@@ -1,0 +1,91 @@
+# The gate. Runs on every push and pull request, and the release workflow calls
+# it before it publishes anything.
+#
+# Kept as one reusable workflow so a release and a pull request are checked by
+# exactly the same jobs — a release-only copy of the test matrix is how the two
+# drift apart and a broken release ships green.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+jobs:
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # The suite starts real processes and talks to WhatsApp's servers up to
+      # the pairing boundary; it needs a little room.
+      - run: npm test
+        timeout-minutes: 15
+      # The installer is piped into root shells by strangers, and the scripts
+      # that publish it write to a public directory. Both get checked here, not
+      # only at release time.
+      - name: shell scripts
+        run: shellcheck deploy/install.sh scripts/publish-installer.sh scripts/deploy-installer.sh scripts/validate-docker.sh
+
+  package:
+    name: package installs and boots
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Packs the real tarball, installs it into an empty prefix, and drives
+      # the installed binary. Catches everything `npm start` in a checkout
+      # cannot: a missing file in `files`, a bad bin path, a broken view.
+      - run: npm run validate:tarball
+        timeout-minutes: 15
+
+  sea:
+    name: executable runs (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build:sea
+        timeout-minutes: 20
+      # Building is not the test: this starts the binary in a directory with no
+      # source tree and exercises assets, views, commands, restart and recovery.
+      - run: npm run validate:sea
+        timeout-minutes: 20
+
+  docker:
+    name: container persists its volume
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: build, start, claim, restart, upgrade
+        run: |
+          set -e
+          bash scripts/validate-docker.sh
+          status=$?
+          # 2 means "no Docker daemon here", which on a GitHub runner would be
+          # a broken runner rather than a passing test.
+          if [ "$status" = "2" ]; then
+            echo "::error::Docker was unavailable on a runner that should have it"
+            exit 1
+          fi
+          exit $status
+        timeout-minutes: 25

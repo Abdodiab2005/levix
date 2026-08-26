@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title><%= brand.name %> · Control panel</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/icon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/brand/icon-16.png" />
+    <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/dashboard.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <img src="/brand/icon-192.png" alt="" />
+          <div>
+            <div class="brand-name"><%= brand.name %></div>
+            <div class="brand-tag"><%= brand.tagline %></div>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <a href="#overview" data-view="overview">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Overview
+          </a>
+          <a href="#connection" data-view="connection">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20a8 8 0 1 0-7-4l-1 4 4-1a8 8 0 0 0 4 1z"/></svg>
+            Connection
+          </a>
+
+          <div class="nav-label">Control</div>
+          <a href="#commands" data-view="commands">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            Commands
+          </a>
+          <a href="#ai" data-view="ai">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4"/></svg>
+            AI &amp; memory
+          </a>
+          <a href="#groups" data-view="groups">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 19a6 6 0 0 1 12 0M15 19a5 5 0 0 1 6-4"/></svg>
+            Groups
+          </a>
+          <a href="#roles" data-view="roles">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 4v5c0 4-3 7-7 9-4-2-7-5-7-9V7z"/></svg>
+            Roles
+          </a>
+
+          <div class="nav-label">Data</div>
+          <a href="#data" data-view="data">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
+            Tables
+          </a>
+          <a href="#settings" data-view="settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1L14.5 3h-4l-.4 2.6a7 7 0 0 0-1.7 1l-2.3-1-2 3.4L6 11a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5c.1-.3.1-.7.1-1z"/></svg>
+            Settings
+          </a>
+        </nav>
+
+        <div class="sidebar-foot">
+          <%= brand.name %> · built by <%= brand.developer %><br />
+          <a href="<%= brand.repo %>" target="_blank" rel="noopener noreferrer">Source &amp; docs</a>
+        </div>
+      </aside>
+
+      <div class="main">
+        <header class="topbar">
+          <button class="btn btn-icon menu-btn" id="menu-btn" title="Menu">☰</button>
+          <h1 id="page-title">Overview</h1>
+          <div class="spacer"></div>
+          <span class="pill" id="status-pill"><span class="dot"></span>Checking…</span>
+          <button class="btn btn-icon" id="refresh-btn" title="Refresh">⟳</button>
+          <button class="btn btn-icon" id="theme-btn" title="Theme">☀</button>
+          <form action="/logout" method="post">
+            <button type="submit" class="btn btn-sm">Log out</button>
+          </form>
+        </header>
+
+        <main class="content">
+          <!-- Overview ---------------------------------------------------->
+          <section class="view" id="view-overview">
+            <div class="section-head">
+              <h2>Overview</h2>
+              <p>What the bot is doing right now.</p>
+            </div>
+
+            <div class="stats" id="stat-cards"></div>
+
+            <div class="card">
+              <div class="card-head"><h2>Runtime</h2></div>
+              <div class="grid-2" id="overview-info"></div>
+            </div>
+          </section>
+
+          <!-- Connection -------------------------------------------------->
+          <section class="view" id="view-connection">
+            <div class="section-head">
+              <h2>Connection</h2>
+              <p>Link a WhatsApp account, or unlink the one in use.</p>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <h2>Account</h2>
+                <div class="spacer"></div>
+                <span id="conn-state"></span>
+              </div>
+
+              <div id="qr-panel">
+                <div class="qr-box">
+                  <div class="qr-frame" id="qr-frame"></div>
+                  <div class="hint" id="qr-note">Waiting for a QR code…</div>
+                  <ol class="steps">
+                    <li>Open WhatsApp on the phone the bot should use.</li>
+                    <li>Settings → Linked devices → Link a device.</li>
+                    <li>Point the camera at the code above.</li>
+                  </ol>
+                </div>
+              </div>
+
+              <div class="inline" style="margin-top:12px">
+                <button class="btn btn-danger" id="unlink-btn">Unlink account</button>
+                <button class="btn" id="restart-btn">Restart bot</button>
+              </div>
+              <div class="hint" style="margin-top:8px">
+                Restart only comes back on its own under a supervisor (pm2, systemd, Docker).
+              </div>
+            </div>
+          </section>
+
+          <!-- Commands ---------------------------------------------------->
+          <section class="view" id="view-commands">
+            <div class="section-head">
+              <h2>Commands</h2>
+              <p>Rename triggers, change who may run what, switch commands off.</p>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2>Prefix</h2></div>
+              <div class="inline">
+                <input type="text" id="prefix-input" maxlength="3" style="max-width:90px" />
+                <button class="btn btn-primary" id="prefix-save">Save</button>
+                <span class="hint">The character every command starts with, e.g. <code>!ping</code>.</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="toolbar">
+                <input type="text" id="cmd-search" placeholder="Search commands…" />
+                <select id="cmd-filter">
+                  <option value="all">All commands</option>
+                  <option value="general">General</option>
+                  <option value="group">Group</option>
+                </select>
+                <div class="spacer" style="flex:1"></div>
+                <span class="hint">Changes apply to the next message.</span>
+              </div>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Command</th>
+                      <th>Type</th>
+                      <th>Aliases (comma separated)</th>
+                      <th>Who can run it</th>
+                      <th>On</th>
+                    </tr>
+                  </thead>
+                  <tbody id="cmd-body">
+                    <tr><td colspan="5"><div class="loading">Loading…</div></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- AI ---------------------------------------------------------->
+          <section class="view" id="view-ai">
+            <div class="section-head">
+              <h2>AI &amp; memory</h2>
+              <p>The prompt the model gets, and everything it has been told to remember.</p>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <h2>System prompt</h2>
+                <div class="spacer"></div>
+                <span class="hint"><code id="persona-file">ai-persona.md</code></span>
+              </div>
+              <textarea id="persona-body" spellcheck="false"></textarea>
+              <div class="inline" style="margin-top:12px">
+                <button class="btn btn-primary" id="persona-save">Save prompt</button>
+                <span class="hint">Applies to the next message — no restart.</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2>Long-term memory</h2></div>
+              <div class="inline" id="memory-list"></div>
+
+              <div id="memory-editor" style="display:none;margin-top:16px">
+                <div class="card-head">
+                  <h2>Editing <code id="memory-scope"></code></h2>
+                </div>
+                <textarea id="memory-content" spellcheck="false"></textarea>
+                <div class="inline" style="margin-top:12px">
+                  <button class="btn btn-primary" id="memory-save">Save</button>
+                  <button class="btn btn-danger" id="memory-delete">Delete file</button>
+                  <span class="hint">Plain Markdown — a line starting with <code>-</code> is one memory.</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Groups ------------------------------------------------------>
+          <section class="view" id="view-groups">
+            <div class="section-head">
+              <h2>Groups</h2>
+              <p>Moderation settings per group. Same values the <code>!group</code> commands change.</p>
+            </div>
+            <div id="groups-list"><div class="loading">Loading…</div></div>
+          </section>
+
+          <!-- Roles ------------------------------------------------------->
+          <section class="view" id="view-roles">
+            <div class="section-head">
+              <h2>Roles</h2>
+              <p>Bot-level roles. An owner can do everything; an admin counts as an admin in every chat.</p>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2>Add someone</h2></div>
+              <div class="inline">
+                <input type="text" id="role-number" placeholder="201234567890" style="max-width:220px" />
+                <select id="role-kind" style="max-width:140px">
+                  <option value="admin">Admin</option>
+                  <option value="owner">Owner</option>
+                </select>
+                <button class="btn btn-primary" id="role-add">Add</button>
+                <span class="hint">International format, digits only.</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2>Owners</h2></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Number</th><th>Name</th><th></th></tr></thead>
+                  <tbody id="owners-body"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2>Admins</h2></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Number</th><th>Name</th><th></th></tr></thead>
+                  <tbody id="admins-body"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <!-- Data -------------------------------------------------------->
+          <section class="view" id="view-data">
+            <div class="section-head">
+              <h2>Tables</h2>
+              <p>What the bot has stored: debts, warnings, notes, todo lists, known users.</p>
+            </div>
+
+            <div class="card">
+              <div class="toolbar" id="data-tabs">
+                <button class="btn btn-sm btn-primary" data-table="debts">Debts</button>
+                <button class="btn btn-sm" data-table="warnings">Warnings</button>
+                <button class="btn btn-sm" data-table="notes">Notes</button>
+                <button class="btn btn-sm" data-table="todos">Todos</button>
+                <button class="btn btn-sm" data-table="users">Users</button>
+                <button class="btn btn-sm" data-table="schedules">Schedules</button>
+              </div>
+              <div id="data-table"><div class="loading">Loading…</div></div>
+            </div>
+          </section>
+
+          <!-- Settings ---------------------------------------------------->
+          <section class="view" id="view-settings">
+            <div class="section-head">
+              <h2>Settings</h2>
+              <p>
+                This page is the only place the bot is configured — there is no config file.
+                Clear a field to go back to its default.
+              </p>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2>Control panel password</h2></div>
+              <div class="inline" style="margin-bottom:8px">
+                <input type="password" id="pw-current" placeholder="Current password"
+                       autocomplete="current-password" />
+              </div>
+              <div class="inline" style="margin-bottom:8px">
+                <input type="password" id="pw-next" placeholder="New password"
+                       autocomplete="new-password" />
+                <button class="btn btn-sm btn-primary" id="pw-save">Change</button>
+              </div>
+              <div class="hint">
+                This password is the only thing between the internet and a linked WhatsApp
+                account. It is stored as a hash — nobody, including this page, can read it back.
+              </div>
+            </div>
+
+            <div id="settings-list"><div class="loading">Loading…</div></div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div class="toasts" id="toasts"></div>
+
+    <script src="/socket.io.min.js"></script>
+    <script src="/qrcode.min.js"></script>
+    <script src="/dashboard.js"></script>
+  </body>
+</html>

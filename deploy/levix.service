@@ -1,0 +1,56 @@
+# systemd unit for Levix.
+#
+#   sudo cp deploy/levix.service /etc/systemd/system/
+#   sudo systemctl enable --now levix
+#   journalctl -u levix -f          # the setup code is printed here on first run
+#
+# deploy/install.sh installs this and rewrites ExecStart with the real path of
+# the `levix` command it just installed — `/usr/bin/env levix` only works when
+# npm's global bin is on systemd's own PATH, which it is not under nvm and not
+# on every distro. If you are installing this by hand, check that line.
+
+[Unit]
+Description=Levix WhatsApp bot
+Documentation=https://github.com/Abdodiab2005/levix
+After=network-online.target
+Wants=network-online.target
+
+# A misconfiguration — a port permanently taken, a corrupt install — must not
+# turn into a restart loop that spins the CPU and fills the journal forever.
+# Five failures in a minute and systemd stops trying, leaving the unit failed
+# where `systemctl status` will show it.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=levix
+Group=levix
+ExecStart=/usr/bin/env levix --data /var/lib/levix
+Restart=always
+# Long enough not to hammer, short enough to recover from a blip unattended.
+RestartSec=5
+KillSignal=SIGTERM
+# Long enough for the database to checkpoint and the socket to close cleanly.
+TimeoutStopSec=30
+
+# Everything it writes is under one directory, which makes the rest of this
+# easy. StateDirectory creates it and fixes its ownership on every start.
+StateDirectory=levix
+WorkingDirectory=/var/lib/levix
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/levix
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# The bot needs outbound network and nothing else; it binds an ordinary port,
+# so it never needs a capability.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

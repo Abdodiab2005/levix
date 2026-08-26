@@ -1,0 +1,26 @@
+# docker compose up -d
+#
+# Then open http://localhost:3001 and pick a password. The setup page asks for
+# a code when you open it from another machine; `docker compose logs levix`
+# prints it.
+
+services:
+  levix:
+    build: .
+    image: levix:latest
+    container_name: levix
+    restart: unless-stopped
+    ports:
+      # Left side is the port on your machine. Change it here, not in the panel
+      # — inside the container the bot always listens on 3001.
+      - "3001:3001"
+    volumes:
+      # Everything the bot owns: database, WhatsApp session, memory, logs.
+      # Back this up and you have backed up the bot.
+      - levix-data:/data
+    # A WhatsApp pairing is one session; never scale this to more than one.
+    deploy:
+      replicas: 1
+
+volumes:
+  levix-data:

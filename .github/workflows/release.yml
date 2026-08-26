@@ -1,0 +1,247 @@
+# Everything a tagged release produces: an npm package, a container image, one
+# executable per platform, the public installer, and a checksum file covering
+# exactly those files.
+#
+# Nothing is published unless the full CI suite passes first — `needs: ci` is
+# the gate, and every publishing job depends on it.
+#
+#   tag pushed
+#     └─ ci ── npm
+#           ├─ image
+#           └─ binaries ── publish-release ── installer
+#
+# Why the installer is a job here and not a separate `on: release: published`
+# workflow: this workflow is what creates the GitHub Release, and a release
+# created with GITHUB_TOKEN does not trigger further workflow runs. A
+# release-triggered workflow would simply never fire. Depending on
+# publish-release gives the same semantics — the public installer only moves
+# after the release genuinely exists — with one pipeline instead of two.
+#
+# Secrets: NPM_TOKEN, and the LEVIX_DEPLOY_* set on the installer-production
+# environment. The container image uses the built-in GITHUB_TOKEN.
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  # The same jobs a pull request runs. A release that would fail CI is not a
+  # release.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  npm:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  image:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}:latest
+
+  binaries:
+    needs: ci
+    # A single executable embeds the host's node binary, so each platform has
+    # to be built on itself.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: levix-linux-x64
+            file: build/levix
+          - os: macos-latest
+            asset: levix-macos-arm64
+            file: build/levix
+          - os: windows-latest
+            asset: levix-windows-x64.exe
+            file: build/levix.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci
+      - run: npm run build:sea
+      # Ship nothing that hasn't been started at least once.
+      - run: npm run validate:sea
+        timeout-minutes: 20
+      - name: Name it after the platform
+        shell: bash
+        run: mv "${{ matrix.file }}" "${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+
+  publish-release:
+    needs: binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      # deploy/install.sh with the version pinned to this release. The same
+      # bytes become the release asset and the file published at
+      # levix.leviro.net — generated once, here, from the commit being released.
+      - name: Generate the installer for this release
+        env:
+          TAG: ${{ github.ref_name }}
+        # No output path: the generator names the file after the tag it
+        # normalised, which is the same name the deployment job looks for.
+        run: node scripts/build-release-installer.mjs "$TAG"
+
+      # Computed from the files that are about to be uploaded, in the same job,
+      # so the manifest cannot describe a different build than the one people
+      # download. The installer is named levix-* on purpose: it is covered by
+      # the existing manifest instead of needing one of its own.
+      - name: Checksum the artifacts
+        working-directory: dist
+        run: |
+          set -e
+          ls -1
+          sha256sum levix-* > SHA256SUMS.txt
+          echo "--- SHA256SUMS.txt ---"
+          cat SHA256SUMS.txt
+          sha256sum -c SHA256SUMS.txt
+
+      # Handed to the deployment job so it publishes the exact file that was
+      # released, not a second build of it.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: dist/levix-*-install.sh
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            ```
+            curl -fsSL https://levix.leviro.net/install.sh | bash
+            ```
+
+            To stay on this exact version:
+
+            ```
+            curl -fsSL https://levix.leviro.net/install/${{ github.ref_name }}.sh | bash
+            ```
+
+            ## Verifying a download
+
+            ```
+            sha256sum -c SHA256SUMS.txt
+            ```
+
+            Each binary carries its own Node and its own SQLite. It does not
+            carry ffmpeg — install it, or point Settings → Media at one, if you
+            want video thumbnails.
+
+  # The public installer. Runs only after the GitHub Release exists, which
+  # itself only happens after CI, the packaged tarball, and every executable
+  # have passed.
+  installer:
+    name: publish the public installer
+    # publish-release: the release the installer belongs to must exist first.
+    # npm: the installer runs `npm install -g levix@<version>`, so that version
+    # has to be on the registry before anyone can be handed the URL.
+    needs: [publish-release, npm]
+    runs-on: ubuntu-latest
+    # Deployment credentials live on their own environment, separate from
+    # ordinary CI secrets, and can be given approval rules later.
+    environment: installer-production
+    # One release at a time touches install.sh. Never cancelled half way: an
+    # interrupted deployment is exactly what the group exists to prevent.
+    concurrency:
+      group: levix-installer-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: installer
+          path: dist
+
+      # The tag reaches the shell as an environment variable, never as text
+      # pasted into a command line.
+      - name: Read the release tag
+        id: release
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          node scripts/build-release-installer.mjs --print "$TAG" >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
+      # This script is about to be served to the public and piped into root
+      # shells. It gets checked before it goes anywhere.
+      - name: Check the shell
+        run: |
+          set -e
+          shellcheck deploy/install.sh scripts/publish-installer.sh scripts/deploy-installer.sh
+          bash -n "dist/levix-${{ steps.release.outputs.tag }}-install.sh"
+
+      - name: Deploy
+        env:
+          LEVIX_DEPLOY_HOST: ${{ secrets.LEVIX_DEPLOY_HOST }}
+          LEVIX_DEPLOY_USER: ${{ secrets.LEVIX_DEPLOY_USER }}
+          LEVIX_DEPLOY_PORT: ${{ secrets.LEVIX_DEPLOY_PORT }}
+          LEVIX_DEPLOY_SSH_KEY: ${{ secrets.LEVIX_DEPLOY_SSH_KEY }}
+          LEVIX_DEPLOY_KNOWN_HOSTS: ${{ secrets.LEVIX_DEPLOY_KNOWN_HOSTS }}
+          LEVIX_DEPLOY_ROOT: ${{ secrets.LEVIX_DEPLOY_ROOT }}
+        run: |
+          bash scripts/deploy-installer.sh \
+            "dist/levix-${{ steps.release.outputs.tag }}-install.sh" \
+            "${{ steps.release.outputs.version }}" \
+            "${{ steps.release.outputs.stable }}"
+
+      - name: What was published
+        run: |
+          echo "### Public installer" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`/install/${{ steps.release.outputs.tag }}.sh\` published" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.release.outputs.stable }}" = "yes" ]; then
+            echo "- \`/install.sh\` now installs ${{ steps.release.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- \`/install.sh\` left alone (prerelease)" >> "$GITHUB_STEP_SUMMARY"
+          fi

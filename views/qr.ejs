@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title><%= brand.name %> · Link WhatsApp</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/brand/icon-32.png" />
+    <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+    <link rel="stylesheet" href="/dashboard.css" />
+    <style>
+      body {
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background:
+          radial-gradient(900px 500px at 15% -10%, rgba(22, 82, 240, 0.2), transparent 60%),
+          var(--bg);
+      }
+      .wrap {
+        width: 100%;
+        max-width: 430px;
+        text-align: center;
+      }
+      .wrap img.logo {
+        width: 170px;
+        max-width: 65%;
+        margin-bottom: 20px;
+      }
+      .foot {
+        margin-top: 18px;
+        color: var(--faint);
+        font-size: 0.78rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <img class="logo" src="/brand/wordmark.png" alt="<%= brand.name %>" />
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Link a WhatsApp account</h2>
+          <div class="spacer"></div>
+          <span class="pill" id="state"><span class="dot"></span>Waiting…</span>
+        </div>
+
+        <div class="qr-box">
+          <div class="qr-frame" id="frame"></div>
+          <ol class="steps">
+            <li>Open WhatsApp on the phone the bot should use.</li>
+            <li>Settings → Linked devices → Link a device.</li>
+            <li>Point the camera at the code above.</li>
+          </ol>
+        </div>
+
+        <a class="btn" href="/">Back to the dashboard</a>
+      </div>
+
+      <div class="foot"><%= brand.name %> · by <%= brand.developer %></div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/qrcode.min.js"></script>
+    <script>
+      (() => {
+        const frame = document.getElementById("frame");
+        const state = document.getElementById("state");
+        let painted = null;
+
+        function setState(text, kind) {
+          state.className = `pill ${kind || ""}`;
+          state.innerHTML = `<span class="dot"></span>${text}`;
+        }
+
+        function render(qr) {
+          if (!qr || painted === qr) return;
+          painted = qr;
+          frame.innerHTML = "";
+          new QRCode(frame, {
+            text: qr,
+            width: 250,
+            height: 250,
+            correctLevel: QRCode.CorrectLevel.H,
+          });
+          setState("Scan me", "");
+        }
+
+        // The QR the server already had when this page was rendered.
+        const initial = <%- JSON.stringify(qr || "") %>;
+        if (initial) render(initial);
+        else setState("Waiting for a code…", "");
+
+        const socket = io();
+        socket.on("qr", render);
+        socket.on("status_update", (data) => {
+          if (data.status === "Connected") {
+            frame.innerHTML = '<div style="padding:60px 30px;color:#0d1730">Linked ✓</div>';
+            setState("Connected", "on");
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

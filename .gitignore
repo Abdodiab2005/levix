@@ -1,0 +1,26 @@
+node_modules
+
+# Everything the bot writes at runtime: the database, the WhatsApp session,
+# the memory files, the logs, temp media. One directory, one backup.
+data/
+
+# Single-executable build output
+build/
+
+# Release artifacts: the per-release installer is generated, never committed
+dist/
+
+# Generated for a packaged build, never committed
+src/commands/_manifest.cjs
+src/commands/group/_manifest.cjs
+
+# Leftovers from older versions (the bot no longer writes any of these)
+.env
+auth_info_baileys
+logs
+memory/
+media/*
+config/schedule.json
+bot.log
+bot.zip
+my-ver.zip

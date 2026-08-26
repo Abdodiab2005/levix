@@ -1,0 +1,14 @@
+node_modules
+data
+logs
+memory
+build
+.git
+.github
+*.md
+!README.md
+Dockerfile
+docker-compose.yml
+.dockerignore
+assets
+scripts
