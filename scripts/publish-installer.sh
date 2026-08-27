@@ -40,8 +40,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-[ -n "$root" ] && [ -n "$version" ] && [ -n "$staged" ] ||
+if [ -z "$root" ] || [ -z "$version" ] || [ -z "$staged" ]; then
   die "usage: publish-installer.sh <root> <version> <staged-file> <stable:yes|no>"
+fi
 
 # Second gate. The tag was validated where it came from; it is validated again
 # here because this is the process that turns it into a path.

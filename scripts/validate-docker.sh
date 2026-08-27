@@ -97,8 +97,20 @@ whoami_out="$(compose exec -T levix id -un 2>/dev/null | tr -d '\r\n')"
 if [ "$whoami_out" = "node" ]; then status=0; else status=1; fi
 ok "it runs as the unprivileged 'node' user (got '${whoami_out}')" "$status"
 
-# One process, not a pool.
-count="$(compose exec -T levix sh -c 'ps -eo comm= | grep -c "^node$"' 2>/dev/null | tr -d '\r\n')"
+# One process, not a pool. The slim runtime image deliberately omits procps,
+# so inspect /proc instead of requiring `ps` just for this validation.
+# shellcheck disable=SC2016 # This script is evaluated by sh inside the container.
+count="$(compose exec -T levix sh -c '
+count=0
+node_path="$(command -v node)"
+for executable in /proc/[0-9]*/exe; do
+  if [ "$(readlink "$executable" 2>/dev/null)" = "$node_path" ]; then
+    count=$((count + 1))
+  fi
+done
+printf "%s\n" "$count"
+' 2>/dev/null)"
+count="$(printf '%s' "$count" | tr -d '\r\n')"
 if [ "${count:-0}" = "1" ]; then status=0; else status=1; fi
 ok "exactly one Levix process is running (got '${count}')" "$status"
 
@@ -121,8 +133,20 @@ ok "nothing was written next to the application code (found '${stray}')" "$statu
 
 printf '\n· persistence\n'
 
-curl -fsS -X POST "http://127.0.0.1:${PORT}/setup" \
-  -d "password=${PASSWORD}&confirm=${PASSWORD}" -o /dev/null 2>/dev/null
+# Docker's published-port NAT makes a request from the host arrive from the
+# bridge gateway, so the panel correctly treats it as remote and asks for the
+# one-time setup code. Claim through loopback inside the container instead;
+# this test is about password persistence, while setup-code enforcement has
+# its own panel coverage.
+compose exec -T levix node --input-type=module -e '
+  const password = process.argv[1];
+  const response = await fetch("http://127.0.0.1:3001/setup", {
+    method: "POST",
+    body: new URLSearchParams({ password, confirm: password }),
+    redirect: "manual",
+  });
+  process.exitCode = response.status === 303 ? 0 : 1;
+' "$PASSWORD" >/dev/null 2>&1
 ok "the first-run password can be set" "$?"
 
 check_login() {
