@@ -25,7 +25,9 @@ stable="${3:-no}"
 
 die() { printf '\nerror: %s\n\n' "$*" >&2; exit 1; }
 
-[ -n "$installer" ] && [ -n "$version" ] || die "usage: deploy-installer.sh <file> <version> <stable:yes|no>"
+if [ -z "$installer" ] || [ -z "$version" ]; then
+  die "usage: deploy-installer.sh <file> <version> <stable:yes|no>"
+fi
 [ -f "$installer" ] || die "no such installer: $installer"
 
 printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.]*)?$' ||
