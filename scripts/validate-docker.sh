@@ -99,8 +99,8 @@ ok "it runs as the unprivileged 'node' user (got '${whoami_out}')" "$status"
 
 # One process, not a pool. The slim runtime image deliberately omits procps,
 # so inspect /proc instead of requiring `ps` just for this validation.
-count="$(
-compose exec -T levix sh 2>/dev/null <<'SH'
+# shellcheck disable=SC2016 # This script is evaluated by sh inside the container.
+count="$(compose exec -T levix sh -c '
 count=0
 node_path="$(command -v node)"
 for executable in /proc/[0-9]*/exe; do
@@ -109,8 +109,7 @@ for executable in /proc/[0-9]*/exe; do
   fi
 done
 printf '%s\n' "$count"
-SH
-)"
+' 2>/dev/null)"
 count="$(printf '%s' "$count" | tr -d '\r\n')"
 if [ "${count:-0}" = "1" ]; then status=0; else status=1; fi
 ok "exactly one Levix process is running (got '${count}')" "$status"
@@ -139,15 +138,15 @@ printf '\n· persistence\n'
 # one-time setup code. Claim through loopback inside the container instead;
 # this test is about password persistence, while setup-code enforcement has
 # its own panel coverage.
-compose exec -T levix node - "$PASSWORD" >/dev/null 2>&1 <<'NODE'
-const password = process.argv[2];
-const response = await fetch("http://127.0.0.1:3001/setup", {
-  method: "POST",
-  body: new URLSearchParams({ password, confirm: password }),
-  redirect: "manual",
-});
-process.exitCode = response.status === 303 ? 0 : 1;
-NODE
+compose exec -T levix node --input-type=module -e '
+  const password = process.argv[1];
+  const response = await fetch("http://127.0.0.1:3001/setup", {
+    method: "POST",
+    body: new URLSearchParams({ password, confirm: password }),
+    redirect: "manual",
+  });
+  process.exitCode = response.status === 303 ? 0 : 1;
+' "$PASSWORD" >/dev/null 2>&1
 ok "the first-run password can be set" "$?"
 
 check_login() {
