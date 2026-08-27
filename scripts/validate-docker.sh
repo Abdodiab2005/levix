@@ -108,7 +108,7 @@ for executable in /proc/[0-9]*/exe; do
     count=$((count + 1))
   fi
 done
-printf '%s\n' "$count"
+printf "%s\n" "$count"
 ' 2>/dev/null)"
 count="$(printf '%s' "$count" | tr -d '\r\n')"
 if [ "${count:-0}" = "1" ]; then status=0; else status=1; fi
