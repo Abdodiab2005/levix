@@ -88,7 +88,12 @@
 
   function applyTheme(theme) {
     document.documentElement.setAttribute("data-theme", theme);
-    $("#theme-btn").textContent = theme === "light" ? "☾" : "☀";
+    const button = $("#theme-btn");
+    button.textContent = theme === "light" ? "☾" : "☀";
+    button.setAttribute(
+      "aria-label",
+      theme === "light" ? "Switch to dark theme" : "Switch to light theme"
+    );
     try {
       localStorage.setItem(THEME_KEY, theme);
     } catch {
@@ -118,6 +123,16 @@
   const VIEWS = {};
   let currentView = null;
 
+  function setSidebar(open) {
+    $(".sidebar").classList.toggle("open", open);
+    $("#sidebar-backdrop").classList.toggle("open", open);
+    $("#menu-btn").setAttribute("aria-expanded", String(open));
+    $("#menu-btn").setAttribute(
+      "aria-label",
+      open ? "Close navigation" : "Open navigation"
+    );
+  }
+
   function show(name) {
     const target = VIEWS[name] ? name : "overview";
     currentView = target;
@@ -129,7 +144,7 @@
       link.classList.toggle("active", link.dataset.view === target)
     );
     $("#page-title").textContent = VIEWS[target].title;
-    $(".sidebar").classList.remove("open");
+    setSidebar(false);
 
     VIEWS[target].load();
   }
@@ -146,8 +161,12 @@
       show(window.location.hash.slice(1))
     );
     $("#menu-btn").addEventListener("click", () =>
-      $(".sidebar").classList.toggle("open")
+      setSidebar(!$(".sidebar").classList.contains("open"))
     );
+    $("#sidebar-backdrop").addEventListener("click", () => setSidebar(false));
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") setSidebar(false);
+    });
     $("#refresh-btn").addEventListener("click", () => {
       VIEWS[currentView].load();
       loadStats();

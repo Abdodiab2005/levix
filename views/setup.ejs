@@ -24,15 +24,14 @@
         text-align: center;
       }
 
-      .login img {
-        width: 190px;
-        max-width: 70%;
+      .login .brand-lockup {
         margin-bottom: 22px;
       }
 
       .login .card {
         text-align: left;
         padding: 24px;
+        box-shadow: var(--shadow);
       }
 
       .login h1 {
@@ -77,7 +76,10 @@
   </head>
   <body>
     <div class="login">
-      <img src="/brand/wordmark.png" alt="<%= brand.name %>" />
+      <div class="brand-lockup" aria-label="<%= brand.name %>">
+        <img src="/brand/mark.svg" alt="" />
+        <strong><%= brand.name %></strong>
+      </div>
 
       <form class="card" action="/setup" method="post">
         <h1>Welcome</h1>
@@ -114,7 +116,7 @@
         <% } %>
       </form>
 
-      <div class="foot"><%= brand.name %> — <%= brand.tagline %> · by <%= brand.developer %></div>
+      <div class="foot"><%= brand.name %> - <%= brand.tagline %> · by <%= brand.developer %></div>
     </div>
   </body>
 </html>

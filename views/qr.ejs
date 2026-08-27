@@ -21,10 +21,11 @@
         max-width: 430px;
         text-align: center;
       }
-      .wrap img.logo {
-        width: 170px;
-        max-width: 65%;
+      .wrap .brand-lockup {
         margin-bottom: 20px;
+      }
+      .wrap .card {
+        box-shadow: var(--shadow);
       }
       .foot {
         margin-top: 18px;
@@ -35,7 +36,10 @@
   </head>
   <body>
     <div class="wrap">
-      <img class="logo" src="/brand/wordmark.png" alt="<%= brand.name %>" />
+      <div class="brand-lockup" aria-label="<%= brand.name %>">
+        <img src="/brand/mark.svg" alt="" />
+        <strong><%= brand.name %></strong>
+      </div>
 
       <div class="card">
         <div class="card-head">

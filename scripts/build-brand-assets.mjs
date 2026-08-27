@@ -6,7 +6,7 @@
 // Sharp is a devDependency: the generated files under public/brand/ are
 // committed, so a normal install never needs it.
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import sharp from "sharp";
@@ -45,10 +45,40 @@ async function write(name, buffer) {
 
 await mkdir(OUT, { recursive: true });
 
-// --- App icon (the dark rounded tile) -------------------------------------
-// Used for the favicon, the PWA manifest and the sidebar badge. It reads on
-// light and dark backgrounds alike, which the white-card variants don't.
-const icon = join(SRC, "icon.png");
+// --- Canonical mark + app icon --------------------------------------------
+// The SVG is the source of truth. Raster fallbacks remain generated for older
+// browsers and package consumers, but the mark itself cannot drift anymore.
+const markSvg = join(SRC, "mark.svg");
+const markSvgBuffer = await readFile(markSvg);
+await write("mark.svg", markSvgBuffer);
+
+const markRaster = await sharp(markSvgBuffer)
+  .resize(512, 512, { fit: "contain" })
+  .png()
+  .toBuffer();
+
+const icon = await sharp({
+  create: {
+    width: 512,
+    height: 512,
+    channels: 4,
+    background: { r: 0, g: 0, b: 0, alpha: 0 },
+  },
+})
+  .composite([
+    {
+      input: Buffer.from(
+        '<svg width="512" height="512"><rect x="8" y="8" width="496" height="496" rx="112" fill="#070C17"/></svg>',
+      ),
+    },
+    {
+      input: await sharp(markRaster).resize(366, 366).png().toBuffer(),
+      left: 73,
+      top: 73,
+    },
+  ])
+  .png()
+  .toBuffer();
 for (const size of [512, 192, 180, 32, 16]) {
   const name =
     size === 180 ? "apple-touch-icon.png" : `icon-${size}.png`;
@@ -77,16 +107,14 @@ await write(
   await sharp(wordmarkTrimmed).resize({ height: 160 }).webp({ quality: 92 }).toBuffer()
 );
 
-// --- Mark only (no text) ---------------------------------------------------
-const mark = await whiteToAlpha(join(SRC, "mark.png"));
-const markTrimmed = await sharp(mark).trim({ threshold: 1 }).toBuffer();
+// --- Mark raster fallbacks -------------------------------------------------
 await write(
   "mark.png",
-  await sharp(markTrimmed).resize(512, 512, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } }).png({ compressionLevel: 9 }).toBuffer()
+  await sharp(markRaster).png({ compressionLevel: 9 }).toBuffer()
 );
 await write(
   "mark.webp",
-  await sharp(markTrimmed).resize(512, 512, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } }).webp({ quality: 92 }).toBuffer()
+  await sharp(markRaster).webp({ quality: 92 }).toBuffer()
 );
 
 // --- Banner (README hero / GitHub social preview) --------------------------

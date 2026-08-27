@@ -3,17 +3,17 @@
    choice in localStorage and stamps data-theme on <html>. */
 
 :root {
-  --blue: #1652f0;
-  --blue-bright: #14a6ff;
-  --cyan: #21d4fd;
+  --blue: #0066f5;
+  --blue-bright: #3d8bff;
+  --cyan: #00d4ff;
   --grad: linear-gradient(135deg, var(--blue) 0%, var(--blue-bright) 55%, var(--cyan) 100%);
 
-  --bg: #070d1c;
-  --bg-soft: #0b142a;
-  --panel: #0e1a33;
-  --panel-hover: #16234180;
-  --line: #1d2c4d;
-  --line-soft: #16223c;
+  --bg: #04070e;
+  --bg-soft: #070c17;
+  --panel: #0a101e;
+  --panel-hover: #111a2e;
+  --line: #1c2a48;
+  --line-soft: #16213a;
 
   --text: #eaf1ff;
   --muted: #8ea3c9;
@@ -26,11 +26,12 @@
 
   --radius: 14px;
   --radius-sm: 9px;
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --shadow: 0 14px 36px rgba(0, 0, 0, 0.24);
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
 :root[data-theme="light"] {
+  color-scheme: light;
   --bg: #f5f7fc;
   --bg-soft: #ffffff;
   --panel: #ffffff;
@@ -41,7 +42,7 @@
   --text: #0d1730;
   --muted: #566484;
   --faint: #8492ad;
-  --shadow: 0 8px 24px rgba(16, 34, 74, 0.08);
+  --shadow: 0 10px 28px rgba(16, 34, 74, 0.07);
 }
 
 * {
@@ -55,6 +56,10 @@ body {
   height: 100%;
 }
 
+html {
+  color-scheme: dark;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -63,6 +68,16 @@ body {
   font-size: 15px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--cyan) 28%, transparent);
+  color: var(--text);
+}
+
+:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
 }
 
 a {
@@ -103,13 +118,14 @@ kbd {
   display: flex;
   align-items: center;
   gap: 11px;
-  padding: 20px 18px 16px;
+  margin: 0 10px;
+  padding: 20px 8px 17px;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .brand img {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
+  width: 40px;
+  height: 40px;
 }
 
 .brand-name {
@@ -123,6 +139,25 @@ kbd {
   color: var(--faint);
   text-transform: uppercase;
   letter-spacing: 0.09em;
+}
+
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  color: var(--text);
+}
+
+.brand-lockup img {
+  width: 46px;
+  height: 46px;
+}
+
+.brand-lockup strong {
+  font-size: 1.65rem;
+  font-weight: 750;
+  letter-spacing: -0.04em;
 }
 
 .nav {
@@ -208,9 +243,10 @@ kbd {
 }
 
 .content {
-  padding: 26px;
-  max-width: 1180px;
+  padding: 30px;
+  max-width: 1240px;
   width: 100%;
+  margin: 0 auto;
 }
 
 .view {
@@ -330,7 +366,7 @@ kbd {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 18px;
-  box-shadow: var(--shadow);
+  box-shadow: none;
 }
 
 .card + .card {
@@ -360,6 +396,8 @@ kbd {
 
 .section-head {
   margin-bottom: 18px;
+  padding-inline-start: 13px;
+  border-inline-start: 2px solid var(--blue-bright);
 }
 
 .section-head h2 {
@@ -443,6 +481,7 @@ select:focus,
 textarea:focus {
   outline: none;
   border-color: var(--blue-bright);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue-bright) 14%, transparent);
 }
 
 textarea {
@@ -774,6 +813,16 @@ td.wrap {
   display: none;
 }
 
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  border: 0;
+  background: rgba(2, 5, 12, 0.64);
+  backdrop-filter: blur(2px);
+}
+
 @media (max-width: 900px) {
   .shell {
     grid-template-columns: 1fr;
@@ -792,6 +841,10 @@ td.wrap {
     transform: none;
   }
 
+  .sidebar-backdrop.open {
+    display: block;
+  }
+
   .menu-btn {
     display: inline-flex;
   }
@@ -802,5 +855,27 @@ td.wrap {
 
   .topbar {
     padding: 12px 14px;
+  }
+}
+
+@media (max-width: 600px) {
+  .topbar {
+    gap: 8px;
+  }
+
+  .topbar h1 {
+    display: none;
+  }
+
+  .topbar .pill {
+    padding-inline: 9px;
+  }
+
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid-2 {
+    grid-template-columns: 1fr;
   }
 }

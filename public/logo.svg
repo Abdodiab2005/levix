@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="levix-gradient" x1="15" y1="86" x2="87" y2="14" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0045FF"/>
+      <stop offset=".55" stop-color="#0066F5"/>
+      <stop offset="1" stop-color="#00D4FF"/>
+    </linearGradient>
+  </defs>
+  <path d="M75.5 55.2C77.8 50.9 79 46 79 41C79 22 63.5 7.5 44 7.5C24.2 7.5 8.5 22.1 8.5 41C8.5 53.5 15.8 64.6 27.2 70.4L23.3 84.5L39.6 76.7C44.3 78.1 49.2 78.4 54.4 76.8" stroke="url(#levix-gradient)" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="34.8" cy="42.7" r="4.1" fill="url(#levix-gradient)"/>
+  <circle cx="55.4" cy="42.7" r="4.1" fill="url(#levix-gradient)"/>
+  <path d="M39.5 51.8C42.7 55.8 47.7 55.8 50.9 51.8" stroke="url(#levix-gradient)" stroke-width="3.8" stroke-linecap="round"/>
+  <path d="M59.2 59.2L83.2 83.2M84.2 57.8L58.4 83.2" stroke="url(#levix-gradient)" stroke-width="8.2" stroke-linecap="round"/>
+  <path d="M83.2 16.5C84.3 20.7 86.3 22.8 90.5 23.9C86.3 25 84.3 27.1 83.2 31.3C82.1 27.1 80.1 25 75.9 23.9C80.1 22.8 82.1 20.7 83.2 16.5Z" fill="url(#levix-gradient)"/>
+</svg>
+
