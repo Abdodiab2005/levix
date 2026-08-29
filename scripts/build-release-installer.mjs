@@ -54,13 +54,16 @@ export function verifyInstaller(text, version) {
   const versions = text.match(/^VERSION="[^"\n]*"$/gm) || [];
   if (versions.length !== 1) problems.push(`${versions.length} VERSION lines`);
   else if (versions[0] !== `VERSION="${version}"`) problems.push(`pinned to ${versions[0]}`);
+  if (!/^PACKAGE="levix-bot"$/m.test(text)) {
+    problems.push("the installer does not target the levix-bot npm package");
+  }
   if (!/npm install -g "\$\{PACKAGE\}@\$\{VERSION\}"/.test(text)) {
     problems.push("the install line no longer uses the pinned version");
   }
-  // A stray version literal elsewhere would install something other than what
-  // the URL promises.
-  for (const stray of text.match(/levix@[0-9][^\s"']*/g) || []) {
-    if (stray !== `levix@${version}`) problems.push(`hardcoded ${stray}`);
+  // A literal package@version elsewhere would bypass PACKAGE/VERSION and could
+  // install something other than what the URL promises.
+  for (const stray of text.match(/(?:levix|levix-bot)@[0-9][^\s"']*/g) || []) {
+    problems.push(`hardcoded ${stray}`);
   }
   return problems;
 }
