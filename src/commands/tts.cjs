@@ -1,36 +1,30 @@
-// Text-to-Speech Command using FREE node-gtts library.
+// Text-to-Speech Command using Google TTS and ffmpeg-static.
 //
-// Audit fix: previously we saved the file as `.mp3` but sent it with
-// `mimetype: "audio/mp4"` and `ptt: true`. Some WhatsApp clients (Telegram-
-// linked viewers, web clients on certain Androids) refuse to play that
-// because the container declared in the mimetype doesn't match the actual
-// MP3 data, hence the "This audio is not available because something is
-// wrong with the audio file" pop-up.
+// Google TTS produces MP3. WhatsApp voice notes are OGG/Opus, so the command:
+//   1. Generates one or more MP3 chunks with @sefinek/google-tts-api.
+//   2. Concatenates the MP3 frames into one temporary file.
+//   3. Invokes the ffmpeg-static binary directly to create OGG/Opus.
 //
-// Proper voice messages on WhatsApp are OGG/Opus. We now:
-//   1. Generate the speech as MP3 via node-gtts (its only supported format).
-//   2. Re-encode it to OGG/Opus with ffmpeg-static.
-//   3. Send with `mimetype: "audio/ogg; codecs=opus"` + `ptt: true`.
-//
-// If ffmpeg isn't available we fall back to sending the raw MP3 with the
-// CORRECT mimetype (`audio/mpeg`) and `ptt: false`, so the user at least
-// gets a playable audio attachment.
+// Calling ffmpeg directly keeps the dependency surface small and avoids the
+// deprecated fluent-ffmpeg wrapper. If ffmpeg is unavailable or transcoding
+// fails, the raw MP3 is still sent as a normal audio attachment.
 
-const gtts = require("node-gtts")("ar");
+const googleTTS = require("@sefinek/google-tts-api");
 const fs = require("fs");
 const fsp = require("fs").promises;
 const path = require("path");
 const os = require("os");
+const { execFile } = require("node:child_process");
+const { promisify } = require("node:util");
 const logger = require("../utils/logger.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
-const { sendBotMessage, sendBotError } = require("../utils/sendBotMessage.cjs");
+const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 
-let ffmpeg = null;
+const execFileAsync = promisify(execFile);
+
 let ffmpegStatic = null;
 try {
-  ffmpeg = require("fluent-ffmpeg");
   ffmpegStatic = require("ffmpeg-static");
-  if (ffmpegStatic) ffmpeg.setFfmpegPath(ffmpegStatic);
 } catch (err) {
   logger.warn(
     { err: err?.message },
@@ -46,26 +40,52 @@ function tmpPath(ext) {
 }
 
 async function synthesizeMp3(text, mp3Path) {
-  return new Promise((resolve, reject) => {
-    gtts.save(mp3Path, text, (err) => (err ? reject(err) : resolve()));
+  const parts = await googleTTS.getAllAudioBase64(text, {
+    lang: "ar",
+    slow: false,
+    timeout: 15_000,
+    splitPunct: "،,.!?؟؛;:\n",
   });
+
+  if (!Array.isArray(parts) || parts.length === 0) {
+    throw new Error("Google TTS returned no audio");
+  }
+
+  const buffers = parts.map((part) => Buffer.from(part.base64, "base64"));
+  await fsp.writeFile(mp3Path, Buffer.concat(buffers));
 }
 
 async function transcodeToOpus(mp3Path) {
-  if (!ffmpeg) return null;
+  if (!ffmpegStatic) return null;
+
   const oggPath = tmpPath("ogg");
-  await new Promise((resolve, reject) => {
-    ffmpeg(mp3Path)
-      .audioCodec("libopus")
-      .audioChannels(1)
-      .audioFrequency(48000)
-      .audioBitrate("48k")
-      .format("ogg")
-      .outputOptions(["-application voip"])
-      .on("error", reject)
-      .on("end", resolve)
-      .save(oggPath);
-  });
+  await execFileAsync(
+    ffmpegStatic,
+    [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-y",
+      "-i",
+      mp3Path,
+      "-vn",
+      "-c:a",
+      "libopus",
+      "-ac",
+      "1",
+      "-ar",
+      "48000",
+      "-b:a",
+      "48k",
+      "-application",
+      "voip",
+      "-f",
+      "ogg",
+      oggPath,
+    ],
+    { windowsHide: true, timeout: 30_000 },
+  );
+
   return oggPath;
 }
 
