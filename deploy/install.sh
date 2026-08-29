@@ -11,16 +11,20 @@
 # What it does, in order — read it before you pipe it into a shell, as you
 # should with any script that asks for sudo:
 #
-#   1. checks for Node 24+ and stops with instructions if it isn't there
+#   1. makes sure Node 24+ is available (bootstraps it on Debian/Ubuntu)
 #   2. installs the `levix` command globally from the `levix-bot` npm package
 #   3. creates a `levix` system user and /var/lib/levix for its data
 #   4. installs the systemd unit, pointed at the levix it just installed
 #   5. enables it, starts it, and prints where to go next
 #   6. offers — but never assumes — to connect a domain
 #
-# It writes exactly three things outside npm's own prefix: the system user,
-# /var/lib/levix, and /etc/systemd/system/levix.service. It never touches an
-# existing installation's data, and it can be re-run to upgrade.
+# On a machine that already has Node 24+, the installer does not touch the
+# system package manager. On a fresh Debian/Ubuntu machine it also installs
+# Node.js from NodeSource, which adds its signing key and APT source.
+#
+# Levix itself writes exactly three things outside npm's own prefix: the system
+# user, /var/lib/levix, and /etc/systemd/system/levix.service. It never touches
+# an existing installation's data, and it can be re-run to upgrade.
 
 set -euo pipefail
 
@@ -48,15 +52,97 @@ sudo_if_needed() {
 
 # --- 1. Node ---------------------------------------------------------------
 
-command -v node >/dev/null 2>&1 ||
-  die "Node is not installed. Get Node ${MIN_NODE_MAJOR} LTS from https://nodejs.org"
+node_major() {
+  if ! command -v node >/dev/null 2>&1; then
+    printf '0\n'
+    return
+  fi
 
-NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-if [ "$NODE_MAJOR" -lt "$MIN_NODE_MAJOR" ]; then
-  die "Node ${MIN_NODE_MAJOR}+ is required (found $(node -v)). Levix stores everything in SQLite, which Node only ships with itself from ${MIN_NODE_MAJOR} on."
+  local major
+  major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true)"
+  case "$major" in
+    ''|*[!0-9]*) printf '0\n' ;;
+    *) printf '%s\n' "$major" ;;
+  esac
+}
+
+install_node24() {
+  [ -r /etc/os-release ] ||
+    die "Node ${MIN_NODE_MAJOR}+ is required. Automatic Node installation is supported on Debian and Ubuntu only."
+
+  # shellcheck disable=SC1091
+  . /etc/os-release
+  case "${ID:-}" in
+    debian|ubuntu) ;;
+    *)
+      die "Node ${MIN_NODE_MAJOR}+ is required. Automatic Node installation is supported on Debian and Ubuntu only (found ${ID:-unknown}). Install Node ${MIN_NODE_MAJOR}+ and run this installer again."
+      ;;
+  esac
+
+  command -v apt-get >/dev/null 2>&1 ||
+    die "This looks like ${ID}, but apt-get is unavailable. Install Node ${MIN_NODE_MAJOR}+ and run this installer again."
+
+  say "Installing Node ${MIN_NODE_MAJOR} from NodeSource…"
+
+  sudo_if_needed apt-get update
+  sudo_if_needed apt-get install -y ca-certificates curl
+  sudo_if_needed install -d -m 0755 /etc/apt/keyrings
+
+  local key_tmp repo_tmp
+  key_tmp="$(mktemp)"
+  repo_tmp="$(mktemp)"
+
+  # Download the signing key as data; do not execute a second remote setup
+  # script inside the Levix installer.
+  if ! curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o "$key_tmp"; then
+    rm -f "$key_tmp" "$repo_tmp"
+    die "Could not download the NodeSource signing key."
+  fi
+
+  printf '%s\n' \
+    "deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_${MIN_NODE_MAJOR}.x nodistro main" \
+    > "$repo_tmp"
+
+  sudo_if_needed install -m 0644 "$key_tmp" /etc/apt/keyrings/nodesource.asc
+  sudo_if_needed install -m 0644 "$repo_tmp" /etc/apt/sources.list.d/nodesource.list
+  rm -f "$key_tmp" "$repo_tmp"
+
+  sudo_if_needed apt-get update
+  sudo_if_needed apt-get install -y nodejs
+
+  # A pre-existing nvm/asdf installation can leave an older Node earlier in
+  # PATH even after the system package is upgraded. Prefer the freshly installed
+  # NodeSource binary for the rest of this installer when it is suitable.
+  if [ -x /usr/bin/node ]; then
+    local system_major
+    system_major="$(/usr/bin/node -p 'process.versions.node.split(".")[0]' 2>/dev/null || printf '0')"
+    case "$system_major" in
+      ''|*[!0-9]*) system_major=0 ;;
+    esac
+    if [ "$system_major" -ge "$MIN_NODE_MAJOR" ]; then
+      PATH="/usr/bin:$PATH"
+      export PATH
+      hash -r
+    fi
+  fi
+}
+
+NODE_MAJOR="$(node_major)"
+if [ "$NODE_MAJOR" -lt "$MIN_NODE_MAJOR" ] || ! command -v npm >/dev/null 2>&1; then
+  if [ "$NODE_MAJOR" -eq 0 ]; then
+    say "Node ${MIN_NODE_MAJOR}+ was not found; bootstrapping it for you."
+  else
+    say "Node $(node -v) is too old; upgrading to Node ${MIN_NODE_MAJOR}."
+  fi
+  install_node24
+  NODE_MAJOR="$(node_major)"
 fi
 
-command -v npm >/dev/null 2>&1 || die "npm is not installed."
+if [ "$NODE_MAJOR" -lt "$MIN_NODE_MAJOR" ]; then
+  die "Node ${MIN_NODE_MAJOR}+ is required, but the automatic installation did not provide it (found $(node -v 2>/dev/null || printf 'no Node'))."
+fi
+command -v npm >/dev/null 2>&1 ||
+  die "Node $(node -v) is installed, but npm is missing. Install npm and run this installer again."
 command -v systemctl >/dev/null 2>&1 ||
   die "This script installs a systemd service, and systemd isn't here. Run 'npm i -g ${PACKAGE}' and start 'levix' yourself."
 
