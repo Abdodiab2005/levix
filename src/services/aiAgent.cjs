@@ -15,7 +15,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { GoogleGenAI, FunctionCallingConfigMode } = require("@google/genai");
 
 const logger = require("../utils/logger.cjs");
 const aiIdentity = require("../config/ai-identity.cjs");
@@ -30,13 +30,19 @@ const { toolDeclarations, describeCall, runTool } = require("./aiTools.cjs");
 
 // One client per key. The dashboard can set a key on a bot that started
 // without one, so the client is built lazily and rebuilt when the key changes.
+//
+// @google/genai replaced the old `new GoogleGenerativeAI(key)` +
+// `getGenerativeModel({model, tools, systemInstruction})` pair with a single
+// client whose model and per-request configuration are passed at call time —
+// which suits Levix, because the model and the tool set are settings that may
+// change between one message and the next.
 let clientCache = { key: null, client: null };
 
 function geminiClient() {
   const key = settings.get("gemini_api_key");
   if (!key) return null;
   if (clientCache.key !== key) {
-    clientCache = { key, client: new GoogleGenerativeAI(key) };
+    clientCache = { key, client: new GoogleGenAI({ apiKey: key }) };
   }
   return clientCache.client;
 }
@@ -163,12 +169,19 @@ function trimHistory(history) {
   return out;
 }
 
-/** Gemini file URIs live ~48h; after that every call fails on the old parts. */
+/**
+ * Gemini file URIs live ~48h; after that every call fails on the old parts.
+ *
+ * @google/genai throws its own `ApiError` with a numeric `status`, where the
+ * old SDK put the code in a handful of different places. Both are still read:
+ * the shapes are cheap to check and the stored history can outlive an upgrade.
+ */
 function isFileReferenceError(error) {
   if (!error) return false;
   const status =
     error.status ||
     error.statusCode ||
+    error.code ||
     error.response?.status ||
     error.error?.code;
   const message = `${error.message || ""} ${error.details || ""}`.toLowerCase();
@@ -254,6 +267,29 @@ function buildTools({ useTools = true, search = googleSearchEnabled() } = {}) {
 }
 
 /**
+ * The tool configuration that lets a built-in tool and custom functions run in
+ * the same request.
+ *
+ * Gemini 3 calls this "tool context circulation": the server runs Google Search
+ * itself, and `includeServerSideToolInvocations` is what puts those server-side
+ * calls into the conversation so the custom functions can see them. Without the
+ * flag the combination is refused outright.
+ *
+ * Turning it on also constrains function calling to VALIDATED — AUTO is not
+ * supported alongside it — so the two are set together or not at all.
+ *
+ * Returns undefined when there is nothing to combine, which leaves the ordinary
+ * AUTO behaviour exactly as it was.
+ */
+function buildToolConfig({ useTools = true, search = googleSearchEnabled() } = {}) {
+  if (!useTools || !search) return undefined;
+  return {
+    includeServerSideToolInvocations: true,
+    functionCallingConfig: { mode: FunctionCallingConfigMode.VALIDATED },
+  };
+}
+
+/**
  * Does this error mean "this model will not take search and functions at once"?
  *
  * Some model/API combinations refuse the mix with a 400. Rather than quietly
@@ -284,6 +320,10 @@ function isToolCombinationError(error) {
  */
 function extractSources(response) {
   const out = [];
+  // The path is unchanged from the old SDK: candidates[].groundingMetadata
+  // .groundingChunks[].web.{uri,title}. Verified against @google/genai's
+  // GroundingMetadata / GroundingChunkWeb, which also adds a Vertex-only
+  // `domain` field that the Gemini Developer API does not populate.
   for (const candidate of response?.candidates || []) {
     const grounding = candidate?.groundingMetadata;
     for (const chunk of grounding?.groundingChunks || []) {
@@ -350,15 +390,27 @@ async function runAgent({
   const stepBudget = maxSteps ?? settings.get("ai_max_tool_steps");
   const systemInstruction = buildSystemInstruction(context);
   const trimmed = trimHistory(history);
+  const model = settings.get("gemini_model");
 
+  // `ai.chats` rather than a hand-rolled contents array on purpose. Gemini 3
+  // returns a `thoughtSignature` on the parts it produces and expects it back
+  // on the following turns of a multi-step tool run; the Chat class records
+  // `candidates[0].content` verbatim into its history, signature included, so
+  // circulating it is not something this file has to remember to do. Levix
+  // persists that same history, and a signature is a plain string, so it
+  // survives the round trip through SQLite too.
   const openChat = (search) => {
     const tools = buildTools({ useTools, search });
-    const model = genAI.getGenerativeModel({
-      model: settings.get("gemini_model"),
-      systemInstruction,
-      ...(tools.length ? { tools } : {}),
+    const toolConfig = buildToolConfig({ useTools, search });
+    return genAI.chats.create({
+      model,
+      history: trimmed,
+      config: {
+        systemInstruction,
+        ...(tools.length ? { tools } : {}),
+        ...(toolConfig ? { toolConfig } : {}),
+      },
     });
-    return model.startChat({ history: trimmed });
   };
 
   let searchOffered = googleSearchEnabled();
@@ -367,31 +419,30 @@ async function runAgent({
   // Only ever filled from real grounding metadata; see extractSources().
   const sources = [];
 
-  let result;
+  let response;
   try {
-    result = await chat.sendMessage(parts);
+    response = await chat.sendMessage({ message: parts });
   } catch (error) {
-    // The one case where dropping a tool is correct: this model will not take
-    // the built-in search alongside Levix's own functions. Keep the functions —
-    // commands depend on them — and say plainly that search went.
+    // Defensive only. Gemini 3 takes the built-in search and custom functions
+    // in one request, so this is not the expected path — but a model that
+    // refuses the combination must not cost Levix its own tools, which the
+    // commands depend on. Search is what gets dropped, never the functions.
     if (!searchOffered || !isToolCombinationError(error)) throw error;
     logger.warn(
-      { err: error?.message, model: settings.get("gemini_model") },
-      "[aiAgent] this model refuses Google Search together with function tools — retrying with functions only"
+      { err: error?.message, model },
+      "[aiAgent] this model refused Google Search together with function tools — retrying with functions only"
     );
     searchOffered = false;
     chat = openChat(false);
-    result = await chat.sendMessage(parts);
+    response = await chat.sendMessage({ message: parts });
   }
 
-  sources.push(...extractSources(result.response));
+  sources.push(...extractSources(response));
   let steps = 0;
 
   while (steps < stepBudget) {
-    const calls =
-      (typeof result.response?.functionCalls === "function"
-        ? result.response.functionCalls()
-        : null) || [];
+    // `functionCalls` is a getter on the new response object, not a method.
+    const calls = response.functionCalls || [];
     if (!calls.length) break;
 
     steps += 1;
@@ -411,30 +462,42 @@ async function runAgent({
         "[aiAgent] tool call"
       );
 
-      let response;
+      // Named apart from the outer `response` on purpose: that one is the
+      // model's reply and is reassigned at the bottom of this loop.
+      let toolResult;
       try {
-        response = await withTimeout(
+        toolResult = await withTimeout(
           runTool(call.name, call.args, context),
           settings.get("ai_tool_timeout_ms"),
           call.name
         );
       } catch (err) {
-        response = { error: err?.message || String(err) };
+        toolResult = { error: err?.message || String(err) };
       }
       responses.push({
-        functionResponse: { name: call.name, response },
+        functionResponse: {
+          // Echoed back when the model supplied one: with several calls in a
+          // single turn the id is how the API pairs each result with its call.
+          ...(call.id ? { id: call.id } : {}),
+          name: call.name,
+          response: toolResult,
+        },
       });
     }
 
     if (status) await status.update("🤖 بجهّز الرد...");
-    result = await chat.sendMessage(responses);
+    // One message carrying every functionResponse part, which is what the API
+    // expects when the model asked for several calls in one turn.
+    response = await chat.sendMessage({ message: responses });
     // Grounding can happen on any turn, not just the first.
-    sources.push(...extractSources(result.response));
+    sources.push(...extractSources(response));
   }
 
+  // `text` is a getter now, and it returns undefined rather than throwing when
+  // the candidate has no text part.
   let text = "";
   try {
-    text = result.response.text();
+    text = response.text ?? "";
   } catch (err) {
     logger.warn({ err: err?.message }, "[aiAgent] response had no text part");
   }
@@ -446,7 +509,10 @@ async function runAgent({
 
   let newHistory = [];
   try {
-    newHistory = trimHistory(await chat.getHistory());
+    // Synchronous in this SDK, and `true` asks for the curated history — the
+    // turns the API would actually accept back, with empty or invalid model
+    // outputs left out. That is exactly what Levix wants to persist.
+    newHistory = trimHistory(chat.getHistory(true));
   } catch (err) {
     logger.warn({ err: err?.message }, "[aiAgent] could not read chat history");
   }
@@ -465,6 +531,7 @@ async function runAgent({
 module.exports = {
   runAgent,
   buildTools,
+  buildToolConfig,
   googleSearchEnabled,
   extractSources,
   formatSources,

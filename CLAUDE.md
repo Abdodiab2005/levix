@@ -27,7 +27,8 @@ project); it is simply not operator-configurable.
 - **WhatsApp**: `@whiskeysockets/baileys@7.0.0-rc14` (ESM)
 - **Database**: SQLite through **`node:sqlite`** — Node's own module, so the
   datastore costs zero dependencies and there is no server to install
-- **AI**: `@google/generative-ai` (Gemini API)
+- **AI**: `@google/genai` (the current Gemini SDK), default model
+  `gemini-3.1-pro-preview`
 - **Web Server**: Express.js (the control panel)
 - **Logging**: Pino with pino-pretty
 - **Scheduling**: `node-cron`
@@ -458,7 +459,8 @@ that gets edited (`🤖 بفكر...` → `🔍 ببحث عن ...` → the answer
   message (text / image / video / audio / document / quoted), the multi-message
   context buffer, `!generate`, and the Groq + expired-file fallbacks.
 - `src/services/aiAgent.cjs` — the loop: system instruction, tool rounds,
-  history trimming.
+  history trimming. Built on `ai.chats`, which is what keeps Gemini 3's thought
+  signatures circulating (see below).
 - `src/services/aiTools.cjs` — the tools themselves.
 - `src/config/ai-persona.md` — **the operator's behaviour prompt**, in English.
   Hot-reloaded (everything above the first `---` is a note to the human and is
@@ -501,12 +503,35 @@ Citations come from `candidates[].groundingMetadata.groundingChunks[].web` and
 nothing else, so an answer the model gave from its own knowledge gets no Sources
 block. `formatSources()` deduplicates by URL and caps the list.
 
-The `googleSearch` shape is the Gemini 2.x one. This SDK's TypeScript types only
-know the older `googleSearchRetrieval`, but it passes `tools` through to the REST
-API untouched, so the 2.x shape reaches the model as written. If a
-model/API combination refuses search and functions together, `runAgent()` detects
-that specific 400 and retries **without search**, keeping Levix's own tools —
-never the other way round.
+**Search and the custom functions go out together**, which Gemini 3 calls *tool
+context circulation*: the server runs the search itself and
+`toolConfig.includeServerSideToolInvocations` is what puts those server-side
+calls into the conversation where the custom functions can see them. Turning
+that on also constrains function calling to `VALIDATED` — `AUTO` is not accepted
+alongside it — so `buildToolConfig()` sets the two together or neither. The
+combination is Gemini 3 only.
+
+`runAgent()` still detects a 400 that refuses the combination and retries
+**without search**, keeping Levix's own tools. That is defensive handling for an
+unexpected model, not the normal path.
+
+**Thought signatures.** Gemini 3 returns a `thoughtSignature` on the parts it
+produces and *rejects* a following turn whose function call has lost it (400,
+"missing a thought_signature"). Levix uses `ai.chats` rather than a hand-rolled
+`contents` array precisely because the Chat class records
+`candidates[0].content` verbatim, signature included — so circulation is not
+something the agent loop has to remember. A signature is a plain string, so it
+survives the JSON round trip through `ai_history` too. Anything that rebuilds
+history by hand has to preserve it.
+
+**Model choice.** The default is `gemini-3.1-pro-preview`.
+`gemini-3.1-pro-preview-customtools` is the same model on a separate endpoint,
+tuned for agents that mix **bash** with custom tools so the model stops
+preferring bash. Levix has no bash tool — its nine tools are search, fetch,
+memory, roles and the clock — and Google warns the variant can show "quality
+fluctuations in some use cases which don't benefit from such tools". So it is
+deliberately not the default. The model is a setting: an operator who actually
+sees the model ignoring the tools can switch to it in one field.
 
 Tools never throw: a failure comes back as `{ error }` so the model can explain
 it. Bounded by `AI_MAX_TOOL_STEPS` rounds and `AI_TOOL_TIMEOUT_MS` per call.

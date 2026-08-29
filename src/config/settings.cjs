@@ -59,9 +59,10 @@ const SETTINGS = [
   {
     key: "gemini_model",
     type: "string",
-    default: "gemini-2.5-flash",
+    default: "gemini-3.1-pro-preview",
     group: "ai",
     label: "Gemini model",
+    hint: "The model that answers. Gemini 3 takes Google Search and Levix's own function tools in the same request, which is what the agent depends on. If you ever see it ignoring the tools, gemini-3.1-pro-preview-customtools is the same model tuned to prefer them.",
   },
   {
     key: "ai_agent",
@@ -107,6 +108,22 @@ const SETTINGS = [
     group: "ai",
     label: "Memory injected (chars)",
     hint: "How much of the long-term memory files goes into every prompt.",
+  },
+  {
+    key: "gemini_stt_model",
+    type: "string",
+    default: "gemini-2.5-flash",
+    group: "ai",
+    label: "Gemini transcription model",
+    hint: "Used by !stt only. A fast, cheap model is the right choice here.",
+  },
+  {
+    key: "gemini_image_model",
+    type: "string",
+    default: "gemini-3.1-flash-image",
+    group: "ai",
+    label: "Gemini image model",
+    hint: "Used by !generate only. Image output needs a model that can return images, which is not the same one that answers chat.",
   },
   {
     key: "ai_google_search",
