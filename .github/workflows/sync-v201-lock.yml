@@ -1,4 +1,4 @@
-name: audit-v201-dependencies
+name: sync-v201-audit-fixes
 
 on:
   push:
@@ -6,19 +6,34 @@ on:
       - fix/v2.0.1-browser-origin-packages
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  audit:
+  audit-fix:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: fix/v2.0.1-browser-origin-packages
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
-      - name: Runtime audit
+      - name: Apply compatible audit fixes to lockfile
+        run: npm audit fix --package-lock-only
+      - name: Verify clean install
+        run: npm ci
+      - name: Show remaining runtime audit
         run: npm audit --omit=dev || true
-      - name: Full audit
-        run: npm audit || true
+      - name: Commit lockfile if changed
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "No compatible lockfile fixes were needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "Apply compatible npm audit fixes"
+          git push origin HEAD:fix/v2.0.1-browser-origin-packages
