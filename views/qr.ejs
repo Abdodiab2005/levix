@@ -55,6 +55,10 @@
             <li>Settings → Linked devices → Link a device.</li>
             <li>Point the camera at the code above.</li>
           </ol>
+          <div class="hint">
+            No code yet? Levix only connects when you ask it to — press
+            <strong>Start session</strong> on the dashboard's Connection screen.
+          </div>
         </div>
 
         <a class="btn" href="/">Back to the dashboard</a>
@@ -63,7 +67,7 @@
       <div class="foot"><%= brand.name %> · by <%= brand.developer %></div>
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
+    <script src="/socket.io.min.js"></script>
     <script src="/qrcode.min.js"></script>
     <script>
       (() => {
@@ -94,13 +98,29 @@
         if (initial) render(initial);
         else setState("Waiting for a code…", "");
 
+        function clear(text, kind) {
+          painted = null;
+          frame.innerHTML = "";
+          setState(text, kind || "");
+        }
+
         const socket = io();
         socket.on("qr", render);
-        socket.on("status_update", (data) => {
-          if (data.status === "Connected") {
+
+        // The backend drops a code the moment it stops being scannable. Without
+        // this the page sat on an expired QR forever, and somebody would keep
+        // pointing a phone at it.
+        socket.on("qr_cleared", () => clear("Waiting for a code…", ""));
+
+        socket.on("session", (state) => {
+          if (state.state === "connected") {
             frame.innerHTML = '<div style="padding:60px 30px;color:#0d1730">Linked ✓</div>';
+            painted = null;
             setState("Connected", "on");
+            return;
           }
+          if (state.state === "waiting_for_qr") return; // the qr event paints it
+          clear(state.canStart ? "Not started — start it from the dashboard" : "Connecting…", "");
         });
       })();
     </script>

@@ -26,21 +26,23 @@ const {
   listRoles,
 } = require("../utils/permissions.cjs");
 
-// The SDK exports a SchemaType enum; fall back to the wire values if a future
-// version drops it, so a rename can't take the whole agent down.
-let SchemaType = null;
+// @google/genai exports a `Type` enum (the old SDK called it `SchemaType`).
+// Its members are the uppercase wire values — Type.STRING === "STRING" — so the
+// fallback below is the same thing spelled out, and a future rename can't take
+// the whole agent down with it.
+let Type = null;
 try {
-  ({ SchemaType } = require("@google/generative-ai"));
+  ({ Type } = require("@google/genai"));
 } catch {
-  SchemaType = null;
+  Type = null;
 }
-const T = SchemaType || {
-  STRING: "string",
-  NUMBER: "number",
-  INTEGER: "integer",
-  BOOLEAN: "boolean",
-  ARRAY: "array",
-  OBJECT: "object",
+const T = Type || {
+  STRING: "STRING",
+  NUMBER: "NUMBER",
+  INTEGER: "INTEGER",
+  BOOLEAN: "BOOLEAN",
+  ARRAY: "ARRAY",
+  OBJECT: "OBJECT",
 };
 
 const UA =

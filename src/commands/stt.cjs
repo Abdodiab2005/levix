@@ -1,6 +1,5 @@
 // Speech-to-Text Command using FREE Gemini API
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const { GoogleAIFileManager } = require("@google/generative-ai/server");
+const { GoogleGenAI } = require("@google/genai");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 const fs = require("fs").promises;
 const path = require("path");
@@ -11,21 +10,25 @@ const settings = require("../config/settings.cjs");
 
 // Built on first use from whatever key is in force, and
 // rebuilt if that key changes — the operator can paste one without a restart.
-let cache = { key: null, model: null, fileManager: null };
+//
+// One @google/genai client covers both halves: `ai.files` replaced the separate
+// GoogleAIFileManager, and the model is named per request.
+let cache = { key: null, genAI: null };
 
 function geminiStt() {
   const key = settings.get("gemini_api_key");
   if (!key) return null;
   if (cache.key !== key) {
-    const genAI = new GoogleGenerativeAI(key);
-    cache = {
-      key,
-      // Free tier with generous limits
-      model: genAI.getGenerativeModel({ model: "gemini-2.5-flash" }),
-      fileManager: new GoogleAIFileManager(key),
-    };
+    cache = { key, genAI: new GoogleGenAI({ apiKey: key }) };
   }
   return cache;
+}
+
+// Transcription is a cheap, high-volume job, so it keeps its own setting even
+// though it defaults to the same Flash model the chat agent uses: an operator
+// who moves the chat model to Pro should not drag transcription along with it.
+function sttModel() {
+  return settings.get("gemini_stt_model");
 }
 
 module.exports = {
@@ -80,28 +83,42 @@ module.exports = {
 
       logger.info(`[STT] Saved audio to temporary file: ${tempAudioPath}`);
 
-      // Upload audio to Gemini
-      const uploadResponse = await gemini.fileManager.uploadFile(tempAudioPath, {
-        mimeType: audioMessage.mimetype || "audio/ogg; codecs=opus",
-        displayName: `audio-${Date.now()}`,
+      // Upload audio to Gemini. ai.files.upload returns the File directly,
+      // where the old fileManager wrapped it in { file }.
+      const uploaded = await gemini.genAI.files.upload({
+        file: tempAudioPath,
+        config: {
+          mimeType: audioMessage.mimetype || "audio/ogg; codecs=opus",
+          displayName: `audio-${Date.now()}`,
+        },
       });
 
-      logger.info(`[STT] Uploaded audio to Gemini: ${uploadResponse.file.uri}`);
+      logger.info(`[STT] Uploaded audio to Gemini: ${uploaded.uri}`);
 
       // Generate transcription using Gemini
-      const result = await gemini.model.generateContent([
-        {
-          fileData: {
-            mimeType: uploadResponse.file.mimeType,
-            fileUri: uploadResponse.file.uri,
+      const response = await gemini.genAI.models.generateContent({
+        model: sttModel(),
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                fileData: {
+                  mimeType: uploaded.mimeType,
+                  fileUri: uploaded.uri,
+                },
+              },
+              {
+                text: "Please transcribe this audio message accurately. Return ONLY the transcription text without any additional commentary, explanations, or formatting. Just the raw transcribed text.",
+              },
+            ],
           },
-        },
-        {
-          text: "Please transcribe this audio message accurately. Return ONLY the transcription text without any additional commentary, explanations, or formatting. Just the raw transcribed text.",
-        },
-      ]);
+        ],
+      });
 
-      const transcription = result.response.text().trim();
+      // `text` is a getter on the new response, and undefined rather than a
+      // throw when the model returned nothing usable.
+      const transcription = (response.text ?? "").trim();
 
       if (!transcription || transcription === "") {
         await status.finish(

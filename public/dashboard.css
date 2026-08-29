@@ -302,6 +302,15 @@ kbd {
 .pill.off .dot {
   background: var(--danger);
 }
+/* Connecting / waiting for a scan / reconnecting: neither linked nor dead. */
+.pill.warn {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+}
+.pill.warn .dot {
+  background: var(--warn);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent);
+}
 
 .btn {
   display: inline-flex;

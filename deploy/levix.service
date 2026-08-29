@@ -4,6 +4,9 @@
 #   sudo systemctl enable --now levix
 #   journalctl -u levix -f          # the setup code is printed here on first run
 #
+# The first-run setup code is one line on stdout, so the journal has it:
+#   journalctl -u levix --no-pager | grep -F '[Setup] Setup code:' | tail -1
+#
 # deploy/install.sh installs this and rewrites ExecStart with the real path of
 # the `levix` command it just installed — `/usr/bin/env levix` only works when
 # npm's global bin is on systemd's own PATH, which it is not under nvm and not

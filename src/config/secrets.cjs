@@ -111,6 +111,23 @@ function getSetupCode() {
   return setupCode;
 }
 
+// The exact shape the code is printed in, and the exact string the install
+// instructions tell people to grep for. Both come from here so they cannot
+// drift apart again — tests/setup-code.test.mjs boots Levix for real and greps
+// its output with the documented command.
+//
+// Printed with console.log rather than through the logger on purpose: the
+// documented way to find it is `journalctl -u levix` / `docker compose logs`,
+// which read stdout, and pino's pretty transport wraps its messages in colour
+// escapes that a naive grep-and-copy would carry along. It also keeps a claim
+// credential out of the log file that sits on disk forever.
+const SETUP_CODE_LOG_PREFIX = "[Setup] Setup code:";
+
+/** The one line that carries the code. Stable — docs grep for its prefix. */
+function formatSetupCodeLine(code = getSetupCode()) {
+  return `${SETUP_CODE_LOG_PREFIX} ${code}`;
+}
+
 function setupCodeMatches(candidate) {
   if (typeof candidate !== "string") return false;
   const expected = Buffer.from(getSetupCode());
@@ -127,4 +144,6 @@ module.exports = {
   verifyDashboardPassword,
   getSetupCode,
   setupCodeMatches,
+  SETUP_CODE_LOG_PREFIX,
+  formatSetupCodeLine,
 };

@@ -18,11 +18,10 @@
 // ("🤖 بفكر..." -> "🔍 ببحث عن ..." -> the final answer), so a single answer
 // never costs four messages.
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const { GoogleAIFileManager } = require("@google/generative-ai/server");
+const { GoogleGenAI } = require("@google/genai");
 
 const logger = require("../utils/logger.cjs");
-const brand = require("../config/brand.cjs");
+const aiIdentity = require("../config/ai-identity.cjs");
 const settings = require("../config/settings.cjs");
 const {
   getChatHistoryAsync,
@@ -39,6 +38,7 @@ const {
 } = require("../utils/permissions.cjs");
 const {
   runAgent,
+  formatSources,
   isFileReferenceError,
   sanitizeHistoryForFiles,
 } = require("../services/aiAgent.cjs");
@@ -65,28 +65,29 @@ function setBuffer(msg, entries) {
 // Keys come from config/settings.cjs (what the dashboard saved, else the default)
 // and are read per call: a key pasted into the dashboard has to work without a
 // restart. The clients are cached per key so we don't rebuild them per message.
-let geminiCache = { key: null, genAI: null, fileManager: null, imageModel: null };
+//
+// One client does everything now: @google/genai folded the separate
+// GoogleAIFileManager into `ai.files`, and the model is named per request
+// instead of being baked into a model object.
+let geminiCache = { key: null, genAI: null };
 
 function geminiClients() {
   const key = settings.get("gemini_api_key");
-  if (!key) return { genAI: null, fileManager: null, imageModel: null };
+  if (!key) return { genAI: null };
   if (geminiCache.key !== key) {
-    const genAI = new GoogleGenerativeAI(key);
-    geminiCache = {
-      key,
-      genAI,
-      fileManager: new GoogleAIFileManager(key),
-      imageModel: genAI.getGenerativeModel({ model: "gemini-2.5-flash" }),
-    };
+    geminiCache = { key, genAI: new GoogleGenAI({ apiKey: key }) };
   }
   return geminiCache;
 }
 
 function isGeminiRateLimitError(error) {
   const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
+  // @google/genai's ApiError carries a numeric `status`; the older shapes are
+  // kept because they cost nothing and a queued error can predate an upgrade.
   const status =
     error?.status ||
     error?.statusCode ||
+    error?.code ||
     error?.response?.status ||
     error?.error?.code;
 
@@ -123,9 +124,9 @@ async function getGroqFallbackResponse(parts) {
       messages: [
         {
           role: "system",
-          // Same frozen identity the Gemini path gets — the fallback shouldn't
-          // answer "who made you?" differently from the main model.
-          content: `${brand.identityPrompt}\n\nبوت واتساب خفيف الظل. رد بالمصري العامي، قصير ومباشر.`,
+          // Same code-owned identity the Gemini path gets — the fallback must
+          // not answer "who made you?" differently from the main model.
+          content: `${aiIdentity.systemBlock}\n\nBe brief, direct and conversational. Answer in the language the user wrote in.`,
         },
         { role: "user", content: mergedPrompt },
       ],
@@ -141,8 +142,8 @@ async function getGroqFallbackResponse(parts) {
 }
 
 async function processIncomingMedia(parts, mediaMessage, mimeOverride = null) {
-  const { fileManager } = geminiClients();
-  if (!fileManager) throw new Error("Gemini fileManager unavailable");
+  const { genAI } = geminiClients();
+  if (!genAI) throw new Error("Gemini client unavailable");
   const tempFilePath = path.join(__dirname, `temp_media_${Date.now()}`);
   const stream = await downloadContentFromMessage(
     mediaMessage,
@@ -160,17 +161,23 @@ async function processIncomingMedia(parts, mediaMessage, mimeOverride = null) {
 
   await fs.writeFile(tempFilePath, buffer);
   try {
-    const uploadResponse = await fileManager.uploadFile(tempFilePath, {
-      mimeType: mimeOverride || mediaMessage.mimetype,
-      displayName: `media-${Date.now()}`,
+    // ai.files.upload returns the File itself, where the old fileManager
+    // wrapped it in { file }. The fileData part shape is unchanged, so history
+    // written by an older Levix still loads.
+    const uploaded = await genAI.files.upload({
+      file: tempFilePath,
+      config: {
+        mimeType: mimeOverride || mediaMessage.mimetype,
+        displayName: `media-${Date.now()}`,
+      },
     });
     parts.push({
       fileData: {
         mimeType: mimeOverride || mediaMessage.mimetype,
-        fileUri: uploadResponse.file.uri,
+        fileUri: uploaded.uri,
       },
     });
-    return uploadResponse.file.uri;
+    return uploaded.uri;
   } finally {
     try {
       await fs.unlink(tempFilePath);
@@ -391,12 +398,19 @@ module.exports = {
             : imagePrompt
             ? `Prompt: ${imagePrompt}`
             : `Prompt: ${quotedMsg}`;
-        const result = await geminiClients().imageModel.generateContent(
-          `Generate an image using this prompt: ${fullPrompt}`
+        const response = await geminiClients().genAI.models.generateContent({
+          model: settings.get("gemini_image_model"),
+          contents: `Generate an image using this prompt: ${fullPrompt}`,
+        });
+
+        // The bytes come back as an inlineData part. (The previous code read
+        // `fileData.data`, which is not a field that exists on either SDK —
+        // this path could never have produced an image.)
+        const image = (response.candidates?.[0]?.content?.parts || []).find(
+          (part) => part?.inlineData?.data
         );
-        const response = await result.response;
-        const image = response.candidates[0].content.parts[0];
-        const imageBuffer = Buffer.from(image.fileData.data, "base64");
+        if (!image) throw new Error("الموديل رجّع رد من غير صورة");
+        const imageBuffer = Buffer.from(image.inlineData.data, "base64");
 
         await status.remove();
         await sendBotMessage(
@@ -698,7 +712,10 @@ module.exports = {
       const text =
         result.text?.trim() ||
         "مفيش رد جه من الموديل. جرّب تصيغ السؤال بشكل تاني.";
-      await status.finish(text);
+      // Appended only when Gemini really grounded the answer on a search —
+      // formatSources() returns "" for an answer the model gave from its own
+      // knowledge, so there is never a Sources block with nothing behind it.
+      await status.finish(`${text}${formatSources(result.sources)}`);
     } catch (error) {
       logger.error({ err: error }, "Error in !gemini command");
 

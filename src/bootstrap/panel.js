@@ -31,8 +31,9 @@ export async function bootstrapPanel({ core } = {}) {
     installFinalHandlers,
   } = require("../../app.cjs");
 
-  const { default: dashboardApiRoutes, setBotInstance, setBotControls } =
-    await import("../routes/dashboard.api.esm.js");
+  const { default: dashboardApiRoutes, setSession } = await import(
+    "../routes/dashboard.api.esm.js"
+  );
 
   // Same session as the control panel: these routes hand back groups, debts
   // and warnings with people's numbers in them.
@@ -40,12 +41,13 @@ export async function bootstrapPanel({ core } = {}) {
   logger.info("Dashboard API routes registered");
 
   // Everything the bot reports goes out to the browsers watching the panel.
+  // One direction only: a browser attaching or leaving cannot reach back and
+  // change the WhatsApp session's lifecycle. See src/core/session.js.
   attach((event, payload) => io.emit(event, payload));
 
-  if (core?.sock) {
-    setBotInstance(core.sock);
-    setBotControls({ clearAll: core.clearAll });
-  }
+  // The routes read the live socket off the session manager, so a reconnect
+  // needs no re-wiring here.
+  if (core?.session) setSession(core.session);
 
   // After every route is registered — the 404 and the error handler have to be
   // last, or they swallow what comes after them.
@@ -73,7 +75,7 @@ export async function bootstrapPanel({ core } = {}) {
     server.listen(port, host, resolve);
   });
 
-  return { port, host, server, setBotInstance, setBotControls };
+  return { port, host, server };
 }
 
 /**

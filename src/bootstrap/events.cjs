@@ -10,8 +10,10 @@
 //   panel     -> forwards every event to socket.io
 //   headless  -> prints the ones a person waiting at a terminal cares about
 //
-// `sink` is shaped like the socket.io server object because that is what
-// `setupEventListeners` is handed. Nothing in src/core had to change.
+// `sink` is shaped like the socket.io server object because that is what the
+// panel forwards from. The WhatsApp session manager (src/core/session.js) emits
+// into it; nothing that listens here can emit back into the bot, which is what
+// keeps a browser attaching or leaving from touching the connection.
 
 const listeners = new Set();
 

@@ -2,8 +2,12 @@
 #
 # Pulls the latest published Levix image from GitHub Container Registry.
 # Then open http://localhost:3001 and pick a password. The setup page asks for
-# a code when you open it from another machine; `docker compose logs levix`
-# prints it.
+# a code when you open it from another machine; this prints it:
+#
+#   docker compose logs levix | grep -F '[Setup] Setup code:' | tail -1
+#
+# Levix does not connect to WhatsApp on its own: open the panel, go to
+# Connection and press Start session to get a QR code.
 
 services:
   levix:
