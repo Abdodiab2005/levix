@@ -69,7 +69,7 @@ node_major() {
 # Read distro metadata in a subshell. /etc/os-release commonly defines VERSION,
 # which must never overwrite Levix's own release VERSION in the parent shell.
 read_os_id() (
-  local os_release="${1:-/etc/os-release}"
+  local os_release="$1"
   [ -r "$os_release" ] || return 1
   # shellcheck disable=SC1090
   . "$os_release"
@@ -78,7 +78,7 @@ read_os_id() (
 
 install_node24() {
   local distro_id
-  distro_id="$(read_os_id)" ||
+  distro_id="$(read_os_id /etc/os-release)" ||
     die "Node ${MIN_NODE_MAJOR}+ is required. Automatic Node installation is supported on Debian and Ubuntu only."
 
   case "$distro_id" in
