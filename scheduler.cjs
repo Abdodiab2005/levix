@@ -103,6 +103,20 @@ function scheduleAt(whenMs, run) {
   return { stop: () => clearTimeout(timer) };
 }
 
+/**
+ * Stop every running task.
+ *
+ * Each task closes over the socket it was armed with (see scheduleNewJob), so
+ * once that socket is gone the task can only fail. The connection handler calls
+ * initializeScheduledJobs() again on the next open, which re-arms every job
+ * against the socket that is actually alive.
+ */
+function stopAllScheduledJobs() {
+  const count = runningTasks.size;
+  for (const jobId of [...runningTasks.keys()]) stopTask(jobId);
+  if (count) logger.info(`[Scheduler] Stopped ${count} job(s) — no live connection`);
+}
+
 function stopTask(jobId) {
   const existing = runningTasks.get(jobId);
   if (!existing) return;
@@ -189,6 +203,7 @@ function updateJobStatus(jobId, status) {
 
 module.exports = {
   initializeScheduledJobs,
+  stopAllScheduledJobs,
   scheduleNewJob,
   getScheduledJobs,
   saveScheduledJob,

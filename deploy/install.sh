@@ -237,7 +237,7 @@ cat <<EOF
   Open the panel and pick a password. Opening it from another machine also
   asks for a setup code — this prints it:
 
-    journalctl -u ${SERVICE} -n 40 | grep -A3 'Setup code'
+    journalctl -u ${SERVICE} --no-pager | grep -F '[Setup] Setup code:' | tail -1
 
   Then scan the QR from the Connection screen with WhatsApp.
 

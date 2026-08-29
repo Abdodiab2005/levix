@@ -174,11 +174,46 @@
   }
 
   // --- connection status --------------------------------------------------
+  //
+  // The backend owns the session (src/core/session.js); this file only draws
+  // what it reports. Nothing here starts, stops or retries a connection on its
+  // own, and closing this tab does not touch the bot.
 
-  function setStatus(connected, label) {
+  // What each backend state looks like: the pill class, the label, and the
+  // sentence under the Connection card's heading.
+  const SESSION_LABELS = {
+    idle: { tone: "off", label: "Not started", tag: "danger", tagText: "Not started" },
+    starting: { tone: "warn", label: "Connecting", tag: "warn", tagText: "Connecting" },
+    waiting_for_qr: { tone: "warn", label: "Waiting for scan", tag: "warn", tagText: "Waiting for scan" },
+    linking: { tone: "warn", label: "Linking", tag: "warn", tagText: "Linking" },
+    connected: { tone: "on", label: "Connected", tag: "ok", tagText: "Linked" },
+    reconnecting: { tone: "warn", label: "Reconnecting", tag: "warn", tagText: "Reconnecting" },
+    disconnected: { tone: "off", label: "Disconnected", tag: "danger", tagText: "Disconnected" },
+    retry_exhausted: { tone: "off", label: "Disconnected", tag: "danger", tagText: "Gave up reconnecting" },
+    logged_out: { tone: "off", label: "Not linked", tag: "danger", tagText: "Not linked" },
+    error: { tone: "off", label: "Error", tag: "danger", tagText: "Error" },
+  };
+
+  const describeSession = (state) =>
+    SESSION_LABELS[state] || { tone: "off", label: "Disconnected", tag: "danger", tagText: "Disconnected" };
+
+  // The last snapshot the backend sent. Every renderer reads this rather than
+  // its own idea of what is going on, so the pill and the Connection card can
+  // never disagree.
+  let sessionSnapshot = null;
+
+  function setStatus(snapshot) {
+    if (!snapshot) return;
+    sessionSnapshot = snapshot;
+    const look = describeSession(snapshot.state);
     const pill = $("#status-pill");
-    pill.className = `pill ${connected ? "on" : "off"}`;
-    pill.innerHTML = `<span class="dot"></span>${esc(label)}`;
+    pill.className = `pill ${look.tone}`;
+    pill.innerHTML = `<span class="dot"></span>${esc(look.label)}`;
+    // Outside the `currentView` check: leaving the Connection screen while a
+    // reconnect was pending used to leave the ticker running for the life of
+    // the page, because only renderConnection() could ever stop it.
+    syncRetryTicker(snapshot);
+    if (currentView === "connection") renderConnection();
   }
 
   // --- overview -----------------------------------------------------------
@@ -186,7 +221,10 @@
   async function loadStats() {
     const { stats } = await api("/stats");
 
-    setStatus(stats.isConnected, stats.isConnected ? "Connected" : "Disconnected");
+    // /stats carries the same session snapshot the socket pushes, so the poll
+    // that runs every 15s refreshes the pill instead of flattening whatever the
+    // last live event put there.
+    setStatus(stats.connection);
 
     const cards = [
       ["Groups", stats.totalGroups],
@@ -253,55 +291,140 @@
     $("#qr-note").textContent = "Scan it from WhatsApp → Linked devices.";
   }
 
+  function clearQr() {
+    qrRendered = null;
+    $("#qr-frame").innerHTML = "";
+    $("#qr-note").textContent = "Waiting for a QR code…";
+  }
+
+  function retryHint(snapshot) {
+    if (snapshot.state !== "reconnecting" || !snapshot.nextRetryAt) return "";
+    const seconds = Math.max(0, Math.round((snapshot.nextRetryAt - Date.now()) / 1000));
+    return ` Next attempt in ${seconds}s.`;
+  }
+
+  // A countdown that only ticks while there is one to show. Rendering it once
+  // and leaving it would put a number on screen that stops being true a second
+  // later.
+  let retryTicker = null;
+
+  function syncRetryTicker(snapshot) {
+    const counting = snapshot.state === "reconnecting" && snapshot.nextRetryAt;
+    if (counting && !retryTicker) {
+      retryTicker = setInterval(() => {
+        if (currentView === "connection") renderConnection();
+      }, 1000);
+    } else if (!counting && retryTicker) {
+      clearInterval(retryTicker);
+      retryTicker = null;
+    }
+  }
+
+  /** Draw the Connection card from the last snapshot. No network call. */
+  function renderConnection() {
+    const snapshot = sessionSnapshot;
+    if (!snapshot) return;
+
+    const look = describeSession(snapshot.state);
+    const who = snapshot.user?.id ? shortJid(snapshot.user.id) : "";
+
+    $("#conn-state").innerHTML =
+      `<span class="tag ${esc(look.tag)}">${esc(look.tagText)}</span>` +
+      (who ? ` <span class="hint">${esc(who)}</span>` : "");
+
+    $("#conn-detail").textContent = (snapshot.detail || "") + retryHint(snapshot);
+
+    // Buttons follow the backend, so a state that cannot accept an action
+    // cannot be asked for one.
+    $("#start-btn").disabled = !snapshot.canStart;
+    $("#start-btn").textContent =
+      snapshot.state === "logged_out" || snapshot.state === "idle"
+        ? "Start session"
+        : "Retry connection";
+    $("#stop-btn").disabled = !snapshot.canStop;
+    // Not "only while connected": a refused pairing leaves dead credentials
+    // that can only be cleared by unlinking.
+    $("#unlink-btn").disabled = !snapshot.canUnlink;
+
+    // The QR frame is only up while a code can actually be scanned.
+    const pairing = snapshot.state === "waiting_for_qr";
+    $("#qr-panel").style.display = pairing ? "block" : "none";
+    if (!pairing) clearQr();
+  }
+
   VIEWS.connection = {
     title: "Connection",
+    // One request for the whole screen, including a QR that was already on
+    // offer before this tab existed — a reload has to show the real backend
+    // state, not an empty frame.
     load: guard(async () => {
-      const { stats } = await api("/stats");
-      const connected = stats.isConnected;
-
-      $("#conn-state").innerHTML = connected
-        ? `<span class="tag ok">Linked</span> <span class="hint">${esc(shortJid(stats.botNumber))}</span>`
-        : `<span class="tag danger">Not linked</span>`;
-
-      $("#qr-panel").style.display = connected ? "none" : "block";
-      if (connected) {
-        qrRendered = null;
-        $("#qr-frame").innerHTML = "";
-        $("#qr-note").textContent = "";
-      }
+      const { session, qr } = await api("/bot/session");
+      setStatus(session);
+      renderConnection();
+      if (qr && session.state === "waiting_for_qr") renderQr(qr);
     }),
   };
 
+  function confirmed(question, fn) {
+    return guard(async () => {
+      if (!confirm(question)) return;
+      await fn();
+    });
+  }
+
   function initConnectionActions() {
-    $("#unlink-btn").addEventListener(
+    // Starting is idempotent on the server: a second click while a socket is
+    // being made is answered with the state it is already in.
+    $("#start-btn").addEventListener(
       "click",
       guard(async () => {
-        if (
-          !confirm(
-            "Unlink this WhatsApp account? The bot stops answering until you scan a new QR code."
-          )
-        ) {
-          return;
+        // Disabled straight away so an impatient second click cannot even be
+        // made, and put back from the backend's answer either way — a failed
+        // request must not leave a dead button behind.
+        $("#start-btn").disabled = true;
+        try {
+          const { session } = await api("/bot/session/start", { method: "POST" });
+          setStatus(session);
+          toast("Session starting…", "ok");
+        } finally {
+          renderConnection();
         }
-        await api("/bot/logout", { method: "POST" });
-        toast("Unlinked. A new QR code will appear here shortly.", "ok");
-        setStatus(false, "Disconnected");
       })
+    );
+
+    $("#stop-btn").addEventListener(
+      "click",
+      confirmed(
+        "Stop the WhatsApp session? The bot stops answering until you start it again. The pairing is kept.",
+        async () => {
+          const { session } = await api("/bot/session/stop", { method: "POST" });
+          setStatus(session);
+          toast("Session stopped.", "ok");
+        }
+      )
+    );
+
+    $("#unlink-btn").addEventListener(
+      "click",
+      confirmed(
+        "Unlink this WhatsApp account? The bot stops answering until you start a new session and scan a QR code.",
+        async () => {
+          const { session } = await api("/bot/logout", { method: "POST" });
+          setStatus(session);
+          toast("Unlinked. Press Start session to pair again.", "ok");
+        }
+      )
     );
 
     $("#restart-btn").addEventListener(
       "click",
-      guard(async () => {
-        if (
-          !confirm(
-            "Restart the bot? It only comes back on its own if it runs under a supervisor (pm2, systemd, Docker)."
-          )
-        ) {
-          return;
+      confirmed(
+        "Restart the bot? It only comes back on its own if it runs under a supervisor (pm2, systemd, Docker).",
+        async () => {
+          const data = await api("/bot/restart", { method: "POST" });
+          toast(data.message || "Restarting…", "ok");
         }
-        const data = await api("/bot/restart", { method: "POST" });
-        toast(data.message || "Restarting…", "ok");
-      })
+      )
     );
   }
 
@@ -1021,22 +1144,28 @@
 
   // --- boot ---------------------------------------------------------------
 
+  // The socket is a one-way feed of what the backend is already doing. Opening
+  // it, losing it or reloading the page changes nothing about the WhatsApp
+  // session; a reconnect happens in the backend with every tab shut.
   function initSocket() {
     // eslint-disable-next-line no-undef
     const socket = io();
 
+    socket.on("session", (snapshot) => setStatus(snapshot));
+
     socket.on("qr", (qr) => {
       renderQr(qr);
-      setStatus(false, "Waiting for scan");
       if (currentView !== "connection") {
         toast("A new QR code is ready — open Connection to scan it.");
       }
     });
 
-    socket.on("status_update", (data) => {
-      const connected = data.status === "Connected";
-      setStatus(connected, data.status);
-      if (connected && currentView === "connection") VIEWS.connection.load();
+    socket.on("qr_cleared", () => clearQr());
+
+    // A socket that dropped may have missed transitions while it was away.
+    socket.on("connect", () => {
+      if (currentView === "connection") VIEWS.connection.load();
+      else loadStats().catch(() => {});
     });
   }
 

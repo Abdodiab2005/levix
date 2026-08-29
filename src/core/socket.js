@@ -51,6 +51,14 @@ export async function createWhatsAppSocket() {
 
   const { state, saveCreds, clearAll } = await useDatabaseAuthState();
 
+  // Whether this install is already paired. NOT `store.hasCredentials()`: the
+  // auth state writes a `creds` row on its very first call, paired or not, so
+  // that row proves nothing. `creds.me.id` is only filled in by a successful
+  // pairing, which is exactly the question the session manager is asking —
+  // it decides whether a close is a failed pairing attempt or a dropped
+  // connection worth retrying.
+  const isPaired = !!state?.creds?.me?.id;
+
   const cachedGroupMetadata = (jid) => groupMetadataCache.get(jid);
 
   const sock = withThumbnailSupport(
@@ -60,5 +68,5 @@ export async function createWhatsAppSocket() {
     })
   );
 
-  return { sock, saveCreds, clearAll };
+  return { sock, saveCreds, clearAll, isPaired };
 }

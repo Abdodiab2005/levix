@@ -100,17 +100,31 @@
           <section class="view" id="view-connection">
             <div class="section-head">
               <h2>Connection</h2>
-              <p>Link a WhatsApp account, or unlink the one in use.</p>
+              <p>Start or stop the WhatsApp session, and link or unlink an account.</p>
             </div>
 
             <div class="card">
               <div class="card-head">
-                <h2>Account</h2>
+                <h2>Session</h2>
                 <div class="spacer"></div>
                 <span id="conn-state"></span>
               </div>
 
-              <div id="qr-panel">
+              <div class="hint" id="conn-detail"></div>
+
+              <div class="inline" style="margin-top:12px">
+                <button class="btn btn-primary" id="start-btn">Start session</button>
+                <button class="btn" id="stop-btn">Stop session</button>
+                <button class="btn btn-danger" id="unlink-btn">Unlink account</button>
+                <button class="btn" id="restart-btn">Restart bot</button>
+              </div>
+              <div class="hint" style="margin-top:8px">
+                Levix runs whether or not WhatsApp is connected. Starting the session is
+                the only thing that opens a connection; restart only comes back on its own
+                under a supervisor (pm2, systemd, Docker).
+              </div>
+
+              <div id="qr-panel" style="display:none">
                 <div class="qr-box">
                   <div class="qr-frame" id="qr-frame"></div>
                   <div class="hint" id="qr-note">Waiting for a QR code…</div>
@@ -120,14 +134,6 @@
                     <li>Point the camera at the code above.</li>
                   </ol>
                 </div>
-              </div>
-
-              <div class="inline" style="margin-top:12px">
-                <button class="btn btn-danger" id="unlink-btn">Unlink account</button>
-                <button class="btn" id="restart-btn">Restart bot</button>
-              </div>
-              <div class="hint" style="margin-top:8px">
-                Restart only comes back on its own under a supervisor (pm2, systemd, Docker).
               </div>
             </div>
           </section>

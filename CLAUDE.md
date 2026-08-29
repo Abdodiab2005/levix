@@ -12,16 +12,19 @@ you edit it: there is no `.env`, no config file, and nothing to install beside
 Node.
 
 The name ("Levix") and the credit ("built by Abdelrhman Diab, Leviro") are
-**not** settings. They live in `src/config/brand.cjs`, are frozen there, and the
-`identityPrompt` from that file is prepended to the AI's system prompt on every
-request — above the editable persona — so no prompt edit and no message from a
-user can make the bot claim a different name or author. The dashboard never
-renders that block and offers no field for it.
+**not** settings. `src/config/brand.cjs` holds what the UI renders (name,
+tagline, credit, repo) and is frozen. The AI's product-identity block is a
+separate, code-owned module — `src/config/ai-identity.cjs` — prepended to the
+system instruction above the editable persona on every request, so no prompt
+edit and no message from a user can make the bot claim a different name or
+author. Nothing imports that module except the AI: no route, no template, no
+setting, and no dashboard field. It is not secret (this is an open-source
+project); it is simply not operator-configurable.
 
 ## Technology Stack
 
 - **Core**: Node.js 24+ with ES Modules (`"type": "module"`)
-- **WhatsApp**: `@whiskeysockets/baileys@7.0.0-rc13` (ESM)
+- **WhatsApp**: `@whiskeysockets/baileys@7.0.0-rc14` (ESM)
 - **Database**: SQLite through **`node:sqlite`** — Node's own module, so the
   datastore costs zero dependencies and there is no server to install
 - **AI**: `@google/generative-ai` (Gemini API)
@@ -112,8 +115,10 @@ src/
 │   ├── settings.cjs  # every operator-changeable value: database -> default
 │   ├── defaults.cjs  # shipped command permissions + prefix (was config.json)
 │   ├── runtime-config.cjs # defaults.cjs + dashboard overrides
-│   ├── brand.cjs     # name + credit + AI identity block (FROZEN)
+│   ├── brand.cjs     # name + credit for the UI (FROZEN, public)
 │   ├── brand.esm.js  # ESM face of brand.cjs
+│   ├── ai-identity.cjs # product identity for the MODEL only (code-owned,
+│   │                 # not a setting, not reachable from any route or view)
 │   ├── ai-persona.md # the editable AI system prompt (a TEMPLATE — the live
 │   │                 # copy lives in the data directory)
 │   ├── constants.js  # build-time constants (retries, cache TTLs)
@@ -125,7 +130,8 @@ src/
 ├── core/             # Core WhatsApp functionality (ESM)
 │   ├── socket.js     # WhatsApp socket creation
 │   ├── events.js     # Event listener setup
-│   └── connection.js # Connection state, owner/admin roster bootstrap
+│   ├── session.js    # THE session state machine: start/stop/logout, retries
+│   └── connection.js # classifyDisconnect() + what happens once open
 ├── handlers/         # Message routing (ESM)
 │   ├── message.handler.js  # Main message router
 │   ├── command.handler.js  # Command dispatcher + loader
@@ -169,24 +175,102 @@ Two shapes, one core. The difference is which bootstrap runs, not a flag
 threaded through the codebase:
 
 ```
-levix                      levix headless
-  bootstrapCore()            bootstrapCore()
+levix                                levix headless
+  bootstrapCore({ autoStart: false })  bootstrapCore({ autoStart: true })
   bootstrapPanel()
   maybe open a browser
 ```
+
+**Starting the process does not start WhatsApp.** In panel mode the session
+sits `idle` until somebody presses Start on the Connection screen. Headless has
+no screen and nobody to press anything, so it asks for `autoStart`. That one
+option is the entire difference — there is no `if (headless)` in `src/core/`.
 
 - `src/cli.js` — the command line. Every branch imports only what it needs, so
   `where` never opens a database and `reset-password` never starts WhatsApp.
   `bin/levix.js` is a two-line wrapper, and the packaged executable bundles the
   same file.
-- `src/bootstrap/core.js` — lock, database, commands, WhatsApp, scheduler.
+- `src/bootstrap/core.js` — lock, database, commands, the session manager,
+  the scheduler. It *builds* the WhatsApp session; it only *starts* it when
+  asked.
 - `src/bootstrap/panel.js` — Express, sessions, EJS, socket.io, routes, listen.
   Requiring `app.cjs` is what *constructs* the panel, so it happens here and
   nowhere else; headless never imports this file.
-- `src/bootstrap/events.cjs` — the hub the bot reports into. `src/core/` still
-  calls `io.emit(...)`; the panel forwards those to socket.io and headless
-  prints the ones a person waiting at a terminal cares about. That seam is why
-  headless needed no changes in `src/core/`.
+- `src/bootstrap/events.cjs` — the hub the bot reports into. The session
+  manager emits into it; the panel forwards everything to socket.io and
+  headless prints the lines a person waiting at a terminal cares about. The hub
+  is one-way: nothing that listens can emit back into the bot, which is what
+  keeps a browser attaching or leaving from touching the connection.
+
+### The WhatsApp session (`src/core/session.js`)
+
+One backend-owned state machine, and the only thing in the codebase allowed to
+create or destroy a Baileys socket. The panel *displays* it and asks it to
+change; socket.io clients opening, closing or refreshing have no effect on it.
+
+```
+idle -> starting -> waiting_for_qr -> linking -> connected
+                                                    |
+                     reconnecting <-----------------+
+                          |
+   disconnected · retry_exhausted · logged_out · error
+```
+
+| state | meaning |
+| --- | --- |
+| `idle` | nothing running. Panel mode boots here. |
+| `starting` | a socket is being created right now. |
+| `waiting_for_qr` | unpaired: a code is out, waiting for a phone. |
+| `linking` | the code was scanned; WhatsApp wants the socket remade. |
+| `connected` | open. |
+| `reconnecting` | recoverable close; a retry is scheduled. |
+| `disconnected` | closed, not retrying, startable by hand. |
+| `retry_exhausted` | the schedule ran out. Levix keeps running. |
+| `logged_out` | WhatsApp dropped the pairing; credentials were cleared. |
+| `error` | creating the socket threw. |
+
+**Reconnect policy — staged linear backoff, not exponential.** Attempt N waits
+`N * 5s`: **5, 10, 15, 20, 25**, then stop (`RETRY_SCHEDULE_MS` in
+`src/config/constants.js`). The counter resets to zero on every `open`. Exactly
+one retry timer exists at a time, and it is deliberately **not** `unref`ed —
+once the WhatsApp socket is gone a headless Levix has nothing else holding the
+event loop open, so an unref'd timer would let the process fall out during the
+wait instead of reconnecting. Shutdown cancels it explicitly, so keeping it
+ref'd cannot delay a SIGTERM. It works with zero dashboards open, because the
+backend owns it.
+
+`DisconnectReason.connectionReplaced` (440) is deliberately left on the
+recoverable side: another client taking the session over is real, but the
+ladder is bounded at five attempts, so the two ends stop fighting inside ~75
+seconds rather than forever. Making it terminal would also make a routine
+network blip that WhatsApp happens to report as 440 need a manual restart.
+
+**Every socket carries a generation number.** A `connection.update` from a
+socket that is no longer the current one is dropped — that is what stops a late
+close from scheduling a reconnect on top of a live connection, or a stale QR
+from overwriting a fresh one.
+
+**Terminal closes** (`classifyDisconnect()` in `src/core/connection.js`):
+
+| code | verdict |
+| --- | --- |
+| `DisconnectReason.loggedOut` (401) | terminal. Clears the credentials, state `logged_out`. |
+| `405` (`CONNECTION_FAILURE_405`) | terminal. **Credentials untouched** — 405 means WhatsApp refused the connection, not that the pairing is gone. |
+| `DisconnectReason.forbidden` (403) | terminal. Credentials untouched. |
+| `DisconnectReason.restartRequired` (515) | recoverable, and never counts as a failed pairing — it *is* the login handshake. |
+| anything else | recoverable: the 5/10/15/20/25 schedule. |
+
+405 is not in Baileys' enum; WhatsApp sends `<failure reason="405">` and Baileys
+passes the integer straight through. It is named in `connection.js` rather than
+left as a bare literal.
+
+**A pairing attempt that closes before anyone scans is not retried.** The stale
+QR is deleted and the session goes back to a startable state. Regenerating one
+forever is what the old code did to installs nobody was pairing.
+
+**Retry exhaustion never exits the process.** `src/core/session.js` contains no
+`process.exit`; a WhatsApp connection that will not come back is not a reason to
+take the control panel down with it.
 
 ### Message Flow
 
@@ -328,12 +412,24 @@ that gets edited (`🤖 بفكر...` → `🔍 ببحث عن ...` → the answer
 - `src/services/aiAgent.cjs` — the loop: system instruction, tool rounds,
   history trimming.
 - `src/services/aiTools.cjs` — the tools themselves.
-- `src/config/ai-persona.md` — **the editable system prompt**. Hot-reloaded
-  (everything above the first `---` is a note to the human and is stripped), and
-  editable from the dashboard too. There is no hard-coded rules block any more.
-- `src/config/brand.cjs` — the one part of the prompt that is NOT editable: the
-  identity block (name + author) is prepended above the persona on every
-  request, so a rewritten persona or a crafted message can't change it.
+- `src/config/ai-persona.md` — **the operator's behaviour prompt**, in English.
+  Hot-reloaded (everything above the first `---` is a note to the human and is
+  stripped), and editable from the dashboard. It holds behaviour and personality
+  only: no product metadata, and no explanation of what else is in the prompt.
+- `src/config/ai-identity.cjs` — the part that is NOT editable: the product
+  identity block (what Levix is, who built it, and how to talk about that) is
+  prepended above the persona on every request, so a rewritten persona or a
+  crafted message can't change it. It is imported by the agent and by nothing
+  else — deliberately not on `brand.cjs`, which every EJS template can render.
+
+The final system instruction is, in order:
+
+```
+ai-identity.cjs systemBlock   (code)
+<data>/ai-persona.md          (the operator's, below the ---)
+runtime context               (who / where / when, code)
+memory/*.md                   (long-term memory, capped)
+```
 
 **Tools the agent can call**
 | tool | what it does |
@@ -532,7 +628,7 @@ the bot does can be changed from it, live:
 | Screen | What it changes | Where it lands |
 | --- | --- | --- |
 | Overview | — (counters, uptime, connection) | — |
-| Connection | QR pairing, **unlink**, restart | `sock.logout()` / `process.exit(0)` |
+| Connection | **start / stop** the session, QR pairing, **unlink**, restart | `src/core/session.js` |
 | Commands | prefix · aliases · permission · on/off | `bot_settings` via `runtime-config.cjs` |
 | AI & memory | the system prompt · the `memory/*.md` files | `<data>/ai-persona.md`, `<data>/memory/` |
 | Groups | antilink · antispam · media · welcome · warnings · rules | `group_settings` |
@@ -592,8 +688,9 @@ does the same thing on the command line.
 
 ### Who is the owner
 
-Whoever scans the QR. `src/core/connection.js` records the paired account as an
-owner and seeds the in-memory rosters from `user_metadata`; everyone else is
+Whoever scans the QR. `handleConnectionOpen()` in `src/core/connection.js`
+records the paired account as an owner and seeds the in-memory rosters from
+`user_metadata`; everyone else is
 granted from the panel (Roles) or with `!perm`. There is no owner list to
 configure.
 
@@ -643,7 +740,9 @@ logger.debug('Debug info');
 3. **Group Metadata Cache**: Cached in `src/core/socket.js:7`, automatically updated
 4. **Async Command Execution**: All command `execute` functions should be `async`
 5. **Message Types**: Handle `conversation`, `extendedTextMessage`, `imageMessage`, etc.
-6. **Connection Retry**: Handled in `src/core/connection.js` with exponential backoff
+6. **Connection Retry**: owned by `src/core/session.js`, staged linear backoff
+   (5/10/15/20/25s), never exponential, never a `process.exit`. Nothing else may
+   create a Baileys socket — go through the session manager.
 7. **Database Operations**: everything through `storage.cjs` /
    `storage.esm.js` is synchronous and lands on disk immediately — SQLite is a
    function call, not a round trip. There is no cache to invalidate and no
@@ -679,9 +778,12 @@ logger.debug('Debug info');
     value. Hoisting one into a module-level `const` re-introduces
     "restart before it applies", which is exactly what the dashboard exists to
     avoid.
-16. **The bot's name and author are frozen** (`src/config/brand.cjs`). Never
-    add an API field, a setting or a config key for them, and keep
-    `identityPrompt` first in the system prompt.
+16. **The bot's name and author are frozen.** `src/config/brand.cjs` is the
+    public half (the UI renders it); `src/config/ai-identity.cjs` is the half
+    the model gets, and it must stay first in the system instruction. Never add
+    an API field, a setting or a config key for either, never import
+    `ai-identity.cjs` from a route or a view, and never put those facts into
+    `ai-persona.md` — that file belongs to the operator.
 17. **`bot_settings.value` is Mixed**: it holds strings, numbers, booleans AND
     objects (the permission / alias override maps). Don't narrow that schema.
 18. **New command? Nothing else to do.** Permissions default from
@@ -722,7 +824,7 @@ logger.debug('Debug info');
 
 1. Start the bot: `npm start` (nothing to set up first; `data/` is created)
 2. Open `http://localhost:3001/`, pick a password on the setup page
-3. Scan the QR from the Connection screen
+3. Go to Connection, press **Start session**, scan the QR
 4. Send `!ping` in WhatsApp
 5. Check the logs, and the database if the change touches it
 6. To start from scratch: stop the bot and delete `data/`
@@ -739,6 +841,7 @@ logger.debug('Debug info');
 
 - **CLI**: `src/cli.js` (`bin/levix.js` is a wrapper)
 - **Startup**: `src/bootstrap/core.js` · `src/bootstrap/panel.js` · `src/bootstrap/events.cjs`
+- **WhatsApp session lifecycle**: `src/core/session.js`
 - **Domain setup**: `src/domain/`
 - **Local-request check**: `src/utils/requestOrigin.cjs`
 - **Single-instance lock**: `src/config/lock.cjs`
@@ -748,7 +851,8 @@ logger.debug('Debug info');
 - **Command Loader**: `src/handlers/command.handler.js`
 - **Shipped defaults**: `src/config/defaults.cjs` (prefix + permissions),
   overridden at runtime by `src/config/runtime-config.cjs`
-- **Brand (frozen)**: `src/config/brand.cjs`
+- **Brand (frozen, public)**: `src/config/brand.cjs`
+- **AI product identity (code-owned, model-only)**: `src/config/ai-identity.cjs`
 - **Runtime settings**: `src/config/settings.cjs`
 - **Generated secrets**: `src/config/secrets.cjs`
 - **Data directory**: `src/config/paths.cjs`
@@ -763,6 +867,8 @@ logger.debug('Debug info');
 - `README.md` - what the bot is
 - `SETUP.md` - the non-developer setup guide
 - `PACKAGING.md` - shipping it: npm, Docker, systemd, single executable
-- `src/config/ai-persona.md` - the AI system prompt template (Arabic). The live
-  copy is `<data>/ai-persona.md`, hot-reloaded and editable from the panel
+- `src/config/ai-persona.md` - the operator's behaviour prompt template
+  (English). The live copy is `<data>/ai-persona.md`, hot-reloaded and editable
+  from the panel. Everything above the `---` is a note to the human and is not
+  sent to the model
 - No need to test at all, Don't run npm start for the testing messages, i'll do it by myself in next times

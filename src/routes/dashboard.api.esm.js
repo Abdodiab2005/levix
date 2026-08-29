@@ -7,9 +7,10 @@
 // Two rules the handlers follow:
 //   * error text stays in the log. The internal message names collections and
 //     server paths, and this response is rendered in a browser.
-//   * nothing here can change the bot's identity. The name and the credit come
-//     from src/config/brand.cjs, are injected into the AI prompt, and are not
-//     exposed as an editable field anywhere below.
+//   * nothing here can change the bot's identity. What the UI renders comes
+//     from src/config/brand.cjs; what the model is told comes from
+//     src/config/ai-identity.cjs, which this file does not import and no route
+//     below returns. Neither is an editable field anywhere in the panel.
 
 import { Router } from "express";
 import { createRequire } from "module";
@@ -52,17 +53,42 @@ const { deleteScheduledJob } = require("../../scheduler.cjs");
 
 const router = Router();
 
-// The live socket, and the auth-clearing callback that comes with it.
-let botInstance = null;
-let botControls = { clearAll: null };
+// The backend's WhatsApp session manager (src/core/session.js). The routes ask
+// it questions and give it orders; they never create or destroy a socket
+// themselves, and nothing a browser does to its websocket reaches it.
+let session = null;
 
-export function setBotInstance(sock) {
-  botInstance = sock;
+export function setSession(manager) {
+  session = manager;
 }
 
-/** Handed the pieces of the current socket that /bot/* needs. */
-export function setBotControls(controls = {}) {
-  botControls = { ...botControls, ...controls };
+/** The live socket, or null. Re-read every time — a reconnect replaces it. */
+function currentSocket() {
+  return session?.socket ?? null;
+}
+
+/** A safe snapshot even before the session manager has been handed over. */
+function sessionState() {
+  return (
+    session?.getState() ?? {
+      state: "idle",
+      status: "Disconnected",
+      connected: false,
+      canStart: false,
+      canStop: false,
+      canUnlink: false,
+      terminal: false,
+      hasQr: false,
+      attempt: 0,
+      maxAttempts: 0,
+      nextRetryAt: null,
+      reason: "no_session",
+      detail: null,
+      user: null,
+      lastDisconnect: null,
+      since: null,
+    }
+  );
 }
 
 // --- helpers --------------------------------------------------------------
@@ -91,9 +117,12 @@ function asyncRoute(handler) {
 
 router.get("/stats", (req, res) => {
   try {
+    const connection = sessionState();
+    const sock = currentSocket();
     res.json({
       success: true,
       stats: {
+        connection,
         totalGroups: countGroups(),
         totalWarnings: countWarnings(),
         totalTodos: countTodos(),
@@ -102,9 +131,9 @@ router.get("/stats", (req, res) => {
         totalSettledDebts: countDebts(true),
         totalSchedules: countSchedules(),
 
-        isConnected: !!botInstance?.user,
-        botNumber: botInstance?.user?.id || null,
-        botName: botInstance?.user?.name || null,
+        isConnected: connection.connected && !!sock?.user,
+        botNumber: sock?.user?.id || null,
+        botName: sock?.user?.name || null,
 
         prefix: runtimeConfig.getPrefix(),
         commandCount: getCommandCatalog().length,
@@ -123,12 +152,16 @@ router.get("/stats", (req, res) => {
 });
 
 router.get("/health", (req, res) => {
+  const connection = sessionState();
   res.json({
     success: true,
     health: {
+      // Levix is healthy whether or not WhatsApp is linked: the panel is the
+      // only surface, and it answers long before a pairing exists.
       status: "healthy",
       database: true,
-      bot: botInstance?.user ? "connected" : "disconnected",
+      bot: connection.connected ? "connected" : "disconnected",
+      session: connection.state,
       uptime: process.uptime(),
       timestamp: Date.now(),
     },
@@ -742,38 +775,85 @@ router.post("/security/password", (req, res) => {
 // Bot control
 // ===========================================================================
 
-// Unlink the WhatsApp account. The connection handler sees the logout, clears
-// the stored credentials and comes back with a fresh QR — no restart needed.
+// The WhatsApp session. These four routes are the only way a browser can
+// influence it, and each is a request to the backend's state machine rather
+// than an instruction to make or break a socket. Everything under
+// /dashboard/api is already behind the panel session and the cross-origin
+// check in app.cjs, so no new surface is exposed here.
+
+// The whole Connection screen in one request, including the QR already on
+// screen. Without the code here a dashboard opened (or reloaded) while a
+// pairing was already waiting showed an empty frame until Baileys happened to
+// issue the next one.
+router.get("/bot/session", (req, res) => {
+  res.json({ success: true, session: sessionState(), qr: session?.qr ?? null });
+});
+
+// Idempotent by construction: the manager returns the state it is already in
+// when a socket exists or is being made, so a double-click, two operators and a
+// retry firing at the same moment all end up with exactly one socket.
+router.post(
+  "/bot/session/start",
+  asyncRoute(async (req, res) => {
+    if (!session) {
+      return res.status(503).json({ success: false, error: "Session manager is not ready" });
+    }
+    const state = await session.start({ reason: "dashboard" });
+    logger.info(`[Dashboard] Start session requested — now ${state.state}`);
+    res.json({ success: true, session: state });
+  })
+);
+
+// Stop talking to WhatsApp but keep the pairing. No retry follows a manual
+// stop, and any pending one is cancelled.
+router.post(
+  "/bot/session/stop",
+  asyncRoute(async (req, res) => {
+    if (!session) {
+      return res.status(503).json({ success: false, error: "Session manager is not ready" });
+    }
+    const state = await session.stop({ reason: "dashboard" });
+    logger.warn("[Dashboard] WhatsApp session stopped from the dashboard");
+    res.json({ success: true, session: state });
+  })
+);
+
+// Unlink the WhatsApp account: WhatsApp drops the companion device and the
+// stored credentials go with it. Levix stays up, and the operator can start a
+// fresh pairing whenever they want one.
 router.post(
   "/bot/logout",
   asyncRoute(async (req, res) => {
-    if (!botInstance) {
-      return res.status(409).json({ success: false, error: "Bot is not connected" });
+    if (!session) {
+      return res.status(503).json({ success: false, error: "Session manager is not ready" });
+    }
+    // Deliberately NOT gated on a live socket. A pairing WhatsApp has refused
+    // (403, 405) leaves dead credentials with no connection to unlink through,
+    // and that is precisely when the operator needs this.
+    if (!sessionState().canUnlink) {
+      return res.status(409).json({ success: false, error: "There is nothing linked to unlink" });
     }
 
-    try {
-      await botInstance.logout();
-    } catch (error) {
-      // A logout that fails still has to clear the local credentials, or the
-      // bot reconnects with a session WhatsApp already dropped.
-      logger.warn({ err: error }, "[Dashboard] logout call failed, clearing anyway");
-      if (botControls.clearAll) await botControls.clearAll();
-    }
-
+    const state = await session.logout();
     logger.warn("[Dashboard] WhatsApp account unlinked from the dashboard");
-    res.json({ success: true });
+    res.json({ success: true, session: state });
   })
 );
 
 // Only useful under a supervisor (pm2 / systemd / docker restart:always) —
-// this exits the process and something else has to bring it back.
+// this stops the process and something else has to bring it back.
+//
+// SIGTERM to ourselves rather than process.exit(): that is the path in
+// src/index.js that cancels the reconnect timers, closes the WhatsApp socket,
+// flushes the store and closes the database. Exiting straight from here skipped
+// all four.
 router.post("/bot/restart", (req, res) => {
   logger.warn("[Dashboard] restart requested");
   res.json({
     success: true,
     message: "Restarting. If the bot is not running under a supervisor, start it again yourself.",
   });
-  setTimeout(() => process.exit(0), 500);
+  setTimeout(() => process.kill(process.pid, "SIGTERM"), 500).unref();
 });
 
 export default router;

@@ -14,8 +14,13 @@ levix
 The npm package is named `levix-bot`; the installed CLI command stays `levix`.
 
 On a desktop that opens the panel in your browser by itself. Pick a password,
-scan the QR, done — see [SETUP.md](SETUP.md) for the longer version, Docker,
-and running it as a service.
+go to **Connection**, press **Start session** and scan the QR — see
+[SETUP.md](SETUP.md) for the longer version, Docker, and running it as a
+service.
+
+Starting Levix does not connect it to WhatsApp. The panel, the database and the
+commands come up on their own, and the WhatsApp session is started from the
+Connection screen when you want it.
 
 ```
   levix                    start Levix with the web panel
@@ -49,9 +54,15 @@ per-chat file. Plain Markdown, hand-editable, injected into every prompt.
 **Scheduled messages** — one-off (`!schedule`) or recurring (`!autoschedule`),
 stored in the database and listed in the panel.
 
+**A connection you control** — the panel starts, stops and unlinks the
+WhatsApp session, and shows what it is actually doing: waiting for a scan,
+connected, reconnecting (5s, 10s, 15s, 20s, 25s), or stopped. Reconnects happen
+in the bot whether or not a browser is open, and a WhatsApp connection that will
+not come back never takes the panel down with it.
+
 **A panel you can also do without** — `levix headless` runs the bot with no
-Express, no socket.io and no port open at all; an unpaired install prints its
-QR straight to the terminal.
+Express, no socket.io and no port open at all; having no screen to press Start
+on, it connects by itself and prints its QR straight to the terminal.
 
 **A domain, without a takeover** — `levix domain bot.example.com` looks at what
 the server already runs and works with it: it adds one nginx or Caddy site and

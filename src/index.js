@@ -3,10 +3,15 @@
 // Two shapes, one core:
 //
 //   levix            bootstrapCore() + bootstrapPanel(), then maybe a browser
-//   levix headless   bootstrapCore() only — nothing binds a port
+//   levix headless   bootstrapCore({ autoStart: true }) — nothing binds a port
 //
 // The difference is which bootstrap runs, not a flag threaded through the
 // codebase. See src/bootstrap/.
+//
+// WhatsApp is not dialled by starting the process. In panel mode the session
+// sits idle until somebody presses Start on the Connection screen, so a fresh
+// install can be configured before it ever tries to pair. Headless has no
+// screen and nobody to press anything, so it asks the core to connect for it.
 
 import os from "node:os";
 import { createRequire } from "module";
@@ -15,9 +20,9 @@ import { flushStore } from "./db/store.esm.js";
 import brand from "./config/brand.esm.js";
 
 const require = createRequire(import.meta.url);
+const qrcodeTerminal = require("qrcode-terminal");
 const logger = require("./utils/logger.cjs");
 const secrets = require("./config/secrets.cjs");
-const settings = require("./config/settings.cjs");
 const { DATA_DIR } = require("./config/paths.cjs");
 const { release: releaseLock } = require("./config/lock.cjs");
 const { close: closeDatabase } = require("./db/db.cjs");
@@ -31,6 +36,10 @@ function short(path) {
   const home = os.homedir();
   return home && path.startsWith(home) ? path.replace(home, "~") : path;
 }
+
+// The session manager, so the shutdown handler can cancel its timers. Set as
+// soon as the core is up.
+let liveSession = null;
 
 /**
  * Start Levix.
@@ -48,9 +57,53 @@ export async function start({ headless = false, open = true } = {}) {
   return headless ? startHeadless() : startWithPanel({ open });
 }
 
+/**
+ * Print the QR in the terminal.
+ *
+ * A QR belongs there in both modes: the panel shows one too, but somebody on an
+ * SSH session has no browser to show it in. This used to live inside the
+ * connection handler, which meant src/core had to know a human might be
+ * watching. Attached after whatever else the mode wants to say about a QR, so
+ * the explanation comes before the block of glyphs rather than after it.
+ */
+function attachTerminalQr() {
+  attach((event, payload) => {
+    if (event === "qr" && typeof payload === "string") {
+      qrcodeTerminal.generate(payload, { small: true });
+    }
+  });
+}
+
 // ---------------------------------------------------------------------------
 // headless
 // ---------------------------------------------------------------------------
+
+/**
+ * What headless does when the session reaches a state that needs a person.
+ *
+ * The panel answers this with a Start button. Headless has no button, no stdin
+ * and no UI, so a bot sitting in `disconnected` or `retry_exhausted` there is
+ * not "still running" in any useful sense — it is a silent process that will
+ * never answer another message. Handing the decision to the supervisor is the
+ * honest ending: systemd, pm2 and Docker all bring it back, and a genuinely
+ * persistent refusal trips their own restart limits and surfaces as a failed
+ * unit rather than as a bot that quietly stopped working.
+ *
+ * Panel mode never calls this. There, Levix stays up by design.
+ */
+const HEADLESS_GRACE_MS = 5000;
+
+function surrender(state) {
+  line();
+  line("  No panel here to start it again — stopping so the supervisor can.");
+  line("  (systemd / pm2 / docker restart it; without one, run levix again.)");
+  line();
+  logger.error(`[headless] session ended in ${state} — exiting for the supervisor`);
+  // Not unref'd: in a terminal state nothing else is holding the loop open, so
+  // an unref'd timer would let the process fall out with code 0 before this
+  // ever ran — the same restart, but with no signal that anything went wrong.
+  setTimeout(() => process.exit(1), HEADLESS_GRACE_MS);
+}
 
 async function startHeadless() {
   line();
@@ -58,7 +111,12 @@ async function startHeadless() {
 
   // Attached before the bot starts, because the QR can arrive during the very
   // first connection attempt.
+  //
+  // Headless has no Connection screen, so the terminal has to say what the
+  // panel would have shown — including the states that need a person, where
+  // "restart it" is the only instruction that exists here.
   let announcedPairing = false;
+  let lastState = null;
   attach((event, payload) => {
     if (event === "qr" && !announcedPairing) {
       announcedPairing = true;
@@ -69,16 +127,36 @@ async function startHeadless() {
       line("  WhatsApp -> Linked devices -> Link a device");
       line();
     }
-    if (event === "status_update" && payload?.status === "Connected") {
-      line();
-      line("  ✓ WhatsApp connected");
-    }
-    if (event === "status_update" && payload?.status === "Disconnected") {
-      line("  … WhatsApp disconnected, reconnecting");
+
+    if (event !== "session" || payload?.state === lastState) return;
+    lastState = payload.state;
+
+    switch (payload.state) {
+      case "connected":
+        line();
+        line("  ✓ WhatsApp connected");
+        break;
+      case "reconnecting":
+        line(`  … WhatsApp disconnected, reconnecting (attempt ${payload.attempt}/${payload.maxAttempts})`);
+        break;
+      case "logged_out":
+      case "retry_exhausted":
+      case "disconnected":
+      case "error":
+        line();
+        line(`  ✗ WhatsApp is not connected${payload.detail ? ` — ${payload.detail}` : ""}`);
+        surrender(payload.state);
+        break;
+      default:
+        break;
     }
   });
 
-  const core = await bootstrapCore();
+  attachTerminalQr();
+
+  // Headless has no Start button, so it starts itself.
+  const core = await bootstrapCore({ autoStart: true });
+  liveSession = core.session;
 
   if (announcedPairing) line("  Waiting for connection...");
 
@@ -101,18 +179,12 @@ async function startHeadless() {
 async function startWithPanel({ open }) {
   const { bootstrapPanel, panelUrl } = await import("./bootstrap/panel.js");
 
-  let setBotInstance = null;
-  let setBotControls = null;
+  attachTerminalQr();
 
-  // The panel needs the live socket, and a reconnect replaces it. Passing the
-  // callback into the core keeps that true without the core knowing what a
-  // panel is.
-  const core = await bootstrapCore({
-    onSocket(sock, controls) {
-      if (setBotInstance) setBotInstance(sock);
-      if (setBotControls) setBotControls({ clearAll: controls.clearAll });
-    },
-  });
+  // Nothing dials WhatsApp here. The panel comes up against an idle session and
+  // the Connection screen offers a Start button.
+  const core = await bootstrapCore({ autoStart: false });
+  liveSession = core.session;
 
   let panel;
   try {
@@ -126,9 +198,6 @@ async function startWithPanel({ open }) {
     throw error;
   }
 
-  ({ setBotInstance, setBotControls } = panel);
-  setBotInstance(core.sock);
-
   const firstRun = !secrets.hasDashboardPassword();
   const url = panelUrl({ port: panel.port, firstRun });
 
@@ -140,10 +209,15 @@ async function startWithPanel({ open }) {
   line(`  Panel: ${url}`);
   line(`  Data:  ${short(DATA_DIR)}`);
 
-  if (firstRun && !settings.get("public_domain")) {
+  // Only while the panel is unclaimed, and only once per process. Printed on
+  // every deployment shape, including one behind a domain: a proxied request
+  // can never count as local, so that is precisely the case that needs it.
+  if (firstRun) {
     line();
     line("  First run — that link asks you to pick a password.");
-    line(`  Opening it from another machine also needs this code: ${secrets.getSetupCode()}`);
+    line("  Opening it from another machine also needs this code:");
+    line();
+    line(`  ${secrets.formatSetupCodeLine()}`);
   }
 
   if (open) {
@@ -156,6 +230,9 @@ async function startWithPanel({ open }) {
     );
   }
 
+  line();
+  line("  Not linked to WhatsApp yet? Open the panel, go to Connection and");
+  line("  press Start session.");
   line();
   line("  Press Ctrl+C to stop.");
   line();
@@ -188,10 +265,30 @@ function installShutdownHandlers() {
     shuttingDown = true;
     logger.info(`[shutdown] ${signal} received, closing down...`);
 
+    // Armed first, not last: everything below is awaited, and a socket close or
+    // a request that refuses to end would otherwise mean the watchdog is never
+    // reached at all. Not unref'd, for the same reason — this timer exists
+    // precisely for the case where nothing else is going to wake the loop.
+    const watchdog = setTimeout(() => {
+      logger.error("[shutdown] took too long — exiting anyway");
+      process.exit(1);
+    }, 10_000);
+
+    // Before anything else: no reconnect may fire while we are going down, and
+    // a pending retry timer must not outlive the process it was scheduled in.
+    if (liveSession) {
+      try {
+        await liveSession.shutdown();
+      } catch (error) {
+        logger.warn({ err: error }, "[shutdown] closing the WhatsApp session failed");
+      }
+    }
+
     const finish = async () => {
       await Promise.allSettled([flushStore()]);
       closeDatabase();
       releaseLock();
+      clearTimeout(watchdog);
       process.exit(0);
     };
 
@@ -199,16 +296,26 @@ function installShutdownHandlers() {
     // listening yet. Reaching into the module cache rather than requiring it
     // keeps this from constructing an Express app during shutdown.
     let server = null;
+    let io = null;
     try {
       const cached = require.cache[require.resolve("../app.cjs")];
       server = cached?.exports?.server ?? null;
+      io = cached?.exports?.io ?? null;
     } catch {}
+
+    // server.close() waits for every open connection, and a dashboard sitting
+    // on a socket.io websocket is an open connection that never ends by itself
+    // — so without this the shutdown ran to the 10s hard exit every time a tab
+    // was open, which is exactly what the panel's own Restart button does.
+    try {
+      io?.disconnectSockets(true);
+      server?.closeIdleConnections?.();
+    } catch (error) {
+      logger.debug({ err: error?.message }, "[shutdown] closing panel connections failed");
+    }
 
     if (server?.listening) server.close(finish);
     else await finish();
-
-    // Don't wait forever on a request that refuses to end.
-    setTimeout(() => process.exit(1), 10_000).unref();
   };
 
   ["SIGTERM", "SIGINT"].forEach((signal) => process.on(signal, () => shutdown(signal)));

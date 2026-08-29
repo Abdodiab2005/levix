@@ -94,7 +94,7 @@ here: the bot is a long-running service, not a one-shot tool.
 
 ```bash
 docker compose up -d
-docker compose logs levix | grep -A3 "Setup code"
+docker compose logs levix | grep -F '[Setup] Setup code:' | tail -1
 ```
 
 `Dockerfile` is a two-stage build on `node:24-slim`. Debian, not Alpine, on
@@ -210,7 +210,9 @@ for this (`.github/workflows/release.yml` does exactly that).
 2. Open Terminal, paste `npm install -g levix-bot`, press Enter.
 3. Type `levix`. A box appears with an address.
 4. Open the address. Type a password twice.
-5. Click **Connection**, scan the QR with WhatsApp → Linked devices.
+5. Click **Connection**, press **Start session**, then scan the QR with
+   WhatsApp → Linked devices. Levix does not open a WhatsApp connection until
+   you ask it to.
 6. Send `!ping` to yourself. It replies.
 
 No file is edited. No key is generated. Nothing is installed besides Node —
@@ -349,7 +351,7 @@ the server.
 Before tagging:
 
 - [ ] `npm start` on a clean `data/` — the setup page appears
-- [ ] Set a password, scan a QR, `!ping` answers
+- [ ] Set a password, press Start session, scan a QR, `!ping` answers
 - [ ] `docker compose up --build` — same flow
 - [ ] `npm run build:sea`, run the binary against an empty data directory
 - [ ] `levix reset-password` then log in again

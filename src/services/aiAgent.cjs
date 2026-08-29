@@ -18,7 +18,7 @@ const path = require("path");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const logger = require("../utils/logger.cjs");
-const brand = require("../config/brand.cjs");
+const aiIdentity = require("../config/ai-identity.cjs");
 const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
 const { toolDeclarations, describeCall, runTool } = require("./aiTools.cjs");
@@ -57,26 +57,36 @@ try {
   // Not fatal: loadPersona() falls back to DEFAULT_PERSONA below.
 }
 
-// Fallback only — the real persona is config/ai-persona.md (editable from the
-// dashboard). No name in here: identity comes from brand.cjs and is prepended
-// separately so it survives any edit to the persona.
-const DEFAULT_PERSONA = `بوت واتساب ذكي وخفيف الظل.
-اتكلم مصري عامي، ردودك قصيرة ومباشرة، واستخدم أدواتك بدل التخمين.`;
+// Fallback only, for the moment between "the file is missing" and "the template
+// has been copied". The real persona is the operator's copy of ai-persona.md.
+// No product identity in here: that comes from src/config/ai-identity.cjs and is
+// prepended separately, so it survives any edit to the persona.
+const DEFAULT_PERSONA = `You are a capable personal WhatsApp assistant.
+Be concise and direct by default, reply in the language the user writes in, and
+use your tools instead of guessing when something needs to be looked up.`;
 
-let personaCache = { text: null, mtime: 0 };
+let personaCache = { text: null, stamp: null };
 
-/** The persona file, re-read whenever it changes on disk. */
+/**
+ * The persona file, re-read whenever it changes on disk.
+ *
+ * Keyed on the nanosecond mtime AND the size, not `mtimeMs`: that is a
+ * millisecond float, and two saves inside the same millisecond — the dashboard
+ * writing twice, or a test — produced the same key, so the second edit was
+ * served from the cache and the operator's change silently did not apply.
+ */
 function loadPersona() {
   try {
-    const { mtimeMs } = fs.statSync(PERSONA_FILE);
-    if (personaCache.text && personaCache.mtime === mtimeMs) {
+    const stat = fs.statSync(PERSONA_FILE, { bigint: true });
+    const stamp = `${stat.mtimeNs}:${stat.size}`;
+    if (personaCache.text && personaCache.stamp === stamp) {
       return personaCache.text;
     }
     const raw = fs.readFileSync(PERSONA_FILE, "utf8").trim();
     // Everything above the `---` separator is a note to the human editing the
     // file, not part of the prompt.
     const body = raw.includes("\n---") ? raw.split(/\n---\s*\n/).slice(1).join("\n---\n") : raw;
-    personaCache = { text: body.trim() || DEFAULT_PERSONA, mtime: mtimeMs };
+    personaCache = { text: body.trim() || DEFAULT_PERSONA, stamp };
     return personaCache.text;
   } catch {
     return DEFAULT_PERSONA;
@@ -96,13 +106,12 @@ function nowLabel() {
 }
 
 /**
- * frozen identity + persona + who/where/when + long-term memory.
+ * product identity + persona + who/where/when + long-term memory.
  *
- * The identity block goes FIRST and does not come from the persona file: the
- * operator can rewrite the persona from the dashboard, but not the bot's name
- * or who wrote it.
- * Deliberately short: the old prompt was a page of rules, and the operator
- * asked for it to go away.
+ * The identity block goes FIRST and does not come from the persona file. The
+ * operator owns the persona and can rewrite it from the dashboard; they do not
+ * own what the product is called or who wrote it, so that part is code (see
+ * src/config/ai-identity.cjs) and is never rendered by the panel.
  */
 function buildSystemInstruction(context = {}) {
   const {
@@ -116,17 +125,19 @@ function buildSystemInstruction(context = {}) {
   } = context;
 
   const runtime = [
-    "## السياق الحالي",
-    `- المتكلم: ${senderName || "غير معروف"}${senderId ? ` (${senderId})` : ""}`,
-    `- صلاحيته: ${isOwner ? "مالك البوت" : isAdmin ? "أدمن" : "مستخدم عادي"}`,
-    `- المكان: ${isGroup ? `جروب${chatName ? ` اسمه "${chatName}"` : ""}` : "محادثة خاصة"}`,
-    `- الوقت دلوقتي: ${nowLabel()}`,
-    "- في جروب: الكل شايف ردك، فخلي بالك.",
+    "# Current context",
+    `- Speaking to you: ${senderName || "unknown"}${senderId ? ` (${senderId})` : ""}`,
+    `- Their role: ${isOwner ? "bot owner" : isAdmin ? "bot admin" : "ordinary user"}`,
+    `- Where: ${isGroup ? `a group chat${chatName ? ` called "${chatName}"` : ""}` : "a private one-to-one chat"}`,
+    `- Local time now: ${nowLabel()}`,
+    isGroup
+      ? "- This is a group: every participant sees your reply. Say nothing here that belongs to one person."
+      : "- This is a private chat: only this person sees your reply.",
   ].join("\n");
 
   const memoryBlock = memory.buildMemoryContext(chatId);
 
-  return [brand.identityPrompt, loadPersona(), runtime, memoryBlock]
+  return [aiIdentity.systemBlock, loadPersona(), runtime, memoryBlock]
     .filter(Boolean)
     .join("\n\n");
 }

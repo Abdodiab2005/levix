@@ -34,6 +34,11 @@ export const getAllNotes = store.getAllNotes;
 export const deleteNote = store.deleteNote;
 export const getAllNotesFlat = store.getAllNotesFlat;
 
+// ===== WhatsApp auth =====
+// Only the wipe. Reads and writes go through src/auth/, which owns the
+// serialisation; unlinking has to work with no socket alive to ask.
+export const clearAuthState = store.authClearAll;
+
 // ===== Pairing QR =====
 export const saveQrCode = store.saveQrCode;
 export const getQrCode = store.getQrCode;

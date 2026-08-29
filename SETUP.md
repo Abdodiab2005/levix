@@ -40,9 +40,14 @@ The terminal prints something like:
   Data:  ~/.levix
 
   First run — that link asks you to pick a password.
-  Opening it from another machine also needs this code: 43CB5162
+  Opening it from another machine also needs this code:
+
+  [Setup] Setup code: 43CB5162
 
   Opening Levix in your browser...
+
+  Not linked to WhatsApp yet? Open the panel, go to Connection and
+  press Start session.
 
   Press Ctrl+C to stop.
 ```
@@ -51,8 +56,9 @@ The terminal prints something like:
 2. Choose a password. (Opening the page from a *different* machine also asks
    for the setup code above — that's what stops a stranger from claiming your
    bot before you do.)
-3. You land on the control panel. Go to **Connection** and scan the QR with
-   WhatsApp → Settings → Linked devices → Link a device.
+3. You land on the control panel. Go to **Connection**, press **Start session**,
+   and scan the QR with WhatsApp → Settings → Linked devices → Link a device.
+   Levix does not connect to WhatsApp until you ask it to.
 4. Send `!ping` in any chat. The bot answers.
 
 Levix only opens a browser when there is one to open: over SSH, under systemd,
@@ -76,7 +82,7 @@ docker compose up -d
 Then open <http://localhost:3001>. The setup code is in the logs:
 
 ```bash
-docker compose logs levix | grep -A3 "Setup code"
+docker compose logs levix | grep -F '[Setup] Setup code:' | tail -1
 ```
 
 Everything the bot owns lives in the `levix-data` volume.
@@ -164,6 +170,13 @@ Closing the terminal stops the bot. Pick one:
 
 ```bash
 curl -fsSL https://levix.leviro.net/install.sh | bash
+```
+
+Opening the panel from your laptop counts as another machine, so it asks for
+the setup code. Print it with:
+
+```bash
+journalctl -u levix --no-pager | grep -F '[Setup] Setup code:' | tail -1
 ```
 
 Read the script first if you like — it is short, and it explains each step.

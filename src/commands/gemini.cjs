@@ -22,7 +22,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { GoogleAIFileManager } = require("@google/generative-ai/server");
 
 const logger = require("../utils/logger.cjs");
-const brand = require("../config/brand.cjs");
+const aiIdentity = require("../config/ai-identity.cjs");
 const settings = require("../config/settings.cjs");
 const {
   getChatHistoryAsync,
@@ -123,9 +123,9 @@ async function getGroqFallbackResponse(parts) {
       messages: [
         {
           role: "system",
-          // Same frozen identity the Gemini path gets — the fallback shouldn't
-          // answer "who made you?" differently from the main model.
-          content: `${brand.identityPrompt}\n\nبوت واتساب خفيف الظل. رد بالمصري العامي، قصير ومباشر.`,
+          // Same code-owned identity the Gemini path gets — the fallback must
+          // not answer "who made you?" differently from the main model.
+          content: `${aiIdentity.systemBlock}\n\nBe brief, direct and conversational. Answer in the language the user wrote in.`,
         },
         { role: "user", content: mergedPrompt },
       ],
