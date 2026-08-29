@@ -33,7 +33,7 @@ const hasUnder = (prefix) => files.some((path) => path.startsWith(prefix));
 section("the package is complete");
 
 ok("npm pack --dry-run succeeds", true);
-equal("it is named levix", manifest.name, "levix");
+equal("it is named levix-bot", manifest.name, "levix-bot");
 equal("at the version in package.json", manifest.version, pkg.version);
 
 for (const required of [
