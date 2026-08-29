@@ -25,6 +25,38 @@ try {
   res = await http.call("/dashboard/api/stats");
   equal("the API is locked before there is a password", res.status, 401);
 
+  section("browser origin boundary");
+
+  res = await http.form(
+    "/setup",
+    { password: "a-good-password", confirm: "different-one" },
+    { origin: "null", "sec-fetch-site": "same-origin" },
+  );
+  equal("Chrome's same-origin Origin:null form reaches validation", res.status, 400);
+
+  res = await http.form(
+    "/setup",
+    { password: "a-good-password", confirm: "different-one" },
+    { origin: "null", "sec-fetch-site": "cross-site" },
+  );
+  equal("Origin:null from a cross-site navigation is rejected", res.status, 403);
+
+  res = await http.form(
+    "/setup",
+    { password: "a-good-password", confirm: "different-one" },
+    { origin: server.base },
+  );
+  equal("an exact same-origin Origin header reaches validation", res.status, 400);
+
+  res = await http.form(
+    "/setup",
+    { password: "a-good-password", confirm: "different-one" },
+    { origin: "https://example.invalid", "sec-fetch-site": "cross-site" },
+  );
+  equal("a foreign browser origin is rejected", res.status, 403);
+
+  section("password validation");
+
   res = await http.form("/setup", { password: "short", confirm: "short" });
   equal("a short password is refused", res.status, 400);
 
