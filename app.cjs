@@ -47,10 +47,18 @@ function isAllowedOrigin(origin, host) {
 // metadata headers are forbidden to page JavaScript, so they are a stronger
 // browser signal than trying to special-case the string "null" globally.
 function isAllowedMutationRequest(req) {
+  const origin = req.get("origin");
+  const host = req.get("host");
+
+  // Preserve the explicit dashboard_origin escape hatch before consulting
+  // fetch metadata: a deliberately separate dashboard can be cross-site.
+  if (origin && origin !== "null" && isAllowedOrigin(origin, host)) return true;
+
   const fetchSite = req.get("sec-fetch-site");
   if (fetchSite === "same-origin") return true;
   if (fetchSite === "cross-site") return false;
-  return isAllowedOrigin(req.get("origin"), req.get("host"));
+
+  return isAllowedOrigin(origin, host);
 }
 
 // serveClient reads the browser bundle out of node_modules on every request,
