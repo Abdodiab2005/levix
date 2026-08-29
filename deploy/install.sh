@@ -12,7 +12,7 @@
 # should with any script that asks for sudo:
 #
 #   1. checks for Node 24+ and stops with instructions if it isn't there
-#   2. installs the `levix` command globally with npm
+#   2. installs the `levix` command globally from the `levix-bot` npm package
 #   3. creates a `levix` system user and /var/lib/levix for its data
 #   4. installs the systemd unit, pointed at the levix it just installed
 #   5. enables it, starts it, and prints where to go next
@@ -24,7 +24,7 @@
 
 set -euo pipefail
 
-PACKAGE="levix"
+PACKAGE="levix-bot"
 # Rewritten by scripts/build-release-installer.mjs when a release is published.
 # Keep this line exactly as it is: one assignment, one double-quoted value.
 VERSION="latest"
