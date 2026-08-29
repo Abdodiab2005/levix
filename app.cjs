@@ -41,11 +41,11 @@ function isAllowedOrigin(origin, host) {
 }
 
 // Browsers may legitimately serialize the Origin header as the literal string
-// "null" for a same-origin navigation in an opaque-origin context. Treating
-// that as a foreign origin breaks first-run/login forms in real browsers even
-// though Sec-Fetch-Site still proves the navigation is same-origin. Fetch
-// metadata headers are forbidden to page JavaScript, so they are a stronger
-// browser signal than trying to special-case the string "null" globally.
+// "null" for a same-origin navigation in an opaque-origin context. Prefer
+// Fetch Metadata when the browser sends it. Some Chromium form navigations omit
+// Sec-Fetch-Site entirely, so only the two credential-gated auth forms get a
+// narrow fallback for Origin:null; every other mutation remains strict.
+const OPAQUE_ORIGIN_AUTH_PATHS = new Set(["/setup", "/login"]);
 function isAllowedMutationRequest(req) {
   const origin = req.get("origin");
   const host = req.get("host");
@@ -57,6 +57,14 @@ function isAllowedMutationRequest(req) {
   const fetchSite = req.get("sec-fetch-site");
   if (fetchSite === "same-origin") return true;
   if (fetchSite === "cross-site") return false;
+
+  // Real Chromium can submit a top-level auth form with Origin:null and no
+  // Sec-Fetch-Site header. Setup is still protected by the one-time setup code
+  // for remote clients; login by the password; both share TCP-peer throttling.
+  // Do not generalize this exception to dashboard APIs or logout.
+  if (origin === "null" && !fetchSite && OPAQUE_ORIGIN_AUTH_PATHS.has(req.path)) {
+    return true;
+  }
 
   return isAllowedOrigin(origin, host);
 }
