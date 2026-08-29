@@ -25,19 +25,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify release tag
+      - name: Verify release tag and npm package
         shell: bash
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME#v}"
           package_version="$(node -p "require('./package.json').version")"
+          package_name="$(node -p "require('./package.json').name")"
 
           if [ "$tag" != "$package_version" ]; then
             echo "::error::Release tag v${tag} does not match package.json version ${package_version}"
             exit 1
           fi
 
-          echo "Release version verified: ${package_version}"
+          if [ "$package_name" != "levix-bot" ]; then
+            echo "::error::Unexpected npm package name: ${package_name} (expected levix-bot)"
+            exit 1
+          fi
+
+          echo "Release verified: ${package_name}@${package_version}"
 
   # The same jobs a pull request runs. A release that would fail CI is not a
   # release.
@@ -179,9 +185,20 @@ jobs:
           body: |
             ## Install
 
+            Linux server:
+
             ```
             curl -fsSL https://levix.leviro.net/install.sh | bash
             ```
+
+            Or with npm (Node.js 24+):
+
+            ```
+            npm install -g levix-bot
+            levix
+            ```
+
+            The npm package is `levix-bot`; the CLI command is `levix`.
 
             To stay on this exact version:
 
