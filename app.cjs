@@ -40,6 +40,19 @@ function isAllowedOrigin(origin, host) {
   return origin === `http://${host}` || origin === `https://${host}`;
 }
 
+// Browsers may legitimately serialize the Origin header as the literal string
+// "null" for a same-origin navigation in an opaque-origin context. Treating
+// that as a foreign origin breaks first-run/login forms in real browsers even
+// though Sec-Fetch-Site still proves the navigation is same-origin. Fetch
+// metadata headers are forbidden to page JavaScript, so they are a stronger
+// browser signal than trying to special-case the string "null" globally.
+function isAllowedMutationRequest(req) {
+  const fetchSite = req.get("sec-fetch-site");
+  if (fetchSite === "same-origin") return true;
+  if (fetchSite === "cross-site") return false;
+  return isAllowedOrigin(req.get("origin"), req.get("host"));
+}
+
 // serveClient reads the browser bundle out of node_modules on every request,
 // which a packaged build has no way to do. We vendor it in public/ instead —
 // same reason qrcode.min.js is there rather than on a CDN.
@@ -91,7 +104,7 @@ app.use((req, res, next) => {
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 app.use((req, res, next) => {
   if (SAFE_METHODS.has(req.method)) return next();
-  if (isAllowedOrigin(req.get("origin"), req.get("host"))) return next();
+  if (isAllowedMutationRequest(req)) return next();
   return res.status(403).json({ error: "Cross-origin request rejected" });
 });
 
