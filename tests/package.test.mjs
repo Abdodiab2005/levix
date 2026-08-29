@@ -122,6 +122,16 @@ ok("the bin file exists", existsSync(join(ROOT, pkg.bin.levix)));
 ok("requires Node 24+", /(>=\s*24|\^24|24\.x)/.test(pkg.engines?.node || ""));
 ok("has no mongoose dependency", !("mongoose" in (pkg.dependencies || {})));
 ok("has no dotenv dependency", !("dotenv" in (pkg.dependencies || {})));
+ok("has no deprecated node-gtts dependency", !("node-gtts" in (pkg.dependencies || {})));
+ok("has no deprecated fluent-ffmpeg dependency", !("fluent-ffmpeg" in (pkg.dependencies || {})));
+ok("has no unused direct uuid dependency", !("uuid" in (pkg.dependencies || {})));
+ok("uses the maintained Google TTS fork", "@sefinek/google-tts-api" in (pkg.dependencies || {}));
+ok(
+  "reviews install scripts explicitly",
+  pkg.allowScripts?.["@whiskeysockets/baileys"] === true &&
+    pkg.allowScripts?.["ffmpeg-static"] === true &&
+    pkg.allowScripts?.protobufjs === true,
+);
 ok(
   "keeps the SEA build tools out of runtime dependencies",
   !("esbuild" in (pkg.dependencies || {})) && !("postject" in (pkg.dependencies || {}))
