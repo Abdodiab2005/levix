@@ -59,10 +59,10 @@ const SETTINGS = [
   {
     key: "gemini_model",
     type: "string",
-    default: "gemini-3.1-pro-preview",
+    default: "gemini-3.7-flash",
     group: "ai",
     label: "Gemini model",
-    hint: "The model that answers. Gemini 3 takes Google Search and Levix's own function tools in the same request, which is what the agent depends on. If you ever see it ignoring the tools, gemini-3.1-pro-preview-customtools is the same model tuned to prefer them.",
+    hint: "The model that answers. Flash is the default because a WhatsApp reply is judged on how fast it arrives; it still takes Google Search and Levix's own function tools in the same request, which is what the agent depends on. A Gemini 3 Pro model works here too if you would rather trade latency for depth.",
   },
   {
     key: "ai_agent",
@@ -112,10 +112,10 @@ const SETTINGS = [
   {
     key: "gemini_stt_model",
     type: "string",
-    default: "gemini-2.5-flash",
+    default: "gemini-3.7-flash",
     group: "ai",
     label: "Gemini transcription model",
-    hint: "Used by !stt only. A fast, cheap model is the right choice here.",
+    hint: "Used by !stt only. Transcription is high-volume and latency-bound, so it stays on Flash whatever the chat model is set to.",
   },
   {
     key: "gemini_image_model",
@@ -123,7 +123,7 @@ const SETTINGS = [
     default: "gemini-3.1-flash-image",
     group: "ai",
     label: "Gemini image model",
-    hint: "Used by !generate only. Image output needs a model that can return images, which is not the same one that answers chat.",
+    hint: "Used by !generate only. Image output needs a model that can return images, which is not the same one that answers chat — gemini-3.1-flash-image is the dedicated stable one.",
   },
   {
     key: "ai_google_search",

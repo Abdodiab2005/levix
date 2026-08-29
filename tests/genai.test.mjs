@@ -96,24 +96,45 @@ section("the deprecated SDK is gone");
   }
 }
 
-section("the default model");
+section("the default models");
 
 {
-  const described = settings.describe().find((entry) => entry.key === "gemini_model");
-  equal("a fresh install answers on Gemini 3", described.default, "gemini-3.1-pro-preview");
+  // Flash across the product: a WhatsApp reply is judged on how fast it lands,
+  // and every message is a paid request on the operator's own key. Image
+  // generation is the exception, because returning image bytes is a different
+  // capability from answering chat.
+  const defaults = {
+    gemini_model: "gemini-3.7-flash",
+    gemini_stt_model: "gemini-3.7-flash",
+    gemini_image_model: "gemini-3.1-flash-image",
+  };
 
-  // Still a setting, not a constant.
-  settings.set("gemini_model", "gemini-2.5-flash");
-  equal("the operator can change it", settings.get("gemini_model"), "gemini-2.5-flash");
+  const described = settings.describe();
+  for (const [key, expected] of Object.entries(defaults)) {
+    equal(`a fresh install uses ${expected} for ${key}`, described.find((e) => e.key === key)?.default, expected);
+    equal(`…and ${key} reads back that way with nothing saved`, settings.get(key), expected);
+  }
+
+  // Still settings, not constants.
+  for (const [key, expected] of Object.entries(defaults)) {
+    settings.set(key, "some-other-model");
+    equal(`the operator can change ${key}`, settings.get(key), "some-other-model");
+    settings.set(key, "");
+    equal(`and clearing ${key} restores the default`, settings.get(key), expected);
+  }
+
+  // The chat model and the transcription model happen to share a default, but
+  // they are separate keys: moving one must not move the other.
+  settings.set("gemini_model", "gemini-3.1-pro-preview");
+  equal("moving the chat model leaves !stt on Flash", settings.get("gemini_stt_model"), "gemini-3.7-flash");
   settings.set("gemini_model", "");
-  equal("and clearing it restores the default", settings.get("gemini_model"), "gemini-3.1-pro-preview");
 }
 
 section("Google Search and Levix's own tools travel in the same request");
 
 await withReplies([textReply("hello")], async (fake) => {
   settings.set("ai_google_search", true);
-  settings.set("gemini_model", "gemini-3.1-pro-preview");
+  settings.set("gemini_model", "gemini-3.7-flash");
 
   await aiAgent.runAgent({ parts: [{ text: "hi" }], history: [] });
 
@@ -122,7 +143,7 @@ await withReplies([textReply("hello")], async (fake) => {
   equal(
     "…to the configured model",
     fake.requests[0].url,
-    "/v1beta/models/gemini-3.1-pro-preview:generateContent"
+    "/v1beta/models/gemini-3.7-flash:generateContent"
   );
 
   const names = toolNames(body.tools);

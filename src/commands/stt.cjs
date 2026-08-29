@@ -24,8 +24,9 @@ function geminiStt() {
   return cache;
 }
 
-// Transcription is a cheap, high-volume job and does not need the model that
-// answers chat, so it stays on its own fast setting.
+// Transcription is a cheap, high-volume job, so it keeps its own setting even
+// though it defaults to the same Flash model the chat agent uses: an operator
+// who moves the chat model to Pro should not drag transcription along with it.
 function sttModel() {
   return settings.get("gemini_stt_model");
 }

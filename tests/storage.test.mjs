@@ -152,13 +152,13 @@ store.authWrite("x", "1"); store.authClearAll();
 ok("auth cleared", store.authRead("x") === null);
 
 section("settings layer");
-ok("setting default", settings.get("gemini_model") === "gemini-3.1-pro-preview");
+ok("setting default", settings.get("gemini_model") === "gemini-3.7-flash");
 ok("source default", settings.sourceOf("gemini_model") === "default");
-settings.set("gemini_model", "gemini-3-pro");
-ok("setting saved", settings.get("gemini_model") === "gemini-3-pro");
+settings.set("gemini_model", "some-other-model");
+ok("setting saved", settings.get("gemini_model") === "some-other-model");
 ok("source dashboard", settings.sourceOf("gemini_model") === "dashboard");
 settings.set("gemini_model", "");
-ok("setting cleared", settings.get("gemini_model") === "gemini-3.1-pro-preview");
+ok("setting cleared", settings.get("gemini_model") === "gemini-3.7-flash");
 settings.set("ai_agent", "off");
 ok("bool coercion", settings.get("ai_agent") === false);
 settings.set("bot_min_delay_ms", "700");

@@ -28,7 +28,7 @@ project); it is simply not operator-configurable.
 - **Database**: SQLite through **`node:sqlite`** — Node's own module, so the
   datastore costs zero dependencies and there is no server to install
 - **AI**: `@google/genai` (the current Gemini SDK), default model
-  `gemini-3.1-pro-preview`
+  `gemini-3.7-flash`
 - **Web Server**: Express.js (the control panel)
 - **Logging**: Pino with pino-pretty
 - **Scheduling**: `node-cron`
@@ -524,14 +524,33 @@ something the agent loop has to remember. A signature is a plain string, so it
 survives the JSON round trip through `ai_history` too. Anything that rebuilds
 history by hand has to preserve it.
 
-**Model choice.** The default is `gemini-3.1-pro-preview`.
-`gemini-3.1-pro-preview-customtools` is the same model on a separate endpoint,
-tuned for agents that mix **bash** with custom tools so the model stops
-preferring bash. Levix has no bash tool — its nine tools are search, fetch,
-memory, roles and the clock — and Google warns the variant can show "quality
-fluctuations in some use cases which don't benefit from such tools". So it is
-deliberately not the default. The model is a setting: an operator who actually
-sees the model ignoring the tools can switch to it in one field.
+**Model choice — Flash across the product.** Levix answers inside a chat app,
+where a reply is judged first on how long it took to arrive, and every message
+is a paid request on somebody's own API key. So the defaults are:
+
+| setting | default | used by |
+| --- | --- | --- |
+| `gemini_model` | `gemini-3.7-flash` | the agent (`!gemini` / `!ask` / `!ai`) |
+| `gemini_stt_model` | `gemini-3.7-flash` | `!stt` |
+| `gemini_image_model` | `gemini-3.1-flash-image` | `!generate` |
+
+`gemini-3.7-flash` is the current GA high-end Flash model and takes Google
+Search and Levix's own function tools in the same request, which is what the
+agent depends on. Pro's latency and price buy depth an ordinary WhatsApp
+conversation does not ask for — and all three are settings, so an operator who
+does want it changes one field.
+
+Image generation stays on the dedicated `gemini-3.1-flash-image`: returning
+image bytes is a different capability from answering chat, and that is the
+stable model that has it. Transcription keeps its own key rather than reusing
+`gemini_model`, so moving the chat model to Pro does not silently move every
+voice note onto it as well.
+
+`gemini-3.1-pro-preview-customtools` was audited and **rejected**: it is a
+separate endpoint tuned for agents that mix **bash** with custom tools, so the
+model stops preferring bash. Levix has no bash tool — its nine are search,
+fetch, memory, roles and the clock — and Google warns the variant can show
+"quality fluctuations in some use cases which don't benefit from such tools".
 
 Tools never throw: a failure comes back as `{ error }` so the model can explain
 it. Bounded by `AI_MAX_TOOL_STEPS` rounds and `AI_TOOL_TIMEOUT_MS` per call.
