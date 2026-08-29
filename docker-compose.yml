@@ -1,13 +1,13 @@
 # docker compose up -d
 #
+# Pulls the latest published Levix image from GitHub Container Registry.
 # Then open http://localhost:3001 and pick a password. The setup page asks for
 # a code when you open it from another machine; `docker compose logs levix`
 # prints it.
 
 services:
   levix:
-    build: .
-    image: levix:latest
+    image: ghcr.io/abdodiab2005/levix:latest
     container_name: levix
     restart: unless-stopped
     ports:
