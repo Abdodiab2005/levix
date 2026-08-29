@@ -2,20 +2,13 @@
 # executable per platform, the public installer, and a checksum file covering
 # exactly those files.
 #
-# Nothing is published unless the full CI suite passes first — `needs: ci` is
-# the gate, and every publishing job depends on it.
+# Nothing is published unless the tag matches package.json and the full CI suite
+# passes first.
 #
 #   tag pushed
-#     └─ ci ── npm
-#           ├─ image
-#           └─ binaries ── publish-release ── installer
-#
-# Why the installer is a job here and not a separate `on: release: published`
-# workflow: this workflow is what creates the GitHub Release, and a release
-# created with GITHUB_TOKEN does not trigger further workflow runs. A
-# release-triggered workflow would simply never fire. Depending on
-# publish-release gives the same semantics — the public installer only moves
-# after the release genuinely exists — with one pipeline instead of two.
+#     └─ verify-version ── ci ── npm
+#                          ├── image
+#                          └── binaries ── publish-release ── installer
 #
 # Secrets: NPM_TOKEN, and the LEVIX_DEPLOY_* set on the installer-production
 # environment. The container image uses the built-in GITHUB_TOKEN.
@@ -27,9 +20,29 @@ on:
     tags: ["v*"]
 
 jobs:
+  verify-version:
+    name: tag matches package version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          package_version="$(node -p "require('./package.json').version")"
+
+          if [ "$tag" != "$package_version" ]; then
+            echo "::error::Release tag v${tag} does not match package.json version ${package_version}"
+            exit 1
+          fi
+
+          echo "Release version verified: ${package_version}"
+
   # The same jobs a pull request runs. A release that would fail CI is not a
   # release.
   ci:
+    needs: verify-version
     uses: ./.github/workflows/ci.yml
 
   npm:
@@ -52,6 +65,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      IMAGE: ghcr.io/abdodiab2005/levix
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -64,8 +79,8 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            ghcr.io/${{ github.repository }}:latest
+            ${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.IMAGE }}:latest
 
   binaries:
     needs: ci
@@ -125,14 +140,8 @@ jobs:
       - name: Generate the installer for this release
         env:
           TAG: ${{ github.ref_name }}
-        # No output path: the generator names the file after the tag it
-        # normalised, which is the same name the deployment job looks for.
         run: node scripts/build-release-installer.mjs "$TAG"
 
-      # Computed from the files that are about to be uploaded, in the same job,
-      # so the manifest cannot describe a different build than the one people
-      # download. The installer is named levix-* on purpose: it is covered by
-      # the existing manifest instead of needing one of its own.
       - name: Checksum the artifacts
         working-directory: dist
         run: |
@@ -143,8 +152,6 @@ jobs:
           cat SHA256SUMS.txt
           sha256sum -c SHA256SUMS.txt
 
-      # Handed to the deployment job so it publishes the exact file that was
-      # released, not a second build of it.
       - uses: actions/upload-artifact@v4
         with:
           name: installer
@@ -177,21 +184,11 @@ jobs:
             carry ffmpeg — install it, or point Settings → Media at one, if you
             want video thumbnails.
 
-  # The public installer. Runs only after the GitHub Release exists, which
-  # itself only happens after CI, the packaged tarball, and every executable
-  # have passed.
   installer:
     name: publish the public installer
-    # publish-release: the release the installer belongs to must exist first.
-    # npm: the installer runs `npm install -g levix@<version>`, so that version
-    # has to be on the registry before anyone can be handed the URL.
     needs: [publish-release, npm]
     runs-on: ubuntu-latest
-    # Deployment credentials live on their own environment, separate from
-    # ordinary CI secrets, and can be given approval rules later.
     environment: installer-production
-    # One release at a time touches install.sh. Never cancelled half way: an
-    # interrupted deployment is exactly what the group exists to prevent.
     concurrency:
       group: levix-installer-production
       cancel-in-progress: false
@@ -203,8 +200,6 @@ jobs:
           name: installer
           path: dist
 
-      # The tag reaches the shell as an environment variable, never as text
-      # pasted into a command line.
       - name: Read the release tag
         id: release
         env:
@@ -213,8 +208,6 @@ jobs:
           node scripts/build-release-installer.mjs --print "$TAG" >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
 
-      # This script is about to be served to the public and piped into root
-      # shells. It gets checked before it goes anywhere.
       - name: Check the shell
         run: |
           set -e
