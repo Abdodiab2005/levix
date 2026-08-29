@@ -66,21 +66,30 @@ node_major() {
   esac
 }
 
+# Read distro metadata in a subshell. /etc/os-release commonly defines VERSION,
+# which must never overwrite Levix's own release VERSION in the parent shell.
+read_os_id() (
+  local os_release="$1"
+  [ -r "$os_release" ] || return 1
+  # shellcheck disable=SC1090
+  . "$os_release"
+  printf '%s\n' "${ID:-}"
+)
+
 install_node24() {
-  [ -r /etc/os-release ] ||
+  local distro_id
+  distro_id="$(read_os_id /etc/os-release)" ||
     die "Node ${MIN_NODE_MAJOR}+ is required. Automatic Node installation is supported on Debian and Ubuntu only."
 
-  # shellcheck disable=SC1091
-  . /etc/os-release
-  case "${ID:-}" in
+  case "$distro_id" in
     debian|ubuntu) ;;
     *)
-      die "Node ${MIN_NODE_MAJOR}+ is required. Automatic Node installation is supported on Debian and Ubuntu only (found ${ID:-unknown}). Install Node ${MIN_NODE_MAJOR}+ and run this installer again."
+      die "Node ${MIN_NODE_MAJOR}+ is required. Automatic Node installation is supported on Debian and Ubuntu only (found ${distro_id:-unknown}). Install Node ${MIN_NODE_MAJOR}+ and run this installer again."
       ;;
   esac
 
   command -v apt-get >/dev/null 2>&1 ||
-    die "This looks like ${ID}, but apt-get is unavailable. Install Node ${MIN_NODE_MAJOR}+ and run this installer again."
+    die "This looks like ${distro_id}, but apt-get is unavailable. Install Node ${MIN_NODE_MAJOR}+ and run this installer again."
 
   say "Installing Node ${MIN_NODE_MAJOR} from NodeSource…"
 

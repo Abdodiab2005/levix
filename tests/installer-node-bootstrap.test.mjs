@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ROOT, section, ok, finish } from "./harness.mjs";
 
@@ -28,5 +29,36 @@ ok(
 ok("Node is re-checked after bootstrapping", /install_node24[\s\S]*NODE_MAJOR="\$\(node_major\)"/.test(source));
 ok("npm is still required before installing Levix", /command -v npm[\s\S]*npm install -g "\$\{PACKAGE\}@\$\{VERSION\}"/.test(source));
 ok("the old fresh-server hard stop is gone", !/Node is not installed\. Get Node/.test(source));
+
+const readOsIdFunction = source.match(/read_os_id\(\) \([\s\S]*?\n\)/)?.[0] || "";
+ok("os-release metadata is read in an isolated subshell", Boolean(readOsIdFunction));
+
+if (readOsIdFunction) {
+  const temp = mkdtempSync(join(tmpdir(), "levix-os-release-"));
+  const fakeOsRelease = join(temp, "os-release");
+  writeFileSync(fakeOsRelease, 'ID=ubuntu\nVERSION="24.04.4 LTS (Noble Numbat)"\n');
+
+  const probe = spawnSync(
+    "bash",
+    [
+      "-c",
+      `set -euo pipefail
+VERSION="latest"
+${readOsIdFunction}
+distro="$(read_os_id "$1")"
+printf '%s|%s\\n' "$distro" "$VERSION"
+`,
+      "bash",
+      fakeOsRelease,
+    ],
+    { encoding: "utf8" }
+  );
+
+  ok(
+    "Ubuntu VERSION cannot overwrite the Levix release VERSION",
+    probe.status === 0 && probe.stdout.trim() === "ubuntu|latest"
+  );
+  rmSync(temp, { recursive: true, force: true });
+}
 
 finish();
