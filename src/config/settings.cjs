@@ -109,6 +109,14 @@ const SETTINGS = [
     hint: "How much of the long-term memory files goes into every prompt.",
   },
   {
+    key: "ai_google_search",
+    type: "bool",
+    default: true,
+    group: "ai",
+    label: "Gemini Google Search",
+    hint: "Lets Gemini use Google's own search grounding when a question needs current information. Gemini only — the Groq fallback is unaffected.",
+  },
+  {
     key: "groq_api_key",
     type: "secret",
     default: "",
@@ -185,6 +193,65 @@ const SETTINGS = [
     hint: "Only if the bundled ffmpeg-static binary can't run on this machine.",
   },
 
+  // --- WhatsApp proxy ----------------------------------------------------
+  //
+  // Applies to the WhatsApp connection ONLY: the session manager hands these
+  // to the one makeWASocket() call (src/core/proxy.js). The control panel, the
+  // AI providers and every other outbound request are untouched.
+  //
+  // None of these apply to a socket that is already open — the Connection
+  // screen offers "Reconnect to apply" instead of dropping a healthy session
+  // the moment somebody opens Settings.
+  {
+    key: "whatsapp_proxy_enabled",
+    type: "bool",
+    default: false,
+    group: "whatsapp",
+    label: "Route WhatsApp through a proxy",
+    hint: "Off means WhatsApp connects directly, exactly as before.",
+  },
+  {
+    key: "whatsapp_proxy_protocol",
+    type: "string",
+    default: "http",
+    choices: ["http", "https", "socks5"],
+    group: "whatsapp",
+    label: "Proxy protocol",
+  },
+  {
+    key: "whatsapp_proxy_host",
+    type: "string",
+    default: "",
+    group: "whatsapp",
+    label: "Proxy host",
+    hint: "Hostname or IP of the proxy server. Required when the proxy is on.",
+  },
+  {
+    key: "whatsapp_proxy_port",
+    type: "int",
+    default: 0,
+    min: 0,
+    max: 65535,
+    group: "whatsapp",
+    label: "Proxy port",
+  },
+  {
+    key: "whatsapp_proxy_username",
+    type: "string",
+    default: "",
+    group: "whatsapp",
+    label: "Proxy username",
+    hint: "Leave empty for a proxy that needs no authentication.",
+  },
+  {
+    key: "whatsapp_proxy_password",
+    type: "secret",
+    default: "",
+    group: "whatsapp",
+    label: "Proxy password",
+    hint: "Stored like an API key: never sent back to this page, never logged.",
+  },
+
   // --- Server ------------------------------------------------------------
   {
     key: "port",
@@ -251,6 +318,7 @@ const GROUP_LABELS = {
   integrations: "Integrations",
   media: "Media",
   server: "Server",
+  whatsapp: "WhatsApp proxy",
 };
 
 // This module is required by files that load before the database is opened in
@@ -319,7 +387,15 @@ function validate(definition, value) {
 
   if (definition.type === "bool") return coerce(definition, value);
 
-  const text = String(value ?? "");
+  const text = String(value ?? "").trim();
+
+  // A fixed set of values (the proxy protocol) is still a string setting; the
+  // list is what makes the dashboard render a dropdown and what stops a
+  // hand-crafted PATCH from storing something the code cannot act on.
+  if (definition.choices && text && !definition.choices.includes(text)) {
+    throw new Error(`${definition.label} must be one of: ${definition.choices.join(", ")}`);
+  }
+
   if (text.length > 500) throw new Error(`${definition.label} is too long`);
   if (definition.key === "bot_timezone" && text) {
     try {
@@ -372,6 +448,7 @@ function describe() {
       hint: definition.hint || null,
       min: definition.min ?? null,
       max: definition.max ?? null,
+      choices: definition.choices ?? null,
       restart: definition.restart === true,
       source: sourceOf(definition.key),
     };

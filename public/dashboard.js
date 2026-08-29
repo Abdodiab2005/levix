@@ -334,6 +334,28 @@
 
     $("#conn-detail").textContent = (snapshot.detail || "") + retryHint(snapshot);
 
+    // The proxy line, and the one action that can apply a changed one. The
+    // label is already redacted server-side — there is no password to leak
+    // here because the browser was never told it.
+    const proxyLine = $("#conn-proxy");
+    if (snapshot.proxy) {
+      proxyLine.textContent = `Connecting through ${snapshot.proxy}.`;
+    } else if (snapshot.connected || snapshot.state === "waiting_for_qr") {
+      proxyLine.textContent = "Connecting directly, with no proxy.";
+    } else {
+      proxyLine.textContent = "";
+    }
+    if (snapshot.proxyChanged) {
+      proxyLine.textContent +=
+        " The saved proxy settings differ from the connection in use — reconnect to apply them.";
+    }
+
+    // Only offered when it would do something: there has to be a live session
+    // to replace, and a reason to replace it.
+    const canReconnect = snapshot.canStop && snapshot.proxyChanged;
+    $("#reconnect-btn").style.display = canReconnect ? "" : "none";
+    $("#reconnect-btn").disabled = !canReconnect;
+
     // Buttons follow the backend, so a state that cannot accept an action
     // cannot be asked for one.
     $("#start-btn").disabled = !snapshot.canStart;
@@ -390,6 +412,18 @@
           renderConnection();
         }
       })
+    );
+
+    $("#reconnect-btn").addEventListener(
+      "click",
+      confirmed(
+        "Reconnect WhatsApp now to apply the saved settings? The bot stops answering for a few seconds.",
+        async () => {
+          const { session } = await api("/bot/session/reconnect", { method: "POST" });
+          setStatus(session);
+          toast("Reconnecting with the new settings…", "ok");
+        }
+      )
     );
 
     $("#stop-btn").addEventListener(
@@ -1048,7 +1082,8 @@
     if (setting.type === "secret") {
       control = `
         <div class="inline">
-          <input type="password" id="${id}" placeholder="${setting.configured ? "•••••••• (set)" : "not set"}" autocomplete="new-password" />
+          <input type="password" id="${id}" placeholder="${setting.configured ? "•••••••• (set)" : "not set"}"
+                 autocomplete="new-password"${setting.configured ? ' data-configured="1"' : ""} />
           <button class="btn btn-sm" data-save-setting="${esc(setting.key)}">Save</button>
           ${setting.configured ? `<button class="btn btn-sm btn-danger" data-clear-setting="${esc(setting.key)}">Clear</button>` : ""}
         </div>`;
@@ -1059,6 +1094,19 @@
             <input type="checkbox" id="${id}" ${setting.value ? "checked" : ""} />
             <span class="track"></span>
           </label>
+          <button class="btn btn-sm" data-save-setting="${esc(setting.key)}">Save</button>
+        </div>`;
+    } else if (Array.isArray(setting.choices) && setting.choices.length) {
+      control = `
+        <div class="inline">
+          <select id="${id}">
+            ${setting.choices
+              .map(
+                (choice) =>
+                  `<option value="${esc(choice)}"${choice === setting.value ? " selected" : ""}>${esc(choice)}</option>`
+              )
+              .join("")}
+          </select>
           <button class="btn btn-sm" data-save-setting="${esc(setting.key)}">Save</button>
         </div>`;
     } else {
@@ -1128,6 +1176,16 @@
 
       const key = save ? save.dataset.saveSetting : clear.dataset.clearSetting;
       const input = document.getElementById(`set-${key}`);
+
+      // An already-set secret with an empty box means "leave it alone", not
+      // "erase it". The box is always empty — the server never sends the value
+      // back — so saving the field as-is would wipe a working password every
+      // time somebody edited the host next to it. Clear is the explicit way.
+      if (save && input.dataset.configured === "1" && input.value === "") {
+        toast("Left unchanged. Use Clear to remove it.");
+        return;
+      }
+
       const value = clear
         ? ""
         : input.type === "checkbox"
@@ -1138,6 +1196,9 @@
         await api("/settings", { method: "PATCH", body: { key, value } });
         toast(clear ? "Cleared" : "Saved", "ok");
         VIEWS.settings.load();
+        // A proxy change cannot reach a socket that is already open; the
+        // Connection screen is where that is offered, so refresh its state.
+        if (key.startsWith("whatsapp_proxy_")) loadStats().catch(() => {});
       })();
     });
   }

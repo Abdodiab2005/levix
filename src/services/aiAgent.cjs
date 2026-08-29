@@ -215,6 +215,116 @@ function isAgentEnabled() {
   return Boolean(geminiClient()) && settings.get("ai_agent");
 }
 
+// ===========================================================================
+// Google Search — Gemini's own, not ours
+// ===========================================================================
+//
+// `{ googleSearch: {} }` is a BUILT-IN tool: the model decides when a question
+// needs the web, Google runs the search inside the same request, and the answer
+// comes back already grounded with the sources it used. There is no
+// google_search function declaration anywhere in Levix, nothing to execute in
+// the tool loop, and no search API key — deliberately. A hand-rolled search
+// tool would be a second, worse implementation of something the model already
+// does better.
+//
+// The shape is the Gemini 2.x one. The older `googleSearchRetrieval` is what
+// 1.5 models take; this SDK's TypeScript types only know that one, but the SDK
+// passes `tools` through to the REST API untouched (dist/index.js:1377), so the
+// 2.x shape reaches the model exactly as written.
+
+const GOOGLE_SEARCH_TOOL = Object.freeze({ googleSearch: {} });
+
+/** Gemini-only. Nothing here is offered to Groq or any other provider. */
+function googleSearchEnabled() {
+  return settings.get("ai_google_search") === true;
+}
+
+/**
+ * The `tools` array for one request.
+ *
+ * Custom function declarations and the built-in search go in the same array;
+ * Gemini 2.x accepts both together. When it does not (see runAgent), the search
+ * half is dropped and Levix's own tools are kept — never the other way round.
+ */
+function buildTools({ useTools = true, search = googleSearchEnabled() } = {}) {
+  const tools = [];
+  if (useTools) tools.push(...toolDeclarations());
+  if (search) tools.push(GOOGLE_SEARCH_TOOL);
+  return tools;
+}
+
+/**
+ * Does this error mean "this model will not take search and functions at once"?
+ *
+ * Some model/API combinations refuse the mix with a 400. Rather than quietly
+ * shipping fewer tools forever, runAgent() retries once without the built-in
+ * search and says so in the log — Levix's own tools are the ones that must
+ * survive, because commands depend on them.
+ */
+function isToolCombinationError(error) {
+  const status = Number(error?.status ?? error?.statusCode ?? error?.error?.code ?? 0);
+  const message = `${error?.message || ""} ${error?.statusText || ""}`.toLowerCase();
+  if (status && status !== 400) return false;
+  return (
+    message.includes("tool") &&
+    (message.includes("not supported") ||
+      message.includes("unsupported") ||
+      message.includes("only one tool") ||
+      message.includes("cannot be used") ||
+      message.includes("at most one"))
+  );
+}
+
+/**
+ * Pull the sources Gemini actually grounded on out of one response.
+ *
+ * Reads only real grounding metadata — `candidates[].groundingMetadata` — so a
+ * turn where the model answered from its own knowledge yields nothing and no
+ * Sources block is ever invented.
+ */
+function extractSources(response) {
+  const out = [];
+  for (const candidate of response?.candidates || []) {
+    const grounding = candidate?.groundingMetadata;
+    for (const chunk of grounding?.groundingChunks || []) {
+      const uri = chunk?.web?.uri;
+      if (!uri) continue;
+      out.push({ uri, title: chunk.web.title || hostOf(uri) || "source" });
+    }
+  }
+  return out;
+}
+
+function hostOf(uri) {
+  try {
+    return new URL(uri).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+/** How many sources are worth putting under a WhatsApp answer. */
+const MAX_SOURCES = 5;
+
+/**
+ * A compact Sources block, or "" when there is nothing to cite.
+ *
+ * Deduplicated by URL, capped, and written in the plain style the rest of the
+ * bot uses — no Markdown links, which WhatsApp renders literally.
+ */
+function formatSources(sources) {
+  const seen = new Set();
+  const lines = [];
+  for (const source of sources || []) {
+    if (!source?.uri || seen.has(source.uri)) continue;
+    seen.add(source.uri);
+    const label = String(source.title || hostOf(source.uri) || "source").trim();
+    lines.push(`• ${label} — ${source.uri}`);
+    if (lines.length >= MAX_SOURCES) break;
+  }
+  return lines.length ? `\n\n*Sources:*\n${lines.join("\n")}` : "";
+}
+
 /**
  * Run one agent turn.
  *
@@ -238,17 +348,43 @@ async function runAgent({
   if (!genAI) throw new Error("GEMINI_API_KEY غير معرف");
 
   const stepBudget = maxSteps ?? settings.get("ai_max_tool_steps");
+  const systemInstruction = buildSystemInstruction(context);
+  const trimmed = trimHistory(history);
 
-  const model = genAI.getGenerativeModel({
-    model: settings.get("gemini_model"),
-    systemInstruction: buildSystemInstruction(context),
-    ...(useTools ? { tools: toolDeclarations() } : {}),
-  });
+  const openChat = (search) => {
+    const tools = buildTools({ useTools, search });
+    const model = genAI.getGenerativeModel({
+      model: settings.get("gemini_model"),
+      systemInstruction,
+      ...(tools.length ? { tools } : {}),
+    });
+    return model.startChat({ history: trimmed });
+  };
 
-  const chat = model.startChat({ history: trimHistory(history) });
+  let searchOffered = googleSearchEnabled();
+  let chat = openChat(searchOffered);
   const toolCalls = [];
+  // Only ever filled from real grounding metadata; see extractSources().
+  const sources = [];
 
-  let result = await chat.sendMessage(parts);
+  let result;
+  try {
+    result = await chat.sendMessage(parts);
+  } catch (error) {
+    // The one case where dropping a tool is correct: this model will not take
+    // the built-in search alongside Levix's own functions. Keep the functions —
+    // commands depend on them — and say plainly that search went.
+    if (!searchOffered || !isToolCombinationError(error)) throw error;
+    logger.warn(
+      { err: error?.message, model: settings.get("gemini_model") },
+      "[aiAgent] this model refuses Google Search together with function tools — retrying with functions only"
+    );
+    searchOffered = false;
+    chat = openChat(false);
+    result = await chat.sendMessage(parts);
+  }
+
+  sources.push(...extractSources(result.response));
   let steps = 0;
 
   while (steps < stepBudget) {
@@ -292,6 +428,8 @@ async function runAgent({
 
     if (status) await status.update("🤖 بجهّز الرد...");
     result = await chat.sendMessage(responses);
+    // Grounding can happen on any turn, not just the first.
+    sources.push(...extractSources(result.response));
   }
 
   let text = "";
@@ -313,11 +451,25 @@ async function runAgent({
     logger.warn({ err: err?.message }, "[aiAgent] could not read chat history");
   }
 
-  return { text, history: newHistory, toolCalls, steps };
+  return {
+    text,
+    history: newHistory,
+    toolCalls,
+    steps,
+    // Empty unless Gemini actually grounded this answer on a search.
+    sources,
+    searchOffered,
+  };
 }
 
 module.exports = {
   runAgent,
+  buildTools,
+  googleSearchEnabled,
+  extractSources,
+  formatSources,
+  isToolCombinationError,
+  GOOGLE_SEARCH_TOOL,
   buildSystemInstruction,
   loadPersona,
   isAgentEnabled,

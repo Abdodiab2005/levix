@@ -39,6 +39,7 @@ const {
 } = require("../utils/permissions.cjs");
 const {
   runAgent,
+  formatSources,
   isFileReferenceError,
   sanitizeHistoryForFiles,
 } = require("../services/aiAgent.cjs");
@@ -698,7 +699,10 @@ module.exports = {
       const text =
         result.text?.trim() ||
         "مفيش رد جه من الموديل. جرّب تصيغ السؤال بشكل تاني.";
-      await status.finish(text);
+      // Appended only when Gemini really grounded the answer on a search —
+      // formatSources() returns "" for an answer the model gave from its own
+      // knowledge, so there is never a Sources block with nothing behind it.
+      await status.finish(`${text}${formatSources(result.sources)}`);
     } catch (error) {
       logger.error({ err: error }, "Error in !gemini command");
 

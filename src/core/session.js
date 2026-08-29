@@ -54,6 +54,13 @@ import { setupEventListeners } from "./events.js";
 import { handleConnectionOpen, classifyDisconnect } from "./connection.js";
 import { RETRY_SCHEDULE_MS } from "../config/constants.js";
 import { clearAuthState, deleteQrCode, saveQrCode } from "../utils/storage.esm.js";
+import {
+  createProxyAgents,
+  describeProxyFailure,
+  proxyFingerprint,
+  readProxyConfig,
+  redactProxy,
+} from "./proxy.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -134,6 +141,14 @@ export class WhatsAppSession {
   #pairing = false;
 
   #shuttingDown = false;
+
+  // The proxy the live socket was actually built with, and how it reads. The
+  // fingerprint contains the password, so it stays here — only the boolean
+  // "would a reconnect change anything" reaches a browser.
+  #proxyFingerprint = null;
+  #proxyLabel = null;
+  #proxyConfig = null;
+
   #qr = null;
   #reason = null;
   #detail = null;
@@ -150,6 +165,11 @@ export class WhatsAppSession {
     clearCredentials = clearAuthState,
     initializeScheduledJobs = null,
     stopScheduledJobs = null,
+    // Read at socket-creation time, never cached at import: the operator can
+    // change the proxy from the panel and the next connection must use it.
+    // Injectable so a test can drive the whole state machine without a proxy.
+    loadProxy = readProxyConfig,
+    buildProxyAgents = createProxyAgents,
     emit = () => {},
     retryDelaysMs = RETRY_SCHEDULE_MS,
     log = logger,
@@ -159,6 +179,8 @@ export class WhatsAppSession {
     this.onOpen = onOpen;
     this.initializeScheduledJobs = initializeScheduledJobs;
     this.stopScheduledJobs = stopScheduledJobs;
+    this.loadProxy = loadProxy;
+    this.buildProxyAgents = buildProxyAgents;
     this.emitEvent = emit;
     this.clearCredentials = clearCredentials;
     this.retryDelaysMs = retryDelaysMs;
@@ -210,6 +232,12 @@ export class WhatsAppSession {
       // leaves dead credentials behind, and unlinking is the only way out of
       // it. The one state with nothing to unlink is the one that just did.
       canUnlink: this.#state !== S.LOGGED_OUT && !this.#shuttingDown,
+      // Redacted — never the password. Null when the socket is direct.
+      proxy: this.#proxyLabel,
+      // True when the saved proxy settings differ from what the live socket was
+      // built with, i.e. a reconnect would actually change something. Only the
+      // answer crosses the wire, never the fingerprint it was computed from.
+      proxyChanged: this.#proxyIsStale(),
       connected: this.#state === S.CONNECTED,
       terminal,
       hasQr: !!this.#qr,
@@ -333,6 +361,21 @@ export class WhatsAppSession {
     return this.getState();
   }
 
+  /**
+   * Take the session down and bring it straight back up.
+   *
+   * This is what "Reconnect to apply" runs. It is composed from the two
+   * lifecycle methods that already exist rather than being a second path to a
+   * socket: stop() cancels the retry and ends the current connection, start()
+   * re-reads the settings — including the proxy — and opens a new one. Nothing
+   * outside this class ever creates a socket.
+   */
+  async reconnect({ reason = "reconnect" } = {}) {
+    if (this.#shuttingDown) return this.getState();
+    await this.stop({ reason, state: S.IDLE });
+    return this.start({ reason });
+  }
+
   /** Process shutdown: cancel everything and never reconnect again. */
   async shutdown() {
     this.#shuttingDown = true;
@@ -360,14 +403,45 @@ export class WhatsAppSession {
     // recheck that it is still the current one when it comes back.
     const startedAt = this.#generation;
 
+    // Read per attempt, so changing the proxy and pressing Reconnect is all it
+    // takes. A configuration that does not validate fails the attempt with the
+    // operator's own mistake rather than dialling out wrongly.
+    let proxyConfig;
+    let proxy = null;
+    try {
+      proxyConfig = this.loadProxy();
+      proxy = this.buildProxyAgents(proxyConfig);
+    } catch (error) {
+      this.log.error(
+        { err: error?.message },
+        "[Session] the proxy configuration is not usable"
+      );
+      this.#proxyFingerprint = null;
+      this.#proxyLabel = null;
+      this.#transition(S.ERROR, {
+        reason: "proxy_invalid",
+        // normalizeProxyConfig() only ever throws messages about the shape of
+        // the settings, never about their values, so this is safe to show.
+        detail: error?.message || "The proxy configuration is not usable",
+      });
+      return;
+    }
+
+    this.#proxyFingerprint = proxyFingerprint(proxyConfig);
+    this.#proxyLabel = redactProxy(proxyConfig);
+    this.#proxyConfig = proxyConfig;
+
     let created;
     try {
-      created = await this.createSocket();
+      created = await this.createSocket({ proxy });
     } catch (error) {
       this.log.error({ err: error }, "[Session] failed to create the WhatsApp socket");
       this.#transition(S.ERROR, {
         reason: "socket_failed",
-        detail: error?.message || "Could not create the WhatsApp socket",
+        detail:
+          describeProxyFailure(error, proxyConfig) ||
+          error?.message ||
+          "Could not create the WhatsApp socket",
       });
       return;
     }
@@ -395,6 +469,8 @@ export class WhatsAppSession {
     this.attachListeners(sock, {
       saveCreds,
       onConnectionUpdate: (update) => this.#onConnectionUpdate(generation, update),
+      onHandshakeRejected: (response) =>
+        this.#onHandshakeRejected(generation, sock, response),
     });
 
     this.#transition(this.#pairing ? S.WAITING_FOR_QR : S.STARTING, {
@@ -403,6 +479,39 @@ export class WhatsAppSession {
     });
 
     this.log.info("[Session] WhatsApp socket created");
+  }
+
+  /**
+   * The server answered the WebSocket handshake with an HTTP status.
+   *
+   * In practice this is the proxy: 407 for bad credentials, 403 for a proxy
+   * that will not tunnel to WhatsApp. Nothing else in Baileys reacts to it, so
+   * without this the attempt hangs in `starting` forever.
+   *
+   * The response is turned into a normal close on the socket itself, so the
+   * ordinary state machine decides what happens next — this does not classify
+   * anything or schedule anything of its own.
+   */
+  #onHandshakeRejected(generation, sock, response) {
+    if (generation !== this.#generation) return;
+
+    const status = response?.statusCode ?? 0;
+    const viaProxy = !!this.#proxyConfig?.enabled;
+    const detail =
+      viaProxy && (status === 407 || status === 401)
+        ? `The proxy at ${this.#proxyLabel} rejected the username or password (HTTP ${status}).`
+        : viaProxy
+        ? `The proxy at ${this.#proxyLabel} refused to connect to WhatsApp (HTTP ${status}).`
+        : `WhatsApp refused the connection (HTTP ${status}).`;
+
+    this.log.error(`[Session] handshake rejected with HTTP ${status} — ${detail}`);
+
+    // Baileys' end() is idempotent and emits the close through the normal
+    // path, so the retry policy and the terminal classification stay exactly
+    // where they already live.
+    const error = new Error(detail);
+    error.output = { statusCode: status || 500, payload: { error: detail } };
+    Promise.resolve(sock?.end?.(error)).catch(() => {});
   }
 
   /** Cut every wire back from a socket we are done with. */
@@ -425,10 +534,30 @@ export class WhatsAppSession {
 
     this.#detach(sock);
     this.#stopJobs();
+    this.#proxyFingerprint = null;
+    this.#proxyLabel = null;
+    this.#proxyConfig = null;
     try {
       await withTimeout(sock.end?.(undefined), SOCKET_CLOSE_TIMEOUT_MS);
     } catch (error) {
       this.log.debug({ err: error?.message }, "[Session] socket end threw");
+    }
+  }
+
+  /**
+   * Would reconnecting pick up a different proxy than the one in use?
+   *
+   * False whenever nothing is connected — there is no socket to be stale, and
+   * the next Start reads the settings fresh anyway.
+   */
+  #proxyIsStale() {
+    if (this.#proxyFingerprint === null) return false;
+    try {
+      return proxyFingerprint(this.loadProxy()) !== this.#proxyFingerprint;
+    } catch {
+      // Settings that no longer validate (half-edited host, say) are not a
+      // reason to nag; the next Start will report the real error.
+      return false;
     }
   }
 
@@ -519,10 +648,17 @@ export class WhatsAppSession {
     // being lost with nothing to show for it. The next open re-arms them.
     this.#stopJobs();
 
+    // classifyDisconnect stays the only thing that decides terminal vs
+    // recoverable. A proxy only ever enriches the sentence next to it.
     const verdict = classifyDisconnect(statusCode);
+    const proxyNote = describeProxyFailure(lastDisconnect?.error, this.#proxyConfig);
+    if (proxyNote && !verdict.terminal) {
+      verdict.detail = verdict.detail ? `${proxyNote} ${verdict.detail}` : proxyNote;
+    }
 
     this.log.warn(
-      `[Session] Connection closed (${statusCode ?? "no status"}: ${reasonText}) — ${verdict.label}`
+      `[Session] Connection closed (${statusCode ?? "no status"}: ${reasonText}) — ${verdict.label}` +
+        (this.#proxyLabel ? ` via ${this.#proxyLabel}` : "")
     );
 
     if (this.#shuttingDown) return;

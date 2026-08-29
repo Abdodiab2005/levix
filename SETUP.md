@@ -188,6 +188,13 @@ script, pinned — use its own URL:
 curl -fsSL https://levix.leviro.net/install/v2.0.0.sh | bash
 ```
 
+**Behind a proxy** — if this server reaches the internet through a proxy, the
+panel has a **WhatsApp proxy** section under Settings: protocol (HTTP, HTTPS or
+SOCKS5), host, port, and a username and password if yours needs them. It applies
+to the WhatsApp connection only — the panel itself and the AI keep connecting
+directly. Saving it never interrupts a working session; the Connection screen
+offers **Reconnect to apply** when a change is waiting.
+
 **Your own machine** — `pm2` works well:
 
 ```bash

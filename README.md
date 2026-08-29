@@ -46,13 +46,20 @@ warnings with auto-kick, rules and notes, plus the usual `!group kick`,
 **An AI agent, not a chat box** — `!gemini` can search the web, open a page and
 read it, save something to its long-term memory and hand out bot roles, across
 several tool rounds, narrating the whole run inside a single message it keeps
-editing. Its personality is a Markdown file you can edit from the panel.
+editing. Gemini's own Google Search is available to it too, so questions about
+current things get grounded answers with their sources listed. Its personality
+is a Markdown file you can edit from the panel.
 
 **Long-term memory** — "remember that…" writes to `memory/global.md` or a
 per-chat file. Plain Markdown, hand-editable, injected into every prompt.
 
 **Scheduled messages** — one-off (`!schedule`) or recurring (`!autoschedule`),
 stored in the database and listed in the panel.
+
+**Optional proxy** — Settings → WhatsApp proxy routes the WhatsApp connection
+through an HTTP, HTTPS or SOCKS5 proxy, including the media it sends and
+receives. Nothing else changes: the control panel and the AI still connect
+directly.
 
 **A connection you control** — the panel starts, stops and unlinks the
 WhatsApp session, and shows what it is actually doing: waiting for a scan,

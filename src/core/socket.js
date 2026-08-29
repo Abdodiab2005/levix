@@ -45,9 +45,21 @@ function withThumbnailSupport(sock) {
   return sock;
 }
 
-// Create and configure WhatsApp socket
-export async function createWhatsAppSocket() {
-  logger.info('[Socket] Initializing WhatsApp socket with database auth');
+/**
+ * Create and configure a WhatsApp socket.
+ *
+ * @param {object} [options]
+ * @param {object|null} [options.proxy] - what createProxyAgents() returned, or
+ *   null for a direct connection. Built by the session manager and passed in
+ *   rather than read here, so this factory stays a pure function of its
+ *   arguments and a test can hand it a fake.
+ */
+export async function createWhatsAppSocket({ proxy = null } = {}) {
+  logger.info(
+    proxy
+      ? `[Socket] Initializing WhatsApp socket through ${proxy.label}`
+      : '[Socket] Initializing WhatsApp socket with database auth'
+  );
 
   const { state, saveCreds, clearAll } = await useDatabaseAuthState();
 
@@ -61,10 +73,24 @@ export async function createWhatsAppSocket() {
 
   const cachedGroupMetadata = (jid) => groupMetadataCache.get(jid);
 
+  const config = getBaileysConfig(cachedGroupMetadata);
+
+  // Three separate hooks, because Baileys has three separate network paths:
+  //   agent              -> the `ws` WebSocket        (https.request, classic agent)
+  //   fetchAgent         -> media UPLOAD on Node      (https.request, classic agent)
+  //   options.dispatcher -> media DOWNLOAD            (global fetch, undici Dispatcher)
+  // Setting only the first would leave every photo the bot sends or receives
+  // going out from the real IP. See src/core/proxy.js.
+  if (proxy) {
+    config.agent = proxy.agent;
+    config.fetchAgent = proxy.fetchAgent;
+    config.options = { ...(config.options || {}), dispatcher: proxy.dispatcher };
+  }
+
   const sock = withThumbnailSupport(
     makeWASocket({
       auth: state,
-      ...getBaileysConfig(cachedGroupMetadata),
+      ...config,
     })
   );
 

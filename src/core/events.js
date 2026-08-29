@@ -18,8 +18,12 @@ const logger = require('../utils/logger.cjs');
  * @param {object} handlers
  * @param {() => Promise<void>} handlers.saveCreds
  * @param {(update: object) => void} handlers.onConnectionUpdate
+ * @param {(response: object) => void} [handlers.onHandshakeRejected]
  */
-export function setupEventListeners(sock, { saveCreds, onConnectionUpdate } = {}) {
+export function setupEventListeners(
+  sock,
+  { saveCreds, onConnectionUpdate, onHandshakeRejected } = {}
+) {
   // Every listener below goes through this. A bare `async` listener hands its
   // promise to Baileys' emitter, which drops it — so one rejection anywhere in
   // the message pipeline becomes an unhandledRejection, and src/index.js turns
@@ -34,6 +38,22 @@ export function setupEventListeners(sock, { saveCreds, onConnectionUpdate } = {}
   sock.ev.on(
     'connection.update',
     contained('connection.update', (update) => onConnectionUpdate?.(update))
+  );
+
+  // A handshake the server answered with an HTTP status instead of an upgrade.
+  //
+  // This has to be listened for or the connection hangs silently forever: ws
+  // only calls abortHandshake() when NOTHING is listening for
+  // 'unexpected-response' (ws/lib/websocket.js:928), and Baileys' own
+  // WebSocketClient registers a re-emitting listener for it — which satisfies
+  // that guard and then does nothing with the event. A proxy answering 407
+  // therefore produced no error, no close and no connection.update at all: the
+  // session simply sat in `starting` until somebody noticed.
+  sock.ws?.on?.(
+    'unexpected-response',
+    contained('unexpected-response', (_request, response) => {
+      onHandshakeRejected?.(response);
+    })
   );
 
   // Save credentials

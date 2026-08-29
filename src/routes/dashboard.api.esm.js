@@ -77,6 +77,8 @@ function sessionState() {
       canStart: false,
       canStop: false,
       canUnlink: false,
+      proxy: null,
+      proxyChanged: false,
       terminal: false,
       hasQr: false,
       attempt: 0,
@@ -800,6 +802,21 @@ router.post(
     }
     const state = await session.start({ reason: "dashboard" });
     logger.info(`[Dashboard] Start session requested — now ${state.state}`);
+    res.json({ success: true, session: state });
+  })
+);
+
+// Apply configuration that only a new socket can pick up — the proxy, today.
+// It goes through the session's own stop()+start(), so this route creates
+// nothing and the state machine stays the only thing that owns a socket.
+router.post(
+  "/bot/session/reconnect",
+  asyncRoute(async (req, res) => {
+    if (!session) {
+      return res.status(503).json({ success: false, error: "Session manager is not ready" });
+    }
+    const state = await session.reconnect({ reason: "dashboard" });
+    logger.info(`[Dashboard] Reconnect requested — now ${state.state}`);
     res.json({ success: true, session: state });
   })
 );

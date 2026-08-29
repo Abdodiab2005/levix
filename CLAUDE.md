@@ -131,6 +131,7 @@ src/
 │   ├── socket.js     # WhatsApp socket creation
 │   ├── events.js     # Event listener setup
 │   ├── session.js    # THE session state machine: start/stop/logout, retries
+│   ├── proxy.js      # the optional outbound proxy — WhatsApp traffic only
 │   └── connection.js # classifyDisconnect() + what happens once open
 ├── handlers/         # Message routing (ESM)
 │   ├── message.handler.js  # Main message router
@@ -271,6 +272,53 @@ forever is what the old code did to installs nobody was pairing.
 **Retry exhaustion never exits the process.** `src/core/session.js` contains no
 `process.exit`; a WhatsApp connection that will not come back is not a reason to
 take the control panel down with it.
+
+### The WhatsApp proxy (`src/core/proxy.js`)
+
+Optional, off by default, and **scoped to WhatsApp**. The agents are handed to
+one `makeWASocket()` call by the session manager; nothing global is patched, so
+the control panel, Gemini, Groq and every other outbound request keep the
+direct connection they have today.
+
+Baileys has three network paths and they do not take the same object. Getting
+the mapping wrong fails quietly in both directions, so it is pinned by tests:
+
+| path | Baileys option | what it needs |
+| --- | --- | --- |
+| the WebSocket (login, QR, messages, everything but media bytes) | `agent` | classic `http.Agent` — `ws` puts it in `https.request` |
+| media **upload** | `fetchAgent` | classic `http.Agent` — on Node `uploadMedia()` takes the `https.request` branch; the dispatcher branch beside it is Bun/Deno only |
+| media **download**, app-state and history blobs | `options.dispatcher` | undici `Dispatcher` — this path is global `fetch`, which takes nothing else |
+
+`http` and `https` proxies use `https-proxy-agent` + undici's `ProxyAgent`;
+`socks5` uses `socks-proxy-agent` + an undici `Agent` whose socket factory dials
+through the SOCKS server (undici's own ProxyAgent speaks CONNECT only).
+
+**Not covered, by Baileys' own design:** `getRawMediaUploadData` (newsletter
+uploads), `generateProfilePicture` and `uploadingNecessaryImages` call
+`getStream(media)` with no options, so a media argument given as a *remote URL*
+is fetched directly on those three paths. Levix passes file paths and buffers,
+so this does not arise today — but do not start passing `{ url: "https://…" }`
+media without re-checking it.
+
+**A rejected handshake has to be listened for.** `ws` only aborts a handshake
+when *nothing* is listening for `unexpected-response`, and Baileys registers a
+listener that ignores it — so a proxy answering `407` produced no error, no
+close and no `connection.update` at all, and the session sat in `starting`
+forever. `src/core/events.js` forwards that event and the session turns it into
+an ordinary close, so the existing retry policy decides what happens next.
+
+**Secrets.** The password is an ordinary `secret` setting: stored like an API
+key, never returned by `/dashboard/api/settings`, and printed as `(updated)` by
+`settings.set`. `proxyUrl()` is the only function that puts it in a string and
+its result never reaches a log, an HTTP response or an error; everything
+human-facing goes through `redactProxy()`. Credentials are percent-encoded
+because all three agent libraries `decodeURIComponent` them back out.
+
+**Applying a change.** Saving settings never touches a healthy session. The
+session records the proxy the live socket was built with and reports
+`proxyChanged` when the saved settings differ; the Connection screen then offers
+**Reconnect to apply**, which calls `session.reconnect()` — `stop()` then
+`start()`, both existing lifecycle methods. No route ever creates a socket.
 
 ### Message Flow
 
@@ -440,6 +488,25 @@ memory/*.md                   (long-term memory, capped)
 | `search_memory` / `forget_memory` | read / delete memory entries — deletes are gated on the **caller**, same rule as `!memory forget` |
 | `grant_role` / `revoke_role` / `list_roles` | bot owner / admin roles — gated on the **caller**, owner only |
 | `get_datetime` | current time in `BOT_TIMEZONE` |
+
+**Google Search is not in that table on purpose.** It is Gemini's own built-in
+tool — `{ googleSearch: {} }`, added to the same `tools` array as the function
+declarations — so the model decides when the web is needed, Google runs the
+search inside the request, and the answer comes back already grounded. There is
+no `google_search` function to declare, nothing to execute in the tool loop, and
+no search API key. Turn it off with the `ai_google_search` setting (Gemini only;
+the Groq fallback never sees it).
+
+Citations come from `candidates[].groundingMetadata.groundingChunks[].web` and
+nothing else, so an answer the model gave from its own knowledge gets no Sources
+block. `formatSources()` deduplicates by URL and caps the list.
+
+The `googleSearch` shape is the Gemini 2.x one. This SDK's TypeScript types only
+know the older `googleSearchRetrieval`, but it passes `tools` through to the REST
+API untouched, so the 2.x shape reaches the model as written. If a
+model/API combination refuses search and functions together, `runAgent()` detects
+that specific 400 and retries **without search**, keeping Levix's own tools —
+never the other way round.
 
 Tools never throw: a failure comes back as `{ error }` so the model can explain
 it. Bounded by `AI_MAX_TOOL_STEPS` rounds and `AI_TOOL_TIMEOUT_MS` per call.
