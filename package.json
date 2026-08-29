@@ -1,5 +1,5 @@
 {
-  "name": "levix",
+  "name": "levix-bot",
   "version": "2.0.0",
   "description": "A self-hosted personal WhatsApp bot with an AI agent, group moderation and a web control panel.",
   "main": "src/index.js",
