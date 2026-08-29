@@ -37,12 +37,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# The published port and the data volume are overridden so a validation run
-# never collides with a real Levix on this machine.
+# The published compose file intentionally pulls the public GHCR image. The
+# validator adds a build context so it tests the image from the checkout being
+# validated instead of whatever happens to be published as :latest.
 overlay() {
   cat <<EOF
 services:
   levix:
+    build: .
+    image: levix-validate:local
     ports: ["127.0.0.1:${PORT}:3001"]
 EOF
 }
