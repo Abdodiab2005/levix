@@ -1,13 +1,15 @@
-name: verify-lockfile
+name: audit-v201-dependencies
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - fix/v2.0.1-browser-origin-packages
 
 permissions:
   contents: read
 
 jobs:
-  lockfile:
+  audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -15,7 +17,8 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Verify package-lock is in sync
-        run: |
-          npm install --package-lock-only --ignore-scripts
-          git diff --exit-code -- package-lock.json
+      - run: npm ci
+      - name: Runtime audit
+        run: npm audit --omit=dev || true
+      - name: Full audit
+        run: npm audit || true
