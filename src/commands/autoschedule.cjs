@@ -2,7 +2,7 @@ const {
   scheduleNewJob,
   saveScheduledJob,
 } = require("../../scheduler.cjs");
-const { v4: uuidv4 } = require("uuid"); // Use UUID for unique IDs
+const { randomUUID } = require("node:crypto");
 const { defaultTimezone } = require("../utils/datetime.cjs");
 
 module.exports = {
@@ -58,7 +58,7 @@ module.exports = {
     }
 
     const newJob = {
-      id: uuidv4(),
+      id: randomUUID(),
       type: "recurring",
       cronString: cronString,
       message: message,
@@ -81,4 +81,3 @@ module.exports = {
     });
   },
 };
-// Note: You need to run `npm install uuid` for this command.
