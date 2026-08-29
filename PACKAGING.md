@@ -56,9 +56,12 @@ npm install, and a read-only container image without a flag.
 ### 2.1 npm — the default
 
 ```bash
-npm install -g levix
+npm install -g levix-bot
 levix
 ```
+
+The npm distribution package is `levix-bot`. Its `bin` entry intentionally
+installs the short `levix` command, so the product and CLI keep the Levix name.
 
 Shipping a release:
 
@@ -84,8 +87,8 @@ levix reset-password     # forget the panel password, keep the WhatsApp link
 levix domain bot.example.com   # reverse proxy + HTTPS, may need sudo
 ```
 
-`npx levix` works too, but installing globally is better here: the bot is a
-long-running service, not a one-shot tool.
+`npx --package levix-bot levix` works too, but installing globally is better
+here: the bot is a long-running service, not a one-shot tool.
 
 ### 2.2 Docker — the "nothing on my system" option
 
@@ -122,10 +125,10 @@ two processes on one database would fight over it.
 curl -fsSL https://levix.leviro.net/install.sh | bash
 ```
 
-`deploy/install.sh` checks Node, installs the package, creates a `levix` system
-user and `/var/lib/levix`, installs `deploy/levix.service`, enables it and
-prints where to go next. It is deliberately short and commented so anyone can
-read it before piping it into a shell — which they should.
+`deploy/install.sh` checks Node, installs `levix-bot` from npm, creates a
+`levix` system user and `/var/lib/levix`, installs `deploy/levix.service`,
+enables it and prints where to go next. It is deliberately short and commented
+so anyone can read it before piping it into a shell — which they should.
 
 The unit is hardened the way a single-directory app allows: `ProtectSystem=
 strict` with one `ReadWritePaths`, `ProtectHome`, `NoNewPrivileges`,
@@ -204,7 +207,7 @@ for this (`.github/workflows/release.yml` does exactly that).
 ### For someone who is not a developer
 
 1. Install Node from nodejs.org — the big green LTS button.
-2. Open Terminal, paste `npm install -g levix`, press Enter.
+2. Open Terminal, paste `npm install -g levix-bot`, press Enter.
 3. Type `levix`. A box appears with an address.
 4. Open the address. Type a password twice.
 5. Click **Connection**, scan the QR with WhatsApp → Linked devices.
@@ -256,8 +259,8 @@ failure.
 
 ## 4. Releasing
 
-A tagged release should produce: an npm package, a Docker image, and one binary
-per platform.
+A tagged release should produce: the `levix-bot` npm package, a Docker image,
+and one binary per platform.
 
 ```bash
 npm version minor
@@ -270,9 +273,9 @@ the executable on all three platforms, Docker) — and every publishing job
 `needs: ci`. A release that would fail CI is not a release; there is no
 release-only copy of the test matrix to drift out of date.
 
-Then it publishes to npm (needs `NPM_TOKEN`), pushes the image to GHCR (uses
-the built-in `GITHUB_TOKEN`), builds and *validates* one binary per platform,
-and attaches them to the release along with `SHA256SUMS.txt`.
+Then it publishes `levix-bot` to npm (needs `NPM_TOKEN`), pushes the image to
+GHCR (uses the built-in `GITHUB_TOKEN`), builds and *validates* one binary per
+platform, and attaches them to the release along with `SHA256SUMS.txt`.
 
 The checksums are computed in the same job that uploads the files, from those
 exact files, and verified with `sha256sum -c` before the upload. Nothing is

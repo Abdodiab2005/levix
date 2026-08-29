@@ -24,9 +24,12 @@ Nothing is compiled, nothing else is installed, no database server is needed.
 ## The quickest way
 
 ```bash
-npm install -g levix
+npm install -g levix-bot
 levix
 ```
+
+`levix-bot` is the npm package name. The command you run after installing it is
+still just `levix`.
 
 The terminal prints something like:
 

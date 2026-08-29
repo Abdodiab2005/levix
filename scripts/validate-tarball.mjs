@@ -8,12 +8,13 @@
 //   npm run validate:tarball
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const PACKAGE_NAME = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).name;
 
 let passed = 0;
 const failures = [];
@@ -71,8 +72,8 @@ const binary = join(prefix, "bin", "levix");
 ok("the levix command is on the prefix", existsSync(binary), `${binary} is missing`);
 if (!existsSync(binary)) finish();
 
-const packageDir = join(prefix, "lib", "node_modules", "levix");
-ok("the package directory exists", existsSync(packageDir));
+const packageDir = join(prefix, "lib", "node_modules", ...PACKAGE_NAME.split("/"));
+ok("the package directory exists", existsSync(packageDir), `${packageDir} is missing`);
 ok("…with the views", existsSync(join(packageDir, "views", "setup.ejs")));
 ok("…with the public assets", existsSync(join(packageDir, "public", "socket.io.min.js")));
 ok("…with the deploy templates", existsSync(join(packageDir, "deploy", "levix.service")));

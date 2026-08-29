@@ -7,9 +7,11 @@ almost all of it while the bot runs.
 Built by Abdelrhman Diab (Leviro).
 
 ```bash
-npm install -g levix
+npm install -g levix-bot
 levix
 ```
+
+The npm package is named `levix-bot`; the installed CLI command stays `levix`.
 
 On a desktop that opens the panel in your browser by itself. Pick a password,
 scan the QR, done — see [SETUP.md](SETUP.md) for the longer version, Docker,
