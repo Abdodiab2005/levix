@@ -89,9 +89,12 @@
   function applyTheme(theme) {
     document.documentElement.setAttribute("data-theme", theme);
     const button = $("#theme-btn");
-    button.textContent = theme === "light" ? "☾" : "☀";
     button.setAttribute(
       "aria-label",
+      theme === "light" ? "Switch to dark theme" : "Switch to light theme"
+    );
+    button.setAttribute(
+      "title",
       theme === "light" ? "Switch to dark theme" : "Switch to light theme"
     );
     try {
@@ -140,9 +143,12 @@
     $$(".view").forEach((view) =>
       view.classList.toggle("active", view.id === `view-${target}`)
     );
-    $$(".nav a").forEach((link) =>
-      link.classList.toggle("active", link.dataset.view === target)
-    );
+    $$(".nav a").forEach((link) => {
+      const active = link.dataset.view === target;
+      link.classList.toggle("active", active);
+      if (active) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    });
     $("#page-title").textContent = VIEWS[target].title;
     setSidebar(false);
 
@@ -227,20 +233,24 @@
     setStatus(stats.connection);
 
     const cards = [
-      ["Groups", stats.totalGroups],
-      ["Commands", stats.commandCount],
-      ["Open debts", stats.totalDebts],
-      ["Warnings", stats.totalWarnings],
-      ["Notes", stats.totalNotes],
-      ["Todo lists", stats.totalTodos],
+      ["Groups", stats.totalGroups, "Communities", '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 19a6 6 0 0 1 12 0M15 19a5 5 0 0 1 6-4"/></svg>'],
+      ["Commands", stats.commandCount, "Available", '<svg viewBox="0 0 24 24"><path d="m5 7 5 5-5 5M12 17h7"/></svg>'],
+      ["Open debts", stats.totalDebts, "Unsettled", '<svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg>'],
+      ["Warnings", stats.totalWarnings, "Issued", '<svg viewBox="0 0 24 24"><path d="M12 4 3 20h18zM12 9v5M12 17h.01"/></svg>'],
+      ["Notes", stats.totalNotes, "Saved", '<svg viewBox="0 0 24 24"><path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h5"/></svg>'],
+      ["Todo lists", stats.totalTodos, "Tracked", '<svg viewBox="0 0 24 24"><path d="m5 7 2 2 4-4M13 7h6M5 14l2 2 4-4M13 14h6"/></svg>'],
     ];
 
     $("#stat-cards").innerHTML = cards
       .map(
-        ([label, value]) => `
+        ([label, value, caption, icon]) => `
         <div class="stat">
-          <div class="label">${esc(label)}</div>
+          <div class="stat-top">
+            <span class="stat-icon" aria-hidden="true">${icon}</span>
+            <span class="label">${esc(label)}</span>
+          </div>
           <div class="value">${esc(value ?? 0)}</div>
+          <div class="stat-foot"><span>${esc(caption)}</span><i aria-hidden="true"></i></div>
         </div>`
       )
       .join("");
@@ -258,9 +268,9 @@
     $("#overview-info").innerHTML = rows
       .map(
         ([label, value]) => `
-        <div>
-          <div class="label" style="font-size:.72rem;letter-spacing:.09em;text-transform:uppercase;color:var(--faint)">${esc(label)}</div>
-          <div style="font-weight:600;margin-top:2px">${esc(value)}</div>
+        <div class="runtime-item">
+          <div class="runtime-label">${esc(label)}</div>
+          <div class="runtime-value">${esc(value)}</div>
         </div>`
       )
       .join("");
@@ -597,7 +607,7 @@
         ? scopes
             .map(
               (entry) => `
-          <button class="btn btn-sm" data-scope="${esc(entry.scope)}">
+          <button class="btn btn-sm" type="button" data-scope="${esc(entry.scope)}">
             ${entry.scope === "global" ? "🌍" : "💬"} ${esc(entry.label)}
             <span class="hint">${esc(entry.entries)} entries</span>
           </button>`
@@ -795,7 +805,7 @@
           </div>
 
           <div style="grid-column:1/-1">
-            <button class="btn btn-primary" data-save-group="${id}">Save this group</button>
+            <button class="btn btn-primary" type="button" data-save-group="${id}">Save this group</button>
             <span class="hint" style="margin-left:8px">Blacklisted: ${group.blacklist.length}</span>
           </div>
         </div>
@@ -937,7 +947,7 @@
           : esc(new Date(job.date).toLocaleString()),
         `<span class="wrap">${esc(String(job.message ?? "").slice(0, 120))}</span>`,
         `<span class="tag${job.status === "active" || job.status === "pending" ? " ok" : ""}">${esc(job.status)}</span>`,
-        `<button class="btn btn-sm btn-danger" data-drop-schedule="${esc(job.id)}">Delete</button>`,
+        `<button class="btn btn-sm btn-danger" type="button" data-drop-schedule="${esc(job.id)}">Delete</button>`,
       ],
     },
     users: {
@@ -998,9 +1008,11 @@
       const button = event.target.closest("[data-table]");
       if (!button) return;
       dataTab = button.dataset.table;
-      $$("#data-tabs .btn").forEach((tab) =>
-        tab.classList.toggle("btn-primary", tab.dataset.table === dataTab)
-      );
+      $$("#data-tabs .btn").forEach((tab) => {
+        const active = tab.dataset.table === dataTab;
+        tab.classList.toggle("btn-primary", active);
+        tab.setAttribute("aria-selected", String(active));
+      });
       loadTable();
     });
   }
@@ -1018,7 +1030,7 @@
         <td><code>${esc(user.phone || shortJid(user.jid))}</code></td>
         <td>${esc(user.displayName || "—")}</td>
         <td>
-          <button class="btn btn-sm btn-danger" data-revoke="${esc(user.phone || shortJid(user.jid))}"
+          <button class="btn btn-sm btn-danger" type="button" data-revoke="${esc(user.phone || shortJid(user.jid))}"
                   data-role="${esc(role)}">Revoke</button>
         </td>
       </tr>`
@@ -1084,8 +1096,8 @@
         <div class="inline">
           <input type="password" id="${id}" placeholder="${setting.configured ? "•••••••• (set)" : "not set"}"
                  autocomplete="new-password"${setting.configured ? ' data-configured="1"' : ""} />
-          <button class="btn btn-sm" data-save-setting="${esc(setting.key)}">Save</button>
-          ${setting.configured ? `<button class="btn btn-sm btn-danger" data-clear-setting="${esc(setting.key)}">Clear</button>` : ""}
+          <button class="btn btn-sm" type="button" data-save-setting="${esc(setting.key)}">Save</button>
+          ${setting.configured ? `<button class="btn btn-sm btn-danger" type="button" data-clear-setting="${esc(setting.key)}">Clear</button>` : ""}
         </div>`;
     } else if (setting.type === "bool") {
       control = `
@@ -1094,7 +1106,7 @@
             <input type="checkbox" id="${id}" ${setting.value ? "checked" : ""} />
             <span class="track"></span>
           </label>
-          <button class="btn btn-sm" data-save-setting="${esc(setting.key)}">Save</button>
+          <button class="btn btn-sm" type="button" data-save-setting="${esc(setting.key)}">Save</button>
         </div>`;
     } else if (Array.isArray(setting.choices) && setting.choices.length) {
       control = `
@@ -1107,7 +1119,7 @@
               )
               .join("")}
           </select>
-          <button class="btn btn-sm" data-save-setting="${esc(setting.key)}">Save</button>
+          <button class="btn btn-sm" type="button" data-save-setting="${esc(setting.key)}">Save</button>
         </div>`;
     } else {
       control = `
@@ -1116,18 +1128,18 @@
                  value="${esc(setting.value)}"
                  ${setting.min !== null ? `min="${setting.min}"` : ""}
                  ${setting.max !== null ? `max="${setting.max}"` : ""} />
-          <button class="btn btn-sm" data-save-setting="${esc(setting.key)}">Save</button>
+          <button class="btn btn-sm" type="button" data-save-setting="${esc(setting.key)}">Save</button>
         </div>`;
     }
 
     return `
-      <div style="margin-bottom:18px">
-        <div class="inline" style="margin-bottom:5px">
-          <label for="${id}" style="font-size:.86rem;font-weight:550">${esc(setting.label)}</label>
+      <div class="setting-item">
+        <div class="inline setting-label-row">
+          <label for="${id}" class="setting-label">${esc(setting.label)}</label>
           ${source}${restart}
         </div>
         ${control}
-        ${setting.hint ? `<div class="hint" style="margin-top:5px">${esc(setting.hint)}</div>` : ""}
+        ${setting.hint ? `<div class="hint setting-hint">${esc(setting.hint)}</div>` : ""}
       </div>`;
   }
 

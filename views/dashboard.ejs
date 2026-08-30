@@ -9,18 +9,19 @@
     <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/dashboard.css" />
   </head>
-  <body>
+  <body class="dashboard-page">
     <div class="shell">
       <aside class="sidebar" id="sidebar">
-        <div class="brand">
+        <a class="brand" href="#overview" aria-label="<%= brand.name %> overview">
           <img src="/brand/mark.svg" alt="" />
-          <div>
+          <div class="brand-copy">
             <div class="brand-name"><%= brand.name %></div>
-            <div class="brand-tag"><%= brand.tagline %></div>
+            <div class="brand-tag">Private control room</div>
           </div>
-        </div>
+          <span class="brand-pulse" aria-hidden="true"><i></i><i></i><i></i></span>
+        </a>
 
-        <nav class="nav">
+        <nav class="nav" aria-label="Primary navigation">
           <a href="#overview" data-view="overview">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
             Overview
@@ -60,8 +61,14 @@
         </nav>
 
         <div class="sidebar-foot">
-          <%= brand.name %> · built by <%= brand.developer %><br />
-          <a href="<%= brand.repo %>" target="_blank" rel="noopener noreferrer">Source &amp; docs</a>
+          <div class="local-note">
+            <span class="local-note-icon" aria-hidden="true"></span>
+            <span><strong>Self-hosted</strong>Your workspace, on your server.</span>
+          </div>
+          <div class="sidebar-credit">
+            <%= brand.name %> by <%= brand.developer %>
+            <a href="<%= brand.repo %>" target="_blank" rel="noopener noreferrer">Source &amp; docs ↗</a>
+          </div>
         </div>
       </aside>
 
@@ -69,29 +76,83 @@
 
       <div class="main">
         <header class="topbar">
-          <button class="btn btn-icon menu-btn" id="menu-btn" type="button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">☰</button>
-          <h1 id="page-title">Overview</h1>
+          <button class="btn btn-icon menu-btn" id="menu-btn" type="button" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+          </button>
+          <div class="page-heading">
+            <span>Levix workspace</span>
+            <h1 id="page-title">Overview</h1>
+          </div>
           <div class="spacer"></div>
-          <span class="pill" id="status-pill"><span class="dot"></span>Checking…</span>
-          <button class="btn btn-icon" id="refresh-btn" type="button" aria-label="Refresh current view">⟳</button>
-          <button class="btn btn-icon" id="theme-btn" type="button" aria-label="Switch color theme">☀</button>
-          <form action="/logout" method="post">
-            <button type="submit" class="btn btn-sm">Log out</button>
-          </form>
+          <div class="topbar-actions">
+            <span class="pill" id="status-pill"><span class="dot"></span>Checking…</span>
+            <div class="icon-cluster">
+              <button class="btn btn-icon" id="refresh-btn" type="button" aria-label="Refresh current view" title="Refresh current view">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66M20 4v7h-7"/></svg>
+              </button>
+              <button class="btn btn-icon theme-toggle" id="theme-btn" type="button" aria-label="Switch color theme" title="Switch color theme">
+                <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></svg>
+                <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.4A8.5 8.5 0 0 1 8.6 4a8.5 8.5 0 1 0 11.4 11.4z"/></svg>
+              </button>
+            </div>
+            <form action="/logout" method="post" class="logout-form">
+              <button type="submit" class="btn btn-sm logout-btn">
+                <span>Log out</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/></svg>
+              </button>
+            </form>
+          </div>
         </header>
 
         <main class="content">
           <!-- Overview ---------------------------------------------------->
           <section class="view" id="view-overview">
-            <div class="section-head">
-              <h2>Overview</h2>
-              <p>What the bot is doing right now.</p>
+            <div class="overview-hero">
+              <div class="hero-copy">
+                <span class="eyebrow">Personal assistant operations</span>
+                <h2>Your conversations,<br /><em>under one calm roof.</em></h2>
+                <p>
+                  Watch the live connection, shape how Levix responds, and manage
+                  the details that keep every chat moving.
+                </p>
+                <div class="hero-actions">
+                  <a class="btn btn-primary" href="#connection">
+                    Manage connection
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                  </a>
+                  <a class="text-link" href="#settings">Tune workspace <span aria-hidden="true">↗</span></a>
+                </div>
+              </div>
+              <div class="signal-stage" aria-hidden="true">
+                <div class="signal-orbit orbit-one"></div>
+                <div class="signal-orbit orbit-two"></div>
+                <div class="signal-core"><img src="/brand/mark.svg" alt="" /></div>
+                <span class="signal-node node-one"></span>
+                <span class="signal-node node-two"></span>
+                <span class="signal-node node-three"></span>
+                <div class="signal-label"><span>Always within reach</span><strong>One private workspace</strong></div>
+              </div>
+            </div>
+
+            <div class="section-head section-head-split">
+              <div>
+                <span class="eyebrow">Workspace pulse</span>
+                <h2>At a glance</h2>
+                <p>The essentials from your running assistant.</p>
+              </div>
+              <span class="section-note">Refreshes every 15 seconds</span>
             </div>
 
             <div class="stats" id="stat-cards"></div>
 
-            <div class="card">
-              <div class="card-head"><h2>Runtime</h2></div>
+            <div class="card runtime-card">
+              <div class="card-head">
+                <div>
+                  <span class="eyebrow">Runtime</span>
+                  <h2>System signals</h2>
+                </div>
+                <span class="source">Current process</span>
+              </div>
               <div class="grid-2" id="overview-info"></div>
             </div>
           </section>
@@ -99,32 +160,39 @@
           <!-- Connection -------------------------------------------------->
           <section class="view" id="view-connection">
             <div class="section-head">
+              <span class="eyebrow">Live link</span>
               <h2>Connection</h2>
               <p>Start or stop the WhatsApp session, and link or unlink an account.</p>
             </div>
 
-            <div class="card">
+            <div class="card session-card">
               <div class="card-head">
-                <h2>Session</h2>
+                <div>
+                  <span class="eyebrow">WhatsApp</span>
+                  <h2>Session</h2>
+                </div>
                 <div class="spacer"></div>
                 <span id="conn-state"></span>
               </div>
 
-              <div class="hint" id="conn-detail"></div>
+              <div class="hint session-detail" id="conn-detail"></div>
 
               <div class="hint" id="conn-proxy"></div>
 
-              <div class="inline" style="margin-top:12px">
-                <button class="btn btn-primary" id="start-btn">Start session</button>
-                <button class="btn" id="reconnect-btn">Reconnect to apply</button>
-                <button class="btn" id="stop-btn">Stop session</button>
-                <button class="btn btn-danger" id="unlink-btn">Unlink account</button>
-                <button class="btn" id="restart-btn">Restart bot</button>
+              <div class="inline action-cluster">
+                <button class="btn btn-primary" id="start-btn" type="button">Start session</button>
+                <button class="btn" id="reconnect-btn" type="button">Reconnect to apply</button>
+                <button class="btn" id="stop-btn" type="button">Stop session</button>
+                <button class="btn btn-danger" id="unlink-btn" type="button">Unlink account</button>
+                <button class="btn" id="restart-btn" type="button">Restart bot</button>
               </div>
-              <div class="hint" style="margin-top:8px">
+              <div class="callout">
+                <span class="callout-icon" aria-hidden="true">i</span>
+                <p>
                 Levix runs whether or not WhatsApp is connected. Starting the session is
                 the only thing that opens a connection; restart only comes back on its own
                 under a supervisor (pm2, systemd, Docker).
+                </p>
               </div>
 
               <div id="qr-panel" style="display:none">
@@ -144,23 +212,29 @@
           <!-- Commands ---------------------------------------------------->
           <section class="view" id="view-commands">
             <div class="section-head">
+              <span class="eyebrow">Behavior</span>
               <h2>Commands</h2>
               <p>Rename triggers, change who may run what, switch commands off.</p>
             </div>
 
-            <div class="card">
+            <div class="card compact-card">
               <div class="card-head"><h2>Prefix</h2></div>
-              <div class="inline">
-                <input type="text" id="prefix-input" maxlength="3" style="max-width:90px" />
-                <button class="btn btn-primary" id="prefix-save">Save</button>
+              <div class="inline prefix-control">
+                <label class="sr-only" for="prefix-input">Command prefix</label>
+                <input type="text" id="prefix-input" maxlength="3" />
+                <button class="btn btn-primary" id="prefix-save" type="button">Save prefix</button>
                 <span class="hint">The character every command starts with, e.g. <code>!ping</code>.</span>
               </div>
             </div>
 
             <div class="card">
               <div class="toolbar">
-                <input type="text" id="cmd-search" placeholder="Search commands…" />
-                <select id="cmd-filter">
+                <label class="search-field">
+                  <span class="sr-only">Search commands</span>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+                  <input type="text" id="cmd-search" placeholder="Search commands…" />
+                </label>
+                <select id="cmd-filter" aria-label="Filter commands by type">
                   <option value="all">All commands</option>
                   <option value="general">General</option>
                   <option value="group">Group</option>
@@ -191,6 +265,7 @@
           <!-- AI ---------------------------------------------------------->
           <section class="view" id="view-ai">
             <div class="section-head">
+              <span class="eyebrow">Intelligence</span>
               <h2>AI &amp; memory</h2>
               <p>The prompt the model gets, and everything it has been told to remember.</p>
             </div>
@@ -202,8 +277,8 @@
                 <span class="hint"><code id="persona-file">ai-persona.md</code></span>
               </div>
               <textarea id="persona-body" spellcheck="false"></textarea>
-              <div class="inline" style="margin-top:12px">
-                <button class="btn btn-primary" id="persona-save">Save prompt</button>
+              <div class="inline form-actions">
+                <button class="btn btn-primary" id="persona-save" type="button">Save prompt</button>
                 <span class="hint">Applies to the next message — no restart.</span>
               </div>
             </div>
@@ -212,14 +287,14 @@
               <div class="card-head"><h2>Long-term memory</h2></div>
               <div class="inline" id="memory-list"></div>
 
-              <div id="memory-editor" style="display:none;margin-top:16px">
+              <div id="memory-editor" class="memory-editor" style="display:none">
                 <div class="card-head">
                   <h2>Editing <code id="memory-scope"></code></h2>
                 </div>
                 <textarea id="memory-content" spellcheck="false"></textarea>
-                <div class="inline" style="margin-top:12px">
-                  <button class="btn btn-primary" id="memory-save">Save</button>
-                  <button class="btn btn-danger" id="memory-delete">Delete file</button>
+                <div class="inline form-actions">
+                  <button class="btn btn-primary" id="memory-save" type="button">Save memory</button>
+                  <button class="btn btn-danger" id="memory-delete" type="button">Delete file</button>
                   <span class="hint">Plain Markdown — a line starting with <code>-</code> is one memory.</span>
                 </div>
               </div>
@@ -229,6 +304,7 @@
           <!-- Groups ------------------------------------------------------>
           <section class="view" id="view-groups">
             <div class="section-head">
+              <span class="eyebrow">Moderation</span>
               <h2>Groups</h2>
               <p>Moderation settings per group. Same values the <code>!group</code> commands change.</p>
             </div>
@@ -238,19 +314,22 @@
           <!-- Roles ------------------------------------------------------->
           <section class="view" id="view-roles">
             <div class="section-head">
+              <span class="eyebrow">Access</span>
               <h2>Roles</h2>
               <p>Bot-level roles. An owner can do everything; an admin counts as an admin in every chat.</p>
             </div>
 
             <div class="card">
               <div class="card-head"><h2>Add someone</h2></div>
-              <div class="inline">
-                <input type="text" id="role-number" placeholder="201234567890" style="max-width:220px" />
-                <select id="role-kind" style="max-width:140px">
+              <div class="inline role-control">
+                <label class="sr-only" for="role-number">Phone number</label>
+                <input type="text" id="role-number" placeholder="201234567890" inputmode="numeric" />
+                <label class="sr-only" for="role-kind">Role</label>
+                <select id="role-kind">
                   <option value="admin">Admin</option>
                   <option value="owner">Owner</option>
                 </select>
-                <button class="btn btn-primary" id="role-add">Add</button>
+                <button class="btn btn-primary" id="role-add" type="button">Add person</button>
                 <span class="hint">International format, digits only.</span>
               </div>
             </div>
@@ -279,18 +358,19 @@
           <!-- Data -------------------------------------------------------->
           <section class="view" id="view-data">
             <div class="section-head">
+              <span class="eyebrow">Stored records</span>
               <h2>Tables</h2>
               <p>What the bot has stored: debts, warnings, notes, todo lists, known users.</p>
             </div>
 
             <div class="card">
-              <div class="toolbar" id="data-tabs">
-                <button class="btn btn-sm btn-primary" data-table="debts">Debts</button>
-                <button class="btn btn-sm" data-table="warnings">Warnings</button>
-                <button class="btn btn-sm" data-table="notes">Notes</button>
-                <button class="btn btn-sm" data-table="todos">Todos</button>
-                <button class="btn btn-sm" data-table="users">Users</button>
-                <button class="btn btn-sm" data-table="schedules">Schedules</button>
+              <div class="toolbar data-tabs" id="data-tabs" role="tablist" aria-label="Stored data tables">
+                <button class="btn btn-sm btn-primary" data-table="debts" type="button" role="tab" aria-selected="true">Debts</button>
+                <button class="btn btn-sm" data-table="warnings" type="button" role="tab" aria-selected="false">Warnings</button>
+                <button class="btn btn-sm" data-table="notes" type="button" role="tab" aria-selected="false">Notes</button>
+                <button class="btn btn-sm" data-table="todos" type="button" role="tab" aria-selected="false">Todos</button>
+                <button class="btn btn-sm" data-table="users" type="button" role="tab" aria-selected="false">Users</button>
+                <button class="btn btn-sm" data-table="schedules" type="button" role="tab" aria-selected="false">Schedules</button>
               </div>
               <div id="data-table"><div class="loading">Loading…</div></div>
             </div>
@@ -299,6 +379,7 @@
           <!-- Settings ---------------------------------------------------->
           <section class="view" id="view-settings">
             <div class="section-head">
+              <span class="eyebrow">Workspace</span>
               <h2>Settings</h2>
               <p>
                 This page is the only place the bot is configured — there is no config file.
@@ -306,16 +387,18 @@
               </p>
             </div>
 
-            <div class="card">
+            <div class="card security-card">
               <div class="card-head"><h2>Control panel password</h2></div>
-              <div class="inline" style="margin-bottom:8px">
-                <input type="password" id="pw-current" placeholder="Current password"
-                       autocomplete="current-password" />
-              </div>
-              <div class="inline" style="margin-bottom:8px">
-                <input type="password" id="pw-next" placeholder="New password"
-                       autocomplete="new-password" />
-                <button class="btn btn-sm btn-primary" id="pw-save">Change</button>
+              <div class="password-grid">
+                <label class="field">
+                  <span>Current password</span>
+                  <input type="password" id="pw-current" autocomplete="current-password" />
+                </label>
+                <label class="field">
+                  <span>New password</span>
+                  <input type="password" id="pw-next" autocomplete="new-password" />
+                </label>
+                <button class="btn btn-primary" id="pw-save" type="button">Change password</button>
               </div>
               <div class="hint">
                 This password is the only thing between the internet and a linked WhatsApp
