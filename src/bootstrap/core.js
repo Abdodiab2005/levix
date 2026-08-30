@@ -16,7 +16,10 @@ import { WhatsAppSession } from "../core/session.js";
 import { loadCommands, getLoadedCommands } from "../handlers/command.handler.js";
 import { initStore } from "../db/store.esm.js";
 import { deleteQrCode } from "../utils/storage.esm.js";
-import { sessionStartupPolicy } from "./session-startup-policy.js";
+import {
+  hasPairedCredentials,
+  sessionStartupPolicy,
+} from "./session-startup-policy.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -45,9 +48,9 @@ export async function bootstrapCore({ autoStart = false } = {}) {
   // bot's state, not next to the code.
   ensureDataDir("media");
 
-  // Read this before a socket can create or update auth rows. It is the boot
-  // policy boundary: fresh panel installs stay idle, paired installs resume.
-  const wasPaired = store.hasCredentials();
+  // A `creds` row alone is not enough: Baileys creates one before pairing.
+  // `me.id` is the durable proof that this install was actually linked.
+  const wasPaired = hasPairedCredentials(store.authRead("creds"));
 
   await initStore();
   await loadCommands();
