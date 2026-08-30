@@ -5,17 +5,18 @@
 // entirely optional. `levix headless` runs this file and nothing else, which is
 // what makes "no panel port is opened" a fact rather than a promise.
 //
-// Note what this does NOT do: it does not dial WhatsApp. It builds the session
-// manager and hands it back. Panel mode leaves it idle until somebody presses
-// Start on the Connection screen; headless has nobody to press anything, so it
-// asks for `autoStart`. That is the whole of the difference between the two
-// modes — there is no `if (headless)` anywhere below this line.
+// A brand-new panel install stays idle until somebody presses Start on the
+// Connection screen, so it does not generate pairing attempts nobody asked
+// for. Once the install has been paired, process restarts resume that saved
+// session automatically. Headless has no Start button, so it asks for
+// `autoStart` and starts even when pairing is still required.
 
 import { createRequire } from "module";
 import { WhatsAppSession } from "../core/session.js";
 import { loadCommands, getLoadedCommands } from "../handlers/command.handler.js";
 import { initStore } from "../db/store.esm.js";
 import { deleteQrCode } from "../utils/storage.esm.js";
+import { sessionStartupPolicy } from "./session-startup-policy.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -29,8 +30,9 @@ const { initializeScheduledJobs, stopAllScheduledJobs } = require("../../schedul
  * Start the bot.
  *
  * @param {object} [options]
- * @param {boolean} [options.autoStart] - connect to WhatsApp straight away.
- *   Headless does; the panel waits to be asked.
+ * @param {boolean} [options.autoStart] - force a WhatsApp start even when the
+ *   install is not paired yet. Headless uses this; panel mode resumes only an
+ *   already-paired session.
  * @returns {Promise<{ session: object, commandCount: number, wasPaired: boolean }>}
  */
 export async function bootstrapCore({ autoStart = false } = {}) {
@@ -43,8 +45,8 @@ export async function bootstrapCore({ autoStart = false } = {}) {
   // bot's state, not next to the code.
   ensureDataDir("media");
 
-  // Whether this install has ever been paired decides what the terminal says
-  // next, so read it before the socket has a chance to create credentials.
+  // Read this before a socket can create or update auth rows. It is the boot
+  // policy boundary: fresh panel installs stay idle, paired installs resume.
   const wasPaired = store.hasCredentials();
 
   await initStore();
@@ -64,7 +66,8 @@ export async function bootstrapCore({ autoStart = false } = {}) {
     log: logger,
   });
 
-  if (autoStart) await session.start({ reason: "autostart" });
+  const startup = sessionStartupPolicy({ autoStart, wasPaired });
+  if (startup.start) await session.start({ reason: startup.reason });
 
   return {
     session,
