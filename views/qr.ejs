@@ -7,65 +7,63 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/brand/icon-32.png" />
     <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/dashboard.css" />
-    <style>
-      body {
-        display: grid;
-        place-items: center;
-        padding: 24px;
-        background:
-          radial-gradient(900px 500px at 15% -10%, rgba(22, 82, 240, 0.2), transparent 60%),
-          var(--bg);
-      }
-      .wrap {
-        width: 100%;
-        max-width: 430px;
-        text-align: center;
-      }
-      .wrap .brand-lockup {
-        margin-bottom: 20px;
-      }
-      .wrap .card {
-        box-shadow: var(--shadow);
-      }
-      .foot {
-        margin-top: 18px;
-        color: var(--faint);
-        font-size: 0.78rem;
-      }
-    </style>
   </head>
-  <body>
-    <div class="wrap">
-      <div class="brand-lockup" aria-label="<%= brand.name %>">
-        <img src="/brand/mark.svg" alt="" />
-        <strong><%= brand.name %></strong>
-      </div>
-
-      <div class="card">
-        <div class="card-head">
-          <h2>Link a WhatsApp account</h2>
-          <div class="spacer"></div>
-          <span class="pill" id="state"><span class="dot"></span>Waiting…</span>
+  <body class="gateway-page">
+    <main class="gateway-shell">
+      <section class="gateway-story" aria-label="About <%= brand.name %>">
+        <div class="brand-lockup" aria-label="<%= brand.name %>">
+          <img src="/brand/mark.svg" alt="" />
+          <span><strong><%= brand.name %></strong><small><%= brand.tagline %></small></span>
         </div>
 
-        <div class="qr-box">
-          <div class="qr-frame" id="frame"></div>
-          <ol class="steps">
-            <li>Open WhatsApp on the phone the bot should use.</li>
-            <li>Settings → Linked devices → Link a device.</li>
-            <li>Point the camera at the code above.</li>
-          </ol>
-          <div class="hint">
-            No code yet? Levix only connects when you ask it to — press
-            <strong>Start session</strong> on the dashboard's Connection screen.
+        <div class="gateway-copy">
+          <span class="eyebrow">A direct line</span>
+          <h2>Bring your assistant online.</h2>
+          <p>One scan securely links Levix to the WhatsApp account you choose.</p>
+        </div>
+
+        <div class="gateway-mark" aria-hidden="true">
+          <span class="gateway-ring"></span>
+          <img src="/brand/mark.svg" alt="" />
+        </div>
+
+        <p class="gateway-trust"><span></span> Live pairing status</p>
+      </section>
+
+      <section class="gateway-panel">
+        <div class="gateway-panel-inner qr-panel-inner">
+          <div class="card auth-card qr-card">
+            <div class="card-head qr-card-head">
+              <div>
+                <span class="eyebrow">Link device</span>
+                <h1>Scan with WhatsApp</h1>
+              </div>
+              <span class="pill" id="state"><span class="dot"></span>Waiting…</span>
+            </div>
+
+            <div class="qr-box">
+              <div class="qr-frame" id="frame"></div>
+              <ol class="steps">
+                <li><span>Open</span> WhatsApp on the phone the bot should use.</li>
+                <li><span>Choose</span> Settings → Linked devices → Link a device.</li>
+                <li><span>Scan</span> the code shown above.</li>
+              </ol>
+              <div class="callout compact-callout">
+                <span class="callout-icon" aria-hidden="true">i</span>
+                <p>No code yet? Press <strong>Start session</strong> on the dashboard's Connection screen.</p>
+              </div>
+            </div>
+
+            <a class="btn qr-back" href="/">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+              Back to dashboard
+            </a>
           </div>
+
+          <div class="foot"><%= brand.name %> by <%= brand.developer %> · <%= brand.studio %></div>
         </div>
-
-        <a class="btn" href="/">Back to the dashboard</a>
-      </div>
-
-      <div class="foot"><%= brand.name %> · by <%= brand.developer %></div>
-    </div>
+      </section>
+    </main>
 
     <script src="/socket.io.min.js"></script>
     <script src="/qrcode.min.js"></script>
@@ -114,7 +112,7 @@
 
         socket.on("session", (state) => {
           if (state.state === "connected") {
-            frame.innerHTML = '<div style="padding:60px 30px;color:#0d1730">Linked ✓</div>';
+            frame.innerHTML = '<div class="qr-success">Linked ✓</div>';
             painted = null;
             setState("Connected", "on");
             return;

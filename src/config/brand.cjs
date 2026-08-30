@@ -16,9 +16,12 @@ const BRAND = Object.freeze({
   tagline: "Personal WhatsApp Bot",
   taglineAr: "بوت واتساب شخصي",
 
+  copyrightYear: 2026,
   developer: "Abdelrhman Diab",
   developerAr: "عبدالرحمن دياب",
+  developerSite: "https://abdelrhman.leviro.net",
   studio: "Leviro",
+  studioSite: "https://leviro.net",
 
   repo: "https://github.com/Abdodiab2005/levix",
 });

@@ -7,116 +7,73 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/brand/icon-32.png" />
     <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/dashboard.css" />
-    <style>
-      body {
-        display: grid;
-        place-items: center;
-        padding: 24px;
-        background:
-          radial-gradient(900px 500px at 15% -10%, rgba(22, 82, 240, 0.22), transparent 60%),
-          radial-gradient(700px 420px at 90% 110%, rgba(33, 212, 253, 0.16), transparent 60%),
-          var(--bg);
-      }
-
-      .login {
-        width: 100%;
-        max-width: 400px;
-        text-align: center;
-      }
-
-      .login .brand-lockup {
-        margin-bottom: 22px;
-      }
-
-      .login .card {
-        text-align: left;
-        padding: 24px;
-        box-shadow: var(--shadow);
-      }
-
-      .login h1 {
-        font-size: 1.05rem;
-        font-weight: 650;
-        margin-bottom: 4px;
-      }
-
-      .login p.sub {
-        color: var(--muted);
-        font-size: 0.86rem;
-        margin-bottom: 18px;
-      }
-
-      .login button {
-        width: 100%;
-        margin-top: 6px;
-        padding: 11px;
-      }
-
-      .login .field {
-        margin-bottom: 12px;
-      }
-
-      .error {
-        margin-top: 12px;
-        padding: 9px 12px;
-        border-radius: var(--radius-sm);
-        background: color-mix(in srgb, var(--danger) 14%, transparent);
-        border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
-        color: var(--danger);
-        font-size: 0.85rem;
-        text-align: center;
-      }
-
-      .foot {
-        margin-top: 20px;
-        color: var(--faint);
-        font-size: 0.78rem;
-      }
-    </style>
   </head>
-  <body>
-    <div class="login">
-      <div class="brand-lockup" aria-label="<%= brand.name %>">
-        <img src="/brand/mark.svg" alt="" />
-        <strong><%= brand.name %></strong>
-      </div>
+  <body class="gateway-page">
+    <main class="gateway-shell">
+      <section class="gateway-story" aria-label="About <%= brand.name %>">
+        <div class="brand-lockup" aria-label="<%= brand.name %>">
+          <img src="/brand/mark.svg" alt="" />
+          <span><strong><%= brand.name %></strong><small><%= brand.tagline %></small></span>
+        </div>
 
-      <form class="card" action="/setup" method="post">
-        <h1>Welcome</h1>
-        <p class="sub">
-          Pick a password for the control panel. It is the only thing protecting a
-          linked WhatsApp account, so make it a real one — at least
-          <%= minLength %> characters.
-        </p>
+        <div class="gateway-copy">
+          <span class="eyebrow">Your first minute</span>
+          <h2>Make the workspace yours.</h2>
+          <p>Choose one strong password, then manage the assistant from a single private control room.</p>
+        </div>
 
-        <% if (needsCode) { %>
-        <label class="field">
-          <span>Setup code</span>
-          <input type="text" name="code" autocomplete="off" autofocus required
-                 placeholder="printed in the bot's terminal" />
-        </label>
-        <% } %>
+        <div class="gateway-mark" aria-hidden="true">
+          <span class="gateway-ring"></span>
+          <img src="/brand/mark.svg" alt="" />
+        </div>
 
-        <label class="field">
-          <span>Password</span>
-          <input type="password" name="password" autocomplete="new-password"
-                 minlength="<%= minLength %>" <%= needsCode ? "" : "autofocus" %> required />
-        </label>
+        <p class="gateway-trust"><span></span> One setup · no configuration files</p>
+      </section>
 
-        <label class="field">
-          <span>Repeat password</span>
-          <input type="password" name="confirm" autocomplete="new-password"
-                 minlength="<%= minLength %>" required />
-        </label>
+      <section class="gateway-panel">
+        <div class="gateway-panel-inner">
+          <form class="card auth-card setup-card" action="/setup" method="post">
+            <div class="auth-head">
+              <span class="eyebrow">Create your workspace</span>
+              <h1>Welcome to <%= brand.name %></h1>
+              <p class="sub">Protect the linked WhatsApp account with at least <%= minLength %> characters.</p>
+            </div>
 
-        <button type="submit" class="btn btn-primary">Create and sign in</button>
+            <% if (needsCode) { %>
+            <label class="field">
+              <span>Setup code</span>
+              <input type="text" name="code" autocomplete="off" autofocus required
+                     placeholder="Printed in the bot's terminal" />
+              <small>Confirms you can access the server running Levix.</small>
+            </label>
+            <% } %>
 
-        <% if (error) { %>
-        <div class="error"><%= error %></div>
-        <% } %>
-      </form>
+            <label class="field">
+              <span>Password</span>
+              <input type="password" name="password" autocomplete="new-password"
+                     placeholder="At least <%= minLength %> characters"
+                     minlength="<%= minLength %>" <%= needsCode ? "" : "autofocus" %> required />
+            </label>
 
-      <div class="foot"><%= brand.name %> - <%= brand.tagline %> · by <%= brand.developer %></div>
-    </div>
+            <label class="field">
+              <span>Repeat password</span>
+              <input type="password" name="confirm" autocomplete="new-password"
+                     placeholder="Type it again" minlength="<%= minLength %>" required />
+            </label>
+
+            <button type="submit" class="btn btn-primary auth-submit">
+              Create workspace
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+
+            <% if (error) { %>
+            <div class="error" role="alert"><%= error %></div>
+            <% } %>
+          </form>
+
+          <div class="foot"><%= brand.name %> by <%= brand.developer %> · <%= brand.studio %></div>
+        </div>
+      </section>
+    </main>
   </body>
 </html>
