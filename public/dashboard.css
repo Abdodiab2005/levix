@@ -10,7 +10,12 @@
   --blue-bright: #5a94ff;
   --cyan: #21cef3;
   --cyan-soft: #8be8fb;
-  --grad: linear-gradient(120deg, var(--blue) 0%, #087ff2 58%, var(--cyan) 115%);
+  --grad: linear-gradient(
+    120deg,
+    var(--blue) 0%,
+    #087ff2 58%,
+    var(--cyan) 115%
+  );
 
   --bg: #07101f;
   --bg-soft: #0a1629;
@@ -35,8 +40,12 @@
   --shadow: 0 22px 70px rgba(0, 5, 18, 0.3);
   --shadow-soft: 0 12px 34px rgba(0, 5, 18, 0.16);
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  --body: Aptos, "Segoe UI Variable Text", "Segoe UI", "Noto Sans Arabic", Tahoma, sans-serif;
-  --display: ui-rounded, "SF Pro Rounded", "Segoe UI Variable Display", "Avenir Next", var(--body);
+  --body:
+    Aptos, "Segoe UI Variable Text", "Segoe UI", "Noto Sans Arabic", Tahoma,
+    sans-serif;
+  --display:
+    ui-rounded, "SF Pro Rounded", "Segoe UI Variable Display", "Avenir Next",
+    var(--body);
 }
 
 :root[data-theme="light"] {
@@ -147,7 +156,11 @@ kbd {
 .dashboard-page {
   min-width: 320px;
   background:
-    radial-gradient(circle at 78% 0%, color-mix(in srgb, var(--blue) 9%, transparent), transparent 32rem),
+    radial-gradient(
+      circle at 78% 0%,
+      color-mix(in srgb, var(--blue) 9%, transparent),
+      transparent 32rem
+    ),
     var(--bg);
 }
 
@@ -158,7 +171,11 @@ kbd {
   pointer-events: none;
   content: "";
   opacity: 0.26;
-  background-image: radial-gradient(circle, color-mix(in srgb, var(--faint) 24%, transparent) 0.75px, transparent 0.85px);
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--faint) 24%, transparent) 0.75px,
+    transparent 0.85px
+  );
   background-size: 22px 22px;
   mask-image: linear-gradient(to bottom, black, transparent 72%);
 }
@@ -180,7 +197,11 @@ kbd {
   overflow-y: auto;
   border-right: 1px solid #203555;
   background:
-    radial-gradient(circle at 15% 6%, rgba(25, 118, 255, 0.2), transparent 17rem),
+    radial-gradient(
+      circle at 15% 6%,
+      rgba(25, 118, 255, 0.2),
+      transparent 17rem
+    ),
     linear-gradient(180deg, #08152b 0%, #071226 100%);
   color: #f4f7ff;
   scrollbar-width: thin;
@@ -258,8 +279,14 @@ kbd {
 
 @keyframes pulse-bars {
   0%,
-  100% { opacity: 0.4; transform: scaleY(0.65); }
-  50% { opacity: 1; transform: scaleY(1); }
+  100% {
+    opacity: 0.4;
+    transform: scaleY(0.65);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
 }
 
 .nav {
@@ -292,7 +319,11 @@ kbd {
   color: #91a6c5;
   font-size: 0.9rem;
   font-weight: 570;
-  transition: color 160ms ease, background 160ms ease, border-color 160ms ease, transform 160ms ease;
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
 }
 
 .nav a::after {
@@ -302,11 +333,15 @@ kbd {
   height: 5px;
   border-radius: 50%;
   background: var(--cyan);
-  box-shadow: 0 0 0 4px rgba(33, 206, 243, 0.1), 0 0 14px rgba(33, 206, 243, 0.6);
+  box-shadow:
+    0 0 0 4px rgba(33, 206, 243, 0.1),
+    0 0 14px rgba(33, 206, 243, 0.6);
   content: "";
   opacity: 0;
   transform: scale(0.3);
-  transition: opacity 160ms ease, transform 160ms ease;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
 }
 
 .nav a:hover {
@@ -318,7 +353,11 @@ kbd {
 
 .nav a.active {
   border-color: rgba(83, 142, 232, 0.24);
-  background: linear-gradient(105deg, rgba(23, 107, 250, 0.2), rgba(33, 206, 243, 0.06));
+  background: linear-gradient(
+    105deg,
+    rgba(23, 107, 250, 0.2),
+    rgba(33, 206, 243, 0.06)
+  );
   color: #ffffff;
   box-shadow: inset 3px 0 0 var(--cyan);
 }
@@ -389,12 +428,18 @@ kbd {
   display: grid;
   gap: 3px;
   color: #5f789d;
-  font-size: 0.69rem;
+  font-size: 0.8rem;
+}
+
+.sidebar-credit.c1 {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .sidebar-credit a {
   width: fit-content;
-  color: #8da5c7;
+  color: #006aff;
   transition: color 150ms ease;
 }
 
@@ -495,8 +540,14 @@ kbd {
 }
 
 @keyframes view-in {
-  from { opacity: 0; transform: translateY(7px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* --- overview hero ----------------------------------------------------- */
@@ -511,7 +562,11 @@ kbd {
   border: 1px solid #1e3e6c;
   border-radius: 28px 28px 28px 10px;
   background:
-    linear-gradient(105deg, rgba(4, 20, 48, 0.98) 0 52%, rgba(6, 35, 73, 0.94) 100%),
+    linear-gradient(
+      105deg,
+      rgba(4, 20, 48, 0.98) 0 52%,
+      rgba(6, 35, 73, 0.94) 100%
+    ),
     #07172f;
   box-shadow: 0 28px 80px rgba(0, 20, 57, 0.26);
   color: #f7faff;
@@ -686,13 +741,21 @@ kbd {
 }
 
 @keyframes orbit {
-  from { transform: translate(-50%, -58%) rotate(0deg); }
-  to { transform: translate(-50%, -58%) rotate(360deg); }
+  from {
+    transform: translate(-50%, -58%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -58%) rotate(360deg);
+  }
 }
 
 @keyframes orbit-reverse {
-  from { transform: translate(-50%, -58%) rotate(360deg); }
-  to { transform: translate(-50%, -58%) rotate(0deg); }
+  from {
+    transform: translate(-50%, -58%) rotate(360deg);
+  }
+  to {
+    transform: translate(-50%, -58%) rotate(0deg);
+  }
 }
 
 .signal-node {
@@ -703,12 +766,23 @@ kbd {
   border: 2px solid #0b2247;
   border-radius: 50%;
   background: var(--cyan);
-  box-shadow: 0 0 0 6px rgba(33, 206, 243, 0.08), 0 0 22px rgba(33, 206, 243, 0.7);
+  box-shadow:
+    0 0 0 6px rgba(33, 206, 243, 0.08),
+    0 0 22px rgba(33, 206, 243, 0.7);
 }
 
-.node-one { top: 21%; left: 30%; }
-.node-two { top: 46%; right: 18%; }
-.node-three { bottom: 23%; left: 27%; }
+.node-one {
+  top: 21%;
+  left: 30%;
+}
+.node-two {
+  top: 46%;
+  right: 18%;
+}
+.node-three {
+  bottom: 23%;
+  left: 27%;
+}
 
 .signal-label {
   position: absolute;
@@ -801,7 +875,9 @@ kbd {
 
 .pill.on .dot {
   background: var(--ok);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 15%, transparent), 0 0 12px color-mix(in srgb, var(--ok) 55%, transparent);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--ok) 15%, transparent),
+    0 0 12px color-mix(in srgb, var(--ok) 55%, transparent);
 }
 
 .pill.off {
@@ -841,7 +917,12 @@ kbd {
   line-height: 1;
   cursor: pointer;
   box-shadow: 0 1px 0 color-mix(in srgb, #ffffff 5%, transparent) inset;
-  transition: transform 150ms ease, background 150ms ease, border-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+  transition:
+    transform 150ms ease,
+    background 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    opacity 150ms ease;
 }
 
 .btn:hover {
@@ -864,13 +945,17 @@ kbd {
   border-color: color-mix(in srgb, var(--cyan) 25%, var(--blue));
   background: var(--grad);
   color: #ffffff;
-  box-shadow: 0 9px 24px rgba(11, 95, 230, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 9px 24px rgba(11, 95, 230, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .btn-primary:hover {
   border-color: color-mix(in srgb, var(--cyan) 50%, var(--blue));
   background: linear-gradient(120deg, #2878ff, #0c8cf3 62%, #23d4f7 120%);
-  box-shadow: 0 12px 28px rgba(11, 95, 230, 0.29), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  box-shadow:
+    0 12px 28px rgba(11, 95, 230, 0.29),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 
 .btn-danger {
@@ -1062,7 +1147,10 @@ kbd {
   border-radius: 16px 16px 16px 6px;
   background: var(--panel);
   box-shadow: 0 8px 28px rgba(0, 7, 20, 0.09);
-  transition: transform 170ms ease, border-color 170ms ease, box-shadow 170ms ease;
+  transition:
+    transform 170ms ease,
+    border-color 170ms ease,
+    box-shadow 170ms ease;
 }
 
 .stat::after {
@@ -1156,7 +1244,11 @@ kbd {
   width: 190px;
   height: 100%;
   pointer-events: none;
-  background: radial-gradient(circle at 100% 0, color-mix(in srgb, var(--blue) 10%, transparent), transparent 70%);
+  background: radial-gradient(
+    circle at 100% 0,
+    color-mix(in srgb, var(--blue) 10%, transparent),
+    transparent 70%
+  );
   content: "";
 }
 
@@ -1231,7 +1323,10 @@ textarea {
   background: var(--bg-soft);
   color: var(--text);
   font-size: 0.87rem;
-  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background 150ms ease;
 }
 
 input::placeholder,
@@ -1290,7 +1385,9 @@ select {
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--bg-soft);
-  transition: background 180ms ease, border-color 180ms ease;
+  transition:
+    background 180ms ease,
+    border-color 180ms ease;
 }
 
 .switch .track::after {
@@ -1303,7 +1400,9 @@ select {
   background: var(--muted);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   content: "";
-  transition: transform 180ms ease, background 180ms ease;
+  transition:
+    transform 180ms ease,
+    background 180ms ease;
 }
 
 .switch input:checked + .track {
@@ -1525,7 +1624,10 @@ td.wrap {
 }
 
 @keyframes loading-pulse {
-  50% { opacity: 0.35; transform: scale(0.7); }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.7);
+  }
 }
 
 /* --- commands, groups and settings ------------------------------------ */
@@ -1731,12 +1833,22 @@ td.wrap {
   animation: toast-in 220ms cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
-.toast.ok { border-left-color: var(--ok); }
-.toast.error { border-left-color: var(--danger); }
+.toast.ok {
+  border-left-color: var(--ok);
+}
+.toast.error {
+  border-left-color: var(--danger);
+}
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateX(16px) scale(0.98); }
-  to { opacity: 1; transform: translateX(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateX(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
 }
 
 /* --- gateway: login, setup and QR ------------------------------------- */
@@ -1911,7 +2023,9 @@ td.wrap {
   height: 7px;
   border-radius: 50%;
   background: var(--ok);
-  box-shadow: 0 0 0 5px rgba(59, 214, 139, 0.09), 0 0 13px rgba(59, 214, 139, 0.44);
+  box-shadow:
+    0 0 0 5px rgba(59, 214, 139, 0.09),
+    0 0 13px rgba(59, 214, 139, 0.44);
 }
 
 .gateway-panel {
@@ -1920,7 +2034,11 @@ td.wrap {
   place-items: center;
   padding: clamp(26px, 5vw, 72px);
   background:
-    radial-gradient(circle at 95% 4%, rgba(23, 107, 250, 0.1), transparent 24rem),
+    radial-gradient(
+      circle at 95% 4%,
+      rgba(23, 107, 250, 0.1),
+      transparent 24rem
+    ),
     #091222;
 }
 
