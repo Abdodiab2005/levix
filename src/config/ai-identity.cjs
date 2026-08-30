@@ -16,9 +16,10 @@
 // be able to change what the product is called or who wrote it, and should not
 // have to look at product metadata to edit their own prompt.
 //
-// This is an open-source project. Nothing here is obfuscated and nothing here
-// is a secret — the point is that it is code-owned rather than
-// operator-configurable, and that it is not reachable from the panel.
+// This is an open-source project. Nothing here is obfuscated or secret. Public
+// credit facts also live in brand.cjs so the footer can render them; the full
+// identity object and its instruction block remain code-owned rather than
+// operator-configurable, and are not reachable from the panel.
 
 const IDENTITY = Object.freeze({
   product: "Levix",

@@ -167,7 +167,7 @@ section("hot reload");
   ok("the human note stays out of the prompt", !reloaded.includes("note"));
 }
 
-section("nothing exposes the identity over HTTP");
+section("nothing exposes the private identity block over HTTP");
 
 {
   const sources = [
@@ -296,18 +296,23 @@ section("the persona API hands back the operator's half and nothing else");
       ok(`${route} leaks no identity metadata`, leaked.length === 0, leaked.join(", "));
     }
 
-    // And the pages themselves, which render app.locals.brand.
+    // Public credit facts belong to app.locals.brand and are intentionally
+    // rendered in the dashboard footer. The private facts and the instruction
+    // block must still never reach a page.
     for (const page of ["/", "/qr"]) {
       const text = await (await http.call(page)).text();
       const leaked = [
-        aiIdentity.developerSite,
-        aiIdentity.studioSite,
-        // Not the bare year: "2005" is also inside the GitHub handle in
-        // brand.repo, which every page footer legitimately renders.
         `born in ${aiIdentity.developerBornYear}`,
+        aiIdentity.developerNationality,
+        aiIdentity.developerRole,
         "Product identity",
       ].filter((needle) => text.includes(needle));
-      ok(`${page} leaks no identity metadata`, leaked.length === 0, leaked.join(", "));
+      ok(`${page} leaks no private identity metadata`, leaked.length === 0, leaked.join(", "));
+
+      if (page === "/") {
+        ok("/ links the public developer site", text.includes(`href="${brand.developerSite}"`));
+        ok("/ links the public studio site", text.includes(`href="${brand.studioSite}"`));
+      }
     }
   } finally {
     server.stop();
