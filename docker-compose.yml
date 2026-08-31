@@ -6,8 +6,9 @@
 #
 #   docker compose logs levix | grep -F '[Setup] Setup code:' | tail -1
 #
-# Levix does not connect to WhatsApp on its own: open the panel, go to
-# Connection and press Start session to get a QR code.
+# On a fresh install Levix waits for you to open Connection and press Start
+# session before it creates the first QR. After a successful pairing, the saved
+# WhatsApp session resumes automatically when the container restarts.
 
 services:
   levix:
