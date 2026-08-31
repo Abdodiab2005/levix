@@ -173,6 +173,14 @@ const MIGRATIONS = [
       );
     `);
   },
+  // v2 — delivery history for truthful schedule status and manual retries.
+  (database) => {
+    database.exec(`
+      ALTER TABLE schedules ADD COLUMN last_run_at INTEGER;
+      ALTER TABLE schedules ADD COLUMN last_delivery_status TEXT;
+      ALTER TABLE schedules ADD COLUMN last_error TEXT;
+    `);
+  },
 ];
 
 function migrate(database, migrations = MIGRATIONS) {

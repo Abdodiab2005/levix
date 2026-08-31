@@ -4,7 +4,7 @@
 // runnable with `npm test`. Covers the storage API, the settings layer, the
 // command table and the generated secrets.
 
-import { useTempDataDir, require, section, ok, finish } from "./harness.mjs";
+import { useTempDataDir, require, section, ok, equal, finish } from "./harness.mjs";
 
 useTempDataDir("levix-storage");
 
@@ -129,6 +129,10 @@ ok("schedules", store.getSchedules().length === 2);
 ok("schedule shape", store.getSchedule("j2").cronString === "0 9 * * *");
 store.setScheduleStatus("j1", "sent");
 ok("schedule status", store.getSchedule("j1").status === "sent");
+store.setScheduleDelivery("j2", "failed", 123456, "offline");
+equal("schedule delivery status", store.getSchedule("j2").lastDeliveryStatus, "failed");
+equal("schedule delivery time", store.getSchedule("j2").lastRunAt, 123456);
+equal("schedule delivery error", store.getSchedule("j2").lastError, "offline");
 ok("schedule delete", store.deleteSchedule("j1") === true);
 ok("schedule count", store.countSchedules() === 1);
 

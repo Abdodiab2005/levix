@@ -54,7 +54,9 @@ is a Markdown file you can edit from the panel.
 per-chat file. Plain Markdown, hand-editable, injected into every prompt.
 
 **Scheduled messages** — one-off (`!schedule`) or recurring (`!autoschedule`),
-stored in the database and listed in the panel.
+including daily and weekly schedules with Arabic or English day names. Jobs
+survive restarts; their latest delivery result is shown in the panel, where a
+failed message can be retried manually.
 
 **Optional proxy** — Settings → WhatsApp proxy routes the WhatsApp connection
 through an HTTP, HTTPS or SOCKS5 proxy, including the media it sends and

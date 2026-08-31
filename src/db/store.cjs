@@ -623,7 +623,7 @@ function countDebts(settled = false) {
 // them, and a crash in the middle of a write can't truncate the file.
 //
 // A job is `{ id, type, targetJid, message, cronString?, date?, status,
-// creatorJid }` — the shape !schedule and !autoschedule have always built.
+// creatorJid, lastRunAt?, lastDeliveryStatus?, lastError? }`.
 
 function scheduleRow(row) {
   if (!row) return null;
@@ -637,6 +637,9 @@ function scheduleRow(row) {
     status: row.status,
     creatorJid: row.creator_jid ?? null,
     createdAt: row.created_at,
+    lastRunAt: row.last_run_at ?? null,
+    lastDeliveryStatus: row.last_delivery_status ?? null,
+    lastError: row.last_error ?? null,
   };
 }
 
@@ -651,8 +654,9 @@ function getSchedule(id) {
 function saveSchedule(job) {
   q(
     `INSERT INTO schedules
-       (id, type, target_jid, message, cron_string, date, status, creator_jid, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       (id, type, target_jid, message, cron_string, date, status, creator_jid,
+        created_at, last_run_at, last_delivery_status, last_error)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        type        = excluded.type,
        target_jid  = excluded.target_jid,
@@ -660,7 +664,10 @@ function saveSchedule(job) {
        cron_string = excluded.cron_string,
        date        = excluded.date,
        status      = excluded.status,
-       creator_jid = excluded.creator_jid`
+       creator_jid = excluded.creator_jid,
+       last_run_at = excluded.last_run_at,
+       last_delivery_status = excluded.last_delivery_status,
+       last_error = excluded.last_error`
   ).run(
     String(job.id),
     job.type,
@@ -670,13 +677,25 @@ function saveSchedule(job) {
     job.date ?? null,
     job.status || "pending",
     job.creatorJid ?? null,
-    job.createdAt ?? Date.now()
+    job.createdAt ?? Date.now(),
+    job.lastRunAt ?? null,
+    job.lastDeliveryStatus ?? null,
+    job.lastError ?? null
   );
   return getSchedule(job.id);
 }
 
 function setScheduleStatus(id, status) {
   q("UPDATE schedules SET status = ? WHERE id = ?").run(status, String(id));
+}
+
+function setScheduleDelivery(id, status, runAt, error = null) {
+  q(
+    `UPDATE schedules
+        SET last_delivery_status = ?, last_run_at = ?, last_error = ?
+      WHERE id = ?`
+  ).run(status, runAt, error, String(id));
+  return getSchedule(id);
 }
 
 function deleteSchedule(id) {
@@ -821,6 +840,7 @@ module.exports = {
   getSchedule,
   saveSchedule,
   setScheduleStatus,
+  setScheduleDelivery,
   deleteSchedule,
   countSchedules,
   // AI history

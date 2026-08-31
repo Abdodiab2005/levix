@@ -89,5 +89,6 @@ export const getSchedules = store.getSchedules;
 export const getSchedule = store.getSchedule;
 export const saveSchedule = store.saveSchedule;
 export const setScheduleStatus = store.setScheduleStatus;
+export const setScheduleDelivery = store.setScheduleDelivery;
 export const deleteSchedule = store.deleteSchedule;
 export const countSchedules = store.countSchedules;
