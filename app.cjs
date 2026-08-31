@@ -19,6 +19,7 @@ const { assetPath } = require("./src/config/paths.cjs");
 const brand = require("./src/config/brand.cjs");
 const settings = require("./src/config/settings.cjs");
 const secrets = require("./src/config/secrets.cjs");
+const { PanelSessionStore } = require("./src/panel/session-store.cjs");
 const { getQrCode } = require("./src/utils/storage.cjs");
 const {
   clientAddress,
@@ -151,9 +152,14 @@ app.locals.brand = brand;
 app.use(express.static(assetPath("public")));
 app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
+// Levix is intentionally one process and one operator, so a small expiring
+// in-memory store is enough. Unlike express-session's development MemoryStore,
+// it is explicitly bounded and prunes expired entries instead of growing for
+// the lifetime of the process. Sessions still disappear on restart by design.
 const sessionMiddleware = session({
   name: SESSION_COOKIE_NAME,
   secret: secrets.getSessionSecret(),
+  store: new PanelSessionStore({ ttlMs: SESSION_MAX_AGE_MS }),
   resave: false,
   saveUninitialized: false,
   cookie: {
