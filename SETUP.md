@@ -58,8 +58,13 @@ The terminal prints something like:
    bot before you do.)
 3. You land on the control panel. Go to **Connection**, press **Start session**,
    and scan the QR with WhatsApp → Settings → Linked devices → Link a device.
-   Levix does not connect to WhatsApp until you ask it to.
+   A brand-new install does not begin pairing until you press Start.
 4. Send `!ping` in any chat. The bot answers.
+
+After that first successful pairing, the saved WhatsApp session resumes
+automatically after a Levix, Docker or systemd restart. You only need the
+Connection screen again if you deliberately stop/unlink the session or WhatsApp
+requires a new link.
 
 Levix only opens a browser when there is one to open: over SSH, under systemd,
 in Docker or in CI it just prints the address and says why. `--no-open` turns
@@ -85,7 +90,8 @@ Then open <http://localhost:3001>. The setup code is in the logs:
 docker compose logs levix | grep -F '[Setup] Setup code:' | tail -1
 ```
 
-Everything the bot owns lives in the `levix-data` volume.
+Everything the bot owns lives in the `levix-data` volume. Once WhatsApp has
+been paired, restarting the container reuses that saved session automatically.
 
 ---
 
@@ -181,11 +187,11 @@ journalctl -u levix --no-pager | grep -F '[Setup] Setup code:' | tail -1
 
 Read the script first if you like — it is short, and it explains each step.
 
-That always installs the newest stable Levix. To stay on one version — the same
-script, pinned — use its own URL:
+That always installs the newest stable Levix. To stay on this release — the
+same script, pinned — use its own URL:
 
 ```bash
-curl -fsSL https://levix.leviro.net/install/v2.0.0.sh | bash
+curl -fsSL https://levix.leviro.net/install/v2.2.1.sh | bash
 ```
 
 **Behind a proxy** — if this server reaches the internet through a proxy, the

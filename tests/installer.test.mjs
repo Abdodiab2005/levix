@@ -273,14 +273,21 @@ const deployScript = readFileSync(join(ROOT, "scripts", "deploy-installer.sh"), 
 
 ok(
   "the installer job waits for the published release",
-  /installer:[\s\S]*?needs:\s*\[publish-release, npm\]/.test(release)
+  /installer:[\s\S]*?needs:\s*publish-release/.test(release)
 );
 ok(
-  "and for the npm version it installs",
-  /needs:\s*\[[^\]]*\bnpm\b[^\]]*\]/.test(release)
+  "the published release waits for npm",
+  /publish-release:[\s\S]*?needs:\s*\[[^\]]*\bnpm\b[^\]]*\]/.test(release)
 );
-ok("which waits for the binaries", /publish-release:\s*\n\s*needs:\s*binaries/.test(release));
-ok("which wait for CI", /binaries:\s*\n\s*needs:\s*ci/.test(release));
+ok(
+  "the published release waits for the container image",
+  /publish-release:[\s\S]*?needs:\s*\[[^\]]*\bimage\b[^\]]*\]/.test(release)
+);
+ok(
+  "the published release waits for every binary",
+  /publish-release:[\s\S]*?needs:\s*\[[^\]]*\bbinaries\b[^\]]*\]/.test(release)
+);
+ok("the binaries wait for CI", /binaries:\s*\n\s*needs:\s*ci/.test(release));
 ok("only tags trigger it", /on:\s*\n\s*push:\s*\n\s*tags:/.test(release));
 ok("not every push to main", !/branches:\s*\[main\]/.test(release));
 ok("two releases cannot race", /group:\s*levix-installer-production/.test(release));

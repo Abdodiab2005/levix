@@ -18,9 +18,11 @@ go to **Connection**, press **Start session** and scan the QR — see
 [SETUP.md](SETUP.md) for the longer version, Docker, and running it as a
 service.
 
-Starting Levix does not connect it to WhatsApp. The panel, the database and the
-commands come up on their own, and the WhatsApp session is started from the
-Connection screen when you want it.
+On a brand-new install, starting Levix does not begin WhatsApp pairing by
+itself: the panel, database and commands come up first, and the Connection
+screen starts the first session when you ask. After that first successful link,
+the saved WhatsApp session resumes automatically after a process, Docker or
+systemd restart unless you explicitly stop or unlink it.
 
 ```
   levix                    start Levix with the web panel
