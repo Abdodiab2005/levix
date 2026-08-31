@@ -1,0 +1,85 @@
+name: Bug report
+description: Report a reproducible problem in Levix
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Remove passwords, setup codes, API keys,
+        WhatsApp credentials, phone numbers, and personal data before submitting.
+
+  - type: input
+    id: version
+    attributes:
+      label: Levix version
+      description: Run `levix --version` or provide the Docker image tag.
+      placeholder: "2.2.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation method
+      options:
+        - Public installer / systemd
+        - npm
+        - Docker Compose
+        - Standalone binary
+        - Source checkout
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, Node.js version when applicable, and reverse proxy or panel.
+      placeholder: "Ubuntu 24.04 x64, Node.js 24, nginx"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start Levix...
+        2. Open...
+        3. Run...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Redact all secrets and personal data.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I removed credentials, setup codes, phone numbers, and personal data.
+          required: true
+        - label: This is not a security vulnerability that should be reported privately.
+          required: true

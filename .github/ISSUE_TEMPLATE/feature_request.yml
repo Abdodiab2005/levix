@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest a focused improvement to Levix
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem would this solve, and who experiences it?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest useful solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Explain current workarounds or other approaches you considered.
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Deployment and compatibility impact
+      description: Note effects on npm, Docker, systemd, binaries, persisted data, or existing commands.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and pull requests.
+          required: true
+        - label: This request has one clear purpose.
+          required: true
