@@ -6,9 +6,9 @@
 # passes first.
 #
 #   tag pushed
-#     └─ verify-version ── ci ── npm
-#                          ├── image
-#                          └── binaries ── publish-release ── installer
+#     └─ verify-version ── ci ── npm ───────────────┐
+#                          ├── image ───────────────┤
+#                          └── binaries ────────────┴─ publish-release ── installer
 #
 # Secrets: NPM_TOKEN, and the LEVIX_DEPLOY_* set on the installer-production
 # environment. The container image uses the built-in GITHUB_TOKEN.
@@ -138,8 +138,11 @@ jobs:
           name: ${{ matrix.asset }}
           path: ${{ matrix.asset }}
 
+  # The GitHub release is the public claim that all shipping channels are good.
+  # Do not create it unless npm, the container image and every binary all made
+  # it through their own publish/build path successfully.
   publish-release:
-    needs: binaries
+    needs: [binaries, npm, image]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -218,7 +221,7 @@ jobs:
 
   installer:
     name: publish the public installer
-    needs: [publish-release, npm]
+    needs: publish-release
     runs-on: ubuntu-latest
     environment: installer-production
     concurrency:
