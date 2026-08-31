@@ -75,6 +75,7 @@ module.exports = {
   getSchedule: store.getSchedule,
   saveSchedule: store.saveSchedule,
   setScheduleStatus: store.setScheduleStatus,
+  setScheduleDelivery: store.setScheduleDelivery,
   deleteSchedule: store.deleteSchedule,
   countSchedules: store.countSchedules,
 };

@@ -9,6 +9,19 @@
 import { useTempDataDir, httpClient, startServer, section, ok, equal, finish } from "./harness.mjs";
 
 const dataDir = useTempDataDir("levix-panel");
+const { saveSchedule } = await import("../src/utils/storage.esm.js");
+saveSchedule({
+  id: "panel-weekly",
+  type: "recurring",
+  targetJid: "120363@g.us",
+  message: "weekly report",
+  cronString: "30 18 * * 5",
+  status: "active",
+  creatorJid: "201000000000@s.whatsapp.net",
+  lastRunAt: 123456,
+  lastDeliveryStatus: "failed",
+  lastError: "offline",
+});
 const server = await startServer({ dataDir, trust: "", routes: true });
 const http = httpClient(server.base);
 
@@ -93,7 +106,18 @@ try {
   res = await http.json("/dashboard/api/settings", { key: "gemini_model", value: "gemini-x" }, "PATCH");
   equal("a setting can be changed", res.status, 200);
 
-  ok("schedules are listed", (await (await http.call("/dashboard/api/schedules")).json()).success);
+  const schedulePayload = await (await http.call("/dashboard/api/schedules")).json();
+  ok("schedules are listed", schedulePayload.success);
+  equal("schedule times name their timezone", schedulePayload.timezone, "Africa/Cairo");
+  equal(
+    "recurring schedules are human-readable",
+    schedulePayload.schedules[0].when,
+    "Every Friday at 18:30 (Africa/Cairo)"
+  );
+  equal("delivery failures reach the panel", schedulePayload.schedules[0].lastError, "offline");
+
+  res = await http.call("/dashboard/api/schedules/missing/retry", { method: "POST" });
+  equal("retry requires a live WhatsApp connection", res.status, 409);
 
   section("changing the panel password");
 

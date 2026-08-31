@@ -4,6 +4,7 @@ const {
 } = require("../../scheduler.cjs");
 const { randomUUID } = require("node:crypto");
 const { defaultTimezone } = require("../utils/datetime.cjs");
+const { parseRecurringArgs } = require("../utils/recurrence.cjs");
 
 module.exports = {
   name: "autoschedule",
@@ -14,54 +15,27 @@ module.exports = {
   async execute(sock, msg, args) {
     const creatorJid = msg.key.participant || msg.key.remoteJid;
     const targetJid = msg.key.remoteJid;
+    const parsed = parseRecurringArgs(args);
 
-    const type = args[0]?.toLowerCase();
-    const time = args[1];
-    const message = args.slice(2).join(" ");
-
-    if (!type || !time || !message) {
+    if (parsed.error) {
+      const errors = {
+        usage:
+          "الصيغة غير صحيحة. استخدم:\n`!autoschedule daily HH:mm رسالتك`\n`!autoschedule weekly day HH:mm رسالتك`",
+        type: "النوع غير مدعوم. استخدم: `daily` أو `weekly`.",
+        day: "اليوم غير صالح. استخدم اسم اليوم بالعربية أو الإنجليزية، أو رقمًا من 0 إلى 7 (0 و7 للأحد).",
+        time: "الوقت غير صالح. استخدم صيغة `HH:mm` (مثال: `09:30`).",
+        message: "اكتب الرسالة التي تريد جدولتها بعد الوقت.",
+      };
       return await sock.sendMessage(creatorJid, {
-        text: "الصيغة غير صحيحة. استخدم:\n`!autoschedule daily HH:mm رسالتك`\n`!autoschedule weekly day HH:mm رسالتك`",
-      });
-    }
-
-    // من غير الفحص ده أي كتابة غلط ("abc:xyz") بتتحوّل لكرون باظ يتخزّن في
-    // الملف، وبعدين كل تشغيل للبوت بيقع وهو بيحاول يجدوله.
-    const timeMatch = /^(\d{1,2}):(\d{2})$/.exec(String(time).trim());
-    const hour = timeMatch && Number(timeMatch[1]);
-    const minute = timeMatch && Number(timeMatch[2]);
-
-    if (!timeMatch || hour > 23 || minute > 59) {
-      return await sock.sendMessage(creatorJid, {
-        text: "الوقت غير صالح. استخدم صيغة `HH:mm` (مثال: `09:30`).",
-      });
-    }
-
-    let cronString = "";
-
-    if (type === "daily") {
-      cronString = `${minute} ${hour} * * *`;
-    } else if (type === "weekly") {
-      // This part can be enhanced later to support specific days like 'monday'
-      // For now, let's keep it simple. Example: !autoschedule weekly 1 10:30 "..." for Monday 10:30
-      const dayOfWeek = args[1];
-      const weeklyTime = args[2];
-      const weeklyMessage = args.slice(3).join(" ");
-      // ... logic to build weekly cron string ...
-      return await sock.sendMessage(creatorJid, {
-        text: "جدولة أسبوعية قيد التطوير.",
-      });
-    } else {
-      return await sock.sendMessage(creatorJid, {
-        text: "النوع غير مدعوم. استخدم: `daily`",
+        text: errors[parsed.error],
       });
     }
 
     const newJob = {
       id: randomUUID(),
       type: "recurring",
-      cronString: cronString,
-      message: message,
+      cronString: parsed.cronString,
+      message: parsed.message,
       targetJid: targetJid,
       creatorJid: creatorJid,
       status: "active",
@@ -77,7 +51,10 @@ module.exports = {
     saveScheduledJob(newJob);
 
     await sock.sendMessage(creatorJid, {
-      text: `✅ تم جدولة رسالة يومية بنجاح في الساعة ${time} (${defaultTimezone()})`,
+      text:
+        parsed.type === "weekly"
+          ? `✅ تم جدولة الرسالة أسبوعيًا يوم ${args[1]} الساعة ${parsed.time} (${defaultTimezone()})`
+          : `✅ تم جدولة الرسالة يوميًا الساعة ${parsed.time} (${defaultTimezone()})`,
     });
   },
 };

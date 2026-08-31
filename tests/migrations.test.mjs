@@ -36,6 +36,8 @@ const tablesOf = (database) =>
     .map((row) => row.name);
 
 const versionOf = (database) => database.prepare("PRAGMA user_version").get().user_version;
+const columnsOf = (database, table) =>
+  database.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name);
 
 function scratchDatabase() {
   const file = join(mkdtempSync(join(tmpdir(), "levix-mig-")), "test.db");
@@ -60,7 +62,32 @@ for (const table of EXPECTED_TABLES) {
   equal("…and ends at the latest version", versionOf(fresh), MIGRATIONS.length);
   const tables = tablesOf(fresh);
   ok("…with every table", EXPECTED_TABLES.every((t) => tables.includes(t)));
+  const scheduleColumns = columnsOf(fresh, "schedules");
+  for (const column of ["last_run_at", "last_delivery_status", "last_error"]) {
+    ok(`…with schedule column ${column}`, scheduleColumns.includes(column));
+  }
   fresh.close();
+}
+
+section("an existing v1 schedule survives the v2 upgrade");
+
+{
+  const database = scratchDatabase();
+  migrate(database, [MIGRATIONS[0]]);
+  database
+    .prepare(
+      `INSERT INTO schedules
+        (id, type, target_jid, message, cron_string, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run("old-weekly", "recurring", "1@g.us", "hello", "0 9 * * 1", "active", 1);
+
+  migrate(database);
+  equal("the upgrade reaches the latest version", versionOf(database), MIGRATIONS.length);
+  const row = database.prepare("SELECT * FROM schedules WHERE id = ?").get("old-weekly");
+  equal("the old message survives", row.message, "hello");
+  equal("new delivery state starts empty", row.last_delivery_status, null);
+  database.close();
 }
 
 // --- idempotence ----------------------------------------------------------

@@ -30,6 +30,7 @@ function saveScheduledJob(job) {
 }
 
 const runningTasks = new Map();
+const deliveriesInFlight = new Set();
 let cleanupScheduled = false;
 
 function trimMediaDirectory() {
@@ -128,24 +129,70 @@ function stopTask(jobId) {
   runningTasks.delete(jobId);
 }
 
-function scheduleNewJob(sock, job) {
-  stopTask(job.id);
+function deliveryErrorMessage(error) {
+  const message = error instanceof Error ? error.message : String(error ?? "Unknown error");
+  return message.replace(/\s+/g, " ").trim().slice(0, 240) || "Unknown error";
+}
 
-  const send = async () => {
+function recordDelivery(jobId, status, runAt, error = null) {
+  try {
+    storage.setScheduleDelivery(jobId, status, runAt, error);
+  } catch (stateError) {
+    logger.error(
+      { err: stateError, jobId },
+      "[Scheduler] failed to record scheduled delivery state"
+    );
+  }
+}
+
+async function deliverScheduledJob(sock, job) {
+  if (deliveriesInFlight.has(job.id)) {
+    logger.warn(`[Scheduler] Job ${job.id} is already being delivered — skipping overlap`);
+    return { ok: false, reason: "in_flight", skipped: true };
+  }
+
+  deliveriesInFlight.add(job.id);
+  const runAt = Date.now();
+
+  try {
+    await sock.sendMessage(job.targetJid, {
+      text: `*رسالة مجدولة 🗓️*\n\n${job.message}`,
+    });
+    recordDelivery(job.id, "sent", runAt);
+    logger.info(`[Scheduler] Executed job ${job.id} -> ${job.targetJid}`);
+    return { ok: true, reason: "sent" };
+  } catch (error) {
+    const message = deliveryErrorMessage(error);
+    recordDelivery(job.id, "failed", runAt, message);
+    logger.error(
+      { err: error, jobId: job.id },
+      "[Scheduler] failed to send scheduled message"
+    );
+    return { ok: false, reason: "delivery_failed", error: message };
+  } finally {
+    deliveriesInFlight.delete(job.id);
+  }
+}
+
+async function executeScheduledJob(sock, job) {
+  const result = await deliverScheduledJob(sock, job);
+
+  if (job.type !== "recurring" && !result.skipped) {
     try {
-      await sock.sendMessage(job.targetJid, {
-        text: `*رسالة مجدولة 🗓️*\n\n${job.message}`,
-      });
-      logger.info(`[Scheduler] Executed job ${job.id} -> ${job.targetJid}`);
-    } catch (err) {
-      // مفيش حد ماسك الـ promise دي: من غير الـ catch الرفض بيطلع
-      // unhandledRejection ويوقّف البوت.
+      updateJobStatus(job.id, result.ok ? "sent" : "failed");
+    } catch (error) {
       logger.error(
-        { err, jobId: job.id },
-        "[Scheduler] failed to send scheduled message"
+        { err: error, jobId: job.id },
+        "[Scheduler] failed to record one-off schedule status"
       );
     }
-  };
+  }
+
+  return result;
+}
+
+function scheduleNewJob(sock, job) {
+  stopTask(job.id);
 
   if (job.type === "recurring") {
     if (!job.cronString || !cron.validate(job.cronString)) {
@@ -158,7 +205,9 @@ function scheduleNewJob(sock, job) {
 
     runningTasks.set(
       job.id,
-      cron.schedule(job.cronString, send, { timezone: settings.get("bot_timezone") })
+      cron.schedule(job.cronString, () => executeScheduledJob(sock, job), {
+        timezone: settings.get("bot_timezone"),
+      })
     );
   } else {
     const when = new Date(job.date).getTime();
@@ -179,15 +228,32 @@ function scheduleNewJob(sock, job) {
     runningTasks.set(
       job.id,
       scheduleAt(when, async () => {
-        await send();
-        updateJobStatus(job.id, "sent");
-        runningTasks.delete(job.id);
+        try {
+          await executeScheduledJob(sock, job);
+        } finally {
+          runningTasks.delete(job.id);
+        }
       })
     );
   }
 
   logger.info(`[Scheduler] Job ${job.id} is now scheduled.`);
   return true;
+}
+
+async function retryScheduledJob(sock, jobId) {
+  const job = storage.getSchedule(jobId);
+  if (!job) return { ok: false, reason: "not_found" };
+
+  const retryable =
+    job.status === "failed" ||
+    (job.type === "recurring" &&
+      job.status === "active" &&
+      job.lastDeliveryStatus === "failed");
+  if (!retryable) return { ok: false, reason: "not_failed", job };
+
+  const result = await executeScheduledJob(sock, job);
+  return { ...result, job: storage.getSchedule(jobId) };
 }
 
 function deleteScheduledJob(jobId) {
@@ -205,6 +271,7 @@ module.exports = {
   initializeScheduledJobs,
   stopAllScheduledJobs,
   scheduleNewJob,
+  retryScheduledJob,
   getScheduledJobs,
   saveScheduledJob,
   deleteScheduledJob,

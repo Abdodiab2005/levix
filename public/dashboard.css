@@ -1561,6 +1561,32 @@ td.wrap {
   white-space: normal;
 }
 
+.schedule-state {
+  display: grid;
+  min-width: 150px;
+  gap: 6px;
+  white-space: normal;
+}
+
+.schedule-detail,
+.schedule-error {
+  color: var(--faint);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.schedule-error {
+  max-width: 260px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .tag,
 .source {
   display: inline-flex;

@@ -882,6 +882,42 @@
 
   // --- data tables --------------------------------------------------------
 
+  function scheduleState(job) {
+    const lifecycleClass =
+      job.status === "active" || job.status === "pending"
+        ? " ok"
+        : job.status === "failed" || job.status === "invalid"
+        ? " danger"
+        : "";
+    const detail = job.lastRunAt
+      ? `<span class="schedule-detail">Last attempt ${esc(timeAgo(job.lastRunAt))}</span>`
+      : '<span class="schedule-detail">Not run yet</span>';
+    const delivery = job.lastDeliveryStatus
+      ? `<span class="tag${job.lastDeliveryStatus === "sent" ? " ok" : " danger"}">Last: ${esc(job.lastDeliveryStatus)}</span>`
+      : "";
+    const error = job.lastError
+      ? `<span class="schedule-error" title="${esc(job.lastError)}">${esc(job.lastError)}</span>`
+      : "";
+
+    return `<div class="schedule-state">
+      <span class="tag${lifecycleClass}">${esc(job.status)}</span>
+      ${delivery}${detail}${error}
+    </div>`;
+  }
+
+  function scheduleActions(job) {
+    const retryable =
+      job.status === "failed" || job.lastDeliveryStatus === "failed";
+    return `<div class="table-actions">
+      ${
+        retryable
+          ? `<button class="btn btn-sm" type="button" data-retry-schedule="${esc(job.id)}">Retry now</button>`
+          : ""
+      }
+      <button class="btn btn-sm btn-danger" type="button" data-drop-schedule="${esc(job.id)}">Delete</button>
+    </div>`;
+  }
+
   const TABLES = {
     debts: {
       endpoint: "/debts",
@@ -939,15 +975,13 @@
     schedules: {
       endpoint: "/schedules",
       key: "schedules",
-      columns: ["Target", "When", "Message", "Status", ""],
+      columns: ["Target", "Schedule", "Message", "Delivery", "Actions"],
       row: (job) => [
         `<code>${esc(shortJid(job.targetJid))}</code>`,
-        job.type === "recurring"
-          ? `<code>${esc(job.cronString || "—")}</code>`
-          : esc(new Date(job.date).toLocaleString()),
+        `<span class="wrap">${esc(job.when || job.cronString || "—")}</span>`,
         `<span class="wrap">${esc(String(job.message ?? "").slice(0, 120))}</span>`,
-        `<span class="tag${job.status === "active" || job.status === "pending" ? " ok" : ""}">${esc(job.status)}</span>`,
-        `<button class="btn btn-sm btn-danger" type="button" data-drop-schedule="${esc(job.id)}">Delete</button>`,
+        scheduleState(job),
+        scheduleActions(job),
       ],
     },
     users: {
@@ -993,6 +1027,24 @@
 
   function initDataActions() {
     $("#data-table").addEventListener("click", (event) => {
+      const retryButton = event.target.closest("[data-retry-schedule]");
+      if (retryButton) {
+        guard(async () => {
+          retryButton.disabled = true;
+          retryButton.textContent = "Retrying…";
+          try {
+            await api(
+              `/schedules/${encodeURIComponent(retryButton.dataset.retrySchedule)}/retry`,
+              { method: "POST" }
+            );
+            toast("Scheduled message sent", "ok");
+          } finally {
+            await loadTable();
+          }
+        })();
+        return;
+      }
+
       const button = event.target.closest("[data-drop-schedule]");
       if (!button) return;
       guard(async () => {

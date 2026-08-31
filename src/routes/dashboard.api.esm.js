@@ -49,7 +49,8 @@ const memory = require("../utils/memory.cjs");
 const secrets = require("../config/secrets.cjs");
 const { DATA_DIR } = require("../config/paths.cjs");
 const { PERSONA_FILE } = require("../services/aiAgent.cjs");
-const { deleteScheduledJob } = require("../../scheduler.cjs");
+const { deleteScheduledJob, retryScheduledJob } = require("../../scheduler.cjs");
+const { describeScheduledJob } = require("../utils/recurrence.cjs");
 
 const router = Router();
 
@@ -732,9 +733,23 @@ router.post("/roles", (req, res) => {
 // Scheduled messages
 // ===========================================================================
 
+function scheduleView(job) {
+  if (!job) return null;
+  const timezone = settings.get("bot_timezone");
+  return { ...job, when: describeScheduledJob(job, timezone) };
+}
+
+function scheduleViews() {
+  return getSchedules().map(scheduleView);
+}
+
 router.get("/schedules", (req, res) => {
   try {
-    res.json({ success: true, schedules: getSchedules() });
+    res.json({
+      success: true,
+      timezone: settings.get("bot_timezone"),
+      schedules: scheduleViews(),
+    });
   } catch (error) {
     fail(res, error, "Error listing schedules");
   }
@@ -745,11 +760,53 @@ router.delete("/schedules/:id", (req, res) => {
     // Through the scheduler, not the store: the running timer/cron task has to
     // be stopped too, or a deleted job still fires until the next restart.
     deleteScheduledJob(req.params.id);
-    res.json({ success: true, schedules: getSchedules() });
+    res.json({ success: true, schedules: scheduleViews() });
   } catch (error) {
     fail(res, error, "Error deleting a schedule");
   }
 });
+
+router.post(
+  "/schedules/:id/retry",
+  asyncRoute(async (req, res) => {
+    const id = String(req.params.id ?? "");
+    if (!id || id.length > 128) return badRequest(res, "Invalid schedule ID");
+
+    const sock = currentSocket();
+    if (!sessionState().connected || !sock) {
+      return res.status(409).json({
+        success: false,
+        error: "Connect WhatsApp before retrying a schedule",
+      });
+    }
+
+    const result = await retryScheduledJob(sock, id);
+    if (result.reason === "not_found") {
+      return res.status(404).json({ success: false, error: "Schedule not found" });
+    }
+    if (result.reason === "not_failed") {
+      return res.status(409).json({
+        success: false,
+        error: "Only a failed delivery can be retried",
+      });
+    }
+    if (result.reason === "in_flight") {
+      return res.status(409).json({
+        success: false,
+        error: "This schedule is already being delivered",
+      });
+    }
+    if (!result.ok) {
+      return res.status(502).json({
+        success: false,
+        error: "WhatsApp delivery failed; the schedule remains retryable",
+        schedule: scheduleView(result.job),
+      });
+    }
+
+    res.json({ success: true, schedule: scheduleView(result.job) });
+  })
+);
 
 // ===========================================================================
 // Security — the panel's own password
