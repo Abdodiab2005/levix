@@ -103,9 +103,25 @@ function adapterFor(provider) {
   return adapter;
 }
 
-/** The settings key holding the API key of whichever provider is active. */
+/**
+ * The settings key holding the API key of whichever provider is active.
+ *
+ * Gemini is deliberately not in ADAPTERS — its loop lives in aiAgent.cjs and
+ * needs no wire adapter — so the key lookup is its own total map over all
+ * three providers, default included. This runs inside the /stats handler and
+ * in front of every AI command, so a provider the map does not know must be
+ * the only thing that throws here.
+ */
+const PROVIDER_KEY_SETTINGS = Object.freeze({
+  gemini: "gemini_api_key",
+  openai: "openai_api_key",
+  anthropic: "anthropic_api_key",
+});
+
 function activeProviderKeySetting(provider = settings.get("ai_provider")) {
-  return adapterFor(provider).keySetting;
+  const keySetting = PROVIDER_KEY_SETTINGS[provider];
+  if (!keySetting) throw new Error(`مزود غير معروف: ${provider}`);
+  return keySetting;
 }
 
 // ===========================================================================

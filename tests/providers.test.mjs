@@ -69,6 +69,18 @@ section("the provider selector");
   }
   const openaiBase = described.find((entry) => entry.key === "openai_base_url");
   equal("the openai base URL defaults to OpenAI itself", openaiBase.default, "https://api.openai.com/v1");
+
+  // Regression: the key lookup used to go through the wire-adapter table,
+  // which has no gemini entry — so the DEFAULT configuration threw, taking
+  // the dashboard /stats endpoint and every AI command down with it.
+  equal("the default provider maps to the gemini key", aiAgent.activeProviderKeySetting(), "gemini_api_key");
+  equal("…openai maps to its own key", aiAgent.activeProviderKeySetting("openai"), "openai_api_key");
+  equal("…and anthropic to its", aiAgent.activeProviderKeySetting("anthropic"), "anthropic_api_key");
+  equal(
+    "isAgentEnabled reads the default provider without throwing (false while the key is empty)",
+    aiAgent.isAgentEnabled(),
+    false
+  );
 }
 
 section("the agent is gated on the ACTIVE provider's key");
