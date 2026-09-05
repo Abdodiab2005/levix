@@ -22,6 +22,10 @@ const aiIdentity = require("../config/ai-identity.cjs");
 const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
 const { toolDeclarations, describeCall, runTool } = require("./aiTools.cjs");
+const {
+  runProviderAgent,
+  activeProviderKeySetting,
+} = require("./aiProviders.cjs");
 
 // Model, key, tool budget and history length all come from config/settings.cjs
 // (what the dashboard saved, else the default) and are read per call, so changing
@@ -225,7 +229,9 @@ function withTimeout(promise, ms, label) {
 }
 
 function isAgentEnabled() {
-  return Boolean(geminiClient()) && settings.get("ai_agent");
+  // The key that matters is the active provider's: a panel switch from gemini
+  // to openai must not keep the agent gated on (or running on) a Gemini key.
+  return Boolean(settings.get(activeProviderKeySetting())) && settings.get("ai_agent");
 }
 
 // ===========================================================================
@@ -247,7 +253,7 @@ function isAgentEnabled() {
 
 const GOOGLE_SEARCH_TOOL = Object.freeze({ googleSearch: {} });
 
-/** Gemini-only. Nothing here is offered to Groq or any other provider. */
+/** Gemini-only. The openai and anthropic providers are never offered it. */
 function googleSearchEnabled() {
   return settings.get("ai_google_search") === true;
 }
@@ -368,6 +374,10 @@ function formatSources(sources) {
 /**
  * Run one agent turn.
  *
+ * Dispatches on the `ai_provider` setting: gemini runs the native loop below
+ * (built-in Google Search, Files uploads); openai and anthropic run the same
+ * loop over their own wire formats in aiProviders.cjs.
+ *
  * @param {object}   options
  * @param {Array}    options.parts    - the Gemini parts for this message
  * @param {Array}    [options.history]- prior conversation
@@ -384,6 +394,20 @@ async function runAgent({
   useTools = true,
   maxSteps = null,
 } = {}) {
+  const provider = settings.get("ai_provider");
+  if (provider !== "gemini") {
+    const result = await runProviderAgent(provider, {
+      parts,
+      history: trimHistory(history),
+      systemInstruction: buildSystemInstruction(context),
+      status,
+      context,
+      useTools,
+      maxSteps,
+    });
+    return { ...result, history: trimHistory(result.history) };
+  }
+
   const genAI = geminiClient();
   if (!genAI) throw new Error("GEMINI_API_KEY غير معرف");
 
@@ -540,6 +564,7 @@ module.exports = {
   buildSystemInstruction,
   loadPersona,
   isAgentEnabled,
+  activeProviderKeySetting,
   isFileReferenceError,
   sanitizeHistoryForFiles,
   trimHistory,

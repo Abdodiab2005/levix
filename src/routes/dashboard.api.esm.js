@@ -48,7 +48,10 @@ const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
 const secrets = require("../config/secrets.cjs");
 const { DATA_DIR } = require("../config/paths.cjs");
-const { PERSONA_FILE } = require("../services/aiAgent.cjs");
+const {
+  PERSONA_FILE,
+  activeProviderKeySetting,
+} = require("../services/aiAgent.cjs");
 const { deleteScheduledJob, retryScheduledJob } = require("../../scheduler.cjs");
 const { describeScheduledJob } = require("../utils/recurrence.cjs");
 
@@ -140,7 +143,9 @@ router.get("/stats", (req, res) => {
 
         prefix: runtimeConfig.getPrefix(),
         commandCount: getCommandCatalog().length,
-        aiConfigured: !!settings.get("gemini_api_key"),
+        // The active provider's key — "AI key: Not set" must mean what the
+        // bot will actually use, not whatever gemini_api_key happens to hold.
+        aiConfigured: !!settings.get(activeProviderKeySetting()),
 
         uptime: process.uptime(),
         memory: process.memoryUsage(),

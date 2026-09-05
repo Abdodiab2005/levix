@@ -33,6 +33,7 @@ useTempDataDir("levix-google-search");
 const settings = harnessRequire("./src/config/settings.cjs");
 const aiAgent = harnessRequire("./src/services/aiAgent.cjs");
 const aiTools = harnessRequire("./src/services/aiTools.cjs");
+const aiProviders = harnessRequire("./src/services/aiProviders.cjs");
 
 const toolNames = (tools) => tools.flatMap((tool) => Object.keys(tool));
 
@@ -113,18 +114,59 @@ section("the setting");
 section("other providers are untouched");
 
 {
-  // Groq is the fallback path in src/commands/gemini.cjs. It is a plain
-  // chat-completions call: no tools of any kind, and certainly not a Gemini
-  // built-in one.
-  const source = readFileSync(join(ROOT, "src", "commands", "gemini.cjs"), "utf8");
-  const groq = source.slice(
-    source.indexOf("async function getGroqFallbackResponse"),
-    source.indexOf("async function processIncomingMedia")
+  // The openai/anthropic loop lives in src/services/aiProviders.cjs. It is
+  // plain chat-completions / messages calls: Levix's own function tools are
+  // the only tools that travel, and certainly not a Gemini built-in one.
+  const providerSource = readFileSync(join(ROOT, "src", "services", "aiProviders.cjs"), "utf8");
+  ok("…and no googleSearch anywhere on the provider path", !providerSource.includes("googleSearch"));
+
+  // Groq is gone — not disabled, gone: no settings, no call path, no comment.
+  const geminiCommand = readFileSync(join(ROOT, "src", "commands", "gemini.cjs"), "utf8");
+  ok("groq is fully removed from the command", !/groq/i.test(geminiCommand));
+  const settingsSource = readFileSync(join(ROOT, "src", "config", "settings.cjs"), "utf8");
+  ok("…and from the settings", !/groq/i.test(settingsSource));
+
+  // What lets Levix's tools reach the other providers is the schema
+  // translation: Gemini's uppercase `Type` dialect becomes JSON Schema.
+  const translated = aiProviders.toJsonSchema({
+    type: "OBJECT",
+    properties: {
+      query: { type: "STRING", description: "The search query." },
+      limit: { type: "INTEGER" },
+    },
+    required: ["query"],
+    nullable: true,
+  });
+  equal(
+    "gemini schema becomes JSON schema",
+    JSON.stringify(translated),
+    JSON.stringify({
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The search query." },
+        limit: { type: "integer" },
+      },
+      required: ["query"],
+    })
   );
 
-  ok("the Groq call exists", groq.length > 200);
-  ok("…and sends no tools", !/tools\s*:/.test(groq));
-  ok("…and no googleSearch", !groq.includes("googleSearch"));
+  const openai = aiProviders.openaiTools();
+  ok(
+    `openai tools wrap the declarations (${openai.length})`,
+    openai.length > 3 &&
+      openai.every(
+        (tool) =>
+          tool.type === "function" &&
+          tool.function.name &&
+          tool.function.parameters?.type === "object"
+      )
+  );
+  const anthropic = aiProviders.anthropicTools();
+  ok(
+    `anthropic tools carry input_schema (${anthropic.length})`,
+    anthropic.length > 3 &&
+      anthropic.every((tool) => tool.name && tool.input_schema?.type === "object")
+  );
 
   ok(
     "googleSearch appears only in the Gemini agent",

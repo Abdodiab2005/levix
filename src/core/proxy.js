@@ -25,9 +25,9 @@
 // WHAT IS NOT PROXIED
 // -------------------
 // Nothing global is patched. The agents are handed to one `makeWASocket()`
-// call by the session manager, so the dashboard's own HTTP server, Gemini,
-// Groq and every other outbound request keep using the direct connection they
-// use today.
+// call by the session manager, so the dashboard's own HTTP server, the AI
+// providers and every other outbound request keep using the direct connection
+// they use today.
 //
 // SECRETS
 // -------

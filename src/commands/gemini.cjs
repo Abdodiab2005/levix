@@ -6,8 +6,12 @@
 //   * the multi-message context buffer (`!gemini add` ... `!gemini send`),
 //   * image generation (`!generate`),
 //   * memory management shortcuts (`!del`, `!delall`),
-//   * the fallbacks: sanitize-and-retry when an uploaded file URI expired, and
-//     Groq when Gemini is rate limited.
+//   * the fallback: sanitize-and-retry when an uploaded file URI expired.
+//
+// The active provider itself (gemini / openai / anthropic) is a setting, and
+// the loop it dispatches to lives in services/aiAgent.cjs +
+// services/aiProviders.cjs. Media and !generate/!stt stay Gemini-only — the
+// other providers have no Files API to upload to.
 //
 // What moved out:
 //   * the system prompt          -> config/ai-persona.md (editable, hot-reloaded)
@@ -21,7 +25,6 @@
 const { GoogleGenAI } = require("@google/genai");
 
 const logger = require("../utils/logger.cjs");
-const aiIdentity = require("../config/ai-identity.cjs");
 const settings = require("../config/settings.cjs");
 const {
   getChatHistoryAsync,
@@ -41,6 +44,7 @@ const {
   formatSources,
   isFileReferenceError,
   sanitizeHistoryForFiles,
+  activeProviderKeySetting,
 } = require("../services/aiAgent.cjs");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 const fs = require("fs").promises;
@@ -80,68 +84,18 @@ function geminiClients() {
   return geminiCache;
 }
 
-function isGeminiRateLimitError(error) {
-  const message = `${error?.message || ""} ${error?.details || ""}`.toLowerCase();
-  // @google/genai's ApiError carries a numeric `status`; the older shapes are
-  // kept because they cost nothing and a queued error can predate an upgrade.
-  const status =
-    error?.status ||
-    error?.statusCode ||
-    error?.code ||
-    error?.response?.status ||
-    error?.error?.code;
-
-  return (
-    status === 429 ||
-    message.includes("429") ||
-    message.includes("rate limit") ||
-    message.includes("resource_exhausted") ||
-    message.includes("quota")
-  );
-}
-
-async function getGroqFallbackResponse(parts) {
-  const groqKey = settings.get("groq_api_key");
-  if (!groqKey) throw new Error("GROQ_API_KEY is not configured");
-
-  const mergedPrompt = parts
-    .map((part) => {
-      if (part?.text) return part.text;
-      if (part?.fileData) return "[تم إرفاق ملف/وسائط في الرسالة]";
-      return "";
-    })
-    .filter(Boolean)
-    .join("\n");
-
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${groqKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: settings.get("groq_model"),
-      messages: [
-        {
-          role: "system",
-          // Same code-owned identity the Gemini path gets — the fallback must
-          // not answer "who made you?" differently from the main model.
-          content: `${aiIdentity.systemBlock}\n\nBe brief, direct and conversational. Answer in the language the user wrote in.`,
-        },
-        { role: "user", content: mergedPrompt },
-      ],
-      temperature: 0.7,
-    }),
-  });
-
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(payload?.error?.message || "Groq API request failed");
-  }
-  return payload?.choices?.[0]?.message?.content?.trim();
-}
-
 async function processIncomingMedia(parts, mediaMessage, mimeOverride = null) {
+  // Reading media is a Gemini capability: the Files API it uploads to does not
+  // exist on the openai/anthropic paths. There the turn carries a note and the
+  // caption/question text still reaches the model.
+  if (settings.get("ai_provider") !== "gemini") {
+    const mime = mimeOverride || mediaMessage.mimetype || "ملف";
+    parts.push({
+      text: `[تم إرفاق وسائط (${mime}) — المزود الحالي لا يستطيع قراءة الوسائط]`,
+    });
+    return null;
+  }
+
   const { genAI } = geminiClients();
   if (!genAI) throw new Error("Gemini client unavailable");
   const tempFilePath = path.join(__dirname, `temp_media_${Date.now()}`);
@@ -392,6 +346,14 @@ module.exports = {
       );
 
       try {
+        // Image generation needs a model that returns image bytes, which only
+        // the Gemini image models do — it stays on Gemini whatever the chat
+        // provider is.
+        if (!geminiClients().genAI) {
+          throw new Error(
+            "مفتاح Gemini API غير معرف — توليد الصور يعمل على Gemini فقط"
+          );
+        }
         const fullPrompt =
           imagePrompt && quotedMsg
             ? `Prompt: ${imagePrompt} ,using quote: ${quotedMsg}`
@@ -636,11 +598,16 @@ module.exports = {
       }
     }
 
-    if (!geminiClients().genAI) {
+    // Provider-aware, on purpose: when the panel picked openai or anthropic,
+    // the bot answers with that key and a missing Gemini key is irrelevant.
+    if (!settings.get(activeProviderKeySetting())) {
+      const provider = settings.get("ai_provider");
       return sendBotMessage(
         sock,
         chatId,
-        { text: "خطأ في الإعدادات: مفتاح Gemini API غير معرف." },
+        {
+          text: `خطأ في الإعدادات: مفتاح مزود الذكاء الاصطناعي الحالي (${provider}) غير معرف — عدّله من لوحة التحكم.`,
+        },
         { replyTo: msg }
       );
     }
@@ -718,26 +685,6 @@ module.exports = {
       await status.finish(`${text}${formatSources(result.sources)}`);
     } catch (error) {
       logger.error({ err: error }, "Error in !gemini command");
-
-      // Rate-limit fallback to Groq for text-only prompts.
-      if (isGeminiRateLimitError(error) && settings.get("groq_api_key")) {
-        if (parts.some((part) => part?.fileData)) {
-          await status.finish(
-            "جيميني عليه ضغط حالياً، ومش قادر أعالج الوسائط دلوقتي. حاول بعد شوية 🙏"
-          );
-          return;
-        }
-        try {
-          const groqResponse = await getGroqFallbackResponse(parts);
-          if (groqResponse) {
-            await status.finish(groqResponse);
-            return;
-          }
-        } catch (groqError) {
-          logger.error({ err: groqError }, "Groq fallback failed");
-        }
-      }
-
       await status.fail(error, "حصلت مشكلة وأنا بكلم الذكاء الاصطناعي");
     }
   },

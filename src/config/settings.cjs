@@ -48,13 +48,27 @@ const SETTINGS = [
   },
 
   // --- AI ----------------------------------------------------------------
+  //
+  // One provider answers chats, chosen here and configured right below: the
+  // dashboard renders every one of these fields (the provider as a dropdown,
+  // keys as password fields), so a provider switch is a settings change, not a
+  // code change or an env file.
+  {
+    key: "ai_provider",
+    type: "string",
+    default: "gemini",
+    choices: ["gemini", "openai", "anthropic"],
+    group: "ai",
+    label: "AI provider",
+    hint: "Which API answers chats. gemini = Google Gemini (the only one that reads media and has built-in Google Search). openai = any OpenAI-compatible chat-completions server. anthropic = Claude.",
+  },
   {
     key: "gemini_api_key",
     type: "secret",
     default: "",
     group: "ai",
     label: "Gemini API key",
-    hint: "Free key from aistudio.google.com/apikey — without it the AI commands stay off.",
+    hint: "Free key from aistudio.google.com/apikey. Needed when the provider is gemini, and by !stt / !generate in every case.",
   },
   {
     key: "gemini_model",
@@ -131,22 +145,54 @@ const SETTINGS = [
     default: true,
     group: "ai",
     label: "Gemini Google Search",
-    hint: "Lets Gemini use Google's own search grounding when a question needs current information. Gemini only — the Groq fallback is unaffected.",
+    hint: "Lets Gemini use Google's own search grounding when a question needs current information. Gemini only — the openai and anthropic providers never see it.",
   },
   {
-    key: "groq_api_key",
+    key: "openai_api_key",
     type: "secret",
     default: "",
     group: "ai",
-    label: "Groq API key (fallback)",
-    hint: "Used only when Gemini is out of quota.",
+    label: "OpenAI-compatible API key",
+    hint: "Used when the provider is openai. Works with OpenAI itself or any server that speaks the same format: OpenRouter, Together, LM Studio, ...",
   },
   {
-    key: "groq_model",
+    key: "openai_base_url",
     type: "string",
-    default: "llama-3.3-70b-versatile",
+    default: "https://api.openai.com/v1",
     group: "ai",
-    label: "Groq model",
+    label: "OpenAI-compatible base URL",
+    hint: "The /v1 root of a chat-completions server. Examples: https://openrouter.ai/api/v1, https://api.together.xyz/v1, http://127.0.0.1:11434/v1 (Ollama).",
+  },
+  {
+    key: "openai_model",
+    type: "string",
+    default: "gpt-4o-mini",
+    group: "ai",
+    label: "OpenAI-compatible model",
+    hint: "Must exist on the server the base URL points at (e.g. gpt-4o-mini on OpenAI, a llama model on a self-hosted server).",
+  },
+  {
+    key: "anthropic_api_key",
+    type: "secret",
+    default: "",
+    group: "ai",
+    label: "Anthropic API key",
+    hint: "Used when the provider is anthropic. Create one at console.anthropic.com.",
+  },
+  {
+    key: "anthropic_base_url",
+    type: "string",
+    default: "https://api.anthropic.com",
+    group: "ai",
+    label: "Anthropic base URL",
+    hint: "The host root — /v1/messages is appended. Change it only for a proxy or a compatible gateway.",
+  },
+  {
+    key: "anthropic_model",
+    type: "string",
+    default: "claude-sonnet-4-5",
+    group: "ai",
+    label: "Anthropic model",
   },
   {
     key: "google_search_api_key",
