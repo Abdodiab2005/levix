@@ -40,7 +40,7 @@ A change should preserve these invariants:
 - Existing npm, Docker, systemd, and standalone-binary workflows must continue
   to work.
 
-Read [CLAUDE.md](CLAUDE.md) for the module layout, storage API, message flow, and
+Read [AGENTS.md](AGENTS.md) for the module layout, storage API, message flow, and
 additional architectural constraints.
 
 ## Making a change

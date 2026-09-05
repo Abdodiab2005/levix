@@ -3,7 +3,7 @@
 // Why files and not a table
 // -------------------------
 // The operator asked for "save it to your memory" to end up in a `.md` file
-// per chat (plus one global file) — the same idea as an agent's CLAUDE.md.
+// per chat (plus one global file) — the same idea as an agent's AGENTS.md.
 // Markdown keeps the memory:
 //   * human readable and hand-editable (open the file, fix a line, done),
 //   * diffable / backup-able without a DB dump,

@@ -1,12 +1,14 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents (and human contributors)
+working with code in this repository.
 
 ## Project Overview
 
 **Levix** — a self-hosted personal WhatsApp bot built with Node.js and
 **Baileys v7**: a command system (55 commands), group moderation, an AI agent
-on Google Gemini, scheduled messages, and a web control panel that changes
+whose provider (Gemini / OpenAI-compatible / Anthropic) is chosen in the panel,
+scheduled messages, and a web control panel that changes
 almost all of it live. The database is the source of truth and the panel is how
 you edit it: there is no `.env`, no config file, and nothing to install beside
 Node.
@@ -27,8 +29,9 @@ project); it is simply not operator-configurable.
 - **WhatsApp**: `@whiskeysockets/baileys@7.0.0-rc14` (ESM)
 - **Database**: SQLite through **`node:sqlite`** — Node's own module, so the
   datastore costs zero dependencies and there is no server to install
-- **AI**: `@google/genai` (the current Gemini SDK), default model
-  `gemini-3.7-flash`
+- **AI**: `@google/genai` (the Gemini path), plus hand-rolled `fetch` clients
+  for the OpenAI-compatible and Anthropic providers — the provider is the
+  `ai_provider` panel setting, default model `gemini-3.7-flash`
 - **Web Server**: Express.js (the control panel)
 - **Logging**: Pino with pino-pretty
 - **Scheduling**: `node-cron`
@@ -146,7 +149,8 @@ src/
 ├── routes/
 │   └── dashboard.api.esm.js # everything the control panel reads/writes
 ├── services/         # External services
-│   ├── aiAgent.cjs   # Gemini agent loop (tools + memory + live status)
+│   ├── aiAgent.cjs   # The Gemini agent loop + provider dispatch (tools, memory, live status)
+│   ├── aiProviders.cjs # The openai/anthropic loops over their own wire formats
 │   └── aiTools.cjs   # The tools the agent can call
 └── utils/            # Utility functions (Mixed)
     ├── memory.cjs    # Long-term memory as Markdown files
@@ -278,7 +282,7 @@ take the control panel down with it.
 
 Optional, off by default, and **scoped to WhatsApp**. The agents are handed to
 one `makeWASocket()` call by the session manager; nothing global is patched, so
-the control panel, Gemini, Groq and every other outbound request keep the
+the control panel, the AI providers and every other outbound request keep the
 direct connection they have today.
 
 Baileys has three network paths and they do not take the same object. Getting
@@ -448,19 +452,35 @@ template. A packaged build unpacks those and calls `setAssetRoot()`.
 
 ## Key Features Implementation
 
-### 1. AI agent — Gemini (`src/commands/gemini.cjs`)
+### 1. AI agent — one provider, chosen in the panel (`src/commands/gemini.cjs`)
 
 The AI is an **agent**, not a single API call: it can call tools over several
 rounds before answering, and the whole run is narrated in ONE WhatsApp message
 that gets edited (`🤖 بفكر...` → `🔍 ببحث عن ...` → the answer).
 
+**The provider is a setting, not a code path choice.** `ai_provider` (dashboard
+dropdown) picks which API answers: `gemini`, `openai` (any OpenAI-compatible
+chat-completions server via `openai_base_url`), or `anthropic`. Every provider
+has its own API key / model settings beside it, and `runAgent()` dispatches on
+the setting per message.
+
 **Layout**
 - `src/commands/gemini.cjs` — WhatsApp surface: builds Gemini `parts` from the
   message (text / image / video / audio / document / quoted), the multi-message
-  context buffer, `!generate`, and the Groq + expired-file fallbacks.
-- `src/services/aiAgent.cjs` — the loop: system instruction, tool rounds,
-  history trimming. Built on `ai.chats`, which is what keeps Gemini 3's thought
-  signatures circulating (see below).
+  context buffer, `!generate`, and the expired-file fallback. Media handling is
+  the one place the provider matters here: on gemini it uploads to the Files
+  API; on openai/anthropic the media part becomes a one-line note (no upload
+  API exists on those paths) and the caption still reaches the model.
+- `src/services/aiAgent.cjs` — the Gemini loop: system instruction, tool
+  rounds, history trimming. Built on `ai.chats`, which is what keeps Gemini 3's
+  thought signatures circulating (see below). Also dispatches to the other
+  providers and owns `isAgentEnabled()` / `activeProviderKeySetting()` — gating
+  always follows the ACTIVE provider's key, not Gemini's.
+- `src/services/aiProviders.cjs` — the openai and anthropic loops, hand-rolled
+  on `fetch` (an SDK would fight the configurable base URL this feature exists
+  for). Translates Gemini-format tool declarations to each wire format, runs
+  the same tool loop, and returns history in the CANONICAL Gemini parts format,
+  so a conversation survives a provider switch mid-flight.
 - `src/services/aiTools.cjs` — the tools themselves.
 - `src/config/ai-persona.md` — **the operator's behaviour prompt**, in English.
   Hot-reloaded (everything above the first `---` is a note to the human and is
@@ -497,7 +517,7 @@ declarations — so the model decides when the web is needed, Google runs the
 search inside the request, and the answer comes back already grounded. There is
 no `google_search` function to declare, nothing to execute in the tool loop, and
 no search API key. Turn it off with the `ai_google_search` setting (Gemini only;
-the Groq fallback never sees it).
+the openai and anthropic providers never see it).
 
 Citations come from `candidates[].groundingMetadata.groundingChunks[].web` and
 nothing else, so an answer the model gave from its own knowledge gets no Sources
@@ -574,7 +594,7 @@ Markdown files below. `!del` does not touch memory.
 ### 1b. Long-term memory (`src/utils/memory.cjs`, `!memory`)
 
 "احفظ ده في ذاكرتك" writes a Markdown file, the same idea as an agent's
-`CLAUDE.md`:
+`AGENTS.md`:
 
 ```
 memory/

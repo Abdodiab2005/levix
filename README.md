@@ -88,7 +88,7 @@ proxies, headless mode, backups, and troubleshooting.
 | --- | --- |
 | Commands | 55 commands for utilities, notes, reminders, polls, media, speech, weather, prayer times, and more |
 | Group moderation | Welcome messages, anti-link, anti-spam, media rules, warnings, auto-kick, roles, rules, and notes |
-| AI agent | Google Gemini with tools for web search, page reading, memory, and role management, plus an optional Groq fallback |
+| AI agent | Pick the brain from the panel — Gemini, any OpenAI-compatible server (OpenAI, OpenRouter, Ollama, ...), or Anthropic — with tools for web search, page reading, memory, and role management |
 | Scheduling | One-off, daily, and weekly messages with durable jobs, delivery status, and manual retry |
 | Control panel | Live connection state, command settings, roles, permissions, keys, memory, schedules, and logs |
 | Media | Text, images, video, audio, QR codes, text-to-speech, and speech-to-text |
@@ -163,11 +163,12 @@ start.
 - **`node:sqlite`** for a single-file datastore with no database server or
   native SQLite dependency.
 - **Express + EJS** for a panel with no frontend build step or CDN dependency.
-- **Google Gemini** for optional AI, with an optional Groq fallback.
+- **Pluggable AI providers** — Gemini, any OpenAI-compatible endpoint, or
+  Anthropic — chosen and keyed from the control panel, no env file.
 - **GitHub Actions** validation for tests, npm packaging, Docker persistence,
   and standalone executables on Linux, macOS, and Windows.
 
-[CLAUDE.md](CLAUDE.md) documents the module layout, message flow, storage API,
+[AGENTS.md](AGENTS.md) documents the module layout, message flow, storage API,
 and architectural constraints. [PACKAGING.md](PACKAGING.md) covers npm, Docker,
 systemd, installers, and single-executable releases.
 
