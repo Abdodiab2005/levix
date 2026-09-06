@@ -1,3 +1,5 @@
+<h1 align="center">Levix</h1>
+
 <p align="center">
   <img src="public/brand/banner.webp" alt="Levix - Personal WhatsApp Bot" width="100%">
 </p>
@@ -20,25 +22,119 @@
   <a href="https://github.com/Abdodiab2005/levix/issues">Issues</a>
 </p>
 
-Levix is a personal WhatsApp bot with 55 commands, group moderation, scheduled
-messages, an AI agent, media tools, and a web control panel. You run it on your
-own computer or server, keep its database and session files yourself, and can
-change almost everything while it is running.
+Levix is a self-hosted personal WhatsApp bot with 55 commands, group
+moderation, scheduled messages, an AI agent, media tools and a web control
+panel. It runs on your own computer or server, keeps its database and session
+files in your data directory, and lets you change most runtime settings from
+the panel.
 
-There is no paid tier, hosted account, external database, or configuration file
-to maintain. Levix is released under the MIT License.
+There is no hosted account, external database, `.env` file or application
+configuration file to maintain. Levix is released under the MIT License.
 
-> [!WARNING]
-> Levix uses [Baileys](https://github.com/WhiskeySockets/Baileys), an unofficial
-> WhatsApp Web client, and is not affiliated with or endorsed by WhatsApp or
-> Meta. Unofficial automation can lead to temporary restrictions or an account
-> ban. Do not use Levix for spam or unsolicited bulk messaging. If an outage or
-> account restriction is unacceptable, use the official WhatsApp Business
-> Platform instead.
+## Disclaimer
 
-## Quick start
+Levix uses [Baileys](https://github.com/WhiskeySockets/Baileys), an unofficial
+WhatsApp Web client and is not affiliated with or endorsed by WhatsApp or
+Meta. Unofficial automation can lead to temporary restrictions or an account
+ban.
 
-### Linux server
+- Respect WhatsApp's terms, local laws and the privacy of people in your chats.
+- Do not use Levix for spam or unsolicited bulk messaging.
+- Use a dedicated WhatsApp account where possible.
+- If an outage or account restriction is unacceptable, use the official
+  WhatsApp Business Platform instead.
+
+## Why Levix?
+
+- A self-hosted WhatsApp bot with a browser-based control panel.
+- Runtime settings, command permissions, roles, schedules, memory and logs in
+  one local data directory.
+- An AI agent with selectable Gemini, OpenAI-compatible and Anthropic providers.
+- Durable SQLite storage with no database server to install.
+- Panel and headless modes for computers, servers, Docker and packaged builds.
+
+## Features
+
+### Technical features
+
+- **Self-hosted storage**: One SQLite database and one data directory hold
+  settings, authentication, schedules, memory, logs, and runtime files.
+- **Modular commands**: Command handlers are loaded dynamically from
+  `src/commands` and can be configured from the panel.
+- **Permission system**: Owner and admin roles, command permissions, aliases,
+  and disabled-command overrides are applied by the bot and the dashboard.
+- **Live control panel**: Connection state, settings, roles, schedules, memory,
+  and logs are available from the browser.
+- **Headless operation**: The WhatsApp session can run without a web panel or
+  open port.
+
+### Core capabilities
+
+#### Commands and moderation
+
+- Utilities for calculations, notes, todos, polls, random values, prayer times,
+  weather, short links, text-to-speech, and speech-to-text
+- Group welcome messages, anti-link protection, anti-spam, media restrictions,
+  warnings, auto-kick, rules, notes, and participant moderation
+- Owner and admin roles, command aliases, per-command permissions, and runtime
+  enable/disable controls
+
+#### AI agent
+
+- Gemini, OpenAI-compatible, and Anthropic providers selected from the panel
+- Web search, page reading, long-term memory, date and time, and role-management
+  tools
+- Conversation history in SQLite and long-term memory as editable Markdown
+- Optional image generation and media-aware prompts
+
+AI is optional. The rest of Levix works without an AI provider key.
+
+#### Scheduling and storage
+
+- One-time and recurring messages stored as durable jobs
+- Delivery status, manual retry, and schedule management from WhatsApp and the
+  panel
+- One SQLite database for settings, schedules, roles, warnings, notes, todos,
+  AI history, WhatsApp authentication, and other bot state
+- A single data directory for the database, WhatsApp session, memory, logs, and
+  temporary media
+
+#### Control panel
+
+- Pairing, start, stop, reconnect, unlink, connection state, and QR display
+- Settings for commands, AI providers, API keys, roles, groups, schedules,
+  memory, proxy, server behavior, and logs
+- Optional HTTP, HTTPS, or SOCKS5 proxy for WhatsApp traffic only
+
+## Prerequisites
+
+- [Node.js](https://nodejs.org/) 24 or newer
+- A phone with WhatsApp and a number with its country code
+- [Git](https://git-scm.com/) for a source checkout
+- [Docker](https://docs.docker.com/get-docker/) for the container installation
+
+Node 24 includes `node:sqlite`, so Levix does not require a separate database
+server or native SQLite installation.
+
+Verify Node.js when installing from npm or source:
+
+```bash
+node --version
+npm --version
+```
+
+## Quick Start
+
+### 1. Install Levix
+
+#### npm
+
+```bash
+npm install -g levix-bot
+levix
+```
+
+#### Linux service installer
 
 The public installer installs the latest stable release and configures Levix as
 a service:
@@ -47,81 +143,44 @@ a service:
 curl -fsSL https://levix.leviro.net/install.sh | bash
 ```
 
-You can [read the installer](deploy/install.sh) before running it.
+Read [deploy/install.sh](deploy/install.sh) before running it if you want to
+inspect the installation steps.
 
-### npm
-
-Requires Node.js 24 or newer:
-
-```bash
-npm install -g levix-bot
-levix
-```
-
-### Docker
+#### Docker
 
 ```bash
 git clone https://github.com/Abdodiab2005/levix
 cd levix
 docker compose up -d
-docker compose logs levix
 ```
 
 Standalone Linux, macOS ARM64, and Windows binaries are available from the
 [latest GitHub release](https://github.com/Abdodiab2005/levix/releases/latest).
 
-When Levix starts:
+### 2. Open the panel
 
-1. Open the panel URL printed in the terminal.
-2. Choose a panel password. A remote first-time setup also asks for the printed
-   setup code.
-3. Open **Connection**, press **Start session**, and scan the QR from WhatsApp.
-4. Send `!ping` in a chat.
+Open the panel URL printed in the terminal. On a first run, choose a panel
+password. Opening setup from another machine also requires the setup code
+printed by Levix.
 
-A successfully linked WhatsApp session resumes automatically after a process,
-Docker, or systemd restart. See [SETUP.md](SETUP.md) for domains, reverse
-proxies, headless mode, backups, and troubleshooting.
+### 3. Pair WhatsApp
 
-## What you get
+Open **Connection**, press **Start session**, and scan the QR code from WhatsApp
+under **Settings → Linked devices → Link a device**.
 
-| Area | What Levix provides |
-| --- | --- |
-| Commands | 55 commands for utilities, notes, reminders, polls, media, speech, weather, prayer times, and more |
-| Group moderation | Welcome messages, anti-link, anti-spam, media rules, warnings, auto-kick, roles, rules, and notes |
-| AI agent | Pick the brain from the panel — Gemini, any OpenAI-compatible server (OpenAI, OpenRouter, Ollama, ...), or Anthropic — with tools for web search, page reading, memory, and role management |
-| Scheduling | One-off, daily, and weekly messages with durable jobs, delivery status, and manual retry |
-| Control panel | Live connection state, command settings, roles, permissions, keys, memory, schedules, and logs |
-| Media | Text, images, video, audio, QR codes, text-to-speech, and speech-to-text |
-| Deployment | npm, Docker, systemd installer, standalone binaries, headless mode, and safe domain setup |
-| Storage | One SQLite database and one data directory for settings, sessions, memory, and logs |
+### 4. Test the bot
 
-Every command can be enabled, disabled, renamed, and assigned permissions from
-the panel without restarting the bot.
+Send the following command in a WhatsApp chat:
 
-### AI that can act
+```text
+!ping
+```
 
-The `!gemini` command is an agent rather than a plain chat box. It can run
-several tool rounds, search the web, read a page, save long-term memories, and
-manage bot roles. It narrates progress by editing one WhatsApp message and lists
-sources when it uses web search.
+A successfully linked session resumes automatically after a process, Docker, or
+systemd restart.
 
-AI is optional. The rest of Levix works without an AI key.
-
-### Persistent schedules and memory
-
-One-off and recurring schedules survive restarts and record their latest
-delivery outcome. Long-term memory is stored as plain Markdown in
-`memory/global.md` or per-chat files, so it remains readable and editable
-outside the panel.
-
-### A connection you control
-
-The panel can start, stop, reconnect, and unlink WhatsApp while showing the
-actual state: idle, waiting for a scan, connected, reconnecting, or stopped.
-Reconnect attempts continue inside the bot even when no browser is open.
-
-An optional HTTP, HTTPS, or SOCKS5 proxy can route WhatsApp traffic, including
-media, without changing how the panel or AI connects.
+See [SETUP.md](SETUP.md) for headless mode, domain setup, reverse proxies,
+backups, keeping Levix running, and troubleshooting.
 
 ## CLI
 
@@ -133,44 +192,184 @@ levix reset-password     reset the panel password
 levix domain [name]      configure a domain safely (may need sudo)
 ```
 
-A fresh panel install waits for you to start the first WhatsApp pairing.
-`levix headless` has no button to press, so it starts the session itself and
-prints the QR in the terminal when needed.
+Panel mode waits for you to start the first WhatsApp pairing. Headless mode has
+no browser button, so it starts the session itself and prints the QR in the
+terminal when needed.
 
-## Data and configuration
+## Configuration
 
-Everything mutable lives in one data directory:
+Levix has no `.env` file and does not use an application configuration file.
+Operator-changeable values are stored in the SQLite database and edited from
+the control panel. Consumers read them at use time, so settings that support
+live changes apply to subsequent operations without a restart.
 
-- npm installation: `~/.levix`
-- source checkout: `./data`
-- Docker: the `levix-data` volume
+| Area            | Examples                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Commands        | Prefix, aliases, enabled or disabled commands, and permissions                                                                        |
+| AI              | `ai_provider`, provider API keys, `gemini_model`, `gemini_stt_model`, `gemini_image_model`, `ai_google_search`, and `openai_base_url` |
+| Groups          | Welcome messages, anti-link, anti-spam, media rules, warning limits, and group rules                                                  |
+| Scheduling      | One-time and recurring jobs, target chats, messages, and delivery state                                                               |
+| Server          | Control-panel port, bind address, public domain, trust proxy, and timezone                                                            |
+| Proxy           | HTTP, HTTPS, or SOCKS5 protocol, host, port, username, and password                                                                   |
+| Media and tools | Reply delays, thumbnails, ffmpeg path, memory limits, and tool timeouts                                                               |
 
-Copying this directory is a full backup, including the SQLite database, WhatsApp
-session, memory, and logs.
+The only environment variable Levix reads is `LEVIX_DATA_DIR`, which selects the
+runtime data directory. Command-line `--data <dir>` takes precedence over it.
 
-The database is the source of truth. The prefix, permissions, API keys, server
-settings, and feature options are stored in `bot_settings` and read at use
-time. There is no `.env` or application configuration file to keep in sync.
+Default data locations are:
 
-Secrets are generated rather than shipped with defaults. The panel password is
-stored as an scrypt hash, and the session-signing key is generated on first
-start.
+| Installation               | Location                |
+| -------------------------- | ----------------------- |
+| npm or global installation | `~/.levix`              |
+| Source checkout            | `./data`                |
+| Docker                     | The `levix-data` volume |
 
-## Architecture
+Copying the data directory backs up the SQLite database, WhatsApp session,
+memory, logs, and other runtime files. The panel password is stored as an scrypt
+hash, and the session-signing key is generated on first start.
 
-- **Node.js 24+** with ES modules and CommonJS where needed.
-- **Baileys v7** for the WhatsApp connection and LID support.
-- **`node:sqlite`** for a single-file datastore with no database server or
-  native SQLite dependency.
-- **Express + EJS** for a panel with no frontend build step or CDN dependency.
-- **Pluggable AI providers** — Gemini, any OpenAI-compatible endpoint, or
-  Anthropic — chosen and keyed from the control panel, no env file.
-- **GitHub Actions** validation for tests, npm packaging, Docker persistence,
-  and standalone executables on Linux, macOS, and Windows.
+## Project Structure
 
-[AGENTS.md](AGENTS.md) documents the module layout, message flow, storage API,
-and architectural constraints. [PACKAGING.md](PACKAGING.md) covers npm, Docker,
-systemd, installers, and single-executable releases.
+| Path                             | Purpose                                                                          |
+| -------------------------------- | -------------------------------------------------------------------------------- |
+| [src/commands](src/commands)     | CommonJS WhatsApp command handlers, including group commands                     |
+| [src/core](src/core)             | WhatsApp socket, session lifecycle, connection handling, and proxy support       |
+| [src/handlers](src/handlers)     | Message, command, and group event routing                                        |
+| [src/middleware](src/middleware) | Message filtering, permissions, anti-spam, blacklist, and forward tracking       |
+| [src/routes](src/routes)         | Dashboard API routes                                                             |
+| [src/services](src/services)     | AI agent, AI providers, and AI tools                                             |
+| [src/db](src/db)                 | SQLite schema, migrations, and storage queries                                   |
+| [src/config](src/config)         | Defaults, runtime settings, paths, brand, AI identity, and Baileys configuration |
+| [views](views)                   | Login, setup, QR, and dashboard EJS views                                        |
+| [public](public)                 | Dashboard JavaScript, CSS, QR library, and brand assets                          |
+| [tests](tests)                   | Automated tests and validation harnesses                                         |
+
+Runtime files are created in the data directory, not beside the source files.
+
+## Command Discovery
+
+Commands are loaded dynamically from [src/commands](src/commands). Each command
+exports its name, aliases, description, chat scope, and execution handler. Group
+subcommands are loaded from the `src/commands/group` directory.
+
+The panel exposes the command catalog and lets an operator change aliases,
+permissions, and enabled state. To view available commands in WhatsApp, send:
+
+```text
+!help
+```
+
+The default command prefix is `!` and can be changed from the panel.
+
+## Command Overview
+
+The command registry loads handlers from [src/commands](src/commands). The
+current command families include:
+
+- **General utilities**: `!ping`, `!help`, `!calc`, `!rand`, `!notes`, `!todo`,
+  `!poll`, `!weather`, and `!prayer`
+- **AI and media**: `!gemini`, `!ask`, `!ai`, `!generate`, `!stt`, and `!tts`
+- **Group moderation**: `!group`, `!antilink`, `!blacklist`, `!warn`, `!media`,
+  and group administration subcommands
+- **Scheduling**: `!schedule`, `!autoschedule`, `!listschedules`, and
+  `!deleteschedule`
+- **Roles and maintenance**: `!perm`, `!status`, `!restart`, `!shutdown`,
+  `!setprefix`, `!block`, and `!unblock`
+
+Use `!help` in WhatsApp for the live command list and usage details. The panel
+also exposes the loaded command catalog and its current aliases, permissions,
+and enabled state.
+
+## Security and Privacy
+
+- The panel is password-protected. A remote first-time setup also requires the
+  setup code printed in the terminal.
+- The panel password is stored as an scrypt hash, and API keys are not returned
+  by the dashboard settings API.
+- The WhatsApp session, database, memory, logs, and temporary media remain in
+  the configured local data directory.
+- The bot does not archive other people's messages. Incoming messages are not
+  permanently stored beyond the state needed for bot features such as forward
+  tracking and sender metadata.
+- Privileged AI actions validate the real message sender in the tool layer;
+  permissions are not granted by prompt text alone.
+
+Do not expose the panel or share setup codes, panel passwords, WhatsApp session
+files, or provider API keys. See [SECURITY.md](SECURITY.md) for reporting
+security issues.
+
+## Deployment Options
+
+### Linux service
+
+Install the latest stable release and configure it as a service:
+
+```bash
+curl -fsSL https://levix.leviro.net/install.sh | bash
+```
+
+To pin the current release:
+
+```bash
+curl -fsSL https://levix.leviro.net/install/v2.2.1.sh | bash
+```
+
+### Docker
+
+```bash
+git clone https://github.com/Abdodiab2005/levix
+cd levix
+docker compose up -d
+```
+
+The `levix-data` volume keeps the database and WhatsApp session between
+container restarts.
+
+### Headless mode
+
+Run Levix without the web interface or an open HTTP port:
+
+```bash
+levix headless
+```
+
+Headless mode starts the WhatsApp session automatically and prints a QR in the
+terminal when pairing is required.
+
+### Domain setup
+
+Configure a domain and reverse proxy with:
+
+```bash
+sudo levix domain bot.example.com
+```
+
+Levix detects the existing web server or hosting panel, validates generated
+configuration before reloading it, and changes only the Levix-specific site.
+Apache, hosting panels, containers, and unrecognised listeners receive
+instructions instead of being modified.
+
+### Proxy settings
+
+An optional HTTP, HTTPS, or SOCKS5 proxy can be configured under **Settings**.
+It applies to WhatsApp traffic, including media, while the control panel and AI
+providers continue to use their direct connections. Saving proxy settings does
+not interrupt a healthy session; reconnect the session from **Connection** to
+apply a pending change.
+
+## Contributing
+
+Before making a substantial change, read [CONTRIBUTING.md](CONTRIBUTING.md).
+The usual local workflow is:
+
+```bash
+npm ci
+npm test
+```
+
+When adding a command, create a CommonJS handler in [src/commands](src/commands)
+that exports its name, aliases, description, chat scope, and execution handler.
+The loader and dashboard catalog discover it automatically.
 
 ## Development
 
@@ -182,11 +381,58 @@ npm test
 npm start
 ```
 
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing a substantial
-change. Bug reports and focused pull requests are welcome.
+Useful validation commands:
 
+```bash
+npm run validate:tarball
+npm run validate:sea
+npm run validate:docker
+```
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing a substantial change.
 For security issues, follow [SECURITY.md](SECURITY.md) and report them
-privately rather than opening a public issue.
+privately.
+
+## Troubleshooting
+
+**The panel does not open**
+
+- Check the panel URL and port printed in the terminal.
+- Use `levix where` to confirm the active data directory.
+- If the panel password is forgotten, run `levix reset-password`.
+
+**Pairing does not complete**
+
+- Open **Connection** and press **Start session** before scanning the QR.
+- Scan the current QR from WhatsApp's linked-device screen.
+- For a remote first-time setup, provide the setup code printed in the terminal.
+
+**The bot is not answering**
+
+- Check the connection state in the panel.
+- Allow the session to reconnect, or use **Reconnect** from the Connection
+  screen.
+- If WhatsApp logged out the session, pair it again with a new QR code.
+
+**An AI command fails**
+
+- Select the intended provider in **Settings**.
+- Confirm that its API key and model settings are configured.
+- Check the panel logs and provider-specific settings.
+
+**The panel password is forgotten**
+
+```bash
+levix reset-password
+```
+
+This resets the panel password without unlinking the WhatsApp session.
+
+## Support
+
+For bugs, feature requests, and questions, open an issue in the
+[Levix repository](https://github.com/Abdodiab2005/levix). Read [SETUP.md](SETUP.md)
+for the full installation and deployment guide.
 
 ## License
 
