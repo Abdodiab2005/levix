@@ -55,9 +55,21 @@ section("the provider selector");
   );
   equal("and gemini is the default", selector.default, "gemini");
   equal("…which is what a fresh install runs", settings.get("ai_provider"), "gemini");
+  equal(
+    "provider labels are human-facing while values stay stable",
+    JSON.stringify(selector.choiceLabels),
+    JSON.stringify({
+      gemini: "Google Gemini",
+      openai: "OpenAI / compatible",
+      anthropic: "Anthropic Claude",
+    })
+  );
 
   // The provider has its own key/model/base-URL settings, all panel-visible.
   for (const key of [
+    "gemini_api_key",
+    "gemini_base_url",
+    "gemini_model",
     "openai_api_key",
     "openai_base_url",
     "openai_model",
@@ -67,6 +79,12 @@ section("the provider selector");
   ]) {
     ok(`${key} is a setting`, described.some((entry) => entry.key === key));
   }
+  const geminiBase = described.find((entry) => entry.key === "gemini_base_url");
+  equal(
+    "the Gemini base URL defaults to Google's API root",
+    geminiBase.default,
+    "https://generativelanguage.googleapis.com"
+  );
   const openaiBase = described.find((entry) => entry.key === "openai_base_url");
   equal("the openai base URL defaults to OpenAI itself", openaiBase.default, "https://api.openai.com/v1");
 

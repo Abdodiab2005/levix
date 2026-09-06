@@ -7,7 +7,7 @@ working with code in this repository.
 
 **Levix** — a self-hosted personal WhatsApp bot built with Node.js and
 **Baileys v7**: a command system (55 commands), group moderation, an AI agent
-whose provider (Gemini / OpenAI-compatible / Anthropic) is chosen in the panel,
+whose provider (Google Gemini / OpenAI-compatible / Anthropic) is chosen in the panel with its own endpoint, API key and model,
 scheduled messages, and a web control panel that changes
 almost all of it live. The database is the source of truth and the panel is how
 you edit it: there is no `.env`, no config file, and nothing to install beside
@@ -31,7 +31,7 @@ project); it is simply not operator-configurable.
   datastore costs zero dependencies and there is no server to install
 - **AI**: `@google/genai` (the Gemini path), plus hand-rolled `fetch` clients
   for the OpenAI-compatible and Anthropic providers — the provider is the
-  `ai_provider` panel setting, default model `gemini-3.7-flash`
+  `ai_provider` panel setting; every provider has endpoint/key/model settings and the default chat model is `gemini-3.7-flash`
 - **Web Server**: Express.js (the control panel)
 - **Logging**: Pino with pino-pretty
 - **Scheduling**: `node-cron`

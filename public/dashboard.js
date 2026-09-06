@@ -1167,7 +1167,7 @@
             ${setting.choices
               .map(
                 (choice) =>
-                  `<option value="${esc(choice)}"${choice === setting.value ? " selected" : ""}>${esc(choice)}</option>`
+                  `<option value="${esc(choice)}"${choice === setting.value ? " selected" : ""}>${esc(setting.choiceLabels?.[choice] || choice)}</option>`
               )
               .join("")}
           </select>

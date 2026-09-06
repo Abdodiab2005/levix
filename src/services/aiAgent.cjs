@@ -40,13 +40,18 @@ const {
 // client whose model and per-request configuration are passed at call time —
 // which suits Levix, because the model and the tool set are settings that may
 // change between one message and the next.
-let clientCache = { key: null, client: null };
+let clientCache = { key: null, baseUrl: null, client: null };
 
 function geminiClient() {
   const key = settings.get("gemini_api_key");
   if (!key) return null;
-  if (clientCache.key !== key) {
-    clientCache = { key, client: new GoogleGenAI({ apiKey: key }) };
+  const baseUrl = String(settings.get("gemini_base_url")).replace(/\/+$/, "");
+  if (clientCache.key !== key || clientCache.baseUrl !== baseUrl) {
+    clientCache = {
+      key,
+      baseUrl,
+      client: new GoogleGenAI({ apiKey: key, httpOptions: { baseUrl } }),
+    };
   }
   return clientCache.client;
 }

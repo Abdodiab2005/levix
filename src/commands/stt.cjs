@@ -13,13 +13,18 @@ const settings = require("../config/settings.cjs");
 //
 // One @google/genai client covers both halves: `ai.files` replaced the separate
 // GoogleAIFileManager, and the model is named per request.
-let cache = { key: null, genAI: null };
+let cache = { key: null, baseUrl: null, genAI: null };
 
 function geminiStt() {
   const key = settings.get("gemini_api_key");
   if (!key) return null;
-  if (cache.key !== key) {
-    cache = { key, genAI: new GoogleGenAI({ apiKey: key }) };
+  const baseUrl = String(settings.get("gemini_base_url")).replace(/\/+$/, "");
+  if (cache.key !== key || cache.baseUrl !== baseUrl) {
+    cache = {
+      key,
+      baseUrl,
+      genAI: new GoogleGenAI({ apiKey: key, httpOptions: { baseUrl } }),
+    };
   }
   return cache;
 }
