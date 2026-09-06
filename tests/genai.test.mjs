@@ -33,25 +33,21 @@ useTempDataDir("levix-genai");
 
 const settings = harnessRequire("./src/config/settings.cjs");
 
-// The SDK resolves its base URL at CLIENT CONSTRUCTION, in this order:
-// httpOptions.baseUrl, then setDefaultBaseUrls(), then $GOOGLE_GEMINI_BASE_URL.
-// The env var is the one to use here: aiAgent loads the SDK through CJS and
-// this file through ESM, which are two module instances with two sets of
-// module-level state, so setDefaultBaseUrls() in one is invisible to the other.
-// The environment is shared by both.
+// Gemini's base URL is an ordinary dashboard setting. The client cache is
+// keyed by both API key and endpoint, so changing only the endpoint applies to
+// the very next call without a restart.
 settings.set("gemini_api_key", "test-key-not-real");
 const aiAgent = harnessRequire("./src/services/aiAgent.cjs");
 
 /** Point the agent at a fresh set of scripted replies. */
 async function withReplies(replies, run) {
   const fake = await startGenaiServer(replies);
-  process.env.GOOGLE_GEMINI_BASE_URL = fake.baseUrl;
-  // The client is cached per API key; a new key forces it to be rebuilt, and
-  // the rebuild is what picks up the base URL above.
+  settings.set("gemini_base_url", fake.baseUrl);
   settings.set("gemini_api_key", `key-${Math.random().toString(36).slice(2)}`);
   try {
     return await run(fake);
   } finally {
+    settings.set("gemini_base_url", "");
     await fake.stop();
   }
 }
@@ -128,6 +124,37 @@ section("the default models");
   settings.set("gemini_model", "gemini-3.1-pro-preview");
   equal("moving the chat model leaves !stt on Flash", settings.get("gemini_stt_model"), "gemini-3.7-flash");
   settings.set("gemini_model", "");
+}
+
+section("Gemini endpoint changes apply without changing the key");
+
+{
+  const key = `endpoint-key-${Math.random().toString(36).slice(2)}`;
+  settings.set("ai_provider", "gemini");
+  settings.set("gemini_api_key", key);
+  settings.set("ai_google_search", false);
+
+  const first = await startGenaiServer([textReply("first endpoint")]);
+  settings.set("gemini_base_url", first.baseUrl);
+  try {
+    const result = await aiAgent.runAgent({ parts: [{ text: "one" }], history: [] });
+    equal("the first custom endpoint answered", result.text, "first endpoint");
+    ok("the first endpoint received the request", !!first.body(0));
+  } finally {
+    await first.stop();
+  }
+
+  const second = await startGenaiServer([textReply("second endpoint")]);
+  settings.set("gemini_base_url", `${second.baseUrl}/`);
+  try {
+    const result = await aiAgent.runAgent({ parts: [{ text: "two" }], history: [] });
+    equal("changing only the endpoint rebuilds the client", result.text, "second endpoint");
+    ok("the second endpoint received the request", !!second.body(0));
+  } finally {
+    settings.set("gemini_base_url", "");
+    settings.set("ai_google_search", true);
+    await second.stop();
+  }
 }
 
 section("Google Search and Levix's own tools travel in the same request");

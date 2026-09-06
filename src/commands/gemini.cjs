@@ -73,13 +73,18 @@ function setBuffer(msg, entries) {
 // One client does everything now: @google/genai folded the separate
 // GoogleAIFileManager into `ai.files`, and the model is named per request
 // instead of being baked into a model object.
-let geminiCache = { key: null, genAI: null };
+let geminiCache = { key: null, baseUrl: null, genAI: null };
 
 function geminiClients() {
   const key = settings.get("gemini_api_key");
   if (!key) return { genAI: null };
-  if (geminiCache.key !== key) {
-    geminiCache = { key, genAI: new GoogleGenAI({ apiKey: key }) };
+  const baseUrl = String(settings.get("gemini_base_url")).replace(/\/+$/, "");
+  if (geminiCache.key !== key || geminiCache.baseUrl !== baseUrl) {
+    geminiCache = {
+      key,
+      baseUrl,
+      genAI: new GoogleGenAI({ apiKey: key, httpOptions: { baseUrl } }),
+    };
   }
   return geminiCache;
 }

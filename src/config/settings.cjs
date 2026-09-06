@@ -58,6 +58,11 @@ const SETTINGS = [
     type: "string",
     default: "gemini",
     choices: ["gemini", "openai", "anthropic"],
+    choiceLabels: {
+      gemini: "Google Gemini",
+      openai: "OpenAI / compatible",
+      anthropic: "Anthropic Claude",
+    },
     group: "ai",
     label: "AI provider",
     hint: "Which API answers chats. gemini = Google Gemini (the only one that reads media and has built-in Google Search). openai = any OpenAI-compatible chat-completions server. anthropic = Claude.",
@@ -69,6 +74,14 @@ const SETTINGS = [
     group: "ai",
     label: "Gemini API key",
     hint: "Free key from aistudio.google.com/apikey. Needed when the provider is gemini, and by !stt / !generate in every case.",
+  },
+  {
+    key: "gemini_base_url",
+    type: "string",
+    default: "https://generativelanguage.googleapis.com",
+    group: "ai",
+    label: "Google Gemini base URL",
+    hint: "Google Generative Language API root. Change it for a proxy or compatible gateway; do not append /v1beta. Applies live to chat, media uploads, !stt and !generate.",
   },
   {
     key: "gemini_model",
@@ -512,6 +525,7 @@ function describe() {
       min: definition.min ?? null,
       max: definition.max ?? null,
       choices: definition.choices ?? null,
+      choiceLabels: definition.choiceLabels ?? null,
       restart: definition.restart === true,
       source: sourceOf(definition.key),
     };
