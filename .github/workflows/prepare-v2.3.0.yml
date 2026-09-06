@@ -1,0 +1,160 @@
+name: prepare v2.3.0
+
+on:
+  push:
+    branches: [release/v2.3.0]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: release/v2.3.0
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Complete per-provider endpoint support
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          # Settings: present friendly provider names and give Google/Gemini the
+          # same endpoint + key + model contract OpenAI and Anthropic already have.
+          replace_once(
+              "src/config/settings.cjs",
+              '    choices: ["gemini", "openai", "anthropic"],\n    group: "ai",',
+              '    choices: ["gemini", "openai", "anthropic"],\n    choiceLabels: {\n      gemini: "Google Gemini",\n      openai: "OpenAI / compatible",\n      anthropic: "Anthropic Claude",\n    },\n    group: "ai",'
+          )
+          replace_once(
+              "src/config/settings.cjs",
+              '''  {\n    key: "gemini_model",\n    type: "string",''',
+              '''  {\n    key: "gemini_base_url",\n    type: "string",\n    default: "https://generativelanguage.googleapis.com",\n    group: "ai",\n    label: "Google Gemini base URL",\n    hint: "Google Generative Language API root. Change it for a proxy or compatible gateway; do not append /v1beta. Applies live to chat, media uploads, !stt and !generate.",\n  },\n  {\n    key: "gemini_model",\n    type: "string",'''
+          )
+          replace_once(
+              "src/config/settings.cjs",
+              '      choices: definition.choices ?? null,\n      restart: definition.restart === true,',
+              '      choices: definition.choices ?? null,\n      choiceLabels: definition.choiceLabels ?? null,\n      restart: definition.restart === true,'
+          )
+
+          # Dashboard: keep stable internal values while showing human provider names.
+          replace_once(
+              "public/dashboard.js",
+              '`<option value="${esc(choice)}"${choice === setting.value ? " selected" : ""}>${esc(choice)}</option>`',
+              '`<option value="${esc(choice)}"${choice === setting.value ? " selected" : ""}>${esc(setting.choiceLabels?.[choice] || choice)}</option>`'
+          )
+
+          # Gemini agent client: endpoint is a live setting, so cache by key + URL.
+          replace_once(
+              "src/services/aiAgent.cjs",
+              '''let clientCache = { key: null, client: null };\n\nfunction geminiClient() {\n  const key = settings.get("gemini_api_key");\n  if (!key) return null;\n  if (clientCache.key !== key) {\n    clientCache = { key, client: new GoogleGenAI({ apiKey: key }) };\n  }\n  return clientCache.client;\n}''',
+              '''let clientCache = { key: null, baseUrl: null, client: null };\n\nfunction geminiClient() {\n  const key = settings.get("gemini_api_key");\n  if (!key) return null;\n  const baseUrl = String(settings.get("gemini_base_url")).replace(/\\/+$/, "");\n  if (clientCache.key !== key || clientCache.baseUrl !== baseUrl) {\n    clientCache = {\n      key,\n      baseUrl,\n      client: new GoogleGenAI({ apiKey: key, httpOptions: { baseUrl } }),\n    };\n  }\n  return clientCache.client;\n}'''
+          )
+
+          # Gemini media/image client follows the same endpoint live.
+          replace_once(
+              "src/commands/gemini.cjs",
+              '''let geminiCache = { key: null, genAI: null };\n\nfunction geminiClients() {\n  const key = settings.get("gemini_api_key");\n  if (!key) return { genAI: null };\n  if (geminiCache.key !== key) {\n    geminiCache = { key, genAI: new GoogleGenAI({ apiKey: key }) };\n  }\n  return geminiCache;\n}''',
+              '''let geminiCache = { key: null, baseUrl: null, genAI: null };\n\nfunction geminiClients() {\n  const key = settings.get("gemini_api_key");\n  if (!key) return { genAI: null };\n  const baseUrl = String(settings.get("gemini_base_url")).replace(/\\/+$/, "");\n  if (geminiCache.key !== key || geminiCache.baseUrl !== baseUrl) {\n    geminiCache = {\n      key,\n      baseUrl,\n      genAI: new GoogleGenAI({ apiKey: key, httpOptions: { baseUrl } }),\n    };\n  }\n  return geminiCache;\n}'''
+          )
+
+          # STT is Gemini-only but must honor the operator's Google endpoint too.
+          replace_once(
+              "src/commands/stt.cjs",
+              '''let cache = { key: null, genAI: null };\n\nfunction geminiStt() {\n  const key = settings.get("gemini_api_key");\n  if (!key) return null;\n  if (cache.key !== key) {\n    cache = { key, genAI: new GoogleGenAI({ apiKey: key }) };\n  }\n  return cache;\n}''',
+              '''let cache = { key: null, baseUrl: null, genAI: null };\n\nfunction geminiStt() {\n  const key = settings.get("gemini_api_key");\n  if (!key) return null;\n  const baseUrl = String(settings.get("gemini_base_url")).replace(/\\/+$/, "");\n  if (cache.key !== key || cache.baseUrl !== baseUrl) {\n    cache = {\n      key,\n      baseUrl,\n      genAI: new GoogleGenAI({ apiKey: key, httpOptions: { baseUrl } }),\n    };\n  }\n  return cache;\n}'''
+          )
+
+          # Provider contract tests now cover endpoint/key/model for all three.
+          replace_once(
+              "tests/providers.test.mjs",
+              '''  for (const key of [\n    "openai_api_key",''',
+              '''  for (const key of [\n    "gemini_api_key",\n    "gemini_base_url",\n    "gemini_model",\n    "openai_api_key",'''
+          )
+          replace_once(
+              "tests/providers.test.mjs",
+              '''  equal("and gemini is the default", selector.default, "gemini");\n  equal("…which is what a fresh install runs", settings.get("ai_provider"), "gemini");''',
+              '''  equal("and gemini is the default", selector.default, "gemini");\n  equal("…which is what a fresh install runs", settings.get("ai_provider"), "gemini");\n  equal(\n    "provider labels are human-facing while values stay stable",\n    JSON.stringify(selector.choiceLabels),\n    JSON.stringify({\n      gemini: "Google Gemini",\n      openai: "OpenAI / compatible",\n      anthropic: "Anthropic Claude",\n    })\n  );'''
+          )
+          replace_once(
+              "tests/providers.test.mjs",
+              '''  const openaiBase = described.find((entry) => entry.key === "openai_base_url");\n  equal("the openai base URL defaults to OpenAI itself", openaiBase.default, "https://api.openai.com/v1");''',
+              '''  const geminiBase = described.find((entry) => entry.key === "gemini_base_url");\n  equal(\n    "the Gemini base URL defaults to Google's API root",\n    geminiBase.default,\n    "https://generativelanguage.googleapis.com"\n  );\n  const openaiBase = described.find((entry) => entry.key === "openai_base_url");\n  equal("the openai base URL defaults to OpenAI itself", openaiBase.default, "https://api.openai.com/v1");'''
+          )
+
+          # Gemini integration tests use the dashboard setting rather than an env override.
+          replace_once(
+              "tests/genai.test.mjs",
+              '''// The SDK resolves its base URL at CLIENT CONSTRUCTION, in this order:\n// httpOptions.baseUrl, then setDefaultBaseUrls(), then $GOOGLE_GEMINI_BASE_URL.\n// The env var is the one to use here: aiAgent loads the SDK through CJS and\n// this file through ESM, which are two module instances with two sets of\n// module-level state, so setDefaultBaseUrls() in one is invisible to the other.\n// The environment is shared by both.\nsettings.set("gemini_api_key", "test-key-not-real");''',
+              '''// Gemini's base URL is an ordinary dashboard setting. The client cache is\n// keyed by both API key and endpoint, so changing only the endpoint applies to\n// the very next call without a restart.\nsettings.set("gemini_api_key", "test-key-not-real");'''
+          )
+          replace_once(
+              "tests/genai.test.mjs",
+              '''async function withReplies(replies, run) {\n  const fake = await startGenaiServer(replies);\n  process.env.GOOGLE_GEMINI_BASE_URL = fake.baseUrl;\n  // The client is cached per API key; a new key forces it to be rebuilt, and\n  // the rebuild is what picks up the base URL above.\n  settings.set("gemini_api_key", `key-${Math.random().toString(36).slice(2)}`);\n  try {\n    return await run(fake);\n  } finally {\n    await fake.stop();\n  }\n}''',
+              '''async function withReplies(replies, run) {\n  const fake = await startGenaiServer(replies);\n  settings.set("gemini_base_url", fake.baseUrl);\n  settings.set("gemini_api_key", `key-${Math.random().toString(36).slice(2)}`);\n  try {\n    return await run(fake);\n  } finally {\n    settings.set("gemini_base_url", "");\n    await fake.stop();\n  }\n}'''
+          )
+          replace_once(
+              "tests/genai.test.mjs",
+              'section("Google Search and Levix\'s own tools travel in the same request");',
+              '''section("Gemini endpoint changes apply without changing the key");\n\n{\n  const key = `endpoint-key-${Math.random().toString(36).slice(2)}`;\n  settings.set("ai_provider", "gemini");\n  settings.set("gemini_api_key", key);\n  settings.set("ai_google_search", false);\n\n  const first = await startGenaiServer([textReply("first endpoint")]);\n  settings.set("gemini_base_url", first.baseUrl);\n  try {\n    const result = await aiAgent.runAgent({ parts: [{ text: "one" }], history: [] });\n    equal("the first custom endpoint answered", result.text, "first endpoint");\n    ok("the first endpoint received the request", !!first.body(0));\n  } finally {\n    await first.stop();\n  }\n\n  const second = await startGenaiServer([textReply("second endpoint")]);\n  settings.set("gemini_base_url", `${second.baseUrl}/`);\n  try {\n    const result = await aiAgent.runAgent({ parts: [{ text: "two" }], history: [] });\n    equal("changing only the endpoint rebuilds the client", result.text, "second endpoint");\n    ok("the second endpoint received the request", !!second.body(0));\n  } finally {\n    settings.set("gemini_base_url", "");\n    settings.set("ai_google_search", true);\n    await second.stop();\n  }\n}\n\nsection("Google Search and Levix's own tools travel in the same request");'''
+          )
+
+          # Public docs: spell out the same provider contract users see in Settings.
+          replace_once(
+              "README.md",
+              'AI agent | Pick the brain from the panel — Gemini, any OpenAI-compatible server (OpenAI, OpenRouter, Ollama, ...), or Anthropic — with tools for web search, page reading, memory, and role management |',
+              'AI agent | Pick Google Gemini, OpenAI / any OpenAI-compatible server, or Anthropic from the panel; each provider has its own endpoint, API key, and model, with tools for web search, page reading, memory, and role management |'
+          )
+          replace_once(
+              "README.md",
+              '**Pluggable AI providers** — Gemini, any OpenAI-compatible endpoint, or\n  Anthropic — chosen and keyed from the control panel, no env file.',
+              '**Pluggable AI providers** — Google Gemini, OpenAI / any OpenAI-compatible endpoint, or\n  Anthropic — each with its own endpoint, API key, and model in the control panel, no env file.'
+          )
+          replace_once(
+              "AGENTS.md",
+              'whose provider (Gemini / OpenAI-compatible / Anthropic) is chosen in the panel,',
+              'whose provider (Google Gemini / OpenAI-compatible / Anthropic) is chosen in the panel with its own endpoint, API key and model,'
+          )
+          replace_once(
+              "AGENTS.md",
+              '`ai_provider` panel setting, default model `gemini-3.7-flash`',
+              '`ai_provider` panel setting; every provider has endpoint/key/model settings and the default chat model is `gemini-3.7-flash`'
+          )
+
+          # npm discoverability for the newly released provider feature.
+          replace_once(
+              "package.json",
+              '    "gemini",\n    "ai-agent",',
+              '    "gemini",\n    "openai",\n    "anthropic",\n    "openai-compatible",\n    "ai-agent",'
+          )
+          PY
+
+          npm version 2.3.0 --no-git-tag-version
+          npm ci
+          npm test
+
+      - name: Commit the release branch
+        shell: bash
+        run: |
+          rm .github/workflows/prepare-v2.3.0.yml
+          git config user.name "Abdelrhman Diab"
+          git config user.email "140413660+Abdodiab2005@users.noreply.github.com"
+          git add -A
+          git commit -m "feat(ai): complete configurable provider endpoints for v2.3.0"
+          git push origin HEAD:release/v2.3.0
