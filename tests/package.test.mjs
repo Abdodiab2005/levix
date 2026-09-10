@@ -97,6 +97,7 @@ const forbidden = [
   [/_manifest\.cjs$/, "a generated SEA manifest"],
   [/\.tgz$/, "a packed tarball"],
   [/(^|\/)\.github\//, "CI workflows"],
+  [/(^|\/)android\//, "the Android host project"],
   [/(^|\/)Dockerfile$/, "the Dockerfile"],
   [/levix\.lock$/, "a lock file"],
 ];
