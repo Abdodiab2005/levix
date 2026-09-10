@@ -340,7 +340,7 @@
                     autocomplete="tel"
                     placeholder="2010…"
                   />
-                  <p class="hint">Digits only, including the country code. No + or spaces.</p>
+                  <p class="hint">This WhatsApp’s own number. Country code, no leading 0 (Egypt: 2010… not 010…).</p>
                 </div>
               </div>
 
@@ -383,11 +383,12 @@
                 </div>
                 <div class="qr-box" id="pairing-box" hidden>
                   <div class="pairing-code" id="pairing-code">••••-••••</div>
+                  <div class="hint" id="pairing-phone"></div>
                   <div class="hint" id="pairing-note">Waiting for a pairing code…</div>
                   <ol class="steps">
-                    <li>On that same WhatsApp, open Settings → Linked devices.</li>
+                    <li>Open WhatsApp on that number → Settings → Linked devices.</li>
                     <li>Link a device → Link with phone number instead.</li>
-                    <li>Enter the code above.</li>
+                    <li>Type the code above. Get a new code if it fails.</li>
                   </ol>
                 </div>
               </div>

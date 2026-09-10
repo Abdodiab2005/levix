@@ -22,8 +22,13 @@ export function setRecentMessageGetter(fn) {
   getRecentMessage = fn;
 }
 
-export const getBaileysConfig = (cachedGroupMetadata) => ({
-  browser: Browsers.windows("Desktop"),
+// QR pairing is happy with a Windows desktop companion. Pairing *codes*
+// are not: WhatsApp rejects them unless the companion looks like Chrome.
+export const BAILEYS_BROWSER_QR = Browsers.windows("Desktop");
+export const BAILEYS_BROWSER_PAIRING = Browsers.macOS("Chrome");
+
+export const getBaileysConfig = (cachedGroupMetadata, { pairingCode = false } = {}) => ({
+  browser: pairingCode ? BAILEYS_BROWSER_PAIRING : BAILEYS_BROWSER_QR,
   markOnlineOnConnect: false,
   logger: pino({ level: "silent" }),
   cachedGroupMetadata,

@@ -329,14 +329,18 @@
     $("#qr-note").textContent = "Waiting for a QR code…";
   }
 
-  function renderPairingCode(code) {
+  function renderPairingCode(code, phone) {
     if (!code || pairingRendered === code) return;
     pairingRendered = code;
     const el = $("#pairing-code");
     if (el) el.textContent = formatPairingCode(code);
+    const phoneEl = $("#pairing-phone");
+    if (phoneEl) {
+      phoneEl.textContent = phone ? `For WhatsApp +${phone}` : "";
+    }
     const note = $("#pairing-note");
     if (note) {
-      note.textContent = "Enter it in WhatsApp → Linked devices → Link with phone number.";
+      note.textContent = "Link with phone number instead — not the QR camera.";
     }
   }
 
@@ -344,6 +348,8 @@
     pairingRendered = null;
     const el = $("#pairing-code");
     if (el) el.textContent = "••••-••••";
+    const phoneEl = $("#pairing-phone");
+    if (phoneEl) phoneEl.textContent = "";
     const note = $("#pairing-note");
     if (note) note.textContent = "Waiting for a pairing code…";
   }
@@ -446,7 +452,7 @@
       setStatus(session);
       renderConnection();
       if (session.state === "waiting_for_qr") {
-        if (pairingCode) renderPairingCode(pairingCode);
+        if (pairingCode) renderPairingCode(pairingCode, session.pairingPhone);
         else if (qr) renderQr(qr);
       }
     }),
@@ -1347,7 +1353,7 @@
 
     socket.on("pairing_code", (payload) => {
       const code = payload && payload.code;
-      if (code) renderPairingCode(code);
+      if (code) renderPairingCode(code, payload.phone);
       if (currentView !== "connection") {
         toast("A pairing code is ready — open Connection to enter it.");
       }

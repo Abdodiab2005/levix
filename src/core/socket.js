@@ -54,7 +54,7 @@ function withThumbnailSupport(sock) {
  *   rather than read here, so this factory stays a pure function of its
  *   arguments and a test can hand it a fake.
  */
-export async function createWhatsAppSocket({ proxy = null } = {}) {
+export async function createWhatsAppSocket({ proxy = null, pairingCode = false } = {}) {
   logger.info(
     proxy
       ? `[Socket] Initializing WhatsApp socket through ${proxy.label}`
@@ -64,16 +64,15 @@ export async function createWhatsAppSocket({ proxy = null } = {}) {
   const { state, saveCreds, clearAll } = await useDatabaseAuthState();
 
   // Whether this install is already paired. NOT `store.hasCredentials()`: the
-  // auth state writes a `creds` row on its very first call, paired or not, so
-  // that row proves nothing. `creds.me.id` is only filled in by a successful
-  // pairing, which is exactly the question the session manager is asking —
-  // it decides whether a close is a failed pairing attempt or a dropped
-  // connection worth retrying.
-  const isPaired = !!state?.creds?.me?.id;
+  // auth state writes a `creds` row on its very first call, paired or not.
+  // `requestPairingCode` also writes `creds.me.id` *before* the phone accepts
+  // the code, so `me.id` alone is not proof. `registered === false` means the
+  // handshake never finished.
+  const isPaired = !!state?.creds?.me?.id && state?.creds?.registered !== false;
 
   const cachedGroupMetadata = (jid) => groupMetadataCache.get(jid);
 
-  const config = getBaileysConfig(cachedGroupMetadata);
+  const config = getBaileysConfig(cachedGroupMetadata, { pairingCode });
 
   // Three separate hooks, because Baileys has three separate network paths:
   //   agent              -> the `ws` WebSocket        (https.request, classic agent)

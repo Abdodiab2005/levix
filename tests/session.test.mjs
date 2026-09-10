@@ -82,6 +82,7 @@ function makeHarness({ paired = false, retryDelaysMs, clearAll } = {}) {
     emit: (event, payload) => events.push({ event, payload }),
     retryDelaysMs,
     log: silent,
+    pairingCodeDelayMs: 0,
   });
 
   return {
@@ -744,6 +745,13 @@ section("pairing phone numbers are digits with a country code");
 {
   equal("strips plus and spaces", normalizePairingPhone("+20 10 1234 5678"), "201012345678");
   equal("accepts Arabic-Indic digits", normalizePairingPhone("٢٠١٠١٢٣٤٥٦٧٨"), "201012345678");
+  let leadingZero = false;
+  try {
+    normalizePairingPhone("01012345678");
+  } catch (error) {
+    leadingZero = error.code === "PAIRING_PHONE";
+  }
+  ok("a local number starting with 0 is rejected", leadingZero);
   equal("qr is the default method", parseStartOptions({}).method, "qr");
   equal("pairing keeps the number", parseStartOptions({ method: "pairing", phone: "201012345678" }).phone, "201012345678");
   let threw = false;
@@ -779,7 +787,12 @@ section("pairing code is chosen before the socket is created");
   ok("no qr event was emitted", !h.events.some((e) => e.event === "qr"));
   ok(
     "the pairing_code event carries the code",
-    h.events.some((e) => e.event === "pairing_code" && e.payload.code === "ABCD1234")
+    h.events.some(
+      (e) =>
+        e.event === "pairing_code" &&
+        e.payload.code === "ABCD1234" &&
+        e.payload.phone === "201012345678"
+    )
   );
   equal("the number was given to Baileys", h.latest().pairingPhone, "201012345678");
   ok("getState does not include the code", h.session.getState().hasPairingCode === true);

@@ -87,6 +87,13 @@ export function normalizePairingPhone(input) {
   value = value.replace(ARABIC_INDIC, (ch) => String(ch.charCodeAt(0) - 0x0660));
   value = value.replace(EASTERN_ARABIC, (ch) => String(ch.charCodeAt(0) - 0x06f0));
   const digits = value.replace(/\D/g, "");
+  if (digits.startsWith("0")) {
+    const error = new Error(
+      "Drop the leading 0 and include the country code (e.g. 2010… not 010…)."
+    );
+    error.code = "PAIRING_PHONE";
+    throw error;
+  }
   if (digits.length < 8 || digits.length > 15) {
     const error = new Error(
       "Enter the WhatsApp number with country code, digits only (e.g. 2010…)."
@@ -208,6 +215,7 @@ export class WhatsAppSession {
     emit = () => {},
     retryDelaysMs = RETRY_SCHEDULE_MS,
     log = logger,
+    pairingCodeDelayMs = 1500,
   } = {}) {
     this.createSocket = createSocket;
     this.attachListeners = attachListeners;
@@ -220,6 +228,7 @@ export class WhatsAppSession {
     this.clearCredentials = clearCredentials;
     this.retryDelaysMs = retryDelaysMs;
     this.log = log;
+    this.pairingCodeDelayMs = pairingCodeDelayMs;
   }
 
   // -------------------------------------------------------------------------
@@ -285,6 +294,8 @@ export class WhatsAppSession {
       hasQr: !!this.#qr,
       hasPairingCode: !!this.#pairingCode,
       pairingMethod: this.#pairingIntent?.method || "qr",
+      pairingPhone:
+        this.#pairingIntent?.method === "pairing" ? this.#pairingIntent.phone : null,
       reason: this.#reason,
       detail: this.#detail,
       lastDisconnect: this.#lastDisconnect,
@@ -479,7 +490,10 @@ export class WhatsAppSession {
 
     let created;
     try {
-      created = await this.createSocket({ proxy });
+      created = await this.createSocket({
+        proxy,
+        pairingCode: this.#pairingIntent.method === "pairing",
+      });
     } catch (error) {
       this.log.error({ err: error }, "[Session] failed to create the WhatsApp socket");
       this.#transition(S.ERROR, {
@@ -691,6 +705,10 @@ export class WhatsAppSession {
 
     this.#pairingCodeRequest = (async () => {
       try {
+        if (this.pairingCodeDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, this.pairingCodeDelayMs));
+        }
+        if (!this.#pairing || this.#shuttingDown) return;
         const raw = await sock.requestPairingCode(phone);
         if (!this.#pairing || this.#shuttingDown) return;
         this.#pairingCode = String(raw || "").replace(/\s|-/g, "");
@@ -699,7 +717,10 @@ export class WhatsAppSession {
           detail:
             "Enter the code in WhatsApp → Linked devices → Link with phone number.",
         });
-        this.emitEvent("pairing_code", { code: this.#pairingCode });
+        this.emitEvent("pairing_code", {
+          code: this.#pairingCode,
+          phone,
+        });
       } catch (error) {
         this.log.error(
           { err: error?.message },
