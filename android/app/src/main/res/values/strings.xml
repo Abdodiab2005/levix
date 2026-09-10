@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Levix</string>
-    <string name="host_shell_note">Levix core on this phone. WhatsApp linking is still in the panel (later).</string>
+    <string name="host_shell_note">Levix core on this phone. Open Panel to link WhatsApp.</string>
     <string name="status_stopped">Stopped</string>
     <string name="status_running">Running</string>
     <string name="node_none">Node: not started</string>
@@ -35,4 +35,7 @@
     <string name="notif_stop">Stop</string>
     <string name="notif_channel_name">Levix host</string>
     <string name="notif_channel_description">Shown while Levix is running</string>
+    <string name="btn_battery">Unrestricted battery</string>
+    <string name="battery_ok">Battery optimizations are off for Levix.</string>
+    <string name="battery_hint">Android may stop Levix overnight. Allow unrestricted battery. On Xiaomi, also enable Autostart in system settings if that screen exists — we do not open hidden OEM pages.</string>
 </resources>

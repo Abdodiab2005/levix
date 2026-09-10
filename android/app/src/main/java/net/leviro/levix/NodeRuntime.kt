@@ -25,6 +25,9 @@ object NodeRuntime {
     @Volatile
     private var process: Process? = null
 
+    @Volatile
+    var unexpectedExitListener: ((Int) -> Unit)? = null
+
     fun start(context: Context) {
         val live = process
         if (live != null && live.isAlive) {
@@ -39,7 +42,10 @@ object NodeRuntime {
             } catch (error: Exception) {
                 val message = error.message ?: error.javaClass.simpleName
                 HostLog.event("node start failed: $message")
-                mainHandler.post { HostState.markNodeError(message) }
+                mainHandler.post {
+                    HostState.markNodeError(message)
+                    if (!stopping.get()) unexpectedExitListener?.invoke(-1)
+                }
             } finally {
                 starting.set(false)
             }
@@ -215,7 +221,10 @@ object NodeRuntime {
             mainHandler.post { HostState.markNodeStopped() }
         } else {
             HostLog.event("node crashed code=$code")
-            mainHandler.post { HostState.markNodeError("exited $code") }
+            mainHandler.post {
+                HostState.markNodeError("exited $code")
+                unexpectedExitListener?.invoke(code)
+            }
         }
     }
 

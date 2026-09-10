@@ -24,7 +24,7 @@ Release line: **alpha → beta → rc → 3.0.0**.
 | 4 | WhatsApp pairing (code or QR) | **Done on device** (pairing code) |
 | 5 | Pairing UX polish | Mostly done (chooser + Chrome companion) |
 | 6 | WebView panel | Done (loopback only) |
-| 7 | Boot receiver / OEM battery | Not started |
+| 7 | Boot receiver / OEM battery / Node crash retry | **Coded** (needs reboot + overnight soak) |
 | 8 | FFmpeg | Not started (`!tts` falls back) |
 | 9 | CI APK job | Not started |
 
@@ -36,7 +36,7 @@ Release line: **alpha → beta → rc → 3.0.0**.
 
 1. `!ping` with the screen locked.
 2. Stop/Start the host and confirm WhatsApp reconnects without pairing again.
-3. Then: boot receiver, battery exemptions, FFmpeg, CI APK, `v3.0.0-rc.1`.
+3. Then: FFmpeg, CI APK, `v3.0.0-rc.1`.
 
 ---
 
@@ -189,10 +189,10 @@ adb shell am start -n net.leviro.levix/.MainActivity --ez openPanel true
 
 ## Explicitly not done
 
-- Boot receiver / OEM battery onboarding
 - FFmpeg in the APK (`!tts` warns and falls back)
 - GitHub Actions APK job
-- Confirmed `!ping` under screen lock / after host restart (do this next)
+- Confirmed `!ping` under screen lock / after host restart
+- Confirmed reboot autostart and overnight soak
 - Play Store (far goal — GitHub Releases first, then Play)
 
 ---
