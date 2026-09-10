@@ -16,6 +16,7 @@ Full plan: [`LEVIX_ANDROID_HOST_PLAN.md`](LEVIX_ANDROID_HOST_PLAN.md)
 | Phase 1 — foreground host shell | Done |
 | Phase 2 — embedded Node.js 24 ARM64 | Done |
 | Phase 3 — boot Levix core | **Done** (Redmi 9) |
+| Phase 4 — WhatsApp pairing | **Done** (pairing code, Chrome companion) |
 | Version | `3.0.0-alpha` |
 | PR | [#34](https://github.com/Abdodiab2005/levix/pull/34) merged |
 | Tag / GitHub prerelease | [v3.0.0-alpha](https://github.com/Abdodiab2005/levix/releases/tag/v3.0.0-alpha) |
@@ -85,7 +86,7 @@ Verified on Redmi 9 (Lineage, ARM64):
 - `files/data/levix.db` (+ WAL, logs, media, lock)
 - Stop kills Node, database remains; Start again skips unpack and reaches `Levix ready` again
 
-ffmpeg-static is omitted on purpose (`!tts` falls back). Open Panel is still disabled (WebView is later).
+Open Panel loads the local setup/dashboard. WhatsApp linked on this phone with a pairing code (`Browsers.macOS("Chrome")`, number with country code, no leading 0).
 
 ## Explicitly not done
 
