@@ -1,11 +1,11 @@
 # Levix Android host — where we are
 
-Last updated: **2026-09-10**
+Last updated: **2026-09-10** (`3.0.0-beta`)
 
 **Status:** Levix is a live WhatsApp companion on a Redmi 9 (Lineage, ARM64). No VPS. No Termux at runtime.
 
-**Open PR:** [#35](https://github.com/Abdodiab2005/levix/pull/35) (`feat/android-boot-core`)  
-**Already on main:** [#34](https://github.com/Abdodiab2005/levix/pull/34) + tag [`v3.0.0-alpha`](https://github.com/Abdodiab2005/levix/releases/tag/v3.0.0-alpha)
+**On main:** [#34](https://github.com/Abdodiab2005/levix/pull/34), [#35](https://github.com/Abdodiab2005/levix/pull/35)  
+**Tags:** [`v3.0.0-alpha`](https://github.com/Abdodiab2005/levix/releases/tag/v3.0.0-alpha) → **`v3.0.0-beta`**
 
 Full original plan: [`LEVIX_ANDROID_HOST_PLAN.md`](LEVIX_ANDROID_HOST_PLAN.md)
 
@@ -29,14 +29,14 @@ Release line: **alpha → beta → rc → 3.0.0**.
 | 9 | CI APK job | Not started |
 
 **Package:** `net.leviro.levix`  
-**APK versionName:** `3.0.0-alpha` (versionCode **7** on the phone)  
+**APK versionName:** `3.0.0-beta` (versionCode **8**)  
 **Node on device:** `v24.18.0` / `android` / `arm64`
 
 **Next checks (not blockers):**
 
 1. `!ping` with the screen locked.
 2. Stop/Start the host and confirm WhatsApp reconnects without pairing again.
-3. Then: boot receiver, battery exemptions, FFmpeg, CI APK, `v3.0.0-beta`.
+3. Then: boot receiver, battery exemptions, FFmpeg, CI APK, `v3.0.0-rc.1`.
 
 ---
 
@@ -146,7 +146,8 @@ Levix ready
 | --- | --- |
 | [#34](https://github.com/Abdodiab2005/levix/pull/34) | Merged. Phases 0–2. `v3.0.0-alpha`. |
 | `v3.0.0-alpha` | GitHub **prerelease**. npm dist-tag `alpha` (not `latest`). `/install.sh` unchanged. |
-| [#35](https://github.com/Abdodiab2005/levix/pull/35) | **Open.** Core boot, WebView, pairing chooser, Chrome pairing fix. |
+| [#35](https://github.com/Abdodiab2005/levix/pull/35) | Merged. Core boot, WebView, pairing chooser, Chrome pairing fix. |
+| `v3.0.0-beta` | GitHub **prerelease**. npm dist-tag `beta`. |
 
 Prerelease tags (`3.0.0-alpha` / `-beta` / `-rc.N`) publish to the matching npm dist-tag and are marked prerelease on GitHub.
 
