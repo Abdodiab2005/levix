@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-10 (Phase 3 verified on Redmi 9)
 
-Pick this up next: **Phase 4 — WhatsApp / Baileys on the phone.**
+Pick this up next: **Phase 4 pairing** — Start session in the on-phone panel and scan/link WhatsApp. Then `!ping`.
 
 Full plan: [`LEVIX_ANDROID_HOST_PLAN.md`](LEVIX_ANDROID_HOST_PLAN.md)
 

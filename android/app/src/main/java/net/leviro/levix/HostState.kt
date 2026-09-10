@@ -20,6 +20,7 @@ object HostState {
         val nodeLine: String? = null,
         val nodeError: String? = null,
         val sqliteOk: Boolean = false,
+        val tlsOk: Boolean = false,
         val databaseReady: Boolean = false,
         val commandsLoaded: Int? = null,
         val panelUrl: String? = null,
@@ -120,6 +121,11 @@ object HostState {
     @Synchronized
     fun markSqliteOk() {
         publish(snapshot.copy(sqliteOk = true, nodeAlive = true, nodeError = null))
+    }
+
+    @Synchronized
+    fun markTlsOk() {
+        publish(snapshot.copy(tlsOk = true, nodeAlive = true))
     }
 
     @Synchronized

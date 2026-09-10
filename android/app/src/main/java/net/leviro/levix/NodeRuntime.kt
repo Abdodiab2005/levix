@@ -149,6 +149,14 @@ object NodeRuntime {
                 HostLog.event("node sqlite ok")
                 mainHandler.post { HostState.markSqliteOk() }
             }
+            line.startsWith("tls ok ") -> {
+                HostLog.event("node $line")
+                mainHandler.post { HostState.markTlsOk() }
+            }
+            line.startsWith("tls error ") -> {
+                HostLog.event("node $line")
+                mainHandler.post { HostState.markNodeError(line) }
+            }
             line.startsWith("sqlite error ") -> {
                 HostLog.event("node $line")
                 mainHandler.post { HostState.markNodeError(line) }
@@ -212,7 +220,7 @@ object NodeRuntime {
     }
 
     private fun looksSecret(line: String): Boolean {
-        val lower = line.lowercase()
+        val lower = stripAnsi(line).lowercase()
         return lower.contains("setup code") ||
             lower.contains("password") ||
             lower.contains("api key") ||
@@ -221,9 +229,16 @@ object NodeRuntime {
     }
 
     private fun isNoisyLoggerLine(line: String): Boolean {
-        return line.contains("INFO:") ||
-            line.contains("WARN:") ||
-            line.contains("DEBUG:") ||
-            line.contains("TRACE:")
+        val plain = stripAnsi(line)
+        return plain.contains("INFO:") ||
+            plain.contains("WARN:") ||
+            plain.contains("DEBUG:") ||
+            plain.contains("TRACE:")
     }
+
+    private fun stripAnsi(line: String): String {
+        return ANSI.replace(line, "")
+    }
+
+    private val ANSI = Regex("\u001B\\[[0-9;]*m")
 }

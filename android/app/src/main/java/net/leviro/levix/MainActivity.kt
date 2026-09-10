@@ -57,9 +57,9 @@ class MainActivity : AppCompatActivity() {
         stopButton = findViewById(R.id.stopButton)
         panelButton = findViewById(R.id.panelButton)
 
-        panelButton.isEnabled = false
         startButton.setOnClickListener { requestStart() }
         stopButton.setOnClickListener { LevixHostService.stop(this) }
+        panelButton.setOnClickListener { openPanel() }
         render(HostState.snapshot)
         maybeAutostart(intent)
     }
@@ -78,6 +78,16 @@ class MainActivity : AppCompatActivity() {
         if (intent?.getBooleanExtra(EXTRA_AUTOSTART, false) == true) {
             requestStart()
         }
+        if (intent?.getBooleanExtra(EXTRA_OPEN_PANEL, false) == true) {
+            openPanel()
+        }
+    }
+
+    private fun openPanel() {
+        val url = HostState.snapshot.panelUrl ?: "http://127.0.0.1:3001/"
+        startActivity(
+            Intent(this, PanelActivity::class.java).putExtra(PanelActivity.EXTRA_URL, url),
+        )
     }
 
     override fun onStart() {
@@ -135,7 +145,7 @@ class MainActivity : AppCompatActivity() {
         levixText.text = levixStatus(snapshot)
         startButton.isEnabled = !snapshot.running
         stopButton.isEnabled = snapshot.running
-        panelButton.isEnabled = false
+        panelButton.isEnabled = snapshot.levixReady || snapshot.panelUrl != null
     }
 
     private fun levixStatus(snapshot: HostState.Snapshot): String {
@@ -162,5 +172,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_AUTOSTART = "autostart"
         const val EXTRA_STOP = "autostop"
+        const val EXTRA_OPEN_PANEL = "openPanel"
     }
 }

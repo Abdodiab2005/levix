@@ -17,5 +17,16 @@ try {
   process.exit(1);
 }
 
+try {
+  const response = await fetch("https://web.whatsapp.com/", {
+    method: "HEAD",
+    redirect: "manual",
+    signal: AbortSignal.timeout(8000),
+  });
+  console.log("tls ok " + response.status);
+} catch (error) {
+  console.log("tls error " + (error && error.message ? error.message : error));
+}
+
 const { run } = await import("./src/cli.js");
 await run(["node", "bin/levix.js", "--no-open"]);

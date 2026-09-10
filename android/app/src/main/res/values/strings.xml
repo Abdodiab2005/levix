@@ -22,7 +22,7 @@
     <string name="btn_start">Start</string>
     <string name="btn_stop">Stop</string>
     <string name="btn_panel">Open Panel</string>
-    <string name="panel_later">Panel comes later</string>
+    <string name="panel_later">Opens the local control panel on this phone</string>
     <string name="notifications_required">Notifications permission is required so the host can stay alive.</string>
     <string name="notif_title">Levix is running</string>
     <string name="notif_starting">Starting…</string>

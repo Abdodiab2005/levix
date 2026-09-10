@@ -1,6 +1,7 @@
 package net.leviro.levix
 
 import android.content.Context
+import android.os.Build
 import java.io.File
 import java.io.FileOutputStream
 import java.util.zip.ZipInputStream
@@ -22,7 +23,8 @@ object LevixAppBundle {
     fun ensure(context: Context): File {
         val app = context.applicationContext
         val dest = File(app.filesDir, "app")
-        val version = app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "0"
+        val info = app.packageManager.getPackageInfo(app.packageName, 0)
+        val version = "${info.versionName}-${if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()}"
         val stamp = File(dest, STAMP_NAME)
         val boot = File(dest, BOOT_FILE)
         if (boot.isFile && stamp.isFile && stamp.readText() == version) {
