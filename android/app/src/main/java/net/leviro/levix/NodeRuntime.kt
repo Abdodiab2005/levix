@@ -93,10 +93,10 @@ object NodeRuntime {
         }
         mainHandler.post { HostState.markNodeStarting() }
         val appDir = LevixAppBundle.ensure(app)
-        if (HostNetwork.awaitValidated(app, 60_000L)) {
+        if (HostNetwork.awaitValidated(app, 8_000L)) {
             HostLog.event("node start: network validated")
         } else {
-            HostLog.event("node start: no validated network after 60s, continuing")
+            HostLog.event("node start: starting without validated network")
         }
         val boot = File(appDir, LevixAppBundle.BOOT_FILE)
         val dataDir = LevixAppBundle.dataDir(app)

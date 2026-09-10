@@ -1,8 +1,10 @@
 package net.leviro.levix
 
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -33,13 +35,40 @@ class PanelActivity : AppCompatActivity() {
                 request: WebResourceRequest,
             ): Boolean {
                 val url = request.url?.toString() ?: return true
-                if (!isLoopback(url)) return true
-                view.loadUrl(url)
-                return true
+                // false = WebView loads it. Reloading here broke setup/login.
+                return !isLoopback(url)
+            }
+
+            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                HostLog.event("panel loading ${url ?: ""}")
+            }
+
+            override fun onReceivedError(
+                view: WebView,
+                request: WebResourceRequest,
+                error: WebResourceError,
+            ) {
+                if (!request.isForMainFrame) return
+                val detail = "${error.errorCode} ${error.description}"
+                HostLog.event("panel webview error $detail")
+                view.loadDataWithBaseURL(
+                    "http://127.0.0.1/",
+                    """
+                    <html><body style="font-family:sans-serif;padding:24px">
+                    <p>The control panel is not reachable yet.</p>
+                    <p>$detail</p>
+                    <p>Wait until the host says Levix ready, then open Panel again.</p>
+                    </body></html>
+                    """.trimIndent(),
+                    "text/html",
+                    "utf-8",
+                    null,
+                )
             }
         }
 
         val url = loopbackUrl(intent.getStringExtra(EXTRA_URL))
+        HostLog.event("panel open $url")
         web.loadUrl(url)
 
         onBackPressedDispatcher.addCallback(

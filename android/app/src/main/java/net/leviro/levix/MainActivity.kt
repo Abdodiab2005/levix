@@ -155,7 +155,7 @@ class MainActivity : AppCompatActivity() {
         levixText.text = levixStatus(snapshot)
         startButton.isEnabled = !snapshot.running
         stopButton.isEnabled = snapshot.running
-        panelButton.isEnabled = snapshot.levixReady || snapshot.panelUrl != null
+        panelButton.isEnabled = snapshot.running
         val unrestricted = HostBattery.isUnrestricted(this)
         batteryButton.isEnabled = !unrestricted
         batteryHint.text = getString(

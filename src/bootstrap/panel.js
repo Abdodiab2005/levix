@@ -98,6 +98,9 @@ export function resolveBindAddress() {
 /** The address a person should type, given how this install is reachable. */
 export function panelUrl({ port, firstRun = false } = {}) {
   const domain = settings.get("public_domain");
-  const base = domain ? `https://${domain}` : `http://localhost:${port}`;
+  const host =
+    domain ||
+    (process.env.LEVIX_ANDROID === "1" ? "127.0.0.1" : "localhost");
+  const base = domain ? `https://${host}` : `http://${host}:${port}`;
   return firstRun ? `${base}/setup` : base;
 }

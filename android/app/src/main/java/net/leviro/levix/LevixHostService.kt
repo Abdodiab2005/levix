@@ -41,7 +41,7 @@ class LevixHostService : Service() {
 
     private val heartbeat = object : Runnable {
         override fun run() {
-            if (HostState.snapshot.nodeAlive) HostState.heartbeat()
+            if (HostState.snapshot.running) HostState.heartbeat()
             updateNotification()
             handler.postDelayed(this, HEARTBEAT_MS)
         }
