@@ -17,16 +17,30 @@ try {
   process.exit(1);
 }
 
-try {
-  const response = await fetch("https://web.whatsapp.com/", {
-    method: "HEAD",
-    redirect: "manual",
-    signal: AbortSignal.timeout(8000),
-  });
-  console.log("tls ok " + response.status);
-} catch (error) {
-  console.log("tls error " + (error && error.message ? error.message : error));
+async function waitForTls() {
+  const attempts = 8;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      const response = await fetch("https://web.whatsapp.com/", {
+        method: "HEAD",
+        redirect: "manual",
+        signal: AbortSignal.timeout(10_000),
+      });
+      console.log("tls ok " + response.status);
+      return;
+    } catch (error) {
+      const msg = error && error.message ? error.message : String(error);
+      console.log("tls wait " + i + "/" + attempts + " " + msg);
+      if (i < attempts) {
+        await new Promise((resolve) => setTimeout(resolve, 2000 * i));
+      } else {
+        console.log("tls skipped " + msg);
+      }
+    }
+  }
 }
+
+await waitForTls();
 
 const { run } = await import("./src/cli.js");
 await run(["node", "bin/levix.js", "--no-open"]);

@@ -93,6 +93,11 @@ object NodeRuntime {
         }
         mainHandler.post { HostState.markNodeStarting() }
         val appDir = LevixAppBundle.ensure(app)
+        if (HostNetwork.awaitValidated(app, 60_000L)) {
+            HostLog.event("node start: network validated")
+        } else {
+            HostLog.event("node start: no validated network after 60s, continuing")
+        }
         val boot = File(appDir, LevixAppBundle.BOOT_FILE)
         val dataDir = LevixAppBundle.dataDir(app)
         val builder = ProcessBuilder(binary.absolutePath, boot.absolutePath)
@@ -159,9 +164,8 @@ object NodeRuntime {
                 HostLog.event("node $line")
                 mainHandler.post { HostState.markTlsOk() }
             }
-            line.startsWith("tls error ") -> {
+            line.startsWith("tls wait ") || line.startsWith("tls skipped ") || line.startsWith("tls error ") -> {
                 HostLog.event("node $line")
-                mainHandler.post { HostState.markNodeError(line) }
             }
             line.startsWith("sqlite error ") -> {
                 HostLog.event("node $line")

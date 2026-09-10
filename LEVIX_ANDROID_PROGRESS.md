@@ -24,7 +24,7 @@ Release line: **alpha → beta → rc → 3.0.0**.
 | 4 | WhatsApp pairing (code or QR) | **Done on device** (pairing code) |
 | 5 | Pairing UX polish | Mostly done (chooser + Chrome companion) |
 | 6 | WebView panel | Done (loopback only) |
-| 7 | Boot receiver / OEM battery / Node crash retry | **Coded** (needs reboot + overnight soak) |
+| 7 | Boot receiver / OEM battery / Node crash retry | **Coded** (needs reboot + overnight soak). TLS after reboot waits for a validated network and retries; timeout is not a Node crash. |
 | 8 | FFmpeg | Not started (`!tts` falls back) |
 | 9 | CI APK job | Not started |
 
