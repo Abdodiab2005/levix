@@ -48,7 +48,7 @@ Open app anytime to manage it
 
 Do **not** attempt these during the initial proof-of-concept:
 
-- Google Play Store publishing.
+- Google Play Store publishing (later; not in the first versions).
 - iOS support.
 - Android x86/x86_64 support.
 - 32-bit ARM support.
@@ -1095,7 +1095,7 @@ Unless new evidence proves otherwise:
 10. Pairing code preferred over same-device QR.
 11. FFmpeg/media postponed until core stability.
 12. Same GitHub repository; Android work lives under `android/`.
-13. GitHub Releases first; Play Store later if ever.
+13. GitHub Releases first; Play Store is a later goal, not a never goal.
 14. Existing desktop/server Levix behavior must not regress.
 
 ---
@@ -1154,7 +1154,7 @@ If working on embedded Node startup, do **not** also implement:
 - pairing UI
 - FFmpeg
 - WebView redesign
-- Play Store packaging
+- Play Store packaging (far goal)
 
 ## Testing Requirement
 

@@ -193,7 +193,7 @@ adb shell am start -n net.leviro.levix/.MainActivity --ez openPanel true
 - FFmpeg in the APK (`!tts` warns and falls back)
 - GitHub Actions APK job
 - Confirmed `!ping` under screen lock / after host restart (do this next)
-- Play Store (never a goal)
+- Play Store (far goal — GitHub Releases first, then Play)
 
 ---
 
