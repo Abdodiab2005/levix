@@ -1,8 +1,8 @@
 # Levix Android host — progress
 
-Last updated: 2026-09-10 (Phase 3 verified on Redmi 9)
+Last updated: 2026-09-10 (WhatsApp linked on Redmi 9 via pairing code)
 
-Pick this up next: **link WhatsApp** from Open Panel → Connection. Choose pairing code (default on the phone) or QR, then `!ping`.
+Pick this up next: confirm `!ping` with the screen locked, then restart the host and check the session comes back. After that: boot receiver / battery, FFmpeg, CI APK.
 
 Full plan: [`LEVIX_ANDROID_HOST_PLAN.md`](LEVIX_ANDROID_HOST_PLAN.md)
 
