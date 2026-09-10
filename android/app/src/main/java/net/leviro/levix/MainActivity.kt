@@ -20,6 +20,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private lateinit var heartbeatText: TextView
     private lateinit var nodeText: TextView
+    private lateinit var levixText: TextView
     private lateinit var statusHint: TextView
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
@@ -50,6 +51,7 @@ class MainActivity : AppCompatActivity() {
         statusText = findViewById(R.id.statusText)
         heartbeatText = findViewById(R.id.heartbeatText)
         nodeText = findViewById(R.id.nodeText)
+        levixText = findViewById(R.id.levixText)
         statusHint = findViewById(R.id.statusHint)
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
@@ -130,9 +132,22 @@ class MainActivity : AppCompatActivity() {
             snapshot.running -> getString(R.string.node_starting)
             else -> getString(R.string.node_none)
         }
+        levixText.text = levixStatus(snapshot)
         startButton.isEnabled = !snapshot.running
         stopButton.isEnabled = snapshot.running
         panelButton.isEnabled = false
+    }
+
+    private fun levixStatus(snapshot: HostState.Snapshot): String {
+        if (!snapshot.running) return ""
+        val parts = mutableListOf<String>()
+        if (snapshot.levixReady) parts.add(getString(R.string.levix_ready))
+        if (snapshot.databaseReady) parts.add(getString(R.string.levix_db))
+        snapshot.commandsLoaded?.let { parts.add(getString(R.string.levix_commands, it)) }
+        snapshot.panelUrl?.let { parts.add(getString(R.string.levix_panel, it)) }
+        if (snapshot.sqliteOk && parts.isEmpty()) parts.add(getString(R.string.levix_sqlite))
+        if (parts.isEmpty()) parts.add(getString(R.string.levix_unpacking))
+        return parts.joinToString("\n")
     }
 
     private fun formatAge(epochMs: Long): String {

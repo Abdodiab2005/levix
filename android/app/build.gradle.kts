@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val repoRoot = rootProject.projectDir.parentFile
 val nodeRuntimeRoot = file("${System.getProperty("user.home")}/.cache/levix-android/node-runtime")
 val nodeBinary = file("$nodeRuntimeRoot/arm64-v8a/libnode.so")
 if (!nodeBinary.isFile) {
@@ -19,7 +20,7 @@ android {
         applicationId = "net.leviro.levix"
         minSdk = 29
         targetSdk = 35
-        versionCode = 3
+        versionCode = 4
         versionName = "3.0.0-alpha"
 
         ndk {
@@ -57,6 +58,24 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+}
+
+tasks.register<Exec>("stageLevixApp") {
+    workingDir = repoRoot
+    commandLine("bash", "android/scripts/stage-levix-app.sh")
+    inputs.dir(File(repoRoot, "src"))
+    inputs.dir(File(repoRoot, "views"))
+    inputs.dir(File(repoRoot, "public"))
+    inputs.dir(File(repoRoot, "bin"))
+    inputs.file(File(repoRoot, "app.cjs"))
+    inputs.file(File(repoRoot, "scheduler.cjs"))
+    inputs.file(File(repoRoot, "package.json"))
+    inputs.file(File(repoRoot, "android/host-boot.mjs"))
+    outputs.file(file("src/main/assets/levix-app.zip"))
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("stageLevixApp")
 }
 
 dependencies {

@@ -88,7 +88,11 @@ export async function bootstrapPanel({ core } = {}) {
  */
 export function resolveBindAddress() {
   const configured = settings.get("bind_address");
-  return configured || "0.0.0.0";
+  if (configured) return configured;
+  // The phone is the host: keep the panel on loopback until a later phase
+  // opens it in a WebView. LAN bind stays an explicit setting.
+  if (process.env.LEVIX_ANDROID === "1") return "127.0.0.1";
+  return "0.0.0.0";
 }
 
 /** The address a person should type, given how this install is reachable. */

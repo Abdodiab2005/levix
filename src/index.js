@@ -185,6 +185,10 @@ async function startWithPanel({ open }) {
   // the Connection screen offers a Start button.
   const core = await bootstrapCore({ autoStart: false });
   liveSession = core.session;
+  if (process.env.LEVIX_ANDROID === "1") {
+    console.log("Database ready");
+    console.log("Commands loaded " + core.commandCount);
+  }
 
   let panel;
   try {
@@ -202,6 +206,10 @@ async function startWithPanel({ open }) {
   const url = panelUrl({ port: panel.port, firstRun });
 
   logger.info(`✅ Control panel: ${url}`);
+  if (process.env.LEVIX_ANDROID === "1") {
+    console.log("Panel listening " + url);
+    console.log("Levix ready");
+  }
 
   line();
   line(`  ${brand.name} is running`);

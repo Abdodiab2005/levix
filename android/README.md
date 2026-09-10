@@ -1,16 +1,16 @@
 # Levix Android host
 
-The Android shell that will host Levix on a phone.
+The Android shell that hosts Levix on a phone.
 
-Phase 2 embeds **Node.js 24 ARM64** (Bionic) and runs a heartbeat script
-from the foreground service. Levix core and WhatsApp are not in this
-build yet.
+Phase 3 boots **Levix core** (commands, SQLite, localhost panel) on
+embedded Node.js 24 ARM64. WhatsApp linking is still a later phase.
 
 ## Requirements
 
 - JDK 17
 - Android SDK 35 (compile / target)
-- `curl`, `python3`, `dpkg-deb`
+- `curl`, `python3`, `dpkg-deb`, `zip`, `rsync`
+- `npm ci` already run in the repo (the APK packs `node_modules`)
 - An **ARM64** device or emulator (Android 10 / API 29+)
 - Android Studio, or `ANDROID_HOME` pointing at the SDK
 
@@ -18,8 +18,7 @@ x86, x86_64, and 32-bit ARM are not built.
 
 ## Fetch the Node runtime
 
-The Node 24 binary is not committed. Fetch it once (about 100 MB in
-`~/.cache/levix-android/node-runtime/`):
+The Node 24 binary is not committed. Fetch it once:
 
 ```bash
 android/scripts/fetch-node-android.sh
@@ -35,6 +34,10 @@ cd android
 ./gradlew :app:assembleDebug
 ```
 
+`preBuild` packs Levix (`src/`, `views/`, `public/`, production
+`node_modules` minus ffmpeg-static/esbuild/sharp) into
+`app/src/main/assets/levix-app.zip` (gitignored).
+
 APK:
 
 ```text
@@ -49,23 +52,26 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ## What this build does
 
-1. Open the app.
-2. Allow notifications when asked.
-3. Press **Start**. A persistent notification appears.
-4. The UI should show `Node: v24.x.x android/arm64` (or `linux/arm64`).
-5. Close the UI, swipe the app from Recents, lock the phone.
-6. Heartbeat should keep advancing.
-7. **Stop** from the notification or the app. Start again without rebooting.
+1. Open the app. Allow notifications.
+2. Press **Start**. First launch unpacks the JS bundle (a few seconds).
+3. The UI should show Node `v24.x android/arm64`, `sqlite ok`,
+   `Database ready`, `Commands loaded`, `Panel listening`, `Levix ready`.
+4. Data lives in `filesDir/data` (`levix.db`, logs). Code lives in
+   `filesDir/app`.
+5. Stop kills Node cleanly. Start again must keep the database.
 
-**Open Panel** is visible and disabled.
+**Open Panel** is still disabled. The panel is on `127.0.0.1` only
+until the WebView phase.
 
-Host events are written to Android logcat (`LevixHost`) and to
-`filesDir/host.log` inside private app storage. That file must never
-contain WhatsApp auth, API keys, or the panel password.
+Host events: logcat tag `LevixHost`, and `filesDir/host.log`. Never log
+WhatsApp auth, API keys, or the panel password.
 
 ## Package
 
 `net.leviro.levix`
 
-Node receives `LEVIX_DATA_DIR` pointing at the app's private `filesDir`.
-Nothing is written to Downloads or shared storage.
+Node env:
+
+- `LEVIX_ANDROID=1`
+- `LEVIX_DATA_DIR` = `filesDir/data`
+- `LEVIX_OPEN_BROWSER=0`
