@@ -10,63 +10,40 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * One Node.js child process, started from the host service.
- *
- * The binary is packaged as `libnode.so` under [android.content.pm.ApplicationInfo.nativeLibraryDir]
- * so Android 10+ W^X still allows exec. The heartbeat script is data, copied into filesDir.
+ * One Node.js child process. Unpacks the Levix JS bundle, then execs
+ * `libnode.so` against `boot.mjs` from nativeLibraryDir (Android 10+ W^X).
  */
 object NodeRuntime {
     private const val BINARY_NAME = "libnode.so"
-    private const val SCRIPT_NAME = "heartbeat.js"
-    private const val STOP_GRACE_MS = 3_000L
+    private const val STOP_GRACE_MS = 8_000L
 
     private val lock = Any()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val stopping = AtomicBoolean(false)
+    private val starting = AtomicBoolean(false)
 
     @Volatile
     private var process: Process? = null
 
     fun start(context: Context) {
-        synchronized(lock) {
-            val live = process
-            if (live != null && live.isAlive) {
-                HostLog.event("node start skipped: already running")
-                return
-            }
-            stopping.set(false)
-            val app = context.applicationContext
-            val binary = File(app.applicationInfo.nativeLibraryDir, BINARY_NAME)
-            if (!binary.exists()) {
-                val message = "node binary missing at nativeLibraryDir/$BINARY_NAME"
-                HostLog.event(message)
-                mainHandler.post { HostState.markNodeError(message) }
-                return
-            }
-            val script = copyScript(app)
-            val builder = ProcessBuilder(binary.absolutePath, script.absolutePath)
-                .directory(app.filesDir)
-                .redirectErrorStream(true)
-            val env = builder.environment()
-            env["LEVIX_ANDROID"] = "1"
-            env["LEVIX_DATA_DIR"] = app.filesDir.absolutePath
-            env["HOME"] = app.filesDir.absolutePath
-            env["TMPDIR"] = app.cacheDir.absolutePath
-            env["NODE_DISABLE_COLORS"] = "1"
-            env["LD_LIBRARY_PATH"] = app.applicationInfo.nativeLibraryDir
-            val started = try {
-                builder.start()
-            } catch (error: Exception) {
-                HostLog.event("node start failed: ${error.javaClass.simpleName}: ${error.message}")
-                mainHandler.post { HostState.markNodeError(error.message ?: "start failed") }
-                return
-            }
-            process = started
-            HostLog.event("node started")
-            mainHandler.post { HostState.markNodeStarting() }
-            Thread({ pumpOutput(started) }, "levix-node-out").apply { isDaemon = true }.start()
-            Thread({ awaitExit(started) }, "levix-node-wait").apply { isDaemon = true }.start()
+        val live = process
+        if (live != null && live.isAlive) {
+            HostLog.event("node start skipped: already running")
+            return
         }
+        if (!starting.compareAndSet(false, true)) return
+        val app = context.applicationContext
+        Thread({
+            try {
+                startBlocking(app)
+            } catch (error: Exception) {
+                val message = error.message ?: error.javaClass.simpleName
+                HostLog.event("node start failed: $message")
+                mainHandler.post { HostState.markNodeError(message) }
+            } finally {
+                starting.set(false)
+            }
+        }, "levix-node-start").start()
     }
 
     fun stop() {
@@ -100,13 +77,42 @@ object NodeRuntime {
         return live != null && live.isAlive
     }
 
-    private fun copyScript(context: Context): File {
-        val dir = File(context.filesDir, "runtime").apply { mkdirs() }
-        val dest = File(dir, SCRIPT_NAME)
-        context.assets.open(SCRIPT_NAME).use { input ->
-            dest.outputStream().use { output -> input.copyTo(output) }
+    private fun startBlocking(app: Context) {
+        val binary = File(app.applicationInfo.nativeLibraryDir, BINARY_NAME)
+        if (!binary.exists()) {
+            val message = "node binary missing at nativeLibraryDir/$BINARY_NAME"
+            HostLog.event(message)
+            mainHandler.post { HostState.markNodeError(message) }
+            return
         }
-        return dest
+        mainHandler.post { HostState.markNodeStarting() }
+        val appDir = LevixAppBundle.ensure(app)
+        val boot = File(appDir, LevixAppBundle.BOOT_FILE)
+        val dataDir = LevixAppBundle.dataDir(app)
+        val builder = ProcessBuilder(binary.absolutePath, boot.absolutePath)
+            .directory(appDir)
+            .redirectErrorStream(true)
+        val env = builder.environment()
+        env["LEVIX_ANDROID"] = "1"
+        env["LEVIX_DATA_DIR"] = dataDir.absolutePath
+        env["LEVIX_OPEN_BROWSER"] = "0"
+        env["HOME"] = dataDir.absolutePath
+        env["TMPDIR"] = app.cacheDir.absolutePath
+        env["NODE_DISABLE_COLORS"] = "1"
+        env["LD_LIBRARY_PATH"] = app.applicationInfo.nativeLibraryDir
+        val started = try {
+            builder.start()
+        } catch (error: Exception) {
+            HostLog.event("node start failed: ${error.javaClass.simpleName}: ${error.message}")
+            mainHandler.post { HostState.markNodeError(error.message ?: "start failed") }
+            return
+        }
+        synchronized(lock) {
+            process = started
+        }
+        HostLog.event("node started")
+        Thread({ pumpOutput(started) }, "levix-node-out").apply { isDaemon = true }.start()
+        Thread({ awaitExit(started) }, "levix-node-wait").apply { isDaemon = true }.start()
     }
 
     private fun pumpOutput(child: Process) {
@@ -139,6 +145,43 @@ object NodeRuntime {
                 HostLog.event("node $line")
                 mainHandler.post { HostState.setNodeArch(arch) }
             }
+            line == "sqlite ok" -> {
+                HostLog.event("node sqlite ok")
+                mainHandler.post { HostState.markSqliteOk() }
+            }
+            line.startsWith("tls ok ") -> {
+                HostLog.event("node $line")
+                mainHandler.post { HostState.markTlsOk() }
+            }
+            line.startsWith("tls error ") -> {
+                HostLog.event("node $line")
+                mainHandler.post { HostState.markNodeError(line) }
+            }
+            line.startsWith("sqlite error ") -> {
+                HostLog.event("node $line")
+                mainHandler.post { HostState.markNodeError(line) }
+            }
+            line == "Database ready" -> {
+                HostLog.event("node $line")
+                mainHandler.post { HostState.markDatabaseReady() }
+            }
+            line.startsWith("Commands loaded ") -> {
+                val count = line.removePrefix("Commands loaded ").trim().toIntOrNull()
+                HostLog.event("node $line")
+                mainHandler.post { HostState.markCommandsLoaded(count) }
+            }
+            line.startsWith("Panel listening ") -> {
+                val url = line.removePrefix("Panel listening ").trim()
+                HostLog.event("node $line")
+                mainHandler.post { HostState.markPanelListening(url) }
+            }
+            line == "Levix ready" -> {
+                HostLog.event("node $line")
+                mainHandler.post {
+                    HostState.markLevixReady()
+                    HostState.heartbeat()
+                }
+            }
             line.startsWith("heartbeat ") -> {
                 mainHandler.post {
                     HostState.heartbeat()
@@ -148,8 +191,11 @@ object NodeRuntime {
             }
             line.startsWith("pid ") -> HostLog.event("node $line")
             else -> {
-                HostLog.event("node: $line")
-                mainHandler.post { HostState.setNodeLine(line) }
+                val trimmed = line.trim()
+                if (trimmed.isEmpty() || looksSecret(trimmed)) return
+                if (isNoisyLoggerLine(trimmed)) return
+                HostLog.event("node: ${trimmed.take(200)}")
+                mainHandler.post { HostState.setNodeLine(trimmed.take(200)) }
             }
         }
     }
@@ -172,4 +218,27 @@ object NodeRuntime {
             mainHandler.post { HostState.markNodeError("exited $code") }
         }
     }
+
+    private fun looksSecret(line: String): Boolean {
+        val lower = stripAnsi(line).lowercase()
+        return lower.contains("setup code") ||
+            lower.contains("password") ||
+            lower.contains("api key") ||
+            lower.contains("token") ||
+            lower.contains("secret")
+    }
+
+    private fun isNoisyLoggerLine(line: String): Boolean {
+        val plain = stripAnsi(line)
+        return plain.contains("INFO:") ||
+            plain.contains("WARN:") ||
+            plain.contains("DEBUG:") ||
+            plain.contains("TRACE:")
+    }
+
+    private fun stripAnsi(line: String): String {
+        return ANSI.replace(line, "")
+    }
+
+    private val ANSI = Regex("\u001B\\[[0-9;]*m")
 }

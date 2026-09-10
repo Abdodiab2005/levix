@@ -1,13 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Levix</string>
-    <string name="host_shell_note">Embedded Node 24 host shell — Levix core is not inside it yet.</string>
+    <string name="host_shell_note">Levix core on this phone. WhatsApp linking is still in the panel (later).</string>
     <string name="status_stopped">Stopped</string>
     <string name="status_running">Running</string>
     <string name="node_none">Node: not started</string>
     <string name="node_starting">Node: starting</string>
     <string name="node_ok">Node: %1$s %2$s/%3$s</string>
     <string name="node_error">Node error: %1$s</string>
+    <string name="levix_unpacking">Unpacking Levix…</string>
+    <string name="levix_sqlite">SQLite: ok</string>
+    <string name="levix_db">Database ready</string>
+    <string name="levix_commands">Commands loaded: %1$d</string>
+    <string name="levix_panel">Panel: %1$s</string>
+    <string name="levix_ready">Levix ready</string>
     <string name="heartbeat_none">No heartbeat yet</string>
     <string name="heartbeat_ago">Last heartbeat: %1$s</string>
     <string name="age_seconds">%1$ds ago</string>
@@ -16,7 +22,7 @@
     <string name="btn_start">Start</string>
     <string name="btn_stop">Stop</string>
     <string name="btn_panel">Open Panel</string>
-    <string name="panel_later">Panel comes later</string>
+    <string name="panel_later">Opens the local control panel on this phone</string>
     <string name="notifications_required">Notifications permission is required so the host can stay alive.</string>
     <string name="notif_title">Levix is running</string>
     <string name="notif_starting">Starting…</string>
@@ -24,6 +30,7 @@
     <string name="notif_node_starting">Node: starting</string>
     <string name="notif_node_ok">Node %1$s %2$s</string>
     <string name="notif_node_error">Node: %1$s</string>
+    <string name="notif_levix_ready">Levix ready</string>
     <string name="notif_open">Open</string>
     <string name="notif_stop">Stop</string>
     <string name="notif_channel_name">Levix host</string>

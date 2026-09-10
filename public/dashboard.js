@@ -190,7 +190,7 @@
   const SESSION_LABELS = {
     idle: { tone: "off", label: "Not started", tag: "danger", tagText: "Not started" },
     starting: { tone: "warn", label: "Connecting", tag: "warn", tagText: "Connecting" },
-    waiting_for_qr: { tone: "warn", label: "Waiting for scan", tag: "warn", tagText: "Waiting for scan" },
+    waiting_for_qr: { tone: "warn", label: "Waiting to link", tag: "warn", tagText: "Waiting to link" },
     linking: { tone: "warn", label: "Linking", tag: "warn", tagText: "Linking" },
     connected: { tone: "on", label: "Connected", tag: "ok", tagText: "Linked" },
     reconnecting: { tone: "warn", label: "Reconnecting", tag: "warn", tagText: "Reconnecting" },
@@ -284,6 +284,28 @@
   // --- connection ---------------------------------------------------------
 
   let qrRendered = null;
+  let pairingRendered = null;
+
+  function formatPairingCode(code) {
+    const raw = String(code || "").replace(/\s|-/g, "");
+    if (raw.length === 8) return `${raw.slice(0, 4)}-${raw.slice(4)}`;
+    return raw;
+  }
+
+  function preferredPairMethod() {
+    return /Android|iPhone|Mobile/i.test(navigator.userAgent) ? "pairing" : "qr";
+  }
+
+  function selectedPairMethod() {
+    const picked = document.querySelector('input[name="pair-method"]:checked');
+    return picked ? picked.value : preferredPairMethod();
+  }
+
+  function syncPairChooser() {
+    const pairing = selectedPairMethod() === "pairing";
+    const wrap = $("#pair-phone-wrap");
+    if (wrap) wrap.hidden = !pairing;
+  }
 
   function renderQr(text) {
     if (!text || qrRendered === text) return;
@@ -305,6 +327,31 @@
     qrRendered = null;
     $("#qr-frame").innerHTML = "";
     $("#qr-note").textContent = "Waiting for a QR code…";
+  }
+
+  function renderPairingCode(code, phone) {
+    if (!code || pairingRendered === code) return;
+    pairingRendered = code;
+    const el = $("#pairing-code");
+    if (el) el.textContent = formatPairingCode(code);
+    const phoneEl = $("#pairing-phone");
+    if (phoneEl) {
+      phoneEl.textContent = phone ? `For WhatsApp +${phone}` : "";
+    }
+    const note = $("#pairing-note");
+    if (note) {
+      note.textContent = "Link with phone number instead — not the QR camera.";
+    }
+  }
+
+  function clearPairingCode() {
+    pairingRendered = null;
+    const el = $("#pairing-code");
+    if (el) el.textContent = "••••-••••";
+    const phoneEl = $("#pairing-phone");
+    if (phoneEl) phoneEl.textContent = "";
+    const note = $("#pairing-note");
+    if (note) note.textContent = "Waiting for a pairing code…";
   }
 
   function retryHint(snapshot) {
@@ -378,10 +425,21 @@
     // that can only be cleared by unlinking.
     $("#unlink-btn").disabled = !snapshot.canUnlink;
 
-    // The QR frame is only up while a code can actually be scanned.
-    const pairing = snapshot.state === "waiting_for_qr";
-    $("#qr-panel").style.display = pairing ? "block" : "none";
-    if (!pairing) clearQr();
+    const chooser = $("#pair-chooser");
+    if (chooser) chooser.style.display = snapshot.canStart ? "" : "none";
+
+    // Offer QR or pairing code only while a link attempt is actually waiting.
+    const waiting = snapshot.state === "waiting_for_qr";
+    $("#qr-panel").style.display = waiting ? "block" : "none";
+    const showCode = waiting && (snapshot.hasPairingCode || snapshot.pairingMethod === "pairing");
+    const qrBox = $("#qr-box");
+    const pairingBox = $("#pairing-box");
+    if (qrBox) qrBox.hidden = showCode;
+    if (pairingBox) pairingBox.hidden = !showCode;
+    if (!waiting) {
+      clearQr();
+      clearPairingCode();
+    }
   }
 
   VIEWS.connection = {
@@ -390,10 +448,13 @@
     // offer before this tab existed — a reload has to show the real backend
     // state, not an empty frame.
     load: guard(async () => {
-      const { session, qr } = await api("/bot/session");
+      const { session, qr, pairingCode } = await api("/bot/session");
       setStatus(session);
       renderConnection();
-      if (qr && session.state === "waiting_for_qr") renderQr(qr);
+      if (session.state === "waiting_for_qr") {
+        if (pairingCode) renderPairingCode(pairingCode, session.pairingPhone);
+        else if (qr) renderQr(qr);
+      }
     }),
   };
 
@@ -415,7 +476,10 @@
         // request must not leave a dead button behind.
         $("#start-btn").disabled = true;
         try {
-          const { session } = await api("/bot/session/start", { method: "POST" });
+          const method = selectedPairMethod();
+          const body = { method };
+          if (method === "pairing") body.phone = ($("#pair-phone")?.value || "").trim();
+          const { session } = await api("/bot/session/start", { method: "POST", body });
           setStatus(session);
           toast("Session starting…", "ok");
         } finally {
@@ -451,7 +515,7 @@
     $("#unlink-btn").addEventListener(
       "click",
       confirmed(
-        "Unlink this WhatsApp account? The bot stops answering until you start a new session and scan a QR code.",
+        "Unlink this WhatsApp account? The bot stops answering until you start a new session and link again.",
         async () => {
           const { session } = await api("/bot/logout", { method: "POST" });
           setStatus(session);
@@ -1287,6 +1351,16 @@
 
     socket.on("qr_cleared", () => clearQr());
 
+    socket.on("pairing_code", (payload) => {
+      const code = payload && payload.code;
+      if (code) renderPairingCode(code, payload.phone);
+      if (currentView !== "connection") {
+        toast("A pairing code is ready — open Connection to enter it.");
+      }
+    });
+
+    socket.on("pairing_code_cleared", () => clearPairingCode());
+
     // A socket that dropped may have missed transitions while it was away.
     socket.on("connect", () => {
       if (currentView === "connection") VIEWS.connection.load();
@@ -1297,6 +1371,15 @@
   initTheme();
   initRouting();
   initConnectionActions();
+  {
+    const def = preferredPairMethod();
+    const radio = document.querySelector(`input[name="pair-method"][value="${def}"]`);
+    if (radio) radio.checked = true;
+    document.querySelectorAll('input[name="pair-method"]').forEach((el) => {
+      el.addEventListener("change", syncPairChooser);
+    });
+    syncPairChooser();
+  }
   initCommandActions();
   initAiActions();
   initGroupActions();

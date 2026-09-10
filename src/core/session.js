@@ -78,6 +78,45 @@ function withTimeout(promise, ms) {
   ]);
 }
 
+const ARABIC_INDIC = /[\u0660-\u0669]/g;
+const EASTERN_ARABIC = /[\u06F0-\u06F9]/g;
+
+/** Digits-only international number for Baileys `requestPairingCode`. */
+export function normalizePairingPhone(input) {
+  let value = String(input ?? "");
+  value = value.replace(ARABIC_INDIC, (ch) => String(ch.charCodeAt(0) - 0x0660));
+  value = value.replace(EASTERN_ARABIC, (ch) => String(ch.charCodeAt(0) - 0x06f0));
+  const digits = value.replace(/\D/g, "");
+  if (digits.startsWith("0")) {
+    const error = new Error(
+      "Drop the leading 0 and include the country code (e.g. 2010… not 010…)."
+    );
+    error.code = "PAIRING_PHONE";
+    throw error;
+  }
+  if (digits.length < 8 || digits.length > 15) {
+    const error = new Error(
+      "Enter the WhatsApp number with country code, digits only (e.g. 2010…)."
+    );
+    error.code = "PAIRING_PHONE";
+    throw error;
+  }
+  return digits;
+}
+
+/** How this start should pair, if the install is not linked yet. */
+export function parseStartOptions({ method, phone } = {}) {
+  if (method == null || method === "" || method === "qr") {
+    return { method: "qr", phone: null };
+  }
+  if (method === "pairing") {
+    return { method: "pairing", phone: normalizePairingPhone(phone) };
+  }
+  const error = new Error("Choose QR code or pairing code.");
+  error.code = "PAIRING_PHONE";
+  throw error;
+}
+
 export const SESSION_STATES = Object.freeze({
   IDLE: "idle",
   STARTING: "starting",
@@ -150,6 +189,9 @@ export class WhatsAppSession {
   #proxyConfig = null;
 
   #qr = null;
+  #pairingCode = null;
+  #pairingIntent = { method: "qr", phone: null };
+  #pairingCodeRequest = null;
   #reason = null;
   #detail = null;
   #lastDisconnect = null;
@@ -173,6 +215,7 @@ export class WhatsAppSession {
     emit = () => {},
     retryDelaysMs = RETRY_SCHEDULE_MS,
     log = logger,
+    pairingCodeDelayMs = 1500,
   } = {}) {
     this.createSocket = createSocket;
     this.attachListeners = attachListeners;
@@ -185,6 +228,7 @@ export class WhatsAppSession {
     this.clearCredentials = clearCredentials;
     this.retryDelaysMs = retryDelaysMs;
     this.log = log;
+    this.pairingCodeDelayMs = pairingCodeDelayMs;
   }
 
   // -------------------------------------------------------------------------
@@ -210,6 +254,13 @@ export class WhatsAppSession {
    */
   get qr() {
     return this.#qr;
+  }
+
+  /**
+   * The 8-character pairing code, or null. Same rule as `qr`: not in getState().
+   */
+  get pairingCode() {
+    return this.#pairingCode;
   }
 
   /** Everything the dashboard needs to render the Connection screen. */
@@ -241,6 +292,10 @@ export class WhatsAppSession {
       connected: this.#state === S.CONNECTED,
       terminal,
       hasQr: !!this.#qr,
+      hasPairingCode: !!this.#pairingCode,
+      pairingMethod: this.#pairingIntent?.method || "qr",
+      pairingPhone:
+        this.#pairingIntent?.method === "pairing" ? this.#pairingIntent.phone : null,
       reason: this.#reason,
       detail: this.#detail,
       lastDisconnect: this.#lastDisconnect,
@@ -258,7 +313,7 @@ export class WhatsAppSession {
    * Bring the session up. Idempotent: if a socket exists or is being made, this
    * returns the state it is already in and creates nothing.
    */
-  async start({ reason = "manual" } = {}) {
+  async start({ reason = "manual", method, phone } = {}) {
     if (this.#shuttingDown) return this.getState();
 
     if (this.#starting) {
@@ -266,6 +321,8 @@ export class WhatsAppSession {
       return this.getState();
     }
     if (BUSY_STATES.has(this.#state)) return this.getState();
+
+    this.#pairingIntent = parseStartOptions({ method, phone });
 
     // A manual start clears whatever the last failure left behind.
     this.#cancelRetry();
@@ -433,7 +490,10 @@ export class WhatsAppSession {
 
     let created;
     try {
-      created = await this.createSocket({ proxy });
+      created = await this.createSocket({
+        proxy,
+        pairingCode: this.#pairingIntent.method === "pairing",
+      });
     } catch (error) {
       this.log.error({ err: error }, "[Session] failed to create the WhatsApp socket");
       this.#transition(S.ERROR, {
@@ -473,9 +533,15 @@ export class WhatsAppSession {
         this.#onHandshakeRejected(generation, sock, response),
     });
 
+    const waitingForCode =
+      this.#pairing && this.#pairingIntent.method === "pairing";
     this.#transition(this.#pairing ? S.WAITING_FOR_QR : S.STARTING, {
       reason,
-      detail: this.#pairing ? "Waiting for a QR code" : "Connecting to WhatsApp",
+      detail: this.#pairing
+        ? waitingForCode
+          ? "Waiting for a pairing code…"
+          : "Waiting for a QR code"
+        : "Connecting to WhatsApp",
     });
 
     this.log.info("[Session] WhatsApp socket created");
@@ -580,7 +646,7 @@ export class WhatsAppSession {
 
     const { connection, lastDisconnect, qr, isNewLogin } = update || {};
 
-    if (qr) this.#onQr(qr);
+    if (qr) await this.#onQr(qr);
 
     // The phone scanned the code. Pairing succeeded even though the connection
     // is about to be torn down and restarted — this is WhatsApp's own login
@@ -598,7 +664,18 @@ export class WhatsAppSession {
     else if (connection === "close") await this.#onClose(lastDisconnect);
   }
 
-  #onQr(qr) {
+  async #onQr(qr) {
+    // Pair-device readiness. In pairing-code mode the QR must not be shown;
+    // requestPairingCode waits for this stanza (or queues until it arrives).
+    if (
+      this.#pairing &&
+      this.#pairingIntent.method === "pairing" &&
+      this.#pairingIntent.phone
+    ) {
+      await this.#requestPairingCode();
+      return;
+    }
+
     this.#qr = qr;
     try {
       saveQrCode(qr);
@@ -610,6 +687,56 @@ export class WhatsAppSession {
       detail: "Scan the code from WhatsApp → Linked devices.",
     });
     this.emitEvent("qr", qr);
+  }
+
+  async #requestPairingCode() {
+    if (this.#pairingCode || this.#pairingCodeRequest) return;
+    const sock = this.#socket;
+    const phone = this.#pairingIntent.phone;
+    if (!phone) return;
+    if (typeof sock?.requestPairingCode !== "function") {
+      this.log.error("[Session] this socket cannot request a pairing code");
+      this.#transition(S.ERROR, {
+        reason: "pairing_unsupported",
+        detail: "Pairing code is not available on this connection. Use QR instead.",
+      });
+      return;
+    }
+
+    this.#pairingCodeRequest = (async () => {
+      try {
+        if (this.pairingCodeDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, this.pairingCodeDelayMs));
+        }
+        if (!this.#pairing || this.#shuttingDown) return;
+        const raw = await sock.requestPairingCode(phone);
+        if (!this.#pairing || this.#shuttingDown) return;
+        this.#pairingCode = String(raw || "").replace(/\s|-/g, "");
+        this.#transition(S.WAITING_FOR_QR, {
+          reason: "pairing_code",
+          detail:
+            "Enter the code in WhatsApp → Linked devices → Link with phone number.",
+        });
+        this.emitEvent("pairing_code", {
+          code: this.#pairingCode,
+          phone,
+        });
+      } catch (error) {
+        this.log.error(
+          { err: error?.message },
+          "[Session] pairing code request failed"
+        );
+        if (!this.#pairing || this.#shuttingDown) return;
+        this.#transition(S.ERROR, {
+          reason: "pairing_failed",
+          detail: "Could not get a pairing code. Check the number and try again.",
+        });
+      } finally {
+        this.#pairingCodeRequest = null;
+      }
+    })();
+
+    await this.#pairingCodeRequest;
   }
 
   async #onOpen() {
@@ -797,14 +924,17 @@ export class WhatsAppSession {
    * GET /qr would happily serve it to somebody.
    */
   #clearQr() {
-    const had = this.#qr !== null;
+    const hadQr = this.#qr !== null;
+    const hadCode = this.#pairingCode !== null;
     this.#qr = null;
+    this.#pairingCode = null;
     try {
       deleteQrCode();
     } catch (error) {
       this.log.debug({ err: error?.message }, "[Session] failed to delete the stored QR");
     }
-    if (had) this.emitEvent("qr_cleared", {});
+    if (hadQr) this.emitEvent("qr_cleared", {});
+    if (hadCode) this.emitEvent("pairing_code_cleared", {});
   }
 
   #transition(state, { reason = null, detail = null } = {}) {

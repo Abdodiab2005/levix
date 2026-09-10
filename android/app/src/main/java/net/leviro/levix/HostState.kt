@@ -19,6 +19,12 @@ object HostState {
         val nodeArch: String? = null,
         val nodeLine: String? = null,
         val nodeError: String? = null,
+        val sqliteOk: Boolean = false,
+        val tlsOk: Boolean = false,
+        val databaseReady: Boolean = false,
+        val commandsLoaded: Int? = null,
+        val panelUrl: String? = null,
+        val levixReady: Boolean = false,
     )
 
     @Volatile
@@ -27,8 +33,8 @@ object HostState {
 
     private val listeners = CopyOnWriteArrayList<(Snapshot) -> Unit>()
 
-    /** Private app storage. Passed to Node as LEVIX_DATA_DIR. */
-    fun dataDir(context: Context): File = context.applicationContext.filesDir
+    /** Mutable Levix data (`levix.db`, logs, memory). Code lives in filesDir/app. */
+    fun dataDir(context: Context): File = LevixAppBundle.dataDir(context)
 
     fun listen(listener: (Snapshot) -> Unit): () -> Unit {
         listeners.add(listener)
@@ -110,6 +116,36 @@ object HostState {
     @Synchronized
     fun setNodeLine(line: String) {
         publish(snapshot.copy(nodeLine = line.take(200)))
+    }
+
+    @Synchronized
+    fun markSqliteOk() {
+        publish(snapshot.copy(sqliteOk = true, nodeAlive = true, nodeError = null))
+    }
+
+    @Synchronized
+    fun markTlsOk() {
+        publish(snapshot.copy(tlsOk = true, nodeAlive = true))
+    }
+
+    @Synchronized
+    fun markDatabaseReady() {
+        publish(snapshot.copy(databaseReady = true, nodeAlive = true))
+    }
+
+    @Synchronized
+    fun markCommandsLoaded(count: Int?) {
+        publish(snapshot.copy(commandsLoaded = count, nodeAlive = true))
+    }
+
+    @Synchronized
+    fun markPanelListening(url: String) {
+        publish(snapshot.copy(panelUrl = url, nodeAlive = true))
+    }
+
+    @Synchronized
+    fun markLevixReady() {
+        publish(snapshot.copy(levixReady = true, nodeAlive = true, nodeError = null))
     }
 
     private fun publish(next: Snapshot) {

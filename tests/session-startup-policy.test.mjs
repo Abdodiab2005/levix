@@ -24,6 +24,14 @@ equal(
   hasPairedCredentials({ me: { id: "201234567890:1@s.whatsapp.net" } }),
   true
 );
+equal(
+  "a pairing-code attempt that wrote me.id is still unpaired",
+  hasPairedCredentials({
+    me: { id: "201234567890:1@s.whatsapp.net" },
+    registered: false,
+  }),
+  false
+);
 
 section("session startup policy");
 

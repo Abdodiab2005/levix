@@ -19,6 +19,12 @@ function isPackaged() {
   }
 }
 
+// Worker-thread transports load targets by module path. That fails inside a
+// SEA, and Android's Bionic Node is happier with in-process streams too.
+function useInProcessLogs() {
+  return isPackaged() || process.env.LEVIX_ANDROID === "1";
+}
+
 const base = {
   level: "trace",
   serializers: {
@@ -38,7 +44,7 @@ const PRETTY = {
 const combined = path.join(logDir, "combined.log");
 const errors = path.join(logDir, "error.log");
 
-const logger = isPackaged()
+const logger = useInProcessLogs()
   ? pino(
       base,
       pino.multistream([

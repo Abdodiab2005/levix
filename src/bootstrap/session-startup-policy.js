@@ -1,13 +1,16 @@
 // Decide whether the WhatsApp session should be started during process boot.
 //
 // Baileys writes a `creds` row as soon as auth state is initialized, even before
-// a QR is successfully paired. Only `creds.me.id` proves that this installation
-// was actually linked to a WhatsApp account.
+// a QR is successfully paired. `requestPairingCode` also writes `creds.me.id`
+// before the phone accepts the code. A finished link has `me.id` and is not
+// still `registered: false`.
 export function hasPairedCredentials(rawCreds) {
   if (!rawCreds) return false;
   try {
     const creds = typeof rawCreds === "string" ? JSON.parse(rawCreds) : rawCreds;
-    return Boolean(creds?.me?.id);
+    if (!creds?.me?.id) return false;
+    if (creds.registered === false) return false;
+    return true;
   } catch {
     return false;
   }

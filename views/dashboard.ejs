@@ -319,6 +319,31 @@
 
               <div class="hint" id="conn-proxy"></div>
 
+              <div id="pair-chooser" class="pair-chooser">
+                <p class="hint">How should this phone link?</p>
+                <div class="pair-methods">
+                  <label class="pair-option">
+                    <input type="radio" name="pair-method" value="qr" />
+                    QR code
+                  </label>
+                  <label class="pair-option">
+                    <input type="radio" name="pair-method" value="pairing" />
+                    Pairing code
+                  </label>
+                </div>
+                <div id="pair-phone-wrap" class="pair-phone-wrap" hidden>
+                  <label for="pair-phone">WhatsApp number with country code</label>
+                  <input
+                    id="pair-phone"
+                    type="tel"
+                    inputmode="numeric"
+                    autocomplete="tel"
+                    placeholder="2010…"
+                  />
+                  <p class="hint">This WhatsApp’s own number. Country code, no leading 0 (Egypt: 2010… not 010…).</p>
+                </div>
+              </div>
+
               <div class="inline action-cluster">
                 <button class="btn btn-primary" id="start-btn" type="button">
                   Start session
@@ -347,13 +372,23 @@
               </div>
 
               <div id="qr-panel" style="display: none">
-                <div class="qr-box">
+                <div class="qr-box" id="qr-box">
                   <div class="qr-frame" id="qr-frame"></div>
                   <div class="hint" id="qr-note">Waiting for a QR code…</div>
-                  <ol class="steps">
+                  <ol class="steps" id="qr-steps">
                     <li>Open WhatsApp on the phone the bot should use.</li>
                     <li>Settings → Linked devices → Link a device.</li>
                     <li>Point the camera at the code above.</li>
+                  </ol>
+                </div>
+                <div class="qr-box" id="pairing-box" hidden>
+                  <div class="pairing-code" id="pairing-code">••••-••••</div>
+                  <div class="hint" id="pairing-phone"></div>
+                  <div class="hint" id="pairing-note">Waiting for a pairing code…</div>
+                  <ol class="steps">
+                    <li>Open WhatsApp on that number → Settings → Linked devices.</li>
+                    <li>Link a device → Link with phone number instead.</li>
+                    <li>Type the code above. Get a new code if it fails.</li>
                   </ol>
                 </div>
               </div>

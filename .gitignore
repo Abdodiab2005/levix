@@ -28,6 +28,7 @@ my-ver.zip
 # Android host
 android/.gradle/
 android/.idea/
+android/.kotlin/
 android/build/
 android/app/build/
 android/local.properties
@@ -37,3 +38,4 @@ android/captures/
 android/.cxx/
 *.apk
 *.aab
+android/app/src/main/assets/levix-app.zip

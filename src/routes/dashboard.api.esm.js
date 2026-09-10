@@ -850,7 +850,12 @@ router.post("/security/password", (req, res) => {
 // pairing was already waiting showed an empty frame until Baileys happened to
 // issue the next one.
 router.get("/bot/session", (req, res) => {
-  res.json({ success: true, session: sessionState(), qr: session?.qr ?? null });
+  res.json({
+    success: true,
+    session: sessionState(),
+    qr: session?.qr ?? null,
+    pairingCode: session?.pairingCode ?? null,
+  });
 });
 
 // Idempotent by construction: the manager returns the state it is already in
@@ -862,7 +867,17 @@ router.post(
     if (!session) {
       return res.status(503).json({ success: false, error: "Session manager is not ready" });
     }
-    const state = await session.start({ reason: "dashboard" });
+    let state;
+    try {
+      state = await session.start({
+        reason: "dashboard",
+        method: req.body?.method,
+        phone: req.body?.phone,
+      });
+    } catch (error) {
+      if (error.code === "PAIRING_PHONE") return badRequest(res, error.message);
+      throw error;
+    }
     logger.info(`[Dashboard] Start session requested — now ${state.state}`);
     res.json({ success: true, session: state });
   })

@@ -20,6 +20,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusText: TextView
     private lateinit var heartbeatText: TextView
     private lateinit var nodeText: TextView
+    private lateinit var levixText: TextView
     private lateinit var statusHint: TextView
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
@@ -50,14 +51,15 @@ class MainActivity : AppCompatActivity() {
         statusText = findViewById(R.id.statusText)
         heartbeatText = findViewById(R.id.heartbeatText)
         nodeText = findViewById(R.id.nodeText)
+        levixText = findViewById(R.id.levixText)
         statusHint = findViewById(R.id.statusHint)
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
         panelButton = findViewById(R.id.panelButton)
 
-        panelButton.isEnabled = false
         startButton.setOnClickListener { requestStart() }
         stopButton.setOnClickListener { LevixHostService.stop(this) }
+        panelButton.setOnClickListener { openPanel() }
         render(HostState.snapshot)
         maybeAutostart(intent)
     }
@@ -76,6 +78,16 @@ class MainActivity : AppCompatActivity() {
         if (intent?.getBooleanExtra(EXTRA_AUTOSTART, false) == true) {
             requestStart()
         }
+        if (intent?.getBooleanExtra(EXTRA_OPEN_PANEL, false) == true) {
+            openPanel()
+        }
+    }
+
+    private fun openPanel() {
+        val url = HostState.snapshot.panelUrl ?: "http://127.0.0.1:3001/"
+        startActivity(
+            Intent(this, PanelActivity::class.java).putExtra(PanelActivity.EXTRA_URL, url),
+        )
     }
 
     override fun onStart() {
@@ -130,9 +142,22 @@ class MainActivity : AppCompatActivity() {
             snapshot.running -> getString(R.string.node_starting)
             else -> getString(R.string.node_none)
         }
+        levixText.text = levixStatus(snapshot)
         startButton.isEnabled = !snapshot.running
         stopButton.isEnabled = snapshot.running
-        panelButton.isEnabled = false
+        panelButton.isEnabled = snapshot.levixReady || snapshot.panelUrl != null
+    }
+
+    private fun levixStatus(snapshot: HostState.Snapshot): String {
+        if (!snapshot.running) return ""
+        val parts = mutableListOf<String>()
+        if (snapshot.levixReady) parts.add(getString(R.string.levix_ready))
+        if (snapshot.databaseReady) parts.add(getString(R.string.levix_db))
+        snapshot.commandsLoaded?.let { parts.add(getString(R.string.levix_commands, it)) }
+        snapshot.panelUrl?.let { parts.add(getString(R.string.levix_panel, it)) }
+        if (snapshot.sqliteOk && parts.isEmpty()) parts.add(getString(R.string.levix_sqlite))
+        if (parts.isEmpty()) parts.add(getString(R.string.levix_unpacking))
+        return parts.joinToString("\n")
     }
 
     private fun formatAge(epochMs: Long): String {
@@ -147,5 +172,6 @@ class MainActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_AUTOSTART = "autostart"
         const val EXTRA_STOP = "autostop"
+        const val EXTRA_OPEN_PANEL = "openPanel"
     }
 }

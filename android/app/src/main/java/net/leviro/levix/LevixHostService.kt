@@ -35,6 +35,7 @@ class LevixHostService : Service() {
 
     private val heartbeat = object : Runnable {
         override fun run() {
+            if (HostState.snapshot.nodeAlive) HostState.heartbeat()
             updateNotification()
             handler.postDelayed(this, HEARTBEAT_MS)
         }
@@ -159,6 +160,7 @@ class LevixHostService : Service() {
         val stamp = if (last == 0L) "—" else timeFormat.format(Date(last))
         val node = when {
             snap.nodeError != null -> getString(R.string.notif_node_error, snap.nodeError)
+            snap.levixReady -> getString(R.string.notif_levix_ready)
             snap.nodeVersion != null -> getString(
                 R.string.notif_node_ok,
                 snap.nodeVersion,
