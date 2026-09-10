@@ -1825,6 +1825,48 @@ td.wrap {
 .steps li::marker {
   color: var(--blue-bright);
   font-family: var(--mono);
+}
+
+.pair-chooser {
+  margin: 16px 0 8px;
+}
+
+.pair-methods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin: 8px 0 12px;
+}
+
+.pair-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.pair-phone-wrap {
+  display: grid;
+  gap: 6px;
+  max-width: 360px;
+  margin-bottom: 12px;
+}
+
+.pair-phone-wrap[hidden] {
+  display: none;
+}
+
+.pairing-code {
+  font-family: var(--mono);
+  font-size: 2rem;
+  letter-spacing: 0.18em;
+  font-weight: 700;
+  padding: 18px 24px;
+  border-radius: 14px;
+  background: var(--panel-raised);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
   font-weight: 700;
 }
 

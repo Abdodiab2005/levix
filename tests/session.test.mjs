@@ -20,7 +20,7 @@ import {
 
 useTempDataDir("levix-session");
 
-const { WhatsAppSession, SESSION_STATES } = await import("../src/core/session.js");
+const { WhatsAppSession, SESSION_STATES, parseStartOptions, normalizePairingPhone } = await import("../src/core/session.js");
 const { RETRY_SCHEDULE_MS, MAX_RETRIES } = await import("../src/config/constants.js");
 const { classifyDisconnect, CONNECTION_FAILURE_405 } = await import("../src/core/connection.js");
 const { DisconnectReason } = await import("@whiskeysockets/baileys");
@@ -60,6 +60,10 @@ function makeHarness({ paired = false, retryDelaysMs, clearAll } = {}) {
       },
       async logout() {
         this.loggedOut += 1;
+      },
+      async requestPairingCode(phone) {
+        this.pairingPhone = phone;
+        return "ABCD1234";
       },
       updates: null,
     };
@@ -733,6 +737,60 @@ section("a socket that will not even be created");
   await h.session.start();
   equal("the failure is a state, not a crash", h.session.state, S.ERROR);
   ok("and it can be retried by hand", h.session.getState().canStart);
+}
+
+section("pairing phone numbers are digits with a country code");
+
+{
+  equal("strips plus and spaces", normalizePairingPhone("+20 10 1234 5678"), "201012345678");
+  equal("accepts Arabic-Indic digits", normalizePairingPhone("٢٠١٠١٢٣٤٥٦٧٨"), "201012345678");
+  equal("qr is the default method", parseStartOptions({}).method, "qr");
+  equal("pairing keeps the number", parseStartOptions({ method: "pairing", phone: "201012345678" }).phone, "201012345678");
+  let threw = false;
+  try {
+    parseStartOptions({ method: "pairing", phone: "12" });
+  } catch (error) {
+    threw = error.code === "PAIRING_PHONE";
+  }
+  ok("a short number is rejected before a socket exists", threw);
+}
+
+section("pairing code is chosen before the socket is created");
+
+{
+  const h = makeHarness();
+  let threw = false;
+  try {
+    await h.session.start({ method: "pairing", phone: "99" });
+  } catch (error) {
+    threw = error.code === "PAIRING_PHONE";
+  }
+  ok("invalid pairing start throws", threw);
+  equal("and creates no socket", h.sockets.length, 0);
+}
+
+{
+  const h = makeHarness();
+  await h.session.start({ method: "pairing", phone: "201012345678" });
+  equal("one socket", h.sockets.length, 1);
+  await h.push({ qr: "should-not-be-shown" });
+  equal("the pairing code is on offer", h.session.pairingCode, "ABCD1234");
+  equal("the QR is not stored", h.session.qr, null);
+  ok("no qr event was emitted", !h.events.some((e) => e.event === "qr"));
+  ok(
+    "the pairing_code event carries the code",
+    h.events.some((e) => e.event === "pairing_code" && e.payload.code === "ABCD1234")
+  );
+  equal("the number was given to Baileys", h.latest().pairingPhone, "201012345678");
+  ok("getState does not include the code", h.session.getState().hasPairingCode === true);
+  ok("the snapshot has no code field", h.session.getState().pairingCode === undefined);
+}
+
+{
+  const h = makeHarness({ paired: true });
+  await h.session.start({ method: "pairing", phone: "201012345678" });
+  equal("a paired install still just connects", h.session.state, S.STARTING);
+  equal("it never asked for a code", h.latest().pairingPhone, undefined);
 }
 
 finish();
