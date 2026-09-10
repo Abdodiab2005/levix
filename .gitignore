@@ -24,3 +24,16 @@ config/schedule.json
 bot.log
 bot.zip
 my-ver.zip
+
+# Android host
+android/.gradle/
+android/.idea/
+android/build/
+android/app/build/
+android/local.properties
+android/*.iml
+android/app/*.iml
+android/captures/
+android/.cxx/
+*.apk
+*.aab

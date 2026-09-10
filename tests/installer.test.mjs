@@ -53,7 +53,7 @@ ok(
 
 section("a release tag is validated before it becomes a path");
 
-for (const good of ["v2.0.0", "v2.0.1", "v2.1.0", "v3.0.0", "v10.20.30", "2.0.1"]) {
+for (const good of ["v2.0.0", "v2.0.1", "v2.1.0", "v3.0.0", "v3.0.0-alpha", "v10.20.30", "2.0.1"]) {
   const parsed = parseTag(good);
   ok(`accepts ${good}`, parsed.version.length > 0);
 }
@@ -61,6 +61,8 @@ for (const good of ["v2.0.0", "v2.0.1", "v2.1.0", "v3.0.0", "v10.20.30", "2.0.1"
 equal("v2.0.1 is stable", parseTag("v2.0.1").stable, true);
 equal("v2.1.0-rc.1 is not", parseTag("v2.1.0-rc.1").stable, false);
 equal("v2.1.0-beta.1 is not", parseTag("v2.1.0-beta.1").stable, false);
+equal("v3.0.0-alpha is not", parseTag("v3.0.0-alpha").stable, false);
+equal("v3.0.0-alpha keeps the label", parseTag("v3.0.0-alpha").version, "3.0.0-alpha");
 equal("a bare tag is normalised", parseTag("2.0.1").tag, "v2.0.1");
 
 for (const bad of [
@@ -299,6 +301,14 @@ ok(
 );
 ok("it ships as a release asset too", /name: installer[\s\S]*?path: dist\/levix-\*-install\.sh/.test(release));
 ok("covered by the existing checksum manifest", /sha256sum levix-\* > SHA256SUMS\.txt/.test(release));
+ok(
+  "prereleases publish to an npm dist-tag, not latest",
+  /npm publish --provenance --access public --tag/.test(release),
+);
+ok(
+  "GitHub marks hyphenated tags as prereleases",
+  /prerelease:\s*\$\{\{\s*contains\(github\.ref_name, '-'\)\s*\}\}/.test(release),
+);
 
 section("the deployment carries no secrets and no shortcuts");
 

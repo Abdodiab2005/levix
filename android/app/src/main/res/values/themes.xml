@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Levix" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/levix_primary</item>
+        <item name="android:statusBarColor">@color/levix_primary</item>
+    </style>
+</resources>

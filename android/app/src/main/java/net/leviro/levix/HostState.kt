@@ -1,0 +1,119 @@
+package net.leviro.levix
+
+import android.content.Context
+import java.io.File
+import java.util.concurrent.CopyOnWriteArrayList
+
+/**
+ * In-process host snapshot. The Activity reads this; the service writes it.
+ */
+object HostState {
+    data class Snapshot(
+        val running: Boolean = false,
+        val lastHeartbeatMs: Long = 0L,
+        val heartbeatCount: Long = 0L,
+        val startedAtMs: Long = 0L,
+        val nodeAlive: Boolean = false,
+        val nodeVersion: String? = null,
+        val nodePlatform: String? = null,
+        val nodeArch: String? = null,
+        val nodeLine: String? = null,
+        val nodeError: String? = null,
+    )
+
+    @Volatile
+    var snapshot: Snapshot = Snapshot()
+        private set
+
+    private val listeners = CopyOnWriteArrayList<(Snapshot) -> Unit>()
+
+    /** Private app storage. Passed to Node as LEVIX_DATA_DIR. */
+    fun dataDir(context: Context): File = context.applicationContext.filesDir
+
+    fun listen(listener: (Snapshot) -> Unit): () -> Unit {
+        listeners.add(listener)
+        listener(snapshot)
+        return { listeners.remove(listener) }
+    }
+
+    @Synchronized
+    fun markStarted() {
+        val now = System.currentTimeMillis()
+        publish(
+            Snapshot(
+                running = true,
+                lastHeartbeatMs = 0L,
+                heartbeatCount = 0L,
+                startedAtMs = now,
+            ),
+        )
+    }
+
+    @Synchronized
+    fun heartbeat() {
+        val current = snapshot
+        if (!current.running) return
+        publish(
+            current.copy(
+                lastHeartbeatMs = System.currentTimeMillis(),
+                heartbeatCount = current.heartbeatCount + 1L,
+            ),
+        )
+    }
+
+    @Synchronized
+    fun markStopped() {
+        publish(Snapshot())
+    }
+
+    @Synchronized
+    fun markNodeStarting() {
+        publish(snapshot.copy(nodeAlive = false, nodeError = null, nodeLine = "starting"))
+    }
+
+    @Synchronized
+    fun markNodeAlive() {
+        publish(snapshot.copy(nodeAlive = true, nodeError = null))
+    }
+
+    @Synchronized
+    fun markNodeStopped() {
+        publish(
+            snapshot.copy(
+                nodeAlive = false,
+                nodeLine = null,
+                nodeError = null,
+            ),
+        )
+    }
+
+    @Synchronized
+    fun markNodeError(message: String) {
+        publish(snapshot.copy(nodeAlive = false, nodeError = message))
+    }
+
+    @Synchronized
+    fun setNodeVersion(version: String) {
+        publish(snapshot.copy(nodeVersion = version, nodeAlive = true, nodeError = null))
+    }
+
+    @Synchronized
+    fun setNodePlatform(platform: String) {
+        publish(snapshot.copy(nodePlatform = platform))
+    }
+
+    @Synchronized
+    fun setNodeArch(arch: String) {
+        publish(snapshot.copy(nodeArch = arch))
+    }
+
+    @Synchronized
+    fun setNodeLine(line: String) {
+        publish(snapshot.copy(nodeLine = line.take(200)))
+    }
+
+    private fun publish(next: Snapshot) {
+        snapshot = next
+        listeners.forEach { listener -> listener(next) }
+    }
+}
