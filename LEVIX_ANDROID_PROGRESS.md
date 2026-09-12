@@ -1,15 +1,15 @@
 # Levix Android host — where we are
 
-Last updated: **2026-09-10** (`3.0.0-beta`)
+Last updated: **2026-09-12** (`3.1.1-beta`)
 
 **Status:** Levix is a live WhatsApp companion on a Redmi 9 (Lineage, ARM64). No VPS. No Termux at runtime.
 
-**On main:** [#34](https://github.com/Abdodiab2005/levix/pull/34), [#35](https://github.com/Abdodiab2005/levix/pull/35)  
-**Tags:** [`v3.0.0-alpha`](https://github.com/Abdodiab2005/levix/releases/tag/v3.0.0-alpha) → **`v3.0.0-beta`**
+**On main:** [#34](https://github.com/Abdodiab2005/levix/pull/34), [#35](https://github.com/Abdodiab2005/levix/pull/35), [#36](https://github.com/Abdodiab2005/levix/pull/36)  
+**Tags:** [`v3.0.0-alpha`](https://github.com/Abdodiab2005/levix/releases/tag/v3.0.0-alpha) → [`v3.0.0-beta`](https://github.com/Abdodiab2005/levix/releases/tag/v3.0.0-beta) → **`v3.1.1-beta`**
 
 Full original plan: [`LEVIX_ANDROID_HOST_PLAN.md`](LEVIX_ANDROID_HOST_PLAN.md)
 
-Release line: **alpha → beta → rc → 3.0.0**.
+Release line: **alpha → beta → rc → 3.0.0 / 3.1.x**.
 
 ---
 
@@ -23,13 +23,13 @@ Release line: **alpha → beta → rc → 3.0.0**.
 | 3 | Boot Levix core (SQLite, 55 commands, localhost panel) | Done on device |
 | 4 | WhatsApp pairing (code or QR) | **Done on device** (pairing code) |
 | 5 | Pairing UX polish | Mostly done (chooser + Chrome companion) |
-| 6 | WebView panel | Done (loopback only) |
-| 7 | Boot receiver / OEM battery / Node crash retry | **Coded** (needs reboot + overnight soak). TLS after reboot waits for a validated network and retries; timeout is not a Node crash. |
+| 6 | WebView panel | Done (unix socket bridge, responsive viewport, no navigation lag) |
+| 7 | Boot receiver / OEM battery / Node crash retry | **Done** (survives reboot, battery limits, and Node crashes) |
 | 8 | FFmpeg | Not started (`!tts` falls back) |
 | 9 | CI APK job | Not started |
 
 **Package:** `net.leviro.levix`  
-**APK versionName:** `3.0.0-beta` (versionCode **8**)  
+**APK versionName:** `3.1.1-beta` (versionCode **22**)  
 **Node on device:** `v24.18.0` / `android` / `arm64`
 
 **Next checks (not blockers):**
@@ -148,6 +148,8 @@ Levix ready
 | `v3.0.0-alpha` | GitHub **prerelease**. npm dist-tag `alpha` (not `latest`). `/install.sh` unchanged. |
 | [#35](https://github.com/Abdodiab2005/levix/pull/35) | Merged. Core boot, WebView, pairing chooser, Chrome pairing fix. |
 | `v3.0.0-beta` | GitHub **prerelease**. npm dist-tag `beta`. |
+| [#36](https://github.com/Abdodiab2005/levix/pull/36) | Merged. Keepalive, boot receiver, battery limits, panel responsiveness, unix socket bridge. |
+| `v3.1.1-beta` | GitHub **prerelease**. npm dist-tag `beta`. |
 
 Prerelease tags (`3.0.0-alpha` / `-beta` / `-rc.N`) publish to the matching npm dist-tag and are marked prerelease on GitHub.
 

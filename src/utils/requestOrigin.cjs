@@ -78,7 +78,10 @@ function hasForwardingHeader(headers = {}) {
  * the right key for rate limiting a password or setup-code guess.
  */
 function clientAddress(req) {
-  return req?.socket?.remoteAddress || req?.connection?.remoteAddress || "";
+  const addr = req?.socket?.remoteAddress || req?.connection?.remoteAddress;
+  if (addr) return addr;
+  if (process.env.LEVIX_ANDROID === "1") return "127.0.0.1";
+  return "";
 }
 
 /**

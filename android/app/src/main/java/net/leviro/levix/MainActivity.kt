@@ -91,7 +91,9 @@ class MainActivity : AppCompatActivity() {
     private fun openPanel() {
         val url = HostState.snapshot.panelUrl ?: "http://127.0.0.1:3001/"
         startActivity(
-            Intent(this, PanelActivity::class.java).putExtra(PanelActivity.EXTRA_URL, url),
+            Intent(this, PanelActivity::class.java)
+                .putExtra(PanelActivity.EXTRA_URL, url)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP),
         )
     }
 
@@ -155,7 +157,8 @@ class MainActivity : AppCompatActivity() {
         levixText.text = levixStatus(snapshot)
         startButton.isEnabled = !snapshot.running
         stopButton.isEnabled = snapshot.running
-        panelButton.isEnabled = snapshot.running
+        panelButton.isEnabled = snapshot.running &&
+            (snapshot.levixReady || snapshot.panelUrl != null)
         val unrestricted = HostBattery.isUnrestricted(this)
         batteryButton.isEnabled = !unrestricted
         batteryHint.text = getString(
