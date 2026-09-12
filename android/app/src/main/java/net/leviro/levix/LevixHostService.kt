@@ -32,10 +32,16 @@ class LevixHostService : Service() {
     private var userStop = false
     private var tornDown = false
     private var unlisten: (() -> Unit)? = null
+    private var nodeRetry = 0
+    private val retryNode = Runnable {
+        if (running && !userStop && HostPrefs.wantedRunning(this)) {
+            NodeRuntime.start(this)
+        }
+    }
 
     private val heartbeat = object : Runnable {
         override fun run() {
-            if (HostState.snapshot.nodeAlive) HostState.heartbeat()
+            if (HostState.snapshot.running) HostState.heartbeat()
             updateNotification()
             handler.postDelayed(this, HEARTBEAT_MS)
         }
@@ -48,6 +54,9 @@ class LevixHostService : Service() {
         ensureChannel()
         // Promote immediately so a fast STOP still satisfies the FGS contract.
         startAsForeground(buildNotification(getString(R.string.notif_starting)))
+        NodeRuntime.unexpectedExitListener = { code ->
+            handler.post { scheduleNodeRetry(code) }
+        }
         HostLog.event("service created")
     }
 
@@ -55,17 +64,24 @@ class LevixHostService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 userStop = true
+                HostPrefs.setWantedRunning(this, false)
                 HostLog.event("service stop requested: user")
                 teardown()
                 stopSelf(startId)
                 return START_NOT_STICKY
             }
             ACTION_START -> {
+                HostPrefs.setWantedRunning(this, true)
                 HostLog.event("service start: user")
                 ensureRunning()
                 return START_STICKY
             }
             else -> {
+                if (!HostPrefs.wantedRunning(this)) {
+                    HostLog.event("service start: system but user had stopped")
+                    stopSelf(startId)
+                    return START_NOT_STICKY
+                }
                 HostLog.event("service start: system restart")
                 ensureRunning()
                 return START_STICKY
@@ -79,8 +95,23 @@ class LevixHostService : Service() {
         } else {
             HostLog.event("service stop: user")
         }
+        NodeRuntime.unexpectedExitListener = null
         teardown()
         super.onDestroy()
+    }
+
+    private fun scheduleNodeRetry(code: Int) {
+        if (userStop || tornDown || !HostPrefs.wantedRunning(this)) return
+        if (nodeRetry >= NODE_RETRY_DELAYS_MS.size) {
+            HostLog.event("node retry exhausted after exit $code")
+            HostState.markNodeError("exited repeatedly")
+            return
+        }
+        val delay = NODE_RETRY_DELAYS_MS[nodeRetry]
+        nodeRetry += 1
+        HostLog.event("node retry $nodeRetry in ${delay}ms (exit $code)")
+        handler.removeCallbacks(retryNode)
+        handler.postDelayed(retryNode, delay)
     }
 
     private fun ensureRunning() {
@@ -94,7 +125,8 @@ class LevixHostService : Service() {
         handler.removeCallbacks(heartbeat)
         handler.postDelayed(heartbeat, HEARTBEAT_MS)
         unlisten?.invoke()
-        unlisten = HostState.listen {
+        unlisten = HostState.listen { snap ->
+            if (snap.levixReady) nodeRetry = 0
             handler.post {
                 if (running && !tornDown) updateNotification()
             }
@@ -107,6 +139,7 @@ class LevixHostService : Service() {
         tornDown = true
         running = false
         handler.removeCallbacks(heartbeat)
+        handler.removeCallbacks(retryNode)
         unlisten?.invoke()
         unlisten = null
         NodeRuntime.stop()
@@ -223,6 +256,7 @@ class LevixHostService : Service() {
         private const val CHANNEL_ID = "levix-host"
         private const val NOTIFICATION_ID = 1001
         private const val HEARTBEAT_MS = 30_000L
+        private val NODE_RETRY_DELAYS_MS = longArrayOf(5_000L, 10_000L, 15_000L, 20_000L, 25_000L)
         private const val WAKE_LOCK_TAG = "net.leviro.levix:host"
 
         fun start(context: Context) {

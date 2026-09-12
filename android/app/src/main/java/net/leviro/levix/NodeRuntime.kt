@@ -25,6 +25,9 @@ object NodeRuntime {
     @Volatile
     private var process: Process? = null
 
+    @Volatile
+    var unexpectedExitListener: ((Int) -> Unit)? = null
+
     fun start(context: Context) {
         val live = process
         if (live != null && live.isAlive) {
@@ -39,7 +42,10 @@ object NodeRuntime {
             } catch (error: Exception) {
                 val message = error.message ?: error.javaClass.simpleName
                 HostLog.event("node start failed: $message")
-                mainHandler.post { HostState.markNodeError(message) }
+                mainHandler.post {
+                    HostState.markNodeError(message)
+                    if (!stopping.get()) unexpectedExitListener?.invoke(-1)
+                }
             } finally {
                 starting.set(false)
             }
@@ -87,6 +93,11 @@ object NodeRuntime {
         }
         mainHandler.post { HostState.markNodeStarting() }
         val appDir = LevixAppBundle.ensure(app)
+        if (HostNetwork.awaitValidated(app, 8_000L)) {
+            HostLog.event("node start: network validated")
+        } else {
+            HostLog.event("node start: starting without validated network")
+        }
         val boot = File(appDir, LevixAppBundle.BOOT_FILE)
         val dataDir = LevixAppBundle.dataDir(app)
         val builder = ProcessBuilder(binary.absolutePath, boot.absolutePath)
@@ -153,9 +164,8 @@ object NodeRuntime {
                 HostLog.event("node $line")
                 mainHandler.post { HostState.markTlsOk() }
             }
-            line.startsWith("tls error ") -> {
+            line.startsWith("tls wait ") || line.startsWith("tls skipped ") || line.startsWith("tls error ") -> {
                 HostLog.event("node $line")
-                mainHandler.post { HostState.markNodeError(line) }
             }
             line.startsWith("sqlite error ") -> {
                 HostLog.event("node $line")
@@ -215,7 +225,10 @@ object NodeRuntime {
             mainHandler.post { HostState.markNodeStopped() }
         } else {
             HostLog.event("node crashed code=$code")
-            mainHandler.post { HostState.markNodeError("exited $code") }
+            mainHandler.post {
+                HostState.markNodeError("exited $code")
+                unexpectedExitListener?.invoke(code)
+            }
         }
     }
 

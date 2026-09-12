@@ -1,15 +1,15 @@
 # Levix Android host — where we are
 
-Last updated: **2026-09-10** (`3.0.0-beta`)
+Last updated: **2026-09-12** (`3.1.1-beta`)
 
 **Status:** Levix is a live WhatsApp companion on a Redmi 9 (Lineage, ARM64). No VPS. No Termux at runtime.
 
-**On main:** [#34](https://github.com/Abdodiab2005/levix/pull/34), [#35](https://github.com/Abdodiab2005/levix/pull/35)  
-**Tags:** [`v3.0.0-alpha`](https://github.com/Abdodiab2005/levix/releases/tag/v3.0.0-alpha) → **`v3.0.0-beta`**
+**On main:** [#34](https://github.com/Abdodiab2005/levix/pull/34), [#35](https://github.com/Abdodiab2005/levix/pull/35), [#36](https://github.com/Abdodiab2005/levix/pull/36)  
+**Tags:** [`v3.0.0-alpha`](https://github.com/Abdodiab2005/levix/releases/tag/v3.0.0-alpha) → [`v3.0.0-beta`](https://github.com/Abdodiab2005/levix/releases/tag/v3.0.0-beta) → **`v3.1.1-beta`**
 
 Full original plan: [`LEVIX_ANDROID_HOST_PLAN.md`](LEVIX_ANDROID_HOST_PLAN.md)
 
-Release line: **alpha → beta → rc → 3.0.0**.
+Release line: **alpha → beta → rc → 3.0.0 / 3.1.x**.
 
 ---
 
@@ -23,20 +23,20 @@ Release line: **alpha → beta → rc → 3.0.0**.
 | 3 | Boot Levix core (SQLite, 55 commands, localhost panel) | Done on device |
 | 4 | WhatsApp pairing (code or QR) | **Done on device** (pairing code) |
 | 5 | Pairing UX polish | Mostly done (chooser + Chrome companion) |
-| 6 | WebView panel | Done (loopback only) |
-| 7 | Boot receiver / OEM battery | Not started |
+| 6 | WebView panel | Done (unix socket bridge, responsive viewport, no navigation lag) |
+| 7 | Boot receiver / OEM battery / Node crash retry | **Done** (survives reboot, battery limits, and Node crashes) |
 | 8 | FFmpeg | Not started (`!tts` falls back) |
 | 9 | CI APK job | Not started |
 
 **Package:** `net.leviro.levix`  
-**APK versionName:** `3.0.0-beta` (versionCode **8**)  
+**APK versionName:** `3.1.1-beta` (versionCode **22**)  
 **Node on device:** `v24.18.0` / `android` / `arm64`
 
 **Next checks (not blockers):**
 
 1. `!ping` with the screen locked.
 2. Stop/Start the host and confirm WhatsApp reconnects without pairing again.
-3. Then: boot receiver, battery exemptions, FFmpeg, CI APK, `v3.0.0-rc.1`.
+3. Then: FFmpeg, CI APK, `v3.0.0-rc.1`.
 
 ---
 
@@ -148,6 +148,8 @@ Levix ready
 | `v3.0.0-alpha` | GitHub **prerelease**. npm dist-tag `alpha` (not `latest`). `/install.sh` unchanged. |
 | [#35](https://github.com/Abdodiab2005/levix/pull/35) | Merged. Core boot, WebView, pairing chooser, Chrome pairing fix. |
 | `v3.0.0-beta` | GitHub **prerelease**. npm dist-tag `beta`. |
+| [#36](https://github.com/Abdodiab2005/levix/pull/36) | Merged. Keepalive, boot receiver, battery limits, panel responsiveness, unix socket bridge. |
+| `v3.1.1-beta` | GitHub **prerelease**. npm dist-tag `beta`. |
 
 Prerelease tags (`3.0.0-alpha` / `-beta` / `-rc.N`) publish to the matching npm dist-tag and are marked prerelease on GitHub.
 
@@ -189,10 +191,10 @@ adb shell am start -n net.leviro.levix/.MainActivity --ez openPanel true
 
 ## Explicitly not done
 
-- Boot receiver / OEM battery onboarding
 - FFmpeg in the APK (`!tts` warns and falls back)
 - GitHub Actions APK job
-- Confirmed `!ping` under screen lock / after host restart (do this next)
+- Confirmed `!ping` under screen lock / after host restart
+- Confirmed reboot autostart and overnight soak
 - Play Store (far goal — GitHub Releases first, then Play)
 
 ---

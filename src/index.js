@@ -194,9 +194,16 @@ async function startWithPanel({ open }) {
   try {
     panel = await bootstrapPanel({ core });
   } catch (error) {
-    if (error.code === "EADDRINUSE") {
+    if (error.code === "EADDRINUSE" || error.code === "ECONNREFUSED") {
       console.error(`\n  ${error.message}\n`);
       logger.error(error.message);
+      if (process.env.LEVIX_ANDROID === "1") {
+        // WhatsApp still works without the panel. process.exit here also
+        // trips pino's sonic-boom ("not ready yet") as a second crash.
+        console.log("Panel failed " + (error.code || error.message));
+        console.log("Levix ready");
+        return { ...core, panel: null, url: null };
+      }
       process.exit(1);
     }
     throw error;

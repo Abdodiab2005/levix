@@ -7,9 +7,20 @@
 import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
+const fs = require("node:fs");
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
+const paths = require("../config/paths.cjs");
 const { attach } = require("./events.cjs");
+
+/** Unix socket path for the Android host. Bionic Node cannot bind TCP. */
+export function androidPanelSocketPath() {
+  return paths.dataPath("panel.sock");
+}
+
+export function isAndroidHost() {
+  return process.env.LEVIX_ANDROID === "1";
+}
 
 /**
  * Start the panel and bind its port.
@@ -55,6 +66,7 @@ export async function bootstrapPanel({ core } = {}) {
 
   const port = settings.get("port");
   const host = resolveBindAddress();
+  const androidSock = isAndroidHost() ? androidPanelSocketPath() : null;
 
   await new Promise((resolve, reject) => {
     // "EADDRINUSE" plus a stack trace is not an answer anyone can act on, and
@@ -72,10 +84,19 @@ export async function bootstrapPanel({ core } = {}) {
       }
       reject(error);
     });
-    server.listen(port, host, resolve);
+    if (androidSock) {
+      try {
+        fs.unlinkSync(androidSock);
+      } catch {
+        // first run has no leftover socket
+      }
+      server.listen(androidSock, resolve);
+    } else {
+      server.listen(port, host, resolve);
+    }
   });
 
-  return { port, host, server };
+  return { port, host, server, socketPath: androidSock };
 }
 
 /**
@@ -89,15 +110,18 @@ export async function bootstrapPanel({ core } = {}) {
 export function resolveBindAddress() {
   const configured = settings.get("bind_address");
   if (configured) return configured;
-  // The phone is the host: keep the panel on loopback until a later phase
-  // opens it in a WebView. LAN bind stays an explicit setting.
-  if (process.env.LEVIX_ANDROID === "1") return "127.0.0.1";
+  // Desktop / Docker: every interface. Android never reaches this — it
+  // binds a unix socket instead (see androidPanelSocketPath). The WebView
+  // still opens http://127.0.0.1:port and the host serves that over the socket.
   return "0.0.0.0";
 }
 
 /** The address a person should type, given how this install is reachable. */
 export function panelUrl({ port, firstRun = false } = {}) {
   const domain = settings.get("public_domain");
-  const base = domain ? `https://${domain}` : `http://localhost:${port}`;
+  const host =
+    domain ||
+    (isAndroidHost() ? "127.0.0.1" : "localhost");
+  const base = domain ? `https://${host}` : `http://${host}:${port}`;
   return firstRun ? `${base}/setup` : base;
 }

@@ -25,6 +25,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
     private lateinit var panelButton: Button
+    private lateinit var batteryButton: Button
+    private lateinit var batteryHint: TextView
 
     private val refresh = object : Runnable {
         override fun run() {
@@ -56,10 +58,13 @@ class MainActivity : AppCompatActivity() {
         startButton = findViewById(R.id.startButton)
         stopButton = findViewById(R.id.stopButton)
         panelButton = findViewById(R.id.panelButton)
+        batteryButton = findViewById(R.id.batteryButton)
+        batteryHint = findViewById(R.id.batteryHint)
 
         startButton.setOnClickListener { requestStart() }
         stopButton.setOnClickListener { LevixHostService.stop(this) }
         panelButton.setOnClickListener { openPanel() }
+        batteryButton.setOnClickListener { HostBattery.requestUnrestricted(this) }
         render(HostState.snapshot)
         maybeAutostart(intent)
     }
@@ -86,8 +91,15 @@ class MainActivity : AppCompatActivity() {
     private fun openPanel() {
         val url = HostState.snapshot.panelUrl ?: "http://127.0.0.1:3001/"
         startActivity(
-            Intent(this, PanelActivity::class.java).putExtra(PanelActivity.EXTRA_URL, url),
+            Intent(this, PanelActivity::class.java)
+                .putExtra(PanelActivity.EXTRA_URL, url)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP),
         )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        render(HostState.snapshot)
     }
 
     override fun onStart() {
@@ -145,7 +157,13 @@ class MainActivity : AppCompatActivity() {
         levixText.text = levixStatus(snapshot)
         startButton.isEnabled = !snapshot.running
         stopButton.isEnabled = snapshot.running
-        panelButton.isEnabled = snapshot.levixReady || snapshot.panelUrl != null
+        panelButton.isEnabled = snapshot.running &&
+            (snapshot.levixReady || snapshot.panelUrl != null)
+        val unrestricted = HostBattery.isUnrestricted(this)
+        batteryButton.isEnabled = !unrestricted
+        batteryHint.text = getString(
+            if (unrestricted) R.string.battery_ok else R.string.battery_hint,
+        )
     }
 
     private fun levixStatus(snapshot: HostState.Snapshot): String {

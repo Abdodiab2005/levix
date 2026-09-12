@@ -292,6 +292,12 @@ app.get("/", noStore, (req, res) => {
   return res.render("login", { error: null });
 });
 
+app.get("/login", noStore, (req, res) => {
+  if (!secrets.hasDashboardPassword()) return res.redirect("/setup");
+  if (req.session.loggedIn) return res.redirect("/");
+  return res.render("login", { error: null });
+});
+
 app.post("/login", (req, res, next) => {
   if (!secrets.hasDashboardPassword()) return res.redirect("/setup");
 
