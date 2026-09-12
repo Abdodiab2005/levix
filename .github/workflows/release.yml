@@ -177,13 +177,16 @@ jobs:
       - name: Fetch Node Android ARM64 runtime
         run: bash android/scripts/fetch-node-android.sh
       - name: Decode Release Keystore
-        if: ${{ secrets.LEVIX_KEYSTORE_BASE64 != '' }}
         env:
           LEVIX_KEYSTORE_BASE64: ${{ secrets.LEVIX_KEYSTORE_BASE64 }}
         run: |
-          mkdir -p ~/.android
-          echo "$LEVIX_KEYSTORE_BASE64" | base64 -d > ~/.android/release.keystore
-          echo "LEVIX_KEYSTORE_FILE=$HOME/.android/release.keystore" >> "$GITHUB_ENV"
+          if [ -n "$LEVIX_KEYSTORE_BASE64" ]; then
+            mkdir -p ~/.android
+            echo "$LEVIX_KEYSTORE_BASE64" | base64 -d > ~/.android/release.keystore
+            echo "LEVIX_KEYSTORE_FILE=$HOME/.android/release.keystore" >> "$GITHUB_ENV"
+          else
+            echo "No custom LEVIX_KEYSTORE_BASE64 secret provided; signing with default keystore"
+          fi
       - name: Build Android Release APK
         working-directory: android
         env:
