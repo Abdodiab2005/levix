@@ -83,6 +83,22 @@ object NodeRuntime {
         return live != null && live.isAlive
     }
 
+    fun setNetworkOnline(online: Boolean) {
+        val cmd = if (online) "network online\n" else "network offline\n"
+        val live: Process?
+        synchronized(lock) {
+            live = process
+        }
+        if (live == null || !live.isAlive) return
+        try {
+            live.outputStream.write(cmd.toByteArray(StandardCharsets.UTF_8))
+            live.outputStream.flush()
+            HostLog.event("node stdin: ${cmd.trim()}")
+        } catch (e: Exception) {
+            HostLog.event("failed to write to node stdin: ${e.message}")
+        }
+    }
+
     private fun startBlocking(app: Context) {
         val binary = File(app.applicationInfo.nativeLibraryDir, BINARY_NAME)
         if (!binary.exists()) {
@@ -111,6 +127,10 @@ object NodeRuntime {
         env["TMPDIR"] = app.cacheDir.absolutePath
         env["NODE_DISABLE_COLORS"] = "1"
         env["LD_LIBRARY_PATH"] = app.applicationInfo.nativeLibraryDir
+        val ffmpegBinary = File(app.applicationInfo.nativeLibraryDir, "libffmpeg.so")
+        if (ffmpegBinary.exists()) {
+            env["LEVIX_FFMPEG_PATH"] = ffmpegBinary.absolutePath
+        }
         val started = try {
             builder.start()
         } catch (error: Exception) {
@@ -198,6 +218,15 @@ object NodeRuntime {
                     HostState.markNodeAlive()
                 }
                 HostLog.heartbeat(HostState.snapshot.heartbeatCount + 1L)
+            }
+            line.startsWith("whatsapp session ") -> {
+                val data = line.removePrefix("whatsapp session ").trim()
+                val parts = data.split("|", limit = 3)
+                val state = parts.getOrNull(0)
+                val code = parts.getOrNull(1)?.toIntOrNull()
+                val reason = parts.getOrNull(2)?.takeIf { it.isNotBlank() }
+                HostLog.event("node whatsapp: state=$state code=$code reason=$reason")
+                mainHandler.post { HostState.setWhatsAppStatus(state, code, reason) }
             }
             line.startsWith("pid ") -> HostLog.event("node $line")
             else -> {

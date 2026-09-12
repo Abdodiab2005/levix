@@ -17,5 +17,39 @@ try {
   process.exit(1);
 }
 
-const { run } = await import("./src/cli.js");
-await run(["node", "bin/levix.js", "--no-open"]);
+import readline from "node:readline";
+
+let session = null;
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  terminal: false,
+});
+
+rl.on("line", async (line) => {
+  const trimmed = line.trim();
+  if (trimmed === "network offline") {
+    const s = session || (await import("./src/index.js")).getLiveSession();
+    if (s?.setInternetOnline) {
+      await s.setInternetOnline(false).catch(() => {});
+    }
+  } else if (trimmed === "network online") {
+    const s = session || (await import("./src/index.js")).getLiveSession();
+    if (s?.setInternetOnline) {
+      await s.setInternetOnline(true).catch(() => {});
+    }
+  }
+});
+
+const { attach } = await import("./src/bootstrap/events.cjs");
+attach((event, payload) => {
+  if (event === "session" && payload) {
+    const code = payload.lastDisconnect?.statusCode ?? "";
+    const reason = payload.lastDisconnect?.reason ?? "";
+    console.log(`whatsapp session ${payload.state}|${code}|${reason}`);
+  }
+});
+
+const { start, getLiveSession } = await import("./src/index.js");
+const app = await start({ headless: false, open: false });
+session = app?.session || getLiveSession();

@@ -41,6 +41,10 @@ function short(path) {
 // soon as the core is up.
 let liveSession = null;
 
+export function getLiveSession() {
+  return liveSession;
+}
+
 /**
  * Start Levix.
  *

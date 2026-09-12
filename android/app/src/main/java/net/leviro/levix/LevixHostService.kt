@@ -8,6 +8,9 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -33,6 +36,11 @@ class LevixHostService : Service() {
     private var tornDown = false
     private var unlisten: (() -> Unit)? = null
     private var nodeRetry = 0
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private var isNetworkOnline = true
+    private var offlineAlertPosted = false
+
     private val retryNode = Runnable {
         if (running && !userStop && HostPrefs.wantedRunning(this)) {
             NodeRuntime.start(this)
@@ -42,7 +50,7 @@ class LevixHostService : Service() {
     private val heartbeat = object : Runnable {
         override fun run() {
             if (HostState.snapshot.running) HostState.heartbeat()
-            updateNotification()
+            checkStateAndNotify()
             handler.postDelayed(this, HEARTBEAT_MS)
         }
     }
@@ -120,18 +128,20 @@ class LevixHostService : Service() {
         tornDown = false
         userStop = false
         acquireWakeLock()
+        registerNetworkCallback()
         HostState.markStarted()
-        startAsForeground(buildNotification(heartbeatLine()))
+        startAsForeground(buildNotification(getString(R.string.notif_starting)))
         handler.removeCallbacks(heartbeat)
         handler.postDelayed(heartbeat, HEARTBEAT_MS)
         unlisten?.invoke()
         unlisten = HostState.listen { snap ->
             if (snap.levixReady) nodeRetry = 0
             handler.post {
-                if (running && !tornDown) updateNotification()
+                if (running && !tornDown) checkStateAndNotify()
             }
         }
         NodeRuntime.start(this)
+        checkStateAndNotify()
     }
 
     private fun teardown() {
@@ -142,6 +152,8 @@ class LevixHostService : Service() {
         handler.removeCallbacks(retryNode)
         unlisten?.invoke()
         unlisten = null
+        unregisterNetworkCallback()
+        cancelOfflineAlert()
         NodeRuntime.stop()
         releaseWakeLock()
         HostState.markStopped()
@@ -168,6 +180,64 @@ class LevixHostService : Service() {
         wakeLock = null
     }
 
+    private fun registerNetworkCallback() {
+        if (connectivityManager != null) return
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return
+        connectivityManager = cm
+
+        val activeNet = cm.activeNetwork
+        val caps = activeNet?.let { cm.getNetworkCapabilities(it) }
+        isNetworkOnline = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                HostLog.event("network callback: available ($network)")
+                handler.post {
+                    isNetworkOnline = true
+                    NodeRuntime.setNetworkOnline(true)
+                    checkStateAndNotify()
+                }
+            }
+
+            override fun onLost(network: Network) {
+                HostLog.event("network callback: lost ($network)")
+                handler.post {
+                    isNetworkOnline = false
+                    NodeRuntime.setNetworkOnline(false)
+                    checkStateAndNotify()
+                }
+            }
+
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                HostLog.event("network callback: capabilities internet=$hasInternet")
+                handler.post {
+                    if (isNetworkOnline != hasInternet) {
+                        isNetworkOnline = hasInternet
+                        NodeRuntime.setNetworkOnline(hasInternet)
+                        checkStateAndNotify()
+                    }
+                }
+            }
+        }
+        networkCallback = callback
+        try {
+            cm.registerDefaultNetworkCallback(callback)
+        } catch (e: Exception) {
+            HostLog.event("failed to register network callback: ${e.message}")
+        }
+    }
+
+    private fun unregisterNetworkCallback() {
+        val cm = connectivityManager ?: return
+        val cb = networkCallback ?: return
+        try {
+            cm.unregisterNetworkCallback(cb)
+        } catch (_: Exception) {}
+        connectivityManager = null
+        networkCallback = null
+    }
+
     private fun startAsForeground(notification: Notification) {
         if (Build.VERSION.SDK_INT >= 34) {
             ServiceCompat.startForeground(
@@ -181,16 +251,102 @@ class LevixHostService : Service() {
         }
     }
 
-    private fun updateNotification() {
-        val text = heartbeatLine()
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, buildNotification(text))
+    private fun formatWhatsAppStatus(snap: HostState.Snapshot): String {
+        if (!isNetworkOnline) {
+            return getString(R.string.notif_wa_offline)
+        }
+        val state = snap.whatsAppState ?: return getString(R.string.notif_node_starting)
+        return when (state) {
+            "connected" -> getString(R.string.notif_wa_connected)
+            "paused" -> getString(R.string.notif_wa_paused)
+            "waiting_for_qr" -> "WhatsApp: 📱 Waiting for pairing"
+            "linking" -> "WhatsApp: 🔄 Linking…"
+            "starting" -> "WhatsApp: ⏳ Starting…"
+            "reconnecting" -> {
+                val codeStr = snap.whatsAppCode?.let { " ($it: ${snap.whatsAppReason ?: "timeout"})" } ?: ""
+                "WhatsApp: ⏳ Reconnecting$codeStr"
+            }
+            "retry_exhausted" -> {
+                val codeStr = snap.whatsAppCode?.let { " ($it: ${snap.whatsAppReason ?: "timeout"})" } ?: ""
+                "WhatsApp: ❌ Connection failed$codeStr"
+            }
+            "disconnected" -> {
+                val codeStr = snap.whatsAppCode?.let { " ($it: ${snap.whatsAppReason ?: ""})" } ?: ""
+                "WhatsApp: Disconnected$codeStr"
+            }
+            "logged_out" -> "WhatsApp: ⚠️ Logged out"
+            "idle" -> "WhatsApp: ⏸️ Idle"
+            else -> "WhatsApp: $state"
+        }
     }
 
-    private fun heartbeatLine(): String {
+    private fun postOfflineAlert(title: String, message: String) {
+        val openIntent = PendingIntent.getActivity(
+            this,
+            3,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notif = NotificationCompat.Builder(this, CHANNEL_ALERT_ID)
+            .setSmallIcon(R.drawable.ic_stat_host)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setContentIntent(openIntent)
+            .addAction(0, getString(R.string.notif_open), openIntent)
+            .build()
+
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(NOTIFICATION_ALERT_ID, notif)
+        offlineAlertPosted = true
+    }
+
+    private fun cancelOfflineAlert() {
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.cancel(NOTIFICATION_ALERT_ID)
+        offlineAlertPosted = false
+    }
+
+    private fun checkStateAndNotify() {
+        if (!running || tornDown) return
         val snap = HostState.snapshot
+
+        if (!isNetworkOnline || snap.whatsAppState == "paused") {
+            postOfflineAlert(
+                getString(R.string.notif_offline_title),
+                getString(R.string.notif_offline_network),
+            )
+        } else if (snap.whatsAppState in listOf("retry_exhausted", "error", "logged_out")) {
+            val detail = when (snap.whatsAppState) {
+                "logged_out" -> "Logged out. Tap to scan QR code."
+                else -> {
+                    val codeStr = snap.whatsAppCode?.let { "$it: " } ?: ""
+                    val reasonStr = snap.whatsAppReason ?: "Connection failed"
+                    "$codeStr$reasonStr"
+                }
+            }
+            postOfflineAlert(
+                getString(R.string.notif_offline_title),
+                getString(R.string.notif_offline_wa, detail),
+            )
+        } else if (snap.whatsAppState == "connected") {
+            cancelOfflineAlert()
+        }
+
+        updateNotification()
+    }
+
+    private fun updateNotification() {
+        val snap = HostState.snapshot
+        val waStatus = formatWhatsAppStatus(snap)
         val last = snap.lastHeartbeatMs
         val stamp = if (last == 0L) "—" else timeFormat.format(Date(last))
+        val shortText = "$waStatus • $stamp"
+
         val node = when {
             snap.nodeError != null -> getString(R.string.notif_node_error, snap.nodeError)
             snap.levixReady -> getString(R.string.notif_levix_ready)
@@ -201,10 +357,13 @@ class LevixHostService : Service() {
             )
             else -> getString(R.string.notif_node_starting)
         }
-        return getString(R.string.notif_heartbeat, stamp) + "\n" + node
+        val expandedText = "$waStatus\n${getString(R.string.notif_heartbeat, stamp)}\n$node"
+
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(NOTIFICATION_ID, buildNotification(shortText, expandedText))
     }
 
-    private fun buildNotification(text: String): Notification {
+    private fun buildNotification(shortText: String, expandedText: String = shortText): Notification {
         val openIntent = PendingIntent.getActivity(
             this,
             1,
@@ -222,8 +381,8 @@ class LevixHostService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_host)
             .setContentTitle(getString(R.string.notif_title))
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentText(shortText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(expandedText))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
@@ -237,16 +396,29 @@ class LevixHostService : Service() {
 
     private fun ensureChannel() {
         val manager = getSystemService(NotificationManager::class.java)
-        if (manager.getNotificationChannel(CHANNEL_ID) != null) return
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            getString(R.string.notif_channel_name),
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            description = getString(R.string.notif_channel_description)
-            setShowBadge(false)
+        if (manager.getNotificationChannel(CHANNEL_ID) == null) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                getString(R.string.notif_channel_name),
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = getString(R.string.notif_channel_description)
+                setShowBadge(false)
+            }
+            manager.createNotificationChannel(channel)
         }
-        manager.createNotificationChannel(channel)
+        if (manager.getNotificationChannel(CHANNEL_ALERT_ID) == null) {
+            val alertChannel = NotificationChannel(
+                CHANNEL_ALERT_ID,
+                getString(R.string.notif_alerts_channel_name),
+                NotificationManager.IMPORTANCE_DEFAULT,
+            ).apply {
+                description = getString(R.string.notif_alerts_channel_description)
+                enableVibration(true)
+                setShowBadge(true)
+            }
+            manager.createNotificationChannel(alertChannel)
+        }
     }
 
     companion object {
@@ -254,7 +426,9 @@ class LevixHostService : Service() {
         const val ACTION_STOP = "net.leviro.levix.action.STOP"
 
         private const val CHANNEL_ID = "levix-host"
+        const val CHANNEL_ALERT_ID = "levix-alerts"
         private const val NOTIFICATION_ID = 1001
+        const val NOTIFICATION_ALERT_ID = 1002
         private const val HEARTBEAT_MS = 30_000L
         private val NODE_RETRY_DELAYS_MS = longArrayOf(5_000L, 10_000L, 15_000L, 20_000L, 25_000L)
         private const val WAKE_LOCK_TAG = "net.leviro.levix:host"
@@ -265,7 +439,6 @@ class LevixHostService : Service() {
         }
 
         fun stop(context: Context) {
-            if (!HostState.snapshot.running) return
             val intent = Intent(context, LevixHostService::class.java).setAction(ACTION_STOP)
             context.startService(intent)
         }

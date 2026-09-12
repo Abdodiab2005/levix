@@ -173,6 +173,28 @@ class MainActivity : AppCompatActivity() {
         if (snapshot.databaseReady) parts.add(getString(R.string.levix_db))
         snapshot.commandsLoaded?.let { parts.add(getString(R.string.levix_commands, it)) }
         snapshot.panelUrl?.let { parts.add(getString(R.string.levix_panel, it)) }
+        snapshot.whatsAppState?.let { state ->
+            val status = when (state) {
+                "connected" -> "WhatsApp: ✅ Connected"
+                "paused" -> "WhatsApp: ⏸️ Paused (Waiting for internet)"
+                "waiting_for_qr" -> "WhatsApp: 📱 Waiting for pairing"
+                "reconnecting" -> {
+                    val codeStr = snapshot.whatsAppCode?.let { " ($it: ${snapshot.whatsAppReason ?: "timeout"})" } ?: ""
+                    "WhatsApp: ⏳ Reconnecting$codeStr"
+                }
+                "retry_exhausted" -> {
+                    val codeStr = snapshot.whatsAppCode?.let { " ($it: ${snapshot.whatsAppReason ?: "timeout"})" } ?: ""
+                    "WhatsApp: ❌ Connection failed$codeStr"
+                }
+                "disconnected" -> {
+                    val codeStr = snapshot.whatsAppCode?.let { " ($it: ${snapshot.whatsAppReason ?: ""})" } ?: ""
+                    "WhatsApp: Disconnected$codeStr"
+                }
+                "logged_out" -> "WhatsApp: Logged out"
+                else -> "WhatsApp: $state"
+            }
+            parts.add(status)
+        }
         if (snapshot.sqliteOk && parts.isEmpty()) parts.add(getString(R.string.levix_sqlite))
         if (parts.isEmpty()) parts.add(getString(R.string.levix_unpacking))
         return parts.joinToString("\n")

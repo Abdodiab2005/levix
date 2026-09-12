@@ -124,6 +124,7 @@ export const SESSION_STATES = Object.freeze({
   LINKING: "linking",
   CONNECTED: "connected",
   RECONNECTING: "reconnecting",
+  PAUSED: "paused",
   DISCONNECTED: "disconnected",
   RETRY_EXHAUSTED: "retry_exhausted",
   LOGGED_OUT: "logged_out",
@@ -139,6 +140,7 @@ const BUSY_STATES = new Set([
   S.LINKING,
   S.CONNECTED,
   S.RECONNECTING,
+  S.PAUSED,
 ]);
 
 /** What the dashboard's status pill has always been told. Kept stable. */
@@ -148,6 +150,7 @@ function legacyStatus(state, hasQr) {
   if (state === S.STARTING) return "Connecting";
   if (state === S.LINKING) return "Linking";
   if (state === S.RECONNECTING) return "Reconnecting";
+  if (state === S.PAUSED) return "Paused (Offline)";
   return "Disconnected";
 }
 
@@ -195,6 +198,8 @@ export class WhatsAppSession {
   #reason = null;
   #detail = null;
   #lastDisconnect = null;
+  #isOnline = true;
+  #wasActiveBeforeOffline = false;
 
   constructor({
     createSocket = createWhatsAppSocket,
@@ -290,6 +295,7 @@ export class WhatsAppSession {
       // answer crosses the wire, never the fingerprint it was computed from.
       proxyChanged: this.#proxyIsStale(),
       connected: this.#state === S.CONNECTED,
+      isOnline: this.#isOnline,
       terminal,
       hasQr: !!this.#qr,
       hasPairingCode: !!this.#pairingCode,
@@ -310,17 +316,67 @@ export class WhatsAppSession {
   // -------------------------------------------------------------------------
 
   /**
+   * Set device internet connectivity state.
+   *
+   * When offline (false):
+   * - Pauses active connection attempts and cancels pending retry timers.
+   * - Transitions to S.PAUSED without exhausting retries.
+   *
+   * When online (true):
+   * - Restores connection if it was active before going offline or currently paused.
+   * - Resets the retry attempt counter so a fresh retry ladder is available.
+   */
+  async setInternetOnline(online, { reason = "network" } = {}) {
+    const isOnline = !!online;
+    if (this.#isOnline === isOnline) return this.getState();
+    this.#isOnline = isOnline;
+
+    if (!isOnline) {
+      this.log.warn("[Session] Device is offline — pausing WhatsApp connection and retries");
+      this.#wasActiveBeforeOffline =
+        BUSY_STATES.has(this.#state) || this.#state === S.PAUSED;
+      this.#cancelRetry();
+
+      if (this.#socket) {
+        await this.#destroySocket();
+      }
+      this.#transition(S.PAUSED, {
+        reason: "offline",
+        detail: "Device is offline. Connection and retries are paused until internet is restored.",
+      });
+      return this.getState();
+    }
+
+    this.log.info("[Session] Device is back online — restoring WhatsApp connection");
+    if (this.#wasActiveBeforeOffline || this.#state === S.PAUSED) {
+      this.#wasActiveBeforeOffline = false;
+      this.#attempt = 0;
+      this.#cancelRetry();
+      await this.start({ reason: "network_restored" });
+    }
+    return this.getState();
+  }
+
+  get isOnline() {
+    return this.#isOnline;
+  }
+
+  /**
    * Bring the session up. Idempotent: if a socket exists or is being made, this
    * returns the state it is already in and creates nothing.
    */
   async start({ reason = "manual", method, phone } = {}) {
     if (this.#shuttingDown) return this.getState();
 
+    if (this.#state === S.PAUSED && !this.#isOnline) {
+      return this.getState();
+    }
+
     if (this.#starting) {
       await this.#starting.catch(() => {});
       return this.getState();
     }
-    if (BUSY_STATES.has(this.#state)) return this.getState();
+    if (BUSY_STATES.has(this.#state) && this.#state !== S.PAUSED) return this.getState();
 
     this.#pairingIntent = parseStartOptions({ method, phone });
 
@@ -451,6 +507,15 @@ export class WhatsAppSession {
   // -------------------------------------------------------------------------
 
   async #open({ reason }) {
+    if (!this.#isOnline) {
+      this.#wasActiveBeforeOffline = true;
+      this.#transition(S.PAUSED, {
+        reason: "offline",
+        detail: "Device is offline. Connection and retries are paused until internet is restored.",
+      });
+      return;
+    }
+
     // Whatever code was on offer belonged to the previous attempt.
     this.#clearQr();
     this.#transition(S.STARTING, { reason });
@@ -790,13 +855,23 @@ export class WhatsAppSession {
 
     if (this.#shuttingDown) return;
 
+    if (!this.#isOnline) {
+      this.#wasActiveBeforeOffline = true;
+      this.#cancelRetry();
+      return this.#transition(S.PAUSED, {
+        reason: "offline",
+        detail: `Connection closed (${statusCode ?? "no status"}: ${reasonText}). Paused until internet is restored.`,
+      });
+    }
+
     if (verdict.loggedOut) return this.#handleLoggedOut(verdict, closedSocket);
     if (verdict.terminal) {
       this.#clearQr();
       this.#pairing = false;
+      const codeInfo = this.#lastDisconnect?.statusCode ? ` (${this.#lastDisconnect.statusCode}: ${this.#lastDisconnect.reason})` : "";
       return this.#transition(S.DISCONNECTED, {
         reason: verdict.reason,
-        detail: verdict.detail,
+        detail: `${verdict.detail || ""}${codeInfo}`.trim(),
       });
     }
 
@@ -805,9 +880,10 @@ export class WhatsAppSession {
     if (this.#pairing && !verdict.restartRequired) {
       this.#pairing = false;
       this.#clearQr();
+      const codeInfo = this.#lastDisconnect?.statusCode ? ` (${this.#lastDisconnect.statusCode}: ${this.#lastDisconnect.reason})` : "";
       return this.#transition(S.DISCONNECTED, {
         reason: "pairing_cancelled",
-        detail: "The pairing attempt ended before the code was scanned. Start a session to try again.",
+        detail: `The pairing attempt ended before the code was scanned${codeInfo}. Start a session to try again.`,
       });
     }
 
@@ -846,6 +922,15 @@ export class WhatsAppSession {
   // -------------------------------------------------------------------------
 
   #scheduleRetry(verdict) {
+    if (!this.#isOnline) {
+      this.#wasActiveBeforeOffline = true;
+      this.#cancelRetry();
+      return this.#transition(S.PAUSED, {
+        reason: "offline",
+        detail: "Device is offline. Connection and retries are paused until internet is restored.",
+      });
+    }
+
     // Never two timers. A close that arrives while one is pending replaces it
     // rather than adding to it.
     this.#cancelRetry();
@@ -855,9 +940,10 @@ export class WhatsAppSession {
         `[Session] ${this.retryDelaysMs.length} reconnect attempts failed. Levix stays up; start the session again from the panel.`
       );
       this.#clearQr();
+      const codeInfo = this.#lastDisconnect?.statusCode ? ` (${this.#lastDisconnect.statusCode}: ${this.#lastDisconnect.reason})` : "";
       return this.#transition(S.RETRY_EXHAUSTED, {
         reason: "retry_exhausted",
-        detail: `Gave up after ${this.retryDelaysMs.length} attempts. Start the session to try again.`,
+        detail: `Gave up after ${this.retryDelaysMs.length} attempts${codeInfo}. Start the session to try again.`,
       });
     }
 
@@ -869,17 +955,12 @@ export class WhatsAppSession {
       `[Session] Reconnecting in ${Math.round(delayMs / 1000)}s (attempt ${this.#attempt}/${this.retryDelaysMs.length})`
     );
 
+    const codeInfo = this.#lastDisconnect?.statusCode ? ` (${this.#lastDisconnect.statusCode}: ${this.#lastDisconnect.reason})` : "";
     this.#transition(S.RECONNECTING, {
       reason: verdict.reason,
-      // The close's own explanation first: a 515 straight after a scan is
-      // WhatsApp asking for a fresh connection, not a failed attempt, and
-      // "attempt 1 of 5" on its own reads like something went wrong.
-      // No countdown in here: this string is baked once, at schedule time, and
-      // would go on claiming "in 5s" for the whole wait. The panel renders the
-      // remaining seconds from nextRetryAt, which actually ticks.
       detail:
         `${verdict.detail ? `${verdict.detail} ` : ""}` +
-        `Reconnecting (attempt ${this.#attempt} of ${this.retryDelaysMs.length}).`,
+        `Reconnecting (attempt ${this.#attempt} of ${this.retryDelaysMs.length})${codeInfo}.`,
     });
 
     this.#retryTimer = setTimeout(() => {

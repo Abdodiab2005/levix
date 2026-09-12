@@ -25,6 +25,9 @@ object HostState {
         val commandsLoaded: Int? = null,
         val panelUrl: String? = null,
         val levixReady: Boolean = false,
+        val whatsAppState: String? = null,
+        val whatsAppCode: Int? = null,
+        val whatsAppReason: String? = null,
     )
 
     @Volatile
@@ -146,6 +149,13 @@ object HostState {
     @Synchronized
     fun markLevixReady() {
         publish(snapshot.copy(levixReady = true, nodeAlive = true, nodeError = null))
+    }
+
+    @Synchronized
+    fun setWhatsAppStatus(state: String?, code: Int?, reason: String?) {
+        val current = snapshot
+        if (!current.running) return
+        publish(current.copy(whatsAppState = state, whatsAppCode = code, whatsAppReason = reason))
     }
 
     private fun publish(next: Snapshot) {

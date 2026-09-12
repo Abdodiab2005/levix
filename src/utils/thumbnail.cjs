@@ -48,9 +48,22 @@ const ffmpegStatic = (() => {
 })();
 
 // Read at call time so the dashboard can point at another binary without a
-// restart; ffmpeg-static is what ships with the bot and works nearly everywhere.
+// restart; ffmpeg-static is what ships with the bot on desktop/docker.
+// On Android, check LEVIX_FFMPEG_PATH or libffmpeg.so in nativeLibraryDir (LD_LIBRARY_PATH).
 function ffmpegBin() {
-  return settings.get("ffmpeg_path") || ffmpegStatic || "ffmpeg";
+  const configured = settings.get("ffmpeg_path");
+  if (configured) return configured;
+  if (process.env.LEVIX_FFMPEG_PATH && fs.existsSync(process.env.LEVIX_FFMPEG_PATH)) {
+    return process.env.LEVIX_FFMPEG_PATH;
+  }
+  if (process.env.FFMPEG_PATH && fs.existsSync(process.env.FFMPEG_PATH)) {
+    return process.env.FFMPEG_PATH;
+  }
+  if (process.env.LEVIX_ANDROID === "1" && process.env.LD_LIBRARY_PATH) {
+    const androidBin = path.join(process.env.LD_LIBRARY_PATH, "libffmpeg.so");
+    if (fs.existsSync(androidBin)) return androidBin;
+  }
+  return ffmpegStatic || "ffmpeg";
 }
 const FFMPEG_TIMEOUT_MS = 20000;
 

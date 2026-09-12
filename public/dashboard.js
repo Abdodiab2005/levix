@@ -391,6 +391,19 @@
 
     $("#conn-detail").textContent = (snapshot.detail || "") + retryHint(snapshot);
 
+    const alertBox = $("#conn-disconnect-alert");
+    const alertText = $("#conn-disconnect-text");
+    if (alertBox && alertText) {
+      if (snapshot.lastDisconnect?.statusCode && snapshot.state !== "connected" && snapshot.state !== "idle") {
+        const code = snapshot.lastDisconnect.statusCode;
+        const reason = snapshot.lastDisconnect.reason || "Unknown";
+        alertText.innerHTML = `⚠️ <strong>Connection failure (${esc(code)}: ${esc(reason)})</strong> — check network connectivity or proxy settings.`;
+        alertBox.style.display = "block";
+      } else {
+        alertBox.style.display = "none";
+      }
+    }
+
     // The proxy line, and the one action that can apply a changed one. The
     // label is already redacted server-side — there is no password to leak
     // here because the browser was never told it.

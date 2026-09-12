@@ -22,15 +22,7 @@ const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 
 const execFileAsync = promisify(execFile);
 
-let ffmpegStatic = null;
-try {
-  ffmpegStatic = require("ffmpeg-static");
-} catch (err) {
-  logger.warn(
-    { err: err?.message },
-    "[TTS] ffmpeg unavailable — will fall back to raw MP3"
-  );
-}
+const { ffmpegPath } = require("../utils/thumbnail.cjs");
 
 function tmpPath(ext) {
   return path.join(
@@ -56,37 +48,45 @@ async function synthesizeMp3(text, mp3Path) {
 }
 
 async function transcodeToOpus(mp3Path) {
-  if (!ffmpegStatic) return null;
+  const bin = ffmpegPath();
+  if (!bin) return null;
 
   const oggPath = tmpPath("ogg");
-  await execFileAsync(
-    ffmpegStatic,
-    [
-      "-hide_banner",
-      "-loglevel",
-      "error",
-      "-y",
-      "-i",
-      mp3Path,
-      "-vn",
-      "-c:a",
-      "libopus",
-      "-ac",
-      "1",
-      "-ar",
-      "48000",
-      "-b:a",
-      "48k",
-      "-application",
-      "voip",
-      "-f",
-      "ogg",
-      oggPath,
-    ],
-    { windowsHide: true, timeout: 30_000 },
-  );
-
-  return oggPath;
+  try {
+    await execFileAsync(
+      bin,
+      [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        mp3Path,
+        "-vn",
+        "-c:a",
+        "libopus",
+        "-ac",
+        "1",
+        "-ar",
+        "48000",
+        "-b:a",
+        "48k",
+        "-application",
+        "voip",
+        "-f",
+        "ogg",
+        oggPath,
+      ],
+      { windowsHide: true, timeout: 30_000 },
+    );
+    return oggPath;
+  } catch (err) {
+    logger.warn(
+      { err: err?.message, bin },
+      "[TTS] ffmpeg transcode failed — will fall back to raw MP3"
+    );
+    return null;
+  }
 }
 
 module.exports = {

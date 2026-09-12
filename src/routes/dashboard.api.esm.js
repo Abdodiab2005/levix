@@ -912,6 +912,21 @@ router.post(
   })
 );
 
+router.post(
+  "/bot/session/network",
+  asyncRoute(async (req, res) => {
+    if (!session) {
+      return res.status(503).json({ success: false, error: "Session manager is not ready" });
+    }
+    const { online } = req.body || {};
+    if (typeof online !== "boolean") {
+      return badRequest(res, "online (boolean) is required");
+    }
+    const state = await session.setInternetOnline(online);
+    res.json({ success: true, session: state });
+  })
+);
+
 // Unlink the WhatsApp account: WhatsApp drops the companion device and the
 // stored credentials go with it. Levix stays up, and the operator can start a
 // fresh pairing whenever they want one.

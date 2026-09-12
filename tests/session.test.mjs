@@ -806,4 +806,32 @@ section("pairing code is chosen before the socket is created");
   equal("it never asked for a code", h.latest().pairingPhone, undefined);
 }
 
+section("internet state: pausing when offline and restarting when online");
+
+{
+  const h = makeHarness({ paired: true, retryDelaysMs: [100, 200, 300] });
+  await h.session.start();
+  await h.push({ connection: "open" });
+  equal("starts connected", h.session.state, S.CONNECTED);
+
+  // Device goes offline
+  await h.session.setInternetOnline(false);
+  equal("session is paused when offline", h.session.state, S.PAUSED);
+  equal("isOnline is false in state", h.session.getState().isOnline, false);
+  equal("socket was ended", h.latest().ended, 1);
+
+  // A close while offline stays paused and does not burn retries
+  await h.push(closedWith(500, "network down"));
+  equal("stays paused after close", h.session.state, S.PAUSED);
+  equal("retry count stays 0", h.session.getState().attempt, 0);
+
+  // Device comes back online
+  await h.session.setInternetOnline(true);
+  equal("restoring internet restarts session", h.session.state, S.STARTING);
+  equal("new socket created", h.sockets.length, 2);
+  await h.push({ connection: "open" });
+  equal("connected again", h.session.state, S.CONNECTED);
+}
+
 finish();
+

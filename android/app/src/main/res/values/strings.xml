@@ -38,4 +38,12 @@
     <string name="btn_battery">Unrestricted battery</string>
     <string name="battery_ok">Battery optimizations are off for Levix.</string>
     <string name="battery_hint">Android may stop Levix overnight. Allow unrestricted battery. On Xiaomi, also enable Autostart in system settings if that screen exists — we do not open hidden OEM pages.</string>
+    <string name="notif_alerts_channel_name">Levix Alerts</string>
+    <string name="notif_alerts_channel_description">Notifications when Levix is offline or disconnected</string>
+    <string name="notif_offline_title">Levix is Offline</string>
+    <string name="notif_offline_network">No internet connection. WhatsApp bot is disconnected.</string>
+    <string name="notif_offline_wa">WhatsApp connection failed: %1$s</string>
+    <string name="notif_wa_connected">WhatsApp: Connected</string>
+    <string name="notif_wa_offline">WhatsApp: Offline (No Internet)</string>
+    <string name="notif_wa_paused">WhatsApp: ⏸️ Paused (No Internet)</string>
 </resources>
