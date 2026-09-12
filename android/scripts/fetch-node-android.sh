@@ -99,11 +99,27 @@ copy_real "$PREFIX/lib/libicuuc.so.78" "$RUNTIME/libicuuc.so.78"
 copy_real "$PREFIX/lib/libicudata.so.78" "$RUNTIME/libicudata.so.78"
 copy_real "$PREFIX/lib/libz.so.1" "$RUNTIME/libz.so.1"
 
+# Stage Android ARM64 FFmpeg binary (NDK static build with Opus & MJPEG/H.264 support)
+FFMPEG_URL="https://github.com/Khang-NT/ffmpeg-binary-android/releases/download/2018-07-31/arm64-v8a-lite.tar.bz2"
+FFMPEG_SHA256="92ff6fb88d116f222fb309125e46f408ab3fd360cbb1d1786712b6fb9d0f3525"
+FFMPEG_ARCHIVE="$WORKDIR/ffmpeg-arm64.tar.bz2"
+
+if [ ! -f "$FFMPEG_ARCHIVE" ] || ! echo "$FFMPEG_SHA256  $FFMPEG_ARCHIVE" | sha256sum -c --status 2>/dev/null; then
+  echo "Downloading FFmpeg ARM64 binary..."
+  curl -fL --retry 3 -o "$FFMPEG_ARCHIVE" "$FFMPEG_URL"
+  echo "$FFMPEG_SHA256  $FFMPEG_ARCHIVE" | sha256sum -c -
+fi
+
+echo "Extracting FFmpeg..."
+tar -xf "$FFMPEG_ARCHIVE" -C "$WORKDIR" ./ffmpeg
+cp -a "$WORKDIR/ffmpeg" "$RUNTIME/libffmpeg.so"
+chmod 755 "$RUNTIME/libffmpeg.so"
+
 for f in "$RUNTIME"/*; do
   "$PATCH" --set-rpath '$ORIGIN' "$f"
 done
 
 echo "Node runtime ready:"
-ls -lh "$RUNTIME/libnode.so"
+ls -lh "$RUNTIME/libnode.so" "$RUNTIME/libffmpeg.so"
 "$PATCH" --print-needed "$RUNTIME/libnode.so"
 echo "Wrote $RUNTIME"

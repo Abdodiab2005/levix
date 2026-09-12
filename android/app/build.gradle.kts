@@ -12,6 +12,12 @@ if (!nodeBinary.isFile) {
         "Missing Node 24 ARM64 runtime at $nodeBinary. Run android/scripts/fetch-node-android.sh first.",
     )
 }
+val ffmpegBinary = file("$nodeRuntimeRoot/arm64-v8a/libffmpeg.so")
+if (!ffmpegBinary.isFile) {
+    throw GradleException(
+        "Missing FFmpeg ARM64 binary at $ffmpegBinary. Run android/scripts/fetch-node-android.sh first.",
+    )
+}
 
 android {
     namespace = "net.leviro.levix"
@@ -21,8 +27,8 @@ android {
         applicationId = "net.leviro.levix"
         minSdk = 29
         targetSdk = 35
-        versionCode = 23
-        versionName = "3.2.0-beta"
+        versionCode = 24
+        versionName = "3.2.1-beta"
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -142,8 +148,9 @@ android.applicationVariants.configureEach {
                 commandLine(File(buildTools, "zipalign").absolutePath, "-f", "-p", "4", rawApk.absolutePath, aligned.absolutePath)
             }
             val releaseKsPath = System.getenv("LEVIX_KEYSTORE_FILE")
-            val ks = if (!releaseKsPath.isNullOrBlank() && File(releaseKsPath).isFile) {
-                File(releaseKsPath)
+            val isCustomReleaseKs = !releaseKsPath.isNullOrBlank() && File(releaseKsPath).isFile
+            val ks = if (isCustomReleaseKs) {
+                File(releaseKsPath!!)
             } else {
                 File(System.getProperty("user.home"), ".android/debug.keystore")
             }
@@ -155,7 +162,7 @@ android.applicationVariants.configureEach {
                         "-keystore", ks.absolutePath,
                         "-storepass", "android",
                         "-alias", "androiddebugkey",
-                        "-keypass", "pass:android",
+                        "-keypass", "android",
                         "-keyalg", "RSA",
                         "-keysize", "2048",
                         "-validity", "10000",
@@ -163,9 +170,9 @@ android.applicationVariants.configureEach {
                     )
                 }
             }
-            val ksPass = System.getenv("LEVIX_KEYSTORE_PASSWORD") ?: "android"
-            val keyAlias = System.getenv("LEVIX_KEY_ALIAS") ?: "androiddebugkey"
-            val keyPass = System.getenv("LEVIX_KEY_PASSWORD") ?: "android"
+            val ksPass = if (isCustomReleaseKs) (System.getenv("LEVIX_KEYSTORE_PASSWORD") ?: "android") else "android"
+            val keyAlias = if (isCustomReleaseKs) (System.getenv("LEVIX_KEY_ALIAS") ?: "androiddebugkey") else "androiddebugkey"
+            val keyPass = if (isCustomReleaseKs) (System.getenv("LEVIX_KEY_PASSWORD") ?: ksPass) else "android"
 
             val ksPassArg = if (ksPass.startsWith("pass:")) ksPass else "pass:$ksPass"
             val keyPassArg = if (keyPass.startsWith("pass:")) keyPass else "pass:$keyPass"

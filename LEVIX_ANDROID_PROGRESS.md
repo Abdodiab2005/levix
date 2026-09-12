@@ -1,11 +1,11 @@
 # Levix Android host — where we are
 
-Last updated: **2026-09-13** (`3.2.0-beta`)
+Last updated: **2026-09-13** (`3.2.1-beta`)
 
 **Status:** Levix is a live WhatsApp companion on a Redmi 9 (Lineage, ARM64). No VPS. No Termux at runtime.
 
 **On main:** [#34](https://github.com/Abdodiab2005/levix/pull/34), [#35](https://github.com/Abdodiab2005/levix/pull/35), [#36](https://github.com/Abdodiab2005/levix/pull/36)  
-**Tags:** [`v3.0.0-alpha`](https://github.com/Abdodiab2005/levix/releases/tag/v3.0.0-alpha) → [`v3.0.0-beta`](https://github.com/Abdodiab2005/levix/releases/tag/v3.0.0-beta) → [`v3.1.1-beta`](https://github.com/Abdodiab2005/levix/releases/tag/v3.1.1-beta) → **`v3.2.0-beta`**
+**Tags:** [`v3.0.0-alpha`](https://github.com/Abdodiab2005/levix/releases/tag/v3.0.0-alpha) → [`v3.0.0-beta`](https://github.com/Abdodiab2005/levix/releases/tag/v3.0.0-beta) → [`v3.1.1-beta`](https://github.com/Abdodiab2005/levix/releases/tag/v3.1.1-beta) → [`v3.2.0-beta`](https://github.com/Abdodiab2005/levix/releases/tag/v3.2.0-beta) → **`v3.2.1-beta`**
 
 Full original plan: [`LEVIX_ANDROID_HOST_PLAN.md`](LEVIX_ANDROID_HOST_PLAN.md)
 
@@ -25,18 +25,20 @@ Release line: **alpha → beta → rc → 3.0.0 / 3.2.x**.
 | 5 | Pairing UX polish | Mostly done (chooser + Chrome companion) |
 | 6 | WebView panel | Done (unix socket bridge, responsive viewport, no navigation lag) |
 | 7 | Boot receiver / OEM battery / Node crash retry | **Done** (survives reboot, battery limits, and Node crashes) |
-| 8 | Media / FFmpeg & Offline Connection | **Done on device** (real-time notification status, offline alerts, network-aware pause/resume) |
-| 9 | CI APK job | **Done** (ci.yml builds debug APK; release.yml signs, hashes, and publishes release APK) |
+| 8 | Media / FFmpeg & Offline Connection | **Done** (bundled ARM64 `libffmpeg.so`, native Opus `!tts` voice notes, video thumbnails, real-time notification status, offline alerts, network-aware pause/resume) |
+| 9 | CI & Release APK jobs | **Done** (ci.yml builds debug APK; release.yml signs, hashes, and publishes release APK) |
+| 13 | User Documentation | **Done** ([`ANDROID.md`](ANDROID.md) full guide covering install, pairing, OEM battery settings, offline handling) |
 
 **Package:** `net.leviro.levix`  
-**APK versionName:** `3.2.0-beta` (versionCode **23**)  
-**Node on device:** `v24.18.0` / `android` / `arm64`
+**APK versionName:** `3.2.1-beta` (versionCode **24**)  
+**Node on device:** `v24.18.0` / `android` / `arm64`  
+**FFmpeg in APK:** NDK ARM64 static binary (`libffmpeg.so`) with native Opus & MJPEG/H.264
 
 **Next checks (not blockers):**
 
 1. `!ping` with the screen locked.
 2. Stop/Start the host and confirm WhatsApp reconnects without pairing again.
-3. Bundle `libffmpeg.so` for full offline Android media transcoding, then cut `v3.0.0-rc.1`.
+3. Overnight soak test (8h / 24h).
 
 ---
 
@@ -191,8 +193,6 @@ adb shell am start -n net.leviro.levix/.MainActivity --ez openPanel true
 
 ## Explicitly not done
 
-- FFmpeg in the APK (`!tts` warns and falls back)
-- GitHub Actions APK job
 - Confirmed `!ping` under screen lock / after host restart
 - Confirmed reboot autostart and overnight soak
 - Play Store (far goal — GitHub Releases first, then Play)

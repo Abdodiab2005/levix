@@ -67,6 +67,18 @@ docker compose up -d
 docker compose logs levix
 ```
 
+### Android phone (No server required)
+
+Run Levix directly on an ARM64 Android device (Android 10+) as a self-contained background companion:
+
+1. Download **`levix-android-arm64.apk`** from [Releases](https://github.com/Abdodiab2005/levix/releases).
+2. Install the APK and tap **Start Host**.
+3. Tap **Open Panel** to set your master password and link WhatsApp via 8-digit Pairing Code.
+
+See [ANDROID.md](ANDROID.md) for full instructions, OEM battery optimizations (Xiaomi, Samsung, OnePlus), and offline handling.
+
+---
+
 Standalone Linux, macOS ARM64, and Windows binaries are available from the
 [latest GitHub release](https://github.com/Abdodiab2005/levix/releases/latest).
 
@@ -92,7 +104,7 @@ proxies, headless mode, backups, and troubleshooting.
 | Scheduling | One-off, daily, and weekly messages with durable jobs, delivery status, and manual retry |
 | Control panel | Live connection state, command settings, roles, permissions, keys, memory, schedules, and logs |
 | Media | Text, images, video, audio, QR codes, text-to-speech, and speech-to-text |
-| Deployment | npm, Docker, systemd installer, standalone binaries, headless mode, and safe domain setup |
+| Deployment | Android APK, npm, Docker, systemd installer, standalone binaries, headless mode, and safe domain setup |
 | Storage | One SQLite database and one data directory for settings, sessions, memory, and logs |
 
 Every command can be enabled, disabled, renamed, and assigned permissions from
