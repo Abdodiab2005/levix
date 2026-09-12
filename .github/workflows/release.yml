@@ -177,7 +177,7 @@ jobs:
       - name: Fetch Node Android ARM64 runtime
         run: bash android/scripts/fetch-node-android.sh
       - name: Decode Release Keystore
-        if: env.LEVIX_KEYSTORE_BASE64 != ''
+        if: ${{ secrets.LEVIX_KEYSTORE_BASE64 != '' }}
         env:
           LEVIX_KEYSTORE_BASE64: ${{ secrets.LEVIX_KEYSTORE_BASE64 }}
         run: |

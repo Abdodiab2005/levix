@@ -47,46 +47,62 @@ async function synthesizeMp3(text, mp3Path) {
   await fsp.writeFile(mp3Path, Buffer.concat(buffers));
 }
 
+async function transcodeWithEncoder(bin, encoder, mp3Path, oggPath) {
+  return execFileAsync(
+    bin,
+    [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-y",
+      "-i",
+      mp3Path,
+      "-vn",
+      "-c:a",
+      encoder,
+      "-ac",
+      "1",
+      "-ar",
+      "48000",
+      "-b:a",
+      "48k",
+      "-application",
+      "voip",
+      "-f",
+      "ogg",
+      oggPath,
+    ],
+    { windowsHide: true, timeout: 30_000 }
+  );
+}
+
 async function transcodeToOpus(mp3Path) {
   const bin = ffmpegPath();
   if (!bin) return null;
 
   const oggPath = tmpPath("ogg");
-  try {
-    await execFileAsync(
-      bin,
-      [
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-y",
-        "-i",
-        mp3Path,
-        "-vn",
-        "-c:a",
-        "libopus",
-        "-ac",
-        "1",
-        "-ar",
-        "48000",
-        "-b:a",
-        "48k",
-        "-application",
-        "voip",
-        "-f",
-        "ogg",
-        oggPath,
-      ],
-      { windowsHide: true, timeout: 30_000 },
-    );
-    return oggPath;
-  } catch (err) {
-    logger.warn(
-      { err: err?.message, bin },
-      "[TTS] ffmpeg transcode failed — will fall back to raw MP3"
-    );
-    return null;
+  const encoders = ["libopus", "opus"];
+  let lastError = null;
+
+  for (const encoder of encoders) {
+    try {
+      await transcodeWithEncoder(bin, encoder, mp3Path, oggPath);
+      return oggPath;
+    } catch (err) {
+      lastError = err;
+      const msg = `${err?.message || ""} ${err?.stderr || ""}`;
+      if (msg.includes("Unknown encoder")) {
+        continue;
+      }
+      break;
+    }
   }
+
+  logger.warn(
+    { err: lastError?.message, bin },
+    "[TTS] ffmpeg transcode failed — will fall back to raw MP3"
+  );
+  return null;
 }
 
 module.exports = {
