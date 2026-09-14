@@ -1,106 +1,616 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:background="@color/levix_bg"
+    android:fillViewport="true"
+    android:layoutDirection="ltr">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:paddingStart="20dp"
+        android:paddingTop="20dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="40dp">
 
-        <TextView
-            android:id="@+id/title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/app_name"
-            android:textSize="28sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/hostNote"
+        <!-- Top Brand Bar -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/host_shell_note" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/statusText"
+            <ImageView
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:contentDescription="@string/app_name"
+                android:src="@drawable/ic_levix_mark" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:singleLine="true"
+                    android:text="@string/app_name"
+                    android:textColor="@color/levix_text"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:text="@string/brand_tagline"
+                    android:textColor="@color/levix_text_muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- Live Status Pill -->
+            <LinearLayout
+                android:id="@+id/statusPill"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_status_pill"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="6dp">
+
+                <ImageView
+                    android:id="@+id/statusDot"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:contentDescription="Status indicator"
+                    android:src="@drawable/ic_dot_red" />
+
+                <TextView
+                    android:id="@+id/statusPillText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:singleLine="true"
+                    android:text="@string/status_stopped"
+                    android:textColor="@color/levix_text"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Hero Overview Card (Centered Text Layout) -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/status_stopped"
-            android:textSize="20sp"
-            android:textStyle="bold" />
+            android:layout_marginTop="18dp"
+            android:background="@drawable/bg_card_raised"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:padding="20dp">
 
-        <TextView
-            android:id="@+id/heartbeatText"
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:letterSpacing="0.08"
+                android:text="@string/hero_eyebrow"
+                android:textColor="@color/levix_cyan"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:lineSpacingMultiplier="1.2"
+                android:text="@string/hero_title"
+                android:textColor="@color/levix_text"
+                android:textSize="21sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/heroSubtitleText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:lineSpacingMultiplier="1.2"
+                android:text="@string/hero_subtitle_stopped"
+                android:textColor="@color/levix_text_muted"
+                android:textSize="13sp" />
+
+            <!-- Primary Action: Open Control Panel -->
+            <Button
+                android:id="@+id/panelButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:background="@drawable/bg_levix_gradient"
+                android:drawableEnd="@drawable/ic_open_panel"
+                android:drawablePadding="8dp"
+                android:enabled="false"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:minHeight="48dp"
+                android:paddingStart="20dp"
+                android:paddingEnd="18dp"
+                android:text="@string/btn_open_panel"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <!-- Assistant Actions: Start / Stop -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/startButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_btn_start_selector"
+                    android:drawableStart="@drawable/ic_play"
+                    android:drawablePadding="6dp"
+                    android:drawableTint="@color/btn_start_color"
+                    app:drawableTint="@color/btn_start_color"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:minHeight="46dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="@string/btn_start_host"
+                    android:textAllCaps="false"
+                    android:textColor="@color/btn_start_color"
+                    android:textSize="12sp" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/stopButton"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_btn_stop_selector"
+                    android:drawableStart="@drawable/ic_stop"
+                    android:drawablePadding="6dp"
+                    android:drawableTint="@color/btn_stop_color"
+                    app:drawableTint="@color/btn_stop_color"
+                    android:enabled="false"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:minHeight="46dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="@string/btn_stop_host"
+                    android:textAllCaps="false"
+                    android:textColor="@color/btn_stop_color"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/statusHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:textColor="@color/levix_warn"
+                android:textSize="12sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Section: Status Overview Header (Left-aligned) -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/heartbeat_none" />
+            android:layout_marginTop="22dp"
+            android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/nodeText"
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:text="@string/section_overview"
+                android:textColor="@color/levix_text"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/section_overview_sub"
+                android:textColor="@color/levix_text_muted"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- Redesigned 2-Column Tile Grid: WhatsApp & Bot Engine -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/node_none" />
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/levixText"
+            <!-- Tile 1: WhatsApp -->
+            <LinearLayout
+                android:id="@+id/cardWhatsApp"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_card_panel"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="WhatsApp"
+                        android:src="@drawable/ic_card_whatsapp" />
+
+                    <Space
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+
+                    <TextView
+                        android:id="@+id/whatsAppBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge_subtle"
+                        android:fontFamily="sans-serif-medium"
+                        android:paddingStart="6dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="6dp"
+                        android:paddingBottom="2dp"
+                        android:singleLine="true"
+                        android:text="@string/status_offline"
+                        android:textColor="@color/levix_text_muted"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:singleLine="true"
+                    android:text="@string/card_whatsapp_title"
+                    android:textColor="@color/levix_text"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/whatsAppDetailText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:lineSpacingMultiplier="1.15"
+                    android:maxLines="2"
+                    android:text="@string/card_whatsapp_desc_offline"
+                    android:textColor="@color/levix_text_muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- Tile 2: Bot Engine -->
+            <LinearLayout
+                android:id="@+id/cardEngine"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_card_panel"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:contentDescription="Engine"
+                        android:src="@drawable/ic_card_engine" />
+
+                    <Space
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+
+                    <TextView
+                        android:id="@+id/engineBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge_subtle"
+                        android:fontFamily="sans-serif-medium"
+                        android:paddingStart="6dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="6dp"
+                        android:paddingBottom="2dp"
+                        android:singleLine="true"
+                        android:text="@string/status_stopped"
+                        android:textColor="@color/levix_text_muted"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:singleLine="true"
+                    android:text="@string/card_engine_title"
+                    android:textColor="@color/levix_text"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/engineDetailText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:lineSpacingMultiplier="1.15"
+                    android:maxLines="2"
+                    android:text="@string/card_engine_desc_stopped"
+                    android:textColor="@color/levix_text_muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Redesigned Compact Card: Battery Guard -->
+        <LinearLayout
+            android:id="@+id/cardBattery"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp" />
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_card_panel"
+            android:orientation="vertical"
+            android:padding="14dp">
 
-        <Button
-            android:id="@+id/startButton"
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/batteryIcon"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:contentDescription="Battery Guard"
+                    android:src="@drawable/ic_card_battery" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_marginEnd="8dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-medium"
+                        android:singleLine="true"
+                        android:text="@string/card_battery_title"
+                        android:textColor="@color/levix_text"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/batteryHint"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="2"
+                        android:text="@string/battery_hint"
+                        android:textColor="@color/levix_text_muted"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/batteryBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_badge_subtle"
+                    android:fontFamily="sans-serif-medium"
+                    android:paddingStart="7dp"
+                    android:paddingTop="2dp"
+                    android:paddingEnd="7dp"
+                    android:paddingBottom="2dp"
+                    android:singleLine="true"
+                    android:text="CHECKING"
+                    android:textColor="@color/levix_warn"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/batteryButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/bg_btn_outlined"
+                android:fontFamily="sans-serif-medium"
+                android:minHeight="38dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="@string/btn_battery"
+                android:textAllCaps="false"
+                android:textColor="@color/levix_warn"
+                android:textSize="12sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Collapsible Diagnostics & Logs Card -->
+        <LinearLayout
+            android:id="@+id/cardSignalsHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/btn_start" />
+            android:layout_marginTop="18dp"
+            android:background="@drawable/bg_card_panel"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="14dp">
 
-        <Button
-            android:id="@+id/stopButton"
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:contentDescription="Diagnostics"
+                android:src="@drawable/ic_terminal" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:layout_marginEnd="8dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="@string/section_diagnostics"
+                    android:textColor="@color/levix_text"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/diagnosticsHintText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/diagnostics_expand_hint"
+                    android:textColor="@color/levix_text_muted"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/chevronLogs"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:contentDescription="Expand or collapse"
+                android:src="@drawable/ic_chevron_down" />
+        </LinearLayout>
+
+        <!-- Expandable Diagnostics Content (Collapsed by default) -->
+        <LinearLayout
+            android:id="@+id/diagnosticsContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/btn_stop" />
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_card_panel"
+            android:orientation="vertical"
+            android:padding="14dp"
+            android:visibility="gone">
 
-        <Button
-            android:id="@+id/panelButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:enabled="false"
-            android:text="@string/btn_panel" />
+            <!-- Actions Row: Share & Copy Logs -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/panelHint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/panel_later" />
+                <Button
+                    android:id="@+id/btnShareLogs"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_btn_outlined"
+                    android:drawableStart="@drawable/ic_share"
+                    android:drawablePadding="6dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:minHeight="40dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:text="@string/btn_share_logs"
+                    android:textAllCaps="false"
+                    android:textColor="@color/levix_blue_bright"
+                    android:textSize="12sp" />
 
-        <Button
-            android:id="@+id/batteryButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/btn_battery" />
+                <Button
+                    android:id="@+id/btnCopyLogs"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_btn_outlined"
+                    android:drawableStart="@drawable/ic_copy"
+                    android:drawablePadding="6dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:minHeight="40dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:text="@string/btn_copy_logs"
+                    android:textAllCaps="false"
+                    android:textColor="@color/levix_text_muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
 
-        <TextView
-            android:id="@+id/batteryHint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/battery_hint" />
+            <TextView
+                android:id="@+id/logPathText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:fontFamily="monospace"
+                android:text="Saved to: Android/data/net.leviro.levix/files/logs/host.log"
+                android:textColor="@color/levix_text_faint"
+                android:textSize="10sp" />
 
-        <TextView
-            android:id="@+id/statusHint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp" />
+            <!-- Compact Preview Box -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_console_box"
+                android:padding="10dp">
+
+                <TextView
+                    android:id="@+id/consoleLogText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:lineSpacingMultiplier="1.2"
+                    android:text="@string/no_logs"
+                    android:textColor="@color/levix_text_muted"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
 </ScrollView>

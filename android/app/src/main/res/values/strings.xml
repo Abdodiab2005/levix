@@ -1,49 +1,83 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Levix</string>
-    <string name="host_shell_note">Levix core on this phone. Open Panel to link WhatsApp.</string>
-    <string name="status_stopped">Stopped</string>
+    <string name="brand_tagline">Control Room</string>
+    <string name="host_shell_note">Autonomous background companion. Open Panel to manage settings.</string>
+
+    <!-- Hero Section -->
+    <string name="hero_eyebrow">PERSONAL COMPANION</string>
+    <string name="hero_title">Your WhatsApp assistant,\nalways by your side.</string>
+    <string name="hero_subtitle_running">Levix is running in the background and ready to assist you.</string>
+    <string name="hero_subtitle_stopped">Levix is currently stopped. Tap Start to activate your assistant.</string>
+    <string name="btn_open_panel">Open Control Panel</string>
+    <string name="btn_start_host">Start Assistant</string>
+    <string name="btn_stop_host">Stop Assistant</string>
+
+    <!-- Sections -->
+    <string name="section_overview">Status Overview</string>
+    <string name="section_overview_sub">Core system health at a glance</string>
+
+    <!-- Essential User Cards -->
+    <string name="card_whatsapp_title">WhatsApp</string>
+    <string name="card_whatsapp_desc_connected">Connected and active. Ready to receive and answer messages.</string>
+    <string name="card_whatsapp_desc_pairing">Waiting for device link. Tap Open Control Panel to link via phone code.</string>
+    <string name="card_whatsapp_desc_paused">Network connection paused. Will reconnect automatically once internet returns.</string>
+    <string name="card_whatsapp_desc_reconnecting">Connection dropped. Reconnecting automatically…</string>
+    <string name="card_whatsapp_desc_offline">Assistant stopped</string>
+
+    <string name="card_engine_title">Bot Engine</string>
+    <string name="card_engine_desc_running">Engine is running normally in the background.</string>
+    <string name="card_engine_desc_starting">Initializing assistant engine…</string>
+    <string name="card_engine_desc_stopped">Engine is inactive. All settings and data are preserved.</string>
+
+    <string name="card_battery_title">Battery Guard</string>
+    <string name="battery_ok">Battery optimizations disabled. Levix will stay alive with the screen locked.</string>
+    <string name="battery_hint">Android may stop Levix in the background. Allow unrestricted battery to ensure 24/7 uptime.</string>
+    <string name="btn_battery">Enable Battery Guard</string>
+
+    <!-- Diagnostics / Beta Logs -->
+    <string name="section_diagnostics">Diagnostics &amp; Logs</string>
+    <string name="diagnostics_sub">Accessible logs for debugging during Beta / RC</string>
+    <string name="diagnostics_expand_hint">Tap to expand debug signals &amp; logs</string>
+    <string name="diagnostics_collapse_hint">Tap to collapse logs</string>
+    <string name="btn_share_logs">Share Logs</string>
+    <string name="btn_copy_logs">Copy Logs</string>
+    <string name="log_file_location">Saved to: %1$s</string>
+    <string name="logs_copied">Logs copied to clipboard</string>
+    <string name="no_logs">No log entries available yet.</string>
+
+    <!-- Status Badges -->
+    <string name="status_connected">Connected</string>
     <string name="status_running">Running</string>
-    <string name="node_none">Node: not started</string>
-    <string name="node_starting">Node: starting</string>
-    <string name="node_ok">Node: %1$s %2$s/%3$s</string>
-    <string name="node_error">Node error: %1$s</string>
-    <string name="levix_unpacking">Unpacking Levix…</string>
-    <string name="levix_sqlite">SQLite: ok</string>
-    <string name="levix_db">Database ready</string>
-    <string name="levix_commands">Commands loaded: %1$d</string>
-    <string name="levix_panel">Panel: %1$s</string>
-    <string name="levix_ready">Levix ready</string>
-    <string name="heartbeat_none">No heartbeat yet</string>
-    <string name="heartbeat_ago">Last heartbeat: %1$s</string>
-    <string name="age_seconds">%1$ds ago</string>
-    <string name="age_minutes">%1$dm ago</string>
-    <string name="age_hours">%1$dh ago</string>
-    <string name="btn_start">Start</string>
-    <string name="btn_stop">Stop</string>
-    <string name="btn_panel">Open Panel</string>
-    <string name="panel_later">Opens the local control panel on this phone</string>
-    <string name="notifications_required">Notifications permission is required so the host can stay alive.</string>
-    <string name="notif_title">Levix is running</string>
-    <string name="notif_starting">Starting…</string>
-    <string name="notif_heartbeat">Heartbeat: %1$s</string>
-    <string name="notif_node_starting">Node: starting</string>
+    <string name="status_starting">Starting…</string>
+    <string name="status_stopped">Stopped</string>
+    <string name="status_pairing">Pairing Needed</string>
+    <string name="status_paused">Paused</string>
+    <string name="status_reconnecting">Reconnecting</string>
+    <string name="status_operational">Operational</string>
+    <string name="status_protected">Protected</string>
+    <string name="status_restricted">Restricted</string>
+    <string name="status_offline">Offline</string>
+
+    <!-- Notifications & System -->
+    <string name="notifications_required">Notification permission is required so the assistant can stay alive.</string>
+    <string name="notif_title">Levix</string>
+    <string name="notif_starting">Connecting…</string>
+    <string name="notif_node_starting">Starting assistant…</string>
+    <string name="notif_node_error">Error: %1$s</string>
     <string name="notif_node_ok">Node %1$s %2$s</string>
-    <string name="notif_node_error">Node: %1$s</string>
     <string name="notif_levix_ready">Levix ready</string>
-    <string name="notif_open">Open</string>
-    <string name="notif_stop">Stop</string>
-    <string name="notif_channel_name">Levix host</string>
-    <string name="notif_channel_description">Shown while Levix is running</string>
-    <string name="btn_battery">Unrestricted battery</string>
-    <string name="battery_ok">Battery optimizations are off for Levix.</string>
-    <string name="battery_hint">Android may stop Levix overnight. Allow unrestricted battery. On Xiaomi, also enable Autostart in system settings if that screen exists — we do not open hidden OEM pages.</string>
+    <string name="notif_heartbeat">Heartbeat: %1$s</string>
+    <string name="notif_channel_name">Levix</string>
+    <string name="notif_channel_description">Ongoing status notification</string>
     <string name="notif_alerts_channel_name">Levix Alerts</string>
-    <string name="notif_alerts_channel_description">Notifications when Levix is offline or disconnected</string>
+    <string name="notif_alerts_channel_description">Alerts when the connection is lost</string>
     <string name="notif_offline_title">Levix is Offline</string>
-    <string name="notif_offline_network">No internet connection. WhatsApp bot is disconnected.</string>
+    <string name="notif_offline_network">No internet connection. WhatsApp bot is paused.</string>
     <string name="notif_offline_wa">WhatsApp connection failed: %1$s</string>
     <string name="notif_wa_connected">WhatsApp: Connected</string>
-    <string name="notif_wa_offline">WhatsApp: Offline (No Internet)</string>
+    <string name="notif_wa_offline">WhatsApp: Offline</string>
     <string name="notif_wa_paused">WhatsApp: ⏸️ Paused (No Internet)</string>
+    <string name="notif_open">Open</string>
+    <string name="notif_stop">Stop</string>
 </resources>

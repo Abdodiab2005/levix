@@ -2,9 +2,43 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+
+    <!-- Speech bubble outline -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="8.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M75.5,55.2C77.8,50.9 79,46 79,41C79,22 63.5,7.5 44,7.5C24.2,7.5 8.5,22.1 8.5,41C8.5,53.5 15.8,64.6 27.2,70.4L23.3,84.5L39.6,76.7C44.3,78.1 49.2,78.4 54.4,76.8" />
+
+    <!-- Left Eye -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M7,4h3v12h7v4H7z" />
+        android:pathData="M34.8,38.6A4.1,4.1 0 1,0 34.8,46.8A4.1,4.1 0 1,0 34.8,38.6Z" />
+
+    <!-- Right Eye -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M55.4,38.6A4.1,4.1 0 1,0 55.4,46.8A4.1,4.1 0 1,0 55.4,38.6Z" />
+
+    <!-- Smile -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.8"
+        android:strokeLineCap="round"
+        android:pathData="M39.5,51.8C42.7,55.8 47.7,55.8 50.9,51.8" />
+
+    <!-- X mark -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="8.2"
+        android:strokeLineCap="round"
+        android:pathData="M59.2,59.2L83.2,83.2M84.2,57.8L58.4,83.2" />
+
+    <!-- Sparkle / Star -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M83.2,16.5C84.3,20.7 86.3,22.8 90.5,23.9C86.3,25 84.3,27.1 83.2,31.3C82.1,27.1 80.1,25 75.9,23.9C80.1,22.8 82.1,20.7 83.2,16.5Z" />
 </vector>

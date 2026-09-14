@@ -1,0 +1,19 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Guard Shield Outline -->
+    <path
+        android:strokeColor="@color/levix_ok"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,2L4,5V11C4,16.52 7.41,21.62 12,22.88C16.59,21.62 20,16.52 20,11V5L12,2Z" />
+
+    <!-- Power Lightning Bolt Inside -->
+    <path
+        android:fillColor="@color/levix_ok"
+        android:pathData="M12.5,6L8,12.5H12L11.5,18L16,11.5H12Z" />
+</vector>

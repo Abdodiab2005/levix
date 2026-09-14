@@ -1,5 +1,57 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="levix_primary">#0045FF</color>
-    <color name="ic_launcher_background">#0B1220</color>
+    <!-- Brand Primary & Launcher -->
+    <color name="levix_primary">#176BFA</color>
+    <color name="levix_primary_deep">#0B50D0</color>
+    <color name="levix_primary_bright">#5A94FF</color>
+    <color name="ic_launcher_background">#07101F</color>
+
+    <!-- Surfaces & Backgrounds (Matched from dashboard.css) -->
+    <color name="levix_bg">#07101F</color>
+    <color name="levix_bg_soft">#0A1629</color>
+    <color name="levix_panel">#0D1A30</color>
+    <color name="levix_panel_raised">#11213B</color>
+    <color name="levix_panel_hover">#142845</color>
+    <color name="levix_console_bg">#050B15</color>
+
+    <!-- Borders & Dividers -->
+    <color name="levix_border">#223657</color>
+    <color name="levix_border_soft">#192B48</color>
+    <color name="levix_border_bright">#2C4670</color>
+
+    <!-- Typography -->
+    <color name="levix_text">#F2F6FF</color>
+    <color name="levix_text_muted">#A4B5CF</color>
+    <color name="levix_text_faint">#7086A8</color>
+
+    <!-- Accents & Gradients -->
+    <color name="levix_blue">#176BFA</color>
+    <color name="levix_blue_deep">#0B50D0</color>
+    <color name="levix_blue_mid">#087FF2</color>
+    <color name="levix_blue_bright">#5A94FF</color>
+    <color name="levix_cyan">#21CEF3</color>
+    <color name="levix_cyan_soft">#8BE8FB</color>
+
+    <!-- Status Colors -->
+    <color name="levix_ok">#3BD68B</color>
+    <color name="levix_ok_soft">#153828</color>
+    <color name="levix_warn">#F2B84B</color>
+    <color name="levix_warn_soft">#3D2E12</color>
+    <color name="levix_danger">#FF6B78</color>
+    <color name="levix_danger_soft">#3D1418</color>
+    <color name="levix_info">#5A94FF</color>
+    <color name="levix_info_soft">#12223D</color>
+
+    <!-- Button Active / Disabled States -->
+    <color name="btn_disabled_bg">#091322</color>
+    <color name="btn_disabled_border">#162338</color>
+    <color name="btn_disabled_text">#4E617E</color>
+
+    <color name="btn_start_active_bg">#13284A</color>
+    <color name="btn_start_active_border">#176BFA</color>
+    <color name="btn_start_active_text">#5A94FF</color>
+
+    <color name="btn_stop_active_bg">#3D1418</color>
+    <color name="btn_stop_active_border">#FF5364</color>
+    <color name="btn_stop_active_text">#FF6B78</color>
 </resources>

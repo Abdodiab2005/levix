@@ -1,0 +1,33 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Processor Body -->
+    <path
+        android:strokeColor="@color/levix_cyan"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M6,4H18A2,2 0 0,1 20,6V18A2,2 0 0,1 18,20H6A2,2 0 0,1 4,18V6A2,2 0 0,1 6,4Z" />
+
+    <!-- Inner Core -->
+    <path
+        android:fillColor="@color/levix_cyan"
+        android:pathData="M9,9H15V15H9Z" />
+
+    <!-- Circuit Pins Top & Bottom -->
+    <path
+        android:strokeColor="@color/levix_cyan"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M8,1V4M12,1V4M16,1V4M8,20V23M12,20V23M16,20V23" />
+
+    <!-- Circuit Pins Left & Right -->
+    <path
+        android:strokeColor="@color/levix_cyan"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:pathData="M1,8H4M1,12H4M1,16H4M20,8H23M20,12H23M20,16H23" />
+</vector>
