@@ -27,8 +27,8 @@ android {
         applicationId = "net.leviro.levix"
         minSdk = 29
         targetSdk = 35
-        versionCode = 24
-        versionName = "3.2.1-beta"
+        versionCode = 25
+        versionName = "3.3.0-rc.1"
 
         ndk {
             abiFilters += "arm64-v8a"
