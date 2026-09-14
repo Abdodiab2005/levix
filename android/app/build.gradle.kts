@@ -27,8 +27,8 @@ android {
         applicationId = "net.leviro.levix"
         minSdk = 29
         targetSdk = 35
-        versionCode = 25
-        versionName = "3.3.0-rc.1"
+        versionCode = 26
+        versionName = "3.3.0-rc.2"
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -92,107 +92,75 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.3")
 }
 
-fun injectVersionedNativeLibs(destAbiDir: File) {
-    val src = file("$nodeRuntimeRoot/arm64-v8a")
-    if (!src.isDirectory) return
-    destAbiDir.mkdirs()
-    src.listFiles()
-        ?.filter { it.isFile && it.name.contains(".so.") }
-        ?.forEach { it.copyTo(File(destAbiDir, it.name), overwrite = true) }
-}
-
 android.applicationVariants.configureEach {
     val variantName = name
     val cap = name.replaceFirstChar { ch -> ch.uppercase() }
-    val strip = tasks.named("strip${cap}DebugSymbols")
-    strip.configure {
-        doLast {
-            injectVersionedNativeLibs(
-                layout.buildDirectory.get().asFile.resolve(
-                    "intermediates/stripped_native_libs/$variantName/strip${cap}DebugSymbols/out/lib/arm64-v8a",
-                ),
-            )
-        }
-    }
-    tasks.named("package$cap").configure {
-        dependsOn(strip)
-        doLast {
-            val apkDir = layout.buildDirectory.get().asFile.resolve("outputs/apk/$variantName")
-            val finalApk = File(apkDir, "app-$variantName.apk")
-            val rawApk = finalApk.takeIf { it.isFile }
-                ?: File(apkDir, "app-$variantName-unsigned.apk").takeIf { it.isFile }
-                ?: return@doLast
-            val nativeOut = layout.buildDirectory.get().asFile.resolve(
-                "intermediates/stripped_native_libs/$variantName/strip${cap}DebugSymbols/out",
-            )
-            val abiDir = File(nativeOut, "lib/arm64-v8a")
-            val extras = abiDir.listFiles()?.filter { it.name.contains(".so.") }.orEmpty()
-            if (extras.isEmpty()) return@doLast
-            extras.forEach { lib ->
-                val result = exec {
-                    workingDir = nativeOut
-                    isIgnoreExitValue = true
-                    commandLine("zip", "-u", "-X", "-0", rawApk.absolutePath, "lib/arm64-v8a/${lib.name}")
+    if (variantName == "release") {
+        tasks.named("package$cap").configure {
+            doLast {
+                val apkDir = layout.buildDirectory.get().asFile.resolve("outputs/apk/$variantName")
+                val finalApk = File(apkDir, "app-$variantName.apk")
+                val rawApk = finalApk.takeIf { it.isFile }
+                    ?: File(apkDir, "app-$variantName-unsigned.apk").takeIf { it.isFile }
+                    ?: return@doLast
+                val buildTools = File(System.getenv("ANDROID_HOME") ?: "", "build-tools").listFiles()
+                    ?.sortedByDescending { it.name }
+                    ?.firstOrNull()
+                    ?: throw GradleException("ANDROID_HOME/build-tools not found; cannot re-sign APK")
+                val aligned = File(apkDir, "app-$variantName-aligned.apk")
+                exec {
+                    commandLine(File(buildTools, "zipalign").absolutePath, "-f", "-p", "4", rawApk.absolutePath, aligned.absolutePath)
                 }
-                // 12 = "nothing to do" (entry already current).
-                if (result.exitValue != 0 && result.exitValue != 12) {
-                    throw GradleException("zip failed (${result.exitValue}) adding ${lib.name}")
+                val releaseKsPath = System.getenv("LEVIX_KEYSTORE_FILE")
+                val isCustomReleaseKs = !releaseKsPath.isNullOrBlank() && File(releaseKsPath).isFile
+                val ks = if (isCustomReleaseKs) {
+                    File(releaseKsPath!!)
+                } else {
+                    File(System.getProperty("user.home"), ".android/debug.keystore")
                 }
-            }
-            val buildTools = File(System.getenv("ANDROID_HOME") ?: "", "build-tools").listFiles()
-                ?.sortedByDescending { it.name }
-                ?.firstOrNull()
-                ?: throw GradleException("ANDROID_HOME/build-tools not found; cannot re-sign APK")
-            val aligned = File(apkDir, "app-$variantName-aligned.apk")
-            exec {
-                commandLine(File(buildTools, "zipalign").absolutePath, "-f", "-p", "4", rawApk.absolutePath, aligned.absolutePath)
-            }
-            val releaseKsPath = System.getenv("LEVIX_KEYSTORE_FILE")
-            val isCustomReleaseKs = !releaseKsPath.isNullOrBlank() && File(releaseKsPath).isFile
-            val ks = if (isCustomReleaseKs) {
-                File(releaseKsPath!!)
-            } else {
-                File(System.getProperty("user.home"), ".android/debug.keystore")
-            }
-            if (!ks.exists()) {
-                ks.parentFile?.mkdirs()
+                if (!ks.exists()) {
+                    ks.parentFile?.mkdirs()
+                    exec {
+                        commandLine(
+                            "keytool", "-genkey", "-v",
+                            "-keystore", ks.absolutePath,
+                            "-storepass", "android",
+                            "-alias", "androiddebugkey",
+                            "-keypass", "android",
+                            "-keyalg", "RSA",
+                            "-keysize", "2048",
+                            "-validity", "10000",
+                            "-dname", "CN=Android Debug,O=Android,C=US",
+                        )
+                    }
+                }
+                val ksPass = if (isCustomReleaseKs) (System.getenv("LEVIX_KEYSTORE_PASSWORD") ?: "android") else "android"
+                val keyAlias = if (isCustomReleaseKs) (System.getenv("LEVIX_KEY_ALIAS") ?: "androiddebugkey") else "androiddebugkey"
+                val keyPass = if (isCustomReleaseKs) (System.getenv("LEVIX_KEY_PASSWORD") ?: ksPass) else "android"
+
+                val ksPassArg = if (ksPass.startsWith("pass:")) ksPass else "pass:$ksPass"
+                val keyPassArg = if (keyPass.startsWith("pass:")) keyPass else "pass:$keyPass"
+
                 exec {
                     commandLine(
-                        "keytool", "-genkey", "-v",
-                        "-keystore", ks.absolutePath,
-                        "-storepass", "android",
-                        "-alias", "androiddebugkey",
-                        "-keypass", "android",
-                        "-keyalg", "RSA",
-                        "-keysize", "2048",
-                        "-validity", "10000",
-                        "-dname", "CN=Android Debug,O=Android,C=US",
+                        File(buildTools, "apksigner").absolutePath,
+                        "sign",
+                        "--ks", ks.absolutePath,
+                        "--ks-pass", ksPassArg,
+                        "--ks-key-alias", keyAlias,
+                        "--key-pass", keyPassArg,
+                        "--in", aligned.absolutePath,
+                        "--out", finalApk.absolutePath,
                     )
                 }
-            }
-            val ksPass = if (isCustomReleaseKs) (System.getenv("LEVIX_KEYSTORE_PASSWORD") ?: "android") else "android"
-            val keyAlias = if (isCustomReleaseKs) (System.getenv("LEVIX_KEY_ALIAS") ?: "androiddebugkey") else "androiddebugkey"
-            val keyPass = if (isCustomReleaseKs) (System.getenv("LEVIX_KEY_PASSWORD") ?: ksPass) else "android"
-
-            val ksPassArg = if (ksPass.startsWith("pass:")) ksPass else "pass:$ksPass"
-            val keyPassArg = if (keyPass.startsWith("pass:")) keyPass else "pass:$keyPass"
-
-            exec {
-                commandLine(
-                    File(buildTools, "apksigner").absolutePath,
-                    "sign",
-                    "--ks", ks.absolutePath,
-                    "--ks-pass", ksPassArg,
-                    "--ks-key-alias", keyAlias,
-                    "--key-pass", keyPassArg,
-                    "--in", aligned.absolutePath,
-                    "--out", finalApk.absolutePath,
-                )
-            }
-            aligned.delete()
-            if (rawApk != finalApk && rawApk.exists()) {
-                rawApk.delete()
+                aligned.delete()
+                if (rawApk != finalApk && rawApk.exists()) {
+                    rawApk.delete()
+                }
             }
         }
     }
 }
+
+
+

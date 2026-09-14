@@ -90,14 +90,39 @@ copy_real "$PREFIX/bin/node" "$RUNTIME/libnode.so"
 copy_real "$PREFIX/lib/libc++_shared.so" "$RUNTIME/libc++_shared.so"
 copy_real "$PREFIX/lib/libcares.so" "$RUNTIME/libcares.so"
 copy_real "$PREFIX/lib/libsqlite3.so" "$RUNTIME/libsqlite3.so"
-# Keep original SONAMEs. The Android linker matches DT_NEEDED/VERNEED
-# filenames, so libcrypto.so.3 cannot be renamed to libcrypto.so.
-copy_real "$PREFIX/lib/libcrypto.so.3" "$RUNTIME/libcrypto.so.3"
-copy_real "$PREFIX/lib/libssl.so.3" "$RUNTIME/libssl.so.3"
-copy_real "$PREFIX/lib/libicui18n.so.78" "$RUNTIME/libicui18n.so.78"
-copy_real "$PREFIX/lib/libicuuc.so.78" "$RUNTIME/libicuuc.so.78"
-copy_real "$PREFIX/lib/libicudata.so.78" "$RUNTIME/libicudata.so.78"
-copy_real "$PREFIX/lib/libz.so.1" "$RUNTIME/libz.so.1"
+# Android's NativeLibraryHelper strictly requires all native libraries inside
+# APK's lib/<abi>/ to end with `.so`. Files ending in numeric suffixes (e.g. .so.1, .so.3)
+# are ignored by Android during APK installation and are never extracted to
+# nativeLibraryDir. We rename them and update their SONAMEs and DT_NEEDED/DT_VERNEED
+# so the Bionic dynamic linker can load them.
+copy_real "$PREFIX/lib/libcrypto.so.3" "$RUNTIME/libcrypto_3.so"
+copy_real "$PREFIX/lib/libssl.so.3" "$RUNTIME/libssl_3.so"
+copy_real "$PREFIX/lib/libicui18n.so.78" "$RUNTIME/libicui18n_78.so"
+copy_real "$PREFIX/lib/libicuuc.so.78" "$RUNTIME/libicuuc_78.so"
+copy_real "$PREFIX/lib/libicudata.so.78" "$RUNTIME/libicudata_78.so"
+copy_real "$PREFIX/lib/libz.so.1" "$RUNTIME/libz_1.so"
+
+# Update SONAMEs
+"$PATCH" --set-soname libcrypto_3.so "$RUNTIME/libcrypto_3.so"
+"$PATCH" --set-soname libssl_3.so "$RUNTIME/libssl_3.so"
+"$PATCH" --set-soname libicui18n_78.so "$RUNTIME/libicui18n_78.so"
+"$PATCH" --set-soname libicuuc_78.so "$RUNTIME/libicuuc_78.so"
+"$PATCH" --set-soname libicudata_78.so "$RUNTIME/libicudata_78.so"
+"$PATCH" --set-soname libz_1.so "$RUNTIME/libz_1.so"
+
+# Update DT_NEEDED in dependent libraries
+"$PATCH" --replace-needed libcrypto.so.3 libcrypto_3.so "$RUNTIME/libssl_3.so"
+"$PATCH" --replace-needed libicudata.so.78 libicudata_78.so "$RUNTIME/libicuuc_78.so"
+"$PATCH" --replace-needed libicuuc.so.78 libicuuc_78.so "$RUNTIME/libicui18n_78.so"
+
+"$PATCH" --replace-needed libz.so.1 libz_1.so "$RUNTIME/libsqlite3.so"
+
+"$PATCH" --replace-needed libz.so.1 libz_1.so "$RUNTIME/libnode.so"
+"$PATCH" --replace-needed libcrypto.so.3 libcrypto_3.so "$RUNTIME/libnode.so"
+"$PATCH" --replace-needed libssl.so.3 libssl_3.so "$RUNTIME/libnode.so"
+"$PATCH" --replace-needed libicui18n.so.78 libicui18n_78.so "$RUNTIME/libnode.so"
+"$PATCH" --replace-needed libicuuc.so.78 libicuuc_78.so "$RUNTIME/libnode.so"
+
 
 # Stage Android ARM64 FFmpeg binary (NDK static build with Opus & MJPEG/H.264 support)
 FFMPEG_URL="https://github.com/Khang-NT/ffmpeg-binary-android/releases/download/2018-07-31/arm64-v8a-lite.tar.bz2"

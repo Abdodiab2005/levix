@@ -127,6 +127,7 @@ object NodeRuntime {
         env["TMPDIR"] = app.cacheDir.absolutePath
         env["NODE_DISABLE_COLORS"] = "1"
         env["LD_LIBRARY_PATH"] = app.applicationInfo.nativeLibraryDir
+        env["OPENSSL_CONF"] = "/dev/null"
         val ffmpegBinary = File(app.applicationInfo.nativeLibraryDir, "libffmpeg.so")
         if (ffmpegBinary.exists()) {
             env["LEVIX_FFMPEG_PATH"] = ffmpegBinary.absolutePath
