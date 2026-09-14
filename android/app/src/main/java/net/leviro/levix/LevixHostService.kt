@@ -8,6 +8,8 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -251,32 +253,22 @@ class LevixHostService : Service() {
         }
     }
 
-    private fun formatWhatsAppStatus(snap: HostState.Snapshot): String {
-        if (!isNetworkOnline) {
-            return getString(R.string.notif_wa_offline)
-        }
-        val state = snap.whatsAppState ?: return getString(R.string.notif_node_starting)
-        return when (state) {
-            "connected" -> getString(R.string.notif_wa_connected)
-            "paused" -> getString(R.string.notif_wa_paused)
-            "waiting_for_qr" -> "WhatsApp: 📱 Waiting for pairing"
-            "linking" -> "WhatsApp: 🔄 Linking…"
-            "starting" -> "WhatsApp: ⏳ Starting…"
-            "reconnecting" -> {
-                val codeStr = snap.whatsAppCode?.let { " ($it: ${snap.whatsAppReason ?: "timeout"})" } ?: ""
-                "WhatsApp: ⏳ Reconnecting$codeStr"
-            }
-            "retry_exhausted" -> {
-                val codeStr = snap.whatsAppCode?.let { " ($it: ${snap.whatsAppReason ?: "timeout"})" } ?: ""
-                "WhatsApp: ❌ Connection failed$codeStr"
-            }
-            "disconnected" -> {
-                val codeStr = snap.whatsAppCode?.let { " ($it: ${snap.whatsAppReason ?: ""})" } ?: ""
-                "WhatsApp: Disconnected$codeStr"
-            }
-            "logged_out" -> "WhatsApp: ⚠️ Logged out"
-            "idle" -> "WhatsApp: ⏸️ Idle"
-            else -> "WhatsApp: $state"
+    private var cachedLargeIcon: Bitmap? = null
+
+    private fun getLevixLargeIcon(): Bitmap? {
+        cachedLargeIcon?.let { return it }
+        return try {
+            val drawable = ContextCompat.getDrawable(this, R.drawable.ic_levix_mark) ?: return null
+            val density = resources.displayMetrics.density
+            val size = (64 * density).toInt().coerceAtLeast(64)
+            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            drawable.setBounds(0, 0, canvas.width, canvas.height)
+            drawable.draw(canvas)
+            cachedLargeIcon = bitmap
+            bitmap
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -289,19 +281,25 @@ class LevixHostService : Service() {
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val notif = NotificationCompat.Builder(this, CHANNEL_ALERT_ID)
+        val largeIcon = getLevixLargeIcon()
+        val builder = NotificationCompat.Builder(this, CHANNEL_ALERT_ID)
             .setSmallIcon(R.drawable.ic_stat_host)
             .setContentTitle(title)
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
+            .setColor(ContextCompat.getColor(this, R.color.levix_warn))
             .setAutoCancel(true)
             .setContentIntent(openIntent)
             .addAction(0, getString(R.string.notif_open), openIntent)
-            .build()
+
+        if (largeIcon != null) {
+            builder.setLargeIcon(largeIcon)
+        }
 
         val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ALERT_ID, notif)
+        manager.notify(NOTIFICATION_ALERT_ID, builder.build())
         offlineAlertPosted = true
     }
 
@@ -342,28 +340,24 @@ class LevixHostService : Service() {
 
     private fun updateNotification() {
         val snap = HostState.snapshot
-        val waStatus = formatWhatsAppStatus(snap)
-        val last = snap.lastHeartbeatMs
-        val stamp = if (last == 0L) "—" else timeFormat.format(Date(last))
-        val shortText = "$waStatus • $stamp"
 
-        val node = when {
-            snap.nodeError != null -> getString(R.string.notif_node_error, snap.nodeError)
-            snap.levixReady -> getString(R.string.notif_levix_ready)
-            snap.nodeVersion != null -> getString(
-                R.string.notif_node_ok,
-                snap.nodeVersion,
-                snap.nodeArch ?: "?",
-            )
-            else -> getString(R.string.notif_node_starting)
+        val statusText = when {
+            !isNetworkOnline || snap.whatsAppState == "paused" -> "Paused"
+            snap.whatsAppState == "connected" -> "Connected"
+            snap.whatsAppState == "waiting_for_qr" -> "Scan QR"
+            snap.whatsAppState == "reconnecting" -> "Reconnecting…"
+            snap.whatsAppState == "retry_exhausted" -> "Disconnected"
+            snap.whatsAppState == "logged_out" -> "Logged out"
+            snap.whatsAppState == "starting" -> "Connecting…"
+            snap.running -> "Connecting…"
+            else -> "Stopped"
         }
-        val expandedText = "$waStatus\n${getString(R.string.notif_heartbeat, stamp)}\n$node"
 
         val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, buildNotification(shortText, expandedText))
+        manager.notify(NOTIFICATION_ID, buildNotification(statusText))
     }
 
-    private fun buildNotification(shortText: String, expandedText: String = shortText): Notification {
+    private fun buildNotification(statusText: String): Notification {
         val openIntent = PendingIntent.getActivity(
             this,
             1,
@@ -372,30 +366,57 @@ class LevixHostService : Service() {
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val stopIntent = PendingIntent.getService(
+        val panelIntent = PendingIntent.getActivity(
             this,
             2,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(MainActivity.EXTRA_OPEN_PANEL, true)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val stopIntent = PendingIntent.getService(
+            this,
+            3,
             Intent(this, LevixHostService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val largeIcon = getLevixLargeIcon()
+
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_host)
-            .setContentTitle(getString(R.string.notif_title))
-            .setContentText(shortText)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(expandedText))
+            .setContentTitle(statusText)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setColor(ContextCompat.getColor(this, R.color.levix_blue))
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(openIntent)
-            .addAction(0, getString(R.string.notif_open), openIntent)
+            .addAction(0, "Open Panel", panelIntent)
             .addAction(0, getString(R.string.notif_stop), stopIntent)
-            .build()
+
+        if (largeIcon != null) {
+            builder.setLargeIcon(largeIcon)
+        }
+
+        return builder.build()
     }
 
     private fun ensureChannel() {
         val manager = getSystemService(NotificationManager::class.java)
+
+        // Reset existing channels if they had sound or vibration enabled
+        val existingHost = manager.getNotificationChannel(CHANNEL_ID)
+        if (existingHost != null && (existingHost.importance > NotificationManager.IMPORTANCE_LOW || existingHost.sound != null || existingHost.shouldVibrate())) {
+            manager.deleteNotificationChannel(CHANNEL_ID)
+        }
+        val existingAlert = manager.getNotificationChannel(CHANNEL_ALERT_ID)
+        if (existingAlert != null && (existingAlert.importance > NotificationManager.IMPORTANCE_LOW || existingAlert.sound != null || existingAlert.shouldVibrate())) {
+            manager.deleteNotificationChannel(CHANNEL_ALERT_ID)
+        }
+
         if (manager.getNotificationChannel(CHANNEL_ID) == null) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
@@ -404,6 +425,8 @@ class LevixHostService : Service() {
             ).apply {
                 description = getString(R.string.notif_channel_description)
                 setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
             }
             manager.createNotificationChannel(channel)
         }
@@ -411,11 +434,12 @@ class LevixHostService : Service() {
             val alertChannel = NotificationChannel(
                 CHANNEL_ALERT_ID,
                 getString(R.string.notif_alerts_channel_name),
-                NotificationManager.IMPORTANCE_DEFAULT,
+                NotificationManager.IMPORTANCE_LOW,
             ).apply {
                 description = getString(R.string.notif_alerts_channel_description)
-                enableVibration(true)
-                setShowBadge(true)
+                setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
             }
             manager.createNotificationChannel(alertChannel)
         }
