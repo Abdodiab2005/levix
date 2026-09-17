@@ -13,8 +13,11 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import java.io.File
 import java.net.URI
 import java.nio.charset.StandardCharsets
@@ -39,7 +42,25 @@ class PanelActivity : AppCompatActivity() {
             ""
         }
         web = WebView(this)
-        setContentView(web)
+        val container = FrameLayout(this).apply {
+            setBackgroundColor(Color.parseColor("#07101f"))
+            addView(
+                web,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+        setContentView(container)
+
+        ViewCompat.setOnApplyWindowInsetsListener(container) { v, windowInsets ->
+            val insets = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            v.setPadding(insets.left, insets.top, insets.right, insets.bottom)
+            windowInsets
+        }
 
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
