@@ -395,6 +395,53 @@ section("a provider without a key fails loudly, in Arabic, like gemini does");
   ok("…naming the provider", /anthropic/i.test(threw?.message || ""));
 }
 
+section("modular provider router and registry");
+
+{
+  const aiRouter = harnessRequire("./src/services/aiRouter.cjs");
+  ok("gemini provider is registered", aiRouter.hasProvider("gemini"));
+  ok("openai provider is registered", aiRouter.hasProvider("openai"));
+  ok("anthropic provider is registered", aiRouter.hasProvider("anthropic"));
+  ok("unknown provider is not registered", !aiRouter.hasProvider("nonexistent_provider"));
+
+  const gemini = aiRouter.getProvider("gemini");
+  equal("gemini id", gemini.id, "gemini");
+  ok("gemini supportsFiles is true", gemini.supportsFiles === true);
+  equal("gemini keySetting", gemini.keySetting, "gemini_api_key");
+
+  const openai = aiRouter.getProvider("openai");
+  equal("openai id", openai.id, "openai");
+  ok("openai supportsFiles is false", openai.supportsFiles === false);
+  equal("openai keySetting", openai.keySetting, "openai_api_key");
+
+  const anthropic = aiRouter.getProvider("anthropic");
+  equal("anthropic id", anthropic.id, "anthropic");
+  equal("anthropic keySetting", anthropic.keySetting, "anthropic_api_key");
+
+  const all = aiRouter.listProviders();
+  ok("listProviders lists at least 3 providers", all.length >= 3);
+
+  let threw = null;
+  try {
+    aiRouter.getProvider("nonexistent_provider");
+  } catch (err) {
+    threw = err;
+  }
+  ok("getting unknown provider throws", threw !== null);
+  ok("...with descriptive Arabic message", /مزود غير معروف/.test(threw?.message || ""));
+
+  // Model capability detection
+  const geminiCaps = aiRouter.detectModelCapabilities("gemini", "gemini-3.7-flash");
+  ok("gemini supports vision", geminiCaps.supportsVision);
+  ok("gemini supports audio STT", geminiCaps.supportsAudioStt);
+
+  const openaiCaps = aiRouter.detectModelCapabilities("openai", "gpt-4o");
+  ok("gpt-4o supports vision", openaiCaps.supportsVision);
+
+  const claudeCaps = aiRouter.detectModelCapabilities("anthropic", "claude-3-5-sonnet");
+  ok("claude-3 supports vision", claudeCaps.supportsVision);
+}
+
 finish();
 
 // --- helpers ---------------------------------------------------------------

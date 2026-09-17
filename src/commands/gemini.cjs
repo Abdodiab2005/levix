@@ -46,6 +46,7 @@ const {
   sanitizeHistoryForFiles,
   activeProviderKeySetting,
 } = require("../services/aiAgent.cjs");
+const { getProvider } = require("../services/aiRouter.cjs");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 const fs = require("fs").promises;
 const path = require("path");
@@ -90,77 +91,13 @@ function geminiClients() {
 }
 
 async function processIncomingMedia(parts, mediaMessage, mimeOverride = null) {
-  // Reading media is a Gemini capability: the Files API it uploads to does not
-  // exist on the openai/anthropic paths. There the turn carries a note and the
-  // caption/question text still reaches the model.
-  if (settings.get("ai_provider") !== "gemini") {
-    const isVisionOn = settings.get("ai_vision_enabled");
-    const mime = mimeOverride || mediaMessage.mimetype || "ملف";
-    if (isVisionOn && mime.startsWith("image/")) {
-      try {
-        const stream = await downloadContentFromMessage(mediaMessage, "image");
-        let buffer = Buffer.from([]);
-        for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
-        if (buffer.length) {
-          parts.push({
-            inlineData: {
-              mimeType: mime,
-              data: buffer.toString("base64"),
-            },
-          });
-          return "inline:image";
-        }
-      } catch (err) {
-        logger.warn({ err }, "[gemini] failed to extract inline image for vision");
-      }
-    }
-    parts.push({
-      text: `[تم إرفاق وسائط (${mime}) — المزود الحالي لا يستطيع قراءة هذا النوع من الوسائط أو تم تعطيل ميزة تحليل الصور]`,
-    });
-    return null;
-  }
-
+  const provider = getProvider();
   const { genAI } = geminiClients();
-  if (!genAI) throw new Error("Gemini client unavailable");
-  const tempFilePath = path.join(__dirname, `temp_media_${Date.now()}`);
-  const stream = await downloadContentFromMessage(
-    mediaMessage,
-    mediaMessage.mimetype?.startsWith("image/")
-      ? "image"
-      : mediaMessage.mimetype?.startsWith("video/")
-      ? "video"
-      : mediaMessage.mimetype?.startsWith("audio/")
-      ? "audio"
-      : "document"
-  );
-  let buffer = Buffer.from([]);
-  for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
-  if (!buffer.length) throw new Error("Empty media buffer");
-
-  await fs.writeFile(tempFilePath, buffer);
-  try {
-    // ai.files.upload returns the File itself, where the old fileManager
-    // wrapped it in { file }. The fileData part shape is unchanged, so history
-    // written by an older Levix still loads.
-    const uploaded = await genAI.files.upload({
-      file: tempFilePath,
-      config: {
-        mimeType: mimeOverride || mediaMessage.mimetype,
-        displayName: `media-${Date.now()}`,
-      },
-    });
-    parts.push({
-      fileData: {
-        mimeType: mimeOverride || mediaMessage.mimetype,
-        fileUri: uploaded.uri,
-      },
-    });
-    return uploaded.uri;
-  } finally {
-    try {
-      await fs.unlink(tempFilePath);
-    } catch {}
-  }
+  return provider.prepareMedia(parts, mediaMessage, mimeOverride, {
+    downloadContentFromMessage,
+    genAI,
+    tempDir: __dirname,
+  });
 }
 
 // === Multi-message context buffer helpers ===
@@ -622,15 +559,14 @@ module.exports = {
       }
     }
 
-    // Provider-aware, on purpose: when the panel picked openai or anthropic,
-    // the bot answers with that key and a missing Gemini key is irrelevant.
-    if (!settings.get(activeProviderKeySetting())) {
-      const provider = settings.get("ai_provider");
+    // Provider-aware: delegates configuration check to the active provider adapter.
+    const activeProvider = getProvider();
+    if (!activeProvider.isConfigured()) {
       return sendBotMessage(
         sock,
         chatId,
         {
-          text: `خطأ في الإعدادات: مفتاح مزود الذكاء الاصطناعي الحالي (${provider}) غير معرف — عدّله من لوحة التحكم.`,
+          text: `خطأ في الإعدادات: مفتاح مزود الذكاء الاصطناعي الحالي (${activeProvider.label || activeProvider.id}) غير معرف — عدّله من لوحة التحكم.`,
         },
         { replyTo: msg }
       );

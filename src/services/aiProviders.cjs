@@ -97,6 +97,82 @@ const ADAPTERS = {
   },
 };
 
+const { BaseAIProvider, registerProvider, getProvider } = require("./aiRouter.cjs");
+
+async function prepareInlineImageMedia(providerId, parts, mediaMessage, mimeOverride, downloadContentFromMessage) {
+  const isVisionOn = settings.get("ai_vision_enabled");
+  const mime = mimeOverride || mediaMessage?.mimetype || "ملف";
+  if (isVisionOn && mime.startsWith("image/") && typeof downloadContentFromMessage === "function") {
+    try {
+      const stream = await downloadContentFromMessage(mediaMessage, "image");
+      let buffer = Buffer.from([]);
+      for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
+      if (buffer.length) {
+        parts.push({
+          inlineData: {
+            mimeType: mime,
+            data: buffer.toString("base64"),
+          },
+        });
+        return "inline:image";
+      }
+    } catch (err) {
+      logger.warn({ err }, `[${providerId}] failed to extract inline image for vision`);
+    }
+  }
+  parts.push({
+    text: `[تم إرفاق وسائط (${mime}) — المزود الحالي لا يستطيع قراءة هذا النوع من الوسائط أو تم تعطيل ميزة تحليل الصور]`,
+  });
+  return null;
+}
+
+class OpenAIProvider extends BaseAIProvider {
+  constructor() {
+    super({
+      id: "openai",
+      label: "OpenAI-compatible",
+      keySetting: "openai_api_key",
+      modelSetting: "openai_model",
+      baseUrlSetting: "openai_base_url",
+      defaultBaseUrl: "https://api.openai.com/v1",
+      supportsFiles: false,
+    });
+  }
+
+  async prepareMedia(parts, mediaMessage, mimeOverride, { downloadContentFromMessage } = {}) {
+    return prepareInlineImageMedia("openai", parts, mediaMessage, mimeOverride, downloadContentFromMessage);
+  }
+
+  async runTurn(options) {
+    return runProviderAgent("openai", options);
+  }
+}
+
+class AnthropicProvider extends BaseAIProvider {
+  constructor() {
+    super({
+      id: "anthropic",
+      label: "Anthropic",
+      keySetting: "anthropic_api_key",
+      modelSetting: "anthropic_model",
+      baseUrlSetting: "anthropic_base_url",
+      defaultBaseUrl: "https://api.anthropic.com",
+      supportsFiles: false,
+    });
+  }
+
+  async prepareMedia(parts, mediaMessage, mimeOverride, { downloadContentFromMessage } = {}) {
+    return prepareInlineImageMedia("anthropic", parts, mediaMessage, mimeOverride, downloadContentFromMessage);
+  }
+
+  async runTurn(options) {
+    return runProviderAgent("anthropic", options);
+  }
+}
+
+registerProvider("openai", new OpenAIProvider());
+registerProvider("anthropic", new AnthropicProvider());
+
 function adapterFor(provider) {
   const adapter = ADAPTERS[provider];
   if (!adapter) throw new Error(`مزود غير معروف: ${provider}`);
@@ -701,4 +777,7 @@ module.exports = {
   parseOpenAIResponse,
   parseAnthropicResponse,
   ADAPTERS,
+  getProvider,
+  OpenAIProvider,
+  AnthropicProvider,
 };

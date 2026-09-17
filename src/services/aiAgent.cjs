@@ -23,6 +23,12 @@ const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
 const { toolDeclarations, describeCall, runTool } = require("./aiTools.cjs");
 const {
+  BaseAIProvider,
+  registerProvider,
+  getProvider,
+  detectModelCapabilities,
+} = require("./aiRouter.cjs");
+const {
   runProviderAgent,
   activeProviderKeySetting,
 } = require("./aiProviders.cjs");
@@ -403,33 +409,89 @@ function formatSources(sources) {
  * @param {boolean}  [options.useTools=true]
  * @returns {Promise<{text: string, history: Array, toolCalls: Array, steps: number}>}
  */
-async function runAgent({
+class GeminiProvider extends BaseAIProvider {
+  constructor() {
+    super({
+      id: "gemini",
+      label: "Google Gemini",
+      keySetting: "gemini_api_key",
+      modelSetting: "gemini_model",
+      baseUrlSetting: "gemini_base_url",
+      defaultBaseUrl: "",
+      supportsFiles: true,
+    });
+  }
+
+  async prepareMedia(parts, mediaMessage, mimeOverride, { downloadContentFromMessage, genAI, tempDir } = {}) {
+    if (!genAI) throw new Error("Gemini client unavailable");
+    const tempFilePath = path.join(tempDir || __dirname, `temp_media_${Date.now()}`);
+    const stream = await downloadContentFromMessage(
+      mediaMessage,
+      mediaMessage.mimetype?.startsWith("image/")
+        ? "image"
+        : mediaMessage.mimetype?.startsWith("video/")
+        ? "video"
+        : mediaMessage.mimetype?.startsWith("audio/")
+        ? "audio"
+        : "document"
+    );
+    let buffer = Buffer.from([]);
+    for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
+    if (!buffer.length) throw new Error("Empty media buffer");
+    await fs.promises.writeFile(tempFilePath, buffer);
+
+    try {
+      const uploadResult = await genAI.files.upload({
+        file: tempFilePath,
+        mimeType: mediaMessage.mimetype,
+      });
+      parts.push({
+        fileData: {
+          fileUri: uploadResult.uri,
+          mimeType: uploadResult.mimeType,
+        },
+      });
+      return uploadResult.uri;
+    } finally {
+      await fs.promises.unlink(tempFilePath).catch(() => {});
+    }
+  }
+
+  async runTurn(options) {
+    return runGeminiTurn(options);
+  }
+}
+
+registerProvider("gemini", new GeminiProvider());
+
+/**
+ * Run one agent turn.
+ * Modular dispatch through getProvider().
+ */
+async function runAgent(options = {}) {
+  const provider = getProvider();
+  const result = await provider.runTurn({
+    ...options,
+    history: trimHistory(options.history),
+    systemInstruction: buildSystemInstruction(options.context),
+  });
+  return { ...result, history: trimHistory(result.history) };
+}
+
+async function runGeminiTurn({
   parts,
   history = [],
   status = null,
   context = {},
   useTools = true,
   maxSteps = null,
+  systemInstruction = null,
 } = {}) {
-  const provider = settings.get("ai_provider");
-  if (provider !== "gemini") {
-    const result = await runProviderAgent(provider, {
-      parts,
-      history: trimHistory(history),
-      systemInstruction: buildSystemInstruction(context),
-      status,
-      context,
-      useTools,
-      maxSteps,
-    });
-    return { ...result, history: trimHistory(result.history) };
-  }
-
   const genAI = geminiClient();
   if (!genAI) throw new Error("GEMINI_API_KEY غير معرف");
 
   const stepBudget = maxSteps ?? settings.get("ai_max_tool_steps");
-  const systemInstruction = buildSystemInstruction(context);
+  const instruction = systemInstruction || buildSystemInstruction(context);
   const trimmed = trimHistory(history);
   const model = settings.get("gemini_model");
 
@@ -447,7 +509,7 @@ async function runAgent({
       model,
       history: trimmed,
       config: {
-        systemInstruction,
+        systemInstruction: instruction,
         ...(tools.length ? { tools } : {}),
         ...(toolConfig ? { toolConfig } : {}),
       },
@@ -569,42 +631,6 @@ async function runAgent({
   };
 }
 
-function detectModelCapabilities(provider = settings.get("ai_provider"), model = null) {
-  const p = provider || "gemini";
-  const m = String(
-    model ||
-    (p === "gemini"
-      ? settings.get("gemini_model")
-      : p === "openai"
-      ? settings.get("openai_model")
-      : settings.get("anthropic_model")) ||
-    ""
-  ).toLowerCase();
-
-  const isGemini = p === "gemini";
-  const isAnthropic = p === "anthropic";
-  const supportsVision =
-    isGemini ||
-    isAnthropic ||
-    m.includes("vision") ||
-    m.includes("vl") ||
-    m.includes("llava") ||
-    m.includes("4o") ||
-    m.includes("pixtral") ||
-    m.includes("qwen") ||
-    m.includes("minicpm") ||
-    m.includes("llama-3.2-11b") ||
-    m.includes("llama-3.2-90b");
-
-  const supportsAudioStt = isGemini || p === "openai" || m.includes("whisper");
-
-  return {
-    provider: p,
-    model: m,
-    supportsVision,
-    supportsAudioStt,
-  };
-}
 
 module.exports = {
   runAgent,
@@ -624,4 +650,6 @@ module.exports = {
   trimHistory,
   PERSONA_FILE,
   detectModelCapabilities,
+  getProvider,
+  GeminiProvider,
 };
