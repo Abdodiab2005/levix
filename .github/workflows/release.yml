@@ -64,6 +64,7 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
       - run: npm ci
+      - run: npm --prefix frontend ci
       - name: Publish npm package
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -136,6 +137,7 @@ jobs:
         with:
           node-version: 24
       - run: npm ci
+      - run: npm --prefix frontend ci
       - run: npm run build:sea
       # Ship nothing that hasn't been started at least once.
       - run: npm run validate:sea
@@ -158,9 +160,13 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
       - run: npm ci
+      - run: npm --prefix frontend ci
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
@@ -171,7 +177,7 @@ jobs:
             ~/.cache/levix-android
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: android-${{ runner.os }}-${{ hashFiles('android/scripts/fetch-node-android.sh', 'android/gradle/wrapper/gradle-wrapper.properties', 'package-lock.json') }}
+          key: android-${{ runner.os }}-${{ hashFiles('android/scripts/fetch-node-android.sh', 'android/gradle/wrapper/gradle-wrapper.properties', 'package-lock.json', 'frontend/package-lock.json') }}
           restore-keys: |
             android-${{ runner.os }}-
       - name: Fetch Node Android ARM64 runtime

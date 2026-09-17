@@ -104,6 +104,12 @@ console.log(`  ${commands.length} commands -> ${rel(manifestPath)}`);
 // 2. Assets + the entry file
 // ---------------------------------------------------------------------------
 
+if (fs.existsSync(path.join(ROOT, "frontend"))) {
+  step("Building the React frontend for SEA bundle");
+  const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+  execFileSync(npmCmd, ["run", "build:frontend"], { cwd: ROOT, stdio: "inherit" });
+}
+
 step("Inlining views, public and the persona template");
 
 function collect(dir, prefix, into) {

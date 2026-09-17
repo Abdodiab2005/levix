@@ -13,7 +13,7 @@
     "check:fix": "biome check --write .",
     "brand:assets": "node scripts/build-brand-assets.mjs",
     "build": "npm run build:frontend",
-    "build:frontend": "npm --prefix frontend run build",
+    "build:frontend": "node scripts/build-frontend.mjs",
     "prepack": "npm run build:frontend",
     "build:sea": "node scripts/build-sea.mjs",
     "validate:tarball": "node scripts/validate-tarball.mjs",
