@@ -10,9 +10,12 @@ import { useI18n } from "../context/I18nContext";
 import type { CommandItem } from "../types";
 
 export const CommandsView: React.FC = () => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const { toast } = useToast();
   const [commands, setCommands] = useState<CommandItem[]>([]);
+  const [prefix, setPrefix] = useState<string>("!");
+  const [isEditingPrefix, setIsEditingPrefix] = useState(false);
+  const [newPrefixInput, setNewPrefixInput] = useState("!");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -20,6 +23,10 @@ export const CommandsView: React.FC = () => {
     try {
       const res = await api.getCommands();
       if (res?.commands) setCommands(res.commands);
+      if (res?.prefix) {
+        setPrefix(res.prefix);
+        setNewPrefixInput(res.prefix);
+      }
     } catch (err: any) {
       toast(err.message, "error");
     } finally {
@@ -30,6 +37,22 @@ export const CommandsView: React.FC = () => {
   useEffect(() => {
     loadCommands();
   }, []);
+
+  const handleUpdatePrefix = async () => {
+    const clean = newPrefixInput.trim();
+    if (!clean || clean.length > 3) {
+      toast(t("prefixValidation"), "error");
+      return;
+    }
+    try {
+      await api.updatePrefix(clean);
+      setPrefix(clean);
+      setIsEditingPrefix(false);
+      toast(`${t("prefixUpdated")} (${clean})`, "success");
+    } catch (err: any) {
+      toast(err.message, "error");
+    }
+  };
 
   const handleToggleEnabled = async (cmd: CommandItem, enabled: boolean) => {
     setCommands((prev) =>
@@ -65,92 +88,129 @@ export const CommandsView: React.FC = () => {
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-      <div className="card-glass">
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "16px",
-          }}
-        >
-          <div>
-            <h2 style={{ fontSize: "1.2rem", fontWeight: 700 }}>{t("commands")}</h2>
-            <p style={{ fontSize: "0.85rem", color: "var(--muted)", marginTop: "4px" }}>
-              Manage and override role permissions or enable/disable bot commands live
-            </p>
-          </div>
+    <div className="flex flex-col gap-6">
+      <div className="rounded-2xl border border-line bg-panel p-5 md:p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-lg md:text-xl font-bold text-text-main">{t("commands")}</h2>
 
-          <div style={{ position: "relative", width: "100%", maxWidth: "300px" }}>
-            <Search
-              size={16}
-              color="var(--muted)"
-              style={{ position: "absolute", top: "12px", insetInlineStart: "12px" }}
-            />
-            <input
-              type="text"
-              className="form-input"
-              style={{ paddingInlineStart: "36px" }}
-              placeholder={t("searchPlaceholder")}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            {/* Active Prefix Chip with Quick Edit */}
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-line bg-panel-raised">
+              <span className="text-xs text-muted font-semibold">{t("activePrefix")}:</span>
+              {isEditingPrefix ? (
+                <div className="inline-flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    maxLength={3}
+                    value={newPrefixInput}
+                    onChange={(e) => setNewPrefixInput(e.target.value)}
+                    className="w-12 h-7 px-1.5 text-center font-mono font-bold text-xs rounded-lg border border-line bg-panel text-text-main focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleUpdatePrefix();
+                      if (e.key === "Escape") setIsEditingPrefix(false);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleUpdatePrefix}
+                    className="px-2 h-7 rounded-lg bg-brand-blue text-white font-bold text-xs hover:bg-brand-blue/90 transition-colors"
+                  >
+                    {t("save")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingPrefix(false)}
+                    className="px-2 h-7 rounded-lg border border-line bg-panel-raised text-muted font-bold text-xs hover:bg-panel-hover transition-colors"
+                  >
+                    {t("cancel")}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewPrefixInput(prefix);
+                    setIsEditingPrefix(true);
+                  }}
+                  className="px-2.5 py-0.5 rounded-lg bg-brand-cyan/15 text-brand-cyan border border-brand-cyan/30 font-mono font-bold text-xs hover:bg-brand-cyan/25 transition-colors"
+                  title={language === "ar" ? "اضغط لتعديل البادئة" : "Click to change prefix"}
+                >
+                  {prefix}
+                </button>
+              )}
+            </div>
           </div>
+          <p className="text-xs md:text-sm text-muted mt-1">
+            {language === "ar"
+              ? "إدارة رتب الأوامر وتفعيلها أو تعطيلها مباشرة مع دعم البادئة المخصصة"
+              : "Manage and override role permissions or enable/disable bot commands live"}
+          </p>
+        </div>
+
+        <div className="relative w-full md:w-72 shrink-0">
+          <Search size={18} className="absolute start-3.5 top-3 text-muted" />
+          <input
+            type="text"
+            className="w-full h-11 ps-10 pe-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            placeholder={t("searchPlaceholder")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
       </div>
 
-      <div className="table-wrap">
-        <table className="table">
+      <div className="rounded-2xl border border-line bg-panel overflow-hidden shadow-sm overflow-x-auto">
+        <table className="w-full text-start border-collapse text-sm">
           <thead>
-            <tr>
-              <th>{t("thCommand")}</th>
-              <th>{t("thAliases")}</th>
-              <th>{t("thDescription")}</th>
-              <th>{t("thScope")}</th>
-              <th>{t("thRequiredRole")}</th>
-              <th style={{ textAlign: "center" }}>{t("thStatus")}</th>
+            <tr className="bg-panel-raised border-b border-line text-xs font-bold text-muted uppercase tracking-wider">
+              <th className="px-4 py-3.5 text-start">{t("thCommand")}</th>
+              <th className="px-4 py-3.5 text-start">{t("thAliases")}</th>
+              <th className="px-4 py-3.5 text-start">{t("thDescription")}</th>
+              <th className="px-4 py-3.5 text-start">{t("thScope")}</th>
+              <th className="px-4 py-3.5 text-start">{t("thRequiredRole")}</th>
+              <th className="px-4 py-3.5 text-center">{t("thStatus")}</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-line/40">
             {loading ? (
               <tr>
-                <td
-                  colSpan={6}
-                  style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}
-                >
+                <td colSpan={6} className="text-center py-10 text-muted">
                   ...
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td
-                  colSpan={6}
-                  style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}
-                >
+                <td colSpan={6} className="text-center py-10 text-muted">
                   ...
                 </td>
               </tr>
             ) : (
               filtered.map((cmd) => (
-                <tr key={cmd.name}>
-                  <td style={{ fontWeight: 700, color: "var(--cyan)" }}>
-                    <bdi className="input-technical">!{cmd.name}</bdi>
-                  </td>
-                  <td style={{ color: "var(--muted)", fontSize: "0.82rem" }}>
-                    <bdi className="input-technical">
-                      {cmd.aliases?.length ? cmd.aliases.map((a) => `!${a}`).join(", ") : "—"}
+                <tr key={cmd.name} className="hover:bg-panel-hover/50 transition-colors">
+                  <td className="px-4 py-3.5 font-mono font-bold text-brand-cyan">
+                    <bdi>
+                      {prefix}
+                      {cmd.name}
                     </bdi>
                   </td>
-                  <td style={{ maxWidth: "320px", color: "var(--text)" }}>{cmd.description}</td>
-                  <td>
-                    <span className="badge badge-info">{cmd.chat}</span>
+                  <td className="px-4 py-3.5 font-mono text-xs text-muted">
+                    <bdi>
+                      {cmd.aliases?.length
+                        ? cmd.aliases.map((a) => `${prefix}${a}`).join(", ")
+                        : "—"}
+                    </bdi>
                   </td>
-                  <td>
+                  <td className="px-4 py-3.5 max-w-xs text-text-main text-xs md:text-sm">
+                    {cmd.description}
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <span className="inline-flex px-2.5 py-0.5 rounded-lg bg-brand-blue/10 text-brand-cyan text-xs font-semibold">
+                      {cmd.chat}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3.5">
                     <select
-                      className="form-select"
-                      style={{ padding: "6px 10px", fontSize: "0.82rem", width: "auto" }}
+                      className="h-9 px-2.5 rounded-lg border border-line bg-panel-raised text-text-main text-xs focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                       value={cmd.permission}
                       onChange={(e) => handlePermissionChange(cmd, e.target.value)}
                     >
@@ -159,7 +219,7 @@ export const CommandsView: React.FC = () => {
                       <option value="OWNER_ONLY">Bot Owner Only</option>
                     </select>
                   </td>
-                  <td style={{ textAlign: "center" }}>
+                  <td className="px-4 py-3.5 text-center">
                     <Toggle
                       checked={cmd.enabled}
                       onChange={(val) => handleToggleEnabled(cmd, val)}

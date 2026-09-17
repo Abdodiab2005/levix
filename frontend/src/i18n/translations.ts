@@ -108,29 +108,74 @@ export const translations = {
     seconds: "ثوانٍ",
 
     // Settings tabs
-    tabGeneral: "عام",
-    tabSecurity: "الأمان",
+    tabGeneral: "عام والبادئة",
+    tabAI: "الذكاء الاصطناعي",
+    tabSecurity: "الأمان والوصول",
     tabProxy: "بروكسي واتساب",
     tabStorage: "التخزين والوسائط",
     tabLogs: "سجلات النظام",
 
+    // Prefix Customization
+    prefixTitle: "بادئة أوامر البوت (Command Prefix)",
+    prefixDesc:
+      "الرمز أو الحرف الذي تبدأ به جميع الأوامر الموجهة للبوت في واتساب (مثل !help أو /ping)",
+    prefixPlaceholder: "مثال: !",
+    prefixPresets: "بادئات شائعة سريعة:",
+    prefixPreview: "معاينة حية لشكل الأوامر:",
+    prefixSaveBtn: "حفظ البادئة الجديدة",
+    prefixUpdated: "تم تحديث بادئة الأوامر بنجاح!",
+    prefixValidation: "يجب أن تكون البادئة من رمز واحد إلى 3 رموز",
+    activePrefix: "البادئة الحالية",
+    changePrefix: "تعديل البادئة",
+
     // General settings
     prefix: "بادئة الأوامر (Prefix)",
-    botMinDelay: "الحد الأدنى للتأخير بين الرسائل (ms)",
-    changePassword: "تغيير كلمة مرور اللوحة",
+    botTimezone: "المنطقة الزمنية (Timezone)",
+    botTimezoneDesc:
+      "المنطقة الزمنية المعتمدة لحساب أوقات الصلاة والمهام المجدولة (مثل Africa/Cairo)",
+    botMinDelay: "الحد الأدنى للتأخير البشري (ms)",
+    botMaxDelay: "الحد الأقصى للتأخير البشري (ms)",
+    delaysDesc: "فترة انتظار قصيرة قبل إرسال الردود ليبدو سلوك البوت طبيعياً وبشرياً",
+    changePassword: "تغيير كلمة مرور لوحة التحكم",
     currentPassword: "كلمة المرور الحالية",
     newPassword: "كلمة المرور الجديدة",
-    confirmPassword: "تأكيد كلمة المرور",
+    confirmPassword: "تأكيد كلمة المرور الجديدة",
+    passwordMatchError: "كلمتا المرور غير متطابقتين",
+    passwordMinLength: "يجب ألا تقل كلمة المرور عن 8 خانات",
+    passwordChangedSuccess: "تم تغيير كلمة مرور لوحة التحكم بنجاح!",
+
+    // WhatsApp Proxy
+    proxyTitle: "بروكسي واتساب الصادر (Outbound Proxy)",
+    proxyDesc: "توجيه اتصالات Baileys إلى واتساب عبر بروكسي خارجي لتجاوز قيود الشبكة أو الحظر",
+    proxyEnabled: "تفعيل البروكسي لاتصالات واتساب",
+    proxyProtocol: "بروتوكول البروكسي (Protocol)",
+    proxyHost: "عنوان المضيف (Host / IP)",
+    proxyPort: "المنفذ (Port)",
+    proxyUsername: "اسم المستخدم (اختياري)",
+    proxyPassword: "كلمة المرور (اختياري)",
+    proxyApplyHint:
+      "⚠️ ملاحظة: عند تعديل إعدادات البروكسي، اضغط على زر إعادة الاتصال في صفحة الاتصال لتطبيق التغييرات.",
+
+    // Storage & Media
+    storageTitle: "إدارة البيانات والاحتفاظ بها",
+    storageDesc: "تحديد مدد صلاحية البيانات المؤقتة وسجلات الرسائل الموجهة والحدود القصوى للجلب",
+    forwardTtl: "صلاحية سجلات الرسائل الموجهة (أيام)",
+    forwardTtlDesc: "حذف إحصائيات الرسائل الموجهة القديمة تلقائياً بعد مرور هذا العدد من الأيام",
+    maxFetchBytes: "الحد الأقصى لجلب محتوى صفحات الويب (Bytes)",
+    maxFetchBytesDesc:
+      "حجم المحتوى الأقصى المسموح لأدوات الذكاء الاصطناعي بجلبه من صفحات الويب (افتراضي: 512KB)",
+    ffmpegPath: "مسار محرك FFmpeg مخصص (اختياري)",
+    weatherApiKey: "مفتاح OpenWeatherMap API (اختياري)",
 
     // Language Banner & Quick Toggles
     langCardTitle: "لغة الواجهة: العربية (RTL)",
-    langCardDesc: "تصميم مخصص بالكامل لاتجاه الكتابة العربي من اليمين لليسار",
+    langCardDesc: "تصميم مخصص بالكامل لاتجاه الكتابة العربي من اليمين لليسار مع خط تجوال",
     langSwitchBtn: "Switch to English",
     langName: "العربية",
     interfaceLanguage: "لغة لوحة التحكم",
-    interfaceLanguageDesc: "التبديل بين الواجهة العربية (RTL) والإنجليزية (LTR)",
+    interfaceLanguageDesc: "التبديل الفوري بين الواجهة العربية (RTL) والإنجليزية (LTR)",
     botPort: "منفذ خادم لوحة التحكم (Port)",
-    botPortHint: "* يتطلب تغيير المنفذ إعادة تشغيل التطبيق ليأخذ مفعوله",
+    botPortHint: "* يتطلب تغيير المنفذ إعادة تشغيل البوت ليأخذ مفعوله",
 
     // Table Headers & Search
     searchPlaceholder: "ابحث في الأوامر أو الأسماء البديلة...",
@@ -272,19 +317,64 @@ export const translations = {
     seconds: "seconds",
 
     // Settings tabs
-    tabGeneral: "General",
-    tabSecurity: "Security",
+    tabGeneral: "General & Prefix",
+    tabAI: "AI Assistant",
+    tabSecurity: "Security & Access",
     tabProxy: "WhatsApp Proxy",
-    tabStorage: "Media & Storage",
+    tabStorage: "Storage & Media",
     tabLogs: "System Logs",
+
+    // Prefix Customization
+    prefixTitle: "Bot Command Prefix",
+    prefixDesc:
+      "The leading character or symbol that triggers commands in WhatsApp chats (e.g. !help, /ping)",
+    prefixPlaceholder: "e.g. !",
+    prefixPresets: "Common Quick Presets:",
+    prefixPreview: "Live Command Syntax Preview:",
+    prefixSaveBtn: "Save New Prefix",
+    prefixUpdated: "Command prefix updated successfully!",
+    prefixValidation: "Prefix must be 1 to 3 characters long",
+    activePrefix: "Active Prefix",
+    changePrefix: "Change Prefix",
 
     // General settings
     prefix: "Command Prefix",
-    botMinDelay: "Minimum Message Delay (ms)",
+    botTimezone: "Timezone",
+    botTimezoneDesc:
+      "IANA timezone used for prayer times, AI context, and cron schedules (e.g. Africa/Cairo)",
+    botMinDelay: "Min Human Delay (ms)",
+    botMaxDelay: "Max Human Delay (ms)",
+    delaysDesc: "Simulated human typing pause before replying to avoid robotic triggers",
     changePassword: "Change Dashboard Password",
     currentPassword: "Current Password",
     newPassword: "New Password",
-    confirmPassword: "Confirm Password",
+    confirmPassword: "Confirm New Password",
+    passwordMatchError: "Passwords do not match",
+    passwordMinLength: "Password must be at least 8 characters long",
+    passwordChangedSuccess: "Dashboard password changed successfully!",
+
+    // WhatsApp Proxy
+    proxyTitle: "Outbound WhatsApp Proxy",
+    proxyDesc:
+      "Route Baileys WhatsApp traffic through an HTTP or SOCKS5 proxy to bypass restrictions",
+    proxyEnabled: "Enable Outbound Proxy for WhatsApp",
+    proxyProtocol: "Proxy Protocol",
+    proxyHost: "Proxy Host / IP",
+    proxyPort: "Proxy Port",
+    proxyUsername: "Username (Optional)",
+    proxyPassword: "Password (Optional)",
+    proxyApplyHint: "⚠️ Note: To apply proxy changes, go to Connection and reconnect WhatsApp.",
+
+    // Storage & Media
+    storageTitle: "Data Retention & Storage Limits",
+    storageDesc: "Configure data cleanup thresholds, forward score retention, and fetch limits",
+    forwardTtl: "Forward Score Expiry (Days)",
+    forwardTtlDesc: "Automatically purge forwarded message scores after this many days",
+    maxFetchBytes: "Web Fetch Byte Limit",
+    maxFetchBytesDesc:
+      "Maximum response body size AI tools are allowed to fetch from web pages (default: 512KB)",
+    ffmpegPath: "Custom FFmpeg Binary Path (Optional)",
+    weatherApiKey: "OpenWeatherMap API Key (Optional)",
 
     // Language Banner & Quick Toggles
     langCardTitle: "Interface Language: English (LTR)",

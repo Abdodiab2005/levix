@@ -30,64 +30,62 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu, title, statu
   };
 
   return (
-    <header className="top-header">
-      <div className="header-left">
+    <header className="h-16 sticky top-0 z-30 flex items-center justify-between px-4 md:px-6 bg-panel/85 backdrop-blur-md border-b border-line">
+      <div className="flex items-center gap-3 min-w-0">
         <button
+          type="button"
           onClick={onToggleMobileMenu}
-          className="btn btn-secondary btn-icon"
+          className="inline-flex md:hidden items-center justify-center w-11 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50"
           id="mobile-menu-btn"
           aria-label="Open navigation menu"
-          style={{ display: "none" }}
         >
-          <Menu size={19} />
+          <Menu size={20} />
         </button>
-        <h1 className="header-title" title={title}>
+        <h1
+          className="text-lg md:text-xl font-bold tracking-tight text-text-main truncate"
+          title={title}
+        >
           {title}
         </h1>
       </div>
 
-      <div className="header-right">
+      <div className="flex items-center gap-2 md:gap-3">
         {/* Language switch */}
         <button
+          type="button"
           onClick={handleLanguageToggle}
-          className="btn btn-secondary btn-sm"
+          className="inline-flex items-center gap-2 px-3.5 py-2 min-h-[44px] rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs md:text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50"
           title={language === "ar" ? "Switch to English" : "التبديل إلى العربية"}
           aria-label="Switch language"
           id="btn-header-lang"
-          style={{ gap: "6px", padding: "6px 12px", minHeight: "34px", fontWeight: 700 }}
         >
-          <Globe size={16} color="var(--cyan)" />
-          <span style={{ fontSize: "0.82rem" }}>{language === "ar" ? "English" : "العربية"}</span>
+          <Globe size={18} className="text-brand-cyan shrink-0" />
+          <span>{language === "ar" ? "English" : "العربية"}</span>
         </button>
 
         {/* Theme toggle */}
         <button
+          type="button"
           onClick={handleThemeToggle}
-          className="btn btn-secondary btn-icon"
+          className="inline-flex items-center justify-center w-11 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50"
           title="Toggle Theme"
           aria-label="Toggle dark/light theme"
         >
-          {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+          {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
         </button>
 
         {/* Logout */}
-        <form action="/logout" method="POST" style={{ margin: 0 }}>
+        <form action="/logout" method="POST" className="m-0">
           <button
             type="submit"
-            className="btn btn-secondary btn-icon"
+            className="inline-flex items-center justify-center w-11 h-11 rounded-xl border border-line bg-panel-raised hover:bg-danger/15 hover:border-danger/40 hover:text-danger text-text-main transition-colors focus-visible:ring-2 focus-visible:ring-danger/50"
             title={t("logout")}
             aria-label="Sign out"
           >
-            <LogOut size={15} className="icon-flip" />
+            <LogOut size={18} className="rtl:-scale-x-100 transition-transform" />
           </button>
         </form>
       </div>
-
-      <style>{`
-        @media (max-width: 900px) {
-          #mobile-menu-btn { display: inline-flex !important; }
-        }
-      `}</style>
     </header>
   );
 };

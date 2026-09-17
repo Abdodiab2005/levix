@@ -461,12 +461,12 @@
     setStatus(stats.connection);
 
     const cards = [
-      ["Groups", stats.totalGroups, "Communities", '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 19a6 6 0 0 1 12 0M15 19a5 5 0 0 1 6-4"/></svg>'],
-      ["Commands", stats.commandCount, "Available", '<svg viewBox="0 0 24 24"><path d="m5 7 5 5-5 5M12 17h7"/></svg>'],
-      ["Open debts", stats.totalDebts, "Unsettled", '<svg viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6"/></svg>'],
-      ["Warnings", stats.totalWarnings, "Issued", '<svg viewBox="0 0 24 24"><path d="M12 4 3 20h18zM12 9v5M12 17h.01"/></svg>'],
-      ["Notes", stats.totalNotes, "Saved", '<svg viewBox="0 0 24 24"><path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h5"/></svg>'],
-      ["Todo lists", stats.totalTodos, "Tracked", '<svg viewBox="0 0 24 24"><path d="m5 7 2 2 4-4M13 7h6M5 14l2 2 4-4M13 14h6"/></svg>'],
+      ["Groups", stats.totalGroups, "Communities", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>'],
+      ["Commands", stats.commandCount, "Available", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>'],
+      ["Open debts", stats.totalDebts, "Unsettled", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>'],
+      ["Warnings", stats.totalWarnings, "Issued", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>'],
+      ["Notes", stats.totalNotes, "Saved", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>'],
+      ["Todo lists", stats.totalTodos, "Tracked", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>'],
     ];
 
     $("#stat-cards").innerHTML = cards
@@ -1668,7 +1668,7 @@
   VIEWS.settings = {
     title: "Settings",
     load: guard(async () => {
-      const { settings } = await api("/settings");
+      const { settings, prefix } = await api("/settings");
       const byKey = new Map(settings.map((s) => [s.key, s]));
 
       $$(".settings-tab").forEach((b) => {
@@ -1691,10 +1691,33 @@
         const generalKeys = ["bot_timezone", "bot_min_delay_ms", "bot_max_delay_ms"];
         const items = generalKeys.map((k) => byKey.get(k)).filter(Boolean);
         listEl.innerHTML = `
+          <div class="card" style="margin-bottom: 20px;">
+            <div class="card-head"><h2>⌨️ Command Prefix (بادئة الأوامر)</h2></div>
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px;">
+              <input type="text" id="gen-prefix-input" maxlength="3" class="field" style="max-width: 90px; font-family: monospace; font-size: 1.15rem; text-align: center;" value="${escapeHtml(prefix || "!")}">
+              <button type="button" class="btn btn-primary" id="gen-prefix-save">Save Prefix</button>
+              <span class="hint" style="margin: 0;">e.g. <code>!help</code> or <code>/help</code></span>
+            </div>
+          </div>
           <div class="card">
             <div class="card-head"><h2>⚙️ ${t("settings_tab_general")}</h2></div>
             ${items.map(settingField).join("")}
           </div>`;
+
+        const pInput = $("#gen-prefix-input");
+        const pSave = $("#gen-prefix-save");
+        if (pSave && pInput) {
+          pSave.addEventListener("click", guard(async () => {
+            const val = pInput.value.trim();
+            if (!val || val.length > 3) {
+              toast("Prefix must be 1 to 3 characters", "bad");
+              return;
+            }
+            await api("/settings", { method: "PATCH", body: { key: "prefix", value: val } });
+            toast(`Prefix updated to "${val}"`, "ok");
+          }));
+        }
+      }
       } else if (activeSettingsTab === "security") {
         const serverKeys = ["port", "bind_address", "trust_proxy", "public_domain", "dashboard_origin"];
         const items = serverKeys.map((k) => byKey.get(k)).filter(Boolean);

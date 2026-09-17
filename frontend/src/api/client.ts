@@ -62,9 +62,10 @@ export const api = {
   stopSession: () => api.post("/session/stop"),
   unlinkSession: () => api.post("/session/unlink"),
   restartBot: () => api.post("/session/restart"),
-  getSettings: () => api.get<{ settings: any[] }>("/settings"),
+  getSettings: () => api.get<{ settings: any[]; prefix?: string; success: boolean }>("/settings"),
   updateSetting: (key: string, value: any) => api.patch("/settings", { key, value }),
-  getCommands: () => api.get<{ commands: any[] }>("/commands"),
+  updatePrefix: (prefix: string) => api.patch("/settings", { key: "prefix", value: prefix }),
+  getCommands: () => api.get<{ commands: any[]; prefix?: string; success: boolean }>("/commands"),
   updateCommand: (name: string, payload: any) =>
     api.patch(`/commands/${encodeURIComponent(name)}`, payload),
   getSchedules: () =>
