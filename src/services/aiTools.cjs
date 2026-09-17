@@ -316,7 +316,7 @@ const TOOLS = {
         required: ["query"],
       },
     },
-    describe: (args) => `🔍 ببحث عن: ${preview(args?.query, 50)}`,
+    describe: (args) => `🔍 جاري البحث عن: ${preview(args?.query, 50)}`,
     async run(args) {
       const query = String(args?.query || "").trim();
       if (!query) return { error: "query is required" };
@@ -344,7 +344,7 @@ const TOOLS = {
         required: ["url"],
       },
     },
-    describe: (args) => `🌐 بفتح الرابط: ${preview(args?.url, 45)}`,
+    describe: (args) => `🌐 جاري فتح الرابط: ${preview(args?.url, 45)}`,
     async run(args) {
       const url = String(args?.url || "").trim();
       if (!url) return { error: "url is required" };
@@ -374,7 +374,7 @@ const TOOLS = {
       },
     },
     describe: (args) =>
-      `🧠 بحفظ في ${scopeOf(args) === "global" ? "الذاكرة العامة" : "ذاكرة الشات"}: ${preview(
+      `🧠 جاري الحفظ في ${scopeOf(args) === "global" ? "الذاكرة العامة" : "ذاكرة المحادثة"}: ${preview(
         args?.content
       )}`,
     async run(args, ctx) {
@@ -418,7 +418,7 @@ const TOOLS = {
         },
       },
     },
-    describe: () => "🧠 بدور في الذاكرة...",
+    describe: () => "🧠 جاري البحث في الذاكرة...",
     async run(args, ctx) {
       const wanted = String(args?.scope || "chat").toLowerCase();
       const scopes = wanted === "all" ? ["chat", "global"] : [scopeOf(args)];
@@ -449,7 +449,7 @@ const TOOLS = {
         required: ["ref"],
       },
     },
-    describe: (args) => `🗑️ بمسح من الذاكرة: ${preview(args?.ref)}`,
+    describe: (args) => `🗑️ جاري الحذف من الذاكرة: ${preview(args?.ref)}`,
     async run(args, ctx) {
       if (!isPrivileged(ctx)) return { ...NOT_PRIVILEGED, removed: false };
       const scope = scopeOf(args);
@@ -483,7 +483,7 @@ const TOOLS = {
       },
     },
     describe: (args) =>
-      `🔑 ببص على صلاحيات: ${preview(args?.target, 25)} (${args?.role || "admin"})`,
+      `🔑 جاري فحص صلاحيات: ${preview(args?.target, 25)} (${args?.role || "admin"})`,
     async run(args, ctx) {
       if (!ctx.isOwner) {
         return { error: "only the bot owner can grant roles", granted: false };
@@ -517,7 +517,7 @@ const TOOLS = {
         required: ["target"],
       },
     },
-    describe: (args) => `🔑 بسحب صلاحية من: ${preview(args?.target, 25)}`,
+    describe: (args) => `🔑 جاري سحب الصلاحية من: ${preview(args?.target, 25)}`,
     async run(args, ctx) {
       if (!ctx.isOwner) {
         return { error: "only the bot owner can revoke roles", revoked: false };
@@ -537,7 +537,7 @@ const TOOLS = {
         "List who currently holds bot owner / admin roles. Owners and admins only.",
       parameters: { type: T.OBJECT, properties: {} },
     },
-    describe: () => "🔑 بجيب قائمة الصلاحيات...",
+    describe: () => "🔑 جاري جلب قائمة الصلاحيات...",
     async run(_args, ctx) {
       if (!ctx.isOwner && !ctx.isAdmin) {
         return { error: "only owners and admins can list roles" };

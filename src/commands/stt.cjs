@@ -40,7 +40,7 @@ module.exports = {
   name: "stt",
   aliases: ["totext", "transcribe"],
   description: "Convert speech/audio to text (FREE - uses Gemini API)",
-  usage: "stt   (رد على رسالة صوتية أو ابعتها بالأمر)",
+  usage: "stt   (قم بالرد على رسالة صوتية أو إرسالها مع الأمر)",
   chat: "all",
 
   async execute(sock, msg, args, body, groupMetadata) {
@@ -54,14 +54,14 @@ module.exports = {
 
     if (!audioMessage) {
       return await sock.sendMessage(chatId, {
-        text: "📢 الاستخدام:\nأرسل رسالة صوتية أو رد على رسالة صوتية بالأمر !stt\n\n✨ مجاني تماماً - يستخدم Gemini API\n🌍 يدعم العربية والإنجليزية وجميع اللغات",
+        text: "📢 الاستخدام:\nأرسل رسالة صوتية أو قم بالرد على رسالة صوتية بالأمر !stt\n\n✨ مجاني تماماً - يدعم العربية والإنجليزية وكافة اللغات",
       });
     }
 
     const gemini = geminiStt();
     if (!gemini) {
       return await sock.sendMessage(chatId, {
-        text: "⚠️ مفتاح Gemini مش متظبط. ضيفه من الداشبورد (Settings).",
+        text: "⚠️ مفتاح Gemini غير مضبوط. يرجى إضافته من لوحة التحكم (Settings).",
       });
     }
 
@@ -71,7 +71,7 @@ module.exports = {
     const status = await createStatus(
       sock,
       chatId,
-      "🎧 بحوّل الصوت لنص...",
+      "🎧 جاري تحويل الصوت إلى نص...",
       { replyTo: msg },
     );
 

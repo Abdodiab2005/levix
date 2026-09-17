@@ -481,7 +481,7 @@ function withTimeout(promise, ms, label) {
     promise,
     new Promise((_, reject) => {
       timer = setTimeout(
-        () => reject(new Error(`${label} تأخرت أكتر من ${Math.round(ms / 1000)} ثانية`)),
+        () => reject(new Error(`${label} استغرقت العملية أكثر من ${Math.round(ms / 1000)} ثانية`)),
         ms
       );
     }),

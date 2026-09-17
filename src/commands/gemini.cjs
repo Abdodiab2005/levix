@@ -645,7 +645,7 @@ module.exports = {
     }
 
     // The one message that will carry the whole run.
-    const status = await createStatus(sock, chatId, "🤖 بفكر...", {
+    const status = await createStatus(sock, chatId, "🤖 جاري التفكير...", {
       replyTo: msg,
     });
 
