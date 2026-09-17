@@ -147,6 +147,80 @@ async function webSearch(query, limit = 5) {
   return searchDuckDuckGo(query, limit);
 }
 
+async function searchNews(query, limit = 5) {
+  const newsQuery = `${query} news أخبار`;
+  return webSearch(newsQuery, limit);
+}
+
+async function enrichWikiResults(lang, titles, urls, limit) {
+  const results = [];
+  const count = Math.min(titles?.length || 0, limit);
+  for (let i = 0; i < count; i++) {
+    const title = titles[i];
+    const url = urls[i];
+    let extract = "";
+    try {
+      const summaryRes = await axios.get(
+        `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+        {
+          timeout: 8000,
+          headers: { "User-Agent": "LevixBot/3.4 (https://github.com/Abdodiab2005/levix)" },
+        }
+      );
+      extract = summaryRes.data?.extract || summaryRes.data?.description || "";
+    } catch {
+      // Non-fatal: summary lookup failure retains title and URL.
+    }
+    results.push({ title, url, extract: extract.slice(0, 1000) });
+  }
+  return { language: lang, count: results.length, results };
+}
+
+async function searchWikipedia(query, language = "auto", limit = 3) {
+  let lang = language;
+  if (!lang || lang === "auto") {
+    lang = /[\u0600-\u06FF]/.test(query) ? "ar" : "en";
+  }
+  const cleanLang = lang.toLowerCase() === "ar" ? "ar" : "en";
+  try {
+    const searchRes = await axios.get(`https://${cleanLang}.wikipedia.org/w/api.php`, {
+      params: {
+        action: "opensearch",
+        search: query,
+        limit: Math.min(5, Math.max(1, limit)),
+        namespace: 0,
+        format: "json",
+      },
+      timeout: 10000,
+      headers: { "User-Agent": "LevixBot/3.4 (https://github.com/Abdodiab2005/levix)" },
+    });
+    const [, titles, , urls] = searchRes.data || [];
+    if (!titles || !titles.length) {
+      const altLang = cleanLang === "ar" ? "en" : "ar";
+      const altRes = await axios.get(`https://${altLang}.wikipedia.org/w/api.php`, {
+        params: {
+          action: "opensearch",
+          search: query,
+          limit: Math.min(5, Math.max(1, limit)),
+          namespace: 0,
+          format: "json",
+        },
+        timeout: 10000,
+        headers: { "User-Agent": "LevixBot/3.4 (https://github.com/Abdodiab2005/levix)" },
+      });
+      const [, altTitles, , altUrls] = altRes.data || [];
+      if (!altTitles || !altTitles.length) {
+        return { query, count: 0, results: [], note: "no Wikipedia articles found" };
+      }
+      return await enrichWikiResults(altLang, altTitles, altUrls, limit);
+    }
+    return await enrichWikiResults(cleanLang, titles, urls, limit);
+  } catch (err) {
+    logger.warn({ err: err.message }, "[aiTools] Wikipedia search failed");
+    return { error: `Wikipedia search failed: ${err.message}` };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // url fetching
 // ---------------------------------------------------------------------------
@@ -317,6 +391,7 @@ const TOOLS = {
       },
     },
     describe: (args) => `🔍 جاري البحث عن: ${preview(args?.query, 50)}`,
+    describeEn: (args) => `🔍 Searching for: ${preview(args?.query, 50)}`,
     async run(args) {
       const query = String(args?.query || "").trim();
       if (!query) return { error: "query is required" };
@@ -327,6 +402,77 @@ const TOOLS = {
         count: results.length,
         results,
         note: results.length ? undefined : "no results found",
+      };
+    },
+  },
+
+  search_wikipedia: {
+    declaration: {
+      name: "search_wikipedia",
+      description:
+        "Search Wikipedia for encyclopedic facts, history, science, biographies, definitions, and academic context in Arabic or English.",
+      parameters: {
+        type: T.OBJECT,
+        properties: {
+          query: {
+            type: T.STRING,
+            description: "The topic, entity, or term to look up.",
+          },
+          language: {
+            type: T.STRING,
+            description:
+              "'ar' for Arabic Wikipedia, 'en' for English Wikipedia, or 'auto' (detect from query).",
+          },
+          limit: {
+            type: T.INTEGER,
+            description: "How many articles to return (1-5, default 3).",
+          },
+        },
+        required: ["query"],
+      },
+    },
+    describe: (args) => `📚 جاري البحث في ويكيبيديا: ${preview(args?.query, 45)}`,
+    describeEn: (args) => `📚 Searching Wikipedia: ${preview(args?.query, 45)}`,
+    async run(args) {
+      const query = String(args?.query || "").trim();
+      if (!query) return { error: "query is required" };
+      const limit = Math.min(5, Math.max(1, Number(args?.limit) || 3));
+      return searchWikipedia(query, args?.language, limit);
+    },
+  },
+
+  search_news: {
+    declaration: {
+      name: "search_news",
+      description:
+        "Search recent news headlines, breaking events, press coverage, and current affairs.",
+      parameters: {
+        type: T.OBJECT,
+        properties: {
+          query: {
+            type: T.STRING,
+            description: "The news topic, person, or event to search for.",
+          },
+          limit: {
+            type: T.INTEGER,
+            description: "How many news results to return (1-8, default 5).",
+          },
+        },
+        required: ["query"],
+      },
+    },
+    describe: (args) => `📰 جاري البحث عن الأخبار: ${preview(args?.query, 45)}`,
+    describeEn: (args) => `📰 Searching news: ${preview(args?.query, 45)}`,
+    async run(args) {
+      const query = String(args?.query || "").trim();
+      if (!query) return { error: "query is required" };
+      const limit = Math.min(8, Math.max(1, Number(args?.limit) || 5));
+      const results = await searchNews(query, limit);
+      return {
+        query,
+        count: results.length,
+        results,
+        note: results.length ? undefined : "no recent news found",
       };
     },
   },
@@ -345,6 +491,7 @@ const TOOLS = {
       },
     },
     describe: (args) => `🌐 جاري فتح الرابط: ${preview(args?.url, 45)}`,
+    describeEn: (args) => `🌐 Opening link: ${preview(args?.url, 45)}`,
     async run(args) {
       const url = String(args?.url || "").trim();
       if (!url) return { error: "url is required" };
@@ -375,6 +522,10 @@ const TOOLS = {
     },
     describe: (args) =>
       `🧠 جاري الحفظ في ${scopeOf(args) === "global" ? "الذاكرة العامة" : "ذاكرة المحادثة"}: ${preview(
+        args?.content
+      )}`,
+    describeEn: (args) =>
+      `🧠 Saving to ${scopeOf(args) === "global" ? "global" : "chat"} memory: ${preview(
         args?.content
       )}`,
     async run(args, ctx) {
@@ -419,6 +570,7 @@ const TOOLS = {
       },
     },
     describe: () => "🧠 جاري البحث في الذاكرة...",
+    describeEn: () => "🧠 Searching memory...",
     async run(args, ctx) {
       const wanted = String(args?.scope || "chat").toLowerCase();
       const scopes = wanted === "all" ? ["chat", "global"] : [scopeOf(args)];
@@ -450,6 +602,7 @@ const TOOLS = {
       },
     },
     describe: (args) => `🗑️ جاري الحذف من الذاكرة: ${preview(args?.ref)}`,
+    describeEn: (args) => `🗑️ Removing from memory: ${preview(args?.ref)}`,
     async run(args, ctx) {
       if (!isPrivileged(ctx)) return { ...NOT_PRIVILEGED, removed: false };
       const scope = scopeOf(args);
@@ -484,6 +637,8 @@ const TOOLS = {
     },
     describe: (args) =>
       `🔑 جاري فحص صلاحيات: ${preview(args?.target, 25)} (${args?.role || "admin"})`,
+    describeEn: (args) =>
+      `🔑 Checking permissions: ${preview(args?.target, 25)} (${args?.role || "admin"})`,
     async run(args, ctx) {
       if (!ctx.isOwner) {
         return { error: "only the bot owner can grant roles", granted: false };
@@ -518,6 +673,7 @@ const TOOLS = {
       },
     },
     describe: (args) => `🔑 جاري سحب الصلاحية من: ${preview(args?.target, 25)}`,
+    describeEn: (args) => `🔑 Revoking permissions from: ${preview(args?.target, 25)}`,
     async run(args, ctx) {
       if (!ctx.isOwner) {
         return { error: "only the bot owner can revoke roles", revoked: false };
@@ -538,6 +694,7 @@ const TOOLS = {
       parameters: { type: T.OBJECT, properties: {} },
     },
     describe: () => "🔑 جاري جلب قائمة الصلاحيات...",
+    describeEn: () => "🔑 Fetching roles list...",
     async run(_args, ctx) {
       if (!ctx.isOwner && !ctx.isAdmin) {
         return { error: "only owners and admins can list roles" };
@@ -567,7 +724,8 @@ const TOOLS = {
         },
       },
     },
-    describe: () => "🕒 بشوف الوقت...",
+    describe: () => "🕒 جاري التحقق من الوقت الحالي...",
+    describeEn: () => "🕒 Checking current time...",
     async run(args) {
       const timeZone = args?.timezone || settings.get("bot_timezone");
       const now = new Date();
@@ -596,13 +754,18 @@ function toolDeclarations() {
 }
 
 /** The status line for a tool call (falls back to the raw name). */
-function describeCall(name, args) {
+function describeCall(name, args, lang = settings.get("bot_language")) {
   const tool = TOOLS[name];
-  if (!tool) return `⚙️ بشغّل: ${name}`;
+  const isEn = lang === "en";
+  const fallback = isEn ? `⚙️ Running: ${name}` : `⚙️ جاري تشغيل: ${name}`;
+  if (!tool) return fallback;
   try {
-    return tool.describe(args) || `⚙️ بشغّل: ${name}`;
+    if (isEn && typeof tool.describeEn === "function") {
+      return tool.describeEn(args) || fallback;
+    }
+    return tool.describe(args) || fallback;
   } catch {
-    return `⚙️ بشغّل: ${name}`;
+    return fallback;
   }
 }
 
@@ -632,6 +795,8 @@ module.exports = {
   describeCall,
   runTool,
   webSearch,
+  searchNews,
+  searchWikipedia,
   fetchUrl,
   decodeText,
 };
