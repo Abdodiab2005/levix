@@ -32,18 +32,15 @@
 //   sameUser(a, b)
 //     True if two identifiers refer to the same person (LID/PN/phone equiv).
 
-import normalizeJid, {
-  isLidJid,
-  isPnJid,
-} from "./normalizeJid.esm.js";
+import normalizeJid, { isLidJid, isPnJid } from "./normalizeJid.esm.js";
 import {
-  getAllOwners,
-  getAllBotAdmins,
-  isUserOwner as dbIsOwner,
   isUserBotAdmin as dbIsBotAdmin,
-  setUserRole,
+  isUserOwner as dbIsOwner,
+  getAllBotAdmins,
+  getAllOwners,
   getLidForPn,
   getPnForLid,
+  setUserRole,
 } from "./storage.esm.js";
 
 // Two rosters, same mechanics:
@@ -96,7 +93,9 @@ export function getBootstrapOwners() {
 export function bootstrapAdmins(values) {
   bootstrapAdminSet.clear();
   if (!Array.isArray(values)) return;
-  values.forEach((value) => pushInto(bootstrapAdminSet, value));
+  values.forEach((value) => {
+    pushInto(bootstrapAdminSet, value);
+  });
 }
 
 export function addBootstrapAdmin(value) {
@@ -162,9 +161,7 @@ function hasRole(jid, { set, dbCheck, listAll }) {
     try {
       for (const entry of listAll()) {
         const entryPhone =
-          digitsOnly(entry.phone) ||
-          digitsOnly(entry.jid) ||
-          digitsOnly(entry.lid);
+          digitsOnly(entry.phone) || digitsOnly(entry.jid) || digitsOnly(entry.lid);
         if (entryPhone && entryPhone === phone) return true;
       }
     } catch {}
@@ -308,9 +305,7 @@ export function isAdminInGroup(groupMetadata, jid) {
   return groupMetadata.participants.some((p) => {
     if (!["admin", "superadmin"].includes(p.admin)) return false;
     const participantIds = [p.id, p.lid, p.phoneNumber, p.jid].filter(Boolean);
-    return participantIds.some(
-      (pid) => normalizeJid(pid) === target || sameUser(pid, jid)
-    );
+    return participantIds.some((pid) => normalizeJid(pid) === target || sameUser(pid, jid));
   });
 }
 

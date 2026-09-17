@@ -48,16 +48,13 @@ function formatEntries(entries, { limit = 30 } = {}) {
     return `*${number}.* ${entry.content}${meta}`;
   });
   const skipped = entries.length - shown.length;
-  return (
-    (skipped > 0 ? `_(+${skipped} أقدم مش معروضين)_\n\n` : "") + lines.join("\n")
-  );
+  return (skipped > 0 ? `_(+${skipped} أقدم مش معروضين)_\n\n` : "") + lines.join("\n");
 }
 
 module.exports = {
   name: "memory",
   aliases: ["mem", "ذاكرة", "remember"],
-  description:
-    "الذاكرة الدائمة للبوت (ملفات .md): إضافة، عرض، بحث، حذف، أو تصدير الملف.",
+  description: "الذاكرة الدائمة للبوت (ملفات .md): إضافة، عرض، بحث، حذف، أو تصدير الملف.",
   usage:
     "memory\nmemory add <المعلومة>\nmemory add global <المعلومة>\nmemory search <كلمة>\nmemory forget <رقم|جزء من النص>\nmemory clear [global]\nmemory file [global]",
   chat: "all",
@@ -79,17 +76,14 @@ module.exports = {
     const reply = (text, extra = {}) =>
       sendBotMessage(sock, chatId, { text, ...extra }, { replyTo: msg });
 
-    const denied = () =>
-      reply("🚫 ده للمشرفين والمالك بس. تقدر تضيف معلومة لذاكرة الشات عادي.");
+    const denied = () => reply("🚫 ده للمشرفين والمالك بس. تقدر تضيف معلومة لذاكرة الشات عادي.");
 
     try {
       // ---------------------------------------------------------------- add
       if (["add", "save", "احفظ", "ضيف", "اضف"].includes(action)) {
         const content = rest.join(" ").trim();
         if (!content) {
-          return reply(
-            "اكتب المعلومة بعد الأمر.\nمثال: `!memory add الاجتماع كل تلات الساعة ٩`"
-          );
+          return reply("اكتب المعلومة بعد الأمر.\nمثال: `!memory add الاجتماع كل تلات الساعة ٩`");
         }
         if (scope === "global" && !privileged) return denied();
 
@@ -103,7 +97,7 @@ module.exports = {
 
         return reply(
           `🧠 اتحفظت في *${scope === "global" ? "الذاكرة العامة" : "ذاكرة الشات"}*.\n` +
-            `\`${entry.id}\` — ${content.length > 80 ? content.slice(0, 80) + "…" : content}`
+            `\`${entry.id}\` — ${content.length > 80 ? content.slice(0, 80) + "…" : content}`,
         );
       }
 
@@ -120,7 +114,7 @@ module.exports = {
         return reply(
           `🔍 *نتايج البحث عن* "${query}"\n\n` +
             `*ذاكرة الشات (${chatHits.length}):*\n${formatEntries(chatHits, { limit: 10 })}\n\n` +
-            `*الذاكرة العامة (${globalHits.length}):*\n${formatEntries(globalHits, { limit: 10 })}`
+            `*الذاكرة العامة (${globalHits.length}):*\n${formatEntries(globalHits, { limit: 10 })}`,
         );
       }
 
@@ -130,8 +124,7 @@ module.exports = {
         const ref = rest.join(" ").trim();
         if (!ref) {
           return reply(
-            "حدد اللي عايز تمسحه: رقمه من `!memory` أو جزء من نصه.\n" +
-              "مثال: `!memory forget 3`"
+            "حدد اللي عايز تمسحه: رقمه من `!memory` أو جزء من نصه.\n" + "مثال: `!memory forget 3`",
           );
         }
         const removed = memory.removeMemory({ scope, chatId, ref });
@@ -140,7 +133,7 @@ module.exports = {
             ? `🗑️ اتمسحت: ${removed.content.slice(0, 120)}`
             : `مالقيتش حاجة تطابق "${ref}" في ${
                 scope === "global" ? "الذاكرة العامة" : "ذاكرة الشات"
-              }.`
+              }.`,
         );
       }
 
@@ -153,7 +146,7 @@ module.exports = {
             ? `🧹 اتمسحت *${count}* معلومة من ${
                 scope === "global" ? "الذاكرة العامة" : "ذاكرة الشات"
               }.`
-            : "الذاكرة كانت فاضية أصلاً."
+            : "الذاكرة كانت فاضية أصلاً.",
         );
       }
 
@@ -171,11 +164,9 @@ module.exports = {
             document: fs.readFileSync(filePath),
             mimetype: "text/markdown",
             fileName: scope === "global" ? "global.md" : `${chatId}.md`,
-            caption: `🧠 ملف ${
-              scope === "global" ? "الذاكرة العامة" : "ذاكرة الشات"
-            }`,
+            caption: `🧠 ملف ${scope === "global" ? "الذاكرة العامة" : "ذاكرة الشات"}`,
           },
-          { replyTo: msg }
+          { replyTo: msg },
         );
       }
 
@@ -189,13 +180,11 @@ module.exports = {
           `(${entries.length} معلومة)\n\n` +
           `${formatEntries(entries)}\n\n` +
           `_الشات: ${stats.chatCount} · العام: ${stats.globalCount}_\n` +
-          "`!memory add <معلومة>` · `!memory add global <معلومة>` · `!memory forget <رقم>` · `!memory file`"
+          "`!memory add <معلومة>` · `!memory add global <معلومة>` · `!memory forget <رقم>` · `!memory file`",
       );
     } catch (error) {
       logger.error({ err: error }, "[memory] command failed");
-      return reply(
-        `❌ *مشكلة في الذاكرة*\n\n*التفاصيل:* ${error.message || error}`
-      );
+      return reply(`❌ *مشكلة في الذاكرة*\n\n*التفاصيل:* ${error.message || error}`);
     }
   },
 };

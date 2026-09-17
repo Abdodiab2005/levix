@@ -49,9 +49,7 @@ const ADAPTERS = {
     baseUrlSetting: "openai_base_url",
     defaultBaseUrl: "https://api.openai.com/v1",
     tools: openaiTools,
-    systemMessage: (systemInstruction) => [
-      { role: "system", content: systemInstruction },
-    ],
+    systemMessage: (systemInstruction) => [{ role: "system", content: systemInstruction }],
     userMessage: (text) => ({ role: "user", content: text }),
     /** Canonical history -> chat-completions messages. */
     historyToMessages: historyToOpenAI,
@@ -99,7 +97,13 @@ const ADAPTERS = {
 
 const { BaseAIProvider, registerProvider, getProvider } = require("./aiRouter.cjs");
 
-async function prepareInlineImageMedia(providerId, parts, mediaMessage, mimeOverride, downloadContentFromMessage) {
+async function prepareInlineImageMedia(
+  providerId,
+  parts,
+  mediaMessage,
+  mimeOverride,
+  downloadContentFromMessage,
+) {
   const isVisionOn = settings.get("ai_vision_enabled");
   const mime = mimeOverride || mediaMessage?.mimetype || "ملف";
   if (isVisionOn && mime.startsWith("image/") && typeof downloadContentFromMessage === "function") {
@@ -140,7 +144,13 @@ class OpenAIProvider extends BaseAIProvider {
   }
 
   async prepareMedia(parts, mediaMessage, mimeOverride, { downloadContentFromMessage } = {}) {
-    return prepareInlineImageMedia("openai", parts, mediaMessage, mimeOverride, downloadContentFromMessage);
+    return prepareInlineImageMedia(
+      "openai",
+      parts,
+      mediaMessage,
+      mimeOverride,
+      downloadContentFromMessage,
+    );
   }
 
   async runTurn(options) {
@@ -162,7 +172,13 @@ class AnthropicProvider extends BaseAIProvider {
   }
 
   async prepareMedia(parts, mediaMessage, mimeOverride, { downloadContentFromMessage } = {}) {
-    return prepareInlineImageMedia("anthropic", parts, mediaMessage, mimeOverride, downloadContentFromMessage);
+    return prepareInlineImageMedia(
+      "anthropic",
+      parts,
+      mediaMessage,
+      mimeOverride,
+      downloadContentFromMessage,
+    );
   }
 
   async runTurn(options) {
@@ -236,15 +252,7 @@ function toJsonSchema(schema) {
     } else if (key === "anyOf") {
       out.anyOf = toJsonSchema(value);
     } else if (
-      [
-        "description",
-        "enum",
-        "required",
-        "format",
-        "minimum",
-        "maximum",
-        "default",
-      ].includes(key)
+      ["description", "enum", "required", "format", "minimum", "maximum", "default"].includes(key)
     ) {
       out[key] = value;
     }
@@ -284,7 +292,11 @@ function partsText(parts) {
   return (parts || [])
     .map((part) => {
       if (part?.text) return part.text;
-      if (isVisionOn && part?.inlineData?.mimeType?.startsWith("image/") && part?.inlineData?.data) {
+      if (
+        isVisionOn &&
+        part?.inlineData?.mimeType?.startsWith("image/") &&
+        part?.inlineData?.data
+      ) {
         return "";
       }
       if (part?.fileData || part?.inlineData) return MEDIA_NOTE;
@@ -320,9 +332,7 @@ function historyToOpenAI(history) {
   (history || []).forEach((turn, turnIndex) => {
     if (!turn || !Array.isArray(turn.parts)) return;
     const role = turn.role === "model" ? "assistant" : "user";
-    const calls = turn.parts
-      .filter((part) => part?.functionCall)
-      .map((part) => part.functionCall);
+    const calls = turn.parts.filter((part) => part?.functionCall).map((part) => part.functionCall);
     const responses = turn.parts
       .filter((part) => part?.functionResponse)
       .map((part) => part.functionResponse);
@@ -347,9 +357,12 @@ function historyToOpenAI(history) {
     }
 
     const isVisionOn = settings.get("ai_vision_enabled");
-    const imageParts = (isVisionOn && role === "user")
-      ? turn.parts.filter((p) => p?.inlineData?.mimeType?.startsWith("image/") && p?.inlineData?.data)
-      : [];
+    const imageParts =
+      isVisionOn && role === "user"
+        ? turn.parts.filter(
+            (p) => p?.inlineData?.mimeType?.startsWith("image/") && p?.inlineData?.data,
+          )
+        : [];
 
     let userContent = text;
     if (imageParts.length) {
@@ -466,8 +479,8 @@ function parseOpenAIResponse(payload) {
   const content = Array.isArray(message.content)
     ? message.content.map((block) => block?.text || "").join("\n")
     : typeof message.content === "string"
-    ? message.content
-    : "";
+      ? message.content
+      : "";
 
   const calls = (message.tool_calls || [])
     .map((toolCall, i) => ({
@@ -491,7 +504,7 @@ function parseOpenAIResponse(payload) {
 
 function parseAnthropicResponse(payload) {
   const blocks = (payload?.content || []).filter(
-    (block) => block?.type === "text" || block?.type === "tool_use"
+    (block) => block?.type === "text" || block?.type === "tool_use",
   );
 
   const calls = blocks
@@ -535,7 +548,7 @@ async function callApi({ url, headers, body, label }) {
     throw new Error(
       err?.name === "AbortError"
         ? `${label} API request timed out after ${API_TIMEOUT_MS / 1000}s`
-        : `${label} API request failed: ${err?.message || err}`
+        : `${label} API request failed: ${err?.message || err}`,
     );
   } finally {
     clearTimeout(timer);
@@ -559,7 +572,11 @@ async function callApi({ url, headers, body, label }) {
   return payload;
 }
 
-function requestFor(adapter, provider, { baseUrl, apiKey, model, systemInstruction, messages, tools }) {
+function requestFor(
+  adapter,
+  provider,
+  { baseUrl, apiKey, model, systemInstruction, messages, tools },
+) {
   if (provider === "anthropic") {
     return {
       url: `${baseUrl}/v1/messages`,
@@ -596,7 +613,7 @@ function withTimeout(promise, ms, label) {
     new Promise((_, reject) => {
       timer = setTimeout(
         () => reject(new Error(`${label} استغرقت العملية أكثر من ${Math.round(ms / 1000)} ثانية`)),
-        ms
+        ms,
       );
     }),
   ]).finally(() => clearTimeout(timer));
@@ -619,15 +636,18 @@ function withTimeout(promise, ms, label) {
  * @param {boolean} [options.useTools=true]
  * @returns {Promise<{text: string, history: Array, toolCalls: Array, steps: number, sources: Array, searchOffered: boolean}>}
  */
-async function runProviderAgent(provider, {
-  parts,
-  systemInstruction,
-  history = [],
-  status = null,
-  context = {},
-  useTools = true,
-  maxSteps = null,
-} = {}) {
+async function runProviderAgent(
+  provider,
+  {
+    parts,
+    systemInstruction,
+    history = [],
+    status = null,
+    context = {},
+    useTools = true,
+    maxSteps = null,
+  } = {},
+) {
   const adapter = adapterFor(provider);
 
   const apiKey = settings.get(adapter.keySetting);
@@ -635,9 +655,10 @@ async function runProviderAgent(provider, {
 
   const stepBudget = maxSteps ?? settings.get("ai_max_tool_steps");
   const model = settings.get(adapter.modelSetting);
-  const baseUrl = String(
-    settings.get(adapter.baseUrlSetting) || adapter.defaultBaseUrl
-  ).replace(/\/+$/, "");
+  const baseUrl = String(settings.get(adapter.baseUrlSetting) || adapter.defaultBaseUrl).replace(
+    /\/+$/,
+    "",
+  );
 
   const turnText = partsText(parts);
 
@@ -699,8 +720,7 @@ async function runProviderAgent(provider, {
       // Same contract as the Gemini loop: the budget answer, not a lie.
       return finish({
         text:
-          parsed.text ||
-          "شغّلت الأدوات المتاحة بس مقدرتش أوصل لإجابة نهائية. جرّب تسأل بصيغة أوضح.",
+          parsed.text || "شغّلت الأدوات المتاحة بس مقدرتش أوصل لإجابة نهائية. جرّب تسأل بصيغة أوضح.",
         canonical,
         toolCalls,
         steps,
@@ -710,9 +730,7 @@ async function runProviderAgent(provider, {
     steps += 1;
 
     if (status) {
-      const line = parsed.calls
-        .map((call) => describeCall(call.name, call.args))
-        .join("\n");
+      const line = parsed.calls.map((call) => describeCall(call.name, call.args)).join("\n");
       await status.update(line);
     }
 
@@ -726,7 +744,7 @@ async function runProviderAgent(provider, {
         toolResult = await withTimeout(
           runTool(call.name, call.args, context),
           settings.get("ai_tool_timeout_ms"),
-          call.name
+          call.name,
         );
       } catch (err) {
         toolResult = { error: err?.message || String(err) };

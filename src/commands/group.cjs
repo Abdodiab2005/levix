@@ -28,7 +28,9 @@ function register(command, label) {
     if (!command?.name) return;
     subCommands.set(command.name, command);
     if (Array.isArray(command.aliases)) {
-      command.aliases.forEach((alias) => subCommands.set(alias, command));
+      command.aliases.forEach((alias) => {
+        subCommands.set(alias, command);
+      });
     }
   } catch (error) {
     logger.error({ err: error, file: label }, `Failed to load group sub-command from ${label}`);
@@ -54,10 +56,7 @@ if (manifest) {
     try {
       register(require(path.join(subCommandsPath, file)), file);
     } catch (error) {
-      logger.error(
-        { err: error, file },
-        `Failed to load group sub-command from ${file}`
-      );
+      logger.error({ err: error, file }, `Failed to load group sub-command from ${file}`);
     }
   }
 }
@@ -100,9 +99,7 @@ module.exports = {
 
     // "group:kick" — the flat key runtime-config uses for sub-commands, so a
     // level changed from the dashboard applies here too.
-    const permissionLevel = runtimeConfig.getPermission(
-      `group:${subCommand.name}`
-    );
+    const permissionLevel = runtimeConfig.getPermission(`group:${subCommand.name}`);
 
     let hasPermission = false;
     switch (permissionLevel) {
@@ -121,7 +118,7 @@ module.exports = {
         break;
       default:
         logger.warn(
-          `[group] Unknown permission level "${permissionLevel}" for sub-command "${subCommand.name}"`
+          `[group] Unknown permission level "${permissionLevel}" for sub-command "${subCommand.name}"`,
         );
     }
 
@@ -148,7 +145,7 @@ module.exports = {
     } catch (error) {
       logger.error(
         { err: error, subCommand: subCommandName },
-        "Error executing a group sub-command"
+        "Error executing a group sub-command",
       );
       await sock.sendMessage(msg.key.remoteJid, {
         text: `❌ *فشل تنفيذ الأمر الفرعي* (\`${error.name || "Error"}\`): ${

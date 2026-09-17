@@ -1,6 +1,8 @@
 // file: frontend/src/components/Modal.tsx
-import React, { useEffect } from "react";
+
 import { X } from "lucide-react";
+import type React from "react";
+import { useEffect } from "react";
 
 interface ModalProps {
   isOpen: boolean;
@@ -36,15 +38,27 @@ export const Modal: React.FC<ModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div
+      className="modal-backdrop"
+      onClick={onClose}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onClose();
+      }}
+      role="presentation"
+    >
       <div
         className="modal-box"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         style={maxWidth ? { maxWidth } : undefined}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
           <h3 style={{ fontSize: "1.05rem", fontWeight: 700 }}>{title}</h3>
           <button
+            type="button"
             onClick={onClose}
             className="btn btn-secondary btn-sm"
             style={{ padding: "4px", borderRadius: "50%" }}

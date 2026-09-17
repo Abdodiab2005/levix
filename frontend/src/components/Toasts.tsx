@@ -1,6 +1,8 @@
 // file: frontend/src/components/Toasts.tsx
-import React, { createContext, useContext, useState, useCallback } from "react";
-import { CheckCircle2, AlertTriangle, XCircle, Info, X } from "lucide-react";
+
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
+import type React from "react";
+import { createContext, useCallback, useContext, useState } from "react";
 
 export interface Toast {
   id: string;
@@ -22,11 +24,14 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const toast = useCallback((message: string, type: Toast["type"] = "info", duration = 4000) => {
-    const id = Math.random().toString(36).slice(2, 9);
-    setToasts((prev) => [...prev, { id, message, type, duration }]);
-    setTimeout(() => removeToast(id), duration);
-  }, [removeToast]);
+  const toast = useCallback(
+    (message: string, type: Toast["type"] = "info", duration = 4000) => {
+      const id = Math.random().toString(36).slice(2, 9);
+      setToasts((prev) => [...prev, { id, message, type, duration }]);
+      setTimeout(() => removeToast(id), duration);
+    },
+    [removeToast],
+  );
 
   return (
     <ToastContext.Provider value={{ toast }}>
@@ -41,10 +46,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 t.type === "success"
                   ? "rgba(16, 185, 129, 0.35)"
                   : t.type === "error"
-                  ? "rgba(239, 68, 68, 0.35)"
-                  : t.type === "warning"
-                  ? "rgba(245, 158, 11, 0.35)"
-                  : "var(--line)",
+                    ? "rgba(239, 68, 68, 0.35)"
+                    : t.type === "warning"
+                      ? "rgba(245, 158, 11, 0.35)"
+                      : "var(--line)",
             }}
           >
             {t.type === "success" && <CheckCircle2 size={18} color="var(--ok)" />}
@@ -54,7 +59,13 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             <span style={{ flex: 1 }}>{t.message}</span>
             <button
               onClick={() => removeToast(t.id)}
-              style={{ background: "transparent", border: "none", color: "var(--muted)", cursor: "pointer", display: "flex" }}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--muted)",
+                cursor: "pointer",
+                display: "flex",
+              }}
             >
               <X size={14} />
             </button>

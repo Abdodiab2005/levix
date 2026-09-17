@@ -27,7 +27,7 @@ function checkNode() {
       "",
       "  Get it from https://nodejs.org (pick the LTS build).",
       "",
-    ].join("\n")
+    ].join("\n"),
   );
   process.exit(1);
 }
@@ -54,7 +54,7 @@ function help() {
       "  Everything else is configured from the control panel itself,",
       "  which prints its address when the bot starts.",
       "",
-    ].join("\n")
+    ].join("\n"),
   );
 }
 
@@ -110,9 +110,7 @@ export async function main(argv = process.argv) {
       const { close } = await import("./db/db.cjs");
       store.deleteBotSetting("auth:password");
       close();
-      console.log(
-        "\n  Password cleared. Start the bot and open the panel to choose a new one.\n"
-      );
+      console.log("\n  Password cleared. Start the bot and open the panel to choose a new one.\n");
       return 0;
     }
 

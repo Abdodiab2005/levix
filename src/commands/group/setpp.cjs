@@ -32,7 +32,7 @@ module.exports = {
           id: msg.message.extendedTextMessage.contextInfo.participant,
         },
         "buffer",
-        {}
+        {},
       );
 
       // Update the group's profile picture using the downloaded image buffer

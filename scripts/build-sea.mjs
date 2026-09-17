@@ -23,11 +23,11 @@
 //   npm i -D esbuild postject
 
 import { execFileSync } from "node:child_process";
-import * as esbuild from "esbuild";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as esbuild from "esbuild";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BUILD = path.join(ROOT, "build");
@@ -76,12 +76,12 @@ function writeManifest(file, entries) {
       ...entries.map(
         ({ spec, category }) =>
           `  { label: ${JSON.stringify(spec)}, category: ${JSON.stringify(
-            category
-          )}, module: require(${JSON.stringify(spec)}) },`
+            category,
+          )}, module: require(${JSON.stringify(spec)}) },`,
       ),
       "];",
       "",
-    ].join("\n")
+    ].join("\n"),
   );
 }
 
@@ -96,7 +96,7 @@ writeManifest(
   groupManifestPath,
   commands
     .filter((entry) => entry.category === "group")
-    .map((entry) => ({ spec: `./${path.basename(entry.spec)}`, category: "group" }))
+    .map((entry) => ({ spec: `./${path.basename(entry.spec)}`, category: "group" })),
 );
 console.log(`  ${commands.length} commands -> ${rel(manifestPath)}`);
 
@@ -124,17 +124,12 @@ assets["src/config/ai-persona.md"] = fs
 
 const assetBytes = Object.values(assets).reduce(
   (total, base64) => total + Math.floor((base64.length * 3) / 4),
-  0
+  0,
 );
-console.log(
-  `  ${Object.keys(assets).length} files, ${(assetBytes / 1024).toFixed(0)} KB`
-);
+console.log(`  ${Object.keys(assets).length} files, ${(assetBytes / 1024).toFixed(0)} KB`);
 
 const assetsFile = path.join(BUILD, "assets.generated.cjs");
-fs.writeFileSync(
-  assetsFile,
-  `module.exports = ${JSON.stringify(assets)};\n`
-);
+fs.writeFileSync(assetsFile, `module.exports = ${JSON.stringify(assets)};\n`);
 
 // CommonJS on purpose: `require` here has to be the bundler's, not one made
 // with createRequire — the latter would be resolved on disk at runtime, which
@@ -177,7 +172,7 @@ paths.setAssetRoot(root);
 // The CLI, not the bot: the executable supports every subcommand
 // (headless, where, reset-password, domain) exactly like \`levix\` does.
 require("../src/cli.js").run(process.argv);
-`
+`,
 );
 
 // ---------------------------------------------------------------------------
@@ -222,7 +217,7 @@ const unwrapCreateRequire = {
       return {
         contents: source.replace(
           /^const require = createRequire\(import\.meta\.url\);$/m,
-          "// createRequire removed by the SEA build — see scripts/build-sea.mjs"
+          "// createRequire removed by the SEA build — see scripts/build-sea.mjs",
         ),
         loader: "js",
       };
@@ -248,7 +243,7 @@ await esbuild.build({
   logLimit: 0,
 });
 console.log(
-  `  ${(fs.statSync(bundleFile).size / 1024 / 1024).toFixed(1)} MB -> ${rel(bundleFile)}`
+  `  ${(fs.statSync(bundleFile).size / 1024 / 1024).toFixed(1)} MB -> ${rel(bundleFile)}`,
 );
 
 step("Preparing the SEA blob");
@@ -264,8 +259,8 @@ fs.writeFileSync(
       useCodeCache: false,
     },
     null,
-    2
-  )
+    2,
+  ),
 );
 execFileSync(process.execPath, ["--experimental-sea-config", seaConfig], {
   stdio: "inherit",
@@ -297,11 +292,9 @@ execFileSync(
     path.join(BUILD, "sea-prep.blob"),
     "--sentinel-fuse",
     "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2",
-    ...(process.platform === "darwin"
-      ? ["--macho-segment-name", "NODE_SEA"]
-      : []),
+    ...(process.platform === "darwin" ? ["--macho-segment-name", "NODE_SEA"] : []),
   ],
-  { stdio: "inherit", cwd: ROOT }
+  { stdio: "inherit", cwd: ROOT },
 );
 
 if (process.platform === "darwin") {
@@ -324,5 +317,5 @@ console.log(
     "",
     "  One binary per platform — build it on the machine you are targeting.",
     "",
-  ].join("\n")
+  ].join("\n"),
 );

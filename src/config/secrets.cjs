@@ -64,9 +64,7 @@ function hasDashboardPassword() {
 function setDashboardPassword(plain) {
   const password = String(plain ?? "");
   if (password.length < MIN_PASSWORD_LENGTH) {
-    throw new Error(
-      `Password must be at least ${MIN_PASSWORD_LENGTH} characters`
-    );
+    throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
   }
 
   const { salt, hash } = hashPassword(password);
@@ -81,11 +79,7 @@ function verifyDashboardPassword(candidate) {
   if (typeof candidate !== "string") return false;
 
   const expected = Buffer.from(record.hash, "hex");
-  const actual = crypto.scryptSync(
-    candidate,
-    Buffer.from(record.salt, "hex"),
-    expected.length
-  );
+  const actual = crypto.scryptSync(candidate, Buffer.from(record.salt, "hex"), expected.length);
   return crypto.timingSafeEqual(expected, actual);
 }
 

@@ -7,8 +7,14 @@
     "start": "node bin/levix.js",
     "dev": "nodemon bin/levix.js",
     "test": "node tests/run.mjs",
+    "lint": "biome lint",
+    "format": "biome format --write .",
+    "check": "biome check .",
+    "check:fix": "biome check --write .",
     "brand:assets": "node scripts/build-brand-assets.mjs",
+    "build": "npm run build:frontend",
     "build:frontend": "npm --prefix frontend run build",
+    "prepack": "npm run build:frontend",
     "build:sea": "node scripts/build-sea.mjs",
     "validate:tarball": "node scripts/validate-tarball.mjs",
     "validate:sea": "node scripts/validate-sea.mjs",
@@ -69,6 +75,7 @@
     "node": ">=24"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.14",
     "esbuild": "^0.28.2",
     "postject": "^1.0.0-alpha.6",
     "sharp": "^0.35.3"

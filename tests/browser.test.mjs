@@ -5,7 +5,7 @@
 // several signals have to agree, so the decision is a pure function of the
 // environment and gets tested as one.
 
-import { useTempDataDir, require, section, ok, equal, finish } from "./harness.mjs";
+import { equal, finish, ok, require, section, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("levix-browser");
 
@@ -13,8 +13,7 @@ const { browserBlockedBecause, openBrowser, openCommand } = require("./src/utils
 
 // A plain Linux desktop, which every case below modifies.
 const DESKTOP = { DISPLAY: ":0" };
-const allowed = (env, platform = "linux") =>
-  browserBlockedBecause(env, { platform }) === null;
+const allowed = (env, platform = "linux") => browserBlockedBecause(env, { platform }) === null;
 
 section("a desktop session is allowed");
 
@@ -47,37 +46,38 @@ for (const [label, env, platform] of blocked) {
 
 section("the reason is specific enough to print");
 
-equal("SSH says so", browserBlockedBecause({ SSH_CONNECTION: "x" }, { platform: "linux" }), "connected over SSH");
+equal(
+  "SSH says so",
+  browserBlockedBecause({ SSH_CONNECTION: "x" }, { platform: "linux" }),
+  "connected over SSH",
+);
 equal("CI says so", browserBlockedBecause({ CI: "1" }, { platform: "linux" }), "running in CI");
 equal(
   "systemd says so",
   browserBlockedBecause({ INVOCATION_ID: "x", DISPLAY: ":0" }, { platform: "linux" }),
-  "started by systemd"
+  "started by systemd",
 );
 equal(
   "a missing display says so",
   browserBlockedBecause({}, { platform: "linux" }),
-  "no graphical session"
+  "no graphical session",
 );
 
 section("the operator can always decide for themselves");
 
-ok(
-  "LEVIX_OPEN_BROWSER=0 stops it on a desktop",
-  !allowed({ ...DESKTOP, LEVIX_OPEN_BROWSER: "0" })
-);
+ok("LEVIX_OPEN_BROWSER=0 stops it on a desktop", !allowed({ ...DESKTOP, LEVIX_OPEN_BROWSER: "0" }));
 ok(
   "LEVIX_OPEN_BROWSER=1 forces it over SSH",
-  allowed({ SSH_CONNECTION: "x", LEVIX_OPEN_BROWSER: "1" })
+  allowed({ SSH_CONNECTION: "x", LEVIX_OPEN_BROWSER: "1" }),
 );
 ok(
   "…and even in CI, where someone may genuinely want it",
-  allowed({ CI: "true", LEVIX_OPEN_BROWSER: "true" })
+  allowed({ CI: "true", LEVIX_OPEN_BROWSER: "true" }),
 );
 equal(
   "the reason names the variable",
   browserBlockedBecause({ ...DESKTOP, LEVIX_OPEN_BROWSER: "off" }, { platform: "linux" }),
-  "LEVIX_OPEN_BROWSER is off"
+  "LEVIX_OPEN_BROWSER is off",
 );
 
 section("the right command per platform");
@@ -87,11 +87,11 @@ equal("Linux uses xdg-open", openCommand("http://x", "linux").command, "xdg-open
 equal("Windows goes through cmd", openCommand("http://x", "win32").command, "cmd");
 ok(
   "Windows passes an empty title first, so a quoted URL isn't eaten",
-  openCommand("http://x", "win32").args[2] === ""
+  openCommand("http://x", "win32").args[2] === "",
 );
 ok(
   "Windows escapes an ampersand for cmd",
-  openCommand("http://x?a=1&b=2", "win32").args[3].includes("^&")
+  openCommand("http://x?a=1&b=2", "win32").args[3].includes("^&"),
 );
 
 section("failing to open a browser is never fatal");

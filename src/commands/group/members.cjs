@@ -33,8 +33,7 @@ module.exports = {
         const phone = member.id.split("@")[0];
 
         // Check if the member is an admin or superadmin
-        const isAdmin =
-          member.admin === "admin" || member.admin === "superadmin";
+        const isAdmin = member.admin === "admin" || member.admin === "superadmin";
 
         // Add the formatted line to our reply text
         // Using @ will create a "mention link" in the WhatsApp message

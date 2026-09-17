@@ -454,10 +454,7 @@ const GROUP_LABELS = {
 // comes too early falls back to the default instead of throwing.
 function storedValue(key) {
   try {
-    const value = require("../utils/storage.cjs").getBotSetting(
-      `setting:${key}`,
-      undefined
-    );
+    const value = require("../utils/storage.cjs").getBotSetting(`setting:${key}`, undefined);
     return value === undefined || value === null ? undefined : value;
   } catch {
     return undefined;
@@ -555,9 +552,7 @@ function set(key, value) {
   const clean = validate(definition, value);
   storage.saveBotSetting(`setting:${key}`, clean);
   // Never log the value of a secret.
-  logger.info(
-    `[settings] ${key} -> ${definition.type === "secret" ? "(updated)" : clean}`
-  );
+  logger.info(`[settings] ${key} -> ${definition.type === "secret" ? "(updated)" : clean}`);
   return get(key);
 }
 

@@ -1,15 +1,17 @@
 // file: frontend/src/views/SettingsView.tsx
-import React, { useEffect, useState } from "react";
-import { Sliders, Shield, Globe, HardDrive, Key, Save, AlertCircle } from "lucide-react";
+
+import { AlertCircle, Globe, HardDrive, Key, Save, Shield, Sliders } from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { useI18n } from "../context/I18nContext";
 import { useToast } from "../components/Toasts";
 import { Toggle } from "../components/Toggle";
+import { useI18n } from "../context/I18nContext";
 
 type SettingsTab = "general" | "security" | "proxy" | "storage";
 
 export const SettingsView: React.FC = () => {
-  const { t } = useI18n();
+  const { t, language, setLanguage } = useI18n();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const [settings, setSettings] = useState<Record<string, any>>({});
@@ -116,9 +118,32 @@ export const SettingsView: React.FC = () => {
       {/* General Settings Tab */}
       {activeTab === "general" && (
         <div className="card" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          <h3 style={{ fontSize: "1.05rem", fontWeight: 700 }}>General Bot Behavior</h3>
+          <h3 style={{ fontSize: "1.05rem", fontWeight: 700 }}>{t("tabGeneral")}</h3>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: "20px",
+            }}
+          >
+            {/* Interface Language */}
+            <div className="form-group">
+              <label className="form-label">{t("interfaceLanguage")}</label>
+              <select
+                className="form-select"
+                style={{ maxWidth: "260px" }}
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as any)}
+              >
+                <option value="ar">العربية (RTL - اليمين لليسار)</option>
+                <option value="en">English (LTR - Left to Right)</option>
+              </select>
+              <span style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: "4px" }}>
+                {t("interfaceLanguageDesc")}
+              </span>
+            </div>
+
             <div className="form-group">
               <label className="form-label">{t("prefix")}</label>
               <input
@@ -138,13 +163,15 @@ export const SettingsView: React.FC = () => {
                 className="form-input"
                 style={{ maxWidth: "200px" }}
                 value={settings["bot_min_delay_ms"] || 700}
-                onChange={(e) => setSettings({ ...settings, bot_min_delay_ms: Number(e.target.value) })}
+                onChange={(e) =>
+                  setSettings({ ...settings, bot_min_delay_ms: Number(e.target.value) })
+                }
                 onBlur={(e) => updateSetting("bot_min_delay_ms", Number(e.target.value))}
               />
             </div>
 
             <div className="form-group">
-              <label className="form-label">Control Panel Port</label>
+              <label className="form-label">{t("botPort")}</label>
               <input
                 type="number"
                 className="form-input"
@@ -154,7 +181,7 @@ export const SettingsView: React.FC = () => {
                 onBlur={(e) => updateSetting("port", Number(e.target.value))}
               />
               <span style={{ fontSize: "0.78rem", color: "var(--warn)", marginTop: "4px" }}>
-                * Changing port takes effect on next process restart
+                {t("botPortHint")}
               </span>
             </div>
           </div>
@@ -168,7 +195,10 @@ export const SettingsView: React.FC = () => {
             {t("changePassword")}
           </h3>
 
-          <form onSubmit={handlePasswordChange} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          <form
+            onSubmit={handlePasswordChange}
+            style={{ display: "flex", flexDirection: "column", gap: "16px" }}
+          >
             <div className="form-group">
               <label className="form-label">{t("currentPassword")}</label>
               <input
@@ -204,7 +234,12 @@ export const SettingsView: React.FC = () => {
               />
             </div>
 
-            <button type="submit" disabled={changingPass} className="btn btn-primary" style={{ alignSelf: "flex-start", marginTop: "10px" }}>
+            <button
+              type="submit"
+              disabled={changingPass}
+              className="btn btn-primary"
+              style={{ alignSelf: "flex-start", marginTop: "10px" }}
+            >
               <Save size={16} />
               <span>{changingPass ? t("saving") : t("save")}</span>
             </button>
@@ -228,7 +263,14 @@ export const SettingsView: React.FC = () => {
             />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "20px", marginTop: "10px" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+              gap: "20px",
+              marginTop: "10px",
+            }}
+          >
             <div className="form-group">
               <label className="form-label">Proxy Protocol</label>
               <select
@@ -296,14 +338,22 @@ export const SettingsView: React.FC = () => {
         <div className="card" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           <h3 style={{ fontSize: "1.05rem", fontWeight: 700 }}>Data Retention &amp; Limits</h3>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: "20px",
+            }}
+          >
             <div className="form-group">
               <label className="form-label">Forward Score Expiry (Days)</label>
               <input
                 type="number"
                 className="form-input"
                 value={settings["forward_score_ttl_days"] || 30}
-                onChange={(e) => setSettings({ ...settings, forward_score_ttl_days: Number(e.target.value) })}
+                onChange={(e) =>
+                  setSettings({ ...settings, forward_score_ttl_days: Number(e.target.value) })
+                }
                 onBlur={(e) => updateSetting("forward_score_ttl_days", Number(e.target.value))}
               />
             </div>
@@ -314,7 +364,9 @@ export const SettingsView: React.FC = () => {
                 type="number"
                 className="form-input"
                 value={settings["max_fetch_bytes"] || 524288}
-                onChange={(e) => setSettings({ ...settings, max_fetch_bytes: Number(e.target.value) })}
+                onChange={(e) =>
+                  setSettings({ ...settings, max_fetch_bytes: Number(e.target.value) })
+                }
                 onBlur={(e) => updateSetting("max_fetch_bytes", Number(e.target.value))}
               />
             </div>

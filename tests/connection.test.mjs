@@ -14,14 +14,14 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  useTempDataDir,
-  httpClient,
-  require,
-  ROOT,
-  section,
-  ok,
   equal,
   finish,
+  httpClient,
+  ok,
+  ROOT,
+  require,
+  section,
+  useTempDataDir,
 } from "./harness.mjs";
 
 const dataDir = useTempDataDir("levix-connection");
@@ -48,7 +48,7 @@ function startLevix({ waitFor = "Ctrl+C", timeoutMs = 60000 } = {}) {
   const seen = new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error(`never printed ${JSON.stringify(waitFor)}\n${output}`)),
-      timeoutMs
+      timeoutMs,
     );
     const check = (chunk) => {
       output += chunk;
@@ -143,16 +143,16 @@ try {
     http.call("/dashboard/api/bot/session/start", { method: "POST" }),
     http.call("/dashboard/api/bot/session/start", { method: "POST" }),
   ]);
-  ok("all three are accepted", [a, b, c].every((r) => r.status === 200));
+  ok(
+    "all three are accepted",
+    [a, b, c].every((r) => r.status === 200),
+  );
 
   ok("a socket was created", await levix.waitForOutput(SOCKET_MARKER));
   equal("exactly one", count(levix.output, SOCKET_MARKER), 1);
 
   session = await (await http.call("/dashboard/api/bot/session")).json();
-  ok(
-    `the session left idle (${session.session.state})`,
-    session.session.state !== "idle"
-  );
+  ok(`the session left idle (${session.session.state})`, session.session.state !== "idle");
 
   section("Stop puts it back, and does not take the panel with it");
 
@@ -163,30 +163,23 @@ try {
   equal("the session is idle again", session.session.state, "idle");
   ok("and startable", session.session.canStart);
 
-  equal(
-    "the panel is still answering",
-    (await http.call("/dashboard/api/stats")).status,
-    200
-  );
+  equal("the panel is still answering", (await http.call("/dashboard/api/stats")).status, 200);
 
   section("unlink does not need a live connection");
+  // Deliberately changed: it used to require a connected socket, which meant
+  // a pairing WhatsApp had refused (403, 405) left dead credentials that
+  // could never be cleared from the panel. The only state with nothing to
+  // unlink is the one that has just been unlinked.
+  res = await http.call("/dashboard/api/bot/logout", { method: "POST" });
+  equal("unlinking a stopped session works", res.status, 200);
 
-  {
-    // Deliberately changed: it used to require a connected socket, which meant
-    // a pairing WhatsApp had refused (403, 405) left dead credentials that
-    // could never be cleared from the panel. The only state with nothing to
-    // unlink is the one that has just been unlinked.
-    res = await http.call("/dashboard/api/bot/logout", { method: "POST" });
-    equal("unlinking a stopped session works", res.status, 200);
+  session = await (await http.call("/dashboard/api/bot/session")).json();
+  equal("the session says so", session.session.state, "logged_out");
+  ok("…and offers a fresh start", session.session.canStart);
+  ok("…with nothing left to unlink", !session.session.canUnlink);
 
-    session = await (await http.call("/dashboard/api/bot/session")).json();
-    equal("the session says so", session.session.state, "logged_out");
-    ok("…and offers a fresh start", session.session.canStart);
-    ok("…with nothing left to unlink", !session.session.canUnlink);
-
-    res = await http.call("/dashboard/api/bot/logout", { method: "POST" });
-    equal("unlinking again is a 409", res.status, 409);
-  }
+  res = await http.call("/dashboard/api/bot/logout", { method: "POST" });
+  equal("unlinking again is a 409", res.status, 409);
 
   section("the browsers watching cannot steer any of this");
 
@@ -201,18 +194,12 @@ try {
     ok("…and listens for nothing a browser sends", !/socket\.on\(/.test(appSource));
     ok(
       "the only bridge is one-way: hub -> io.emit",
-      /attach\(\(event, payload\) => io\.emit\(event, payload\)\)/.test(panelSource)
+      /attach\(\(event, payload\) => io\.emit\(event, payload\)\)/.test(panelSource),
     );
 
     const sessionSource = readFileSync(join(ROOT, "src", "core", "session.js"), "utf8");
-    ok(
-      "the session never imports socket.io or express",
-      !/socket\.io|express/.test(sessionSource)
-    );
-    ok(
-      "retry exhaustion does not kill the process",
-      !/process\.exit/.test(sessionSource)
-    );
+    ok("the session never imports socket.io or express", !/socket\.io|express/.test(sessionSource));
+    ok("retry exhaustion does not kill the process", !/process\.exit/.test(sessionSource));
   }
   section("restart really stops the process, and cleanly");
 

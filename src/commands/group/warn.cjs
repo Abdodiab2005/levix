@@ -1,10 +1,6 @@
 // file: /commands/warn.js (Corrected Logic Flow)
 const { getGroupSettings } = require("../../utils/storage.cjs"); // <-- 1. Import getGroupSettings
-const {
-  getUserWarnings,
-  saveUserWarnings,
-  clearUserWarnings,
-} = require("../../utils/storage.cjs");
+const { getUserWarnings, saveUserWarnings, clearUserWarnings } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
 
 module.exports = {
@@ -18,8 +14,7 @@ module.exports = {
     try {
       const groupId = msg.key.remoteJid;
       const senderId = msg.key.participant;
-      const mentionedJid =
-        msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+      const mentionedJid = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
       const reason = args.slice(1).join(" ");
 
       // --- 1. Validate Inputs ---
@@ -46,9 +41,8 @@ module.exports = {
       const newWarnCount = userWarnings.length;
 
       // --- 3. Send Confirmation & Check for Action ---
-      let replyText =
-        `✅ تم توجيه تحذير إلى @${mentionedJid.split("@")[0]}.\n` +
-        `*السبب:* ${reason}`;
+      const replyText =
+        `✅ تم توجيه تحذير إلى @${mentionedJid.split("@")[0]}.\n` + `*السبب:* ${reason}`;
 
       await sock.sendMessage(groupId, {
         text: replyText,
@@ -57,17 +51,11 @@ module.exports = {
 
       const warnConfig = getGroupSettings(groupId)?.warn_system;
 
-      if (
-        warnConfig &&
-        warnConfig.action === "KICK" &&
-        newWarnCount >= warnConfig.max_warnings
-      ) {
+      if (warnConfig && warnConfig.action === "KICK" && newWarnCount >= warnConfig.max_warnings) {
         await sock.sendMessage(groupId, {
           text: `🚫 لقد وصل العضو @${
             mentionedJid.split("@")[0]
-          } إلى الحد الأقصى للتحذيرات (${newWarnCount}/${
-            warnConfig.max_warnings
-          }). سيتم حذفه.`,
+          } إلى الحد الأقصى للتحذيرات (${newWarnCount}/${warnConfig.max_warnings}). سيتم حذفه.`,
           mentions: [mentionedJid],
         });
 
@@ -76,13 +64,10 @@ module.exports = {
           await sock.groupParticipantsUpdate(groupId, [mentionedJid], "remove");
           clearUserWarnings(groupId, mentionedJid);
           logger.info(
-            `[Warn Kick] Kicked and cleared warnings for ${mentionedJid} from ${groupId}`
+            `[Warn Kick] Kicked and cleared warnings for ${mentionedJid} from ${groupId}`,
           );
         } catch (kickError) {
-          logger.error(
-            { err: kickError },
-            "Failed to kick user after max warnings"
-          );
+          logger.error({ err: kickError }, "Failed to kick user after max warnings");
           await sock.sendMessage(groupId, {
             text: "حاولت حذف العضو ولكني لا أملك صلاحية كافية لذلك.",
           });

@@ -1,4 +1,4 @@
-import { useTempDataDir, httpClient, startServer, section, equal, finish } from "./harness.mjs";
+import { equal, finish, httpClient, section, startServer, useTempDataDir } from "./harness.mjs";
 
 const dataDir = useTempDataDir("levix-opaque-origin-auth");
 const server = await startServer({ dataDir, trust: "", routes: true });

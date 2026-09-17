@@ -97,19 +97,16 @@ function activeProviderKeySetting(provider = settings.get("ai_provider")) {
   return p.keySetting;
 }
 
-function detectModelCapabilities(
-  provider = settings.get("ai_provider"),
-  model = null
-) {
+function detectModelCapabilities(provider = settings.get("ai_provider"), model = null) {
   const p = provider || "gemini";
   const m = String(
     model ||
       (p === "gemini"
         ? settings.get("gemini_model")
         : p === "openai"
-        ? settings.get("openai_model")
-        : settings.get("anthropic_model")) ||
-      ""
+          ? settings.get("openai_model")
+          : settings.get("anthropic_model")) ||
+      "",
   ).toLowerCase();
 
   const isGemini = p === "gemini";
@@ -129,7 +126,8 @@ function detectModelCapabilities(
     m.includes("llama-3.2-11b") ||
     m.includes("llama-3.2-90b");
 
-  const supportsAudioStt = isGemini || p === "openai" || m.includes("whisper") || m.includes("audio");
+  const supportsAudioStt =
+    isGemini || p === "openai" || m.includes("whisper") || m.includes("audio");
 
   return {
     provider: p,

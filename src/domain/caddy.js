@@ -44,7 +44,7 @@ export function applySite(system, { domain, port, caddyfile = "/etc/caddy/Caddyf
   if (!current.includes(IMPORT_LINE)) {
     system.writeFile(
       caddyfile,
-      `${current}${current.endsWith("\n") || current === "" ? "" : "\n"}\n# Added by Levix — loads its site files.\n${IMPORT_LINE}\n`
+      `${current}${current.endsWith("\n") || current === "" ? "" : "\n"}\n# Added by Levix — loads its site files.\n${IMPORT_LINE}\n`,
     );
   }
 

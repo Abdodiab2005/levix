@@ -4,7 +4,7 @@
 // runnable with `npm test`. Covers the storage API, the settings layer, the
 // command table and the generated secrets.
 
-import { useTempDataDir, require, section, ok, equal, finish } from "./harness.mjs";
+import { equal, finish, ok, require, section, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("levix-storage");
 
@@ -12,7 +12,6 @@ const store = require("./src/db/store.cjs");
 const settings = require("./src/config/settings.cjs");
 const secrets = require("./src/config/secrets.cjs");
 const runtime = require("./src/config/runtime-config.cjs");
-
 
 section("bot settings: strings, numbers, objects, arrays");
 store.saveBotSetting("k:str", "hello");
@@ -34,7 +33,8 @@ ok("group empty", Object.keys(store.getGroupSettings("nope@g.us")).length === 0)
 ok("group count", store.countGroups() === 1);
 ok("group all", store.getAllGroupSettings()[0].settings.warnLimit === 3);
 // mutating what we got back must not leak into storage
-const gs = store.getGroupSettings("g1@g.us"); gs.antilink = false;
+const gs = store.getGroupSettings("g1@g.us");
+gs.antilink = false;
 ok("group copy", store.getGroupSettings("g1@g.us").antilink === true);
 
 section("warnings");
@@ -58,9 +58,12 @@ ok("note delete", store.deleteNote("g1@g.us", "rules") === true);
 ok("note delete again", store.deleteNote("g1@g.us", "rules") === false);
 
 section("qr");
-store.saveQrCode("QR1"); ok("qr", store.getQrCode() === "QR1");
-store.saveQrCode("QR2"); ok("qr replace", store.getQrCode() === "QR2");
-store.deleteQrCode(); ok("qr gone", store.getQrCode() === null);
+store.saveQrCode("QR1");
+ok("qr", store.getQrCode() === "QR1");
+store.saveQrCode("QR2");
+ok("qr replace", store.getQrCode() === "QR2");
+store.deleteQrCode();
+ok("qr gone", store.getQrCode() === null);
 
 section("lid mapping");
 store.storeLidPnMappings([
@@ -73,11 +76,19 @@ ok("lids bulk", store.getLidsForPns(["201111111111@s.whatsapp.net"]).size === 1)
 ok("lid all", store.getAllLidMappings().length === 2);
 
 section("users & roles: the four-step lookup");
-store.saveUserMetadata({ jid: "201234567890@s.whatsapp.net", lid: "999@lid", phone: "201234567890", displayName: "Abdo" });
+store.saveUserMetadata({
+  jid: "201234567890@s.whatsapp.net",
+  lid: "999@lid",
+  phone: "201234567890",
+  displayName: "Abdo",
+});
 ok("user by jid", store.getUserMetadata("201234567890@s.whatsapp.net").displayName === "Abdo");
 ok("user by lid", store.getUserMetadata("999@lid").jid === "201234567890@s.whatsapp.net");
 ok("user by phone", store.getUserMetadata("201234567890").jid === "201234567890@s.whatsapp.net");
-ok("user by device suffix", store.getUserMetadata("201234567890:12@s.whatsapp.net")?.jid === "201234567890@s.whatsapp.net");
+ok(
+  "user by device suffix",
+  store.getUserMetadata("201234567890:12@s.whatsapp.net")?.jid === "201234567890@s.whatsapp.net",
+);
 ok("user unknown", store.getUserMetadata("000@s.whatsapp.net") === null);
 
 store.setUserRole("201234567890", "owner", true);
@@ -111,7 +122,13 @@ ok("forward top", store.getTopForwardedMessages("g1@g.us")[0].message_id === "m1
 ok("forward missing", store.getForwardScore("nope") === null);
 
 section("debts");
-const d = store.addDebt({ groupId: "g1@g.us", debtorId: "u1", creditorId: "u2", amount: 50, description: "lunch" });
+const d = store.addDebt({
+  groupId: "g1@g.us",
+  debtorId: "u1",
+  creditorId: "u2",
+  amount: 50,
+  description: "lunch",
+});
 ok("debt id", Number.isInteger(d.id));
 ok("debt read", store.getDebt(d.id).amount === 50);
 ok("debt bool", store.getDebt(d.id).settled === false);
@@ -123,8 +140,23 @@ ok("debt delete", store.deleteDebt(d.id) === true);
 ok("debt delete again", store.deleteDebt(d.id) === false);
 
 section("schedules");
-store.saveSchedule({ id: "j1", type: "once", targetJid: "g1@g.us", message: "hi", date: "2030-01-01T00:00:00.000Z", status: "pending", creatorJid: "u1" });
-store.saveSchedule({ id: "j2", type: "recurring", targetJid: "g1@g.us", message: "daily", cronString: "0 9 * * *", status: "active" });
+store.saveSchedule({
+  id: "j1",
+  type: "once",
+  targetJid: "g1@g.us",
+  message: "hi",
+  date: "2030-01-01T00:00:00.000Z",
+  status: "pending",
+  creatorJid: "u1",
+});
+store.saveSchedule({
+  id: "j2",
+  type: "recurring",
+  targetJid: "g1@g.us",
+  message: "daily",
+  cronString: "0 9 * * *",
+  status: "active",
+});
 ok("schedules", store.getSchedules().length === 2);
 ok("schedule shape", store.getSchedule("j2").cronString === "0 9 * * *");
 store.setScheduleStatus("j1", "sent");
@@ -141,7 +173,8 @@ store.saveChatHistory("chat1", [{ role: "user", parts: [{ text: "hi" }] }]);
 ok("history", store.getChatHistory("chat1")[0].parts[0].text === "hi");
 ok("history empty", store.getChatHistory("nope").length === 0);
 ok("history delete", store.deleteChatHistory("chat1") === true);
-store.saveChatHistory("a", [1]); store.saveChatHistory("b", [2]);
+store.saveChatHistory("a", [1]);
+store.saveChatHistory("b", [2]);
 store.deleteAllChatHistories();
 ok("history wiped", store.getChatHistory("a").length === 0);
 
@@ -152,7 +185,8 @@ ok("has creds", store.hasCredentials() === true);
 ok("auth read", store.authRead("creds") === '{"me":1}');
 store.authRemove("creds");
 ok("auth removed", store.authRead("creds") === null);
-store.authWrite("x", "1"); store.authClearAll();
+store.authWrite("x", "1");
+store.authClearAll();
 ok("auth cleared", store.authRead("x") === null);
 
 section("settings layer");
@@ -167,10 +201,18 @@ settings.set("ai_agent", "off");
 ok("bool coercion", settings.get("ai_agent") === false);
 settings.set("bot_min_delay_ms", "700");
 ok("int coercion", settings.get("bot_min_delay_ms") === 700);
-try { settings.set("bot_min_delay_ms", 999999); ok("range rejected", false); }
-catch { ok("range rejected", true); }
-try { settings.set("bot_timezone", "Not/AZone"); ok("tz rejected", false); }
-catch { ok("tz rejected", true); }
+try {
+  settings.set("bot_min_delay_ms", 999999);
+  ok("range rejected", false);
+} catch {
+  ok("range rejected", true);
+}
+try {
+  settings.set("bot_timezone", "Not/AZone");
+  ok("tz rejected", false);
+} catch {
+  ok("tz rejected", true);
+}
 settings.set("gemini_api_key", "sekrit");
 const described = settings.describe();
 const secretField = described.find((d) => d.key === "gemini_api_key");
@@ -200,8 +242,12 @@ ok("session secret length", s1.length >= 64);
 ok("session secret stable", secrets.getSessionSecret() === s1);
 ok("no password yet", secrets.hasDashboardPassword() === false);
 ok("verify with no password", secrets.verifyDashboardPassword("anything") === false);
-try { secrets.setDashboardPassword("short"); ok("short rejected", false); }
-catch { ok("short rejected", true); }
+try {
+  secrets.setDashboardPassword("short");
+  ok("short rejected", false);
+} catch {
+  ok("short rejected", true);
+}
 secrets.setDashboardPassword("correct horse battery");
 ok("has password", secrets.hasDashboardPassword() === true);
 ok("verify right", secrets.verifyDashboardPassword("correct horse battery") === true);

@@ -38,7 +38,7 @@ async function initStore() {
   }
   logger.info(
     `[Store] SQLite ready at ${DB_PATH} — ${countGroups()} group(s), ` +
-      `${countUsers()} user(s), ${countNotes()} note(s), ${countLidMappings()} LID mapping(s)`
+      `${countUsers()} user(s), ${countNotes()} note(s), ${countLidMappings()} LID mapping(s)`,
   );
 }
 
@@ -97,7 +97,7 @@ function getBotSetting(key, defaultValue = null) {
 function saveBotSetting(key, value) {
   q(
     `INSERT INTO bot_settings (key, value) VALUES (?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
   ).run(key, JSON.stringify(value ?? null));
 }
 
@@ -110,16 +110,14 @@ function deleteBotSetting(key) {
 // ===================================================================
 
 function getGroupSettings(groupId) {
-  const row = q("SELECT settings FROM group_settings WHERE group_id = ?").get(
-    groupId
-  );
+  const row = q("SELECT settings FROM group_settings WHERE group_id = ?").get(groupId);
   return row ? parseJson(row.settings, {}) : {};
 }
 
 function saveGroupSettings(groupId, settings) {
   q(
     `INSERT INTO group_settings (group_id, settings) VALUES (?, ?)
-     ON CONFLICT(group_id) DO UPDATE SET settings = excluded.settings`
+     ON CONFLICT(group_id) DO UPDATE SET settings = excluded.settings`,
   ).run(groupId, JSON.stringify(settings || {}));
 }
 
@@ -141,24 +139,22 @@ function countGroups() {
 // ===================================================================
 
 function getUserWarnings(groupId, userId) {
-  const row = q(
-    "SELECT warnings FROM warnings WHERE group_id = ? AND user_id = ?"
-  ).get(groupId, userId);
+  const row = q("SELECT warnings FROM warnings WHERE group_id = ? AND user_id = ?").get(
+    groupId,
+    userId,
+  );
   return row ? parseJson(row.warnings, []) : [];
 }
 
 function saveUserWarnings(groupId, userId, warningsArray) {
   q(
     `INSERT INTO warnings (group_id, user_id, warnings) VALUES (?, ?, ?)
-     ON CONFLICT(group_id, user_id) DO UPDATE SET warnings = excluded.warnings`
+     ON CONFLICT(group_id, user_id) DO UPDATE SET warnings = excluded.warnings`,
   ).run(groupId, userId, JSON.stringify(warningsArray || []));
 }
 
 function clearUserWarnings(groupId, userId) {
-  q("DELETE FROM warnings WHERE group_id = ? AND user_id = ?").run(
-    groupId,
-    userId
-  );
+  q("DELETE FROM warnings WHERE group_id = ? AND user_id = ?").run(groupId, userId);
 }
 
 function getAllWarnings() {
@@ -187,7 +183,7 @@ function getUserTodos(userId) {
 function saveUserTodos(userId, tasksArray) {
   q(
     `INSERT INTO todos (user_id, tasks) VALUES (?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET tasks = excluded.tasks`
+     ON CONFLICT(user_id) DO UPDATE SET tasks = excluded.tasks`,
   ).run(userId, JSON.stringify(tasksArray || []));
 }
 
@@ -208,14 +204,15 @@ function countTodos() {
 function saveNote(groupId, keyword, text) {
   q(
     `INSERT INTO notes (group_id, keyword, note_text) VALUES (?, ?, ?)
-     ON CONFLICT(group_id, keyword) DO UPDATE SET note_text = excluded.note_text`
+     ON CONFLICT(group_id, keyword) DO UPDATE SET note_text = excluded.note_text`,
   ).run(groupId, keyword, text);
 }
 
 function getNote(groupId, keyword) {
-  const row = q(
-    "SELECT note_text FROM notes WHERE group_id = ? AND keyword = ?"
-  ).get(groupId, keyword);
+  const row = q("SELECT note_text FROM notes WHERE group_id = ? AND keyword = ?").get(
+    groupId,
+    keyword,
+  );
   return row ? row.note_text : null;
 }
 
@@ -226,16 +223,17 @@ function getAllNotes(groupId) {
 }
 
 function deleteNote(groupId, keyword) {
-  const { changes } = q(
-    "DELETE FROM notes WHERE group_id = ? AND keyword = ?"
-  ).run(groupId, keyword);
+  const { changes } = q("DELETE FROM notes WHERE group_id = ? AND keyword = ?").run(
+    groupId,
+    keyword,
+  );
   return changes > 0;
 }
 
 function getAllNotesFlat(limit = 100) {
   return q(
     `SELECT group_id, keyword, note_text FROM notes
-     ORDER BY group_id, keyword LIMIT ?`
+     ORDER BY group_id, keyword LIMIT ?`,
   ).all(limit);
 }
 
@@ -250,7 +248,7 @@ function countNotes() {
 function saveQrCode(qr) {
   q(
     `INSERT INTO qr_codes (id, qr_string) VALUES (1, ?)
-     ON CONFLICT(id) DO UPDATE SET qr_string = excluded.qr_string`
+     ON CONFLICT(id) DO UPDATE SET qr_string = excluded.qr_string`,
   ).run(qr);
 }
 
@@ -273,7 +271,7 @@ function storeLidPnMapping(lid, pn, deviceIndex = 0) {
      ON CONFLICT(lid) DO UPDATE SET
        pn = excluded.pn,
        device_index = excluded.device_index,
-       updated_at = excluded.updated_at`
+       updated_at = excluded.updated_at`,
   ).run(lid, pn, deviceIndex, Date.now());
   logger.debug(`[LID] Stored mapping: ${lid} <-> ${pn}`);
 }
@@ -357,17 +355,9 @@ function saveUserMetadata(userData) {
     user_lid: userData.lid || existing?.user_lid || null,
     phone_number: userData.phone || existing?.phone_number || null,
     is_owner:
-      userData.isOwner === undefined
-        ? existing?.is_owner === 1
-          ? 1
-          : 0
-        : bool(userData.isOwner),
+      userData.isOwner === undefined ? (existing?.is_owner === 1 ? 1 : 0) : bool(userData.isOwner),
     is_admin:
-      userData.isAdmin === undefined
-        ? existing?.is_admin === 1
-          ? 1
-          : 0
-        : bool(userData.isAdmin),
+      userData.isAdmin === undefined ? (existing?.is_admin === 1 ? 1 : 0) : bool(userData.isAdmin),
     first_seen: existing?.first_seen ?? now,
     last_seen: now,
     display_name: userData.displayName || existing?.display_name || null,
@@ -383,7 +373,7 @@ function saveUserMetadata(userData) {
        is_owner     = excluded.is_owner,
        is_admin     = excluded.is_admin,
        last_seen    = excluded.last_seen,
-       display_name = excluded.display_name`
+       display_name = excluded.display_name`,
   ).run(
     row.user_jid,
     row.user_lid,
@@ -392,7 +382,7 @@ function saveUserMetadata(userData) {
     row.is_admin,
     row.first_seen,
     row.last_seen,
-    row.display_name
+    row.display_name,
   );
 }
 
@@ -411,9 +401,7 @@ function getUserMetadata(identifier) {
   }
 
   if (!row) {
-    row = q("SELECT * FROM user_metadata WHERE phone_number = ?").get(
-      identifier
-    );
+    row = q("SELECT * FROM user_metadata WHERE phone_number = ?").get(identifier);
   }
 
   if (!row) {
@@ -424,7 +412,7 @@ function getUserMetadata(identifier) {
         q(
           `SELECT * FROM user_metadata
            WHERE user_jid LIKE ? OR user_lid LIKE ?
-           LIMIT 1`
+           LIMIT 1`,
         ).get(`${phone}@%`, `${phone}@%`);
     }
   }
@@ -445,21 +433,15 @@ function isUserBotAdmin(identifier) {
 }
 
 function getAllOwners() {
-  return q("SELECT * FROM user_metadata WHERE is_owner = 1")
-    .all()
-    .map(rowToUser);
+  return q("SELECT * FROM user_metadata WHERE is_owner = 1").all().map(rowToUser);
 }
 
 function getAllBotAdmins() {
-  return q("SELECT * FROM user_metadata WHERE is_admin = 1")
-    .all()
-    .map(rowToUser);
+  return q("SELECT * FROM user_metadata WHERE is_admin = 1").all().map(rowToUser);
 }
 
 function getAllUsers() {
-  return q("SELECT * FROM user_metadata ORDER BY last_seen DESC")
-    .all()
-    .map(rowToUser);
+  return q("SELECT * FROM user_metadata ORDER BY last_seen DESC").all().map(rowToUser);
 }
 
 function countUsers() {
@@ -493,8 +475,7 @@ function setUserRole(identifier, role, enabled = true) {
 
   saveUserMetadata({
     jid,
-    lid:
-      existing?.lid || (String(identifier).endsWith("@lid") ? identifier : null),
+    lid: existing?.lid || (String(identifier).endsWith("@lid") ? identifier : null),
     phone: existing?.phone || digitsOf(identifier),
     displayName: existing?.displayName || null,
     [wanted]: !!enabled,
@@ -504,10 +485,7 @@ function setUserRole(identifier, role, enabled = true) {
 }
 
 function updateUserLastSeen(jid) {
-  q("UPDATE user_metadata SET last_seen = ? WHERE user_jid = ?").run(
-    Date.now(),
-    jid
-  );
+  q("UPDATE user_metadata SET last_seen = ? WHERE user_jid = ?").run(Date.now(), jid);
 }
 
 // ===================================================================
@@ -524,20 +502,17 @@ function incrementForwardScore(messageId, groupId, senderId) {
      ON CONFLICT(message_id) DO UPDATE SET
        forward_count     = forward_count + 1,
        last_forwarded_at = excluded.last_forwarded_at,
-       expires_at        = excluded.expires_at`
+       expires_at        = excluded.expires_at`,
   ).run(messageId, groupId, senderId, now, now, forwardExpiry());
 
   return (
-    q("SELECT forward_count FROM forward_scores WHERE message_id = ?").get(
-      messageId
-    )?.forward_count ?? 1
+    q("SELECT forward_count FROM forward_scores WHERE message_id = ?").get(messageId)
+      ?.forward_count ?? 1
   );
 }
 
 function getForwardScore(messageId) {
-  const row = q("SELECT * FROM forward_scores WHERE message_id = ?").get(
-    messageId
-  );
+  const row = q("SELECT * FROM forward_scores WHERE message_id = ?").get(messageId);
   return row
     ? {
         count: row.forward_count,
@@ -554,7 +529,7 @@ function getTopForwardedMessages(groupId, limit = 10) {
      FROM forward_scores
      WHERE group_id = ?
      ORDER BY forward_count DESC
-     LIMIT ?`
+     LIMIT ?`,
   ).all(groupId, limit);
 }
 
@@ -567,19 +542,12 @@ function debtRow(row) {
   return { ...row, settled: row.settled === 1 };
 }
 
-function addDebt({
-  groupId,
-  debtorId,
-  creditorId,
-  amount,
-  currency = "USD",
-  description = null,
-}) {
+function addDebt({ groupId, debtorId, creditorId, amount, currency = "USD", description = null }) {
   const createdAt = Date.now();
   const { lastInsertRowid } = q(
     `INSERT INTO debts
        (group_id, debtor_id, creditor_id, amount, currency, description, created_at, settled, settled_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL)`,
   ).run(groupId, debtorId, creditorId, amount, currency, description, createdAt);
 
   return getDebt(Number(lastInsertRowid));
@@ -597,22 +565,18 @@ function deleteDebt(id) {
 function listDebts(groupId, { settled = false } = {}) {
   return q(
     `SELECT * FROM debts WHERE group_id = ? AND settled = ?
-     ORDER BY created_at DESC`
+     ORDER BY created_at DESC`,
   )
     .all(groupId, bool(settled))
     .map(debtRow);
 }
 
 function getRecentDebts(limit = 50) {
-  return q("SELECT * FROM debts ORDER BY created_at DESC LIMIT ?")
-    .all(limit)
-    .map(debtRow);
+  return q("SELECT * FROM debts ORDER BY created_at DESC LIMIT ?").all(limit).map(debtRow);
 }
 
 function countDebts(settled = false) {
-  return q("SELECT COUNT(*) AS n FROM debts WHERE settled = ?").get(
-    bool(settled)
-  ).n;
+  return q("SELECT COUNT(*) AS n FROM debts WHERE settled = ?").get(bool(settled)).n;
 }
 
 // ===================================================================
@@ -667,7 +631,7 @@ function saveSchedule(job) {
        creator_jid = excluded.creator_jid,
        last_run_at = excluded.last_run_at,
        last_delivery_status = excluded.last_delivery_status,
-       last_error = excluded.last_error`
+       last_error = excluded.last_error`,
   ).run(
     String(job.id),
     job.type,
@@ -680,7 +644,7 @@ function saveSchedule(job) {
     job.createdAt ?? Date.now(),
     job.lastRunAt ?? null,
     job.lastDeliveryStatus ?? null,
-    job.lastError ?? null
+    job.lastError ?? null,
   );
   return getSchedule(job.id);
 }
@@ -693,7 +657,7 @@ function setScheduleDelivery(id, status, runAt, error = null) {
   q(
     `UPDATE schedules
         SET last_delivery_status = ?, last_run_at = ?, last_error = ?
-      WHERE id = ?`
+      WHERE id = ?`,
   ).run(status, runAt, error, String(id));
   return getSchedule(id);
 }
@@ -725,7 +689,7 @@ function saveChatHistory(chatId, historyArray) {
     `INSERT INTO ai_history (chat_id, history, updated_at) VALUES (?, ?, ?)
      ON CONFLICT(chat_id) DO UPDATE SET
        history = excluded.history,
-       updated_at = excluded.updated_at`
+       updated_at = excluded.updated_at`,
   ).run(chatId, JSON.stringify(historyArray || []), Date.now());
 }
 
@@ -753,7 +717,7 @@ function authRead(key) {
 function authWrite(key, serialized) {
   q(
     `INSERT INTO baileys_auth (key, value) VALUES (?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
   ).run(key, serialized);
 }
 

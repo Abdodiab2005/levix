@@ -10,10 +10,10 @@
 //
 // Generated installers are release artifacts. They are never committed.
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
 
 export const ROOT = fileURLToPath(new URL("..", import.meta.url));
 export const SOURCE = join(ROOT, "deploy", "install.sh");
@@ -40,7 +40,9 @@ export function buildInstaller(source, version) {
   const line = /^VERSION="[^"\n]*"$/gm;
   const found = source.match(line) || [];
   if (found.length !== 1) {
-    throw new Error(`deploy/install.sh must contain exactly one VERSION= line, found ${found.length}`);
+    throw new Error(
+      `deploy/install.sh must contain exactly one VERSION= line, found ${found.length}`,
+    );
   }
   const out = source.replace(line, `VERSION="${version}"`);
   if (!out.includes(`VERSION="${version}"`)) throw new Error("failed to pin the version");
@@ -70,14 +72,16 @@ export function verifyInstaller(text, version) {
 
 function checkSyntax(file) {
   const bash = spawnSync("bash", ["-n", file], { encoding: "utf8" });
-  if (bash.status !== 0) throw new Error(`generated installer is not valid shell:\n${bash.stderr.trim()}`);
+  if (bash.status !== 0)
+    throw new Error(`generated installer is not valid shell:\n${bash.stderr.trim()}`);
 }
 
 export function generate(tagInput, outPath) {
   const { tag, version, stable } = parseTag(tagInput);
   const text = buildInstaller(readFileSync(SOURCE, "utf8"), version);
   const problems = verifyInstaller(text, version);
-  if (problems.length) throw new Error(`generated installer failed its own check: ${problems.join("; ")}`);
+  if (problems.length)
+    throw new Error(`generated installer failed its own check: ${problems.join("; ")}`);
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, text, { mode: 0o644 });
   checkSyntax(outPath);

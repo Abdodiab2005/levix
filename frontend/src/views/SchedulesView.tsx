@@ -1,11 +1,13 @@
 // file: frontend/src/views/SchedulesView.tsx
-import React, { useEffect, useState } from "react";
-import { Calendar, Plus, Trash2, RefreshCw, AlertCircle, Clock } from "lucide-react";
+
+import { AlertCircle, Calendar, Clock, Plus, RefreshCw, Trash2 } from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { useI18n } from "../context/I18nContext";
-import { useToast } from "../components/Toasts";
 import { Modal } from "../components/Modal";
-import { ScheduleItem } from "../types";
+import { useToast } from "../components/Toasts";
+import { useI18n } from "../context/I18nContext";
+import type { ScheduleItem } from "../types";
 
 export const SchedulesView: React.FC = () => {
   const { t } = useI18n();
@@ -93,17 +95,26 @@ export const SchedulesView: React.FC = () => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
       <div className="card-glass">
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "16px",
+          }}
+        >
           <div>
             <h2 style={{ fontSize: "1.2rem", fontWeight: 700 }}>{t("schedules")}</h2>
             <p style={{ fontSize: "0.85rem", color: "var(--muted)", marginTop: "4px" }}>
-              Timezone: <code style={{ color: "var(--cyan)" }}>{timezone}</code> · Cron &amp; one-off deliveries
+              Timezone: <code style={{ color: "var(--cyan)" }}>{timezone}</code> · Cron &amp;
+              one-off deliveries
             </p>
           </div>
 
           <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
             <Plus size={16} />
-            <span>Schedule Message</span>
+            <span>{t("scheduleNewMsg")}</span>
           </button>
         </div>
       </div>
@@ -112,24 +123,30 @@ export const SchedulesView: React.FC = () => {
         <table className="table">
           <thead>
             <tr>
-              <th>Target</th>
-              <th>Message Preview</th>
-              <th>Schedule</th>
-              <th>Type</th>
-              <th>Delivery Status</th>
-              <th style={{ textAlign: "center" }}>Actions</th>
+              <th>{t("thTarget")}</th>
+              <th>{t("thMessage")}</th>
+              <th>{t("thSchedule")}</th>
+              <th>{t("thType")}</th>
+              <th>{t("thDelivery")}</th>
+              <th style={{ textAlign: "center" }}>{t("thActions")}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}>
+                <td
+                  colSpan={6}
+                  style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}
+                >
                   Loading schedules...
                 </td>
               </tr>
             ) : schedules.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}>
+                <td
+                  colSpan={6}
+                  style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}
+                >
                   No scheduled messages found. Create one with the button above!
                 </td>
               </tr>
@@ -139,7 +156,14 @@ export const SchedulesView: React.FC = () => {
                   <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.85rem" }}>
                     {s.targetJid}
                   </td>
-                  <td style={{ maxWidth: "250px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <td
+                    style={{
+                      maxWidth: "250px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
                     {s.message}
                   </td>
                   <td>
@@ -207,7 +231,9 @@ export const SchedulesView: React.FC = () => {
       >
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           <div className="form-group">
-            <label className="form-label">Recipient (Phone Number with Country Code or Group JID)</label>
+            <label className="form-label">
+              Recipient (Phone Number with Country Code or Group JID)
+            </label>
             <input
               type="text"
               className="form-input"
@@ -231,7 +257,9 @@ export const SchedulesView: React.FC = () => {
 
           {scheduleType === "recurring" ? (
             <div className="form-group">
-              <label className="form-label">Cron Expression (5 fields: min hour day month weekday)</label>
+              <label className="form-label">
+                Cron Expression (5 fields: min hour day month weekday)
+              </label>
               <input
                 type="text"
                 className="form-input"

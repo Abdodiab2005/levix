@@ -60,12 +60,12 @@ console.log("\n· npm install -g (into an empty prefix)");
 const installed = spawnSync(
   "npm",
   ["install", "--prefix", prefix, "--global", "--no-audit", "--no-fund", tarballPath],
-  { cwd: workDir, encoding: "utf8", timeout: 600000 }
+  { cwd: workDir, encoding: "utf8", timeout: 600000 },
 );
 ok(
   "the tarball installs",
   installed.status === 0,
-  (installed.stderr || "").split("\n").slice(-6).join("\n")
+  (installed.stderr || "").split("\n").slice(-6).join("\n"),
 );
 
 const binary = join(prefix, "bin", "levix");
@@ -108,7 +108,7 @@ function start(args, { waitFor = "Ctrl+C", timeoutMs = 120000 } = {}) {
   const seen = new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error(`never printed ${JSON.stringify(waitFor)}\n${output}`)),
-      timeoutMs
+      timeoutMs,
     );
     const check = (chunk) => {
       output += chunk;

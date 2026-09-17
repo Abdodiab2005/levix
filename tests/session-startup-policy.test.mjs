@@ -2,7 +2,7 @@ import {
   hasPairedCredentials,
   sessionStartupPolicy,
 } from "../src/bootstrap/session-startup-policy.js";
-import { section, equal, finish } from "./harness.mjs";
+import { equal, finish, section } from "./harness.mjs";
 
 section("paired credential detection");
 
@@ -11,18 +11,18 @@ equal("an empty creds row is unpaired", hasPairedCredentials("{}"), false);
 equal(
   "a pre-pairing creds row is still unpaired",
   hasPairedCredentials(JSON.stringify({ noiseKey: { private: "x" } })),
-  false
+  false,
 );
 equal("malformed creds fail closed", hasPairedCredentials("{not-json"), false);
 equal(
   "creds.me.id proves a completed pairing",
   hasPairedCredentials(JSON.stringify({ me: { id: "201234567890:1@s.whatsapp.net" } })),
-  true
+  true,
 );
 equal(
   "already-parsed credentials are accepted too",
   hasPairedCredentials({ me: { id: "201234567890:1@s.whatsapp.net" } }),
-  true
+  true,
 );
 equal(
   "a pairing-code attempt that wrote me.id is still unpaired",
@@ -30,7 +30,7 @@ equal(
     me: { id: "201234567890:1@s.whatsapp.net" },
     registered: false,
   }),
-  false
+  false,
 );
 
 section("session startup policy");

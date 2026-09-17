@@ -1,16 +1,16 @@
 // Recurring parsing and delivery state, without opening a WhatsApp connection.
 
-import {
-  useTempDataDir,
-  require as harnessRequire,
-  ROOT,
-  section,
-  ok,
-  equal,
-  finish,
-} from "./harness.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  equal,
+  finish,
+  require as harnessRequire,
+  ok,
+  ROOT,
+  section,
+  useTempDataDir,
+} from "./harness.mjs";
 
 useTempDataDir("levix-scheduling");
 
@@ -47,25 +47,25 @@ section("daily and weekly recurrence parsing");
   equal(
     "a bad day is rejected",
     recurrence.parseRecurringArgs(["weekly", "someday", "10:00", "x"]).error,
-    "day"
+    "day",
   );
   equal(
     "a bad time is rejected",
     recurrence.parseRecurringArgs(["daily", "25:00", "x"]).error,
-    "time"
+    "time",
   );
   equal(
     "an empty message is rejected",
     recurrence.parseRecurringArgs(["daily", "10:00"]).error,
-    "message"
+    "message",
   );
   equal(
     "weekly schedules are readable",
     recurrence.describeScheduledJob(
       { type: "recurring", cronString: "30 18 * * 5" },
-      "Africa/Cairo"
+      "Africa/Cairo",
     ),
-    "Every Friday at 18:30 (Africa/Cairo)"
+    "Every Friday at 18:30 (Africa/Cairo)",
   );
 }
 
@@ -93,13 +93,7 @@ section("the autoschedule command persists a real weekly job");
       },
     };
 
-    await autoschedule.execute(sock, msg, [
-      "weekly",
-      "الجمعة",
-      "18:30",
-      "موعد",
-      "الفريق",
-    ]);
+    await autoschedule.execute(sock, msg, ["weekly", "الجمعة", "18:30", "موعد", "الفريق"]);
 
     const [job] = scheduler.getScheduledJobs();
     equal("one job is saved", scheduler.getScheduledJobs().length, 1);
@@ -112,7 +106,10 @@ section("the autoschedule command persists a real weekly job");
 
     await autoschedule.execute(sock, msg, ["weekly", "not-a-day", "18:30", "x"]);
     equal("an invalid day saves nothing", scheduler.getScheduledJobs().length, 1);
-    ok("the invalid day gets a useful reply", replies.at(-1).content.text.includes("اليوم غير صالح"));
+    ok(
+      "the invalid day gets a useful reply",
+      replies.at(-1).content.text.includes("اليوم غير صالح"),
+    );
   } finally {
     scheduler.stopAllScheduledJobs();
     cron.schedule = realSchedule;
@@ -138,12 +135,12 @@ section("a failed one-off is never reported as sent");
         throw new Error("network unavailable");
       },
     },
-    job
+    job,
   );
 
   ok(
     "the timer records the failure",
-    await waitUntil(() => storage.getSchedule(job.id)?.status === "failed")
+    await waitUntil(() => storage.getSchedule(job.id)?.status === "failed"),
   );
   let stored = storage.getSchedule(job.id);
   equal("the lifecycle says failed", stored.status, "failed");
@@ -160,7 +157,7 @@ section("a failed one-off is never reported as sent");
         ok("retry carries the message", content.text.includes(job.message));
       },
     },
-    job.id
+    job.id,
   );
   ok("manual retry succeeds", retry.ok);
   equal("manual retry sends once", sent, 1);
@@ -198,7 +195,7 @@ section("recurring failures stay active and retries cannot overlap");
           throw new Error("temporary outage");
         },
       },
-      recurring
+      recurring,
     );
     await tick();
 
@@ -243,8 +240,8 @@ section("the panel exposes delivery state and manual retry");
   ok(
     "the retry control calls the protected API",
     /schedules\/\$\{encodeURIComponent\(retryButton\.dataset\.retrySchedule\)\}\/retry/.test(
-      source
-    )
+      source,
+    ),
   );
 }
 

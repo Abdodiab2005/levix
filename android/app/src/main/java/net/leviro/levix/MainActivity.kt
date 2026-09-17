@@ -18,8 +18,10 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.os.LocaleListCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 
@@ -30,6 +32,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusPill: View
     private lateinit var statusDot: View
     private lateinit var statusPillText: TextView
+    private lateinit var btnLanguage: TextView
 
     // Hero Section
     private lateinit var heroSubtitleText: TextView
@@ -102,6 +105,27 @@ class MainActivity : AppCompatActivity() {
         statusPill = findViewById(R.id.statusPill)
         statusDot = findViewById(R.id.statusDot)
         statusPillText = findViewById(R.id.statusPillText)
+        btnLanguage = findViewById(R.id.btnLanguage)
+
+        val currentLocales = AppCompatDelegate.getApplicationLocales()
+        val isArabic = if (!currentLocales.isEmpty) {
+            currentLocales[0]?.language?.startsWith("ar") == true
+        } else {
+            resources.configuration.locales[0]?.language?.startsWith("ar") == true
+        }
+        btnLanguage.text = if (isArabic) "English" else "العربية"
+        
+        val cardLanguageSwitch = findViewById<View?>(R.id.cardLanguageSwitch)
+        val btnLanguageToggleCard = findViewById<TextView?>(R.id.btnLanguageToggleCard)
+        btnLanguageToggleCard?.text = if (isArabic) "English" else "العربية"
+
+        val toggleLanguage = {
+            val next = if (isArabic) "en" else "ar"
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(next))
+        }
+        btnLanguage.setOnClickListener { toggleLanguage() }
+        cardLanguageSwitch?.setOnClickListener { toggleLanguage() }
+        btnLanguageToggleCard?.setOnClickListener { toggleLanguage() }
 
         heroSubtitleText = findViewById(R.id.heroSubtitleText)
         panelButton = findViewById(R.id.panelButton)

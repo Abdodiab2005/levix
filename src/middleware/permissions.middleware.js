@@ -1,12 +1,12 @@
 // file: /middleware/permissions.middleware.js
 import { createRequire } from "module";
 import {
-  isOwnerJid,
-  isBotAdminUser,
+  getSenderCandidates,
+  getSenderId,
   isAdminInGroup,
   isBotAdminInGroup,
-  getSenderId,
-  getSenderCandidates,
+  isBotAdminUser,
+  isOwnerJid,
 } from "../utils/permissions.esm.js";
 
 const require = createRequire(import.meta.url);
@@ -46,7 +46,7 @@ export function checkCommandPermission(commandName, msg, groupMetadata, sock) {
   const candidates = senderCandidates.length ? senderCandidates : [senderId];
 
   // fromMe is an immediate owner indicator (the bot is always its own owner).
-  let isOwner = msg.key.fromMe || candidates.some((c) => isOwnerJid(c));
+  const isOwner = msg.key.fromMe || candidates.some((c) => isOwnerJid(c));
 
   // Bot-level admins (granted with `!perm add admin`, from the dashboard, or by
   // asking the AI) count as admins everywhere — including DMs, where there is
@@ -54,8 +54,7 @@ export function checkCommandPermission(commandName, msg, groupMetadata, sock) {
   const isBotAdmin = !isOwner && candidates.some((c) => isBotAdminUser(c));
 
   const isSenderAdmin =
-    isBotAdmin ||
-    (isGroup ? candidates.some((c) => isAdminInGroup(groupMetadata, c)) : false);
+    isBotAdmin || (isGroup ? candidates.some((c) => isAdminInGroup(groupMetadata, c)) : false);
 
   const permissionLevel = resolvePermissionLevel(commandName);
 
@@ -96,9 +95,7 @@ export function checkCommandPermission(commandName, msg, groupMetadata, sock) {
       break;
 
     default:
-      logger.warn(
-        `Unknown permission level: ${permissionLevel} for command: ${commandName}`
-      );
+      logger.warn(`Unknown permission level: ${permissionLevel} for command: ${commandName}`);
       hasPermission = false;
       reason = "🚫 مستوى الصلاحية غير معروف.";
   }

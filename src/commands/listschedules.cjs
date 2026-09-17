@@ -10,9 +10,7 @@ module.exports = {
 
   async execute(sock, msg) {
     const jobs = getScheduledJobs();
-    const activeJobs = jobs.filter(
-      (job) => job.status === "pending" || job.status === "active"
-    );
+    const activeJobs = jobs.filter((job) => job.status === "pending" || job.status === "active");
 
     if (activeJobs.length === 0) {
       return await sock.sendMessage(msg.key.remoteJid, {
@@ -35,9 +33,7 @@ module.exports = {
         });
         reply += `*الوقت المحدد:* ${jobDate}\n`;
       }
-      reply += `*الوجهة:* ${
-        job.targetJid.endsWith("@g.us") ? "هذا الجروب" : "محادثة خاصة"
-      }\n\n`;
+      reply += `*الوجهة:* ${job.targetJid.endsWith("@g.us") ? "هذا الجروب" : "محادثة خاصة"}\n\n`;
     });
 
     reply += "*لحذف مهمة، استخدم:*\n`!deleteschedule <ID>`";

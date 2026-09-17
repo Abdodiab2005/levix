@@ -1,8 +1,5 @@
 // file: /commands/group/approveall.js
-const {
-  getGroupSettings,
-  saveGroupSettings,
-} = require("../../utils/storage.cjs"); // Note the path is ../../
+const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs"); // Note the path is ../../
 const logger = require("../../utils/logger.cjs");
 
 module.exports = {
@@ -36,18 +33,13 @@ module.exports = {
           text: "☑️ تم تعطيل نظام الموافقة التلقائية.",
         });
       } else {
-        const status = settings.join_requests.auto_approve_enabled
-          ? "مفعل ✅"
-          : "معطل ☑️";
+        const status = settings.join_requests.auto_approve_enabled ? "مفعل ✅" : "معطل ☑️";
         return await sock.sendMessage(groupId, {
           text: `حالة الموافقة التلقائية: ${status}.\nاستخدم 'on' أو 'off' للتغيير.`,
         });
       }
     } catch (error) {
-      logger.error(
-        { err: error, command: "approveall" },
-        "Error in !group approveall command"
-      );
+      logger.error({ err: error, command: "approveall" }, "Error in !group approveall command");
       await sock.sendMessage(groupId, { text: "حدث خطأ." });
     }
   },

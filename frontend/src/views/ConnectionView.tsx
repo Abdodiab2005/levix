@@ -1,11 +1,14 @@
 // file: frontend/src/views/ConnectionView.tsx
-import React, { useState } from "react";
-import { Play, Square, RefreshCw, Unlink, RotateCcw, QrCode, AlertCircle, CheckCircle2 } from "lucide-react";
+
+import { AlertCircle, Play, QrCode, RefreshCw, RotateCcw, Square, Unlink } from "lucide-react";
+import QRCode from "qrcode";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { useI18n } from "../context/I18nContext";
-import { useToast } from "../components/Toasts";
 import { Modal } from "../components/Modal";
-import { SessionStatus } from "../types";
+import { useToast } from "../components/Toasts";
+import { useI18n } from "../context/I18nContext";
+import type { SessionStatus } from "../types";
 
 interface ConnectionViewProps {
   status: SessionStatus | null;
@@ -16,10 +19,29 @@ export const ConnectionView: React.FC<ConnectionViewProps> = ({ status }) => {
   const { toast } = useToast();
   const [showUnlinkModal, setShowUnlinkModal] = useState(false);
   const [acting, setActing] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   const state = status?.state || "idle";
   const isConnected = state === "connected";
   const isWaitingQr = state === "waiting_for_qr";
+
+  // Generate QR code locally in offline-first mode
+  useEffect(() => {
+    if (status?.qr) {
+      QRCode.toDataURL(status.qr, {
+        width: 260,
+        margin: 2,
+        color: {
+          dark: "#0b1629",
+          light: "#ffffff",
+        },
+      })
+        .then((url) => setQrDataUrl(url))
+        .catch(() => setQrDataUrl(null));
+    } else {
+      setQrDataUrl(null);
+    }
+  }, [status?.qr]);
 
   const handleAction = async (actionFn: () => Promise<any>, successMsg: string) => {
     setActing(true);
@@ -39,19 +61,31 @@ export const ConnectionView: React.FC<ConnectionViewProps> = ({ status }) => {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       {/* Session State Card */}
       <div className="card">
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px", marginBottom: "20px" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "14px",
+            marginBottom: "18px",
+          }}
+        >
           <div>
-            <h2 style={{ fontSize: "1.2rem", fontWeight: 700 }}>{t("connection")}</h2>
-            <p style={{ fontSize: "0.85rem", color: "var(--muted)", marginTop: "4px" }}>
-              Backend-owned Baileys v7 WhatsApp connection state machine
+            <h2 style={{ fontSize: "1.15rem", fontWeight: 700 }}>{t("connection")}</h2>
+            <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginTop: "3px" }}>
+              Baileys v7 WhatsApp connection engine
             </p>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span className={`badge ${isConnected ? "badge-ok" : isWaitingQr ? "badge-warn" : "badge-info"}`} style={{ fontSize: "0.85rem", padding: "6px 14px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span
+              className={`badge ${isConnected ? "badge-ok" : isWaitingQr ? "badge-warn" : "badge-info"}`}
+              style={{ fontSize: "0.82rem", padding: "5px 12px" }}
+            >
               <span className="pulse-dot" />
               <span>{t(state as any, state)}</span>
             </span>
@@ -60,24 +94,39 @@ export const ConnectionView: React.FC<ConnectionViewProps> = ({ status }) => {
 
         {/* Retry timer warning */}
         {status?.retryInSeconds ? (
-          <div style={{ background: "var(--warn-bg)", border: "1px solid rgba(245, 158, 11, 0.3)", borderRadius: "var(--radius-sm)", padding: "14px 18px", display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
-            <AlertCircle size={20} color="var(--warn)" />
+          <div
+            style={{
+              background: "var(--warn-bg)",
+              border: "1px solid rgba(245, 158, 11, 0.3)",
+              borderRadius: "var(--radius-sm)",
+              padding: "12px 16px",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              marginBottom: "16px",
+            }}
+          >
+            <AlertCircle size={18} color="var(--warn)" style={{ flexShrink: 0 }} />
             <div>
-              <div style={{ fontWeight: 600, color: "var(--warn)" }}>Reconnecting soon...</div>
-              <div style={{ fontSize: "0.85rem", color: "var(--text)" }}>Next attempt in {status.retryInSeconds} seconds (staged linear backoff)</div>
+              <div style={{ fontWeight: 600, fontSize: "0.88rem", color: "var(--warn)" }}>
+                {t("reconnectingSoon")}
+              </div>
+              <div style={{ fontSize: "0.82rem", color: "var(--text)" }}>
+                {t("nextAttemptIn")} {status.retryInSeconds} {t("seconds")}
+              </div>
             </div>
           </div>
         ) : null}
 
         {/* Action Controls */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "12px" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
           {!isConnected ? (
             <button
               onClick={() => handleAction(api.startSession, t("starting"))}
               disabled={acting || state === "starting"}
               className="btn btn-primary"
             >
-              <Play size={16} />
+              <Play size={15} />
               <span>{t("start")}</span>
             </button>
           ) : (
@@ -86,7 +135,7 @@ export const ConnectionView: React.FC<ConnectionViewProps> = ({ status }) => {
               disabled={acting}
               className="btn btn-secondary"
             >
-              <Square size={16} />
+              <Square size={15} />
               <span>{t("stop")}</span>
             </button>
           )}
@@ -96,7 +145,7 @@ export const ConnectionView: React.FC<ConnectionViewProps> = ({ status }) => {
             disabled={acting}
             className="btn btn-secondary"
           >
-            <RefreshCw size={16} />
+            <RefreshCw size={15} />
             <span>{t("reconnect")}</span>
           </button>
 
@@ -105,7 +154,7 @@ export const ConnectionView: React.FC<ConnectionViewProps> = ({ status }) => {
             disabled={acting}
             className="btn btn-danger"
           >
-            <Unlink size={16} />
+            <Unlink size={15} />
             <span>{t("unlink")}</span>
           </button>
 
@@ -114,7 +163,7 @@ export const ConnectionView: React.FC<ConnectionViewProps> = ({ status }) => {
             disabled={acting}
             className="btn btn-secondary"
           >
-            <RotateCcw size={16} />
+            <RotateCcw size={15} />
             <span>{t("restart")}</span>
           </button>
         </div>
@@ -122,51 +171,91 @@ export const ConnectionView: React.FC<ConnectionViewProps> = ({ status }) => {
 
       {/* QR Code / Pairing Box */}
       {isWaitingQr && (
-        <div className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: "36px 24px" }}>
-          <div style={{ width: "48px", height: "48px", borderRadius: "50%", background: "var(--info-bg)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "16px" }}>
-            <QrCode size={26} color="var(--cyan)" />
+        <div
+          className="card"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            textAlign: "center",
+            padding: "28px 18px",
+          }}
+        >
+          <div
+            style={{
+              width: "44px",
+              height: "44px",
+              borderRadius: "50%",
+              background: "var(--info-bg)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: "14px",
+            }}
+          >
+            <QrCode size={24} color="var(--cyan)" />
           </div>
-          <h3 style={{ fontSize: "1.15rem", fontWeight: 700, marginBottom: "8px" }}>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "6px" }}>
             {t("waiting_for_qr")}
           </h3>
-          <p style={{ fontSize: "0.88rem", color: "var(--muted)", maxWidth: "450px", marginBottom: "24px" }}>
-            Open WhatsApp on your phone &gt; Settings &gt; Linked Devices &gt; Link a Device, and scan the QR code below.
+          <p
+            style={{
+              fontSize: "0.84rem",
+              color: "var(--muted)",
+              maxWidth: "420px",
+              marginBottom: "20px",
+            }}
+          >
+            {t("scanQrHint")}
           </p>
 
-          {status?.qr ? (
-            <div style={{ padding: "16px", background: "#ffffff", borderRadius: "12px", boxShadow: "var(--shadow)" }}>
+          {qrDataUrl ? (
+            <div
+              style={{
+                padding: "12px",
+                background: "#ffffff",
+                borderRadius: "12px",
+                boxShadow: "var(--shadow)",
+              }}
+            >
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(status.qr)}`}
+                src={qrDataUrl}
                 alt="WhatsApp QR Code"
-                style={{ display: "block", width: "260px", height: "260px" }}
+                style={{ display: "block", width: "240px", height: "240px" }}
               />
             </div>
           ) : status?.pairingCode ? (
-            <div style={{ background: "var(--panel-raised)", padding: "18px 24px", borderRadius: "12px", border: "1px solid var(--line)" }}>
-              <div style={{ fontSize: "0.8rem", color: "var(--muted)", marginBottom: "6px" }}>Pairing Code</div>
-              <div style={{ fontSize: "1.8rem", fontWeight: 800, letterSpacing: "0.15em", color: "var(--cyan)", fontFamily: "var(--font-mono)" }}>
+            <div
+              style={{
+                background: "var(--panel-raised)",
+                padding: "16px 20px",
+                borderRadius: "12px",
+                border: "1px solid var(--line)",
+              }}
+            >
+              <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginBottom: "6px" }}>
+                {t("pairingCode")}
+              </div>
+              <div
+                style={{
+                  fontSize: "1.6rem",
+                  fontWeight: 800,
+                  letterSpacing: "0.15em",
+                  color: "var(--cyan)",
+                  fontFamily: "var(--font-mono)",
+                  direction: "ltr",
+                }}
+              >
                 {status.pairingCode}
               </div>
             </div>
           ) : (
-            <div style={{ color: "var(--muted)", padding: "20px" }}>Generating QR code...</div>
+            <div style={{ color: "var(--muted)", fontSize: "0.86rem" }}>{t("starting")}</div>
           )}
         </div>
       )}
 
-      {isConnected && (
-        <div className="card" style={{ display: "flex", alignItems: "center", gap: "16px", background: "var(--ok-bg)", borderColor: "rgba(16, 185, 129, 0.25)" }}>
-          <CheckCircle2 size={24} color="var(--ok)" />
-          <div>
-            <div style={{ fontWeight: 700, color: "var(--ok)" }}>Bot is actively paired and online</div>
-            <div style={{ fontSize: "0.85rem", color: "var(--text)", marginTop: "2px" }}>
-              Messages, commands, and scheduled jobs are being delivered in real time.
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Unlink Confirmation Modal */}
+      {/* Confirm Unlink Modal */}
       <Modal
         isOpen={showUnlinkModal}
         onClose={() => setShowUnlinkModal(false)}
@@ -182,8 +271,9 @@ export const ConnectionView: React.FC<ConnectionViewProps> = ({ status }) => {
           </>
         }
       >
-        <p style={{ color: "var(--text)", fontSize: "0.92rem", lineHeight: "1.6" }}>
-          Are you sure you want to unlink this WhatsApp session? You will need to re-scan the QR code to connect again.
+        <p style={{ fontSize: "0.9rem", color: "var(--text)", lineHeight: "1.6" }}>
+          Are you sure you want to unlink this WhatsApp session? You will need to scan a new QR code
+          to reconnect.
         </p>
       </Modal>
     </div>

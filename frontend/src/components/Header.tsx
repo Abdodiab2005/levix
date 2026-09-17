@@ -1,8 +1,9 @@
 // file: frontend/src/components/Header.tsx
+
+import { Globe, LogOut, Menu, Moon, Sun } from "lucide-react";
 import React from "react";
-import { Menu, Globe, LogOut, Sun, Moon } from "lucide-react";
 import { useI18n } from "../context/I18nContext";
-import { SessionStatus } from "../types";
+import type { SessionStatus } from "../types";
 
 interface HeaderProps {
   onToggleMobileMenu: () => void;
@@ -10,11 +11,7 @@ interface HeaderProps {
   status: SessionStatus | null;
 }
 
-export const Header: React.FC<HeaderProps> = ({
-  onToggleMobileMenu,
-  title,
-  status,
-}) => {
+export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu, title, status }) => {
   const { language, setLanguage, t } = useI18n();
 
   const handleLanguageToggle = () => {
@@ -32,70 +29,56 @@ export const Header: React.FC<HeaderProps> = ({
     localStorage.setItem("levix_theme", nextTheme);
   };
 
-  const state = status?.state || "idle";
-  const stateClass =
-    state === "connected"
-      ? "badge-ok"
-      : state === "starting" || state === "linking" || state === "waiting_for_qr"
-      ? "badge-warn"
-      : state === "error" || state === "logged_out"
-      ? "badge-danger"
-      : "badge-info";
-
   return (
     <header className="top-header">
-      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+      <div className="header-left">
         <button
           onClick={onToggleMobileMenu}
-          className="btn btn-secondary btn-sm"
-          style={{ display: "none" }}
+          className="btn btn-secondary btn-icon"
           id="mobile-menu-btn"
-          aria-label="Open menu"
+          aria-label="Open navigation menu"
+          style={{ display: "none" }}
         >
-          <Menu size={20} />
+          <Menu size={19} />
         </button>
-        <h1 style={{ fontSize: "1.25rem", fontWeight: 700, letterSpacing: "-0.01em" }}>
+        <h1 className="header-title" title={title}>
           {title}
         </h1>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        {/* Status indicator */}
-        <div className={`badge ${stateClass}`}>
-          <span className="pulse-dot" />
-          <span>{t(state as any, state)}</span>
-        </div>
-
+      <div className="header-right">
         {/* Language switch */}
         <button
           onClick={handleLanguageToggle}
           className="btn btn-secondary btn-sm"
-          title="Switch Language (AR / EN)"
-          style={{ minWidth: "75px" }}
+          title={language === "ar" ? "Switch to English" : "التبديل إلى العربية"}
+          aria-label="Switch language"
+          id="btn-header-lang"
+          style={{ gap: "6px", padding: "6px 12px", minHeight: "34px", fontWeight: 700 }}
         >
-          <Globe size={15} />
-          <span>{language === "ar" ? "English" : "العربية"}</span>
+          <Globe size={16} color="var(--cyan)" />
+          <span style={{ fontSize: "0.82rem" }}>{language === "ar" ? "English" : "العربية"}</span>
         </button>
 
         {/* Theme toggle */}
         <button
           onClick={handleThemeToggle}
-          className="btn btn-secondary btn-sm"
+          className="btn btn-secondary btn-icon"
           title="Toggle Theme"
           aria-label="Toggle dark/light theme"
         >
-          {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
         </button>
 
         {/* Logout */}
         <form action="/logout" method="POST" style={{ margin: 0 }}>
           <button
             type="submit"
-            className="btn btn-secondary btn-sm"
+            className="btn btn-secondary btn-icon"
             title={t("logout")}
             aria-label="Sign out"
           >
-            <LogOut size={16} />
+            <LogOut size={15} className="icon-flip" />
           </button>
         </form>
       </div>

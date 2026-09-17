@@ -44,18 +44,31 @@ function resolveSttProvider() {
   if (active === "openai" && settings.get("openai_api_key")) {
     return "openai";
   }
-  return settings.get("gemini_api_key") ? "gemini" : (settings.get("openai_api_key") ? "openai" : "gemini");
+  return settings.get("gemini_api_key")
+    ? "gemini"
+    : settings.get("openai_api_key")
+      ? "openai"
+      : "gemini";
 }
 
 async function transcribeWithOpenAi(audioBuffer, mimetype) {
   const apiKey = settings.get("openai_api_key");
   if (!apiKey) throw new Error("مفتاح OpenAI / Groq غير مضبوط في الإعدادات");
-  const baseUrl = String(settings.get("openai_base_url") || "https://api.openai.com/v1").replace(/\/+$/, "");
+  const baseUrl = String(settings.get("openai_base_url") || "https://api.openai.com/v1").replace(
+    /\/+$/,
+    "",
+  );
   const model = settings.get("openai_stt_model") || "whisper-large-v3";
 
   const formData = new FormData();
   const mime = mimetype || "audio/ogg";
-  const ext = mime.includes("mp4") ? "m4a" : mime.includes("mp3") ? "mp3" : mime.includes("wav") ? "wav" : "ogg";
+  const ext = mime.includes("mp4")
+    ? "m4a"
+    : mime.includes("mp3")
+      ? "mp3"
+      : mime.includes("wav")
+        ? "wav"
+        : "ogg";
   const blob = new Blob([audioBuffer], { type: mime });
   formData.append("file", blob, `audio.${ext}`);
   formData.append("model", model);
@@ -95,8 +108,7 @@ module.exports = {
     // Check if message has audio or if it's a reply to an audio message
     const audioMessage =
       msg.message?.audioMessage ||
-      msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
-        ?.audioMessage;
+      msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.audioMessage;
 
     if (!audioMessage) {
       return await sock.sendMessage(chatId, {
@@ -117,19 +129,13 @@ module.exports = {
     let tempAudioPath = null;
 
     // One message, edited from "transcribing" into the transcript itself.
-    const status = await createStatus(
-      sock,
-      chatId,
-      "🎧 جاري تحويل الصوت إلى نص...",
-      { replyTo: msg },
-    );
+    const status = await createStatus(sock, chatId, "🎧 جاري تحويل الصوت إلى نص...", {
+      replyTo: msg,
+    });
 
     try {
       // Download audio content
-      const audioBuffer = await downloadContentFromMessage(
-        audioMessage,
-        "audio"
-      );
+      const audioBuffer = await downloadContentFromMessage(audioMessage, "audio");
 
       let transcription = "";
       if (provider === "openai" && hasOpenAi) {
@@ -198,14 +204,11 @@ module.exports = {
 
       // Provide more specific error messages
       if (error.message?.includes("quota")) {
-        errorMessage +=
-          "\n\nتم تجاوز الحد المجاني. حاول مرة أخرى لاحقاً.";
+        errorMessage += "\n\nتم تجاوز الحد المجاني. حاول مرة أخرى لاحقاً.";
       } else if (error.message?.includes("API key")) {
-        errorMessage +=
-          "\n\nخطأ في مفتاح API. تواصل مع المطور.";
+        errorMessage += "\n\nخطأ في مفتاح API. تواصل مع المطور.";
       } else if (error.message?.includes("upload")) {
-        errorMessage +=
-          "\n\nفشل رفع الملف الصوتي. حاول مرة أخرى.";
+        errorMessage += "\n\nفشل رفع الملف الصوتي. حاول مرة أخرى.";
       }
 
       await status.finish(errorMessage);
@@ -218,7 +221,7 @@ module.exports = {
         } catch (cleanupErr) {
           logger.warn(
             { err: cleanupErr },
-            `[STT] Failed to delete temporary file: ${tempAudioPath}`
+            `[STT] Failed to delete temporary file: ${tempAudioPath}`,
           );
         }
       }

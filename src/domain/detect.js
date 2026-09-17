@@ -170,4 +170,4 @@ export async function checkDns(system, domain) {
   return { status: matches ? "ok" : "elsewhere", resolved, mine };
 }
 
-export { PANELS, KNOWN_WEB_SERVERS };
+export { KNOWN_WEB_SERVERS, PANELS };

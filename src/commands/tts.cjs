@@ -27,7 +27,7 @@ const { ffmpegPath } = require("../utils/thumbnail.cjs");
 function tmpPath(ext) {
   return path.join(
     os.tmpdir(),
-    `wa-bot-tts-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+    `wa-bot-tts-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`,
   );
 }
 
@@ -72,7 +72,7 @@ async function transcodeWithEncoder(bin, encoder, mp3Path, oggPath) {
       "ogg",
       oggPath,
     ],
-    { windowsHide: true, timeout: 30_000 }
+    { windowsHide: true, timeout: 30_000 },
   );
 }
 
@@ -100,7 +100,7 @@ async function transcodeToOpus(mp3Path) {
 
   logger.warn(
     { err: lastError?.message, bin },
-    "[TTS] ffmpeg transcode failed — will fall back to raw MP3"
+    "[TTS] ffmpeg transcode failed — will fall back to raw MP3",
   );
   return null;
 }
@@ -117,10 +117,8 @@ module.exports = {
 
     let textToConvert = args.join(" ");
     const quotedMsg =
-      msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
-        ?.conversation ||
-      msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
-        ?.extendedTextMessage?.text;
+      msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.conversation ||
+      msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.extendedTextMessage?.text;
 
     if (!textToConvert && quotedMsg) textToConvert = quotedMsg;
 
@@ -129,10 +127,9 @@ module.exports = {
         sock,
         chatId,
         {
-          text:
-            "📢 الاستخدام:\n!tts <النص>\n\nأو رد على رسالة نصية بالأمر !tts\n\n✨ مجاني تماماً - بدون تكاليف!",
+          text: "📢 الاستخدام:\n!tts <النص>\n\nأو رد على رسالة نصية بالأمر !tts\n\n✨ مجاني تماماً - بدون تكاليف!",
         },
-        { replyTo: msg }
+        { replyTo: msg },
       );
     }
 
@@ -152,10 +149,7 @@ module.exports = {
       try {
         oggPath = await transcodeToOpus(mp3Path);
       } catch (err) {
-        logger.warn(
-          { err: err?.message },
-          "[TTS] Opus transcode failed, will fall back to MP3"
-        );
+        logger.warn({ err: err?.message }, "[TTS] Opus transcode failed, will fall back to MP3");
         oggPath = null;
       }
 
@@ -169,7 +163,7 @@ module.exports = {
             mimetype: "audio/ogg; codecs=opus",
             ptt: true,
           },
-          { replyTo: msg, typing: false }
+          { replyTo: msg, typing: false },
         );
       } else {
         // Fallback: send the raw MP3 with the correct mimetype. Cannot be
@@ -183,7 +177,7 @@ module.exports = {
             mimetype: "audio/mpeg",
             ptt: false,
           },
-          { replyTo: msg, typing: false }
+          { replyTo: msg, typing: false },
         );
       }
 

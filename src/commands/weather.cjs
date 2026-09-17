@@ -28,12 +28,9 @@ module.exports = {
     const API_URL = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric&lang=ar`;
 
     // One message: it starts as "looking it up" and turns into the forecast.
-    const status = await createStatus(
-      sock,
-      msg.key.remoteJid,
-      `🔍 بدور على طقس ${city}...`,
-      { replyTo: msg },
-    );
+    const status = await createStatus(sock, msg.key.remoteJid, `🔍 بدور على طقس ${city}...`, {
+      replyTo: msg,
+    });
 
     try {
       const response = await axios.get(API_URL);
@@ -60,15 +57,11 @@ module.exports = {
       // التعامل مع الأخطاء
       if (error.response && error.response.status === 404) {
         // خطأ 404 يعني أن المدينة غير موجودة
-        await status.finish(
-          `لم أتمكن من العثور على مدينة باسم "${city}". يرجى التحقق من الاسم.`,
-        );
+        await status.finish(`لم أتمكن من العثور على مدينة باسم "${city}". يرجى التحقق من الاسم.`);
       } else if (error.response && error.response.status === 401) {
         // خطأ 401 يعني أن مفتاح الـ API غير صالح
         logger.error("[Error] Invalid API Key for OpenWeatherMap.");
-        await status.finish(
-          `حدث خطأ في المصادقة مع خدمة الطقس. يرجى مراجعة مفتاح الـ API.`,
-        );
+        await status.finish(`حدث خطأ في المصادقة مع خدمة الطقس. يرجى مراجعة مفتاح الـ API.`);
       } else {
         // أي أخطاء أخرى
         logger.error(error.message, "[Error] in Weather API:");

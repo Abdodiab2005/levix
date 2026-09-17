@@ -1,11 +1,9 @@
-import { require, section, ok, equal, finish } from "./harness.mjs";
+import { equal, finish, ok, require, section } from "./harness.mjs";
 
 const { PanelSessionStore } = require("./src/panel/session-store.cjs");
 
 const call = (fn) =>
-  new Promise((resolve, reject) =>
-    fn((error, value) => (error ? reject(error) : resolve(value)))
-  );
+  new Promise((resolve, reject) => fn((error, value) => (error ? reject(error) : resolve(value))));
 
 const set = (store, sid, sess) => call((done) => store.set(sid, sess, done));
 const get = (store, sid) => call((done) => store.get(sid, done));

@@ -77,7 +77,7 @@ export async function bootstrapPanel({ core } = {}) {
           `Port ${port} is already taken.\n\n` +
             `  Levix is probably already running — open http://localhost:${port}/ and\n` +
             `  check. If something else owns the port, change it in the control panel\n` +
-            `  under Settings -> Server, or start with a different one.`
+            `  under Settings -> Server, or start with a different one.`,
         );
         friendly.code = "EADDRINUSE";
         return reject(friendly);
@@ -119,9 +119,7 @@ export function resolveBindAddress() {
 /** The address a person should type, given how this install is reachable. */
 export function panelUrl({ port, firstRun = false } = {}) {
   const domain = settings.get("public_domain");
-  const host =
-    domain ||
-    (isAndroidHost() ? "127.0.0.1" : "localhost");
+  const host = domain || (isAndroidHost() ? "127.0.0.1" : "localhost");
   const base = domain ? `https://${host}` : `http://${host}:${port}`;
   return firstRun ? `${base}/setup` : base;
 }

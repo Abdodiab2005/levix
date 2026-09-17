@@ -120,15 +120,14 @@ async function captureContextEntry(msg, args) {
 
   const m = msg.message || {};
 
-  const directMedia =
-    m.imageMessage || m.videoMessage || m.audioMessage || m.documentMessage;
+  const directMedia = m.imageMessage || m.videoMessage || m.audioMessage || m.documentMessage;
   if (directMedia) {
     try {
       await processIncomingMedia(entry.mediaParts, directMedia);
     } catch (err) {
       logger.warn(
         { err: err?.message },
-        "[Gemini Context] direct media upload failed; entry will be text-only"
+        "[Gemini Context] direct media upload failed; entry will be text-only",
       );
     }
   }
@@ -143,17 +142,14 @@ async function captureContextEntry(msg, args) {
       quoted.documentMessage?.caption ||
       "";
     const quotedMedia =
-      quoted.imageMessage ||
-      quoted.videoMessage ||
-      quoted.audioMessage ||
-      quoted.documentMessage;
+      quoted.imageMessage || quoted.videoMessage || quoted.audioMessage || quoted.documentMessage;
     if (quotedMedia) {
       try {
         await processIncomingMedia(entry.quotedMediaParts, quotedMedia);
       } catch (err) {
         logger.warn(
           { err: err?.message },
-          "[Gemini Context] quoted media upload failed; entry will continue without it"
+          "[Gemini Context] quoted media upload failed; entry will continue without it",
         );
       }
     }
@@ -163,9 +159,7 @@ async function captureContextEntry(msg, args) {
 }
 
 function entryHasContent(e) {
-  return Boolean(
-    e.text || e.quotedText || e.mediaParts?.length || e.quotedMediaParts?.length
-  );
+  return Boolean(e.text || e.quotedText || e.mediaParts?.length || e.quotedMediaParts?.length);
 }
 
 function buildPartsFromBuffer(entries) {
@@ -186,13 +180,11 @@ function summarizeEntry(e, idx) {
     bits.push(`📝 ${preview}`);
   }
   if (e.quotedText) {
-    const preview =
-      e.quotedText.length > 40 ? e.quotedText.slice(0, 40) + "…" : e.quotedText;
+    const preview = e.quotedText.length > 40 ? e.quotedText.slice(0, 40) + "…" : e.quotedText;
     bits.push(`↩️ "${preview}"`);
   }
   if (e.mediaParts?.length) bits.push(`🖼️ ميديا (${e.mediaParts.length})`);
-  if (e.quotedMediaParts?.length)
-    bits.push(`🖼️↩️ ميديا مقتبسة (${e.quotedMediaParts.length})`);
+  if (e.quotedMediaParts?.length) bits.push(`🖼️↩️ ميديا مقتبسة (${e.quotedMediaParts.length})`);
   return `${idx + 1}. ${bits.join(" · ") || "(فارغة)"}`;
 }
 
@@ -210,11 +202,7 @@ module.exports = {
     const userName = msg.pushName;
     const isGroup = chatId.endsWith("@g.us");
 
-    const senderId = msg.key.fromMe
-      ? null
-      : isGroup
-      ? msg.key.participant
-      : msg.key.remoteJid;
+    const senderId = msg.key.fromMe ? null : isGroup ? msg.key.participant : msg.key.remoteJid;
     const isOwner = msg.key.fromMe || isOwnerJidSync(senderId);
     // نفس تعريف "privileged" في أمر !memory: أدمن البوت أو أدمن الجروب —
     // عشان أدوات الوكيل تطبّق نفس القاعدة اللي الأوامر بتطبّقها.
@@ -241,8 +229,8 @@ module.exports = {
     const subCommand = aliasSubCmds.has(invoked)
       ? invoked
       : inlineSubCmds.has(candidateInline)
-      ? candidateInline
-      : null;
+        ? candidateInline
+        : null;
 
     // --- conversation history management (owner only) ---
     if (subCommand === "del" || subCommand === "resetai") {
@@ -251,7 +239,7 @@ module.exports = {
           sock,
           chatId,
           { text: "🚫 هذا الأمر مخصص للمالك فقط." },
-          { replyTo: msg }
+          { replyTo: msg },
         );
       await deleteChatHistoryAsync(chatId);
       return sendBotMessage(
@@ -262,7 +250,7 @@ module.exports = {
             "✅ تم مسح سجل المحادثة.\n" +
             "_(الذاكرة الدائمة مش بتتمسح كده — استخدم `!memory clear` لو ده اللي تقصده.)_",
         },
-        { replyTo: msg }
+        { replyTo: msg },
       );
     }
     if (subCommand === "delall") {
@@ -271,21 +259,20 @@ module.exports = {
           sock,
           chatId,
           { text: "🚫 هذا الأمر مخصص للمالك فقط." },
-          { replyTo: msg }
+          { replyTo: msg },
         );
       await deleteAllChatHistoriesAsync();
       return sendBotMessage(
         sock,
         chatId,
         { text: "✅ تم مسح كل سجلات المحادثات بنجاح." },
-        { replyTo: msg }
+        { replyTo: msg },
       );
     }
 
     // --- image generation ---
     if (subCommand === "generate") {
-      const quotedMsg =
-        msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.conversation;
+      const quotedMsg = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.conversation;
       const imagePromptArgs = invoked === "generate" ? args : args.slice(1);
       const imagePrompt = imagePromptArgs.join(" ");
       if (!imagePrompt && !quotedMsg) {
@@ -295,32 +282,25 @@ module.exports = {
           {
             text: "اكتب وصف للصورة اللي عايزها بعد الأمر. مثال: !generate قطة ترتدي قبعة",
           },
-          { replyTo: msg }
+          { replyTo: msg },
         );
       }
 
-      const status = await createStatus(
-        sock,
-        chatId,
-        "🎨 بجهّز الصورة...",
-        { replyTo: msg }
-      );
+      const status = await createStatus(sock, chatId, "🎨 بجهّز الصورة...", { replyTo: msg });
 
       try {
         // Image generation needs a model that returns image bytes, which only
         // the Gemini image models do — it stays on Gemini whatever the chat
         // provider is.
         if (!geminiClients().genAI) {
-          throw new Error(
-            "مفتاح Gemini API غير معرف — توليد الصور يعمل على Gemini فقط"
-          );
+          throw new Error("مفتاح Gemini API غير معرف — توليد الصور يعمل على Gemini فقط");
         }
         const fullPrompt =
           imagePrompt && quotedMsg
             ? `Prompt: ${imagePrompt} ,using quote: ${quotedMsg}`
             : imagePrompt
-            ? `Prompt: ${imagePrompt}`
-            : `Prompt: ${quotedMsg}`;
+              ? `Prompt: ${imagePrompt}`
+              : `Prompt: ${quotedMsg}`;
         const response = await geminiClients().genAI.models.generateContent({
           model: settings.get("gemini_image_model"),
           contents: `Generate an image using this prompt: ${fullPrompt}`,
@@ -330,7 +310,7 @@ module.exports = {
         // `fileData.data`, which is not a field that exists on either SDK —
         // this path could never have produced an image.)
         const image = (response.candidates?.[0]?.content?.parts || []).find(
-          (part) => part?.inlineData?.data
+          (part) => part?.inlineData?.data,
         );
         if (!image) throw new Error("الموديل رجّع رد من غير صورة");
         const imageBuffer = Buffer.from(image.inlineData.data, "base64");
@@ -343,7 +323,7 @@ module.exports = {
             image: imageBuffer,
             caption: `🖼️ تفضل، صورة لـ: "${imagePrompt}"`,
           },
-          { replyTo: msg }
+          { replyTo: msg },
         );
       } catch (error) {
         logger.error({ err: error }, `Error in !generate command`);
@@ -364,7 +344,7 @@ module.exports = {
               "📭 مفيش حاجة أضيفها للـ context.\n\n" +
               "اكتب نص بعد الأمر، أو رد على رسالة، أو ابعت ميديا مع كابشن `!gemini add`.",
           },
-          { replyTo: msg }
+          { replyTo: msg },
         );
       }
       const buf = getBuffer(msg);
@@ -378,7 +358,7 @@ module.exports = {
             `✅ اتضافت للـ context. (إجمالي الآن: *${buf.length}*)\n\n` +
             "كمل بـ `!gemini add ...` ، أو ابعت كله بـ `!gemini send`.",
         },
-        { replyTo: msg }
+        { replyTo: msg },
       );
     }
 
@@ -389,11 +369,9 @@ module.exports = {
         sock,
         chatId,
         {
-          text: had
-            ? `🗑️ تم مسح *${had}* رسالة من الـ context.`
-            : "📭 الـ context كان فاضي أصلاً.",
+          text: had ? `🗑️ تم مسح *${had}* رسالة من الـ context.` : "📭 الـ context كان فاضي أصلاً.",
         },
-        { replyTo: msg }
+        { replyTo: msg },
       );
     }
 
@@ -404,7 +382,7 @@ module.exports = {
           sock,
           chatId,
           { text: "📭 الـ context فاضي. ابدأ بـ `!gemini add ...`." },
-          { replyTo: msg }
+          { replyTo: msg },
         );
       }
       return sendBotMessage(
@@ -416,7 +394,7 @@ module.exports = {
             buf.map((e, i) => summarizeEntry(e, i)).join("\n") +
             "\n\nابعت كله بـ `!gemini send` أو امسحه بـ `!gemini clear`.",
         },
-        { replyTo: msg }
+        { replyTo: msg },
       );
     }
 
@@ -438,7 +416,7 @@ module.exports = {
               "📭 الـ context فاضي ومفيش نص في `!gemini send`.\n\n" +
               "ابدأ بـ `!gemini add ...` الأول، أو اكتب نص مع `!gemini send ...`.",
           },
-          { replyTo: msg }
+          { replyTo: msg },
         );
       }
       setBuffer(msg, []);
@@ -452,18 +430,13 @@ module.exports = {
       try {
         await processIncomingMedia(parts, mediaMessage);
         parts.push({
-          text:
-            prompt || mediaMessage.caption || "ماذا يوجد في هذه الصورة/الفيديو؟",
+          text: prompt || mediaMessage.caption || "ماذا يوجد في هذه الصورة/الفيديو؟",
         });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload media to Gemini.");
-        return sendBotError(
-          sock,
-          chatId,
-          error,
-          "حصلت مشكلة في رفع الصورة/الفيديو",
-          { replyTo: msg }
-        );
+        return sendBotError(sock, chatId, error, "حصلت مشكلة في رفع الصورة/الفيديو", {
+          replyTo: msg,
+        });
       }
     } else if (!parts.length && msg.message?.audioMessage) {
       try {
@@ -471,13 +444,9 @@ module.exports = {
         parts.push({ text: prompt || "حلل لي هذا التسجيل الصوتي." });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload audio to Gemini.");
-        return sendBotError(
-          sock,
-          chatId,
-          error,
-          "حصلت مشكلة في رفع التسجيل الصوتي",
-          { replyTo: msg }
-        );
+        return sendBotError(sock, chatId, error, "حصلت مشكلة في رفع التسجيل الصوتي", {
+          replyTo: msg,
+        });
       }
     } else if (!parts.length && msg.message?.documentMessage) {
       try {
@@ -485,9 +454,7 @@ module.exports = {
         const fileName = msg.message.documentMessage.fileName || "document";
         const text = prompt || msg.message.documentMessage.caption || "";
         parts.push({
-          text: text
-            ? `${text}\n(الملف: ${fileName})`
-            : `حلل/لخّص الملف: ${fileName}`,
+          text: text ? `${text}\n(الملف: ${fileName})` : `حلل/لخّص الملف: ${fileName}`,
         });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload document to Gemini.");
@@ -504,16 +471,14 @@ module.exports = {
         sock,
         chatId,
         { text: "يرجى كتابة سؤال أو إرسال صورة/فيديو/تسجيل صوتي/ملف مع الأمر." },
-        { replyTo: msg }
+        { replyTo: msg },
       );
     }
 
     // Quoted message context. Skipped for `!gemini send` — those entries
     // captured their own quotes at `add` time.
     const quotedMsg =
-      subCommand === "send"
-        ? null
-        : msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+      subCommand === "send" ? null : msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
 
     if (quotedMsg) {
       let quotedMediaPart = null;
@@ -535,13 +500,9 @@ module.exports = {
           quotedMediaPart = probeParts[0];
         } catch (mediaError) {
           logger.error({ err: mediaError }, "Failed to process quoted media");
-          await sendBotError(
-            sock,
-            chatId,
-            mediaError,
-            "حصلت مشكلة في الرسالة المقتبسة",
-            { replyTo: msg }
-          );
+          await sendBotError(sock, chatId, mediaError, "حصلت مشكلة في الرسالة المقتبسة", {
+            replyTo: msg,
+          });
         }
       }
 
@@ -568,7 +529,7 @@ module.exports = {
         {
           text: `خطأ في الإعدادات: مفتاح مزود الذكاء الاصطناعي الحالي (${activeProvider.label || activeProvider.id}) غير معرف — عدّله من لوحة التحكم.`,
         },
-        { replyTo: msg }
+        { replyTo: msg },
       );
     }
 
@@ -589,10 +550,9 @@ module.exports = {
 
     // Mentions/replies are ids the model can't invent — hand them over so
     // "اعمل الراجل ده أدمن" has something concrete to act on.
-    const targets = [
-      ...(agentContext.mentionedJids || []),
-      agentContext.quotedParticipant,
-    ].filter(Boolean);
+    const targets = [...(agentContext.mentionedJids || []), agentContext.quotedParticipant].filter(
+      Boolean,
+    );
     if (targets.length) {
       parts.unshift({
         text: `(معرفات مذكورة في الرسالة: ${[...new Set(targets)].join(", ")})`,
@@ -631,14 +591,12 @@ module.exports = {
         const cleaned = sanitizeHistoryForFiles(oldHistory);
         await saveChatHistoryAsync(chatId, cleaned);
         logger.info(
-          `[Gemini] sanitized history for chat ${chatId}: ${oldHistory.length} -> ${cleaned.length}; retrying once`
+          `[Gemini] sanitized history for chat ${chatId}: ${oldHistory.length} -> ${cleaned.length}; retrying once`,
         );
         result = await attempt(cleaned);
       }
 
-      const text =
-        result.text?.trim() ||
-        "مفيش رد جه من الموديل. جرّب تصيغ السؤال بشكل تاني.";
+      const text = result.text?.trim() || "مفيش رد جه من الموديل. جرّب تصيغ السؤال بشكل تاني.";
       // Appended only when Gemini really grounded the answer on a search —
       // formatSources() returns "" for an answer the model gave from its own
       // knowledge, so there is never a Sources block with nothing behind it.

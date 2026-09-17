@@ -1,0 +1,79 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "src/**",
+      "frontend/src/**",
+      "tests/**",
+      "scripts/**",
+      "*.cjs",
+      "*.js",
+      "*.mjs",
+      "*.json",
+      "!public/dashboard",
+      "!public/*.min.js",
+      "!tests/fixtures",
+      "!android",
+      "!data",
+      "!dist",
+      "!build"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "a11y": {
+        "useButtonType": "warn",
+        "noLabelWithoutControl": "warn",
+        "noStaticElementInteractions": "warn",
+        "useKeyWithClickEvents": "warn"
+      },
+      "correctness": {
+        "noNodejsModules": "off",
+        "noUnusedImports": "warn",
+        "noUnusedVariables": "warn",
+        "useExhaustiveDependencies": "warn"
+      },
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noArrayIndexKey": "warn",
+        "noAssignInExpressions": "warn",
+        "noDuplicateProperties": "off"
+      },
+      "style": {
+        "noNonNullAssertion": "warn",
+        "useNodejsImportProtocol": "off"
+      },
+      "complexity": {
+        "noForEach": "off",
+        "noImportantStyles": "off"
+      }
+    }
+  },
+  "css": {
+    "formatter": {
+      "enabled": true
+    },
+    "linter": {
+      "enabled": true
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always"
+    }
+  }
+}

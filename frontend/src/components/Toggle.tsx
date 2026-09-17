@@ -1,5 +1,5 @@
 // file: frontend/src/components/Toggle.tsx
-import React from "react";
+import type React from "react";
 
 interface ToggleProps {
   checked: boolean;
@@ -21,11 +21,21 @@ export const Toggle: React.FC<ToggleProps> = ({
   const toggleId = id || `toggle-${Math.random().toString(36).slice(2, 8)}`;
 
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "16px",
+      }}
+    >
       {(label || description) && (
         <div>
           {label && (
-            <label htmlFor={toggleId} style={{ fontWeight: 600, fontSize: "0.92rem", cursor: "pointer", display: "block" }}>
+            <label
+              htmlFor={toggleId}
+              style={{ fontWeight: 600, fontSize: "0.92rem", cursor: "pointer", display: "block" }}
+            >
               {label}
             </label>
           )}

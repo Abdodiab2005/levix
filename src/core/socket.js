@@ -1,17 +1,14 @@
-import { makeWASocket } from '@whiskeysockets/baileys';
-import NodeCache from 'node-cache';
-import {
-  getBaileysConfig,
-  setRecentMessageGetter,
-} from '../config/baileys.config.js';
-import { CACHE_CONFIG } from '../config/constants.js';
-import { useDatabaseAuthState } from '../auth/use-database-auth-state.js';
-import { getMessageFromRecent } from '../utils/recentMessageCache.esm.js';
-import { createRequire } from 'module';
+import { makeWASocket } from "@whiskeysockets/baileys";
+import { createRequire } from "module";
+import NodeCache from "node-cache";
+import { useDatabaseAuthState } from "../auth/use-database-auth-state.js";
+import { getBaileysConfig, setRecentMessageGetter } from "../config/baileys.config.js";
+import { CACHE_CONFIG } from "../config/constants.js";
+import { getMessageFromRecent } from "../utils/recentMessageCache.esm.js";
 
 const require = createRequire(import.meta.url);
-const logger = require('../utils/logger.cjs');
-const { withMediaThumbnail } = require('../utils/thumbnail.cjs');
+const logger = require("../utils/logger.cjs");
+const { withMediaThumbnail } = require("../utils/thumbnail.cjs");
 
 // Group metadata cache
 export const groupMetadataCache = new NodeCache(CACHE_CONFIG);
@@ -36,7 +33,7 @@ function withThumbnailSupport(sock) {
     try {
       payload = await withMediaThumbnail(content);
     } catch (err) {
-      logger.debug({ err: err?.message }, '[Socket] thumbnail step skipped');
+      logger.debug({ err: err?.message }, "[Socket] thumbnail step skipped");
       payload = content;
     }
     return original(jid, payload, options);
@@ -58,7 +55,7 @@ export async function createWhatsAppSocket({ proxy = null, pairingCode = false }
   logger.info(
     proxy
       ? `[Socket] Initializing WhatsApp socket through ${proxy.label}`
-      : '[Socket] Initializing WhatsApp socket with database auth'
+      : "[Socket] Initializing WhatsApp socket with database auth",
   );
 
   const { state, saveCreds, clearAll } = await useDatabaseAuthState();
@@ -90,7 +87,7 @@ export async function createWhatsAppSocket({ proxy = null, pairingCode = false }
     makeWASocket({
       auth: state,
       ...config,
-    })
+    }),
   );
 
   return { sock, saveCreds, clearAll, isPaired };

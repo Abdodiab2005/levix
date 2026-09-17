@@ -10,6 +10,13 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
+FROM node:24-slim AS frontend-builder
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json ./frontend/
+RUN cd frontend && npm ci
+COPY frontend ./frontend
+RUN cd frontend && npm run build
+
 FROM node:24-slim
 WORKDIR /app
 
@@ -23,6 +30,7 @@ COPY bin ./bin
 COPY src ./src
 COPY views ./views
 COPY public ./public
+COPY --from=frontend-builder /app/public/dashboard ./public/dashboard
 COPY app.cjs scheduler.cjs ./
 
 # The database, the WhatsApp session, the memory files, the logs.

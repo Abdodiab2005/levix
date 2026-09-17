@@ -37,8 +37,7 @@ equal("without the Android marker, empty bind is every interface", resolveBindAd
 const indexSrc = readFileSync(new URL("../src/index.js", import.meta.url), "utf8");
 ok(
   "Android panel bind failure keeps the process up",
-  /Panel failed/.test(indexSrc) &&
-    /LEVIX_ANDROID === "1"[\s\S]{0,400}Levix ready/.test(indexSrc),
+  /Panel failed/.test(indexSrc) && /LEVIX_ANDROID === "1"[\s\S]{0,400}Levix ready/.test(indexSrc),
 );
 ok("desktop panel bind failure still exits", /process\.exit\(1\)/.test(indexSrc));
 

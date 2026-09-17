@@ -7,13 +7,12 @@
 //
 // The bot itself never needs root. This command may, and says so when it does.
 
-import readline from "node:readline/promises";
 import { createRequire } from "node:module";
-
-import { createSystem } from "./system.js";
-import { inspect, classify, checkDns } from "./detect.js";
-import * as nginx from "./nginx.js";
+import readline from "node:readline/promises";
 import * as caddy from "./caddy.js";
+import { checkDns, classify, inspect } from "./detect.js";
+import * as nginx from "./nginx.js";
+import { createSystem } from "./system.js";
 
 const require = createRequire(import.meta.url);
 const settings = require("../config/settings.cjs");
@@ -29,15 +28,15 @@ const DOMAIN_PATTERN = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-)
 
 /** Short, reliable guidance per panel. No panel APIs — just where to click. */
 const PANEL_HINTS = {
-  "CloudPanel": 'Sites → Add Site → Reverse Proxy, then "SSL/TLS → Let\'s Encrypt".',
-  "Plesk": "Domains → Hosting & DNS → Apache & nginx Settings → additional nginx directives.",
+  CloudPanel: 'Sites → Add Site → Reverse Proxy, then "SSL/TLS → Let\'s Encrypt".',
+  Plesk: "Domains → Hosting & DNS → Apache & nginx Settings → additional nginx directives.",
   "cPanel / WHM": "WHM → Apache → Reverse Proxy (or ProxyPass in an include file).",
-  "CyberPanel": "Websites → Manage → vHost Conf, then Issue SSL.",
-  "aaPanel": "Website → Settings → Reverse proxy, then Let's Encrypt under SSL.",
-  "HestiaCP": "Web → Edit domain → Proxy Template, then enable Let's Encrypt.",
-  "ISPConfig": "Sites → Options → nginx Directives.",
-  "Coolify": "Add a service pointing at the host port, and let Coolify terminate TLS.",
-  "Dokploy": "Create an application/domain entry pointing at the host port.",
+  CyberPanel: "Websites → Manage → vHost Conf, then Issue SSL.",
+  aaPanel: "Website → Settings → Reverse proxy, then Let's Encrypt under SSL.",
+  HestiaCP: "Web → Edit domain → Proxy Template, then enable Let's Encrypt.",
+  ISPConfig: "Sites → Options → nginx Directives.",
+  Coolify: "Add a service pointing at the host port, and let Coolify terminate TLS.",
+  Dokploy: "Create an application/domain entry pointing at the host port.",
   "Virtualmin / Webmin": "Services → Configure Website → Edit Directives.",
 };
 
@@ -108,7 +107,11 @@ export async function runDomainCommand({ domain = null, assumeYes = false, syste
     cross("No domain given. Try: levix domain bot.example.com");
     return 1;
   }
-  name = name.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  name = name
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/.*$/, "");
 
   if (!DOMAIN_PATTERN.test(name)) {
     cross(`"${name}" doesn't look like a domain name.`);
@@ -189,7 +192,9 @@ function printFindings(report) {
   line(`  Found: ${found.length ? found.join(", ") : "no web server"}`);
   for (const port of [80, 443]) {
     const state = report.ports[port];
-    line(`  Port ${port}: ${state.taken ? `in use by ${state.process || "an unknown process"}` : "free"}`);
+    line(
+      `  Port ${port}: ${state.taken ? `in use by ${state.process || "an unknown process"}` : "free"}`,
+    );
   }
   line();
 }
@@ -223,7 +228,7 @@ async function confirmDns(sys, name, { assumeYes }) {
   cross(
     dnsCheck.status === "unresolved"
       ? `${name} does not resolve yet.`
-      : `${name} resolves to ${dnsCheck.resolved.v4.join(", ") || dnsCheck.resolved.v6.join(", ")}, not to this server.`
+      : `${name} resolves to ${dnsCheck.resolved.v4.join(", ") || dnsCheck.resolved.v6.join(", ")}, not to this server.`,
   );
   line();
   line("  Add this DNS record:");
@@ -264,7 +269,12 @@ async function configureNginx(sys, { name, port, report, assumeYes }) {
   if (!applied.ok) {
     cross("nginx rejected the configuration — nothing was reloaded.");
     line();
-    line(applied.error.split("\n").map((l) => `    ${l}`).join("\n"));
+    line(
+      applied.error
+        .split("\n")
+        .map((l) => `    ${l}`)
+        .join("\n"),
+    );
     line();
     line("  The previous state has been restored.");
     return 1;
@@ -284,7 +294,13 @@ async function configureNginx(sys, { name, port, report, assumeYes }) {
       } else {
         cross("certbot failed — the site is up over HTTP.");
         line();
-        line(cert.error.split("\n").slice(0, 8).map((l) => `    ${l}`).join("\n"));
+        line(
+          cert.error
+            .split("\n")
+            .slice(0, 8)
+            .map((l) => `    ${l}`)
+            .join("\n"),
+        );
         line();
       }
     }
@@ -348,7 +364,12 @@ async function configureCaddy(sys, { name, port, report, assumeYes, install }) {
   if (!applied.ok) {
     cross("Caddy rejected the configuration — nothing was reloaded.");
     line();
-    line(applied.error.split("\n").map((l) => `    ${l}`).join("\n"));
+    line(
+      applied.error
+        .split("\n")
+        .map((l) => `    ${l}`)
+        .join("\n"),
+    );
     line();
     return 1;
   }

@@ -16,8 +16,7 @@ module.exports = {
     if (!isGroup && args.length === 0) {
       targetJid = remoteJid;
     } else {
-      const mentionedJid =
-        msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+      const mentionedJid = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
       const numberArg = args[0];
 
       if (mentionedJid) {
@@ -45,10 +44,7 @@ module.exports = {
       //   mentions: [normalizedTargetJid],
       // });
     } catch (error) {
-      logger.error(
-        { err: error, command: "unblock" },
-        "Error in !unblock command"
-      );
+      logger.error({ err: error, command: "unblock" }, "Error in !unblock command");
       await sock.sendMessage(remoteJid, {
         text: "حدث خطأ أثناء محاولة فك حظر المستخدم.",
       });

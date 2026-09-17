@@ -1,16 +1,14 @@
 // file: /commands/group/antilink.js
 const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
-const {
-  isOwnerJidSync,
-  isAdminInGroupSync,
-} = require("../../utils/permissions.cjs");
+const { isOwnerJidSync, isAdminInGroupSync } = require("../../utils/permissions.cjs");
 
 // --- The Main Command Logic ---
 const command = {
   name: "antilink",
   description: "Advanced control for the anti-link feature.",
-  usage: "antilink [status]\nantilink <on|off>\nantilink mode <ALL|WHITELIST|BLACKLIST>\nantilink <allow|disallow> <دومين>",
+  usage:
+    "antilink [status]\nantilink <on|off>\nantilink mode <ALL|WHITELIST|BLACKLIST>\nantilink <allow|disallow> <دومين>",
   chat: "group",
   userAdminRequired: true,
 
@@ -44,7 +42,7 @@ const command = {
           text: "☑️ تم تعطيل نظام منع الروابط.",
         });
         break;
-      case "mode":
+      case "mode": {
         const mode = args[1] ? args[1].toUpperCase() : "";
         if (!["ALL", "WHITELIST", "BLACKLIST"].includes(mode)) {
           return await sock.sendMessage(groupId, {
@@ -56,7 +54,8 @@ const command = {
           text: `✅ تم تغيير وضع منع الروابط إلى: ${mode}`,
         });
         break;
-      case "allow":
+      }
+      case "allow": {
         const domainToAllow = args[1] ? args[1].toLowerCase() : "";
         if (!domainToAllow)
           return await sock.sendMessage(groupId, {
@@ -69,30 +68,31 @@ const command = {
           text: `✅ تم إضافة '${domainToAllow}' إلى قائمة الدومينات المسموح بها.`,
         });
         break;
-      case "disallow":
+      }
+      case "disallow": {
         const domainToDisallow = args[1] ? args[1].toLowerCase() : "";
         if (!domainToDisallow)
           return await sock.sendMessage(groupId, {
             text: "يرجى تحديد دومين لإزالته.",
           });
         antilinkConfig.allowed_domains = antilinkConfig.allowed_domains.filter(
-          (d) => d !== domainToDisallow
+          (d) => d !== domainToDisallow,
         );
         await sock.sendMessage(groupId, {
           text: `☑️ تم إزالة '${domainToDisallow}' من قائمة الدومينات المسموح بها.`,
         });
         break;
-      default:
+      }
+      default: {
         // Display current status
         let statusReply = `*حالة نظام منع الروابط:*\n\n`;
-        statusReply += `الحالة: ${
-          antilinkConfig.enabled ? "مفعل ✅" : "معطل ☑️"
-        }\n`;
+        statusReply += `الحالة: ${antilinkConfig.enabled ? "مفعل ✅" : "معطل ☑️"}\n`;
         statusReply += `الوضع: ${antilinkConfig.mode}\n`;
         statusReply += `الدومينات المسموح بها: ${
           antilinkConfig.allowed_domains.join(", ") || "لا يوجد"
         }\n`;
         await sock.sendMessage(groupId, { text: statusReply });
+      }
     }
 
     saveGroupSettings(groupId, settings);
@@ -101,7 +101,7 @@ const command = {
 
 // --- The Message Handler Logic ---
 const linkRegex = new RegExp(
-  /(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/[a-zA-Z0-9]+\.[^\s]{2,}|[a-zA-Z0-9]+\.[^\s]{2,})/i
+  /(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/[a-zA-Z0-9]+\.[^\s]{2,}|[a-zA-Z0-9]+\.[^\s]{2,})/i,
 );
 
 async function handleAntiLink(sock, msg, _legacyConfig, _normalizeJid) {
@@ -123,14 +123,13 @@ async function handleAntiLink(sock, msg, _legacyConfig, _normalizeJid) {
 
   if (isOwner || isSenderAdmin) return;
 
-  const body =
-    msg.message.conversation || msg.message.extendedTextMessage?.text || "";
+  const body = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
   if (!linkRegex.test(body)) return; // No link found
 
   // --- Link Found, Apply Rules ---
   const foundLinks = body.match(linkRegex);
   const domain = new URL(
-    foundLinks[0].startsWith("http") ? foundLinks[0] : `http://${foundLinks[0]}`
+    foundLinks[0].startsWith("http") ? foundLinks[0] : `http://${foundLinks[0]}`,
   ).hostname.replace("www.", "");
 
   let shouldDelete = false;
@@ -152,9 +151,7 @@ async function handleAntiLink(sock, msg, _legacyConfig, _normalizeJid) {
   }
 
   if (shouldDelete) {
-    logger.info(
-      `[Anti-Link] Deleting link from ${senderId} in ${groupId}. Domain: ${domain}`
-    );
+    logger.info(`[Anti-Link] Deleting link from ${senderId} in ${groupId}. Domain: ${domain}`);
     await sock.sendMessage(groupId, { delete: msg.key });
     await sock.sendMessage(groupId, {
       text: `ممنوع إرسال الروابط هنا يا @${senderId.split("@")[0]}!`,

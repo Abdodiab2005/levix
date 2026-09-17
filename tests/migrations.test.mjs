@@ -3,11 +3,11 @@
 // Upgrading Levix means running new code against a database somebody's bot has
 // been using for months. Every guarantee below is one an upgrade depends on.
 
-import { DatabaseSync } from "node:sqlite";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { useTempDataDir, require, section, ok, equal, throws, finish } from "./harness.mjs";
+import { DatabaseSync } from "node:sqlite";
+import { equal, finish, ok, require, section, throws, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("levix-migrations");
 
@@ -37,7 +37,10 @@ const tablesOf = (database) =>
 
 const versionOf = (database) => database.prepare("PRAGMA user_version").get().user_version;
 const columnsOf = (database, table) =>
-  database.prepare(`PRAGMA table_info(${table})`).all().map((column) => column.name);
+  database
+    .prepare(`PRAGMA table_info(${table})`)
+    .all()
+    .map((column) => column.name);
 
 function scratchDatabase() {
   const file = join(mkdtempSync(join(tmpdir(), "levix-mig-")), "test.db");
@@ -61,7 +64,10 @@ for (const table of EXPECTED_TABLES) {
   migrate(fresh);
   equal("…and ends at the latest version", versionOf(fresh), MIGRATIONS.length);
   const tables = tablesOf(fresh);
-  ok("…with every table", EXPECTED_TABLES.every((t) => tables.includes(t)));
+  ok(
+    "…with every table",
+    EXPECTED_TABLES.every((t) => tables.includes(t)),
+  );
   const scheduleColumns = columnsOf(fresh, "schedules");
   for (const column of ["last_run_at", "last_delivery_status", "last_error"]) {
     ok(`…with schedule column ${column}`, scheduleColumns.includes(column));
@@ -78,7 +84,7 @@ section("an existing v1 schedule survives the v2 upgrade");
     .prepare(
       `INSERT INTO schedules
         (id, type, target_jid, message, cron_string, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
     .run("old-weekly", "recurring", "1@g.us", "hello", "0 9 * * 1", "active", 1);
 
@@ -113,7 +119,7 @@ section("running it again changes nothing");
   equal(
     "existing rows survive a re-run",
     database.prepare("SELECT value FROM bot_settings WHERE key = 'k'").get().value,
-    '"v"'
+    '"v"',
   );
   database.close();
 }
@@ -148,19 +154,10 @@ section("a migration that fails leaves no half-applied schema");
     },
   ];
 
-  throws("the failure propagates rather than being swallowed", () =>
-    migrate(database, failing)
-  );
+  throws("the failure propagates rather than being swallowed", () => migrate(database, failing));
 
-  equal(
-    "the version still says the last good migration",
-    versionOf(database),
-    MIGRATIONS.length
-  );
-  ok(
-    "the table the failed step created is gone",
-    !tablesOf(database).includes("half_applied")
-  );
+  equal("the version still says the last good migration", versionOf(database), MIGRATIONS.length);
+  ok("the table the failed step created is gone", !tablesOf(database).includes("half_applied"));
 
   // The decisive part: the next start must be able to finish the job.
   const fixed = [
@@ -192,7 +189,7 @@ section("a second connection sees committed data");
   equal(
     "…and the committed row",
     second.prepare("SELECT value FROM bot_settings WHERE key = 'shared'").get().value,
-    '"yes"'
+    '"yes"',
   );
   // Opening a database that is already at the latest version must be a no-op,
   // not a second attempt to create everything.

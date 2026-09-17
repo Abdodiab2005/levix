@@ -10,8 +10,8 @@
 
 import { spawn } from "node:child_process";
 import { readdirSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 
@@ -67,11 +67,7 @@ for (const file of files) {
 
 console.log(`\n${"═".repeat(64)}`);
 for (const r of results) {
-  const status = r.crashed
-    ? "CRASHED"
-    : r.failed
-    ? `${r.failed} FAILED`
-    : "ok";
+  const status = r.crashed ? "CRASHED" : r.failed ? `${r.failed} FAILED` : "ok";
   console.log(`  ${r.file.padEnd(34)} ${String(r.checks).padStart(4)} checks   ${status}`);
 }
 

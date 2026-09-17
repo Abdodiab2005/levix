@@ -34,7 +34,7 @@ function zoneOffsetMs(date, timeZone = defaultTimezone()) {
     Number(parts.day),
     Number(parts.hour),
     Number(parts.minute),
-    Number(parts.second)
+    Number(parts.second),
   );
 
   // بنشيل الملي ثانية من الطرفين عشان الفرق يطلع نظيف.
@@ -44,7 +44,7 @@ function zoneOffsetMs(date, timeZone = defaultTimezone()) {
 // ساعة حائط في منطقة زمنية -> لحظة حقيقية (Date بـ UTC جوّاها).
 function zonedTimeToDate(
   { year, month, day, hour = 0, minute = 0, second = 0 },
-  timeZone = defaultTimezone()
+  timeZone = defaultTimezone(),
 ) {
   const asUtc = Date.UTC(year, month - 1, day, hour, minute, second);
   if (!Number.isFinite(asUtc)) return new Date(NaN);

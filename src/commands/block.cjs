@@ -21,10 +21,8 @@ module.exports = {
     }
     // Case 2: A target is specified (mention, reply, or number)
     else {
-      const mentionedJid =
-        msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
-      const repliedToJid =
-        msg.message?.extendedTextMessage?.contextInfo?.participant;
+      const mentionedJid = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+      const repliedToJid = msg.message?.extendedTextMessage?.contextInfo?.participant;
       const numberArg = args[0];
 
       if (mentionedJid) {

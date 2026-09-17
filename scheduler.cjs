@@ -78,7 +78,7 @@ function initializeScheduledJobs(sock) {
         logger.info("[Scheduler] Running periodic media cleanup...");
         trimMediaDirectory();
       },
-      { timezone: settings.get("bot_timezone") }
+      { timezone: settings.get("bot_timezone") },
     );
   }
 
@@ -97,7 +97,7 @@ function scheduleAt(whenMs, run) {
     const remaining = whenMs - Date.now();
     timer = setTimeout(
       remaining > MAX_TIMEOUT_MS ? arm : run,
-      Math.min(Math.max(remaining, 0), MAX_TIMEOUT_MS)
+      Math.min(Math.max(remaining, 0), MAX_TIMEOUT_MS),
     );
   };
   arm();
@@ -140,7 +140,7 @@ function recordDelivery(jobId, status, runAt, error = null) {
   } catch (stateError) {
     logger.error(
       { err: stateError, jobId },
-      "[Scheduler] failed to record scheduled delivery state"
+      "[Scheduler] failed to record scheduled delivery state",
     );
   }
 }
@@ -164,10 +164,7 @@ async function deliverScheduledJob(sock, job) {
   } catch (error) {
     const message = deliveryErrorMessage(error);
     recordDelivery(job.id, "failed", runAt, message);
-    logger.error(
-      { err: error, jobId: job.id },
-      "[Scheduler] failed to send scheduled message"
-    );
+    logger.error({ err: error, jobId: job.id }, "[Scheduler] failed to send scheduled message");
     return { ok: false, reason: "delivery_failed", error: message };
   } finally {
     deliveriesInFlight.delete(job.id);
@@ -183,7 +180,7 @@ async function executeScheduledJob(sock, job) {
     } catch (error) {
       logger.error(
         { err: error, jobId: job.id },
-        "[Scheduler] failed to record one-off schedule status"
+        "[Scheduler] failed to record one-off schedule status",
       );
     }
   }
@@ -197,7 +194,7 @@ function scheduleNewJob(sock, job) {
   if (job.type === "recurring") {
     if (!job.cronString || !cron.validate(job.cronString)) {
       logger.error(
-        `[Scheduler] Job ${job.id} has an invalid cron string (${job.cronString}) — skipping it`
+        `[Scheduler] Job ${job.id} has an invalid cron string (${job.cronString}) — skipping it`,
       );
       updateJobStatus(job.id, "invalid");
       return false;
@@ -207,7 +204,7 @@ function scheduleNewJob(sock, job) {
       job.id,
       cron.schedule(job.cronString, () => executeScheduledJob(sock, job), {
         timezone: settings.get("bot_timezone"),
-      })
+      }),
     );
   } else {
     const when = new Date(job.date).getTime();
@@ -233,7 +230,7 @@ function scheduleNewJob(sock, job) {
         } finally {
           runningTasks.delete(job.id);
         }
-      })
+      }),
     );
   }
 
@@ -247,9 +244,7 @@ async function retryScheduledJob(sock, jobId) {
 
   const retryable =
     job.status === "failed" ||
-    (job.type === "recurring" &&
-      job.status === "active" &&
-      job.lastDeliveryStatus === "failed");
+    (job.type === "recurring" && job.status === "active" && job.lastDeliveryStatus === "failed");
   if (!retryable) return { ok: false, reason: "not_failed", job };
 
   const result = await executeScheduledJob(sock, job);

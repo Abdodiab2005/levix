@@ -184,9 +184,7 @@ const MIGRATIONS = [
 ];
 
 function migrate(database, migrations = MIGRATIONS) {
-  const { user_version: current } = database
-    .prepare("PRAGMA user_version")
-    .get();
+  const { user_version: current } = database.prepare("PRAGMA user_version").get();
 
   if (current >= migrations.length) return;
 
@@ -247,9 +245,7 @@ function parseJson(text, fallback) {
 /** Delete whatever has aged out. Cheap; called at boot and on a timer. */
 function sweepExpired() {
   try {
-    const { changes } = q("DELETE FROM forward_scores WHERE expires_at < ?").run(
-      Date.now()
-    );
+    const { changes } = q("DELETE FROM forward_scores WHERE expires_at < ?").run(Date.now());
     if (changes) logger.debug(`[DB] Swept ${changes} expired forward score(s)`);
   } catch (err) {
     logger.error({ err }, "[DB] sweep failed");

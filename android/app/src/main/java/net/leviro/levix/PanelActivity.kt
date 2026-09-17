@@ -67,6 +67,7 @@ class PanelActivity : AppCompatActivity() {
         web.settings.useWideViewPort = true
         web.settings.loadWithOverviewMode = true
         web.settings.textZoom = 100
+        web.settings.cacheMode = WebSettings.LOAD_NO_CACHE
         @Suppress("DEPRECATION")
         web.settings.databaseEnabled = true
         web.settings.displayZoomControls = false

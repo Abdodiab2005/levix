@@ -10,7 +10,7 @@
 // and the symptom is "scan the QR again" a week later.
 
 import { spawnSync } from "node:child_process";
-import { useTempDataDir, require, section, ok, equal, ROOT, finish } from "./harness.mjs";
+import { equal, finish, ok, ROOT, require, section, useTempDataDir } from "./harness.mjs";
 
 const dataDir = useTempDataDir("levix-persist");
 

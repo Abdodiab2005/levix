@@ -1,11 +1,13 @@
 // file: frontend/src/views/CommandsView.tsx
-import React, { useEffect, useState } from "react";
-import { Terminal, Search } from "lucide-react";
+
+import { Search, Terminal } from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { useI18n } from "../context/I18nContext";
 import { useToast } from "../components/Toasts";
 import { Toggle } from "../components/Toggle";
-import { CommandItem } from "../types";
+import { useI18n } from "../context/I18nContext";
+import type { CommandItem } from "../types";
 
 export const CommandsView: React.FC = () => {
   const { t } = useI18n();
@@ -31,7 +33,7 @@ export const CommandsView: React.FC = () => {
 
   const handleToggleEnabled = async (cmd: CommandItem, enabled: boolean) => {
     setCommands((prev) =>
-      prev.map((c) => (c.name === cmd.name ? { ...c, enabled, overridden: true } : c))
+      prev.map((c) => (c.name === cmd.name ? { ...c, enabled, overridden: true } : c)),
     );
     try {
       await api.updateCommand(cmd.name, { enabled });
@@ -44,7 +46,7 @@ export const CommandsView: React.FC = () => {
 
   const handlePermissionChange = async (cmd: CommandItem, permission: any) => {
     setCommands((prev) =>
-      prev.map((c) => (c.name === cmd.name ? { ...c, permission, overridden: true } : c))
+      prev.map((c) => (c.name === cmd.name ? { ...c, permission, overridden: true } : c)),
     );
     try {
       await api.updateCommand(cmd.name, { permission });
@@ -59,13 +61,21 @@ export const CommandsView: React.FC = () => {
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       c.description.toLowerCase().includes(search.toLowerCase()) ||
-      c.aliases.some((a) => a.toLowerCase().includes(search.toLowerCase()))
+      c.aliases.some((a) => a.toLowerCase().includes(search.toLowerCase())),
   );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
       <div className="card-glass">
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "16px",
+          }}
+        >
           <div>
             <h2 style={{ fontSize: "1.2rem", fontWeight: 700 }}>{t("commands")}</h2>
             <p style={{ fontSize: "0.85rem", color: "var(--muted)", marginTop: "4px" }}>
@@ -74,12 +84,16 @@ export const CommandsView: React.FC = () => {
           </div>
 
           <div style={{ position: "relative", width: "100%", maxWidth: "300px" }}>
-            <Search size={16} color="var(--muted)" style={{ position: "absolute", top: "12px", insetInlineStart: "12px" }} />
+            <Search
+              size={16}
+              color="var(--muted)"
+              style={{ position: "absolute", top: "12px", insetInlineStart: "12px" }}
+            />
             <input
               type="text"
               className="form-input"
               style={{ paddingInlineStart: "36px" }}
-              placeholder="Search commands or aliases..."
+              placeholder={t("searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -91,39 +105,45 @@ export const CommandsView: React.FC = () => {
         <table className="table">
           <thead>
             <tr>
-              <th>Command</th>
-              <th>Aliases</th>
-              <th>Description</th>
-              <th>Scope</th>
-              <th>Required Role</th>
-              <th style={{ textAlign: "center" }}>Status</th>
+              <th>{t("thCommand")}</th>
+              <th>{t("thAliases")}</th>
+              <th>{t("thDescription")}</th>
+              <th>{t("thScope")}</th>
+              <th>{t("thRequiredRole")}</th>
+              <th style={{ textAlign: "center" }}>{t("thStatus")}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}>
-                  Loading commands catalog...
+                <td
+                  colSpan={6}
+                  style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}
+                >
+                  ...
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}>
-                  No commands match your query.
+                <td
+                  colSpan={6}
+                  style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}
+                >
+                  ...
                 </td>
               </tr>
             ) : (
               filtered.map((cmd) => (
                 <tr key={cmd.name}>
-                  <td style={{ fontWeight: 700, fontFamily: "var(--font-mono)", color: "var(--cyan)" }}>
-                    !{cmd.name}
+                  <td style={{ fontWeight: 700, color: "var(--cyan)" }}>
+                    <bdi className="input-technical">!{cmd.name}</bdi>
                   </td>
-                  <td style={{ color: "var(--muted)", fontFamily: "var(--font-mono)", fontSize: "0.82rem" }}>
-                    {cmd.aliases?.length ? cmd.aliases.map((a) => `!${a}`).join(", ") : "—"}
+                  <td style={{ color: "var(--muted)", fontSize: "0.82rem" }}>
+                    <bdi className="input-technical">
+                      {cmd.aliases?.length ? cmd.aliases.map((a) => `!${a}`).join(", ") : "—"}
+                    </bdi>
                   </td>
-                  <td style={{ maxWidth: "320px", color: "var(--text)" }}>
-                    {cmd.description}
-                  </td>
+                  <td style={{ maxWidth: "320px", color: "var(--text)" }}>{cmd.description}</td>
                   <td>
                     <span className="badge badge-info">{cmd.chat}</span>
                   </td>

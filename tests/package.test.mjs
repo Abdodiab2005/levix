@@ -8,11 +8,11 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { require, ROOT, section, ok, equal, finish } from "./harness.mjs";
+import { equal, finish, ok, ROOT, require, section } from "./harness.mjs";
 
 const pkg = require("./package.json");
 
-const packed = spawnSync("npm", ["pack", "--dry-run", "--json"], {
+const packed = spawnSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], {
   cwd: ROOT,
   encoding: "utf8",
   env: { ...process.env, npm_config_loglevel: "silent" },
@@ -25,7 +25,9 @@ if (packed.status !== 0) {
   process.exit(1);
 }
 
-const manifest = JSON.parse(packed.stdout)[0];
+const jsonStart = packed.stdout.indexOf("[");
+const jsonEnd = packed.stdout.lastIndexOf("]");
+const manifest = JSON.parse(packed.stdout.slice(jsonStart, jsonEnd + 1))[0];
 const files = manifest.files.map((entry) => entry.path);
 const has = (path) => files.includes(path);
 const hasUnder = (prefix) => files.some((path) => path.startsWith(prefix));
@@ -79,7 +81,7 @@ for (const entry of pkg.files || []) {
 ok(
   "the LICENSE file the manifest declares exists",
   existsSync(join(ROOT, "LICENSE")),
-  `license field says ${pkg.license}`
+  `license field says ${pkg.license}`,
 );
 
 section("and nothing that shouldn't be");
@@ -112,9 +114,12 @@ section("it is a sensible size");
 // Not a style rule: a tarball that suddenly triples has picked something up.
 ok(
   `unpacked size is under 5 MB (${(manifest.unpackedSize / 1e6).toFixed(1)} MB)`,
-  manifest.unpackedSize < 5_000_000
+  manifest.unpackedSize < 5_000_000,
 );
-ok(`file count is plausible (${manifest.entryCount})`, manifest.entryCount > 100 && manifest.entryCount < 400);
+ok(
+  `file count is plausible (${manifest.entryCount})`,
+  manifest.entryCount > 100 && manifest.entryCount < 400,
+);
 
 section("the manifest itself");
 
@@ -135,7 +140,7 @@ ok(
 );
 ok(
   "keeps the SEA build tools out of runtime dependencies",
-  !("esbuild" in (pkg.dependencies || {})) && !("postject" in (pkg.dependencies || {}))
+  !("esbuild" in (pkg.dependencies || {})) && !("postject" in (pkg.dependencies || {})),
 );
 
 finish();

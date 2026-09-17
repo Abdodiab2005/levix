@@ -24,13 +24,8 @@ module.exports = {
     }
 
     // Safety check: Is the target user already an admin?
-    const targetUser = groupMetadata.participants.find(
-      (p) => p.id === targetJid
-    );
-    if (
-      targetUser &&
-      (targetUser.admin === "admin" || targetUser.admin === "superadmin")
-    ) {
+    const targetUser = groupMetadata.participants.find((p) => p.id === targetJid);
+    if (targetUser && (targetUser.admin === "admin" || targetUser.admin === "superadmin")) {
       return await sock.sendMessage(groupId, {
         text: `⚠️ العضو @${targetJid.split("@")[0]} مشرف بالفعل.`,
         mentions: [targetJid],
@@ -41,17 +36,14 @@ module.exports = {
       await sock.groupParticipantsUpdate(
         groupId,
         [targetJid],
-        "promote" // The action is 'promote'
+        "promote", // The action is 'promote'
       );
       await sock.sendMessage(groupId, {
         text: `👑 تم ترقية @${targetJid.split("@")[0]} إلى مشرف بنجاح.`,
         mentions: [targetJid],
       });
     } catch (error) {
-      logger.error(
-        { err: error, command: "promote" },
-        "Error in !promote command"
-      );
+      logger.error({ err: error, command: "promote" }, "Error in !promote command");
       await sock.sendMessage(groupId, {
         text: "حدث خطأ أثناء محاولة الترقية.",
       });

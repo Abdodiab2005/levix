@@ -8,10 +8,6 @@ module.exports = {
 
   async execute(sock, msg) {
     // The bot will reply with "Pong!" and quote the original message
-    await sock.sendMessage(
-      msg.key.remoteJid,
-      { text: "Pong! 🏓" },
-      { quoted: msg }
-    );
+    await sock.sendMessage(msg.key.remoteJid, { text: "Pong! 🏓" }, { quoted: msg });
   },
 };

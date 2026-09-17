@@ -7,11 +7,25 @@
 // review of some YAML.
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ROOT, section, ok, equal, throws, finish } from "./harness.mjs";
-import { parseTag, buildInstaller, verifyInstaller, generate, SOURCE } from "../scripts/build-release-installer.mjs";
+import {
+  buildInstaller,
+  generate,
+  parseTag,
+  SOURCE,
+  verifyInstaller,
+} from "../scripts/build-release-installer.mjs";
+import { equal, finish, ok, ROOT, section, throws } from "./harness.mjs";
 
 const PUBLISH = join(ROOT, "scripts", "publish-installer.sh");
 const source = readFileSync(SOURCE, "utf8");
@@ -36,17 +50,16 @@ ok("deploy/install.sh is valid shell", bash("-n", SOURCE).status === 0);
 const versionLines = source.match(/^VERSION="[^"\n]*"$/gm) || [];
 equal("it has exactly one VERSION line", versionLines.length, 1);
 equal("which is unpinned in git", versionLines[0], 'VERSION="latest"');
-ok(
-  "and the install step uses it",
-  /npm install -g "\$\{PACKAGE\}@\$\{VERSION\}"/.test(source)
-);
+ok("and the install step uses it", /npm install -g "\$\{PACKAGE\}@\$\{VERSION\}"/.test(source));
 ok(
   "no generated installer was committed",
   !existsSync(join(ROOT, "deploy", "install-v2.0.0.sh")) &&
-    (spawnSync("git", ["ls-files", "deploy/install-*.sh", "deploy/install/*"], {
-      cwd: ROOT,
-      encoding: "utf8",
-    }).stdout || "").trim() === ""
+    (
+      spawnSync("git", ["ls-files", "deploy/install-*.sh", "deploy/install/*"], {
+        cwd: ROOT,
+        encoding: "utf8",
+      }).stdout || ""
+    ).trim() === "",
 );
 
 // --------------------------------------------------------------------------
@@ -110,35 +123,42 @@ ok("nothing is left unpinned", !/^VERSION="latest"$/m.test(builtText));
 equal("exactly one VERSION line survives", (builtText.match(/^VERSION="/gm) || []).length, 1);
 ok(
   "no other version can sneak in",
-  (builtText.match(/levix@[0-9][^\s"']*/g) || []).every((m) => m === "levix@2.0.1")
+  (builtText.match(/levix@[0-9][^\s"']*/g) || []).every((m) => m === "levix@2.0.1"),
 );
 ok("it is the same script otherwise", builtText.split("\n").length === source.split("\n").length);
 equal("it is world readable, not writable", mode(built.path), "644");
 
 const other = generate("v2.5.0", join(work, "gen", "levix-v2.5.0-install.sh"));
-ok("a later release pins its own version", /^VERSION="2\.5\.0"$/m.test(readFileSync(other.path, "utf8")));
+ok(
+  "a later release pins its own version",
+  /^VERSION="2\.5\.0"$/m.test(readFileSync(other.path, "utf8")),
+);
 ok("and does not mention the earlier one", !/2\.0\.1/.test(readFileSync(other.path, "utf8")));
 equal("the earlier file is untouched", readFileSync(built.path, "utf8"), builtText);
 
-throws("a bad tag never reaches the filesystem", () => generate("../evil", join(work, "gen", "evil.sh")));
+throws("a bad tag never reaches the filesystem", () =>
+  generate("../evil", join(work, "gen", "evil.sh")),
+);
 ok("and wrote nothing", !existsSync(join(work, "gen", "evil.sh")));
 
 section("the generator checks its own output");
 
 throws("a source with two VERSION lines is refused", () =>
-  buildInstaller(`${source}\nVERSION="sneaky"\n`, "2.0.1")
+  buildInstaller(`${source}\nVERSION="sneaky"\n`, "2.0.1"),
 );
 throws("a source with none is refused", () =>
-  buildInstaller(source.replace(/^VERSION="[^"\n]*"$/m, "# gone"), "2.0.1")
+  buildInstaller(source.replace(/^VERSION="[^"\n]*"$/m, "# gone"), "2.0.1"),
 );
 ok(
   "a hardcoded package version is caught",
-  verifyInstaller(`${builtText}\n# npm i -g levix@1.0.0\n`, "2.0.1").length > 0
+  verifyInstaller(`${builtText}\n# npm i -g levix@1.0.0\n`, "2.0.1").length > 0,
 );
 ok(
   "so is an install line that stopped using VERSION",
-  verifyInstaller(builtText.replace('npm install -g "${PACKAGE}@${VERSION}"', 'npm install -g levix'), "2.0.1")
-    .length > 0
+  verifyInstaller(
+    builtText.replace('npm install -g "${PACKAGE}@${VERSION}"', "npm install -g levix"),
+    "2.0.1",
+  ).length > 0,
 );
 equal("a good one has nothing to report", verifyInstaller(builtText, "2.0.1").length, 0);
 
@@ -172,14 +192,20 @@ equal("and install.sh is the same file", read(join(site, "install.sh")), v200);
 equal("the marker records it", read(join(site, "install.version")).trim(), "2.0.0");
 equal("the versioned file is 0644", mode(join(site, "install", "v2.0.0.sh")), "644");
 equal("install.sh is 0644", mode(join(site, "install.sh")), "644");
-ok("the staged upload is cleaned up", !existsSync(join(site, ".incoming", "levix-v2.0.0-install.sh")));
+ok(
+  "the staged upload is cleaned up",
+  !existsSync(join(site, ".incoming", "levix-v2.0.0-install.sh")),
+);
 
 result = publish(site, "2.0.1", v201);
 equal("the next release publishes", result.status, 0);
 equal("its versioned file exists", read(join(site, "install", "v2.0.1.sh")), v201);
 equal("install.sh moved to it", read(join(site, "install.sh")), v201);
 equal("v2.0.0.sh is exactly as it was", read(join(site, "install", "v2.0.0.sh")), v200);
-ok("which still installs 2.0.0", /^VERSION="2\.0\.0"$/m.test(read(join(site, "install", "v2.0.0.sh"))));
+ok(
+  "which still installs 2.0.0",
+  /^VERSION="2\.0\.0"$/m.test(read(join(site, "install", "v2.0.0.sh"))),
+);
 
 result = publish(site, "2.0.1", v201);
 equal("publishing the same release again succeeds", result.status, 0);
@@ -208,7 +234,7 @@ section("nothing broken is ever published");
 
 const before = read(join(site, "install.sh"));
 
-result = publish(site, "2.1.0", "#!/usr/bin/env bash\nVERSION=\"2.1.0\"\nif [ 1 = 1 ; then\n");
+result = publish(site, "2.1.0", '#!/usr/bin/env bash\nVERSION="2.1.0"\nif [ 1 = 1 ; then\n');
 ok("a syntax error fails the deployment", result.status !== 0);
 ok("nothing was published", !existsSync(join(site, "install", "v2.1.0.sh")));
 equal("install.sh is untouched", read(join(site, "install.sh")), before);
@@ -230,14 +256,24 @@ equal("install.sh is intact", read(join(site, "install.sh")), before);
 
 section("a version can never become a path");
 
-for (const bad of ["../../etc/passwd", "2.0.1/../..", "latest", "2.0.1;id", "", " 2.0.1", "2.0.1 && id"]) {
-  const attempt = publish(site, bad, v201, "yes", { staged: join(site, ".incoming", "attempt.sh") });
+for (const bad of [
+  "../../etc/passwd",
+  "2.0.1/../..",
+  "latest",
+  "2.0.1;id",
+  "",
+  " 2.0.1",
+  "2.0.1 && id",
+]) {
+  const attempt = publish(site, bad, v201, "yes", {
+    staged: join(site, ".incoming", "attempt.sh"),
+  });
   ok(`refuses version ${JSON.stringify(bad)}`, attempt.status !== 0);
 }
 equal("install.sh survived all of that", read(join(site, "install.sh")), before);
 ok(
   "and nothing odd was created",
-  !existsSync(join(site, "install", "vlatest.sh")) && !existsSync(join(work, "passwd"))
+  !existsSync(join(site, "install", "vlatest.sh")) && !existsSync(join(work, "passwd")),
 );
 
 const outside = join(work, "outside.sh");
@@ -264,7 +300,11 @@ const rollback = root("rollback");
 publish(rollback, "2.0.0", v200);
 publish(rollback, "2.0.1", v201);
 writeFileSync(join(rollback, "install.sh"), read(join(rollback, "install", "v2.0.0.sh")));
-equal("restoring an older installer needs nothing but cp", read(join(rollback, "install.sh")), v200);
+equal(
+  "restoring an older installer needs nothing but cp",
+  read(join(rollback, "install.sh")),
+  v200,
+);
 
 // --------------------------------------------------------------------------
 
@@ -275,32 +315,42 @@ const deployScript = readFileSync(join(ROOT, "scripts", "deploy-installer.sh"), 
 
 ok(
   "the installer job waits for the published release",
-  /installer:[\s\S]*?needs:\s*publish-release/.test(release)
+  /installer:[\s\S]*?needs:\s*publish-release/.test(release),
 );
 ok(
   "the published release waits for npm",
-  /publish-release:[\s\S]*?needs:\s*\[[^\]]*\bnpm\b[^\]]*\]/.test(release)
+  /publish-release:[\s\S]*?needs:\s*\[[^\]]*\bnpm\b[^\]]*\]/.test(release),
 );
 ok(
   "the published release waits for the container image",
-  /publish-release:[\s\S]*?needs:\s*\[[^\]]*\bimage\b[^\]]*\]/.test(release)
+  /publish-release:[\s\S]*?needs:\s*\[[^\]]*\bimage\b[^\]]*\]/.test(release),
 );
 ok(
   "the published release waits for every binary",
-  /publish-release:[\s\S]*?needs:\s*\[[^\]]*\bbinaries\b[^\]]*\]/.test(release)
+  /publish-release:[\s\S]*?needs:\s*\[[^\]]*\bbinaries\b[^\]]*\]/.test(release),
 );
 ok("the binaries wait for CI", /binaries:\s*\n\s*needs:\s*ci/.test(release));
 ok("only tags trigger it", /on:\s*\n\s*push:\s*\n\s*tags:/.test(release));
 ok("not every push to main", !/branches:\s*\[main\]/.test(release));
 ok("two releases cannot race", /group:\s*levix-installer-production/.test(release));
 ok("and a running deployment is never cancelled", /cancel-in-progress:\s*false/.test(release));
-ok("deployment secrets live on their own environment", /environment:\s*installer-production/.test(release));
+ok(
+  "deployment secrets live on their own environment",
+  /environment:\s*installer-production/.test(release),
+);
 ok(
   "the installer is generated from the tag being released",
-  /build-release-installer\.mjs "\$TAG"/.test(release) && /TAG: \$\{\{ github\.ref_name \}\}/.test(release)
+  /build-release-installer\.mjs "\$TAG"/.test(release) &&
+    /TAG: \$\{\{ github\.ref_name \}\}/.test(release),
 );
-ok("it ships as a release asset too", /name: installer[\s\S]*?path: dist\/levix-\*-install\.sh/.test(release));
-ok("covered by the existing checksum manifest", /sha256sum levix-\* > SHA256SUMS\.txt/.test(release));
+ok(
+  "it ships as a release asset too",
+  /name: installer[\s\S]*?path: dist\/levix-\*-install\.sh/.test(release),
+);
+ok(
+  "covered by the existing checksum manifest",
+  /sha256sum levix-\* > SHA256SUMS\.txt/.test(release),
+);
 ok(
   "prereleases publish to an npm dist-tag, not latest",
   /npm publish --provenance --access public --tag/.test(release),

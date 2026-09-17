@@ -208,7 +208,9 @@ function listMemory({ scope = "chat", chatId } = {}) {
  */
 function addMemory({ scope = "chat", chatId, content, by, chatName } = {}) {
   const normalizedScope = normalizeScope(scope);
-  const text = String(content || "").trim().slice(0, MAX_ENTRY_CHARS);
+  const text = String(content || "")
+    .trim()
+    .slice(0, MAX_ENTRY_CHARS);
   if (!text) throw new Error("مفيش محتوى أحفظه");
 
   const filePath = memoryFilePath(normalizedScope, chatId);
@@ -236,10 +238,7 @@ function addMemory({ scope = "chat", chatId, content, by, chatName } = {}) {
   ].join("\n");
 
   writeRaw(filePath, `${raw}${body}\n`);
-  logger.info(
-    { scope: normalizedScope, chatId, id },
-    "[memory] saved a new entry"
-  );
+  logger.info({ scope: normalizedScope, chatId, id }, "[memory] saved a new entry");
   return { id, content: text, scope: normalizedScope, file: filePath };
 }
 
@@ -294,7 +293,9 @@ function clearMemory({ scope = "chat", chatId } = {}) {
 
 /** Case-insensitive substring search across one scope. */
 function searchMemory(query, { scope = "chat", chatId } = {}) {
-  const needle = String(query || "").trim().toLowerCase();
+  const needle = String(query || "")
+    .trim()
+    .toLowerCase();
   const entries = listMemory({ scope, chatId });
   if (!needle) return entries;
   return entries.filter((entry) => entry.content.toLowerCase().includes(needle));
@@ -326,16 +327,11 @@ function buildMemoryContext(chatId, { limitChars = maxContextChars() } = {}) {
   const blocks = [];
 
   if (globalEntries.length) {
-    blocks.push(
-      `### ذاكرة عامة (global.md)\n${renderEntries(globalEntries, perScope)}`
-    );
+    blocks.push(`### ذاكرة عامة (global.md)\n${renderEntries(globalEntries, perScope)}`);
   }
   if (chatEntries.length) {
     blocks.push(
-      `### ذاكرة المحادثة دي (${safeFileName(chatId)}.md)\n${renderEntries(
-        chatEntries,
-        perScope
-      )}`
+      `### ذاكرة المحادثة دي (${safeFileName(chatId)}.md)\n${renderEntries(chatEntries, perScope)}`,
     );
   }
 

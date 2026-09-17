@@ -44,7 +44,7 @@ _ملاحظة: يمكن للمالك والمسؤولين تغيير اللغة 
         {
           text: `⚠️ عذراً، تغيير لغة البوت متاح لمالك البوت والمسؤولين فقط.\nSorry, only bot owner and admins can change bot language.`,
         },
-        { quoted: msg }
+        { quoted: msg },
       );
       return;
     }
@@ -56,7 +56,7 @@ _ملاحظة: يمكن للمالك والمسؤولين تغيير اللغة 
         {
           text: `❌ خيار غير صحيح. الخيارات المتاحة: \`ar\` أو \`en\` أو \`auto\`.\nInvalid option. Valid options are: \`ar\`, \`en\`, or \`auto\`.`,
         },
-        { quoted: msg }
+        { quoted: msg },
       );
       return;
     }
@@ -67,20 +67,26 @@ _ملاحظة: يمكن للمالك والمسؤولين تغيير اللغة 
     if (choice === "ar") {
       await sock.sendMessage(
         chatId,
-        { text: "✅ تم ضبط لغة البوت على **العربية الفصحى**. سيتحدث الذكاء الاصطناعي بالعربية الفصحى دائماً." },
-        { quoted: msg }
+        {
+          text: "✅ تم ضبط لغة البوت على **العربية الفصحى**. سيتحدث الذكاء الاصطناعي بالعربية الفصحى دائماً.",
+        },
+        { quoted: msg },
       );
     } else if (choice === "en") {
       await sock.sendMessage(
         chatId,
-        { text: "✅ Bot language set to **English**. The AI assistant will now always respond in English." },
-        { quoted: msg }
+        {
+          text: "✅ Bot language set to **English**. The AI assistant will now always respond in English.",
+        },
+        { quoted: msg },
       );
     } else {
       await sock.sendMessage(
         chatId,
-        { text: "✅ تم ضبط اللغة على **التلقائي (Auto)**. سيرد البوت بحسب لغة كل رسالة ترسلها له تلقائياً." },
-        { quoted: msg }
+        {
+          text: "✅ تم ضبط اللغة على **التلقائي (Auto)**. سيرد البوت بحسب لغة كل رسالة ترسلها له تلقائياً.",
+        },
+        { quoted: msg },
       );
     }
   },

@@ -171,14 +171,15 @@ start.
 ## Architecture
 
 - **Node.js 24+** with ES modules and CommonJS where needed.
-- **Baileys v7** for the WhatsApp connection and LID support.
-- **`node:sqlite`** for a single-file datastore with no database server or
-  native SQLite dependency.
-- **Express + EJS** for a panel with no frontend build step or CDN dependency.
+- **Baileys v7** for the WhatsApp protocol engine, LID support, and phone pairing codes.
+- **`node:sqlite`** for a zero-dependency, single-file datastore.
+- **React + Vite Control Panel** (`frontend/`) with TypeScript, native RTL Arabic / English internationalization, Lucide icons, responsive drawer, modal dialogs, and real-time Socket.IO synchronization.
+- **Express + EJS Gateways** for lightweight setup, login, and pairing QR gateway screens.
 - **Pluggable AI providers** — Google Gemini, OpenAI / any OpenAI-compatible endpoint, or
   Anthropic — each with its own endpoint, API key, and model in the control panel, no env file.
+- **Biome** for fast formatting and linting across the codebase.
 - **GitHub Actions** validation for tests, npm packaging, Docker persistence,
-  and standalone executables on Linux, macOS, and Windows.
+  Android APK packaging, and standalone executables on Linux, macOS, and Windows.
 
 [AGENTS.md](AGENTS.md) documents the module layout, message flow, storage API,
 and architectural constraints. [PACKAGING.md](PACKAGING.md) covers npm, Docker,
@@ -190,8 +191,11 @@ systemd, installers, and single-executable releases.
 git clone https://github.com/Abdodiab2005/levix
 cd levix
 npm ci
-npm test
-npm start
+cd frontend && npm ci && cd ..
+npm run build        # compiles the React frontend to public/dashboard
+npm run lint         # runs Biome linter across the project
+npm test             # runs the full test suite
+npm start            # starts Levix
 ```
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing a substantial

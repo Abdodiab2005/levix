@@ -12,8 +12,7 @@ module.exports = {
   async execute(sock, msg) {
     try {
       const groupId = msg.key.remoteJid;
-      const mentionedJid =
-        msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+      const mentionedJid = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
 
       if (!mentionedJid) {
         return await sock.sendMessage(groupId, {

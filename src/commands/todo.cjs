@@ -18,7 +18,7 @@ module.exports = {
       const userTasks = getUserTodos(senderId);
 
       switch (subCommand) {
-        case "add":
+        case "add": {
           const taskToAdd = args.slice(1).join(" ");
           if (!taskToAdd) {
             return await sock.sendMessage(remoteJid, {
@@ -32,15 +32,12 @@ module.exports = {
             mentions: [senderId],
           });
           break;
+        }
 
         case "remove":
-        case "del":
+        case "del": {
           const taskNumber = parseInt(args[1], 10);
-          if (
-            isNaN(taskNumber) ||
-            taskNumber <= 0 ||
-            taskNumber > userTasks.length
-          ) {
+          if (isNaN(taskNumber) || taskNumber <= 0 || taskNumber > userTasks.length) {
             return await sock.sendMessage(remoteJid, {
               text: "رقم المهمة غير صالح.",
             });
@@ -48,15 +45,14 @@ module.exports = {
           const removedTask = userTasks.splice(taskNumber - 1, 1);
           saveUserTodos(senderId, userTasks);
           await sock.sendMessage(remoteJid, {
-            text: `☑️ يا @${senderId.split("@")[0]}، تم حذف المهمة: *${
-              removedTask[0]
-            }*`,
+            text: `☑️ يا @${senderId.split("@")[0]}، تم حذف المهمة: *${removedTask[0]}*`,
             mentions: [senderId],
           });
           break;
+        }
 
         case "list":
-        default:
+        default: {
           if (userTasks.length === 0) {
             return await sock.sendMessage(remoteJid, {
               text: `قائمة مهامك فارغة يا @${senderId.split("@")[0]}.`,
@@ -74,12 +70,10 @@ module.exports = {
             mentions: [senderId],
           });
           break;
+        }
       }
     } catch (error) {
-      logger.error(
-        { err: error, command: "todo" },
-        "An error occurred in the todo command"
-      );
+      logger.error({ err: error, command: "todo" }, "An error occurred in the todo command");
       await sock.sendMessage(msg.key.remoteJid, {
         text: "حدث خطأ أثناء معالجة قائمة المهام.",
       });

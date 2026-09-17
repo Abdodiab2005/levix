@@ -10,11 +10,11 @@
 // pairing needs a phone and is not something CI can do.
 
 import { spawn } from "node:child_process";
-import net from "node:net";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { useTempDataDir, require, ROOT, section, ok, equal, finish } from "./harness.mjs";
+import { equal, finish, ok, ROOT, require, section, useTempDataDir } from "./harness.mjs";
 
 const dataDir = useTempDataDir("levix-headless");
 
@@ -38,7 +38,12 @@ function startLevix(args, { waitFor, timeoutMs = 60000, data = dataDir } = {}) {
 
   const child = spawn(
     process.execPath,
-    ["--require", join(ROOT, "tests", "fixtures", "probe.cjs"), join(ROOT, "bin", "levix.js"), ...args],
+    [
+      "--require",
+      join(ROOT, "tests", "fixtures", "probe.cjs"),
+      join(ROOT, "bin", "levix.js"),
+      ...args,
+    ],
     {
       env: {
         ...process.env,
@@ -48,14 +53,14 @@ function startLevix(args, { waitFor, timeoutMs = 60000, data = dataDir } = {}) {
         LEVIX_OPEN_BROWSER: "0",
       },
       stdio: ["ignore", "pipe", "pipe"],
-    }
+    },
   );
 
   let output = "";
   const seen = new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error(`never printed ${JSON.stringify(waitFor)}\n${output}`)),
-      timeoutMs
+      timeoutMs,
     );
     const check = (chunk) => {
       output += chunk;
@@ -118,10 +123,7 @@ let headlessModules = [];
   // Only the port this install is configured to use: whether some unrelated
   // program on the developer's machine holds 3001 says nothing about Levix.
   ok(`the panel port ${PANEL_PORT} is free`, await portIsFree(PANEL_PORT));
-  ok(
-    "no listener appeared while the bot was starting",
-    (await portIsFree(PANEL_PORT)) === true
-  );
+  ok("no listener appeared while the bot was starting", (await portIsFree(PANEL_PORT)) === true);
 
   headlessModules = await levix.stop();
 }
@@ -132,34 +134,40 @@ section("Express was never constructed");
   ok(
     "the module probe recorded something to check",
     headlessModules.length > 20,
-    `probe returned ${headlessModules.length} modules`
+    `probe returned ${headlessModules.length} modules`,
   );
   const web = headlessModules.filter((path) =>
-    /node_modules\/(express|socket\.io|ejs|express-session)\//.test(path)
+    /node_modules\/(express|socket\.io|ejs|express-session)\//.test(path),
   );
   ok("no express, socket.io, ejs or session module was loaded", web.length === 0, web[0]);
   ok("app.cjs was never required", !headlessModules.some((p) => p.endsWith("/app.cjs")));
   ok(
     "the panel bootstrap was never imported",
-    !headlessModules.some((p) => p.includes("bootstrap/panel"))
+    !headlessModules.some((p) => p.includes("bootstrap/panel")),
   );
   ok(
     "the dashboard routes were never imported",
-    !headlessModules.some((p) => p.includes("routes/dashboard.api"))
+    !headlessModules.some((p) => p.includes("routes/dashboard.api")),
   );
 
   section("…but the bot's own core was");
 
-  ok("the database is loaded", headlessModules.some((p) => p.endsWith("src/db/db.cjs")));
-  ok("the commands are loaded", headlessModules.some((p) => p.includes("src/commands/")));
+  ok(
+    "the database is loaded",
+    headlessModules.some((p) => p.endsWith("src/db/db.cjs")),
+  );
+  ok(
+    "the commands are loaded",
+    headlessModules.some((p) => p.includes("src/commands/")),
+  );
   ok(
     "the scheduler is loaded",
     headlessModules.some((p) => p.endsWith("scheduler.cjs")) ||
-      headlessModules.some((p) => p.includes("node-cron"))
+      headlessModules.some((p) => p.includes("node-cron")),
   );
   ok(
     "Baileys is loaded",
-    headlessModules.some((p) => /@whiskeysockets|baileys/.test(p))
+    headlessModules.some((p) => /@whiskeysockets|baileys/.test(p)),
   );
 }
 
@@ -205,7 +213,10 @@ section("the default mode does open the panel port");
   await levix.seen;
 
   ok("it prints a panel URL", /Panel: http/.test(levix.output));
-  ok(`the URL carries the configured port ${PANEL_PORT}`, levix.output.includes(String(PANEL_PORT)));
+  ok(
+    `the URL carries the configured port ${PANEL_PORT}`,
+    levix.output.includes(String(PANEL_PORT)),
+  );
   ok("a first run points at /setup", /\/setup/.test(levix.output));
   ok("it prints the data directory", levix.output.includes("Data:"));
   ok("it explains how to stop", /Ctrl\+C/.test(levix.output));
@@ -219,10 +230,16 @@ section("the default mode does open the panel port");
   ok(
     "the module probe recorded something to check",
     modules.length > 20,
-    `probe returned ${modules.length} modules`
+    `probe returned ${modules.length} modules`,
   );
-  ok("express was loaded this time", modules.some((p) => /node_modules\/express\//.test(p)));
-  ok("app.cjs was required this time", modules.some((p) => p.endsWith("/app.cjs")));
+  ok(
+    "express was loaded this time",
+    modules.some((p) => /node_modules\/express\//.test(p)),
+  );
+  ok(
+    "app.cjs was required this time",
+    modules.some((p) => p.endsWith("/app.cjs")),
+  );
 }
 
 section("bind address: public by default, loopback once a proxy is in front");
@@ -243,14 +260,14 @@ section("bind address: public by default, loopback once a proxy is in front");
     await levix.seen;
     const local = await fetch(`http://127.0.0.1:${PANEL_PORT}/setup`).then(
       (r) => r.status,
-      () => 0
+      () => 0,
     );
     equal("localhost reaches the panel", local, 200);
 
     if (lan) {
       const remote = await fetch(`http://${lan}:${PANEL_PORT}/setup`).then(
         (r) => r.status,
-        () => 0
+        () => 0,
       );
       equal(`${lan} reaches it too, by default`, remote, 200);
     } else {
@@ -269,14 +286,14 @@ section("bind address: public by default, loopback once a proxy is in front");
     await levix.seen;
     const local = await fetch(`http://127.0.0.1:${PANEL_PORT}/setup`).then(
       (r) => r.status,
-      () => 0
+      () => 0,
     );
     equal("localhost still reaches the panel", local, 200);
 
     if (lan) {
       const remote = await fetch(`http://${lan}:${PANEL_PORT}/setup`).then(
         (r) => r.status,
-        () => 0
+        () => 0,
       );
       equal(`${lan} can no longer reach the raw port`, remote, 0);
     } else {
@@ -302,10 +319,7 @@ section("a configured domain becomes the address Levix prints");
 
   ok("the public domain is printed", /Panel: https:\/\/bot\.example\.com/.test(levix.output));
   ok("not the localhost URL", !/Panel: http:\/\/localhost/.test(levix.output));
-  ok(
-    "the port is still bound locally",
-    (await portIsFree(PANEL_PORT)) === false
-  );
+  ok("the port is still bound locally", (await portIsFree(PANEL_PORT)) === false);
 
   await levix.stop();
 

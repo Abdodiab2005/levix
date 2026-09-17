@@ -17,7 +17,16 @@
 //   3. the same over a real non-loopback interface, when the machine has one
 
 import os from "node:os";
-import { useTempDataDir, require, httpClient, startServer, section, ok, equal, finish } from "./harness.mjs";
+import {
+  equal,
+  finish,
+  httpClient,
+  ok,
+  require,
+  section,
+  startServer,
+  useTempDataDir,
+} from "./harness.mjs";
 
 const dataDir = useTempDataDir("levix-setup");
 
@@ -84,7 +93,10 @@ for (const header of [
   ok(`${header} counts`, hasForwardingHeader({ [header]: "127.0.0.1" }) === true);
 }
 ok("no headers at all", hasForwardingHeader({}) === false);
-ok("an empty header value doesn't count", hasForwardingHeader({ "x-forwarded-for": "  " }) === false);
+ok(
+  "an empty header value doesn't count",
+  hasForwardingHeader({ "x-forwarded-for": "  " }) === false,
+);
 ok("unrelated headers don't count", hasForwardingHeader({ "user-agent": "curl" }) === false);
 
 section("the address always comes from the socket, never a header");
@@ -97,37 +109,37 @@ const forged = {
 equal("clientAddress reads the socket", clientAddress(forged), "203.0.113.9");
 ok(
   "a forged header cannot make a remote request local",
-  isDirectLocalRequest(forged, { proxyConfigured: true }) === false
+  isDirectLocalRequest(forged, { proxyConfigured: true }) === false,
 );
 ok(
   "…nor with the proxy setting off",
-  isDirectLocalRequest(forged, { proxyConfigured: false }) === false
+  isDirectLocalRequest(forged, { proxyConfigured: false }) === false,
 );
 
 const direct = { headers: {}, socket: { remoteAddress: "127.0.0.1" } };
 ok("a genuine direct loopback request is local", isDirectLocalRequest(direct) === true);
 ok(
   "…but not once a proxy is configured",
-  isDirectLocalRequest(direct, { proxyConfigured: true }) === false
+  isDirectLocalRequest(direct, { proxyConfigured: true }) === false,
 );
 ok(
   "…and not if it carries a forwarding header",
   isDirectLocalRequest(
     { headers: { "x-forwarded-for": "8.8.8.8" }, socket: { remoteAddress: "127.0.0.1" } },
-    { proxyConfigured: false }
-  ) === false
+    { proxyConfigured: false },
+  ) === false,
 );
 ok(
   "an IPv6 loopback request is local",
-  isDirectLocalRequest({ headers: {}, socket: { remoteAddress: "::1" } }) === true
+  isDirectLocalRequest({ headers: {}, socket: { remoteAddress: "::1" } }) === true,
 );
 ok(
   "an IPv4-mapped loopback request is local",
-  isDirectLocalRequest({ headers: {}, socket: { remoteAddress: "::ffff:127.0.0.1" } }) === true
+  isDirectLocalRequest({ headers: {}, socket: { remoteAddress: "::ffff:127.0.0.1" } }) === true,
 );
 ok(
   "a plain remote request is not local",
-  isDirectLocalRequest({ headers: {}, socket: { remoteAddress: "203.0.113.9" } }) === false
+  isDirectLocalRequest({ headers: {}, socket: { remoteAddress: "203.0.113.9" } }) === false,
 );
 
 // --- 2. the live boundary -------------------------------------------------
@@ -142,7 +154,7 @@ async function claimAttempt(base, headers, { code } = {}) {
   const response = await http.form(
     "/setup",
     { password: "a-good-password", confirm: "a-good-password", ...(code ? { code } : {}) },
-    headers
+    headers,
   );
   return { asksForCode, status: response.status };
 }
@@ -230,7 +242,7 @@ section("a legitimate reverse-proxy deployment still works");
     ok(
       "with no proxy configured, Express trusts nothing",
       plain.trustProxy === false || plain.trustProxy === undefined || plain.trustProxy === null,
-      String(plain.trustProxy)
+      String(plain.trustProxy),
     );
   } finally {
     plain.stop();

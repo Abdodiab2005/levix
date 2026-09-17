@@ -105,7 +105,7 @@ function warnMissingFfmpeg(reason) {
     { ffmpeg: ffmpegBin(), reason },
     "[thumbnail] ffmpeg isn't runnable — video previews are off and images " +
       "fall back to raw-JPEG previews. Reinstall `ffmpeg-static`, or point " +
-      "Settings -> Media -> ffmpeg path at a working binary."
+      "Settings -> Media -> ffmpeg path at a working binary.",
   );
 }
 
@@ -216,9 +216,7 @@ function parseProbe(stderr = "") {
     hasAudio: /Stream #\d+:\d+[^\n]*?: Audio:/.test(stderr),
   };
 
-  const dimensions = stderr.match(
-    /Stream #\d+:\d+[^\n]*?: Video:[^\n]*?[,\s](\d{2,5})x(\d{2,5})/
-  );
+  const dimensions = stderr.match(/Stream #\d+:\d+[^\n]*?: Video:[^\n]*?[,\s](\d{2,5})x(\d{2,5})/);
   if (dimensions) {
     info.width = Number(dimensions[1]) || 0;
     info.height = Number(dimensions[2]) || 0;
@@ -226,10 +224,7 @@ function parseProbe(stderr = "") {
 
   const duration = stderr.match(/Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/);
   if (duration) {
-    const seconds =
-      Number(duration[1]) * 3600 +
-      Number(duration[2]) * 60 +
-      Number(duration[3]);
+    const seconds = Number(duration[1]) * 3600 + Number(duration[2]) * 60 + Number(duration[3]);
     // Round, but never down to 0 — a sub-second clip still has a duration.
     if (Number.isFinite(seconds) && seconds > 0) {
       info.seconds = Math.max(1, Math.round(seconds));
@@ -270,7 +265,7 @@ async function generateThumbnail(filePath, kind) {
 
     // For video, seek a second in — frame 0 of a lot of clips is a black fade.
     let result = await runFfmpeg(
-      kind === "video" ? ["-y", "-ss", "1", ...encodeArgs] : ["-y", ...encodeArgs]
+      kind === "video" ? ["-y", "-ss", "1", ...encodeArgs] : ["-y", ...encodeArgs],
     );
 
     if (kind === "video" && (!result.ok || !sizeOf(target))) {
@@ -322,8 +317,7 @@ function jpegMeta(buffer) {
     if (marker === 0xd9 || marker === 0xda) break; // end of header / start of scan
     const length = buffer.readUInt16BE(offset + 2);
     // SOF0..SOF15, minus the DHT/JPG/DAC markers that share the range
-    const isFrameHeader =
-      marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
+    const isFrameHeader = marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
     if (isFrameHeader) {
       return {
         format: "jpeg",
@@ -478,7 +472,7 @@ async function resolveSource(media, kind) {
     } catch (err) {
       logger.debug(
         { err: err?.message, url },
-        "[thumbnail] remote source could not be fetched for a preview"
+        "[thumbnail] remote source could not be fetched for a preview",
       );
       return null;
     }
@@ -549,7 +543,7 @@ async function withMediaThumbnail(content) {
         thumbnail = fs.readFileSync(source.file);
         logger.debug(
           { bytes: thumbnail.length },
-          "[thumbnail] reusing the image itself as its preview"
+          "[thumbnail] reusing the image itself as its preview",
         );
       }
     }
@@ -585,7 +579,7 @@ async function withMediaThumbnail(content) {
   } catch (err) {
     logger.debug(
       { err: err?.message, kind, field },
-      "[thumbnail] could not build a preview — sending without one"
+      "[thumbnail] could not build a preview — sending without one",
     );
     return content;
   } finally {

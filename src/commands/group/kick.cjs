@@ -16,9 +16,7 @@ module.exports = {
 
     // --- Target Identification Logic ---
     // 1. Check for mentions
-    if (
-      msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length > 0
-    ) {
+    if (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length > 0) {
       targetJid = msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
     }
     // 2. Check if it's a reply to another message
@@ -44,13 +42,8 @@ module.exports = {
     }
 
     // Check if the target is also an admin
-    const targetUser = groupMetadata.participants.find(
-      (p) => p.id === targetJid
-    );
-    if (
-      targetUser &&
-      (targetUser.admin === "admin" || targetUser.admin === "superadmin")
-    ) {
+    const targetUser = groupMetadata.participants.find((p) => p.id === targetJid);
+    if (targetUser && (targetUser.admin === "admin" || targetUser.admin === "superadmin")) {
       return await sock.sendMessage(groupId, {
         text: "لا يمكن للمشرف طرد مشرف آخر.",
       });
