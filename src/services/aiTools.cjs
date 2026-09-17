@@ -153,26 +153,31 @@ async function searchNews(query, limit = 5) {
 }
 
 async function enrichWikiResults(lang, titles, urls, limit) {
-  const results = [];
   const count = Math.min(titles?.length || 0, limit);
+  const items = [];
   for (let i = 0; i < count; i++) {
-    const title = titles[i];
-    const url = urls[i];
-    let extract = "";
-    try {
-      const summaryRes = await axios.get(
-        `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
-        {
-          timeout: 8000,
-          headers: { "User-Agent": "LevixBot/3.4 (https://github.com/Abdodiab2005/levix)" },
-        }
-      );
-      extract = summaryRes.data?.extract || summaryRes.data?.description || "";
-    } catch {
-      // Non-fatal: summary lookup failure retains title and URL.
-    }
-    results.push({ title, url, extract: extract.slice(0, 1000) });
+    items.push({ title: titles[i], url: urls[i] });
   }
+
+  const results = await Promise.all(
+    items.map(async ({ title, url }) => {
+      let extract = "";
+      try {
+        const summaryRes = await axios.get(
+          `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+          {
+            timeout: 8000,
+            headers: { "User-Agent": "LevixBot/3.4 (https://github.com/Abdodiab2005/levix)" },
+          }
+        );
+        extract = summaryRes.data?.extract || summaryRes.data?.description || "";
+      } catch {
+        // Non-fatal: summary lookup failure retains title and URL.
+      }
+      return { title, url, extract: extract.slice(0, 1000) };
+    })
+  );
+
   return { language: lang, count: results.length, results };
 }
 
