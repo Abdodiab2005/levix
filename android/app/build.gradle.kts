@@ -27,7 +27,7 @@ android {
         applicationId = "net.leviro.levix"
         minSdk = 29
         targetSdk = 35
-        versionCode = 29
+        versionCode = 30
         versionName = "3.4.0-rc.3"
 
         ndk {
