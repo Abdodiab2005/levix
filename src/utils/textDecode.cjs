@@ -69,12 +69,8 @@ function decodeHtmlEntities(text) {
 function decodeEscapes(text) {
   if (!text || typeof text !== "string" || !text.includes("\\")) return text;
   return text
-    .replace(/\\u([0-9a-f]{4})/gi, (match, hex) =>
-      String.fromCharCode(parseInt(hex, 16))
-    )
-    .replace(/\\x([0-9a-f]{2})/gi, (match, hex) =>
-      String.fromCharCode(parseInt(hex, 16))
-    )
+    .replace(/\\u([0-9a-f]{4})/gi, (match, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/\\x([0-9a-f]{2})/gi, (match, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/\\n/g, "\n")
     .replace(/\\t/g, "\t")
     .replace(/\\r/g, "")
@@ -87,8 +83,7 @@ function decodeEscapes(text) {
 // The tell-tale pair that appears when UTF-8 bytes are decoded as latin1: a
 // lead byte (0xC2-0xDF) followed by a continuation byte that landed in the
 // latin1 supplement or the cp1252 punctuation block.
-const MOJIBAKE_HINT =
-  /[Â-ß][-¿–—‘-„†-•…‰‹›€™ŒœŠšŸŽžƒˆ˜]/;
+const MOJIBAKE_HINT = /[Â-ß][-¿–—‘-„†-•…‰‹›€™ŒœŠšŸŽžƒˆ˜]/;
 
 function textScore(text) {
   let score = 0;
@@ -179,7 +174,7 @@ function stripHtml(html) {
       .replace(/<!--[\s\S]*?-->/g, " ")
       .replace(/<\/(p|div|li|tr|h[1-6]|br)>/gi, "\n")
       .replace(/<br\s*\/?>/gi, "\n")
-      .replace(/<[^>]+>/g, " ")
+      .replace(/<[^>]+>/g, " "),
   )
     .replace(NOISE_SPACE, " ")
     .replace(/\n{3,}/g, "\n\n")

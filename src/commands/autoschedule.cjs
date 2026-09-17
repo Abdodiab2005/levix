@@ -1,7 +1,4 @@
-const {
-  scheduleNewJob,
-  saveScheduledJob,
-} = require("../../scheduler.cjs");
+const { scheduleNewJob, saveScheduledJob } = require("../../scheduler.cjs");
 const { randomUUID } = require("node:crypto");
 const { defaultTimezone } = require("../utils/datetime.cjs");
 const { parseRecurringArgs } = require("../utils/recurrence.cjs");

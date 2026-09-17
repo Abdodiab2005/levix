@@ -22,6 +22,11 @@ copy_tree() {
   cp -a "$src" "$dest"
 }
 
+if [ -d "$ROOT/frontend" ]; then
+  echo "Building React frontend for Android app..."
+  ( cd "$ROOT" && npm run build:frontend )
+fi
+
 copy_tree "$ROOT/bin" "$STAGE/bin"
 copy_tree "$ROOT/src" "$STAGE/src"
 copy_tree "$ROOT/views" "$STAGE/views"

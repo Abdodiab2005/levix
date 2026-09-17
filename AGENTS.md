@@ -54,9 +54,12 @@ When importing:
 
 ### Development
 ```bash
-npm start        # node bin/levix.js — data lands in ./data
-npm run dev      # same, under nodemon
-npm test         # the whole suite (tests/run.mjs)
+npm run build:frontend # compile React dashboard to public/dashboard
+npm run lint           # run Biome linter across the project
+npm run format         # format code with Biome
+npm start              # node bin/levix.js — data lands in ./data
+npm run dev            # same, under nodemon
+npm test               # the whole suite (tests/run.mjs)
 
 node bin/levix.js headless         # the bot with no panel and no open port
 node bin/levix.js where            # print the data directory
@@ -166,13 +169,15 @@ src/
 Outside `src/`:
 
 ```
-views/            # login.ejs · setup.ejs · dashboard.ejs · qr.ejs
-public/           # dashboard.css · dashboard.js · qrcode.min.js · socket.io.min.js
-public/brand/     # generated logo files (committed)
+frontend/         # React 19 + Vite + TypeScript dashboard SPA (bilingual Arabic RTL / English)
+views/            # Gateway pages (login.ejs · setup.ejs · qr.ejs) + fallback dashboard.ejs
+public/           # Static assets (socket.io.min.js, qrcode.min.js) and public/dashboard/ (built SPA)
+public/brand/     # Generated logo and branding files (committed)
+android/          # Android companion app (Kotlin, Gradle, embedded Node 24 ARM64, FFmpeg)
 deploy/           # install.sh · levix.service · nginx/ (reference config)
 scripts/          # build-brand-assets.mjs · build-sea.mjs · release installer
 Dockerfile · docker-compose.yml
-data/             # created at runtime, gitignored (or ~/.levix)
+data/             # Created at runtime, gitignored (or ~/.levix)
 ```
 
 ### Startup

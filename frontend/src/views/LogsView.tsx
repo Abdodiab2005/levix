@@ -1,9 +1,11 @@
 // file: frontend/src/views/LogsView.tsx
-import React, { useEffect, useState, useRef } from "react";
-import { Terminal, Trash2, Filter } from "lucide-react";
+
+import { Filter, Terminal, Trash2 } from "lucide-react";
+import type React from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { useI18n } from "../context/I18nContext";
-import { LogItem } from "../types";
+import type { LogItem } from "../types";
 
 interface LogsViewProps {
   socket: any;
@@ -17,9 +19,12 @@ export const LogsView: React.FC<LogsViewProps> = ({ socket }) => {
   const logEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    api.getLogs().then((res) => {
-      if (res?.logs) setLogs(res.logs);
-    }).catch(() => {});
+    api
+      .getLogs()
+      .then((res) => {
+        if (res?.logs) setLogs(res.logs);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -47,10 +52,18 @@ export const LogsView: React.FC<LogsViewProps> = ({ socket }) => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       <div className="card-glass" style={{ padding: "14px 20px" }}>
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "14px" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "14px",
+          }}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <Terminal size={20} color="var(--cyan)" />
-            <h2 style={{ fontSize: "1.1rem", fontWeight: 700 }}>Live Server Logs</h2>
+            <h2 style={{ fontSize: "1.1rem", fontWeight: 700 }}>{t("liveServerLogs")}</h2>
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -62,7 +75,7 @@ export const LogsView: React.FC<LogsViewProps> = ({ socket }) => {
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
               >
-                <option value="all">All Levels</option>
+                <option value="all">{t("allLogs")}</option>
                 <option value="info">Info</option>
                 <option value="warn">Warn</option>
                 <option value="error">Error</option>
@@ -75,13 +88,14 @@ export const LogsView: React.FC<LogsViewProps> = ({ socket }) => {
               title="Clear logs view"
             >
               <Trash2 size={14} />
-              <span>Clear</span>
+              <span>{t("clearLogs")}</span>
             </button>
           </div>
         </div>
       </div>
 
       <div
+        className="input-technical"
         style={{
           background: "#030712",
           border: "1px solid var(--line)",
@@ -95,11 +109,13 @@ export const LogsView: React.FC<LogsViewProps> = ({ socket }) => {
           display: "flex",
           flexDirection: "column",
           gap: "4px",
+          direction: "ltr",
+          textAlign: "left",
         }}
       >
         {filtered.length === 0 ? (
           <div style={{ color: "var(--faint)", textAlign: "center", padding: "40px" }}>
-            No log entries to display.
+            {t("noLogs")}
           </div>
         ) : (
           filtered.map((l, i) => (
@@ -113,8 +129,8 @@ export const LogsView: React.FC<LogsViewProps> = ({ socket }) => {
                     l.level === "error"
                       ? "var(--danger)"
                       : l.level === "warn"
-                      ? "var(--warn)"
-                      : "var(--cyan)",
+                        ? "var(--warn)"
+                        : "var(--cyan)",
                   fontWeight: 600,
                   flexShrink: 0,
                 }}

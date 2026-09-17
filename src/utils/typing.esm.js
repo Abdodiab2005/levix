@@ -1,8 +1,8 @@
 // Typing simulation utility
-import { createRequire } from 'module';
+import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
-const logger = require('./logger.cjs');
+const logger = require("./logger.cjs");
 
 /**
  * Simulates typing with a random delay between 300-500ms
@@ -15,16 +15,16 @@ const logger = require('./logger.cjs');
 export async function simulateTyping(sock, jid, minDelay = 300, maxDelay = 500) {
   try {
     // Send typing indicator
-    await sock.sendPresenceUpdate('composing', jid);
+    await sock.sendPresenceUpdate("composing", jid);
 
     // Random delay between min and max
     const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-    await new Promise(resolve => setTimeout(resolve, delay));
+    await new Promise((resolve) => setTimeout(resolve, delay));
 
     // Stop typing indicator
-    await sock.sendPresenceUpdate('paused', jid);
+    await sock.sendPresenceUpdate("paused", jid);
   } catch (error) {
-    logger.error({ err: error }, '[Typing] Error simulating typing');
+    logger.error({ err: error }, "[Typing] Error simulating typing");
   }
 }
 
@@ -45,7 +45,7 @@ export async function sendMessageWithTyping(sock, jid, message, withTyping = tru
     const sent = await sock.sendMessage(jid, message);
     return sent;
   } catch (error) {
-    logger.error({ err: error }, '[Typing] Error sending message with typing');
+    logger.error({ err: error }, "[Typing] Error sending message with typing");
     throw error;
   }
 }
@@ -74,22 +74,22 @@ export function calculateTypingDelay(text, charsPerSecond = 40) {
  */
 export async function sendMessageWithRealisticTyping(sock, jid, message) {
   try {
-    const text = message.text || message.caption || '';
+    const text = message.text || message.caption || "";
     const delay = calculateTypingDelay(text);
 
     // Send typing indicator
-    await sock.sendPresenceUpdate('composing', jid);
+    await sock.sendPresenceUpdate("composing", jid);
 
     // Wait for calculated delay
-    await new Promise(resolve => setTimeout(resolve, delay));
+    await new Promise((resolve) => setTimeout(resolve, delay));
 
     // Stop typing and send message
-    await sock.sendPresenceUpdate('paused', jid);
+    await sock.sendPresenceUpdate("paused", jid);
     const sent = await sock.sendMessage(jid, message);
 
     return sent;
   } catch (error) {
-    logger.error({ err: error }, '[Typing] Error sending message with realistic typing');
+    logger.error({ err: error }, "[Typing] Error sending message with realistic typing");
     throw error;
   }
 }

@@ -13,21 +13,21 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  useTempDataDir,
-  require as harnessRequire,
-  ROOT,
-  section,
-  ok,
-  equal,
-  finish,
-} from "./harness.mjs";
-import {
-  startGenaiServer,
-  textReply,
+  errorReply,
   functionCallReply,
   groundedReply,
-  errorReply,
+  startGenaiServer,
+  textReply,
 } from "./fixtures/genai-server.mjs";
+import {
+  equal,
+  finish,
+  require as harnessRequire,
+  ok,
+  ROOT,
+  section,
+  useTempDataDir,
+} from "./harness.mjs";
 
 useTempDataDir("levix-genai");
 
@@ -86,7 +86,7 @@ section("the deprecated SDK is gone");
     const source = readFileSync(join(ROOT, file), "utf8");
     ok(
       `${file} does not require the old SDK`,
-      !/require\(\s*["']@google\/generative-ai/.test(source)
+      !/require\(\s*["']@google\/generative-ai/.test(source),
     );
     ok(`${file} uses @google/genai`, /@google\/genai/.test(source));
   }
@@ -107,7 +107,11 @@ section("the default models");
 
   const described = settings.describe();
   for (const [key, expected] of Object.entries(defaults)) {
-    equal(`a fresh install uses ${expected} for ${key}`, described.find((e) => e.key === key)?.default, expected);
+    equal(
+      `a fresh install uses ${expected} for ${key}`,
+      described.find((e) => e.key === key)?.default,
+      expected,
+    );
     equal(`…and ${key} reads back that way with nothing saved`, settings.get(key), expected);
   }
 
@@ -122,7 +126,11 @@ section("the default models");
   // The chat model and the transcription model happen to share a default, but
   // they are separate keys: moving one must not move the other.
   settings.set("gemini_model", "gemini-3.1-pro-preview");
-  equal("moving the chat model leaves !stt on Flash", settings.get("gemini_stt_model"), "gemini-3.7-flash");
+  equal(
+    "moving the chat model leaves !stt on Flash",
+    settings.get("gemini_stt_model"),
+    "gemini-3.7-flash",
+  );
   settings.set("gemini_model", "");
 }
 
@@ -170,7 +178,7 @@ await withReplies([textReply("hello")], async (fake) => {
   equal(
     "…to the configured model",
     fake.requests[0].url,
-    "/v1beta/models/gemini-3.7-flash:generateContent"
+    "/v1beta/models/gemini-3.7-flash:generateContent",
   );
 
   const names = toolNames(body.tools);
@@ -181,7 +189,7 @@ await withReplies([textReply("hello")], async (fake) => {
   ok(`every custom tool survived (${declared.length})`, declared.length >= 9);
   ok(
     "and none of them is a hand-rolled google_search",
-    !declared.some((declaration) => /google_?search/i.test(declaration.name))
+    !declared.some((declaration) => /google_?search/i.test(declaration.name)),
   );
 
   // Gemini 3 calls this tool context circulation, and refuses the combination
@@ -189,12 +197,12 @@ await withReplies([textReply("hello")], async (fake) => {
   equal(
     "server-side tool invocations are requested",
     body.toolConfig?.includeServerSideToolInvocations,
-    true
+    true,
   );
   equal(
     "…and function calling is VALIDATED, as that combination requires",
     body.toolConfig?.functionCallingConfig?.mode,
-    "VALIDATED"
+    "VALIDATED",
   );
 
   ok("the system instruction went too", !!body.systemInstruction);
@@ -214,7 +222,7 @@ await withReplies([textReply("hello")], async (fake) => {
   equal(
     "the custom tools are all still there",
     body.tools.find((tool) => tool.functionDeclarations).functionDeclarations.length >= 9,
-    true
+    true,
   );
   // Nothing to combine, so the ordinary AUTO behaviour is left alone.
   equal("no tool-combination config is sent", body.toolConfig, undefined);
@@ -225,10 +233,7 @@ await withReplies([textReply("hello")], async (fake) => {
 section("a custom tool call runs and its result goes back");
 
 await withReplies(
-  [
-    functionCallReply([{ name: "get_datetime", args: {} }]),
-    textReply("it is late"),
-  ],
+  [functionCallReply([{ name: "get_datetime", args: {} }]), textReply("it is late")],
   async (fake) => {
     const result = await aiAgent.runAgent({
       parts: [{ text: "what time is it" }],
@@ -251,15 +256,11 @@ await withReplies(
 
     // Gemini 3 rejects a turn whose function call lost its thought signature.
     const modelTurn = second.contents.find((content) =>
-      (content.parts || []).some((part) => part.functionCall)
+      (content.parts || []).some((part) => part.functionCall),
     );
     ok("the model's call was echoed back", !!modelTurn);
-    equal(
-      "…with its thought signature intact",
-      modelTurn.parts[0].thoughtSignature,
-      "sig-abc123"
-    );
-  }
+    equal("…with its thought signature intact", modelTurn.parts[0].thoughtSignature, "sig-abc123");
+  },
 );
 
 section("parallel calls each get their result, matched by id");
@@ -286,7 +287,7 @@ await withReplies(
     equal("both results were returned", responses.length, 2);
     equal("the first keeps its id", responses[0].functionResponse.id, "call-1");
     equal("and so does the second", responses[1].functionResponse.id, "call-2");
-  }
+  },
 );
 
 section("multi-step tool use keeps going");
@@ -315,7 +316,7 @@ await withReplies(
       .filter(Boolean);
     ok(`both signatures were circulated (${signatures.join(", ")})`, signatures.includes("sig-1"));
     ok("…including the second step's", signatures.includes("sig-2"));
-  }
+  },
 );
 
 section("the tool budget still stops the loop");
@@ -339,7 +340,7 @@ section("the tool budget still stops the loop");
       });
       equal("it stopped at the budget", result.steps, 2);
       ok("and said something rather than nothing", result.text.length > 0);
-    }
+    },
   );
 
   settings.set("ai_max_tool_steps", previous);
@@ -380,7 +381,7 @@ await withReplies(
     equal("duplicates collapse", (block.match(/example\.com\/a/g) || []).length, 1);
     ok("both distinct sources appear", block.includes("docs.example.org/b"));
     ok("no Markdown link syntax", !block.includes("]("));
-  }
+  },
 );
 
 section("no grounding, no Sources block");
@@ -403,7 +404,7 @@ await withReplies([errorReply(400, "something went wrong")], async () => {
   ok("the error propagates to the command layer", threw !== null);
   ok(
     `…carrying its status (${threw?.status})`,
-    threw?.status === 400 || /400/.test(String(threw?.message))
+    threw?.status === 400 || /400/.test(String(threw?.message)),
   );
 });
 
@@ -426,7 +427,7 @@ await withReplies(
     const names = toolNames(retry.tools);
     ok("search is gone from the retry", !names.includes("googleSearch"));
     ok("but the custom functions are not", names.includes("functionDeclarations"));
-  }
+  },
 );
 
 finish();

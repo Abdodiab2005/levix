@@ -7,8 +7,8 @@
 // committed, so a normal install never needs it.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -52,10 +52,7 @@ const markSvg = join(SRC, "mark.svg");
 const markSvgBuffer = await readFile(markSvg);
 await write("mark.svg", markSvgBuffer);
 
-const markRaster = await sharp(markSvgBuffer)
-  .resize(512, 512, { fit: "contain" })
-  .png()
-  .toBuffer();
+const markRaster = await sharp(markSvgBuffer).resize(512, 512, { fit: "contain" }).png().toBuffer();
 
 const icon = await sharp({
   create: {
@@ -80,19 +77,15 @@ const icon = await sharp({
   .png()
   .toBuffer();
 for (const size of [512, 192, 180, 32, 16]) {
-  const name =
-    size === 180 ? "apple-touch-icon.png" : `icon-${size}.png`;
+  const name = size === 180 ? "apple-touch-icon.png" : `icon-${size}.png`;
   await write(
     name,
-    await sharp(icon)
-      .resize(size, size, { fit: "cover" })
-      .png({ compressionLevel: 9 })
-      .toBuffer()
+    await sharp(icon).resize(size, size, { fit: "cover" }).png({ compressionLevel: 9 }).toBuffer(),
   );
 }
 await write(
   "icon-512.webp",
-  await sharp(icon).resize(512, 512, { fit: "cover" }).webp({ quality: 90 }).toBuffer()
+  await sharp(icon).resize(512, 512, { fit: "cover" }).webp({ quality: 90 }).toBuffer(),
 );
 
 // --- Wordmark (logo + "Levix") --------------------------------------------
@@ -100,33 +93,27 @@ const wordmark = await whiteToAlpha(join(SRC, "wordmark.png"));
 const wordmarkTrimmed = await sharp(wordmark).trim({ threshold: 1 }).toBuffer();
 await write(
   "wordmark.png",
-  await sharp(wordmarkTrimmed).resize({ height: 160 }).png({ compressionLevel: 9 }).toBuffer()
+  await sharp(wordmarkTrimmed).resize({ height: 160 }).png({ compressionLevel: 9 }).toBuffer(),
 );
 await write(
   "wordmark.webp",
-  await sharp(wordmarkTrimmed).resize({ height: 160 }).webp({ quality: 92 }).toBuffer()
+  await sharp(wordmarkTrimmed).resize({ height: 160 }).webp({ quality: 92 }).toBuffer(),
 );
 
 // --- Mark raster fallbacks -------------------------------------------------
-await write(
-  "mark.png",
-  await sharp(markRaster).png({ compressionLevel: 9 }).toBuffer()
-);
-await write(
-  "mark.webp",
-  await sharp(markRaster).webp({ quality: 92 }).toBuffer()
-);
+await write("mark.png", await sharp(markRaster).png({ compressionLevel: 9 }).toBuffer());
+await write("mark.webp", await sharp(markRaster).webp({ quality: 92 }).toBuffer());
 
 // --- Banner (README hero / GitHub social preview) --------------------------
 const banner = join(SRC, "banner.png");
 // JPEG, not PNG: it is a soft gradient, and the PNG of it was ~850 KB.
 await write(
   "banner.jpg",
-  await sharp(banner).resize({ width: 1280 }).jpeg({ quality: 88, mozjpeg: true }).toBuffer()
+  await sharp(banner).resize({ width: 1280 }).jpeg({ quality: 88, mozjpeg: true }).toBuffer(),
 );
 await write(
   "banner.webp",
-  await sharp(banner).resize({ width: 1280 }).webp({ quality: 88 }).toBuffer()
+  await sharp(banner).resize({ width: 1280 }).webp({ quality: 88 }).toBuffer(),
 );
 
 console.log("\nBrand assets written to public/brand/");

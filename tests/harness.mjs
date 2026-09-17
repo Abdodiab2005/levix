@@ -7,9 +7,9 @@
 // installation.
 
 import { mkdtempSync, rmSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
 export const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -63,7 +63,9 @@ export function equal(label, actual, expected) {
   return ok(
     label,
     actual === expected,
-    actual === expected ? undefined : `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`
+    actual === expected
+      ? undefined
+      : `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`,
   );
 }
 
@@ -135,7 +137,13 @@ export function httpClient(base) {
  * Returns { base, stop() }. Used where one process can't hold every
  * configuration under test — app.cjs reads `trust proxy` once, at import.
  */
-export async function startServer({ dataDir, trust, host, routes = false, timeoutMs = 20000 } = {}) {
+export async function startServer({
+  dataDir,
+  trust,
+  host,
+  routes = false,
+  timeoutMs = 20000,
+} = {}) {
   const { spawn } = await import("node:child_process");
   const args = [join(ROOT, "tests", "fixtures", "server.mjs"), "--data", dataDir];
   if (trust !== undefined) args.push("--trust", String(trust));
@@ -150,7 +158,7 @@ export async function startServer({ dataDir, trust, host, routes = false, timeou
   const address = await new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error(`server did not start in ${timeoutMs}ms\n${stderr}`)),
-      timeoutMs
+      timeoutMs,
     );
     child.stdout.on("data", (chunk) => {
       buffered += chunk;

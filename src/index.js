@@ -16,8 +16,8 @@
 import os from "node:os";
 import { createRequire } from "module";
 import { bootstrapCore } from "./bootstrap/core.js";
-import { flushStore } from "./db/store.esm.js";
 import brand from "./config/brand.esm.js";
+import { flushStore } from "./db/store.esm.js";
 
 const require = createRequire(import.meta.url);
 const qrcodeTerminal = require("qrcode-terminal");
@@ -141,7 +141,9 @@ async function startHeadless() {
         line("  ✓ WhatsApp connected");
         break;
       case "reconnecting":
-        line(`  … WhatsApp disconnected, reconnecting (attempt ${payload.attempt}/${payload.maxAttempts})`);
+        line(
+          `  … WhatsApp disconnected, reconnecting (attempt ${payload.attempt}/${payload.maxAttempts})`,
+        );
         break;
       case "logged_out":
       case "retry_exhausted":
@@ -245,7 +247,7 @@ async function startWithPanel({ open }) {
     line(
       opened
         ? `  Opening ${brand.name} in your browser...`
-        : `  Open that link yourself (${reason}).`
+        : `  Open that link yourself (${reason}).`,
     );
   }
 
@@ -337,7 +339,9 @@ function installShutdownHandlers() {
     else await finish();
   };
 
-  ["SIGTERM", "SIGINT"].forEach((signal) => process.on(signal, () => shutdown(signal)));
+  ["SIGTERM", "SIGINT"].forEach((signal) => {
+    process.on(signal, () => shutdown(signal));
+  });
 }
 
 export default start;

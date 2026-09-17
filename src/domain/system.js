@@ -11,8 +11,8 @@
 // The default implementation is the real one. Tests pass their own.
 
 import { spawnSync } from "node:child_process";
-import fs from "node:fs";
 import dns from "node:dns/promises";
+import fs from "node:fs";
 
 /**
  * @typedef {object} System
@@ -135,10 +135,7 @@ export function parseListeners(output) {
     if (!Number.isFinite(port)) continue;
 
     // users:(("nginx",pid=123,fd=6))  |  123/nginx: master
-    const owner =
-      /users:\(\("([^"]+)"/.exec(line)?.[1] ||
-      /\d+\/([\w.-]+)/.exec(line)?.[1] ||
-      null;
+    const owner = /users:\(\("([^"]+)"/.exec(line)?.[1] || /\d+\/([\w.-]+)/.exec(line)?.[1] || null;
 
     found.push({ port, process: owner });
   }

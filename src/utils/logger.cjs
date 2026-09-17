@@ -51,7 +51,7 @@ const logger = useInProcessLogs()
         { level: "trace", stream: pino.destination({ dest: combined, mkdir: true }) },
         { level: "error", stream: pino.destination({ dest: errors, mkdir: true }) },
         { level: "trace", stream: require("pino-pretty")(PRETTY) },
-      ])
+      ]),
     )
   : pino({
       ...base,

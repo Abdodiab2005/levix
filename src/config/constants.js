@@ -15,7 +15,7 @@
 export const RETRY_DELAY_MS = 5000;
 export const MAX_RETRIES = 5;
 export const RETRY_SCHEDULE_MS = Object.freeze(
-  Array.from({ length: MAX_RETRIES }, (_, index) => RETRY_DELAY_MS * (index + 1))
+  Array.from({ length: MAX_RETRIES }, (_, index) => RETRY_DELAY_MS * (index + 1)),
 );
 
 // Group metadata cache

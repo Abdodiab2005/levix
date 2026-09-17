@@ -69,13 +69,7 @@ async function safePresence(sock, jid, presence) {
  * @returns {Promise<object>} Baileys send result
  */
 export async function sendBotMessage(sock, jid, content, options = {}) {
-  const {
-    replyTo = null,
-    quoted = null,
-    quote = true,
-    typing = true,
-    delayMs,
-  } = options;
+  const { replyTo = null, quoted = null, quote = true, typing = true, delayMs } = options;
 
   // Respect the per-chat cooldown so multiple replies don't pile up instantly.
   const now = Date.now();
@@ -109,7 +103,7 @@ export async function sendBotMessage(sock, jid, content, options = {}) {
   } catch (err) {
     logger.error(
       { err, jid, contentKeys: Object.keys(content || {}) },
-      "[sendBotMessage] sock.sendMessage failed"
+      "[sendBotMessage] sock.sendMessage failed",
     );
     throw err;
   }
@@ -127,12 +121,8 @@ export async function sendBotMessage(sock, jid, content, options = {}) {
  */
 export async function sendBotError(sock, jid, err, arabicLead = "حدث خطأ", options = {}) {
   const name = err?.name || (typeof err === "string" ? "Error" : "Error");
-  const message =
-    err?.message || (typeof err === "string" ? err : JSON.stringify(err));
-  const text = `❌ *${arabicLead}*\n\n*النوع:* \`${name}\`\n*التفاصيل:* ${message}`.slice(
-    0,
-    1500
-  );
+  const message = err?.message || (typeof err === "string" ? err : JSON.stringify(err));
+  const text = `❌ *${arabicLead}*\n\n*النوع:* \`${name}\`\n*التفاصيل:* ${message}`.slice(0, 1500);
   return sendBotMessage(sock, jid, { text }, options);
 }
 

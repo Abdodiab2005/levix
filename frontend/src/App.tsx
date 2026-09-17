@@ -1,21 +1,21 @@
 // file: frontend/src/App.tsx
-import React, { useState, useEffect } from "react";
-import { I18nProvider, useI18n } from "./context/I18nContext";
-import { ToastProvider, useToast } from "./components/Toasts";
-import { Sidebar, ViewTab } from "./components/Sidebar";
-import { Header } from "./components/Header";
-import { useSocket } from "./hooks/useSocket";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { api } from "./api/client";
-
-// Views
-import { OverviewView } from "./views/OverviewView";
-import { ConnectionView } from "./views/ConnectionView";
+import { Header } from "./components/Header";
+import { Sidebar, type ViewTab } from "./components/Sidebar";
+import { ToastProvider, useToast } from "./components/Toasts";
+import { I18nProvider, useI18n } from "./context/I18nContext";
+import { useSocket } from "./hooks/useSocket";
 import { AIAssistantView } from "./views/AIAssistantView";
 import { CommandsView } from "./views/CommandsView";
-import { SchedulesView } from "./views/SchedulesView";
+import { ConnectionView } from "./views/ConnectionView";
 import { GroupsView } from "./views/GroupsView";
-import { SettingsView } from "./views/SettingsView";
 import { LogsView } from "./views/LogsView";
+// Views
+import { OverviewView } from "./views/OverviewView";
+import { SchedulesView } from "./views/SchedulesView";
+import { SettingsView } from "./views/SettingsView";
 
 const MainLayout: React.FC = () => {
   const { t } = useI18n();
@@ -39,7 +39,11 @@ const MainLayout: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Realtime Socket listener
-  const { isConnected: socketConnected, sessionStatus: socketStatus, socket } = useSocket((event, data) => {
+  const {
+    isConnected: socketConnected,
+    sessionStatus: socketStatus,
+    socket,
+  } = useSocket((event, data) => {
     if (event === "status") {
       toast(`Connection state: ${data?.state}`, "info");
     }
@@ -48,7 +52,8 @@ const MainLayout: React.FC = () => {
   const [initialStatus, setInitialStatus] = useState<any>(null);
 
   useEffect(() => {
-    api.getSession()
+    api
+      .getSession()
       .then((res) => {
         if (res?.status) setInitialStatus(res.status);
       })
@@ -103,9 +108,7 @@ const MainLayout: React.FC = () => {
           {currentView === "overview" && (
             <OverviewView status={activeStatus} onNavigate={handleSelectView} />
           )}
-          {currentView === "connection" && (
-            <ConnectionView status={activeStatus} />
-          )}
+          {currentView === "connection" && <ConnectionView status={activeStatus} />}
           {currentView === "ai" && <AIAssistantView />}
           {currentView === "commands" && <CommandsView />}
           {currentView === "schedules" && <SchedulesView />}

@@ -1,6 +1,7 @@
 import { Browsers } from "@whiskeysockets/baileys";
-import pino from "pino";
 import NodeCache from "node-cache";
+import pino from "pino";
+
 // rc10 supports several pluggable caches; we keep them in-process so message
 // retries / device discovery don't keep slamming the network.
 const msgRetryCounterCache = new NodeCache({

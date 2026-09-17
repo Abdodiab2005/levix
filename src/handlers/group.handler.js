@@ -1,16 +1,16 @@
-import { createRequire } from 'module';
-import { delay } from '@whiskeysockets/baileys';
-import { getGroupSettings } from '../utils/storage.esm.js';
+import { delay } from "@whiskeysockets/baileys";
+import { createRequire } from "module";
+import { getGroupSettings } from "../utils/storage.esm.js";
 
 const require = createRequire(import.meta.url);
-const logger = require('../utils/logger.cjs');
+const logger = require("../utils/logger.cjs");
 
 // Handle group participant updates (join/leave)
 export async function handleGroupParticipantsUpdate(sock, update) {
   const { id, participants, action } = update;
-  logger.info({ update }, 'Received group participants update');
+  logger.info({ update }, "Received group participants update");
 
-  if (action !== 'add') {
+  if (action !== "add") {
     logger.info(`[Group] ${action} action for ${id}`);
     return;
   }
@@ -29,7 +29,7 @@ export async function handleGroupParticipantsUpdate(sock, update) {
       const randomIndex = Math.floor(Math.random() * welcomeConfig.messages.length);
       const welcomeMessage = welcomeConfig.messages[randomIndex];
 
-      const finalMessage = welcomeMessage.replace(/\${user}/g, `@${participant.split('@')[0]}`);
+      const finalMessage = welcomeMessage.replace(/\${user}/g, `@${participant.split("@")[0]}`);
 
       await delay(1000);
       await sock.sendMessage(id, {
@@ -38,16 +38,16 @@ export async function handleGroupParticipantsUpdate(sock, update) {
       });
     }
   } catch (error) {
-    logger.error({ err: error, update }, 'Error in group-participants.update event');
+    logger.error({ err: error, update }, "Error in group-participants.update event");
   }
 }
 
 // Handle group join requests
 export async function handleGroupJoinRequests(sock, events) {
-  logger.info({ events }, 'Received group join request update');
+  logger.info({ events }, "Received group join request update");
 
   for (const request of events) {
-    if (request.type !== 'request') continue;
+    if (request.type !== "request") continue;
 
     const groupId = request.jid;
     const participantId = request.from;
@@ -58,16 +58,16 @@ export async function handleGroupJoinRequests(sock, events) {
       if (settings?.join_requests?.auto_approve_enabled) {
         logger.info(`[Auto-Approve] Approving ${participantId} for group ${groupId}`);
 
-        await sock.groupRequestUpdate(groupId, participantId, 'approve');
+        await sock.groupRequestUpdate(groupId, participantId, "approve");
 
         await delay(500);
         await sock.sendMessage(groupId, {
-          text: `✅ تم قبول طلب انضمام @${participantId.split('@')[0]} تلقائيًا.`,
+          text: `✅ تم قبول طلب انضمام @${participantId.split("@")[0]} تلقائيًا.`,
           mentions: [participantId],
         });
       }
     } catch (error) {
-      logger.error({ err: error, request }, 'Error in auto-approve event');
+      logger.error({ err: error, request }, "Error in auto-approve event");
     }
   }
 }

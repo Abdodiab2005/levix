@@ -1,7 +1,11 @@
 // file: frontend/src/api/client.ts
 
 class ApiError extends Error {
-  constructor(public status: number, message: string, public data?: any) {
+  constructor(
+    public status: number,
+    message: string,
+    public data?: any,
+  ) {
     super(message);
     this.name = "ApiError";
   }
@@ -34,7 +38,7 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
     throw new ApiError(
       response.status,
       data?.error || data?.message || `HTTP ${response.status}: Request failed`,
-      data
+      data,
     );
   }
 
@@ -58,20 +62,25 @@ export const api = {
   stopSession: () => api.post("/session/stop"),
   unlinkSession: () => api.post("/session/unlink"),
   restartBot: () => api.post("/session/restart"),
-  getSettings: () => api.get<{ settings: any[] }>("/settings"),
+  getSettings: () => api.get<{ settings: any[]; prefix?: string; success: boolean }>("/settings"),
   updateSetting: (key: string, value: any) => api.patch("/settings", { key, value }),
-  getCommands: () => api.get<{ commands: any[] }>("/commands"),
-  updateCommand: (name: string, payload: any) => api.patch(`/commands/${encodeURIComponent(name)}`, payload),
-  getSchedules: () => api.get<{ schedules: any[]; timezone: string; success: boolean }>("/schedules"),
+  updatePrefix: (prefix: string) => api.patch("/settings", { key: "prefix", value: prefix }),
+  getCommands: () => api.get<{ commands: any[]; prefix?: string; success: boolean }>("/commands"),
+  updateCommand: (name: string, payload: any) =>
+    api.patch(`/commands/${encodeURIComponent(name)}`, payload),
+  getSchedules: () =>
+    api.get<{ schedules: any[]; timezone: string; success: boolean }>("/schedules"),
   createSchedule: (payload: any) => api.post("/schedules", payload),
   deleteSchedule: (id: string) => api.delete(`/schedules/${encodeURIComponent(id)}`),
   retrySchedule: (id: string) => api.post(`/schedules/${encodeURIComponent(id)}/retry`),
   getGroups: () => api.get<{ groups: any[] }>("/groups"),
-  updateGroup: (jid: string, payload: any) => api.patch(`/groups/${encodeURIComponent(jid)}`, payload),
+  updateGroup: (jid: string, payload: any) =>
+    api.patch(`/groups/${encodeURIComponent(jid)}`, payload),
   getPersona: () => api.get<{ persona: string }>("/persona"),
   updatePersona: (persona: string) => api.put("/persona", { persona }),
   getMemoryFiles: () => api.get<{ files: string[] }>("/memory"),
-  getMemoryFile: (name: string) => api.get<{ content: string }>(`/memory/${encodeURIComponent(name)}`),
+  getMemoryFile: (name: string) =>
+    api.get<{ content: string }>(`/memory/${encodeURIComponent(name)}`),
   updateMemoryFile: (name: string, content: string) =>
     api.put(`/memory/${encodeURIComponent(name)}`, { content }),
   deleteMemoryFile: (name: string) => api.delete(`/memory/${encodeURIComponent(name)}`),

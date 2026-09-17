@@ -3,8 +3,7 @@ const logger = require("../../utils/logger.cjs");
 
 module.exports = {
   name: "removeall",
-  description:
-    "Removes all non-admin members from the group after confirmation.",
+  description: "Removes all non-admin members from the group after confirmation.",
   usage: "removeall",
   chat: "group",
   userAdminRequired: true,
@@ -33,9 +32,7 @@ module.exports = {
     setTimeout(() => {
       if (confirmationSessions.has(senderId)) {
         confirmationSessions.delete(senderId);
-        logger.info(
-          `[Confirmation] Timed out for ${senderId} on command removeall.`
-        );
+        logger.info(`[Confirmation] Timed out for ${senderId} on command removeall.`);
       }
     }, 30000); // 30 seconds
   },

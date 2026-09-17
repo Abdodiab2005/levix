@@ -37,12 +37,12 @@
 // string, its result never reaches a log or an HTTP response, and everything
 // human-facing goes through `redactProxy()`.
 
-import { createRequire } from "module";
+import tls from "node:tls";
 import { HttpsProxyAgent } from "https-proxy-agent";
+import { createRequire } from "module";
+import { SocksClient } from "socks";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import { Agent as UndiciAgent, ProxyAgent as UndiciProxyAgent } from "undici";
-import { SocksClient } from "socks";
-import tls from "node:tls";
 
 const require = createRequire(import.meta.url);
 const settings = require("../config/settings.cjs");
@@ -74,7 +74,9 @@ export function readProxyConfig() {
  */
 export function normalizeProxyConfig(raw = {}) {
   const enabled = raw.enabled === true || raw.enabled === "true" || raw.enabled === 1;
-  const protocol = String(raw.protocol ?? "http").trim().toLowerCase();
+  const protocol = String(raw.protocol ?? "http")
+    .trim()
+    .toLowerCase();
   const host = String(raw.host ?? "").trim();
   const port = Number(raw.port ?? 0);
   // Usernames and passwords are taken exactly as given except for surrounding
@@ -179,9 +181,7 @@ function socksDispatcher(config) {
     host: config.host,
     port: config.port,
     type: 5,
-    ...(config.username
-      ? { userId: config.username, password: config.password }
-      : {}),
+    ...(config.username ? { userId: config.username, password: config.password } : {}),
   };
 
   return new UndiciAgent({

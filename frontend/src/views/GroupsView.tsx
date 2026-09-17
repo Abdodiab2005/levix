@@ -1,11 +1,13 @@
 // file: frontend/src/views/GroupsView.tsx
-import React, { useEffect, useState } from "react";
-import { Users, Shield, Link2, Image, Sparkles } from "lucide-react";
+
+import { Image, Link2, Shield, Sparkles, Users } from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { useI18n } from "../context/I18nContext";
 import { useToast } from "../components/Toasts";
 import { Toggle } from "../components/Toggle";
-import { GroupItem } from "../types";
+import { useI18n } from "../context/I18nContext";
+import type { GroupItem } from "../types";
 
 export const GroupsView: React.FC = () => {
   const { t } = useI18n();
@@ -29,9 +31,7 @@ export const GroupsView: React.FC = () => {
   }, []);
 
   const handleUpdate = async (jid: string, updates: Partial<GroupItem>) => {
-    setGroups((prev) =>
-      prev.map((g) => (g.jid === jid ? { ...g, ...updates } : g))
-    );
+    setGroups((prev) => prev.map((g) => (g.jid === jid ? { ...g, ...updates } : g)));
     try {
       await api.updateGroup(jid, updates);
       toast("Group settings saved", "success");
@@ -56,33 +56,39 @@ export const GroupsView: React.FC = () => {
         <table className="table">
           <thead>
             <tr>
-              <th>Group Name</th>
-              <th>Group JID</th>
-              <th>Members</th>
-              <th style={{ textAlign: "center" }}>Anti-Link</th>
-              <th>Media Restriction</th>
-              <th style={{ textAlign: "center" }}>Welcome Msg</th>
+              <th>{t("thGroupName")}</th>
+              <th>{t("thGroupJid")}</th>
+              <th>{t("thMembers")}</th>
+              <th style={{ textAlign: "center" }}>{t("thAntiLink")}</th>
+              <th>{t("thMedia")}</th>
+              <th style={{ textAlign: "center" }}>{t("thWelcome")}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}>
+                <td
+                  colSpan={6}
+                  style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}
+                >
                   Loading groups...
                 </td>
               </tr>
             ) : groups.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}>
+                <td
+                  colSpan={6}
+                  style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}
+                >
                   No groups found. Once the bot joins groups, they will appear here.
                 </td>
               </tr>
             ) : (
               groups.map((g) => (
                 <tr key={g.jid}>
-                  <td style={{ fontWeight: 600 }}>{g.subject || "Untitled Group"}</td>
-                  <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.82rem", color: "var(--muted)" }}>
-                    {g.jid}
+                  <td style={{ fontWeight: 700 }}>{g.subject || "Untitled Group"}</td>
+                  <td style={{ color: "var(--muted)", fontSize: "0.82rem" }}>
+                    <bdi className="input-technical">{g.jid}</bdi>
                   </td>
                   <td>
                     <span className="badge badge-info">{g.memberCount ?? "—"}</span>

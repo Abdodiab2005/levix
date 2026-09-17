@@ -1,10 +1,7 @@
 // commands/mod.js
 
 const { getGroupSettings, saveGroupSettings } = require("../utils/storage.cjs");
-const {
-  isOwnerJidSync,
-  isAdminInGroupSync,
-} = require("../utils/permissions.cjs");
+const { isOwnerJidSync, isAdminInGroupSync } = require("../utils/permissions.cjs");
 
 // الهيكل الافتراضي لإعدادات المراقبة
 const defaultModSettings = {
@@ -20,7 +17,8 @@ module.exports = {
   name: "mod",
   aliases: ["moderation", "settings"],
   description: "التحكم في إعدادات المراقبة للجروب.",
-  usage: "mod status\nmod <enable|disable> <antiLink|antiSpam|forbiddenWords>\nmod words <add|remove> <الكلمة>\nmod words list",
+  usage:
+    "mod status\nmod <enable|disable> <antiLink|antiSpam|forbiddenWords>\nmod words <add|remove> <الكلمة>\nmod words list",
   chat: "group", // يعمل في الجروبات فقط
   botAdminRequired: false, // لا يتطلب أن يكون البوت مشرفًا لتغيير الإعدادات
 
@@ -34,18 +32,14 @@ module.exports = {
     const senderIsAdmin = isAdminInGroupSync(groupMetadata, senderId);
     const isOwner = msg.key.fromMe || isOwnerJidSync(senderId);
     if (!senderIsAdmin && !isOwner) {
-      return sock.sendMessage(
-        groupId,
-        { text: "🚫 هذا الأمر للمشرفين فقط." },
-        { quoted: msg }
-      );
+      return sock.sendMessage(groupId, { text: "🚫 هذا الأمر للمشرفين فقط." }, { quoted: msg });
     }
 
     const command = args[0]?.toLowerCase();
     const feature = args[1]?.toLowerCase();
 
     // الحصول على الإعدادات الحالية للجروب أو إنشاء إعدادات افتراضية
-    let settings = getGroupSettings(groupId) || {};
+    const settings = getGroupSettings(groupId) || {};
     if (!settings.moderation) {
       settings.moderation = JSON.parse(JSON.stringify(defaultModSettings)); // نسخة عميقة
     }
@@ -54,11 +48,11 @@ module.exports = {
 
     switch (command) {
       case "enable":
-        if (!modSettings.hasOwnProperty(feature)) {
+        if (!Object.hasOwn(modSettings, feature)) {
           return sock.sendMessage(
             groupId,
             { text: `⚠️ الميزة "${feature}" غير موجودة.` },
-            { quoted: msg }
+            { quoted: msg },
           );
         }
         modSettings[feature].enabled = true;
@@ -66,16 +60,16 @@ module.exports = {
         await sock.sendMessage(
           groupId,
           { text: `✅ تم تفعيل ميزة *${feature}*.` },
-          { quoted: msg }
+          { quoted: msg },
         );
         break;
 
       case "disable":
-        if (!modSettings.hasOwnProperty(feature)) {
+        if (!Object.hasOwn(modSettings, feature)) {
           return sock.sendMessage(
             groupId,
             { text: `⚠️ الميزة "${feature}" غير موجودة.` },
-            { quoted: msg }
+            { quoted: msg },
           );
         }
         modSettings[feature].enabled = false;
@@ -83,11 +77,11 @@ module.exports = {
         await sock.sendMessage(
           groupId,
           { text: `❌ تم تعطيل ميزة *${feature}*.` },
-          { quoted: msg }
+          { quoted: msg },
         );
         break;
 
-      case "status":
+      case "status": {
         let statusText = "📊 *حالة إعدادات المراقبة* 📊\n\n";
         for (const key in modSettings) {
           const status = modSettings[key].enabled ? "✅ مفعل" : "❌ معطل";
@@ -96,8 +90,9 @@ module.exports = {
         statusText += `\n- لعرض قائمة الكلمات الممنوعة، اكتب: \`!mod words list\``;
         await sock.sendMessage(groupId, { text: statusText }, { quoted: msg });
         break;
+      }
 
-      case "words":
+      case "words": {
         const wordAction = args[1]?.toLowerCase();
         const word = args.slice(2).join(" ").toLowerCase();
 
@@ -116,8 +111,9 @@ module.exports = {
             return sock.sendMessage(groupId, {
               text: "الرجاء كتابة الكلمة التي تريد إزالتها.",
             });
-          modSettings.forbiddenWords.list =
-            modSettings.forbiddenWords.list.filter((w) => w !== word);
+          modSettings.forbiddenWords.list = modSettings.forbiddenWords.list.filter(
+            (w) => w !== word,
+          );
           saveGroupSettings(groupId, settings);
           await sock.sendMessage(groupId, {
             text: `🗑️ تم إزالة "${word}" من القائمة.`,
@@ -138,8 +134,9 @@ module.exports = {
           });
         }
         break;
+      }
 
-      default:
+      default: {
         let helpText = "🤖 *أوامر التحكم في المراقبة*\n\n";
         helpText +=
           "• `!mod enable <feature>`\nلتفعيل ميزة (antilink, antispam, forbiddenwords)\n\n";
@@ -150,6 +147,7 @@ module.exports = {
         helpText += "• `!mod words list`\nلعرض قائمة الكلمات الممنوعة.";
         await sock.sendMessage(groupId, { text: helpText }, { quoted: msg });
         break;
+      }
     }
   },
 };

@@ -13,13 +13,10 @@
 
 import { createRequire } from "module";
 import { WhatsAppSession } from "../core/session.js";
-import { loadCommands, getLoadedCommands } from "../handlers/command.handler.js";
 import { initStore } from "../db/store.esm.js";
+import { getLoadedCommands, loadCommands } from "../handlers/command.handler.js";
 import { deleteQrCode } from "../utils/storage.esm.js";
-import {
-  hasPairedCredentials,
-  sessionStartupPolicy,
-} from "./session-startup-policy.js";
+import { hasPairedCredentials, sessionStartupPolicy } from "./session-startup-policy.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");

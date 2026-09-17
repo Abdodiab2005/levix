@@ -1,7 +1,7 @@
 // Baileys v7 LID Helper Functions
 // These functions help work with the new LID system
 
-import { getLidForPn, getPnForLid } from '../utils/storage.esm.js';
+import { getLidForPn, getPnForLid } from "../utils/storage.esm.js";
 
 /**
  * Get the preferred identifier for a user (LID if available, otherwise PN)
@@ -10,7 +10,7 @@ import { getLidForPn, getPnForLid } from '../utils/storage.esm.js';
  * @returns {Promise<string>} - LID if available, otherwise the original PN
  */
 export async function getPreferredJid(sock, pn) {
-  if (!pn || !pn.includes('@s.whatsapp.net')) {
+  if (!pn || !pn.includes("@s.whatsapp.net")) {
     return pn; // Not a phone number, return as-is
   }
 
@@ -44,7 +44,7 @@ export async function getPreferredJid(sock, pn) {
  * @returns {Promise<string>} - PN if found, otherwise the original LID
  */
 export async function lidToPn(sock, lid) {
-  if (!lid || !lid.includes('@lid')) {
+  if (!lid || !lid.includes("@lid")) {
     return lid; // Not a LID, return as-is
   }
 
@@ -78,7 +78,7 @@ export async function lidToPn(sock, lid) {
  * @returns {Promise<string>} - User identifier (LID or PN)
  */
 export async function getUserIdFromKey(sock, msgKey) {
-  const isGroup = msgKey.remoteJid?.endsWith('@g.us');
+  const isGroup = msgKey.remoteJid?.endsWith("@g.us");
 
   if (isGroup) {
     // In groups, use participant field
@@ -114,11 +114,11 @@ export async function getUserIdFromKey(sock, msgKey) {
  */
 export async function formatUserMention(sock, jid) {
   // Extract the number/ID part for display
-  const displayId = jid.split('@')[0];
+  const displayId = jid.split("@")[0];
 
   return {
     text: `@${displayId}`,
-    mentions: [jid]
+    mentions: [jid],
   };
 }
 
@@ -132,7 +132,7 @@ export async function resolveJids(sock, jids) {
   const resolved = [];
 
   for (const jid of jids) {
-    if (jid.includes('@s.whatsapp.net')) {
+    if (jid.includes("@s.whatsapp.net")) {
       resolved.push(await getPreferredJid(sock, jid));
     } else {
       resolved.push(jid);

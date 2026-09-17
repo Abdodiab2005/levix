@@ -7,6 +7,10 @@ data/
 # Single-executable build output
 build/
 
+# Frontend build output (Vite / React)
+public/dashboard/
+frontend/dist/
+
 # Release artifacts: the per-release installer is generated, never committed
 dist/
 

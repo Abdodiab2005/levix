@@ -28,10 +28,7 @@ const {
   getProvider,
   detectModelCapabilities,
 } = require("./aiRouter.cjs");
-const {
-  runProviderAgent,
-  activeProviderKeySetting,
-} = require("./aiProviders.cjs");
+const { runProviderAgent, activeProviderKeySetting } = require("./aiProviders.cjs");
 
 // Model, key, tool budget and history length all come from config/settings.cjs
 // (what the dashboard saved, else the default) and are read per call, so changing
@@ -106,7 +103,12 @@ function loadPersona() {
     const raw = fs.readFileSync(PERSONA_FILE, "utf8").trim();
     // Everything above the `---` separator is a note to the human editing the
     // file, not part of the prompt.
-    const body = raw.includes("\n---") ? raw.split(/\n---\s*\n/).slice(1).join("\n---\n") : raw;
+    const body = raw.includes("\n---")
+      ? raw
+          .split(/\n---\s*\n/)
+          .slice(1)
+          .join("\n---\n")
+      : raw;
     personaCache = { text: body.trim() || DEFAULT_PERSONA, stamp };
     return personaCache.text;
   } catch {
@@ -146,15 +148,7 @@ function botLangDirective() {
  * src/config/ai-identity.cjs) and is never rendered by the panel.
  */
 function buildSystemInstruction(context = {}) {
-  const {
-    chatId,
-    senderName,
-    senderId,
-    isOwner,
-    isAdmin,
-    isGroup,
-    chatName,
-  } = context;
+  const { chatId, senderName, senderId, isOwner, isAdmin, isGroup, chatName } = context;
 
   const runtime = [
     "# Current context",
@@ -170,9 +164,7 @@ function buildSystemInstruction(context = {}) {
 
   const memoryBlock = memory.buildMemoryContext(chatId);
 
-  return [aiIdentity.systemBlock, loadPersona(), runtime, memoryBlock]
-    .filter(Boolean)
-    .join("\n\n");
+  return [aiIdentity.systemBlock, loadPersona(), runtime, memoryBlock].filter(Boolean).join("\n\n");
 }
 
 /** A turn the conversation can legally start from. */
@@ -206,11 +198,7 @@ function trimHistory(history) {
 function isFileReferenceError(error) {
   if (!error) return false;
   const status =
-    error.status ||
-    error.statusCode ||
-    error.code ||
-    error.response?.status ||
-    error.error?.code;
+    error.status || error.statusCode || error.code || error.response?.status || error.error?.code;
   const message = `${error.message || ""} ${error.details || ""}`.toLowerCase();
 
   if ([403, 404, 410].includes(Number(status))) return true;
@@ -220,7 +208,7 @@ function isFileReferenceError(error) {
   return (
     message.includes("file") &&
     /not found|not exist|expired|not in an active|not active|permission to access|forbidden|file_?uri/.test(
-      message
+      message,
     )
   );
 }
@@ -245,7 +233,7 @@ function withTimeout(promise, ms, label) {
     new Promise((_, reject) => {
       timer = setTimeout(
         () => reject(new Error(`${label} تأخرت أكتر من ${Math.round(ms / 1000)} ثانية`)),
-        ms
+        ms,
       );
     }),
   ]).finally(() => clearTimeout(timer));
@@ -422,7 +410,12 @@ class GeminiProvider extends BaseAIProvider {
     });
   }
 
-  async prepareMedia(parts, mediaMessage, mimeOverride, { downloadContentFromMessage, genAI, tempDir } = {}) {
+  async prepareMedia(
+    parts,
+    mediaMessage,
+    mimeOverride,
+    { downloadContentFromMessage, genAI, tempDir } = {},
+  ) {
     if (!genAI) throw new Error("Gemini client unavailable");
     const tempFilePath = path.join(tempDir || __dirname, `temp_media_${Date.now()}`);
     const stream = await downloadContentFromMessage(
@@ -430,10 +423,10 @@ class GeminiProvider extends BaseAIProvider {
       mediaMessage.mimetype?.startsWith("image/")
         ? "image"
         : mediaMessage.mimetype?.startsWith("video/")
-        ? "video"
-        : mediaMessage.mimetype?.startsWith("audio/")
-        ? "audio"
-        : "document"
+          ? "video"
+          : mediaMessage.mimetype?.startsWith("audio/")
+            ? "audio"
+            : "document",
     );
     let buffer = Buffer.from([]);
     for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
@@ -533,7 +526,7 @@ async function runGeminiTurn({
     if (!searchOffered || !isToolCombinationError(error)) throw error;
     logger.warn(
       { err: error?.message, model },
-      "[aiAgent] this model refused Google Search together with function tools — retrying with functions only"
+      "[aiAgent] this model refused Google Search together with function tools — retrying with functions only",
     );
     searchOffered = false;
     chat = openChat(false);
@@ -560,10 +553,7 @@ async function runGeminiTurn({
     const responses = [];
     for (const call of calls) {
       toolCalls.push({ name: call.name, args: call.args });
-      logger.info(
-        { tool: call.name, chatId: context.chatId },
-        "[aiAgent] tool call"
-      );
+      logger.info({ tool: call.name, chatId: context.chatId }, "[aiAgent] tool call");
 
       // Named apart from the outer `response` on purpose: that one is the
       // model's reply and is reassigned at the bottom of this loop.
@@ -572,7 +562,7 @@ async function runGeminiTurn({
         toolResult = await withTimeout(
           runTool(call.name, call.args, context),
           settings.get("ai_tool_timeout_ms"),
-          call.name
+          call.name,
         );
       } catch (err) {
         toolResult = { error: err?.message || String(err) };
@@ -606,8 +596,7 @@ async function runGeminiTurn({
   }
 
   if (!text && steps >= stepBudget) {
-    text =
-      "شغّلت الأدوات المتاحة بس مقدرتش أوصل لإجابة نهائية. جرّب تسأل بصيغة أوضح.";
+    text = "شغّلت الأدوات المتاحة بس مقدرتش أوصل لإجابة نهائية. جرّب تسأل بصيغة أوضح.";
   }
 
   let newHistory = [];
@@ -630,7 +619,6 @@ async function runGeminiTurn({
     searchOffered,
   };
 }
-
 
 module.exports = {
   runAgent,

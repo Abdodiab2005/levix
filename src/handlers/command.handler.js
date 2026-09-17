@@ -1,11 +1,8 @@
 import { readdirSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
 import { createRequire } from "module";
-import {
-  checkCommandPermission,
-  checkBotAdmin,
-} from "../middleware/permissions.middleware.js";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
+import { checkBotAdmin, checkCommandPermission } from "../middleware/permissions.middleware.js";
 import { sendBotMessage } from "../utils/sendBotMessage.esm.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -65,7 +62,7 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false) {
   return new Proxy(sock, {
     get(target, prop, receiver) {
       if (prop === "sendMessage") {
-        return async function (jid, content, options) {
+        return async (jid, content, options) => {
           // Try to edit the trigger message in place for the first eligible
           // text reply. We can only edit messages we sent ourselves.
           const eligibleForEdit =
@@ -109,16 +106,13 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false) {
  * override when there is one, otherwise what the command file declared.
  */
 function indexAliases(command) {
-  const aliases = runtimeConfig.getAliases(
-    command.name,
-    command.__declaredAliases || []
-  );
+  const aliases = runtimeConfig.getAliases(command.name, command.__declaredAliases || []);
 
   for (const alias of aliases) {
     const existing = commands.get(alias);
     if (existing && existing.name !== command.name) {
       logger.warn(
-        `[Commands] Alias conflict: ${alias} already maps to ${existing.name}, ignoring for ${command.name}`
+        `[Commands] Alias conflict: ${alias} already maps to ${existing.name}, ignoring for ${command.name}`,
       );
       continue;
     }
@@ -141,9 +135,7 @@ export function rebuildCommandIndex() {
   for (const command of commandList.values()) {
     indexAliases(command);
   }
-  logger.info(
-    `[Commands] Index rebuilt: ${commandList.size} commands, ${commands.size} entries`
-  );
+  logger.info(`[Commands] Index rebuilt: ${commandList.size} commands, ${commands.size} entries`);
 }
 
 /**
@@ -201,9 +193,7 @@ export async function loadCommands() {
       if (entry.isDirectory()) {
         // Load commands from subdirectories (e.g., group/)
         const subDirPath = join(commandsPath, entry.name);
-        const subFiles = readdirSync(subDirPath).filter((file) =>
-          file.endsWith(".cjs")
-        );
+        const subFiles = readdirSync(subDirPath).filter((file) => file.endsWith(".cjs"));
 
         for (const file of subFiles) {
           registerCommandFile(join(subDirPath, file), entry.name);
@@ -215,7 +205,7 @@ export async function loadCommands() {
   }
 
   logger.info(
-    `[Commands] Loaded ${commandList.size} commands (${commands.size} entries with aliases)`
+    `[Commands] Loaded ${commandList.size} commands (${commands.size} entries with aliases)`,
   );
 }
 
@@ -252,13 +242,11 @@ function registerCommand(command, label, category) {
     command.__category = category || "general";
     // What the FILE declares, kept aside so a dashboard override can be
     // cleared back to it later (command.aliases itself is what we index).
-    command.__declaredAliases = Array.isArray(command.aliases)
-      ? [...command.aliases]
-      : [];
+    command.__declaredAliases = Array.isArray(command.aliases) ? [...command.aliases] : [];
     commands.set(command.name, command);
     commandList.set(command.name, command);
     logger.info(
-      `[Commands] Loaded command: ${command.name}${category ? ` (from ${category}/)` : ""}`
+      `[Commands] Loaded command: ${command.name}${category ? ` (from ${category}/)` : ""}`,
     );
 
     indexAliases(command);
@@ -295,7 +283,7 @@ export async function handleCommand(sock, msg, body) {
       sock,
       msg.key.remoteJid,
       { text: "⛔ الأمر ده متوقف حاليًا." },
-      { replyTo: msg }
+      { replyTo: msg },
     );
     return true;
   }
@@ -314,7 +302,7 @@ export async function handleCommand(sock, msg, body) {
           sock,
           msg.key.remoteJid,
           { text: "⚠️ هذا الأمر يعمل في المجموعات فقط." },
-          { replyTo: msg }
+          { replyTo: msg },
         );
         return true;
       }
@@ -323,7 +311,7 @@ export async function handleCommand(sock, msg, body) {
           sock,
           msg.key.remoteJid,
           { text: "⚠️ هذا الأمر يعمل في المحادثات الخاصة فقط." },
-          { replyTo: msg }
+          { replyTo: msg },
         );
         return true;
       }
@@ -331,22 +319,16 @@ export async function handleCommand(sock, msg, body) {
       // Group sub-commands are keyed "group:<name>" everywhere — defaults.cjs,
       // the dashboard, and `!group kick`. Use the same key here so running
       // `!kick` directly is gated exactly like running `!group kick`.
-      const permissionKey =
-        command.__category === "group" ? `group:${command.name}` : command.name;
+      const permissionKey = command.__category === "group" ? `group:${command.name}` : command.name;
 
-      const permissionCheck = checkCommandPermission(
-        permissionKey,
-        msg,
-        groupMetadata,
-        sock
-      );
+      const permissionCheck = checkCommandPermission(permissionKey, msg, groupMetadata, sock);
 
       if (!permissionCheck.hasPermission) {
         await sendBotMessage(
           sock,
           msg.key.remoteJid,
           { text: permissionCheck.reason },
-          { replyTo: msg }
+          { replyTo: msg },
         );
         return true;
       }
@@ -356,7 +338,7 @@ export async function handleCommand(sock, msg, body) {
           sock,
           msg.key.remoteJid,
           { text: "⚠️ هذا الأمر يتطلب أن تكون مشرفًا." },
-          { replyTo: msg }
+          { replyTo: msg },
         );
         return true;
       }
@@ -366,7 +348,7 @@ export async function handleCommand(sock, msg, body) {
           sock,
           msg.key.remoteJid,
           { text: "⚠️ يجب أن أكون مشرفًا لتنفيذ هذا الأمر." },
-          { replyTo: msg }
+          { replyTo: msg },
         );
         return true;
       }
@@ -392,10 +374,7 @@ export async function handleCommand(sock, msg, body) {
     await command.execute(proxiedSock, msg, args, body, groupMetadata, ctx);
     return true;
   } catch (error) {
-    logger.error(
-      { err: error, command: invokedName },
-      "Error executing command"
-    );
+    logger.error({ err: error, command: invokedName }, "Error executing command");
     // Surface the error name to the user instead of silently re-throwing.
     try {
       await sendBotMessage(
@@ -406,7 +385,7 @@ export async function handleCommand(sock, msg, body) {
             error.message || "غير معروف"
           }`,
         },
-        { replyTo: msg }
+        { replyTo: msg },
       );
     } catch {}
     throw error;

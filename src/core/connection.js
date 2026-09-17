@@ -11,13 +11,9 @@
 
 import { DisconnectReason } from "@whiskeysockets/baileys";
 import { createRequire } from "module";
+import { bootstrapAdmins, bootstrapOwners } from "../utils/permissions.esm.js";
+import { getAllBotAdmins, getAllOwners, saveUserMetadata } from "../utils/storage.esm.js";
 import { groupMetadataCache } from "./socket.js";
-import {
-  saveUserMetadata,
-  getAllOwners,
-  getAllBotAdmins,
-} from "../utils/storage.esm.js";
-import { bootstrapOwners, bootstrapAdmins } from "../utils/permissions.esm.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -123,9 +119,7 @@ export async function handleConnectionOpen(sock, initializeScheduledJobs) {
   const botPn = sock?.user?.id
     ? `${sock.user.id.split(":")[0].split("@")[0]}@s.whatsapp.net`
     : null;
-  const botLid = sock?.user?.lid
-    ? `${sock.user.lid.split(":")[0].split("@")[0]}@lid`
-    : null;
+  const botLid = sock?.user?.lid ? `${sock.user.lid.split(":")[0].split("@")[0]}@lid` : null;
 
   // Both rosters are seeded from the database so a permission check never has
   // to hit it on the hot path.
@@ -144,7 +138,7 @@ export async function handleConnectionOpen(sock, initializeScheduledJobs) {
   await primePermissions();
   logger.info(
     `[Permissions] Owner roster: ${ownersRoster.length} entries; ` +
-      `admin roster: ${adminsRoster.length} entries`
+      `admin roster: ${adminsRoster.length} entries`,
   );
 
   // Called on every open, including a reconnect: scheduleNewJob() stops the
@@ -163,9 +157,7 @@ async function saveBotOwnerMetadata(sock) {
 
     const phoneNumber = sock?.user?.id?.split(":")[0]?.split("@")[0];
     const userJid = phoneNumber ? `${phoneNumber}@s.whatsapp.net` : null;
-    const userLid = sock?.user?.lid
-      ? `${sock.user.lid.split(":")[0].split("@")[0]}@lid`
-      : null;
+    const userLid = sock?.user?.lid ? `${sock.user.lid.split(":")[0].split("@")[0]}@lid` : null;
     const displayName = sock?.user?.name || sock?.user?.verifiedName || null;
 
     if (userJid) {
@@ -177,7 +169,7 @@ async function saveBotOwnerMetadata(sock) {
         displayName,
       });
       logger.info(
-        `[User Metadata] Saved bot owner: ${phoneNumber} (JID: ${userJid}, LID: ${userLid})`
+        `[User Metadata] Saved bot owner: ${phoneNumber} (JID: ${userJid}, LID: ${userLid})`,
       );
     }
   } catch (err) {

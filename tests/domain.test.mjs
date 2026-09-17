@@ -6,7 +6,7 @@
 // directory" — and records every command and every file write, so the tests
 // can assert on what Levix *would* do to somebody's production box.
 
-import { useTempDataDir, require, section, ok, equal, finish } from "./harness.mjs";
+import { equal, finish, ok, require, section, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("levix-domain");
 
@@ -80,17 +80,32 @@ section("what kind of server is this?");
 const scenarios = [
   {
     label: "nginx + certbot",
-    spec: { commands: ["nginx", "certbot", "systemctl"], paths: NGINX_LAYOUT, listeners: [{ port: 80, process: "nginx" }, { port: 443, process: "nginx" }] },
+    spec: {
+      commands: ["nginx", "certbot", "systemctl"],
+      paths: NGINX_LAYOUT,
+      listeners: [
+        { port: 80, process: "nginx" },
+        { port: 443, process: "nginx" },
+      ],
+    },
     expect: "nginx",
   },
   {
     label: "nginx without certbot",
-    spec: { commands: ["nginx", "systemctl"], paths: NGINX_LAYOUT, listeners: [{ port: 80, process: "nginx" }] },
+    spec: {
+      commands: ["nginx", "systemctl"],
+      paths: NGINX_LAYOUT,
+      listeners: [{ port: 80, process: "nginx" }],
+    },
     expect: "nginx",
   },
   {
     label: "caddy",
-    spec: { commands: ["caddy", "systemctl"], paths: ["/etc/caddy/Caddyfile"], listeners: [{ port: 443, process: "caddy" }] },
+    spec: {
+      commands: ["caddy", "systemctl"],
+      paths: ["/etc/caddy/Caddyfile"],
+      listeners: [{ port: 443, process: "caddy" }],
+    },
     expect: "caddy",
   },
   {
@@ -198,8 +213,15 @@ section("applying it: validate, then reload");
   const result = nginx.applySite(system, { domain: "bot.example.com", port: 3001 });
 
   ok("it succeeds", result.ok === true);
-  equal("the site goes in sites-available", result.path, "/etc/nginx/sites-available/levix-bot.example.com.conf");
-  ok("and is enabled by symlink", system.disk.has("/etc/nginx/sites-enabled/levix-bot.example.com.conf"));
+  equal(
+    "the site goes in sites-available",
+    result.path,
+    "/etc/nginx/sites-available/levix-bot.example.com.conf",
+  );
+  ok(
+    "and is enabled by symlink",
+    system.disk.has("/etc/nginx/sites-enabled/levix-bot.example.com.conf"),
+  );
 
   const testIndex = system.calls.indexOf("nginx -t");
   const reloadIndex = system.calls.indexOf("systemctl reload nginx");
@@ -229,7 +251,10 @@ section("a configuration nginx rejects is never reloaded");
   ok("nothing was reloaded at all", !system.calls.some((c) => c.includes("reload")));
   ok("nginx's own message is passed through", result.error.includes("duplicate server name"));
   ok("the half-written site was removed", !system.disk.has(result.path));
-  ok("…and so was its symlink", !system.disk.has("/etc/nginx/sites-enabled/levix-bot.example.com.conf"));
+  ok(
+    "…and so was its symlink",
+    !system.disk.has("/etc/nginx/sites-enabled/levix-bot.example.com.conf"),
+  );
 }
 
 section("a Levix site that already exists is restored on failure");
@@ -266,7 +291,10 @@ section("conf.d layouts work too");
   const system = fakeSystem({ commands: ["nginx", "systemctl"], paths: ["/etc/nginx/conf.d"] });
   const result = nginx.applySite(system, { domain: "bot.example.com", port: 3001 });
   equal("the site lands in conf.d", result.path, "/etc/nginx/conf.d/levix-bot.example.com.conf");
-  ok("no sites-enabled symlink is invented", ![...system.disk.keys()].some((p) => p.includes("sites-enabled")));
+  ok(
+    "no sites-enabled symlink is invented",
+    ![...system.disk.keys()].some((p) => p.includes("sites-enabled")),
+  );
 }
 
 section("certificates are not issued twice");
@@ -279,7 +307,10 @@ section("certificates are not issued twice");
   const result = nginx.ensureCertificate(system, { domain: "bot.example.com" });
   ok("it succeeds", result.ok === true);
   ok("it says it skipped", Boolean(result.skipped));
-  ok("certbot was never asked for a new one", !system.calls.some((c) => c.startsWith("certbot --nginx")));
+  ok(
+    "certbot was never asked for a new one",
+    !system.calls.some((c) => c.startsWith("certbot --nginx")),
+  );
 }
 
 {
@@ -288,7 +319,9 @@ section("certificates are not issued twice");
   ok("a missing certificate is requested", result.ok === true);
   ok(
     "…non-interactively, for that domain only",
-    system.calls.some((c) => c.includes("--nginx -d bot.example.com") && c.includes("--non-interactive"))
+    system.calls.some(
+      (c) => c.includes("--nginx -d bot.example.com") && c.includes("--non-interactive"),
+    ),
   );
 }
 
@@ -309,16 +342,19 @@ section("the Caddy site");
 {
   const system = fakeSystem({
     commands: ["caddy", "systemctl"],
-    files: { "/etc/caddy/Caddyfile": "example.com {\n  respond \"hi\"\n}\n" },
+    files: { "/etc/caddy/Caddyfile": 'example.com {\n  respond "hi"\n}\n' },
   });
   const result = caddy.applySite(system, { domain: "bot.example.com", port: 3001 });
 
   ok("it succeeds", result.ok === true);
   equal("the site is its own file", result.path, "/etc/caddy/levix/bot.example.com.caddy");
-  ok("which reverse-proxies to the local port", system.disk.get(result.path).includes("reverse_proxy 127.0.0.1:3001"));
+  ok(
+    "which reverse-proxies to the local port",
+    system.disk.get(result.path).includes("reverse_proxy 127.0.0.1:3001"),
+  );
 
   const caddyfile = system.disk.get("/etc/caddy/Caddyfile");
-  ok("the existing Caddyfile is preserved", caddyfile.includes('example.com {'));
+  ok("the existing Caddyfile is preserved", caddyfile.includes("example.com {"));
   ok("with one import line added", caddyfile.includes(caddy.IMPORT_LINE));
 
   const validateIndex = system.calls.findIndex((c) => c.startsWith("caddy validate"));
@@ -334,7 +370,7 @@ section("the Caddy site");
 section("a Caddyfile Caddy rejects is rolled back");
 
 {
-  const original = "example.com {\n  respond \"hi\"\n}\n";
+  const original = 'example.com {\n  respond "hi"\n}\n';
   const system = fakeSystem({
     commands: ["caddy", "systemctl"],
     files: { "/etc/caddy/Caddyfile": original },
@@ -345,7 +381,11 @@ section("a Caddyfile Caddy rejects is rolled back");
   ok("it reports failure", result.ok === false);
   ok("nothing was reloaded", !system.calls.some((c) => c.includes("reload")));
   ok("Caddy's own message is passed through", result.error.includes("unrecognized directive"));
-  equal("the operator's Caddyfile is exactly as it was", system.disk.get("/etc/caddy/Caddyfile"), original);
+  equal(
+    "the operator's Caddyfile is exactly as it was",
+    system.disk.get("/etc/caddy/Caddyfile"),
+    original,
+  );
   ok("and the site file is gone", !system.disk.has(result.path));
 }
 

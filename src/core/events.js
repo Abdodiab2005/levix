@@ -1,11 +1,14 @@
-import { createRequire } from 'module';
-import { handleIncomingMessage } from '../handlers/message.handler.js';
-import { handleGroupParticipantsUpdate, handleGroupJoinRequests } from '../handlers/group.handler.js';
-import { groupMetadataCache } from './socket.js';
-import { storeLidPnMappings } from '../utils/storage.esm.js';
+import { createRequire } from "module";
+import {
+  handleGroupJoinRequests,
+  handleGroupParticipantsUpdate,
+} from "../handlers/group.handler.js";
+import { handleIncomingMessage } from "../handlers/message.handler.js";
+import { storeLidPnMappings } from "../utils/storage.esm.js";
+import { groupMetadataCache } from "./socket.js";
 
 const require = createRequire(import.meta.url);
-const logger = require('../utils/logger.cjs');
+const logger = require("../utils/logger.cjs");
 
 /**
  * Wire one socket up.
@@ -22,7 +25,7 @@ const logger = require('../utils/logger.cjs');
  */
 export function setupEventListeners(
   sock,
-  { saveCreds, onConnectionUpdate, onHandshakeRejected } = {}
+  { saveCreds, onConnectionUpdate, onHandshakeRejected } = {},
 ) {
   // Every listener below goes through this. A bare `async` listener hands its
   // promise to Baileys' emitter, which drops it — so one rejection anywhere in
@@ -36,8 +39,8 @@ export function setupEventListeners(
   };
 
   sock.ev.on(
-    'connection.update',
-    contained('connection.update', (update) => onConnectionUpdate?.(update))
+    "connection.update",
+    contained("connection.update", (update) => onConnectionUpdate?.(update)),
   );
 
   // A handshake the server answered with an HTTP status instead of an upgrade.
@@ -50,17 +53,17 @@ export function setupEventListeners(
   // therefore produced no error, no close and no connection.update at all: the
   // session simply sat in `starting` until somebody noticed.
   sock.ws?.on?.(
-    'unexpected-response',
-    contained('unexpected-response', (_request, response) => {
+    "unexpected-response",
+    contained("unexpected-response", (_request, response) => {
       onHandshakeRejected?.(response);
-    })
+    }),
   );
 
   // Save credentials
-  if (saveCreds) sock.ev.on('creds.update', saveCreds);
+  if (saveCreds) sock.ev.on("creds.update", saveCreds);
 
   // V7: LID mapping updates
-  sock.ev.on('lid-mapping.update', (updates) => {
+  sock.ev.on("lid-mapping.update", (updates) => {
     logger.info(`[LID] Received ${Object.keys(updates).length} LID mapping updates`);
     const mappings = [];
     for (const [lid, pn] of Object.entries(updates)) {
@@ -74,7 +77,7 @@ export function setupEventListeners(
   });
 
   // Group metadata updates
-  sock.ev.on('groups.upsert', (updates) => {
+  sock.ev.on("groups.upsert", (updates) => {
     for (const group of updates) {
       logger.info(`[Cache] Caching metadata for group: ${group.id}`);
       groupMetadataCache.set(group.id, group);
@@ -83,21 +86,19 @@ export function setupEventListeners(
 
   // Incoming messages
   sock.ev.on(
-    'messages.upsert',
-    contained('messages.upsert', (m) => handleIncomingMessage(sock, m))
+    "messages.upsert",
+    contained("messages.upsert", (m) => handleIncomingMessage(sock, m)),
   );
 
   // Group participant updates
   sock.ev.on(
-    'group-participants.update',
-    contained('group-participants.update', (update) =>
-      handleGroupParticipantsUpdate(sock, update)
-    )
+    "group-participants.update",
+    contained("group-participants.update", (update) => handleGroupParticipantsUpdate(sock, update)),
   );
 
   // Group join requests
   sock.ev.on(
-    'group-requests.update',
-    contained('group-requests.update', (events) => handleGroupJoinRequests(sock, events))
+    "group-requests.update",
+    contained("group-requests.update", (events) => handleGroupJoinRequests(sock, events)),
   );
 }

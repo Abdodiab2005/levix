@@ -27,7 +27,7 @@ android {
         applicationId = "net.leviro.levix"
         minSdk = 29
         targetSdk = 35
-        versionCode = 27
+        versionCode = 29
         versionName = "3.4.0-rc.3"
 
         ndk {
@@ -73,6 +73,8 @@ tasks.register<Exec>("stageLevixApp") {
     inputs.dir(File(repoRoot, "src"))
     inputs.dir(File(repoRoot, "views"))
     inputs.dir(File(repoRoot, "public"))
+    inputs.dir(File(repoRoot, "frontend/src"))
+    inputs.file(File(repoRoot, "frontend/package.json"))
     inputs.dir(File(repoRoot, "bin"))
     inputs.file(File(repoRoot, "app.cjs"))
     inputs.file(File(repoRoot, "scheduler.cjs"))

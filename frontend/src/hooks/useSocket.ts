@@ -1,7 +1,7 @@
 // file: frontend/src/hooks/useSocket.ts
 import { useEffect, useState } from "react";
-import { io, Socket } from "socket.io-client";
-import { SessionStatus } from "../types";
+import { io, type Socket } from "socket.io-client";
+import type { SessionStatus } from "../types";
 
 let socketInstance: Socket | null = null;
 
@@ -38,7 +38,9 @@ export function useSocket(onEvent?: (event: string, data: any) => void) {
     };
 
     const handlePairingCode = (code: string) => {
-      setSessionStatus((prev) => (prev ? { ...prev, pairingCode: code } : { state: "waiting_for_qr", pairingCode: code }));
+      setSessionStatus((prev) =>
+        prev ? { ...prev, pairingCode: code } : { state: "waiting_for_qr", pairingCode: code },
+      );
       onEvent?.("pairing-code", code);
     };
 

@@ -1,8 +1,5 @@
 // file: commands/schedule.js
-const {
-  scheduleNewJob,
-  saveScheduledJob,
-} = require("../../scheduler.cjs");
+const { scheduleNewJob, saveScheduledJob } = require("../../scheduler.cjs");
 const { zonedTimeToDate, defaultTimezone } = require("../utils/datetime.cjs");
 
 const DATETIME_RE = /^(\d{1,2}):(\d{2})\s+(\d{1,2})-(\d{1,2})-(\d{4})$/;
@@ -77,10 +74,9 @@ module.exports = {
     saveScheduledJob(newJob);
 
     await sock.sendMessage(creatorJid, {
-      text: `✅ تم جدولة رسالتك بنجاح ليتم إرسالها في:\n*${scheduleDate.toLocaleString(
-        "ar-EG",
-        { timeZone: defaultTimezone() }
-      )}*`,
+      text: `✅ تم جدولة رسالتك بنجاح ليتم إرسالها في:\n*${scheduleDate.toLocaleString("ar-EG", {
+        timeZone: defaultTimezone(),
+      })}*`,
     });
   },
 };

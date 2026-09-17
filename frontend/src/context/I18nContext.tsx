@@ -1,12 +1,13 @@
 // file: frontend/src/context/I18nContext.tsx
-import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
-import { translations, Language } from "../i18n/translations";
+import type React from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { type Language, translations } from "../i18n/translations";
 
 interface I18nContextType {
   language: Language;
   direction: "rtl" | "ltr";
   setLanguage: (lang: Language) => void;
-  t: (key: keyof typeof translations["en"], fallback?: string) => string;
+  t: (key: keyof (typeof translations)["en"], fallback?: string) => string;
 }
 
 const I18nContext = createContext<I18nContextType | null>(null);
@@ -31,7 +32,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const t = useMemo(() => {
-    return (key: keyof typeof translations["en"], fallback?: string): string => {
+    return (key: keyof (typeof translations)["en"], fallback?: string): string => {
       const dict = translations[language] || translations["en"];
       return (dict as any)[key] ?? (translations["en"] as any)[key] ?? fallback ?? String(key);
     };

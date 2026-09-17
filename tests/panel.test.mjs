@@ -6,7 +6,7 @@
 // works", not "pairing works". Pairing is verified by hand and by
 // scripts/validate-sea.mjs starting a real process.
 
-import { useTempDataDir, httpClient, startServer, section, ok, equal, finish } from "./harness.mjs";
+import { equal, finish, httpClient, ok, section, startServer, useTempDataDir } from "./harness.mjs";
 
 const dataDir = useTempDataDir("levix-panel");
 const { saveSchedule } = await import("../src/utils/storage.esm.js");
@@ -99,11 +99,15 @@ try {
   ok("the removed REST API key is gone", !settings.some((s) => s.key === "secret_api_key"));
   ok(
     "the port is marked restart-required",
-    settings.some((s) => s.key === "port" && s.restart === true)
+    settings.some((s) => s.key === "port" && s.restart === true),
   );
   ok("no setting still claims to come from .env", !settings.some((s) => s.source === "env"));
 
-  res = await http.json("/dashboard/api/settings", { key: "gemini_model", value: "gemini-x" }, "PATCH");
+  res = await http.json(
+    "/dashboard/api/settings",
+    { key: "gemini_model", value: "gemini-x" },
+    "PATCH",
+  );
   equal("a setting can be changed", res.status, 200);
 
   const schedulePayload = await (await http.call("/dashboard/api/schedules")).json();
@@ -112,7 +116,7 @@ try {
   equal(
     "recurring schedules are human-readable",
     schedulePayload.schedules[0].when,
-    "Every Friday at 18:30 (Africa/Cairo)"
+    "Every Friday at 18:30 (Africa/Cairo)",
   );
   equal("delivery failures reach the panel", schedulePayload.schedules[0].lastError, "offline");
 
@@ -144,8 +148,16 @@ try {
   equal("logout succeeds", (await http.call("/logout", { method: "POST" })).status, 303);
   equal("the API is locked again", (await http.call("/dashboard/api/stats")).status, 401);
 
-  equal("the old password no longer works", (await http.form("/login", { password: "a-good-password" })).status, 401);
-  equal("the new password does", (await http.form("/login", { password: "another-good-one" })).status, 303);
+  equal(
+    "the old password no longer works",
+    (await http.form("/login", { password: "a-good-password" })).status,
+    401,
+  );
+  equal(
+    "the new password does",
+    (await http.form("/login", { password: "another-good-one" })).status,
+    303,
+  );
   equal("the QR page is reachable", (await http.call("/qr")).status, 200);
 
   section("guessing is throttled");
@@ -154,7 +166,7 @@ try {
   equal(
     "the right password is refused once the limit is hit",
     (await http.form("/login", { password: "another-good-one" })).status,
-    429
+    429,
   );
 
   section("everything else");

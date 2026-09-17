@@ -81,11 +81,8 @@ module.exports = {
     if (["dice", "die", "نرد", "زهر"].includes(mode)) {
       const result = rollDice(args[1]);
       if (result.error) return reply(result.error);
-      const detail =
-        result.rolls.length > 1 ? `\n(${result.rolls.join(" + ")})` : "";
-      return reply(
-        `🎲 *${result.total}* — ${result.count}d${result.sides}${detail}`
-      );
+      const detail = result.rolls.length > 1 ? `\n(${result.rolls.join(" + ")})` : "";
+      return reply(`🎲 *${result.total}* — ${result.count}d${result.sides}${detail}`);
     }
 
     if (["pick", "choose", "اختار", "اختر"].includes(mode)) {

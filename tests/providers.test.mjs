@@ -8,23 +8,23 @@
 // tool-result round trip, and the canonical history that reaches storage.
 
 import {
-  useTempDataDir,
-  require as harnessRequire,
-  section,
-  ok,
-  equal,
-  finish,
-} from "./harness.mjs";
-import {
-  startProviderServer,
-  openaiText,
-  openaiToolCall,
+  ANTHROPIC_PATH,
   anthropicText,
   anthropicToolCall,
-  providerError,
   OPENAI_PATH,
-  ANTHROPIC_PATH,
+  openaiText,
+  openaiToolCall,
+  providerError,
+  startProviderServer,
 } from "./fixtures/provider-server.mjs";
+import {
+  equal,
+  finish,
+  require as harnessRequire,
+  ok,
+  section,
+  useTempDataDir,
+} from "./harness.mjs";
 
 useTempDataDir("levix-providers");
 
@@ -51,7 +51,7 @@ section("the provider selector");
   equal(
     "with exactly the three providers as choices",
     JSON.stringify(selector.choices),
-    JSON.stringify(["gemini", "openai", "anthropic"])
+    JSON.stringify(["gemini", "openai", "anthropic"]),
   );
   equal("and gemini is the default", selector.default, "gemini");
   equal("…which is what a fresh install runs", settings.get("ai_provider"), "gemini");
@@ -62,7 +62,7 @@ section("the provider selector");
       gemini: "Google Gemini",
       openai: "OpenAI / compatible",
       anthropic: "Anthropic Claude",
-    })
+    }),
   );
 
   // The provider has its own key/model/base-URL settings, all panel-visible.
@@ -77,27 +77,46 @@ section("the provider selector");
     "anthropic_base_url",
     "anthropic_model",
   ]) {
-    ok(`${key} is a setting`, described.some((entry) => entry.key === key));
+    ok(
+      `${key} is a setting`,
+      described.some((entry) => entry.key === key),
+    );
   }
   const geminiBase = described.find((entry) => entry.key === "gemini_base_url");
   equal(
     "the Gemini base URL defaults to Google's API root",
     geminiBase.default,
-    "https://generativelanguage.googleapis.com"
+    "https://generativelanguage.googleapis.com",
   );
   const openaiBase = described.find((entry) => entry.key === "openai_base_url");
-  equal("the openai base URL defaults to OpenAI itself", openaiBase.default, "https://api.openai.com/v1");
+  equal(
+    "the openai base URL defaults to OpenAI itself",
+    openaiBase.default,
+    "https://api.openai.com/v1",
+  );
 
   // Regression: the key lookup used to go through the wire-adapter table,
   // which has no gemini entry — so the DEFAULT configuration threw, taking
   // the dashboard /stats endpoint and every AI command down with it.
-  equal("the default provider maps to the gemini key", aiAgent.activeProviderKeySetting(), "gemini_api_key");
-  equal("…openai maps to its own key", aiAgent.activeProviderKeySetting("openai"), "openai_api_key");
-  equal("…and anthropic to its", aiAgent.activeProviderKeySetting("anthropic"), "anthropic_api_key");
+  equal(
+    "the default provider maps to the gemini key",
+    aiAgent.activeProviderKeySetting(),
+    "gemini_api_key",
+  );
+  equal(
+    "…openai maps to its own key",
+    aiAgent.activeProviderKeySetting("openai"),
+    "openai_api_key",
+  );
+  equal(
+    "…and anthropic to its",
+    aiAgent.activeProviderKeySetting("anthropic"),
+    "anthropic_api_key",
+  );
   equal(
     "isAgentEnabled reads the default provider without throwing (false while the key is empty)",
     aiAgent.isAgentEnabled(),
-    false
+    false,
   );
 }
 
@@ -147,20 +166,23 @@ await useOpenAI([], async (fake) => {
         tool.function.name &&
         tool.function.parameters?.type === "object" &&
         // No uppercase Gemini `Type` value survived the translation.
-        !/"type":"[A-Z]/.test(JSON.stringify(tool.function.parameters))
-    )
+        !/"type":"[A-Z]/.test(JSON.stringify(tool.function.parameters)),
+    ),
   );
   const search = tools.find((tool) => tool.function.name === "web_search");
   equal(
     "the schema really was translated (query: string)",
     search?.function?.parameters?.properties?.query?.type,
-    "string"
+    "string",
   );
   ok("…and never a Gemini built-in", !JSON.stringify(tools).includes("googleSearch"));
   equal("tool_choice is auto", body.tool_choice, "auto");
 
   // The key authenticates the Bearer way, and never anywhere else.
-  ok("the api key is a Bearer token", /^Bearer key-/.test(fake.requests[0].headers.authorization || ""));
+  ok(
+    "the api key is a Bearer token",
+    /^Bearer key-/.test(fake.requests[0].headers.authorization || ""),
+  );
 });
 
 section("openai: a tool call runs and its result goes back");
@@ -191,7 +213,7 @@ await useOpenAI(
     ok("a tool message followed", !!toolMessage);
     equal("…paired by tool_call_id", toolMessage.tool_call_id, "call_abc");
     ok("…carrying the tool's output as JSON", JSON.parse(toolMessage.content).iso);
-  }
+  },
 );
 
 section("openai: the budget still stops the loop");
@@ -215,7 +237,7 @@ section("openai: the budget still stops the loop");
       });
       equal("it stopped at the budget", result.steps, 2);
       ok("and said something rather than nothing", result.text.length > 0);
-    }
+    },
   );
 
   settings.set("ai_max_tool_steps", previous);
@@ -229,7 +251,10 @@ await useAnthropic([], async (fake) => {
 
   const request = fake.requests[0];
   equal("a request reached /v1/messages", request.url, ANTHROPIC_PATH);
-  ok("auth is the x-api-key header", request.headers["x-api-key"] === settings.get("anthropic_api_key"));
+  ok(
+    "auth is the x-api-key header",
+    request.headers["x-api-key"] === settings.get("anthropic_api_key"),
+  );
   ok("…with a version pinned", !!request.headers["anthropic-version"]);
 
   const body = fake.body(ANTHROPIC_PATH, 0);
@@ -243,7 +268,7 @@ await useAnthropic([], async (fake) => {
   ok(`Levix's own tools travel (${tools.length})`, tools.length > 3);
   ok(
     "every one in Messages-API shape with an input_schema",
-    tools.every((tool) => tool.name && tool.input_schema?.type === "object")
+    tools.every((tool) => tool.name && tool.input_schema?.type === "object"),
   );
   ok("…and never a Gemini built-in", !JSON.stringify(tools).includes("googleSearch"));
   equal("tool_choice is auto", JSON.stringify(body.tool_choice), JSON.stringify({ type: "auto" }));
@@ -252,7 +277,10 @@ await useAnthropic([], async (fake) => {
 section("anthropic: a tool call runs and its result goes back");
 
 await useAnthropic(
-  [anthropicToolCall([{ name: "get_datetime", args: {}, id: "toolu_1" }]), anthropicText("it is late")],
+  [
+    anthropicToolCall([{ name: "get_datetime", args: {}, id: "toolu_1" }]),
+    anthropicText("it is late"),
+  ],
   async (fake) => {
     const result = await aiAgent.runAgent({
       parts: [{ text: "what time is it" }],
@@ -266,7 +294,8 @@ await useAnthropic(
 
     const second = fake.body(ANTHROPIC_PATH, 1);
     const assistant = second.messages.find(
-      (message) => message.role === "assistant" && (message.content || []).some((b) => b.type === "tool_use")
+      (message) =>
+        message.role === "assistant" && (message.content || []).some((b) => b.type === "tool_use"),
     );
     ok("the tool_use block was echoed", !!assistant);
     equal("…with its id", assistant.content.find((b) => b.type === "tool_use").id, "toolu_1");
@@ -277,7 +306,7 @@ await useAnthropic(
     ok("a tool_result block followed", !!toolResult);
     equal("…paired by tool_use_id", toolResult.tool_use_id, "toolu_1");
     ok("…carrying the tool's output", JSON.parse(toolResult.content).iso);
-  }
+  },
 );
 
 section("media becomes a note, not bytes, off the Gemini path");
@@ -321,7 +350,10 @@ await useOpenAI([openaiText("first")], async (fake) => {
     const messages = anthropicFake.body(ANTHROPIC_PATH, 0).messages;
     ok("the stored turns were replayed", messages.length > 1);
     equal("…starting with the first user message", messages[0].content[0].text, "one");
-    ok("roles alternate", messages.every((message, i) => message.role === (i % 2 ? "assistant" : "user")));
+    ok(
+      "roles alternate",
+      messages.every((message, i) => message.role === (i % 2 ? "assistant" : "user")),
+    );
   });
 });
 
@@ -347,10 +379,10 @@ await useAnthropic(
       equal(
         "…still paired with the call it answers",
         toolMessage.tool_call_id,
-        echoed.tool_calls[0].id
+        echoed.tool_calls[0].id,
       );
     });
-  }
+  },
 );
 
 section("an API error is not swallowed");
@@ -377,7 +409,10 @@ await useOpenAI([providerError(401, "bad key")], async () => {
     threw = error;
   }
   ok("an HTTP error propagates too", threw !== null);
-  ok(`…carrying its status (${threw?.status})`, threw?.status === 401 || /401/.test(String(threw?.message)));
+  ok(
+    `…carrying its status (${threw?.status})`,
+    threw?.status === 401 || /401/.test(String(threw?.message)),
+  );
 });
 
 section("a provider without a key fails loudly, in Arabic, like gemini does");

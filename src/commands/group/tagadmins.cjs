@@ -13,7 +13,7 @@ module.exports = {
     try {
       // Filter the participants to get only admins and superadmins
       const admins = groupMetadata.participants.filter(
-        (p) => p.admin === "admin" || p.admin === "superadmin"
+        (p) => p.admin === "admin" || p.admin === "superadmin",
       );
 
       if (admins.length === 0) {
@@ -40,10 +40,7 @@ module.exports = {
         mentions: mentions,
       });
     } catch (error) {
-      logger.error(
-        { err: error, command: "tagadmins" },
-        "Error in !tagadmins command"
-      );
+      logger.error({ err: error, command: "tagadmins" }, "Error in !tagadmins command");
       await sock.sendMessage(groupId, { text: "حدث خطأ." });
     }
   },

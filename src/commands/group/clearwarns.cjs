@@ -12,8 +12,7 @@ module.exports = {
   async execute(sock, msg) {
     try {
       const groupId = msg.key.remoteJid;
-      const mentionedJid =
-        msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+      const mentionedJid = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
 
       if (!mentionedJid) {
         return await sock.sendMessage(groupId, {
@@ -24,9 +23,7 @@ module.exports = {
       // Call the new function from storage.js to delete the record from the database
       clearUserWarnings(groupId, mentionedJid);
 
-      const replyText = `✅ تم مسح جميع تحذيرات العضو @${
-        mentionedJid.split("@")[0]
-      } بنجاح.`;
+      const replyText = `✅ تم مسح جميع تحذيرات العضو @${mentionedJid.split("@")[0]} بنجاح.`;
       await sock.sendMessage(groupId, {
         text: replyText,
         mentions: [mentionedJid],

@@ -50,7 +50,7 @@ const FUNCTIONS = {
   rad: { arity: 1, fn: (x) => x * DEG },
   fact: { arity: 1, fn: (x) => factorial(x) },
   pow: { arity: 2, fn: Math.pow },
-  root: { arity: 2, fn: (x, n) => (n % 2 === 0 || x >= 0 ? Math.pow(x, 1 / n) : -Math.pow(-x, 1 / n)) },
+  root: { arity: 2, fn: (x, n) => (n % 2 === 0 || x >= 0 ? x ** (1 / n) : -((-x) ** (1 / n))) },
   hypot: { arity: -1, fn: (...a) => Math.hypot(...a) },
   min: { arity: -1, fn: (...a) => Math.min(...a) },
   max: { arity: -1, fn: (...a) => Math.max(...a) },
@@ -96,10 +96,7 @@ function normalize(input) {
     .replace(/(?<=\d),(?=\d{3}(?!\d))/g, "");
 
   // «20% من 300» / «20% of 300» -> (20/100)*300, so % stays modulo elsewhere.
-  text = text.replace(
-    /(\d+(?:\.\d+)?)\s*%\s*(?:of|من)\s*/gi,
-    (_, value) => `(${value}/100)*`
-  );
+  text = text.replace(/(\d+(?:\.\d+)?)\s*%\s*(?:of|من)\s*/gi, (_, value) => `(${value}/100)*`);
 
   return text.trim();
 }
@@ -219,7 +216,7 @@ function parse(tokens) {
 
   function parsePower() {
     const base = parsePostfix();
-    if (eat("^")) return Math.pow(base, parseUnary()); // right-associative
+    if (eat("^")) return base ** parseUnary(); // right-associative
     return base;
   }
 
@@ -267,7 +264,7 @@ function parse(tokens) {
         expect(")", `قوس \`${name}\` مقفلش`);
         if (spec.arity !== -1 && args.length !== spec.arity) {
           throw new CalcError(
-            `الدالة \`${name}\` بتاخد ${spec.arity} ${spec.arity === 1 ? "قيمة" : "قيم"}`
+            `الدالة \`${name}\` بتاخد ${spec.arity} ${spec.arity === 1 ? "قيمة" : "قيم"}`,
           );
         }
         if (!args.length) throw new CalcError(`الدالة \`${name}\` من غير قيم`);
@@ -348,8 +345,7 @@ module.exports = {
 
     // Fall back to the quoted message so «رد على الرقم واكتب !calc» works.
     const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-    const quotedText =
-      quoted?.conversation || quoted?.extendedTextMessage?.text || "";
+    const quotedText = quoted?.conversation || quoted?.extendedTextMessage?.text || "";
 
     const expression = args.join(" ").trim() || quotedText.trim();
 
@@ -363,20 +359,17 @@ module.exports = {
         sock,
         chatId,
         {
-          text:
-            `🧮 \`${normalized}\`\n` +
-            `*=* ${formatNumber(value)}`,
+          text: `🧮 \`${normalized}\`\n` + `*=* ${formatNumber(value)}`,
         },
-        { replyTo: msg }
+        { replyTo: msg },
       );
     } catch (error) {
-      const reason =
-        error instanceof CalcError ? error.message : "المعادلة مش مفهومة";
+      const reason = error instanceof CalcError ? error.message : "المعادلة مش مفهومة";
       return sendBotMessage(
         sock,
         chatId,
         { text: `❌ ${reason}\n\nاكتب \`!calc\` لوحده عشان تشوف الأمثلة.` },
-        { replyTo: msg }
+        { replyTo: msg },
       );
     }
   },

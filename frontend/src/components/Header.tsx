@@ -1,8 +1,9 @@
 // file: frontend/src/components/Header.tsx
+
+import { Globe, LogOut, Menu, Moon, Sun } from "lucide-react";
 import React from "react";
-import { Menu, Globe, LogOut, Sun, Moon } from "lucide-react";
 import { useI18n } from "../context/I18nContext";
-import { SessionStatus } from "../types";
+import type { SessionStatus } from "../types";
 
 interface HeaderProps {
   onToggleMobileMenu: () => void;
@@ -10,11 +11,7 @@ interface HeaderProps {
   status: SessionStatus | null;
 }
 
-export const Header: React.FC<HeaderProps> = ({
-  onToggleMobileMenu,
-  title,
-  status,
-}) => {
+export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu, title, status }) => {
   const { language, setLanguage, t } = useI18n();
 
   const handleLanguageToggle = () => {
@@ -32,79 +29,63 @@ export const Header: React.FC<HeaderProps> = ({
     localStorage.setItem("levix_theme", nextTheme);
   };
 
-  const state = status?.state || "idle";
-  const stateClass =
-    state === "connected"
-      ? "badge-ok"
-      : state === "starting" || state === "linking" || state === "waiting_for_qr"
-      ? "badge-warn"
-      : state === "error" || state === "logged_out"
-      ? "badge-danger"
-      : "badge-info";
-
   return (
-    <header className="top-header">
-      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+    <header className="h-16 sticky top-0 z-30 flex items-center justify-between px-4 md:px-6 bg-panel/85 backdrop-blur-md border-b border-line">
+      <div className="flex items-center gap-3 min-w-0">
         <button
+          type="button"
           onClick={onToggleMobileMenu}
-          className="btn btn-secondary btn-sm"
-          style={{ display: "none" }}
+          className="inline-flex md:hidden items-center justify-center w-11 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50"
           id="mobile-menu-btn"
-          aria-label="Open menu"
+          aria-label="Open navigation menu"
         >
           <Menu size={20} />
         </button>
-        <h1 style={{ fontSize: "1.25rem", fontWeight: 700, letterSpacing: "-0.01em" }}>
+        <h1
+          className="text-lg md:text-xl font-bold tracking-tight text-text-main truncate"
+          title={title}
+        >
           {title}
         </h1>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        {/* Status indicator */}
-        <div className={`badge ${stateClass}`}>
-          <span className="pulse-dot" />
-          <span>{t(state as any, state)}</span>
-        </div>
-
+      <div className="flex items-center gap-2 md:gap-3">
         {/* Language switch */}
         <button
+          type="button"
           onClick={handleLanguageToggle}
-          className="btn btn-secondary btn-sm"
-          title="Switch Language (AR / EN)"
-          style={{ minWidth: "75px" }}
+          className="inline-flex items-center gap-2 px-3.5 py-2 min-h-[44px] rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs md:text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50"
+          title={language === "ar" ? "Switch to English" : "التبديل إلى العربية"}
+          aria-label="Switch language"
+          id="btn-header-lang"
         >
-          <Globe size={15} />
+          <Globe size={18} className="text-brand-cyan shrink-0" />
           <span>{language === "ar" ? "English" : "العربية"}</span>
         </button>
 
         {/* Theme toggle */}
         <button
+          type="button"
           onClick={handleThemeToggle}
-          className="btn btn-secondary btn-sm"
+          className="inline-flex items-center justify-center w-11 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50"
           title="Toggle Theme"
           aria-label="Toggle dark/light theme"
         >
-          {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
         </button>
 
         {/* Logout */}
-        <form action="/logout" method="POST" style={{ margin: 0 }}>
+        <form action="/logout" method="POST" className="m-0">
           <button
             type="submit"
-            className="btn btn-secondary btn-sm"
+            className="inline-flex items-center justify-center w-11 h-11 rounded-xl border border-line bg-panel-raised hover:bg-danger/15 hover:border-danger/40 hover:text-danger text-text-main transition-colors focus-visible:ring-2 focus-visible:ring-danger/50"
             title={t("logout")}
             aria-label="Sign out"
           >
-            <LogOut size={16} />
+            <LogOut size={18} className="rtl:-scale-x-100 transition-transform" />
           </button>
         </form>
       </div>
-
-      <style>{`
-        @media (max-width: 900px) {
-          #mobile-menu-btn { display: inline-flex !important; }
-        }
-      `}</style>
     </header>
   );
 };

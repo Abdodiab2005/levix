@@ -44,12 +44,13 @@ npm install, and a read-only container image without a flag.
 
 ---
 
-## 2. The four channels
+## 2. The distribution channels
 
 | Channel | For | They need | Time to first message |
 | --- | --- | --- | --- |
 | npm global | anyone with Node | Node 24+ | ~2 min |
 | Docker | anyone with Docker | Docker | ~3 min (first build) |
+| Android APK | Android phone (no server) | Android 10+ ARM64 | ~1 min |
 | Install script | a Linux VPS | Node 24+, systemd, sudo | ~3 min, survives reboot |
 | Single binary | no Node at all | nothing | ~1 min |
 
@@ -72,8 +73,7 @@ git push --follow-tags
 ```
 
 `package.json` carries `bin: { levix: "bin/levix.js" }` and a `files` list, so
-the tarball is source, views, public assets and the deploy templates — no
-tests, no build output, no data.
+`package.json` carries `bin: { levix: "bin/levix.js" }` and a `files` list. A `prepack` script (`npm run build:frontend`) automatically builds the React + Vite dashboard (`frontend/`) into `public/dashboard` prior to packaging, keeping build output out of git while ensuring every npm distribution includes the full SPA bundle.
 
 `src/cli.js` checks the Node version before anything else and prints an
 actionable message instead of a stack trace. It carries the modes and the
@@ -97,7 +97,10 @@ docker compose up -d
 docker compose logs levix | grep -F '[Setup] Setup code:' | tail -1
 ```
 
-`Dockerfile` is a two-stage build on `node:24-slim`. Debian, not Alpine, on
+`Dockerfile` is a multi-stage build on `node:24-slim`:
+1. `deps`: installs production dependencies (`npm ci --omit=dev`).
+2. `frontend-builder`: compiles the React + Vite dashboard (`npm run build`).
+3. Final runtime: packages Node runtime, copies built frontend assets to `public/dashboard`, and sets up the `/data` volume. Debian, not Alpine, on
 purpose: `ffmpeg-static` ships a glibc binary that will not run on musl, and
 the failure is silent — thumbnails just stop.
 

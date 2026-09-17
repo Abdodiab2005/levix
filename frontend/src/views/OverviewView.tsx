@@ -1,10 +1,20 @@
-// file: frontend/src/views/OverviewView.tsx
-import React, { useEffect, useState } from "react";
-import { Users, Terminal, Clock, Folder, MessageSquare, Play, Square, Activity } from "lucide-react";
+import {
+  Activity,
+  Clock,
+  Folder,
+  Globe,
+  MessageSquare,
+  Play,
+  Square,
+  Terminal,
+  Users,
+} from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { useI18n } from "../context/I18nContext";
 import { useToast } from "../components/Toasts";
-import { DashboardStats, SessionStatus } from "../types";
+import { useI18n } from "../context/I18nContext";
+import type { DashboardStats, SessionStatus } from "../types";
 
 interface OverviewViewProps {
   status: SessionStatus | null;
@@ -12,14 +22,15 @@ interface OverviewViewProps {
 }
 
 export const OverviewView: React.FC<OverviewViewProps> = ({ status, onNavigate }) => {
-  const { t } = useI18n();
+  const { t, language, setLanguage } = useI18n();
   const { toast } = useToast();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
-    api.getStats()
+    api
+      .getStats()
       .then((res) => {
         if (mounted && res?.stats) setStats(res.stats);
       })
@@ -64,103 +75,143 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ status, onNavigate }
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+    <div className="flex flex-col gap-5">
       {/* Hero Session Banner */}
-      <div className="card-glass" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "20px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+      <div className="rounded-2xl border border-line bg-gradient-to-br from-panel-raised to-panel p-5 md:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5 min-w-0 flex-1">
           <div
-            style={{
-              width: "48px",
-              height: "48px",
-              borderRadius: "12px",
-              background: isConnected ? "var(--ok-bg)" : "var(--warn-bg)",
-              color: isConnected ? "var(--ok)" : "var(--warn)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+              isConnected ? "bg-ok/10 text-ok" : "bg-warn/10 text-warn"
+            }`}
           >
-            <Activity size={26} />
+            <Activity size={24} />
           </div>
-          <div>
-            <h2 style={{ fontSize: "1.2rem", fontWeight: 700 }}>
-              {isConnected ? t("connected") : t(status?.state as any || "disconnected")}
+          <div className="min-w-0">
+            <h2 className="text-base md:text-lg font-bold text-text-main truncate">
+              {isConnected ? t("connected") : t(status?.state as any, "disconnected")}
             </h2>
-            <p style={{ fontSize: "0.85rem", color: "var(--muted)", marginTop: "4px" }}>
+            <p className="text-xs text-muted truncate mt-0.5">
               {isConnected
-                ? status?.user?.id ? `+${status.user.id.split("@")[0]}` : "Active and listening to messages"
-                : "WhatsApp connection is currently paused or linking"}
+                ? status?.user?.id
+                  ? `+${status.user.id.split("@")[0]}`
+                  : t("activeListening")
+                : t("pausedOrLinking")}
             </p>
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "12px" }}>
+        <div className="flex items-center gap-2.5 flex-wrap">
           {isConnected ? (
-            <button onClick={handleStop} className="btn btn-secondary">
-              <Square size={16} />
+            <button
+              type="button"
+              onClick={handleStop}
+              className="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border border-line bg-panel hover:bg-danger/15 hover:border-danger/30 hover:text-danger text-text-main text-xs md:text-sm font-bold transition-all focus-visible:ring-2 focus-visible:ring-danger/50"
+            >
+              <Square size={18} />
               <span>{t("stop")}</span>
             </button>
           ) : (
-            <button onClick={handleStart} className="btn btn-primary">
-              <Play size={16} />
+            <button
+              type="button"
+              onClick={handleStart}
+              className="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white text-xs md:text-sm font-bold shadow-md shadow-brand-blue/20 transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50"
+            >
+              <Play size={18} />
               <span>{t("start")}</span>
             </button>
           )}
-          <button onClick={() => onNavigate("connection")} className="btn btn-secondary">
+          <button
+            type="button"
+            onClick={() => onNavigate("connection")}
+            className="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border border-line bg-panel hover:bg-panel-hover text-text-main text-xs md:text-sm font-bold transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50"
+          >
             <span>{t("connection")}</span>
           </button>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "20px" }}>
-        <div className="card">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-            <span style={{ color: "var(--muted)", fontSize: "0.88rem", fontWeight: 600 }}>{t("totalGroups")}</span>
-            <Users size={20} color="var(--blue-bright)" />
+      {/* Prominent Quick Language & RTL Switcher on Main Interface */}
+      <div className="rounded-2xl border border-line border-s-4 border-s-brand-cyan bg-panel p-4 md:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5 min-w-0 flex-1">
+          <div className="w-11 h-11 rounded-xl bg-brand-cyan/10 text-brand-cyan flex items-center justify-center shrink-0">
+            <Globe size={22} />
           </div>
-          <div style={{ fontSize: "1.8rem", fontWeight: 800 }}>
-            {loading ? "—" : stats?.totalGroups ?? 0}
-          </div>
-        </div>
-
-        <div className="card">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-            <span style={{ color: "var(--muted)", fontSize: "0.88rem", fontWeight: 600 }}>{t("commandCount")}</span>
-            <Terminal size={20} color="var(--cyan)" />
-          </div>
-          <div style={{ fontSize: "1.8rem", fontWeight: 800 }}>
-            {loading ? "—" : stats?.commandCount ?? 0}
+          <div className="min-w-0">
+            <div className="text-sm md:text-base font-bold text-text-main truncate">
+              {t("langCardTitle")}
+            </div>
+            <div className="text-xs text-muted truncate mt-0.5">{t("langCardDesc")}</div>
           </div>
         </div>
 
-        <div className="card">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-            <span style={{ color: "var(--muted)", fontSize: "0.88rem", fontWeight: 600 }}>{t("uptime")}</span>
-            <Clock size={20} color="var(--ok)" />
+        <button
+          type="button"
+          onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
+          className="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main text-xs md:text-sm font-bold transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 shrink-0"
+          id="btn-switch-lang-overview"
+        >
+          <Globe size={18} className="text-brand-cyan" />
+          <span>{t("langSwitchBtn")}</span>
+        </button>
+      </div>
+
+      {/* Responsive Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="rounded-2xl border border-line bg-panel p-4 md:p-5 shadow-sm space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-brand-blue flex items-center justify-center shrink-0">
+              <Users size={20} />
+            </div>
+            <span className="text-xs font-semibold text-muted">{t("totalGroups")}</span>
           </div>
-          <div style={{ fontSize: "1.8rem", fontWeight: 800 }}>
+          <div className="text-2xl font-extrabold text-text-main font-mono">
+            {loading ? "—" : (stats?.totalGroups ?? 0)}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-line bg-panel p-4 md:p-5 shadow-sm space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-brand-cyan/10 text-brand-cyan flex items-center justify-center shrink-0">
+              <Terminal size={20} />
+            </div>
+            <span className="text-xs font-semibold text-muted">{t("commandCount")}</span>
+          </div>
+          <div className="text-2xl font-extrabold text-text-main font-mono">
+            {loading ? "—" : (stats?.commandCount ?? 0)}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-line bg-panel p-4 md:p-5 shadow-sm space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-ok/10 text-ok flex items-center justify-center shrink-0">
+              <Clock size={20} />
+            </div>
+            <span className="text-xs font-semibold text-muted">{t("uptime")}</span>
+          </div>
+          <div className="text-2xl font-extrabold text-text-main font-mono">
             {loading ? "—" : formatUptime(stats?.uptime || 0)}
           </div>
         </div>
 
-        <div className="card">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-            <span style={{ color: "var(--muted)", fontSize: "0.88rem", fontWeight: 600 }}>{t("activeSchedules")}</span>
-            <MessageSquare size={20} color="var(--purple)" />
+        <div className="rounded-2xl border border-line bg-panel p-4 md:p-5 shadow-sm space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0">
+              <MessageSquare size={20} />
+            </div>
+            <span className="text-xs font-semibold text-muted">{t("activeSchedules")}</span>
           </div>
-          <div style={{ fontSize: "1.8rem", fontWeight: 800 }}>
-            {loading ? "—" : stats?.activeSchedules ?? 0}
+          <div className="text-2xl font-extrabold text-text-main font-mono">
+            {loading ? "—" : (stats?.activeSchedules ?? 0)}
           </div>
         </div>
       </div>
 
       {/* Directory & Quick Info */}
-      <div className="card" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-        <Folder size={22} color="var(--faint)" />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--muted)", fontWeight: 600 }}>{t("dataDir")}</div>
-          <div style={{ fontSize: "0.88rem", fontFamily: "var(--font-mono)", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      <div className="rounded-2xl border border-line bg-panel p-4 shadow-sm flex items-center gap-3.5">
+        <Folder size={20} className="text-faint shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="text-xs font-semibold text-muted">{t("dataDir")}</div>
+          <div className="text-xs font-mono text-text-main truncate direction-ltr text-start">
             {stats?.dataDir || "..."}
           </div>
         </div>

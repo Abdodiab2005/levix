@@ -1,11 +1,11 @@
 import { createRequire } from "module";
-import { handleCommand } from "./command.handler.js";
 import { handleAntiSpam } from "../middleware/antispam.middleware.js";
 import { checkBlacklist } from "../middleware/blacklist.middleware.js";
 import { trackForwardedMessage } from "../middleware/forward-tracking.middleware.js";
-import { updateUserLastSeen, saveUserMetadata } from "../utils/storage.esm.js";
-import { rememberMessage } from "../utils/recentMessageCache.esm.js";
 import normalizeJid from "../utils/normalizeJid.esm.js";
+import { rememberMessage } from "../utils/recentMessageCache.esm.js";
+import { saveUserMetadata, updateUserLastSeen } from "../utils/storage.esm.js";
+import { handleCommand } from "./command.handler.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -85,11 +85,7 @@ export async function handleIncomingMessage(sock, m) {
 
   // Update user metadata (last seen)
   const senderId = normalizeJid(msg.key.participant || msg.key.remoteJid);
-  if (
-    senderId &&
-    !senderId.includes("@broadcast") &&
-    !senderId.includes("@newsletter")
-  ) {
+  if (senderId && !senderId.includes("@broadcast") && !senderId.includes("@newsletter")) {
     try {
       saveUserMetadata({
         jid: senderId,
@@ -134,12 +130,7 @@ async function handleGroupModeration(sock, msg) {
     const linkActionTaken = await handleAntiLink(sock, msg, {}, normalizeJid);
     if (linkActionTaken) return;
 
-    const mediaActionTaken = await handleMediaControl(
-      sock,
-      msg,
-      {},
-      normalizeJid
-    );
+    const mediaActionTaken = await handleMediaControl(sock, msg, {}, normalizeJid);
     if (mediaActionTaken) return;
 
     await handleAntiSpam(sock, msg);

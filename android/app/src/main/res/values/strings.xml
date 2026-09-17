@@ -14,6 +14,9 @@
     <string name="btn_stop_host">Stop Assistant</string>
 
     <!-- Sections -->
+    <string name="pref_language_title">App Language</string>
+    <string name="pref_language_sub">Switch between Arabic (RTL) &amp; English (LTR)</string>
+    <string name="pref_language_btn">العربية</string>
     <string name="section_overview">Status Overview</string>
     <string name="section_overview_sub">Core system health at a glance</string>
 

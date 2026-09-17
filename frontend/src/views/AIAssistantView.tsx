@@ -1,23 +1,24 @@
 // file: frontend/src/views/AIAssistantView.tsx
-import React, { useEffect, useState } from "react";
-import { Bot, Sparkles, Eye, Mic, Globe, Key, FileText, Database, Check, Save } from "lucide-react";
+
+import { Bot, Check, Database, Eye, FileText, Globe, Key, Mic, Save, Sparkles } from "lucide-react";
+import type React from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { useI18n } from "../context/I18nContext";
+import { Modal } from "../components/Modal";
 import { useToast } from "../components/Toasts";
 import { Toggle } from "../components/Toggle";
-import { Modal } from "../components/Modal";
+import { useI18n } from "../context/I18nContext";
 
 interface ProviderPreset {
   id: string;
   name: string;
-  desc: string;
+  descKey: string;
   provider: "gemini" | "openai" | "anthropic";
   defaultModel: string;
   defaultBaseUrl: string;
   keySetting: string;
   modelSetting: string;
   baseUrlSetting?: string;
-  supportsVision: boolean;
 }
 
 export const AIAssistantView: React.FC = () => {
@@ -39,62 +40,57 @@ export const AIAssistantView: React.FC = () => {
     {
       id: "gemini",
       name: "Google Gemini",
-      desc: t("providerGeminiDesc"),
+      descKey: "providerGeminiDesc",
       provider: "gemini",
       defaultModel: "gemini-3.7-flash",
       defaultBaseUrl: "",
       keySetting: "gemini_api_key",
       modelSetting: "gemini_model",
       baseUrlSetting: "gemini_base_url",
-      supportsVision: true,
     },
     {
       id: "groq",
       name: "Groq Cloud",
-      desc: t("providerGroqDesc"),
+      descKey: "providerGroqDesc",
       provider: "openai",
       defaultModel: "llama-3.3-70b-versatile",
       defaultBaseUrl: "https://api.groq.com/openai/v1",
       keySetting: "openai_api_key",
       modelSetting: "openai_model",
       baseUrlSetting: "openai_base_url",
-      supportsVision: true,
     },
     {
       id: "openai",
       name: "OpenAI",
-      desc: t("providerOpenAIDesc"),
+      descKey: "providerOpenAIDesc",
       provider: "openai",
       defaultModel: "gpt-4o",
       defaultBaseUrl: "https://api.openai.com/v1",
       keySetting: "openai_api_key",
       modelSetting: "openai_model",
       baseUrlSetting: "openai_base_url",
-      supportsVision: true,
     },
     {
       id: "ollama",
       name: "Ollama (Local)",
-      desc: t("providerOllamaDesc"),
+      descKey: "providerOllamaDesc",
       provider: "openai",
       defaultModel: "llama3.2",
       defaultBaseUrl: "http://localhost:11434/v1",
       keySetting: "openai_api_key",
       modelSetting: "openai_model",
       baseUrlSetting: "openai_base_url",
-      supportsVision: true,
     },
     {
       id: "anthropic",
       name: "Anthropic Claude",
-      desc: t("providerAnthropicDesc"),
+      descKey: "providerAnthropicDesc",
       provider: "anthropic",
       defaultModel: "claude-3-7-sonnet-20250219",
       defaultBaseUrl: "https://api.anthropic.com",
       keySetting: "anthropic_api_key",
       modelSetting: "anthropic_model",
       baseUrlSetting: "anthropic_base_url",
-      supportsVision: true,
     },
   ];
 
@@ -133,16 +129,18 @@ export const AIAssistantView: React.FC = () => {
   const activeBaseUrl = settings["openai_base_url"] || "";
 
   // Identify matching preset
-  let selectedPreset = presets.find((p) => {
-    if (activeProvider === "gemini") return p.id === "gemini";
-    if (activeProvider === "anthropic") return p.id === "anthropic";
-    if (activeProvider === "openai") {
-      if (activeBaseUrl.includes("groq")) return p.id === "groq";
-      if (activeBaseUrl.includes("localhost") || activeBaseUrl.includes("11434")) return p.id === "ollama";
-      return p.id === "openai";
-    }
-    return false;
-  }) || presets[0];
+  const selectedPreset =
+    presets.find((p) => {
+      if (activeProvider === "gemini") return p.id === "gemini";
+      if (activeProvider === "anthropic") return p.id === "anthropic";
+      if (activeProvider === "openai") {
+        if (activeBaseUrl.includes("groq")) return p.id === "groq";
+        if (activeBaseUrl.includes("localhost") || activeBaseUrl.includes("11434"))
+          return p.id === "ollama";
+        return p.id === "openai";
+      }
+      return false;
+    }) || presets[0];
 
   const selectPreset = async (preset: ProviderPreset) => {
     setSaving(true);
@@ -219,21 +217,50 @@ export const AIAssistantView: React.FC = () => {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       {/* Header card with master toggle */}
       <div className="card-glass">
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "20px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "var(--grad-primary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Bot size={26} color="#fff" />
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "16px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "14px",
+              flex: 1,
+              minWidth: "240px",
+            }}
+          >
+            <div
+              style={{
+                width: "44px",
+                height: "44px",
+                borderRadius: "12px",
+                background: "var(--grad-primary)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <Bot size={24} color="#fff" />
             </div>
             <div>
-              <h2 style={{ fontSize: "1.25rem", fontWeight: 700 }}>{t("aiTitle")}</h2>
-              <p style={{ fontSize: "0.85rem", color: "var(--muted)", marginTop: "4px" }}>{t("aiSubtitle")}</p>
+              <h2 style={{ fontSize: "1.15rem", fontWeight: 700 }}>{t("aiTitle")}</h2>
+              <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginTop: "3px" }}>
+                {t("aiSubtitle")}
+              </p>
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 }}>
             <Toggle
               checked={Boolean(settings["ai_agent"])}
               onChange={(val) => updateSetting("ai_agent", val)}
@@ -245,9 +272,9 @@ export const AIAssistantView: React.FC = () => {
 
       {/* Quick Setup Wizard */}
       <div className="card">
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "18px" }}>
-          <Sparkles size={20} color="var(--cyan)" />
-          <h3 style={{ fontSize: "1.05rem", fontWeight: 700 }}>{t("quickSetup")}</h3>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
+          <Sparkles size={18} color="var(--cyan)" style={{ flexShrink: 0 }} />
+          <h3 style={{ fontSize: "1rem", fontWeight: 700 }}>{t("quickSetup")}</h3>
         </div>
 
         <div className="provider-grid">
@@ -259,12 +286,21 @@ export const AIAssistantView: React.FC = () => {
                 className={`provider-card ${isActive ? "active" : ""}`}
                 onClick={() => selectPreset(p)}
               >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>{p.name}</span>
-                  {isActive && <Check size={18} color="var(--cyan)" />}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "8px",
+                  }}
+                >
+                  <span style={{ fontWeight: 700, fontSize: "0.92rem" }}>
+                    <bdi>{p.name}</bdi>
+                  </span>
+                  {isActive && <Check size={16} color="var(--cyan)" style={{ flexShrink: 0 }} />}
                 </div>
-                <p style={{ fontSize: "0.8rem", color: "var(--muted)", lineHeight: "1.4" }}>
-                  {p.desc}
+                <p style={{ fontSize: "0.78rem", color: "var(--muted)", lineHeight: "1.4" }}>
+                  {t(p.descKey as any, p.name)}
                 </p>
               </div>
             );
@@ -272,14 +308,23 @@ export const AIAssistantView: React.FC = () => {
         </div>
 
         {/* Dynamic Provider Inputs */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px", marginTop: "20px" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gap: "16px",
+            marginTop: "16px",
+          }}
+        >
           <div className="form-group">
             <label className="form-label">{t("modelName")}</label>
             <input
               type="text"
-              className="form-input"
+              className="form-input input-technical"
               value={settings[selectedPreset.modelSetting] || ""}
-              onChange={(e) => setSettings({ ...settings, [selectedPreset.modelSetting]: e.target.value })}
+              onChange={(e) =>
+                setSettings({ ...settings, [selectedPreset.modelSetting]: e.target.value })
+              }
               onBlur={(e) => updateSetting(selectedPreset.modelSetting, e.target.value)}
               placeholder={selectedPreset.defaultModel}
             />
@@ -289,45 +334,68 @@ export const AIAssistantView: React.FC = () => {
             <label className="form-label">{t("apiKey")}</label>
             <input
               type="password"
-              className="form-input"
+              className="form-input input-technical"
               value={settings[selectedPreset.keySetting] || ""}
-              onChange={(e) => setSettings({ ...settings, [selectedPreset.keySetting]: e.target.value })}
+              onChange={(e) =>
+                setSettings({ ...settings, [selectedPreset.keySetting]: e.target.value })
+              }
               onBlur={(e) => updateSetting(selectedPreset.keySetting, e.target.value)}
               placeholder="(set or update API key)"
             />
           </div>
 
-          {selectedPreset.baseUrlSetting && (() => {
-            const baseUrlKey = selectedPreset.baseUrlSetting;
-            return (
-              <div className="form-group">
-                <label className="form-label">{t("baseUrl")}</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={settings[baseUrlKey] || ""}
-                  onChange={(e) => setSettings({ ...settings, [baseUrlKey]: e.target.value })}
-                  onBlur={(e) => updateSetting(baseUrlKey, e.target.value)}
-                  placeholder={selectedPreset.defaultBaseUrl}
-                />
-              </div>
-            );
-          })()}
+          {selectedPreset.baseUrlSetting &&
+            (() => {
+              const baseUrlKey = selectedPreset.baseUrlSetting;
+              return (
+                <div className="form-group">
+                  <label className="form-label">{t("baseUrl")}</label>
+                  <input
+                    type="text"
+                    className="form-input input-technical"
+                    value={settings[baseUrlKey] || ""}
+                    onChange={(e) => setSettings({ ...settings, [baseUrlKey]: e.target.value })}
+                    onBlur={(e) => updateSetting(baseUrlKey, e.target.value)}
+                    placeholder={selectedPreset.defaultBaseUrl}
+                  />
+                </div>
+              );
+            })()}
         </div>
       </div>
 
       {/* Model Capabilities & Toggles */}
-      <div className="card" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        <h3 style={{ fontSize: "1.05rem", fontWeight: 700 }}>Capabilities & Toggles</h3>
+      <div className="card" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <h3 style={{ fontSize: "1rem", fontWeight: 700 }}>{t("capabilities")}</h3>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "24px" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gap: "16px",
+          }}
+        >
           {/* Vision Toggle */}
-          <div style={{ padding: "16px", borderRadius: "var(--radius-sm)", background: "var(--panel-raised)", border: "1px solid var(--line)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-              <Eye size={18} color="var(--blue-bright)" />
-              <span style={{ fontWeight: 600 }}>{t("aiVision")}</span>
+          <div
+            style={{
+              padding: "14px",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--panel-raised)",
+              border: "1px solid var(--line)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <Eye size={17} color="var(--blue-bright)" style={{ flexShrink: 0 }} />
+              <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>{t("aiVision")}</span>
             </div>
-            <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "14px" }}>
+            <p
+              style={{
+                fontSize: "0.8rem",
+                color: "var(--muted)",
+                marginBottom: "12px",
+                lineHeight: "1.4",
+              }}
+            >
               {t("aiVisionDesc")}
             </p>
             <Toggle
@@ -337,13 +405,27 @@ export const AIAssistantView: React.FC = () => {
           </div>
 
           {/* Bot Language Selector */}
-          <div style={{ padding: "16px", borderRadius: "var(--radius-sm)", background: "var(--panel-raised)", border: "1px solid var(--line)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-              <Globe size={18} color="var(--ok)" />
-              <span style={{ fontWeight: 600 }}>{t("botLanguage")}</span>
+          <div
+            style={{
+              padding: "14px",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--panel-raised)",
+              border: "1px solid var(--line)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <Globe size={17} color="var(--ok)" style={{ flexShrink: 0 }} />
+              <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>{t("botLanguage")}</span>
             </div>
-            <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "14px" }}>
-              Set bot response language directly or via command <code style={{ color: "var(--cyan)" }}>!lang</code>
+            <p
+              style={{
+                fontSize: "0.8rem",
+                color: "var(--muted)",
+                marginBottom: "12px",
+                lineHeight: "1.4",
+              }}
+            >
+              {t("botLanguageDesc")}
             </p>
             <select
               className="form-select"
@@ -357,57 +439,91 @@ export const AIAssistantView: React.FC = () => {
           </div>
 
           {/* STT Provider Selector */}
-          <div style={{ padding: "16px", borderRadius: "var(--radius-sm)", background: "var(--panel-raised)", border: "1px solid var(--line)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-              <Mic size={18} color="var(--purple)" />
-              <span style={{ fontWeight: 600 }}>{t("aiStt")}</span>
+          <div
+            style={{
+              padding: "14px",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--panel-raised)",
+              border: "1px solid var(--line)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <Mic size={17} color="var(--purple)" style={{ flexShrink: 0 }} />
+              <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>{t("aiStt")}</span>
             </div>
-            <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginBottom: "14px" }}>
-              Speech-to-text transcription engine for voice notes
+            <p
+              style={{
+                fontSize: "0.8rem",
+                color: "var(--muted)",
+                marginBottom: "12px",
+                lineHeight: "1.4",
+              }}
+            >
+              {t("sttDesc")}
             </p>
             <select
               className="form-select"
               value={settings["ai_stt_provider"] || "auto"}
               onChange={(e) => updateSetting("ai_stt_provider", e.target.value)}
             >
-              <option value="auto">Auto (Matches active provider)</option>
-              <option value="gemini">Google Gemini Audio API</option>
-              <option value="openai">OpenAI / Groq Whisper API</option>
+              <option value="auto">{t("sttAuto")}</option>
+              <option value="gemini">{t("sttGemini")}</option>
+              <option value="openai">{t("sttOpenAI")}</option>
             </select>
           </div>
         </div>
       </div>
 
       {/* Persona Prompt & Long-term Memory Actions */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "20px" }}>
-        <div className="card" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+          gap: "16px",
+        }}
+      >
+        <div
+          className="card"
+          style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}
+        >
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-              <FileText size={20} color="var(--blue-bright)" />
-              <h3 style={{ fontSize: "1.05rem", fontWeight: 700 }}>{t("personaPrompt")}</h3>
+            <div
+              style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}
+            >
+              <FileText size={18} color="var(--blue-bright)" style={{ flexShrink: 0 }} />
+              <h3 style={{ fontSize: "1rem", fontWeight: 700 }}>{t("personaPrompt")}</h3>
             </div>
-            <p style={{ fontSize: "0.85rem", color: "var(--muted)", lineHeight: "1.5" }}>
-              Edit the live system prompt that shapes your AI assistant's persona, tone, and behavior.
+            <p style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: "1.5" }}>
+              {t("personaDesc")}
             </p>
           </div>
-          <div style={{ marginTop: "20px" }}>
-            <button onClick={openPersonaEditor} className="btn btn-secondary" style={{ width: "100%" }}>
-              Edit System Prompt
+          <div style={{ marginTop: "16px" }}>
+            <button
+              onClick={openPersonaEditor}
+              className="btn btn-secondary"
+              style={{ width: "100%" }}
+            >
+              {t("editPersona")}
             </button>
           </div>
         </div>
 
-        <div className="card" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+        <div
+          className="card"
+          style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}
+        >
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-              <Database size={20} color="var(--cyan)" />
-              <h3 style={{ fontSize: "1.05rem", fontWeight: 700 }}>{t("memoryFiles")}</h3>
+            <div
+              style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}
+            >
+              <Database size={18} color="var(--cyan)" style={{ flexShrink: 0 }} />
+              <h3 style={{ fontSize: "1rem", fontWeight: 700 }}>{t("memoryFiles")}</h3>
             </div>
-            <p style={{ fontSize: "0.85rem", color: "var(--muted)", lineHeight: "1.5" }}>
-              Inspect and manage markdown memory documents stored inside the data directory.
+            <p style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: "1.5" }}>
+              {t("memoryDesc")}
             </p>
           </div>
-          <div style={{ marginTop: "20px" }}>
+          <div style={{ marginTop: "16px" }}>
             <button
               onClick={() => {
                 loadMemoryFiles();
@@ -417,7 +533,7 @@ export const AIAssistantView: React.FC = () => {
               className="btn btn-secondary"
               style={{ width: "100%" }}
             >
-              Manage Memory Files
+              {t("manageMemory")}
             </button>
           </div>
         </div>
@@ -435,18 +551,18 @@ export const AIAssistantView: React.FC = () => {
               {t("cancel")}
             </button>
             <button onClick={savePersona} className="btn btn-primary">
-              <Save size={16} />
+              <Save size={15} />
               <span>{t("save")}</span>
             </button>
           </>
         }
       >
         <textarea
-          className="form-textarea"
-          rows={16}
+          className="form-textarea input-technical"
+          rows={14}
           value={personaText}
           onChange={(e) => setPersonaText(e.target.value)}
-          style={{ fontFamily: "var(--font-mono)", fontSize: "0.85rem", lineHeight: "1.5" }}
+          style={{ fontSize: "0.84rem", lineHeight: "1.5" }}
         />
       </Modal>
 
@@ -462,18 +578,18 @@ export const AIAssistantView: React.FC = () => {
               {t("cancel")}
             </button>
             <button onClick={saveMemoryFile} className="btn btn-primary">
-              <Save size={16} />
+              <Save size={15} />
               <span>{t("save")}</span>
             </button>
           </>
         }
       >
         <textarea
-          className="form-textarea"
-          rows={14}
+          className="form-textarea input-technical"
+          rows={12}
           value={memoryContent}
           onChange={(e) => setMemoryContent(e.target.value)}
-          style={{ fontFamily: "var(--font-mono)", fontSize: "0.85rem" }}
+          style={{ fontSize: "0.84rem" }}
         />
       </Modal>
     </div>

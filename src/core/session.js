@@ -46,14 +46,12 @@
 // Regenerating one forever is how the old code burned a socket a minute on
 // installs nobody was pairing.
 
-import { createRequire } from "module";
 import { DisconnectReason } from "@whiskeysockets/baileys";
-
-import { createWhatsAppSocket } from "./socket.js";
-import { setupEventListeners } from "./events.js";
-import { handleConnectionOpen, classifyDisconnect } from "./connection.js";
+import { createRequire } from "module";
 import { RETRY_SCHEDULE_MS } from "../config/constants.js";
 import { clearAuthState, deleteQrCode, saveQrCode } from "../utils/storage.esm.js";
+import { classifyDisconnect, handleConnectionOpen } from "./connection.js";
+import { setupEventListeners } from "./events.js";
 import {
   createProxyAgents,
   describeProxyFailure,
@@ -61,6 +59,7 @@ import {
   readProxyConfig,
   redactProxy,
 } from "./proxy.js";
+import { createWhatsAppSocket } from "./socket.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -89,14 +88,14 @@ export function normalizePairingPhone(input) {
   const digits = value.replace(/\D/g, "");
   if (digits.startsWith("0")) {
     const error = new Error(
-      "Drop the leading 0 and include the country code (e.g. 2010… not 010…)."
+      "Drop the leading 0 and include the country code (e.g. 2010… not 010…).",
     );
     error.code = "PAIRING_PHONE";
     throw error;
   }
   if (digits.length < 8 || digits.length > 15) {
     const error = new Error(
-      "Enter the WhatsApp number with country code, digits only (e.g. 2010…)."
+      "Enter the WhatsApp number with country code, digits only (e.g. 2010…).",
     );
     error.code = "PAIRING_PHONE";
     throw error;
@@ -271,9 +270,7 @@ export class WhatsAppSession {
   /** Everything the dashboard needs to render the Connection screen. */
   getState() {
     const terminal =
-      this.#state === S.LOGGED_OUT ||
-      this.#state === S.RETRY_EXHAUSTED ||
-      this.#state === S.ERROR;
+      this.#state === S.LOGGED_OUT || this.#state === S.RETRY_EXHAUSTED || this.#state === S.ERROR;
 
     return {
       state: this.#state,
@@ -300,8 +297,7 @@ export class WhatsAppSession {
       hasQr: !!this.#qr,
       hasPairingCode: !!this.#pairingCode,
       pairingMethod: this.#pairingIntent?.method || "qr",
-      pairingPhone:
-        this.#pairingIntent?.method === "pairing" ? this.#pairingIntent.phone : null,
+      pairingPhone: this.#pairingIntent?.method === "pairing" ? this.#pairingIntent.phone : null,
       reason: this.#reason,
       detail: this.#detail,
       lastDisconnect: this.#lastDisconnect,
@@ -333,8 +329,7 @@ export class WhatsAppSession {
 
     if (!isOnline) {
       this.log.warn("[Session] Device is offline — pausing WhatsApp connection and retries");
-      this.#wasActiveBeforeOffline =
-        BUSY_STATES.has(this.#state) || this.#state === S.PAUSED;
+      this.#wasActiveBeforeOffline = BUSY_STATES.has(this.#state) || this.#state === S.PAUSED;
       this.#cancelRetry();
 
       if (this.#socket) {
@@ -534,10 +529,7 @@ export class WhatsAppSession {
       proxyConfig = this.loadProxy();
       proxy = this.buildProxyAgents(proxyConfig);
     } catch (error) {
-      this.log.error(
-        { err: error?.message },
-        "[Session] the proxy configuration is not usable"
-      );
+      this.log.error({ err: error?.message }, "[Session] the proxy configuration is not usable");
       this.#proxyFingerprint = null;
       this.#proxyLabel = null;
       this.#transition(S.ERROR, {
@@ -594,12 +586,10 @@ export class WhatsAppSession {
     this.attachListeners(sock, {
       saveCreds,
       onConnectionUpdate: (update) => this.#onConnectionUpdate(generation, update),
-      onHandshakeRejected: (response) =>
-        this.#onHandshakeRejected(generation, sock, response),
+      onHandshakeRejected: (response) => this.#onHandshakeRejected(generation, sock, response),
     });
 
-    const waitingForCode =
-      this.#pairing && this.#pairingIntent.method === "pairing";
+    const waitingForCode = this.#pairing && this.#pairingIntent.method === "pairing";
     this.#transition(this.#pairing ? S.WAITING_FOR_QR : S.STARTING, {
       reason,
       detail: this.#pairing
@@ -632,8 +622,8 @@ export class WhatsAppSession {
       viaProxy && (status === 407 || status === 401)
         ? `The proxy at ${this.#proxyLabel} rejected the username or password (HTTP ${status}).`
         : viaProxy
-        ? `The proxy at ${this.#proxyLabel} refused to connect to WhatsApp (HTTP ${status}).`
-        : `WhatsApp refused the connection (HTTP ${status}).`;
+          ? `The proxy at ${this.#proxyLabel} refused to connect to WhatsApp (HTTP ${status}).`
+          : `WhatsApp refused the connection (HTTP ${status}).`;
 
     this.log.error(`[Session] handshake rejected with HTTP ${status} — ${detail}`);
 
@@ -732,11 +722,7 @@ export class WhatsAppSession {
   async #onQr(qr) {
     // Pair-device readiness. In pairing-code mode the QR must not be shown;
     // requestPairingCode waits for this stanza (or queues until it arrives).
-    if (
-      this.#pairing &&
-      this.#pairingIntent.method === "pairing" &&
-      this.#pairingIntent.phone
-    ) {
+    if (this.#pairing && this.#pairingIntent.method === "pairing" && this.#pairingIntent.phone) {
       await this.#requestPairingCode();
       return;
     }
@@ -779,18 +765,14 @@ export class WhatsAppSession {
         this.#pairingCode = String(raw || "").replace(/\s|-/g, "");
         this.#transition(S.WAITING_FOR_QR, {
           reason: "pairing_code",
-          detail:
-            "Enter the code in WhatsApp → Linked devices → Link with phone number.",
+          detail: "Enter the code in WhatsApp → Linked devices → Link with phone number.",
         });
         this.emitEvent("pairing_code", {
           code: this.#pairingCode,
           phone,
         });
       } catch (error) {
-        this.log.error(
-          { err: error?.message },
-          "[Session] pairing code request failed"
-        );
+        this.log.error({ err: error?.message }, "[Session] pairing code request failed");
         if (!this.#pairing || this.#shuttingDown) return;
         this.#transition(S.ERROR, {
           reason: "pairing_failed",
@@ -822,9 +804,7 @@ export class WhatsAppSession {
   async #onClose(lastDisconnect) {
     const statusCode = lastDisconnect?.error?.output?.statusCode;
     const reasonText =
-      lastDisconnect?.error?.output?.payload?.error ||
-      lastDisconnect?.error?.message ||
-      "Unknown";
+      lastDisconnect?.error?.output?.payload?.error || lastDisconnect?.error?.message || "Unknown";
 
     this.#lastDisconnect = { statusCode: statusCode ?? null, reason: reasonText, at: Date.now() };
     const closedSocket = this.#socket;
@@ -850,7 +830,7 @@ export class WhatsAppSession {
 
     this.log.warn(
       `[Session] Connection closed (${statusCode ?? "no status"}: ${reasonText}) — ${verdict.label}` +
-        (this.#proxyLabel ? ` via ${this.#proxyLabel}` : "")
+        (this.#proxyLabel ? ` via ${this.#proxyLabel}` : ""),
     );
 
     if (this.#shuttingDown) return;
@@ -868,7 +848,9 @@ export class WhatsAppSession {
     if (verdict.terminal) {
       this.#clearQr();
       this.#pairing = false;
-      const codeInfo = this.#lastDisconnect?.statusCode ? ` (${this.#lastDisconnect.statusCode}: ${this.#lastDisconnect.reason})` : "";
+      const codeInfo = this.#lastDisconnect?.statusCode
+        ? ` (${this.#lastDisconnect.statusCode}: ${this.#lastDisconnect.reason})`
+        : "";
       return this.#transition(S.DISCONNECTED, {
         reason: verdict.reason,
         detail: `${verdict.detail || ""}${codeInfo}`.trim(),
@@ -880,7 +862,9 @@ export class WhatsAppSession {
     if (this.#pairing && !verdict.restartRequired) {
       this.#pairing = false;
       this.#clearQr();
-      const codeInfo = this.#lastDisconnect?.statusCode ? ` (${this.#lastDisconnect.statusCode}: ${this.#lastDisconnect.reason})` : "";
+      const codeInfo = this.#lastDisconnect?.statusCode
+        ? ` (${this.#lastDisconnect.statusCode}: ${this.#lastDisconnect.reason})`
+        : "";
       return this.#transition(S.DISCONNECTED, {
         reason: "pairing_cancelled",
         detail: `The pairing attempt ended before the code was scanned${codeInfo}. Start a session to try again.`,
@@ -937,10 +921,12 @@ export class WhatsAppSession {
 
     if (this.#attempt >= this.retryDelaysMs.length) {
       this.log.error(
-        `[Session] ${this.retryDelaysMs.length} reconnect attempts failed. Levix stays up; start the session again from the panel.`
+        `[Session] ${this.retryDelaysMs.length} reconnect attempts failed. Levix stays up; start the session again from the panel.`,
       );
       this.#clearQr();
-      const codeInfo = this.#lastDisconnect?.statusCode ? ` (${this.#lastDisconnect.statusCode}: ${this.#lastDisconnect.reason})` : "";
+      const codeInfo = this.#lastDisconnect?.statusCode
+        ? ` (${this.#lastDisconnect.statusCode}: ${this.#lastDisconnect.reason})`
+        : "";
       return this.#transition(S.RETRY_EXHAUSTED, {
         reason: "retry_exhausted",
         detail: `Gave up after ${this.retryDelaysMs.length} attempts${codeInfo}. Start the session to try again.`,
@@ -952,10 +938,12 @@ export class WhatsAppSession {
     this.#nextRetryAt = Date.now() + delayMs;
 
     this.log.warn(
-      `[Session] Reconnecting in ${Math.round(delayMs / 1000)}s (attempt ${this.#attempt}/${this.retryDelaysMs.length})`
+      `[Session] Reconnecting in ${Math.round(delayMs / 1000)}s (attempt ${this.#attempt}/${this.retryDelaysMs.length})`,
     );
 
-    const codeInfo = this.#lastDisconnect?.statusCode ? ` (${this.#lastDisconnect.statusCode}: ${this.#lastDisconnect.reason})` : "";
+    const codeInfo = this.#lastDisconnect?.statusCode
+      ? ` (${this.#lastDisconnect.statusCode}: ${this.#lastDisconnect.reason})`
+      : "";
     this.#transition(S.RECONNECTING, {
       reason: verdict.reason,
       detail:

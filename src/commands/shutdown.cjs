@@ -31,7 +31,7 @@ module.exports = {
             err: error.message,
             stderr: stderr,
           },
-          `Failed to execute shutdown command: ${commandToExecute}`
+          `Failed to execute shutdown command: ${commandToExecute}`,
         );
 
         // We can't reliably send a message here because the process might be stopping.

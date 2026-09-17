@@ -32,17 +32,12 @@ module.exports = {
 
     // 3. Define the API endpoint for is.gd
     // We use `encodeURIComponent` to ensure the URL is properly formatted for the API request
-    const API_URL = `https://is.gd/create.php?format=simple&url=${encodeURIComponent(
-      longUrl
-    )}`;
+    const API_URL = `https://is.gd/create.php?format=simple&url=${encodeURIComponent(longUrl)}`;
 
     // One message: "shortening..." becomes the short link itself.
-    const status = await createStatus(
-      sock,
-      msg.key.remoteJid,
-      "🔗 بختصر الرابط...",
-      { replyTo: msg },
-    );
+    const status = await createStatus(sock, msg.key.remoteJid, "🔗 بختصر الرابط...", {
+      replyTo: msg,
+    });
 
     try {
       // 4. Make the GET request to the API
@@ -51,20 +46,17 @@ module.exports = {
       // 5. The API returns the shortened URL as plain text in the response body
       const shortUrl = response.data;
 
-      const reply =
-        `✅ تم اختصار الرابط بنجاح!\n\n` + `🔗 *الرابط المختصر:*\n${shortUrl}`;
+      const reply = `✅ تم اختصار الرابط بنجاح!\n\n` + `🔗 *الرابط المختصر:*\n${shortUrl}`;
 
       await status.finish(reply);
     } catch (error) {
       logger.error(
         error.response ? error.response.data : error.message,
-        "[Error] in !shortlink command:"
+        "[Error] in !shortlink command:",
       );
 
       // The API returns a plain text error message if something goes wrong
-      const errorMessage = error.response
-        ? error.response.data
-        : "حدث خطأ غير متوقع.";
+      const errorMessage = error.response ? error.response.data : "حدث خطأ غير متوقع.";
 
       await sock.sendMessage(msg.key.remoteJid, {
         text: `*عذرًا، حدث خطأ:*\n\n` + `\`\`\`${errorMessage}\`\`\``,

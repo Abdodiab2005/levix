@@ -1,7 +1,4 @@
-const {
-  getGroupSettings,
-  saveGroupSettings,
-} = require("../../utils/storage.cjs");
+const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
 
 module.exports = {
@@ -36,10 +33,7 @@ module.exports = {
       });
     } catch (error) {
       // Improved logging for better debugging
-      logger.error(
-        { err: error, groupId: groupId },
-        "Error in !setrules command"
-      );
+      logger.error({ err: error, groupId: groupId }, "Error in !setrules command");
       await sock.sendMessage(groupId, { text: "حدث خطأ أثناء حفظ القواعد." });
     }
   },

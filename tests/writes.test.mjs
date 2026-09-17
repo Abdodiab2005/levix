@@ -10,10 +10,10 @@
 // afterwards, which is the same question a person restoring a backup asks.
 
 import { spawn } from "node:child_process";
-import { mkdtempSync, readdirSync, existsSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
-import { useTempDataDir, httpClient, ROOT, section, ok, equal, finish } from "./harness.mjs";
+import { equal, finish, httpClient, ok, ROOT, section, useTempDataDir } from "./harness.mjs";
 
 const dataDir = useTempDataDir("levix-writes");
 const workDir = mkdtempSync(join(tmpdir(), "levix-cwd-"));
@@ -41,7 +41,7 @@ const child = spawn(
     cwd: workDir,
     env: { ...process.env, LEVIX_DATA_DIR: dataDir, HOME: homeDir },
     stdio: ["ignore", "pipe", "pipe"],
-  }
+  },
 );
 
 let stderr = "";
@@ -76,14 +76,19 @@ try {
   equal(
     "the persona is writable",
     (await http.json("/dashboard/api/ai/persona", { body: `${current}\nتم` }, "PUT")).status,
-    200
+    200,
   );
 
   equal(
     "a memory file is writable",
-    (await http.json("/dashboard/api/ai/memory/global", { content: "- a remembered fact\n" }, "PUT"))
-      .status,
-    200
+    (
+      await http.json(
+        "/dashboard/api/ai/memory/global",
+        { content: "- a remembered fact\n" },
+        "PUT",
+      )
+    ).status,
+    200,
   );
 } finally {
   child.kill("SIGTERM");
@@ -97,12 +102,16 @@ section("everything mutable is inside the data directory");
 const dataFiles = listFiles(dataDir);
 
 for (const expected of ["levix.db", "logs/combined.log", "ai-persona.md"]) {
-  ok(`the data directory holds ${expected}`, dataFiles.some((f) => f === expected), dataFiles.join(" "));
+  ok(
+    `the data directory holds ${expected}`,
+    dataFiles.some((f) => f === expected),
+    dataFiles.join(" "),
+  );
 }
 ok(
   "…and the memory file",
   dataFiles.some((f) => f.startsWith("memory/")),
-  dataFiles.join(" ")
+  dataFiles.join(" "),
 );
 
 section("and nothing landed anywhere else");
@@ -132,7 +141,7 @@ for (const legacy of ["logs", "memory", "media", "data", "auth_info_baileys"]) {
 // the one intentional exception and it lives inside the backup, not outside.
 ok(
   "the data directory is a directory we can copy",
-  statSync(dataDir).isDirectory() && dataFiles.length > 0
+  statSync(dataDir).isDirectory() && dataFiles.length > 0,
 );
 
 finish();

@@ -19,13 +19,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  useTempDataDir,
-  require as harnessRequire,
-  ROOT,
-  section,
-  ok,
   equal,
   finish,
+  require as harnessRequire,
+  ok,
+  ROOT,
+  section,
+  useTempDataDir,
 } from "./harness.mjs";
 
 useTempDataDir("levix-google-search");
@@ -45,7 +45,7 @@ section("the native tool, not a function we wrote");
   equal(
     "the tool is Gemini's own googleSearch",
     JSON.stringify(aiAgent.GOOGLE_SEARCH_TOOL),
-    JSON.stringify({ googleSearch: {} })
+    JSON.stringify({ googleSearch: {} }),
   );
 
   const declared = aiTools
@@ -57,7 +57,7 @@ section("the native tool, not a function we wrote");
   ok(
     "and none of them is a hand-rolled google_search",
     !declared.some((name) => /google_?search/i.test(name)),
-    declared.join(", ")
+    declared.join(", "),
   );
 
   // A custom search function would have to be executable. Nothing answers to
@@ -85,7 +85,11 @@ section("the tools array");
   equal("a tools-off turn can still ground", searchOnly.length, 1);
   ok("…on search alone", toolNames(searchOnly).includes("googleSearch"));
 
-  equal("and both off means no tools at all", aiAgent.buildTools({ useTools: false, search: false }).length, 0);
+  equal(
+    "and both off means no tools at all",
+    aiAgent.buildTools({ useTools: false, search: false }).length,
+    0,
+  );
 }
 
 section("the setting");
@@ -100,7 +104,7 @@ section("the setting");
   ok("…and the tool is withheld", !toolNames(aiAgent.buildTools({})).includes("googleSearch"));
   ok(
     "…while Levix's own tools stay",
-    toolNames(aiAgent.buildTools({})).includes("functionDeclarations")
+    toolNames(aiAgent.buildTools({})).includes("functionDeclarations"),
   );
 
   settings.set("ai_google_search", true);
@@ -118,7 +122,10 @@ section("other providers are untouched");
   // plain chat-completions / messages calls: Levix's own function tools are
   // the only tools that travel, and certainly not a Gemini built-in one.
   const providerSource = readFileSync(join(ROOT, "src", "services", "aiProviders.cjs"), "utf8");
-  ok("…and no googleSearch anywhere on the provider path", !providerSource.includes("googleSearch"));
+  ok(
+    "…and no googleSearch anywhere on the provider path",
+    !providerSource.includes("googleSearch"),
+  );
 
   // Groq is gone — not disabled, gone: no settings, no call path, no comment.
   const geminiCommand = readFileSync(join(ROOT, "src", "commands", "gemini.cjs"), "utf8");
@@ -147,7 +154,7 @@ section("other providers are untouched");
         limit: { type: "integer" },
       },
       required: ["query"],
-    })
+    }),
   );
 
   const openai = aiProviders.openaiTools();
@@ -158,19 +165,19 @@ section("other providers are untouched");
         (tool) =>
           tool.type === "function" &&
           tool.function.name &&
-          tool.function.parameters?.type === "object"
-      )
+          tool.function.parameters?.type === "object",
+      ),
   );
   const anthropic = aiProviders.anthropicTools();
   ok(
     `anthropic tools carry input_schema (${anthropic.length})`,
     anthropic.length > 3 &&
-      anthropic.every((tool) => tool.name && tool.input_schema?.type === "object")
+      anthropic.every((tool) => tool.name && tool.input_schema?.type === "object"),
   );
 
   ok(
     "googleSearch appears only in the Gemini agent",
-    !readFileSync(join(ROOT, "src", "services", "aiTools.cjs"), "utf8").includes("googleSearch")
+    !readFileSync(join(ROOT, "src", "services", "aiTools.cjs"), "utf8").includes("googleSearch"),
   );
 }
 
@@ -197,7 +204,10 @@ section("citations come from real grounding metadata and nowhere else");
 
   const sources = aiAgent.extractSources(grounded);
   equal("every web chunk with a uri is taken", sources.length, 3);
-  ok("chunks with no uri are skipped", sources.every((source) => !!source.uri));
+  ok(
+    "chunks with no uri are skipped",
+    sources.every((source) => !!source.uri),
+  );
 
   const block = aiAgent.formatSources(sources);
   ok("there is a Sources block", block.includes("Sources"));
@@ -216,7 +226,10 @@ section("citations come from real grounding metadata and nowhere else");
     title: `S${i}`,
   }));
   const capped = aiAgent.formatSources(many);
-  ok("a long list is capped", capped.split("\n").filter((line) => line.startsWith("•")).length <= 5);
+  ok(
+    "a long list is capped",
+    capped.split("\n").filter((line) => line.startsWith("•")).length <= 5,
+  );
 }
 
 section("no grounding means no Sources section");
@@ -228,11 +241,7 @@ section("no grounding means no Sources section");
   // A perfectly ordinary answer, with no groundingMetadata anywhere.
   const ungrounded = { candidates: [{ content: { parts: [{ text: "42" }] } }] };
   equal("an ungrounded response yields no sources", aiAgent.extractSources(ungrounded).length, 0);
-  equal(
-    "…and therefore no block",
-    aiAgent.formatSources(aiAgent.extractSources(ungrounded)),
-    ""
-  );
+  equal("…and therefore no block", aiAgent.formatSources(aiAgent.extractSources(ungrounded)), "");
 
   // Grounding metadata that came back empty is still not a reason to invent one.
   const empty = { candidates: [{ groundingMetadata: { webSearchQueries: [] } }] };
@@ -272,7 +281,10 @@ section("a model that refuses the combination keeps Levix's tools");
     new Error("socket hang up"),
   ];
   for (const error of unrelated) {
-    ok(`not mistaken for a tool problem: "${error.message}"`, !aiAgent.isToolCombinationError(error));
+    ok(
+      `not mistaken for a tool problem: "${error.message}"`,
+      !aiAgent.isToolCombinationError(error),
+    );
   }
 }
 
@@ -283,24 +295,18 @@ section("no secret reaches a log line");
   // payload should ever be part of that.
   const agentSource = readFileSync(join(ROOT, "src", "services", "aiAgent.cjs"), "utf8");
 
-  ok(
-    "the api key is never logged",
-    !/logger\.[a-z]+\([^)]*gemini_api_key/.test(agentSource)
-  );
+  ok("the api key is never logged", !/logger\.[a-z]+\([^)]*gemini_api_key/.test(agentSource));
   ok(
     "grounding chunks are never dumped into a log",
-    !/logger\.[a-z]+\([^)]*groundingChunks/.test(agentSource)
+    !/logger\.[a-z]+\([^)]*groundingChunks/.test(agentSource),
   );
-  ok(
-    "…nor the sources array",
-    !/logger\.[a-z]+\([^)]*\bsources\b/.test(agentSource)
-  );
+  ok("…nor the sources array", !/logger\.[a-z]+\([^)]*\bsources\b/.test(agentSource));
 
   // The tool-combination warning names the model, which is a setting, not a
   // secret — and nothing else.
   const warning = agentSource.slice(
     agentSource.indexOf("refuses Google Search together") - 400,
-    agentSource.indexOf("refuses Google Search together") + 120
+    agentSource.indexOf("refuses Google Search together") + 120,
   );
   ok("the fallback warning logs only the message and the model", !warning.includes("api_key"));
 }

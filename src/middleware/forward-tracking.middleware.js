@@ -1,7 +1,7 @@
 // file: /middleware/forward-tracking.middleware.js
 import { createRequire } from "module";
-import { incrementForwardScore } from "../utils/storage.esm.js";
 import normalizeJid from "../utils/normalizeJid.esm.js";
+import { incrementForwardScore } from "../utils/storage.esm.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -21,7 +21,8 @@ export async function trackForwardedMessage(msg) {
       msg.message?.audioMessage?.contextInfo;
 
     // A message is considered forwarded if it has isForwarded flag or forwardingScore > 0
-    const isForwarded = contextInfo?.isForwarded || (contextInfo?.forwardingScore && contextInfo.forwardingScore > 0);
+    const isForwarded =
+      contextInfo?.isForwarded || (contextInfo?.forwardingScore && contextInfo.forwardingScore > 0);
 
     if (!isForwarded) {
       return false;

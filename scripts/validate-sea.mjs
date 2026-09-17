@@ -90,7 +90,7 @@ function startBinary(args, { waitFor, timeoutMs = 90000, extraEnv = {} } = {}) {
   const seen = new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error(`never printed ${JSON.stringify(waitFor)}\n${output}`)),
-      timeoutMs
+      timeoutMs,
     );
     const check = (chunk) => {
       output += chunk;
@@ -165,7 +165,7 @@ let panelUrl = null;
   ok(
     "…and is the real library",
     (await socketClient.text()).includes("socket.io"),
-    "the file served does not look like socket.io"
+    "the file served does not look like socket.io",
   );
 
   const logo = await fetch(`${base}/brand/wordmark.png`);
@@ -201,7 +201,7 @@ let panelUrl = null;
   ok(
     `every command loaded (${body.stats?.commandCount})`,
     body.stats?.commandCount > 50,
-    "the generated manifests did not load"
+    "the generated manifests did not load",
   );
 
   console.log("\n· logging");
@@ -212,7 +212,7 @@ let panelUrl = null;
   ok(
     "no worker-thread transport error",
     !/worker (has )?exited|Cannot find module/i.test(levix.output),
-    levix.output.slice(-400)
+    levix.output.slice(-400),
   );
 
   console.log("\n· no lookups into a source tree that isn't there");
@@ -220,9 +220,12 @@ let panelUrl = null;
   ok(
     "nothing tried to require a missing module",
     !/Cannot find module/i.test(levix.output),
-    levix.output.slice(-400)
+    levix.output.slice(-400),
   );
-  ok("no unhandled crash was printed", !/Uncaught Exception|UnhandledPromiseRejection/.test(levix.output));
+  ok(
+    "no unhandled crash was printed",
+    !/Uncaught Exception|UnhandledPromiseRejection/.test(levix.output),
+  );
 
   await levix.stop();
 }
@@ -265,7 +268,7 @@ console.log("\n· headless");
 
   const reachable = await fetch(`http://127.0.0.1:${PANEL_PORT}/`).then(
     () => true,
-    () => false
+    () => false,
   );
   ok("nothing answers on a panel port", reachable === false);
 

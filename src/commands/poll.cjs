@@ -74,7 +74,7 @@ module.exports = {
           selectableCount: multi ? options.length : 1,
         },
       },
-      { replyTo: msg }
+      { replyTo: msg },
     );
   },
 };

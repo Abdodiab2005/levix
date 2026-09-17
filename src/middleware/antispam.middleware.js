@@ -1,20 +1,17 @@
-import { createRequire } from 'module';
-import { getGroupSettings } from '../utils/storage.esm.js';
-import normalizeJid from '../utils/normalizeJid.esm.js';
-import {
-  isOwnerJid,
-  isAdminInGroup,
-} from '../utils/permissions.esm.js';
+import { createRequire } from "module";
+import normalizeJid from "../utils/normalizeJid.esm.js";
+import { isAdminInGroup, isOwnerJid } from "../utils/permissions.esm.js";
+import { getGroupSettings } from "../utils/storage.esm.js";
 
 const require = createRequire(import.meta.url);
-const logger = require('../utils/logger.cjs');
+const logger = require("../utils/logger.cjs");
 
 const userMessageTimestamps = new Map();
 
 // Handle anti-spam detection and action
 export async function handleAntiSpam(sock, msg) {
   const groupId = msg.key.remoteJid;
-  if (!groupId.endsWith('@g.us')) return;
+  if (!groupId.endsWith("@g.us")) return;
 
   const senderId = normalizeJid(msg.key.participant);
   const settings = getGroupSettings(groupId);
@@ -47,18 +44,18 @@ export async function handleAntiSpam(sock, msg) {
 
   // Check if user exceeded message count
   if (recentTimestamps.length > (spamConfig.message_count || 5)) {
-    logger.warn({ user: senderId, group: groupId }, 'Spam detected, taking action.');
+    logger.warn({ user: senderId, group: groupId }, "Spam detected, taking action.");
 
     // Take action based on config
-    if (spamConfig.action === 'KICK') {
+    if (spamConfig.action === "KICK") {
       await sock.sendMessage(groupId, {
-        text: `🚫 تم حذف @${senderId.split('@')[0]} بسبب الإزعاج (Spam).`,
+        text: `🚫 تم حذف @${senderId.split("@")[0]} بسبب الإزعاج (Spam).`,
         mentions: [senderId],
       });
-      await sock.groupParticipantsUpdate(groupId, [senderId], 'remove');
+      await sock.groupParticipantsUpdate(groupId, [senderId], "remove");
     } else {
       await sock.sendMessage(groupId, {
-        text: `⚠️ تحذير لـ @${senderId.split('@')[0]}! الرجاء عدم إرسال رسائل مزعجة.`,
+        text: `⚠️ تحذير لـ @${senderId.split("@")[0]}! الرجاء عدم إرسال رسائل مزعجة.`,
         mentions: [senderId],
       });
     }

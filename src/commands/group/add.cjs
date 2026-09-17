@@ -4,8 +4,7 @@ const normalizeJid = require("../../utils/normalizeJid.esm.js").default;
 
 module.exports = {
   name: "add",
-  description:
-    "Adds a member to the group or sends an invite if privacy settings block it.",
+  description: "Adds a member to the group or sends an invite if privacy settings block it.",
   usage: "add [admin] <رقم الموبايل>",
   chat: "group",
   userAdminRequired: true,
@@ -22,25 +21,21 @@ module.exports = {
     try {
       // --- ✅ THIS IS THE MISSING LOGIC TO DEFINE targetJid ---
       // 1. Identify the Target User
-      const mentionedJid =
-        msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+      const mentionedJid = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
       let contactJid;
 
       // Check for contact card in a quoted message
       const quotedVcard =
-        msg.message?.extendedTextMessage?.contextInfo?.quotedMessage
-          ?.contactMessage?.vcard;
+        msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.contactMessage?.vcard;
       if (quotedVcard) {
-        contactJid =
-          quotedVcard.match(/waid=([0-9]+)/)?.[1] + "@s.whatsapp.net";
+        contactJid = quotedVcard.match(/waid=([0-9]+)/)?.[1] + "@s.whatsapp.net";
       }
 
       // If not found, check for contact card in the main message
       if (!contactJid || !contactJid.includes("@")) {
         const mainVcard = msg.message?.contactMessage?.vcard;
         if (mainVcard) {
-          contactJid =
-            mainVcard.match(/waid=([0-9]+)/)?.[1] + "@s.whatsapp.net";
+          contactJid = mainVcard.match(/waid=([0-9]+)/)?.[1] + "@s.whatsapp.net";
         }
       }
 
@@ -70,7 +65,7 @@ module.exports = {
 
       // Pre-check if the user is already in the group
       const isAlreadyMember = groupMetadata.participants.some(
-        (p) => normalizeJid(p.id) === normalizeJid(targetJid)
+        (p) => normalizeJid(p.id) === normalizeJid(targetJid),
       );
       if (isAlreadyMember) {
         return await sock.sendMessage(groupId, {
@@ -83,11 +78,7 @@ module.exports = {
         text: `جاري محاولة إضافة @${targetJid.split("@")[0]}...`,
         mentions: [targetJid],
       });
-      const response = await sock.groupParticipantsUpdate(
-        groupId,
-        [targetJid],
-        "add"
-      );
+      const response = await sock.groupParticipantsUpdate(groupId, [targetJid], "add");
       const status = response[0].status;
 
       if (status === "200") {

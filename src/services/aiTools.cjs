@@ -20,11 +20,7 @@ const axios = require("axios");
 const logger = require("../utils/logger.cjs");
 const memory = require("../utils/memory.cjs");
 const { decodeBuffer, stripHtml, decodeText } = require("../utils/textDecode.cjs");
-const {
-  grantRole,
-  revokeRole,
-  listRoles,
-} = require("../utils/permissions.cjs");
+const { grantRole, revokeRole, listRoles } = require("../utils/permissions.cjs");
 
 // @google/genai exports a `Type` enum (the old SDK called it `SchemaType`).
 // Its members are the uppercase wire values — Type.STRING === "STRING" — so the
@@ -83,16 +79,11 @@ async function searchDuckDuckGo(query, limit) {
     validateStatus: (status) => status >= 200 && status < 500,
   });
 
-  const html = decodeBuffer(
-    Buffer.from(response.data),
-    response.headers["content-type"]
-  );
+  const html = decodeBuffer(Buffer.from(response.data), response.headers["content-type"]);
 
   const results = [];
-  const linkRe =
-    /<a[^>]+class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
-  const snippetRe =
-    /<a[^>]+class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
+  const linkRe = /<a[^>]+class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  const snippetRe = /<a[^>]+class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
 
   const snippets = [];
   let snippetMatch;
@@ -114,18 +105,15 @@ async function searchDuckDuckGo(query, limit) {
 }
 
 async function searchGoogleCse(query, limit) {
-  const response = await axios.get(
-    "https://www.googleapis.com/customsearch/v1",
-    {
-      params: {
-        key: settings.get("google_search_api_key"),
-        cx: settings.get("google_search_cx"),
-        q: query,
-        num: Math.min(10, limit),
-      },
-      timeout: 20000,
-    }
-  );
+  const response = await axios.get("https://www.googleapis.com/customsearch/v1", {
+    params: {
+      key: settings.get("google_search_api_key"),
+      cx: settings.get("google_search_cx"),
+      q: query,
+      num: Math.min(10, limit),
+    },
+    timeout: 20000,
+  });
   return (response.data?.items || []).slice(0, limit).map((item) => ({
     title: item.title,
     url: item.link,
@@ -168,14 +156,14 @@ async function enrichWikiResults(lang, titles, urls, limit) {
           {
             timeout: 8000,
             headers: { "User-Agent": "LevixBot/3.4 (https://github.com/Abdodiab2005/levix)" },
-          }
+          },
         );
         extract = summaryRes.data?.extract || summaryRes.data?.description || "";
       } catch {
         // Non-fatal: summary lookup failure retains title and URL.
       }
       return { title, url, extract: extract.slice(0, 1000) };
-    })
+    }),
   );
 
   return { language: lang, count: results.length, results };
@@ -340,9 +328,7 @@ async function fetchUrl(rawUrl) {
   const contentType = String(response.headers["content-type"] || "");
   const body = decodeBuffer(Buffer.from(response.data), contentType);
 
-  const text = /json|text\/plain|xml/i.test(contentType)
-    ? body
-    : stripHtml(body);
+  const text = /json|text\/plain|xml/i.test(contentType) ? body : stripHtml(body);
 
   return {
     url: url.toString(),
@@ -373,7 +359,9 @@ const NOT_PRIVILEGED = {
 };
 
 function preview(value, length = 40) {
-  const text = String(value || "").replace(/\s+/g, " ").trim();
+  const text = String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
   return text.length > length ? `${text.slice(0, length)}...` : text;
 }
 
@@ -514,8 +502,7 @@ const TOOLS = {
         properties: {
           content: {
             type: T.STRING,
-            description:
-              "The fact to remember, written as a short standalone sentence.",
+            description: "The fact to remember, written as a short standalone sentence.",
           },
           scope: {
             type: T.STRING,
@@ -527,11 +514,11 @@ const TOOLS = {
     },
     describe: (args) =>
       `🧠 جاري الحفظ في ${scopeOf(args) === "global" ? "الذاكرة العامة" : "ذاكرة المحادثة"}: ${preview(
-        args?.content
+        args?.content,
       )}`,
     describeEn: (args) =>
       `🧠 Saving to ${scopeOf(args) === "global" ? "global" : "chat"} memory: ${preview(
-        args?.content
+        args?.content,
       )}`,
     async run(args, ctx) {
       const scope = scopeOf(args);
@@ -648,13 +635,11 @@ const TOOLS = {
       if (!ctx.isOwner) {
         return { error: "only the bot owner can grant roles", granted: false };
       }
-      const role = String(args?.role || "admin").toLowerCase() === "owner"
-        ? "owner"
-        : "admin";
+      const role = String(args?.role || "admin").toLowerCase() === "owner" ? "owner" : "admin";
       const record = await grantRole(args?.target, role);
       logger.info(
         { target: args?.target, role, by: ctx.senderId },
-        "[aiTools] role granted by the agent"
+        "[aiTools] role granted by the agent",
       );
       return {
         granted: true,
@@ -683,9 +668,7 @@ const TOOLS = {
       if (!ctx.isOwner) {
         return { error: "only the bot owner can revoke roles", revoked: false };
       }
-      const role = String(args?.role || "admin").toLowerCase() === "owner"
-        ? "owner"
-        : "admin";
+      const role = String(args?.role || "admin").toLowerCase() === "owner" ? "owner" : "admin";
       const record = await revokeRole(args?.target, role);
       return { revoked: true, role, user: record ? record.jid : args?.target };
     },
@@ -694,8 +677,7 @@ const TOOLS = {
   list_roles: {
     declaration: {
       name: "list_roles",
-      description:
-        "List who currently holds bot owner / admin roles. Owners and admins only.",
+      description: "List who currently holds bot owner / admin roles. Owners and admins only.",
       parameters: { type: T.OBJECT, properties: {} },
     },
     describe: () => "🔑 جاري جلب قائمة الصلاحيات...",
@@ -786,10 +768,7 @@ async function runTool(name, args, ctx) {
     const result = await tool.run(args || {}, ctx || {});
     return result && typeof result === "object" ? result : { result };
   } catch (err) {
-    logger.warn(
-      { err: err?.message, tool: name },
-      "[aiTools] tool call failed"
-    );
+    logger.warn({ err: err?.message, tool: name }, "[aiTools] tool call failed");
     return { error: `${err?.name || "Error"}: ${err?.message || err}` };
   }
 }

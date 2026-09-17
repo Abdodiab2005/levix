@@ -55,7 +55,7 @@ export async function useDatabaseAuthState(storageType = null) {
           const key = `${type}-${id}`;
           const val = await readData(key);
           if (val !== null && val !== undefined) out[id] = val;
-        })
+        }),
       );
       return out;
     },
@@ -63,9 +63,7 @@ export async function useDatabaseAuthState(storageType = null) {
     set: async (data) => {
       try {
         const topKeys = Object.keys(data);
-        const looksLikeTyped = topKeys.some(
-          (k) => typeof data[k] === "object" && data[k] !== null
-        );
+        const looksLikeTyped = topKeys.some((k) => typeof data[k] === "object" && data[k] !== null);
 
         if (looksLikeTyped) {
           for (const type of topKeys) {

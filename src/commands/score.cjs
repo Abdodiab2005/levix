@@ -49,10 +49,16 @@ function getQuotedInfo(msg) {
           const quotedContextInfo = quotedContent.contextInfo;
 
           // Extract forwarding score and isForwarded flag
-          if (quotedContextInfo.forwardingScore !== undefined && quotedContextInfo.forwardingScore !== null) {
+          if (
+            quotedContextInfo.forwardingScore !== undefined &&
+            quotedContextInfo.forwardingScore !== null
+          ) {
             forwardingScore = quotedContextInfo.forwardingScore;
           }
-          if (quotedContextInfo.isForwarded !== undefined && quotedContextInfo.isForwarded !== null) {
+          if (
+            quotedContextInfo.isForwarded !== undefined &&
+            quotedContextInfo.isForwarded !== null
+          ) {
             isForwarded = quotedContextInfo.isForwarded;
           }
 

@@ -85,17 +85,14 @@ function buildNumbers({ from, to, step }, limit) {
 
 function renderLine(template, number, index) {
   if (!template) return String(number);
-  return template
-    .replace(/\{n\}/gi, String(number))
-    .replace(/\{i\}/gi, String(index));
+  return template.replace(/\{n\}/gi, String(number)).replace(/\{i\}/gi, String(index));
 }
 
 module.exports = {
   name: "loop",
   aliases: ["repeat", "كرر", "تكرار"],
   description: "يكرر نص أو أرقام — في رسالة واحدة أو رسائل منفصلة.",
-  usage:
-    "loop <عدد|من-إلى[:خطوة]> [النص] [-s رسائل منفصلة] [-n بدون ترقيم]",
+  usage: "loop <عدد|من-إلى[:خطوة]> [النص] [-s رسائل منفصلة] [-n بدون ترقيم]",
   chat: "all",
 
   async execute(sock, msg, args) {
@@ -124,7 +121,7 @@ module.exports = {
     if (requested > limit) {
       return reply(
         `❌ ${requested} تكرار كتير أوي.\n` +
-          `الحد الأقصى ${limit} ${split ? "رسالة منفصلة" : "تكرار في الرسالة الواحدة"}.`
+          `الحد الأقصى ${limit} ${split ? "رسالة منفصلة" : "تكرار في الرسالة الواحدة"}.`,
       );
     }
 
@@ -133,9 +130,7 @@ module.exports = {
 
     // A bare count with text repeats the text; a range without text prints the
     // numbers. Either way {n}/{i} are substituted per line.
-    const lines = numbers.map((number, index) =>
-      renderLine(template, number, index + 1)
-    );
+    const lines = numbers.map((number, index) => renderLine(template, number, index + 1));
 
     if (split) {
       for (let i = 0; i < lines.length; i++) {
@@ -144,15 +139,13 @@ module.exports = {
           sock,
           chatId,
           { text: body },
-          { replyTo: i === 0 ? msg : null, typing: false, delayMs: SPLIT_GAP_MS }
+          { replyTo: i === 0 ? msg : null, typing: false, delayMs: SPLIT_GAP_MS },
         );
       }
       return;
     }
 
-    let text = lines
-      .map((line, i) => (numbered ? `${i + 1}. ${line}` : line))
-      .join("\n");
+    let text = lines.map((line, i) => (numbered ? `${i + 1}. ${line}` : line)).join("\n");
 
     if (text.length > MAX_OUTPUT_CHARS) {
       text = `${text.slice(0, MAX_OUTPUT_CHARS)}\n…\n_(اتقصت عشان طولها)_`;

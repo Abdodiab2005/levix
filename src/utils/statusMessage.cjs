@@ -44,7 +44,7 @@ class StatusMessage {
         this.sock,
         this.jid,
         { text },
-        { replyTo: this.replyTo, quote: this.quote, typing: false, delayMs: 0 }
+        { replyTo: this.replyTo, quote: this.quote, typing: false, delayMs: 0 },
       );
       this.key = sent?.key || null;
       this.lastEditAt = Date.now();
@@ -71,11 +71,7 @@ class StatusMessage {
       // `quoted: null` on purpose: the command handler wraps sock.sendMessage
       // and auto-quotes anything that doesn't set it, and an edit/delete is a
       // protocolMessage — there is nowhere to hang a contextInfo.
-      await this.sock.sendMessage(
-        this.jid,
-        { text: next, edit: this.key },
-        { quoted: null }
-      );
+      await this.sock.sendMessage(this.jid, { text: next, edit: this.key }, { quoted: null });
       this.text = next;
       this.lastEditAt = Date.now();
       return true;
@@ -91,7 +87,7 @@ class StatusMessage {
         this.sock,
         this.jid,
         { text },
-        { replyTo: this.replyTo, quote: this.quote, typing: false, delayMs: 0 }
+        { replyTo: this.replyTo, quote: this.quote, typing: false, delayMs: 0 },
       );
       this.key = sent?.key || null;
       this.text = text;
@@ -115,7 +111,7 @@ class StatusMessage {
     const name = err?.name || "Error";
     const message = err?.message || String(err || "غير معروف");
     return this.finish(
-      `❌ *${arabicLead}*\n\n*النوع:* \`${name}\`\n*التفاصيل:* ${message}`.slice(0, 1500)
+      `❌ *${arabicLead}*\n\n*النوع:* \`${name}\`\n*التفاصيل:* ${message}`.slice(0, 1500),
     );
   }
 
@@ -124,11 +120,7 @@ class StatusMessage {
     this.closed = true;
     if (!this.key) return false;
     try {
-      await this.sock.sendMessage(
-        this.jid,
-        { delete: this.key },
-        { quoted: null }
-      );
+      await this.sock.sendMessage(this.jid, { delete: this.key }, { quoted: null });
       this.key = null;
       return true;
     } catch (err) {

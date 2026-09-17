@@ -10,20 +10,19 @@
 // the DOCUMENTED shell pipeline against the REAL stdout of a real `levix`
 // process. If either side moves, this goes red.
 
-import { spawn } from "node:child_process";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  useTempDataDir,
-  httpClient,
-  require,
-  ROOT,
-  section,
-  ok,
   equal,
   finish,
+  httpClient,
+  ok,
+  ROOT,
+  require,
+  section,
+  useTempDataDir,
 } from "./harness.mjs";
 
 const dataDir = useTempDataDir("levix-setupcode");
@@ -72,7 +71,7 @@ async function boot({ data = dataDir, waitFor = "Ctrl+C", timeoutMs = 60000 } = 
     await new Promise((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new Error(`never printed ${JSON.stringify(waitFor)}\n${output}`)),
-        timeoutMs
+        timeoutMs,
       );
       const check = (chunk) => {
         output += chunk;
@@ -123,20 +122,12 @@ ok(`the documented pipeline matches something (got ${JSON.stringify(matched)})`,
 ok("it carries the stable prefix", matched.includes(PREFIX));
 // `tail -1` would hide a code printed on every request, so count the raw output
 // rather than the pipeline's.
-equal(
-  "printed exactly once for the whole process",
-  firstRun.split(PREFIX).length - 1,
-  1
-);
+equal("printed exactly once for the whole process", firstRun.split(PREFIX).length - 1, 1);
 
 const code = matched.slice(matched.indexOf(PREFIX) + PREFIX.length).trim();
 ok(`the code is 8 uppercase hex characters (${code})`, /^[0-9A-F]{8}$/.test(code));
 
-ok(
-  "no ANSI escape rode along with it",
-  // eslint-disable-next-line no-control-regex
-  !/\[/.test(matched)
-);
+ok("no ANSI escape rode along with it", !matched.includes("\x1b["));
 
 section("…and that code actually claims the panel from another machine");
 
@@ -153,14 +144,14 @@ section("…and that code actually claims the panel from another machine");
   res = await http.form(
     "/setup",
     { password: "a-good-password", confirm: "a-good-password", code: "DEADBEEF" },
-    remote
+    remote,
   );
   equal("a wrong code is refused", res.status, 401);
 
   res = await http.form(
     "/setup",
     { password: "a-good-password", confirm: "a-good-password", code },
-    remote
+    remote,
   );
   equal("the code that was printed is accepted", res.status, 303);
 }
@@ -173,11 +164,11 @@ equal("the prefix is a constant", PREFIX, "[Setup] Setup code:");
 equal(
   "and formatSetupCodeLine builds the printed line from it",
   secrets.formatSetupCodeLine("ABCDEF01"),
-  `${PREFIX} ABCDEF01`
+  `${PREFIX} ABCDEF01`,
 );
 ok(
   "the running process printed exactly that shape",
-  new RegExp(`${PREFIX.replace(/[[\]]/g, "\\$&")} [0-9A-F]{8}`).test(firstRun)
+  new RegExp(`${PREFIX.replace(/[[\]]/g, "\\$&")} [0-9A-F]{8}`).test(firstRun),
 );
 
 section("every documented retrieval command greps for what Levix prints");
@@ -240,10 +231,7 @@ section("a proxied install prints it too — that is the case that needs it");
 
   const output = await bootAndCapture({ data: proxied });
   ok("the panel advertises the domain", /Panel: https:\/\/bot\.example\.com/.test(output));
-  ok(
-    "and still prints the setup code",
-    runDocumentedCommand(output).includes(PREFIX)
-  );
+  ok("and still prints the setup code", runDocumentedCommand(output).includes(PREFIX));
 
   process.env.LEVIX_DATA_DIR = dataDir;
 }

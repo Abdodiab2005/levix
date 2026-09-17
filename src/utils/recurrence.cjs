@@ -44,15 +44,7 @@ const DAY_ALIASES = new Map([
   ["سبت", 6],
 ]);
 
-const WEEKDAYS = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function normalizeDay(value) {
   return String(value ?? "")
@@ -84,7 +76,9 @@ function parseTime(value) {
 }
 
 function parseRecurringArgs(args) {
-  const type = String(args[0] ?? "").trim().toLowerCase();
+  const type = String(args[0] ?? "")
+    .trim()
+    .toLowerCase();
 
   if (type === "daily") {
     const time = parseTime(args[1]);
@@ -120,7 +114,9 @@ function parseRecurringArgs(args) {
 
 function describeScheduledJob(job, timezone) {
   if (job.type === "recurring") {
-    const parts = String(job.cronString ?? "").trim().split(/\s+/);
+    const parts = String(job.cronString ?? "")
+      .trim()
+      .split(/\s+/);
     if (parts.length === 5) {
       const [minuteText, hourText, dayOfMonth, month, dayText] = parts;
       const minute = Number(minuteText);

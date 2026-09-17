@@ -1,14 +1,12 @@
 // file: /commands/welcome.js
-const {
-  getGroupSettings,
-  saveGroupSettings,
-} = require("../../utils/storage.cjs");
+const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
 
 module.exports = {
   name: "welcome",
   description: "Manages the group's welcome message system.",
-  usage: "welcome [status]\nwelcome <on|off>\nwelcome add <نص الترحيب>\nwelcome list\nwelcome delete <رقم>",
+  usage:
+    "welcome [status]\nwelcome <on|off>\nwelcome add <نص الترحيب>\nwelcome list\nwelcome delete <رقم>",
   chat: "group",
   userAdminRequired: true,
 
@@ -40,7 +38,7 @@ module.exports = {
           });
           break;
 
-        case "add":
+        case "add": {
           const messageToAdd = args.slice(1).join(" ");
           if (!messageToAdd || !messageToAdd.includes("${user}")) {
             return await sock.sendMessage(groupId, {
@@ -52,8 +50,9 @@ module.exports = {
             text: "✅ تم إضافة رسالة الترحيب بنجاح.",
           });
           break;
+        }
 
-        case "list":
+        case "list": {
           if (welcomeConfig.messages.length === 0) {
             return await sock.sendMessage(groupId, {
               text: "لا توجد رسائل ترحيب محفوظة.",
@@ -65,8 +64,9 @@ module.exports = {
           });
           await sock.sendMessage(groupId, { text: listReply });
           break;
+        }
 
-        case "delete":
+        case "delete": {
           const indexToDelete = parseInt(args[1]?.replace("#", ""), 10) - 1;
           if (
             isNaN(indexToDelete) ||
@@ -77,32 +77,28 @@ module.exports = {
               text: "رقم الرسالة غير صالح. استخدم `!welcome list` لمعرفة الأرقام.",
             });
           }
-          const deletedMessage = welcomeConfig.messages.splice(
-            indexToDelete,
-            1
-          );
+          const deletedMessage = welcomeConfig.messages.splice(indexToDelete, 1);
           await sock.sendMessage(groupId, {
             text: `☑️ تم حذف الرسالة بنجاح:\n*${deletedMessage[0]}*`,
           });
           break;
+        }
 
         case "status":
-        default:
+        default: {
           const statusReply =
             `*상태 نظام الترحيب:*\n\n` +
             `الحالة: ${welcomeConfig.enabled ? "مفعل ✅" : "معطل ☑️"}\n` +
             `عدد الرسائل المحفوظة: ${welcomeConfig.messages.length}`;
           await sock.sendMessage(groupId, { text: statusReply });
           break;
+        }
       }
 
       // Save the updated settings back to the database
       saveGroupSettings(groupId, settings);
     } catch (error) {
-      logger.error(
-        { err: error, command: "welcome" },
-        "Error in !welcome command"
-      );
+      logger.error({ err: error, command: "welcome" }, "Error in !welcome command");
       await sock.sendMessage(groupId, { text: "حدث خطأ." });
     }
   },

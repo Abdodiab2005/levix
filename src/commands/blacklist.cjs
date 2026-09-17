@@ -65,9 +65,7 @@ module.exports = {
       const normalizedTargetJid = normalizeJid(targetJid);
 
       if (action === "add") {
-        const targetUser = groupMetadata.participants.find(
-          (p) => p.id === normalizedTargetJid
-        );
+        const targetUser = groupMetadata.participants.find((p) => p.id === normalizedTargetJid);
         if (targetUser?.admin)
           return await sock.sendMessage(groupId, {
             text: "لا يمكن حظر المشرفين.",
@@ -80,37 +78,26 @@ module.exports = {
 
         settings.blacklist.push(normalizedTargetJid);
         await sock.sendMessage(groupId, {
-          text: `🚫 تم إضافة @${
-            normalizedTargetJid.split("@")[0]
-          } إلى القائمة السوداء بنجاح.`,
+          text: `🚫 تم إضافة @${normalizedTargetJid.split("@")[0]} إلى القائمة السوداء بنجاح.`,
           mentions: [normalizedTargetJid],
         });
       } else if (action === "remove") {
         if (!settings.blacklist.includes(normalizedTargetJid))
           return await sock.sendMessage(groupId, {
-            text: `العضو @${
-              normalizedTargetJid.split("@")[0]
-            } ليس في القائمة السوداء أصلاً.`,
+            text: `العضو @${normalizedTargetJid.split("@")[0]} ليس في القائمة السوداء أصلاً.`,
             mentions: [normalizedTargetJid],
           });
 
-        settings.blacklist = settings.blacklist.filter(
-          (jid) => jid !== normalizedTargetJid
-        );
+        settings.blacklist = settings.blacklist.filter((jid) => jid !== normalizedTargetJid);
         await sock.sendMessage(groupId, {
-          text: `✅ تم إزالة @${
-            normalizedTargetJid.split("@")[0]
-          } من القائمة السوداء.`,
+          text: `✅ تم إزالة @${normalizedTargetJid.split("@")[0]} من القائمة السوداء.`,
           mentions: [normalizedTargetJid],
         });
       }
 
       saveGroupSettings(groupId, settings);
     } catch (error) {
-      logger.error(
-        { err: error, command: "blacklist" },
-        "Error in !blacklist command"
-      );
+      logger.error({ err: error, command: "blacklist" }, "Error in !blacklist command");
     }
   },
 };

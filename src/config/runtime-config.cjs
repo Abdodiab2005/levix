@@ -17,12 +17,7 @@
 const defaults = require("./defaults.cjs");
 const logger = require("../utils/logger.cjs");
 
-const PERMISSION_LEVELS = Object.freeze([
-  "MEMBERS",
-  "ADMINS_ONLY",
-  "ADMINS_OWNER",
-  "OWNER_ONLY",
-]);
+const PERMISSION_LEVELS = Object.freeze(["MEMBERS", "ADMINS_ONLY", "ADMINS_OWNER", "OWNER_ONLY"]);
 
 const KEY_PERMISSIONS = "command_permissions";
 const KEY_ALIASES = "command_aliases";
@@ -84,11 +79,7 @@ function defaultPermission(commandKey) {
   if (sub) {
     const groupEntry = table[head];
     if (isPlainObject(groupEntry)) {
-      return (
-        groupEntry.sub_commands?.[sub] ||
-        groupEntry.default_permission ||
-        "MEMBERS"
-      );
+      return groupEntry.sub_commands?.[sub] || groupEntry.default_permission || "MEMBERS";
     }
     return "MEMBERS";
   }
@@ -166,7 +157,9 @@ function setAliases(commandName, aliases) {
     if (!Array.isArray(aliases)) throw new Error("Aliases must be a list");
     const cleaned = [];
     for (const raw of aliases) {
-      const alias = String(raw ?? "").trim().toLowerCase();
+      const alias = String(raw ?? "")
+        .trim()
+        .toLowerCase();
       if (!alias) continue;
       if (/\s/.test(alias)) throw new Error(`Alias "${alias}" can't contain spaces`);
       if (alias.length > 20) throw new Error(`Alias "${alias}" is too long`);
@@ -177,7 +170,9 @@ function setAliases(commandName, aliases) {
   }
 
   writeSetting(KEY_ALIASES, overrides);
-  logger.info(`[config] aliases ${commandName} -> ${JSON.stringify(overrides[commandName] ?? "(default)")}`);
+  logger.info(
+    `[config] aliases ${commandName} -> ${JSON.stringify(overrides[commandName] ?? "(default)")}`,
+  );
   return getAliases(commandName);
 }
 

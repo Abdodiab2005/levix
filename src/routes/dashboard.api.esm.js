@@ -12,34 +12,30 @@
 //     src/config/ai-identity.cjs, which this file does not import and no route
 //     below returns. Neither is an editable field anywhere in the panel.
 
-import { Router } from "express";
-import { createRequire } from "module";
 import fs from "node:fs";
 import path from "node:path";
-
+import { Router } from "express";
+import { createRequire } from "module";
+import { groupMetadataCache } from "../core/socket.js";
+import { getCommandCatalog, rebuildCommandIndex } from "../handlers/command.handler.js";
+import { grantRole, listRoles, revokeRole } from "../utils/permissions.esm.js";
 import {
-  countGroups,
-  countWarnings,
-  countTodos,
-  countNotes,
   countDebts,
+  countGroups,
+  countNotes,
+  countSchedules,
+  countTodos,
+  countWarnings,
   getAllGroupSettings,
-  getGroupSettings,
-  saveGroupSettings,
   getAllNotesFlat,
-  getAllWarnings,
   getAllTodos,
   getAllUsers,
+  getAllWarnings,
+  getGroupSettings,
   getRecentDebts,
-  countSchedules,
   getSchedules,
+  saveGroupSettings,
 } from "../utils/storage.esm.js";
-import {
-  getCommandCatalog,
-  rebuildCommandIndex,
-} from "../handlers/command.handler.js";
-import { groupMetadataCache } from "../core/socket.js";
-import { grantRole, revokeRole, listRoles } from "../utils/permissions.esm.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -48,10 +44,7 @@ const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
 const secrets = require("../config/secrets.cjs");
 const { DATA_DIR } = require("../config/paths.cjs");
-const {
-  PERSONA_FILE,
-  activeProviderKeySetting,
-} = require("../services/aiAgent.cjs");
+const { PERSONA_FILE, activeProviderKeySetting } = require("../services/aiAgent.cjs");
 const { deleteScheduledJob, retryScheduledJob } = require("../../scheduler.cjs");
 const { describeScheduledJob } = require("../utils/recurrence.cjs");
 
@@ -112,7 +105,7 @@ function badRequest(res, message) {
 function asyncRoute(handler) {
   return (req, res) => {
     Promise.resolve(handler(req, res)).catch((error) =>
-      fail(res, error, `${req.method} ${req.path} failed`)
+      fail(res, error, `${req.method} ${req.path} failed`),
     );
   };
 }
@@ -208,7 +201,7 @@ router.patch("/commands/:name", (req, res) => {
       if (command.permissionLocked) {
         return badRequest(
           res,
-          "This command always requires a WhatsApp group admin, so its permission is fixed."
+          "This command always requires a WhatsApp group admin, so its permission is fixed.",
         );
       }
       runtimeConfig.setPermission(command.key, permission || null);
@@ -229,12 +222,11 @@ router.patch("/commands/:name", (req, res) => {
           for (const alias of entry.aliases) taken.set(alias, entry.name);
         }
         for (const raw of aliases) {
-          const alias = String(raw ?? "").trim().toLowerCase();
+          const alias = String(raw ?? "")
+            .trim()
+            .toLowerCase();
           if (taken.has(alias)) {
-            return badRequest(
-              res,
-              `"${alias}" is already used by !${taken.get(alias)}`
-            );
+            return badRequest(res, `"${alias}" is already used by !${taken.get(alias)}`);
           }
         }
       }
@@ -253,9 +245,7 @@ router.patch("/commands/:name", (req, res) => {
   // Make the new triggers live now rather than after a restart.
   if (indexNeedsRebuild) rebuildCommandIndex();
 
-  const updated = getCommandCatalog().find(
-    (entry) => entry.name === command.name
-  );
+  const updated = getCommandCatalog().find((entry) => entry.name === command.name);
   res.json({ success: true, command: updated });
 });
 
@@ -317,9 +307,7 @@ function splitPersona(raw) {
 
 router.get("/ai/persona", (req, res) => {
   try {
-    const raw = fs.existsSync(PERSONA_FILE)
-      ? fs.readFileSync(PERSONA_FILE, "utf8")
-      : "";
+    const raw = fs.existsSync(PERSONA_FILE) ? fs.readFileSync(PERSONA_FILE, "utf8") : "";
     const { header, body } = splitPersona(raw);
     res.json({
       success: true,
@@ -336,9 +324,7 @@ router.put("/ai/persona", (req, res) => {
   if (body.length > 20000) return badRequest(res, "Persona is too long (20k max)");
 
   try {
-    const raw = fs.existsSync(PERSONA_FILE)
-      ? fs.readFileSync(PERSONA_FILE, "utf8")
-      : "";
+    const raw = fs.existsSync(PERSONA_FILE) ? fs.readFileSync(PERSONA_FILE, "utf8") : "";
     const { header } = splitPersona(raw);
     const next = `${header}\n${PERSONA_SEPARATOR}\n${body.trim()}\n`;
     fs.writeFileSync(PERSONA_FILE, next, "utf8");
@@ -353,10 +339,7 @@ router.put("/ai/persona", (req, res) => {
 // memory.cjs and then re-checked against the memory root, so a crafted scope
 // can't walk out of it.
 function memoryPathFor(scope) {
-  const filePath =
-    scope === "global"
-      ? memory.GLOBAL_FILE
-      : memory.memoryFilePath("chat", scope);
+  const filePath = scope === "global" ? memory.GLOBAL_FILE : memory.memoryFilePath("chat", scope);
   const resolved = path.resolve(filePath);
   if (!resolved.startsWith(path.resolve(memory.ROOT) + path.sep)) {
     throw new Error("Refusing to touch a file outside the memory folder");
@@ -403,9 +386,7 @@ router.get("/ai/memory", (req, res) => {
 router.get("/ai/memory/:scope", (req, res) => {
   try {
     const filePath = memoryPathFor(req.params.scope);
-    const content = fs.existsSync(filePath)
-      ? fs.readFileSync(filePath, "utf8")
-      : "";
+    const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : "";
     res.json({ success: true, scope: req.params.scope, content });
   } catch (error) {
     return badRequest(res, error.message);
@@ -484,9 +465,7 @@ function groupView(groupId, stored) {
 
 router.get("/groups", (req, res) => {
   try {
-    const stored = new Map(
-      getAllGroupSettings().map((row) => [row.group_id, row.settings || {}])
-    );
+    const stored = new Map(getAllGroupSettings().map((row) => [row.group_id, row.settings || {}]));
 
     // Groups the bot is in but that have no settings row yet still belong in
     // the list — that's exactly where the operator goes to configure them.
@@ -575,9 +554,7 @@ router.patch("/groups/:id", (req, res) => {
         if (!Array.isArray(patch.media_control.blocked_types)) {
           throw new Error("blocked_types must be a list");
         }
-        const types = patch.media_control.blocked_types.map((type) =>
-          String(type).toLowerCase()
-        );
+        const types = patch.media_control.blocked_types.map((type) => String(type).toLowerCase());
         for (const type of types) {
           if (!MEDIA_TYPES.includes(type)) throw new Error(`Unknown media type: ${type}`);
         }
@@ -673,9 +650,7 @@ router.get("/notes", (req, res) => {
 
 router.get("/warnings", (req, res) => {
   try {
-    const warnings = getAllWarnings().sort((a, b) =>
-      a.group_id.localeCompare(b.group_id)
-    );
+    const warnings = getAllWarnings().sort((a, b) => a.group_id.localeCompare(b.group_id));
     res.json({ success: true, warnings });
   } catch (error) {
     fail(res, error, "Error fetching warnings");
@@ -810,7 +785,7 @@ router.post(
     }
 
     res.json({ success: true, schedule: scheduleView(result.job) });
-  })
+  }),
 );
 
 // ===========================================================================
@@ -880,7 +855,7 @@ router.post(
     }
     logger.info(`[Dashboard] Start session requested — now ${state.state}`);
     res.json({ success: true, session: state });
-  })
+  }),
 );
 
 // Apply configuration that only a new socket can pick up — the proxy, today.
@@ -895,7 +870,7 @@ router.post(
     const state = await session.reconnect({ reason: "dashboard" });
     logger.info(`[Dashboard] Reconnect requested — now ${state.state}`);
     res.json({ success: true, session: state });
-  })
+  }),
 );
 
 // Stop talking to WhatsApp but keep the pairing. No retry follows a manual
@@ -909,7 +884,7 @@ router.post(
     const state = await session.stop({ reason: "dashboard" });
     logger.warn("[Dashboard] WhatsApp session stopped from the dashboard");
     res.json({ success: true, session: state });
-  })
+  }),
 );
 
 router.post(
@@ -924,7 +899,7 @@ router.post(
     }
     const state = await session.setInternetOnline(online);
     res.json({ success: true, session: state });
-  })
+  }),
 );
 
 // Unlink the WhatsApp account: WhatsApp drops the companion device and the
@@ -946,7 +921,7 @@ router.post(
     const state = await session.logout();
     logger.warn("[Dashboard] WhatsApp account unlinked from the dashboard");
     res.json({ success: true, session: state });
-  })
+  }),
 );
 
 // Only useful under a supervisor (pm2 / systemd / docker restart:always) —

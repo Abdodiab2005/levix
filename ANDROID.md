@@ -149,6 +149,36 @@ To update Levix to a newer version:
 
 ---
 
+## Building the APK from Source
+
+If you prefer to compile Levix Host from source:
+
+### 1. Prerequisites
+- **JDK 17** & **Android SDK 35** (`$ANDROID_HOME` configured)
+- **Node.js 24+** on your development machine
+- Tools: `zip`, `rsync`, `curl`, `python3`
+
+### 2. Fetch the Embedded Node.js ARM64 Runtime
+Download and unpack the Node.js 24 binary for ARM64 Android:
+```bash
+android/scripts/fetch-node-android.sh
+```
+
+### 3. Build the APK
+Run Gradle to assemble the APK:
+```bash
+cd android
+./gradlew :app:assembleDebug
+```
+> The Gradle `stageLevixApp` task automatically runs `npm run build:frontend` to compile the React dashboard into `public/dashboard`, stages the production server bundle into `levix-app.zip`, and embeds it inside the APK assets.
+
+### 4. Install onto Device
+```bash
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+---
+
 ## Troubleshooting & FAQ
 
 #### Why did WhatsApp show "Couldn't link device" when using a pairing code?

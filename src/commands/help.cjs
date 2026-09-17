@@ -27,8 +27,7 @@ function loadAllCommands() {
   if (cached) return cached;
   const commandsPath = path.join(__dirname);
   const files = getAllCommandFiles(commandsPath).filter(
-    (file) =>
-      path.basename(file) !== "help.cjs" && path.basename(file) !== "help.js"
+    (file) => path.basename(file) !== "help.cjs" && path.basename(file) !== "help.js",
   );
 
   const commands = { general: [], group: [] };
@@ -110,7 +109,7 @@ const PERMISSION_LABELS = {
 
 function permissionFor(command, isGroupCommand) {
   const level = runtimeConfig.getPermission(
-    isGroupCommand ? `group:${command.name}` : command.name
+    isGroupCommand ? `group:${command.name}` : command.name,
   );
   return PERMISSION_LABELS[level] || level;
 }
@@ -152,8 +151,7 @@ module.exports = {
 
       // A command switched off from the dashboard can't run, so it has no
       // business in the menu.
-      const live = (list) =>
-        list.filter((cmd) => !runtimeConfig.isDisabled(cmd.name));
+      const live = (list) => list.filter((cmd) => !runtimeConfig.isDisabled(cmd.name));
 
       const general = live(commands.general);
       const group = live(commands.group);
@@ -177,11 +175,9 @@ module.exports = {
         sock,
         msg.key.remoteJid,
         {
-          text:
-            `❌ الأمر "*${args[0]}*" غير موجود.\n` +
-            `اكتب \`${prefix}help\` لعرض كل الأوامر.`,
+          text: `❌ الأمر "*${args[0]}*" غير موجود.\n` + `اكتب \`${prefix}help\` لعرض كل الأوامر.`,
         },
-        { replyTo: msg }
+        { replyTo: msg },
       );
     }
 
@@ -190,9 +186,7 @@ module.exports = {
 
     const commandAliases = aliasesOf(command);
     if (commandAliases.length) {
-      usageText += `├─ *اختصارات:* ${commandAliases
-        .map((a) => `${prefix}${a}`)
-        .join(", ")}\n`;
+      usageText += `├─ *اختصارات:* ${commandAliases.map((a) => `${prefix}${a}`).join(", ")}\n`;
     }
 
     if (command.description) {

@@ -18,7 +18,7 @@ module.exports = {
       const currentPrefix = runtimeConfig.getPrefix();
 
       await sock.sendMessage(chatId, {
-        text: `البادئة الحالية للبوت: \`${currentPrefix}\`\n\nلتغيير البادئة، استخدم:\n\`${currentPrefix}setprefix <البادئة_الجديدة>\`\n\nمثال: \`${currentPrefix}setprefix /\`\n\n⚠️ ملاحظة: يمكن للمالك فقط تغيير البادئة.`
+        text: `البادئة الحالية للبوت: \`${currentPrefix}\`\n\nلتغيير البادئة، استخدم:\n\`${currentPrefix}setprefix <البادئة_الجديدة>\`\n\nمثال: \`${currentPrefix}setprefix /\`\n\n⚠️ ملاحظة: يمكن للمالك فقط تغيير البادئة.`,
       });
       return;
     }
@@ -34,7 +34,7 @@ module.exports = {
     logger.info(`[Prefix] Bot prefix changed to: ${newPrefix}`);
 
     await sock.sendMessage(chatId, {
-      text: `✅ تم تغيير البادئة بنجاح إلى: \`${newPrefix}\`\n\nالآن استخدم \`${newPrefix}help\` لعرض الأوامر.\n\n⚠️ البادئة الجديدة تعمل الآن في كل المحادثات.`
+      text: `✅ تم تغيير البادئة بنجاح إلى: \`${newPrefix}\`\n\nالآن استخدم \`${newPrefix}help\` لعرض الأوامر.\n\n⚠️ البادئة الجديدة تعمل الآن في كل المحادثات.`,
     });
   },
 };

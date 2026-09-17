@@ -21,7 +21,7 @@ module.exports = {
     const warnConfig = settings.warn_system;
 
     switch (subCommand) {
-      case "max":
+      case "max": {
         const max = parseInt(value, 10);
         if (isNaN(max) || max < 1) {
           return await sock.sendMessage(groupId, {
@@ -33,8 +33,9 @@ module.exports = {
           text: `✅ تم تعيين الحد الأقصى للتحذيرات إلى ${max}.`,
         });
         break;
+      }
 
-      case "action":
+      case "action": {
         const action = value?.toUpperCase();
         if (action !== "KICK" && action !== "NONE") {
           return await sock.sendMessage(groupId, {
@@ -46,6 +47,7 @@ module.exports = {
           text: `✅ تم تعيين الإجراء التلقائي إلى ${action}.`,
         });
         break;
+      }
 
       default:
         return await sock.sendMessage(groupId, {

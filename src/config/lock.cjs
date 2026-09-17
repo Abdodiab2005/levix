@@ -86,7 +86,7 @@ function acquireSingleInstanceLock() {
           `  ${LOCK_FILE}\n\n` +
           `  Only one Levix can run per data directory — a WhatsApp pairing is a\n` +
           `  single session. Stop the other one, or start this one with --data\n` +
-          `  pointing somewhere else.`
+          `  pointing somewhere else.`,
       );
       error.code = "ELEVIXLOCKED";
       throw error;
@@ -94,7 +94,7 @@ function acquireSingleInstanceLock() {
 
     // The holder is gone (a crash, a kill -9, a reboot). Take it over.
     logger.warn(
-      `[lock] Removing a stale lock from pid ${owner ?? "unknown"} — that process is gone`
+      `[lock] Removing a stale lock from pid ${owner ?? "unknown"} — that process is gone`,
     );
     fs.rmSync(LOCK_FILE, { force: true });
     claim();

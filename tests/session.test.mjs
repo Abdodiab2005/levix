@@ -10,17 +10,19 @@
 
 import { EventEmitter } from "node:events";
 import {
-  useTempDataDir,
-  require as harnessRequire,
-  section,
-  ok,
   equal,
   finish,
+  require as harnessRequire,
+  ok,
+  section,
+  useTempDataDir,
 } from "./harness.mjs";
 
 useTempDataDir("levix-session");
 
-const { WhatsAppSession, SESSION_STATES, parseStartOptions, normalizePairingPhone } = await import("../src/core/session.js");
+const { WhatsAppSession, SESSION_STATES, parseStartOptions, normalizePairingPhone } = await import(
+  "../src/core/session.js"
+);
 const { RETRY_SCHEDULE_MS, MAX_RETRIES } = await import("../src/config/constants.js");
 const { classifyDisconnect, CONNECTION_FAILURE_405 } = await import("../src/core/connection.js");
 const { DisconnectReason } = await import("@whiskeysockets/baileys");
@@ -101,13 +103,16 @@ section("the retry schedule is 5/10/15/20/25 seconds, staged and linear");
 equal(
   "the exact ladder",
   JSON.stringify([...RETRY_SCHEDULE_MS]),
-  JSON.stringify([5000, 10000, 15000, 20000, 25000])
+  JSON.stringify([5000, 10000, 15000, 20000, 25000]),
 );
 equal("five attempts", MAX_RETRIES, 5);
 ok("the schedule is frozen", Object.isFrozen(RETRY_SCHEDULE_MS));
 {
   const steps = RETRY_SCHEDULE_MS.map((ms, i) => (i ? ms - RETRY_SCHEDULE_MS[i - 1] : ms));
-  ok("every step is the same 5s — linear, not exponential", steps.every((s) => s === 5000));
+  ok(
+    "every step is the same 5s — linear, not exponential",
+    steps.every((s) => s === 5000),
+  );
 }
 
 section("a session does nothing until it is asked to");
@@ -215,7 +220,10 @@ section("pairing: a QR that nobody scans is not replaced by another one");
 
   equal("the state says a code is waiting", h.session.state, S.WAITING_FOR_QR);
   equal("the code is readable for a dashboard that loads late", h.session.qr, "QR-ONE");
-  ok("the QR went out to whoever is listening", h.events.some((e) => e.event === "qr"));
+  ok(
+    "the QR went out to whoever is listening",
+    h.events.some((e) => e.event === "qr"),
+  );
 
   // The connection drops before a phone ever scanned it.
   await h.push({ connection: "close", lastDisconnect: closedWith(DisconnectReason.timedOut) });
@@ -223,7 +231,10 @@ section("pairing: a QR that nobody scans is not replaced by another one");
   equal("the pairing attempt ends", h.session.state, S.DISCONNECTED);
   equal("no second socket was created", h.sockets.length, 1);
   equal("the stale code is gone", h.session.qr, null);
-  ok("the panel is told the code is gone", h.events.some((e) => e.event === "qr_cleared"));
+  ok(
+    "the panel is told the code is gone",
+    h.events.some((e) => e.event === "qr_cleared"),
+  );
   ok("and it can be started by hand again", h.session.getState().canStart);
 
   await sleep(60);
@@ -247,7 +258,10 @@ section("pairing: a scan is not a failed attempt");
   equal("the session is linking", h.session.state, S.LINKING);
   equal("the code is cleared once it has been used", h.session.qr, null);
 
-  await h.push({ connection: "close", lastDisconnect: closedWith(DisconnectReason.restartRequired) });
+  await h.push({
+    connection: "close",
+    lastDisconnect: closedWith(DisconnectReason.restartRequired),
+  });
   equal("a restart-required close is retried, not abandoned", h.session.state, S.RECONNECTING);
 
   await sleep(120);
@@ -265,7 +279,10 @@ section("an authenticated session reconnects on its own");
   equal("connected", h.session.state, S.CONNECTED);
   equal("the retry counter is clear", h.session.getState().attempt, 0);
 
-  await h.push({ connection: "close", lastDisconnect: closedWith(DisconnectReason.connectionClosed) });
+  await h.push({
+    connection: "close",
+    lastDisconnect: closedWith(DisconnectReason.connectionClosed),
+  });
 
   const state = h.session.getState();
   equal("it is reconnecting", state.state, S.RECONNECTING);
@@ -279,7 +296,7 @@ section("an authenticated session reconnects on its own");
   // whole ladder above ran with no listener but a recording array.
   ok(
     "the retry was scheduled with nothing listening but a plain array",
-    Array.isArray(h.events) && h.session.getState().nextRetryAt !== null
+    Array.isArray(h.events) && h.session.getState().nextRetryAt !== null,
   );
 
   await h.session.stop();
@@ -316,11 +333,14 @@ section("…in order, and only one at a time, until it gives up");
 
   ok(
     `the delays climb in order (${observed.join(", ")})`,
-    observed.every((ms, i) => i === 0 || ms > observed[i - 1])
+    observed.every((ms, i) => i === 0 || ms > observed[i - 1]),
   );
 
   // One more close, with the schedule used up.
-  await h.push({ connection: "close", lastDisconnect: closedWith(DisconnectReason.connectionLost) });
+  await h.push({
+    connection: "close",
+    lastDisconnect: closedWith(DisconnectReason.connectionLost),
+  });
   equal("it gives up", h.session.state, S.RETRY_EXHAUSTED);
   ok("but says it can be started again", h.session.getState().canStart);
   await sleep(160);
@@ -334,7 +354,7 @@ section("…in order, and only one at a time, until it gives up");
     const { fileURLToPath } = await import("node:url");
     const source = readFileSync(
       fileURLToPath(new URL("../src/core/session.js", import.meta.url)),
-      "utf8"
+      "utf8",
     );
     ok("the session never exits the process", !/process\.exit/.test(source));
   }
@@ -428,7 +448,10 @@ section("a reconnect re-binds the scheduled jobs, and only once each");
   await h.push({ connection: "open" });
   equal("the first open binds the jobs", bound.length, 1);
 
-  await h.push({ connection: "close", lastDisconnect: closedWith(DisconnectReason.connectionLost) });
+  await h.push({
+    connection: "close",
+    lastDisconnect: closedWith(DisconnectReason.connectionLost),
+  });
   await sleep(60);
   const secondSocket = h.latest();
   secondSocket.user = { id: "1@s.whatsapp.net" };
@@ -448,7 +471,10 @@ section("a successful open clears the counter");
   h.latest().user = { id: "1@s.whatsapp.net" };
   await h.push({ connection: "open" });
 
-  await h.push({ connection: "close", lastDisconnect: closedWith(DisconnectReason.connectionLost) });
+  await h.push({
+    connection: "close",
+    lastDisconnect: closedWith(DisconnectReason.connectionLost),
+  });
   equal("one attempt used", h.session.getState().attempt, 1);
   await sleep(60);
 
@@ -457,7 +483,10 @@ section("a successful open clears the counter");
   equal("connected again", h.session.state, S.CONNECTED);
   equal("the counter is back to zero", h.session.getState().attempt, 0);
 
-  await h.push({ connection: "close", lastDisconnect: closedWith(DisconnectReason.connectionLost) });
+  await h.push({
+    connection: "close",
+    lastDisconnect: closedWith(DisconnectReason.connectionLost),
+  });
   equal("so the next failure is attempt one again", h.session.getState().attempt, 1);
   await h.session.stop();
 }
@@ -471,7 +500,10 @@ section("a replaced socket cannot reach back");
   h.latest().user = { id: "1@s.whatsapp.net" };
   await h.push({ connection: "open" });
 
-  await h.push({ connection: "close", lastDisconnect: closedWith(DisconnectReason.connectionLost) });
+  await h.push({
+    connection: "close",
+    lastDisconnect: closedWith(DisconnectReason.connectionLost),
+  });
   await sleep(60);
   equal("a second socket exists", h.sockets.length, 2);
   h.sockets[1].user = { id: "1@s.whatsapp.net" };
@@ -479,7 +511,10 @@ section("a replaced socket cannot reach back");
   equal("and it is the live one", h.session.state, S.CONNECTED);
 
   // The old socket finally gets round to reporting its own death.
-  await h.push({ connection: "close", lastDisconnect: closedWith(DisconnectReason.connectionLost) }, first);
+  await h.push(
+    { connection: "close", lastDisconnect: closedWith(DisconnectReason.connectionLost) },
+    first,
+  );
   equal("the stale close changed nothing", h.session.state, S.CONNECTED);
   await sleep(80);
   equal("and scheduled nothing", h.sockets.length, 2);
@@ -536,7 +571,10 @@ section("terminal closes: 405");
   h.latest().user = { id: "1@s.whatsapp.net" };
   await h.push({ connection: "open" });
 
-  await h.push({ connection: "close", lastDisconnect: closedWith(CONNECTION_FAILURE_405, "Connection Failure") });
+  await h.push({
+    connection: "close",
+    lastDisconnect: closedWith(CONNECTION_FAILURE_405, "Connection Failure"),
+  });
 
   equal("it stops rather than hammering WhatsApp", h.session.state, S.DISCONNECTED);
   equal("the pairing was left alone", cleared, 0);
@@ -563,9 +601,18 @@ section("classifying a close");
   ok("…and is not treated as a logout", !classifyDisconnect(DisconnectReason.forbidden).loggedOut);
 
   ok("515 is recoverable", !classifyDisconnect(DisconnectReason.restartRequired).terminal);
-  ok("…and marked as the pairing handshake", classifyDisconnect(DisconnectReason.restartRequired).restartRequired);
+  ok(
+    "…and marked as the pairing handshake",
+    classifyDisconnect(DisconnectReason.restartRequired).restartRequired,
+  );
 
-  for (const code of [DisconnectReason.connectionClosed, DisconnectReason.connectionLost, DisconnectReason.badSession, DisconnectReason.unavailableService, undefined]) {
+  for (const code of [
+    DisconnectReason.connectionClosed,
+    DisconnectReason.connectionLost,
+    DisconnectReason.badSession,
+    DisconnectReason.unavailableService,
+    undefined,
+  ]) {
     ok(`${code ?? "no status"} is retried`, !classifyDisconnect(code).terminal);
   }
 }
@@ -688,7 +735,10 @@ section("shutdown leaves nothing running");
   const sock = h.latest();
   sock.user = { id: "1@s.whatsapp.net" };
   await h.push({ connection: "open" });
-  await h.push({ connection: "close", lastDisconnect: closedWith(DisconnectReason.connectionLost) });
+  await h.push({
+    connection: "close",
+    lastDisconnect: closedWith(DisconnectReason.connectionLost),
+  });
   equal("a retry is pending", h.session.state, S.RECONNECTING);
 
   await h.session.shutdown();
@@ -715,15 +765,19 @@ section("a pending reconnect keeps a headless process alive");
   const here = fileURLToPath(new URL(".", import.meta.url));
   const result = spawnSync(
     process.execPath,
-    [join(here, "fixtures", "reconnect-liveness.mjs"), "--data", mkdtempSync(join(tmpdir(), "levix-liveness-"))],
-    { encoding: "utf8", timeout: 30000, env: { ...process.env, LEVIX_DATA_DIR: "" } }
+    [
+      join(here, "fixtures", "reconnect-liveness.mjs"),
+      "--data",
+      mkdtempSync(join(tmpdir(), "levix-liveness-")),
+    ],
+    { encoding: "utf8", timeout: 30000, env: { ...process.env, LEVIX_DATA_DIR: "" } },
   );
 
   const out = `${result.stdout || ""}${result.stderr || ""}`;
   ok(
     "the process was still there when the retry fired",
     out.includes("RECONNECTED"),
-    out.trim().split("\n").slice(-3).join(" | ")
+    out.trim().split("\n").slice(-3).join(" | "),
   );
   ok("…and not because it never left", !out.includes("EXITED_BEFORE_RETRY"));
 }
@@ -753,7 +807,11 @@ section("pairing phone numbers are digits with a country code");
   }
   ok("a local number starting with 0 is rejected", leadingZero);
   equal("qr is the default method", parseStartOptions({}).method, "qr");
-  equal("pairing keeps the number", parseStartOptions({ method: "pairing", phone: "201012345678" }).phone, "201012345678");
+  equal(
+    "pairing keeps the number",
+    parseStartOptions({ method: "pairing", phone: "201012345678" }).phone,
+    "201012345678",
+  );
   let threw = false;
   try {
     parseStartOptions({ method: "pairing", phone: "12" });
@@ -791,8 +849,8 @@ section("pairing code is chosen before the socket is created");
       (e) =>
         e.event === "pairing_code" &&
         e.payload.code === "ABCD1234" &&
-        e.payload.phone === "201012345678"
-    )
+        e.payload.phone === "201012345678",
+    ),
   );
   equal("the number was given to Baileys", h.latest().pairingPhone, "201012345678");
   ok("getState does not include the code", h.session.getState().hasPairingCode === true);
@@ -834,4 +892,3 @@ section("internet state: pausing when offline and restarting when online");
 }
 
 finish();
-

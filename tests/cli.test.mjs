@@ -10,7 +10,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { useTempDataDir, require, ROOT, section, ok, equal, finish } from "./harness.mjs";
+import { equal, finish, ok, ROOT, require, section, useTempDataDir } from "./harness.mjs";
 
 const dataDir = useTempDataDir("levix-cli");
 const CLI = join(ROOT, "bin", "levix.js");
@@ -23,7 +23,7 @@ function levix(args, { data = dataDir, probe = false } = {}) {
     {
       encoding: "utf8",
       env: { ...process.env, LEVIX_DATA_DIR: data, ...(probeOut ? { PROBE_OUT: probeOut } : {}) },
-    }
+    },
   );
   result.modules =
     probeOut && existsSync(probeOut) ? readFileSync(probeOut, "utf8").split("\n") : [];
@@ -40,7 +40,7 @@ section("basic invocations");
   equal(
     "…and prints the package version",
     version.stdout.trim(),
-    require("./package.json").version
+    require("./package.json").version,
   );
 
   const help = levix(["--help"]);
@@ -66,7 +66,7 @@ section("where prints the directory actually in use");
   equal(
     "--data wins over the environment",
     levix(["--data", other, "where"], { data: dataDir }).stdout.trim(),
-    other
+    other,
   );
 
   // `where` loads almost nothing, which is the point — so prove the probe saw
@@ -75,21 +75,21 @@ section("where prints the directory actually in use");
   ok(
     "the probe captured the module that resolves the directory",
     result.modules.some((path) => path.endsWith("src/config/paths.cjs")),
-    `probe returned ${result.modules.length} modules`
+    `probe returned ${result.modules.length} modules`,
   );
 
   // Cheap: no WhatsApp stack, no web server, no command files.
   const heavy = result.modules.filter((path) =>
-    /node_modules\/(@whiskeysockets|baileys|express|socket\.io|ejs|node-cron|qrcode)/.test(path)
+    /node_modules\/(@whiskeysockets|baileys|express|socket\.io|ejs|node-cron|qrcode)/.test(path),
   );
   ok("it loads no WhatsApp, web or scheduling dependency", heavy.length === 0, heavy[0]);
   ok(
     "it does not even open the database",
-    !result.modules.some((path) => path.endsWith("src/db/db.cjs"))
+    !result.modules.some((path) => path.endsWith("src/db/db.cjs")),
   );
   ok(
     "it does not load the command files",
-    !result.modules.some((path) => path.includes("src/commands/"))
+    !result.modules.some((path) => path.includes("src/commands/")),
   );
 }
 
@@ -126,22 +126,22 @@ checkpoint();
   ok(
     "the module probe recorded something to check",
     result.modules.length > 3,
-    `probe returned ${result.modules.length} modules`
+    `probe returned ${result.modules.length} modules`,
   );
 
   const heavy = result.modules.filter((path) =>
     /node_modules\/(@whiskeysockets|baileys|express|socket\.io|ejs|node-cron|fluent-ffmpeg|ffmpeg-static)/.test(
-      path
-    )
+      path,
+    ),
   );
   ok("it starts no WhatsApp, web or media dependency", heavy.length === 0, heavy[0]);
   ok(
     "it does not load the command files",
-    !result.modules.some((path) => path.includes("src/commands/"))
+    !result.modules.some((path) => path.includes("src/commands/")),
   );
   ok(
     "it does load the database, and only that",
-    result.modules.some((path) => path.endsWith("src/db/db.cjs"))
+    result.modules.some((path) => path.endsWith("src/db/db.cjs")),
   );
 }
 
@@ -165,7 +165,7 @@ section("it cleared the password and nothing else");
       }));
       `,
     ],
-    { env: { ...process.env, LEVIX_DATA_DIR: dataDir }, encoding: "utf8" }
+    { env: { ...process.env, LEVIX_DATA_DIR: dataDir }, encoding: "utf8" },
   );
   const state = JSON.parse(after.stdout);
 
@@ -206,7 +206,7 @@ section("the panel accepts a new password afterwards");
     equal(
       "…and it logs in",
       (await login.form("/login", { password: "a-brand-new-password" })).status,
-      303
+      303,
     );
   } finally {
     server.stop();
@@ -227,7 +227,7 @@ section("an unsupported Node version fails with a sentence, not a stack");
       import(${JSON.stringify(CLI)});
       `,
     ],
-    { encoding: "utf8", env: { ...process.env, LEVIX_DATA_DIR: dataDir } }
+    { encoding: "utf8", env: { ...process.env, LEVIX_DATA_DIR: dataDir } },
   );
 
   equal("it exits non-zero", fake.status, 1);

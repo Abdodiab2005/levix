@@ -8,7 +8,7 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { useTempDataDir, require, ROOT, section, ok, equal, finish } from "./harness.mjs";
+import { equal, finish, ok, ROOT, require, section, useTempDataDir } from "./harness.mjs";
 
 const dataDir = useTempDataDir("levix-lock");
 const lock = require("./src/config/lock.cjs");
@@ -30,7 +30,7 @@ function claimInChild(dir, { holdMs = 0 } = {}) {
       }
       `,
     ],
-    { env: { ...process.env, LEVIX_DATA_DIR: dir }, encoding: "utf8" }
+    { env: { ...process.env, LEVIX_DATA_DIR: dir }, encoding: "utf8" },
   );
 }
 
@@ -76,7 +76,10 @@ section("a lock left behind by a crash is not fatal");
   for (const junk of ["", "   ", "not-a-pid", "-1"]) {
     writeFileSync(first, junk);
     const child = claimInChild(dataDir);
-    ok(`a lock file containing ${JSON.stringify(junk)} is taken over`, child.stdout.startsWith("ACQUIRED"));
+    ok(
+      `a lock file containing ${JSON.stringify(junk)} is taken over`,
+      child.stdout.startsWith("ACQUIRED"),
+    );
   }
 }
 
@@ -97,7 +100,7 @@ section("a live holder is never evicted");
       process.stdout.write("PLANTED");
       `,
     ],
-    { env: { ...process.env, LEVIX_DATA_DIR: dataDir }, encoding: "utf8" }
+    { env: { ...process.env, LEVIX_DATA_DIR: dataDir }, encoding: "utf8" },
   );
   ok("a lock pointing at a live process is planted", holder.stdout === "PLANTED");
 

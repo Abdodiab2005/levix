@@ -23,10 +23,7 @@ const settings = require("./src/config/settings.cjs");
 const secrets = require("./src/config/secrets.cjs");
 const { PanelSessionStore } = require("./src/panel/session-store.cjs");
 const { getQrCode } = require("./src/utils/storage.cjs");
-const {
-  clientAddress,
-  isDirectLocalRequest,
-} = require("./src/utils/requestOrigin.cjs");
+const { clientAddress, isDirectLocalRequest } = require("./src/utils/requestOrigin.cjs");
 
 const SESSION_COOKIE_NAME = "wa.sid";
 const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
@@ -296,10 +293,7 @@ app.get("/", noStore, (req, res) => {
       let html = fs.readFileSync(dashboardHtmlPath, "utf8");
       const credits = `<div class="brand-credits" style="display:none"><a href="${brand.developerSite}">${brand.developer}</a><a href="${brand.studioSite}">${brand.studio}</a></div>`;
       html = html
-        .replace(
-          "</head>",
-          `<script>window.__BRAND__ = ${JSON.stringify(brand)};</script></head>`
-        )
+        .replace("</head>", `<script>window.__BRAND__ = ${JSON.stringify(brand)};</script></head>`)
         .replace("</body>", `${credits}</body>`);
       return res.type("html").send(html);
     }

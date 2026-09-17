@@ -24,9 +24,7 @@ module.exports = {
     }
 
     // Safety check: Is the target user NOT an admin?
-    const targetUser = groupMetadata.participants.find(
-      (p) => p.id === targetJid
-    );
+    const targetUser = groupMetadata.participants.find((p) => p.id === targetJid);
     if (!targetUser || !targetUser.admin) {
       return await sock.sendMessage(groupId, {
         text: `⚠️ العضو @${targetJid.split("@")[0]} ليس مشرفًا أصلاً.`,
@@ -45,17 +43,14 @@ module.exports = {
       await sock.groupParticipantsUpdate(
         groupId,
         [targetJid],
-        "demote" // The action is 'demote'
+        "demote", // The action is 'demote'
       );
       await sock.sendMessage(groupId, {
         text: `👤 تم عزل @${targetJid.split("@")[0]} من الإشراف.`,
         mentions: [targetJid],
       });
     } catch (error) {
-      logger.error(
-        { err: error, command: "demote" },
-        "Error in !demote command"
-      );
+      logger.error({ err: error, command: "demote" }, "Error in !demote command");
       await sock.sendMessage(groupId, { text: "حدث خطأ أثناء محاولة العزل." });
     }
   },

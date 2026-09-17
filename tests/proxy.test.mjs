@@ -14,13 +14,13 @@
 
 import { EventEmitter } from "node:events";
 import {
-  useTempDataDir,
-  require as harnessRequire,
-  ROOT,
-  section,
-  ok,
   equal,
   finish,
+  require as harnessRequire,
+  ok,
+  ROOT,
+  section,
+  useTempDataDir,
 } from "./harness.mjs";
 
 useTempDataDir("levix-proxy");
@@ -36,7 +36,14 @@ const silent = { info() {}, warn() {}, error() {}, debug() {}, trace() {} };
 const PASSWORD = "s3cr3t:p@ss/word";
 
 /** Put a whole proxy configuration into the real settings store. */
-function saveProxy({ enabled, protocol = "http", host = "", port = 0, username = "", password = "" }) {
+function saveProxy({
+  enabled,
+  protocol = "http",
+  host = "",
+  port = 0,
+  username = "",
+  password = "",
+}) {
   settings.set("whatsapp_proxy_enabled", enabled);
   settings.set("whatsapp_proxy_protocol", protocol);
   settings.set("whatsapp_proxy_host", host);
@@ -154,7 +161,7 @@ section("nothing human-facing carries the password");
   equal(
     "a failure with the proxy off is not blamed on it",
     proxy.describeProxyFailure(new Error("boom"), { enabled: false }),
-    null
+    null,
   );
 }
 
@@ -181,19 +188,19 @@ section("the two agent shapes Baileys actually needs");
 
     ok(
       `${protocol}: the WebSocket gets a classic http.Agent`,
-      typeof agents.agent?.addRequest === "function"
+      typeof agents.agent?.addRequest === "function",
     );
     ok(
       `${protocol}: media upload gets a classic http.Agent too`,
-      typeof agents.fetchAgent?.addRequest === "function"
+      typeof agents.fetchAgent?.addRequest === "function",
     );
     ok(
       `${protocol}: …and NOT an undici dispatcher, which https.request cannot use`,
-      typeof agents.fetchAgent?.dispatch !== "function"
+      typeof agents.fetchAgent?.dispatch !== "function",
     );
     ok(
       `${protocol}: media download gets an undici Dispatcher`,
-      typeof agents.dispatcher?.dispatch === "function"
+      typeof agents.dispatcher?.dispatch === "function",
     );
 
     const expected = protocol === "socks5" ? "SocksProxyAgent" : "HttpsProxyAgent";
@@ -214,15 +221,12 @@ section("the socket config wires each agent to the path that can use it");
   const source = readFileSync(join(ROOT, "src", "core", "socket.js"), "utf8");
 
   ok("the WebSocket agent goes to `agent`", /config\.agent\s*=\s*proxy\.agent/.test(source));
-  ok("the upload agent goes to `fetchAgent`", /config\.fetchAgent\s*=\s*proxy\.fetchAgent/.test(source));
   ok(
-    "the dispatcher goes to `options.dispatcher`",
-    /dispatcher:\s*proxy\.dispatcher/.test(source)
+    "the upload agent goes to `fetchAgent`",
+    /config\.fetchAgent\s*=\s*proxy\.fetchAgent/.test(source),
   );
-  ok(
-    "and nothing is set when there is no proxy",
-    /if \(proxy\) \{/.test(source)
-  );
+  ok("the dispatcher goes to `options.dispatcher`", /dispatcher:\s*proxy\.dispatcher/.test(source));
+  ok("and nothing is set when there is no proxy", /if \(proxy\) \{/.test(source));
 }
 
 section("the socket factory is handed exactly what was configured");
@@ -291,7 +295,7 @@ function makeHarness() {
   ok("…and a media dispatcher", typeof given.dispatcher.dispatch === "function");
   ok(
     `…and the session says so (${h.session.getState().proxy})`,
-    h.session.getState().proxy.includes("http.example:3128")
+    h.session.getState().proxy.includes("http.example:3128"),
   );
   await h.session.stop();
 }
@@ -336,7 +340,7 @@ section("changing the proxy never touches the live socket by itself");
   ok("but the panel is told a reconnect would change something", h.session.getState().proxyChanged);
   ok(
     "and the live socket still reports the OLD proxy",
-    h.session.getState().proxy.includes("first.example")
+    h.session.getState().proxy.includes("first.example"),
   );
 
   await sleep(60);
@@ -347,12 +351,26 @@ section("changing the proxy never touches the live socket by itself");
 }
 
 {
-  saveProxy({ enabled: true, protocol: "http", host: "p.example", port: 3128, username: "u", password: "one" });
+  saveProxy({
+    enabled: true,
+    protocol: "http",
+    host: "p.example",
+    port: 3128,
+    username: "u",
+    password: "one",
+  });
   const h = makeHarness();
   await h.open();
   ok("clean to start with", !h.session.getState().proxyChanged);
 
-  saveProxy({ enabled: true, protocol: "http", host: "p.example", port: 3128, username: "u", password: "two" });
+  saveProxy({
+    enabled: true,
+    protocol: "http",
+    host: "p.example",
+    port: 3128,
+    username: "u",
+    password: "two",
+  });
   ok("a password-only change is still a change", h.session.getState().proxyChanged);
   await h.session.stop();
 }
@@ -368,10 +386,7 @@ section("reconnect-to-apply goes through the lifecycle");
   await h.session.reconnect({ reason: "test" });
 
   equal("exactly one more socket was made", h.sockets.length, 2);
-  ok(
-    "the new one got the new proxy",
-    h.proxiesSeen[1].label.includes("new.example")
-  );
+  ok("the new one got the new proxy", h.proxiesSeen[1].label.includes("new.example"));
   ok("…and nothing is stale any more", !h.session.getState().proxyChanged);
   equal("the session is back on its way up", h.session.state, S.STARTING);
   await h.session.stop();
@@ -418,7 +433,14 @@ section("a proxy that rejects the handshake does not hang");
   // and Baileys registers a listener that ignores it — so a 407 used to produce
   // no error, no close and no state change at all. The session listens for it
   // and turns it into an ordinary close.
-  saveProxy({ enabled: true, protocol: "http", host: "auth.example", port: 3128, username: "u", password: "wrong" });
+  saveProxy({
+    enabled: true,
+    protocol: "http",
+    host: "auth.example",
+    port: 3128,
+    username: "u",
+    password: "wrong",
+  });
 
   const sockets = [];
   let rejectHandshake = null;
@@ -458,11 +480,7 @@ section("a proxy that rejects the handshake does not hang");
   await sleep(30);
 
   equal("the socket was ended rather than left hanging", sockets[0].ended, 1);
-  equal(
-    "…and the close ran through the normal state machine",
-    session.state,
-    S.RECONNECTING
-  );
+  equal("…and the close ran through the normal state machine", session.state, S.RECONNECTING);
   const detail = session.getState().detail || "";
   ok(`the reason blames the proxy credentials (${detail})`, /username or password/i.test(detail));
   ok("without printing the password", !JSON.stringify(session.getState()).includes("wrong"));
@@ -481,10 +499,7 @@ section("headless reads the same saved configuration");
   await h.session.start({ reason: "autostart" });
 
   ok("the autostart path proxies too", !!h.proxiesSeen[0]);
-  ok(
-    "with the configured proxy",
-    h.proxiesSeen[0].label.includes("headless.example:1080")
-  );
+  ok("with the configured proxy", h.proxiesSeen[0].label.includes("headless.example:1080"));
   await h.session.stop();
 
   saveProxy({ enabled: false });
@@ -510,14 +525,14 @@ section("the settings API never hands the password back");
   equal("only whether it is set", password.configured, true);
   ok(
     "nothing in the whole settings payload contains it",
-    !JSON.stringify(described).includes(PASSWORD)
+    !JSON.stringify(described).includes(PASSWORD),
   );
 
   const protocol = described.find((entry) => entry.key === "whatsapp_proxy_protocol");
   equal(
     "the protocol offers a fixed set of choices",
     JSON.stringify(protocol.choices),
-    JSON.stringify(["http", "https", "socks5"])
+    JSON.stringify(["http", "https", "socks5"]),
   );
 
   let threw = null;
