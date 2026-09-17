@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Levix</string>
+    <string name="brand_tagline">غرفة التحكم</string>
+    <string name="host_shell_note">المساعد الذكي المستقل في الخلفية. افتح لوحة التحكم لإدارة الإعدادات.</string>
+
+    <!-- Hero Section -->
+    <string name="hero_eyebrow">المساعد الشخصي</string>
+    <string name="hero_title">مساعد واتساب الذكي الخاص بك،\nدائماً إلى جانبك.</string>
+    <string name="hero_subtitle_running">ليفيكس يعمل في الخلفية ومستعد لمساعدتك فوراً.</string>
+    <string name="hero_subtitle_stopped">ليفيكس متوقف حالياً. اضغط على تشغيل لتفعيل المساعد.</string>
+    <string name="btn_open_panel">فتح لوحة التحكم</string>
+    <string name="btn_start_host">تشغيل المساعد</string>
+    <string name="btn_stop_host">إيقاف المساعد</string>
+
+    <!-- Sections -->
+    <string name="section_overview">نظرة عامة على الحالة</string>
+    <string name="section_overview_sub">مؤشرات النظام والخدمات الأساسية في لمحة</string>
+
+    <!-- Essential User Cards -->
+    <string name="card_whatsapp_title">واتساب</string>
+    <string name="card_whatsapp_desc_connected">متصل ونشط. جاهز لاستقبال الرسائل والرد عليها.</string>
+    <string name="card_whatsapp_desc_pairing">في انتظار ربط الجهاز. اضغط فتح لوحة التحكم للربط عبر كود الهاتف.</string>
+    <string name="card_whatsapp_desc_paused">الاتصال بالشبكة متوقف مؤقتاً. سيعاود الاتصال تلقائياً فور توفر الإنترنت.</string>
+    <string name="card_whatsapp_desc_reconnecting">انقطع الاتصال. جاري إعادة الاتصال تلقائياً…</string>
+    <string name="card_whatsapp_desc_offline">المساعد متوقف</string>
+
+    <string name="card_engine_title">محرك البوت</string>
+    <string name="card_engine_desc_running">يعمل المحرك بشكل سليم في الخلفية.</string>
+    <string name="card_engine_desc_starting">جاري تهيئة محرك المساعد…</string>
+    <string name="card_engine_desc_stopped">المحرك غير نشط. جميع الإعدادات والبيانات محفوظة بأمان.</string>
+
+    <string name="card_battery_title">حماية البطارية</string>
+    <string name="battery_ok">تم تعطيل تحسينات استهلاك البطارية. سيظل ليفيكس نشطاً أثناء قفل الشاشة.</string>
+    <string name="battery_hint">قد يقوم أندرويد بإيقاف ليفيكس في الخلفية. امنح إذناً غير مقيد للبطارية لضمان العمل طوال الوقت.</string>
+    <string name="btn_battery">تفعيل حماية البطارية</string>
+
+    <!-- Diagnostics / Beta Logs -->
+    <string name="section_diagnostics">التشخيص وسجلات النظام</string>
+    <string name="diagnostics_sub">سجلات تتبع الأخطاء البرمجية أثناء الإصدار التجريبي</string>
+    <string name="diagnostics_expand_hint">اضغط لعرض إشارات وتفاصيل السجلات</string>
+    <string name="diagnostics_collapse_hint">اضغط لإخفاء السجلات</string>
+    <string name="btn_share_logs">مشاركة السجلات</string>
+    <string name="btn_copy_logs">نسخ السجلات</string>
+    <string name="log_file_location">تم الحفظ في: %1$s</string>
+    <string name="logs_copied">تم نسخ السجلات إلى الحافظة بنجاح</string>
+    <string name="no_logs">لا توجد سجلات مسجلة بعد.</string>
+
+    <!-- Status Badges -->
+    <string name="status_connected">متصل</string>
+    <string name="status_running">قيد التشغيل</string>
+    <string name="status_starting">جاري البدء…</string>
+    <string name="status_stopped">متوقف</string>
+    <string name="status_pairing">يلزم الربط</string>
+    <string name="status_paused">متوقف مؤقتاً</string>
+    <string name="status_reconnecting">إعادة الاتصال…</string>
+    <string name="status_operational">جاهز للعمل</string>
+    <string name="status_protected">محمي</string>
+    <string name="status_restricted">مقيد</string>
+    <string name="status_offline">غير متصل</string>
+
+    <!-- Notifications & System -->
+    <string name="notifications_required">إذن الإشعارات مطلوب لضمان استمرار عمل المساعد في الخلفية دون انقطاع.</string>
+    <string name="notif_title">ليفيكس</string>
+    <string name="notif_starting">جاري الاتصال…</string>
+    <string name="notif_node_starting">جاري تشغيل المساعد…</string>
+    <string name="notif_node_error">خطأ: %1$s</string>
+    <string name="notif_node_ok">نود %1$s %2$s</string>
+    <string name="notif_levix_ready">ليفيكس جاهز</string>
+    <string name="notif_heartbeat">نبض التشغيل: %1$s</string>
+    <string name="notif_channel_name">ليفيكس</string>
+    <string name="notif_channel_description">إشعار حالة التشغيل المستمر</string>
+    <string name="notif_alerts_channel_name">تنبيهات ليفيكس</string>
+    <string name="notif_alerts_channel_description">تنبيهات عند انقطاع الاتصال</string>
+    <string name="notif_offline_title">ليفيكس غير متصل</string>
+    <string name="notif_offline_network">لا يوجد اتصال بالإنترنت. بوت واتساب متوقف مؤقتاً.</string>
+    <string name="notif_offline_wa">تعذر اتصال واتساب: %1$s</string>
+    <string name="notif_wa_connected">واتساب: متصل</string>
+    <string name="notif_wa_offline">واتساب: غير متصل</string>
+    <string name="notif_wa_paused">واتساب: ⏸️ متوقف مؤقتاً (لا يوجد إنترنت)</string>
+    <string name="notif_open">فتح</string>
+    <string name="notif_stop">إيقاف</string>
+</resources>
