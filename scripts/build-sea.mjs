@@ -107,7 +107,11 @@ console.log(`  ${commands.length} commands -> ${rel(manifestPath)}`);
 if (fs.existsSync(path.join(ROOT, "frontend"))) {
   step("Building the React frontend for SEA bundle");
   const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
-  execFileSync(npmCmd, ["run", "build:frontend"], { cwd: ROOT, stdio: "inherit" });
+  execFileSync(npmCmd, ["run", "build:frontend"], {
+    cwd: ROOT,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
 }
 
 step("Inlining views, public and the persona template");

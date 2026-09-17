@@ -11,7 +11,8 @@ if (!fs.existsSync(FRONTEND)) {
   process.exit(0);
 }
 
-const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+const isWin = process.platform === "win32";
+const npmCmd = isWin ? "npm.cmd" : "npm";
 
 // Ensure frontend dependencies are installed if missing
 const frontendModules = path.join(FRONTEND, "node_modules");
@@ -21,12 +22,14 @@ if (!fs.existsSync(frontendModules) || fs.readdirSync(frontendModules).length ==
     execFileSync(npmCmd, ["ci"], {
       cwd: FRONTEND,
       stdio: "inherit",
+      shell: isWin,
     });
   } catch {
     console.warn("  npm ci failed, falling back to npm install");
     execFileSync(npmCmd, ["install"], {
       cwd: FRONTEND,
       stdio: "inherit",
+      shell: isWin,
     });
   }
 }
@@ -34,4 +37,5 @@ if (!fs.existsSync(frontendModules) || fs.readdirSync(frontendModules).length ==
 execFileSync(npmCmd, ["run", "build"], {
   cwd: FRONTEND,
   stdio: "inherit",
+  shell: isWin,
 });
