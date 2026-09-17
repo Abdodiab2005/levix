@@ -9,6 +9,8 @@
 // (port, proxy hops, extra origin) are settings in the database that the panel
 // itself can change.
 
+const fs = require("node:fs");
+const path = require("node:path");
 const http = require("node:http");
 const express = require("express");
 const { Server } = require("socket.io");
@@ -288,7 +290,21 @@ app.post("/setup", (req, res, next) => {
 
 app.get("/", noStore, (req, res) => {
   if (!secrets.hasDashboardPassword()) return res.redirect("/setup");
-  if (req.session.loggedIn) return res.render("dashboard");
+  if (req.session.loggedIn) {
+    const dashboardHtmlPath = path.join(assetPath("public"), "dashboard", "index.html");
+    if (fs.existsSync(dashboardHtmlPath)) {
+      let html = fs.readFileSync(dashboardHtmlPath, "utf8");
+      const credits = `<div class="brand-credits" style="display:none"><a href="${brand.developerSite}">${brand.developer}</a><a href="${brand.studioSite}">${brand.studio}</a></div>`;
+      html = html
+        .replace(
+          "</head>",
+          `<script>window.__BRAND__ = ${JSON.stringify(brand)};</script></head>`
+        )
+        .replace("</body>", `${credits}</body>`);
+      return res.type("html").send(html);
+    }
+    return res.render("dashboard");
+  }
   return res.render("login", { error: null });
 });
 

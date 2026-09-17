@@ -8,6 +8,7 @@
     "dev": "nodemon bin/levix.js",
     "test": "node tests/run.mjs",
     "brand:assets": "node scripts/build-brand-assets.mjs",
+    "build:frontend": "npm --prefix frontend run build",
     "build:sea": "node scripts/build-sea.mjs",
     "validate:tarball": "node scripts/validate-tarball.mjs",
     "validate:sea": "node scripts/validate-sea.mjs",

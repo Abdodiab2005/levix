@@ -1,0 +1,218 @@
+// file: frontend/src/i18n/translations.ts
+
+export type Language = "ar" | "en";
+
+export const translations = {
+  ar: {
+    // Navigation
+    overview: "نظرة عامة",
+    connection: "حالة الاتصال",
+    control: "التحكم والإدارة",
+    commands: "كتالوج الأوامر",
+    ai: "الذكاء الاصطناعي والذاكرة",
+    groups: "المجموعات",
+    roles: "الأدوار والمشرفين",
+    schedules: "الرسائل المجدولة",
+    notes: "الملاحظات والقوائم",
+    settings: "الإعدادات العامة",
+    logs: "السجلات المباشرة",
+
+    // Connection states
+    connected: "متصل بالواتساب",
+    disconnected: "غير متصل",
+    starting: "جاري إنشاء الاتصال...",
+    waiting_for_qr: "بانتظار مسح رمز الـ QR",
+    linking: "جاري ربط الجلسة...",
+    reconnecting: "جاري إعادة الاتصال...",
+    retry_exhausted: "استُنفذت محاولات الاتصال",
+    logged_out: "تم تسجيل الخروج من الهاتف",
+    idle: "الجلسة خاملة",
+
+    // Actions
+    start: "بدء الاتصال",
+    stop: "إيقاف مؤقت",
+    reconnect: "إعادة الاتصال",
+    unlink: "إلغاء الربط (Unlink)",
+    restart: "إعادة تشغيل البوت",
+    save: "حفظ التغييرات",
+    saving: "جاري الحفظ...",
+    cancel: "إلغاء",
+    delete: "حذف",
+    edit: "تعديل",
+    add: "إضافة",
+    refresh: "تحديث",
+    logout: "تسجيل الخروج",
+    close: "إغلاق",
+    copy: "نسخ",
+    copied: "تم النسخ!",
+
+    // Overview
+    totalGroups: "إجمالي المجموعات",
+    totalUsers: "المستخدمين المسجلين",
+    commandCount: "الأوامر المفعلة",
+    uptime: "مدة التشغيل",
+    dataDir: "مجلد البيانات",
+    quickStatus: "حالة النظام",
+    activeSchedules: "المهام المجدولة النشطة",
+
+    // AI Assistant
+    aiTitle: "إعدادات الذكاء الاصطناعي (AI Assistant)",
+    aiSubtitle: "اختر المزود المناسب بضغطة زر أو خصص النماذج والمفاتيح",
+    aiAgentEnabled: "تفعيل وكيل الذكاء الاصطناعي (AI Agent)",
+    aiProvider: "المزود النشط",
+    quickSetup: "معالج الإعداد السريع للمزودين",
+    aiVision: "تحليل وفهم الصور (Vision)",
+    aiVisionDesc: "تحويل الصور إلى Base64 وتمريرها لنماذج الرؤية الذكية المتوافقة",
+    aiStt: "مزود تحويل الصوت إلى نص (STT)",
+    botLanguage: "لغة ردود البوت",
+    langAuto: "تلقائي (حسب لغة رسالة المستخدم)",
+    langAr: "العربية الفصحى (دائماً)",
+    langEn: "English (دائماً)",
+    modelName: "اسم النموذج (Model Name)",
+    apiKey: "مفتاح الـ API",
+    baseUrl: "رابط الـ Base URL (اختياري / للمزودات المتوافقة)",
+    maxToolSteps: "الحد الأقصى لخطوات الأدوات",
+    googleSearch: "أداة بحث جوجل المدمجة (Google Search)",
+    personaPrompt: "برومبت شخصية البوت (AI Persona)",
+    memoryFiles: "ملفات الذاكرة طويلة المدى",
+
+    // Provider labels
+    providerGemini: "Google Gemini",
+    providerGeminiDesc: "الافتراضي، يدعم البحث والملفات والصور والصوتيات محلياً",
+    providerGroq: "Groq Cloud",
+    providerGroqDesc: "فائق السرعة لنماذج Llama 3 و Mixtral مع دعم Vision",
+    providerOpenAI: "OpenAI / Compatible",
+    providerOpenAIDesc: "لنماذج GPT-4o أو أي خادم متوافق مع API OpenAI",
+    providerOllama: "Ollama (محلي)",
+    providerOllamaDesc: "تشغيل النماذج محلياً على جهازك مجاناً بدون إنترنت",
+    providerAnthropic: "Anthropic Claude",
+    providerAnthropicDesc: "لنماذج Claude 3.5 Sonnet الذكية والمتقدمة",
+
+    // Settings tabs
+    tabGeneral: "عام",
+    tabSecurity: "الأمان",
+    tabProxy: "بروكسي واتساب",
+    tabStorage: "التخزين والوسائط",
+    tabLogs: "سجلات النظام",
+
+    // General settings
+    prefix: "بادئة الأوامر (Prefix)",
+    botMinDelay: "الحد الأدنى للتأخير بين الرسائل (ms)",
+    changePassword: "تغيير كلمة مرور اللوحة",
+    currentPassword: "كلمة المرور الحالية",
+    newPassword: "كلمة المرور الجديدة",
+    confirmPassword: "تأكيد كلمة المرور",
+
+    // Alerts and notifications
+    savedSuccessfully: "تم حفظ الإعدادات بنجاح!",
+    saveFailed: "حدث خطأ أثناء حفظ الإعدادات.",
+    connectionStatusUpdated: "تم تحديث حالة الاتصال.",
+    networkError: "تعذر الاتصال بالخادم.",
+  },
+  en: {
+    // Navigation
+    overview: "Overview",
+    connection: "Connection",
+    control: "Control & Management",
+    commands: "Command Catalog",
+    ai: "AI & Memory",
+    groups: "Groups",
+    roles: "Roles & Admins",
+    schedules: "Scheduled Messages",
+    notes: "Notes & Lists",
+    settings: "Settings",
+    logs: "Live Logs",
+
+    // Connection states
+    connected: "Connected to WhatsApp",
+    disconnected: "Disconnected",
+    starting: "Starting socket...",
+    waiting_for_qr: "Waiting for QR scan",
+    linking: "Linking session...",
+    reconnecting: "Reconnecting...",
+    retry_exhausted: "Retries exhausted",
+    logged_out: "Logged out from phone",
+    idle: "Session idle",
+
+    // Actions
+    start: "Start Connection",
+    stop: "Pause",
+    reconnect: "Reconnect",
+    unlink: "Unlink Device",
+    restart: "Restart Bot",
+    save: "Save Changes",
+    saving: "Saving...",
+    cancel: "Cancel",
+    delete: "Delete",
+    edit: "Edit",
+    add: "Add",
+    refresh: "Refresh",
+    logout: "Sign Out",
+    close: "Close",
+    copy: "Copy",
+    copied: "Copied!",
+
+    // Overview
+    totalGroups: "Total Groups",
+    totalUsers: "Registered Users",
+    commandCount: "Enabled Commands",
+    uptime: "Uptime",
+    dataDir: "Data Directory",
+    quickStatus: "System Status",
+    activeSchedules: "Active Schedules",
+
+    // AI Assistant
+    aiTitle: "AI Assistant Configuration",
+    aiSubtitle: "Select a provider with one click or configure custom endpoints and keys",
+    aiAgentEnabled: "Enable AI Agent",
+    aiProvider: "Active Provider",
+    quickSetup: "Quick Provider Setup Wizard",
+    aiVision: "Image Understanding (Vision)",
+    aiVisionDesc: "Encode attached images to Base64 and pass to supported multimodal vision models",
+    aiStt: "Speech-to-Text Provider (STT)",
+    botLanguage: "Bot Response Language",
+    langAuto: "Auto-detect (matches user's language)",
+    langAr: "Modern Standard Arabic (Always)",
+    langEn: "English (Always)",
+    modelName: "Model Name",
+    apiKey: "API Key",
+    baseUrl: "Base URL (Optional / Compatible endpoints)",
+    maxToolSteps: "Max Tool Steps",
+    googleSearch: "Built-in Google Search Grounding",
+    personaPrompt: "AI Persona System Prompt",
+    memoryFiles: "Long-term Memory Files",
+
+    // Provider labels
+    providerGemini: "Google Gemini",
+    providerGeminiDesc: "Default provider with native Google Search, Files upload, and Multimodal support",
+    providerGroq: "Groq Cloud",
+    providerGroqDesc: "Ultra-fast inference for Llama 3 & Mixtral models with Vision support",
+    providerOpenAI: "OpenAI / Compatible",
+    providerOpenAIDesc: "For GPT-4o models or any OpenAI-compatible API gateway",
+    providerOllama: "Ollama (Local)",
+    providerOllamaDesc: "Run local open-source models completely offline on your own machine",
+    providerAnthropic: "Anthropic Claude",
+    providerAnthropicDesc: "For Claude 3.5 Sonnet advanced reasoning models",
+
+    // Settings tabs
+    tabGeneral: "General",
+    tabSecurity: "Security",
+    tabProxy: "WhatsApp Proxy",
+    tabStorage: "Media & Storage",
+    tabLogs: "System Logs",
+
+    // General settings
+    prefix: "Command Prefix",
+    botMinDelay: "Minimum Message Delay (ms)",
+    changePassword: "Change Dashboard Password",
+    currentPassword: "Current Password",
+    newPassword: "New Password",
+    confirmPassword: "Confirm Password",
+
+    // Alerts and notifications
+    savedSuccessfully: "Settings saved successfully!",
+    saveFailed: "Failed to save settings.",
+    connectionStatusUpdated: "Connection status updated.",
+    networkError: "Network error connecting to server.",
+  },
+};
