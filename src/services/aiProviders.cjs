@@ -204,11 +204,13 @@ function anthropicTools() {
 // ===========================================================================
 
 function partsText(parts) {
+  const isVisionOn = settings.get("ai_vision_enabled");
   return (parts || [])
     .map((part) => {
       if (part?.text) return part.text;
-      // Media on this path is a note, never bytes: there is no upload API to
-      // send it through (see the header comment).
+      if (isVisionOn && part?.inlineData?.mimeType?.startsWith("image/") && part?.inlineData?.data) {
+        return "";
+      }
       if (part?.fileData || part?.inlineData) return MEDIA_NOTE;
       return "";
     })
@@ -268,6 +270,26 @@ function historyToOpenAI(history) {
       return;
     }
 
+    const isVisionOn = settings.get("ai_vision_enabled");
+    const imageParts = (isVisionOn && role === "user")
+      ? turn.parts.filter((p) => p?.inlineData?.mimeType?.startsWith("image/") && p?.inlineData?.data)
+      : [];
+
+    let userContent = text;
+    if (imageParts.length) {
+      const items = [];
+      if (text) items.push({ type: "text", text });
+      for (const img of imageParts) {
+        items.push({
+          type: "image_url",
+          image_url: {
+            url: `data:${img.inlineData.mimeType};base64,${img.inlineData.data}`,
+          },
+        });
+      }
+      userContent = items;
+    }
+
     if (responses.length) {
       for (const response of responses) {
         messages.push({
@@ -276,11 +298,11 @@ function historyToOpenAI(history) {
           content: JSON.stringify(response.response ?? {}),
         });
       }
-      if (text) messages.push({ role: "user", content: text });
+      if (userContent) messages.push({ role: "user", content: userContent });
       return;
     }
 
-    if (text) messages.push({ role, content: text });
+    if (userContent) messages.push({ role, content: userContent });
   });
 
   return messages;
@@ -330,7 +352,23 @@ function historyToAnthropic(history) {
           content: JSON.stringify(part.functionResponse.response ?? {}),
         });
       } else if (part?.fileData || part?.inlineData) {
-        blocks.push({ type: "text", text: MEDIA_NOTE });
+        const isVisionOn = settings.get("ai_vision_enabled");
+        if (
+          isVisionOn &&
+          part?.inlineData?.mimeType?.startsWith("image/") &&
+          part?.inlineData?.data
+        ) {
+          blocks.push({
+            type: "image",
+            source: {
+              type: "base64",
+              media_type: part.inlineData.mimeType,
+              data: part.inlineData.data,
+            },
+          });
+        } else {
+          blocks.push({ type: "text", text: MEDIA_NOTE });
+        }
       }
     }
 

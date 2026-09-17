@@ -94,9 +94,28 @@ async function processIncomingMedia(parts, mediaMessage, mimeOverride = null) {
   // exist on the openai/anthropic paths. There the turn carries a note and the
   // caption/question text still reaches the model.
   if (settings.get("ai_provider") !== "gemini") {
+    const isVisionOn = settings.get("ai_vision_enabled");
     const mime = mimeOverride || mediaMessage.mimetype || "ملف";
+    if (isVisionOn && mime.startsWith("image/")) {
+      try {
+        const stream = await downloadContentFromMessage(mediaMessage, "image");
+        let buffer = Buffer.from([]);
+        for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
+        if (buffer.length) {
+          parts.push({
+            inlineData: {
+              mimeType: mime,
+              data: buffer.toString("base64"),
+            },
+          });
+          return "inline:image";
+        }
+      } catch (err) {
+        logger.warn({ err }, "[gemini] failed to extract inline image for vision");
+      }
+    }
     parts.push({
-      text: `[تم إرفاق وسائط (${mime}) — المزود الحالي لا يستطيع قراءة الوسائط]`,
+      text: `[تم إرفاق وسائط (${mime}) — المزود الحالي لا يستطيع قراءة هذا النوع من الوسائط أو تم تعطيل ميزة تحليل الصور]`,
     });
     return null;
   }

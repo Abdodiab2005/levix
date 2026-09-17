@@ -557,6 +557,43 @@ async function runAgent({
   };
 }
 
+function detectModelCapabilities(provider = settings.get("ai_provider"), model = null) {
+  const p = provider || "gemini";
+  const m = String(
+    model ||
+    (p === "gemini"
+      ? settings.get("gemini_model")
+      : p === "openai"
+      ? settings.get("openai_model")
+      : settings.get("anthropic_model")) ||
+    ""
+  ).toLowerCase();
+
+  const isGemini = p === "gemini";
+  const isAnthropic = p === "anthropic";
+  const supportsVision =
+    isGemini ||
+    isAnthropic ||
+    m.includes("vision") ||
+    m.includes("vl") ||
+    m.includes("llava") ||
+    m.includes("4o") ||
+    m.includes("pixtral") ||
+    m.includes("qwen") ||
+    m.includes("minicpm") ||
+    m.includes("llama-3.2-11b") ||
+    m.includes("llama-3.2-90b");
+
+  const supportsAudioStt = isGemini || p === "openai" || m.includes("whisper");
+
+  return {
+    provider: p,
+    model: m,
+    supportsVision,
+    supportsAudioStt,
+  };
+}
+
 module.exports = {
   runAgent,
   buildTools,
@@ -574,4 +611,5 @@ module.exports = {
   sanitizeHistoryForFiles,
   trimHistory,
   PERSONA_FILE,
+  detectModelCapabilities,
 };

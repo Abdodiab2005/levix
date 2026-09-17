@@ -36,10 +36,56 @@ function sttModel() {
   return settings.get("gemini_stt_model");
 }
 
+function resolveSttProvider() {
+  const chosen = settings.get("ai_stt_provider");
+  if (chosen === "openai") return "openai";
+  if (chosen === "gemini") return "gemini";
+  const active = settings.get("ai_provider");
+  if (active === "openai" && settings.get("openai_api_key")) {
+    return "openai";
+  }
+  return settings.get("gemini_api_key") ? "gemini" : (settings.get("openai_api_key") ? "openai" : "gemini");
+}
+
+async function transcribeWithOpenAi(audioBuffer, mimetype) {
+  const apiKey = settings.get("openai_api_key");
+  if (!apiKey) throw new Error("مفتاح OpenAI / Groq غير مضبوط في الإعدادات");
+  const baseUrl = String(settings.get("openai_base_url") || "https://api.openai.com/v1").replace(/\/+$/, "");
+  const model = settings.get("openai_stt_model") || "whisper-large-v3";
+
+  const formData = new FormData();
+  const mime = mimetype || "audio/ogg";
+  const ext = mime.includes("mp4") ? "m4a" : mime.includes("mp3") ? "mp3" : mime.includes("wav") ? "wav" : "ogg";
+  const blob = new Blob([audioBuffer], { type: mime });
+  formData.append("file", blob, `audio.${ext}`);
+  formData.append("model", model);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  try {
+    const res = await fetch(`${baseUrl}/audio/transcriptions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: formData,
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const err = await res.text().catch(() => "");
+      throw new Error(`STT API (${res.status}): ${err}`);
+    }
+    const data = await res.json();
+    return String(data?.text || "").trim();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 module.exports = {
   name: "stt",
   aliases: ["totext", "transcribe"],
-  description: "Convert speech/audio to text (FREE - uses Gemini API)",
+  description: "Convert speech/audio to text (supports Gemini & Groq/OpenAI Whisper)",
   usage: "stt   (قم بالرد على رسالة صوتية أو إرسالها مع الأمر)",
   chat: "all",
 
@@ -54,14 +100,17 @@ module.exports = {
 
     if (!audioMessage) {
       return await sock.sendMessage(chatId, {
-        text: "📢 الاستخدام:\nأرسل رسالة صوتية أو قم بالرد على رسالة صوتية بالأمر !stt\n\n✨ مجاني تماماً - يدعم العربية والإنجليزية وكافة اللغات",
+        text: "📢 الاستخدام:\nأرسل رسالة صوتية أو قم بالرد على رسالة صوتية بالأمر !stt\n\n✨ يدعم تفريغ الصوت عبر Gemini و Groq/OpenAI Whisper\n🌍 يدعم العربية والإنجليزية وكافة اللغات",
       });
     }
 
-    const gemini = geminiStt();
-    if (!gemini) {
+    const provider = resolveSttProvider();
+    const hasGemini = !!geminiStt();
+    const hasOpenAi = !!settings.get("openai_api_key");
+
+    if (!hasGemini && !hasOpenAi) {
       return await sock.sendMessage(chatId, {
-        text: "⚠️ مفتاح Gemini غير مضبوط. يرجى إضافته من لوحة التحكم (Settings).",
+        text: "⚠️ مفتاح الذكاء الاصطناعي (Gemini أو OpenAI/Groq) غير مضبوط. يرجى إضافته من لوحة التحكم (Settings).",
       });
     }
 
@@ -82,48 +131,54 @@ module.exports = {
         "audio"
       );
 
-      // Save audio to temporary file
-      tempAudioPath = path.join(__dirname, `stt_audio_${Date.now()}.ogg`);
-      await fs.writeFile(tempAudioPath, audioBuffer);
+      let transcription = "";
+      if (provider === "openai" && hasOpenAi) {
+        logger.info("[STT] Transcribing via OpenAI/Groq Whisper API");
+        transcription = await transcribeWithOpenAi(audioBuffer, audioMessage.mimetype);
+      } else if (hasGemini) {
+        // Save audio to temporary file
+        tempAudioPath = path.join(__dirname, `stt_audio_${Date.now()}.ogg`);
+        await fs.writeFile(tempAudioPath, audioBuffer);
 
-      logger.info(`[STT] Saved audio to temporary file: ${tempAudioPath}`);
+        logger.info(`[STT] Saved audio to temporary file: ${tempAudioPath}`);
 
-      // Upload audio to Gemini. ai.files.upload returns the File directly,
-      // where the old fileManager wrapped it in { file }.
-      const uploaded = await gemini.genAI.files.upload({
-        file: tempAudioPath,
-        config: {
-          mimeType: audioMessage.mimetype || "audio/ogg; codecs=opus",
-          displayName: `audio-${Date.now()}`,
-        },
-      });
-
-      logger.info(`[STT] Uploaded audio to Gemini: ${uploaded.uri}`);
-
-      // Generate transcription using Gemini
-      const response = await gemini.genAI.models.generateContent({
-        model: sttModel(),
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                fileData: {
-                  mimeType: uploaded.mimeType,
-                  fileUri: uploaded.uri,
-                },
-              },
-              {
-                text: "Please transcribe this audio message accurately. Return ONLY the transcription text without any additional commentary, explanations, or formatting. Just the raw transcribed text.",
-              },
-            ],
+        // Upload audio to Gemini. ai.files.upload returns the File directly
+        const uploaded = await gemini.genAI.files.upload({
+          file: tempAudioPath,
+          config: {
+            mimeType: audioMessage.mimetype || "audio/ogg; codecs=opus",
+            displayName: `audio-${Date.now()}`,
           },
-        ],
-      });
+        });
 
-      // `text` is a getter on the new response, and undefined rather than a
-      // throw when the model returned nothing usable.
-      const transcription = (response.text ?? "").trim();
+        logger.info(`[STT] Uploaded audio to Gemini: ${uploaded.uri}`);
+
+        // Generate transcription using Gemini
+        const response = await gemini.genAI.models.generateContent({
+          model: sttModel(),
+          contents: [
+            {
+              role: "user",
+              parts: [
+                {
+                  fileData: {
+                    mimeType: uploaded.mimeType,
+                    fileUri: uploaded.uri,
+                  },
+                },
+                {
+                  text: "Please transcribe this audio message accurately. Return ONLY the transcription text without any additional commentary, explanations, or formatting. Just the raw transcribed text.",
+                },
+              ],
+            },
+          ],
+        });
+
+        transcription = (response.text ?? "").trim();
+      } else if (hasOpenAi) {
+        logger.info("[STT] Fallback transcribing via OpenAI/Groq Whisper API");
+        transcription = await transcribeWithOpenAi(audioBuffer, audioMessage.mimetype);
+      }
 
       if (!transcription || transcription === "") {
         await status.finish(
