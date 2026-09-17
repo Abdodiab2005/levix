@@ -120,6 +120,17 @@ function nowLabel() {
   }
 }
 
+function botLangDirective() {
+  const botLang = settings.get("bot_language") || "auto";
+  if (botLang === "ar") {
+    return "- Language instruction: Always reply in Modern Standard Arabic (العربية الفصحى), clear, professional, and well-phrased.";
+  }
+  if (botLang === "en") {
+    return "- Language instruction: Always reply in English, clear, professional, natural, and direct.";
+  }
+  return "- Language instruction: Automatically reply in the language the user writes in (Modern Standard Arabic if Arabic, English if English).";
+}
+
 /**
  * product identity + persona + who/where/when + long-term memory.
  *
@@ -148,6 +159,7 @@ function buildSystemInstruction(context = {}) {
     isGroup
       ? "- This is a group: every participant sees your reply. Say nothing here that belongs to one person."
       : "- This is a private chat: only this person sees your reply.",
+    botLangDirective(),
   ].join("\n");
 
   const memoryBlock = memory.buildMemoryContext(chatId);

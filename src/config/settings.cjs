@@ -28,6 +28,20 @@ const SETTINGS = [
     hint: "IANA name, e.g. Africa/Cairo. Used by the AI, !prayer and the scheduler.",
   },
   {
+    key: "bot_language",
+    type: "string",
+    default: "auto",
+    choices: ["auto", "ar", "en"],
+    choiceLabels: {
+      auto: "Auto-detect (follow user message)",
+      ar: "Modern Standard Arabic (العربية الفصحى)",
+      en: "English",
+    },
+    group: "general",
+    label: "Bot response language",
+    hint: "Preferred language for AI replies and status updates. Can also be switched with !lang.",
+  },
+  {
     key: "bot_min_delay_ms",
     type: "int",
     default: 400,

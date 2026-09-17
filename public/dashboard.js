@@ -1554,7 +1554,7 @@
       providerFieldsHtml = keys.map((k) => settingField(byKey.get(k))).join("");
     }
 
-    const capKeys = ["ai_vision_enabled", "ai_stt_provider"];
+    const capKeys = ["bot_language", "ai_vision_enabled", "ai_stt_provider"];
     if (
       byKey.get("ai_stt_provider")?.value === "openai" ||
       (byKey.get("ai_stt_provider")?.value === "auto" && currentProvider === "openai")
