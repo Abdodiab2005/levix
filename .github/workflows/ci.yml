@@ -118,7 +118,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
       - name: Cache Android build cache & Node runtime
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/levix-android
