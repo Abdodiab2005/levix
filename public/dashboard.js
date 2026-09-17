@@ -121,6 +121,234 @@
     });
   }
 
+  // --- i18n -----------------------------------------------------------------
+
+  const LANG_KEY = "levix_lang";
+  let currentLang = "en";
+
+  const I18N = {
+    en: {
+      overview: "Overview",
+      connection: "Connection",
+      commands: "Commands",
+      ai: "AI & memory",
+      groups: "Groups",
+      roles: "Roles",
+      data: "Tables",
+      data_label: "Data",
+      control: "Control",
+      settings: "Settings",
+      workspace: "Workspace",
+      settings_sub: "Configure your bot options and AI models. Changes take effect immediately.",
+      settings_tab_ai: "AI Assistant",
+      settings_tab_general: "General",
+      settings_tab_security: "Security",
+      settings_tab_whatsapp: "WhatsApp Proxy",
+      settings_tab_media: "Media & Storage",
+      pw_heading: "Control panel password",
+      pw_current: "Current password",
+      pw_next: "New password",
+      pw_change_btn: "Change password",
+      pw_hint: "This password protects your dashboard. It is stored securely as a hash.",
+      ai_wizard_title: "AI Provider Setup",
+      ai_wizard_sub: "Choose which provider powers your assistant's chat responses.",
+      provider_gemini: "Google Gemini",
+      provider_gemini_desc: "Free key, native multimodal vision, and Google Search grounding.",
+      provider_groq: "Groq",
+      provider_groq_desc: "Ultra-fast Llama 3 & Whisper STT inference.",
+      provider_openai: "OpenAI / Compatible",
+      provider_openai_desc: "GPT-4o, OpenRouter, Together AI, or any compatible endpoint.",
+      provider_ollama: "Ollama (Local)",
+      provider_ollama_desc: "Self-hosted models running locally on your hardware.",
+      provider_anthropic: "Anthropic Claude",
+      provider_anthropic_desc: "Claude 3.5 & Sonnet reasoning models.",
+      apply_preset: "Apply Preset",
+      active_provider: "Active Provider",
+      api_key: "API Key",
+      base_url: "Base URL",
+      model_name: "Model Name",
+      capabilities_title: "Model Capabilities & Media",
+      capabilities_sub: "Configure vision inspection and voice speech-to-text.",
+      vision_toggle: "Vision & Image Analysis",
+      vision_toggle_hint: "Allows the AI to inspect and understand photos sent in messages.",
+      stt_title: "Voice Transcription (STT)",
+      stt_hint: "Which engine transcribes voice messages when using !stt.",
+      agent_mode_toggle: "Autonomous Agent Mode",
+      agent_mode_hint: "Enables multi-turn tool calling (web search, memory, bot actions).",
+      google_search_toggle: "Google Search Grounding",
+      google_search_hint: "Allows Gemini to look up current live web data.",
+      advanced_btn: "Advanced AI Settings…",
+      ai_advanced_title: "Advanced AI Settings",
+      save: "Save",
+      saved: "Saved",
+      saved_here: "saved here",
+      default_val: "default",
+      restart_to_apply: "restart to apply",
+      not_set: "not set",
+      cleared: "Cleared",
+      clear: "Clear",
+      done: "Done",
+      close: "Close",
+      supports_vision_badge: "Vision Supported",
+      supports_audio_badge: "Audio/STT Ready",
+      recommended: "Recommended",
+      detected: "Detected",
+      connected: "Connected",
+      disconnected: "Disconnected",
+      idle: "Idle",
+      starting: "Starting…",
+      linking: "Linking…",
+      reconnecting: "Reconnecting…",
+      unlink: "Unlink",
+      start_bot: "Start",
+      stop_bot: "Stop",
+      reconnect_bot: "Reconnect to apply",
+    },
+    ar: {
+      overview: "نظرة عامة",
+      connection: "الاتصال",
+      commands: "الأوامر",
+      ai: "الذكاء الاصطناعي والذاكرة",
+      groups: "المجموعات",
+      roles: "الصلاحيات",
+      data: "الجداول والبيانات",
+      data_label: "البيانات",
+      control: "التحكم",
+      settings: "الإعدادات",
+      workspace: "مساحة العمل",
+      settings_sub: "لوحة التحكم المركزية لضبط إعدادات البوت والذكاء الاصطناعي. تُطبق التغييرات فوراً.",
+      settings_tab_ai: "الذكاء الاصطناعي",
+      settings_tab_general: "عام",
+      settings_tab_security: "الأمان",
+      settings_tab_whatsapp: "بروكسي واتساب",
+      settings_tab_media: "الوسائط والتخزين",
+      pw_heading: "كلمة مرور لوحة التحكم",
+      pw_current: "كلمة المرور الحالية",
+      pw_next: "كلمة المرور الجديدة",
+      pw_change_btn: "تغيير كلمة المرور",
+      pw_hint: "هذه الكلمة تحمي حساب واتساب المربوط. تُحفظ بشكل مشفر تماماً.",
+      ai_wizard_title: "إعداد مزود الذكاء الاصطناعي",
+      ai_wizard_sub: "اختر المزود والموديل الذي يشغّل محادثات المساعد الخاص بك.",
+      provider_gemini: "جوجل جيميني",
+      provider_gemini_desc: "مفتاح مجاني مع دعم فائق لقراءة الصور والبحث المباشر.",
+      provider_groq: "جروك (Groq)",
+      provider_groq_desc: "سرعة خارقة في الرد وتفريغ الصوت بموديلات Llama و Whisper.",
+      provider_openai: "OpenAI / متوافق",
+      provider_openai_desc: "موديلات GPT-4o أو OpenRouter أو Together ومختلف المزودات.",
+      provider_ollama: "أولاما (محلي)",
+      provider_ollama_desc: "موديلات تعمل محلياً على جهازك دون اتصال خارجي.",
+      provider_anthropic: "أنثروبيك كلود",
+      provider_anthropic_desc: "موديلات Claude 3.5 & Sonnet لقدرات تحليلية متقدمة.",
+      apply_preset: "تطبيق الإعداد الجاهز",
+      active_provider: "المزود النشط",
+      api_key: "مفتاح API",
+      base_url: "رابط الخدمة (Base URL)",
+      model_name: "اسم الموديل",
+      capabilities_title: "قدرات الموديل ومعالجة الوسائط",
+      capabilities_sub: "تحديد ما إذا كان الموديل سيتعامل مع الصور والتسجيلات الصوتية.",
+      vision_toggle: "تحليل وقراءة الصور (Vision)",
+      vision_toggle_hint: "يسمح للذكاء الاصطناعي برؤية وفهم الصور والمستندات المرسلة في الشات.",
+      stt_title: "تفريغ الصوتيات إلى نص (STT)",
+      stt_hint: "المحرك المستخدم في تحويل الرسائل الصوتية لنصوص عند طلب !stt.",
+      agent_mode_toggle: "وضع الوكيل الذكي (Agent Mode)",
+      agent_mode_hint: "تفعيل البحث بالإنترنت، تسجيل الملاحظات في الذاكرة، وأدوات المجموعات.",
+      google_search_toggle: "البحث الحي عبر جوجل",
+      google_search_hint: "يتيح لموديل جيميني جلب أحدث المعلومات والأخبار الحية من محرك بحث جوجل.",
+      advanced_btn: "إعدادات متقدمة للذكاء الاصطناعي…",
+      ai_advanced_title: "إعدادات متقدمة للذكاء الاصطناعي",
+      save: "حفظ",
+      saved: "تم الحفظ بنجاح",
+      saved_here: "محفوظ هنا",
+      default_val: "افتراضي",
+      restart_to_apply: "إعادة التشغيل للتطبيق",
+      not_set: "غير محدد",
+      cleared: "تم الحذف",
+      clear: "مسح",
+      done: "تم",
+      close: "إغلاق",
+      supports_vision_badge: "يدعم تحليل الصور",
+      supports_audio_badge: "يدعم تفريغ الصوتيات",
+      recommended: "موصى به",
+      detected: "تم اكتشافه",
+      connected: "متصل",
+      disconnected: "غير متصل",
+      idle: "خامل",
+      starting: "جاري البدء…",
+      linking: "جاري الربط…",
+      reconnecting: "جاري إعادة الاتصال…",
+      unlink: "إلغاء الربط",
+      start_bot: "تشغيل",
+      stop_bot: "إيقاف",
+      reconnect_bot: "إعادة الاتصال لتطبيق التغييرات",
+    },
+  };
+
+  function t(key) {
+    return I18N[currentLang]?.[key] || I18N.en[key] || key;
+  }
+
+  function applyLang(lang) {
+    currentLang = lang === "ar" ? "ar" : "en";
+    document.documentElement.setAttribute("lang", currentLang);
+    document.documentElement.setAttribute("dir", currentLang === "ar" ? "rtl" : "ltr");
+    if (currentLang === "ar") {
+      document.documentElement.classList.add("lang-ar");
+    } else {
+      document.documentElement.classList.remove("lang-ar");
+    }
+
+    const langTag = $("#lang-tag");
+    if (langTag) {
+      langTag.textContent = currentLang === "ar" ? "EN" : "عربي";
+    }
+    const langBtn = $("#lang-btn");
+    if (langBtn) {
+      const title = currentLang === "ar" ? "Switch to English" : "التبديل إلى العربية";
+      langBtn.setAttribute("title", title);
+      langBtn.setAttribute("aria-label", title);
+    }
+
+    try {
+      localStorage.setItem(LANG_KEY, currentLang);
+    } catch {}
+
+    document.querySelectorAll("[data-i18n]").forEach((el) => {
+      const key = el.getAttribute("data-i18n");
+      const val = t(key);
+      if (val) el.textContent = val;
+    });
+
+    document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+      const key = el.getAttribute("data-i18n-title");
+      const val = t(key);
+      if (val) el.setAttribute("title", val);
+    });
+
+    if (currentView && VIEWS[currentView]) {
+      $("#page-title").textContent = t(currentView) || VIEWS[currentView].title;
+    }
+  }
+
+  function initLang() {
+    let chosen = "en";
+    try {
+      const saved = localStorage.getItem(LANG_KEY);
+      if (saved === "ar" || saved === "en") chosen = saved;
+      else {
+        const nav = (navigator.languages && navigator.languages[0]) || navigator.language || "";
+        if (nav.toLowerCase().startsWith("ar")) chosen = "ar";
+      }
+    } catch {}
+    applyLang(chosen);
+
+    $("#lang-btn")?.addEventListener("click", () => {
+      applyLang(currentLang === "ar" ? "en" : "ar");
+      if (currentView && VIEWS[currentView]?.load) {
+        VIEWS[currentView].load().catch(() => {});
+      }
+    });
+  }
+
   // --- routing ------------------------------------------------------------
 
   const VIEWS = {};
@@ -149,7 +377,7 @@
       if (active) link.setAttribute("aria-current", "page");
       else link.removeAttribute("aria-current");
     });
-    $("#page-title").textContent = VIEWS[target].title;
+    $("#page-title").textContent = I18N[currentLang]?.[target] || VIEWS[target].title;
     setSidebar(false);
 
     VIEWS[target].load();
@@ -1209,33 +1437,36 @@
 
   // --- settings -----------------------------------------------------------
 
+  let activeSettingsTab = "ai";
+
   function settingField(setting) {
+    if (!setting) return "";
     const id = `set-${setting.key}`;
     const source =
       setting.source === "dashboard"
-        ? '<span class="source dashboard">saved here</span>'
-        : '<span class="source">default</span>';
+        ? '<span class="source dashboard">' + t("saved_here") + '</span>'
+        : '<span class="source">' + t("default_val") + '</span>';
     const restart = setting.restart
-      ? '<span class="source">restart to apply</span>'
+      ? '<span class="source">' + t("restart_to_apply") + '</span>'
       : "";
 
     let control;
     if (setting.type === "secret") {
       control = `
         <div class="inline">
-          <input type="password" id="${id}" placeholder="${setting.configured ? "•••••••• (set)" : "not set"}"
+          <input type="password" id="${id}" placeholder="${setting.configured ? "•••••••• (set)" : t("not_set")}"
                  autocomplete="new-password"${setting.configured ? ' data-configured="1"' : ""} />
-          <button class="btn btn-sm" type="button" data-save-setting="${esc(setting.key)}">Save</button>
-          ${setting.configured ? `<button class="btn btn-sm btn-danger" type="button" data-clear-setting="${esc(setting.key)}">Clear</button>` : ""}
+          <button class="btn btn-sm" type="button" data-save-setting="${esc(setting.key)}">${t("save")}</button>
+          ${setting.configured ? `<button class="btn btn-sm btn-danger" type="button" data-clear-setting="${esc(setting.key)}">${t("clear")}</button>` : ""}
         </div>`;
     } else if (setting.type === "bool") {
       control = `
         <div class="inline">
           <label class="switch">
-            <input type="checkbox" id="${id}" ${setting.value ? "checked" : ""} />
+            <input type="checkbox" id="${id}" ${setting.value ? "checked" : ""} data-auto-save="${esc(setting.key)}" />
             <span class="track"></span>
           </label>
-          <button class="btn btn-sm" type="button" data-save-setting="${esc(setting.key)}">Save</button>
+          <button class="btn btn-sm" type="button" data-save-setting="${esc(setting.key)}">${t("save")}</button>
         </div>`;
     } else if (Array.isArray(setting.choices) && setting.choices.length) {
       control = `
@@ -1248,7 +1479,7 @@
               )
               .join("")}
           </select>
-          <button class="btn btn-sm" type="button" data-save-setting="${esc(setting.key)}">Save</button>
+          <button class="btn btn-sm" type="button" data-save-setting="${esc(setting.key)}">${t("save")}</button>
         </div>`;
     } else {
       control = `
@@ -1257,12 +1488,12 @@
                  value="${esc(setting.value)}"
                  ${setting.min !== null ? `min="${setting.min}"` : ""}
                  ${setting.max !== null ? `max="${setting.max}"` : ""} />
-          <button class="btn btn-sm" type="button" data-save-setting="${esc(setting.key)}">Save</button>
+          <button class="btn btn-sm" type="button" data-save-setting="${esc(setting.key)}">${t("save")}</button>
         </div>`;
     }
 
     return `
-      <div class="setting-item">
+      <div class="setting-item" id="item-${esc(setting.key)}">
         <div class="inline setting-label-row">
           <label for="${id}" class="setting-label">${esc(setting.label)}</label>
           ${source}${restart}
@@ -1272,28 +1503,237 @@
       </div>`;
   }
 
+  function renderAiSettingsTab(container, byKey) {
+    const currentProvider = byKey.get("ai_provider")?.value || "gemini";
+    const openaiBaseUrl = String(byKey.get("openai_base_url")?.value || "");
+    const activeModel =
+      currentProvider === "gemini"
+        ? byKey.get("gemini_model")?.value
+        : currentProvider === "openai"
+        ? byKey.get("openai_model")?.value
+        : byKey.get("anthropic_model")?.value;
+
+    const mStr = String(activeModel || "").toLowerCase();
+    const supportsVision =
+      currentProvider === "gemini" ||
+      currentProvider === "anthropic" ||
+      mStr.includes("vision") ||
+      mStr.includes("vl") ||
+      mStr.includes("llava") ||
+      mStr.includes("4o") ||
+      mStr.includes("pixtral") ||
+      mStr.includes("qwen") ||
+      mStr.includes("llama-3.2-11b") ||
+      mStr.includes("llama-3.2-90b");
+
+    let activeCard = currentProvider;
+    if (currentProvider === "openai") {
+      if (openaiBaseUrl.includes("groq.com")) activeCard = "groq";
+      else if (openaiBaseUrl.includes("11434") || openaiBaseUrl.includes("ollama")) activeCard = "ollama";
+      else activeCard = "openai";
+    }
+
+    let providerFieldsHtml = "";
+    if (currentProvider === "gemini") {
+      const keys = ["gemini_api_key", "gemini_model"];
+      providerFieldsHtml = keys.map((k) => settingField(byKey.get(k))).join("");
+    } else if (currentProvider === "openai") {
+      const keys = ["openai_api_key", "openai_base_url", "openai_model"];
+      providerFieldsHtml = `
+        <div class="preset-chips">
+          <span class="hint" style="align-self:center; font-weight:600;">${t("apply_preset")}:</span>
+          <button class="preset-chip" type="button" data-preset="groq">⚡ Groq (Llama 3.3)</button>
+          <button class="preset-chip" type="button" data-preset="openai">🧠 OpenAI (GPT-4o)</button>
+          <button class="preset-chip" type="button" data-preset="ollama">🦙 Ollama (Local)</button>
+          <button class="preset-chip" type="button" data-preset="openrouter">🌐 OpenRouter</button>
+        </div>
+        ${keys.map((k) => settingField(byKey.get(k))).join("")}
+      `;
+    } else if (currentProvider === "anthropic") {
+      const keys = ["anthropic_api_key", "anthropic_model"];
+      providerFieldsHtml = keys.map((k) => settingField(byKey.get(k))).join("");
+    }
+
+    const capKeys = ["ai_vision_enabled", "ai_stt_provider"];
+    if (
+      byKey.get("ai_stt_provider")?.value === "openai" ||
+      (byKey.get("ai_stt_provider")?.value === "auto" && currentProvider === "openai")
+    ) {
+      capKeys.push("openai_stt_model");
+    }
+    capKeys.push("ai_agent");
+    if (currentProvider === "gemini") {
+      capKeys.push("ai_google_search");
+    }
+    const capFieldsHtml = capKeys.map((k) => settingField(byKey.get(k))).join("");
+
+    container.innerHTML = `
+      <!-- Step 1: Provider Selection Cards -->
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h2>${t("ai_wizard_title")}</h2>
+            <div class="hint">${t("ai_wizard_sub")}</div>
+          </div>
+        </div>
+
+        <div class="provider-grid">
+          <div class="provider-card ${activeCard === "gemini" ? "active" : ""}" data-pick-provider="gemini">
+            <div class="provider-card-head">
+              <div class="provider-title"><span>🌟</span> ${t("provider_gemini")}</div>
+              <span class="provider-active-badge">${t("active_provider")}</span>
+            </div>
+            <div class="provider-desc">${t("provider_gemini_desc")}</div>
+          </div>
+
+          <div class="provider-card ${activeCard === "groq" ? "active" : ""}" data-pick-provider="groq">
+            <div class="provider-card-head">
+              <div class="provider-title"><span>⚡</span> ${t("provider_groq")}</div>
+              <span class="provider-active-badge">${t("active_provider")}</span>
+            </div>
+            <div class="provider-desc">${t("provider_groq_desc")}</div>
+          </div>
+
+          <div class="provider-card ${activeCard === "openai" ? "active" : ""}" data-pick-provider="openai">
+            <div class="provider-card-head">
+              <div class="provider-title"><span>🧠</span> ${t("provider_openai")}</div>
+              <span class="provider-active-badge">${t("active_provider")}</span>
+            </div>
+            <div class="provider-desc">${t("provider_openai_desc")}</div>
+          </div>
+
+          <div class="provider-card ${activeCard === "ollama" ? "active" : ""}" data-pick-provider="ollama">
+            <div class="provider-card-head">
+              <div class="provider-title"><span>🦙</span> ${t("provider_ollama")}</div>
+              <span class="provider-active-badge">${t("active_provider")}</span>
+            </div>
+            <div class="provider-desc">${t("provider_ollama_desc")}</div>
+          </div>
+
+          <div class="provider-card ${activeCard === "anthropic" ? "active" : ""}" data-pick-provider="anthropic">
+            <div class="provider-card-head">
+              <div class="provider-title"><span>🔮</span> ${t("provider_anthropic")}</div>
+              <span class="provider-active-badge">${t("active_provider")}</span>
+            </div>
+            <div class="provider-desc">${t("provider_anthropic_desc")}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Credentials & Model for Active Provider -->
+      <div class="card">
+        <div class="card-head">
+          <h2>🔑 ${t("active_provider")}: ${esc(currentProvider.toUpperCase())} ${activeCard !== currentProvider ? `(${esc(activeCard.toUpperCase())})` : ""}</h2>
+        </div>
+        ${providerFieldsHtml}
+      </div>
+
+      <!-- Step 3: Model Capabilities & Media Toggles (Point 3) -->
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h2>🎛️ ${t("capabilities_title")}</h2>
+            <div class="hint">${t("capabilities_sub")}</div>
+          </div>
+        </div>
+        ${capFieldsHtml}
+        <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <button class="btn btn-secondary" id="open-ai-advanced" type="button">
+            ⚙️ ${t("advanced_btn")}
+          </button>
+        </div>
+      </div>
+    `;
+
+    const advContainer = $("#ai-advanced-fields");
+    if (advContainer) {
+      const advKeys = [
+        "ai_max_tool_steps",
+        "ai_tool_timeout_ms",
+        "ai_max_history",
+        "memory_context_chars",
+        "gemini_stt_model",
+        "gemini_image_model",
+        "google_search_api_key",
+        "google_search_cx",
+      ];
+      advContainer.innerHTML = advKeys
+        .map((k) => byKey.get(k))
+        .filter(Boolean)
+        .map(settingField)
+        .join("");
+    }
+  }
+
   VIEWS.settings = {
     title: "Settings",
     load: guard(async () => {
       const { settings } = await api("/settings");
+      const byKey = new Map(settings.map((s) => [s.key, s]));
 
-      const groups = new Map();
-      for (const setting of settings) {
-        if (!groups.has(setting.group)) {
-          groups.set(setting.group, { label: setting.groupLabel, items: [] });
-        }
-        groups.get(setting.group).items.push(setting);
+      $$(".settings-tab").forEach((b) => {
+        const isSelected = b.dataset.tab === activeSettingsTab;
+        b.classList.toggle("active", isSelected);
+        b.setAttribute("aria-selected", isSelected ? "true" : "false");
+      });
+
+      const secContent = $("#settings-tab-security");
+      if (secContent) {
+        secContent.style.display = activeSettingsTab === "security" ? "block" : "none";
       }
 
-      $("#settings-list").innerHTML = [...groups.values()]
-        .map(
-          (group) => `
-        <div class="card">
-          <div class="card-head"><h2>${esc(group.label)}</h2></div>
-          ${group.items.map(settingField).join("")}
-        </div>`
-        )
-        .join("");
+      const listEl = $("#settings-list");
+      if (!listEl) return;
+
+      if (activeSettingsTab === "ai") {
+        renderAiSettingsTab(listEl, byKey);
+      } else if (activeSettingsTab === "general") {
+        const generalKeys = ["bot_timezone", "bot_min_delay_ms", "bot_max_delay_ms"];
+        const items = generalKeys.map((k) => byKey.get(k)).filter(Boolean);
+        listEl.innerHTML = `
+          <div class="card">
+            <div class="card-head"><h2>⚙️ ${t("settings_tab_general")}</h2></div>
+            ${items.map(settingField).join("")}
+          </div>`;
+      } else if (activeSettingsTab === "security") {
+        const serverKeys = ["port", "bind_address", "trust_proxy", "public_domain", "dashboard_origin"];
+        const items = serverKeys.map((k) => byKey.get(k)).filter(Boolean);
+        listEl.innerHTML = `
+          <div class="card">
+            <div class="card-head"><h2>🌐 ${t("settings_tab_security")} &amp; Server</h2></div>
+            ${items.map(settingField).join("")}
+          </div>`;
+      } else if (activeSettingsTab === "whatsapp") {
+        const proxyKeys = [
+          "whatsapp_proxy_enabled",
+          "whatsapp_proxy_protocol",
+          "whatsapp_proxy_host",
+          "whatsapp_proxy_port",
+          "whatsapp_proxy_username",
+          "whatsapp_proxy_password",
+        ];
+        const items = proxyKeys.map((k) => byKey.get(k)).filter(Boolean);
+        listEl.innerHTML = `
+          <div class="card">
+            <div class="card-head"><h2>🌐 ${t("settings_tab_whatsapp")}</h2></div>
+            ${items.map(settingField).join("")}
+          </div>`;
+      } else if (activeSettingsTab === "media") {
+        const mediaKeys = [
+          "thumbnail_remote",
+          "thumbnail_remote_max_mb",
+          "thumbnail_remote_timeout_ms",
+          "ffmpeg_path",
+          "forward_score_ttl_days",
+          "openweathermap_api_key",
+        ];
+        const items = mediaKeys.map((k) => byKey.get(k)).filter(Boolean);
+        listEl.innerHTML = `
+          <div class="card">
+            <div class="card-head"><h2>📁 ${t("settings_tab_media")}</h2></div>
+            ${items.map(settingField).join("")}
+          </div>`;
+      }
     }),
   };
 
@@ -1310,18 +1750,107 @@
       })
     );
 
-    $("#settings-list").addEventListener("click", (event) => {
+    // Tab switcher
+    $("#settings-nav-tabs")?.addEventListener("click", (e) => {
+      const tabBtn = e.target.closest("[data-tab]");
+      if (!tabBtn) return;
+      activeSettingsTab = tabBtn.dataset.tab;
+      VIEWS.settings.load();
+    });
+
+    // Modal triggers
+    document.addEventListener("click", (e) => {
+      if (e.target.closest("#open-ai-advanced")) {
+        const modal = $("#ai-advanced-modal");
+        if (modal) modal.style.display = "flex";
+      } else if (e.target.closest("#ai-advanced-close") || e.target.closest("#ai-advanced-done")) {
+        const modal = $("#ai-advanced-modal");
+        if (modal) modal.style.display = "none";
+      }
+    });
+
+    // Provider Card Picker
+    document.addEventListener("click", (e) => {
+      const card = e.target.closest("[data-pick-provider]");
+      if (!card) return;
+      const pick = card.dataset.pickProvider;
+      guard(async () => {
+        if (pick === "groq") {
+          await api("/settings", { method: "PATCH", body: { key: "ai_provider", value: "openai" } });
+          await api("/settings", { method: "PATCH", body: { key: "openai_base_url", value: "https://api.groq.com/openai/v1" } });
+          await api("/settings", { method: "PATCH", body: { key: "openai_model", value: "llama-3.3-70b-versatile" } });
+          await api("/settings", { method: "PATCH", body: { key: "openai_stt_model", value: "whisper-large-v3" } });
+          await api("/settings", { method: "PATCH", body: { key: "ai_vision_enabled", value: true } });
+        } else if (pick === "ollama") {
+          await api("/settings", { method: "PATCH", body: { key: "ai_provider", value: "openai" } });
+          await api("/settings", { method: "PATCH", body: { key: "openai_base_url", value: "http://127.0.0.1:11434/v1" } });
+          await api("/settings", { method: "PATCH", body: { key: "openai_model", value: "llama3.2" } });
+        } else if (pick === "openai") {
+          await api("/settings", { method: "PATCH", body: { key: "ai_provider", value: "openai" } });
+          await api("/settings", { method: "PATCH", body: { key: "openai_base_url", value: "https://api.openai.com/v1" } });
+          await api("/settings", { method: "PATCH", body: { key: "openai_model", value: "gpt-4o-mini" } });
+        } else if (pick === "gemini") {
+          await api("/settings", { method: "PATCH", body: { key: "ai_provider", value: "gemini" } });
+        } else if (pick === "anthropic") {
+          await api("/settings", { method: "PATCH", body: { key: "ai_provider", value: "anthropic" } });
+          await api("/settings", { method: "PATCH", body: { key: "anthropic_model", value: "claude-sonnet-4-5" } });
+        }
+        toast(t("saved"), "ok");
+        VIEWS.settings.load();
+      })();
+    });
+
+    // Preset chips
+    document.addEventListener("click", (e) => {
+      const chip = e.target.closest("[data-preset]");
+      if (!chip) return;
+      const preset = chip.dataset.preset;
+      guard(async () => {
+        if (preset === "groq") {
+          await api("/settings", { method: "PATCH", body: { key: "openai_base_url", value: "https://api.groq.com/openai/v1" } });
+          await api("/settings", { method: "PATCH", body: { key: "openai_model", value: "llama-3.3-70b-versatile" } });
+          await api("/settings", { method: "PATCH", body: { key: "openai_stt_model", value: "whisper-large-v3" } });
+          await api("/settings", { method: "PATCH", body: { key: "ai_vision_enabled", value: true } });
+        } else if (preset === "openai") {
+          await api("/settings", { method: "PATCH", body: { key: "openai_base_url", value: "https://api.openai.com/v1" } });
+          await api("/settings", { method: "PATCH", body: { key: "openai_model", value: "gpt-4o-mini" } });
+        } else if (preset === "ollama") {
+          await api("/settings", { method: "PATCH", body: { key: "openai_base_url", value: "http://127.0.0.1:11434/v1" } });
+          await api("/settings", { method: "PATCH", body: { key: "openai_model", value: "llama3.2" } });
+        } else if (preset === "openrouter") {
+          await api("/settings", { method: "PATCH", body: { key: "openai_base_url", value: "https://openrouter.ai/api/v1" } });
+          await api("/settings", { method: "PATCH", body: { key: "openai_model", value: "google/gemini-2.5-flash" } });
+        }
+        toast(t("saved"), "ok");
+        VIEWS.settings.load();
+      })();
+    });
+
+    // Auto-save switches on change
+    document.addEventListener("change", (e) => {
+      const autoSaveKey = e.target?.dataset?.autoSave;
+      if (autoSaveKey && e.target.type === "checkbox") {
+        const key = autoSaveKey;
+        const value = e.target.checked;
+        guard(async () => {
+          await api("/settings", { method: "PATCH", body: { key, value } });
+          toast(t("saved"), "ok");
+          VIEWS.settings.load();
+          if (key.startsWith("whatsapp_proxy_")) loadStats().catch(() => {});
+        })();
+      }
+    });
+
+    // Button-based save and clear
+    document.addEventListener("click", (event) => {
       const save = event.target.closest("[data-save-setting]");
       const clear = event.target.closest("[data-clear-setting]");
       if (!save && !clear) return;
 
       const key = save ? save.dataset.saveSetting : clear.dataset.clearSetting;
       const input = document.getElementById(`set-${key}`);
+      if (!input) return;
 
-      // An already-set secret with an empty box means "leave it alone", not
-      // "erase it". The box is always empty — the server never sends the value
-      // back — so saving the field as-is would wipe a working password every
-      // time somebody edited the host next to it. Clear is the explicit way.
       if (save && input.dataset.configured === "1" && input.value === "") {
         toast("Left unchanged. Use Clear to remove it.");
         return;
@@ -1335,10 +1864,8 @@
 
       guard(async () => {
         await api("/settings", { method: "PATCH", body: { key, value } });
-        toast(clear ? "Cleared" : "Saved", "ok");
+        toast(clear ? t("cleared") : t("saved"), "ok");
         VIEWS.settings.load();
-        // A proxy change cannot reach a socket that is already open; the
-        // Connection screen is where that is offered, so refresh its state.
         if (key.startsWith("whatsapp_proxy_")) loadStats().catch(() => {});
       })();
     });
@@ -1382,6 +1909,7 @@
   }
 
   initTheme();
+  initLang();
   initRouting();
   initConnectionActions();
   {
