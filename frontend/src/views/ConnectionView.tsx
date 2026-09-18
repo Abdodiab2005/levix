@@ -7,7 +7,6 @@ import {
   Copy,
   Key,
   Phone,
-  Play,
   QrCode,
   Radio,
   RefreshCw,
@@ -25,6 +24,10 @@ import { Modal } from "../components/Modal";
 import { useToast } from "../components/Toasts";
 import { useI18n } from "../context/I18nContext";
 import type { SessionStatus } from "../types";
+
+function isAndroidCompanionApp() {
+  return typeof window !== "undefined" && Boolean((window as { LevixHost?: unknown }).LevixHost);
+}
 
 interface ConnectionViewProps {
   status: SessionStatus | null;
@@ -51,7 +54,20 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
   const isWaitingQr = state === "waiting_for_qr";
   const isStarting = state === "starting" || state === "linking";
   const isReconnecting = state === "reconnecting";
+  const isPaused = state === "paused";
+  const isLoggedOut = state === "logged_out";
+  const linked = Boolean(status?.linked) && !isLoggedOut;
+  const needsPairing = !linked;
   const canUnlink = Boolean(status?.canUnlink);
+  const isOnline = status?.isOnline !== false;
+  const resumeLabel =
+    isPaused || state === "disconnected" || state === "retry_exhausted"
+      ? language === "ar"
+        ? "استئناف الجلسة"
+        : "Resume session"
+      : language === "ar"
+        ? "الاتصال"
+        : "Connect";
 
   // Generate QR code locally in offline-first mode
   useEffect(() => {
@@ -162,6 +178,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
   };
 
   const rawPhone = status?.user?.id ? status.user.id.split("@")[0].split(":")[0] : null;
+  const hideRestart = isAndroidCompanionApp();
 
   return (
     <div className="flex flex-col gap-5 sm:gap-6">
@@ -187,7 +204,15 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
                 {t("connection")}
               </h2>
               <p className="text-xs sm:text-sm text-muted mt-0.5">
-                {isConnected ? t("sessionActive") : t("sessionOffline")}
+                {isConnected
+                  ? t("sessionActive")
+                  : isPaused
+                    ? t("paused")
+                    : linked
+                      ? language === "ar"
+                        ? "جلسة محفوظة — يمكن استئنافها"
+                        : "Saved session — ready to resume"
+                      : t("sessionOffline")}
               </p>
             </div>
           </div>
@@ -286,16 +311,18 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
                   <span>{t("unlink")}</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleAction(api.restartBot, t("restart"))}
-                  disabled={acting}
-                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
-                  title={t("restart")}
-                >
-                  <RotateCcw size={15} />
-                  <span>{t("restart")}</span>
-                </button>
+                {!hideRestart && (
+                  <button
+                    type="button"
+                    onClick={() => handleAction(api.restartBot, t("restart"))}
+                    disabled={acting}
+                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
+                    title={t("restart")}
+                  >
+                    <RotateCcw size={15} />
+                    <span>{t("restart")}</span>
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -313,21 +340,79 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
                 <span>{language === "ar" ? "إلغاء المحاولة" : "Cancel Attempt"}</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => handleAction(api.restartBot, t("restart"))}
-                disabled={acting}
-                className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
-                title={t("restart")}
-              >
-                <RotateCcw size={15} />
-                <span>{t("restart")}</span>
-              </button>
+              {!hideRestart && (
+                <button
+                  type="button"
+                  onClick={() => handleAction(api.restartBot, t("restart"))}
+                  disabled={acting}
+                  className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
+                  title={t("restart")}
+                >
+                  <RotateCcw size={15} />
+                  <span>{t("restart")}</span>
+                </button>
+              )}
             </div>
           )}
 
-          {/* 3. When IDLE, DISCONNECTED, ERROR, LOGGED OUT: Pairing Method Selector & Input Form */}
-          {!isConnected && !isStarting && !isWaitingQr && !isReconnecting && (
+          {/* 3a. Known session (paused / idle / disconnected): resume, never QR or pairing codes */}
+          {!isConnected &&
+            !isStarting &&
+            !isWaitingQr &&
+            !isReconnecting &&
+            linked && (
+            <div className="flex flex-col gap-3 w-full max-w-xl">
+              {isPaused && (
+                <p className="text-xs sm:text-sm text-muted leading-relaxed">
+                  {isOnline
+                    ? language === "ar"
+                      ? "الجلسة محفوظة. اضغط استئناف لإعادة استخدام نفس حساب واتساب."
+                      : "This WhatsApp session is saved. Resume to reconnect with the same account."
+                    : language === "ar"
+                      ? "الاتصال متوقف بسبب انقطاع الإنترنت. سيُستأنف تلقائياً عند عودة الشبكة، أو اضغط استئناف."
+                      : "Paused while the device is offline. It will resume when the network returns, or tap Resume."}
+                </p>
+              )}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleAction(api.startSession, resumeLabel)}
+                  disabled={acting}
+                  className="inline-flex items-center justify-center gap-2 px-6 h-12 sm:h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-sm shadow-md shadow-brand-blue/25 transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50 w-full sm:w-fit"
+                >
+                  <Radio size={16} />
+                  <span>{resumeLabel}</span>
+                </button>
+                {canUnlink && (
+                  <button
+                    type="button"
+                    onClick={() => setShowUnlinkModal(true)}
+                    disabled={acting}
+                    className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-danger/30 bg-danger/10 hover:bg-danger/20 text-danger font-bold text-xs sm:text-sm transition-all disabled:opacity-50"
+                    title={t("unlink")}
+                  >
+                    <Unlink size={15} />
+                    <span>{t("unlink")}</span>
+                  </button>
+                )}
+                {!hideRestart && (
+                  <button
+                    type="button"
+                    onClick={() => handleAction(api.restartBot, t("restart"))}
+                    disabled={acting}
+                    className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all disabled:opacity-50"
+                    title={t("restart")}
+                  >
+                    <RotateCcw size={15} />
+                    <span>{t("restart")}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 3b. No saved session / logged out: QR or pairing code */}
+          {!isConnected && !isStarting && !isWaitingQr && !isReconnecting && needsPairing && (
             <div className="flex flex-col gap-4 w-full">
               {/* Method Selector Tabs */}
               <div className="flex items-center gap-1.5 p-1 rounded-xl bg-panel-raised border border-line w-full sm:w-fit">
@@ -425,16 +510,18 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
                   </button>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => handleAction(api.restartBot, t("restart"))}
-                  disabled={acting}
-                  className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
-                  title={t("restart")}
-                >
-                  <RotateCcw size={15} />
-                  <span>{t("restart")}</span>
-                </button>
+                {!hideRestart && (
+                  <button
+                    type="button"
+                    onClick={() => handleAction(api.restartBot, t("restart"))}
+                    disabled={acting}
+                    className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
+                    title={t("restart")}
+                  >
+                    <RotateCcw size={15} />
+                    <span>{t("restart")}</span>
+                  </button>
+                )}
               </div>
             </div>
           )}

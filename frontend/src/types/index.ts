@@ -16,6 +16,7 @@ export type SessionState =
   | "connected"
   | "reconnecting"
   | "disconnected"
+  | "paused"
   | "retry_exhausted"
   | "logged_out"
   | "error";
@@ -31,6 +32,7 @@ export interface SessionStatus {
   canStart?: boolean;
   canStop?: boolean;
   canUnlink?: boolean;
+  linked?: boolean;
   connected?: boolean;
   isOnline?: boolean;
   terminal?: boolean;
@@ -77,6 +79,9 @@ export interface ScheduleItem {
   id: string;
   type: "recurring" | "once";
   targetJid: string;
+  targetLabel?: string;
+  targetKind?: "group" | "contact" | string;
+  targetPhone?: string | null;
   message: string;
   cronString?: string;
   scheduledTime?: number;
@@ -88,10 +93,13 @@ export interface ScheduleItem {
 }
 
 export interface GroupItem {
+  id?: string;
   jid: string;
   subject: string;
   memberCount: number;
-  antilink?: boolean;
+  participants?: number | null;
+  antilink?: boolean | { enabled?: boolean };
+  antilinkEnabled?: boolean;
   mediaRestriction?: string;
   welcomeEnabled?: boolean;
 }

@@ -21,6 +21,10 @@ const logger = require("../utils/logger.cjs");
 const aiIdentity = require("../config/ai-identity.cjs");
 const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
+const {
+  assertProviderBaseUrl,
+  assertProviderRequestUrl,
+} = require("../utils/providerUrl.cjs");
 const { toolDeclarations, describeCall, runTool } = require("./aiTools.cjs");
 const {
   BaseAIProvider,
@@ -48,7 +52,9 @@ let clientCache = { key: null, baseUrl: null, client: null };
 function geminiClient() {
   const key = settings.get("gemini_api_key");
   if (!key) return null;
-  const baseUrl = String(settings.get("gemini_base_url")).replace(/\/+$/, "");
+  const baseUrl = assertProviderBaseUrl(settings.get("gemini_base_url"), {
+    allowLoopback: true,
+  });
   if (clientCache.key !== key || clientCache.baseUrl !== baseUrl) {
     clientCache = {
       key,
@@ -417,6 +423,20 @@ class GeminiProvider extends BaseAIProvider {
     { downloadContentFromMessage, genAI, tempDir } = {},
   ) {
     if (!genAI) throw new Error("Gemini client unavailable");
+    const mime = mimeOverride || mediaMessage?.mimetype || "";
+    const caps = detectModelCapabilities("gemini");
+    if (mime.startsWith("image/") && (!settings.get("ai_vision_enabled") || !caps.supportsVision)) {
+      parts.push({
+        text: "[تم إرفاق صورة — الرؤية غير مفعّلة للنموذج المحدد / Vision is disabled for the selected model]",
+      });
+      return null;
+    }
+    if (mime.startsWith("audio/") && (!settings.get("ai_stt_enabled") || !caps.supportsAudioStt)) {
+      parts.push({
+        text: "[تم إرفاق صوت — تحويل الكلام غير مفعّل للنموذج المحدد / Speech-to-text is disabled for the selected model]",
+      });
+      return null;
+    }
     const tempFilePath = path.join(tempDir || __dirname, `temp_media_${Date.now()}`);
     const stream = await downloadContentFromMessage(
       mediaMessage,
@@ -482,6 +502,7 @@ async function runGeminiTurn({
 } = {}) {
   const genAI = geminiClient();
   if (!genAI) throw new Error("GEMINI_API_KEY غير معرف");
+  await assertProviderRequestUrl(settings.get("gemini_base_url"), { allowLoopback: true });
 
   const stepBudget = maxSteps ?? settings.get("ai_max_tool_steps");
   const instruction = systemInstruction || buildSystemInstruction(context);

@@ -2,6 +2,7 @@
 
 import {
   AlertCircle,
+  BookUser,
   Calendar,
   CheckCircle2,
   Plus,
@@ -26,6 +27,19 @@ interface RecipientItem {
   name: string;
   type: "group" | "contact";
   phone?: string | null;
+  memberCount?: number | null;
+}
+
+function hasPhoneBookPicker() {
+  const host = (window as { LevixHost?: { pickContact?: () => void } }).LevixHost;
+  return Boolean(host && typeof host.pickContact === "function");
+}
+
+function digitsToWhatsAppJid(phone: string): string | null {
+  let digits = String(phone || "").replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.length < 8 || digits.length > 15) return null;
+  return `${digits}@s.whatsapp.net`;
 }
 
 interface SchedulesViewProps {
@@ -122,6 +136,55 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     } catch (err: any) {
       toast(err.message, "error");
     }
+  };
+
+  const handlePickPhoneContact = async () => {
+    const host = (window as { LevixHost?: { pickContact?: () => void } }).LevixHost;
+    if (!host?.pickContact) {
+      toast(
+        language === "ar"
+          ? "دليل الهاتف متاح من تطبيق أندرويد فقط"
+          : "Phone book is available in the Android app",
+        "info",
+      );
+      return;
+    }
+    const picked = await new Promise<{ name: string; phone: string } | null>((resolve) => {
+      const onPicked = (ev: Event) => {
+        window.removeEventListener("levix-contact", onPicked);
+        const detail = (ev as CustomEvent).detail as { name?: string; phone?: string } | null;
+        if (!detail?.phone) {
+          resolve(null);
+          return;
+        }
+        resolve({ name: String(detail.name || ""), phone: String(detail.phone) });
+      };
+      window.addEventListener("levix-contact", onPicked);
+      try {
+        host.pickContact?.();
+      } catch {
+        window.removeEventListener("levix-contact", onPicked);
+        resolve(null);
+      }
+    });
+    if (!picked) return;
+    const jid = digitsToWhatsAppJid(picked.phone);
+    if (!jid) {
+      toast(
+        language === "ar"
+          ? "الرقم غير صالح. استخدم رقمًا مع كود الدولة."
+          : "That number is not valid. Use a number with country code.",
+        "error",
+      );
+      return;
+    }
+    const phone = `+${jid.split("@")[0]}`;
+    setSelectedRecipient({
+      id: jid,
+      name: picked.name || phone,
+      phone,
+      type: "contact",
+    });
   };
 
   const handleOpenAddModal = () => {
@@ -328,17 +391,29 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             ) : (
               schedules.map((s) => (
                 <tr key={s.id} className="hover:bg-panel-hover/50 transition-colors">
-                  <td className="px-5 py-4 font-mono text-xs text-text-main">
+                  <td className="px-5 py-4 text-xs text-text-main">
                     <bdi>
-                      {s.targetJid.includes("@g.us") ? (
+                      {s.targetKind === "group" || s.targetJid.includes("@g.us") ? (
                         <span className="inline-flex items-center gap-1.5 text-brand-cyan">
                           <Users size={14} />
-                          <span>{language === "ar" ? "مجموعة" : "Group"}</span>
+                          <span className="font-semibold truncate max-w-[12rem]">
+                            {s.targetLabel && s.targetLabel !== "Group"
+                              ? s.targetLabel
+                              : language === "ar"
+                                ? "مجموعة"
+                                : "Group"}
+                          </span>
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1.5 text-ok">
                           <User size={14} />
-                          <span>+{s.targetJid.split("@")[0]}</span>
+                          <span className="font-semibold">
+                            {s.targetPhone ||
+                              (s.targetLabel && !s.targetLabel.includes("@lid")
+                                ? s.targetLabel
+                                : null) ||
+                              (language === "ar" ? "جهة اتصال" : "Contact")}
+                          </span>
                         </span>
                       )}
                     </bdi>
@@ -483,15 +558,28 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               </div>
             ) : (
               <div className="flex flex-col gap-2">
-                <div className="relative">
-                  <Search size={16} className="absolute start-3 top-3 text-muted" />
-                  <input
-                    type="text"
-                    value={searchRecipient}
-                    onChange={(e) => setSearchRecipient(e.target.value)}
-                    placeholder={t("searchRecipients")}
-                    className="w-full h-10 ps-9 pe-3 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-                  />
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search size={16} className="absolute start-3 top-3 text-muted" />
+                    <input
+                      type="text"
+                      value={searchRecipient}
+                      onChange={(e) => setSearchRecipient(e.target.value)}
+                      placeholder={t("searchRecipients")}
+                      className="w-full h-10 ps-9 pe-3 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                    />
+                  </div>
+                  {hasPhoneBookPicker() && (
+                    <button
+                      type="button"
+                      onClick={handlePickPhoneContact}
+                      className="inline-flex items-center justify-center gap-1.5 h-10 px-3 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main text-xs font-bold shrink-0"
+                      title={t("pickPhoneContactHint")}
+                    >
+                      <BookUser size={15} />
+                      <span className="hidden sm:inline">{t("pickPhoneContact")}</span>
+                    </button>
+                  )}
                 </div>
 
                 <div className="max-h-48 overflow-y-auto rounded-xl border border-line bg-panel-raised divide-y divide-line/40">

@@ -15,10 +15,26 @@ export const GroupsView: React.FC = () => {
   const [groups, setGroups] = useState<GroupItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const normalizeGroup = (g: any): GroupItem => {
+    const jid = g.jid || g.id || "";
+    const antilinkEnabled =
+      typeof g.antilink === "boolean" ? g.antilink : Boolean(g.antilinkEnabled ?? g.antilink?.enabled);
+    return {
+      ...g,
+      jid,
+      subject: g.subject || "",
+      memberCount: g.memberCount ?? g.participants ?? 0,
+      antilink: antilinkEnabled,
+      antilinkEnabled,
+      welcomeEnabled: Boolean(g.welcomeEnabled ?? g.welcome_system?.enabled),
+      mediaRestriction: g.mediaRestriction || "none",
+    };
+  };
+
   const loadGroups = async () => {
     try {
       const res = await api.getGroups();
-      if (res?.groups) setGroups(res.groups);
+      if (res?.groups) setGroups(res.groups.map(normalizeGroup));
     } catch (err: any) {
       toast(err.message, "error");
     } finally {
@@ -114,17 +130,19 @@ export const GroupsView: React.FC = () => {
                       <div className="w-9 h-9 rounded-xl bg-brand-blue/10 text-brand-cyan flex items-center justify-center font-bold text-sm shrink-0">
                         {(g.subject || "G").charAt(0).toUpperCase()}
                       </div>
-                      <span className="line-clamp-1">{g.subject || "Untitled Group"}</span>
+                      <span className="line-clamp-1">
+                        {g.subject || (language === "ar" ? "مجموعة بدون اسم" : "Unnamed group")}
+                      </span>
                     </div>
                   </td>
                   <td className="px-5 py-4 font-mono text-xs text-muted">
                     <bdi className="px-2 py-1 rounded bg-bg-soft border border-line select-all">
-                      {g.jid}
+                      {g.jid?.split("@")[0] || g.jid}
                     </bdi>
                   </td>
                   <td className="px-5 py-4">
                     <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-panel-raised border border-line text-xs font-semibold text-text-main">
-                      {g.memberCount ?? "—"}
+                      {g.memberCount || "—"}
                     </span>
                   </td>
                   <td className="px-5 py-4 text-center">
@@ -141,9 +159,6 @@ export const GroupsView: React.FC = () => {
                     >
                       <option value="none">
                         {language === "ar" ? "بلا قيود (الكل)" : "No Restrictions"}
-                      </option>
-                      <option value="allow_admin_only">
-                        {language === "ar" ? "المشرفون فقط" : "Admins Only"}
                       </option>
                       <option value="block_all">
                         {language === "ar" ? "حظر كافة الوسائط" : "Block All Media"}

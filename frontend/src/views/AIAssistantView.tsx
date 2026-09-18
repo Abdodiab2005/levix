@@ -1,21 +1,22 @@
-// file: frontend/src/views/AIAssistantView.tsx
-
 import {
+  AlertCircle,
+  AlertTriangle,
   Bot,
   Check,
+  CheckCircle2,
   Database,
   Eye,
   FileText,
   Globe,
-  Key,
   Mic,
   RefreshCw,
   Save,
   Sparkles,
+  Volume2,
 } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { api, type NormalizedModel } from "../api/client";
 import { Modal } from "../components/Modal";
 import { useToast } from "../components/Toasts";
 import { Toggle } from "../components/Toggle";
@@ -33,39 +34,28 @@ interface ProviderPreset {
   baseUrlSetting?: string;
 }
 
-const SEEDED_MODELS: Record<string, string[]> = {
-  gemini: [
-    "gemini-3.7-flash",
-    "gemini-2.5-flash",
-    "gemini-2.5-pro",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-thinking-exp",
-  ],
-  groq: [
-    "llama-3.3-70b-versatile",
-    "llama-3.1-70b-versatile",
-    "llama-3.1-8b-instant",
-    "qwen-2.5-32b",
-    "deepseek-r1-distill-llama-70b",
-  ],
-  openai: ["gpt-4o", "gpt-4o-mini", "o3-mini", "o1", "gpt-4.5-preview"],
-  ollama: ["llama3.3", "llama3.2", "qwen2.5", "deepseek-r1", "mistral"],
-  anthropic: [
-    "claude-3-7-sonnet-20250219",
-    "claude-3-5-sonnet-20241022",
-    "claude-3-5-haiku-20241022",
-  ],
-};
-
 export const AIAssistantView: React.FC = () => {
   const { t, language } = useI18n();
   const { toast } = useToast();
 
   const [settings, setSettings] = useState<Record<string, any>>({});
+  const [configuredKeys, setConfiguredKeys] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
 
-  // Model fetching state
-  const [fetchedModels, setFetchedModels] = useState<Record<string, string[]>>({});
+  // Model discovery state
+  const [discoveryState, setDiscoveryState] = useState<
+    Record<
+      string,
+      {
+        live: boolean;
+        requiresApiKey: boolean;
+        fallback?: boolean;
+        models: NormalizedModel[];
+        error?: string;
+        cached?: boolean;
+      }
+    >
+  >({});
   const [fetchingModels, setFetchingModels] = useState(false);
   const [isCustomModel, setIsCustomModel] = useState(false);
 
@@ -104,7 +94,7 @@ export const AIAssistantView: React.FC = () => {
       name: "OpenAI",
       descKey: "providerOpenAIDesc",
       provider: "openai",
-      defaultModel: "gpt-4o",
+      defaultModel: "gpt-4o-mini",
       defaultBaseUrl: "https://api.openai.com/v1",
       keySetting: "openai_api_key",
       modelSetting: "openai_model",
@@ -126,7 +116,7 @@ export const AIAssistantView: React.FC = () => {
       name: "Anthropic Claude",
       descKey: "providerAnthropicDesc",
       provider: "anthropic",
-      defaultModel: "claude-3-7-sonnet-20250219",
+      defaultModel: "claude-sonnet-4-5",
       defaultBaseUrl: "https://api.anthropic.com",
       keySetting: "anthropic_api_key",
       modelSetting: "anthropic_model",
@@ -139,10 +129,15 @@ export const AIAssistantView: React.FC = () => {
       const res = await api.getSettings();
       if (res?.settings) {
         const map: Record<string, any> = {};
+        const conf: Record<string, boolean> = {};
         res.settings.forEach((s: any) => {
           map[s.key] = s.value;
+          if (s.type === "secret") {
+            conf[s.key] = Boolean(s.configured);
+          }
         });
         setSettings(map);
+        setConfiguredKeys(conf);
       }
     } catch (err: any) {
       toast(err.message, "error");
@@ -155,11 +150,29 @@ export const AIAssistantView: React.FC = () => {
     loadSettings();
   }, []);
 
-  const updateSetting = async (key: string, value: any) => {
+  const updateSetting = async (key: string, value: any, quiet = false) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
     try {
-      await api.updateSetting(key, value);
-      toast(t("savedSuccessfully"), "success");
+      const res = await api.updateSetting(key, value);
+      if (!quiet) toast(t("savedSuccessfully"), "success");
+      if (key.endsWith("_api_key")) {
+        setSettings((prev) => ({ ...prev, [key]: "" }));
+        setConfiguredKeys((prev) => ({ ...prev, [key]: Boolean(value) }));
+      }
+      if (res?.settings && Array.isArray(res.settings)) {
+        const next: Record<string, any> = {};
+        const conf: Record<string, boolean> = {};
+        res.settings.forEach((s: any) => {
+          if (s.type === "secret") {
+            conf[s.key] = Boolean(s.configured);
+            next[s.key] = "";
+          } else {
+            next[s.key] = s.value;
+          }
+        });
+        setSettings((prev) => ({ ...prev, ...next }));
+        setConfiguredKeys((prev) => ({ ...prev, ...conf }));
+      }
     } catch (err: any) {
       toast(err.message, "error");
     }
@@ -214,32 +227,73 @@ export const AIAssistantView: React.FC = () => {
     }
   };
 
-  const handleFetchModels = async () => {
+  const handleFetchModels = async (forceRefresh = false) => {
     setFetchingModels(true);
-    try {
-      const res = await api.fetchAiModels({
-        provider: selectedPreset.provider,
-        apiKey: settings[selectedPreset.keySetting],
-        baseUrl: selectedPreset.baseUrlSetting
-          ? settings[selectedPreset.baseUrlSetting]
-          : undefined,
-      });
+    const typedKey = String(settings[selectedPreset.keySetting] || "").trim();
+    const hasStoredKey = Boolean(configuredKeys[selectedPreset.keySetting]);
 
-      if (res?.models && res.models.length > 0) {
-        setFetchedModels((prev) => ({ ...prev, [selectedPreset.id]: res.models }));
-        toast(
-          language === "ar"
-            ? `تم جلب ${res.models.length} نموذجاً متاحاً`
-            : `Fetched ${res.models.length} available models`,
-          "success",
-        );
-      } else {
-        toast(
-          language === "ar"
-            ? "لم يتم العثور على نماذج جديدة، تم الإبقاء على القائمة الافتراضية"
-            : "No extra models returned; using seeded list",
-          "info",
-        );
+    try {
+      const payload: {
+        provider: string;
+        apiKey?: string;
+        baseUrl?: string;
+        refresh?: boolean;
+      } = {
+        provider: selectedPreset.provider,
+        refresh: forceRefresh,
+      };
+      if (typedKey) payload.apiKey = typedKey;
+      if (selectedPreset.baseUrlSetting && settings[selectedPreset.baseUrlSetting]) {
+        payload.baseUrl = settings[selectedPreset.baseUrlSetting];
+      }
+
+      const res = await api.fetchAiModels(payload);
+
+      if (res && (res.success || res.fallback)) {
+        setDiscoveryState((prev) => ({
+          ...prev,
+          [selectedPreset.id]: {
+            live: Boolean(res.live),
+            requiresApiKey: Boolean(res.requiresApiKey),
+            fallback: Boolean(res.fallback),
+            models: res.models || [],
+            cached: Boolean(res.cached),
+            error: res.success ? undefined : res.error?.message,
+          },
+        }));
+
+        if (res.live && res.success) {
+          toast(
+            language === "ar"
+              ? `تم التحقق بنجاح وجلب ${res.models.length} نموذجاً متاحاً لحسابك`
+              : `Discovered ${res.models.length} live models available for your account`,
+            "success",
+          );
+        } else if (res.requiresApiKey) {
+          if (forceRefresh) {
+            toast(
+              language === "ar"
+                ? "يرجى إدخال مفتاح API أولاً لاكتشاف النماذج المتاحة لحسابك"
+                : "Enter an API key to discover account models",
+              "info",
+            );
+          }
+        } else if (!res.success && res.error) {
+          toast(res.error.message || "Failed to discover models", "error");
+        }
+      } else if (res && !res.success && res.error) {
+        setDiscoveryState((prev) => ({
+          ...prev,
+          [selectedPreset.id]: {
+            live: false,
+            requiresApiKey: !(hasStoredKey || typedKey),
+            fallback: true,
+            models: res.models || [],
+            error: res.error?.message,
+          },
+        }));
+
+        toast(res.error.message || "Failed to discover models", "error");
       }
     } catch (err: any) {
       toast(err.message || "Failed to fetch models", "error");
@@ -248,26 +302,63 @@ export const AIAssistantView: React.FC = () => {
     }
   };
 
-  // Real-time auto-fetch from live provider endpoint when API key is configured
   useEffect(() => {
-    const key = settings[selectedPreset.keySetting];
-    if (key && !fetchedModels[selectedPreset.id] && !fetchingModels) {
-      handleFetchModels();
+    if (!loading) {
+      handleFetchModels(false);
     }
-  }, [selectedPreset.id, settings[selectedPreset.keySetting]]);
+  }, [selectedPreset.id, configuredKeys[selectedPreset.keySetting], loading]);
 
-  const availableModelList =
-    fetchedModels[selectedPreset.id] ||
-    SEEDED_MODELS[selectedPreset.id] ||
-    SEEDED_MODELS[selectedPreset.provider] ||
-    [];
+  const currentModelList: NormalizedModel[] = discoveryState[selectedPreset.id]?.models || [];
+  const isLiveVerified = Boolean(discoveryState[selectedPreset.id]?.live);
+  const requiresApiKey = Boolean(
+    discoveryState[selectedPreset.id]?.requiresApiKey ??
+      !configuredKeys[selectedPreset.keySetting],
+  );
 
   const currentModelVal = settings[selectedPreset.modelSetting] || selectedPreset.defaultModel;
+
+  const currentModelObj: NormalizedModel = currentModelList.find(
+    (m) => m.id.toLowerCase() === currentModelVal.toLowerCase(),
+  ) || {
+    id: currentModelVal,
+    displayName: currentModelVal,
+    provider: selectedPreset.provider,
+    recommended: false,
+    capabilities: {
+      textInput: true,
+      textOutput: true,
+      vision: false,
+      audioInput: false,
+      stt: false,
+      videoInput: false,
+      pdfInput: false,
+    },
+    capabilitySource: "unknown",
+  };
+
+  const supportsVision = Boolean(currentModelObj.capabilities.vision);
+  const supportsStt = Boolean(currentModelObj.capabilities.stt);
+
+  // Independent capability auto-disabling and clearing of stale incompatible configuration
+  useEffect(() => {
+    if (loading) return;
+
+    if (!supportsVision && settings["ai_vision_enabled"]) {
+      updateSetting("ai_vision_enabled", false, true);
+    }
+
+    if (!supportsStt && settings["ai_stt_enabled"]) {
+      updateSetting("ai_stt_enabled", false, true);
+    }
+  }, [currentModelVal, supportsVision, supportsStt, loading]);
 
   const openPersonaEditor = async () => {
     try {
       const res = await api.getPersona();
-      setPersonaText(res?.persona || "");
+      const persona = res?.persona;
+      setPersonaText(
+        typeof persona === "string" ? persona : persona?.body || "",
+      );
       setPersonaModalOpen(true);
     } catch (err: any) {
       toast(err.message, "error");
@@ -290,7 +381,10 @@ export const AIAssistantView: React.FC = () => {
   const loadMemoryFiles = async () => {
     try {
       const res = await api.getMemoryFiles();
-      setMemoryFiles(res?.files || []);
+      const names =
+        res?.files ||
+        (res?.scopes || []).map((s) => s.scope);
+      setMemoryFiles(names);
     } catch (err: any) {
       toast(err.message, "error");
     }
@@ -432,80 +526,53 @@ export const AIAssistantView: React.FC = () => {
           })}
         </div>
 
-        {/* Dynamic Provider Inputs with Fetch Models Button */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-line">
-          {/* Model Name Selector / Input */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <label htmlFor="input-model-name" className="block text-xs font-bold text-muted">
-                {t("modelName")}
-              </label>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCustomModel(!isCustomModel)}
-                  className="text-[11px] text-brand-cyan hover:underline font-semibold"
-                >
-                  {isCustomModel
-                    ? language === "ar"
-                      ? "القائمة"
-                      : "List"
-                    : language === "ar"
-                      ? "مخصص"
-                      : "Custom"}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleFetchModels}
-                  disabled={fetchingModels}
-                  className="inline-flex items-center gap-1 text-[11px] text-brand-blue hover:text-brand-blue/80 font-bold"
-                  title={t("fetchModels")}
-                >
-                  <RefreshCw size={11} className={fetchingModels ? "animate-spin" : ""} />
-                  <span>{fetchingModels ? t("fetchingModels") : t("fetchModels")}</span>
-                </button>
-              </div>
+        {/* Warning banner if API key is missing */}
+        {requiresApiKey && (
+          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-3">
+            <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+            <div className="text-xs text-text-main">
+              <p className="font-bold">{t("connectKeyFirstPrompt")}</p>
+              <p className="text-muted mt-0.5">
+                {language === "ar"
+                  ? "النماذج المعروضة أدناه هي نماذج مقترحة من الدليل المحلي وليست مؤكدة لحسابك حتى يتم ربط المفتاح."
+                  : "Models shown below are catalog recommendations and are not verified for your account until a key is configured."}
+              </p>
             </div>
-
-            {isCustomModel ? (
-              <input
-                id="input-model-name"
-                type="text"
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main font-mono text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-                value={settings[selectedPreset.modelSetting] || ""}
-                onChange={(e) =>
-                  setSettings({ ...settings, [selectedPreset.modelSetting]: e.target.value })
-                }
-                onBlur={(e) => updateSetting(selectedPreset.modelSetting, e.target.value)}
-                placeholder={selectedPreset.defaultModel}
-              />
-            ) : (
-              <select
-                id="input-model-name"
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main font-mono text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-                value={currentModelVal}
-                onChange={(e) => {
-                  updateSetting(selectedPreset.modelSetting, e.target.value);
-                }}
-              >
-                {/* Available / Seeded models */}
-                {availableModelList.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-                {!availableModelList.includes(currentModelVal) && (
-                  <option value={currentModelVal}>{currentModelVal} (حالي)</option>
-                )}
-              </select>
-            )}
           </div>
+        )}
 
+        {/* Discovery error banner if discovery failed */}
+        {discoveryState[selectedPreset.id]?.error && (
+          <div className="p-3 rounded-xl bg-danger/10 border border-danger/25 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs text-danger font-semibold">
+              <AlertCircle size={16} className="shrink-0" />
+              <span>{discoveryState[selectedPreset.id]?.error}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleFetchModels(true)}
+              className="text-xs font-bold underline hover:opacity-80 shrink-0"
+            >
+              {t("refreshModels")}
+            </button>
+          </div>
+        )}
+
+        {/* Dynamic Provider Inputs: key first, then URL, then model */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-line">
           {/* API Key */}
           <div className="space-y-1.5">
-            <label htmlFor="input-api-key" className="block text-xs font-bold text-muted">
-              {t("apiKey")}
-            </label>
+            <div className="flex items-center justify-between">
+              <label htmlFor="input-api-key" className="block text-xs font-bold text-muted">
+                {t("apiKey")}
+              </label>
+              {configuredKeys[selectedPreset.keySetting] && (
+                <span className="text-[10px] text-ok font-semibold flex items-center gap-1">
+                  <CheckCircle2 size={11} />
+                  {language === "ar" ? "محفوظ" : "Saved"}
+                </span>
+              )}
+            </div>
             <input
               id="input-api-key"
               type="password"
@@ -515,7 +582,13 @@ export const AIAssistantView: React.FC = () => {
                 setSettings({ ...settings, [selectedPreset.keySetting]: e.target.value })
               }
               onBlur={(e) => updateSetting(selectedPreset.keySetting, e.target.value)}
-              placeholder="(set or update API key)"
+              placeholder={
+                configuredKeys[selectedPreset.keySetting]
+                  ? "••••••••••••"
+                  : language === "ar"
+                    ? "أدخل المفتاح"
+                    : "Enter API key"
+              }
             />
           </div>
 
@@ -544,6 +617,212 @@ export const AIAssistantView: React.FC = () => {
               />
             </div>
           )}
+
+          {/* Model Name Selector / Input */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <label htmlFor="input-model-name" className="block text-xs font-bold text-muted">
+                  {t("modelName")}
+                </label>
+                {isLiveVerified ? (
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-ok/15 text-ok border border-ok/30">
+                    {t("sourceLive")}
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-brand-cyan/15 text-brand-cyan border border-brand-cyan/30">
+                    {t("sourceSeed")}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsCustomModel(!isCustomModel)}
+                  className="text-[11px] text-brand-cyan hover:underline font-semibold"
+                >
+                  {isCustomModel
+                    ? language === "ar"
+                      ? "القائمة"
+                      : "List"
+                    : language === "ar"
+                      ? "مخصص"
+                      : "Custom"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleFetchModels(true)}
+                  disabled={fetchingModels}
+                  className="inline-flex items-center gap-1 text-[11px] text-brand-blue hover:text-brand-blue/80 font-bold"
+                  title={t("refreshModels")}
+                >
+                  <RefreshCw size={11} className={fetchingModels ? "animate-spin" : ""} />
+                  <span>{fetchingModels ? t("refreshing") : t("refreshModels")}</span>
+                </button>
+              </div>
+            </div>
+
+            {isCustomModel ? (
+              <input
+                id="input-model-name"
+                type="text"
+                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main font-mono text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                value={settings[selectedPreset.modelSetting] || ""}
+                onChange={(e) =>
+                  setSettings({ ...settings, [selectedPreset.modelSetting]: e.target.value })
+                }
+                onBlur={(e) => updateSetting(selectedPreset.modelSetting, e.target.value)}
+                placeholder={selectedPreset.defaultModel}
+              />
+            ) : (
+              <select
+                id="input-model-name"
+                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main font-mono text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                value={currentModelVal}
+                onChange={(e) => {
+                  updateSetting(selectedPreset.modelSetting, e.target.value);
+                }}
+              >
+                <optgroup label={isLiveVerified ? t("modelsAvailableLive") : t("modelsRecommendedSeed")}>
+                  {currentModelList.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.displayName && m.displayName !== m.id ? `${m.displayName} (${m.id})` : m.id}
+                      {m.recommended ? " ★" : ""}
+                    </option>
+                  ))}
+                </optgroup>
+                {!currentModelList.some((m) => m.id.toLowerCase() === currentModelVal.toLowerCase()) && (
+                  <option value={currentModelVal}>{currentModelVal} (current)</option>
+                )}
+              </select>
+            )}
+          </div>
+        </div>
+
+        {/* Dedicated Model Capabilities Status Card */}
+        <div className="p-3.5 rounded-xl border border-line bg-panel-raised/60 flex flex-col gap-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="font-bold text-text-main flex items-center gap-1.5">
+              <Sparkles size={14} className="text-brand-cyan shrink-0" />
+              {language === "ar" ? "القدرات:" : "Capabilities:"}{" "}
+              <span className="font-mono text-brand-cyan">{currentModelObj.displayName || currentModelVal}</span>
+            </span>
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                currentModelObj.capabilitySource === "provider"
+                  ? "bg-ok/15 text-ok border-ok/30"
+                  : currentModelObj.capabilitySource === "seed"
+                    ? "bg-brand-blue/15 text-brand-blue border-brand-blue/30"
+                    : "bg-muted/15 text-muted border-line"
+              }`}
+            >
+              {currentModelObj.capabilitySource === "provider"
+                ? t("sourceLive")
+                : currentModelObj.capabilitySource === "seed"
+                  ? t("sourceSeed")
+                  : t("sourceUnknown")}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+            {/* Vision */}
+            <div
+              className={`p-2 rounded-lg border flex items-center justify-between ${
+                supportsVision ? "bg-ok/10 border-ok/25 text-ok" : "bg-panel border-line text-muted"
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-medium">
+                <Eye size={14} />
+                <span>{t("capVision")}</span>
+              </div>
+              <span className="text-[10px] font-bold">
+                {supportsVision ? t("supported") : t("unsupported")}
+              </span>
+            </div>
+
+            {/* Speech / STT */}
+            <div
+              className={`p-2 rounded-lg border flex items-center justify-between ${
+                supportsStt ? "bg-ok/10 border-ok/25 text-ok" : "bg-panel border-line text-muted"
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-medium">
+                <Mic size={14} />
+                <span>{t("capStt")}</span>
+              </div>
+              <span className="text-[10px] font-bold">
+                {supportsStt ? t("supported") : t("unsupported")}
+              </span>
+            </div>
+
+            {/* Audio Input */}
+            <div
+              className={`p-2 rounded-lg border flex items-center justify-between ${
+                currentModelObj.capabilities.audioInput
+                  ? "bg-ok/10 border-ok/25 text-ok"
+                  : "bg-panel border-line text-muted"
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-medium">
+                <Volume2 size={14} />
+                <span>{t("capAudio")}</span>
+              </div>
+              <span className="text-[10px] font-bold">
+                {currentModelObj.capabilities.audioInput ? t("supported") : t("unsupported")}
+              </span>
+            </div>
+
+            {/* Text I/O */}
+            <div
+              className={`p-2 rounded-lg border flex items-center justify-between ${
+                currentModelObj.capabilities.textInput && currentModelObj.capabilities.textOutput
+                  ? "bg-ok/10 border-ok/25 text-ok"
+                  : "bg-panel border-line text-muted"
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-medium">
+                <FileText size={14} />
+                <span>{t("capText")}</span>
+              </div>
+              <span className="text-[10px] font-bold">
+                {currentModelObj.capabilities.textInput && currentModelObj.capabilities.textOutput
+                  ? t("supported")
+                  : t("unsupported")}
+              </span>
+            </div>
+
+            <div
+              className={`p-2 rounded-lg border flex items-center justify-between ${
+                currentModelObj.capabilities.pdfInput
+                  ? "bg-ok/10 border-ok/25 text-ok"
+                  : "bg-panel border-line text-muted"
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-medium">
+                <FileText size={14} />
+                <span>{t("capPdf")}</span>
+              </div>
+              <span className="text-[10px] font-bold">
+                {currentModelObj.capabilities.pdfInput ? t("supported") : t("unsupported")}
+              </span>
+            </div>
+
+            <div
+              className={`p-2 rounded-lg border flex items-center justify-between ${
+                currentModelObj.capabilities.videoInput
+                  ? "bg-ok/10 border-ok/25 text-ok"
+                  : "bg-panel border-line text-muted"
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-medium">
+                <Eye size={14} />
+                <span>{t("capVideo")}</span>
+              </div>
+              <span className="text-[10px] font-bold">
+                {currentModelObj.capabilities.videoInput ? t("supported") : t("unsupported")}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -556,17 +835,75 @@ export const AIAssistantView: React.FC = () => {
           <div className="relative rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
             <div className="absolute top-3.5 end-3.5">
               <Toggle
-                checked={Boolean(settings["ai_vision_enabled"])}
-                onChange={(val) => updateSetting("ai_vision_enabled", val)}
+                checked={Boolean(settings["ai_vision_enabled"]) && supportsVision}
+                disabled={!supportsVision}
+                onChange={(val) => {
+                  if (supportsVision) updateSetting("ai_vision_enabled", val);
+                }}
               />
             </div>
             <div className="pe-12">
               <div className="flex items-center gap-2 text-text-main mb-1">
-                <Eye size={17} className="text-brand-cyan shrink-0" />
+                <Eye size={17} className={supportsVision ? "text-brand-cyan shrink-0" : "text-muted shrink-0"} />
                 <span className="font-bold text-sm">{t("aiVision")}</span>
               </div>
               <p className="text-xs text-muted leading-relaxed">{t("aiVisionDesc")}</p>
+              {!supportsVision && (
+                <p className="text-[11px] text-amber-500 font-semibold mt-2 flex items-center gap-1">
+                  <AlertTriangle size={13} className="shrink-0" />
+                  <span>{t("visionUnsupportedNotice")}</span>
+                </p>
+              )}
             </div>
+          </div>
+
+          {/* STT Toggle (Speech-to-Text) */}
+          <div className="relative rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
+            <div className="absolute top-3.5 end-3.5">
+              <Toggle
+                checked={Boolean(settings["ai_stt_enabled"] ?? true) && supportsStt}
+                disabled={!supportsStt}
+                onChange={(val) => {
+                  if (supportsStt) updateSetting("ai_stt_enabled", val);
+                }}
+              />
+            </div>
+            <div className="pe-12">
+              <div className="flex items-center gap-2 text-text-main mb-1">
+                <Mic size={17} className={supportsStt ? "text-purple-400 shrink-0" : "text-muted shrink-0"} />
+                <span className="font-bold text-sm">{t("aiSttEnabled")}</span>
+              </div>
+              <p className="text-xs text-muted leading-relaxed">{t("aiSttEnabledDesc")}</p>
+              {!supportsStt && (
+                <p className="text-[11px] text-amber-500 font-semibold mt-2 flex items-center gap-1">
+                  <AlertTriangle size={13} className="shrink-0" />
+                  <span>{t("sttUnsupportedNotice")}</span>
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* STT Provider Selector */}
+          <div className="rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-text-main mb-1">
+                <Mic size={17} className="text-purple-400 shrink-0" />
+                <span className="font-bold text-sm">{t("aiStt")}</span>
+              </div>
+              <p className="text-xs text-muted leading-relaxed">{t("sttDesc")}</p>
+            </div>
+            <select
+              className="w-full h-10 px-3 rounded-lg border border-line bg-panel text-text-main text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50 disabled:opacity-50"
+              value={settings["ai_stt_provider"] || "auto"}
+              disabled={!supportsStt}
+              onChange={(e) => {
+                if (supportsStt) updateSetting("ai_stt_provider", e.target.value);
+              }}
+            >
+              <option value="auto">{t("sttAuto")}</option>
+              <option value="gemini">{t("sttGemini")}</option>
+              <option value="openai">{t("sttOpenAI")}</option>
+            </select>
           </div>
 
           {/* Bot Language Selector */}
@@ -586,26 +923,6 @@ export const AIAssistantView: React.FC = () => {
               <option value="auto">{t("langAuto")}</option>
               <option value="ar">{t("langAr")}</option>
               <option value="en">{t("langEn")}</option>
-            </select>
-          </div>
-
-          {/* STT Provider Selector */}
-          <div className="rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 text-text-main mb-1">
-                <Mic size={17} className="text-purple-400 shrink-0" />
-                <span className="font-bold text-sm">{t("aiStt")}</span>
-              </div>
-              <p className="text-xs text-muted leading-relaxed">{t("sttDesc")}</p>
-            </div>
-            <select
-              className="w-full h-10 px-3 rounded-lg border border-line bg-panel text-text-main text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-              value={settings["ai_stt_provider"] || "auto"}
-              onChange={(e) => updateSetting("ai_stt_provider", e.target.value)}
-            >
-              <option value="auto">{t("sttAuto")}</option>
-              <option value="gemini">{t("sttGemini")}</option>
-              <option value="openai">{t("sttOpenAI")}</option>
             </select>
           </div>
         </div>
@@ -642,8 +959,8 @@ export const AIAssistantView: React.FC = () => {
             type="button"
             onClick={() => {
               loadMemoryFiles();
-              setSelectedMemoryFile("general.md");
-              viewMemoryFile("general.md");
+              setSelectedMemoryFile("global");
+              viewMemoryFile("global");
             }}
             className="w-full h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50 flex items-center justify-center gap-2"
           >

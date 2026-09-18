@@ -194,7 +194,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         render(HostState.snapshot)
-        maybeAutostart(intent)
+        maybeOpenPanel(intent)
     }
 
     private fun toggleLogsAccordion() {
@@ -214,17 +214,14 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        maybeAutostart(intent)
+        maybeOpenPanel(intent)
     }
 
-    private fun maybeAutostart(intent: Intent?) {
-        if (intent?.getBooleanExtra(EXTRA_STOP, false) == true) {
-            LevixHostService.stop(this)
-            return
-        }
-        if (intent?.getBooleanExtra(EXTRA_AUTOSTART, false) == true) {
-            requestStart()
-        }
+    // MainActivity must remain exported for the launcher. Never accept service
+    // start/stop controls through its extras: another installed app can launch
+    // an exported activity with arbitrary extras. The notification's harmless
+    // "open panel" navigation is the only action routed through this activity.
+    private fun maybeOpenPanel(intent: Intent?) {
         if (intent?.getBooleanExtra(EXTRA_OPEN_PANEL, false) == true) {
             openPanel()
         }
@@ -455,8 +452,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        const val EXTRA_AUTOSTART = "autostart"
-        const val EXTRA_STOP = "autostop"
         const val EXTRA_OPEN_PANEL = "openPanel"
     }
 }

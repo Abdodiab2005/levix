@@ -16,6 +16,7 @@
 // dashboard only ever learns whether one is configured.
 
 const logger = require("../utils/logger.cjs");
+const { assertProviderBaseUrl } = require("../utils/providerUrl.cjs");
 
 const SETTINGS = [
   // --- General -----------------------------------------------------------
@@ -183,12 +184,20 @@ const SETTINGS = [
     hint: "Allow the active model to inspect and analyze incoming images. Enabled natively on Gemini, and available on OpenAI-compatible/Anthropic when using vision-capable models (e.g. llama-3.2-11b-vision, gpt-4o, claude-3).",
   },
   {
+    key: "ai_stt_enabled",
+    type: "bool",
+    default: true,
+    group: "ai",
+    label: "Audio & Speech-to-text (STT)",
+    hint: "Enable audio processing and speech-to-text transcription with compatible models.",
+  },
+  {
     key: "ai_auto_detect_capabilities",
     type: "bool",
     default: true,
     group: "ai",
     label: "Auto-detect model capabilities",
-    hint: "Detect whether the model supports vision or audio based on its name and show recommendations.",
+    hint: "When the selected model does not support Vision or Speech-to-text, those toggles are turned off and locked automatically. Capabilities come from the provider API and the local registry — never from guessing at the model name.",
   },
   {
     key: "ai_stt_provider",
@@ -447,6 +456,9 @@ const SETTINGS = [
 ];
 
 const BY_KEY = new Map(SETTINGS.map((definition) => [definition.key, definition]));
+const SECRET_SETTING_KEYS = SETTINGS.filter((definition) => definition.type === "secret").map(
+  (definition) => definition.key,
+);
 
 const GROUP_LABELS = {
   general: "General",
@@ -463,7 +475,12 @@ const GROUP_LABELS = {
 function storedValue(key) {
   try {
     const value = require("../utils/storage.cjs").getBotSetting(`setting:${key}`, undefined);
-    return value === undefined || value === null ? undefined : value;
+    if (value === undefined || value === null) return undefined;
+    const definition = BY_KEY.get(key);
+    if (definition?.type === "secret" && typeof value === "string") {
+      return require("./vault.cjs").open(value);
+    }
+    return value;
   } catch {
     return undefined;
   }
@@ -537,6 +554,9 @@ function validate(definition, value) {
       throw new Error(`"${text}" is not a valid timezone`);
     }
   }
+  if (["gemini_base_url", "openai_base_url", "anthropic_base_url"].includes(definition.key)) {
+    return assertProviderBaseUrl(text, { allowLoopback: true });
+  }
   return text;
 }
 
@@ -558,7 +578,9 @@ function set(key, value) {
   }
 
   const clean = validate(definition, value);
-  storage.saveBotSetting(`setting:${key}`, clean);
+  const toStore =
+    definition.type === "secret" ? require("./vault.cjs").seal(String(clean)) : clean;
+  storage.saveBotSetting(`setting:${key}`, toStore);
   // Never log the value of a secret.
   logger.info(`[settings] ${key} -> ${definition.type === "secret" ? "(updated)" : clean}`);
   return get(key);
@@ -592,4 +614,11 @@ function describe() {
   });
 }
 
-module.exports = { get, set, describe, sourceOf, SETTING_KEYS: [...BY_KEY.keys()] };
+module.exports = {
+  get,
+  set,
+  describe,
+  sourceOf,
+  SETTING_KEYS: [...BY_KEY.keys()],
+  SECRET_SETTING_KEYS: [...SECRET_SETTING_KEYS],
+};

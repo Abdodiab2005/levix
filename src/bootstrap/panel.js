@@ -40,6 +40,7 @@ export async function bootstrapPanel({ core } = {}) {
     requireLoginApi,
     noStore,
     installFinalHandlers,
+    disconnectInvalidPanelSockets,
   } = require("../../app.cjs");
 
   const { default: dashboardApiRoutes, setSession } = await import(
@@ -54,7 +55,13 @@ export async function bootstrapPanel({ core } = {}) {
   // Everything the bot reports goes out to the browsers watching the panel.
   // One direction only: a browser attaching or leaving cannot reach back and
   // change the WhatsApp session's lifecycle. See src/core/session.js.
-  attach((event, payload) => io.emit(event, payload));
+  attach((event, payload) => {
+    // A CLI reset-password runs in another process, so the in-memory session
+    // store cannot receive a destroy call. Revalidate the password epoch before
+    // every server push; stale sockets are removed before QR/pairing data moves.
+    disconnectInvalidPanelSockets();
+    io.emit(event, payload);
+  });
 
   // The routes read the live socket off the session manager, so a reconnect
   // needs no re-wiring here.

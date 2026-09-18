@@ -16,6 +16,13 @@ export const deleteBotSetting = store.deleteBotSetting;
 export const getGroupSettings = store.getGroupSettings;
 export const saveGroupSettings = store.saveGroupSettings;
 export const getAllGroupSettings = store.getAllGroupSettings;
+export const upsertGroupDirectory = store.upsertGroupDirectory;
+export const getGroupDirectory = store.getGroupDirectory;
+export const getAllGroupDirectory = store.getAllGroupDirectory;
+export const clearWhatsAppDirectory = store.clearWhatsAppDirectory;
+export const isPairedSession = store.isPairedSession;
+export const resolveUserPhone = store.resolveUserPhone;
+export const describePeer = store.describePeer;
 
 // ===== Warnings =====
 export const getUserWarnings = store.getUserWarnings;
@@ -91,4 +98,8 @@ export const saveSchedule = store.saveSchedule;
 export const setScheduleStatus = store.setScheduleStatus;
 export const setScheduleDelivery = store.setScheduleDelivery;
 export const deleteSchedule = store.deleteSchedule;
+export const pauseAllSchedules = store.pauseAllSchedules;
 export const countSchedules = store.countSchedules;
+
+// ===== AI conversation history =====
+export const deleteAllChatHistories = store.deleteAllChatHistories;

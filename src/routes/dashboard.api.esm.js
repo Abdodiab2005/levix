@@ -26,11 +26,14 @@ import {
   countSchedules,
   countTodos,
   countWarnings,
+  getAllGroupDirectory,
   getAllGroupSettings,
   getAllNotesFlat,
   getAllTodos,
   getAllUsers,
   getAllWarnings,
+  describePeer,
+  getGroupDirectory,
   getGroupSettings,
   getRecentDebts,
   getSchedules,
@@ -43,6 +46,9 @@ const runtimeConfig = require("../config/runtime-config.cjs");
 const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
 const secrets = require("../config/secrets.cjs");
+const { clientAddress } = require("../utils/requestOrigin.cjs");
+const { blockedFor, recordFailure, clearAttempts } = require("../panel/login-throttle.cjs");
+const { stampPanelSession } = require("../panel/session-auth.cjs");
 const { DATA_DIR } = require("../config/paths.cjs");
 const { PERSONA_FILE, activeProviderKeySetting } = require("../services/aiAgent.cjs");
 const {
@@ -52,6 +58,12 @@ const {
   saveScheduledJob,
 } = require("../../scheduler.cjs");
 const { describeScheduledJob } = require("../utils/recurrence.cjs");
+const { discoverProviderModels, DiscoveryError } = require("../services/llmDiscovery.cjs");
+const {
+  invalidateDiscoveryCache,
+  applyCapabilityGuards,
+  resolveCapabilities,
+} = require("../services/modelRegistry.cjs");
 const cron = require("node-cron");
 
 const router = Router();
@@ -60,9 +72,16 @@ const router = Router();
 // it questions and give it orders; they never create or destroy a socket
 // themselves, and nothing a browser does to its websocket reaches it.
 let session = null;
+const DASHBOARD_START_COALESCE_MS = 500;
+let dashboardStartPromise = null;
+let dashboardStartSettledAt = 0;
+let dashboardStartKey = null;
 
 export function setSession(manager) {
   session = manager;
+  dashboardStartPromise = null;
+  dashboardStartSettledAt = 0;
+  dashboardStartKey = null;
 }
 
 /** The live socket, or null. Re-read every time — a reconnect replaces it. */
@@ -272,7 +291,8 @@ router.get("/settings", (req, res) => {
 });
 
 router.patch("/settings", (req, res) => {
-  const { key, value } = req.body || {};
+  const { key } = req.body || {};
+  let { value } = req.body || {};
   if (typeof key !== "string" || !key) return badRequest(res, "key is required");
 
   try {
@@ -281,7 +301,63 @@ router.patch("/settings", (req, res) => {
       return res.json({ success: true, prefix });
     }
 
+    if (key === "ai_vision_enabled" || key === "ai_stt_enabled") {
+      const provider = String(settings.get("ai_provider") || "gemini");
+      const modelKey =
+        provider === "gemini"
+          ? "gemini_model"
+          : provider === "anthropic"
+            ? "anthropic_model"
+            : "openai_model";
+      const resolved = resolveCapabilities(provider, settings.get(modelKey));
+      const next = applyCapabilityGuards({
+        visionEnabled: key === "ai_vision_enabled" ? value : settings.get("ai_vision_enabled"),
+        sttEnabled: key === "ai_stt_enabled" ? value : settings.get("ai_stt_enabled"),
+        capabilities: resolved.capabilities,
+      });
+      if (key === "ai_vision_enabled") value = next.visionEnabled;
+      if (key === "ai_stt_enabled") value = next.sttEnabled;
+    }
+
     settings.set(key, value);
+    if (typeof key === "string" && (key.includes("api_key") || key.includes("base_url"))) {
+      const prov = key.startsWith("gemini")
+        ? "gemini"
+        : key.startsWith("anthropic")
+          ? "anthropic"
+          : key.startsWith("openai")
+            ? "openai"
+            : null;
+      if (prov) invalidateDiscoveryCache(prov);
+      else invalidateDiscoveryCache();
+    }
+    if (
+      key === "ai_provider" ||
+      key === "gemini_model" ||
+      key === "openai_model" ||
+      key === "anthropic_model"
+    ) {
+      const provider = key === "ai_provider" ? String(value || "gemini") : key.split("_")[0];
+      const modelKey =
+        provider === "gemini"
+          ? "gemini_model"
+          : provider === "anthropic"
+            ? "anthropic_model"
+            : "openai_model";
+      const modelId = key.endsWith("_model") ? value : settings.get(modelKey);
+      const resolved = resolveCapabilities(provider, modelId);
+      const next = applyCapabilityGuards({
+        visionEnabled: settings.get("ai_vision_enabled"),
+        sttEnabled: settings.get("ai_stt_enabled"),
+        capabilities: resolved.capabilities,
+      });
+      if (Boolean(settings.get("ai_vision_enabled")) !== next.visionEnabled) {
+        settings.set("ai_vision_enabled", next.visionEnabled);
+      }
+      if (Boolean(settings.get("ai_stt_enabled")) !== next.sttEnabled) {
+        settings.set("ai_stt_enabled", next.sttEnabled);
+      }
+    }
     return res.json({
       success: true,
       // Never echo a value back: for a secret that would hand it to anyone who
@@ -344,98 +420,69 @@ router.put("/ai/persona", (req, res) => {
 router.post(
   "/ai/models",
   asyncRoute(async (req, res) => {
-    const { provider = settings.get("ai_provider") || "gemini", apiKey, baseUrl } = req.body || {};
+    const {
+      provider = settings.get("ai_provider") || "gemini",
+      apiKey,
+      baseUrl,
+      refresh = false,
+    } = req.body || {};
+
+    const provKey = String(provider || "gemini").toLowerCase();
+    const activeKeySetting =
+      provKey === "gemini"
+        ? "gemini_api_key"
+        : provKey === "anthropic"
+          ? "anthropic_api_key"
+          : "openai_api_key";
+    const activeBaseUrlSetting =
+      provKey === "gemini"
+        ? "gemini_base_url"
+        : provKey === "anthropic"
+          ? "anthropic_base_url"
+          : "openai_base_url";
+
+    const offeredKey = typeof apiKey === "string" ? apiKey.trim() : "";
+    const effectiveKey = offeredKey || settings.get(activeKeySetting) || "";
+    const effectiveBaseUrl = baseUrl || settings.get(activeBaseUrlSetting) || "";
 
     try {
-      if (provider === "gemini") {
-        const key = apiKey || settings.get("gemini_api_key");
-        if (!key) {
-          return res.json({
-            success: true,
-            models: [
-              "gemini-2.5-flash",
-              "gemini-2.5-pro",
-              "gemini-2.0-flash",
-              "gemini-1.5-flash",
-              "gemini-1.5-pro",
-            ],
-          });
-        }
-        const resp = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`,
-        );
-        if (!resp.ok) {
-          throw new Error(`Gemini API returned ${resp.status}: ${resp.statusText}`);
-        }
-        const data = await resp.json();
-        const models = (data.models || [])
-          .map((m) => m.name.replace(/^models\//, ""))
-          .filter((id) => id.startsWith("gemini-"));
+      const result = await discoverProviderModels({
+        provider: provKey,
+        apiKey: effectiveKey,
+        baseUrl: effectiveBaseUrl,
+        refresh: Boolean(refresh),
+      });
+
+      return res.json(result);
+    } catch (err) {
+      if (err instanceof DiscoveryError) {
         return res.json({
-          success: true,
-          models: models.length
-            ? models
-            : ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"],
+          success: false,
+          live: false,
+          fallback: true,
+          provider: provKey,
+          error: {
+            code: err.code,
+            type: err.type,
+            message: err.message,
+          },
+          models: [],
         });
       }
 
-      if (provider === "openai") {
-        const url = (
-          baseUrl ||
-          settings.get("openai_base_url") ||
-          "https://api.openai.com/v1"
-        ).replace(/\/+$/, "");
-        const key = apiKey || settings.get("openai_api_key");
-        const headers = {};
-        if (key) headers["Authorization"] = `Bearer ${key}`;
-
-        const resp = await fetch(`${url}/models`, { headers });
-        if (!resp.ok) {
-          throw new Error(`OpenAI server returned ${resp.status}: ${resp.statusText}`);
-        }
-        const data = await resp.json();
-        const models = (data.data || []).map((m) => m.id);
-        return res.json({ success: true, models });
-      }
-
-      if (provider === "anthropic") {
-        const key = apiKey || settings.get("anthropic_api_key");
-        const url = (
-          baseUrl ||
-          settings.get("anthropic_base_url") ||
-          "https://api.anthropic.com"
-        ).replace(/\/+$/, "");
-        if (key) {
-          try {
-            const resp = await fetch(`${url}/v1/models`, {
-              headers: {
-                "x-api-key": key,
-                "anthropic-version": "2023-06-01",
-              },
-            });
-            if (resp.ok) {
-              const data = await resp.json();
-              const models = (data.data || []).map((m) => m.id);
-              if (models.length) return res.json({ success: true, models });
-            }
-          } catch {
-            // fallback
-          }
-        }
-        return res.json({
-          success: true,
-          models: [
-            "claude-3-7-sonnet-20250219",
-            "claude-3-5-sonnet-20241022",
-            "claude-3-5-haiku-20241022",
-            "claude-3-opus-20240229",
-          ],
-        });
-      }
-
-      return res.json({ success: true, models: [] });
-    } catch (error) {
-      fail(res, error, "Failed to fetch models from provider");
+      logger.warn({ provider: provKey }, "[Dashboard API] Live model fetch failed");
+      return res.json({
+        success: false,
+        live: false,
+        fallback: true,
+        provider: provKey,
+        error: {
+          code: 500,
+          type: "server_error",
+          message: "An unexpected error occurred while discovering models.",
+        },
+        models: [],
+      });
     }
   }),
 );
@@ -530,13 +577,26 @@ router.delete("/ai/memory/:scope", (req, res) => {
 // ===========================================================================
 
 function groupView(groupId, stored) {
-  const metadata = groupMetadataCache.get(groupId) || null;
+  const live = groupMetadataCache.get(groupId) || null;
+  const directory = getGroupDirectory(groupId) || null;
   const config = stored || {};
+  const subject = live?.subject || directory?.subject || null;
+  const memberCount =
+    live?.participants?.length ?? directory?.participant_count ?? null;
+  const mediaEnabled = !!config.media_control?.enabled;
+  const blocked = config.media_control?.blocked_types || [];
+  const mediaRestriction = !mediaEnabled
+    ? "none"
+    : blocked.length >= 4
+      ? "block_all"
+      : "custom";
 
   return {
     id: groupId,
-    subject: metadata?.subject || null,
-    participants: metadata?.participants?.length ?? null,
+    jid: groupId,
+    subject,
+    participants: memberCount,
+    memberCount,
     antilink: {
       enabled: !!config.antilink?.enabled,
       mode: config.antilink?.mode || "ALL",
@@ -565,6 +625,9 @@ function groupView(groupId, stored) {
     },
     rules: config.rules || "",
     blacklist: config.blacklist || [],
+    antilinkEnabled: !!config.antilink?.enabled,
+    welcomeEnabled: !!config.welcome_system?.enabled,
+    mediaRestriction,
   };
 }
 
@@ -576,6 +639,7 @@ router.get("/groups", (req, res) => {
     // the list — that's exactly where the operator goes to configure them.
     const ids = new Set(stored.keys());
     for (const jid of groupMetadataCache.keys()) ids.add(jid);
+    for (const row of getAllGroupDirectory()) ids.add(row.group_id);
 
     const groups = [...ids]
       .map((id) => groupView(id, stored.get(id)))
@@ -595,6 +659,19 @@ router.patch("/groups/:id", (req, res) => {
   if (!groupId.endsWith("@g.us")) return badRequest(res, "Not a group id");
 
   const patch = req.body || {};
+  if (typeof patch.antilink === "boolean") {
+    patch.antilink = { enabled: patch.antilink };
+  }
+  if (patch.welcomeEnabled !== undefined && !patch.welcome_system) {
+    patch.welcome_system = { enabled: !!patch.welcomeEnabled };
+  }
+  if (patch.mediaRestriction && !patch.media_control) {
+    if (patch.mediaRestriction === "none") {
+      patch.media_control = { enabled: false, blocked_types: [] };
+    } else if (patch.mediaRestriction === "block_all") {
+      patch.media_control = { enabled: true, blocked_types: [...MEDIA_TYPES] };
+    }
+  }
   const current = getGroupSettings(groupId) || {};
 
   try {
@@ -821,7 +898,14 @@ router.post("/roles", (req, res) => {
 function scheduleView(job) {
   if (!job) return null;
   const timezone = settings.get("bot_timezone");
-  return { ...job, when: describeScheduledJob(job, timezone) };
+  const peer = describePeer(job.targetJid);
+  return {
+    ...job,
+    when: describeScheduledJob(job, timezone),
+    targetLabel: peer.label,
+    targetKind: peer.kind,
+    targetPhone: peer.phone,
+  };
 }
 
 function scheduleViews() {
@@ -833,49 +917,36 @@ router.get("/recipients", (req, res) => {
     const recipients = [];
     const seen = new Set();
 
-    // 1. Groups from stored settings
-    const groupRows = getAllGroupSettings() || [];
-    for (const g of groupRows) {
-      if (!seen.has(g.group_id)) {
-        seen.add(g.group_id);
-        const name = g.settings?.subject || g.group_id.split("@")[0];
-        recipients.push({
-          id: g.group_id,
-          name,
-          type: "group",
-        });
-      }
-    }
+    const addGroup = (gid) => {
+      if (!gid || seen.has(gid)) return;
+      seen.add(gid);
+      const live = groupMetadataCache.get(gid);
+      const peer = describePeer(gid);
+      recipients.push({
+        id: gid,
+        name: live?.subject || peer.label,
+        type: "group",
+        memberCount: live?.participants?.length ?? peer.memberCount,
+      });
+    };
 
-    // Also check groupMetadataCache if available
-    if (groupMetadataCache) {
-      for (const [gid, meta] of groupMetadataCache.entries()) {
-        if (!seen.has(gid)) {
-          seen.add(gid);
-          recipients.push({
-            id: gid,
-            name: meta?.subject || gid.split("@")[0],
-            type: "group",
-          });
-        }
-      }
-    }
+    for (const g of getAllGroupSettings() || []) addGroup(g.group_id);
+    for (const row of getAllGroupDirectory()) addGroup(row.group_id);
+    for (const gid of groupMetadataCache.keys()) addGroup(gid);
 
-    // 2. Recent contacts from user_metadata
     const users = getAllUsers() || [];
     users.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
-    for (const u of users.slice(0, 50)) {
-      const jid = u.user_jid || u.jid;
-      if (jid && !seen.has(jid)) {
-        seen.add(jid);
-        const phone = u.phone_number || (jid.includes("@") ? jid.split("@")[0] : jid);
-        recipients.push({
-          id: jid,
-          name: u.push_name || (phone ? `+${phone}` : jid),
-          phone: phone ? `+${phone}` : null,
-          type: "contact",
-        });
-      }
+    for (const u of users.slice(0, 80)) {
+      const jid = u.jid;
+      if (!jid || seen.has(jid) || String(jid).endsWith("@g.us")) continue;
+      seen.add(jid);
+      const peer = describePeer(jid);
+      recipients.push({
+        id: jid,
+        name: peer.label,
+        phone: peer.phone,
+        type: "contact",
+      });
     }
 
     res.json({ success: true, recipients });
@@ -1001,10 +1072,17 @@ router.post(
 
 router.post("/security/password", (req, res) => {
   const { current, next } = req.body || {};
+  const peer = clientAddress(req);
+  const retryAfter = blockedFor(peer);
+  if (retryAfter) {
+    res.set("Retry-After", String(retryAfter));
+    return res.status(429).json({ success: false, error: "Too many attempts. Try again later." });
+  }
 
   // Being signed in isn't enough: an unattended browser shouldn't be able to
   // lock the real operator out.
   if (!secrets.verifyDashboardPassword(current)) {
+    recordFailure(peer);
     return res.status(401).json({ success: false, error: "Current password is wrong" });
   }
 
@@ -1014,7 +1092,16 @@ router.post("/security/password", (req, res) => {
     return badRequest(res, error.message);
   }
 
-  res.json({ success: true });
+  clearAttempts(peer);
+  stampPanelSession(req.session);
+  req.session.save((err) => {
+    if (err) return res.status(500).json({ success: false, error: "Could not refresh the session" });
+    try {
+      const { disconnectInvalidPanelSockets } = require("../../app.cjs");
+      disconnectInvalidPanelSockets();
+    } catch {}
+    res.json({ success: true });
+  });
 });
 
 // ===========================================================================
@@ -1040,9 +1127,10 @@ router.get("/bot/session", (req, res) => {
   });
 });
 
-// Idempotent by construction: the manager returns the state it is already in
-// when a socket exists or is being made, so a double-click, two operators and a
-// retry firing at the same moment all end up with exactly one socket.
+// Coalesce repeated browser requests as well as relying on the manager's own
+// in-flight guard. A socket can fail before three concurrent HTTP requests have
+// all reached this handler; the short settled-request window prevents a late
+// duplicate from immediately creating a replacement socket.
 router.post(
   "/bot/session/start",
   asyncRoute(async (req, res) => {
@@ -1051,11 +1139,27 @@ router.post(
     }
     let state;
     try {
-      state = await session.start({
-        reason: "dashboard",
-        method: req.body?.method,
-        phone: req.body?.phone,
-      });
+      const method = req.body?.method;
+      const phone = req.body?.phone;
+      const requestKey = JSON.stringify([method ?? null, phone ?? null]);
+      const isDuplicate =
+        requestKey === dashboardStartKey &&
+        Date.now() - dashboardStartSettledAt < DASHBOARD_START_COALESCE_MS;
+
+      if (dashboardStartPromise) {
+        state = await dashboardStartPromise;
+      } else if (isDuplicate) {
+        state = sessionState();
+      } else {
+        dashboardStartKey = requestKey;
+        dashboardStartPromise = session.start({ reason: "dashboard", method, phone });
+        try {
+          state = await dashboardStartPromise;
+        } finally {
+          dashboardStartSettledAt = Date.now();
+          dashboardStartPromise = null;
+        }
+      }
     } catch (error) {
       if (error.code === "PAIRING_PHONE") return badRequest(res, error.message);
       throw error;

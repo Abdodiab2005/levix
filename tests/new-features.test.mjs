@@ -1,5 +1,5 @@
-import { section, equal, ok, useTempDataDir, finish } from "./harness.mjs";
 import { createRequire } from "node:module";
+import { equal, finish, ok, section, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("new-features");
 
@@ -42,37 +42,38 @@ ok("formats Bob card", tableOutput.includes("📋 *Bob*"));
 ok("formats Bob role", tableOutput.includes("• *Role:* Member"));
 ok("formats Bob city", tableOutput.includes("• *City:* Alexandria"));
 
-section("!lang numeral conversion");
+section("!digit numeral conversion");
 
+const digitCmd = require("../src/commands/digit.cjs");
 const langCmd = require("../src/commands/lang.cjs");
+equal("digit command name is digit", digitCmd.name, "digit");
+ok("digit aliases include num", digitCmd.aliases.includes("num"));
+ok("digit aliases include digits", digitCmd.aliases.includes("digits"));
 equal("lang command name is lang", langCmd.name, "lang");
-ok("lang aliases include num", langCmd.aliases.includes("num"));
+ok("lang is not also the number converter", !langCmd.aliases.includes("num"));
 
 let sentText = "";
 const mockSock = {
-  async sendMessage(jid, content) {
+  async sendMessage(_jid, content) {
     sentText = content.text;
     return { key: { id: "mock" } };
   },
 };
 
-// Convert English to Arabic numerals inline
-await langCmd.execute(mockSock, { key: { remoteJid: "123@s.whatsapp.net" } }, [
+await digitCmd.execute(mockSock, { key: { remoteJid: "123@s.whatsapp.net" } }, [
   "ar",
   "Phone:",
   "01012345678",
 ]);
 equal("converts English digits to Arabic digits", sentText, "Phone: ٠١٠١٢٣٤٥٦٧٨");
 
-// Convert Arabic to English numerals inline
-await langCmd.execute(mockSock, { key: { remoteJid: "123@s.whatsapp.net" } }, [
+await digitCmd.execute(mockSock, { key: { remoteJid: "123@s.whatsapp.net" } }, [
   "en",
   "الرقم:",
   "٠١٠١٢٣٤٥٦٧٨",
 ]);
 equal("converts Arabic digits to English digits", sentText, "الرقم: 01012345678");
 
-// Convert via reply
 const mockReplyMsg = {
   key: { remoteJid: "123@s.whatsapp.net" },
   message: {
@@ -85,7 +86,38 @@ const mockReplyMsg = {
     },
   },
 };
-await langCmd.execute(mockSock, mockReplyMsg, ["ar"]);
+await digitCmd.execute(mockSock, mockReplyMsg, ["ar"]);
 equal("converts digits in replied message to Arabic digits", sentText, "Order #٩٨٧٦٥ ready");
+
+await digitCmd.execute(mockSock, { key: { remoteJid: "123@s.whatsapp.net" } }, ["Phone:", "01099"]);
+equal("auto-detects English digits and converts to Arabic", sentText, "Phone: ٠١٠٩٩");
+
+await digitCmd.execute(mockSock, { key: { remoteJid: "123@s.whatsapp.net" } }, ["الرقم:", "٠١٠٩٩"]);
+equal("auto-detects Arabic digits and converts to English", sentText, "الرقم: 01099");
+
+await digitCmd.execute(mockSock, { key: { remoteJid: "123@s.whatsapp.net" } }, ["mix", "12٣"]);
+ok(
+  "mixed digits require an explicit language",
+  sentText.includes("مختلطة") || sentText.includes("mixed"),
+);
+
+await digitCmd.execute(mockSock, { key: { remoteJid: "123@s.whatsapp.net" } }, ["ar", "12٣"]);
+equal("explicit ar converts mixed digits to Arabic", sentText, "١٢٣");
+
+const mixedReply = {
+  key: { remoteJid: "123@s.whatsapp.net" },
+  message: {
+    extendedTextMessage: {
+      contextInfo: {
+        quotedMessage: { conversation: "Order #98765 ready" },
+      },
+    },
+  },
+};
+await digitCmd.execute(mockSock, mixedReply, []);
+equal("reply with !digit auto-converts English digits to Arabic", sentText, "Order #٩٨٧٦٥ ready");
+
+await langCmd.execute(mockSock, { key: { remoteJid: "123@s.whatsapp.net" } }, ["ar", "123"]);
+ok("!lang with numbers points at !digit", sentText.includes("digit"));
 
 finish();

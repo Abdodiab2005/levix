@@ -162,6 +162,9 @@ object PanelHttp {
         var currentUrl = url
         var currentBody = if (currentMethod == "GET" || currentMethod == "HEAD") ByteArray(0) else body
         repeat(5) {
+            if (!PanelActivity.isLoopback(currentUrl)) {
+                throw IOException("panel request left the loopback origin")
+            }
             val one = once(sock, currentMethod, currentUrl, headers, currentBody)
             applySetCookie(currentUrl, one.headers)
             val location = one.header("Location")
@@ -182,6 +185,9 @@ object PanelHttp {
         headers: Map<String, String>,
         body: ByteArray,
     ): Exchange {
+        if (!PanelActivity.isLoopback(url)) {
+            throw IOException("panel request left the loopback origin")
+        }
         val uri = URI(url)
         val path = buildString {
             append(uri.rawPath?.ifBlank { "/" } ?: "/")

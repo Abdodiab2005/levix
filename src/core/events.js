@@ -4,7 +4,7 @@ import {
   handleGroupParticipantsUpdate,
 } from "../handlers/group.handler.js";
 import { handleIncomingMessage } from "../handlers/message.handler.js";
-import { storeLidPnMappings } from "../utils/storage.esm.js";
+import { storeLidPnMappings, upsertGroupDirectory } from "../utils/storage.esm.js";
 import { groupMetadataCache } from "./socket.js";
 
 const require = createRequire(import.meta.url);
@@ -81,6 +81,23 @@ export function setupEventListeners(
     for (const group of updates) {
       logger.info(`[Cache] Caching metadata for group: ${group.id}`);
       groupMetadataCache.set(group.id, group);
+      upsertGroupDirectory(group.id, {
+        subject: group.subject || null,
+        participantCount: group.participants?.length ?? null,
+      });
+    }
+  });
+
+  sock.ev.on("groups.update", (updates) => {
+    for (const group of updates || []) {
+      if (!group?.id) continue;
+      const current = groupMetadataCache.get(group.id) || {};
+      const next = { ...current, ...group };
+      groupMetadataCache.set(group.id, next);
+      upsertGroupDirectory(group.id, {
+        subject: next.subject || null,
+        participantCount: next.participants?.length ?? null,
+      });
     }
   });
 

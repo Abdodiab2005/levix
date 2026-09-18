@@ -51,21 +51,64 @@ const { getProvider } = require("../services/aiRouter.cjs");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 const fs = require("fs").promises;
 const path = require("path");
+const {
+  assertProviderBaseUrl,
+  assertProviderRequestUrl,
+} = require("../utils/providerUrl.cjs");
 
 // Per-(chat, sender) explicit context buffer for the multi-message workflow.
 // Entries accumulate until `!gemini send` flushes them into a single call.
 // Lives in memory only — short-lived by design.
-const contextBuffers = new Map(); // key: "<chatJid>::<senderJid>" -> Entry[]
+const contextBuffers = new Map(); // key: "<chatJid>::<senderJid>" -> { entries, at }
+const MAX_BUFFER_ENTRIES = 20;
+const MAX_BUFFER_CHARS = 32_000;
+const MAX_BUFFER_KEYS = 64;
+const BUFFER_TTL_MS = 30 * 60 * 1000;
 
 function bufferKey(msg) {
   return `${msg.key.remoteJid}::${msg.key.participant || msg.key.remoteJid}`;
 }
+function pruneBuffers(now = Date.now()) {
+  for (const [key, slot] of contextBuffers) {
+    if (!slot?.entries?.length || now - (slot.at || 0) > BUFFER_TTL_MS) {
+      contextBuffers.delete(key);
+    }
+  }
+}
+function entryChars(entry) {
+  let size = (entry?.text?.length || 0) + (entry?.quotedText?.length || 0);
+  for (const part of [...(entry?.mediaParts || []), ...(entry?.quotedMediaParts || [])]) {
+    size += JSON.stringify(part || {}).length;
+  }
+  return size;
+}
 function getBuffer(msg) {
-  return contextBuffers.get(bufferKey(msg)) || [];
+  pruneBuffers();
+  return contextBuffers.get(bufferKey(msg))?.entries || [];
 }
 function setBuffer(msg, entries) {
-  if (!entries?.length) contextBuffers.delete(bufferKey(msg));
-  else contextBuffers.set(bufferKey(msg), entries);
+  pruneBuffers();
+  const key = bufferKey(msg);
+  if (!entries?.length) {
+    contextBuffers.delete(key);
+    return true;
+  }
+  const capped = entries.slice(-MAX_BUFFER_ENTRIES);
+  let used = 0;
+  const kept = [];
+  for (let i = capped.length - 1; i >= 0; i--) {
+    const nextSize = entryChars(capped[i]);
+    if (nextSize > MAX_BUFFER_CHARS || used + nextSize > MAX_BUFFER_CHARS) break;
+    used += nextSize;
+    kept.unshift(capped[i]);
+  }
+  if (!kept.length) return false;
+  if (contextBuffers.size >= MAX_BUFFER_KEYS && !contextBuffers.has(key)) return false;
+  contextBuffers.set(key, { entries: kept, at: Date.now() });
+  return true;
+}
+function clearAllContextBuffers() {
+  contextBuffers.clear();
 }
 
 // Keys come from config/settings.cjs (what the dashboard saved, else the default)
@@ -80,7 +123,9 @@ let geminiCache = { key: null, baseUrl: null, genAI: null };
 function geminiClients() {
   const key = settings.get("gemini_api_key");
   if (!key) return { genAI: null };
-  const baseUrl = String(settings.get("gemini_base_url")).replace(/\/+$/, "");
+  const baseUrl = assertProviderBaseUrl(settings.get("gemini_base_url"), {
+    allowLoopback: true,
+  });
   if (geminiCache.key !== key || geminiCache.baseUrl !== baseUrl) {
     geminiCache = {
       key,
@@ -93,6 +138,9 @@ function geminiClients() {
 
 async function processIncomingMedia(parts, mediaMessage, mimeOverride = null) {
   const provider = getProvider();
+  if (provider.id === "gemini") {
+    await assertProviderRequestUrl(settings.get("gemini_base_url"), { allowLoopback: true });
+  }
   const { genAI } = geminiClients();
   return provider.prepareMedia(parts, mediaMessage, mimeOverride, {
     downloadContentFromMessage,
@@ -205,12 +253,8 @@ module.exports = {
 
     const senderId = msg.key.fromMe ? null : isGroup ? msg.key.participant : msg.key.remoteJid;
     const isOwner = msg.key.fromMe || isOwnerJidSync(senderId);
-    // نفس تعريف "privileged" في أمر !memory: أدمن البوت أو أدمن الجروب —
-    // عشان أدوات الوكيل تطبّق نفس القاعدة اللي الأوامر بتطبّقها.
-    const isAdmin =
-      isOwner ||
-      isBotAdminUserSync(senderId) ||
-      (isGroup && isAdminInGroupSync(groupMetadata, senderId));
+    const isBotAdmin = isOwner || isBotAdminUserSync(senderId);
+    const isGroupAdmin = Boolean(isGroup && isAdminInGroupSync(groupMetadata, senderId));
 
     // Resolve sub-command. Aliases like !del arrive via ctx.invokedName, while
     // `!gemini del ...` arrives as args[0].
@@ -296,6 +340,9 @@ module.exports = {
         if (!geminiClients().genAI) {
           throw new Error("مفتاح Gemini API غير معرف — توليد الصور يعمل على Gemini فقط");
         }
+        await assertProviderRequestUrl(settings.get("gemini_base_url"), {
+          allowLoopback: true,
+        });
         const fullPrompt =
           imagePrompt && quotedMsg
             ? `Prompt: ${imagePrompt} ,using quote: ${quotedMsg}`
@@ -349,14 +396,34 @@ module.exports = {
         );
       }
       const buf = getBuffer(msg);
+      if (buf.length >= MAX_BUFFER_ENTRIES) {
+        return sendBotMessage(
+          sock,
+          chatId,
+          { text: `الـ context ممتلئ (حد أقصى ${MAX_BUFFER_ENTRIES} رسائل). ابعت \`!gemini send\` أو \`!gemini clear\`.` },
+          { replyTo: msg },
+        );
+      }
       buf.push(entry);
-      setBuffer(msg, buf);
+      if (!setBuffer(msg, buf)) {
+        return sendBotMessage(
+          sock,
+          chatId,
+          {
+            text:
+              "الـ context كبير جدًا أو عدد الـ contexts المفتوحة وصل للحد. " +
+              "ابعت `!gemini send` أو `!gemini clear` وحاول تاني.",
+          },
+          { replyTo: msg },
+        );
+      }
+      const stored = getBuffer(msg);
       return sendBotMessage(
         sock,
         chatId,
         {
           text:
-            `✅ اتضافت للـ context. (إجمالي الآن: *${buf.length}*)\n\n` +
+            `✅ اتضافت للـ context. (إجمالي الآن: *${stored.length}*)\n\n` +
             "كمل بـ `!gemini add ...` ، أو ابعت كله بـ `!gemini send`.",
         },
         { replyTo: msg },
@@ -542,11 +609,13 @@ module.exports = {
       senderId,
       senderName: userName,
       isOwner,
-      isAdmin,
+      isAdmin: isBotAdmin,
+      isGroupAdmin,
       isGroup,
       chatName: groupMetadata?.subject || null,
       mentionedJids: contextInfo?.mentionedJid || [],
       quotedParticipant: contextInfo?.participant || null,
+      userText: body || "",
     };
 
     // Mentions/replies are ids the model can't invent — hand them over so
@@ -609,3 +678,5 @@ module.exports = {
     }
   },
 };
+
+module.exports.clearAllContextBuffers = clearAllContextBuffers;

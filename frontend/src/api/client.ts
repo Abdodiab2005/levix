@@ -45,6 +45,43 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
   return data as T;
 }
 
+export interface ModelCapabilities {
+  textInput: boolean;
+  textOutput: boolean;
+  vision: boolean;
+  audioInput: boolean;
+  stt: boolean;
+  videoInput: boolean;
+  pdfInput: boolean;
+}
+
+export interface NormalizedModel {
+  id: string;
+  displayName: string;
+  provider: string;
+  recommended: boolean;
+  capabilities: ModelCapabilities;
+  capabilitySource: "provider" | "seed" | "unknown";
+  status?: string;
+  isRecommendedSeed?: boolean;
+}
+
+export interface FetchAiModelsResponse {
+  success: boolean;
+  live: boolean;
+  requiresApiKey?: boolean;
+  fallback?: boolean;
+  provider: string;
+  models: NormalizedModel[];
+  cached?: boolean;
+  message?: string;
+  error?: {
+    code: number;
+    type: string;
+    message: string;
+  };
+}
+
 export const api = {
   get: <T = any>(endpoint: string) => request<T>(endpoint, { method: "GET" }),
   post: <T = any>(endpoint: string, body?: any) =>
@@ -81,14 +118,16 @@ export const api = {
   getGroups: () => api.get<{ groups: any[] }>("/groups"),
   updateGroup: (jid: string, payload: any) =>
     api.patch(`/groups/${encodeURIComponent(jid)}`, payload),
-  getPersona: () => api.get<{ persona: string }>("/persona"),
-  updatePersona: (persona: string) => api.put("/persona", { persona }),
-  getMemoryFiles: () => api.get<{ files: string[] }>("/memory"),
+  getPersona: () =>
+    api.get<{ persona: { header?: string; body?: string } | string }>("/ai/persona"),
+  updatePersona: (persona: string) => api.put("/ai/persona", { body: persona }),
+  getMemoryFiles: () =>
+    api.get<{ files?: string[]; scopes?: Array<{ scope: string; label: string }> }>("/ai/memory"),
   getMemoryFile: (name: string) =>
-    api.get<{ content: string }>(`/memory/${encodeURIComponent(name)}`),
+    api.get<{ content: string }>(`/ai/memory/${encodeURIComponent(name)}`),
   updateMemoryFile: (name: string, content: string) =>
-    api.put(`/memory/${encodeURIComponent(name)}`, { content }),
-  deleteMemoryFile: (name: string) => api.delete(`/memory/${encodeURIComponent(name)}`),
+    api.put(`/ai/memory/${encodeURIComponent(name)}`, { content }),
+  deleteMemoryFile: (name: string) => api.delete(`/ai/memory/${encodeURIComponent(name)}`),
   getRecipients: () =>
     api.get<{
       recipients: Array<{
@@ -98,8 +137,12 @@ export const api = {
         phone?: string | null;
       }>;
     }>("/recipients"),
-  fetchAiModels: (payload?: { provider?: string; apiKey?: string; baseUrl?: string }) =>
-    api.post<{ models: string[]; success: boolean }>("/ai/models", payload || {}),
+  fetchAiModels: (payload?: {
+    provider?: string;
+    apiKey?: string;
+    baseUrl?: string;
+    refresh?: boolean;
+  }) => api.post<FetchAiModelsResponse>("/ai/models", payload || {}),
   changePassword: (current: string, next: string) =>
     api.post("/security/password", { current, next }),
   getLogs: () => api.get<{ logs: any[] }>("/logs"),

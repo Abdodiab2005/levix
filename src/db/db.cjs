@@ -181,6 +181,18 @@ const MIGRATIONS = [
       ALTER TABLE schedules ADD COLUMN last_error TEXT;
     `);
   },
+  // v3 — persisted group names/sizes so the panel still shows them after a
+  // restart, and so unlink can wipe the WhatsApp directory in one place.
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS group_directory (
+        group_id TEXT PRIMARY KEY,
+        subject TEXT,
+        participant_count INTEGER,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+  },
 ];
 
 function migrate(database, migrations = MIGRATIONS) {

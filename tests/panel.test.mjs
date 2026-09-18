@@ -110,6 +110,68 @@ try {
   );
   equal("a setting can be changed", res.status, 200);
 
+  section("model discovery API");
+
+  res = await http.json("/dashboard/api/ai/models", { provider: "openai" });
+  const openaiModels = await res.json();
+  equal("openai models without a key still answers", res.status, 200);
+  ok("openai discovery without a key is not live", openaiModels.live === false);
+  ok("openai discovery without a key asks for a key", openaiModels.requiresApiKey === true);
+  ok("openai seed models are returned as recommendations", openaiModels.models.length > 0);
+  ok(
+    "seed models are not labelled live",
+    openaiModels.models.every((m) => m.live !== true && m.isRecommendedSeed),
+  );
+
+  res = await http.json("/dashboard/api/ai/models", { provider: "anthropic" });
+  const anthropicModels = await res.json();
+  ok("anthropic discovery without a key is not live", anthropicModels.live === false);
+  ok("anthropic seed models exist", anthropicModels.models.length > 0);
+
+  res = await http.json("/dashboard/api/ai/models", { provider: "gemini" });
+  const geminiModels = await res.json();
+  ok("gemini discovery without a key is not live", geminiModels.live === false);
+  ok("gemini seed models exist", geminiModels.models.length > 0);
+  ok(
+    "gemini seeds exclude embeddings and live models",
+    geminiModels.models.every((m) => !/embed|live|vector|native-audio/i.test(m.id)),
+  );
+
+  res = await http.json(
+    "/dashboard/api/settings",
+    { key: "ai_provider", value: "openai" },
+    "PATCH",
+  );
+  equal("provider can switch to openai", res.status, 200);
+  res = await http.json(
+    "/dashboard/api/settings",
+    { key: "openai_model", value: "gpt-6-astra" },
+    "PATCH",
+  );
+  equal("switching to GPT-6 Astra succeeds", res.status, 200);
+
+  res = await http.json(
+    "/dashboard/api/settings",
+    { key: "ai_vision_enabled", value: true },
+    "PATCH",
+  );
+  equal("vision can be enabled on GPT-6 Astra", res.status, 200);
+  let described = (await res.json()).settings;
+  equal(
+    "GPT-6 Astra allows vision",
+    described.find((s) => s.key === "ai_vision_enabled")?.value,
+    true,
+  );
+
+  res = await http.json("/dashboard/api/settings", { key: "ai_stt_enabled", value: true }, "PATCH");
+  equal("STT toggle request is accepted", res.status, 200);
+  described = (await res.json()).settings;
+  equal(
+    "GPT-6 Astra rejects enabling STT",
+    described.find((s) => s.key === "ai_stt_enabled")?.value,
+    false,
+  );
+
   const schedulePayload = await (await http.call("/dashboard/api/schedules")).json();
   ok("schedules are listed", schedulePayload.success);
   equal("schedule times name their timezone", schedulePayload.timezone, "Africa/Cairo");

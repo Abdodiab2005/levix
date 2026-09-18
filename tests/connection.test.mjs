@@ -193,8 +193,10 @@ try {
     ok("the panel registers no io.on('connection')", !/io\.on\(/.test(appSource));
     ok("…and listens for nothing a browser sends", !/socket\.on\(/.test(appSource));
     ok(
-      "the only bridge is one-way: hub -> io.emit",
-      /attach\(\(event, payload\) => io\.emit\(event, payload\)\)/.test(panelSource),
+      "the only bridge is one-way: hub -> validated io.emit",
+      /attach\(\(event, payload\) => \{[\s\S]*disconnectInvalidPanelSockets\(\);[\s\S]*io\.emit\(event, payload\);[\s\S]*\}\);/.test(
+        panelSource,
+      ),
     );
 
     const sessionSource = readFileSync(join(ROOT, "src", "core", "session.js"), "utf8");

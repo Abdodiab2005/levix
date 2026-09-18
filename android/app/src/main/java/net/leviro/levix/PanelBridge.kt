@@ -9,10 +9,20 @@ import java.io.File
  * fetch / XHR / form POST from the panel page. WebView intercept cannot
  * read POST bodies; those go through this bridge onto the unix socket.
  */
-class PanelBridge(private val sock: File, private val bridgeJs: String = "") {
+class PanelBridge(
+    private val sock: File,
+    private val bridgeJs: String = "",
+    private val onPickContact: (() -> Unit)? = null,
+) {
+    @JavascriptInterface
+    fun pickContact() {
+        onPickContact?.invoke()
+    }
+
     @JavascriptInterface
     fun request(url: String, method: String, headersJson: String, bodyB64: String): String {
         return try {
+            require(PanelActivity.isLoopback(url)) { "panel bridge only accepts loopback HTTP URLs" }
             val headers = mutableMapOf<String, String>()
             val parsed = JSONObject(headersJson.ifBlank { "{}" })
             val keys = parsed.keys()

@@ -46,11 +46,11 @@ const silent = { info() {}, warn() {}, error() {}, debug() {}, trace() {} };
  * `harness.push(update)` delivers a connection.update to the CURRENT socket, so
  * a test can also aim one at an old socket on purpose.
  */
-function makeHarness({ paired = false, retryDelaysMs, clearAll } = {}) {
+function makeHarness({ paired = false, retryDelaysMs, clearAll, isLinked } = {}) {
   const sockets = [];
   const events = [];
 
-  const createSocket = async () => {
+  const createSocket = async (opts = {}) => {
     const sock = {
       index: sockets.length,
       user: null,
@@ -67,6 +67,7 @@ function makeHarness({ paired = false, retryDelaysMs, clearAll } = {}) {
         this.pairingPhone = phone;
         return "ABCD1234";
       },
+      pairingCodeOption: Boolean(opts.pairingCode),
       updates: null,
     };
     sockets.push(sock);
@@ -85,6 +86,10 @@ function makeHarness({ paired = false, retryDelaysMs, clearAll } = {}) {
     retryDelaysMs,
     log: silent,
     pairingCodeDelayMs: 0,
+    isLinked: isLinked ?? (() => paired),
+    clearDirectory: () => {
+      events.push({ event: "directory_cleared", payload: null });
+    },
   });
 
   return {
@@ -862,6 +867,8 @@ section("pairing code is chosen before the socket is created");
   await h.session.start({ method: "pairing", phone: "201012345678" });
   equal("a paired install still just connects", h.session.state, S.STARTING);
   equal("it never asked for a code", h.latest().pairingPhone, undefined);
+  equal("createSocket was not asked for a pairing code", h.latest().pairingCodeOption, false);
+  ok("getState.linked is true for a known session", h.session.getState().linked === true);
 }
 
 section("internet state: pausing when offline and restarting when online");

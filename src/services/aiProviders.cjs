@@ -31,6 +31,7 @@
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
 const { toolDeclarations, describeCall, runTool } = require("./aiTools.cjs");
+const { assertProviderBaseUrl, safeProviderFetch } = require("../utils/providerUrl.cjs");
 
 // Shown in place of a media part, on the wire and in the canonical history.
 const MEDIA_NOTE = "[تم إرفاق ملف/وسائط في الرسالة]";
@@ -95,7 +96,17 @@ const ADAPTERS = {
   },
 };
 
-const { BaseAIProvider, registerProvider, getProvider } = require("./aiRouter.cjs");
+const {
+  BaseAIProvider,
+  registerProvider,
+  getProvider,
+  detectModelCapabilities,
+} = require("./aiRouter.cjs");
+
+function visionAllowed(providerId) {
+  const id = providerId || settings.get("ai_provider");
+  return Boolean(settings.get("ai_vision_enabled") && detectModelCapabilities(id).supportsVision);
+}
 
 async function prepareInlineImageMedia(
   providerId,
@@ -104,7 +115,7 @@ async function prepareInlineImageMedia(
   mimeOverride,
   downloadContentFromMessage,
 ) {
-  const isVisionOn = settings.get("ai_vision_enabled");
+  const isVisionOn = visionAllowed(providerId);
   const mime = mimeOverride || mediaMessage?.mimetype || "ملف";
   if (isVisionOn && mime.startsWith("image/") && typeof downloadContentFromMessage === "function") {
     try {
@@ -288,7 +299,7 @@ function anthropicTools() {
 // ===========================================================================
 
 function partsText(parts) {
-  const isVisionOn = settings.get("ai_vision_enabled");
+  const isVisionOn = visionAllowed();
   return (parts || [])
     .map((part) => {
       if (part?.text) return part.text;
@@ -356,7 +367,7 @@ function historyToOpenAI(history) {
       return;
     }
 
-    const isVisionOn = settings.get("ai_vision_enabled");
+    const isVisionOn = visionAllowed("openai");
     const imageParts =
       isVisionOn && role === "user"
         ? turn.parts.filter(
@@ -441,7 +452,7 @@ function historyToAnthropic(history) {
           content: JSON.stringify(part.functionResponse.response ?? {}),
         });
       } else if (part?.fileData || part?.inlineData) {
-        const isVisionOn = settings.get("ai_vision_enabled");
+        const isVisionOn = visionAllowed("anthropic");
         if (
           isVisionOn &&
           part?.inlineData?.mimeType?.startsWith("image/") &&
@@ -538,12 +549,12 @@ async function callApi({ url, headers, body, label }) {
 
   let response;
   try {
-    response = await fetch(url, {
+    response = await safeProviderFetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...headers },
       body: JSON.stringify(body),
       signal: controller.signal,
-    });
+    }, { allowLoopback: true });
   } catch (err) {
     throw new Error(
       err?.name === "AbortError"
@@ -655,9 +666,9 @@ async function runProviderAgent(
 
   const stepBudget = maxSteps ?? settings.get("ai_max_tool_steps");
   const model = settings.get(adapter.modelSetting);
-  const baseUrl = String(settings.get(adapter.baseUrlSetting) || adapter.defaultBaseUrl).replace(
-    /\/+$/,
-    "",
+  const baseUrl = assertProviderBaseUrl(
+    settings.get(adapter.baseUrlSetting) || adapter.defaultBaseUrl,
+    { allowLoopback: true },
   );
 
   const turnText = partsText(parts);

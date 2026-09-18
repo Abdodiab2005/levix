@@ -30,8 +30,36 @@ const DEFAULT_FORWARD_TTL_DAYS = 30;
 
 let sweepTimer = null;
 
+function migrateSecretsAtRest() {
+  const vault = require("../config/vault.cjs");
+  const rows = q("SELECT key, value FROM baileys_auth").all();
+  for (const row of rows) {
+    if (row.value && !vault.isSealed(row.value)) {
+      q("UPDATE baileys_auth SET value = ? WHERE key = ?").run(vault.seal(row.value), row.key);
+    }
+  }
+
+  let secretKeys = [];
+  try {
+    secretKeys = require("../config/settings.cjs").SECRET_SETTING_KEYS || [];
+  } catch {
+    secretKeys = [];
+  }
+  for (const key of secretKeys) {
+    const stored = getBotSetting(`setting:${key}`, null);
+    if (typeof stored === "string" && stored && !vault.isSealed(stored)) {
+      saveBotSetting(`setting:${key}`, vault.seal(stored));
+    }
+  }
+}
+
 async function initStore() {
   sweepExpired();
+  try {
+    migrateSecretsAtRest();
+  } catch (err) {
+    logger.error({ err }, "[Store] Failed to encrypt existing secrets at rest");
+  }
   if (!sweepTimer) {
     sweepTimer = setInterval(sweepExpired, 6 * 60 * 60 * 1000);
     sweepTimer.unref();
@@ -132,6 +160,62 @@ function getAllGroupSettings() {
 
 function countGroups() {
   return q("SELECT COUNT(*) AS n FROM group_settings").get().n;
+}
+
+function upsertGroupDirectory(groupId, { subject = null, participantCount = null } = {}) {
+  if (!groupId) return;
+  const existing = q("SELECT subject, participant_count FROM group_directory WHERE group_id = ?").get(
+    groupId,
+  );
+  q(
+    `INSERT INTO group_directory (group_id, subject, participant_count, updated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(group_id) DO UPDATE SET
+       subject = COALESCE(excluded.subject, group_directory.subject),
+       participant_count = COALESCE(excluded.participant_count, group_directory.participant_count),
+       updated_at = excluded.updated_at`,
+  ).run(
+    groupId,
+    subject || existing?.subject || null,
+    participantCount == null ? (existing?.participant_count ?? null) : participantCount,
+    Date.now(),
+  );
+}
+
+function getGroupDirectory(groupId) {
+  return q("SELECT group_id, subject, participant_count, updated_at FROM group_directory WHERE group_id = ?").get(
+    groupId,
+  );
+}
+
+function getAllGroupDirectory() {
+  return q(
+    "SELECT group_id, subject, participant_count, updated_at FROM group_directory ORDER BY subject COLLATE NOCASE",
+  ).all();
+}
+
+function clearGroupDirectory() {
+  q("DELETE FROM group_directory").run();
+}
+
+function clearGroupSettings() {
+  q("DELETE FROM group_settings").run();
+}
+
+function clearUserMetadata() {
+  q("DELETE FROM user_metadata").run();
+}
+
+function clearLidMappings() {
+  q("DELETE FROM lid_mapping").run();
+}
+
+/** Drop WhatsApp-derived directory data after unlink / logged-out. */
+function clearWhatsAppDirectory() {
+  clearGroupDirectory();
+  clearGroupSettings();
+  clearUserMetadata();
+  clearLidMappings();
 }
 
 // ===================================================================
@@ -667,6 +751,12 @@ function deleteSchedule(id) {
   return changes > 0;
 }
 
+/** Keep old jobs visible after unlink, but never arm them for a new account. */
+function pauseAllSchedules() {
+  return q("UPDATE schedules SET status = 'paused' WHERE status IN ('active', 'pending')").run()
+    .changes;
+}
+
 function countSchedules() {
   return q("SELECT COUNT(*) AS n FROM schedules").get().n;
 }
@@ -711,14 +801,19 @@ function deleteAllChatHistories() {
 
 function authRead(key) {
   const row = q("SELECT value FROM baileys_auth WHERE key = ?").get(key);
-  return row ? row.value : null;
+  if (!row) return null;
+  const vault = require("../config/vault.cjs");
+  return vault.open(row.value);
 }
 
 function authWrite(key, serialized) {
+  const vault = require("../config/vault.cjs");
+  const payload = serialized == null ? "" : String(serialized);
+  const stored = vault.isSealed(payload) ? payload : vault.seal(payload);
   q(
     `INSERT INTO baileys_auth (key, value) VALUES (?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-  ).run(key, serialized);
+  ).run(key, stored);
 }
 
 function authRemove(key) {
@@ -731,6 +826,68 @@ function authClearAll() {
 
 function hasCredentials() {
   return !!q("SELECT 1 AS x FROM baileys_auth WHERE key = 'creds'").get();
+}
+
+/**
+ * A finished pairing — not merely that a creds row exists. Baileys writes
+ * creds on the first socket, and requestPairingCode fills me.id before the
+ * phone accepts, so only `registered !== false` plus a me.id is proof.
+ */
+function isPairedSession() {
+  const text = authRead("creds");
+  if (!text) return false;
+  try {
+    const creds = JSON.parse(text);
+    const meId = creds?.me?.id;
+    if (!meId) return false;
+    return creds.registered !== false;
+  } catch {
+    return false;
+  }
+}
+
+function resolveUserPhone(jid) {
+  if (!jid || String(jid).endsWith("@g.us")) return null;
+  const meta = getUserMetadata(jid);
+  if (meta?.phone) return String(meta.phone).replace(/\D/g, "");
+  const raw = String(jid);
+  const local = raw.split("@")[0].split(":")[0];
+  if (raw.includes("@lid") || !/^\d{8,15}$/.test(local)) {
+    for (const candidate of [raw, local, `${local}@lid`]) {
+      const pn = getPnForLid(candidate);
+      if (!pn) continue;
+      const digits = String(pn).split("@")[0].replace(/\D/g, "");
+      if (digits) return digits;
+    }
+  }
+  if (/^\d{8,15}$/.test(local)) return local;
+  return null;
+}
+
+function describePeer(jid) {
+  const id = String(jid || "");
+  if (!id) return { jid: "", kind: "unknown", label: "", phone: null, memberCount: null };
+  if (id.endsWith("@g.us")) {
+    const dir = getGroupDirectory(id);
+    const label = dir?.subject || null;
+    return {
+      jid: id,
+      kind: "group",
+      label: label || "Group",
+      phone: null,
+      memberCount: dir?.participant_count ?? null,
+    };
+  }
+  const phone = resolveUserPhone(id);
+  const meta = getUserMetadata(id);
+  const label = meta?.displayName || (phone ? `+${phone}` : id.split("@")[0]);
+  return {
+    jid: id,
+    kind: "contact",
+    label,
+    phone: phone ? `+${phone}` : null,
+    memberCount: null,
+  };
 }
 
 module.exports = {
@@ -748,6 +905,14 @@ module.exports = {
   saveGroupSettings,
   getAllGroupSettings,
   countGroups,
+  upsertGroupDirectory,
+  getGroupDirectory,
+  getAllGroupDirectory,
+  clearGroupDirectory,
+  clearGroupSettings,
+  clearUserMetadata,
+  clearLidMappings,
+  clearWhatsAppDirectory,
   // Warnings
   getUserWarnings,
   saveUserWarnings,
@@ -806,6 +971,7 @@ module.exports = {
   setScheduleStatus,
   setScheduleDelivery,
   deleteSchedule,
+  pauseAllSchedules,
   countSchedules,
   // AI history
   getChatHistory,
@@ -818,4 +984,8 @@ module.exports = {
   authRemove,
   authClearAll,
   hasCredentials,
+  isPairedSession,
+  resolveUserPhone,
+  describePeer,
+  migrateSecretsAtRest,
 };

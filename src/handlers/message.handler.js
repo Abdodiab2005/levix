@@ -9,6 +9,7 @@ import { handleCommand } from "./command.handler.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
+const { visibleText } = require("../utils/messageContent.cjs");
 
 // Envelopes that carry no user-visible content: message revokes and edits
 // (protocolMessage), reactions, poll votes, the undecrypted edit envelope, and
@@ -74,13 +75,7 @@ export async function handleIncomingMessage(sock, m) {
   // Parse message context. Crucially we ALSO consider media captions —
   // otherwise sending an image with caption "!gemini حلل ده" is invisible
   // to the command handler and the user sees nothing happen.
-  const body =
-    msg.message?.conversation ||
-    msg.message?.extendedTextMessage?.text ||
-    msg.message?.imageMessage?.caption ||
-    msg.message?.videoMessage?.caption ||
-    msg.message?.documentMessage?.caption ||
-    "";
+  const body = visibleText(msg.message);
   const isGroup = msg.key.remoteJid.endsWith("@g.us");
 
   // Update user metadata (last seen)
@@ -126,6 +121,10 @@ async function handleGroupModeration(sock, msg) {
   try {
     const { handleAntiLink } = require("../commands/group/antilink.cjs");
     const { handleMediaControl } = require("../commands/group/media.cjs");
+    const { handleForbiddenWords } = require("../commands/mod.cjs");
+
+    const wordActionTaken = await handleForbiddenWords(sock, msg);
+    if (wordActionTaken) return;
 
     const linkActionTaken = await handleAntiLink(sock, msg, {}, normalizeJid);
     if (linkActionTaken) return;
