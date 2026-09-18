@@ -61,7 +61,7 @@ export const api = {
     api.get<{ status?: any; session?: any; qr?: string | null; pairingCode?: string | null }>(
       "/bot/session",
     ),
-  startSession: (body?: { method?: "qr" | "phone"; phone?: string }) =>
+  startSession: (body?: { method?: "qr" | "pairing"; phone?: string }) =>
     api.post("/bot/session/start", body),
   reconnectSession: () => api.post("/bot/session/reconnect"),
   stopSession: () => api.post("/bot/session/stop"),
@@ -89,6 +89,17 @@ export const api = {
   updateMemoryFile: (name: string, content: string) =>
     api.put(`/memory/${encodeURIComponent(name)}`, { content }),
   deleteMemoryFile: (name: string) => api.delete(`/memory/${encodeURIComponent(name)}`),
+  getRecipients: () =>
+    api.get<{
+      recipients: Array<{
+        id: string;
+        name: string;
+        type: "group" | "contact";
+        phone?: string | null;
+      }>;
+    }>("/recipients"),
+  fetchAiModels: (payload?: { provider?: string; apiKey?: string; baseUrl?: string }) =>
+    api.post<{ models: string[]; success: boolean }>("/ai/models", payload || {}),
   changePassword: (current: string, next: string) =>
     api.post("/security/password", { current, next }),
   getLogs: () => api.get<{ logs: any[] }>("/logs"),

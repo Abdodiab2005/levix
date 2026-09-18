@@ -34,6 +34,7 @@ const {
 } = require("../utils/storage-hub.cjs");
 const { sendBotMessage, sendBotError } = require("../utils/sendBotMessage.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
+const { formatMarkdownForWhatsApp } = require("../utils/markdownParser.cjs");
 const {
   isOwnerJidSync,
   isBotAdminUserSync,
@@ -600,7 +601,8 @@ module.exports = {
       // Appended only when Gemini really grounded the answer on a search —
       // formatSources() returns "" for an answer the model gave from its own
       // knowledge, so there is never a Sources block with nothing behind it.
-      await status.finish(`${text}${formatSources(result.sources)}`);
+      const responseText = formatMarkdownForWhatsApp(`${text}${formatSources(result.sources)}`);
+      await status.finish(responseText);
     } catch (error) {
       logger.error({ err: error }, "Error in !gemini command");
       await status.fail(error, "حصلت مشكلة وأنا بكلم الذكاء الاصطناعي");

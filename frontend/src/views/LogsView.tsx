@@ -3,12 +3,13 @@
 import { ArrowDown, Filter, Terminal, Trash2 } from "lucide-react";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import type { Socket } from "socket.io-client";
 import { api } from "../api/client";
 import { useI18n } from "../context/I18nContext";
 import type { LogItem } from "../types";
 
 interface LogsViewProps {
-  socket: any;
+  socket: Socket | null;
 }
 
 export const LogsView: React.FC<LogsViewProps> = ({ socket }) => {

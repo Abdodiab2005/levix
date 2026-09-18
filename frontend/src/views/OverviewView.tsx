@@ -4,6 +4,7 @@ import {
   Activity,
   Bot,
   Calendar,
+  ChevronRight,
   Clock,
   Folder,
   MessageSquare,
@@ -14,19 +15,20 @@ import {
   Terminal,
   Users,
 } from "lucide-react";
-import type React from "react";
+import type { FC } from "react";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import type { ViewTab } from "../components/Sidebar";
 import { useToast } from "../components/Toasts";
 import { useI18n } from "../context/I18nContext";
 import type { DashboardStats, SessionStatus } from "../types";
 
 interface OverviewViewProps {
   status: SessionStatus | null;
-  onNavigate: (view: any) => void;
+  onNavigate: (view: ViewTab) => void;
 }
 
-export const OverviewView: React.FC<OverviewViewProps> = ({ status, onNavigate }) => {
+export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
   const { t, language } = useI18n();
   const { toast } = useToast();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -79,7 +81,13 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ status, onNavigate }
     }
   };
 
-  const quickNavCards = [
+  const quickNavCards: Array<{
+    id: ViewTab;
+    title: string;
+    desc: string;
+    icon: typeof Radio;
+    color: string;
+  }> = [
     {
       id: "connection",
       title: t("connection"),
@@ -141,11 +149,15 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ status, onNavigate }
               </span>
             </div>
             <p className="text-xs sm:text-sm text-muted truncate mt-1">
-              {isConnected
-                ? status?.user?.id
-                  ? <bdi dir="ltr">{`+${status.user.id.split("@")[0]}`}</bdi>
-                  : t("activeListening")
-                : t("pausedOrLinking")}
+              {isConnected ? (
+                status?.user?.id ? (
+                  <bdi dir="ltr">{`+${status.user.id.split("@")[0]}`}</bdi>
+                ) : (
+                  t("activeListening")
+                )
+              ) : (
+                t("pausedOrLinking")
+              )}
             </p>
           </div>
         </div>
@@ -249,7 +261,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ status, onNavigate }
               key={card.id}
               type="button"
               onClick={() => onNavigate(card.id)}
-              className="rounded-2xl border border-line bg-panel hover:bg-panel-hover p-3.5 sm:p-5 shadow-sm text-start flex flex-col justify-between gap-2.5 sm:gap-3 transition-all hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-brand-blue/50"
+              className="group rounded-2xl border border-line bg-panel hover:bg-panel-hover p-4 sm:p-5 shadow-sm text-start flex flex-col justify-between gap-3 sm:gap-4 transition-all hover:-translate-y-0.5 hover:border-brand-blue/30 focus-visible:ring-2 focus-visible:ring-brand-blue/50"
             >
               <div className="flex items-center justify-between w-full">
                 <div
@@ -257,11 +269,20 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ status, onNavigate }
                 >
                   <Icon size={18} />
                 </div>
-                <span className="text-xs font-bold text-brand-cyan hover:underline">&rarr;</span>
+                <div className="w-7 h-7 rounded-full bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-muted group-hover:text-brand-cyan group-hover:border-brand-cyan/40 group-hover:bg-brand-cyan/10 transition-all">
+                  <ChevronRight
+                    size={14}
+                    className="rtl:rotate-180 transition-transform group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5"
+                  />
+                </div>
               </div>
               <div>
-                <h3 className="text-xs sm:text-sm font-bold text-text-main">{card.title}</h3>
-                <p className="text-[11px] sm:text-xs text-muted mt-0.5 line-clamp-2">{card.desc}</p>
+                <h3 className="text-xs sm:text-sm font-bold text-text-main group-hover:text-brand-cyan transition-colors">
+                  {card.title}
+                </h3>
+                <p className="text-[11px] sm:text-xs text-muted mt-0.5 line-clamp-2 leading-relaxed">
+                  {card.desc}
+                </p>
               </div>
             </button>
           );

@@ -1,12 +1,13 @@
 // file: frontend/src/App.tsx
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "./api/client";
 import { Header } from "./components/Header";
 import { Sidebar, type ViewTab } from "./components/Sidebar";
 import { ToastProvider, useToast } from "./components/Toasts";
 import { I18nProvider, useI18n } from "./context/I18nContext";
 import { useSocket } from "./hooks/useSocket";
+import type { SessionState, SessionStatus } from "./types";
 import { AIAssistantView } from "./views/AIAssistantView";
 import { CommandsView } from "./views/CommandsView";
 import { ConnectionView } from "./views/ConnectionView";
@@ -45,30 +46,61 @@ const MainLayout: React.FC = () => {
     socket,
   } = useSocket((event, data) => {
     if (event === "status") {
-      toast(`Connection state: ${data?.state}`, "info");
+      const state = (data as { state?: string })?.state;
+      toast(`Connection state: ${state}`, "info");
     }
   });
 
-  const [initialStatus, setInitialStatus] = useState<any>(null);
+  const [initialStatus, setInitialStatus] = useState<Partial<SessionStatus> | null>(null);
 
-  useEffect(() => {
-    api
-      .getSession()
-      .then((res) => {
-        if (res?.session) {
-          setInitialStatus({
-            ...res.session,
-            qr: res.qr ?? null,
-            pairingCode: res.pairingCode ?? null,
-          });
-        } else if (res?.status) {
-          setInitialStatus(res.status);
-        }
-      })
-      .catch(() => {});
+  const refreshStatus = useCallback(async () => {
+    try {
+      const res = await api.getSession();
+      if (res?.session) {
+        setInitialStatus({
+          ...res.session,
+          qr: res.qr ?? null,
+          pairingCode: res.pairingCode ?? null,
+        });
+      } else if (res?.status) {
+        setInitialStatus(res.status);
+      }
+    } catch {
+      // ignore
+    }
   }, []);
 
-  const activeStatus = socketStatus || initialStatus;
+  useEffect(() => {
+    refreshStatus();
+  }, [refreshStatus]);
+
+  const activeStatus: SessionStatus | null =
+    initialStatus || socketStatus
+      ? {
+          state: ((socketStatus?.state || initialStatus?.state || "idle") as SessionState),
+          ...(initialStatus || {}),
+          ...(socketStatus || {}),
+        }
+      : null;
+
+  const isConnected = activeStatus?.connected === true || activeStatus?.state === "connected";
+
+  // Auto-poll in transitional states (starting, linking, waiting_for_qr without QR, reconnecting)
+  useEffect(() => {
+    const state = activeStatus?.state;
+    const isTransitional =
+      state === "starting" ||
+      state === "linking" ||
+      state === "reconnecting" ||
+      (state === "waiting_for_qr" && !activeStatus?.qr && !activeStatus?.pairingCode);
+
+    const intervalMs = isTransitional ? 2000 : 15000;
+    const timer = setInterval(() => {
+      refreshStatus();
+    }, intervalMs);
+
+    return () => clearInterval(timer);
+  }, [activeStatus?.state, activeStatus?.qr, activeStatus?.pairingCode, refreshStatus]);
 
   // Sync hash with view
   const handleSelectView = (view: ViewTab) => {
@@ -116,10 +148,18 @@ const MainLayout: React.FC = () => {
           {currentView === "overview" && (
             <OverviewView status={activeStatus} onNavigate={handleSelectView} />
           )}
-          {currentView === "connection" && <ConnectionView status={activeStatus} />}
+          {currentView === "connection" && (
+            <ConnectionView
+              status={activeStatus}
+              onRefresh={refreshStatus}
+              onStatusUpdate={(s) => setInitialStatus((prev) => ({ ...(prev || {}), ...s }))}
+            />
+          )}
           {currentView === "ai" && <AIAssistantView />}
           {currentView === "commands" && <CommandsView />}
-          {currentView === "schedules" && <SchedulesView />}
+          {currentView === "schedules" && (
+            <SchedulesView isConnected={isConnected} onNavigate={handleSelectView} />
+          )}
           {currentView === "groups" && <GroupsView />}
           {currentView === "settings" && <SettingsView />}
           {currentView === "logs" && <LogsView socket={socket} />}

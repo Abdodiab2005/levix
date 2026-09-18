@@ -13,10 +13,8 @@
     "jsx": "react-jsx",
     "strict": true,
     "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true
+    "allowSyntheticDefaultImports": true
   },
-  "include": ["src"]
+  "include": ["frontend/src/**/*"],
+  "exclude": ["node_modules", "frontend/node_modules", "data", "android", "build"]
 }

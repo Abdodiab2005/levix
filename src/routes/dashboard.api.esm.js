@@ -45,8 +45,14 @@ const memory = require("../utils/memory.cjs");
 const secrets = require("../config/secrets.cjs");
 const { DATA_DIR } = require("../config/paths.cjs");
 const { PERSONA_FILE, activeProviderKeySetting } = require("../services/aiAgent.cjs");
-const { deleteScheduledJob, retryScheduledJob } = require("../../scheduler.cjs");
+const {
+  deleteScheduledJob,
+  retryScheduledJob,
+  scheduleNewJob,
+  saveScheduledJob,
+} = require("../../scheduler.cjs");
 const { describeScheduledJob } = require("../utils/recurrence.cjs");
+const cron = require("node-cron");
 
 const router = Router();
 
@@ -334,6 +340,105 @@ router.put("/ai/persona", (req, res) => {
     fail(res, error, "Error writing persona");
   }
 });
+
+router.post(
+  "/ai/models",
+  asyncRoute(async (req, res) => {
+    const { provider = settings.get("ai_provider") || "gemini", apiKey, baseUrl } = req.body || {};
+
+    try {
+      if (provider === "gemini") {
+        const key = apiKey || settings.get("gemini_api_key");
+        if (!key) {
+          return res.json({
+            success: true,
+            models: [
+              "gemini-2.5-flash",
+              "gemini-2.5-pro",
+              "gemini-2.0-flash",
+              "gemini-1.5-flash",
+              "gemini-1.5-pro",
+            ],
+          });
+        }
+        const resp = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`,
+        );
+        if (!resp.ok) {
+          throw new Error(`Gemini API returned ${resp.status}: ${resp.statusText}`);
+        }
+        const data = await resp.json();
+        const models = (data.models || [])
+          .map((m) => m.name.replace(/^models\//, ""))
+          .filter((id) => id.startsWith("gemini-"));
+        return res.json({
+          success: true,
+          models: models.length
+            ? models
+            : ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"],
+        });
+      }
+
+      if (provider === "openai") {
+        const url = (
+          baseUrl ||
+          settings.get("openai_base_url") ||
+          "https://api.openai.com/v1"
+        ).replace(/\/+$/, "");
+        const key = apiKey || settings.get("openai_api_key");
+        const headers = {};
+        if (key) headers["Authorization"] = `Bearer ${key}`;
+
+        const resp = await fetch(`${url}/models`, { headers });
+        if (!resp.ok) {
+          throw new Error(`OpenAI server returned ${resp.status}: ${resp.statusText}`);
+        }
+        const data = await resp.json();
+        const models = (data.data || []).map((m) => m.id);
+        return res.json({ success: true, models });
+      }
+
+      if (provider === "anthropic") {
+        const key = apiKey || settings.get("anthropic_api_key");
+        const url = (
+          baseUrl ||
+          settings.get("anthropic_base_url") ||
+          "https://api.anthropic.com"
+        ).replace(/\/+$/, "");
+        if (key) {
+          try {
+            const resp = await fetch(`${url}/v1/models`, {
+              headers: {
+                "x-api-key": key,
+                "anthropic-version": "2023-06-01",
+              },
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              const models = (data.data || []).map((m) => m.id);
+              if (models.length) return res.json({ success: true, models });
+            }
+          } catch {
+            // fallback
+          }
+        }
+        return res.json({
+          success: true,
+          models: [
+            "claude-3-7-sonnet-20250219",
+            "claude-3-5-sonnet-20241022",
+            "claude-3-5-haiku-20241022",
+            "claude-3-opus-20240229",
+          ],
+        });
+      }
+
+      return res.json({ success: true, models: [] });
+    } catch (error) {
+      fail(res, error, "Failed to fetch models from provider");
+    }
+  }),
+);
 
 // Memory files: `global`, or one chat. The scope is turned into a path by
 // memory.cjs and then re-checked against the memory root, so a crafted scope
@@ -722,6 +827,108 @@ function scheduleView(job) {
 function scheduleViews() {
   return getSchedules().map(scheduleView);
 }
+
+router.get("/recipients", (req, res) => {
+  try {
+    const recipients = [];
+    const seen = new Set();
+
+    // 1. Groups from stored settings
+    const groupRows = getAllGroupSettings() || [];
+    for (const g of groupRows) {
+      if (!seen.has(g.group_id)) {
+        seen.add(g.group_id);
+        const name = g.settings?.subject || g.group_id.split("@")[0];
+        recipients.push({
+          id: g.group_id,
+          name,
+          type: "group",
+        });
+      }
+    }
+
+    // Also check groupMetadataCache if available
+    if (groupMetadataCache) {
+      for (const [gid, meta] of groupMetadataCache.entries()) {
+        if (!seen.has(gid)) {
+          seen.add(gid);
+          recipients.push({
+            id: gid,
+            name: meta?.subject || gid.split("@")[0],
+            type: "group",
+          });
+        }
+      }
+    }
+
+    // 2. Recent contacts from user_metadata
+    const users = getAllUsers() || [];
+    users.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+    for (const u of users.slice(0, 50)) {
+      const jid = u.user_jid || u.jid;
+      if (jid && !seen.has(jid)) {
+        seen.add(jid);
+        const phone = u.phone_number || (jid.includes("@") ? jid.split("@")[0] : jid);
+        recipients.push({
+          id: jid,
+          name: u.push_name || (phone ? `+${phone}` : jid),
+          phone: phone ? `+${phone}` : null,
+          type: "contact",
+        });
+      }
+    }
+
+    res.json({ success: true, recipients });
+  } catch (error) {
+    fail(res, error, "Error fetching recipients");
+  }
+});
+
+router.post(
+  "/schedules",
+  asyncRoute(async (req, res) => {
+    const existing = getSchedules();
+    if (existing.length >= 3) {
+      return badRequest(res, "Maximum 3 scheduled messages reached");
+    }
+
+    const { targetJid, message, type, cronString, scheduledTime } = req.body || {};
+    if (!targetJid || !message) {
+      return badRequest(res, "Recipient and message are required");
+    }
+
+    const id = Date.now().toString();
+    const job = {
+      id,
+      type: type === "once" ? "once" : "recurring",
+      targetJid: String(targetJid).trim(),
+      message: String(message).trim(),
+      creatorJid: "dashboard@levix",
+      status: "active",
+    };
+
+    if (job.type === "recurring") {
+      if (!cronString || !cron.validate(cronString)) {
+        return badRequest(res, "Invalid cron expression");
+      }
+      job.cron = cronString;
+    } else {
+      const timeMs = Number(scheduledTime);
+      if (!timeMs || timeMs <= Date.now()) {
+        return badRequest(res, "Scheduled time must be in the future");
+      }
+      job.date = new Date(timeMs).toISOString();
+    }
+
+    saveScheduledJob(job);
+    const sock = currentSocket();
+    if (sock) {
+      scheduleNewJob(sock, job);
+    }
+
+    res.json({ success: true, schedule: scheduleView(job) });
+  }),
+);
 
 router.get("/schedules", (req, res) => {
   try {

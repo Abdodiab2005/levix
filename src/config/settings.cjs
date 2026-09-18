@@ -284,6 +284,14 @@ const SETTINGS = [
     label: "OpenWeatherMap API key",
     hint: "Needed by !weather.",
   },
+  {
+    key: "youtube_api_key",
+    type: "secret",
+    default: "",
+    group: "integrations",
+    label: "YouTube Data API key",
+    hint: "For YouTube video and search tools.",
+  },
 
   // --- Media -------------------------------------------------------------
   {

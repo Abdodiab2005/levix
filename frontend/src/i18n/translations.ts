@@ -223,7 +223,41 @@ export const translations = {
     networkError: "تعذر الاتصال بالخادم.",
     loading: "جاري التحميل...",
     aiAssistantDesc: "وكيل ذكي متعدد الأدوات مع ذاكرة طويلة الأمد",
-    settingsSub: "البادئة، المنافذ، فترات التأخير، والأمان",
+    settingsSub: "البادئة، التأخير، الخدمات، والأمان",
+
+    // Aliases
+    editAliases: "تعديل الأسماء المستعارة",
+    aliasesFor: "الأسماء المستعارة لـ",
+    addAlias: "إضافة اسم مستعار",
+    newAliasPlaceholder: "اكتب اسماً جديداً...",
+    noAliases: "لا توجد أسماء مستعارة",
+
+    // Recipient selector & Schedules
+    selectRecipient: "اختر المحادثة المستهدفة",
+    searchRecipients: "ابحث بالاسم أو رقم الهاتف...",
+    recipients: "المستلمون",
+    chooseChat: "اختر جهة اتصال أو مجموعة...",
+    noRecipientsFound: "لم يتم العثور على محادثات",
+    maxSchedulesReached: "تم بلوغ الحد الأقصى (3 رسائل مجدولة)",
+    limitReached: "الحد الأقصى مكتمل",
+
+    // Integrations
+    tabIntegrations: "الربط والخدمات",
+    integrationsDesc: "مفاتيح واجهات البرمجة (API) للخدمات الخارجية المرتبطة بالبوت",
+    youtubeApiKey: "مفتاح YouTube Data API (اختياري)",
+
+    // Model fetching
+    fetchModels: "جلب النماذج المتاحة",
+    fetchingModels: "جاري جلب النماذج...",
+    selectModel: "اختر نموذجاً من القائمة...",
+    availableModels: "النماذج المتاحة من المزود",
+    customModel: "أو اكتب اسم نموذج مخصص",
+
+    // Cleaned connection view
+    sessionStatus: "حالة الجلسة",
+    sessionActive: "الجلسة متصلة وتستقبل الرسائل",
+    sessionOffline: "الجلسة غير متصلة حالياً",
+    connectedNumber: "الرقم المرتبط",
   },
   en: {
     // Navigation
@@ -448,6 +482,40 @@ export const translations = {
     networkError: "Network error connecting to server.",
     loading: "Loading...",
     aiAssistantDesc: "Autonomous tool-calling AI agent with long-term memory",
-    settingsSub: "Prefix, ports, delays, security & storage",
+    settingsSub: "Prefix, delays, integrations, & security",
+
+    // Aliases
+    editAliases: "Edit Aliases",
+    aliasesFor: "Aliases for",
+    addAlias: "Add Alias",
+    newAliasPlaceholder: "Type new alias...",
+    noAliases: "No custom aliases",
+
+    // Recipient selector & Schedules
+    selectRecipient: "Select Target Chat",
+    searchRecipients: "Search by name or phone...",
+    recipients: "Recipients",
+    chooseChat: "Choose a contact or group...",
+    noRecipientsFound: "No matching chats found",
+    maxSchedulesReached: "Maximum limit reached (3 scheduled messages)",
+    limitReached: "Limit Reached",
+
+    // Integrations
+    tabIntegrations: "Integrations",
+    integrationsDesc: "API keys for external services connected to the bot",
+    youtubeApiKey: "YouTube Data API Key (Optional)",
+
+    // Model fetching
+    fetchModels: "Fetch Available Models",
+    fetchingModels: "Fetching models...",
+    selectModel: "Select a model from list...",
+    availableModels: "Models Available from Provider",
+    customModel: "Or type a custom model name",
+
+    // Cleaned connection view
+    sessionStatus: "Session Status",
+    sessionActive: "Session active and receiving messages",
+    sessionOffline: "Session currently offline",
+    connectedNumber: "Linked Phone",
   },
 };

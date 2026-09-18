@@ -22,11 +22,20 @@ export type SessionState =
 
 export interface SessionStatus {
   state: SessionState;
+  status?: string;
   qr?: string | null;
   pairingCode?: string | null;
   retryInSeconds?: number | null;
   error?: string | null;
   proxyChanged?: boolean;
+  canStart?: boolean;
+  canStop?: boolean;
+  canUnlink?: boolean;
+  connected?: boolean;
+  isOnline?: boolean;
+  terminal?: boolean;
+  hasQr?: boolean;
+  hasPairingCode?: boolean;
   user?: {
     id: string;
     name?: string;
