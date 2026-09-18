@@ -940,4 +940,40 @@ router.post("/bot/restart", (req, res) => {
   setTimeout(() => process.kill(process.pid, "SIGTERM"), 500).unref();
 });
 
+// --- Aliases for frontend API client compatibility -------------------------
+router.get("/session", (req, res) => {
+  res.json({
+    success: true,
+    status: sessionState(),
+    session: sessionState(),
+    qr: session?.qr ?? null,
+    pairingCode: session?.pairingCode ?? null,
+  });
+});
+
+router.post("/session/start", (req, res, next) => {
+  req.url = "/bot/session/start";
+  router.handle(req, res, next);
+});
+
+router.post("/session/reconnect", (req, res, next) => {
+  req.url = "/bot/session/reconnect";
+  router.handle(req, res, next);
+});
+
+router.post("/session/stop", (req, res, next) => {
+  req.url = "/bot/session/stop";
+  router.handle(req, res, next);
+});
+
+router.post("/session/unlink", (req, res, next) => {
+  req.url = "/bot/logout";
+  router.handle(req, res, next);
+});
+
+router.post("/session/restart", (req, res, next) => {
+  req.url = "/bot/restart";
+  router.handle(req, res, next);
+});
+
 export default router;

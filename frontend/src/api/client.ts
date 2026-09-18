@@ -57,11 +57,16 @@ export const api = {
 
   // Helpers
   getStats: () => api.get<{ stats: any; success: boolean }>("/stats"),
-  getSession: () => api.get<{ status: any }>("/session"),
-  startSession: () => api.post("/session/start"),
-  stopSession: () => api.post("/session/stop"),
-  unlinkSession: () => api.post("/session/unlink"),
-  restartBot: () => api.post("/session/restart"),
+  getSession: () =>
+    api.get<{ status?: any; session?: any; qr?: string | null; pairingCode?: string | null }>(
+      "/bot/session",
+    ),
+  startSession: (body?: { method?: "qr" | "phone"; phone?: string }) =>
+    api.post("/bot/session/start", body),
+  reconnectSession: () => api.post("/bot/session/reconnect"),
+  stopSession: () => api.post("/bot/session/stop"),
+  unlinkSession: () => api.post("/bot/logout"),
+  restartBot: () => api.post("/bot/restart"),
   getSettings: () => api.get<{ settings: any[]; prefix?: string; success: boolean }>("/settings"),
   updateSetting: (key: string, value: any) => api.patch("/settings", { key, value }),
   updatePrefix: (prefix: string) => api.patch("/settings", { key: "prefix", value: prefix }),

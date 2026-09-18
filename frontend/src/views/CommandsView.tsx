@@ -160,7 +160,7 @@ export const CommandsView: React.FC = () => {
       </div>
 
       <div className="rounded-2xl border border-line bg-panel overflow-hidden shadow-sm overflow-x-auto">
-        <table className="w-full text-start border-collapse text-sm">
+        <table className="w-full min-w-[720px] text-start border-collapse text-sm">
           <thead>
             <tr className="bg-panel-raised border-b border-line text-xs font-bold text-muted uppercase tracking-wider">
               <th className="px-4 py-3.5 text-start">{t("thCommand")}</th>

@@ -37,6 +37,11 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu, title, statu
   }, [langMenuOpen]);
 
   const [theme, setTheme] = React.useState<"dark" | "light">(() => {
+    const saved = localStorage.getItem("levix_theme") as "dark" | "light" | null;
+    if (saved) {
+      document.documentElement.setAttribute("data-theme", saved);
+      return saved;
+    }
     return (document.documentElement.getAttribute("data-theme") as "dark" | "light") || "dark";
   });
 

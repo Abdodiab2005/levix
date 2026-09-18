@@ -46,6 +46,18 @@ export const translations = {
     copy: "نسخ",
     copied: "تم النسخ!",
 
+    // Diagnostics & Health Cards
+    clientIdentity: "هوية العميل",
+    noPhonePaired: "لم يتم ربط أي هاتف بعد",
+    linkedAs: "مرتبط كـ",
+    datastoreHealth: "حالة قاعدة البيانات",
+    datastoreHealthy: "بيانات الاعتماد ومفاتيح الجلسة ومطابقات LID سليمة ومستقرة.",
+    reconnectPolicy: "سياسة إعادة الاتصال",
+    reconnectPolicyDesc: "تراجع خطي تدريجي (5ث، 10ث، 15ث، 20ث، 25ث) مع محاولات محدودة.",
+    maxAttemptsAutoPause: "الحد الأقصى: 5 محاولات · إيقاف تلقائي دون إنترنت",
+    platformWeb: "المنصة: واتساب ويب (v7 Multi-Device)",
+    databaseNodeSqlite: "قاعدة البيانات: node:sqlite (تزامني)",
+
     // Overview
     totalGroups: "إجمالي المجموعات",
     totalUsers: "المستخدمين المسجلين",
@@ -255,6 +267,18 @@ export const translations = {
     close: "Close",
     copy: "Copy",
     copied: "Copied!",
+
+    // Diagnostics & Health Cards
+    clientIdentity: "Client Identity",
+    noPhonePaired: "No phone paired yet",
+    linkedAs: "Linked as",
+    datastoreHealth: "Datastore Health",
+    datastoreHealthy: "SQLite credentials, auth keys, and LID mappings are healthy.",
+    reconnectPolicy: "Reconnect Policy",
+    reconnectPolicyDesc: "Staged linear backoff (5s, 10s, 15s, 20s, 25s) with bounded retries.",
+    maxAttemptsAutoPause: "Max attempts: 5 • Auto-pause offline",
+    platformWeb: "Platform: WhatsApp Web (v7 Multi-Device)",
+    databaseNodeSqlite: "Database: node:sqlite (Synchronous)",
 
     // Overview
     totalGroups: "Total Groups",

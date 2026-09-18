@@ -55,7 +55,15 @@ const MainLayout: React.FC = () => {
     api
       .getSession()
       .then((res) => {
-        if (res?.status) setInitialStatus(res.status);
+        if (res?.session) {
+          setInitialStatus({
+            ...res.session,
+            qr: res.qr ?? null,
+            pairingCode: res.pairingCode ?? null,
+          });
+        } else if (res?.status) {
+          setInitialStatus(res.status);
+        }
       })
       .catch(() => {});
   }, []);

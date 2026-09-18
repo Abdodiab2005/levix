@@ -77,7 +77,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
       <aside
         className={cn(
-          "fixed top-0 bottom-0 start-0 z-50 w-64 md:static md:z-auto bg-panel border-e border-line flex flex-col transition-transform duration-200 ease-out",
+          "fixed top-0 bottom-0 start-0 z-50 w-72 md:w-64 md:static md:z-auto bg-panel border-e border-line flex flex-col transition-transform duration-200 ease-out",
           isOpenMobile ? "translate-x-0" : "max-md:-translate-x-full rtl:max-md:translate-x-full",
         )}
         aria-label="Main Navigation"
@@ -98,7 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={onCloseMobile}
-            className="inline-flex md:hidden items-center justify-center w-10 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main transition-colors"
+            className="inline-flex md:hidden items-center justify-center w-10 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main transition-colors shrink-0"
             aria-label="Close menu"
           >
             <X size={18} />

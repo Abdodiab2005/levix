@@ -67,7 +67,7 @@ export const GroupsView: React.FC = () => {
 
       {/* Table Container */}
       <div className="rounded-2xl border border-line bg-panel overflow-hidden shadow-sm overflow-x-auto">
-        <table className="w-full text-start border-collapse text-sm">
+        <table className="w-full min-w-[640px] text-start border-collapse text-sm">
           <thead>
             <tr className="bg-panel-raised border-b border-line text-xs font-bold text-muted uppercase tracking-wider">
               <th className="px-5 py-4 text-start">{t("thGroupName")}</th>

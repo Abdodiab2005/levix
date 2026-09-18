@@ -159,7 +159,7 @@ export const ConnectionView: React.FC<ConnectionViewProps> = ({ status }) => {
 
           <button
             type="button"
-            onClick={() => handleAction(api.startSession, t("reconnecting"))}
+            onClick={() => handleAction(api.reconnectSession, t("reconnecting"))}
             disabled={acting}
             className="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
           >
@@ -224,42 +224,45 @@ export const ConnectionView: React.FC<ConnectionViewProps> = ({ status }) => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="rounded-2xl border border-line bg-panel p-5 shadow-sm space-y-3">
           <div className="flex items-center gap-3 text-text-main">
-            <Smartphone size={20} className="text-brand-cyan" />
-            <h3 className="text-sm font-bold">Client Identity</h3>
+            <Smartphone size={20} className="text-brand-cyan shrink-0" />
+            <h3 className="text-sm font-bold">{t("clientIdentity")}</h3>
           </div>
           <p className="text-xs text-muted">
-            {status?.user?.id
-              ? `Linked as +${status.user.id.split("@")[0]}`
-              : "No phone paired yet"}
+            {status?.user?.id ? (
+              <span>
+                {t("linkedAs")}{" "}
+                <bdi dir="ltr" className="font-mono font-bold text-text-main">
+                  {`+${status.user.id.split("@")[0]}`}
+                </bdi>
+              </span>
+            ) : (
+              t("noPhonePaired")
+            )}
           </p>
-          <div className="pt-2 border-t border-line text-[11px] text-faint font-mono">
-            Platform: WhatsApp Web (v7 Multi-Device)
+          <div className="pt-2 border-t border-line text-[11px] text-faint font-mono truncate">
+            {t("platformWeb")}
           </div>
         </div>
 
         <div className="rounded-2xl border border-line bg-panel p-5 shadow-sm space-y-3">
           <div className="flex items-center gap-3 text-text-main">
-            <Database size={20} className="text-ok" />
-            <h3 className="text-sm font-bold">Datastore Health</h3>
+            <Database size={20} className="text-ok shrink-0" />
+            <h3 className="text-sm font-bold">{t("datastoreHealth")}</h3>
           </div>
-          <p className="text-xs text-muted">
-            SQLite credentials, auth keys, and LID mappings are healthy.
-          </p>
-          <div className="pt-2 border-t border-line text-[11px] text-faint font-mono">
-            Database: node:sqlite (Synchronous)
+          <p className="text-xs text-muted leading-relaxed">{t("datastoreHealthy")}</p>
+          <div className="pt-2 border-t border-line text-[11px] text-faint font-mono truncate">
+            {t("databaseNodeSqlite")}
           </div>
         </div>
 
         <div className="rounded-2xl border border-line bg-panel p-5 shadow-sm space-y-3">
           <div className="flex items-center gap-3 text-text-main">
-            <Shield size={20} className="text-brand-blue" />
-            <h3 className="text-sm font-bold">Reconnect Policy</h3>
+            <Shield size={20} className="text-brand-blue shrink-0" />
+            <h3 className="text-sm font-bold">{t("reconnectPolicy")}</h3>
           </div>
-          <p className="text-xs text-muted">
-            Staged linear backoff (5s, 10s, 15s, 20s, 25s) with bounded retries.
-          </p>
-          <div className="pt-2 border-t border-line text-[11px] text-faint font-mono">
-            Max attempts: 5 &bull; Auto-pause offline
+          <p className="text-xs text-muted leading-relaxed">{t("reconnectPolicyDesc")}</p>
+          <div className="pt-2 border-t border-line text-[11px] text-faint font-mono truncate">
+            {t("maxAttemptsAutoPause")}
           </div>
         </div>
       </div>

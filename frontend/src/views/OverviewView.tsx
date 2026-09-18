@@ -27,7 +27,7 @@ interface OverviewViewProps {
 }
 
 export const OverviewView: React.FC<OverviewViewProps> = ({ status, onNavigate }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const { toast } = useToast();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -143,7 +143,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ status, onNavigate }
             <p className="text-xs sm:text-sm text-muted truncate mt-1">
               {isConnected
                 ? status?.user?.id
-                  ? `+${status.user.id.split("@")[0]}`
+                  ? <bdi dir="ltr">{`+${status.user.id.split("@")[0]}`}</bdi>
                   : t("activeListening")
                 : t("pausedOrLinking")}
             </p>
@@ -182,66 +182,66 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ status, onNavigate }
       </div>
 
       {/* Responsive Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-        <div className="rounded-2xl border border-line bg-panel p-5 shadow-sm space-y-3 hover:border-brand-blue/40 transition-colors">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-muted uppercase tracking-wider">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
+        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-5 shadow-sm space-y-2 sm:space-y-3 hover:border-brand-blue/40 transition-colors">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] sm:text-xs font-bold text-muted uppercase tracking-wider truncate">
               {t("totalGroups")}
             </span>
-            <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-brand-blue flex items-center justify-center shrink-0 border border-blue-500/20">
-              <Users size={20} />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-blue-500/10 text-brand-blue flex items-center justify-center shrink-0 border border-blue-500/20">
+              <Users size={18} />
             </div>
           </div>
-          <div className="text-3xl font-extrabold text-text-main font-mono tracking-tight">
+          <div className="text-2xl sm:text-3xl font-extrabold text-text-main font-mono tracking-tight">
             {loading ? "—" : (stats?.totalGroups ?? 0)}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-line bg-panel p-5 shadow-sm space-y-3 hover:border-brand-cyan/40 transition-colors">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-muted uppercase tracking-wider">
+        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-5 shadow-sm space-y-2 sm:space-y-3 hover:border-brand-cyan/40 transition-colors">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] sm:text-xs font-bold text-muted uppercase tracking-wider truncate">
               {t("commandCount")}
             </span>
-            <div className="w-10 h-10 rounded-xl bg-brand-cyan/10 text-brand-cyan flex items-center justify-center shrink-0 border border-brand-cyan/20">
-              <Terminal size={20} />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-brand-cyan/10 text-brand-cyan flex items-center justify-center shrink-0 border border-brand-cyan/20">
+              <Terminal size={18} />
             </div>
           </div>
-          <div className="text-3xl font-extrabold text-text-main font-mono tracking-tight">
+          <div className="text-2xl sm:text-3xl font-extrabold text-text-main font-mono tracking-tight">
             {loading ? "—" : (stats?.commandCount ?? 0)}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-line bg-panel p-5 shadow-sm space-y-3 hover:border-ok/40 transition-colors">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-muted uppercase tracking-wider">
+        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-5 shadow-sm space-y-2 sm:space-y-3 hover:border-ok/40 transition-colors">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] sm:text-xs font-bold text-muted uppercase tracking-wider truncate">
               {t("uptime")}
             </span>
-            <div className="w-10 h-10 rounded-xl bg-ok/10 text-ok flex items-center justify-center shrink-0 border border-ok/20">
-              <Clock size={20} />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-ok/10 text-ok flex items-center justify-center shrink-0 border border-ok/20">
+              <Clock size={18} />
             </div>
           </div>
-          <div className="text-3xl font-extrabold text-text-main font-mono tracking-tight">
+          <div className="text-2xl sm:text-3xl font-extrabold text-text-main font-mono tracking-tight">
             {loading ? "—" : formatUptime(stats?.uptime || 0)}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-line bg-panel p-5 shadow-sm space-y-3 hover:border-purple-500/40 transition-colors">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-muted uppercase tracking-wider">
+        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-5 shadow-sm space-y-2 sm:space-y-3 hover:border-purple-500/40 transition-colors">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] sm:text-xs font-bold text-muted uppercase tracking-wider truncate">
               {t("activeSchedules")}
             </span>
-            <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20">
-              <MessageSquare size={20} />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20">
+              <MessageSquare size={18} />
             </div>
           </div>
-          <div className="text-3xl font-extrabold text-text-main font-mono tracking-tight">
+          <div className="text-2xl sm:text-3xl font-extrabold text-text-main font-mono tracking-tight">
             {loading ? "—" : (stats?.activeSchedules ?? 0)}
           </div>
         </div>
       </div>
 
       {/* Quick Access Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {quickNavCards.map((card) => {
           const Icon = card.icon;
           return (
@@ -249,19 +249,19 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ status, onNavigate }
               key={card.id}
               type="button"
               onClick={() => onNavigate(card.id)}
-              className="rounded-2xl border border-line bg-panel hover:bg-panel-hover p-4 sm:p-5 shadow-sm text-start flex flex-col justify-between gap-3 transition-all hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-brand-blue/50"
+              className="rounded-2xl border border-line bg-panel hover:bg-panel-hover p-3.5 sm:p-5 shadow-sm text-start flex flex-col justify-between gap-2.5 sm:gap-3 transition-all hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-brand-blue/50"
             >
               <div className="flex items-center justify-between w-full">
                 <div
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${card.color}`}
+                  className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 border ${card.color}`}
                 >
-                  <Icon size={20} />
+                  <Icon size={18} />
                 </div>
                 <span className="text-xs font-bold text-brand-cyan hover:underline">&rarr;</span>
               </div>
               <div>
-                <h3 className="text-sm font-bold text-text-main">{card.title}</h3>
-                <p className="text-xs text-muted mt-0.5 line-clamp-2">{card.desc}</p>
+                <h3 className="text-xs sm:text-sm font-bold text-text-main">{card.title}</h3>
+                <p className="text-[11px] sm:text-xs text-muted mt-0.5 line-clamp-2">{card.desc}</p>
               </div>
             </button>
           );
@@ -273,7 +273,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ status, onNavigate }
         <Folder size={20} className="text-faint shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="text-xs font-semibold text-muted">{t("dataDir")}</div>
-          <div className="text-xs font-mono text-text-main truncate text-start">
+          <div className="text-xs font-mono text-text-main truncate text-start" dir="ltr">
             {stats?.dataDir || "..."}
           </div>
         </div>
