@@ -4,7 +4,6 @@ import {
   Bot,
   Calendar,
   FileText,
-  Globe,
   LayoutGrid,
   Radio,
   Settings,
@@ -41,7 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile,
 }) => {
-  const { t, language, setLanguage } = useI18n();
+  const { t } = useI18n();
 
   const brand = (window as any).__BRAND__ || {
     name: "Levix",
@@ -107,26 +106,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-          {navItems.map((item, idx) => {
+          {navItems.map((item) => {
             if (item.labelCategory) {
               return (
                 <div
-                  key={`cat-${item.labelCategory}-${idx}`}
+                  key={`cat-${item.labelCategory}`}
                   className="px-3 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wider text-faint"
                 >
                   {item.labelCategory}
                 </div>
               );
             }
-            const Icon = item.icon!;
+            if (!item.icon) return null;
+            const Icon = item.icon;
             const isActive = currentView === item.id;
             return (
               <button
-                type="button"
                 key={item.id}
+                type="button"
                 onClick={() => {
-                  onSelectView(item.id as ViewTab);
-                  onCloseMobile();
+                  if (item.id) {
+                    onSelectView(item.id as ViewTab);
+                    onCloseMobile();
+                  }
                 }}
                 className={cn(
                   "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 text-start min-h-[44px]",
@@ -142,19 +144,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        <div className="p-4 border-t border-line text-xs text-faint flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={() => setLanguage(language === "ar" ? "en" : "ar")}
-            className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 min-h-[44px] rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50"
-            id="btn-sidebar-lang"
-          >
-            <Globe size={18} className="text-brand-cyan shrink-0" />
-            <span>{language === "ar" ? "English" : "العربية"}</span>
-          </button>
-
+        <div className="p-4 border-t border-line text-xs text-faint flex flex-col gap-2.5">
           <div className="flex items-center justify-between text-[11px] text-muted">
-            <span>v{brand.version || "3.4.0"}</span>
+            <span className="font-mono">v{brand.version || "3.4.0"}</span>
             <span className="flex items-center gap-1.5">
               <Shield size={14} className="text-brand-cyan" /> Local-first
             </span>

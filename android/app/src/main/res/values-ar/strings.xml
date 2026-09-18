@@ -17,6 +17,9 @@
     <string name="pref_language_title">لغة التطبيق</string>
     <string name="pref_language_sub">التبديل بين العربية والإنجليزية مع دعم كامل لاتجاه RTL</string>
     <string name="pref_language_btn">English</string>
+    <string name="lang_arabic">العربية</string>
+    <string name="lang_english">English</string>
+    <string name="dialog_choose_language">اختر اللغة</string>
     <string name="section_overview">نظرة عامة على الحالة</string>
     <string name="section_overview_sub">مؤشرات النظام والخدمات الأساسية في لمحة</string>
 

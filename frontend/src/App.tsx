@@ -40,7 +40,7 @@ const MainLayout: React.FC = () => {
 
   // Realtime Socket listener
   const {
-    isConnected: socketConnected,
+    isConnected: _socketConnected,
     sessionStatus: socketStatus,
     socket,
   } = useSocket((event, data) => {
@@ -89,7 +89,7 @@ const MainLayout: React.FC = () => {
   };
 
   return (
-    <div className="app-shell">
+    <div className="min-h-screen min-h-[100dvh] flex bg-bg text-text-main bg-ambient-glow overflow-x-hidden relative">
       <Sidebar
         currentView={currentView}
         onSelectView={handleSelectView}
@@ -97,14 +97,14 @@ const MainLayout: React.FC = () => {
         onCloseMobile={() => setMobileMenuOpen(false)}
       />
 
-      <div className="main-content">
+      <div className="flex-1 flex flex-col min-w-0">
         <Header
           onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
           title={viewTitles[currentView] || "Dashboard"}
           status={activeStatus}
         />
 
-        <main className="view-container">
+        <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
           {currentView === "overview" && (
             <OverviewView status={activeStatus} onNavigate={handleSelectView} />
           )}

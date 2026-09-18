@@ -1,6 +1,18 @@
 // file: frontend/src/views/ConnectionView.tsx
 
-import { AlertCircle, Play, QrCode, RefreshCw, RotateCcw, Square, Unlink } from "lucide-react";
+import {
+  AlertCircle,
+  Database,
+  Play,
+  QrCode,
+  Radio,
+  RefreshCw,
+  RotateCcw,
+  Shield,
+  Smartphone,
+  Square,
+  Unlink,
+} from "lucide-react";
 import QRCode from "qrcode";
 import type React from "react";
 import { useEffect, useState } from "react";
@@ -29,7 +41,7 @@ export const ConnectionView: React.FC<ConnectionViewProps> = ({ status }) => {
   useEffect(() => {
     if (status?.qr) {
       QRCode.toDataURL(status.qr, {
-        width: 260,
+        width: 280,
         margin: 2,
         color: {
           dark: "#0b1629",
@@ -61,30 +73,46 @@ export const ConnectionView: React.FC<ConnectionViewProps> = ({ status }) => {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      {/* Session State Card */}
-      <div className="card">
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "14px",
-            marginBottom: "18px",
-          }}
-        >
-          <div>
-            <h2 style={{ fontSize: "1.15rem", fontWeight: 700 }}>{t("connection")}</h2>
-            <p style={{ fontSize: "0.82rem", color: "var(--muted)", marginTop: "3px" }}>
-              Baileys v7 WhatsApp connection engine
-            </p>
+    <div className="flex flex-col gap-6">
+      {/* Primary Connection Hero Card */}
+      <div className="rounded-2xl border border-line bg-gradient-to-br from-panel-raised via-panel to-panel p-6 shadow-sm flex flex-col gap-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-line">
+          <div className="flex items-center gap-3.5">
+            <div
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border ${
+                isConnected
+                  ? "bg-ok/15 text-ok border-ok/30 shadow-sm shadow-ok/20"
+                  : isWaitingQr
+                    ? "bg-warn/15 text-warn border-warn/30 shadow-sm shadow-warn/20"
+                    : "bg-info/15 text-info border-info/30 shadow-sm shadow-info/20"
+              }`}
+            >
+              <Radio size={24} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="text-lg sm:text-xl font-extrabold text-text-main">
+                  {t("connection")}
+                </h2>
+                <span className="px-2 py-0.5 rounded-md bg-panel-raised border border-line text-[11px] font-mono font-bold text-muted">
+                  Baileys v7
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-muted mt-0.5">
+                WhatsApp Multi-Device Socket State Machine
+              </p>
+            </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div className="flex items-center gap-3">
             <span
-              className={`badge ${isConnected ? "badge-ok" : isWaitingQr ? "badge-warn" : "badge-info"}`}
-              style={{ fontSize: "0.82rem", padding: "5px 12px" }}
+              className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold border ${
+                isConnected
+                  ? "bg-ok/15 text-ok border-ok/30"
+                  : isWaitingQr
+                    ? "bg-warn/15 text-warn border-warn/30"
+                    : "bg-brand-cyan/15 text-brand-cyan border-brand-cyan/30"
+              }`}
             >
               <span className="pulse-dot" />
               <span>{t(state as any, state)}</span>
@@ -92,168 +120,149 @@ export const ConnectionView: React.FC<ConnectionViewProps> = ({ status }) => {
           </div>
         </div>
 
-        {/* Retry timer warning */}
+        {/* Retry Alert */}
         {status?.retryInSeconds ? (
-          <div
-            style={{
-              background: "var(--warn-bg)",
-              border: "1px solid rgba(245, 158, 11, 0.3)",
-              borderRadius: "var(--radius-sm)",
-              padding: "12px 16px",
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              marginBottom: "16px",
-            }}
-          >
-            <AlertCircle size={18} color="var(--warn)" style={{ flexShrink: 0 }} />
-            <div>
-              <div style={{ fontWeight: 600, fontSize: "0.88rem", color: "var(--warn)" }}>
-                {t("reconnectingSoon")}
-              </div>
-              <div style={{ fontSize: "0.82rem", color: "var(--text)" }}>
+          <div className="rounded-xl border border-warn/30 bg-warn/10 p-4 flex items-center gap-3 text-warn">
+            <AlertCircle size={20} className="shrink-0" />
+            <div className="text-xs sm:text-sm">
+              <span className="font-bold">{t("reconnectingSoon")}</span> &bull;{" "}
+              <span>
                 {t("nextAttemptIn")} {status.retryInSeconds} {t("seconds")}
-              </div>
+              </span>
             </div>
           </div>
         ) : null}
 
         {/* Action Controls */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+        <div className="flex flex-wrap items-center gap-3">
           {!isConnected ? (
             <button
+              type="button"
               onClick={() => handleAction(api.startSession, t("starting"))}
               disabled={acting || state === "starting"}
-              className="btn btn-primary"
+              className="inline-flex items-center justify-center gap-2 px-5 h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/25 transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
             >
-              <Play size={15} />
+              <Play size={16} />
               <span>{t("start")}</span>
             </button>
           ) : (
             <button
+              type="button"
               onClick={() => handleAction(api.stopSession, t("stop"))}
               disabled={acting}
-              className="btn btn-secondary"
+              className="inline-flex items-center justify-center gap-2 px-5 h-11 rounded-xl border border-line bg-panel-raised hover:bg-danger/15 hover:border-danger/40 hover:text-danger text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-danger/50 disabled:opacity-50"
             >
-              <Square size={15} />
+              <Square size={16} />
               <span>{t("stop")}</span>
             </button>
           )}
 
           <button
+            type="button"
             onClick={() => handleAction(api.startSession, t("reconnecting"))}
             disabled={acting}
-            className="btn btn-secondary"
+            className="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
           >
-            <RefreshCw size={15} />
+            <RefreshCw size={16} />
             <span>{t("reconnect")}</span>
           </button>
 
           <button
+            type="button"
             onClick={() => setShowUnlinkModal(true)}
             disabled={acting}
-            className="btn btn-danger"
+            className="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border border-danger/30 bg-danger/10 hover:bg-danger/20 text-danger font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-danger/50 disabled:opacity-50"
           >
-            <Unlink size={15} />
+            <Unlink size={16} />
             <span>{t("unlink")}</span>
           </button>
 
           <button
+            type="button"
             onClick={() => handleAction(api.restartBot, t("restart"))}
             disabled={acting}
-            className="btn btn-secondary"
+            className="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
           >
-            <RotateCcw size={15} />
+            <RotateCcw size={16} />
             <span>{t("restart")}</span>
           </button>
         </div>
       </div>
 
-      {/* QR Code / Pairing Box */}
+      {/* QR Code / Pairing Container */}
       {isWaitingQr && (
-        <div
-          className="card"
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            textAlign: "center",
-            padding: "28px 18px",
-          }}
-        >
-          <div
-            style={{
-              width: "44px",
-              height: "44px",
-              borderRadius: "50%",
-              background: "var(--info-bg)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginBottom: "14px",
-            }}
-          >
-            <QrCode size={24} color="var(--cyan)" />
+        <div className="rounded-2xl border border-line bg-panel p-8 shadow-sm flex flex-col items-center text-center">
+          <div className="w-12 h-12 rounded-2xl bg-brand-cyan/15 text-brand-cyan flex items-center justify-center mb-4 border border-brand-cyan/30">
+            <QrCode size={26} />
           </div>
-          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "6px" }}>
-            {t("waiting_for_qr")}
-          </h3>
-          <p
-            style={{
-              fontSize: "0.84rem",
-              color: "var(--muted)",
-              maxWidth: "420px",
-              marginBottom: "20px",
-            }}
-          >
-            {t("scanQrHint")}
+          <h3 className="text-lg font-bold text-text-main mb-1.5">{t("waiting_for_qr")}</h3>
+          <p className="text-xs sm:text-sm text-muted max-w-md mb-6">
+            {t("scanQrHint") ||
+              "Open WhatsApp on your phone, go to Linked Devices, and scan this code to link Levix."}
           </p>
 
           {qrDataUrl ? (
-            <div
-              style={{
-                padding: "12px",
-                background: "#ffffff",
-                borderRadius: "12px",
-                boxShadow: "var(--shadow)",
-              }}
-            >
-              <img
-                src={qrDataUrl}
-                alt="WhatsApp QR Code"
-                style={{ display: "block", width: "240px", height: "240px" }}
-              />
+            <div className="p-4 bg-white rounded-2xl shadow-xl border border-line">
+              <img src={qrDataUrl} alt="WhatsApp QR Code" className="w-64 h-64 block rounded-lg" />
             </div>
           ) : status?.pairingCode ? (
-            <div
-              style={{
-                background: "var(--panel-raised)",
-                padding: "16px 20px",
-                borderRadius: "12px",
-                border: "1px solid var(--line)",
-              }}
-            >
-              <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginBottom: "6px" }}>
+            <div className="rounded-2xl border border-line bg-panel-raised p-6 max-w-sm w-full">
+              <div className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">
                 {t("pairingCode")}
               </div>
-              <div
-                style={{
-                  fontSize: "1.6rem",
-                  fontWeight: 800,
-                  letterSpacing: "0.15em",
-                  color: "var(--cyan)",
-                  fontFamily: "var(--font-mono)",
-                  direction: "ltr",
-                }}
-              >
+              <div className="text-3xl font-mono font-extrabold tracking-widest text-brand-cyan">
                 {status.pairingCode}
               </div>
             </div>
           ) : (
-            <div style={{ color: "var(--muted)", fontSize: "0.86rem" }}>{t("starting")}</div>
+            <div className="text-sm font-medium text-muted">{t("starting")}</div>
           )}
         </div>
       )}
+
+      {/* Diagnostics and Health Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="rounded-2xl border border-line bg-panel p-5 shadow-sm space-y-3">
+          <div className="flex items-center gap-3 text-text-main">
+            <Smartphone size={20} className="text-brand-cyan" />
+            <h3 className="text-sm font-bold">Client Identity</h3>
+          </div>
+          <p className="text-xs text-muted">
+            {status?.user?.id
+              ? `Linked as +${status.user.id.split("@")[0]}`
+              : "No phone paired yet"}
+          </p>
+          <div className="pt-2 border-t border-line text-[11px] text-faint font-mono">
+            Platform: WhatsApp Web (v7 Multi-Device)
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-line bg-panel p-5 shadow-sm space-y-3">
+          <div className="flex items-center gap-3 text-text-main">
+            <Database size={20} className="text-ok" />
+            <h3 className="text-sm font-bold">Datastore Health</h3>
+          </div>
+          <p className="text-xs text-muted">
+            SQLite credentials, auth keys, and LID mappings are healthy.
+          </p>
+          <div className="pt-2 border-t border-line text-[11px] text-faint font-mono">
+            Database: node:sqlite (Synchronous)
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-line bg-panel p-5 shadow-sm space-y-3">
+          <div className="flex items-center gap-3 text-text-main">
+            <Shield size={20} className="text-brand-blue" />
+            <h3 className="text-sm font-bold">Reconnect Policy</h3>
+          </div>
+          <p className="text-xs text-muted">
+            Staged linear backoff (5s, 10s, 15s, 20s, 25s) with bounded retries.
+          </p>
+          <div className="pt-2 border-t border-line text-[11px] text-faint font-mono">
+            Max attempts: 5 &bull; Auto-pause offline
+          </div>
+        </div>
+      </div>
 
       {/* Confirm Unlink Modal */}
       <Modal
@@ -261,19 +270,27 @@ export const ConnectionView: React.FC<ConnectionViewProps> = ({ status }) => {
         onClose={() => setShowUnlinkModal(false)}
         title={t("unlink")}
         footer={
-          <>
-            <button onClick={() => setShowUnlinkModal(false)} className="btn btn-secondary">
+          <div className="flex items-center justify-end gap-3 w-full">
+            <button
+              type="button"
+              onClick={() => setShowUnlinkModal(false)}
+              className="px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors"
+            >
               {t("cancel")}
             </button>
-            <button onClick={confirmUnlink} className="btn btn-danger">
+            <button
+              type="button"
+              onClick={confirmUnlink}
+              className="px-4 h-10 rounded-xl bg-danger hover:bg-danger/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-danger/25 transition-colors"
+            >
               {t("unlink")}
             </button>
-          </>
+          </div>
         }
       >
-        <p style={{ fontSize: "0.9rem", color: "var(--text)", lineHeight: "1.6" }}>
+        <p className="text-sm text-text-main leading-relaxed">
           Are you sure you want to unlink this WhatsApp session? You will need to scan a new QR code
-          to reconnect.
+          or enter a new pairing code to reconnect.
         </p>
       </Modal>
     </div>

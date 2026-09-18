@@ -1,18 +1,13 @@
 // file: frontend/src/views/SettingsView.tsx
 
 import {
-  AlertCircle,
   Bot,
-  Check,
   Eye,
   EyeOff,
   Globe,
   HardDrive,
-  Key,
   Lock,
-  RefreshCw,
   Save,
-  Server,
   Shield,
   Sliders,
   Sparkles,
@@ -281,12 +276,12 @@ export const SettingsView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1.5 flex-1 min-w-[220px]">
+              <div className="flex flex-col gap-1.5 flex-1 min-w-[240px]">
                 <span className="text-xs text-muted font-semibold">{t("changePrefix")}</span>
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
                   <input
                     type="text"
-                    className="w-28 h-11 px-3 text-center font-mono font-bold text-base rounded-xl border border-line bg-panel text-text-main focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                    className="w-24 sm:w-28 h-11 px-3 text-center font-mono font-bold text-base rounded-xl border border-line bg-panel text-text-main focus:outline-none focus:ring-2 focus:ring-brand-blue/50 shrink-0"
                     maxLength={3}
                     placeholder={t("prefixPlaceholder")}
                     value={prefixInput}
@@ -299,10 +294,12 @@ export const SettingsView: React.FC = () => {
                     type="button"
                     onClick={() => handleSavePrefix()}
                     disabled={savingPrefix || prefixInput.trim() === prefix}
-                    className="inline-flex items-center gap-2 px-5 h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs md:text-sm transition-all shadow-md shadow-brand-blue/20 focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-2 px-4 sm:px-5 h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs md:text-sm whitespace-nowrap shrink-0 transition-all shadow-md shadow-brand-blue/20 focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
                   >
-                    <Save size={17} />
-                    <span>{savingPrefix ? t("saving") : t("prefixSaveBtn")}</span>
+                    <Save size={17} className="shrink-0" />
+                    <span className="whitespace-nowrap">
+                      {savingPrefix ? t("saving") : t("prefixSaveBtn")}
+                    </span>
                   </button>
                 </div>
               </div>

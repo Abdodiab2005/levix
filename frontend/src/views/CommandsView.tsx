@@ -1,6 +1,6 @@
 // file: frontend/src/views/CommandsView.tsx
 
-import { Search, Terminal } from "lucide-react";
+import { Search } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
@@ -174,14 +174,19 @@ export const CommandsView: React.FC = () => {
           <tbody className="divide-y divide-line/40">
             {loading ? (
               <tr>
-                <td colSpan={6} className="text-center py-10 text-muted">
-                  ...
+                <td colSpan={6} className="text-center py-12 text-muted">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <div className="w-6 h-6 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs">{t("loading")}</span>
+                  </div>
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-10 text-muted">
-                  ...
+                <td colSpan={6} className="text-center py-12 text-muted text-xs">
+                  {language === "ar"
+                    ? "لم يتم العثور على أوامر مطابقة"
+                    : "No matching commands found."}
                 </td>
               </tr>
             ) : (

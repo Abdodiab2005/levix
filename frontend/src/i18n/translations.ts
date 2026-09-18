@@ -168,6 +168,7 @@ export const translations = {
     weatherApiKey: "مفتاح OpenWeatherMap API (اختياري)",
 
     // Language Banner & Quick Toggles
+    chooseLanguage: "اختر اللغة",
     langCardTitle: "لغة الواجهة: العربية (RTL)",
     langCardDesc: "تصميم مخصص بالكامل لاتجاه الكتابة العربي من اليمين لليسار مع خط تجوال",
     langSwitchBtn: "Switch to English",
@@ -208,6 +209,9 @@ export const translations = {
     saveFailed: "حدث خطأ أثناء حفظ الإعدادات.",
     connectionStatusUpdated: "تم تحديث حالة الاتصال.",
     networkError: "تعذر الاتصال بالخادم.",
+    loading: "جاري التحميل...",
+    aiAssistantDesc: "وكيل ذكي متعدد الأدوات مع ذاكرة طويلة الأمد",
+    settingsSub: "البادئة، المنافذ، فترات التأخير، والأمان",
   },
   en: {
     // Navigation
@@ -377,6 +381,7 @@ export const translations = {
     weatherApiKey: "OpenWeatherMap API Key (Optional)",
 
     // Language Banner & Quick Toggles
+    chooseLanguage: "Choose Language",
     langCardTitle: "Interface Language: English (LTR)",
     langCardDesc: "Full bidirectional layout support with optimized Arabic RTL & English LTR",
     langSwitchBtn: "التبديل إلى العربية",
@@ -417,5 +422,8 @@ export const translations = {
     saveFailed: "Failed to save settings.",
     connectionStatusUpdated: "Connection status updated.",
     networkError: "Network error connecting to server.",
+    loading: "Loading...",
+    aiAssistantDesc: "Autonomous tool-calling AI agent with long-term memory",
+    settingsSub: "Prefix, ports, delays, security & storage",
   },
 };
