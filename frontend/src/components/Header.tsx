@@ -1,6 +1,6 @@
 // file: frontend/src/components/Header.tsx
 
-import { Globe, LogOut, Menu, Moon, Sun } from "lucide-react";
+import { Check, Globe, LogOut, Menu, Moon, Sun } from "lucide-react";
 import React from "react";
 import { useI18n } from "../context/I18nContext";
 import type { SessionStatus } from "../types";
@@ -11,14 +11,37 @@ interface HeaderProps {
   status: SessionStatus | null;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu, title, status }) => {
+export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu, title, status: _status }) => {
   const { language, setLanguage, t } = useI18n();
+  const [langMenuOpen, setLangMenuOpen] = React.useState(false);
+  const langMenuRef = React.useRef<HTMLDivElement>(null);
 
-  const handleLanguageToggle = () => {
-    setLanguage(language === "ar" ? "en" : "ar");
-  };
+  React.useEffect(() => {
+    if (!langMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (langMenuRef.current && !langMenuRef.current.contains(e.target as Node)) {
+        setLangMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setLangMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [langMenuOpen]);
 
   const [theme, setTheme] = React.useState<"dark" | "light">(() => {
+    const saved = localStorage.getItem("levix_theme") as "dark" | "light" | null;
+    if (saved) {
+      document.documentElement.setAttribute("data-theme", saved);
+      return saved;
+    }
     return (document.documentElement.getAttribute("data-theme") as "dark" | "light") || "dark";
   });
 
@@ -50,18 +73,66 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu, title, statu
       </div>
 
       <div className="flex items-center gap-2 md:gap-3">
-        {/* Language switch */}
-        <button
-          type="button"
-          onClick={handleLanguageToggle}
-          className="inline-flex items-center gap-2 px-3.5 py-2 min-h-[44px] rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs md:text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50"
-          title={language === "ar" ? "Switch to English" : "التبديل إلى العربية"}
-          aria-label="Switch language"
-          id="btn-header-lang"
-        >
-          <Globe size={18} className="text-brand-cyan shrink-0" />
-          <span>{language === "ar" ? "English" : "العربية"}</span>
-        </button>
+        {/* Language selector */}
+        <div className="relative" ref={langMenuRef}>
+          <button
+            type="button"
+            onClick={() => setLangMenuOpen((prev) => !prev)}
+            className="inline-flex items-center justify-center w-11 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50"
+            title={t("chooseLanguage", "Choose Language")}
+            aria-label={t("chooseLanguage", "Choose Language")}
+            aria-expanded={langMenuOpen}
+            aria-haspopup="true"
+            id="btn-header-lang"
+          >
+            <Globe size={18} className="text-brand-cyan" />
+          </button>
+
+          {langMenuOpen && (
+            <div
+              role="menu"
+              aria-orientation="vertical"
+              aria-labelledby="btn-header-lang"
+              className="absolute end-0 mt-2 w-48 rounded-2xl border border-line bg-panel-solid shadow-2xl p-1.5 z-50 ring-1 ring-black/10 animate-in fade-in zoom-in-95 duration-150"
+            >
+              <div className="px-2.5 py-1.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                {t("chooseLanguage", "Choose Language")}
+              </div>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setLanguage("ar");
+                  setLangMenuOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2 text-xs md:text-sm font-medium rounded-lg transition-colors ${
+                  language === "ar"
+                    ? "bg-brand-blue/15 text-brand-cyan font-bold"
+                    : "text-text-main hover:bg-panel-hover"
+                }`}
+              >
+                <span>العربية</span>
+                {language === "ar" && <Check size={16} className="text-brand-cyan" />}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setLanguage("en");
+                  setLangMenuOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2 text-xs md:text-sm font-medium rounded-lg transition-colors ${
+                  language === "en"
+                    ? "bg-brand-blue/15 text-brand-cyan font-bold"
+                    : "text-text-main hover:bg-panel-hover"
+                }`}
+              >
+                <span>English</span>
+                {language === "en" && <Check size={16} className="text-brand-cyan" />}
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Theme toggle */}
         <button

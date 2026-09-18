@@ -2,6 +2,11 @@
 const { getGroupSettings } = require("../../utils/storage.cjs"); // <-- 1. Import getGroupSettings
 const { getUserWarnings, saveUserWarnings, clearUserWarnings } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
+const {
+  hasBotPrivilegesSync,
+  isAdminInGroupSync,
+  sameUserSync,
+} = require("../../utils/permissions.cjs");
 
 module.exports = {
   name: "warn",
@@ -10,7 +15,7 @@ module.exports = {
   chat: "group",
   userAdminRequired: true,
 
-  async execute(sock, msg, args) {
+  async execute(sock, msg, args, _body, groupMetadata) {
     try {
       const groupId = msg.key.remoteJid;
       const senderId = msg.key.participant;
@@ -26,6 +31,18 @@ module.exports = {
       if (!reason) {
         return await sock.sendMessage(groupId, {
           text: "يجب كتابة سبب التحذير.",
+        });
+      }
+      const isBot = [sock.user?.id, sock.user?.lid]
+        .filter(Boolean)
+        .some((id) => sameUserSync(id, mentionedJid));
+      if (
+        isBot ||
+        hasBotPrivilegesSync(mentionedJid) ||
+        isAdminInGroupSync(groupMetadata, mentionedJid)
+      ) {
+        return await sock.sendMessage(groupId, {
+          text: "لا يمكن تحذير أو طرد البوت أو مالكه أو أحد المشرفين بهذه الطريقة.",
         });
       }
 

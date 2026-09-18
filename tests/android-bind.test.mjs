@@ -44,4 +44,31 @@ ok("desktop panel bind failure still exits", /process\.exit\(1\)/.test(indexSrc)
 const panelSrc = readFileSync(new URL("../src/bootstrap/panel.js", import.meta.url), "utf8");
 ok("Android listen uses the unix socket path", /server\.listen\(androidSock/.test(panelSrc));
 
+const androidMain = readFileSync(
+  new URL(
+    "../android/app/src/main/java/net/leviro/levix/MainActivity.kt",
+    import.meta.url,
+  ),
+  "utf8",
+);
+ok("the exported Android launcher cannot start the host through extras", !/EXTRA_AUTOSTART/.test(androidMain));
+ok("the exported Android launcher cannot stop the host through extras", !/EXTRA_STOP/.test(androidMain));
+
+const androidBridge = readFileSync(
+  new URL(
+    "../android/app/src/main/java/net/leviro/levix/PanelBridge.kt",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const androidHttp = readFileSync(
+  new URL(
+    "../android/app/src/main/java/net/leviro/levix/PanelHttp.kt",
+    import.meta.url,
+  ),
+  "utf8",
+);
+ok("the Android JavaScript bridge enforces the loopback URL policy natively", /isLoopback\(url\)/.test(androidBridge));
+ok("Android panel redirects are rechecked before the unix-socket request", /isLoopback\(currentUrl\)/.test(androidHttp));
+
 finish();

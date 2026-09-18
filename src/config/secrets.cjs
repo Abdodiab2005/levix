@@ -9,7 +9,11 @@
 //   secret:session   the express-session signing key. 48 random bytes, made on
 //                    first start and reused forever after. Nobody ever sees it.
 //   auth:password    the dashboard password as an scrypt hash + salt. The
-//                    password itself is never written anywhere.
+//                    password itself is never written anywhere (not encrypted
+//                    for recovery — it is a one-way hash).
+//
+// WhatsApp session blobs and third-party API keys are sealed separately by
+// src/config/vault.cjs (AES-256-GCM, key in levix.key next to the database).
 //
 // Both live in `bot_settings`, i.e. inside the same SQLite file as the rest of
 // the bot's state — so a backup of that one file is a backup of the login too.
@@ -57,6 +61,13 @@ function hasDashboardPassword() {
   return !!(record && record.hash && record.salt);
 }
 
+/** Epoch stored on panel sessions so a password change or wipe revokes them. */
+function getPasswordUpdatedAt() {
+  const record = store.getBotSetting(PASSWORD_KEY, null);
+  if (!record?.hash || !record?.salt) return 0;
+  return Number(record.updatedAt) || 0;
+}
+
 /**
  * @throws {Error} when the password is too short — the dashboard holds a full
  *   WhatsApp account, so this is not a place for a 3-character password.
@@ -67,8 +78,10 @@ function setDashboardPassword(plain) {
     throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
   }
 
+  const previousEpoch = getPasswordUpdatedAt();
   const { salt, hash } = hashPassword(password);
-  store.saveBotSetting(PASSWORD_KEY, { alg: "scrypt", salt, hash, updatedAt: Date.now() });
+  const updatedAt = Math.max(Date.now(), previousEpoch + 1);
+  store.saveBotSetting(PASSWORD_KEY, { alg: "scrypt", salt, hash, updatedAt });
   logger.info("[secrets] Dashboard password updated");
 }
 
@@ -134,6 +147,7 @@ module.exports = {
   MIN_PASSWORD_LENGTH,
   getSessionSecret,
   hasDashboardPassword,
+  getPasswordUpdatedAt,
   setDashboardPassword,
   verifyDashboardPassword,
   getSetupCode,

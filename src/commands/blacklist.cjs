@@ -2,6 +2,11 @@
 const { getGroupSettings, saveGroupSettings } = require("../utils/storage.cjs");
 const logger = require("../utils/logger.cjs");
 const normalizeJid = require("../utils/normalizeJid.esm.js").default;
+const { isAdminInGroupSync, sameUserSync } = require("../utils/permissions.cjs");
+
+function sameIdentity(a, b) {
+  return normalizeJid(a) === normalizeJid(b) || sameUserSync(a, b);
+}
 
 module.exports = {
   name: "blacklist",
@@ -65,12 +70,20 @@ module.exports = {
       const normalizedTargetJid = normalizeJid(targetJid);
 
       if (action === "add") {
-        const targetUser = groupMetadata.participants.find((p) => p.id === normalizedTargetJid);
-        if (targetUser?.admin)
+        const targetIsAdmin =
+          isAdminInGroupSync(groupMetadata, normalizedTargetJid) ||
+          groupMetadata.participants.some(
+            (participant) =>
+              participant.admin &&
+              [participant.id, participant.lid, participant.phoneNumber, participant.jid]
+                .filter(Boolean)
+                .some((id) => sameIdentity(id, normalizedTargetJid)),
+          );
+        if (targetIsAdmin)
           return await sock.sendMessage(groupId, {
             text: "لا يمكن حظر المشرفين.",
           });
-        if (settings.blacklist.includes(normalizedTargetJid))
+        if (settings.blacklist.some((jid) => sameIdentity(jid, normalizedTargetJid)))
           return await sock.sendMessage(groupId, {
             text: `العضو @${normalizedTargetJid.split("@")[0]} محظور بالفعل.`,
             mentions: [normalizedTargetJid],
@@ -82,13 +95,15 @@ module.exports = {
           mentions: [normalizedTargetJid],
         });
       } else if (action === "remove") {
-        if (!settings.blacklist.includes(normalizedTargetJid))
+        if (!settings.blacklist.some((jid) => sameIdentity(jid, normalizedTargetJid)))
           return await sock.sendMessage(groupId, {
             text: `العضو @${normalizedTargetJid.split("@")[0]} ليس في القائمة السوداء أصلاً.`,
             mentions: [normalizedTargetJid],
           });
 
-        settings.blacklist = settings.blacklist.filter((jid) => jid !== normalizedTargetJid);
+        settings.blacklist = settings.blacklist.filter(
+          (jid) => !sameIdentity(jid, normalizedTargetJid),
+        );
         await sock.sendMessage(groupId, {
           text: `✅ تم إزالة @${normalizedTargetJid.split("@")[0]} من القائمة السوداء.`,
           mentions: [normalizedTargetJid],

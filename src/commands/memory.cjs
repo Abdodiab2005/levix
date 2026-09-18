@@ -65,10 +65,8 @@ module.exports = {
     const senderId = isGroup ? msg.key.participant : msg.key.remoteJid;
 
     const isOwner = msg.key.fromMe || isOwnerJidSync(senderId);
-    const privileged =
-      isOwner ||
-      isBotAdminUserSync(senderId) ||
-      (isGroup && isAdminInGroupSync(groupMetadata, senderId));
+    const botPrivileged = isOwner || isBotAdminUserSync(senderId);
+    const groupAdmin = Boolean(isGroup && isAdminInGroupSync(groupMetadata, senderId));
 
     const action = String(args[0] || "").toLowerCase();
     const { scope, rest } = extractScope(args.slice(1));
@@ -85,7 +83,7 @@ module.exports = {
         if (!content) {
           return reply("اكتب المعلومة بعد الأمر.\nمثال: `!memory add الاجتماع كل تلات الساعة ٩`");
         }
-        if (scope === "global" && !privileged) return denied();
+        if (scope === "global" && !botPrivileged) return denied();
 
         const entry = memory.addMemory({
           scope,
@@ -120,7 +118,7 @@ module.exports = {
 
       // ------------------------------------------------------------- forget
       if (["forget", "del", "delete", "remove", "امسح", "انسى"].includes(action)) {
-        if (!privileged) return denied();
+        if (scope === "global" ? !botPrivileged : !botPrivileged && !groupAdmin) return denied();
         const ref = rest.join(" ").trim();
         if (!ref) {
           return reply(
@@ -139,7 +137,7 @@ module.exports = {
 
       // -------------------------------------------------------------- clear
       if (["clear", "reset", "wipe", "تصفير"].includes(action)) {
-        if (!privileged) return denied();
+        if (scope === "global" ? !botPrivileged : !botPrivileged && !groupAdmin) return denied();
         const count = memory.clearMemory({ scope, chatId });
         return reply(
           count
@@ -152,7 +150,7 @@ module.exports = {
 
       // --------------------------------------------------------------- file
       if (["file", "export", "md", "ملف"].includes(action)) {
-        if (!privileged) return denied();
+        if (scope === "global" ? !botPrivileged : !botPrivileged && !groupAdmin) return denied();
         const filePath = memory.memoryFilePath(scope, chatId);
         if (!fs.existsSync(filePath)) {
           return reply("مفيش ملف ذاكرة لسه — ابدأ بـ `!memory add ...`.");

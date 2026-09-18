@@ -49,7 +49,16 @@
 import { DisconnectReason } from "@whiskeysockets/baileys";
 import { createRequire } from "module";
 import { RETRY_SCHEDULE_MS } from "../config/constants.js";
-import { clearAuthState, deleteQrCode, saveQrCode } from "../utils/storage.esm.js";
+import {
+  clearAuthState,
+  clearWhatsAppDirectory,
+  deleteAllChatHistories,
+  deleteQrCode,
+  isPairedSession,
+  pauseAllSchedules,
+  saveQrCode,
+} from "../utils/storage.esm.js";
+import { bootstrapAdmins, bootstrapOwners } from "../utils/permissions.esm.js";
 import { classifyDisconnect, handleConnectionOpen } from "./connection.js";
 import { setupEventListeners } from "./events.js";
 import {
@@ -59,10 +68,32 @@ import {
   readProxyConfig,
   redactProxy,
 } from "./proxy.js";
-import { createWhatsAppSocket } from "./socket.js";
+import { createWhatsAppSocket, groupMetadataCache } from "./socket.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
+
+function clearAccountScopedState() {
+  clearWhatsAppDirectory();
+  deleteAllChatHistories();
+  pauseAllSchedules();
+  bootstrapOwners([]);
+  bootstrapAdmins([]);
+
+  try {
+    require("../utils/memory.cjs").clearAllMemoryFiles();
+  } catch (error) {
+    logger.warn({ err: error }, "[Session] failed to clear AI memory after unlink");
+  }
+  try {
+    require("../commands/gemini.cjs").clearAllContextBuffers();
+  } catch (error) {
+    logger.warn({ err: error }, "[Session] failed to clear AI context buffers after unlink");
+  }
+  try {
+    groupMetadataCache.flushAll();
+  } catch {}
+}
 
 // Baileys' `end()` awaits `ws.close()`, which waits for the socket's own
 // 'close' event with no timeout of its own. A half-dead TCP connection can
@@ -220,12 +251,16 @@ export class WhatsAppSession {
     retryDelaysMs = RETRY_SCHEDULE_MS,
     log = logger,
     pairingCodeDelayMs = 1500,
+    isLinked = isPairedSession,
+    clearDirectory = clearAccountScopedState,
   } = {}) {
     this.createSocket = createSocket;
     this.attachListeners = attachListeners;
     this.onOpen = onOpen;
     this.initializeScheduledJobs = initializeScheduledJobs;
     this.stopScheduledJobs = stopScheduledJobs;
+    this.isLinked = isLinked;
+    this.clearDirectory = clearDirectory;
     this.loadProxy = loadProxy;
     this.buildProxyAgents = buildProxyAgents;
     this.emitEvent = emit;
@@ -285,6 +320,8 @@ export class WhatsAppSession {
       // leaves dead credentials behind, and unlinking is the only way out of
       // it. The one state with nothing to unlink is the one that just did.
       canUnlink: this.#state !== S.LOGGED_OUT && !this.#shuttingDown,
+      // Finished WhatsApp pairing — resume/connect, do not offer QR/pair.
+      linked: this.#state !== S.LOGGED_OUT && this.isLinked(),
       // Redacted — never the password. Null when the socket is direct.
       proxy: this.#proxyLabel,
       // True when the saved proxy settings differ from what the live socket was
@@ -373,7 +410,12 @@ export class WhatsAppSession {
     }
     if (BUSY_STATES.has(this.#state) && this.#state !== S.PAUSED) return this.getState();
 
-    this.#pairingIntent = parseStartOptions({ method, phone });
+    // A known pairing reuses the stored session. Do not request a pairing code.
+    if (this.isLinked()) {
+      this.#pairingIntent = { method: "qr", phone: null };
+    } else {
+      this.#pairingIntent = parseStartOptions({ method, phone });
+    }
 
     // A manual start clears whatever the last failure left behind.
     this.#cancelRetry();
@@ -462,6 +504,13 @@ export class WhatsAppSession {
     this.#clearAll = null;
     this.#pairing = false;
     this.#clearQr();
+    this.#stopJobs();
+    try {
+      this.clearDirectory?.();
+    } catch (error) {
+      this.log.warn({ err: error }, "[Session] failed to clear WhatsApp directory after unlink");
+    }
+
     this.#transition(S.LOGGED_OUT, {
       reason: "unlinked",
       detail: "The WhatsApp account was unlinked. Start a session to pair a new one.",
@@ -549,7 +598,7 @@ export class WhatsAppSession {
     try {
       created = await this.createSocket({
         proxy,
-        pairingCode: this.#pairingIntent.method === "pairing",
+        pairingCode: !this.isLinked() && this.#pairingIntent.method === "pairing",
       });
     } catch (error) {
       this.log.error({ err: error }, "[Session] failed to create the WhatsApp socket");
@@ -898,6 +947,12 @@ export class WhatsAppSession {
     this.#clearQr();
     this.#cancelRetry();
     this.#attempt = 0;
+    this.#stopJobs();
+    try {
+      this.clearDirectory?.();
+    } catch (error) {
+      this.log.warn({ err: error }, "[Session] failed to clear WhatsApp directory after logout");
+    }
     this.#transition(S.LOGGED_OUT, { reason: verdict.reason, detail: verdict.detail });
   }
 

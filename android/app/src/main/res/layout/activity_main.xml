@@ -58,27 +58,19 @@
                     android:textSize="12sp" />
             </LinearLayout>
 
-            <!-- Language Switch Button -->
-            <TextView
+            <!-- Language Switch Button (Icon Only) -->
+            <ImageView
                 android:id="@+id/btnLanguage"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
                 android:layout_marginEnd="8dp"
                 android:background="@drawable/bg_status_pill"
-                android:gravity="center_vertical"
-                android:drawableStart="@drawable/ic_globe"
-                android:drawablePadding="6dp"
-                android:paddingStart="10dp"
-                android:paddingTop="6dp"
-                android:paddingEnd="10dp"
-                android:paddingBottom="6dp"
-                android:textColor="@color/levix_cyan"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:fontFamily="sans-serif-medium"
+                android:scaleType="centerInside"
+                android:padding="8dp"
+                android:src="@drawable/ic_globe"
+                android:contentDescription="@string/dialog_choose_language"
                 android:clickable="true"
-                android:focusable="true"
-                android:text="English" />
+                android:focusable="true" />
 
             <!-- Live Status Pill -->
             <LinearLayout

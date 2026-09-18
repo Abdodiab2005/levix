@@ -7,6 +7,11 @@ const logger = require("../utils/logger.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 
 const settings = require("../config/settings.cjs");
+const {
+  assertProviderBaseUrl,
+  assertProviderRequestUrl,
+  safeProviderFetch,
+} = require("../utils/providerUrl.cjs");
 
 // Built on first use from whatever key is in force, and
 // rebuilt if that key changes — the operator can paste one without a restart.
@@ -18,7 +23,9 @@ let cache = { key: null, baseUrl: null, genAI: null };
 function geminiStt() {
   const key = settings.get("gemini_api_key");
   if (!key) return null;
-  const baseUrl = String(settings.get("gemini_base_url")).replace(/\/+$/, "");
+  const baseUrl = assertProviderBaseUrl(settings.get("gemini_base_url"), {
+    allowLoopback: true,
+  });
   if (cache.key !== key || cache.baseUrl !== baseUrl) {
     cache = {
       key,
@@ -54,9 +61,9 @@ function resolveSttProvider() {
 async function transcribeWithOpenAi(audioBuffer, mimetype) {
   const apiKey = settings.get("openai_api_key");
   if (!apiKey) throw new Error("مفتاح OpenAI / Groq غير مضبوط في الإعدادات");
-  const baseUrl = String(settings.get("openai_base_url") || "https://api.openai.com/v1").replace(
-    /\/+$/,
-    "",
+  const baseUrl = assertProviderBaseUrl(
+    settings.get("openai_base_url") || "https://api.openai.com/v1",
+    { allowLoopback: true },
   );
   const model = settings.get("openai_stt_model") || "whisper-large-v3";
 
@@ -76,14 +83,14 @@ async function transcribeWithOpenAi(audioBuffer, mimetype) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60000);
   try {
-    const res = await fetch(`${baseUrl}/audio/transcriptions`, {
+    const res = await safeProviderFetch(`${baseUrl}/audio/transcriptions`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
       },
       body: formData,
       signal: controller.signal,
-    });
+    }, { allowLoopback: true });
     if (!res.ok) {
       const err = await res.text().catch(() => "");
       throw new Error(`STT API (${res.status}): ${err}`);
@@ -142,6 +149,9 @@ module.exports = {
         logger.info("[STT] Transcribing via OpenAI/Groq Whisper API");
         transcription = await transcribeWithOpenAi(audioBuffer, audioMessage.mimetype);
       } else if (hasGemini) {
+        await assertProviderRequestUrl(settings.get("gemini_base_url"), {
+          allowLoopback: true,
+        });
         // Save audio to temporary file
         tempAudioPath = path.join(__dirname, `stt_audio_${Date.now()}.ogg`);
         await fs.writeFile(tempAudioPath, audioBuffer);

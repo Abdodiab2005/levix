@@ -1,6 +1,10 @@
 // file: /commands/kick.js
 const logger = require("../../utils/logger.cjs");
-const { isOwnerJidSync } = require("../../utils/permissions.cjs");
+const {
+  hasBotPrivilegesSync,
+  isAdminInGroupSync,
+  sameUserSync,
+} = require("../../utils/permissions.cjs");
 
 module.exports = {
   name: "kick",
@@ -30,20 +34,20 @@ module.exports = {
 
     // --- Safety Checks ---
     // Can't kick the bot itself
-    if (targetJid === sock.user.id) {
+    if ([sock.user?.id, sock.user?.lid].filter(Boolean).some((id) => sameUserSync(id, targetJid))) {
       return await sock.sendMessage(groupId, { text: "لا يمكنني طرد نفسي." });
     }
 
-    // Can't kick one of the owners
-    if (isOwnerJidSync(targetJid)) {
+    // Bot owners/admins are privileged across chats and cannot be removed by
+    // a group-only admin through an alternate LID/PN representation.
+    if (hasBotPrivilegesSync(targetJid)) {
       return await sock.sendMessage(groupId, {
-        text: "لا يمكن طرد مالك البوت.",
+        text: "لا يمكن طرد مالك أو مشرف البوت.",
       });
     }
 
     // Check if the target is also an admin
-    const targetUser = groupMetadata.participants.find((p) => p.id === targetJid);
-    if (targetUser && (targetUser.admin === "admin" || targetUser.admin === "superadmin")) {
+    if (isAdminInGroupSync(groupMetadata, targetJid)) {
       return await sock.sendMessage(groupId, {
         text: "لا يمكن للمشرف طرد مشرف آخر.",
       });

@@ -5,8 +5,8 @@
 // and service loops, providers register an adapter implementing the BaseAIProvider
 // interface. The router dispatches based on the active `ai_provider` setting.
 
-const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
+const { resolveCapabilities } = require("./modelRegistry.cjs");
 
 class BaseAIProvider {
   constructor({
@@ -45,12 +45,15 @@ class BaseAIProvider {
   }
 
   supportsMedia(mime = "") {
+    const caps = detectModelCapabilities(this.id);
+    if (typeof mime === "string" && mime.startsWith("image/")) {
+      return Boolean(settings.get("ai_vision_enabled") && caps.supportsVision);
+    }
+    if (typeof mime === "string" && mime.startsWith("audio/")) {
+      return Boolean(settings.get("ai_stt_enabled") && caps.supportsAudioStt);
+    }
     if (this.supportsFiles) return true;
-    return (
-      Boolean(settings.get("ai_vision_enabled")) &&
-      typeof mime === "string" &&
-      mime.startsWith("image/")
-    );
+    return false;
   }
 
   async prepareMedia(parts, mediaMessage, mimeOverride, _context = {}) {
@@ -107,34 +110,19 @@ function detectModelCapabilities(provider = settings.get("ai_provider"), model =
           ? settings.get("openai_model")
           : settings.get("anthropic_model")) ||
       "",
-  ).toLowerCase();
+  );
 
-  const isGemini = p === "gemini";
-  const isAnthropic = p === "anthropic";
-  const supportsVision =
-    isGemini ||
-    isAnthropic ||
-    m.includes("vision") ||
-    m.includes("vl") ||
-    m.includes("llava") ||
-    m.includes("4o") ||
-    m.includes("pixtral") ||
-    m.includes("qwen") ||
-    m.includes("minicpm") ||
-    m.includes("claude-3") ||
-    m.includes("gemini") ||
-    m.includes("llama-3.2-11b") ||
-    m.includes("llama-3.2-90b");
-
-  const supportsAudioStt =
-    isGemini || p === "openai" || m.includes("whisper") || m.includes("audio");
+  const resolved = resolveCapabilities(p, m);
+  const caps = resolved.capabilities;
 
   return {
     provider: p,
     model: m,
-    supportsVision,
-    supportsAudioStt,
-    visionRecommended: supportsVision && !settings.get("ai_vision_enabled"),
+    capabilities: caps,
+    capabilitySource: resolved.capabilitySource,
+    supportsVision: Boolean(caps.vision),
+    supportsAudioStt: Boolean(caps.stt),
+    visionRecommended: Boolean(caps.vision) && !settings.get("ai_vision_enabled"),
   };
 }
 

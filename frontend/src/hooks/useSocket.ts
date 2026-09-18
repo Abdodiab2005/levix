@@ -17,7 +17,7 @@ function getSocket(): Socket {
   return socketInstance;
 }
 
-export function useSocket(onEvent?: (event: string, data: any) => void) {
+export function useSocket(onEvent?: (event: string, data: unknown) => void) {
   const [isConnected, setIsConnected] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
 
@@ -27,32 +27,80 @@ export function useSocket(onEvent?: (event: string, data: any) => void) {
     const handleConnect = () => setIsConnected(true);
     const handleDisconnect = () => setIsConnected(false);
 
+    // Full snapshot event emitted on every transition by WhatsAppSession
+    const handleSession = (snapshot: Partial<SessionStatus>) => {
+      setSessionStatus((prev) => ({
+        ...prev,
+        ...snapshot,
+        state: snapshot?.state || prev?.state || "idle",
+      }));
+      onEvent?.("session", snapshot);
+    };
+
+    // Legacy status update
+    const handleStatusUpdate = (data: { state?: SessionStatus["state"]; status?: string }) => {
+      setSessionStatus((prev) => ({
+        ...prev,
+        state: data?.state || prev?.state || "idle",
+        status: data?.status || prev?.status,
+      }));
+      onEvent?.("status_update", data);
+    };
+
     const handleStatus = (status: SessionStatus) => {
-      setSessionStatus(status);
+      setSessionStatus((prev) => ({
+        ...prev,
+        ...status,
+      }));
       onEvent?.("status", status);
     };
 
     const handleQr = (qr: string) => {
-      setSessionStatus((prev) => (prev ? { ...prev, qr } : { state: "waiting_for_qr", qr }));
+      setSessionStatus((prev) => ({
+        ...prev,
+        state: "waiting_for_qr",
+        qr,
+      }));
       onEvent?.("qr", qr);
     };
 
-    const handlePairingCode = (code: string) => {
-      setSessionStatus((prev) =>
-        prev ? { ...prev, pairingCode: code } : { state: "waiting_for_qr", pairingCode: code },
-      );
-      onEvent?.("pairing-code", code);
+    const handlePairingCode = (data: unknown) => {
+      const code =
+        typeof data === "object" && data && "code" in data
+          ? String((data as { code: unknown }).code)
+          : String(data || "");
+      setSessionStatus((prev) => ({
+        ...prev,
+        state: "waiting_for_qr",
+        pairingCode: code,
+      }));
+      onEvent?.("pairing_code", code);
     };
 
-    const handleAny = (event: string, ...args: any[]) => {
+    const handleQrCleared = () => {
+      setSessionStatus((prev) => (prev ? { ...prev, qr: null } : null));
+      onEvent?.("qr_cleared", {});
+    };
+
+    const handlePairingCodeCleared = () => {
+      setSessionStatus((prev) => (prev ? { ...prev, pairingCode: null } : null));
+      onEvent?.("pairing_code_cleared", {});
+    };
+
+    const handleAny = (event: string, ...args: unknown[]) => {
       onEvent?.(event, args[0]);
     };
 
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
+    socket.on("session", handleSession);
+    socket.on("status_update", handleStatusUpdate);
     socket.on("status", handleStatus);
     socket.on("qr", handleQr);
+    socket.on("pairing_code", handlePairingCode);
     socket.on("pairing-code", handlePairingCode);
+    socket.on("qr_cleared", handleQrCleared);
+    socket.on("pairing_code_cleared", handlePairingCodeCleared);
     socket.onAny(handleAny);
 
     setIsConnected(socket.connected);
@@ -60,9 +108,14 @@ export function useSocket(onEvent?: (event: string, data: any) => void) {
     return () => {
       socket.off("connect", handleConnect);
       socket.off("disconnect", handleDisconnect);
+      socket.off("session", handleSession);
+      socket.off("status_update", handleStatusUpdate);
       socket.off("status", handleStatus);
       socket.off("qr", handleQr);
+      socket.off("pairing_code", handlePairingCode);
       socket.off("pairing-code", handlePairingCode);
+      socket.off("qr_cleared", handleQrCleared);
+      socket.off("pairing_code_cleared", handlePairingCodeCleared);
       socket.offAny(handleAny);
     };
   }, [onEvent]);

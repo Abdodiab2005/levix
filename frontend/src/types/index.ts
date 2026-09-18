@@ -16,17 +16,28 @@ export type SessionState =
   | "connected"
   | "reconnecting"
   | "disconnected"
+  | "paused"
   | "retry_exhausted"
   | "logged_out"
   | "error";
 
 export interface SessionStatus {
   state: SessionState;
+  status?: string;
   qr?: string | null;
   pairingCode?: string | null;
   retryInSeconds?: number | null;
   error?: string | null;
   proxyChanged?: boolean;
+  canStart?: boolean;
+  canStop?: boolean;
+  canUnlink?: boolean;
+  linked?: boolean;
+  connected?: boolean;
+  isOnline?: boolean;
+  terminal?: boolean;
+  hasQr?: boolean;
+  hasPairingCode?: boolean;
   user?: {
     id: string;
     name?: string;
@@ -68,6 +79,9 @@ export interface ScheduleItem {
   id: string;
   type: "recurring" | "once";
   targetJid: string;
+  targetLabel?: string;
+  targetKind?: "group" | "contact" | string;
+  targetPhone?: string | null;
   message: string;
   cronString?: string;
   scheduledTime?: number;
@@ -79,10 +93,13 @@ export interface ScheduleItem {
 }
 
 export interface GroupItem {
+  id?: string;
   jid: string;
   subject: string;
   memberCount: number;
-  antilink?: boolean;
+  participants?: number | null;
+  antilink?: boolean | { enabled?: boolean };
+  antilinkEnabled?: boolean;
   mediaRestriction?: string;
   welcomeEnabled?: boolean;
 }

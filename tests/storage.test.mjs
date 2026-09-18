@@ -183,11 +183,72 @@ ok("no creds yet", store.hasCredentials() === false);
 store.authWrite("creds", '{"me":1}');
 ok("has creds", store.hasCredentials() === true);
 ok("auth read", store.authRead("creds") === '{"me":1}');
+
+section("secrets at rest");
+{
+  const vault = require("./src/config/vault.cjs");
+  const { q } = require("./src/db/db.cjs");
+  const fs = require("node:fs");
+
+  store.authWrite("creds", '{"pretend":"session-secret-xyz"}');
+  equal("callers still see plaintext session JSON", store.authRead("creds"), '{"pretend":"session-secret-xyz"}');
+  const rawCreds = q("SELECT value FROM baileys_auth WHERE key = ?").get("creds").value;
+  ok("whatsapp session is sealed in sqlite", vault.isSealed(rawCreds));
+  ok("session plaintext is not in sqlite", !String(rawCreds).includes("session-secret-xyz"));
+
+  settings.set("gemini_api_key", "AIzaSy-test-key-not-real");
+  equal("settings.get returns the api key", settings.get("gemini_api_key"), "AIzaSy-test-key-not-real");
+  const rawKey = store.getBotSetting("setting:gemini_api_key");
+  ok("api key is sealed in sqlite", vault.isSealed(rawKey));
+  ok("api key plaintext is not in sqlite", !String(rawKey).includes("AIzaSy-test-key-not-real"));
+  equal(
+    "describe() never returns the api key",
+    settings.describe().find((s) => s.key === "gemini_api_key")?.value,
+    null,
+  );
+
+  q("INSERT INTO baileys_auth (key, value) VALUES (?, ?)").run("legacy", "plain-legacy-creds");
+  store.migrateSecretsAtRest();
+  ok(
+    "legacy session rows are sealed on migrate",
+    vault.isSealed(q("SELECT value FROM baileys_auth WHERE key = ?").get("legacy").value),
+  );
+  equal("legacy session still reads", store.authRead("legacy"), "plain-legacy-creds");
+
+  const keyStat = fs.statSync(vault.keyPath());
+  ok("encryption key is not world-readable", (keyStat.mode & 0o077) === 0);
+  ok("encryption key is not stored in the database", store.getBotSetting("levix.key", null) === null);
+
+  store.authRemove("legacy");
+  settings.set("gemini_api_key", "");
+}
 store.authRemove("creds");
 ok("auth removed", store.authRead("creds") === null);
 store.authWrite("x", "1");
 store.authClearAll();
 ok("auth cleared", store.authRead("x") === null);
+
+store.authWrite("creds", JSON.stringify({ me: { id: "2010@s.whatsapp.net" }, registered: true }));
+ok("paired session is recognized", store.isPairedSession() === true);
+store.authWrite("creds", JSON.stringify({ me: { id: "2010@s.whatsapp.net" }, registered: false }));
+ok("unfinished pairing is not a linked session", store.isPairedSession() === false);
+store.authClearAll();
+
+store.saveUserMetadata({ jid: "123@lid", phone: "201012345678", displayName: "Ali" });
+store.storeLidPnMapping("123@lid", "201012345678");
+const peer = store.describePeer("123@lid");
+equal("LID peer shows the phone", peer.phone, "+201012345678");
+equal("LID peer uses the display name", peer.label, "Ali");
+
+store.upsertGroupDirectory("120363@g.us", { subject: "Family", participantCount: 12 });
+const groupPeer = store.describePeer("120363@g.us");
+equal("group peer uses the stored subject", groupPeer.label, "Family");
+equal("group peer kind", groupPeer.kind, "group");
+
+store.clearWhatsAppDirectory();
+ok("directory wipe removes users", store.getAllUsers().length === 0);
+ok("directory wipe removes groups", store.getAllGroupDirectory().length === 0);
+ok("directory wipe removes LID map", store.getPnForLid("123@lid") === null);
 
 section("settings layer");
 ok("setting default", settings.get("gemini_model") === "gemini-3.7-flash");

@@ -50,6 +50,7 @@ const COMMAND_PERMISSIONS = Object.freeze({
   shutdown: "OWNER_ONLY",
   status: "OWNER_ONLY",
   lang: "MEMBERS",
+  digit: "MEMBERS",
   block: "OWNER_ONLY",
   unblock: "OWNER_ONLY",
   group: {

@@ -13,6 +13,8 @@
 // isn't allowed to do it.
 
 const dns = require("node:dns").promises;
+const http = require("node:http");
+const https = require("node:https");
 const net = require("node:net");
 
 const axios = require("axios");
@@ -21,6 +23,7 @@ const logger = require("../utils/logger.cjs");
 const memory = require("../utils/memory.cjs");
 const { decodeBuffer, stripHtml, decodeText } = require("../utils/textDecode.cjs");
 const { grantRole, revokeRole, listRoles } = require("../utils/permissions.cjs");
+const { isForbiddenIp } = require("../utils/providerUrl.cjs");
 
 // @google/genai exports a `Type` enum (the old SDK called it `SchemaType`).
 // Its members are the uppercase wire values — Type.STRING === "STRING" — so the
@@ -224,49 +227,9 @@ async function searchWikipedia(query, language = "auto", limit = 3) {
 // و 2130706433 و [::ffff:127.0.0.1] نفس العنوان بصيغة تانية، والأهم إن رابط
 // عام ممكن يعمل redirect على 169.254.169.254 (مفاتيح السيرفر عند أغلب
 // مزودي الاستضافة). فبنـ resolve العنوان ونفحص كل خطوة تحويل لوحدها.
-// ::ffff:127.0.0.1 بيتكتب برضه ::ffff:7f00:1 — والـ URL parser بيطبّع الشكل
-// التاني، فلازم نفك الصيغة السداسية كمان مش الشكل بالنقط بس.
-function mappedIpv4(v6) {
-  const dotted = /^::(?:ffff:)?(\d+\.\d+\.\d+\.\d+)$/.exec(v6);
-  if (dotted) return dotted[1];
-
-  const hex = /^::(?:ffff:)?([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(v6);
-  if (!hex) return null;
-  const high = parseInt(hex[1], 16);
-  const low = parseInt(hex[2], 16);
-  return `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`;
-}
-
-function isPrivateIp(ip) {
-  const family = net.isIP(ip);
-
-  if (family === 4) {
-    const [a, b] = ip.split(".").map(Number);
-    if (a === 0 || a === 10 || a === 127) return true;
-    if (a === 169 && b === 254) return true; // link-local + metadata
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
-    if (a >= 224) return true; // multicast + reserved
-    return false;
-  }
-
-  if (family === 6) {
-    const v6 = ip.toLowerCase();
-    if (v6 === "::" || v6 === "::1") return true;
-    if (/^f[cd]/.test(v6)) return true; // unique local
-    if (v6.startsWith("fe80")) return true; // link local
-    const mapped = mappedIpv4(v6);
-    if (mapped) return isPrivateIp(mapped);
-    return false;
-  }
-
-  return true; // مش عنوان صالح أصلاً
-}
-
-// ملاحظة: فيه فرصة نظرية إن الـ DNS يرد بعنوان تاني بين الفحص والاتصال
-// (DNS rebinding). قفلها بالكامل محتاج تثبيت الـ IP على مستوى الـ socket؛
-// اللي هنا بيقفل الحالات العملية: أسماء داخلية، صيغ IP بديلة، والتحويلات.
+// Resolve once, reject every local/reserved answer, then pin the HTTP socket to
+// one of those exact answers. That closes the gap where a rebinding hostname
+// could return a public address during validation and loopback during connect.
 async function assertPublicUrl(rawUrl) {
   let url;
   try {
@@ -279,50 +242,88 @@ async function assertPublicUrl(rawUrl) {
   const host = url.hostname.replace(/^\[|\]$/g, "");
 
   if (net.isIP(host)) {
-    if (isPrivateIp(host)) throw new Error("الرابط ده ممنوع");
-    return url;
+    if (isForbiddenIp(host)) throw new Error("الرابط ده ممنوع");
+    return { url, host, addresses: [{ address: host, family: net.isIP(host) }] };
   }
 
   let addresses;
   try {
-    addresses = await dns.lookup(host, { all: true });
+    addresses = await dns.lookup(host, { all: true, verbatim: true });
   } catch {
     throw new Error("مش قادر أوصل للدومين ده");
   }
-  if (!addresses.length || addresses.some((a) => isPrivateIp(a.address))) {
+  if (!addresses.length || addresses.some((a) => isForbiddenIp(a.address))) {
     throw new Error("الرابط ده ممنوع");
   }
 
-  return url;
+  return { url, host, addresses };
+}
+
+function pinnedAgent(protocol, expectedHost, addresses) {
+  const lookup = (hostname, options, callback) => {
+    if (String(hostname).toLowerCase() !== expectedHost.toLowerCase()) {
+      const error = new Error("اتصال بدومين غير متوقع");
+      error.code = "EAI_FAIL";
+      return callback(error);
+    }
+
+    const requestedFamily = typeof options === "number" ? options : options?.family;
+    const candidates = requestedFamily
+      ? addresses.filter(({ family }) => family === requestedFamily)
+      : addresses;
+    if (!candidates.length) {
+      const error = new Error("مفيش عنوان متوافق للدومين ده");
+      error.code = "EAI_ADDRFAMILY";
+      return callback(error);
+    }
+    if (typeof options === "object" && options?.all) {
+      return callback(null, candidates.map(({ address, family }) => ({ address, family })));
+    }
+    return callback(null, candidates[0].address, candidates[0].family);
+  };
+
+  const Agent = protocol === "https:" ? https.Agent : http.Agent;
+  return new Agent({ keepAlive: false, lookup });
 }
 
 const MAX_REDIRECTS = 4;
 
 async function fetchUrl(rawUrl) {
-  let url = await assertPublicUrl(rawUrl);
+  let target = await assertPublicUrl(rawUrl);
   let response;
 
   for (let hop = 0; ; hop++) {
-    response = await axios.get(url.toString(), {
-      responseType: "arraybuffer",
-      timeout: 20000,
-      // بنمشي ورا التحويلات بنفسنا عشان نفحص كل خطوة — axios بيفحص الأول بس.
-      maxRedirects: 0,
-      maxContentLength: MAX_FETCH_BYTES,
-      headers: {
-        "User-Agent": UA,
-        "Accept-Language": "ar,en;q=0.9",
-        Accept: "text/html,application/json,text/plain,*/*",
-      },
-      validateStatus: (status) => status >= 200 && status < 500,
-    });
+    const { url, host, addresses } = target;
+    const agent = pinnedAgent(url.protocol, host, addresses);
+    try {
+      response = await axios.get(url.toString(), {
+        responseType: "arraybuffer",
+        timeout: 20000,
+        // بنمشي ورا التحويلات بنفسنا عشان نفحص كل خطوة — axios بيفحص الأول بس.
+        maxRedirects: 0,
+        maxContentLength: MAX_FETCH_BYTES,
+        // Ignore process-wide proxy variables: they would perform their own
+        // hostname resolution and bypass the pinned lookup above.
+        proxy: false,
+        httpAgent: url.protocol === "http:" ? agent : undefined,
+        httpsAgent: url.protocol === "https:" ? agent : undefined,
+        headers: {
+          "User-Agent": UA,
+          "Accept-Language": "ar,en;q=0.9",
+          Accept: "text/html,application/json,text/plain,*/*",
+        },
+        validateStatus: (status) => status >= 200 && status < 500,
+      });
+    } finally {
+      agent.destroy();
+    }
 
     const location = response.headers?.location;
     const isRedirect = response.status >= 300 && response.status < 400 && location;
     if (!isRedirect) break;
     if (hop >= MAX_REDIRECTS) throw new Error("الرابط بيحوّل كتير أوي");
 
-    url = await assertPublicUrl(new URL(location, url).toString());
+    target = await assertPublicUrl(new URL(location, url).toString());
   }
 
   const contentType = String(response.headers["content-type"] || "");
@@ -331,7 +332,7 @@ async function fetchUrl(rawUrl) {
   const text = /json|text\/plain|xml/i.test(contentType) ? body : stripHtml(body);
 
   return {
-    url: url.toString(),
+    url: target.url.toString(),
     status: response.status,
     contentType,
     truncated: text.length > MAX_PAGE_CHARS,
@@ -350,8 +351,25 @@ function scopeOf(args) {
 // نفس قاعدة أمر !memory بالظبط: الكتابة في الذاكرة العامة والمسح محتاجين
 // أدمن/مالك. الفحص لازم يكون هنا مش في البرومبت — الموديل بيقرا صفحات ويب
 // ورسايل ناس، وأي واحدة فيهم ممكن تقوله "احفظ ده في الذاكرة العامة".
-function isPrivileged(ctx) {
+function isBotPrivileged(ctx) {
   return Boolean(ctx?.isOwner || ctx?.isAdmin);
+}
+
+function isChatMemoryAdmin(ctx) {
+  return isBotPrivileged(ctx) || Boolean(ctx?.isGroupAdmin);
+}
+
+function roleTargetBound(target, ctx) {
+  const raw = String(target || "").trim();
+  if (!raw) return false;
+  const ids = [...(ctx?.mentionedJids || []), ctx?.quotedParticipant].filter(Boolean);
+  const { sameUserSync } = require("../utils/permissions.cjs");
+  if (ids.some((id) => sameUserSync(id, raw))) return true;
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length >= 8 && String(ctx?.userText || "").replace(/\D/g, "").includes(digits)) {
+    return true;
+  }
+  return false;
 }
 
 const NOT_PRIVILEGED = {
@@ -523,7 +541,7 @@ const TOOLS = {
     async run(args, ctx) {
       const scope = scopeOf(args);
       // الذاكرة العامة بتتحقن في البرومبت بتاع كل الشاتات، فمش أي حد يكتب فيها.
-      if (scope === "global" && !isPrivileged(ctx)) {
+      if (scope === "global" && !isBotPrivileged(ctx)) {
         return { ...NOT_PRIVILEGED, saved: false };
       }
       const entry = memory.addMemory({
@@ -596,8 +614,9 @@ const TOOLS = {
     describe: (args) => `🗑️ جاري الحذف من الذاكرة: ${preview(args?.ref)}`,
     describeEn: (args) => `🗑️ Removing from memory: ${preview(args?.ref)}`,
     async run(args, ctx) {
-      if (!isPrivileged(ctx)) return { ...NOT_PRIVILEGED, removed: false };
       const scope = scopeOf(args);
+      const allowed = scope === "global" ? isBotPrivileged(ctx) : isChatMemoryAdmin(ctx);
+      if (!allowed) return { ...NOT_PRIVILEGED, removed: false };
       const removed = memory.removeMemory({
         scope,
         chatId: ctx.chatId,
@@ -635,6 +654,12 @@ const TOOLS = {
       if (!ctx.isOwner) {
         return { error: "only the bot owner can grant roles", granted: false };
       }
+      if (!roleTargetBound(args?.target, ctx)) {
+        return {
+          error: "mention, quote, or type the target phone number in your own request",
+          granted: false,
+        };
+      }
       const role = String(args?.role || "admin").toLowerCase() === "owner" ? "owner" : "admin";
       const record = await grantRole(args?.target, role);
       logger.info(
@@ -667,6 +692,12 @@ const TOOLS = {
     async run(args, ctx) {
       if (!ctx.isOwner) {
         return { error: "only the bot owner can revoke roles", revoked: false };
+      }
+      if (!roleTargetBound(args?.target, ctx)) {
+        return {
+          error: "mention, quote, or type the target phone number in your own request",
+          revoked: false,
+        };
       }
       const role = String(args?.role || "admin").toLowerCase() === "owner" ? "owner" : "admin";
       const record = await revokeRole(args?.target, role);

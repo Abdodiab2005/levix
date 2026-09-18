@@ -1,28 +1,78 @@
 // file: frontend/src/views/SchedulesView.tsx
 
-import { AlertCircle, Calendar, Clock, Plus, RefreshCw, Trash2 } from "lucide-react";
+import {
+  AlertCircle,
+  BookUser,
+  Calendar,
+  CheckCircle2,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  User,
+  Users,
+  X,
+} from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { Modal } from "../components/Modal";
+import type { ViewTab } from "../components/Sidebar";
 import { useToast } from "../components/Toasts";
 import { useI18n } from "../context/I18nContext";
 import type { ScheduleItem } from "../types";
 
-export const SchedulesView: React.FC = () => {
-  const { t } = useI18n();
+interface RecipientItem {
+  id: string;
+  name: string;
+  type: "group" | "contact";
+  phone?: string | null;
+  memberCount?: number | null;
+}
+
+function hasPhoneBookPicker() {
+  const host = (window as { LevixHost?: { pickContact?: () => void } }).LevixHost;
+  return Boolean(host && typeof host.pickContact === "function");
+}
+
+function digitsToWhatsAppJid(phone: string): string | null {
+  let digits = String(phone || "").replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.length < 8 || digits.length > 15) return null;
+  return `${digits}@s.whatsapp.net`;
+}
+
+interface SchedulesViewProps {
+  isConnected?: boolean;
+  onNavigate?: (view: ViewTab) => void;
+}
+
+export const SchedulesView: React.FC<SchedulesViewProps> = ({
+  isConnected = false,
+  onNavigate,
+}) => {
+  const { t, language } = useI18n();
   const { toast } = useToast();
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [timezone, setTimezone] = useState("UTC");
   const [loading, setLoading] = useState(true);
 
+  // Recipients state
+  const [recipients, setRecipients] = useState<RecipientItem[]>([]);
+  const [loadingRecipients, setLoadingRecipients] = useState(false);
+  const [selectedRecipient, setSelectedRecipient] = useState<RecipientItem | null>(null);
+  const [searchRecipient, setSearchRecipient] = useState("");
+
   // New schedule modal state
   const [showAddModal, setShowAddModal] = useState(false);
-  const [targetJid, setTargetJid] = useState("");
   const [message, setMessage] = useState("");
   const [scheduleType, setScheduleType] = useState<"recurring" | "once">("recurring");
   const [cronString, setCronString] = useState("0 9 * * *");
   const [oneOffTime, setOneOffTime] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  const MAX_SCHEDULES = 3;
+  const isLimitReached = schedules.length >= MAX_SCHEDULES;
 
   const loadSchedules = async () => {
     try {
@@ -38,14 +88,31 @@ export const SchedulesView: React.FC = () => {
     }
   };
 
+  const loadRecipients = async () => {
+    setLoadingRecipients(true);
+    try {
+      const res = await api.getRecipients();
+      if (res?.recipients) {
+        setRecipients(res.recipients);
+      }
+    } catch (err: any) {
+      // silently handle, user can retry
+    } finally {
+      setLoadingRecipients(false);
+    }
+  };
+
   useEffect(() => {
     loadSchedules();
-  }, []);
+    if (isConnected) {
+      loadRecipients();
+    }
+  }, [isConnected]);
 
   const handleDelete = async (id: string) => {
     try {
       await api.deleteSchedule(id);
-      toast("Schedule deleted", "success");
+      toast(t("savedSuccessfully"), "success");
       setSchedules((prev) => prev.filter((s) => s.id !== id));
     } catch (err: any) {
       toast(err.message, "error");
@@ -53,24 +120,124 @@ export const SchedulesView: React.FC = () => {
   };
 
   const handleRetry = async (id: string) => {
+    if (!isConnected) {
+      toast(
+        language === "ar"
+          ? "واتساب غير متصل، يرجى بدء الاتصال أولاً"
+          : "WhatsApp is disconnected, please connect first",
+        "warning",
+      );
+      return;
+    }
     try {
       await api.retrySchedule(id);
-      toast("Delivery retry triggered", "info");
+      toast(language === "ar" ? "تمت إعادة محاولة الإرسال" : "Delivery retry triggered", "info");
       loadSchedules();
     } catch (err: any) {
       toast(err.message, "error");
     }
   };
 
+  const handlePickPhoneContact = async () => {
+    const host = (window as { LevixHost?: { pickContact?: () => void } }).LevixHost;
+    if (!host?.pickContact) {
+      toast(
+        language === "ar"
+          ? "دليل الهاتف متاح من تطبيق أندرويد فقط"
+          : "Phone book is available in the Android app",
+        "info",
+      );
+      return;
+    }
+    const picked = await new Promise<{ name: string; phone: string } | null>((resolve) => {
+      const onPicked = (ev: Event) => {
+        window.removeEventListener("levix-contact", onPicked);
+        const detail = (ev as CustomEvent).detail as { name?: string; phone?: string } | null;
+        if (!detail?.phone) {
+          resolve(null);
+          return;
+        }
+        resolve({ name: String(detail.name || ""), phone: String(detail.phone) });
+      };
+      window.addEventListener("levix-contact", onPicked);
+      try {
+        host.pickContact?.();
+      } catch {
+        window.removeEventListener("levix-contact", onPicked);
+        resolve(null);
+      }
+    });
+    if (!picked) return;
+    const jid = digitsToWhatsAppJid(picked.phone);
+    if (!jid) {
+      toast(
+        language === "ar"
+          ? "الرقم غير صالح. استخدم رقمًا مع كود الدولة."
+          : "That number is not valid. Use a number with country code.",
+        "error",
+      );
+      return;
+    }
+    const phone = `+${jid.split("@")[0]}`;
+    setSelectedRecipient({
+      id: jid,
+      name: picked.name || phone,
+      phone,
+      type: "contact",
+    });
+  };
+
+  const handleOpenAddModal = () => {
+    if (!isConnected) {
+      toast(
+        language === "ar"
+          ? "يلزم اتصال واتساب لجدولة الرسائل"
+          : "Active WhatsApp connection is required to schedule messages",
+        "warning",
+      );
+      return;
+    }
+    if (isLimitReached) {
+      toast(t("maxSchedulesReached"), "warning");
+      return;
+    }
+    setSelectedRecipient(null);
+    setSearchRecipient("");
+    setMessage("");
+    setShowAddModal(true);
+    if (!recipients.length) loadRecipients();
+  };
+
   const handleCreateSchedule = async () => {
-    if (!targetJid || !message) {
-      toast("Please specify recipient JID and message content", "warning");
+    if (!selectedRecipient) {
+      toast(
+        language === "ar" ? "يرجى اختيار المحادثة المستهدفة" : "Please select a recipient chat",
+        "warning",
+      );
+      return;
+    }
+    if (!message.trim()) {
+      toast(
+        language === "ar" ? "يرجى كتابة نص الرسالة" : "Please write the message text",
+        "warning",
+      );
       return;
     }
 
+    if (scheduleType === "once" && (!oneOffTime || new Date(oneOffTime).getTime() <= Date.now())) {
+      toast(
+        language === "ar"
+          ? "يرجى تحديد وقت وتاريخ مستقبلي صالح"
+          : "Please select a valid future date and time",
+        "warning",
+      );
+      return;
+    }
+
+    setCreating(true);
     const payload: any = {
-      targetJid: targetJid.includes("@") ? targetJid : `${targetJid}@s.whatsapp.net`,
-      message,
+      targetJid: selectedRecipient.id,
+      message: message.trim(),
       type: scheduleType,
     };
 
@@ -82,125 +249,243 @@ export const SchedulesView: React.FC = () => {
 
     try {
       await api.createSchedule(payload);
-      toast("Schedule created successfully", "success");
+      toast(t("savedSuccessfully"), "success");
       setShowAddModal(false);
-      setTargetJid("");
+      setSelectedRecipient(null);
       setMessage("");
       loadSchedules();
     } catch (err: any) {
       toast(err.message, "error");
+    } finally {
+      setCreating(false);
     }
   };
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-      <div className="card-glass">
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "16px",
-          }}
-        >
-          <div>
-            <h2 style={{ fontSize: "1.2rem", fontWeight: 700 }}>{t("schedules")}</h2>
-            <p style={{ fontSize: "0.85rem", color: "var(--muted)", marginTop: "4px" }}>
-              Timezone: <code style={{ color: "var(--cyan)" }}>{timezone}</code> · Cron &amp;
-              one-off deliveries
-            </p>
-          </div>
+  const filteredRecipients = recipients.filter((r) => {
+    const q = searchRecipient.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      r.name.toLowerCase().includes(q) ||
+      (r.phone && r.phone.includes(q)) ||
+      r.id.toLowerCase().includes(q)
+    );
+  });
 
-          <button onClick={() => setShowAddModal(true)} className="btn btn-primary">
-            <Plus size={16} />
-            <span>{t("scheduleNewMsg")}</span>
+  return (
+    <div className="flex flex-col gap-5 sm:gap-6">
+      {/* Offline Alert Banner */}
+      {!isConnected && (
+        <div className="rounded-2xl border border-warn/30 bg-warn/10 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-warn/20 text-warn flex items-center justify-center shrink-0">
+              <AlertCircle size={22} />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-bold text-warn">
+                {language === "ar" ? "واتساب غير متصل حالياً" : "WhatsApp is Disconnected"}
+              </h3>
+              <p className="text-xs sm:text-sm text-text-main/80 mt-0.5">
+                {language === "ar"
+                  ? "يلزم وجود اتصال نشط بواتساب لجدولة الرسائل وإرسالها واختيار جهات الاتصال."
+                  : "An active WhatsApp connection is required to schedule messages, fetch chats, and deliver automated jobs."}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate?.("connection")}
+            className="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl bg-warn hover:bg-warn/90 text-bg font-bold text-xs sm:text-sm shadow-sm transition-all shrink-0"
+          >
+            <span>{language === "ar" ? "الذهاب للاتصال" : "Go to Connection"}</span>
           </button>
         </div>
+      )}
+
+      {/* Header Card */}
+      <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-brand-cyan/10 text-brand-cyan flex items-center justify-center shrink-0">
+            <Calendar size={24} />
+          </div>
+          <div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-lg md:text-xl font-bold text-text-main">{t("schedules")}</h2>
+              <span
+                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                  isLimitReached
+                    ? "bg-warn/15 text-warn border-warn/30"
+                    : "bg-brand-cyan/10 text-brand-cyan border-brand-cyan/20"
+                }`}
+              >
+                {schedules.length} / {MAX_SCHEDULES} {language === "ar" ? "مجدول" : "scheduled"}
+              </span>
+            </div>
+            <p className="text-xs md:text-sm text-muted mt-1">
+              {language === "ar" ? "المنطقة الزمنية:" : "Timezone:"}{" "}
+              <code className="text-brand-cyan font-mono font-semibold px-1.5 py-0.5 rounded bg-bg-soft border border-line">
+                {timezone}
+              </code>{" "}
+              ·{" "}
+              {language === "ar"
+                ? "إرسال دوري ومحدد بالوقت"
+                : "Cron & one-off automated message deliveries"}
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleOpenAddModal}
+          disabled={isLimitReached || !isConnected}
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 h-12 sm:h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/20 transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Plus size={18} />
+          <span>
+            {!isConnected
+              ? language === "ar"
+                ? "يلزم اتصال واتساب"
+                : "Connection Required"
+              : isLimitReached
+                ? t("limitReached")
+                : t("scheduleNewMsg")}
+          </span>
+        </button>
       </div>
 
-      <div className="table-wrap">
-        <table className="table">
+      {/* Table Container */}
+      <div className="rounded-2xl border border-line bg-panel overflow-hidden shadow-sm overflow-x-auto">
+        <table className="w-full min-w-[680px] text-start border-collapse text-sm">
           <thead>
-            <tr>
-              <th>{t("thTarget")}</th>
-              <th>{t("thMessage")}</th>
-              <th>{t("thSchedule")}</th>
-              <th>{t("thType")}</th>
-              <th>{t("thDelivery")}</th>
-              <th style={{ textAlign: "center" }}>{t("thActions")}</th>
+            <tr className="bg-panel-raised border-b border-line text-xs font-bold text-muted uppercase tracking-wider">
+              <th className="px-5 py-4 text-start">{t("thTarget")}</th>
+              <th className="px-5 py-4 text-start">{t("thMessage")}</th>
+              <th className="px-5 py-4 text-start">{t("thSchedule")}</th>
+              <th className="px-5 py-4 text-start">{t("thType")}</th>
+              <th className="px-5 py-4 text-start">{t("thDelivery")}</th>
+              <th className="px-5 py-4 text-center">{t("thActions")}</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-line/40">
             {loading ? (
               <tr>
-                <td
-                  colSpan={6}
-                  style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}
-                >
-                  Loading schedules...
+                <td colSpan={6} className="text-center py-16 text-muted">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <div className="w-6 h-6 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs">{t("loading")}</span>
+                  </div>
                 </td>
               </tr>
             ) : schedules.length === 0 ? (
               <tr>
-                <td
-                  colSpan={6}
-                  style={{ textAlign: "center", padding: "30px", color: "var(--muted)" }}
-                >
-                  No scheduled messages found. Create one with the button above!
+                <td colSpan={6} className="text-center py-16 text-muted text-xs sm:text-sm">
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <Calendar size={28} className="text-muted/40" />
+                    <span>
+                      {language === "ar"
+                        ? "لا توجد رسائل مجدولة حالياً."
+                        : "No active schedules found."}
+                    </span>
+                  </div>
                 </td>
               </tr>
             ) : (
               schedules.map((s) => (
-                <tr key={s.id}>
-                  <td style={{ fontFamily: "var(--font-mono)", fontSize: "0.85rem" }}>
-                    {s.targetJid}
+                <tr key={s.id} className="hover:bg-panel-hover/50 transition-colors">
+                  <td className="px-5 py-4 text-xs text-text-main">
+                    <bdi>
+                      {s.targetKind === "group" || s.targetJid.includes("@g.us") ? (
+                        <span className="inline-flex items-center gap-1.5 text-brand-cyan">
+                          <Users size={14} />
+                          <span className="font-semibold truncate max-w-[12rem]">
+                            {s.targetLabel && s.targetLabel !== "Group"
+                              ? s.targetLabel
+                              : language === "ar"
+                                ? "مجموعة"
+                                : "Group"}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 text-ok">
+                          <User size={14} />
+                          <span className="font-semibold">
+                            {s.targetPhone ||
+                              (s.targetLabel && !s.targetLabel.includes("@lid")
+                                ? s.targetLabel
+                                : null) ||
+                              (language === "ar" ? "جهة اتصال" : "Contact")}
+                          </span>
+                        </span>
+                      )}
+                    </bdi>
                   </td>
-                  <td
-                    style={{
-                      maxWidth: "250px",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
+                  <td className="px-5 py-4 max-w-xs text-text-main truncate text-xs sm:text-sm">
                     {s.message}
                   </td>
-                  <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <Clock size={14} color="var(--cyan)" />
-                      <span>{s.when}</span>
-                    </div>
+                  <td className="px-5 py-4 text-xs font-mono text-muted">
+                    {s.when || s.cronString || "—"}
                   </td>
-                  <td>
-                    <span className="badge badge-info">{s.type}</span>
+                  <td className="px-5 py-4">
+                    <span
+                      className={`inline-flex px-2.5 py-0.5 rounded-lg text-xs font-semibold ${
+                        s.type === "recurring"
+                          ? "bg-brand-blue/10 text-brand-cyan"
+                          : "bg-purple-500/10 text-purple-400"
+                      }`}
+                    >
+                      {s.type === "recurring"
+                        ? language === "ar"
+                          ? "متكرر"
+                          : "Recurring"
+                        : language === "ar"
+                          ? "مرة واحدة"
+                          : "Once"}
+                    </span>
                   </td>
-                  <td>
-                    {s.lastDeliveryStatus === "failed" ? (
-                      <span className="badge badge-danger" title={s.lastError || "Failed"}>
-                        <AlertCircle size={12} /> Failed
+                  <td className="px-5 py-4">
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+                        s.lastDeliveryStatus === "failed"
+                          ? "bg-danger/10 text-danger border border-danger/25"
+                          : s.status === "active"
+                            ? "bg-ok/10 text-ok border border-ok/25"
+                            : "bg-muted/10 text-muted"
+                      }`}
+                    >
+                      {s.lastDeliveryStatus === "failed" ? (
+                        <AlertCircle size={13} />
+                      ) : (
+                        <CheckCircle2 size={13} />
+                      )}
+                      <span>
+                        {s.lastDeliveryStatus === "failed"
+                          ? language === "ar"
+                            ? "فشل الإرسال"
+                            : "Failed"
+                          : s.status === "active"
+                            ? language === "ar"
+                              ? "نشط"
+                              : "Active"
+                            : s.status}
                       </span>
-                    ) : s.lastDeliveryStatus === "success" ? (
-                      <span className="badge badge-ok">Delivered</span>
-                    ) : (
-                      <span className="badge badge-warn">Pending</span>
-                    )}
+                    </span>
                   </td>
-                  <td style={{ textAlign: "center" }}>
-                    <div style={{ display: "inline-flex", gap: "8px" }}>
+                  <td className="px-5 py-4 text-center">
+                    <div className="flex items-center justify-center gap-2">
                       {s.lastDeliveryStatus === "failed" && (
                         <button
+                          type="button"
                           onClick={() => handleRetry(s.id)}
-                          className="btn btn-secondary btn-sm"
+                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-line bg-panel-raised hover:bg-panel-hover text-brand-cyan transition-colors"
                           title="Retry delivery"
                         >
                           <RefreshCw size={14} />
                         </button>
                       )}
                       <button
+                        type="button"
                         onClick={() => handleDelete(s.id)}
-                        className="btn btn-danger btn-sm"
-                        title="Delete schedule"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-danger/25 bg-danger/10 hover:bg-danger/20 text-danger transition-colors"
+                        title={t("delete")}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -213,82 +498,206 @@ export const SchedulesView: React.FC = () => {
         </table>
       </div>
 
-      {/* Add Schedule Modal */}
+      {/* Add Schedule Modal with Chat Search & Select */}
       <Modal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
-        title="Schedule New Message"
+        title={t("scheduleNewMsg")}
         footer={
-          <>
-            <button onClick={() => setShowAddModal(false)} className="btn btn-secondary">
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => setShowAddModal(false)}
+              className="px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors"
+            >
               {t("cancel")}
             </button>
-            <button onClick={handleCreateSchedule} className="btn btn-primary">
-              Schedule
+            <button
+              type="button"
+              onClick={handleCreateSchedule}
+              disabled={creating || !selectedRecipient || !message.trim()}
+              className="px-5 h-10 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/20 transition-all disabled:opacity-50"
+            >
+              {creating ? t("saving") : language === "ar" ? "جدولة الرسالة" : "Schedule"}
             </button>
-          </>
+          </div>
         }
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          <div className="form-group">
-            <label className="form-label">
-              Recipient (Phone Number with Country Code or Group JID)
+        <div className="flex flex-col gap-4 py-1">
+          {/* Target Recipient Selector (No raw JIDs!) */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-text-main">
+              {t("selectRecipient")} <span className="text-danger">*</span>
             </label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="e.g. 201012345678 or 120363@g.us"
-              value={targetJid}
-              onChange={(e) => setTargetJid(e.target.value)}
-            />
+
+            {selectedRecipient ? (
+              <div className="flex items-center justify-between p-3 rounded-xl border border-brand-blue/40 bg-brand-blue/10">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-brand-blue/20 text-brand-cyan flex items-center justify-center shrink-0">
+                    {selectedRecipient.type === "group" ? <Users size={16} /> : <User size={16} />}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs sm:text-sm font-bold text-text-main truncate">
+                      {selectedRecipient.name}
+                    </div>
+                    {selectedRecipient.phone && (
+                      <div className="text-[11px] text-muted font-mono" dir="ltr">
+                        {selectedRecipient.phone}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRecipient(null)}
+                  className="p-1 rounded-lg hover:bg-panel text-muted hover:text-danger transition-colors"
+                  title="Change chat"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search size={16} className="absolute start-3 top-3 text-muted" />
+                    <input
+                      type="text"
+                      value={searchRecipient}
+                      onChange={(e) => setSearchRecipient(e.target.value)}
+                      placeholder={t("searchRecipients")}
+                      className="w-full h-10 ps-9 pe-3 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                    />
+                  </div>
+                  {hasPhoneBookPicker() && (
+                    <button
+                      type="button"
+                      onClick={handlePickPhoneContact}
+                      className="inline-flex items-center justify-center gap-1.5 h-10 px-3 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main text-xs font-bold shrink-0"
+                      title={t("pickPhoneContactHint")}
+                    >
+                      <BookUser size={15} />
+                      <span className="hidden sm:inline">{t("pickPhoneContact")}</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="max-h-48 overflow-y-auto rounded-xl border border-line bg-panel-raised divide-y divide-line/40">
+                  {loadingRecipients ? (
+                    <div className="p-4 text-center text-xs text-muted">{t("loading")}</div>
+                  ) : filteredRecipients.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-muted">
+                      {t("noRecipientsFound")}
+                    </div>
+                  ) : (
+                    filteredRecipients.map((rec) => (
+                      <button
+                        key={rec.id}
+                        type="button"
+                        onClick={() => setSelectedRecipient(rec)}
+                        className="w-full p-2.5 flex items-center justify-between gap-2 hover:bg-panel text-start transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-panel border border-line flex items-center justify-center shrink-0 text-muted">
+                            {rec.type === "group" ? <Users size={14} /> : <User size={14} />}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-text-main truncate">
+                              {rec.name}
+                            </div>
+                            {rec.phone && (
+                              <div className="text-[10px] text-muted font-mono" dir="ltr">
+                                {rec.phone}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-panel text-muted shrink-0">
+                          {rec.type === "group"
+                            ? language === "ar"
+                              ? "مجموعة"
+                              : "Group"
+                            : language === "ar"
+                              ? "محادثة"
+                              : "Contact"}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="form-group">
-            <label className="form-label">Schedule Type</label>
+          {/* Schedule Type */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-text-main">
+              {language === "ar" ? "نوع الجدولة" : "Schedule Type"}
+            </label>
             <select
-              className="form-select"
+              className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
               value={scheduleType}
               onChange={(e) => setScheduleType(e.target.value as any)}
             >
-              <option value="recurring">Recurring (Cron Expression)</option>
-              <option value="once">One-Off (Specific Date &amp; Time)</option>
+              <option value="recurring">
+                {language === "ar" ? "دوري متكرر (Cron Expression)" : "Recurring (Cron Expression)"}
+              </option>
+              <option value="once">
+                {language === "ar"
+                  ? "مرة واحدة (تاريخ ووقت محدد)"
+                  : "One-Off (Specific Date & Time)"}
+              </option>
             </select>
           </div>
 
           {scheduleType === "recurring" ? (
-            <div className="form-group">
-              <label className="form-label">
-                Cron Expression (5 fields: min hour day month weekday)
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-text-main">
+                {language === "ar"
+                  ? "تعبير Cron (دقيقة ساعة يوم شهر يوم-الأسبوع)"
+                  : "Cron Expression (5 fields: min hour day month weekday)"}
               </label>
               <input
                 type="text"
-                className="form-input"
+                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised font-mono text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                 value={cronString}
                 onChange={(e) => setCronString(e.target.value)}
                 placeholder="0 9 * * *"
               />
-              <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>
-                e.g. <code style={{ color: "var(--cyan)" }}>0 9 * * *</code> (Every day at 9:00 AM)
+              <span className="block text-xs text-muted">
+                {language === "ar" ? "مثال: " : "e.g. "}
+                <code className="text-brand-cyan">0 9 * * *</code> (
+                {language === "ar" ? "يومياً الساعة 9:00 صباحاً" : "Every day at 9:00 AM"})
               </span>
             </div>
           ) : (
-            <div className="form-group">
-              <label className="form-label">Delivery Date &amp; Time</label>
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-text-main">
+                {language === "ar" ? "موعد وتاريخ الإرسال" : "Delivery Date & Time"}
+              </label>
               <input
                 type="datetime-local"
-                className="form-input"
+                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                 value={oneOffTime}
                 onChange={(e) => setOneOffTime(e.target.value)}
               />
             </div>
           )}
 
-          <div className="form-group">
-            <label className="form-label">Message Text</label>
+          {/* Message Text */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-text-main">
+              {language === "ar" ? "نص الرسالة" : "Message Text"}{" "}
+              <span className="text-danger">*</span>
+            </label>
             <textarea
-              className="form-textarea"
-              rows={4}
-              placeholder="Message to be sent automatically..."
+              className="w-full p-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50 resize-y min-h-[90px]"
+              rows={3}
+              placeholder={
+                language === "ar"
+                  ? "اكتب الرسالة التي سيتم إرسالها تلقائياً..."
+                  : "Message to be sent automatically..."
+              }
               value={message}
               onChange={(e) => setMessage(e.target.value)}
             />

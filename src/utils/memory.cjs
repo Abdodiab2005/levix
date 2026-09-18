@@ -291,6 +291,39 @@ function clearMemory({ scope = "chat", chatId } = {}) {
   return entries.length;
 }
 
+/**
+ * Remove account-derived AI memory when the WhatsApp account is unlinked.
+ * A later pairing is a different security principal, so neither chat files nor
+ * global facts may silently cross that account boundary.
+ */
+function clearAllMemoryFiles() {
+  let removed = 0;
+  try {
+    if (fs.existsSync(GLOBAL_FILE)) {
+      fs.unlinkSync(GLOBAL_FILE);
+      removed += 1;
+    }
+  } catch (err) {
+    logger.warn({ err }, "[memory] failed to remove global memory during unlink");
+  }
+
+  try {
+    if (fs.existsSync(CHATS_DIR)) {
+      for (const name of fs.readdirSync(CHATS_DIR)) {
+        if (!name.endsWith(".md")) continue;
+        const filePath = path.join(CHATS_DIR, name);
+        const stat = fs.lstatSync(filePath);
+        if (!stat.isFile() || stat.isSymbolicLink()) continue;
+        fs.unlinkSync(filePath);
+        removed += 1;
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, "[memory] failed to remove chat memory during unlink");
+  }
+  return removed;
+}
+
 /** Case-insensitive substring search across one scope. */
 function searchMemory(query, { scope = "chat", chatId } = {}) {
   const needle = String(query || "")
@@ -374,6 +407,7 @@ module.exports = {
   addMemory,
   removeMemory,
   clearMemory,
+  clearAllMemoryFiles,
   searchMemory,
   buildMemoryContext,
   memoryStats,

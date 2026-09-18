@@ -24,6 +24,8 @@ const secrets = require("./src/config/secrets.cjs");
 const { PanelSessionStore } = require("./src/panel/session-store.cjs");
 const { getQrCode } = require("./src/utils/storage.cjs");
 const { clientAddress, isDirectLocalRequest } = require("./src/utils/requestOrigin.cjs");
+const { blockedFor, recordFailure, clearAttempts } = require("./src/panel/login-throttle.cjs");
+const { isPanelSessionValid, stampPanelSession } = require("./src/panel/session-auth.cjs");
 
 const SESSION_COOKIE_NAME = "wa.sid";
 const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
@@ -43,9 +45,10 @@ function isAllowedOrigin(origin, host) {
 // Browsers may legitimately serialize the Origin header as the literal string
 // "null" for a same-origin navigation in an opaque-origin context. Prefer
 // Fetch Metadata when the browser sends it. Some Chromium form navigations omit
-// Sec-Fetch-Site entirely, so only the two credential-gated auth forms get a
-// narrow fallback for Origin:null; every other mutation remains strict.
-const OPAQUE_ORIGIN_AUTH_PATHS = new Set(["/setup", "/login"]);
+// Sec-Fetch-Site entirely, so password-gated login gets a narrow fallback for
+// Origin:null. First-run setup is deliberately excluded: a loopback request
+// otherwise skips the setup code and could claim an unconfigured panel.
+const OPAQUE_ORIGIN_AUTH_PATHS = new Set(["/login"]);
 function isAllowedMutationRequest(req) {
   const origin = req.get("origin");
   const host = req.get("host");
@@ -59,9 +62,9 @@ function isAllowedMutationRequest(req) {
   if (fetchSite === "cross-site") return false;
 
   // Real Chromium can submit a top-level auth form with Origin:null and no
-  // Sec-Fetch-Site header. Setup is still protected by the one-time setup code
-  // for remote clients; login by the password; both share TCP-peer throttling.
-  // Do not generalize this exception to dashboard APIs or logout.
+  // Sec-Fetch-Site header. Login is still protected by the password and
+  // TCP-peer throttling. Do not generalize this exception to setup, dashboard
+  // APIs, or logout.
   if (origin === "null" && !fetchSite && OPAQUE_ORIGIN_AUTH_PATHS.has(req.path)) {
     return true;
   }
@@ -125,7 +128,7 @@ app.use((req, res, next) => {
 });
 
 function requireLoginApi(req, res, next) {
-  if (req.session?.loggedIn) return next();
+  if (isPanelSessionValid(req.session)) return next();
   return res.status(401).json({ error: "Unauthorized" });
 }
 
@@ -137,7 +140,7 @@ function noStore(req, res, next) {
 }
 
 function requireLoginPage(req, res, next) {
-  if (req.session?.loggedIn) return next();
+  if (isPanelSessionValid(req.session)) return next();
   return res.redirect("/");
 }
 
@@ -177,40 +180,20 @@ app.use(sessionMiddleware);
 // Every socket receives the pairing QR, so it goes through the same session.
 io.engine.use(sessionMiddleware);
 io.use((socket, next) => {
-  if (socket.request.session?.loggedIn) return next();
+  if (isPanelSessionValid(socket.request.session)) return next();
   next(new Error("unauthorized"));
 });
 
-// --- Attempt throttling ---------------------------------------------------
-// Shared by /login and /setup: both are a guess at a secret.
-//
-// Keyed on the TCP peer, never on `req.ip`: with `trust proxy` set, a client
-// picks its own `req.ip` by writing a header, so it could rotate the value and
-// never hit the limit.
-
-const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
-const MAX_ATTEMPTS = 5;
-const attempts = new Map();
-
-function blockedFor(ip) {
-  const now = Date.now();
-  for (const [key, entry] of attempts) {
-    if (now - entry.firstAt > ATTEMPT_WINDOW_MS) attempts.delete(key);
+function disconnectInvalidPanelSockets() {
+  for (const socket of io.of("/").sockets.values()) {
+    if (!isPanelSessionValid(socket.request.session)) socket.disconnect(true);
   }
-  const entry = attempts.get(ip);
-  if (!entry || entry.count < MAX_ATTEMPTS) return 0;
-  const remaining = ATTEMPT_WINDOW_MS - (now - entry.firstAt);
-  return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
 }
 
-function recordFailure(ip) {
-  const now = Date.now();
-  const entry = attempts.get(ip);
-  if (!entry || now - entry.firstAt > ATTEMPT_WINDOW_MS) {
-    attempts.set(ip, { count: 1, firstAt: now });
-    return;
+function disconnectSessionSockets(sid) {
+  for (const socket of io.of("/").sockets.values()) {
+    if (socket.request.sessionID === sid) socket.disconnect(true);
   }
-  entry.count += 1;
 }
 
 // --- First run ------------------------------------------------------------
@@ -270,12 +253,12 @@ app.post("/setup", (req, res, next) => {
     return renderSetup(req, res, error.message, 400);
   }
 
-  attempts.delete(peer);
+  clearAttempts(peer);
   logger.info({ ip: peer }, "[dashboard] Password set — first run complete");
 
   req.session.regenerate((err) => {
     if (err) return next(err);
-    req.session.loggedIn = true;
+    stampPanelSession(req.session);
     req.session.save((saveErr) => {
       if (saveErr) return next(saveErr);
       res.redirect(303, "/");
@@ -287,7 +270,7 @@ app.post("/setup", (req, res, next) => {
 
 app.get("/", noStore, (req, res) => {
   if (!secrets.hasDashboardPassword()) return res.redirect("/setup");
-  if (req.session.loggedIn) {
+  if (isPanelSessionValid(req.session)) {
     const dashboardHtmlPath = path.join(assetPath("public"), "dashboard", "index.html");
     if (fs.existsSync(dashboardHtmlPath)) {
       let html = fs.readFileSync(dashboardHtmlPath, "utf8");
@@ -304,7 +287,7 @@ app.get("/", noStore, (req, res) => {
 
 app.get("/login", noStore, (req, res) => {
   if (!secrets.hasDashboardPassword()) return res.redirect("/setup");
-  if (req.session.loggedIn) return res.redirect("/");
+  if (isPanelSessionValid(req.session)) return res.redirect("/");
   return res.render("login", { error: null });
 });
 
@@ -326,12 +309,12 @@ app.post("/login", (req, res, next) => {
     return res.status(401).render("login", { error: "Incorrect Password" });
   }
 
-  attempts.delete(peer);
+  clearAttempts(peer);
 
   // A fresh id after login, or the id an attacker planted beforehand still works.
   req.session.regenerate((err) => {
     if (err) return next(err);
-    req.session.loggedIn = true;
+    stampPanelSession(req.session);
     req.session.save((saveErr) => {
       if (saveErr) return next(saveErr);
       res.redirect(303, "/");
@@ -342,8 +325,10 @@ app.post("/login", (req, res, next) => {
 // POST, not GET: a link that changes state gets fired by an <img> or by the
 // browser's prefetch.
 app.post("/logout", (req, res, next) => {
+  const sid = req.sessionID;
   req.session.destroy((err) => {
     if (err) return next(err);
+    disconnectSessionSockets(sid);
     res.clearCookie(SESSION_COOKIE_NAME, {
       httpOnly: true,
       sameSite: "lax",
@@ -385,4 +370,6 @@ module.exports = {
   requireLoginPage,
   noStore,
   installFinalHandlers,
+  disconnectInvalidPanelSockets,
+  disconnectSessionSockets,
 };

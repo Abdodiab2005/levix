@@ -1,10 +1,14 @@
 package net.leviro.levix
 
 import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.ContactsContract
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -15,12 +19,14 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import java.io.File
 import java.net.URI
 import java.nio.charset.StandardCharsets
+import org.json.JSONObject
 
 /**
  * Local control panel only. Loads loopback HTTP; Node is reached over the
@@ -30,6 +36,13 @@ class PanelActivity : AppCompatActivity() {
     private lateinit var web: WebView
     private lateinit var sock: File
     private lateinit var bridgeJs: String
+
+    private val pickPhone = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val uri = result.data?.data.takeIf { result.resultCode == Activity.RESULT_OK }
+        deliverPickedContact(uri)
+    }
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,6 +81,8 @@ class PanelActivity : AppCompatActivity() {
         web.settings.loadWithOverviewMode = true
         web.settings.textZoom = 100
         web.settings.cacheMode = WebSettings.LOAD_NO_CACHE
+        web.settings.allowFileAccess = false
+        web.settings.allowContentAccess = false
         @Suppress("DEPRECATION")
         web.settings.databaseEnabled = true
         web.settings.displayZoomControls = false
@@ -85,7 +100,10 @@ class PanelActivity : AppCompatActivity() {
 
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false)
-        web.addJavascriptInterface(PanelBridge(sock, bridgeJs), "LevixHost")
+        web.addJavascriptInterface(
+            PanelBridge(sock, bridgeJs) { runOnUiThread { launchContactPicker() } },
+            "LevixHost",
+        )
 
         web.webChromeClient = WebChromeClient()
         web.webViewClient = object : WebViewClient() {
@@ -102,7 +120,7 @@ class PanelActivity : AppCompatActivity() {
                 request: WebResourceRequest,
             ): WebResourceResponse? {
                 val url = request.url?.toString() ?: return null
-                if (!isLoopback(url)) return null
+                if (!isLoopback(url)) return blockedResponse()
                 return try {
                     PanelHttp.intercept(sock, request, bridgeJs)
                 } catch (error: Throwable) {
@@ -113,6 +131,10 @@ class PanelActivity : AppCompatActivity() {
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 HostLog.event("panel loading ${url ?: ""}")
+                if (url == null || !isLoopback(url)) {
+                    view?.stopLoading()
+                    return
+                }
                 if (!bridgeJs.isEmpty()) {
                     view?.evaluateJavascript(bridgeJs, null)
                 }
@@ -142,6 +164,44 @@ class PanelActivity : AppCompatActivity() {
         )
     }
 
+    private fun launchContactPicker() {
+        val intent = Intent(Intent.ACTION_PICK).apply {
+            type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
+        }
+        pickPhone.launch(intent)
+    }
+
+    private fun deliverPickedContact(uri: Uri?) {
+        if (!::web.isInitialized) return
+        val payload = JSONObject()
+        if (uri != null) {
+            try {
+                contentResolver.query(
+                    uri,
+                    arrayOf(
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                        ContactsContract.CommonDataKinds.Phone.NUMBER,
+                    ),
+                    null,
+                    null,
+                    null,
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        payload.put("name", cursor.getString(0) ?: "")
+                        payload.put("phone", cursor.getString(1) ?: "")
+                    }
+                }
+            } catch (error: Exception) {
+                HostLog.event("contact pick ${error.message}")
+            }
+        }
+        val detail = if (payload.has("phone")) payload.toString() else "null"
+        web.evaluateJavascript(
+            "(function(){window.dispatchEvent(new CustomEvent('levix-contact',{detail:$detail}));})()",
+            null,
+        )
+    }
+
     override fun onDestroy() {
         web.destroy()
         super.onDestroy()
@@ -159,11 +219,23 @@ class PanelActivity : AppCompatActivity() {
 
         fun isLoopback(url: String): Boolean {
             return try {
-                val host = URI(url).host ?: return false
-                host == "127.0.0.1" || host == "localhost" || host == "[::1]"
+                val uri = URI(url)
+                val host = uri.host ?: return false
+                uri.scheme.equals("http", ignoreCase = true) &&
+                    uri.userInfo == null &&
+                    (host == "127.0.0.1" || host == "localhost" || host == "[::1]" || host == "::1")
             } catch (_: Exception) {
                 false
             }
         }
+
+        private fun blockedResponse(): WebResourceResponse = WebResourceResponse(
+            "text/plain",
+            "utf-8",
+            403,
+            "Forbidden",
+            mapOf("Cache-Control" to "no-store"),
+            java.io.ByteArrayInputStream("Blocked by Levix".toByteArray()),
+        )
     }
 }

@@ -2,6 +2,7 @@
 const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
 const { isOwnerJidSync, isAdminInGroupSync } = require("../../utils/permissions.cjs");
+const { mediaType } = require("../../utils/messageContent.cjs");
 
 const VALID_TYPES = ["image", "video", "sticker", "audio"];
 
@@ -88,12 +89,13 @@ async function handleMediaControl(sock, msg, _legacyConfig, _normalizeJid) {
   const senderId = msg.key.participant || msg.key.remoteJid;
 
   const groupMetadata = await sock.groupMetadata(groupId);
-  const isOwner = isOwnerJidSync(senderId);
-  const isSenderAdmin = isAdminInGroupSync(groupMetadata, senderId);
+  const senderIds = [senderId, msg.key.participantAlt, msg.key.participantPn].filter(Boolean);
+  const isOwner = msg.key.fromMe || senderIds.some(isOwnerJidSync);
+  const isSenderAdmin = senderIds.some((id) => isAdminInGroupSync(groupMetadata, id));
 
   if (isOwner || isSenderAdmin) return false;
 
-  const messageType = Object.keys(msg.message)[0].replace("Message", "").toLowerCase();
+  const messageType = mediaType(msg.message);
 
   if (mediaConfig.blocked_types.includes(messageType)) {
     logger.info(`[Media Control] Deleting ${messageType} from ${senderId} in ${groupId}.`);

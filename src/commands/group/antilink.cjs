@@ -2,6 +2,7 @@
 const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
 const { isOwnerJidSync, isAdminInGroupSync } = require("../../utils/permissions.cjs");
+const { visibleText } = require("../../utils/messageContent.cjs");
 
 // --- The Main Command Logic ---
 const command = {
@@ -106,31 +107,37 @@ const linkRegex = new RegExp(
 
 async function handleAntiLink(sock, msg, _legacyConfig, _normalizeJid) {
   const isGroup = msg.key.remoteJid.endsWith("@g.us");
-  if (!isGroup) return;
+  if (!isGroup) return false;
 
   const groupId = msg.key.remoteJid;
   const settings = getGroupSettings(groupId);
   const antilinkConfig = settings.antilink;
 
-  if (!antilinkConfig || !antilinkConfig.enabled) return;
+  if (!antilinkConfig || !antilinkConfig.enabled) return false;
 
   const senderId = msg.key.participant || msg.key.remoteJid;
 
   const groupMetadata = await sock.groupMetadata(groupId);
   // Centralized checks — handle LID/PN cross-format and bootstrap roster.
-  const isOwner = isOwnerJidSync(senderId);
-  const isSenderAdmin = isAdminInGroupSync(groupMetadata, senderId);
+  const senderIds = [senderId, msg.key.participantAlt, msg.key.participantPn].filter(Boolean);
+  const isOwner = msg.key.fromMe || senderIds.some(isOwnerJidSync);
+  const isSenderAdmin = senderIds.some((id) => isAdminInGroupSync(groupMetadata, id));
 
-  if (isOwner || isSenderAdmin) return;
+  if (isOwner || isSenderAdmin) return false;
 
-  const body = msg.message.conversation || msg.message.extendedTextMessage?.text || "";
-  if (!linkRegex.test(body)) return; // No link found
+  const body = visibleText(msg.message);
+  if (!linkRegex.test(body)) return false; // No link found
 
   // --- Link Found, Apply Rules ---
   const foundLinks = body.match(linkRegex);
-  const domain = new URL(
-    foundLinks[0].startsWith("http") ? foundLinks[0] : `http://${foundLinks[0]}`,
-  ).hostname.replace("www.", "");
+  let domain;
+  try {
+    domain = new URL(
+      foundLinks[0].startsWith("http") ? foundLinks[0] : `http://${foundLinks[0]}`,
+    ).hostname.replace("www.", "");
+  } catch {
+    return false;
+  }
 
   let shouldDelete = false;
 
@@ -157,7 +164,9 @@ async function handleAntiLink(sock, msg, _legacyConfig, _normalizeJid) {
       text: `ممنوع إرسال الروابط هنا يا @${senderId.split("@")[0]}!`,
       mentions: [senderId],
     });
+    return true;
   }
+  return false;
 }
 
 // Export both the command and the handler

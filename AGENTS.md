@@ -6,12 +6,12 @@ working with code in this repository.
 ## Project Overview
 
 **Levix** — a self-hosted personal WhatsApp bot built with Node.js and
-**Baileys v7**: a command system (55 commands), group moderation, an AI agent
-whose provider (Google Gemini / OpenAI-compatible / Anthropic) is chosen in the panel with its own endpoint, API key and model,
-scheduled messages, and a web control panel that changes
-almost all of it live. The database is the source of truth and the panel is how
-you edit it: there is no `.env`, no config file, and nothing to install beside
-Node.
+**Baileys v7**: a 59-command system, group moderation, an AI agent whose
+provider (Google Gemini / OpenAI-compatible / Anthropic) is selected in the
+panel with its own endpoint, API key and model, scheduled messages, and a web
+control panel that changes almost all of it live. The database is the source of
+truth and the panel is how you edit it: there is no `.env`, no config file, and
+nothing to install beside Node.
 
 The name ("Levix") and the credit ("built by Abdelrhman Diab, Leviro") are
 **not** settings. `src/config/brand.cjs` holds what the UI renders (name,
@@ -31,7 +31,8 @@ project); it is simply not operator-configurable.
   datastore costs zero dependencies and there is no server to install
 - **AI**: `@google/genai` (the Gemini path), plus hand-rolled `fetch` clients
   for the OpenAI-compatible and Anthropic providers — the provider is the
-  `ai_provider` panel setting; every provider has endpoint/key/model settings and the default chat model is `gemini-3.7-flash`
+  `ai_provider` panel setting; every provider has endpoint/key/model settings,
+  and the default chat model is `gemini-3.7-flash`
 - **Web Server**: Express.js (the control panel)
 - **Logging**: Pino with pino-pretty
 - **Scheduling**: `node-cron`
@@ -120,7 +121,10 @@ src/
 │   ├── paths.cjs     # THE data directory + the read-only asset root
 │   ├── secrets.cjs   # generated session key · password hash · setup code
 │   ├── settings.cjs  # every operator-changeable value: database -> default
+│   ├── vault.cjs     # AES-256-GCM sealing for API keys and auth blobs
 │   ├── defaults.cjs  # shipped command permissions + prefix (was config.json)
+│   ├── available-models.json # offline model discovery fallback
+│   ├── modelCapabilities.cjs # model capability normalization
 │   ├── runtime-config.cjs # defaults.cjs + dashboard overrides
 │   ├── brand.cjs     # name + credit for the UI (FROZEN, public)
 │   ├── brand.esm.js  # ESM face of brand.cjs
@@ -151,14 +155,19 @@ src/
 │   └── forward-tracking.middleware.js
 ├── routes/
 │   └── dashboard.api.esm.js # everything the control panel reads/writes
+├── panel/            # login throttling, session epochs, bounded session store
 ├── services/         # External services
 │   ├── aiAgent.cjs   # The Gemini agent loop + provider dispatch (tools, memory, live status)
 │   ├── aiProviders.cjs # The openai/anthropic loops over their own wire formats
-│   └── aiTools.cjs   # The tools the agent can call
+│   ├── aiTools.cjs   # The tools the agent can call
+│   ├── llmDiscovery.cjs # live, credential-scoped model discovery
+│   └── modelRegistry.cjs # model catalog and capability lookup
 └── utils/            # Utility functions (Mixed)
     ├── memory.cjs    # Long-term memory as Markdown files
     ├── statusMessage.cjs # One message per command, edited in place
     ├── textDecode.cjs    # charset / entity / mojibake decoding
+    ├── messageContent.cjs # unwrap visible text/media from Baileys envelopes
+    ├── providerUrl.cjs # provider URL validation + DNS-pinned fetch
     ├── logger.cjs    # Pino (worker transports, or in-process when packaged)
     ├── storage.cjs   # Sync storage API (CommonJS) — re-exports src/db/store.cjs
     ├── storage.esm.js # Same API for ESM callers
@@ -368,7 +377,7 @@ module.exports = {
 
 ### Baileys v7 (IMPORTANT)
 
-This project uses **Baileys v7.0.0-rc.6** which has breaking changes from v6:
+This project uses **Baileys v7.0.0-rc14** which has breaking changes from v6:
 
 1. **LID System**: WhatsApp now uses LIDs (Local Identifiers) for privacy
    - Database: `lid_mapping` table stores LID ↔ Phone Number mappings
@@ -654,11 +663,11 @@ sent twice after the first reconnect.
 ### 3. Group Moderation
 
 **Features**:
-- Welcome messages (`src/commands/group/welcome.js`)
-- Anti-link protection (`src/commands/group/antilink.js`)
-- Media restrictions (`src/commands/group/media.js`)
+- Welcome messages (`src/commands/group/welcome.cjs`)
+- Anti-link protection (`src/commands/group/antilink.cjs`)
+- Media restrictions (`src/commands/group/media.cjs`)
 - Anti-spam (`src/middleware/antispam.middleware.js`)
-- Warning system (`src/commands/group/warn.js`)
+- Warning system (`src/commands/group/warn.cjs`)
 - Auto-kick after N warnings (configurable per group)
 
 **Admin Commands**: kick, promote, demote, add, removeall, setname, setpp, etc.
@@ -773,17 +782,21 @@ the bot does can be changed from it, live:
 | Settings | API keys, model, timezone, delays, thumbnails, port, proxy | `bot_settings` (`setting:*`) |
 | Settings → password | the panel's own password | `bot_settings` (scrypt hash) |
 
-Front end is `views/dashboard.ejs` + `public/dashboard.css` + `public/dashboard.js`:
-plus `views/setup.ejs` for the first run. Plain browser JS, no framework,
-**no CDN** — the QR library and the socket.io client are both served from
-`public/`. Everything rendered came out of a WhatsApp message, so it goes
-through `esc()` before it touches `innerHTML`.
+The main dashboard is the React 19 + Vite + TypeScript SPA in `frontend/`,
+compiled to `public/dashboard/`. The EJS files in `views/` are the login,
+setup, QR and fallback gateway pages. Runtime browser dependencies are served
+locally—there is no CDN dependency.
 
 **First run.** With no password set, `/` redirects to `/setup`. From localhost
 that page just asks for a password; from anywhere else it also asks for the
 setup code printed in the terminal at startup, so a bot that comes up on a
 public IP can't be claimed by whoever finds the port first. See "Configuration"
-for how a value resolves.
+for how a value resolves. Browser mutations must be same-origin; an opaque
+`Origin: null` request cannot use the localhost shortcut to claim first run.
+
+Every authenticated panel session carries the current password epoch. Changing
+or resetting the password invalidates older HTTP and Socket.IO sessions before
+more QR or account data can be pushed.
 
 **What the dashboard deliberately can't do:** change the bot's name or its
 author (`brand.cjs`), or lower the permission of a command that declares
@@ -814,9 +827,15 @@ Which means a fresh install runs correctly against an empty database, and
   overrides, disabled commands. Group sub-commands are keyed `group:<name>`.
 - Secrets are **generated, never configured** (`src/config/secrets.cjs`): the
   session signing key on first start, the password as an scrypt hash chosen in
-  the browser. Third-party API keys are stored like any setting, but the API
-  only ever reports whether one is configured — the value never leaves the
-  server.
+  the browser. Third-party API keys and Baileys auth blobs are sealed at rest
+  with the install-local AES-256-GCM key in `src/config/vault.cjs`; the API only
+  reports whether a key is configured and never returns its value.
+
+Provider base URLs are validated both when saved and when used. Public
+endpoints require HTTPS; private, link-local, metadata, multicast and reserved
+destinations are rejected. Explicit loopback URLs remain supported for local
+Ollama/LM Studio servers. Levix-owned fetch clients pin the validated DNS answer
+to the socket and handle redirects manually so secrets cannot cross hosts.
 
 The one environment variable read anywhere in the code is `LEVIX_DATA_DIR`,
 because a Docker volume has no other way to say where it is. `--data <dir>`
@@ -955,6 +974,14 @@ logger.debug('Debug info');
     `group.cjs` read a directory, and fall back to a generated `_manifest.cjs`
     when there isn't one (that's how the single-executable build works). If you
     add another directory scan at load time, give it the same fallback.
+26. **Unlink is an account boundary.** It clears the WhatsApp directory, roles,
+    AI history, long-term memory and buffered AI context, and pauses schedules
+    created for the old account. Do not leave account-derived state active for
+    the next phone that pairs.
+27. **Compare WhatsApp identities with the shared helpers.** LIDs, phone-number
+    JIDs and device suffixes can name the same user. Moderation and role gates
+    must use `sameUser()`, `getSenderCandidates()` and `isAdminInGroup()` rather
+    than exact string equality.
 
 ## Testing Workflow
 
@@ -1007,4 +1034,3 @@ logger.debug('Debug info');
   (English). The live copy is `<data>/ai-persona.md`, hot-reloaded and editable
   from the panel. Everything above the `---` is a note to the human and is not
   sent to the model
-- No need to test at all, Don't run npm start for the testing messages, i'll do it by myself in next times

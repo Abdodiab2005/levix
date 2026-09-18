@@ -18,7 +18,12 @@ object LevixAppBundle {
     const val BOOT_FILE = "boot.mjs"
 
     fun dataDir(context: Context): File =
-        File(context.applicationContext.filesDir, "data").apply { mkdirs() }
+        File(context.applicationContext.filesDir, "data").apply {
+            mkdirs()
+            setReadable(true, true)
+            setWritable(true, true)
+            setExecutable(true, true)
+        }
 
     fun ensure(context: Context): File {
         val app = context.applicationContext

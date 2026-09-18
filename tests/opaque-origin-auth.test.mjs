@@ -12,14 +12,14 @@ try {
     { password: "a-good-password", confirm: "different-one" },
     { origin: "null" },
   );
-  equal("Origin:null setup without Sec-Fetch-Site reaches validation", res.status, 400);
+  equal("Origin:null setup without Sec-Fetch-Site is rejected", res.status, 403);
 
   res = await http.form(
     "/setup",
     { password: "a-good-password", confirm: "a-good-password" },
-    { origin: "null" },
+    { origin: server.base },
   );
-  equal("Origin:null setup without Sec-Fetch-Site can complete", res.status, 303);
+  equal("same-origin setup can complete", res.status, 303);
 
   res = await http.call("/logout", {
     method: "POST",

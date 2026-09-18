@@ -1,5 +1,5 @@
 import { createRequire } from "module";
-import normalizeJid from "../utils/normalizeJid.esm.js";
+import { getSenderCandidates, isAdminInGroup, sameUser } from "../utils/permissions.esm.js";
 import { getGroupSettings } from "../utils/storage.esm.js";
 
 const require = createRequire(import.meta.url);
@@ -10,12 +10,19 @@ export async function checkBlacklist(sock, msg) {
   const groupId = msg.key.remoteJid;
   if (!groupId.endsWith("@g.us")) return false;
 
-  const senderId = normalizeJid(msg.key.participant || msg.key.remoteJid);
+  const senderCandidates = getSenderCandidates(msg, sock);
+  const senderId = senderCandidates[0];
+  if (!senderId) return false;
   const settings = getGroupSettings(groupId);
+  const listed = (settings?.blacklist || []).some((entry) =>
+    senderCandidates.some((candidate) => sameUser(entry, candidate)),
+  );
 
-  if (settings?.blacklist?.includes(senderId)) {
+  if (listed) {
     const groupMetadata = await sock.groupMetadata(groupId);
-    const isSenderAdmin = groupMetadata.participants.some((p) => p.admin && p.id === senderId);
+    const isSenderAdmin = senderCandidates.some((candidate) =>
+      isAdminInGroup(groupMetadata, candidate),
+    );
 
     if (!isSenderAdmin) {
       logger.info(`Ignoring message from blacklisted user ${senderId}`);

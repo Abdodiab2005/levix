@@ -27,6 +27,9 @@ export const translations = {
     retry_exhausted: "استُنفذت محاولات الاتصال",
     logged_out: "تم تسجيل الخروج من الهاتف",
     idle: "الجلسة خاملة",
+    paused: "متوقف مؤقتاً",
+    resume: "استئناف الجلسة",
+    connectSession: "الاتصال",
 
     // Actions
     start: "بدء الاتصال",
@@ -45,6 +48,18 @@ export const translations = {
     close: "إغلاق",
     copy: "نسخ",
     copied: "تم النسخ!",
+
+    // Diagnostics & Health Cards
+    clientIdentity: "هوية العميل",
+    noPhonePaired: "لم يتم ربط أي هاتف بعد",
+    linkedAs: "مرتبط كـ",
+    datastoreHealth: "حالة قاعدة البيانات",
+    datastoreHealthy: "بيانات الاعتماد ومفاتيح الجلسة ومطابقات LID سليمة ومستقرة.",
+    reconnectPolicy: "سياسة إعادة الاتصال",
+    reconnectPolicyDesc: "تراجع خطي تدريجي (5ث، 10ث، 15ث، 20ث، 25ث) مع محاولات محدودة.",
+    maxAttemptsAutoPause: "الحد الأقصى: 5 محاولات · إيقاف تلقائي دون إنترنت",
+    platformWeb: "المنصة: واتساب ويب (v7 Multi-Device)",
+    databaseNodeSqlite: "قاعدة البيانات: node:sqlite (تزامني)",
 
     // Overview
     totalGroups: "إجمالي المجموعات",
@@ -75,9 +90,9 @@ export const translations = {
     langAuto: "تلقائي (حسب لغة رسالة المستخدم)",
     langAr: "العربية الفصحى (دائماً)",
     langEn: "English (دائماً)",
-    modelName: "اسم النموذج (Model Name)",
-    apiKey: "مفتاح الـ API",
-    baseUrl: "رابط الـ Base URL (اختياري / للمزودات المتوافقة)",
+    modelName: "النموذج",
+    apiKey: "مفتاح API",
+    baseUrl: "Base URL",
     maxToolSteps: "الحد الأقصى لخطوات الأدوات",
     googleSearch: "أداة بحث جوجل المدمجة (Google Search)",
     personaPrompt: "برومبت شخصية البوت (AI Persona)",
@@ -87,6 +102,28 @@ export const translations = {
     memoryDesc: "استعراض وتعديل ملفات الذاكرة التراكمية المحفوظة بصيغة Markdown",
     manageMemory: "إدارة ملفات الذاكرة",
     capabilities: "القدرات والميزات المتقدمة",
+    modelsAvailableLive: "نماذج متاحة لحسابك (تم التحقق عبر API)",
+    modelsRecommendedSeed: "نماذج مقترحة / معروفة (دليل النماذج)",
+    connectKeyFirstPrompt: "يرجى إدخال مفتاح API أولاً لاكتشاف النماذج المتاحة لحسابك",
+    refreshModels: "تحديث قائمة النماذج",
+    refreshing: "جارِ التحديث...",
+    fetchModels: "فحص النماذج المتاحة",
+    fetchingModels: "جارِ فحص النماذج...",
+    capVision: "الرؤية",
+    capStt: "الصوت",
+    capAudio: "إدخال الصوت",
+    capText: "نص",
+    capPdf: "PDF",
+    capVideo: "فيديو",
+    supported: "مدعوم",
+    unsupported: "غير مدعوم",
+    sourceLive: "حسابك",
+    sourceSeed: "مقترح",
+    sourceUnknown: "غير معروف",
+    visionUnsupportedNotice: "النموذج المختار لا يدعم معالجة الصور والرؤية (Vision)، تم تعطيل الميزة تلقائياً.",
+    sttUnsupportedNotice: "النموذج المختار لا يدعم تحويل وفهم الصوت (STT)، تم تعطيل الميزة تلقائياً.",
+    aiSttEnabled: "تفعيل تحويل وفهم الصوت (STT)",
+    aiSttEnabledDesc: "تفريغ الرسائل الصوتية وفهم الملفات الصوتية عبر النموذج المختار",
 
     // Provider labels
     providerGemini: "Google Gemini",
@@ -168,6 +205,7 @@ export const translations = {
     weatherApiKey: "مفتاح OpenWeatherMap API (اختياري)",
 
     // Language Banner & Quick Toggles
+    chooseLanguage: "اختر اللغة",
     langCardTitle: "لغة الواجهة: العربية (RTL)",
     langCardDesc: "تصميم مخصص بالكامل لاتجاه الكتابة العربي من اليمين لليسار مع خط تجوال",
     langSwitchBtn: "Switch to English",
@@ -208,6 +246,43 @@ export const translations = {
     saveFailed: "حدث خطأ أثناء حفظ الإعدادات.",
     connectionStatusUpdated: "تم تحديث حالة الاتصال.",
     networkError: "تعذر الاتصال بالخادم.",
+    loading: "جاري التحميل...",
+    aiAssistantDesc: "وكيل ذكي متعدد الأدوات مع ذاكرة طويلة الأمد",
+    settingsSub: "البادئة، التأخير، الخدمات، والأمان",
+
+    // Aliases
+    editAliases: "تعديل الأسماء المستعارة",
+    aliasesFor: "الأسماء المستعارة لـ",
+    addAlias: "إضافة اسم مستعار",
+    newAliasPlaceholder: "اكتب اسماً جديداً...",
+    noAliases: "لا توجد أسماء مستعارة",
+
+    // Recipient selector & Schedules
+    selectRecipient: "اختر المحادثة المستهدفة",
+    searchRecipients: "ابحث بالاسم أو رقم الهاتف...",
+    recipients: "المستلمون",
+    chooseChat: "اختر جهة اتصال أو مجموعة...",
+    noRecipientsFound: "لم يتم العثور على محادثات",
+    pickPhoneContact: "من دليل الهاتف",
+    pickPhoneContactHint: "اختر جهة اتصال من هاتف أندرويد",
+    maxSchedulesReached: "تم بلوغ الحد الأقصى (3 رسائل مجدولة)",
+    limitReached: "الحد الأقصى مكتمل",
+
+    // Integrations
+    tabIntegrations: "الربط والخدمات",
+    integrationsDesc: "مفاتيح واجهات البرمجة (API) للخدمات الخارجية المرتبطة بالبوت",
+    youtubeApiKey: "مفتاح YouTube Data API (اختياري)",
+
+    // Model fetching
+    selectModel: "اختر نموذجاً من القائمة...",
+    availableModels: "النماذج المتاحة من المزود",
+    customModel: "أو اكتب اسم نموذج مخصص",
+
+    // Cleaned connection view
+    sessionStatus: "حالة الجلسة",
+    sessionActive: "الجلسة متصلة وتستقبل الرسائل",
+    sessionOffline: "الجلسة غير متصلة حالياً",
+    connectedNumber: "الرقم المرتبط",
   },
   en: {
     // Navigation
@@ -233,6 +308,9 @@ export const translations = {
     retry_exhausted: "Retries exhausted",
     logged_out: "Logged out from phone",
     idle: "Session idle",
+    paused: "Paused",
+    resume: "Resume session",
+    connectSession: "Connect",
 
     // Actions
     start: "Start Connection",
@@ -251,6 +329,18 @@ export const translations = {
     close: "Close",
     copy: "Copy",
     copied: "Copied!",
+
+    // Diagnostics & Health Cards
+    clientIdentity: "Client Identity",
+    noPhonePaired: "No phone paired yet",
+    linkedAs: "Linked as",
+    datastoreHealth: "Datastore Health",
+    datastoreHealthy: "SQLite credentials, auth keys, and LID mappings are healthy.",
+    reconnectPolicy: "Reconnect Policy",
+    reconnectPolicyDesc: "Staged linear backoff (5s, 10s, 15s, 20s, 25s) with bounded retries.",
+    maxAttemptsAutoPause: "Max attempts: 5 • Auto-pause offline",
+    platformWeb: "Platform: WhatsApp Web (v7 Multi-Device)",
+    databaseNodeSqlite: "Database: node:sqlite (Synchronous)",
 
     // Overview
     totalGroups: "Total Groups",
@@ -281,9 +371,9 @@ export const translations = {
     langAuto: "Auto-detect (matches user's language)",
     langAr: "Modern Standard Arabic (Always)",
     langEn: "English (Always)",
-    modelName: "Model Name",
-    apiKey: "API Key",
-    baseUrl: "Base URL (Optional / Compatible endpoints)",
+    modelName: "Model",
+    apiKey: "API key",
+    baseUrl: "Base URL",
     maxToolSteps: "Max Tool Steps",
     googleSearch: "Built-in Google Search Grounding",
     personaPrompt: "AI Persona System Prompt",
@@ -294,6 +384,28 @@ export const translations = {
     memoryDesc: "Inspect and manage markdown memory documents stored inside the data directory.",
     manageMemory: "Manage Memory Files",
     capabilities: "Capabilities & Toggles",
+    modelsAvailableLive: "Models Available for Your Account (Live API Verified)",
+    modelsRecommendedSeed: "Recommended / Known Models (Catalog)",
+    connectKeyFirstPrompt: "Please connect your API key first to discover models available to your account",
+    refreshModels: "Refresh Models",
+    refreshing: "Refreshing...",
+    fetchModels: "Fetch Available Models",
+    fetchingModels: "Discovering models...",
+    capVision: "Vision",
+    capStt: "Speech",
+    capAudio: "Audio in",
+    capText: "Text",
+    capPdf: "PDF",
+    capVideo: "Video",
+    supported: "Supported",
+    unsupported: "Unsupported",
+    sourceLive: "Your account",
+    sourceSeed: "Catalog",
+    sourceUnknown: "Unknown",
+    visionUnsupportedNotice: "The selected model does not support Vision (image understanding). Feature disabled automatically.",
+    sttUnsupportedNotice: "The selected model does not support Speech-to-Text (STT). Feature disabled automatically.",
+    aiSttEnabled: "Enable Speech-to-Text (STT)",
+    aiSttEnabledDesc: "Audio transcription and voice note understanding using the active model",
 
     // Provider labels
     providerGemini: "Google Gemini",
@@ -377,6 +489,7 @@ export const translations = {
     weatherApiKey: "OpenWeatherMap API Key (Optional)",
 
     // Language Banner & Quick Toggles
+    chooseLanguage: "Choose Language",
     langCardTitle: "Interface Language: English (LTR)",
     langCardDesc: "Full bidirectional layout support with optimized Arabic RTL & English LTR",
     langSwitchBtn: "التبديل إلى العربية",
@@ -417,5 +530,42 @@ export const translations = {
     saveFailed: "Failed to save settings.",
     connectionStatusUpdated: "Connection status updated.",
     networkError: "Network error connecting to server.",
+    loading: "Loading...",
+    aiAssistantDesc: "Autonomous tool-calling AI agent with long-term memory",
+    settingsSub: "Prefix, delays, integrations, & security",
+
+    // Aliases
+    editAliases: "Edit Aliases",
+    aliasesFor: "Aliases for",
+    addAlias: "Add Alias",
+    newAliasPlaceholder: "Type new alias...",
+    noAliases: "No custom aliases",
+
+    // Recipient selector & Schedules
+    selectRecipient: "Select Target Chat",
+    searchRecipients: "Search by name or phone...",
+    recipients: "Recipients",
+    chooseChat: "Choose a contact or group...",
+    noRecipientsFound: "No matching chats found",
+    pickPhoneContact: "From phone book",
+    pickPhoneContactHint: "Pick a contact from this Android phone",
+    maxSchedulesReached: "Maximum limit reached (3 scheduled messages)",
+    limitReached: "Limit Reached",
+
+    // Integrations
+    tabIntegrations: "Integrations",
+    integrationsDesc: "API keys for external services connected to the bot",
+    youtubeApiKey: "YouTube Data API Key (Optional)",
+
+    // Model fetching
+    selectModel: "Select a model from list...",
+    availableModels: "Models Available from Provider",
+    customModel: "Or type a custom model name",
+
+    // Cleaned connection view
+    sessionStatus: "Session Status",
+    sessionActive: "Session active and receiving messages",
+    sessionOffline: "Session currently offline",
+    connectedNumber: "Linked Phone",
   },
 };

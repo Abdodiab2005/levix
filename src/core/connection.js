@@ -12,7 +12,12 @@
 import { DisconnectReason } from "@whiskeysockets/baileys";
 import { createRequire } from "module";
 import { bootstrapAdmins, bootstrapOwners } from "../utils/permissions.esm.js";
-import { getAllBotAdmins, getAllOwners, saveUserMetadata } from "../utils/storage.esm.js";
+import {
+  getAllBotAdmins,
+  getAllOwners,
+  saveUserMetadata,
+  upsertGroupDirectory,
+} from "../utils/storage.esm.js";
 import { groupMetadataCache } from "./socket.js";
 
 const require = createRequire(import.meta.url);
@@ -187,6 +192,10 @@ async function cacheAllGroups(sock) {
 
     for (const jid in groups) {
       groupMetadataCache.set(jid, groups[jid]);
+      upsertGroupDirectory(jid, {
+        subject: groups[jid]?.subject || null,
+        participantCount: groups[jid]?.participants?.length ?? null,
+      });
       cachedCount++;
     }
 

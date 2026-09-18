@@ -32,7 +32,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var statusPill: View
     private lateinit var statusDot: View
     private lateinit var statusPillText: TextView
-    private lateinit var btnLanguage: TextView
+    private lateinit var btnLanguage: View
 
     // Hero Section
     private lateinit var heroSubtitleText: TextView
@@ -113,19 +113,38 @@ class MainActivity : AppCompatActivity() {
         } else {
             resources.configuration.locales[0]?.language?.startsWith("ar") == true
         }
-        btnLanguage.text = if (isArabic) "English" else "العربية"
         
         val cardLanguageSwitch = findViewById<View?>(R.id.cardLanguageSwitch)
         val btnLanguageToggleCard = findViewById<TextView?>(R.id.btnLanguageToggleCard)
-        btnLanguageToggleCard?.text = if (isArabic) "English" else "العربية"
+        btnLanguageToggleCard?.text = if (isArabic) "العربية" else "English"
 
-        val toggleLanguage = {
-            val next = if (isArabic) "en" else "ar"
-            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(next))
+        val showLanguageDialog = {
+            val languages = arrayOf(getString(R.string.lang_arabic), getString(R.string.lang_english))
+            val languageTags = arrayOf("ar", "en")
+            val locales = AppCompatDelegate.getApplicationLocales()
+            val isCurrentAr = if (!locales.isEmpty) {
+                locales[0]?.language?.startsWith("ar") == true
+            } else {
+                resources.configuration.locales[0]?.language?.startsWith("ar") == true
+            }
+            val currentIndex = if (isCurrentAr) 0 else 1
+
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.dialog_choose_language)
+                .setSingleChoiceItems(languages, currentIndex) { dialog, which ->
+                    dialog.dismiss()
+                    if (which != currentIndex) {
+                        val targetTag = languageTags[which]
+                        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(targetTag))
+                    }
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
         }
-        btnLanguage.setOnClickListener { toggleLanguage() }
-        cardLanguageSwitch?.setOnClickListener { toggleLanguage() }
-        btnLanguageToggleCard?.setOnClickListener { toggleLanguage() }
+
+        btnLanguage.setOnClickListener { showLanguageDialog() }
+        cardLanguageSwitch?.setOnClickListener { showLanguageDialog() }
+        btnLanguageToggleCard?.setOnClickListener { showLanguageDialog() }
 
         heroSubtitleText = findViewById(R.id.heroSubtitleText)
         panelButton = findViewById(R.id.panelButton)
@@ -175,7 +194,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         render(HostState.snapshot)
-        maybeAutostart(intent)
+        maybeOpenPanel(intent)
     }
 
     private fun toggleLogsAccordion() {
@@ -195,17 +214,14 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        maybeAutostart(intent)
+        maybeOpenPanel(intent)
     }
 
-    private fun maybeAutostart(intent: Intent?) {
-        if (intent?.getBooleanExtra(EXTRA_STOP, false) == true) {
-            LevixHostService.stop(this)
-            return
-        }
-        if (intent?.getBooleanExtra(EXTRA_AUTOSTART, false) == true) {
-            requestStart()
-        }
+    // MainActivity must remain exported for the launcher. Never accept service
+    // start/stop controls through its extras: another installed app can launch
+    // an exported activity with arbitrary extras. The notification's harmless
+    // "open panel" navigation is the only action routed through this activity.
+    private fun maybeOpenPanel(intent: Intent?) {
         if (intent?.getBooleanExtra(EXTRA_OPEN_PANEL, false) == true) {
             openPanel()
         }
@@ -436,8 +452,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        const val EXTRA_AUTOSTART = "autostart"
-        const val EXTRA_STOP = "autostop"
         const val EXTRA_OPEN_PANEL = "openPanel"
     }
 }

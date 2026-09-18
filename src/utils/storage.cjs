@@ -17,6 +17,13 @@ module.exports = {
   getGroupSettings: store.getGroupSettings,
   saveGroupSettings: store.saveGroupSettings,
   getAllGroupSettings: store.getAllGroupSettings,
+  upsertGroupDirectory: store.upsertGroupDirectory,
+  getGroupDirectory: store.getGroupDirectory,
+  getAllGroupDirectory: store.getAllGroupDirectory,
+  clearWhatsAppDirectory: store.clearWhatsAppDirectory,
+  isPairedSession: store.isPairedSession,
+  resolveUserPhone: store.resolveUserPhone,
+  describePeer: store.describePeer,
   // Warnings
   getUserWarnings: store.getUserWarnings,
   saveUserWarnings: store.saveUserWarnings,
@@ -77,5 +84,8 @@ module.exports = {
   setScheduleStatus: store.setScheduleStatus,
   setScheduleDelivery: store.setScheduleDelivery,
   deleteSchedule: store.deleteSchedule,
+  pauseAllSchedules: store.pauseAllSchedules,
   countSchedules: store.countSchedules,
+  // AI conversation history
+  deleteAllChatHistories: store.deleteAllChatHistories,
 };
