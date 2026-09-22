@@ -283,6 +283,36 @@ export const translations = {
     sessionActive: "الجلسة متصلة وتستقبل الرسائل",
     sessionOffline: "الجلسة غير متصلة حالياً",
     connectedNumber: "الرقم المرتبط",
+
+    // Feedback & support — the panel's line to the developer
+    tabFeedback: "الملاحظات والدعم",
+    feedbackTitle: "أرسل ملاحظاتك إلى المطوّر",
+    feedbackDesc:
+      "مشكلة، اقتراح، أو سؤال — تُسلَّم رسالتك مباشرةً إلى مطوّر ليفيكس. لا يوجد وسيط ولا نظام تذاكر.",
+    feedbackTopicLabel: "موضوع الرسالة",
+    feedbackTopicBug: "هناك خلل",
+    feedbackTopicIdea: "فكرة أو طلب",
+    feedbackTopicQuestion: "سؤال",
+    feedbackTopicPraise: "يعمل بشكل جيد",
+    feedbackTopicOther: "شيء آخر",
+    feedbackMessageLabel: "رسالتك",
+    feedbackMessagePlaceholder:
+      "ماذا حدث، وماذا كنت تتوقع، وماذا كنت تفعل في ذلك الوقت. التفاصيل تساعد — يقرأها شخص حقيقي.",
+    feedbackCharsNeeded: "حرفاً إضافياً على الأقل",
+    feedbackRatingLabel: "كيف يعمل ليفيكس معك؟ (اختياري)",
+    feedbackContactLabel: "كيف نتواصل معك؟ (اختياري)",
+    feedbackContactPlaceholder: "بريد إلكتروني أو معرّف واتساب/تيليجرام — فقط إن أردت رداً",
+    feedbackSendBtn: "إرسال الملاحظات",
+    feedbackSending: "جاري الإرسال...",
+    feedbackSent: "تم الإرسال. شكراً لك!",
+    feedbackSentDesc: "وصلت رسالتك إلى مطوّر ليفيكس. إن تركت وسيلة للتواصل، توقّع رداً.",
+    feedbackSendAnother: "إرسال رسالة أخرى",
+    feedbackWhatIsSent: "ما يُرسَل مع رسالتك",
+    feedbackWhatIsSentDesc:
+      "نص رسالتك، والموضوع، والتقييم ووسيلة التواصل إن أضفتهما، بالإضافة إلى إصدار ليفيكس والمنصة التي يعمل عليها. لا تُرسَل أي رسالة واتساب أو محادثة أو جهة اتصال أو مفتاح، ولا يُرسَل شيء إلا عند الضغط على إرسال.",
+    feedbackRuntimeLabel: "يُرفَق مع الرسالة",
+    feedbackGithubHint: "للأخطاء التي تريد تتبّعها علناً مع السجلات، افتح Issue على GitHub.",
+    feedbackOpenGithub: "فتح Issue على GitHub",
   },
   en: {
     // Navigation
@@ -567,5 +597,37 @@ export const translations = {
     sessionActive: "Session active and receiving messages",
     sessionOffline: "Session currently offline",
     connectedNumber: "Linked Phone",
+
+    // Feedback & support — the panel's line to the developer
+    tabFeedback: "Feedback & Support",
+    feedbackTitle: "Send feedback to the developer",
+    feedbackDesc:
+      "A bug, an idea, or a question — it is delivered straight to the person who builds Levix. No middle layer, no ticket queue.",
+    feedbackTopicLabel: "What is this about?",
+    feedbackTopicBug: "Something is broken",
+    feedbackTopicIdea: "An idea or request",
+    feedbackTopicQuestion: "A question",
+    feedbackTopicPraise: "It works well",
+    feedbackTopicOther: "Something else",
+    feedbackMessageLabel: "Your message",
+    feedbackMessagePlaceholder:
+      "What happened, what you expected, and what you were doing at the time. Detail helps — it is read by a person.",
+    feedbackCharsNeeded: "more characters",
+    feedbackRatingLabel: "How is Levix working out? (optional)",
+    feedbackContactLabel: "How to reach you (optional)",
+    feedbackContactPlaceholder: "Email, or a WhatsApp/Telegram handle — only if you want an answer",
+    feedbackSendBtn: "Send feedback",
+    feedbackSending: "Sending...",
+    feedbackSent: "Sent. Thank you!",
+    feedbackSentDesc:
+      "It reached the developer of Levix. If you left a way to reach you, expect a reply.",
+    feedbackSendAnother: "Send something else",
+    feedbackWhatIsSent: "What goes with your message",
+    feedbackWhatIsSentDesc:
+      "Your text, the topic, and the rating and contact if you added them, plus the Levix version and the platform it runs on. No WhatsApp message, chat, contact or key is ever attached, and nothing is sent until you press Send.",
+    feedbackRuntimeLabel: "Attached to the message",
+    feedbackGithubHint:
+      "For reproducible bugs you want tracked in public with logs, open a GitHub issue.",
+    feedbackOpenGithub: "Open a GitHub issue",
   },
 };

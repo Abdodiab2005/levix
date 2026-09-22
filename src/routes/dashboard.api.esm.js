@@ -48,6 +48,15 @@ const memory = require("../utils/memory.cjs");
 const secrets = require("../config/secrets.cjs");
 const { clientAddress } = require("../utils/requestOrigin.cjs");
 const { blockedFor, recordFailure, clearAttempts } = require("../panel/login-throttle.cjs");
+const {
+  TOPICS: FEEDBACK_TOPICS,
+  MESSAGE_MAX: FEEDBACK_MESSAGE_MAX,
+  MESSAGE_MIN: FEEDBACK_MESSAGE_MIN,
+  describeRuntime,
+  feedbackRetryAfter,
+  submitFeedback,
+  validateFeedback,
+} = require("../panel/feedback.cjs");
 const { stampPanelSession } = require("../panel/session-auth.cjs");
 const { DATA_DIR } = require("../config/paths.cjs");
 const { PERSONA_FILE, activeProviderKeySetting } = require("../services/aiAgent.cjs");
@@ -1103,6 +1112,49 @@ router.post("/security/password", (req, res) => {
     res.json({ success: true });
   });
 });
+
+// ===========================================================================
+// Feedback — the operator's line to the developer
+// ===========================================================================
+
+// What the form needs to render itself, so the topics and the limits are
+// defined in one place (src/panel/feedback.cjs) instead of twice.
+router.get("/feedback/meta", (req, res) => {
+  const runtime = describeRuntime();
+  res.json({
+    success: true,
+    topics: FEEDBACK_TOPICS,
+    messageMin: FEEDBACK_MESSAGE_MIN,
+    messageMax: FEEDBACK_MESSAGE_MAX,
+    // Shown next to the form so the operator can see what travels with it.
+    runtime: { version: runtime.version, platform: runtime.platform },
+  });
+});
+
+// Leaves this machine only when the operator presses Send, and carries nothing
+// but the form's own fields plus the version and platform — see feedback.cjs.
+router.post(
+  "/feedback",
+  asyncRoute(async (req, res) => {
+    const parsed = validateFeedback(req.body || {});
+    if (!parsed.ok) return badRequest(res, parsed.error);
+
+    const retryAfter = feedbackRetryAfter();
+    if (retryAfter) {
+      res.set("Retry-After", String(retryAfter));
+      return res.status(429).json({
+        success: false,
+        error: "A few have gone out already. Try again in a little while.",
+      });
+    }
+
+    const result = await submitFeedback(parsed.value);
+    if (!result.ok) {
+      return res.status(result.status).json({ success: false, error: result.error });
+    }
+    res.json({ success: true });
+  }),
+);
 
 // ===========================================================================
 // Bot control

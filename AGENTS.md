@@ -105,6 +105,9 @@ The control panel is the only surface and it is always on.
 - QR pairing: `/qr`, behind the login, same for the socket.io channel that
   pushes QR refreshes
 - Dashboard API: `http://localhost:3001/dashboard/api/*` — behind the session
+- Feedback: `POST /dashboard/api/feedback` — the only route that talks to a
+  Levix-operated server, and only when the operator presses Send. Point
+  `LEVIX_FEEDBACK_URL` elsewhere to test it without reaching production.
 
 ## Architecture
 
@@ -156,6 +159,7 @@ src/
 ├── routes/
 │   └── dashboard.api.esm.js # everything the control panel reads/writes
 ├── panel/            # login throttling, session epochs, bounded session store
+│   └── feedback.cjs  # validates + forwards Settings → Feedback to the developer
 ├── services/         # External services
 │   ├── aiAgent.cjs   # The Gemini agent loop + provider dispatch (tools, memory, live status)
 │   ├── aiProviders.cjs # The openai/anthropic loops over their own wire formats
@@ -781,6 +785,7 @@ the bot does can be changed from it, live:
 | Tables | debts · warnings · notes · todos · users · schedules | read-only (schedules can be deleted) |
 | Settings | API keys, model, timezone, delays, thumbnails, port, proxy | `bot_settings` (`setting:*`) |
 | Settings → password | the panel's own password | `bot_settings` (scrypt hash) |
+| Settings → Feedback | nothing local — one message to the developer | forwarded server-side to `levix.leviro.net/api/feedback` (`src/panel/feedback.cjs`) |
 
 The main dashboard is the React 19 + Vite + TypeScript SPA in `frontend/`,
 compiled to `public/dashboard/`. The EJS files in `views/` are the login,
