@@ -179,6 +179,8 @@ cd android
 
 > The panel's CSS is built for the system WebView, which on the 32-bit (`armeabi-v7a`) devices the APK supports is far behind current desktop browsers. `frontend/vite.config.ts` flattens Tailwind's `@layer` blocks — a WebView without cascade layers (pre-Chrome 99) drops them wholesale and renders the panel with no styling at all — and downlevels `oklch()` through Lightning CSS.
 
+> It also re-states Tailwind's `translate`/`rotate`/`scale` utilities as `transform` behind `@supports not (translate: 0px)`. Those standalone properties need Chrome 104, and a WebView that drops them leaves the mobile sidebar parked over the page (its `-translate-x-full` never moves it off-screen), the settings toggles stuck showing "off", and the RTL icon flips dead. The build fails rather than emit a transform it cannot downlevel, so a Tailwind upgrade that uses a new shape is caught here instead of on someone's phone.
+
 Outputs land in `android/app/build/outputs/apk/<buildType>/` as `levix-android-arm64.apk` and `levix-android-armv7.apk`.
 
 ### 4. Install onto Device
