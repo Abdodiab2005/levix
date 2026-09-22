@@ -131,8 +131,18 @@ jobs:
         run: bash android/scripts/fetch-node-android.sh
       - name: Set up Android SDK (API 36)
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-36" > /dev/null
+          set -e
+          if [ -d "$ANDROID_HOME/platforms/android-36" ]; then
+            echo "platforms;android-36 already present"
+            exit 0
+          fi
+          # sdkmanager is not on the runner's PATH; it lives in the SDK.
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(command -v sdkmanager)"
+          fi
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platforms;android-36" > /dev/null
       - name: Build Android Debug APKs
         working-directory: android
         run: ./gradlew :app:assembleDebug --stacktrace
