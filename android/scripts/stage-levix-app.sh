@@ -89,10 +89,12 @@ rm -f "$OUT"
 ( cd "$STAGE" && zip -qr "$OUT" . )
 
 # The panel's HTML, JS and CSS have to be inside the archive the APK ships,
-# not merely in the staging tree next to it.
-listing="$(zip -sf "$OUT")"
+# not merely in the staging tree next to it. `zip -sf` indents each entry, and
+# sed both trims that and drains the pipe — piping into `grep -q` instead would
+# hand zip a SIGPIPE on the first match and, under pipefail, read as a failure.
+listing="$(zip -sf "$OUT" | sed 's/^[[:space:]]*//')"
 for ref in /dashboard/index.html $(dashboard_assets); do
-  if ! printf '%s\n' "$listing" | grep -qxF "  public$ref"; then
+  if ! grep -qxF "public$ref" <<<"$listing"; then
     echo "$OUT is missing public$ref" >&2
     exit 1
   fi
