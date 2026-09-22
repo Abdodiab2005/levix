@@ -519,7 +519,7 @@ memory/*.md                   (long-term memory, capped)
 | tool | what it does |
 | --- | --- |
 | `web_search` | DuckDuckGo, or Google Programmable Search when `GOOGLE_SEARCH_API_KEY` + `GOOGLE_SEARCH_CX` are set |
-| `fetch_url` | opens a page and reads its text — the host is resolved and every redirect hop re-checked against private/loopback/link-local ranges |
+| `fetch_url` | opens an **HTTPS-only** page and reads its text — the host is resolved and every redirect hop is re-checked against private/loopback/link-local ranges, and redirects cannot downgrade to HTTP |
 | `save_memory` | writes a fact to `memory/global.md` or `memory/chats/<chat>.md` — global scope is gated on the **caller** being admin/owner |
 | `search_memory` / `forget_memory` | read / delete memory entries — deletes are gated on the **caller**, same rule as `!memory forget` |
 | `grant_role` / `revoke_role` / `list_roles` | bot owner / admin roles — gated on the **caller**, owner only |

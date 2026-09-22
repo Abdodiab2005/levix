@@ -65,7 +65,7 @@ Notes:
 | **WhatsApp (Meta)** | Your messages, media you send through the bot, your phone number / pairing credentials, group metadata | Continuously while the bot is linked | Levix is a WhatsApp client; this is the product's core function |
 | **Your configured AI provider** (Google, OpenAI-compatible server, or Anthropic — chosen by you, using your own API key) | The text/media of AI conversations you take part in | Only when you invoke an AI feature (`!gemini`, `!ask`, `!ai`, `!generate`, `!stt`, …) | To generate the answer you asked for |
 | **DuckDuckGo** or **Google Programmable Search** (if you configured it) | The search query | Only when an AI answer uses the web-search tool | Web-grounded answers |
-| **Web pages the AI opens** | Standard HTTP requests to the page's server | Only when an AI answer uses the fetch-page tool | Reading a page you asked about |
+| **Web pages the AI opens** | HTTPS requests to the page's server | Only when an AI answer uses the fetch-page tool | Reading a page you asked about |
 | **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |
 
 The developer of Levix is **not** a recipient of any of the above. The AI
@@ -108,7 +108,8 @@ requested. The in-app WebView loads only the local control panel
   be HTTPS, and private/reserved/metadata addresses are rejected (explicit
   loopback is allowed for local Ollama/LM Studio servers).
 - Levix-owned fetch clients pin the validated DNS answer to the socket and
-  follow redirects manually, so credentials cannot silently cross hosts.
+  follow redirects manually. The AI `fetch_url` tool accepts HTTPS only, and
+  redirects are re-validated so a page cannot downgrade the request to HTTP.
 
 ## 6. Children
 

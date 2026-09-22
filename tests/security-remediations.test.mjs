@@ -47,11 +47,14 @@ ok("translated loopback is classified as forbidden", isForbiddenIp("::ffff:0:7f0
 ok("6to4 destinations are classified as forbidden", isForbiddenIp("2002:7f00:1::"));
 
 let result;
+result = await runTool("fetch_url", { url: "http://example.com/" }, {});
+ok("fetch_url rejects public HTTP before any request is made", Boolean(result.error));
+
 for (const url of [
-  "http://[::ffff:0:7f00:1]/",
-  "http://[2002:7f00:1::]/",
-  "http://[64:ff9b::7f00:1]/",
-  "http://[febf::1]/",
+  "https://[::ffff:0:7f00:1]/",
+  "https://[2002:7f00:1::]/",
+  "https://[64:ff9b::7f00:1]/",
+  "https://[febf::1]/",
 ]) {
   result = await runTool("fetch_url", { url }, {});
   ok(`fetch_url rejects transitioned or link-local address ${url}`, Boolean(result.error));

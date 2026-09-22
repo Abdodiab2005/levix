@@ -13,7 +13,6 @@
 // isn't allowed to do it.
 
 const dns = require("node:dns").promises;
-const http = require("node:http");
 const https = require("node:https");
 const net = require("node:net");
 
@@ -237,7 +236,7 @@ async function assertPublicUrl(rawUrl) {
   } catch {
     throw new Error("الرابط مش صالح");
   }
-  if (!/^https?:$/.test(url.protocol)) throw new Error("مسموح بـ http/https بس");
+  if (url.protocol !== "https:") throw new Error("مسموح بروابط HTTPS بس");
 
   const host = url.hostname.replace(/^\[|\]$/g, "");
 
@@ -259,7 +258,7 @@ async function assertPublicUrl(rawUrl) {
   return { url, host, addresses };
 }
 
-function pinnedAgent(protocol, expectedHost, addresses) {
+function pinnedAgent(expectedHost, addresses) {
   const lookup = (hostname, options, callback) => {
     if (String(hostname).toLowerCase() !== expectedHost.toLowerCase()) {
       const error = new Error("اتصال بدومين غير متوقع");
@@ -282,8 +281,7 @@ function pinnedAgent(protocol, expectedHost, addresses) {
     return callback(null, candidates[0].address, candidates[0].family);
   };
 
-  const Agent = protocol === "https:" ? https.Agent : http.Agent;
-  return new Agent({ keepAlive: false, lookup });
+  return new https.Agent({ keepAlive: false, lookup });
 }
 
 const MAX_REDIRECTS = 4;
@@ -294,7 +292,7 @@ async function fetchUrl(rawUrl) {
 
   for (let hop = 0; ; hop++) {
     const { url, host, addresses } = target;
-    const agent = pinnedAgent(url.protocol, host, addresses);
+    const agent = pinnedAgent(host, addresses);
     try {
       response = await axios.get(url.toString(), {
         responseType: "arraybuffer",
@@ -305,8 +303,7 @@ async function fetchUrl(rawUrl) {
         // Ignore process-wide proxy variables: they would perform their own
         // hostname resolution and bypass the pinned lookup above.
         proxy: false,
-        httpAgent: url.protocol === "http:" ? agent : undefined,
-        httpsAgent: url.protocol === "https:" ? agent : undefined,
+        httpsAgent: agent,
         headers: {
           "User-Agent": UA,
           "Accept-Language": "ar,en;q=0.9",
@@ -492,11 +489,11 @@ const TOOLS = {
     declaration: {
       name: "fetch_url",
       description:
-        "Open a URL and read its text content (article, API response, page the user sent). Use after web_search when a snippet is not enough.",
+        "Open an HTTPS URL and read its text content (article, API response, page the user sent). Use after web_search when a snippet is not enough.",
       parameters: {
         type: T.OBJECT,
         properties: {
-          url: { type: T.STRING, description: "Full http(s) URL." },
+          url: { type: T.STRING, description: "Full HTTPS URL." },
         },
         required: ["url"],
       },
