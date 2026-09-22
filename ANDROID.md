@@ -175,7 +175,9 @@ Run Gradle to assemble one APK per ABI:
 cd android
 ./gradlew :app:assembleDebug
 ```
-> The Gradle `stageLevixApp` task automatically runs `npm run build:frontend` to compile the React dashboard into `public/dashboard`, stages the production server bundle into `levix-app.zip`, and embeds it inside the APK assets.
+> The Gradle `stageLevixApp` task automatically runs `npm run build:frontend` to compile the React dashboard into `public/dashboard`, stages the production server bundle into `levix-app.zip`, and embeds it inside the APK assets. Staging fails rather than packaging an APK whose panel would render unstyled: it checks that `public/dashboard/index.html` exists, links a stylesheet, and that every asset it references is present both on disk and inside `levix-app.zip`.
+
+> The panel's CSS is built for the system WebView, which on the 32-bit (`armeabi-v7a`) devices the APK supports is far behind current desktop browsers. `frontend/vite.config.ts` flattens Tailwind's `@layer` blocks — a WebView without cascade layers (pre-Chrome 99) drops them wholesale and renders the panel with no styling at all — and downlevels `oklch()` through Lightning CSS.
 
 Outputs land in `android/app/build/outputs/apk/<buildType>/` as `levix-android-arm64.apk` and `levix-android-armv7.apk`.
 
