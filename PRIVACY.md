@@ -12,7 +12,9 @@
 Levix is a **self-hosted** personal WhatsApp bot. The Android app runs the
 entire bot **on your device** — there is no Levix cloud, no Levix account, and
 no Levix server. The developer does **not** receive any data from your
-installation: no analytics, no telemetry, no crash reports, no ads.
+installation on its own: no analytics, no telemetry, no crash reports, no ads.
+The only thing that ever reaches the developer is a message **you** write in
+**Settings → Feedback** and press Send on.
 
 Data only leaves your device as a direct result of features you use:
 
@@ -32,6 +34,13 @@ Data only leaves your device as a direct result of features you use:
 3. **Search engines** — when an AI answer uses the web-search tool, the search
    query goes to DuckDuckGo (or Google Programmable Search, if you configured
    it).
+4. **The developer, if you send feedback** — the panel's **Settings → Feedback**
+   form sends what you typed (your message, the topic, an optional 1–5 rating,
+   an optional contact) plus the Levix version and the platform it runs on. It
+   travels through `levix.leviro.net/api/feedback` and is delivered to the
+   developer as a Telegram message. Nothing is attached from WhatsApp — no
+   message, chat, contact, credential or key — and nothing is sent unless you
+   press Send.
 
 Everything else — the database, your settings, API keys, memory files, the
 control panel — stays in the app's private storage on the device.
@@ -77,10 +86,11 @@ Notes:
 | **DuckDuckGo** or **Google Programmable Search** (if you configured it) | The search query | Only when an AI answer uses the web-search tool | Web-grounded answers |
 | **Web pages the AI opens** | HTTPS requests to the page's server | Only when an AI answer uses the fetch-page tool | Reading a page you asked about |
 | **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |
+| **The developer** (via `levix.leviro.net/api/feedback`, delivered as a Telegram message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact — plus the Levix version, the platform, and the sending app's user-agent | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
 
-The developer of Levix is **not** a recipient of any of the above. The AI
-provider's use of the content you send it is governed by that provider's own
-privacy policy.
+Apart from feedback you deliberately send, the developer of Levix is **not** a
+recipient of any of the above. The AI provider's use of the content you send it
+is governed by that provider's own privacy policy.
 
 ## 3. Permissions the Android app requests
 
@@ -107,6 +117,9 @@ requested. The in-app WebView loads only the local control panel
   account's schedules.
 - **Uninstall the app** — removes everything; there is no server-side copy of
   any of your data to survive deletion.
+- **Feedback you chose to send** — it is a message in the developer's inbox, not
+  a record in a database, and the app has no copy of it. Ask the developer to
+  delete it (section 9) and it will be deleted.
 
 ## 5. Security
 
@@ -150,7 +163,9 @@ Google Play.
 **Q: Do you provide a way for users to request that their data is deleted?**
 → **No**. Levix has no developer-operated account or cloud copy to delete.
 Users can still delete locally stored data with the in-app controls described
-in section 4, unlink WhatsApp, or uninstall the app.
+in section 4, unlink WhatsApp, or uninstall the app. Feedback a user chose to
+send is the one thing the developer holds; it is deleted on request through the
+contact in section 9.
 
 Declare these data types:
 
@@ -159,7 +174,8 @@ Declare these data types:
 | Personal info → **Name** | Yes | No | Optional | App functionality |
 | Personal info → **User IDs / personal identifiers** | Yes | No | Required | App functionality |
 | Personal info → **Phone number** | Yes | No | Required | App functionality |
-| Messages → **Other in-app messages** | Yes | No | Optional | App functionality |
+| Messages → **Other in-app messages** | Yes | No | Optional | App functionality, Customer support |
+| Personal info → **Email address** | Yes | No | Optional | Customer support |
 | Photos and videos → **Photos** | Yes | No | Optional | App functionality |
 | Photos and videos → **Videos** | Yes | No | Optional | App functionality |
 | Audio files → **Voice or sound recordings** | Yes | No | Optional | App functionality |
@@ -173,10 +189,18 @@ Declare these data types:
 For every data type above:
 
 - **Processed ephemerally:** No.
-- **Collection purpose:** App functionality only.
+- **Collection purpose:** App functionality, plus **Customer support** for the
+  two rows the feedback form touches — the message text (Messages → Other
+  in-app messages) and the contact you may optionally leave (Personal info →
+  Email address). Both are optional: the form works without a contact, and
+  nothing is sent until you press Send.
 - **Sharing purpose:** none, because the form is declared as collected rather
   than shared under Google Play's applicable user-initiated/service-provider
   handling rules.
+
+The **Email address** declaration covers only the optional contact field in the
+feedback form — it is never read from the device, and the field can be left
+empty.
 
 The **Contacts** declaration does not mean Levix requests Android's Contacts
 permission. It covers WhatsApp participant identifiers (for example mentioned
@@ -209,5 +233,8 @@ date. Continued use after a change means acceptance.
 
 ## 9. Contact
 
+- In the app: **Settings → Feedback** in the control panel — it reaches the
+  developer directly, and is the fastest route for a bug or a request.
+- On the web: [levix.leviro.net/feedback](https://levix.leviro.net/feedback)
 - Issues & security reports: [github.com/Abdodiab2005/levix](https://github.com/Abdodiab2005/levix)
 - Product: Levix, built by Abdelrhman Diab, Leviro.

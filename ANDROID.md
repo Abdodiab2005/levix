@@ -197,6 +197,31 @@ The AAB contains both ABIs; Play generates the right per-device APK from it. Sig
 
 ---
 
+## Sending Feedback & Reaching the Developer
+
+Levix has no support desk, and nothing about your installation is reported
+automatically. When something is wrong — or right — the panel is where you say so:
+
+1. Tap **Open Control Panel** in the app.
+2. Go to **Settings → Feedback**.
+3. Pick what it is about (a bug, an idea, a question, or how it is going), write
+   the message, and press **Send**.
+
+The message goes to the developer directly. What travels with it: your text, the
+topic, an optional 1–5 rating, an optional way to reach you, and the Levix
+version and platform so a bug report says which build it came from. Nothing from
+WhatsApp is attached — no message, chat, contact, credential or key — and nothing
+is sent until you press Send. The same form is on the web at
+[levix.leviro.net/feedback](https://levix.leviro.net/feedback) if the host will
+not start at all.
+
+Leave the contact field empty and nothing you send names you; fill it in if you
+want an answer. For a bug you would rather see tracked in public with logs
+attached, open a [GitHub issue](https://github.com/Abdodiab2005/levix/issues)
+and use **Share Logs** in the app to attach the host log.
+
+---
+
 ## Troubleshooting & FAQ
 
 #### Why did WhatsApp show "Couldn't link device" when using a pairing code?
@@ -214,6 +239,11 @@ Then navigate to `http://localhost:3001` in your computer's browser.
 
 #### Does Levix work on 32-bit (armv7) phones?
 Yes — install **`levix-android-armv7.apk`**. (Most phones from 2016 onward are 64-bit and should use `levix-android-arm64.apk` instead; the 64-bit build is the one Google Play serves by default.)
+
+#### How do I report a bug or ask for a feature?
+**Settings → Feedback** in the control panel — see "Sending Feedback & Reaching
+the Developer" above. It reaches the developer directly, and the app version and
+platform travel with it so nothing has to be guessed.
 
 #### Will Levix drain my battery?
 Levix is optimized to idle at negligible CPU usage (~0.1% - 0.5% CPU when no messages are being processed). RAM usage typically hovers around 90–140 MB.

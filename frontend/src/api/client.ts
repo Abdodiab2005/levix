@@ -66,6 +66,23 @@ export interface NormalizedModel {
   isRecommendedSeed?: boolean;
 }
 
+export type FeedbackTopic = "bug" | "idea" | "question" | "praise" | "other";
+
+export interface FeedbackMeta {
+  success: boolean;
+  topics: FeedbackTopic[];
+  messageMin: number;
+  messageMax: number;
+  runtime: { version: string; platform: string };
+}
+
+export interface FeedbackPayload {
+  message: string;
+  topic: FeedbackTopic;
+  rating?: number | null;
+  contact?: string | null;
+}
+
 export interface FetchAiModelsResponse {
   success: boolean;
   live: boolean;
@@ -145,5 +162,8 @@ export const api = {
   }) => api.post<FetchAiModelsResponse>("/ai/models", payload || {}),
   changePassword: (current: string, next: string) =>
     api.post("/security/password", { current, next }),
+  // The bot forwards this to the developer; nothing about it is stored locally.
+  getFeedbackMeta: () => api.get<FeedbackMeta>("/feedback/meta"),
+  sendFeedback: (payload: FeedbackPayload) => api.post<{ success: boolean }>("/feedback", payload),
   getLogs: () => api.get<{ logs: any[] }>("/logs"),
 };

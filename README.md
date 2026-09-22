@@ -204,6 +204,18 @@ change. Bug reports and focused pull requests are welcome.
 For security issues, follow [SECURITY.md](SECURITY.md) and report them
 privately rather than opening a public issue.
 
+## Sending feedback
+
+**Settings → Feedback** in the control panel writes straight to the developer.
+The bot forwards it server-side to `levix.leviro.net/api/feedback`, which
+delivers it as a Telegram message; the same form is on the web at
+[levix.leviro.net/feedback](https://levix.leviro.net/feedback). It carries your
+message, the topic, an optional rating and an optional contact, plus the version
+and platform — and nothing from WhatsApp. Nothing leaves until you press Send.
+
+Prefer a public, trackable bug report with logs attached? Open an
+[issue](https://github.com/Abdodiab2005/levix/issues) instead.
+
 ## License
 
 Levix is free and open source under the [MIT License](LICENSE).

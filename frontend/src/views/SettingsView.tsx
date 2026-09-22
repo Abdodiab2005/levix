@@ -7,6 +7,7 @@ import {
   HardDrive,
   Key,
   Lock,
+  MessageSquareHeart,
   Save,
   Shield,
   Sliders,
@@ -15,12 +16,13 @@ import {
 import type React from "react";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { FeedbackForm } from "../components/FeedbackForm";
 import { Toggle } from "../components/Toggle";
 import { useToast } from "../components/Toasts";
 import { useI18n } from "../context/I18nContext";
 import { cn } from "../utils/cn";
 
-type SettingsTab = "general" | "integrations" | "proxy" | "security" | "storage";
+type SettingsTab = "general" | "integrations" | "proxy" | "security" | "storage" | "feedback";
 
 const PREFIX_PRESETS = ["!", "/", ".", "#", "$", "?"];
 
@@ -222,6 +224,22 @@ export const SettingsView: React.FC = () => {
         >
           <HardDrive size={17} className="shrink-0" />
           <span>{t("tabStorage")}</span>
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "feedback"}
+          onClick={() => setActiveTab("feedback")}
+          className={cn(
+            "flex items-center gap-2 px-3.5 py-2.5 min-h-[44px] rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50",
+            activeTab === "feedback"
+              ? "bg-brand-blue text-white shadow-md shadow-brand-blue/25"
+              : "text-muted hover:text-text-main hover:bg-panel-hover",
+          )}
+        >
+          <MessageSquareHeart size={17} className="shrink-0" />
+          <span>{t("tabFeedback")}</span>
         </button>
       </div>
 
@@ -731,6 +749,11 @@ export const SettingsView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* ====================================================================
+          TAB 6: Feedback & support — the operator's line to the developer
+         ==================================================================== */}
+      {activeTab === "feedback" && <FeedbackForm />}
     </div>
   );
 };
