@@ -47,8 +47,8 @@ android {
         applicationId = "net.leviro.levix"
         minSdk = 29
         targetSdk = 36
-        versionCode = 50
-        versionName = "4.0.0-beta"
+        versionCode = 51
+        versionName = "4.0.0"
     }
 
     // One APK per ABI — each carries only its own Node runtime, so both
