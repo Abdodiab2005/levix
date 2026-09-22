@@ -150,7 +150,10 @@ app.engine("ejs", require("ejs").__express);
 app.set("view engine", "ejs");
 app.set("views", assetPath("views"));
 // Name, tagline and credit for every template. Frozen — see brand.cjs.
-app.locals.brand = brand;
+// The one addition is the version from package.json, so the panel shows the
+// shipped version instead of a string frozen in the frontend bundle.
+const pkg = require("./package.json");
+app.locals.brand = { ...brand, version: pkg.version };
 app.use(express.static(assetPath("public")));
 app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
@@ -274,9 +277,12 @@ app.get("/", noStore, (req, res) => {
     const dashboardHtmlPath = path.join(assetPath("public"), "dashboard", "index.html");
     if (fs.existsSync(dashboardHtmlPath)) {
       let html = fs.readFileSync(dashboardHtmlPath, "utf8");
-      const credits = `<div class="brand-credits" style="display:none"><a href="${brand.developerSite}">${brand.developer}</a><a href="${brand.studioSite}">${brand.studio}</a></div>`;
+      const credits = `<div class="brand-credits" style="display:none"><a href="${app.locals.brand.developerSite}">${app.locals.brand.developer}</a><a href="${app.locals.brand.studioSite}">${app.locals.brand.studio}</a></div>`;
       html = html
-        .replace("</head>", `<script>window.__BRAND__ = ${JSON.stringify(brand)};</script></head>`)
+        .replace(
+          "</head>",
+          `<script>window.__BRAND__ = ${JSON.stringify(app.locals.brand)};</script></head>`,
+        )
         .replace("</body>", `${credits}</body>`);
       return res.type("html").send(html);
     }

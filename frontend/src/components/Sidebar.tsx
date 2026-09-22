@@ -45,7 +45,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const brand = (window as any).__BRAND__ || {
     name: "Levix",
     tagline: "Private control room",
-    version: "3.4.0",
+    // The server injects the real version into __BRAND__; this fallback
+    // bundle-time copy is only read when that script is missing.
+    version: "",
     developer: "Abdelrhman Diab",
     studio: "Leviro",
     developerSite: "https://github.com/Abdodiab2005",
@@ -146,7 +148,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <div className="p-4 border-t border-line text-xs text-faint flex flex-col gap-2.5">
           <div className="flex items-center justify-between text-[11px] text-muted">
-            <span className="font-mono">v{brand.version || "3.4.0"}</span>
+            <span className="font-mono">{brand.version ? `v${brand.version}` : ""}</span>
             <span className="flex items-center gap-1.5">
               <Shield size={14} className="text-brand-cyan" /> Local-first
             </span>
