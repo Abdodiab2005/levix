@@ -1,0 +1,76 @@
+node_modules
+
+# Everything the bot writes at runtime: the database, the WhatsApp session,
+# the memory files, the logs, temp media. One directory, one backup.
+data/
+
+# Single-executable build output
+build/
+
+# Frontend build output (Vite / React)
+public/dashboard/
+frontend/dist/
+
+# Release artifacts: the per-release installer is generated, never committed
+dist/
+
+# Generated for a packaged build, never committed
+src/commands/_manifest.cjs
+src/commands/group/_manifest.cjs
+
+# Leftovers from older versions (the bot no longer writes any of these)
+.env
+auth_info_baileys
+logs
+memory/
+media/*
+config/schedule.json
+bot.log
+bot.zip
+my-ver.zip
+
+# Android host
+android/.gradle/
+android/.idea/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+android/*.iml
+android/app/*.iml
+android/captures/
+android/.cxx/
+*.apk
+*.aab
+android/app/src/main/assets/levix-app.zip
+
+# ===== ↑ 以上同步自 .gitignore（「从 .gitignore 同步」只重写以上部分）=====
+.git/
+.hg/
+.svn/
+bower_components/
+jspm_packages/
+__pycache__/
+site-packages/
+venv/
+coverage/
+htmlcov/
+lcov-report/
+cmakefiles/
+cmake-build-*/
+bazel-*/
+pods/
+deriveddata/
+storybook-static/
+playwright-report/
+test-results/
+allure-results/
+allure-report/
+cdk.out/
+*.egg-info/
+*.dist-info/
+eggs/
+pip-wheel-metadata/
+wheels/
+# ----- ↑ 以上为 ZCode 默认排除规则（自定义规则请写在本行下方，不会被同步/恢复改动）-----
+# 自定义规则写在下方（本行提示可删除）
