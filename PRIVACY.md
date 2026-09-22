@@ -19,10 +19,16 @@ Data only leaves your device as a direct result of features you use:
 1. **WhatsApp** — Levix is a WhatsApp client; your messages, pairing data and
    WhatsApp account credentials necessarily travel to WhatsApp (Meta) so the
    product can function.
-2. **Your chosen AI provider** — when you use an AI feature, the text (and
-   media, on the Gemini path) of that conversation is sent to the AI provider
-   you configured, with **your own API key** (Google Gemini, any
-   OpenAI-compatible server, or Anthropic).
+2. **Your chosen AI provider** — when you use an AI feature, the prompt and
+   relevant context are sent to the provider you configured with **your own API
+   key** (Google Gemini, any OpenAI-compatible server, or Anthropic). Depending
+   on the feature and provider, that context can include your display name,
+   WhatsApp user/phone identifiers, group name, message text, quoted or
+   mentioned participant identifiers, AI history or long-term memory, and
+   media or files you ask the AI to process. Supported images can be sent to
+   OpenAI-compatible or Anthropic providers; Gemini can additionally receive
+   supported video, audio and documents. Speech-to-text can send audio to
+   Gemini or an OpenAI-compatible provider.
 3. **Search engines** — when an AI answer uses the web-search tool, the search
    query goes to DuckDuckGo (or Google Programmable Search, if you configured
    it).
@@ -32,7 +38,7 @@ control panel — stays in the app's private storage on the device.
 
 ---
 
-## 1. Data stored on your device (never leaves it)
+## 1. Data stored locally
 
 | Data | Where it lives | Purpose |
 | --- | --- | --- |
@@ -51,6 +57,10 @@ Notes:
 - The bot does **not** archive other people's messages. Nothing incoming is
   stored beyond the metadata rows listed above; deleted/edited messages are
   not captured.
+- Some data stored locally — especially AI conversation history, long-term
+  memory, names and WhatsApp identifiers — can be included as context in a
+  later AI request when you choose to use an AI feature. Local storage does
+  not mean that this context can never leave the device.
 - Android backup of app data is **disabled** (`allowBackup="false"`), so none
   of this is copied to Google's device backup.
 - The embedded control panel binds to the loopback interface
@@ -63,7 +73,7 @@ Notes:
 | Recipient | What is sent | When | Why |
 | --- | --- | --- | --- |
 | **WhatsApp (Meta)** | Your messages, media you send through the bot, your phone number / pairing credentials, group metadata | Continuously while the bot is linked | Levix is a WhatsApp client; this is the product's core function |
-| **Your configured AI provider** (Google, OpenAI-compatible server, or Anthropic — chosen by you, using your own API key) | The text/media of AI conversations you take part in | Only when you invoke an AI feature (`!gemini`, `!ask`, `!ai`, `!generate`, `!stt`, …) | To generate the answer you asked for |
+| **Your configured AI provider** (Google, OpenAI-compatible server, or Anthropic — chosen by you, using your own API key) | The AI prompt and relevant context, which can include display name, WhatsApp user/phone identifiers, group name, messages, quoted/mentioned participant identifiers, AI history or memory, and supported media/files | Only when you invoke an AI feature (`!gemini`, `!ask`, `!ai`, `!generate`, `!stt`, …) | To generate or process the result you asked for |
 | **DuckDuckGo** or **Google Programmable Search** (if you configured it) | The search query | Only when an AI answer uses the web-search tool | Web-grounded answers |
 | **Web pages the AI opens** | HTTPS requests to the page's server | Only when an AI answer uses the fetch-page tool | Reading a page you asked about |
 | **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |
@@ -122,50 +132,75 @@ in their country or region.
 ## 7. Google Play Data Safety form — answer map
 
 Fill the Play Console **App content → Data safety** form as follows. This
-mapping reflects the behavior described above: only data that is actually
-transmitted off the device is declared "collected"; on-device-only storage is
-excluded per Google's definition.
+mapping reflects the Android app's current behavior and the categories used by
+Google Play.
 
 **Q: Does your app collect or share any of the required user data types?**
-→ **Yes** (data leaves the device to WhatsApp and to the user-configured AI
-provider as core app functionality).
+→ **Yes**
 
-| Data type | Collected? | Shared? | Purpose | Details to enter |
-| --- | --- | --- | --- | --- |
-| Personal info → **Phone number** | Yes | No (not for the developer's or third parties' own purposes) | App functionality | Required (cannot use a core feature without it); encrypted in transit: **yes**; deletion: app unlink / uninstall |
-| Messages → **Other user messages** (content the bot relays / you send to your AI provider) | Yes | No | App functionality | Required for core feature; encrypted in transit: **yes** (WhatsApp TLS / provider HTTPS); deletion: app unlink / uninstall |
+**Q: Is all of the data collected encrypted in transit?**
+→ **Yes**
 
-**Q: Is all of the data collected encrypted in transit?** → **Yes**
+**Account creation**
+→ **My app does not allow users to create an account**
+
+**Can users log in with accounts created outside of the app?**
+→ **No**
 
 **Q: Do you provide a way for users to request that their data is deleted?**
-→ **Yes** (unlink in-app + uninstall; no server-side copy exists — see
-section 4).
+→ **No**. Levix has no developer-operated account or cloud copy to delete.
+Users can still delete locally stored data with the in-app controls described
+in section 4, unlink WhatsApp, or uninstall the app.
 
-Everything else — device IDs, app interactions, diagnostics, location,
-financial info — select **No / not collected**: the app contains no analytics,
-advertising, or crash-reporting SDKs and sends nothing to the developer.
+Declare these data types:
 
-### Other Play Console declarations (checked, as of this version)
+| Data type | Collected? | Shared? | Required? | Purpose |
+| --- | --- | --- | --- | --- |
+| Personal info → **Name** | Yes | No | Optional | App functionality |
+| Personal info → **User IDs / personal identifiers** | Yes | No | Required | App functionality |
+| Personal info → **Phone number** | Yes | No | Required | App functionality |
+| Messages → **Other in-app messages** | Yes | No | Optional | App functionality |
+| Photos and videos → **Photos** | Yes | No | Optional | App functionality |
+| Photos and videos → **Videos** | Yes | No | Optional | App functionality |
+| Audio files → **Voice or sound recordings** | Yes | No | Optional | App functionality |
+| Audio files → **Other audio files** | Yes | No | Optional | App functionality |
+| Files and docs → **Files and docs** | Yes | No | Optional | App functionality |
+| Contacts → **Contacts** | Yes | No | Optional | App functionality |
+| App activity → **In-app search history** | Yes | No | Optional | App functionality |
+| App activity → **Other user-generated content** | Yes | No | Optional | App functionality |
+| Web browsing → **Web browsing history** | Yes | No | Optional | App functionality |
 
-- **Privacy policy URL** — host this file (e.g. a GitHub-rendered
-  `PRIVACY.md` link or a page on your site) and paste the URL; Play requires
-  it for every app.
-- **App access** — the app is gated by a user-chosen password (all
-  functionality restricted).
-- **Ads** — contains no ads. **No** declarations needed.
+For every data type above:
+
+- **Processed ephemerally:** No.
+- **Collection purpose:** App functionality only.
+- **Sharing purpose:** none, because the form is declared as collected rather
+  than shared under Google Play's applicable user-initiated/service-provider
+  handling rules.
+
+The **Contacts** declaration does not mean Levix requests Android's Contacts
+permission. It covers WhatsApp participant identifiers (for example mentioned
+or quoted participants) that can be included in an AI request.
+
+Do **not** declare location, financial info, health/fitness, calendar, app
+performance/diagnostics, installed apps, or device/other identifiers. Levix
+contains no analytics, advertising, or crash-reporting SDK.
+
+### Other Play Console declarations
+
+- **Privacy policy URL** — use the public Levix privacy page.
+- **App access** — the local control panel is gated by a user-chosen password.
+- **Ads** — no ads.
 - **News app / government app / COVID-19 app** — No.
 - **Financial features** — the `!debt` command is a personal note-taking
   ledger stored locally only; no financial services are offered.
-- **AI-generated content** — the app can generate content via user-configured
-  AI providers; comply with Play's "AI-Generated Content" policy (report/block
-  mechanism is the panel + the bot owner, since the operator hosts it
-  themselves).
-- **Foreground service (special use)** — declared as
-  `specialUse` with subtype "Persistent personal WhatsApp bot host"; provide
-  the same justification text when Play asks.
-- **16 KB page size** — all shipped 64-bit native libraries are ≥ 16 KB
-  aligned; the build script verifies it.
-- **64-bit** — the AAB includes `arm64-v8a` (plus `armeabi-v7a`).
+- **AI-generated content** — Levix can generate content through user-configured
+  AI providers.
+- **Foreground service (special use)** — declared as `specialUse` with
+  subtype "Persistent personal WhatsApp bot host".
+- **16 KB page size** — all shipped 64-bit native libraries are expected to be
+  ≥ 16 KB aligned; the Android build/release checks should remain enabled.
+- **64-bit** — the AAB includes `arm64-v8a` plus `armeabi-v7a`.
 
 ## 8. Changes to this policy
 
