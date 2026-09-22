@@ -3,7 +3,7 @@
 Run **Levix** directly on your Android phone as an autonomous background companion — **no VPS, no Termux at runtime, no cloud server, and no subscription fees**.
 
 Levix for Android packages the complete Levix stack into a standalone Android APK:
-- **Node.js 24 LTS** compiled for Android Bionic (ARM64)
+- **Node.js 24 LTS** compiled for Android Bionic (ARM64 **and** ARMv7)
 - **SQLite** datastore powered by Node's built-in `node:sqlite`
 - **Baileys v7** WhatsApp protocol engine with local LID mapping
 - **AI Agent** with multi-provider support (Gemini, OpenAI, Anthropic)
@@ -17,9 +17,9 @@ Levix for Android packages the complete Levix stack into a standalone Android AP
 
 | Requirement | Specification |
 | --- | --- |
-| **Architecture** | **ARM64** (`arm64-v8a` / `aarch64`) only. Almost all Android phones made since 2016 are 64-bit. |
-| **Android Version** | **Android 10** or newer (API level 29+). |
-| **Free Storage** | ~150 MB (APK size ~35 MB + unpacked app bundle + SQLite database). |
+| **Architecture** | **ARM64** (`levix-android-arm64.apk` — almost all phones since 2016) or **ARMv7 32-bit** (`levix-android-armv7.apk` — remaining 32-bit-only devices). |
+| **Android Version** | **Android 10** or newer (API level 29+; the app targets API 36). |
+| **Free Storage** | ~400 MB (APK ~100–110 MB per ABI + unpacked app bundle + SQLite database). |
 | **WhatsApp Account** | An active WhatsApp account to link with via pairing code or QR. |
 
 ---
@@ -27,7 +27,10 @@ Levix for Android packages the complete Levix stack into a standalone Android AP
 ## Installation
 
 1. Go to the [Levix Releases](https://github.com/Abdodiab2005/levix/releases) page on GitHub.
-2. Download the latest **`levix-android-arm64.apk`**.
+2. Download the APK that matches your device:
+   - **`levix-android-arm64.apk`** — 64-bit devices (almost all phones since 2016).
+   - **`levix-android-armv7.apk`** — 32-bit-only devices.
+   - Not sure? Install the [AIDA64](https://play.google.com/store/apps/details?id=com.finalwire.aida64) app or check your phone's specs; if it says `arm64-v8a` / `aarch64` / "64-bit", use the arm64 build.
 3. Open the downloaded APK on your device and tap **Install**.
    - If prompted by Android, enable **"Install unknown apps"** for your browser or file manager.
 4. Open the **Levix Host** app from your home screen or app drawer.
@@ -111,7 +114,7 @@ Levix includes intelligent network and connection lifecycle handling:
 
 ## Media & Native Audio Transcoding (FFmpeg)
 
-Levix bundles a native ARM64 build of **FFmpeg** (`libffmpeg.so`) inside the APK.
+Levix bundles a native build of **FFmpeg** (`libffmpeg.so` — ARM64 or ARMv7, matching the APK) inside the APK.
 - **Voice Notes (`!tts`)**: The Text-to-Speech command automatically transcodes Google TTS MP3 audio into true WhatsApp PTT voice notes (`audio/ogg; codecs=opus`).
 - **Media Previews**: Video and picture thumbnails (`jpegThumbnail`) are generated locally on the phone before sending, ensuring crisp previews in chat bubbles and quotes.
 - No external packages or Termux setup are required.
@@ -142,7 +145,7 @@ To back up your configuration and WhatsApp session:
 ## Upgrading
 
 To update Levix to a newer version:
-1. Download the new `levix-android-arm64.apk` from [Releases](https://github.com/Abdodiab2005/levix/releases).
+1. Download the new APK from [Releases](https://github.com/Abdodiab2005/levix/releases) — `levix-android-arm64.apk` or `levix-android-armv7.apk`, whichever you installed before.
 2. Install it directly over the existing app.
 3. Your database, WhatsApp pairing, settings, and passwords will remain completely intact.
 4. On first launch after updating, Levix automatically detects the version upgrade and refreshes the application bundle in the background.
@@ -154,28 +157,41 @@ To update Levix to a newer version:
 If you prefer to compile Levix Host from source:
 
 ### 1. Prerequisites
-- **JDK 17** & **Android SDK 35** (`$ANDROID_HOME` configured)
+- **JDK 17** & **Android SDK 36** (`$ANDROID_HOME` configured)
 - **Node.js 24+** on your development machine
-- Tools: `zip`, `rsync`, `curl`, `python3`
+- Tools: `zip`, `rsync`, `curl`, `python3`, `dpkg-deb` (for extracting the runtime packages)
 
-### 2. Fetch the Embedded Node.js ARM64 Runtime
-Download and unpack the Node.js 24 binary for ARM64 Android:
+### 2. Fetch the Embedded Node.js Runtimes (ARM64 + ARMv7)
+Download and unpack the Node.js 24 binaries for Android (both ABIs, plus a per-ABI FFmpeg):
 ```bash
-android/scripts/fetch-node-android.sh
+android/scripts/fetch-node-android.sh                 # both ABIs
+android/scripts/fetch-node-android.sh arm64-v8a       # one ABI only
 ```
+The script verifies every 64-bit ELF is 16 KB page aligned — required by Google Play for apps targeting API 35+ — and fails the build otherwise.
 
-### 3. Build the APK
-Run Gradle to assemble the APK:
+### 3. Build the APKs
+Run Gradle to assemble one APK per ABI:
 ```bash
 cd android
 ./gradlew :app:assembleDebug
 ```
 > The Gradle `stageLevixApp` task automatically runs `npm run build:frontend` to compile the React dashboard into `public/dashboard`, stages the production server bundle into `levix-app.zip`, and embeds it inside the APK assets.
 
+Outputs land in `android/app/build/outputs/apk/<buildType>/` as `levix-android-arm64.apk` and `levix-android-armv7.apk`.
+
 ### 4. Install onto Device
 ```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/debug/levix-android-arm64.apk
 ```
+
+### 5. Build the Google Play bundle (AAB)
+Google Play requires an **AAB**, not an APK:
+```bash
+cd android
+./gradlew :app:stageLevixBundle
+# -> app/build/outputs/bundle/release/levix-android.aab
+```
+The AAB contains both ABIs; Play generates the right per-device APK from it. Sign with your upload keystore via `LEVIX_KEYSTORE_FILE` / `LEVIX_KEYSTORE_PASSWORD` / `LEVIX_KEY_ALIAS` / `LEVIX_KEY_PASSWORD` (without them it falls back to the debug keystore — fine for testing, not for Play). Before submitting, fill the Play Console **Data safety** form from [`PRIVACY.md`](PRIVACY.md) and host that policy at a public URL.
 
 ---
 
@@ -194,8 +210,8 @@ adb forward tcp:3001 tcp:3001
 ```
 Then navigate to `http://localhost:3001` in your computer's browser.
 
-#### Does Levix work on 32-bit (armv7l) phones?
-No. Modern Node.js and Baileys v7 require 64-bit ARM architecture (`arm64-v8a`).
+#### Does Levix work on 32-bit (armv7) phones?
+Yes — install **`levix-android-armv7.apk`**. (Most phones from 2016 onward are 64-bit and should use `levix-android-arm64.apk` instead; the 64-bit build is the one Google Play serves by default.)
 
 #### Will Levix drain my battery?
 Levix is optimized to idle at negligible CPU usage (~0.1% - 0.5% CPU when no messages are being processed). RAM usage typically hovers around 90–140 MB.

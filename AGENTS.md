@@ -182,7 +182,7 @@ frontend/         # React 19 + Vite + TypeScript dashboard SPA (bilingual Arabic
 views/            # Gateway pages (login.ejs · setup.ejs · qr.ejs) + fallback dashboard.ejs
 public/           # Static assets (socket.io.min.js, qrcode.min.js) and public/dashboard/ (built SPA)
 public/brand/     # Generated logo and branding files (committed)
-android/          # Android companion app (Kotlin, Gradle, embedded Node 24 ARM64, FFmpeg)
+android/          # Android companion app (Kotlin, Gradle, embedded Node 24 ARM64 + ARMv7, FFmpeg; API 36, per-ABI APKs + Play AAB)
 deploy/           # install.sh · levix.service · nginx/ (reference config)
 scripts/          # build-brand-assets.mjs · build-sea.mjs · release installer
 Dockerfile · docker-compose.yml

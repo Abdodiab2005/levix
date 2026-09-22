@@ -127,14 +127,20 @@ jobs:
           key: android-${{ runner.os }}-${{ hashFiles('android/scripts/fetch-node-android.sh', 'android/gradle/wrapper/gradle-wrapper.properties', 'package-lock.json', 'frontend/package-lock.json') }}
           restore-keys: |
             android-${{ runner.os }}-
-      - name: Fetch Node Android ARM64 runtime
+      - name: Fetch Node Android runtimes (arm64 + armv7)
         run: bash android/scripts/fetch-node-android.sh
-      - name: Build Android Debug APK
+      - name: Set up Android SDK (API 36)
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36" > /dev/null
+      - name: Build Android Debug APKs
         working-directory: android
         run: ./gradlew :app:assembleDebug --stacktrace
-      - name: Upload Debug APK
+      - name: Upload Debug APKs
         uses: actions/upload-artifact@v7
         with:
-          name: app-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: android-debug-apks
+          path: |
+            android/app/build/outputs/apk/debug/levix-android-arm64.apk
+            android/app/build/outputs/apk/debug/levix-android-armv7.apk
 

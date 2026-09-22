@@ -69,9 +69,9 @@ docker compose logs levix
 
 ### Android phone (No server required)
 
-Run Levix directly on an ARM64 Android device (Android 10+) as a self-contained background companion:
+Run Levix directly on an Android device (Android 10+, ARM64 or ARMv7) as a self-contained background companion:
 
-1. Download **`levix-android-arm64.apk`** from [Releases](https://github.com/Abdodiab2005/levix/releases).
+1. Download **`levix-android-arm64.apk`** (64-bit phones) or **`levix-android-armv7.apk`** (32-bit phones) from [Releases](https://github.com/Abdodiab2005/levix/releases).
 2. Install the APK and tap **Start Host**.
 3. Tap **Open Panel** to set your master password and link WhatsApp via 8-digit Pairing Code.
 

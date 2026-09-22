@@ -50,7 +50,7 @@ npm install, and a read-only container image without a flag.
 | --- | --- | --- | --- |
 | npm global | anyone with Node | Node 24+ | ~2 min |
 | Docker | anyone with Docker | Docker | ~3 min (first build) |
-| Android APK | Android phone (no server) | Android 10+ ARM64 | ~1 min |
+| Android APK | Android phone (no server) | Android 10+ ARM64/ARMv7 | ~1 min |
 | Install script | a Linux VPS | Node 24+, systemd, sudo | ~3 min, survives reboot |
 | Single binary | no Node at all | nothing | ~1 min |
 

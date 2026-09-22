@@ -151,7 +151,7 @@ jobs:
           path: ${{ matrix.asset }}
 
   apk:
-    name: android apk (arm64)
+    name: android apk + aab (arm64, armv7)
     needs: ci
     runs-on: ubuntu-latest
     steps:
@@ -180,8 +180,12 @@ jobs:
           key: android-${{ runner.os }}-${{ hashFiles('android/scripts/fetch-node-android.sh', 'android/gradle/wrapper/gradle-wrapper.properties', 'package-lock.json', 'frontend/package-lock.json') }}
           restore-keys: |
             android-${{ runner.os }}-
-      - name: Fetch Node Android ARM64 runtime
+      - name: Fetch Node Android runtimes (arm64 + armv7)
         run: bash android/scripts/fetch-node-android.sh
+      - name: Set up Android SDK (API 36)
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36" > /dev/null
       - name: Decode Release Keystore
         env:
           LEVIX_KEYSTORE_BASE64: ${{ secrets.LEVIX_KEYSTORE_BASE64 }}
@@ -193,19 +197,30 @@ jobs:
           else
             echo "No custom LEVIX_KEYSTORE_BASE64 secret provided; signing with default keystore"
           fi
-      - name: Build Android Release APK
+      - name: Build Android Release APKs + AAB
         working-directory: android
         env:
           LEVIX_KEYSTORE_PASSWORD: ${{ secrets.LEVIX_KEYSTORE_PASSWORD }}
           LEVIX_KEY_ALIAS: ${{ secrets.LEVIX_KEY_ALIAS }}
           LEVIX_KEY_PASSWORD: ${{ secrets.LEVIX_KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease --stacktrace
-      - name: Stage Release APK
-        run: cp android/app/build/outputs/apk/release/app-release.apk levix-android-arm64.apk
+        run: ./gradlew :app:assembleRelease :app:stageLevixBundle --stacktrace
+      - name: Stage Release Artifacts
+        run: |
+          cp android/app/build/outputs/apk/release/levix-android-arm64.apk levix-android-arm64.apk
+          cp android/app/build/outputs/apk/release/levix-android-armv7.apk levix-android-armv7.apk
+          cp android/app/build/outputs/bundle/release/levix-android.aab levix-android.aab
       - uses: actions/upload-artifact@v7
         with:
           name: levix-android-arm64.apk
           path: levix-android-arm64.apk
+      - uses: actions/upload-artifact@v7
+        with:
+          name: levix-android-armv7.apk
+          path: levix-android-armv7.apk
+      - uses: actions/upload-artifact@v7
+        with:
+          name: levix-android.aab
+          path: levix-android.aab
 
   # The GitHub release is the public claim that all shipping channels are good.
   # Do not create it unless npm, the container image and every binary all made
@@ -279,9 +294,14 @@ jobs:
             curl -fsSL https://levix.leviro.net/install/${{ github.ref_name }}.sh | bash
             ```
 
-            ## Android APK
+            ## Android
 
-            Download `levix-android-arm64.apk` from the release assets below and install on an ARM64 Android device (Android 10+).
+            Direct install (Android 10+, pick the APK matching your device):
+            - `levix-android-arm64.apk` — 64-bit devices (almost all phones since 2016)
+            - `levix-android-armv7.apk` — 32-bit-only devices
+
+            `levix-android.aab` is the Google Play artifact — it is not
+            installable directly; upload it to the Play Console.
 
             ## Verifying a download
 

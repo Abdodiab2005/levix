@@ -6,32 +6,60 @@ plugins {
 val repoRoot = rootProject.projectDir.parentFile
 val cacheDir = System.getenv("LEVIX_NODE_CACHE") ?: "${System.getProperty("user.home")}/.cache/levix-android"
 val nodeRuntimeRoot = file("$cacheDir/node-runtime")
-val nodeBinary = file("$nodeRuntimeRoot/arm64-v8a/libnode.so")
-if (!nodeBinary.isFile) {
-    throw GradleException(
-        "Missing Node 24 ARM64 runtime at $nodeBinary. Run android/scripts/fetch-node-android.sh first.",
-    )
+
+// ABIs to package, shared with the fetch script through LEVIX_ANDROID_ABIS
+// (default: both). arm64-v8a covers every modern phone; armeabi-v7a covers
+// the remaining 32-bit-only devices.
+val levixAbis = (System.getenv("LEVIX_ANDROID_ABIS") ?: "arm64-v8a,armeabi-v7a")
+    .split(",")
+    .map { it.trim() }
+    .filter { it.isNotEmpty() }
+    .distinct()
+
+val knownAbis = setOf("arm64-v8a", "armeabi-v7a")
+levixAbis.forEach { abi ->
+    if (abi !in knownAbis) {
+        throw GradleException("Unknown ABI '$abi' in LEVIX_ANDROID_ABIS (supported: $knownAbis)")
+    }
+    val dir = file("$nodeRuntimeRoot/$abi")
+    listOf("libnode.so", "libffmpeg.so").forEach { lib ->
+        if (!File(dir, lib).isFile) {
+            throw GradleException(
+                "Missing $lib for $abi at $dir. Run android/scripts/fetch-node-android.sh first.",
+            )
+        }
+    }
 }
-val ffmpegBinary = file("$nodeRuntimeRoot/arm64-v8a/libffmpeg.so")
-if (!ffmpegBinary.isFile) {
-    throw GradleException(
-        "Missing FFmpeg ARM64 binary at $ffmpegBinary. Run android/scripts/fetch-node-android.sh first.",
-    )
-}
+
+// Release signing: the upload keystore from the environment when provided
+// (what CI uses), otherwise the local debug keystore so a plain
+// assembleRelease always yields an installable APK. The same config signs
+// the AAB — Google Play rejects unsigned bundles.
+val releaseKeystorePath = System.getenv("LEVIX_KEYSTORE_FILE")
+val hasCustomKeystore = !releaseKeystorePath.isNullOrBlank() && File(releaseKeystorePath!!).isFile
+val debugKeystore = File(System.getProperty("user.home"), ".android/debug.keystore")
 
 android {
     namespace = "net.leviro.levix"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "net.leviro.levix"
         minSdk = 29
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 50
         versionName = "4.0.0-beta"
+    }
 
-        ndk {
-            abiFilters += "arm64-v8a"
+    // One APK per ABI — each carries only its own Node runtime, so both
+    // artifacts stay ~half the size of a universal build. The AAB keeps
+    // every ABI (Google Play generates per-device APKs from it).
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include(*levixAbis.toTypedArray())
+            isUniversalApk = false
         }
     }
 
@@ -47,9 +75,28 @@ android {
         }
     }
 
+    signingConfigs {
+        create("levixRelease") {
+            if (hasCustomKeystore) {
+                storeFile = File(releaseKeystorePath!!)
+                storePassword = System.getenv("LEVIX_KEYSTORE_PASSWORD") ?: "android"
+                keyAlias = System.getenv("LEVIX_KEY_ALIAS") ?: "androiddebugkey"
+                keyPassword = System.getenv("LEVIX_KEY_PASSWORD")
+                    ?: System.getenv("LEVIX_KEYSTORE_PASSWORD")
+                    ?: "android"
+            } else {
+                storeFile = debugKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("levixRelease")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -64,6 +111,22 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+    }
+}
+
+// Publish-friendly artifact names:
+//   levix-android-arm64.apk  (arm64-v8a)
+//   levix-android-armv7.apk  (armeabi-v7a)
+android.applicationVariants.configureEach {
+    outputs.all {
+        val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+        val abi = output.getFilter(com.android.build.OutputFile.ABI)
+        val baseName = when (abi) {
+            "arm64-v8a" -> "levix-android-arm64"
+            "armeabi-v7a" -> "levix-android-armv7"
+            else -> "levix-android"
+        }
+        output.outputFileName = "$baseName.apk"
     }
 }
 
@@ -83,8 +146,54 @@ tasks.register<Exec>("stageLevixApp") {
     outputs.file(file("src/main/assets/levix-app.zip"))
 }
 
+// Creates the debug keystore on demand so the release signing config always
+// has something to sign with when no upload keystore is configured.
+tasks.register("ensureDebugKeystore") {
+    outputs.file(debugKeystore)
+    doLast {
+        if (!debugKeystore.isFile) {
+            debugKeystore.parentFile?.mkdirs()
+            exec {
+                // The running JVM's own keytool — PATH on the daemon is not
+                // guaranteed to carry it.
+                val keytool = File(System.getProperty("java.home"), "bin/keytool")
+                commandLine(
+                    keytool.absolutePath, "-genkey", "-v",
+                    "-keystore", debugKeystore.absolutePath,
+                    "-storepass", "android",
+                    "-alias", "androiddebugkey",
+                    "-keypass", "android",
+                    "-keyalg", "RSA",
+                    "-keysize", "2048",
+                    "-validity", "10000",
+                    "-dname", "CN=Android Debug,O=Android,C=US",
+                )
+            }
+        }
+    }
+}
+
 tasks.named("preBuild").configure {
     dependsOn("stageLevixApp")
+    if (!hasCustomKeystore) {
+        dependsOn("ensureDebugKeystore")
+    }
+}
+
+// The Google Play artifact: ./gradlew :app:stageLevixBundle
+// -> outputs/bundle/release/levix-android.aab (signed, both ABIs inside).
+tasks.register("stageLevixBundle") {
+    description = "Build the signed release AAB (levix-android.aab) for Google Play."
+    dependsOn("bundleRelease")
+    doLast {
+        val src = layout.buildDirectory.file("outputs/bundle/release/app-release.aab").get().asFile
+        if (!src.isFile) {
+            throw GradleException("bundleRelease produced no AAB at $src")
+        }
+        val dst = File(src.parentFile, "levix-android.aab")
+        src.copyTo(dst, overwrite = true)
+        logger.lifecycle("Signed AAB ready: $dst")
+    }
 }
 
 dependencies {
@@ -93,76 +202,3 @@ dependencies {
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.activity:activity-ktx:1.9.3")
 }
-
-android.applicationVariants.configureEach {
-    val variantName = name
-    val cap = name.replaceFirstChar { ch -> ch.uppercase() }
-    if (variantName == "release") {
-        tasks.named("package$cap").configure {
-            doLast {
-                val apkDir = layout.buildDirectory.get().asFile.resolve("outputs/apk/$variantName")
-                val finalApk = File(apkDir, "app-$variantName.apk")
-                val rawApk = finalApk.takeIf { it.isFile }
-                    ?: File(apkDir, "app-$variantName-unsigned.apk").takeIf { it.isFile }
-                    ?: return@doLast
-                val buildTools = File(System.getenv("ANDROID_HOME") ?: "", "build-tools").listFiles()
-                    ?.sortedByDescending { it.name }
-                    ?.firstOrNull()
-                    ?: throw GradleException("ANDROID_HOME/build-tools not found; cannot re-sign APK")
-                val aligned = File(apkDir, "app-$variantName-aligned.apk")
-                exec {
-                    commandLine(File(buildTools, "zipalign").absolutePath, "-f", "-p", "4", rawApk.absolutePath, aligned.absolutePath)
-                }
-                val releaseKsPath = System.getenv("LEVIX_KEYSTORE_FILE")
-                val isCustomReleaseKs = !releaseKsPath.isNullOrBlank() && File(releaseKsPath).isFile
-                val ks = if (isCustomReleaseKs) {
-                    File(releaseKsPath!!)
-                } else {
-                    File(System.getProperty("user.home"), ".android/debug.keystore")
-                }
-                if (!ks.exists()) {
-                    ks.parentFile?.mkdirs()
-                    exec {
-                        commandLine(
-                            "keytool", "-genkey", "-v",
-                            "-keystore", ks.absolutePath,
-                            "-storepass", "android",
-                            "-alias", "androiddebugkey",
-                            "-keypass", "android",
-                            "-keyalg", "RSA",
-                            "-keysize", "2048",
-                            "-validity", "10000",
-                            "-dname", "CN=Android Debug,O=Android,C=US",
-                        )
-                    }
-                }
-                val ksPass = if (isCustomReleaseKs) (System.getenv("LEVIX_KEYSTORE_PASSWORD") ?: "android") else "android"
-                val keyAlias = if (isCustomReleaseKs) (System.getenv("LEVIX_KEY_ALIAS") ?: "androiddebugkey") else "androiddebugkey"
-                val keyPass = if (isCustomReleaseKs) (System.getenv("LEVIX_KEY_PASSWORD") ?: ksPass) else "android"
-
-                val ksPassArg = if (ksPass.startsWith("pass:")) ksPass else "pass:$ksPass"
-                val keyPassArg = if (keyPass.startsWith("pass:")) keyPass else "pass:$keyPass"
-
-                exec {
-                    commandLine(
-                        File(buildTools, "apksigner").absolutePath,
-                        "sign",
-                        "--ks", ks.absolutePath,
-                        "--ks-pass", ksPassArg,
-                        "--ks-key-alias", keyAlias,
-                        "--key-pass", keyPassArg,
-                        "--in", aligned.absolutePath,
-                        "--out", finalApk.absolutePath,
-                    )
-                }
-                aligned.delete()
-                if (rawApk != finalApk && rawApk.exists()) {
-                    rawApk.delete()
-                }
-            }
-        }
-    }
-}
-
-
-
