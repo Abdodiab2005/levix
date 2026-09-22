@@ -1,6 +1,6 @@
 # Levix Privacy Policy & Google Play Data Safety
 
-> **Effective date:** 2026-09-20
+> **Effective date:** 2026-09-22
 > **Applies to:** the Levix Android app (`net.leviro.levix`) and the Levix
 > self-hosted server distributed from this repository.
 > **Product:** Levix, built by Abdelrhman Diab, Leviro.
@@ -112,9 +112,11 @@ requested. The in-app WebView loads only the local control panel
 
 ## 6. Children
 
-Levix is not directed at children. WhatsApp's own terms require users to be at
-least 16 (or the minimum age in your country), and the app should be declared
-as not child-directed (target age 13+) in Play Console.
+Levix is not directed at children. The Levix Android app is intended for users
+aged **16 and over**. In Google Play Console, the target audience should be
+declared as **16–17** and **18 and over**; age groups under 16 should not be
+selected. Users must also meet WhatsApp's minimum-age requirements applicable
+in their country or region.
 
 ## 7. Google Play Data Safety form — answer map
 
