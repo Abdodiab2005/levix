@@ -195,7 +195,7 @@ cd android
 ./gradlew :app:stageLevixBundle
 # -> app/build/outputs/bundle/release/levix-android.aab
 ```
-The AAB contains both ABIs; Play generates the right per-device APK from it. Sign with your upload keystore via `LEVIX_KEYSTORE_FILE` / `LEVIX_KEYSTORE_PASSWORD` / `LEVIX_KEY_ALIAS` / `LEVIX_KEY_PASSWORD` (without them it falls back to the debug keystore — fine for testing, not for Play). Before submitting, fill the Play Console **Data safety** form from [`PRIVACY.md`](PRIVACY.md) and host that policy at a public URL.
+The AAB contains both ABIs; Play generates the right per-device APK from it. Sign with your upload keystore via `LEVIX_KEYSTORE_FILE` / `LEVIX_KEYSTORE_PASSWORD` / `LEVIX_KEY_ALIAS` / `LEVIX_KEY_PASSWORD` (`stageLevixBundle` refuses to run without them — Play rejects debug-signed bundles; release APKs from `assembleRelease` still fall back to the debug keystore for local testing). Before submitting, fill the Play Console **Data safety** form from [`PRIVACY.md`](PRIVACY.md) and host that policy at a public URL.
 
 ---
 
