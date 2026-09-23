@@ -205,7 +205,10 @@ jobs:
             echo "$LEVIX_KEYSTORE_BASE64" | base64 -d > ~/.android/release.keystore
             echo "LEVIX_KEYSTORE_FILE=$HOME/.android/release.keystore" >> "$GITHUB_ENV"
           else
-            echo "No custom LEVIX_KEYSTORE_BASE64 secret provided; signing with default keystore"
+            # A release signed with the debug key is rejected by Google Play,
+            # and switching keys later breaks updates for sideloaded APKs.
+            echo "::error::LEVIX_KEYSTORE_BASE64 secret is missing; refusing to ship a debug-signed release"
+            exit 1
           fi
       - name: Build Android Release APKs + AAB
         working-directory: android

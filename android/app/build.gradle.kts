@@ -47,8 +47,8 @@ android {
         applicationId = "net.leviro.levix"
         minSdk = 29
         targetSdk = 36
-        versionCode = 54
-        versionName = "4.0.3"
+        versionCode = 55
+        versionName = "4.0.4"
     }
 
     // One APK per ABI — each carries only its own Node runtime, so both
@@ -185,6 +185,16 @@ tasks.named("preBuild").configure {
 tasks.register("stageLevixBundle") {
     description = "Build the signed release AAB (levix-android.aab) for Google Play."
     dependsOn("bundleRelease")
+    doFirst {
+        // Google Play refuses anything signed with the debug certificate, so
+        // an AAB built without the upload keystore is never worth producing.
+        if (!hasCustomKeystore) {
+            throw GradleException(
+                "No upload keystore: set LEVIX_KEYSTORE_FILE (and LEVIX_KEYSTORE_PASSWORD, " +
+                    "LEVIX_KEY_ALIAS) — Google Play rejects debug-signed bundles.",
+            )
+        }
+    }
     doLast {
         val src = layout.buildDirectory.file("outputs/bundle/release/app-release.aab").get().asFile
         if (!src.isFile) {

@@ -63,7 +63,9 @@ cd android
 
 Set `LEVIX_KEYSTORE_FILE` / `LEVIX_KEYSTORE_PASSWORD` / `LEVIX_KEY_ALIAS` /
 `LEVIX_KEY_PASSWORD` to sign with your Play upload keystore (CI wires the same
-variables from repository secrets). Fill the Data safety form from the
+variables from repository secrets). The bundle task fails without them rather
+than produce a debug-signed AAB Play would reject, and a tagged release fails
+if the `LEVIX_KEYSTORE_BASE64` secret is missing. Fill the Data safety form from the
 repo's `PRIVACY.md` before submitting.
 
 Build a single ABI locally with `LEVIX_ANDROID_ABIS=arm64-v8a ./gradlew ...`.
