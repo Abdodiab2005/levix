@@ -4,9 +4,10 @@
 //   help ar | help en    the list, in that language
 //   help <command> [lang] one command, in the bot's language unless one is given
 //
-// "The bot's language" is the bot_language setting; in "auto" it is the script
-// the message was typed in. Every command documents itself in both languages,
-// and this file is what keeps a new command from shipping in only one.
+// "The bot's language" is the language every reply uses (utils/i18n.cjs; see
+// tests/reply-language.test.mjs). Every command documents itself in both
+// languages, and this file is what keeps a new command from shipping in only
+// one.
 
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -15,7 +16,7 @@ import { equal, finish, ok, require, ROOT, section, useTempDataDir } from "./har
 useTempDataDir("levix-help-i18n");
 
 const settings = require("./src/config/settings.cjs");
-const { localize, parseLang, resolveLang } = require("./src/utils/commandDocs.cjs");
+const { localize, parseLang } = require("./src/utils/commandDocs.cjs");
 const help = require("./src/commands/help.cjs");
 
 const ARABIC_LETTERS = /[\u0621-\u064A]/;
@@ -91,14 +92,6 @@ equal("عربي", parseLang("عربي"), "ar");
 equal("انجليزي", parseLang("انجليزي"), "en");
 equal("a command name is not a language", parseLang("kick"), null);
 
-settings.set("bot_language", "auto");
-equal("auto + Latin text is English", resolveLang("!help"), "en");
-equal("auto + Arabic text is Arabic", resolveLang("!مساعدة"), "ar");
-settings.set("bot_language", "ar");
-equal("ar is ar whatever the text", resolveLang("!help"), "ar");
-settings.set("bot_language", "en");
-equal("en is en whatever the text", resolveLang("!مساعدة"), "en");
-
 equal("a plain string is shown as-is", localize("only one", "ar"), "only one");
 equal("a missing language falls back", localize({ en: "english" }, "ar"), "english");
 
@@ -168,14 +161,20 @@ section("one command, in either language");
   ok("help kick en on an Arabic bot is English", enOnArabicBot.includes("*Command Details*"));
 }
 
-section("auto: the script the message was typed in");
+section("auto: help follows the message like every other reply");
 
 {
   settings.set("bot_language", "auto");
-  const latin = await runHelp([], { body: "!help", invokedName: "help" });
-  ok("!help is English", latin.includes("*General Commands*"));
-  const arabic = await runHelp([], { body: "!مساعدة", invokedName: "مساعدة" });
+  const bare = await runHelp([], { invokedName: "help" });
+  ok("a bare !help is Arabic, the bot's default", bare.includes("*الأوامر العامة*"));
+  const arabic = await runHelp([], { invokedName: "مساعدة" });
   ok("!مساعدة is Arabic", arabic.includes("*الأوامر العامة*"));
+  const commandName = await runHelp(["kick"], { invokedName: "help" });
+  ok("a command name is not English: !help kick stays Arabic", commandName.includes("*تفاصيل الأمر*"));
+  const english = await runHelp(["please"], { invokedName: "help" });
+  ok("an English word makes it English", english.includes("Command \"*please*\" not found"));
+  const explicit = await runHelp(["en"], { invokedName: "help" });
+  ok("and help en is English", explicit.includes("*General Commands*"));
 }
 
 section("an unknown command is answered in the same language");

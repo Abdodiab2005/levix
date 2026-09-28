@@ -50,6 +50,7 @@ const GLOBAL_FILE = path.join(ROOT, "global.md");
 const MAX_ENTRY_CHARS = 2000;
 // Read per call so the dashboard can change it without a restart.
 const settings = require("../config/settings.cjs");
+const { tr } = require("./i18n.cjs");
 const maxContextChars = () => settings.get("memory_context_chars");
 
 // ---------------------------------------------------------------------------
@@ -211,7 +212,7 @@ function addMemory({ scope = "chat", chatId, content, by, chatName } = {}) {
   const text = String(content || "")
     .trim()
     .slice(0, MAX_ENTRY_CHARS);
-  if (!text) throw new Error("مفيش محتوى أحفظه");
+  if (!text) throw new Error(tr("There is nothing to save", "مفيش محتوى أحفظه"));
 
   const filePath = memoryFilePath(normalizedScope, chatId);
   ensureDirs();

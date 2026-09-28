@@ -10,6 +10,7 @@ import { handleCommand } from "./command.handler.js";
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
 const { visibleText } = require("../utils/messageContent.cjs");
+const { detectLang, withLang } = require("../utils/i18n.cjs");
 
 // Envelopes that carry no user-visible content: message revokes and edits
 // (protocolMessage), reactions, poll votes, the undecrypted edit envelope, and
@@ -76,6 +77,14 @@ export async function handleIncomingMessage(sock, m) {
   // otherwise sending an image with caption "!gemini حلل ده" is invisible
   // to the command handler and the user sees nothing happen.
   const body = visibleText(msg.message);
+
+  // Everything the bot says about this message — a moderation warning, a
+  // command's reply — goes out in one language (see utils/i18n.cjs). A
+  // command narrows this down to its own arguments.
+  return withLang(detectLang(body), () => processMessage(sock, msg, body));
+}
+
+async function processMessage(sock, msg, body) {
   const isGroup = msg.key.remoteJid.endsWith("@g.us");
 
   // Update user metadata (last seen)

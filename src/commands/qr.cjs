@@ -1,6 +1,7 @@
 // file: /commands/qr.js
 const qrcode = require("qrcode");
 const logger = require("../utils/logger.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "qr",
@@ -13,6 +14,8 @@ module.exports = {
     ar: "qr <نص|رابط>",
   },
   chat: "all",
+  // What goes in the code is data, not the language you are talking in.
+  neutralArgs: true,
 
   async execute(sock, msg, args) {
     const remoteJid = msg.key.remoteJid;
@@ -20,7 +23,10 @@ module.exports = {
 
     if (!textToEncode) {
       return await sock.sendMessage(remoteJid, {
-        text: "يرجى كتابة النص أو الرابط الذي تريد تحويله بعد الأمر.\n*مثال:*\n`!qr https://google.com`",
+        text: tr(
+          "Write the text or link to encode after the command.\n*Example:*\n`!qr https://google.com`",
+          "يرجى كتابة النص أو الرابط الذي تريد تحويله بعد الأمر.\n*مثال:*\n`!qr https://google.com`",
+        ),
       });
     }
 
@@ -33,12 +39,15 @@ module.exports = {
       // Send the image buffer as a photo
       await sock.sendMessage(remoteJid, {
         image: qrImageBuffer,
-        caption: `*QR Code for:*\n\`\`\`${textToEncode}\`\`\``,
+        caption: tr(
+          `*QR code for:*\n\`\`\`${textToEncode}\`\`\``,
+          `*رمز QR لـ:*\n\`\`\`${textToEncode}\`\`\``,
+        ),
       });
     } catch (error) {
       logger.error({ err: error }, "Failed to generate QR code");
       await sock.sendMessage(remoteJid, {
-        text: "حدث خطأ أثناء إنشاء QR code.",
+        text: tr("Something went wrong while making the QR code.", "حدث خطأ أثناء إنشاء QR code."),
       });
     }
   },

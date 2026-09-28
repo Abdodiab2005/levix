@@ -1,5 +1,6 @@
 // file: /commands/tagadmins.js
 const logger = require("../../utils/logger.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "tagadmins",
@@ -24,17 +25,20 @@ module.exports = {
 
       if (admins.length === 0) {
         return await sock.sendMessage(groupId, {
-          text: "لا يوجد مشرفون في هذا الجروب.",
+          text: tr("This group has no admins.", "لا يوجد مشرفون في هذا الجروب."),
         });
       }
 
       // Get the custom message provided by the user, or use a default one
-      const customMessage = args.join(" ") || "يرجى حضور المشرفين";
+      const customMessage = args.join(" ") || tr("Admins, please come here", "يرجى حضور المشرفين");
 
       // Get an array of JIDs for the mentions property
       const mentions = admins.map((a) => a.id);
 
-      let text = `*🚨 تنبيه للمشرفين 🚨*\n\n*الرسالة:* ${customMessage}\n\n`;
+      let text = tr(
+        `*🚨 Calling the admins 🚨*\n\n*Message:* ${customMessage}\n\n`,
+        `*🚨 تنبيه للمشرفين 🚨*\n\n*الرسالة:* ${customMessage}\n\n`,
+      );
 
       // Add a tag for each admin
       for (const admin of admins) {
@@ -47,7 +51,7 @@ module.exports = {
       });
     } catch (error) {
       logger.error({ err: error, command: "tagadmins" }, "Error in !tagadmins command");
-      await sock.sendMessage(groupId, { text: "حدث خطأ." });
+      await sock.sendMessage(groupId, { text: tr("Something went wrong.", "حدث خطأ.") });
     }
   },
 };

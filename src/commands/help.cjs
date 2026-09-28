@@ -5,9 +5,10 @@
 //   help <command>       one command, in the bot's language
 //   help <command> ar    one command, in that language (`help ar <command>` too)
 //
-// "The bot's language" is the `bot_language` setting; when that is "auto" it is
-// the script the message was typed in (see utils/commandDocs.cjs). Each
-// command carries its own description and usage as `{ en, ar }`.
+// "The bot's language" is the language every reply uses (utils/i18n.cjs): the
+// `bot_language` setting, and in "auto" the language the message is written
+// in — with command names counted as syntax, so `!help kick` is not English.
+// Each command carries its own description and usage as `{ en, ar }`.
 
 const fs = require("fs");
 const path = require("path");
@@ -15,7 +16,8 @@ const logger = require("../utils/logger.cjs");
 const brand = require("../config/brand.cjs");
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
-const { parseLang, resolveLang, localize } = require("../utils/commandDocs.cjs");
+const { parseLang, localize } = require("../utils/commandDocs.cjs");
+const { detectLang, syntaxWords } = require("../utils/i18n.cjs");
 
 // Every command module, the way the loader finds them: from the generated
 // manifest in a packaged build (there is no directory to read inside an
@@ -78,6 +80,15 @@ function loadAllCommands() {
 
   cached = { commands, aliasIndex };
   return cached;
+}
+
+/** Every command's name, aliases and keywords — what may follow !help. */
+function helpSyntax(commands) {
+  const words = new Set();
+  for (const cmd of [...commands.general, ...commands.group]) {
+    for (const word of syntaxWords(cmd, aliasesOf(cmd))) words.add(word);
+  }
+  return words;
 }
 
 function findCommand(query, commands, aliasIndex) {
@@ -310,11 +321,15 @@ module.exports = {
   },
   chat: "all",
 
-  async execute(sock, msg, args = [], body = "", _groupMetadata = null, ctx = {}) {
+  async execute(sock, msg, args = [], _body = "", _groupMetadata = null, ctx = {}) {
     const prefix = currentPrefix();
     const { commands, aliasIndex } = loadAllCommands();
     const parsed = parseArgs(args);
-    const lang = parsed.lang || resolveLang(`${ctx?.invokedName || ""} ${body || args.join(" ")}`);
+    // Command names after !help are syntax, not English: `!help kick` on an
+    // auto bot is answered like any bare command.
+    const lang =
+      parsed.lang ||
+      detectLang(`${ctx?.invokedName || ""} ${args.join(" ")}`, { syntax: helpSyntax(commands) });
 
     if (!parsed.query) {
       return sendBotMessage(

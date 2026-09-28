@@ -34,6 +34,7 @@ const settings = harnessRequire("./src/config/settings.cjs");
 const aiAgent = harnessRequire("./src/services/aiAgent.cjs");
 const aiTools = harnessRequire("./src/services/aiTools.cjs");
 const aiProviders = harnessRequire("./src/services/aiProviders.cjs");
+const { withLang } = harnessRequire("./src/utils/i18n.cjs");
 
 const toolNames = (tools) => tools.flatMap((tool) => Object.keys(tool));
 
@@ -209,8 +210,12 @@ section("citations come from real grounding metadata and nowhere else");
     sources.every((source) => !!source.uri),
   );
 
-  const block = aiAgent.formatSources(sources);
+  const block = withLang("en", () => aiAgent.formatSources(sources));
   ok("there is a Sources block", block.includes("Sources"));
+  ok(
+    "…headed in the reply language",
+    withLang("ar", () => aiAgent.formatSources(sources)).includes("المصادر"),
+  );
   equal("duplicates are collapsed", (block.match(/example\.com\/a/g) || []).length, 1);
   ok("both distinct sources are listed", block.includes("docs.example.org/b"));
   ok("titles are used", block.includes("Example") && block.includes("Docs"));

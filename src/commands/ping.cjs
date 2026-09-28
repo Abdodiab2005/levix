@@ -1,3 +1,5 @@
+const { tr } = require("../utils/i18n.cjs");
+
 // file: /commands/ping.js
 
 module.exports = {
@@ -14,6 +16,10 @@ module.exports = {
 
   async execute(sock, msg) {
     // The bot will reply with "Pong!" and quote the original message
-    await sock.sendMessage(msg.key.remoteJid, { text: "Pong! 🏓" }, { quoted: msg });
+    await sock.sendMessage(
+      msg.key.remoteJid,
+      { text: tr("Pong! 🏓", "بونج! 🏓") },
+      { quoted: msg },
+    );
   },
 };

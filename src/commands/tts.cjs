@@ -23,6 +23,7 @@ const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 const execFileAsync = promisify(execFile);
 
 const { ffmpegPath } = require("../utils/thumbnail.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 function tmpPath(ext) {
   return path.join(
@@ -158,16 +159,24 @@ module.exports = {
         sock,
         chatId,
         {
-          text: "📢 الاستخدام:\n!tts <النص>\n\nأو رد على رسالة نصية بالأمر !tts\n\n✨ مجاني تماماً - بدون تكاليف!",
+          text: tr(
+            "📢 Usage:\n!tts <text>\n\nor reply to a text message with !tts\n\n✨ Completely free — no costs!",
+            "📢 الاستخدام:\n!tts <النص>\n\nأو رد على رسالة نصية بالأمر !tts\n\n✨ مجاني تماماً - بدون تكاليف!",
+          ),
         },
         { replyTo: msg },
       );
     }
 
     // One status line: it disappears once the voice note is on its way.
-    const status = await createStatus(sock, chatId, "🎙️ بحوّل النص لصوت...", {
-      replyTo: msg,
-    });
+    const status = await createStatus(
+      sock,
+      chatId,
+      tr("🎙️ Turning the text into speech...", "🎙️ بحوّل النص لصوت..."),
+      {
+        replyTo: msg,
+      },
+    );
 
     try {
       const voice = await synthesizeVoice(textToConvert);
@@ -204,7 +213,10 @@ module.exports = {
       logger.info("[TTS] Successfully delivered TTS audio");
     } catch (error) {
       logger.error({ err: error }, "[TTS] Error converting text to speech");
-      await status.fail(error, "حصلت مشكلة وأنا بحوّل النص لصوت");
+      await status.fail(
+        error,
+        tr("Something went wrong turning the text into speech", "حصلت مشكلة وأنا بحوّل النص لصوت"),
+      );
     }
   },
 

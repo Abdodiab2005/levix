@@ -1,6 +1,7 @@
 // file: /commands/save.js
 const { saveNote } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "save",
@@ -22,7 +23,10 @@ module.exports = {
 
     if (!keywordArg || !keywordArg.startsWith("#") || !noteText) {
       return await sock.sendMessage(groupId, {
-        text: "صيغة غير صحيحة. استخدم:\n`!save #keyword نص الملاحظة`",
+        text: tr(
+          "Wrong format. Use:\n`!save #keyword note text`",
+          "صيغة غير صحيحة. استخدم:\n`!save #keyword نص الملاحظة`",
+        ),
       });
     }
 
@@ -32,11 +36,16 @@ module.exports = {
       // Simply call the new storage function
       saveNote(groupId, keyword, noteText);
       await sock.sendMessage(groupId, {
-        text: `✅ تم حفظ الملاحظة بنجاح بالكلمة المفتاحية: \`#${keyword}\``,
+        text: tr(
+          `✅ Note saved under the keyword \`#${keyword}\``,
+          `✅ تم حفظ الملاحظة بنجاح بالكلمة المفتاحية: \`#${keyword}\``,
+        ),
       });
     } catch (error) {
       logger.error({ err: error, command: "save" }, "Error in !save command");
-      await sock.sendMessage(groupId, { text: "حدث خطأ أثناء حفظ الملاحظة." });
+      await sock.sendMessage(groupId, {
+        text: tr("Something went wrong while saving the note.", "حدث خطأ أثناء حفظ الملاحظة."),
+      });
     }
   },
 };

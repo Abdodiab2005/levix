@@ -1,5 +1,6 @@
 // file: /commands/notes.js
 const { getAllNotes } = require("../utils/storage.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "notes",
@@ -21,13 +22,16 @@ module.exports = {
 
     if (keywords.length === 0) {
       return await sock.sendMessage(groupId, {
-        text: "لا توجد ملاحظات محفوظة في هذا الجروب.",
+        text: tr("This group has no saved notes.", "لا توجد ملاحظات محفوظة في هذا الجروب."),
       });
     }
 
-    let reply = "*🔑 الكلمات المفتاحية للملاحظات المحفوظة:*\n\n";
+    let reply = tr("*🔑 Saved note keywords:*\n\n", "*🔑 الكلمات المفتاحية للملاحظات المحفوظة:*\n\n");
     reply += keywords.map((kw) => `\`#${kw}\``).join("\n");
-    reply += "\n\nللحصول على ملاحظة، استخدم: `!note #keyword`";
+    reply += tr(
+      "\n\nTo get a note, use: `!note #keyword`",
+      "\n\nللحصول على ملاحظة، استخدم: `!note #keyword`",
+    );
 
     await sock.sendMessage(groupId, { text: reply });
   },

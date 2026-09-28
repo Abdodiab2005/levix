@@ -1,6 +1,7 @@
 // file: /commands/unblock.js (Upgraded with private chat context)
 const logger = require("../utils/logger.cjs");
 const normalizeJid = require("../utils/normalizeJid.esm.js");
+const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "unblock",
@@ -31,7 +32,10 @@ module.exports = {
         targetJid = `${numberArg.replace(/\D/g, "")}@s.whatsapp.net`;
       } else {
         return await sock.sendMessage(remoteJid, {
-          text: "لفك حظر عضو، استخدم الأمر في شاته الخاص، أو قم بعمل منشن له، أو كتابة رقمه.",
+          text: tr(
+            "To unblock someone, use this in their private chat, mention them, or type their number.",
+            "لفك حظر عضو، استخدم الأمر في شاته الخاص، أو قم بعمل منشن له، أو كتابة رقمه.",
+          ),
         });
       }
     }
@@ -52,7 +56,10 @@ module.exports = {
     } catch (error) {
       logger.error({ err: error, command: "unblock" }, "Error in !unblock command");
       await sock.sendMessage(remoteJid, {
-        text: "حدث خطأ أثناء محاولة فك حظر المستخدم.",
+        text: tr(
+          "Something went wrong while unblocking the user.",
+          "حدث خطأ أثناء محاولة فك حظر المستخدم.",
+        ),
       });
     }
   },

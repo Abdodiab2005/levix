@@ -12,6 +12,7 @@ const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
 const { localize, bothLanguages } = require("../utils/commandDocs.cjs");
+const { langForCommand, withLang, tr } = require("../utils/i18n.cjs");
 
 // Commands collection (keyed by both names and aliases)
 const commands = new Map();
@@ -282,13 +283,22 @@ export async function handleCommand(sock, msg, body) {
   const command = commands.get(invokedName);
   if (!command) return false;
 
+  // Everything this command sends goes out in one language: the bot's, or in
+  // "auto" the one this message is written in — judged on the arguments, not
+  // on the command's own keywords (see utils/i18n.cjs).
+  const aliases = runtimeConfig.getAliases(command.name, command.__declaredAliases || []);
+  const lang = langForCommand(command, args, aliases);
+  return withLang(lang, () => runCommand(sock, msg, body, { command, args, invokedName, isGroup }));
+}
+
+async function runCommand(sock, msg, body, { command, args, invokedName, isGroup }) {
   // Turned off from the dashboard. Answered rather than ignored so the user
   // knows the command exists and isn't broken.
   if (runtimeConfig.isDisabled(command.name)) {
     await sendBotMessage(
       sock,
       msg.key.remoteJid,
-      { text: "⛔ الأمر ده متوقف حاليًا." },
+      { text: tr("⛔ This command is turned off right now.", "⛔ الأمر ده متوقف حاليًا.") },
       { replyTo: msg },
     );
     return true;
@@ -308,7 +318,12 @@ export async function handleCommand(sock, msg, body) {
         await sendBotMessage(
           sock,
           msg.key.remoteJid,
-          { text: "⚠️ هذا الأمر يعمل في المجموعات فقط." },
+          {
+            text: tr(
+              "⚠️ This command only works in groups.",
+              "⚠️ هذا الأمر يعمل في المجموعات فقط.",
+            ),
+          },
           { replyTo: msg },
         );
         return true;
@@ -317,7 +332,12 @@ export async function handleCommand(sock, msg, body) {
         await sendBotMessage(
           sock,
           msg.key.remoteJid,
-          { text: "⚠️ هذا الأمر يعمل في المحادثات الخاصة فقط." },
+          {
+            text: tr(
+              "⚠️ This command only works in private chats.",
+              "⚠️ هذا الأمر يعمل في المحادثات الخاصة فقط.",
+            ),
+          },
           { replyTo: msg },
         );
         return true;
@@ -344,7 +364,12 @@ export async function handleCommand(sock, msg, body) {
         await sendBotMessage(
           sock,
           msg.key.remoteJid,
-          { text: "⚠️ هذا الأمر يتطلب أن تكون مشرفًا." },
+          {
+            text: tr(
+              "⚠️ You need to be a group admin to use this command.",
+              "⚠️ هذا الأمر يتطلب أن تكون مشرفًا.",
+            ),
+          },
           { replyTo: msg },
         );
         return true;
@@ -354,7 +379,12 @@ export async function handleCommand(sock, msg, body) {
         await sendBotMessage(
           sock,
           msg.key.remoteJid,
-          { text: "⚠️ يجب أن أكون مشرفًا لتنفيذ هذا الأمر." },
+          {
+            text: tr(
+              "⚠️ I need to be a group admin to do that.",
+              "⚠️ يجب أن أكون مشرفًا لتنفيذ هذا الأمر.",
+            ),
+          },
           { replyTo: msg },
         );
         return true;
@@ -388,9 +418,14 @@ export async function handleCommand(sock, msg, body) {
         sock,
         msg.key.remoteJid,
         {
-          text: `❌ *فشل تنفيذ الأمر*\n\n*النوع:* \`${error.name || "Error"}\`\n*التفاصيل:* ${
-            error.message || "غير معروف"
-          }`,
+          text: tr(
+            `❌ *The command failed*\n\n*Type:* \`${error.name || "Error"}\`\n*Details:* ${
+              error.message || "unknown"
+            }`,
+            `❌ *فشل تنفيذ الأمر*\n\n*النوع:* \`${error.name || "Error"}\`\n*التفاصيل:* ${
+              error.message || "غير معروف"
+            }`,
+          ),
         },
         { replyTo: msg },
       );

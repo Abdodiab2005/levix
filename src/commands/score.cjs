@@ -1,4 +1,5 @@
 const logger = require("../utils/logger.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 /**
  * Extracts quoted message info with forwarding score
@@ -109,9 +110,11 @@ module.exports = {
 
     if (!quotedInfo || !quotedInfo.stanzaId) {
       return await sock.sendMessage(chatId, {
-        text:
+        text: tr(
+          "❌ Reply to a message to see its score.\n\n*Usage:* reply to a message and type `!score`",
           "❌ يرجى الرد على رسالة لعرض نقاطها.\n\n" +
-          "*الاستخدام:* قم بالرد على رسالة واكتب `!score`",
+            "*الاستخدام:* قم بالرد على رسالة واكتب `!score`",
+        ),
       });
     }
 
@@ -119,14 +122,18 @@ module.exports = {
       const { forwardingScore, isForwarded } = quotedInfo;
 
       // Display the forward score
-      let responseText = "📊 *نقاط الرسالة*\n\n";
+      let responseText = tr("📊 *Message score*\n\n", "📊 *نقاط الرسالة*\n\n");
 
       if (isForwarded || forwardingScore > 0) {
-        responseText += `🔢 *عدد مرات إعادة التوجيه:* ${forwardingScore}\n`;
-        responseText += `✅ *حالة الرسالة:* تم إعادة توجيهها`;
+        responseText += tr(
+          `🔢 *Times forwarded:* ${forwardingScore}\n✅ *Status:* forwarded`,
+          `🔢 *عدد مرات إعادة التوجيه:* ${forwardingScore}\n✅ *حالة الرسالة:* تم إعادة توجيهها`,
+        );
       } else {
-        responseText += `🔢 *عدد مرات إعادة التوجيه:* 0\n`;
-        responseText += `ℹ️ *حالة الرسالة:* رسالة أصلية (لم يتم إعادة توجيهها)`;
+        responseText += tr(
+          "🔢 *Times forwarded:* 0\nℹ️ *Status:* original message (never forwarded)",
+          "🔢 *عدد مرات إعادة التوجيه:* 0\nℹ️ *حالة الرسالة:* رسالة أصلية (لم يتم إعادة توجيهها)",
+        );
       }
 
       await sock.sendMessage(chatId, {
@@ -135,7 +142,10 @@ module.exports = {
     } catch (error) {
       logger.error({ err: error }, "Error in !score command");
       await sock.sendMessage(chatId, {
-        text: "❌ حدث خطأ أثناء جلب نقاط الرسالة.",
+        text: tr(
+          "❌ Something went wrong while reading the message's score.",
+          "❌ حدث خطأ أثناء جلب نقاط الرسالة.",
+        ),
       });
     }
   },

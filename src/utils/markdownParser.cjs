@@ -1,3 +1,5 @@
+const { tr } = require("./i18n.cjs");
+
 // file: src/utils/markdownParser.cjs
 //
 // Converts standard Markdown output (especially from LLMs) into human-readable
@@ -48,13 +50,13 @@ function formatTableForWhatsApp({ headers, rows }) {
   const cards = [];
 
   rows.forEach((row, rowIndex) => {
-    const primaryLabel = row[0] || `عنصر ${rowIndex + 1}`;
+    const primaryLabel = row[0] || tr(`Item ${rowIndex + 1}`, `عنصر ${rowIndex + 1}`);
     const fields = [];
 
     // If there's more than 1 column, list the remaining fields with bullet points
     if (headers.length > 1) {
       for (let c = 0; c < headers.length; c++) {
-        const headerName = headers[c] || `عمود ${c + 1}`;
+        const headerName = headers[c] || tr(`Column ${c + 1}`, `عمود ${c + 1}`);
         const cellValue = row[c] || "—";
         fields.push(`  • *${headerName}:* ${cellValue}`);
       }

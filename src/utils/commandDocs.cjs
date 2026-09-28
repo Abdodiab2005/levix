@@ -6,10 +6,7 @@
 // only one language still appears in both.
 //
 // Which language: `!help ar` / `!help en` say so explicitly. Otherwise it is
-// the `bot_language` setting, and when that is "auto" the script the message
-// was typed in — `!help` is English, `!مساعدة` is Arabic.
-
-const settings = require("../config/settings.cjs");
+// the language every other reply uses — see utils/i18n.cjs.
 
 const LANGS = ["en", "ar"];
 
@@ -30,8 +27,6 @@ const LANG_WORDS = new Map([
   ["العربية", "ar"],
 ]);
 
-const ARABIC_SCRIPT = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/;
-
 /** "ar" | "en" for a word like `ar`, `english`, `عربي`; null otherwise. */
 function parseLang(word) {
   return (
@@ -41,17 +36,6 @@ function parseLang(word) {
         .toLowerCase(),
     ) || null
   );
-}
-
-/**
- * The language to answer `text` in: the bot's language setting, or — when
- * that is "auto" — Arabic if the text is written in Arabic script, else
- * English.
- */
-function resolveLang(text = "") {
-  const setting = settings.get("bot_language");
-  if (setting === "ar" || setting === "en") return setting;
-  return ARABIC_SCRIPT.test(String(text)) ? "ar" : "en";
 }
 
 /** Pick `lang` out of a string or an `{ en, ar }` object. */
@@ -71,4 +55,4 @@ function bothLanguages(value) {
   return { en: localize(value, "en"), ar: localize(value, "ar") };
 }
 
-module.exports = { LANGS, parseLang, resolveLang, localize, bothLanguages };
+module.exports = { LANGS, parseLang, localize, bothLanguages };

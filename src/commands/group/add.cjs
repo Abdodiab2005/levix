@@ -1,5 +1,6 @@
 // file: /commands/add.js (Upgraded with Invite Fallback)
 const logger = require("../../utils/logger.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 const normalizeJid = require("../../utils/normalizeJid.esm.js").default;
 
 module.exports = {
@@ -59,12 +60,18 @@ module.exports = {
         const cleanNumber = numberArg.replace(/\D/g, "");
         if (!cleanNumber)
           return await sock.sendMessage(groupId, {
-            text: "يرجى تقديم رقم هاتف صالح، أو عمل منشن، أو إرسال جهة اتصال.",
+            text: tr(
+              "Give a valid phone number, a mention, or a contact card.",
+              "يرجى تقديم رقم هاتف صالح، أو عمل منشن، أو إرسال جهة اتصال.",
+            ),
           });
         targetJid = `${cleanNumber}@s.whatsapp.net`;
       } else {
         return await sock.sendMessage(groupId, {
-          text: "لإضافة عضو، قم بعمل منشن له، أو أرسل رقمه، أو أرسل جهة الاتصال الخاصة به.",
+          text: tr(
+            "To add someone, mention them, send their number, or send their contact card.",
+            "لإضافة عضو، قم بعمل منشن له، أو أرسل رقمه، أو أرسل جهة الاتصال الخاصة به.",
+          ),
         });
       }
       // --- End of Target Identification Logic ---
@@ -75,23 +82,32 @@ module.exports = {
       );
       if (isAlreadyMember) {
         return await sock.sendMessage(groupId, {
-          text: `⚠️ العضو @${targetJid.split("@")[0]} موجود بالفعل في الجروب.`,
+          text: tr(
+            `⚠️ @${targetJid.split("@")[0]} is already in the group.`,
+            `⚠️ العضو @${targetJid.split("@")[0]} موجود بالفعل في الجروب.`,
+          ),
           mentions: [targetJid],
         });
       }
 
       await sock.sendMessage(groupId, {
-        text: `جاري محاولة إضافة @${targetJid.split("@")[0]}...`,
+        text: tr(
+          `Trying to add @${targetJid.split("@")[0]}...`,
+          `جاري محاولة إضافة @${targetJid.split("@")[0]}...`,
+        ),
         mentions: [targetJid],
       });
       const response = await sock.groupParticipantsUpdate(groupId, [targetJid], "add");
       const status = response[0].status;
 
       if (status === "200") {
-        let successMsg = `✅ تم إضافة @${targetJid.split("@")[0]} بنجاح.`;
+        let successMsg = tr(
+          `✅ Added @${targetJid.split("@")[0]}.`,
+          `✅ تم إضافة @${targetJid.split("@")[0]} بنجاح.`,
+        );
         if (shouldPromote) {
           await sock.groupParticipantsUpdate(groupId, [targetJid], "promote");
-          successMsg += `\n👑 وتمت ترقيته إلى مشرف.`;
+          successMsg += tr(`\n👑 And made them an admin.`, `\n👑 وتمت ترقيته إلى مشرف.`);
         }
         await sock.sendMessage(groupId, {
           text: successMsg,
@@ -99,9 +115,14 @@ module.exports = {
         });
       } else if (status === "403") {
         await sock.sendMessage(groupId, {
-          text: `⚠️ لا يمكن إضافة @${
-            targetJid.split("@")[0]
-          } مباشرة بسبب إعدادات الخصوصية لديه.\n\nهل تود إرسال رابط دعوة له في الخاص؟\nأرسل \`yes\` للتأكيد.`,
+          text: tr(
+            `⚠️ @${
+              targetJid.split("@")[0]
+            } can't be added directly because of their privacy settings.\n\nSend them an invite link in private?\nSend \`yes\` to confirm.`,
+            `⚠️ لا يمكن إضافة @${
+              targetJid.split("@")[0]
+            } مباشرة بسبب إعدادات الخصوصية لديه.\n\nهل تود إرسال رابط دعوة له في الخاص؟\nأرسل \`yes\` للتأكيد.`,
+          ),
           mentions: [targetJid],
         });
 
@@ -120,13 +141,19 @@ module.exports = {
         }, 30000);
       } else {
         await sock.sendMessage(groupId, {
-          text: `⚠️ لم أتمكن من إضافة الرقم. (كود الحالة: ${status})`,
+          text: tr(
+            `⚠️ I couldn't add that number. (status code: ${status})`,
+            `⚠️ لم أتمكن من إضافة الرقم. (كود الحالة: ${status})`,
+          ),
         });
       }
     } catch (error) {
       logger.error({ err: error, command: "add" }, "Error in !add command");
       await sock.sendMessage(groupId, {
-        text: "حدث خطأ. تأكد من أنني مشرف وأن الرقم صحيح.",
+        text: tr(
+          "Something went wrong. Make sure I'm an admin and the number is right.",
+          "حدث خطأ. تأكد من أنني مشرف وأن الرقم صحيح.",
+        ),
       });
     }
   },

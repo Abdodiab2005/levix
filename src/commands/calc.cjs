@@ -10,6 +10,7 @@
 // FUNCTIONS.
 
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 // ---------------------------------------------------------------------------
 // whitelist
@@ -59,8 +60,12 @@ const FUNCTIONS = {
 };
 
 function factorial(n) {
-  if (!Number.isInteger(n)) throw new CalcError("المضروب (!) يشتغل على أرقام صحيحة بس");
-  if (n < 0) throw new CalcError("مفيش مضروب لرقم سالب");
+  if (!Number.isInteger(n)) {
+    throw new CalcError(
+      tr("Factorial (!) only works on whole numbers", "المضروب (!) يشتغل على أرقام صحيحة بس"),
+    );
+  }
+  if (n < 0) throw new CalcError(tr("Negative numbers have no factorial", "مفيش مضروب لرقم سالب"));
   if (n > 170) return Infinity; // beyond this a double is Infinity anyway
   let result = 1;
   for (let i = 2; i <= n; i++) result *= i;
@@ -129,7 +134,9 @@ function tokenize(text) {
         while (i < text.length && /[0-9]/.test(text[i])) raw += text[i++];
       }
       const value = Number(raw);
-      if (!Number.isFinite(value)) throw new CalcError(`رقم غير صالح: \`${raw}\``);
+      if (!Number.isFinite(value)) {
+        throw new CalcError(tr(`Invalid number: \`${raw}\``, `رقم غير صالح: \`${raw}\``));
+      }
       tokens.push({ type: "num", value });
       continue;
     }
@@ -147,7 +154,7 @@ function tokenize(text) {
       continue;
     }
 
-    throw new CalcError(`رمز مش مفهوم: \`${char}\``);
+    throw new CalcError(tr(`Unknown symbol: \`${char}\``, `رمز مش مفهوم: \`${char}\``));
   }
 
   return tokens;
@@ -191,13 +198,17 @@ function parse(tokens) {
         left *= parseUnary();
       } else if (eat("/")) {
         const right = parseUnary();
-        if (right === 0) throw new CalcError("القسمة على صفر ملهاش لازمة 😅");
+        if (right === 0) {
+          throw new CalcError(tr("Division by zero isn't defined 😅", "القسمة على صفر ملهاش لازمة 😅"));
+        }
         left /= right;
       } else if (peek()?.type === "%" && startsValue(peek(1))) {
         // infix `%` is modulo; the postfix «15%» form is handled in parsePostfix
         pos++;
         const right = parseUnary();
-        if (right === 0) throw new CalcError("باقي القسمة على صفر مش معرّف");
+        if (right === 0) {
+          throw new CalcError(tr("Modulo by zero isn't defined", "باقي القسمة على صفر مش معرّف"));
+        }
         left %= right;
       } else if (startsValue(peek())) {
         // implicit multiplication: 2(3+4), 3pi, 2sqrt(9)
@@ -236,11 +247,11 @@ function parse(tokens) {
 
   function parsePrimary() {
     const token = peek();
-    if (!token) throw new CalcError("المعادلة ناقصة");
+    if (!token) throw new CalcError(tr("The expression is incomplete", "المعادلة ناقصة"));
 
     if (eat("(")) {
       const value = parseExpression();
-      expect(")", "قوس مفتوح ومقفلش");
+      expect(")", tr("A bracket was opened and never closed", "قوس مفتوح ومقفلش"));
       return value;
     }
 
@@ -255,43 +266,64 @@ function parse(tokens) {
 
       if (FUNCTIONS[name]) {
         const spec = FUNCTIONS[name];
-        expect("(", `الدالة \`${name}\` محتاجة أقواس، زي \`${name}(9)\``);
+        expect(
+          "(",
+          tr(
+            `The function \`${name}\` needs brackets, like \`${name}(9)\``,
+            `الدالة \`${name}\` محتاجة أقواس، زي \`${name}(9)\``,
+          ),
+        );
         const args = [];
         if (peek()?.type !== ")") {
           args.push(parseExpression());
           while (eat(",")) args.push(parseExpression());
         }
-        expect(")", `قوس \`${name}\` مقفلش`);
+        expect(")", tr(`The bracket of \`${name}\` is never closed`, `قوس \`${name}\` مقفلش`));
         if (spec.arity !== -1 && args.length !== spec.arity) {
           throw new CalcError(
-            `الدالة \`${name}\` بتاخد ${spec.arity} ${spec.arity === 1 ? "قيمة" : "قيم"}`,
+            tr(
+              `The function \`${name}\` takes ${spec.arity} ${spec.arity === 1 ? "value" : "values"}`,
+              `الدالة \`${name}\` بتاخد ${spec.arity} ${spec.arity === 1 ? "قيمة" : "قيم"}`,
+            ),
           );
         }
-        if (!args.length) throw new CalcError(`الدالة \`${name}\` من غير قيم`);
+        if (!args.length) {
+          throw new CalcError(
+            tr(`The function \`${name}\` got no values`, `الدالة \`${name}\` من غير قيم`),
+          );
+        }
         return spec.fn(...args);
       }
 
       if (name in CONSTANTS) return CONSTANTS[name];
 
-      throw new CalcError(`مش عارف يعني إيه \`${name}\``);
+      throw new CalcError(tr(`I don't know what \`${name}\` is`, `مش عارف يعني إيه \`${name}\``));
     }
 
-    throw new CalcError(`مكان غلط للرمز \`${token.type}\``);
+    throw new CalcError(
+      tr(`\`${token.type}\` is in the wrong place`, `مكان غلط للرمز \`${token.type}\``),
+    );
   }
 
   const result = parseExpression();
-  if (pos < tokens.length) throw new CalcError("في زيادة في آخر المعادلة");
+  if (pos < tokens.length) {
+    throw new CalcError(
+      tr("There is something extra at the end of the expression", "في زيادة في آخر المعادلة"),
+    );
+  }
   return result;
 }
 
 function evaluate(expression) {
   const normalized = normalize(expression);
-  if (!normalized) throw new CalcError("اكتب معادلة الأول");
-  if (normalized.length > 300) throw new CalcError("المعادلة طويلة أوي");
+  if (!normalized) throw new CalcError(tr("Type an expression first", "اكتب معادلة الأول"));
+  if (normalized.length > 300) {
+    throw new CalcError(tr("The expression is too long", "المعادلة طويلة أوي"));
+  }
 
   const value = parse(tokenize(normalized));
   if (typeof value !== "number" || Number.isNaN(value)) {
-    throw new CalcError("النتيجة مش رقم صالح");
+    throw new CalcError(tr("The result isn't a valid number", "النتيجة مش رقم صالح"));
   }
   return { normalized, value };
 }
@@ -316,7 +348,27 @@ function formatNumber(value) {
   return fraction ? `${grouped}.${fraction}` : grouped;
 }
 
-const HELP_TEXT =
+const helpText = () =>
+  tr(
+    "🧮 *Calculator*\n\n" +
+      "*Usage:* `!calc <expression>`\n" +
+      "or reply to a message containing an expression with `!calc`\n\n" +
+      "*Operators:* `+` `-` `*` `/` `%` (modulo) `^` (power) `!` (factorial)\n" +
+      "*Percentages:* `15%` · `20% of 300`\n" +
+      "*Constants:* `pi` · `e` · `tau`\n" +
+      "*Functions:* sqrt, cbrt, abs, round, floor, ceil, ln, log, log2, exp,\n" +
+      "sin, cos, tan, sind, cosd, tand, asin, acos, atan, deg, rad,\n" +
+      "pow, root, hypot, min, max, avg, sum, fact\n\n" +
+      "*Examples:*\n" +
+      "`!calc (12 + 8) * 3`\n" +
+      "`!calc 2^10`\n" +
+      "`!calc 25% of 480`\n" +
+      "`!calc sqrt(144) + 5!`\n" +
+      "`!calc max(3, 9, 4) * pi`",
+    HELP_TEXT_AR,
+  );
+
+const HELP_TEXT_AR =
   "🧮 *الآلة الحاسبة*\n\n" +
   "*الاستخدام:* `!calc <معادلة>`\n" +
   "أو رد على رسالة فيها معادلة واكتب `!calc`\n\n" +
@@ -356,7 +408,7 @@ module.exports = {
     const expression = args.join(" ").trim() || quotedText.trim();
 
     if (!expression) {
-      return sendBotMessage(sock, chatId, { text: HELP_TEXT }, { replyTo: msg });
+      return sendBotMessage(sock, chatId, { text: helpText() }, { replyTo: msg });
     }
 
     try {
@@ -370,11 +422,19 @@ module.exports = {
         { replyTo: msg },
       );
     } catch (error) {
-      const reason = error instanceof CalcError ? error.message : "المعادلة مش مفهومة";
+      const reason =
+        error instanceof CalcError
+          ? error.message
+          : tr("I couldn't understand that expression", "المعادلة مش مفهومة");
       return sendBotMessage(
         sock,
         chatId,
-        { text: `❌ ${reason}\n\nاكتب \`!calc\` لوحده عشان تشوف الأمثلة.` },
+        {
+          text: tr(
+            `❌ ${reason}\n\nSend \`!calc\` on its own to see examples.`,
+            `❌ ${reason}\n\nاكتب \`!calc\` لوحده عشان تشوف الأمثلة.`,
+          ),
+        },
         { replyTo: msg },
       );
     }

@@ -4,6 +4,7 @@ const logger = require("../../utils/logger.cjs");
 const { isOwnerJidSync, isAdminInGroupSync } = require("../../utils/permissions.cjs");
 const { visibleText } = require("../../utils/messageContent.cjs");
 const { resolveGroupMetadata } = require("../../utils/groupMetadataCache.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 
 // --- The Main Command Logic ---
 const command = {
@@ -40,25 +41,28 @@ const command = {
       case "on":
         antilinkConfig.enabled = true;
         await sock.sendMessage(groupId, {
-          text: "✅ تم تفعيل نظام منع الروابط.",
+          text: tr("✅ Anti-link is on.", "✅ تم تفعيل نظام منع الروابط."),
         });
         break;
       case "off":
         antilinkConfig.enabled = false;
         await sock.sendMessage(groupId, {
-          text: "☑️ تم تعطيل نظام منع الروابط.",
+          text: tr("☑️ Anti-link is off.", "☑️ تم تعطيل نظام منع الروابط."),
         });
         break;
       case "mode": {
         const mode = args[1] ? args[1].toUpperCase() : "";
         if (!["ALL", "WHITELIST", "BLACKLIST"].includes(mode)) {
           return await sock.sendMessage(groupId, {
-            text: "الوضع غير صالح. الأوضاع المتاحة: `ALL`, `WHITELIST`, `BLACKLIST`",
+            text: tr(
+              "Invalid mode. Available: `ALL`, `WHITELIST`, `BLACKLIST`",
+              "الوضع غير صالح. الأوضاع المتاحة: `ALL`, `WHITELIST`, `BLACKLIST`",
+            ),
           });
         }
         antilinkConfig.mode = mode;
         await sock.sendMessage(groupId, {
-          text: `✅ تم تغيير وضع منع الروابط إلى: ${mode}`,
+          text: tr(`✅ Anti-link mode is now: ${mode}`, `✅ تم تغيير وضع منع الروابط إلى: ${mode}`),
         });
         break;
       }
@@ -66,13 +70,16 @@ const command = {
         const domainToAllow = args[1] ? args[1].toLowerCase() : "";
         if (!domainToAllow)
           return await sock.sendMessage(groupId, {
-            text: "يرجى تحديد دومين للسماح به.",
+            text: tr("Say which domain to allow.", "يرجى تحديد دومين للسماح به."),
           });
         if (!antilinkConfig.allowed_domains.includes(domainToAllow)) {
           antilinkConfig.allowed_domains.push(domainToAllow);
         }
         await sock.sendMessage(groupId, {
-          text: `✅ تم إضافة '${domainToAllow}' إلى قائمة الدومينات المسموح بها.`,
+          text: tr(
+            `✅ '${domainToAllow}' is now allowed.`,
+            `✅ تم إضافة '${domainToAllow}' إلى قائمة الدومينات المسموح بها.`,
+          ),
         });
         break;
       }
@@ -80,24 +87,27 @@ const command = {
         const domainToDisallow = args[1] ? args[1].toLowerCase() : "";
         if (!domainToDisallow)
           return await sock.sendMessage(groupId, {
-            text: "يرجى تحديد دومين لإزالته.",
+            text: tr("Say which domain to remove.", "يرجى تحديد دومين لإزالته."),
           });
         antilinkConfig.allowed_domains = antilinkConfig.allowed_domains.filter(
           (d) => d !== domainToDisallow,
         );
         await sock.sendMessage(groupId, {
-          text: `☑️ تم إزالة '${domainToDisallow}' من قائمة الدومينات المسموح بها.`,
+          text: tr(
+            `☑️ '${domainToDisallow}' is no longer allowed.`,
+            `☑️ تم إزالة '${domainToDisallow}' من قائمة الدومينات المسموح بها.`,
+          ),
         });
         break;
       }
       default: {
         // Display current status
-        let statusReply = `*حالة نظام منع الروابط:*\n\n`;
-        statusReply += `الحالة: ${antilinkConfig.enabled ? "مفعل ✅" : "معطل ☑️"}\n`;
-        statusReply += `الوضع: ${antilinkConfig.mode}\n`;
-        statusReply += `الدومينات المسموح بها: ${
-          antilinkConfig.allowed_domains.join(", ") || "لا يوجد"
-        }\n`;
+        const state = antilinkConfig.enabled ? tr("on ✅", "مفعل ✅") : tr("off ☑️", "معطل ☑️");
+        const allowed = antilinkConfig.allowed_domains.join(", ") || tr("none", "لا يوجد");
+        const statusReply = tr(
+          `*Anti-link:*\n\nState: ${state}\nMode: ${antilinkConfig.mode}\nAllowed domains: ${allowed}\n`,
+          `*حالة نظام منع الروابط:*\n\nالحالة: ${state}\nالوضع: ${antilinkConfig.mode}\nالدومينات المسموح بها: ${allowed}\n`,
+        );
         await sock.sendMessage(groupId, { text: statusReply });
       }
     }
@@ -168,7 +178,10 @@ async function handleAntiLink(sock, msg, _legacyConfig, _normalizeJid) {
     logger.info(`[Anti-Link] Deleting link from ${senderId} in ${groupId}. Domain: ${domain}`);
     await sock.sendMessage(groupId, { delete: msg.key });
     await sock.sendMessage(groupId, {
-      text: `ممنوع إرسال الروابط هنا يا @${senderId.split("@")[0]}!`,
+      text: tr(
+        `No links here, @${senderId.split("@")[0]}!`,
+        `ممنوع إرسال الروابط هنا يا @${senderId.split("@")[0]}!`,
+      ),
       mentions: [senderId],
     });
     return true;

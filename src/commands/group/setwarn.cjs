@@ -1,5 +1,6 @@
 // file: /commands/group/setwarn.js
 const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "setwarn",
@@ -31,12 +32,15 @@ module.exports = {
         const max = parseInt(value, 10);
         if (isNaN(max) || max < 1) {
           return await sock.sendMessage(groupId, {
-            text: "يرجى تحديد عدد صحيح وصالح للحد الأقصى للتحذيرات.",
+            text: tr(
+              "Give a valid whole number for the warning limit.",
+              "يرجى تحديد عدد صحيح وصالح للحد الأقصى للتحذيرات.",
+            ),
           });
         }
         warnConfig.max_warnings = max;
         await sock.sendMessage(groupId, {
-          text: `✅ تم تعيين الحد الأقصى للتحذيرات إلى ${max}.`,
+          text: tr(`✅ The warning limit is now ${max}.`, `✅ تم تعيين الحد الأقصى للتحذيرات إلى ${max}.`),
         });
         break;
       }
@@ -45,19 +49,25 @@ module.exports = {
         const action = value?.toUpperCase();
         if (action !== "KICK" && action !== "NONE") {
           return await sock.sendMessage(groupId, {
-            text: "الإجراء غير صالح. الإجراءات المتاحة: `KICK`, `NONE`",
+            text: tr(
+              "Invalid action. Available: `KICK`, `NONE`",
+              "الإجراء غير صالح. الإجراءات المتاحة: `KICK`, `NONE`",
+            ),
           });
         }
         warnConfig.action = action;
         await sock.sendMessage(groupId, {
-          text: `✅ تم تعيين الإجراء التلقائي إلى ${action}.`,
+          text: tr(`✅ The automatic action is now ${action}.`, `✅ تم تعيين الإجراء التلقائي إلى ${action}.`),
         });
         break;
       }
 
       default:
         return await sock.sendMessage(groupId, {
-          text: "صيغة غير صحيحة. استخدم:\n`!setwarn max <number>`\n`!setwarn action <KICK|NONE>`",
+          text: tr(
+            "Wrong format. Use:\n`!setwarn max <number>`\n`!setwarn action <KICK|NONE>`",
+            "صيغة غير صحيحة. استخدم:\n`!setwarn max <number>`\n`!setwarn action <KICK|NONE>`",
+          ),
         });
     }
 

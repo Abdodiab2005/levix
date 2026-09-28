@@ -23,6 +23,7 @@ const {
   downloadMedia,
   uploadToGemini,
 } = require("../utils/geminiMedia.cjs");
+const { tr } = require("../utils/i18n.cjs");
 const aiIdentity = require("../config/ai-identity.cjs");
 const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
@@ -243,7 +244,15 @@ function withTimeout(promise, ms, label) {
     promise,
     new Promise((_, reject) => {
       timer = setTimeout(
-        () => reject(new Error(`${label} تأخرت أكتر من ${Math.round(ms / 1000)} ثانية`)),
+        () =>
+          reject(
+            new Error(
+              tr(
+                `${label} took longer than ${Math.round(ms / 1000)} seconds`,
+                `${label} تأخرت أكتر من ${Math.round(ms / 1000)} ثانية`,
+              ),
+            ),
+          ),
         ms,
       );
     }),
@@ -390,7 +399,7 @@ function formatSources(sources) {
     lines.push(`• ${label} — ${source.uri}`);
     if (lines.length >= MAX_SOURCES) break;
   }
-  return lines.length ? `\n\n*Sources:*\n${lines.join("\n")}` : "";
+  return lines.length ? `\n\n${tr("*Sources:*", "*المصادر:*")}\n${lines.join("\n")}` : "";
 }
 
 /**
@@ -497,7 +506,7 @@ async function runGeminiTurn({
   search = null,
 } = {}) {
   const genAI = geminiClient();
-  if (!genAI) throw new Error("GEMINI_API_KEY غير معرف");
+  if (!genAI) throw new Error(tr("No Gemini API key is set", "GEMINI_API_KEY غير معرف"));
   await assertProviderRequestUrl(settings.get("gemini_base_url"), { allowLoopback: true });
 
   const stepBudget = maxSteps ?? settings.get("ai_max_tool_steps");
@@ -597,7 +606,7 @@ async function runGeminiTurn({
       });
     }
 
-    if (status) await status.update("🤖 بجهّز الرد...");
+    if (status) await status.update(tr("🤖 Writing the answer...", "🤖 بجهّز الرد..."));
     // One message carrying every functionResponse part, which is what the API
     // expects when the model asked for several calls in one turn.
     response = await chat.sendMessage({ message: responses });
@@ -615,7 +624,10 @@ async function runGeminiTurn({
   }
 
   if (!text && steps >= stepBudget) {
-    text = "شغّلت الأدوات المتاحة بس مقدرتش أوصل لإجابة نهائية. جرّب تسأل بصيغة أوضح.";
+    text = tr(
+      "I ran the tools I have but couldn't reach a final answer. Try asking more clearly.",
+      "شغّلت الأدوات المتاحة بس مقدرتش أوصل لإجابة نهائية. جرّب تسأل بصيغة أوضح.",
+    );
   }
 
   let newHistory = [];

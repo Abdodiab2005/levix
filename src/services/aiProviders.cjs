@@ -103,6 +103,7 @@ const {
   getProvider,
   detectModelCapabilities,
 } = require("./aiRouter.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 function visionAllowed(providerId) {
   const id = providerId || settings.get("ai_provider");
@@ -216,7 +217,7 @@ registerProvider("anthropic", new AnthropicProvider());
 
 function adapterFor(provider) {
   const adapter = ADAPTERS[provider];
-  if (!adapter) throw new Error(`مزود غير معروف: ${provider}`);
+  if (!adapter) throw new Error(tr(`Unknown provider: ${provider}`, `مزود غير معروف: ${provider}`));
   return adapter;
 }
 
@@ -237,7 +238,7 @@ const PROVIDER_KEY_SETTINGS = Object.freeze({
 
 function activeProviderKeySetting(provider = settings.get("ai_provider")) {
   const keySetting = PROVIDER_KEY_SETTINGS[provider];
-  if (!keySetting) throw new Error(`مزود غير معروف: ${provider}`);
+  if (!keySetting) throw new Error(tr(`Unknown provider: ${provider}`, `مزود غير معروف: ${provider}`));
   return keySetting;
 }
 
@@ -637,7 +638,15 @@ function withTimeout(promise, ms, label) {
     promise,
     new Promise((_, reject) => {
       timer = setTimeout(
-        () => reject(new Error(`${label} استغرقت العملية أكثر من ${Math.round(ms / 1000)} ثانية`)),
+        () =>
+          reject(
+            new Error(
+              tr(
+                `${label} took longer than ${Math.round(ms / 1000)} seconds`,
+                `${label} استغرقت العملية أكثر من ${Math.round(ms / 1000)} ثانية`,
+              ),
+            ),
+          ),
         ms,
       );
     }),
@@ -745,7 +754,11 @@ async function runProviderAgent(
       // Same contract as the Gemini loop: the budget answer, not a lie.
       return finish({
         text:
-          parsed.text || "شغّلت الأدوات المتاحة بس مقدرتش أوصل لإجابة نهائية. جرّب تسأل بصيغة أوضح.",
+          parsed.text ||
+          tr(
+            "I ran the tools I have but couldn't reach a final answer. Try asking more clearly.",
+            "شغّلت الأدوات المتاحة بس مقدرتش أوصل لإجابة نهائية. جرّب تسأل بصيغة أوضح.",
+          ),
         canonical,
         toolCalls,
         steps,
@@ -792,7 +805,7 @@ async function runProviderAgent(
       })),
     });
 
-    if (status) await status.update("🤖 بجهّز الرد...");
+    if (status) await status.update(tr("🤖 Writing the answer...", "🤖 بجهّز الرد..."));
     response = await send();
   }
 }

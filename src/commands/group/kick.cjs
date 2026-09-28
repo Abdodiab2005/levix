@@ -5,6 +5,7 @@ const {
   isAdminInGroupSync,
   sameUserSync,
 } = require("../../utils/permissions.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "kick",
@@ -34,41 +35,47 @@ module.exports = {
       targetJid = msg.message.extendedTextMessage.contextInfo.participant;
     } else {
       return await sock.sendMessage(groupId, {
-        text: "يجب عمل منشن للعضو أو الرد على رسالته لطرده.",
+        text: tr(
+          "Mention the member, or reply to their message, to kick them.",
+          "يجب عمل منشن للعضو أو الرد على رسالته لطرده.",
+        ),
       });
     }
 
     // --- Safety Checks ---
     // Can't kick the bot itself
     if ([sock.user?.id, sock.user?.lid].filter(Boolean).some((id) => sameUserSync(id, targetJid))) {
-      return await sock.sendMessage(groupId, { text: "لا يمكنني طرد نفسي." });
+      return await sock.sendMessage(groupId, { text: tr("I can't kick myself.", "لا يمكنني طرد نفسي.") });
     }
 
     // Bot owners/admins are privileged across chats and cannot be removed by
     // a group-only admin through an alternate LID/PN representation.
     if (hasBotPrivilegesSync(targetJid)) {
       return await sock.sendMessage(groupId, {
-        text: "لا يمكن طرد مالك أو مشرف البوت.",
+        text: tr("The bot's owner or admins can't be kicked.", "لا يمكن طرد مالك أو مشرف البوت."),
       });
     }
 
     // Check if the target is also an admin
     if (isAdminInGroupSync(groupMetadata, targetJid)) {
       return await sock.sendMessage(groupId, {
-        text: "لا يمكن للمشرف طرد مشرف آخر.",
+        text: tr("An admin can't kick another admin.", "لا يمكن للمشرف طرد مشرف آخر."),
       });
     }
 
     // --- Execution ---
     try {
-      const reason = args.slice(1).join(" ") || "بدون سبب";
+      const reason = args.slice(1).join(" ") || tr("No reason given", "بدون سبب");
       const senderName = msg.pushName;
+      const member = `@${targetJid.split("@")[0]}`;
 
-      const kickMessage =
+      const kickMessage = tr(
+        `*By:* ${senderName}\n*Action:* kick\n*Member:* ${member}\n*Reason:* ${reason}`,
         `*تم بواسطة:* ${senderName}\n` +
-        `*الإجراء:* طرد\n` +
-        `*العضو:* @${targetJid.split("@")[0]}\n` +
-        `*السبب:* ${reason}`;
+          `*الإجراء:* طرد\n` +
+          `*العضو:* ${member}\n` +
+          `*السبب:* ${reason}`,
+      );
 
       // Announce the kick before performing it
       await sock.sendMessage(groupId, {
@@ -81,7 +88,10 @@ module.exports = {
     } catch (error) {
       logger.error({ err: error, command: "kick" }, "Error in !kick command");
       await sock.sendMessage(groupId, {
-        text: "حدث خطأ أثناء محاولة طرد العضو. قد تكون صلاحياتي غير كافية.",
+        text: tr(
+          "Something went wrong while kicking the member. I may not have enough permissions.",
+          "حدث خطأ أثناء محاولة طرد العضو. قد تكون صلاحياتي غير كافية.",
+        ),
       });
     }
   },

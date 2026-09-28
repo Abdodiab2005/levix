@@ -2,6 +2,7 @@
 const { delay } = require("@whiskeysockets/baileys");
 const { exec } = require("child_process"); // 1. Import the 'exec' function
 const logger = require("../utils/logger.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "shutdown",
@@ -22,7 +23,10 @@ module.exports = {
 
     // 2. Send a final message to the user before shutting down
     await sock.sendMessage(msg.key.remoteJid, {
-      text: "🔌 تم استلام أمر الإيقاف النهائي. سيتم إيقاف البوت الآن... وداعًا! 👋",
+      text: tr(
+        "🔌 Shutdown received. Stopping the bot now... goodbye! 👋",
+        "🔌 تم استلام أمر الإيقاف النهائي. سيتم إيقاف البوت الآن... وداعًا! 👋",
+      ),
     });
 
     // A small delay to ensure the WhatsApp message is sent out

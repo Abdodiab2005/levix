@@ -1,5 +1,6 @@
 // file: /commands/removeall.js
 const logger = require("../../utils/logger.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "removeall",
@@ -24,7 +25,10 @@ module.exports = {
 
     // Ask for confirmation
     await sock.sendMessage(groupId, {
-      text: "⚠️ هل أنت متأكد من أنك تريد حذف جميع الأعضاء غير المشرفين؟\n\nأرسل `yes` للتأكيد خلال 30 ثانية.",
+      text: tr(
+        "⚠️ Are you sure you want to remove every non-admin member?\n\nSend `yes` within 30 seconds to confirm.",
+        "⚠️ هل أنت متأكد من أنك تريد حذف جميع الأعضاء غير المشرفين؟\n\nأرسل `yes` للتأكيد خلال 30 ثانية.",
+      ),
     });
 
     // Store the confirmation request

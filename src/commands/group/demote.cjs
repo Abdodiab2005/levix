@@ -1,5 +1,6 @@
 // file: /commands/demote.js
 const logger = require("../../utils/logger.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "demote",
@@ -25,7 +26,10 @@ module.exports = {
 
     if (!targetJid) {
       return await sock.sendMessage(groupId, {
-        text: "يجب عمل منشن للمشرف أو الرد على رسالته لعزله.",
+        text: tr(
+          "Mention the admin, or reply to their message, to demote them.",
+          "يجب عمل منشن للمشرف أو الرد على رسالته لعزله.",
+        ),
       });
     }
 
@@ -33,7 +37,10 @@ module.exports = {
     const targetUser = groupMetadata.participants.find((p) => p.id === targetJid);
     if (!targetUser || !targetUser.admin) {
       return await sock.sendMessage(groupId, {
-        text: `⚠️ العضو @${targetJid.split("@")[0]} ليس مشرفًا أصلاً.`,
+        text: tr(
+          `⚠️ @${targetJid.split("@")[0]} isn't an admin.`,
+          `⚠️ العضو @${targetJid.split("@")[0]} ليس مشرفًا أصلاً.`,
+        ),
         mentions: [targetJid],
       });
     }
@@ -41,7 +48,7 @@ module.exports = {
     // Safety check: Cannot demote the group creator
     if (targetUser.admin === "superadmin") {
       return await sock.sendMessage(groupId, {
-        text: "لا يمكن عزل منشئ الجروب.",
+        text: tr("The group's creator can't be demoted.", "لا يمكن عزل منشئ الجروب."),
       });
     }
 
@@ -52,12 +59,17 @@ module.exports = {
         "demote", // The action is 'demote'
       );
       await sock.sendMessage(groupId, {
-        text: `👤 تم عزل @${targetJid.split("@")[0]} من الإشراف.`,
+        text: tr(
+          `👤 @${targetJid.split("@")[0]} is no longer an admin.`,
+          `👤 تم عزل @${targetJid.split("@")[0]} من الإشراف.`,
+        ),
         mentions: [targetJid],
       });
     } catch (error) {
       logger.error({ err: error, command: "demote" }, "Error in !demote command");
-      await sock.sendMessage(groupId, { text: "حدث خطأ أثناء محاولة العزل." });
+      await sock.sendMessage(groupId, {
+        text: tr("Something went wrong while demoting.", "حدث خطأ أثناء محاولة العزل."),
+      });
     }
   },
 };

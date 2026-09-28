@@ -1,6 +1,7 @@
 // file: commands/schedule.js
 const { scheduleNewJob, saveScheduledJob } = require("../../scheduler.cjs");
 const { zonedTimeToDate, defaultTimezone } = require("../utils/datetime.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 const DATETIME_RE = /^(\d{1,2}):(\d{2})\s+(\d{1,2})-(\d{1,2})-(\d{4})$/;
 
@@ -26,7 +27,10 @@ module.exports = {
 
     if (!parts || parts.length < 2) {
       return await sock.sendMessage(creatorJid, {
-        text: 'الصيغة غير صحيحة. يرجى استخدام:\n`!schedule "HH:mm DD-MM-YYYY" "رسالتك"`',
+        text: tr(
+          'Wrong format. Use:\n`!schedule "HH:mm DD-MM-YYYY" "your message"`',
+          'الصيغة غير صحيحة. يرجى استخدام:\n`!schedule "HH:mm DD-MM-YYYY" "رسالتك"`',
+        ),
       });
     }
 
@@ -37,7 +41,10 @@ module.exports = {
     const match = DATETIME_RE.exec(dateTimeString.trim());
     if (!match) {
       return await sock.sendMessage(creatorJid, {
-        text: "صيغة الوقت غير صحيحة. استخدم `HH:mm DD-MM-YYYY` (مثال: `22:30 07-06-2025`).",
+        text: tr(
+          "Wrong time format. Use `HH:mm DD-MM-YYYY` (for example `22:30 07-06-2025`).",
+          "صيغة الوقت غير صحيحة. استخدم `HH:mm DD-MM-YYYY` (مثال: `22:30 07-06-2025`).",
+        ),
       });
     }
 
@@ -56,7 +63,10 @@ module.exports = {
 
     if (isNaN(scheduleDate.getTime()) || scheduleDate <= new Date()) {
       return await sock.sendMessage(creatorJid, {
-        text: "التاريخ أو الوقت غير صالح أو في الماضي. يرجى استخدام صيغة `HH:mm DD-MM-YYYY` بتاريخ مستقبلي.",
+        text: tr(
+          "That date or time is invalid or in the past. Use `HH:mm DD-MM-YYYY` with a future date.",
+          "التاريخ أو الوقت غير صالح أو في الماضي. يرجى استخدام صيغة `HH:mm DD-MM-YYYY` بتاريخ مستقبلي.",
+        ),
       });
     }
 
@@ -73,16 +83,23 @@ module.exports = {
     // Schedule the job to run in the current session
     if (!scheduleNewJob(sock, newJob)) {
       return await sock.sendMessage(creatorJid, {
-        text: "معرفتش أجدول الرسالة دي. راجع الوقت وجرب تاني.",
+        text: tr(
+          "I couldn't schedule that message. Check the time and try again.",
+          "معرفتش أجدول الرسالة دي. راجع الوقت وجرب تاني.",
+        ),
       });
     }
 
     saveScheduledJob(newJob);
 
+    const when = scheduleDate.toLocaleString(tr("en-GB", "ar-EG"), {
+      timeZone: defaultTimezone(),
+    });
     await sock.sendMessage(creatorJid, {
-      text: `✅ تم جدولة رسالتك بنجاح ليتم إرسالها في:\n*${scheduleDate.toLocaleString("ar-EG", {
-        timeZone: defaultTimezone(),
-      })}*`,
+      text: tr(
+        `✅ Your message is scheduled for:\n*${when}*`,
+        `✅ تم جدولة رسالتك بنجاح ليتم إرسالها في:\n*${when}*`,
+      ),
     });
   },
 };

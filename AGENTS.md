@@ -170,6 +170,7 @@ src/
 └── utils/            # Utility functions (Mixed)
     ├── memory.cjs    # Long-term memory as Markdown files
     ├── statusMessage.cjs # One message per command, edited in place
+    ├── i18n.cjs      # tr(en, ar) + the per-message reply language
     ├── textDecode.cjs    # charset / entity / mojibake decoding
     ├── messageContent.cjs # unwrap visible text/media from Baileys envelopes
     ├── geminiMedia.cjs # WhatsApp media -> Gemini: bare MIME types, in-memory
@@ -366,11 +367,28 @@ session records the proxy the live socket was built with and reports
 
 Commands are loaded dynamically from `src/commands/`:
 - Each command exports: `{ name, aliases, description, usage, chat, execute }`
-- `description` and `usage` are `{ en, ar }` — `!help` shows the bot's
-  language (`bot_language`; in `auto`, the script the message was typed in),
-  `!help ar` / `!help en` and `!help <command> [ar|en]` pick one, and the
-  dashboard shows the panel's. `src/utils/commandDocs.cjs` does the picking;
-  `tests/help-i18n.test.mjs` fails a command that ships only one language
+- `description` and `usage` are `{ en, ar }` — `!help` shows the reply
+  language (below), `!help ar` / `!help en` and `!help <command> [ar|en]` pick
+  one, and the dashboard shows the panel's. `src/utils/commandDocs.cjs` does
+  the picking; `tests/help-i18n.test.mjs` fails a command that ships only one
+  language
+- Every reply is written in both languages where it is sent:
+  `tr("Done.", "تم.")` from `src/utils/i18n.cjs`. The language is decided once
+  per incoming message and carried by AsyncLocalStorage through everything the
+  message causes (helpers, status edits, timers), so nothing passes a `lang`
+  around:
+  - `bot_language` `ar` / `en`: that language, always
+  - `auto`: Arabic letters in the arguments -> Arabic; English words that are
+    not the command's own syntax -> English; a bare command (`!ping`,
+    `!kick @x`, `!todo list`) -> Arabic. "Syntax" is the command's name,
+    aliases, the Latin keywords in its Arabic `usage`, and any `keywords: []`
+    it declares; ids, numbers, links and mentions are never words
+  - a command whose arguments are never language (a city `!weather` wants in
+    English, a link) sets `neutralArgs: true`
+  - outside any message (a scheduled send, a group event) `auto` means Arabic;
+    the scheduler judges the scheduled text itself
+- `tests/reply-language.test.mjs` runs the commands through the dispatcher in
+  English and in Arabic and fails on a reply in the wrong language
 - Commands are registered in a Map with aliases
 - Loaded on startup via `src/handlers/command.handler.js:16`
 
@@ -1068,6 +1086,12 @@ logger.debug('Debug info');
     against `ctx.caller`. Never read who is calling from the tool's arguments,
     and never hand-roll `isOwner` checks inside `run()` — see
     `src/services/aiToolAuth.cjs`.
+29. **Every reply goes through `tr(en, ar)`.** A new `text:`, caption, status
+    line or thrown message a user will read is written in both languages at
+    the call site. Build it inside the function that sends it, never in a
+    module-level constant (the language is per message). Arabic words a
+    command *accepts* (`اضف`, `عام`) are input, not replies, and stay as they
+    are.
 
 ## Testing Workflow
 

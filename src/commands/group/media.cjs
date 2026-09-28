@@ -4,6 +4,7 @@ const logger = require("../../utils/logger.cjs");
 const { isOwnerJidSync, isAdminInGroupSync } = require("../../utils/permissions.cjs");
 const { mediaType } = require("../../utils/messageContent.cjs");
 const { resolveGroupMetadata } = require("../../utils/groupMetadataCache.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 
 const VALID_TYPES = ["image", "video", "sticker", "audio"];
 
@@ -35,26 +36,29 @@ const command = {
       case "on":
         mediaConfig.enabled = true;
         await sock.sendMessage(groupId, {
-          text: "✅ تم تفعيل نظام مراقبة الوسائط.",
+          text: tr("✅ Media control is on.", "✅ تم تفعيل نظام مراقبة الوسائط."),
         });
         break;
       case "off":
         mediaConfig.enabled = false;
         await sock.sendMessage(groupId, {
-          text: "☑️ تم تعطيل نظام مراقبة الوسائط.",
+          text: tr("☑️ Media control is off.", "☑️ تم تعطيل نظام مراقبة الوسائط."),
         });
         break;
       case "block": {
         const typeToBlock = args[1] ? args[1].toLowerCase() : "";
         if (!VALID_TYPES.includes(typeToBlock))
           return await sock.sendMessage(groupId, {
-            text: `نوع غير صالح. الأنواع المتاحة: ${VALID_TYPES.join(", ")}`,
+            text: tr(
+              `Invalid type. Available types: ${VALID_TYPES.join(", ")}`,
+              `نوع غير صالح. الأنواع المتاحة: ${VALID_TYPES.join(", ")}`,
+            ),
           });
         if (!mediaConfig.blocked_types.includes(typeToBlock)) {
           mediaConfig.blocked_types.push(typeToBlock);
         }
         await sock.sendMessage(groupId, {
-          text: `✅ تم إضافة '${typeToBlock}' للأنواع الممنوعة.`,
+          text: tr(`✅ '${typeToBlock}' is now blocked.`, `✅ تم إضافة '${typeToBlock}' للأنواع الممنوعة.`),
         });
         break;
       }
@@ -62,19 +66,25 @@ const command = {
         const typeToUnblock = args[1] ? args[1].toLowerCase() : "";
         if (!typeToUnblock)
           return await sock.sendMessage(groupId, {
-            text: "يرجى تحديد نوع لإلغاء حظره.",
+            text: tr("Say which type to unblock.", "يرجى تحديد نوع لإلغاء حظره."),
           });
         mediaConfig.blocked_types = mediaConfig.blocked_types.filter((t) => t !== typeToUnblock);
         await sock.sendMessage(groupId, {
-          text: `☑️ تم إزالة '${typeToUnblock}' من الأنواع الممنوعة.`,
+          text: tr(
+            `☑️ '${typeToUnblock}' is no longer blocked.`,
+            `☑️ تم إزالة '${typeToUnblock}' من الأنواع الممنوعة.`,
+          ),
         });
         break;
       }
       default: {
         // 'status'
-        let statusReply = `*حالة نظام مراقبة الوسائط:*\n\n`;
-        statusReply += `الحالة: ${mediaConfig.enabled ? "مفعل ✅" : "معطل ☑️"}\n`;
-        statusReply += `الأنواع الممنوعة: ${mediaConfig.blocked_types.join(", ") || "لا يوجد"}`;
+        const state = mediaConfig.enabled ? tr("on ✅", "مفعل ✅") : tr("off ☑️", "معطل ☑️");
+        const blocked = mediaConfig.blocked_types.join(", ") || tr("none", "لا يوجد");
+        const statusReply = tr(
+          `*Media control:*\n\nState: ${state}\nBlocked types: ${blocked}`,
+          `*حالة نظام مراقبة الوسائط:*\n\nالحالة: ${state}\nالأنواع الممنوعة: ${blocked}`,
+        );
         await sock.sendMessage(groupId, { text: statusReply });
       }
     }
@@ -109,7 +119,10 @@ async function handleMediaControl(sock, msg, _legacyConfig, _normalizeJid) {
     logger.info(`[Media Control] Deleting ${messageType} from ${senderId} in ${groupId}.`);
     await sock.sendMessage(groupId, { delete: msg.key });
     await sock.sendMessage(groupId, {
-      text: `يا @${senderId.split("@")[0]}، إرسال *${messageType}* ممنوع هنا.`,
+      text: tr(
+        `@${senderId.split("@")[0]}, *${messageType}* isn't allowed here.`,
+        `يا @${senderId.split("@")[0]}، إرسال *${messageType}* ممنوع هنا.`,
+      ),
       mentions: [senderId],
     });
     return true; // Action was taken

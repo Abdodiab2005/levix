@@ -11,6 +11,7 @@
 // Used for settling arguments in the group. No dependencies, no state.
 
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 const MAX_DICE = 20;
 const MAX_SIDES = 1000;
@@ -29,7 +30,19 @@ function toNumber(token) {
   return Number.isFinite(value) ? Math.trunc(value) : null;
 }
 
-const HELP_TEXT =
+const helpText = () =>
+  tr(
+    "🎲 *Random*\n\n" +
+      "`!rand` a number from 1 to 100\n" +
+      "`!rand <max>` a number from 1 to that number\n" +
+      "`!rand <min> <max>` a number between the two\n" +
+      "`!rand dice [count d sides]` dice — e.g. `!rand dice 2d6`\n" +
+      "`!rand coin` heads or tails\n" +
+      "`!rand pick option | option | option` picks one",
+    HELP_TEXT_AR,
+  );
+
+const HELP_TEXT_AR =
   "🎲 *عشوائي*\n\n" +
   "`!rand` رقم من 1 لـ 100\n" +
   "`!rand <أقصى>` رقم من 1 للرقم ده\n" +
@@ -47,9 +60,12 @@ function rollDice(spec) {
 
   if (!match || count < 1 || count > MAX_DICE || sides < 2 || sides > MAX_SIDES) {
     return {
-      error:
+      error: tr(
+        `❌ Wrong dice format. Use \`<count>d<sides>\` — e.g. \`2d6\`.\n` +
+          `(at most ${MAX_DICE} dice and ${MAX_SIDES} sides)`,
         `❌ صيغة النرد غلط. استخدم \`عددdأوجه\` — مثال \`2d6\`.\n` +
-        `(حد أقصى ${MAX_DICE} نرد و ${MAX_SIDES} وجه)`,
+          `(حد أقصى ${MAX_DICE} نرد و ${MAX_SIDES} وجه)`,
+      ),
     };
   }
 
@@ -77,11 +93,11 @@ module.exports = {
 
     const mode = (args[0] || "").toLowerCase();
 
-    if (["help", "?", "مساعدة"].includes(mode)) return reply(HELP_TEXT);
+    if (["help", "?", "مساعدة"].includes(mode)) return reply(helpText());
 
     if (["coin", "flip", "عملة", "معملة"].includes(mode)) {
       const heads = Math.random() < 0.5;
-      return reply(`🪙 *${heads ? "ملك 👑" : "كتابة ✍️"}*`);
+      return reply(`🪙 *${heads ? tr("Heads 👑", "ملك 👑") : tr("Tails ✍️", "كتابة ✍️")}*`);
     }
 
     if (["dice", "die", "نرد", "زهر"].includes(mode)) {
@@ -100,21 +116,36 @@ module.exports = {
         .filter(Boolean);
 
       if (choices.length < 2) {
-        return reply("❌ اديني خيارين على الأقل مفصولين بـ `|`.\nمثال: `!rand pick شاي | قهوة`");
+        return reply(
+          tr(
+            "❌ Give me at least two options separated by `|`.\nExample: `!rand pick tea | coffee`",
+            "❌ اديني خيارين على الأقل مفصولين بـ `|`.\nمثال: `!rand pick شاي | قهوة`",
+          ),
+        );
       }
       if (choices.length > MAX_CHOICES) {
-        return reply(`❌ الخيارات كتير أوي (الحد ${MAX_CHOICES}).`);
+        return reply(
+          tr(
+            `❌ Too many options (the limit is ${MAX_CHOICES}).`,
+            `❌ الخيارات كتير أوي (الحد ${MAX_CHOICES}).`,
+          ),
+        );
       }
 
       const winner = choices[randomInt(0, choices.length - 1)];
-      return reply(`🎯 اخترت: *${winner}*\n_(من ${choices.length} خيارات)_`);
+      return reply(
+        tr(
+          `🎯 I picked: *${winner}*\n_(out of ${choices.length} options)_`,
+          `🎯 اخترت: *${winner}*\n_(من ${choices.length} خيارات)_`,
+        ),
+      );
     }
 
     // Plain number forms: !rand · !rand 6 · !rand 10 50
     const first = toNumber(args[0]);
     const second = toNumber(args[1]);
 
-    if (args[0] && first === null) return reply(HELP_TEXT);
+    if (args[0] && first === null) return reply(helpText());
 
     let min = 1;
     let max = 100;
@@ -128,6 +159,11 @@ module.exports = {
 
     if (min === max) return reply(`🎲 *${min}*`);
 
-    return reply(`🎲 *${randomInt(min, max)}*\n_(بين ${min} و ${max})_`);
+    return reply(
+      tr(
+        `🎲 *${randomInt(min, max)}*\n_(between ${min} and ${max})_`,
+        `🎲 *${randomInt(min, max)}*\n_(بين ${min} و ${max})_`,
+      ),
+    );
   },
 };

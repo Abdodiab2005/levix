@@ -1,6 +1,7 @@
 // file: /commands/restart.js
 const { delay } = require("@whiskeysockets/baileys");
 const logger = require("../utils/logger.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "restart",
@@ -19,7 +20,10 @@ module.exports = {
 
     // Send a confirmation message before exiting
     await sock.sendMessage(msg.key.remoteJid, {
-      text: "✅ جاري إعادة تشغيل البوت... سأعود بعد لحظات.",
+      text: tr(
+        "✅ Restarting the bot... back in a moment.",
+        "✅ جاري إعادة تشغيل البوت... سأعود بعد لحظات.",
+      ),
     });
 
     // A small delay to ensure the message is sent before the process exits

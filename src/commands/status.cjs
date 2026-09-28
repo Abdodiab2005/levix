@@ -4,6 +4,7 @@ const os = require("os");
 const baileysVersion = require("@whiskeysockets/baileys/package.json").version;
 const logger = require("../utils/logger.cjs");
 const { checkFfmpeg } = require("../utils/thumbnail.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 /**
  * A helper function to format seconds into a human-readable string.
@@ -17,7 +18,7 @@ function formatUptime(seconds) {
   const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
 
-  return `${d} يوم, ${h} ساعة, ${m} دقيقة, ${s} ثانية`;
+  return tr(`${d}d ${h}h ${m}m ${s}s`, `${d} يوم, ${h} ساعة, ${m} دقيقة, ${s} ثانية`);
 }
 
 module.exports = {
@@ -56,25 +57,39 @@ module.exports = {
       //    binary is otherwise invisible.
       const ffmpeg = await checkFfmpeg();
       const ffmpegLine = ffmpeg.ok
-        ? `✅ ${ffmpeg.version || "شغال"}`
-        : `❌ مش شغال (${ffmpeg.path})`;
+        ? `✅ ${ffmpeg.version || tr("working", "شغال")}`
+        : tr(`❌ not working (${ffmpeg.path})`, `❌ مش شغال (${ffmpeg.path})`);
 
       // --- BUILDING THE REPLY ---
-      const reply = `*🤖 Bot Status 🤖*
+      const reply = tr(
+        `*🤖 Bot Status 🤖*
+
+*⏰ Uptime:* ${formattedUptime}
+*📊 Memory:* ${rssMb} MB
+*🟢 Node.js:* ${nodeVersion}
+*📚 Baileys:* v${baileysVersion}
+*💻 OS:* ${platform}
+*💿 OS release:* ${osRelease}
+*🎞️ ffmpeg (thumbnails):* ${ffmpegLine}`,
+        `*🤖 حالة البوت 🤖*
 
 *⏰ وقت التشغيل:* ${formattedUptime}
-* 📊 استخدام الذاكرة:* ${rssMb} MB
-*🟢 Node.js Version:* ${nodeVersion}
-*📚 Baileys Version:* v${baileysVersion}
+*📊 استخدام الذاكرة:* ${rssMb} MB
+*🟢 إصدار Node.js:* ${nodeVersion}
+*📚 إصدار Baileys:* v${baileysVersion}
 *💻 نظام التشغيل:* ${platform}
 *💿 إصدار نظام التشغيل:* ${osRelease}
-*🎞️ ffmpeg (الصور المصغرة):* ${ffmpegLine}`;
+*🎞️ ffmpeg (الصور المصغرة):* ${ffmpegLine}`,
+      );
 
       await sock.sendMessage(msg.key.remoteJid, { text: reply });
     } catch (error) {
       logger.error(error, "[Error] في أمر !status:");
       await sock.sendMessage(msg.key.remoteJid, {
-        text: "حدث خطأ أثناء جلب حالة النظام.",
+        text: tr(
+          "Something went wrong while reading the system status.",
+          "حدث خطأ أثناء جلب حالة النظام.",
+        ),
       });
     }
   },

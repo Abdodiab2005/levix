@@ -3,6 +3,7 @@ const { getGroupSettings, saveGroupSettings } = require("../utils/storage.cjs");
 const logger = require("../utils/logger.cjs");
 const normalizeJid = require("../utils/normalizeJid.esm.js").default;
 const { isAdminInGroupSync, sameUserSync } = require("../utils/permissions.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 function sameIdentity(a, b) {
   return normalizeJid(a) === normalizeJid(b) || sameUserSync(a, b);
@@ -50,10 +51,13 @@ module.exports = {
       if (action === "list") {
         if (settings.blacklist.length === 0)
           return await sock.sendMessage(groupId, {
-            text: "القائمة السوداء فارغة حاليًا.",
+            text: tr("The blacklist is empty.", "القائمة السوداء فارغة حاليًا."),
           });
 
-        let listReply = "*🚫 قائمة المستخدمين المحظورين من البوت:*\n\n";
+        let listReply = tr(
+          "*🚫 Users blocked from the bot:*\n\n",
+          "*🚫 قائمة المستخدمين المحظورين من البوت:*\n\n",
+        );
         settings.blacklist.forEach((jid) => {
           listReply += `» @${jid.split("@")[0]}\n`;
         });
@@ -70,7 +74,10 @@ module.exports = {
 
       if (!targetJid)
         return await sock.sendMessage(groupId, {
-          text: `لتنفيذ هذا الإجراء، قم بعمل منشن للعضو أو كتابة رقمه.`,
+          text: tr(
+            "Mention the member or type their number to do that.",
+            "لتنفيذ هذا الإجراء، قم بعمل منشن للعضو أو كتابة رقمه.",
+          ),
         });
 
       const normalizedTargetJid = normalizeJid(targetJid);
@@ -87,23 +94,32 @@ module.exports = {
           );
         if (targetIsAdmin)
           return await sock.sendMessage(groupId, {
-            text: "لا يمكن حظر المشرفين.",
+            text: tr("Admins can't be blacklisted.", "لا يمكن حظر المشرفين."),
           });
         if (settings.blacklist.some((jid) => sameIdentity(jid, normalizedTargetJid)))
           return await sock.sendMessage(groupId, {
-            text: `العضو @${normalizedTargetJid.split("@")[0]} محظور بالفعل.`,
+            text: tr(
+              `@${normalizedTargetJid.split("@")[0]} is already blacklisted.`,
+              `العضو @${normalizedTargetJid.split("@")[0]} محظور بالفعل.`,
+            ),
             mentions: [normalizedTargetJid],
           });
 
         settings.blacklist.push(normalizedTargetJid);
         await sock.sendMessage(groupId, {
-          text: `🚫 تم إضافة @${normalizedTargetJid.split("@")[0]} إلى القائمة السوداء بنجاح.`,
+          text: tr(
+            `🚫 @${normalizedTargetJid.split("@")[0]} was added to the blacklist.`,
+            `🚫 تم إضافة @${normalizedTargetJid.split("@")[0]} إلى القائمة السوداء بنجاح.`,
+          ),
           mentions: [normalizedTargetJid],
         });
       } else if (action === "remove") {
         if (!settings.blacklist.some((jid) => sameIdentity(jid, normalizedTargetJid)))
           return await sock.sendMessage(groupId, {
-            text: `العضو @${normalizedTargetJid.split("@")[0]} ليس في القائمة السوداء أصلاً.`,
+            text: tr(
+              `@${normalizedTargetJid.split("@")[0]} isn't on the blacklist.`,
+              `العضو @${normalizedTargetJid.split("@")[0]} ليس في القائمة السوداء أصلاً.`,
+            ),
             mentions: [normalizedTargetJid],
           });
 
@@ -111,7 +127,10 @@ module.exports = {
           (jid) => !sameIdentity(jid, normalizedTargetJid),
         );
         await sock.sendMessage(groupId, {
-          text: `✅ تم إزالة @${normalizedTargetJid.split("@")[0]} من القائمة السوداء.`,
+          text: tr(
+            `✅ @${normalizedTargetJid.split("@")[0]} was removed from the blacklist.`,
+            `✅ تم إزالة @${normalizedTargetJid.split("@")[0]} من القائمة السوداء.`,
+          ),
           mentions: [normalizedTargetJid],
         });
       }
