@@ -5,8 +5,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -42,6 +44,7 @@ class LevixHostService : Service() {
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var isNetworkOnline = true
     private var offlineAlertPosted = false
+    private var powerReceiver: BroadcastReceiver? = null
 
     private val retryNode = Runnable {
         if (running && !userStop && HostPrefs.wantedRunning(this)) {
@@ -51,7 +54,13 @@ class LevixHostService : Service() {
 
     private val heartbeat = object : Runnable {
         override fun run() {
-            if (HostState.snapshot.running) HostState.heartbeat()
+            if (HostState.snapshot.running) {
+                HostState.heartbeat()
+                // Every 10th beat (5 min) reaches host.log. The delay runs on
+                // uptime, which stops while the CPU sleeps, so a phone that
+                // froze Levix shows up as a gap between these lines.
+                HostLog.heartbeat(HostState.snapshot.heartbeatCount)
+            }
             checkStateAndNotify()
             handler.postDelayed(this, HEARTBEAT_MS)
         }
@@ -130,6 +139,7 @@ class LevixHostService : Service() {
         tornDown = false
         userStop = false
         acquireWakeLock()
+        registerPowerReceiver()
         registerNetworkCallback()
         HostState.markStarted()
         startAsForeground(buildNotification(getString(R.string.notif_starting)))
@@ -155,6 +165,7 @@ class LevixHostService : Service() {
         unlisten?.invoke()
         unlisten = null
         unregisterNetworkCallback()
+        unregisterPowerReceiver()
         cancelOfflineAlert()
         NodeRuntime.stop()
         releaseWakeLock()
@@ -180,6 +191,48 @@ class LevixHostService : Service() {
         val lock = wakeLock ?: return
         if (lock.isHeld) lock.release()
         wakeLock = null
+    }
+
+    /**
+     * Puts the phone's power state in host.log: whether Levix is exempt from
+     * battery optimization, and every Doze / battery-saver switch. Without the
+     * exemption Doze ignores the wake lock above — the process freezes, the
+     * WhatsApp keepalive stops, and the 5-second reconnect timer fires minutes
+     * later — which a log of reconnects alone can't tell apart from a bad
+     * network.
+     */
+    private fun registerPowerReceiver() {
+        if (powerReceiver != null) return
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        HostLog.event(
+            "power: battery unrestricted=${HostBattery.isUnrestricted(this)} " +
+                "saver=${pm.isPowerSaveMode} doze=${pm.isDeviceIdleMode}",
+        )
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                when (intent.action) {
+                    PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED ->
+                        HostLog.event("power: doze=${pm.isDeviceIdleMode}")
+                    PowerManager.ACTION_POWER_SAVE_MODE_CHANGED ->
+                        HostLog.event("power: saver=${pm.isPowerSaveMode}")
+                }
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)
+            addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+        }
+        // System broadcasts still arrive at a not-exported receiver.
+        ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        powerReceiver = receiver
+    }
+
+    private fun unregisterPowerReceiver() {
+        val receiver = powerReceiver ?: return
+        try {
+            unregisterReceiver(receiver)
+        } catch (_: Exception) {}
+        powerReceiver = null
     }
 
     private fun registerNetworkCallback() {
@@ -212,9 +265,12 @@ class LevixHostService : Service() {
 
             override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
                 val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                HostLog.event("network callback: capabilities internet=$hasInternet")
                 handler.post {
+                    // Android calls this on every signal-strength or bandwidth
+                    // update — a quarter of host.log was the same line — so
+                    // only an actual change is logged.
                     if (isNetworkOnline != hasInternet) {
+                        HostLog.event("network callback: capabilities internet=$hasInternet")
                         isNetworkOnline = hasInternet
                         NodeRuntime.setNetworkOnline(hasInternet)
                         checkStateAndNotify()
