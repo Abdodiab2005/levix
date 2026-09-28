@@ -14,10 +14,15 @@
 // runtime block and whatever is in the long-term memory files.
 
 const fs = require("fs");
-const path = require("path");
 const { GoogleGenAI, FunctionCallingConfigMode } = require("@google/genai");
 
 const logger = require("../utils/logger.cjs");
+const {
+  mediaKind,
+  baseMimeType,
+  downloadMedia,
+  uploadToGemini,
+} = require("../utils/geminiMedia.cjs");
 const aiIdentity = require("../config/ai-identity.cjs");
 const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
@@ -422,54 +427,42 @@ class GeminiProvider extends BaseAIProvider {
     parts,
     mediaMessage,
     mimeOverride,
-    { downloadContentFromMessage, genAI, tempDir } = {},
+    { downloadContentFromMessage, genAI, downloadType } = {},
   ) {
     if (!genAI) throw new Error("Gemini client unavailable");
-    const mime = mimeOverride || mediaMessage?.mimetype || "";
+    const rawMime = mimeOverride || mediaMessage?.mimetype || "";
+    const kind = mediaKind(rawMime);
     const caps = detectModelCapabilities("gemini");
-    if (mime.startsWith("image/") && (!settings.get("ai_vision_enabled") || !caps.supportsVision)) {
+    if (kind === "image" && (!settings.get("ai_vision_enabled") || !caps.supportsVision)) {
       parts.push({
         text: "[تم إرفاق صورة — الرؤية غير مفعّلة للنموذج المحدد / Vision is disabled for the selected model]",
       });
       return null;
     }
-    if (mime.startsWith("audio/") && (!settings.get("ai_stt_enabled") || !caps.supportsAudioStt)) {
+    if (kind === "audio" && (!settings.get("ai_stt_enabled") || !caps.supportsAudioStt)) {
       parts.push({
         text: "[تم إرفاق صوت — تحويل الكلام غير مفعّل للنموذج المحدد / Speech-to-text is disabled for the selected model]",
       });
       return null;
     }
-    const tempFilePath = path.join(tempDir || __dirname, `temp_media_${Date.now()}`);
-    const stream = await downloadContentFromMessage(
-      mediaMessage,
-      mediaMessage.mimetype?.startsWith("image/")
-        ? "image"
-        : mediaMessage.mimetype?.startsWith("video/")
-          ? "video"
-          : mediaMessage.mimetype?.startsWith("audio/")
-            ? "audio"
-            : "document",
-    );
-    let buffer = Buffer.from([]);
-    for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
-    if (!buffer.length) throw new Error("Empty media buffer");
-    await fs.promises.writeFile(tempFilePath, buffer);
 
-    try {
-      const uploadResult = await genAI.files.upload({
-        file: tempFilePath,
-        mimeType: mediaMessage.mimetype,
-      });
-      parts.push({
-        fileData: {
-          fileUri: uploadResult.uri,
-          mimeType: uploadResult.mimeType,
-        },
-      });
-      return uploadResult.uri;
-    } finally {
-      await fs.promises.unlink(tempFilePath).catch(() => {});
-    }
+    // The MIME type goes in `config` (see utils/geminiMedia.cjs) — passing it
+    // anywhere else is what made every upload fail with "Can not determine
+    // mimeType".
+    const mimeType = baseMimeType(rawMime, kind);
+    const buffer = await downloadMedia(
+      downloadContentFromMessage,
+      mediaMessage,
+      downloadType || kind,
+    );
+    const file = await uploadToGemini(genAI, buffer, mimeType);
+    parts.push({
+      fileData: {
+        fileUri: file.uri,
+        mimeType: file.mimeType || mimeType,
+      },
+    });
+    return file.uri;
   }
 
   async runTurn(options) {

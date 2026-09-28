@@ -18,18 +18,79 @@ import http from "node:http";
  * @param {Array<object|function>} replies - one per request, in order. A
  *   function is called with the parsed request body. Anything past the end of
  *   the list gets a plain text answer.
+ * @param {object} [options]
+ * @param {string[]} [options.fileStates] - the Files API side: the first entry
+ *   is the state an upload comes back in, each later one answers the next
+ *   `files.get`. Defaults to ["ACTIVE"].
  */
-export async function startGenaiServer(replies = []) {
+export async function startGenaiServer(replies = [], { fileStates = ["ACTIVE"] } = {}) {
   const requests = [];
+  // Files API traffic is kept apart from `requests`, so body(n) still means
+  // "the nth generateContent" in tests that upload something first.
+  const uploads = [];
+  const fileGets = [];
   let index = 0;
+  let baseUrl = "";
+
+  const fileResource = (upload, state) => ({
+    name: upload.name,
+    uri: `${baseUrl}/v1beta/${upload.name}`,
+    mimeType: upload.mimeType,
+    sizeBytes: String(upload.bytes?.length || 0),
+    state,
+  });
 
   const server = http.createServer((req, res) => {
-    let body = "";
-    req.on("data", (chunk) => (body += chunk));
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
     req.on("end", () => {
+      const raw = Buffer.concat(chunks);
+
+      // The resumable upload @google/genai speaks: a `start` that declares the
+      // MIME type in a header and gets an upload URL back, then the bytes.
+      if (req.url.startsWith("/upload/")) {
+        let declared = {};
+        try {
+          declared = JSON.parse(raw.toString("utf8") || "{}");
+        } catch {}
+        const upload = {
+          name: `files/test${uploads.length + 1}`,
+          mimeType: req.headers["x-goog-upload-header-content-type"],
+          declared,
+          headers: req.headers,
+          bytes: null,
+        };
+        uploads.push(upload);
+        res.writeHead(200, {
+          "content-type": "application/json",
+          "x-goog-upload-url": `${baseUrl}/upload-session/${uploads.length}`,
+        });
+        res.end("{}");
+        return;
+      }
+      if (req.url.startsWith("/upload-session/")) {
+        const upload = uploads[Number(req.url.split("/")[2]) - 1];
+        upload.bytes = Buffer.concat([upload.bytes || Buffer.alloc(0), raw]);
+        res.writeHead(200, {
+          "content-type": "application/json",
+          "x-goog-upload-status": "final",
+        });
+        res.end(JSON.stringify({ file: fileResource(upload, fileStates[0]) }));
+        return;
+      }
+      const fileGet = /^\/v1beta\/(files\/[^/?]+)/.exec(req.url);
+      if (req.method === "GET" && fileGet) {
+        const upload = uploads.find((u) => u.name === fileGet[1]);
+        fileGets.push(fileGet[1]);
+        const state = fileStates[Math.min(fileGets.length, fileStates.length - 1)];
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(fileResource(upload, state)));
+        return;
+      }
+
       let parsed = {};
       try {
-        parsed = JSON.parse(body || "{}");
+        parsed = JSON.parse(raw.toString("utf8") || "{}");
       } catch {}
       requests.push({ url: req.url, method: req.method, body: parsed, headers: req.headers });
 
@@ -42,10 +103,15 @@ export async function startGenaiServer(replies = []) {
   });
 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  baseUrl = `http://127.0.0.1:${server.address().port}`;
 
   return {
-    baseUrl: `http://127.0.0.1:${server.address().port}`,
+    baseUrl,
     requests,
+    /** Files API uploads: { name, mimeType (the declared header), bytes }. */
+    uploads,
+    /** The file names `files.get` was asked about, in order. */
+    fileGets,
     /** The nth captured request body (0-based). */
     body: (n = 0) => requests[n]?.body,
     last: () => requests[requests.length - 1]?.body,

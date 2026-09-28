@@ -46,8 +46,7 @@ const {
 } = require("../services/aiAgent.cjs");
 const { getProvider } = require("../services/aiRouter.cjs");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
-const fs = require("fs").promises;
-const path = require("path");
+const { unwrapMessage, visibleText } = require("../utils/messageContent.cjs");
 const {
   assertProviderBaseUrl,
   assertProviderRequestUrl,
@@ -133,16 +132,29 @@ function geminiClients() {
   return geminiCache;
 }
 
-async function processIncomingMedia(parts, mediaMessage, mimeOverride = null) {
+// The media in a message and the type WhatsApp filed it under. That type, not
+// the MIME type, picks the decryption keys: a photo sent as a document has to
+// be downloaded as a "document".
+const MEDIA_TYPES = ["image", "video", "audio", "document"];
+function pickMedia(message) {
+  const inner = unwrapMessage(message);
+  for (const type of MEDIA_TYPES) {
+    const media = inner[`${type}Message`];
+    if (media) return { media, type };
+  }
+  return null;
+}
+
+async function processIncomingMedia(parts, mediaMessage, downloadType) {
   const provider = getProvider();
   if (provider.id === "gemini") {
     await assertProviderRequestUrl(settings.get("gemini_base_url"), { allowLoopback: true });
   }
   const { genAI } = geminiClients();
-  return provider.prepareMedia(parts, mediaMessage, mimeOverride, {
+  return provider.prepareMedia(parts, mediaMessage, null, {
     downloadContentFromMessage,
     genAI,
-    tempDir: __dirname,
+    downloadType,
   });
 }
 
@@ -164,12 +176,12 @@ async function captureContextEntry(msg, args) {
   const cleanedText = args.slice(1).join(" ").trim();
   if (cleanedText) entry.text = cleanedText;
 
-  const m = msg.message || {};
+  const m = unwrapMessage(msg.message);
 
-  const directMedia = m.imageMessage || m.videoMessage || m.audioMessage || m.documentMessage;
+  const directMedia = pickMedia(m);
   if (directMedia) {
     try {
-      await processIncomingMedia(entry.mediaParts, directMedia);
+      await processIncomingMedia(entry.mediaParts, directMedia.media, directMedia.type);
     } catch (err) {
       logger.warn(
         { err: err?.message },
@@ -180,18 +192,11 @@ async function captureContextEntry(msg, args) {
 
   const quoted = m.extendedTextMessage?.contextInfo?.quotedMessage;
   if (quoted) {
-    entry.quotedText =
-      quoted.conversation ||
-      quoted.extendedTextMessage?.text ||
-      quoted.imageMessage?.caption ||
-      quoted.videoMessage?.caption ||
-      quoted.documentMessage?.caption ||
-      "";
-    const quotedMedia =
-      quoted.imageMessage || quoted.videoMessage || quoted.audioMessage || quoted.documentMessage;
+    entry.quotedText = visibleText(quoted);
+    const quotedMedia = pickMedia(quoted);
     if (quotedMedia) {
       try {
-        await processIncomingMedia(entry.quotedMediaParts, quotedMedia);
+        await processIncomingMedia(entry.quotedMediaParts, quotedMedia.media, quotedMedia.type);
       } catch (err) {
         logger.warn(
           { err: err?.message },
@@ -491,7 +496,11 @@ module.exports = {
     if (!parts.length && (msg.message?.imageMessage || msg.message?.videoMessage)) {
       const mediaMessage = msg.message.imageMessage || msg.message.videoMessage;
       try {
-        await processIncomingMedia(parts, mediaMessage);
+        await processIncomingMedia(
+          parts,
+          mediaMessage,
+          msg.message.imageMessage ? "image" : "video",
+        );
         parts.push({
           text: prompt || mediaMessage.caption || "ماذا يوجد في هذه الصورة/الفيديو؟",
         });
@@ -503,7 +512,7 @@ module.exports = {
       }
     } else if (!parts.length && msg.message?.audioMessage) {
       try {
-        await processIncomingMedia(parts, msg.message.audioMessage);
+        await processIncomingMedia(parts, msg.message.audioMessage, "audio");
         parts.push({ text: prompt || "حلل لي هذا التسجيل الصوتي." });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload audio to Gemini.");
@@ -513,7 +522,7 @@ module.exports = {
       }
     } else if (!parts.length && msg.message?.documentMessage) {
       try {
-        await processIncomingMedia(parts, msg.message.documentMessage);
+        await processIncomingMedia(parts, msg.message.documentMessage, "document");
         const fileName = msg.message.documentMessage.fileName || "document";
         const text = prompt || msg.message.documentMessage.caption || "";
         parts.push({
@@ -545,25 +554,21 @@ module.exports = {
 
     if (quotedMsg) {
       let quotedMediaPart = null;
-      const quotedText =
-        quotedMsg.conversation ||
-        quotedMsg.extendedTextMessage?.text ||
-        quotedMsg.documentMessage?.caption;
-
-      const mediaInQuote =
-        quotedMsg.imageMessage ||
-        quotedMsg.videoMessage ||
-        quotedMsg.audioMessage ||
-        quotedMsg.documentMessage;
+      // Captions count: "describe this" on a captioned photo should see both.
+      const quotedText = visibleText(quotedMsg);
+      const mediaInQuote = pickMedia(quotedMsg);
 
       if (mediaInQuote) {
         try {
           const probeParts = [];
-          await processIncomingMedia(probeParts, mediaInQuote);
+          await processIncomingMedia(probeParts, mediaInQuote.media, mediaInQuote.type);
           quotedMediaPart = probeParts[0];
         } catch (mediaError) {
+          // Stop here. Carrying on without the media used to post this error
+          // AND a second reply from a model that had never seen the photo
+          // ("I can't see any image") — two messages, the second one wrong.
           logger.error({ err: mediaError }, "Failed to process quoted media");
-          await sendBotError(sock, chatId, mediaError, "حصلت مشكلة في الرسالة المقتبسة", {
+          return sendBotError(sock, chatId, mediaError, "حصلت مشكلة في الرسالة المقتبسة", {
             replyTo: msg,
           });
         }

@@ -172,6 +172,8 @@ src/
     ├── statusMessage.cjs # One message per command, edited in place
     ├── textDecode.cjs    # charset / entity / mojibake decoding
     ├── messageContent.cjs # unwrap visible text/media from Baileys envelopes
+    ├── geminiMedia.cjs # WhatsApp media -> Gemini: bare MIME types, in-memory
+    │                 # download, Files API upload (MIME in `config`, no temp file)
     ├── providerUrl.cjs # provider URL validation + DNS-pinned fetch
     ├── logger.cjs    # Pino (worker transports, or in-process when packaged)
     ├── storage.cjs   # Sync storage API (CommonJS) — re-exports src/db/store.cjs
@@ -488,8 +490,14 @@ the setting per message.
   message (text / image / video / audio / document / quoted), the multi-message
   context buffer, `!generate`, and the expired-file fallback. Media handling is
   the one place the provider matters here: on gemini it uploads to the Files
-  API; on openai/anthropic the media part becomes a one-line note (no upload
-  API exists on those paths) and the caption still reaches the model.
+  API through `src/utils/geminiMedia.cjs` (the MIME type rides in `config`,
+  parameters stripped — `audio/ogg; codecs=opus` is sent as `audio/ogg`); on
+  openai/anthropic the media part becomes a one-line note (no upload API exists
+  on those paths) and the caption still reaches the model. The download type is
+  the message's WhatsApp type, not its MIME type: a photo sent as a document
+  decrypts with the document keys. A quoted media message that can't be read
+  ends the command with one error reply — it is never answered without the
+  media.
 - `src/services/aiAgent.cjs` — the Gemini loop: system instruction, tool
   rounds, history trimming. Built on `ai.chats`, which is what keeps Gemini 3's
   thought signatures circulating (see below). Also dispatches to the other
