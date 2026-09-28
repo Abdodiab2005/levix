@@ -2,6 +2,7 @@
 // We lazy-import the ESM module on first call and cache the resolved exports.
 
 const logger = require("./logger.cjs");
+const { tr } = require("./i18n.cjs");
 
 let cached = null;
 
@@ -26,16 +27,19 @@ async function sendBotMessage(sock, jid, content, options = {}) {
   }
 }
 
-async function sendBotError(sock, jid, err, arabicLead = "حدث خطأ", options = {}) {
+async function sendBotError(sock, jid, err, lead = tr("Something went wrong", "حدث خطأ"), options = {}) {
   try {
     const mod = await getModule();
-    return await mod.sendBotError(sock, jid, err, arabicLead, options);
+    return await mod.sendBotError(sock, jid, err, lead, options);
   } catch (innerErr) {
     logger.error({ err: innerErr }, "[sendBotMessage.cjs] error helper failed");
     const name = err?.name || "Error";
     const message = err?.message || String(err);
     return sock.sendMessage(jid, {
-      text: `❌ *${arabicLead}*\n\n*النوع:* \`${name}\`\n*التفاصيل:* ${message}`,
+      text: tr(
+        `❌ *${lead}*\n\n*Type:* \`${name}\`\n*Details:* ${message}`,
+        `❌ *${lead}*\n\n*النوع:* \`${name}\`\n*التفاصيل:* ${message}`,
+      ),
     });
   }
 }

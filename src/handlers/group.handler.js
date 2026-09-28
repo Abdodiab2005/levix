@@ -4,6 +4,7 @@ import { getGroupSettings } from "../utils/storage.esm.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 // Handle group participant updates (join/leave)
 export async function handleGroupParticipantsUpdate(sock, update) {
@@ -62,7 +63,10 @@ export async function handleGroupJoinRequests(sock, events) {
 
         await delay(500);
         await sock.sendMessage(groupId, {
-          text: `✅ تم قبول طلب انضمام @${participantId.split("@")[0]} تلقائيًا.`,
+          text: tr(
+            `✅ @${participantId.split("@")[0]}'s join request was approved automatically.`,
+            `✅ تم قبول طلب انضمام @${participantId.split("@")[0]} تلقائيًا.`,
+          ),
           mentions: [participantId],
         });
       }

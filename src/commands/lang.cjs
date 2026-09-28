@@ -3,12 +3,19 @@ const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
 const { isOwnerJidSync, isBotAdminUserSync } = require("../utils/permissions.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "lang",
   aliases: ["language", "لغة"],
-  description: "View or change the bot response language",
-  usage: "lang [en|ar|auto]",
+  description: {
+    en: "Shows or changes the bot's language.",
+    ar: "يعرض لغة البوت أو يغيّرها.",
+  },
+  usage: {
+    en: "lang [en|ar|auto]",
+    ar: "lang [en|ar|auto]",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {
@@ -21,18 +28,32 @@ module.exports = {
 
     if (!args || args.length === 0) {
       const labels = {
-        auto: "تلقائي (حسب لغة رسالتك) / Auto-detect",
-        ar: "العربية الفصحى (Modern Standard Arabic)",
-        en: "English (الإنجليزية)",
+        auto: tr("Auto (follows each message)", "تلقائي (حسب لغة رسالتك)"),
+        ar: tr("Arabic", "العربية الفصحى"),
+        en: tr("English", "الإنجليزية"),
       };
-      const text = `🌐 *لغة البوت / Bot language*
+      const text = tr(
+        `🌐 *Bot language*
+
+⚙️ *Current:* \`${labels[currentLang] || currentLang}\`
+• \`${prefix}lang ar\` — العربية الفصحى دائماً
+• \`${prefix}lang en\` — English always
+• \`${prefix}lang auto\` — follow the language of each message
+
+Commands, !help and the AI all answer in it.
+
+🔢 *To convert digits* use \`${prefix}digit\` — e.g. \`${prefix}digit 12345\``,
+        `🌐 *لغة البوت*
 
 ⚙️ *اللغة الحالية:* \`${labels[currentLang] || currentLang}\`
 • \`${prefix}lang ar\` — العربية الفصحى دائماً
 • \`${prefix}lang en\` — English always
 • \`${prefix}lang auto\` — تلقائي حسب لغة الرسالة
 
-🔢 *لتحويل الأرقام* استخدم \`${prefix}digit\` — مثال: \`${prefix}digit 12345\``;
+الأوامر و!help والذكاء الاصطناعي كلهم بيردوا بيها.
+
+🔢 *لتحويل الأرقام* استخدم \`${prefix}digit\` — مثال: \`${prefix}digit 12345\``,
+      );
       await sock.sendMessage(chatId, { text }, { quoted: msg });
       return;
     }
@@ -42,7 +63,10 @@ module.exports = {
         await sock.sendMessage(
           chatId,
           {
-            text: `🔢 لتحويل الأرقام استخدم \`${prefix}digit\`:\n• \`${prefix}digit ${firstArg} ${args.slice(1).join(" ")}\`\n• أو \`${prefix}digit ${args.slice(1).join(" ")}\` للتحويل التلقائي.\nTo convert digits, use \`${prefix}digit\`.`,
+            text: tr(
+              `🔢 To convert digits, use \`${prefix}digit\`:\n• \`${prefix}digit ${firstArg} ${args.slice(1).join(" ")}\`\n• or \`${prefix}digit ${args.slice(1).join(" ")}\` to detect the direction.`,
+              `🔢 لتحويل الأرقام استخدم \`${prefix}digit\`:\n• \`${prefix}digit ${firstArg} ${args.slice(1).join(" ")}\`\n• أو \`${prefix}digit ${args.slice(1).join(" ")}\` للتحويل التلقائي.`,
+            ),
           },
           { quoted: msg },
         );
@@ -55,7 +79,10 @@ module.exports = {
         await sock.sendMessage(
           chatId,
           {
-            text: `⚠️ عذراً، تغيير لغة البوت متاح لمالك البوت والمسؤولين فقط.\nSorry, only bot owner and admins can change bot language.\n_لتحويل الأرقام استخدم \`${prefix}digit\`._`,
+            text: tr(
+              `⚠️ Sorry, only the bot owner and admins can change the bot's language.\n_To convert digits, use \`${prefix}digit\`._`,
+              `⚠️ عذراً، تغيير لغة البوت متاح لمالك البوت والمسؤولين فقط.\n_لتحويل الأرقام استخدم \`${prefix}digit\`._`,
+            ),
           },
           { quoted: msg },
         );
@@ -69,7 +96,7 @@ module.exports = {
         await sock.sendMessage(
           chatId,
           {
-            text: "✅ تم ضبط لغة البوت على *العربية الفصحى*. سيتحدث الذكاء الاصطناعي بالعربية الفصحى دائماً.",
+            text: "✅ تم ضبط لغة البوت على *العربية الفصحى*. الأوامر والذكاء الاصطناعي هيردوا بالعربي دائماً.",
           },
           { quoted: msg },
         );
@@ -77,7 +104,7 @@ module.exports = {
         await sock.sendMessage(
           chatId,
           {
-            text: "✅ Bot language set to *English*. The AI assistant will now always respond in English.",
+            text: "✅ Bot language set to *English*. Commands and the AI assistant will now always answer in English.",
           },
           { quoted: msg },
         );
@@ -85,7 +112,10 @@ module.exports = {
         await sock.sendMessage(
           chatId,
           {
-            text: "✅ تم ضبط اللغة على *التلقائي (Auto)*. سيرد البوت بحسب لغة كل رسالة ترسلها له تلقائياً.",
+            text: tr(
+              "✅ Language set to *Auto*. The bot will answer each message in the language it is written in.",
+              "✅ تم ضبط اللغة على *التلقائي (Auto)*. سيرد البوت بحسب لغة كل رسالة ترسلها له تلقائياً.",
+            ),
           },
           { quoted: msg },
         );
@@ -96,7 +126,10 @@ module.exports = {
     await sock.sendMessage(
       chatId,
       {
-        text: `❌ خيار غير صحيح.\nاستخدم:\n• \`${prefix}lang ar\` / \`${prefix}lang en\` / \`${prefix}lang auto\` للغة البوت\n• \`${prefix}digit 12345\` لتحويل الأرقام`,
+        text: tr(
+          `❌ Unknown option.\nUse:\n• \`${prefix}lang ar\` / \`${prefix}lang en\` / \`${prefix}lang auto\` for the bot's language\n• \`${prefix}digit 12345\` to convert digits`,
+          `❌ خيار غير صحيح.\nاستخدم:\n• \`${prefix}lang ar\` / \`${prefix}lang en\` / \`${prefix}lang auto\` للغة البوت\n• \`${prefix}digit 12345\` لتحويل الأرقام`,
+        ),
       },
       { quoted: msg },
     );

@@ -13,6 +13,7 @@
 // flood bot (and from getting the account banned).
 
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 const MAX_ITEMS = 100; // total iterations, one-message mode
 const MAX_SPLIT_ITEMS = 15; // total iterations, separate-messages mode
@@ -22,7 +23,28 @@ const SPLIT_GAP_MS = 900; // breathing room between separate sends
 const SPLIT_FLAGS = new Set(["-s", "--split", "split", "منفصل", "منفصلة"]);
 const NO_NUMBER_FLAGS = new Set(["-n", "--nonum", "--plain", "بدون-ترقيم"]);
 
-const HELP_TEXT =
+const helpText = () =>
+  tr(
+    "🔁 *Loop*\n\n" +
+      "*Usage:*\n" +
+      "`!loop <count> <text>` — repeat the text in one message\n" +
+      "`!loop <from>-<to>` — print the numbers from/to\n" +
+      "`!loop <from>-<to>:<step>` — with a custom step\n\n" +
+      "*Options:*\n" +
+      "`-s` separate messages instead of one\n" +
+      "`-n` no numbering\n\n" +
+      "*Placeholders in the text:*\n" +
+      "`{n}` the current number · `{i}` the repetition number\n\n" +
+      "*Examples:*\n" +
+      "`!loop 5 hello`\n" +
+      "`!loop 1-10`\n" +
+      "`!loop 0-100:25 counter {n}`\n" +
+      "`!loop 3 good morning -s`\n\n" +
+      `_At most ${MAX_ITEMS} repetitions in one message, ${MAX_SPLIT_ITEMS} separate messages._`,
+    HELP_TEXT_AR,
+  );
+
+const HELP_TEXT_AR =
   "🔁 *أمر التكرار*\n\n" +
   "*الاستخدام:*\n" +
   "`!loop <عدد> <النص>` — يكرر النص في رسالة واحدة\n" +
@@ -91,8 +113,14 @@ function renderLine(template, number, index) {
 module.exports = {
   name: "loop",
   aliases: ["repeat", "كرر", "تكرار"],
-  description: "يكرر نص أو أرقام — في رسالة واحدة أو رسائل منفصلة.",
-  usage: "loop <عدد|من-إلى[:خطوة]> [النص] [-s رسائل منفصلة] [-n بدون ترقيم]",
+  description: {
+    en: "Repeats text or numbers — in one message or as separate messages.",
+    ar: "يكرر نصًا أو أرقامًا — في رسالة واحدة أو في رسائل منفصلة.",
+  },
+  usage: {
+    en: "loop <count|from-to[:step]> [text] [-s separate messages] [-n no numbering]",
+    ar: "loop <عدد|من-إلى[:خطوة]> [النص] [-s رسائل منفصلة] [-n بدون ترقيم]",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {
@@ -111,22 +139,28 @@ module.exports = {
     }
 
     const range = parseRange(rest[0]);
-    if (!range) return reply(HELP_TEXT);
+    if (!range) return reply(helpText());
 
     const template = rest.slice(1).join(" ").trim();
     const limit = split ? MAX_SPLIT_ITEMS : MAX_ITEMS;
     const requested = countOf(range);
 
-    if (requested < 1) return reply("❌ المدى ده مش بيطلع أي أرقام.");
+    const emptyRange = () =>
+      reply(tr("❌ That range doesn't produce any numbers.", "❌ المدى ده مش بيطلع أي أرقام."));
+    if (requested < 1) return emptyRange();
     if (requested > limit) {
       return reply(
-        `❌ ${requested} تكرار كتير أوي.\n` +
-          `الحد الأقصى ${limit} ${split ? "رسالة منفصلة" : "تكرار في الرسالة الواحدة"}.`,
+        tr(
+          `❌ ${requested} repetitions is too many.\n` +
+            `The limit is ${limit} ${split ? "separate messages" : "repetitions in one message"}.`,
+          `❌ ${requested} تكرار كتير أوي.\n` +
+            `الحد الأقصى ${limit} ${split ? "رسالة منفصلة" : "تكرار في الرسالة الواحدة"}.`,
+        ),
       );
     }
 
     const numbers = buildNumbers(range, limit);
-    if (!numbers.length) return reply("❌ المدى ده مش بيطلع أي أرقام.");
+    if (!numbers.length) return emptyRange();
 
     // A bare count with text repeats the text; a range without text prints the
     // numbers. Either way {n}/{i} are substituted per line.
@@ -148,7 +182,7 @@ module.exports = {
     let text = lines.map((line, i) => (numbered ? `${i + 1}. ${line}` : line)).join("\n");
 
     if (text.length > MAX_OUTPUT_CHARS) {
-      text = `${text.slice(0, MAX_OUTPUT_CHARS)}\n…\n_(اتقصت عشان طولها)_`;
+      text = `${text.slice(0, MAX_OUTPUT_CHARS)}\n…\n${tr("_(cut short — too long)_", "_(اتقصت عشان طولها)_")}`;
     }
 
     return reply(text);

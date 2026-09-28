@@ -1,10 +1,17 @@
 const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "setrules",
-  description: "Sets the rules for the current group.",
-  usage: "setrules <القواعد>",
+  description: {
+    en: "Sets the rules for this group.",
+    ar: "يضبط قواعد هذه المجموعة.",
+  },
+  usage: {
+    en: "setrules <rules>",
+    ar: "setrules <القواعد>",
+  },
   chat: "group",
   userAdminRequired: true,
 
@@ -14,7 +21,10 @@ module.exports = {
 
     if (!rulesText) {
       return await sock.sendMessage(groupId, {
-        text: "يرجى كتابة القواعد بعد الأمر.\n*مثال:*\n`!setrules 1. احترام الأعضاء.\n2. ممنوع السبام.`",
+        text: tr(
+          "Write the rules after the command.\n*Example:*\n`!setrules 1. Respect the members.\n2. No spam.`",
+          "يرجى كتابة القواعد بعد الأمر.\n*مثال:*\n`!setrules 1. احترام الأعضاء.\n2. ممنوع السبام.`",
+        ),
       });
     }
 
@@ -29,12 +39,14 @@ module.exports = {
       saveGroupSettings(groupId, settings);
 
       await sock.sendMessage(groupId, {
-        text: "✅ تم حفظ قواعد الجروب بنجاح في قاعدة البيانات.",
+        text: tr("✅ The group's rules were saved.", "✅ تم حفظ قواعد الجروب بنجاح في قاعدة البيانات."),
       });
     } catch (error) {
       // Improved logging for better debugging
       logger.error({ err: error, groupId: groupId }, "Error in !setrules command");
-      await sock.sendMessage(groupId, { text: "حدث خطأ أثناء حفظ القواعد." });
+      await sock.sendMessage(groupId, {
+        text: tr("Something went wrong while saving the rules.", "حدث خطأ أثناء حفظ القواعد."),
+      });
     }
   },
 };

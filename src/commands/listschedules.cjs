@@ -1,10 +1,17 @@
 // file: /commands/listschedules.js
 const { getScheduledJobs } = require("../../scheduler.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "listschedules",
-  description: "Lists all active and pending scheduled jobs.",
-  usage: "listschedules",
+  description: {
+    en: "Lists all active and pending scheduled messages.",
+    ar: "يعرض كل الرسائل المجدولة النشطة والمعلّقة.",
+  },
+  usage: {
+    en: "listschedules",
+    ar: "listschedules",
+  },
   chat: "all",
   userAdminRequired: true,
 
@@ -14,29 +21,39 @@ module.exports = {
 
     if (activeJobs.length === 0) {
       return await sock.sendMessage(msg.key.remoteJid, {
-        text: "لا توجد مهام مجدولة حاليًا.",
+        text: tr("There are no scheduled messages.", "لا توجد مهام مجدولة حاليًا."),
       });
     }
 
-    let reply = "*⏰ المهام المجدولة النشطة:*\n\n";
+    let reply = tr("*⏰ Active scheduled messages:*\n\n", "*⏰ المهام المجدولة النشطة:*\n\n");
 
     activeJobs.forEach((job, index) => {
-      reply += `*${index + 1}. المهمة:*\n`;
+      reply += tr(`*${index + 1}. Job:*\n`, `*${index + 1}. المهمة:*\n`);
       reply += `*ID:* \`${job.id}\`\n`;
-      reply += `*الرسالة:* "${job.message}"\n`;
+      reply += tr(`*Message:* "${job.message}"\n`, `*الرسالة:* "${job.message}"\n`);
 
       if (job.type === "recurring") {
-        reply += `*التكرار:* ${job.cronString} (يوميًا/أسبوعيًا)\n`;
+        reply += tr(
+          `*Repeats:* ${job.cronString} (daily/weekly)\n`,
+          `*التكرار:* ${job.cronString} (يوميًا/أسبوعيًا)\n`,
+        );
       } else {
-        const jobDate = new Date(job.date).toLocaleString("ar-EG", {
+        const jobDate = new Date(job.date).toLocaleString(tr("en-GB", "ar-EG"), {
           timeZone: "Africa/Cairo",
         });
-        reply += `*الوقت المحدد:* ${jobDate}\n`;
+        reply += tr(`*When:* ${jobDate}\n`, `*الوقت المحدد:* ${jobDate}\n`);
       }
-      reply += `*الوجهة:* ${job.targetJid.endsWith("@g.us") ? "هذا الجروب" : "محادثة خاصة"}\n\n`;
+      const inGroup = job.targetJid.endsWith("@g.us");
+      reply += tr(
+        `*Where:* ${inGroup ? "this group" : "a private chat"}\n\n`,
+        `*الوجهة:* ${inGroup ? "هذا الجروب" : "محادثة خاصة"}\n\n`,
+      );
     });
 
-    reply += "*لحذف مهمة، استخدم:*\n`!deleteschedule <ID>`";
+    reply += tr(
+      "*To delete one, use:*\n`!deleteschedule <ID>`",
+      "*لحذف مهمة، استخدم:*\n`!deleteschedule <ID>`",
+    );
 
     await sock.sendMessage(msg.key.remoteJid, { text: reply });
   },

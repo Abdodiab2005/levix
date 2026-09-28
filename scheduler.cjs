@@ -7,6 +7,7 @@ const logger = require("./src/utils/logger.cjs");
 const settings = require("./src/config/settings.cjs");
 const { ensureDataDir } = require("./src/config/paths.cjs");
 const storage = require("./src/utils/storage.cjs");
+const { detectLang, withLang, tr } = require("./src/utils/i18n.cjs");
 
 // الجدولة كانت في config/schedule.json: الداشبورد مش شايفاه، وكراش وسط
 // الكتابة كان ممكن يقصّه. دلوقتي جدول في نفس قاعدة البيانات زي أي حاجة تانية.
@@ -161,7 +162,11 @@ async function deliverScheduledJob(sock, job) {
 
   try {
     await sock.sendMessage(job.targetJid, {
-      text: `*رسالة مجدولة 🗓️*\n\n${job.message}`,
+      // No message is being answered here, so the header follows the scheduled
+      // text itself (in "auto"), or the bot's language.
+      text: withLang(detectLang(job.message), () =>
+        tr(`*Scheduled message 🗓️*\n\n${job.message}`, `*رسالة مجدولة 🗓️*\n\n${job.message}`),
+      ),
     });
     recordDelivery(job.id, "sent", runAt);
     logger.info(`[Scheduler] Executed job ${job.id} -> ${job.targetJid}`);

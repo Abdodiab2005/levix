@@ -11,6 +11,7 @@ import { resolveGroupMetadata } from "../utils/groupMetadataCache.cjs";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 const userMessageTimestamps = new Map();
 
@@ -78,13 +79,19 @@ export async function handleAntiSpam(sock, msg) {
     // Take action based on config
     if (spamConfig.action === "KICK") {
       await sock.sendMessage(groupId, {
-        text: `🚫 تم حذف @${senderId.split("@")[0]} بسبب الإزعاج (Spam).`,
+        text: tr(
+          `🚫 @${senderId.split("@")[0]} was removed for spamming.`,
+          `🚫 تم حذف @${senderId.split("@")[0]} بسبب الإزعاج (Spam).`,
+        ),
         mentions: [senderId],
       });
       await sock.groupParticipantsUpdate(groupId, [senderId], "remove");
     } else {
       await sock.sendMessage(groupId, {
-        text: `⚠️ تحذير لـ @${senderId.split("@")[0]}! الرجاء عدم إرسال رسائل مزعجة.`,
+        text: tr(
+          `⚠️ Warning, @${senderId.split("@")[0]}! Please don't spam.`,
+          `⚠️ تحذير لـ @${senderId.split("@")[0]}! الرجاء عدم إرسال رسائل مزعجة.`,
+        ),
         mentions: [senderId],
       });
     }

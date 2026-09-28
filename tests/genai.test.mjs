@@ -38,6 +38,7 @@ const settings = harnessRequire("./src/config/settings.cjs");
 // the very next call without a restart.
 settings.set("gemini_api_key", "test-key-not-real");
 const aiAgent = harnessRequire("./src/services/aiAgent.cjs");
+const { withLang } = harnessRequire("./src/utils/i18n.cjs");
 
 /** Point the agent at a fresh set of scripted replies. */
 async function withReplies(replies, run) {
@@ -376,7 +377,7 @@ await withReplies(
     const result = await aiAgent.runAgent({ parts: [{ text: "current news" }], history: [] });
 
     equal("the sources were read off the SDK's parsed response", result.sources.length, 3);
-    const block = aiAgent.formatSources(result.sources);
+    const block = withLang("en", () => aiAgent.formatSources(result.sources));
     ok("a Sources block is produced", block.includes("Sources"));
     equal("duplicates collapse", (block.match(/example\.com\/a/g) || []).length, 1);
     ok("both distinct sources appear", block.includes("docs.example.org/b"));

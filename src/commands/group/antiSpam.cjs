@@ -1,6 +1,7 @@
 // commands/antiSpam.js
 const logger = require("../../utils/logger.cjs");
 const { isAdminInGroupSync } = require("../../utils/permissions.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 
 // إعدادات يمكن تعديلها
 const SPAM_MESSAGE_COUNT = 3; // عدد الرسائل المتطابقة لتعتبر سبام
@@ -66,7 +67,10 @@ async function handleAntiSpam(sock, msg) {
         antiSpamCache.delete(cacheKey);
 
         await sock.sendMessage(groupId, {
-          text: `🚫 تم طرد المستخدم @${senderId.split("@")[0]} تلقائيًا بسبب الإزعاج.`,
+          text: tr(
+            `🚫 @${senderId.split("@")[0]} was removed automatically for spamming.`,
+            `🚫 تم طرد المستخدم @${senderId.split("@")[0]} تلقائيًا بسبب الإزعاج.`,
+          ),
           mentions: [senderId],
         });
         await sock.groupParticipantsUpdate(groupId, [senderId], "remove");
@@ -75,9 +79,12 @@ async function handleAntiSpam(sock, msg) {
           `[AntiSpam] Warning ${senderId} in ${groupId}. Warn count: ${userData.warnCount}`,
         );
         await sock.sendMessage(groupId, {
-          text: `⚠️ تحذير للمستخدم @${
-            senderId.split("@")[0]
-          } بسبب تكرار الرسائل.\nالتحذير رقم: ${userData.warnCount}`,
+          text: tr(
+            `⚠️ Warning for @${senderId.split("@")[0]}: repeated messages.\nWarning number: ${userData.warnCount}`,
+            `⚠️ تحذير للمستخدم @${
+              senderId.split("@")[0]
+            } بسبب تكرار الرسائل.\nالتحذير رقم: ${userData.warnCount}`,
+          ),
           mentions: [senderId],
         });
       }

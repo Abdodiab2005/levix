@@ -56,6 +56,7 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 const settings = require("../config/settings.cjs");
+const { currentLang } = require("../utils/i18n.cjs");
 
 const MAX_PAGE_CHARS = 6000;
 const MAX_FETCH_BYTES = 3 * 1024 * 1024;
@@ -1167,7 +1168,7 @@ async function summarizeWithProvider(transcript) {
 }
 
 /** The status line for a tool call (falls back to the raw name). */
-function describeCall(name, args, lang = settings.get("bot_language")) {
+function describeCall(name, args, lang = currentLang()) {
   const tool = TOOLS[name];
   const isEn = lang === "en";
   const fallback = isEn ? `⚙️ Running: ${name}` : `⚙️ جاري تشغيل: ${name}`;

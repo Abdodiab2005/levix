@@ -6,6 +6,7 @@ const { spawn } = require("node:child_process");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 const logger = require("../utils/logger.cjs");
 const { ffmpegPath } = require("../utils/thumbnail.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 function runFfmpeg(args) {
   return new Promise((resolve, reject) => {
@@ -48,8 +49,14 @@ async function streamToBuffer(stream) {
 module.exports = {
   name: "sticker",
   aliases: ["s", "ملصق", "toimg", "tosticker"],
-  description: "Convert images/videos to stickers, or convert stickers to images/videos",
-  usage: "sticker (reply to image/video/sticker) or toimg (reply to sticker)",
+  description: {
+    en: "Turns images/videos into stickers, or stickers back into images/videos.",
+    ar: "يحوّل الصور والفيديوهات إلى ملصقات، أو الملصقات إلى صور وفيديوهات.",
+  },
+  usage: {
+    en: "sticker   (reply to an image, video or sticker)\ntoimg   (reply to a sticker)",
+    ar: "sticker   (رد على صورة أو فيديو أو ملصق)\ntoimg   (رد على ملصق)",
+  },
   chat: "all",
 
   async execute(sock, msg, args, body, groupMetadata, { invokedName } = {}) {
@@ -75,7 +82,10 @@ module.exports = {
       await sock.sendMessage(
         chatId,
         {
-          text: `🎨 *محول الملصقات والوسائط / Sticker Converter*\n\n• *صورة/فيديو ➔ ملصق:* أرسل أو رد على صورة أو فيديو بـ \`!sticker\` أو \`!s\`\n• *ملصق ➔ صورة/فيديو:* رد على أي ملصق بـ \`!toimg\` أو \`!sticker\``,
+          text: tr(
+            `🎨 *Sticker converter*\n\n• *Image/video ➔ sticker:* send or reply to an image or video with \`!sticker\` or \`!s\`\n• *Sticker ➔ image/video:* reply to any sticker with \`!toimg\` or \`!sticker\``,
+            `🎨 *محول الملصقات والوسائط*\n\n• *صورة/فيديو ➔ ملصق:* أرسل أو رد على صورة أو فيديو بـ \`!sticker\` أو \`!s\`\n• *ملصق ➔ صورة/فيديو:* رد على أي ملصق بـ \`!toimg\` أو \`!sticker\``,
+          ),
         },
         { quoted: msg },
       );
@@ -93,7 +103,12 @@ module.exports = {
         if (!stickerMsg) {
           await sock.sendMessage(
             chatId,
-            { text: "يرجى الرد على ملصق لتحويله إلى صورة أو فيديو." },
+            {
+              text: tr(
+                "Reply to a sticker to turn it into an image or video.",
+                "يرجى الرد على ملصق لتحويله إلى صورة أو فيديو.",
+              ),
+            },
             { quoted: msg },
           );
           return;
@@ -128,7 +143,11 @@ module.exports = {
           const videoBuffer = await fs.promises.readFile(outMp4);
           await sock.sendMessage(
             chatId,
-            { video: videoBuffer, gifPlayback: true, caption: "✅ تم تحويل الملصق إلى فيديو/GIF" },
+            {
+              video: videoBuffer,
+              gifPlayback: true,
+              caption: tr("✅ Sticker turned into a video/GIF", "✅ تم تحويل الملصق إلى فيديو/GIF"),
+            },
             { quoted: msg },
           );
         } else {
@@ -141,7 +160,10 @@ module.exports = {
           const imageBuffer = await fs.promises.readFile(outJpg);
           await sock.sendMessage(
             chatId,
-            { image: imageBuffer, caption: "✅ تم تحويل الملصق إلى صورة" },
+            {
+              image: imageBuffer,
+              caption: tr("✅ Sticker turned into an image", "✅ تم تحويل الملصق إلى صورة"),
+            },
             { quoted: msg },
           );
         }
@@ -206,7 +228,12 @@ module.exports = {
       logger.error({ err: err?.message }, "[Sticker] Conversion failed");
       await sock.sendMessage(
         chatId,
-        { text: `❌ فشل تحويل الوسائط: ${err?.message || "خطأ غير متوقع"}` },
+        {
+          text: tr(
+            `❌ Conversion failed: ${err?.message || "unexpected error"}`,
+            `❌ فشل تحويل الوسائط: ${err?.message || "خطأ غير متوقع"}`,
+          ),
+        },
         { quoted: msg },
       );
     } finally {

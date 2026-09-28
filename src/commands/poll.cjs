@@ -7,6 +7,7 @@
 // and WhatsApp counts the results.
 
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 12; // WhatsApp's own ceiling
@@ -15,7 +16,20 @@ const MAX_OPTION_CHARS = 100;
 
 const MULTI_FLAGS = new Set(["--multi", "-m", "متعدد"]);
 
-const HELP_TEXT =
+const helpText = () =>
+  tr(
+    "📊 *Poll*\n\n" +
+      "*Usage:*\n" +
+      "`!poll <question> | <option> | <option> ...`\n\n" +
+      "*Options:*\n" +
+      "`--multi` allows more than one answer\n\n" +
+      "*Example:*\n" +
+      "`!poll Where to? | Cinema | Beach | Home`\n\n" +
+      `_${MIN_OPTIONS} to ${MAX_OPTIONS} options._`,
+    HELP_TEXT_AR,
+  );
+
+const HELP_TEXT_AR =
   "📊 *استفتاء*\n\n" +
   "*الاستخدام:*\n" +
   "`!poll <السؤال> | <خيار> | <خيار> ...`\n\n" +
@@ -28,17 +42,27 @@ const HELP_TEXT =
 /**
  * Validate question/options and build the exact `sendMessage` content for a
  * native poll — shared by the !poll command and the AI agent's `create_poll`
- * tool so both doors enforce the same WhatsApp limits. Throws with an Arabic
- * message on any violation; returns the `{ poll: ... }` content object.
+ * tool so both doors enforce the same WhatsApp limits. Throws with a message
+ * in the reply language on any violation; returns the `{ poll: ... }` content
+ * object.
  */
 function buildPollContent(question, options, { multi = false } = {}) {
   const name = String(question || "").trim().slice(0, MAX_QUESTION_CHARS);
   const values = [...new Set((options || []).map((o) => String(o || "").trim().slice(0, MAX_OPTION_CHARS)).filter(Boolean))];
 
-  if (!name) throw new Error("السؤال مطلوب.");
-  if (values.length < MIN_OPTIONS) throw new Error("محتاج خيارين مختلفين على الأقل.");
+  if (!name) throw new Error(tr("A question is required.", "السؤال مطلوب."));
+  if (values.length < MIN_OPTIONS) {
+    throw new Error(
+      tr("At least two different options are needed.", "محتاج خيارين مختلفين على الأقل."),
+    );
+  }
   if (values.length > MAX_OPTIONS) {
-    throw new Error(`الحد الأقصى ${MAX_OPTIONS} خيار (اتعطى ${values.length}).`);
+    throw new Error(
+      tr(
+        `${MAX_OPTIONS} options at most (got ${values.length}).`,
+        `الحد الأقصى ${MAX_OPTIONS} خيار (اتعطى ${values.length}).`,
+      ),
+    );
   }
 
   return {
@@ -53,9 +77,16 @@ function buildPollContent(question, options, { multi = false } = {}) {
 module.exports = {
   name: "poll",
   aliases: ["vote", "استفتاء", "تصويت"],
-  description: "ينشئ استفتاء (تصويت) داخل الشات.",
-  usage: "poll <السؤال> | <خيار1> | <خيار2> [| ...] [--multi]",
+  description: {
+    en: "Creates a poll in the chat.",
+    ar: "ينشئ استفتاءً (تصويتًا) داخل المحادثة.",
+  },
+  usage: {
+    en: "poll <question> | <option 1> | <option 2> [| ...] [--multi]",
+    ar: "poll <السؤال> | <خيار1> | <خيار2> [| ...] [--multi]",
+  },
   chat: "all",
+  keywords: [...MULTI_FLAGS],
 
   async execute(sock, msg, args) {
     const chatId = msg.key.remoteJid;
@@ -76,7 +107,7 @@ module.exports = {
       .map((part) => part.trim())
       .filter(Boolean);
 
-    if (parts.length < MIN_OPTIONS + 1) return reply(HELP_TEXT);
+    if (parts.length < MIN_OPTIONS + 1) return reply(helpText());
 
     const question = parts[0];
     const options = parts.slice(1);

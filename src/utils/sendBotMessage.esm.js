@@ -18,6 +18,7 @@ import { createRequire } from "module";
 
 const require = createRequire(import.meta.url);
 const logger = require("./logger.cjs");
+const { tr } = require("./i18n.cjs");
 const settings = require("../config/settings.cjs");
 
 const lastSendTime = new Map(); // chatJid -> timestamp ms
@@ -130,13 +131,22 @@ export async function sendBotMessage(sock, jid, content, options = {}) {
  * @param {object} sock
  * @param {string} jid
  * @param {Error|string} err
- * @param {string} [arabicLead] - optional Arabic prefix ("معرفتش أعمل كذا")
+ * @param {string} [lead] - one-line summary in the reply language, via tr()
  * @param {object} [options]    - forwarded to sendBotMessage
  */
-export async function sendBotError(sock, jid, err, arabicLead = "حدث خطأ", options = {}) {
+export async function sendBotError(
+  sock,
+  jid,
+  err,
+  lead = tr("Something went wrong", "حدث خطأ"),
+  options = {},
+) {
   const name = err?.name || (typeof err === "string" ? "Error" : "Error");
   const message = err?.message || (typeof err === "string" ? err : JSON.stringify(err));
-  const text = `❌ *${arabicLead}*\n\n*النوع:* \`${name}\`\n*التفاصيل:* ${message}`.slice(0, 1500);
+  const text = tr(
+    `❌ *${lead}*\n\n*Type:* \`${name}\`\n*Details:* ${message}`,
+    `❌ *${lead}*\n\n*النوع:* \`${name}\`\n*التفاصيل:* ${message}`,
+  ).slice(0, 1500);
   return sendBotMessage(sock, jid, { text }, options);
 }
 

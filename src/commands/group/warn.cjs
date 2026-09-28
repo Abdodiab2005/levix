@@ -7,11 +7,18 @@ const {
   isAdminInGroupSync,
   sameUserSync,
 } = require("../../utils/permissions.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "warn",
-  description: "Warns a user and takes action if the limit is reached.",
-  usage: "warn @عضو [السبب]",
+  description: {
+    en: "Warns a member, and takes action once the limit is reached.",
+    ar: "يوجّه تحذيرًا لعضو، ويتخذ إجراءً عند بلوغ الحد.",
+  },
+  usage: {
+    en: "warn @member [reason]",
+    ar: "warn @عضو [السبب]",
+  },
   chat: "group",
   userAdminRequired: true,
 
@@ -25,12 +32,12 @@ module.exports = {
       // --- 1. Validate Inputs ---
       if (!mentionedJid) {
         return await sock.sendMessage(groupId, {
-          text: "يجب عمل منشن للعضو الذي تريد تحذيره.",
+          text: tr("Mention the member you want to warn.", "يجب عمل منشن للعضو الذي تريد تحذيره."),
         });
       }
       if (!reason) {
         return await sock.sendMessage(groupId, {
-          text: "يجب كتابة سبب التحذير.",
+          text: tr("Write a reason for the warning.", "يجب كتابة سبب التحذير."),
         });
       }
       const isBot = [sock.user?.id, sock.user?.lid]
@@ -42,7 +49,10 @@ module.exports = {
         isAdminInGroupSync(groupMetadata, mentionedJid)
       ) {
         return await sock.sendMessage(groupId, {
-          text: "لا يمكن تحذير أو طرد البوت أو مالكه أو أحد المشرفين بهذه الطريقة.",
+          text: tr(
+            "The bot, its owner and admins can't be warned or kicked this way.",
+            "لا يمكن تحذير أو طرد البوت أو مالكه أو أحد المشرفين بهذه الطريقة.",
+          ),
         });
       }
 
@@ -58,8 +68,10 @@ module.exports = {
       const newWarnCount = userWarnings.length;
 
       // --- 3. Send Confirmation & Check for Action ---
-      const replyText =
-        `✅ تم توجيه تحذير إلى @${mentionedJid.split("@")[0]}.\n` + `*السبب:* ${reason}`;
+      const replyText = tr(
+        `✅ @${mentionedJid.split("@")[0]} has been warned.\n*Reason:* ${reason}`,
+        `✅ تم توجيه تحذير إلى @${mentionedJid.split("@")[0]}.\n` + `*السبب:* ${reason}`,
+      );
 
       await sock.sendMessage(groupId, {
         text: replyText,
@@ -70,9 +82,14 @@ module.exports = {
 
       if (warnConfig && warnConfig.action === "KICK" && newWarnCount >= warnConfig.max_warnings) {
         await sock.sendMessage(groupId, {
-          text: `🚫 لقد وصل العضو @${
-            mentionedJid.split("@")[0]
-          } إلى الحد الأقصى للتحذيرات (${newWarnCount}/${warnConfig.max_warnings}). سيتم حذفه.`,
+          text: tr(
+            `🚫 @${
+              mentionedJid.split("@")[0]
+            } reached the warning limit (${newWarnCount}/${warnConfig.max_warnings}) and will be removed.`,
+            `🚫 لقد وصل العضو @${
+              mentionedJid.split("@")[0]
+            } إلى الحد الأقصى للتحذيرات (${newWarnCount}/${warnConfig.max_warnings}). سيتم حذفه.`,
+          ),
           mentions: [mentionedJid],
         });
 
@@ -86,21 +103,24 @@ module.exports = {
         } catch (kickError) {
           logger.error({ err: kickError }, "Failed to kick user after max warnings");
           await sock.sendMessage(groupId, {
-            text: "حاولت حذف العضو ولكني لا أملك صلاحية كافية لذلك.",
+            text: tr(
+              "I tried to remove the member, but I don't have enough permissions.",
+              "حاولت حذف العضو ولكني لا أملك صلاحية كافية لذلك.",
+            ),
           });
         }
       } else {
         // If no action is taken, just inform about the new count
         await sock.sendMessage(groupId, {
-          text: `*إجمالي التحذيرات الآن:* ${newWarnCount}${
-            warnConfig ? `/${warnConfig.max_warnings}` : ""
-          }`,
+          text:
+            tr("*Warnings so far:* ", "*إجمالي التحذيرات الآن:* ") +
+            `${newWarnCount}${warnConfig ? `/${warnConfig.max_warnings}` : ""}`,
         });
       }
     } catch (error) {
       logger.error({ err: error }, "An error occurred in the !warn command.");
       await sock.sendMessage(msg.key.remoteJid, {
-        text: "حدث خطأ عام في أمر التحذير.",
+        text: tr("Something went wrong with the warn command.", "حدث خطأ عام في أمر التحذير."),
       });
     }
   },

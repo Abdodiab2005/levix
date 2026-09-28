@@ -170,8 +170,11 @@ src/
 └── utils/            # Utility functions (Mixed)
     ├── memory.cjs    # Long-term memory as Markdown files
     ├── statusMessage.cjs # One message per command, edited in place
+    ├── i18n.cjs      # tr(en, ar) + the per-message reply language
     ├── textDecode.cjs    # charset / entity / mojibake decoding
     ├── messageContent.cjs # unwrap visible text/media from Baileys envelopes
+    ├── geminiMedia.cjs # WhatsApp media -> Gemini: bare MIME types, in-memory
+    │                 # download, Files API upload (MIME in `config`, no temp file)
     ├── providerUrl.cjs # provider URL validation + DNS-pinned fetch
     ├── logger.cjs    # Pino (worker transports, or in-process when packaged)
     ├── storage.cjs   # Sync storage API (CommonJS) — re-exports src/db/store.cjs
@@ -363,7 +366,29 @@ session records the proxy the live socket was built with and reports
 ### Command System
 
 Commands are loaded dynamically from `src/commands/`:
-- Each command exports: `{ name, aliases, description, chat, execute }`
+- Each command exports: `{ name, aliases, description, usage, chat, execute }`
+- `description` and `usage` are `{ en, ar }` — `!help` shows the reply
+  language (below), `!help ar` / `!help en` and `!help <command> [ar|en]` pick
+  one, and the dashboard shows the panel's. `src/utils/commandDocs.cjs` does
+  the picking; `tests/help-i18n.test.mjs` fails a command that ships only one
+  language
+- Every reply is written in both languages where it is sent:
+  `tr("Done.", "تم.")` from `src/utils/i18n.cjs`. The language is decided once
+  per incoming message and carried by AsyncLocalStorage through everything the
+  message causes (helpers, status edits, timers), so nothing passes a `lang`
+  around:
+  - `bot_language` `ar` / `en`: that language, always
+  - `auto`: Arabic letters in the arguments -> Arabic; English words that are
+    not the command's own syntax -> English; a bare command (`!ping`,
+    `!kick @x`, `!todo list`) -> Arabic. "Syntax" is the command's name,
+    aliases, the Latin keywords in its Arabic `usage`, and any `keywords: []`
+    it declares; ids, numbers, links and mentions are never words
+  - a command whose arguments are never language (a city `!weather` wants in
+    English, a link) sets `neutralArgs: true`
+  - outside any message (a scheduled send, a group event) `auto` means Arabic;
+    the scheduler judges the scheduled text itself
+- `tests/reply-language.test.mjs` runs the commands through the dispatcher in
+  English and in Arabic and fails on a reply in the wrong language
 - Commands are registered in a Map with aliases
 - Loaded on startup via `src/handlers/command.handler.js:16`
 
@@ -372,7 +397,8 @@ Commands are loaded dynamically from `src/commands/`:
 module.exports = {
   name: "ping",
   aliases: ["p"],
-  description: "Check bot latency",
+  description: { en: "Check bot latency", ar: "يقيس سرعة استجابة البوت" },
+  usage: { en: "ping", ar: "ping" },
   chat: "all", // "all", "group", "private"
   async execute(sock, msg, args, body, groupMetadata) {
     // Command logic here
@@ -488,8 +514,14 @@ the setting per message.
   message (text / image / video / audio / document / quoted), the multi-message
   context buffer, `!generate`, and the expired-file fallback. Media handling is
   the one place the provider matters here: on gemini it uploads to the Files
-  API; on openai/anthropic the media part becomes a one-line note (no upload
-  API exists on those paths) and the caption still reaches the model.
+  API through `src/utils/geminiMedia.cjs` (the MIME type rides in `config`,
+  parameters stripped — `audio/ogg; codecs=opus` is sent as `audio/ogg`); on
+  openai/anthropic the media part becomes a one-line note (no upload API exists
+  on those paths) and the caption still reaches the model. The download type is
+  the message's WhatsApp type, not its MIME type: a photo sent as a document
+  decrypts with the document keys. A quoted media message that can't be read
+  ends the command with one error reply — it is never answered without the
+  media.
 - `src/services/aiAgent.cjs` — the Gemini loop: system instruction, tool
   rounds, history trimming. Built on `ai.chats`, which is what keeps Gemini 3's
   thought signatures circulating (see below). Also dispatches to the other
@@ -915,7 +947,8 @@ configure.
    module.exports = {
      name: "commandname",
      aliases: ["alias1", "alias2"],
-     description: "What the command does",
+     description: { en: "What the command does", ar: "ماذا يفعل الأمر" },
+     usage: { en: "commandname <arg>", ar: "commandname <معامل>" },
      chat: "all", // "all", "group", or "private"
      async execute(sock, msg, args, body, groupMetadata) {
        // Implementation
@@ -973,9 +1006,11 @@ logger.debug('Debug info');
    `src/utils/thumbnail.cjs` generates `jpegThumbnail` + width/height/seconds with
    ffmpeg-static and `src/core/socket.js` patches `sock.sendMessage` so every send
    path gets one. Pass your own `jpegThumbnail` to opt out.
-9. **Command `usage`**: Written WITHOUT the prefix (`"kick @عضو [السبب]"`), one
-   variant per line. `!help` prepends the live prefix and prints them as the
-   command's parameters.
+9. **Command `usage`**: Written WITHOUT the prefix, one variant per line, in
+   both languages: `{ en: "kick @member [reason]", ar: "kick @عضو [السبب]" }`.
+   `!help` prepends the live prefix and prints them as the command's
+   parameters. Placeholders are translated; literal sub-commands and flags
+   (`add`, `on|off`, `--multi`) are not.
 10. **Never post progress messages**: use `createStatus()` and edit one message
     (see "One message per command"). A command that sends "جاري..." and then a
     result is a bug.
@@ -1051,6 +1086,12 @@ logger.debug('Debug info');
     against `ctx.caller`. Never read who is calling from the tool's arguments,
     and never hand-roll `isOwner` checks inside `run()` — see
     `src/services/aiToolAuth.cjs`.
+29. **Every reply goes through `tr(en, ar)`.** A new `text:`, caption, status
+    line or thrown message a user will read is written in both languages at
+    the call site. Build it inside the function that sends it, never in a
+    module-level constant (the language is per message). Arabic words a
+    command *accepts* (`اضف`, `عام`) are input, not replies, and stay as they
+    are.
 
 ## Testing Workflow
 

@@ -265,18 +265,18 @@ section("help bidi layout");
     async sendPresenceUpdate() {},
   };
 
-  await help.execute(helpSock, { key: { remoteJid: DM } }, []);
+  await help.execute(helpSock, { key: { remoteJid: DM } }, ["ar"]);
   ok("list keeps the box layout", captured.includes("│  ◦"));
   ok("command line ends with a colon", /│  ◦ \*!help\*[^:]*:\n/.test(captured));
   ok(
     "description starts its own line under the command",
-    /│  ◦ \*!help\*[^:]*:\n│     Shows a list of all commands/.test(captured),
+    /│  ◦ \*!help\*[^:]*:\n│     يعرض كل الأوامر/.test(captured),
   );
 
-  await help.execute(helpSock, { key: { remoteJid: DM } }, ["help"]);
+  await help.execute(helpSock, { key: { remoteJid: DM } }, ["help", "ar"]);
   ok(
     "detail view puts the Arabic label on its own line",
-    captured.includes("├─ *الوصف:*\n│     Shows a list of all commands"),
+    captured.includes("├─ *الوصف:*\n│     يعرض كل الأوامر"),
   );
   ok(
     "detail view puts the command under its label",

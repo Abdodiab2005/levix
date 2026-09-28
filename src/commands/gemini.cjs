@@ -46,12 +46,12 @@ const {
 } = require("../services/aiAgent.cjs");
 const { getProvider } = require("../services/aiRouter.cjs");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
-const fs = require("fs").promises;
-const path = require("path");
+const { unwrapMessage, visibleText } = require("../utils/messageContent.cjs");
 const {
   assertProviderBaseUrl,
   assertProviderRequestUrl,
 } = require("../utils/providerUrl.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 // Per-(chat, sender) explicit context buffer for the multi-message workflow.
 // Entries accumulate until `!gemini send` flushes them into a single call.
@@ -133,16 +133,29 @@ function geminiClients() {
   return geminiCache;
 }
 
-async function processIncomingMedia(parts, mediaMessage, mimeOverride = null) {
+// The media in a message and the type WhatsApp filed it under. That type, not
+// the MIME type, picks the decryption keys: a photo sent as a document has to
+// be downloaded as a "document".
+const MEDIA_TYPES = ["image", "video", "audio", "document"];
+function pickMedia(message) {
+  const inner = unwrapMessage(message);
+  for (const type of MEDIA_TYPES) {
+    const media = inner[`${type}Message`];
+    if (media) return { media, type };
+  }
+  return null;
+}
+
+async function processIncomingMedia(parts, mediaMessage, downloadType) {
   const provider = getProvider();
   if (provider.id === "gemini") {
     await assertProviderRequestUrl(settings.get("gemini_base_url"), { allowLoopback: true });
   }
   const { genAI } = geminiClients();
-  return provider.prepareMedia(parts, mediaMessage, mimeOverride, {
+  return provider.prepareMedia(parts, mediaMessage, null, {
     downloadContentFromMessage,
     genAI,
-    tempDir: __dirname,
+    downloadType,
   });
 }
 
@@ -164,12 +177,12 @@ async function captureContextEntry(msg, args) {
   const cleanedText = args.slice(1).join(" ").trim();
   if (cleanedText) entry.text = cleanedText;
 
-  const m = msg.message || {};
+  const m = unwrapMessage(msg.message);
 
-  const directMedia = m.imageMessage || m.videoMessage || m.audioMessage || m.documentMessage;
+  const directMedia = pickMedia(m);
   if (directMedia) {
     try {
-      await processIncomingMedia(entry.mediaParts, directMedia);
+      await processIncomingMedia(entry.mediaParts, directMedia.media, directMedia.type);
     } catch (err) {
       logger.warn(
         { err: err?.message },
@@ -180,18 +193,11 @@ async function captureContextEntry(msg, args) {
 
   const quoted = m.extendedTextMessage?.contextInfo?.quotedMessage;
   if (quoted) {
-    entry.quotedText =
-      quoted.conversation ||
-      quoted.extendedTextMessage?.text ||
-      quoted.imageMessage?.caption ||
-      quoted.videoMessage?.caption ||
-      quoted.documentMessage?.caption ||
-      "";
-    const quotedMedia =
-      quoted.imageMessage || quoted.videoMessage || quoted.audioMessage || quoted.documentMessage;
+    entry.quotedText = visibleText(quoted);
+    const quotedMedia = pickMedia(quoted);
     if (quotedMedia) {
       try {
-        await processIncomingMedia(entry.quotedMediaParts, quotedMedia);
+        await processIncomingMedia(entry.quotedMediaParts, quotedMedia.media, quotedMedia.type);
       } catch (err) {
         logger.warn(
           { err: err?.message },
@@ -211,7 +217,9 @@ function entryHasContent(e) {
 function buildPartsFromBuffer(entries) {
   const parts = [];
   for (const e of entries) {
-    if (e.quotedText) parts.push({ text: `(مرجع: "${e.quotedText}")` });
+    if (e.quotedText) {
+      parts.push({ text: tr(`(Reference: "${e.quotedText}")`, `(مرجع: "${e.quotedText}")`) });
+    }
     if (e.quotedMediaParts?.length) parts.push(...e.quotedMediaParts);
     if (e.mediaParts?.length) parts.push(...e.mediaParts);
     if (e.text) parts.push({ text: e.text });
@@ -229,18 +237,30 @@ function summarizeEntry(e, idx) {
     const preview = e.quotedText.length > 40 ? e.quotedText.slice(0, 40) + "…" : e.quotedText;
     bits.push(`↩️ "${preview}"`);
   }
-  if (e.mediaParts?.length) bits.push(`🖼️ ميديا (${e.mediaParts.length})`);
-  if (e.quotedMediaParts?.length) bits.push(`🖼️↩️ ميديا مقتبسة (${e.quotedMediaParts.length})`);
-  return `${idx + 1}. ${bits.join(" · ") || "(فارغة)"}`;
+  if (e.mediaParts?.length)
+    bits.push(tr(`🖼️ media (${e.mediaParts.length})`, `🖼️ ميديا (${e.mediaParts.length})`));
+  if (e.quotedMediaParts?.length) {
+    bits.push(
+      tr(
+        `🖼️↩️ quoted media (${e.quotedMediaParts.length})`,
+        `🖼️↩️ ميديا مقتبسة (${e.quotedMediaParts.length})`,
+      ),
+    );
+  }
+  return `${idx + 1}. ${bits.join(" · ") || tr("(empty)", "(فارغة)")}`;
 }
 
 module.exports = {
   name: "gemini",
   aliases: ["ask", "ai", "resetai", "del", "delall", "generate"],
-  description:
-    "مساعد ذكي بأدوات (بحث، فتح روابط، ذاكرة دائمة). sub-commands: add/send/clear/show للسياق، generate للصور، del/delall لمسح المحادثة.",
-  usage:
-    "gemini <النص>\ngemini add <النص>\ngemini send\ngemini show\ngemini clear\ngenerate <وصف الصورة>\ndel   (مسح ذاكرة المحادثة)\ndelall   (مسح كل المحادثات)",
+  description: {
+    en: "AI assistant with tools (web search, reading links, long-term memory). Sub-commands: add/send/clear/show for context, generate for images, del/delall to clear the conversation.",
+    ar: "مساعد ذكي بأدوات (بحث في الويب، قراءة الروابط، ذاكرة دائمة). أوامر فرعية: add/send/clear/show للسياق، وgenerate للصور، وdel/delall لمسح المحادثة.",
+  },
+  usage: {
+    en: "gemini <text>\ngemini add <text>\ngemini send\ngemini show\ngemini clear\ngenerate <image description>\ndel   (clear this chat's conversation)\ndelall   (clear every conversation)",
+    ar: "gemini <النص>\ngemini add <النص>\ngemini send\ngemini show\ngemini clear\ngenerate <وصف الصورة>\ndel   (مسح سجل محادثة هذا الشات)\ndelall   (مسح كل المحادثات)",
+  },
   chat: "all",
 
   async execute(sock, msg, args, body, groupMetadata, ctx = {}) {
@@ -278,7 +298,7 @@ module.exports = {
         return sendBotMessage(
           sock,
           chatId,
-          { text: "🚫 هذا الأمر مخصص للمالك فقط." },
+          { text: tr("🚫 Only the bot owner can use this.", "🚫 هذا الأمر مخصص للمالك فقط.") },
           { replyTo: msg },
         );
       await deleteChatHistoryAsync(chatId);
@@ -286,9 +306,12 @@ module.exports = {
         sock,
         chatId,
         {
-          text:
+          text: tr(
+            "✅ Conversation history cleared.\n" +
+              "_(Long-term memory isn't cleared this way — use `!memory clear` if that's what you meant.)_",
             "✅ تم مسح سجل المحادثة.\n" +
-            "_(الذاكرة الدائمة مش بتتمسح كده — استخدم `!memory clear` لو ده اللي تقصده.)_",
+              "_(الذاكرة الدائمة مش بتتمسح كده — استخدم `!memory clear` لو ده اللي تقصده.)_",
+          ),
         },
         { replyTo: msg },
       );
@@ -298,14 +321,19 @@ module.exports = {
         return sendBotMessage(
           sock,
           chatId,
-          { text: "🚫 هذا الأمر مخصص للمالك فقط." },
+          { text: tr("🚫 Only the bot owner can use this.", "🚫 هذا الأمر مخصص للمالك فقط.") },
           { replyTo: msg },
         );
       await deleteAllChatHistoriesAsync();
       return sendBotMessage(
         sock,
         chatId,
-        { text: "✅ تم مسح كل سجلات المحادثات بنجاح." },
+        {
+          text: tr(
+            "✅ Every conversation history was cleared.",
+            "✅ تم مسح كل سجلات المحادثات بنجاح.",
+          ),
+        },
         { replyTo: msg },
       );
     }
@@ -320,20 +348,33 @@ module.exports = {
           sock,
           chatId,
           {
-            text: "اكتب وصف للصورة اللي عايزها بعد الأمر. مثال: !generate قطة ترتدي قبعة",
+            text: tr(
+              "Describe the image you want after the command. Example: !generate a cat wearing a hat",
+              "اكتب وصف للصورة اللي عايزها بعد الأمر. مثال: !generate قطة ترتدي قبعة",
+            ),
           },
           { replyTo: msg },
         );
       }
 
-      const status = await createStatus(sock, chatId, "🎨 بجهّز الصورة...", { replyTo: msg });
+      const status = await createStatus(
+        sock,
+        chatId,
+        tr("🎨 Making the image...", "🎨 بجهّز الصورة..."),
+        { replyTo: msg },
+      );
 
       try {
         // Image generation needs a model that returns image bytes, which only
         // the Gemini image models do — it stays on Gemini whatever the chat
         // provider is.
         if (!geminiClients().genAI) {
-          throw new Error("مفتاح Gemini API غير معرف — توليد الصور يعمل على Gemini فقط");
+          throw new Error(
+            tr(
+              "No Gemini API key is set — image generation only runs on Gemini",
+              "مفتاح Gemini API غير معرف — توليد الصور يعمل على Gemini فقط",
+            ),
+          );
         }
         await assertProviderRequestUrl(settings.get("gemini_base_url"), {
           allowLoopback: true,
@@ -355,7 +396,9 @@ module.exports = {
         const image = (response.candidates?.[0]?.content?.parts || []).find(
           (part) => part?.inlineData?.data,
         );
-        if (!image) throw new Error("الموديل رجّع رد من غير صورة");
+        if (!image) {
+          throw new Error(tr("The model answered without an image", "الموديل رجّع رد من غير صورة"));
+        }
         const imageBuffer = Buffer.from(image.inlineData.data, "base64");
 
         await status.remove();
@@ -364,13 +407,13 @@ module.exports = {
           chatId,
           {
             image: imageBuffer,
-            caption: `🖼️ تفضل، صورة لـ: "${imagePrompt}"`,
+            caption: tr(`🖼️ Here you go: "${imagePrompt}"`, `🖼️ تفضل، صورة لـ: "${imagePrompt}"`),
           },
           { replyTo: msg },
         );
       } catch (error) {
         logger.error({ err: error }, `Error in !generate command`);
-        await status.fail(error, "للأسف معرفتش أعمل الصورة");
+        await status.fail(error, tr("I couldn't make the image", "للأسف معرفتش أعمل الصورة"));
       }
       return;
     }
@@ -383,9 +426,12 @@ module.exports = {
           sock,
           chatId,
           {
-            text:
+            text: tr(
+              "📭 Nothing to add to the context.\n\n" +
+                "Write text after the command, reply to a message, or send media with the caption `!gemini add`.",
               "📭 مفيش حاجة أضيفها للـ context.\n\n" +
-              "اكتب نص بعد الأمر، أو رد على رسالة، أو ابعت ميديا مع كابشن `!gemini add`.",
+                "اكتب نص بعد الأمر، أو رد على رسالة، أو ابعت ميديا مع كابشن `!gemini add`.",
+            ),
           },
           { replyTo: msg },
         );
@@ -395,7 +441,12 @@ module.exports = {
         return sendBotMessage(
           sock,
           chatId,
-          { text: `الـ context ممتلئ (حد أقصى ${MAX_BUFFER_ENTRIES} رسائل). ابعت \`!gemini send\` أو \`!gemini clear\`.` },
+          {
+            text: tr(
+              `The context is full (${MAX_BUFFER_ENTRIES} messages at most). Send \`!gemini send\` or \`!gemini clear\`.`,
+              `الـ context ممتلئ (حد أقصى ${MAX_BUFFER_ENTRIES} رسائل). ابعت \`!gemini send\` أو \`!gemini clear\`.`,
+            ),
+          },
           { replyTo: msg },
         );
       }
@@ -405,9 +456,12 @@ module.exports = {
           sock,
           chatId,
           {
-            text:
+            text: tr(
+              "The context is too big, or too many contexts are open. " +
+                "Send `!gemini send` or `!gemini clear` and try again.",
               "الـ context كبير جدًا أو عدد الـ contexts المفتوحة وصل للحد. " +
-              "ابعت `!gemini send` أو `!gemini clear` وحاول تاني.",
+                "ابعت `!gemini send` أو `!gemini clear` وحاول تاني.",
+            ),
           },
           { replyTo: msg },
         );
@@ -417,9 +471,12 @@ module.exports = {
         sock,
         chatId,
         {
-          text:
+          text: tr(
+            `✅ Added to the context. (Total now: *${stored.length}*)\n\n` +
+              "Keep going with `!gemini add ...`, or send it all with `!gemini send`.",
             `✅ اتضافت للـ context. (إجمالي الآن: *${stored.length}*)\n\n` +
-            "كمل بـ `!gemini add ...` ، أو ابعت كله بـ `!gemini send`.",
+              "كمل بـ `!gemini add ...` ، أو ابعت كله بـ `!gemini send`.",
+          ),
         },
         { replyTo: msg },
       );
@@ -432,7 +489,12 @@ module.exports = {
         sock,
         chatId,
         {
-          text: had ? `🗑️ تم مسح *${had}* رسالة من الـ context.` : "📭 الـ context كان فاضي أصلاً.",
+          text: had
+            ? tr(
+                `🗑️ Cleared *${had}* messages from the context.`,
+                `🗑️ تم مسح *${had}* رسالة من الـ context.`,
+              )
+            : tr("📭 The context was already empty.", "📭 الـ context كان فاضي أصلاً."),
         },
         { replyTo: msg },
       );
@@ -444,7 +506,12 @@ module.exports = {
         return sendBotMessage(
           sock,
           chatId,
-          { text: "📭 الـ context فاضي. ابدأ بـ `!gemini add ...`." },
+          {
+            text: tr(
+              "📭 The context is empty. Start with `!gemini add ...`.",
+              "📭 الـ context فاضي. ابدأ بـ `!gemini add ...`.",
+            ),
+          },
           { replyTo: msg },
         );
       }
@@ -453,9 +520,15 @@ module.exports = {
         chatId,
         {
           text:
-            `📋 *الـ context الحالي:* (${buf.length} رسالة)\n\n` +
+            tr(
+              `📋 *Current context:* (${buf.length} messages)\n\n`,
+              `📋 *الـ context الحالي:* (${buf.length} رسالة)\n\n`,
+            ) +
             buf.map((e, i) => summarizeEntry(e, i)).join("\n") +
-            "\n\nابعت كله بـ `!gemini send` أو امسحه بـ `!gemini clear`.",
+            tr(
+              "\n\nSend it all with `!gemini send` or clear it with `!gemini clear`.",
+              "\n\nابعت كله بـ `!gemini send` أو امسحه بـ `!gemini clear`.",
+            ),
         },
         { replyTo: msg },
       );
@@ -475,9 +548,12 @@ module.exports = {
           sock,
           chatId,
           {
-            text:
+            text: tr(
+              "📭 The context is empty and `!gemini send` has no text.\n\n" +
+                "Start with `!gemini add ...`, or write text with `!gemini send ...`.",
               "📭 الـ context فاضي ومفيش نص في `!gemini send`.\n\n" +
-              "ابدأ بـ `!gemini add ...` الأول، أو اكتب نص مع `!gemini send ...`.",
+                "ابدأ بـ `!gemini add ...` الأول، أو اكتب نص مع `!gemini send ...`.",
+            ),
           },
           { replyTo: msg },
         );
@@ -491,39 +567,66 @@ module.exports = {
     if (!parts.length && (msg.message?.imageMessage || msg.message?.videoMessage)) {
       const mediaMessage = msg.message.imageMessage || msg.message.videoMessage;
       try {
-        await processIncomingMedia(parts, mediaMessage);
+        await processIncomingMedia(
+          parts,
+          mediaMessage,
+          msg.message.imageMessage ? "image" : "video",
+        );
         parts.push({
-          text: prompt || mediaMessage.caption || "ماذا يوجد في هذه الصورة/الفيديو؟",
+          text:
+            prompt ||
+            mediaMessage.caption ||
+            tr("What is in this image/video?", "ماذا يوجد في هذه الصورة/الفيديو؟"),
         });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload media to Gemini.");
-        return sendBotError(sock, chatId, error, "حصلت مشكلة في رفع الصورة/الفيديو", {
-          replyTo: msg,
-        });
+        return sendBotError(
+          sock,
+          chatId,
+          error,
+          tr("Uploading the image/video failed", "حصلت مشكلة في رفع الصورة/الفيديو"),
+          {
+            replyTo: msg,
+          },
+        );
       }
     } else if (!parts.length && msg.message?.audioMessage) {
       try {
-        await processIncomingMedia(parts, msg.message.audioMessage);
-        parts.push({ text: prompt || "حلل لي هذا التسجيل الصوتي." });
+        await processIncomingMedia(parts, msg.message.audioMessage, "audio");
+        parts.push({ text: prompt || tr("Analyze this recording.", "حلل لي هذا التسجيل الصوتي.") });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload audio to Gemini.");
-        return sendBotError(sock, chatId, error, "حصلت مشكلة في رفع التسجيل الصوتي", {
-          replyTo: msg,
-        });
+        return sendBotError(
+          sock,
+          chatId,
+          error,
+          tr("Uploading the recording failed", "حصلت مشكلة في رفع التسجيل الصوتي"),
+          {
+            replyTo: msg,
+          },
+        );
       }
     } else if (!parts.length && msg.message?.documentMessage) {
       try {
-        await processIncomingMedia(parts, msg.message.documentMessage);
+        await processIncomingMedia(parts, msg.message.documentMessage, "document");
         const fileName = msg.message.documentMessage.fileName || "document";
         const text = prompt || msg.message.documentMessage.caption || "";
         parts.push({
-          text: text ? `${text}\n(الملف: ${fileName})` : `حلل/لخّص الملف: ${fileName}`,
+          text: text
+            ? tr(`${text}\n(File: ${fileName})`, `${text}\n(الملف: ${fileName})`)
+            : tr(`Analyze/summarize the file: ${fileName}`, `حلل/لخّص الملف: ${fileName}`),
         });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload document to Gemini.");
-        return sendBotError(sock, chatId, error, "حصلت مشكلة في رفع الملف", {
-          replyTo: msg,
-        });
+        return sendBotError(
+          sock,
+          chatId,
+          error,
+          tr("Uploading the file failed", "حصلت مشكلة في رفع الملف"),
+          {
+            replyTo: msg,
+          },
+        );
       }
     } else if (!parts.length && prompt) {
       parts.push({ text: prompt });
@@ -533,7 +636,12 @@ module.exports = {
       return sendBotMessage(
         sock,
         chatId,
-        { text: "يرجى كتابة سؤال أو إرسال صورة/فيديو/تسجيل صوتي/ملف مع الأمر." },
+        {
+          text: tr(
+            "Write a question, or send an image/video/voice note/file with the command.",
+            "يرجى كتابة سؤال أو إرسال صورة/فيديو/تسجيل صوتي/ملف مع الأمر.",
+          ),
+        },
         { replyTo: msg },
       );
     }
@@ -545,27 +653,29 @@ module.exports = {
 
     if (quotedMsg) {
       let quotedMediaPart = null;
-      const quotedText =
-        quotedMsg.conversation ||
-        quotedMsg.extendedTextMessage?.text ||
-        quotedMsg.documentMessage?.caption;
-
-      const mediaInQuote =
-        quotedMsg.imageMessage ||
-        quotedMsg.videoMessage ||
-        quotedMsg.audioMessage ||
-        quotedMsg.documentMessage;
+      // Captions count: "describe this" on a captioned photo should see both.
+      const quotedText = visibleText(quotedMsg);
+      const mediaInQuote = pickMedia(quotedMsg);
 
       if (mediaInQuote) {
         try {
           const probeParts = [];
-          await processIncomingMedia(probeParts, mediaInQuote);
+          await processIncomingMedia(probeParts, mediaInQuote.media, mediaInQuote.type);
           quotedMediaPart = probeParts[0];
         } catch (mediaError) {
+          // Stop here. Carrying on without the media used to post this error
+          // AND a second reply from a model that had never seen the photo
+          // ("I can't see any image") — two messages, the second one wrong.
           logger.error({ err: mediaError }, "Failed to process quoted media");
-          await sendBotError(sock, chatId, mediaError, "حصلت مشكلة في الرسالة المقتبسة", {
-            replyTo: msg,
-          });
+          return sendBotError(
+            sock,
+            chatId,
+            mediaError,
+            tr("There was a problem with the quoted message", "حصلت مشكلة في الرسالة المقتبسة"),
+            {
+              replyTo: msg,
+            },
+          );
         }
       }
 
@@ -573,12 +683,18 @@ module.exports = {
         parts.unshift(quotedMediaPart);
         if (quotedText) {
           parts.unshift({
-            text: `بالاعتماد على هذه الرسالة كمرجع:\n"""\n${quotedText}\n"""\n\n`,
+            text: tr(
+              `Using this message as a reference:\n"""\n${quotedText}\n"""\n\n`,
+              `بالاعتماد على هذه الرسالة كمرجع:\n"""\n${quotedText}\n"""\n\n`,
+            ),
           });
         }
       } else if (quotedText) {
         parts.unshift({
-          text: `بالاعتماد على هذه الرسالة كمرجع:\n"""\n${quotedText}\n"""\n\nأجب على التالي:`,
+          text: tr(
+            `Using this message as a reference:\n"""\n${quotedText}\n"""\n\nAnswer the following:`,
+            `بالاعتماد على هذه الرسالة كمرجع:\n"""\n${quotedText}\n"""\n\nأجب على التالي:`,
+          ),
         });
       }
     }
@@ -590,7 +706,10 @@ module.exports = {
         sock,
         chatId,
         {
-          text: `خطأ في الإعدادات: مفتاح مزود الذكاء الاصطناعي الحالي (${activeProvider.label || activeProvider.id}) غير معرف — عدّله من لوحة التحكم.`,
+          text: tr(
+            `Settings problem: no API key is set for the current AI provider (${activeProvider.label || activeProvider.id}) — set it in the control panel.`,
+            `خطأ في الإعدادات: مفتاح مزود الذكاء الاصطناعي الحالي (${activeProvider.label || activeProvider.id}) غير معرف — عدّله من لوحة التحكم.`,
+          ),
         },
         { replyTo: msg },
       );
@@ -622,12 +741,15 @@ module.exports = {
     const targets = [...caller.mentionedJids, caller.quotedParticipant].filter(Boolean);
     if (targets.length) {
       parts.unshift({
-        text: `(معرفات مذكورة في الرسالة: ${[...new Set(targets)].join(", ")})`,
+        text: tr(
+          `(IDs mentioned in the message: ${[...new Set(targets)].join(", ")})`,
+          `(معرفات مذكورة في الرسالة: ${[...new Set(targets)].join(", ")})`,
+        ),
       });
     }
 
     // The one message that will carry the whole run.
-    const status = await createStatus(sock, chatId, "🤖 جاري التفكير...", {
+    const status = await createStatus(sock, chatId, tr("🤖 Thinking...", "🤖 جاري التفكير..."), {
       replyTo: msg,
     });
 
@@ -663,7 +785,12 @@ module.exports = {
         result = await attempt(cleaned);
       }
 
-      const text = result.text?.trim() || "مفيش رد جه من الموديل. جرّب تصيغ السؤال بشكل تاني.";
+      const text =
+        result.text?.trim() ||
+        tr(
+          "The model sent no answer. Try asking another way.",
+          "مفيش رد جه من الموديل. جرّب تصيغ السؤال بشكل تاني.",
+        );
       // Appended only when Gemini really grounded the answer on a search —
       // formatSources() returns "" for an answer the model gave from its own
       // knowledge, so there is never a Sources block with nothing behind it.
@@ -671,7 +798,10 @@ module.exports = {
       await status.finish(responseText);
     } catch (error) {
       logger.error({ err: error }, "Error in !gemini command");
-      await status.fail(error, "حصلت مشكلة وأنا بكلم الذكاء الاصطناعي");
+      await status.fail(
+        error,
+        tr("Something went wrong while talking to the AI", "حصلت مشكلة وأنا بكلم الذكاء الاصطناعي"),
+      );
     }
   },
 };

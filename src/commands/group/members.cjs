@@ -1,10 +1,17 @@
 // file: /commands/members.js
 const logger = require("../../utils/logger.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "members",
-  description: "Lists all members in the group with their numbers.",
-  usage: "members",
+  description: {
+    en: "Lists every member of the group with their number.",
+    ar: "يعرض كل أعضاء المجموعة مع أرقامهم.",
+  },
+  usage: {
+    en: "members",
+    ar: "members",
+  },
   chat: "group", // This command only works in groups
 
   async execute(sock, msg) {
@@ -13,7 +20,9 @@ module.exports = {
       const groupId = msg.key.remoteJid;
 
       // Send a temporary message to let the user know we're working on it
-      await sock.sendMessage(groupId, { text: "جاري جلب قائمة الأعضاء..." });
+      await sock.sendMessage(groupId, {
+        text: tr("Fetching the member list...", "جاري جلب قائمة الأعضاء..."),
+      });
 
       // Fetch the group's metadata
       const metadata = await sock.groupMetadata(groupId);
@@ -22,7 +31,10 @@ module.exports = {
       // --- Building the reply message ---
 
       // Start with a header
-      let replyText = `*قائمة أعضاء الجروب:*\n*العدد الإجمالي: ${members.length}*\n\n`;
+      let replyText = tr(
+        `*Group members:*\n*Total: ${members.length}*\n\n`,
+        `*قائمة أعضاء الجروب:*\n*العدد الإجمالي: ${members.length}*\n\n`,
+      );
 
       // Create an array of JIDs for the mentions property
       const mentions = [];
@@ -37,7 +49,7 @@ module.exports = {
 
         // Add the formatted line to our reply text
         // Using @ will create a "mention link" in the WhatsApp message
-        replyText += `${index + 1}. @${phone}${isAdmin ? " 👑 *مشرف*" : ""}\n`;
+        replyText += `${index + 1}. @${phone}${isAdmin ? tr(" 👑 *admin*", " 👑 *مشرف*") : ""}\n`;
 
         // Add the member's JID to the mentions array
         mentions.push(member.id);
@@ -51,7 +63,10 @@ module.exports = {
     } catch (error) {
       logger.error(error, "[Error] in !members command:");
       await sock.sendMessage(msg.key.remoteJid, {
-        text: "حدث خطأ أثناء جلب قائمة الأعضاء.",
+        text: tr(
+          "Something went wrong while fetching the member list.",
+          "حدث خطأ أثناء جلب قائمة الأعضاء.",
+        ),
       });
     }
   },

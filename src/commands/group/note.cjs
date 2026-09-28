@@ -1,10 +1,17 @@
 // file: /commands/note.js
 const { getAllNotes, getNote } = require("../../utils/storage.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "note",
-  description: "Retrieves a saved note.",
-  usage: "note #الكلمة-المفتاحية",
+  description: {
+    en: "Shows a saved note.",
+    ar: "يعرض ملاحظة محفوظة.",
+  },
+  usage: {
+    en: "note #keyword",
+    ar: "note #الكلمة-المفتاحية",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {
@@ -13,7 +20,7 @@ module.exports = {
 
     if (!keywordArg || !keywordArg.startsWith("#")) {
       return await sock.sendMessage(groupId, {
-        text: "صيغة غير صحيحة. استخدم: `!note #keyword`",
+        text: tr("Wrong format. Use: `!note #keyword`", "صيغة غير صحيحة. استخدم: `!note #keyword`"),
       });
     }
 
@@ -25,7 +32,10 @@ module.exports = {
       await sock.sendMessage(groupId, { text: noteText });
     } else {
       await sock.sendMessage(groupId, {
-        text: `⚠️ لم يتم العثور على ملاحظة بالكلمة المفتاحية: \`${keywordArg}\`\n\nلعرض كل الملاحظات، استخدم: \`!notes\``,
+        text: tr(
+          `⚠️ No note has the keyword \`${keywordArg}\`\n\nTo see every note, use: \`!notes\``,
+          `⚠️ لم يتم العثور على ملاحظة بالكلمة المفتاحية: \`${keywordArg}\`\n\nلعرض كل الملاحظات، استخدم: \`!notes\``,
+        ),
       });
     }
   },

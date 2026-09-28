@@ -1,11 +1,18 @@
 // file: /commands/warns.js
 const { getUserWarnings } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "warns",
-  description: "Displays the warnings for a specific user.",
-  usage: "warns @عضو",
+  description: {
+    en: "Shows a member's warnings.",
+    ar: "يعرض تحذيرات عضو معيّن.",
+  },
+  usage: {
+    en: "warns @member",
+    ar: "warns @عضو",
+  },
   chat: "group",
   userAdminRequired: true,
 
@@ -16,7 +23,10 @@ module.exports = {
 
       if (!mentionedJid) {
         return await sock.sendMessage(groupId, {
-          text: "يجب عمل منشن للعضو الذي تريد عرض تحذيراته.",
+          text: tr(
+            "Mention the member whose warnings you want to see.",
+            "يجب عمل منشن للعضو الذي تريد عرض تحذيراته.",
+          ),
         });
       }
 
@@ -25,28 +35,38 @@ module.exports = {
 
       if (userWarnings.length === 0) {
         return await sock.sendMessage(groupId, {
-          text: `✅ لا توجد أي تحذيرات للعضو @${mentionedJid.split("@")[0]}.`,
+          text: tr(
+            `✅ @${mentionedJid.split("@")[0]} has no warnings.`,
+            `✅ لا توجد أي تحذيرات للعضو @${mentionedJid.split("@")[0]}.`,
+          ),
           mentions: [mentionedJid],
         });
       }
 
-      let reply = `*سجل تحذيرات @${
-        mentionedJid.split("@")[0]
-      }:*\n*إجمالي التحذيرات: ${userWarnings.length}*\n\n`;
+      const who = mentionedJid.split("@")[0];
+      let reply = tr(
+        `*Warnings for @${who}:*\n*Total: ${userWarnings.length}*\n\n`,
+        `*سجل تحذيرات @${who}:*\n*إجمالي التحذيرات: ${userWarnings.length}*\n\n`,
+      );
 
       const mentionedAdmins = [];
       userWarnings.forEach((warning, index) => {
         const adminJid = warning.by;
         mentionedAdmins.push(adminJid);
-        const warningDate = new Date(warning.date).toLocaleString("ar-EG", {
+        const warningDate = new Date(warning.date).toLocaleString(tr("en-GB", "ar-EG"), {
           timeZone: "Africa/Cairo",
         });
 
-        reply +=
+        reply += tr(
+          `*${index + 1}. Warning:*\n` +
+            `*Reason:* ${warning.reason}\n` +
+            `*By:* @${adminJid.split("@")[0]}\n` +
+            `*Date:* ${warningDate}\n\n`,
           `*${index + 1}. التحذير:*\n` +
-          `*السبب:* ${warning.reason}\n` +
-          `*بواسطة المشرف:* @${adminJid.split("@")[0]}\n` +
-          `*التاريخ:* ${warningDate}\n\n`;
+            `*السبب:* ${warning.reason}\n` +
+            `*بواسطة المشرف:* @${adminJid.split("@")[0]}\n` +
+            `*التاريخ:* ${warningDate}\n\n`,
+        );
       });
 
       const mentions = [mentionedJid, ...mentionedAdmins];
@@ -58,7 +78,7 @@ module.exports = {
     } catch (error) {
       logger.error({ err: error }, "Error in !warns command");
       await sock.sendMessage(msg.key.remoteJid, {
-        text: "حدث خطأ أثناء عرض التحذيرات.",
+        text: tr("Something went wrong while listing the warnings.", "حدث خطأ أثناء عرض التحذيرات."),
       });
     }
   },

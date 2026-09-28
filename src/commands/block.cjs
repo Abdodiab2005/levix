@@ -2,11 +2,18 @@
 const logger = require("../utils/logger.cjs");
 const { isOwnerJidSync } = require("../utils/permissions.cjs");
 const normalizeJid = require("../utils/normalizeJid.esm.js");
+const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "block",
-  description: "Blocks a user from contacting the bot on WhatsApp.",
-  usage: "block [@عضو|رقم]   (أو رد على رسالته)",
+  description: {
+    en: "Blocks a user from contacting the bot on WhatsApp.",
+    ar: "يحظر مستخدمًا من التواصل مع البوت على واتساب.",
+  },
+  usage: {
+    en: "block [@member|number]   (or reply to their message)",
+    ar: "block [@عضو|رقم]   (أو رد على رسالته)",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {
@@ -33,7 +40,10 @@ module.exports = {
         targetJid = `${numberArg.replace(/\D/g, "")}@s.whatsapp.net`;
       } else {
         return await sock.sendMessage(remoteJid, {
-          text: "لكي يعمل هذا الأمر، استخدمه في شات خاص بدون وسائط، أو قم بعمل منشن/رد/كتابة رقم المستخدم.",
+          text: tr(
+            "Use this in a private chat with no arguments, or mention / reply to / type the number of the user.",
+            "لكي يعمل هذا الأمر، استخدمه في شات خاص بدون وسائط، أو قم بعمل منشن/رد/كتابة رقم المستخدم.",
+          ),
         });
       }
     }
@@ -43,7 +53,7 @@ module.exports = {
     // Safety Check
     if (isOwnerJidSync(normalizedTargetJid)) {
       return await sock.sendMessage(remoteJid, {
-        text: "لا يمكنك حظر مالك البوت.",
+        text: tr("You can't block the bot owner.", "لا يمكنك حظر مالك البوت."),
       });
     }
 
@@ -61,7 +71,10 @@ module.exports = {
     } catch (error) {
       logger.error({ err: error, command: "block" }, "Error in !block command");
       await sock.sendMessage(remoteJid, {
-        text: "حدث خطأ أثناء محاولة حظر المستخدم.",
+        text: tr(
+          "Something went wrong while blocking the user.",
+          "حدث خطأ أثناء محاولة حظر المستخدم.",
+        ),
       });
     }
   },

@@ -1,11 +1,18 @@
 // file: /commands/clearwarns.js
 const { clearUserWarnings } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
+const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "clearwarns",
-  description: "Clears all warnings for a specific user.",
-  usage: "clearwarns @عضو",
+  description: {
+    en: "Clears all of a member's warnings.",
+    ar: "يمسح كل تحذيرات عضو معيّن.",
+  },
+  usage: {
+    en: "clearwarns @member",
+    ar: "clearwarns @عضو",
+  },
   chat: "group",
   userAdminRequired: true,
 
@@ -16,14 +23,20 @@ module.exports = {
 
       if (!mentionedJid) {
         return await sock.sendMessage(groupId, {
-          text: "يجب عمل منشن للعضو الذي تريد مسح تحذيراته.",
+          text: tr(
+            "Mention the member whose warnings you want to clear.",
+            "يجب عمل منشن للعضو الذي تريد مسح تحذيراته.",
+          ),
         });
       }
 
       // Call the new function from storage.js to delete the record from the database
       clearUserWarnings(groupId, mentionedJid);
 
-      const replyText = `✅ تم مسح جميع تحذيرات العضو @${mentionedJid.split("@")[0]} بنجاح.`;
+      const replyText = tr(
+        `✅ Cleared every warning for @${mentionedJid.split("@")[0]}.`,
+        `✅ تم مسح جميع تحذيرات العضو @${mentionedJid.split("@")[0]} بنجاح.`,
+      );
       await sock.sendMessage(groupId, {
         text: replyText,
         mentions: [mentionedJid],
@@ -31,7 +44,7 @@ module.exports = {
     } catch (error) {
       logger.error({ err: error }, "Error in !clearwarns command");
       await sock.sendMessage(msg.key.remoteJid, {
-        text: "حدث خطأ أثناء مسح التحذيرات.",
+        text: tr("Something went wrong while clearing the warnings.", "حدث خطأ أثناء مسح التحذيرات."),
       });
     }
   },

@@ -32,6 +32,7 @@ const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
 const { toolDeclarations, describeCall, runTool } = require("./aiTools.cjs");
 const { assertProviderBaseUrl, safeProviderFetch } = require("../utils/providerUrl.cjs");
+const { baseMimeType, downloadMedia } = require("../utils/geminiMedia.cjs");
 
 // Shown in place of a media part, on the wire and in the canonical history.
 const MEDIA_NOTE = "[تم إرفاق ملف/وسائط في الرسالة]";
@@ -102,6 +103,7 @@ const {
   getProvider,
   detectModelCapabilities,
 } = require("./aiRouter.cjs");
+const { tr } = require("../utils/i18n.cjs");
 
 function visionAllowed(providerId) {
   const id = providerId || settings.get("ai_provider");
@@ -114,23 +116,24 @@ async function prepareInlineImageMedia(
   mediaMessage,
   mimeOverride,
   downloadContentFromMessage,
+  downloadType,
 ) {
   const isVisionOn = visionAllowed(providerId);
   const mime = mimeOverride || mediaMessage?.mimetype || "ملف";
   if (isVisionOn && mime.startsWith("image/") && typeof downloadContentFromMessage === "function") {
     try {
-      const stream = await downloadContentFromMessage(mediaMessage, "image");
-      let buffer = Buffer.from([]);
-      for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
-      if (buffer.length) {
-        parts.push({
-          inlineData: {
-            mimeType: mime,
-            data: buffer.toString("base64"),
-          },
-        });
-        return "inline:image";
-      }
+      const buffer = await downloadMedia(
+        downloadContentFromMessage,
+        mediaMessage,
+        downloadType || "image",
+      );
+      parts.push({
+        inlineData: {
+          mimeType: baseMimeType(mime, "image"),
+          data: buffer.toString("base64"),
+        },
+      });
+      return "inline:image";
     } catch (err) {
       logger.warn({ err }, `[${providerId}] failed to extract inline image for vision`);
     }
@@ -154,13 +157,19 @@ class OpenAIProvider extends BaseAIProvider {
     });
   }
 
-  async prepareMedia(parts, mediaMessage, mimeOverride, { downloadContentFromMessage } = {}) {
+  async prepareMedia(
+    parts,
+    mediaMessage,
+    mimeOverride,
+    { downloadContentFromMessage, downloadType } = {},
+  ) {
     return prepareInlineImageMedia(
       "openai",
       parts,
       mediaMessage,
       mimeOverride,
       downloadContentFromMessage,
+      downloadType,
     );
   }
 
@@ -182,13 +191,19 @@ class AnthropicProvider extends BaseAIProvider {
     });
   }
 
-  async prepareMedia(parts, mediaMessage, mimeOverride, { downloadContentFromMessage } = {}) {
+  async prepareMedia(
+    parts,
+    mediaMessage,
+    mimeOverride,
+    { downloadContentFromMessage, downloadType } = {},
+  ) {
     return prepareInlineImageMedia(
       "anthropic",
       parts,
       mediaMessage,
       mimeOverride,
       downloadContentFromMessage,
+      downloadType,
     );
   }
 
@@ -202,7 +217,7 @@ registerProvider("anthropic", new AnthropicProvider());
 
 function adapterFor(provider) {
   const adapter = ADAPTERS[provider];
-  if (!adapter) throw new Error(`مزود غير معروف: ${provider}`);
+  if (!adapter) throw new Error(tr(`Unknown provider: ${provider}`, `مزود غير معروف: ${provider}`));
   return adapter;
 }
 
@@ -223,7 +238,7 @@ const PROVIDER_KEY_SETTINGS = Object.freeze({
 
 function activeProviderKeySetting(provider = settings.get("ai_provider")) {
   const keySetting = PROVIDER_KEY_SETTINGS[provider];
-  if (!keySetting) throw new Error(`مزود غير معروف: ${provider}`);
+  if (!keySetting) throw new Error(tr(`Unknown provider: ${provider}`, `مزود غير معروف: ${provider}`));
   return keySetting;
 }
 
@@ -623,7 +638,15 @@ function withTimeout(promise, ms, label) {
     promise,
     new Promise((_, reject) => {
       timer = setTimeout(
-        () => reject(new Error(`${label} استغرقت العملية أكثر من ${Math.round(ms / 1000)} ثانية`)),
+        () =>
+          reject(
+            new Error(
+              tr(
+                `${label} took longer than ${Math.round(ms / 1000)} seconds`,
+                `${label} استغرقت العملية أكثر من ${Math.round(ms / 1000)} ثانية`,
+              ),
+            ),
+          ),
         ms,
       );
     }),
@@ -731,7 +754,11 @@ async function runProviderAgent(
       // Same contract as the Gemini loop: the budget answer, not a lie.
       return finish({
         text:
-          parsed.text || "شغّلت الأدوات المتاحة بس مقدرتش أوصل لإجابة نهائية. جرّب تسأل بصيغة أوضح.",
+          parsed.text ||
+          tr(
+            "I ran the tools I have but couldn't reach a final answer. Try asking more clearly.",
+            "شغّلت الأدوات المتاحة بس مقدرتش أوصل لإجابة نهائية. جرّب تسأل بصيغة أوضح.",
+          ),
         canonical,
         toolCalls,
         steps,
@@ -778,7 +805,7 @@ async function runProviderAgent(
       })),
     });
 
-    if (status) await status.update("🤖 بجهّز الرد...");
+    if (status) await status.update(tr("🤖 Writing the answer...", "🤖 بجهّز الرد..."));
     response = await send();
   }
 }

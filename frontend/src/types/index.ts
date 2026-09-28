@@ -68,6 +68,7 @@ export interface CommandItem {
   name: string;
   aliases: string[];
   description: string;
+  descriptions?: { en?: string; ar?: string };
   chat: "all" | "group" | "private";
   permission: "MEMBERS" | "ADMIN_ONLY" | "OWNER_ONLY";
   defaultPermission: "MEMBERS" | "ADMIN_ONLY" | "OWNER_ONLY";

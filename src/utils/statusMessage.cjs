@@ -15,6 +15,7 @@
 
 const logger = require("./logger.cjs");
 const { sendBotMessage } = require("./sendBotMessage.cjs");
+const { tr } = require("./i18n.cjs");
 
 // WhatsApp tolerates a few edits per message; spacing them out keeps the
 // server happy and the animation readable.
@@ -106,12 +107,18 @@ class StatusMessage {
     return ok;
   }
 
-  /** Turn the line into the standard error card. */
-  async fail(err, arabicLead = "حصلت مشكلة") {
+  /**
+   * Turn the line into the standard error card. `lead` is the one-line
+   * summary, already in the reply language — pass it through tr().
+   */
+  async fail(err, lead = tr("Something went wrong", "حصلت مشكلة")) {
     const name = err?.name || "Error";
-    const message = err?.message || String(err || "غير معروف");
+    const message = err?.message || String(err || tr("unknown", "غير معروف"));
     return this.finish(
-      `❌ *${arabicLead}*\n\n*النوع:* \`${name}\`\n*التفاصيل:* ${message}`.slice(0, 1500),
+      tr(
+        `❌ *${lead}*\n\n*Type:* \`${name}\`\n*Details:* ${message}`,
+        `❌ *${lead}*\n\n*النوع:* \`${name}\`\n*التفاصيل:* ${message}`,
+      ).slice(0, 1500),
     );
   }
 

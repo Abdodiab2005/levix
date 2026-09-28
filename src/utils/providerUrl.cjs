@@ -6,7 +6,12 @@
 
 const dns = require("node:dns").promises;
 const net = require("node:net");
-const { Agent, fetch: undiciFetch, Response: UndiciResponse } = require("undici");
+const {
+  Agent,
+  fetch: undiciFetch,
+  FormData: UndiciFormData,
+  Response: UndiciResponse,
+} = require("undici");
 
 function ipv4Bytes(host) {
   const parts = String(host).split(".");
@@ -261,11 +266,33 @@ function responseWithDispatcherCleanup(response, dispatcher) {
   });
 }
 
+// Node's global FormData and the undici package's are different classes, and
+// the package's fetch only recognises its own: handed a global one it sends the
+// string "[object FormData]" as text/plain. That is what every Whisper upload
+// from !stt was. Copy the entries across; File values keep their filename.
+function undiciBody(body) {
+  if (
+    typeof globalThis.FormData === "function" &&
+    body instanceof globalThis.FormData &&
+    !(body instanceof UndiciFormData)
+  ) {
+    const copy = new UndiciFormData();
+    for (const [name, value] of body.entries()) copy.append(name, value);
+    return copy;
+  }
+  return body;
+}
+
 async function safeProviderFetch(raw, init = {}, options = {}) {
   const { url, host, addresses } = await resolveProviderRequestUrl(raw, options);
   const dispatcher = new Agent({ connect: { lookup: pinnedLookup(host, addresses) } });
   try {
-    const response = await undiciFetch(url, { ...init, redirect: "manual", dispatcher });
+    const response = await undiciFetch(url, {
+      ...init,
+      ...(init.body !== undefined ? { body: undiciBody(init.body) } : {}),
+      redirect: "manual",
+      dispatcher,
+    });
     return responseWithDispatcherCleanup(response, dispatcher);
   } catch (error) {
     Promise.resolve(dispatcher.destroy()).catch(() => {});
