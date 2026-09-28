@@ -6,16 +6,20 @@
 #   armeabi-v7a/   from Termux arm packages
 #
 # Termux is not required on the phone — only the ELF files are packaged into
-# the APK. FFmpeg comes from the Khang-NT static Android builds (one per ABI).
+# the APK. FFmpeg is built from source per ABI by build-ffmpeg-android.sh.
 #
 # Usage:
 #   fetch-node-android.sh [abi ...]        # default: arm64-v8a armeabi-v7a
 #   LEVIX_ANDROID_ABIS="arm64-v8a" ...     # same list via env (what Gradle reads)
 #
 # Google Play requires every 64-bit ELF to be 16 KB page aligned when the app
-# targets API 35+, so the script verifies alignment for arm64-v8a and fails
-# the build otherwise. 32-bit ABIs are exempt from that requirement.
+# targets API 35+, so the script verifies arm64-v8a and fails the build
+# otherwise: segment alignment, a RELRO region that does not share a 16 KB
+# page with writable data, and an NDK of r28 or newer (older ones get the
+# RELRO layout wrong, and Play warns about them). 32-bit ABIs are exempt.
 set -euo pipefail
+
+SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 CACHE="${LEVIX_NODE_CACHE:-$HOME/.cache/levix-android}"
 BASE="https://packages.termux.dev/apt/termux-main"
@@ -30,20 +34,6 @@ termux_arch() {
     arm64-v8a) echo aarch64 ;;
     armeabi-v7a) echo arm ;;
     *) echo "unknown ABI: $1 (expected arm64-v8a or armeabi-v7a)" >&2; return 1 ;;
-  esac
-}
-
-# Static FFmpeg builds (NDK, Opus & MJPEG/H.264 support) — per ABI.
-ffmpeg_url() {
-  case "$1" in
-    arm64-v8a) echo "https://github.com/Khang-NT/ffmpeg-binary-android/releases/download/2018-07-31/arm64-v8a-lite.tar.bz2" ;;
-    armeabi-v7a) echo "https://github.com/Khang-NT/ffmpeg-binary-android/releases/download/2018-07-31/armv7-a-lite.tar.bz2" ;;
-  esac
-}
-ffmpeg_sha256() {
-  case "$1" in
-    arm64-v8a) echo "92ff6fb88d116f222fb309125e46f408ab3fd360cbb1d1786712b6fb9d0f3525" ;;
-    armeabi-v7a) echo "c5f96375f629fe56916749601396ab3c299498c14aee1cbeca2ea64a8f10d371" ;;
   esac
 }
 
@@ -126,59 +116,108 @@ PY
 }
 
 verify_elfs() {
-  # Checks every staged ELF: right machine for the ABI, and (64-bit only,
-  # a Google Play requirement for apps targeting API 35+) PT_LOAD alignment
-  # of at least 16 KB.
+  # Checks every staged ELF: right machine for the ABI, and for 64-bit (a
+  # Google Play requirement for apps targeting API 35+) that it loads on a
+  # 16 KB-page device:
+  #   - every PT_LOAD aligned to at least 16 KB;
+  #   - PT_GNU_RELRO does not end partway into a 16 KB page that also holds
+  #     writable data — the loader's mprotect() rounds out to the page and
+  #     would make that data read-only (NDK r27 and older linked this way);
+  #   - built with NDK r28+, which is what Play reads from .note.android.ident.
   local runtime="$1" abi="$2"
   python3 - "$runtime" "$abi" <<'PY'
+import re
 import struct
 import sys
 from pathlib import Path
 
+PT_LOAD, PT_NOTE, PT_GNU_RELRO = 1, 4, 0x6474E552
+PAGE_16K = 16384
+MIN_NDK = 28
+
 runtime, abi = Path(sys.argv[1]), sys.argv[2]
 expect_machine = {"arm64-v8a": 0xB7, "armeabi-v7a": 0x28}[abi]  # AArch64 / ARM
+
+
+def program_headers(data, is64):
+    if is64:
+        phoff = struct.unpack_from("<Q", data, 0x20)[0]
+        phentsize, phnum = struct.unpack_from("<HH", data, 0x36)
+    else:
+        phoff = struct.unpack_from("<I", data, 0x1C)[0]
+        phentsize, phnum = struct.unpack_from("<HH", data, 0x2A)
+    for i in range(phnum):
+        at = phoff + i * phentsize
+        if is64:
+            p_type, _, offset, vaddr, _, filesz, memsz, align = struct.unpack_from("<IIQQQQQQ", data, at)
+        else:
+            p_type, offset, vaddr, _, filesz, memsz, _, align = struct.unpack_from("<IIIIIIII", data, at)
+        yield {"type": p_type, "offset": offset, "vaddr": vaddr,
+               "filesz": filesz, "memsz": memsz, "align": align}
+
+
+def ndk_version(data, phdrs):
+    """The NDK named in .note.android.ident, None when the ELF has no such note."""
+    for ph in phdrs:
+        if ph["type"] != PT_NOTE:
+            continue
+        at, end = ph["offset"], ph["offset"] + ph["filesz"]
+        while at + 12 <= end:
+            namesz, descsz, _ = struct.unpack_from("<III", data, at)
+            name = data[at + 12:at + 12 + namesz].rstrip(b"\0")
+            desc_at = at + 12 + ((namesz + 3) & ~3)
+            if name == b"Android":
+                if descsz < 4 + 64:
+                    return "(unversioned)"  # old NDKs recorded only the API level
+                return data[desc_at + 4:desc_at + 68].split(b"\0")[0].decode() or "unknown"
+            at = desc_at + ((descsz + 3) & ~3)
+    return None
+
+
 failures = []
 for so in sorted(runtime.glob("*.so")):
-    with open(so, "rb") as fh:
-        header = fh.read(64)
-    if header[:4] != b"\x7fELF":
+    data = so.read_bytes()
+    if data[:4] != b"\x7fELF":
         failures.append(f"{so.name}: not an ELF")
         continue
-    is64 = header[4] == 2
-    machine = struct.unpack_from("<H", header, 0x12)[0]
+    is64 = data[4] == 2
+    machine = struct.unpack_from("<H", data, 0x12)[0]
     if machine != expect_machine:
         failures.append(f"{so.name}: wrong machine 0x{machine:x}")
         continue
-    if is64:
-        phoff = struct.unpack_from("<Q", header, 0x20)[0]
-        phentsize, phnum = struct.unpack_from("<HH", header, 0x36)
-        align_off = 48
-    else:
-        phoff = struct.unpack_from("<I", header, 0x1C)[0]
-        phentsize, phnum = struct.unpack_from("<HH", header, 0x2A)
-        align_off = 28
-    min_align = 16384 if is64 else 4096
-    with open(so, "rb") as fh:
-        fh.seek(phoff)
-        for i in range(phnum):
-            ph = fh.read(phentsize)
-            if not ph:
-                break
-            if struct.unpack_from("<I", ph, 0)[0] != 1:  # PT_LOAD
-                continue
-            p_align = struct.unpack_from("<Q" if is64 else "<I", ph, align_off)[0]
-            if p_align < min_align:
-                failures.append(
-                    f"{so.name}: PT_LOAD aligned to {p_align} < {min_align} "
-                    f"({'16 KB page size requirement' if is64 else 'page size'})"
-                )
-                break
+    phdrs = list(program_headers(data, is64))
+    loads = [ph for ph in phdrs if ph["type"] == PT_LOAD]
+    min_align = PAGE_16K if is64 else 4096
+    for ph in loads:
+        if ph["align"] < min_align:
+            failures.append(
+                f"{so.name}: PT_LOAD aligned to {ph['align']} < {min_align} "
+                f"({'16 KB page size requirement' if is64 else 'page size'})"
+            )
+            break
+    if not is64:
+        continue
+    for relro in (ph for ph in phdrs if ph["type"] == PT_GNU_RELRO):
+        relro_end = relro["vaddr"] + relro["memsz"]
+        page_end = -(-relro_end // PAGE_16K) * PAGE_16K
+        if relro_end == page_end:
+            continue
+        if any(ph["vaddr"] < page_end and ph["vaddr"] + ph["memsz"] > relro_end for ph in loads):
+            failures.append(
+                f"{so.name}: RELRO ends at 0x{relro_end:x}, inside a 16 KB page that also "
+                f"holds writable data (crashes on 16 KB-page devices)"
+            )
+    ndk = ndk_version(data, phdrs)
+    if ndk is not None:
+        match = re.match(r"r(\d+)", ndk)
+        if not match or int(match.group(1)) < MIN_NDK:
+            failures.append(f"{so.name}: built with NDK {ndk}; Google Play needs r{MIN_NDK}+ for 16 KB devices")
 if failures:
     print("ELF verification failed for " + abi + ":", file=sys.stderr)
     for f in failures:
         print("  " + f, file=sys.stderr)
     sys.exit(1)
-print(f"ELF verification passed for {abi}: machine OK, alignments OK")
+print(f"ELF verification passed for {abi}: machine, alignment, RELRO and NDK OK")
 PY
 }
 
@@ -292,26 +331,12 @@ for ABI in "${ABIS[@]}"; do
     exit 1
   fi
 
-  # Stage the per-ABI static FFmpeg binary.
-  FFMPEG_URL="$(ffmpeg_url "$ABI")"
-  FFMPEG_SHA256="$(ffmpeg_sha256 "$ABI")"
-  FFMPEG_ARCHIVE="$WORKDIR/ffmpeg-$ABI.tar.bz2"
-
-  if [ ! -f "$FFMPEG_ARCHIVE" ] || ! echo "$FFMPEG_SHA256  $FFMPEG_ARCHIVE" | sha256sum -c --status 2>/dev/null; then
-    echo "==> [$ABI] downloading FFmpeg..."
-    curl -fL --retry 3 -o "$FFMPEG_ARCHIVE" "$FFMPEG_URL"
-    echo "$FFMPEG_SHA256  $FFMPEG_ARCHIVE" | sha256sum -c -
-  fi
-
-  rm -rf "$WORKDIR/ffmpeg-$ABI"
-  mkdir -p "$WORKDIR/ffmpeg-$ABI"
-  tar -xjf "$FFMPEG_ARCHIVE" -C "$WORKDIR/ffmpeg-$ABI" ./ffmpeg
-  cp -a "$WORKDIR/ffmpeg-$ABI/ffmpeg" "$RUNTIME/libffmpeg.so"
-  chmod 755 "$RUNTIME/libffmpeg.so"
-
+  # FFmpeg links against Bionic only, so it takes no $ORIGIN runpath: staged
+  # after the rewrite, it keeps exactly the segment layout the NDK linked.
   for f in "$RUNTIME"/*; do
     "$PATCH" --set-rpath '$ORIGIN' "$f"
   done
+  bash "$SCRIPTS/build-ffmpeg-android.sh" "$ABI" "$RUNTIME/libffmpeg.so"
 
   verify_elfs "$RUNTIME" "$ABI"
 

@@ -38,7 +38,8 @@
         <activity
             android:name=".PanelActivity"
             android:exported="false"
-            android:parentActivityName=".MainActivity" />
+            android:parentActivityName=".MainActivity"
+            android:windowSoftInputMode="adjustResize" />
 
         <service
             android:name=".LevixHostService"

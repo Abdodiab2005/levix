@@ -7,6 +7,7 @@ import {
   sameUser,
 } from "../utils/permissions.esm.js";
 import { getGroupSettings, getPnForLid } from "../utils/storage.esm.js";
+import { resolveGroupMetadata } from "../utils/groupMetadataCache.cjs";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -41,7 +42,9 @@ export async function handleAntiSpam(sock, msg) {
   // Owners and admins are immune. The legacy owner mirror it used to import was
   // only ever populated with the bot's own JID, so real operators were
   // counted as spammers — the centralized check fixes that.
-  const groupMetadata = await sock.groupMetadata(groupId);
+  // Cache-first: antispam runs on EVERY group message, so this read must not
+  // be a live query (see utils/groupMetadataCache.cjs).
+  const groupMetadata = await resolveGroupMetadata(sock, groupId);
   const protectedSender = senderCandidates.some(
     (candidate) =>
       isOwnerJid(candidate) ||

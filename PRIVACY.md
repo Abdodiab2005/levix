@@ -223,7 +223,9 @@ contains no analytics, advertising, or crash-reporting SDK.
 - **Foreground service (special use)** — declared as `specialUse` with
   subtype "Persistent personal WhatsApp bot host".
 - **16 KB page size** — all shipped 64-bit native libraries are expected to be
-  ≥ 16 KB aligned; the Android build/release checks should remain enabled.
+  ≥ 16 KB aligned and built with NDK r28+; the Android build/release checks
+  (`verify_elfs` in `android/scripts/fetch-node-android.sh`) should remain
+  enabled.
 - **64-bit** — the AAB includes `arm64-v8a` plus `armeabi-v7a`.
 
 ## 8. Changes to this policy

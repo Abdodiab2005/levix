@@ -502,9 +502,13 @@ section("capability guards: vision and STT are independent");
   ok("Gemini Flash can keep vision", geminiGuarded.visionEnabled === true);
   ok("Gemini Flash can keep STT", geminiGuarded.sttEnabled === true);
 
+  // A model the registry has never heard of is UNKNOWN, not unsupported: the
+  // operator's toggles stand (this is what keeps vision/STT usable on a
+  // custom gateway). And auto-detection off means nothing is ever forced.
   const unknownGuarded = applyCapabilityGuards({
     visionEnabled: true,
     sttEnabled: true,
+    capabilitySource: "unknown",
     capabilities: {
       textInput: true,
       textOutput: true,
@@ -515,8 +519,21 @@ section("capability guards: vision and STT are independent");
       pdfInput: false,
     },
   });
-  ok("unknown model disables vision", unknownGuarded.visionEnabled === false);
-  ok("unknown model disables STT", unknownGuarded.sttEnabled === false);
+  ok("unknown model keeps the operator's vision choice", unknownGuarded.visionEnabled === true);
+  ok("unknown model keeps the operator's STT choice", unknownGuarded.sttEnabled === true);
+  ok("unknown model locks nothing (vision)", unknownGuarded.visionLocked === false);
+  ok("unknown model locks nothing (STT)", unknownGuarded.sttLocked === false);
+
+  const autoDetectOff = applyCapabilityGuards({
+    visionEnabled: true,
+    sttEnabled: true,
+    capabilitySource: "seed",
+    autoDetect: false,
+    capabilities: gpt6.capabilities,
+  });
+  ok("auto-detect off leaves vision alone", autoDetectOff.visionEnabled === true);
+  ok("auto-detect off leaves STT alone", autoDetectOff.sttEnabled === true);
+  ok("auto-detect off locks nothing (STT)", autoDetectOff.sttLocked === false);
 
   ok(
     "cache key is not the raw api key",

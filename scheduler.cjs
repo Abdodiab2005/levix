@@ -31,6 +31,9 @@ function saveScheduledJob(job) {
 
 const runningTasks = new Map();
 const deliveriesInFlight = new Set();
+// The socket the jobs were last armed with. Callers that don't hold a socket
+// themselves (the AI agent's reminder tool) arm new jobs through it.
+let currentSock = null;
 let cleanupScheduled = false;
 
 function trimMediaDirectory() {
@@ -57,6 +60,7 @@ function trimMediaDirectory() {
 }
 
 function initializeScheduledJobs(sock) {
+  currentSock = sock;
   const jobs = getScheduledJobs();
   logger.info(`[Scheduler] Initializing ${jobs.length} total jobs...`);
 
@@ -113,6 +117,7 @@ function scheduleAt(whenMs, run) {
  * against the socket that is actually alive.
  */
 function stopAllScheduledJobs() {
+  currentSock = null;
   const count = runningTasks.size;
   for (const jobId of [...runningTasks.keys()]) stopTask(jobId);
   if (count) logger.info(`[Scheduler] Stopped ${count} job(s) — no live connection`);
@@ -262,10 +267,24 @@ function updateJobStatus(jobId, status) {
   storage.setScheduleStatus(jobId, status);
 }
 
+/**
+ * Arm one job immediately and persist it — for callers that don't hold a
+ * socket (the AI agent's reminder tool). Uses the socket the scheduler was
+ * last initialized with; `initializeScheduledJobs()` on the next connection
+ * open re-arms every stored job anyway, so a save here is never lost.
+ */
+function scheduleJobNow(job) {
+  if (!currentSock || !currentSock.user) return { ok: false, reason: "no_connection" };
+  if (!scheduleNewJob(currentSock, job)) return { ok: false, reason: "invalid_time" };
+  saveScheduledJob(job);
+  return { ok: true };
+}
+
 module.exports = {
   initializeScheduledJobs,
   stopAllScheduledJobs,
   scheduleNewJob,
+  scheduleJobNow,
   retryScheduledJob,
   getScheduledJobs,
   saveScheduledJob,

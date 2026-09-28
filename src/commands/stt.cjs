@@ -149,6 +149,7 @@ module.exports = {
         logger.info("[STT] Transcribing via OpenAI/Groq Whisper API");
         transcription = await transcribeWithOpenAi(audioBuffer, audioMessage.mimetype);
       } else if (hasGemini) {
+        const gemini = geminiStt();
         await assertProviderRequestUrl(settings.get("gemini_base_url"), {
           allowLoopback: true,
         });

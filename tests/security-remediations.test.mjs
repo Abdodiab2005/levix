@@ -62,62 +62,58 @@ for (const url of [
 
 section("AI privileges distinguish bot admins from WhatsApp group admins");
 
+// Callers come from real (fake) messages, resolved the way the AI resolves
+// them — a plain object with owner flags is nobody (tests/ai-tool-authz.test.mjs).
+const { resolveCaller } = require("./src/services/aiToolAuth.cjs");
+const aiSock = { user: { id: "201999999999@s.whatsapp.net" } };
+const aiGroup = "120363-security@g.us";
+const aiGroupMetadata = {
+  id: aiGroup,
+  participants: [{ id: "111@s.whatsapp.net", admin: "admin" }],
+};
+const aiCaller = (from, text = "!ai hi") =>
+  resolveCaller({
+    msg: {
+      key: { remoteJid: aiGroup, participant: from, fromMe: false },
+      message: { conversation: text },
+    },
+    sock: aiSock,
+    groupMetadata: aiGroupMetadata,
+    text,
+  });
+await permissions.grantRole("201000000000@s.whatsapp.net", "owner");
+const groupAdmin = await aiCaller("111@s.whatsapp.net");
+
 result = await runTool(
   "save_memory",
   { scope: "global", content: "group admin poison" },
-  {
-    chatId: "120363-security@g.us",
-    senderId: "111@s.whatsapp.net",
-    isOwner: false,
-    isAdmin: false,
-    isGroupAdmin: true,
-  },
+  { caller: groupAdmin },
 );
-equal("a group admin cannot write global memory", result.saved, false);
+ok("a group admin cannot write global memory", result.denied === true && result.saved !== true);
 
-result = await runTool("list_roles", {}, { isOwner: false, isAdmin: false, isGroupAdmin: true });
+result = await runTool("list_roles", {}, { caller: groupAdmin });
 ok("a group admin cannot enumerate bot roles", Boolean(result.error));
 
 result = await runTool(
   "save_memory",
   { scope: "chat", content: "chat-scoped fact" },
-  {
-    chatId: "120363-security@g.us",
-    senderId: "111@s.whatsapp.net",
-    isOwner: false,
-    isAdmin: false,
-    isGroupAdmin: true,
-  },
+  { caller: groupAdmin },
 );
 equal("a group admin can still manage that chat's memory", result.saved, true);
-result = await runTool(
-  "forget_memory",
-  { scope: "chat", ref: result.id },
-  {
-    chatId: "120363-security@g.us",
-    senderId: "111@s.whatsapp.net",
-    isOwner: false,
-    isAdmin: false,
-    isGroupAdmin: true,
-  },
-);
+result = await runTool("forget_memory", { scope: "chat", ref: result.id }, { caller: groupAdmin });
 equal("chat memory removal remains group-scoped", result.removed, true);
 
 result = await runTool(
   "grant_role",
   { target: "201111111111", role: "admin" },
-  { isOwner: true, senderId: "owner@s.whatsapp.net", userText: "what is the weather?" },
+  { caller: await aiCaller("201000000000@s.whatsapp.net", "what is the weather?") },
 );
 equal("owner status alone does not bind a model-invented role target", result.granted, false);
 
 result = await runTool(
   "grant_role",
   { target: "201111111111", role: "admin" },
-  {
-    isOwner: true,
-    senderId: "owner@s.whatsapp.net",
-    userText: "make 201111111111 an admin",
-  },
+  { caller: await aiCaller("201000000000@s.whatsapp.net", "make 201111111111 an admin") },
 );
 equal("an explicit owner-supplied phone target is accepted", result.granted, true);
 
@@ -223,19 +219,26 @@ const baseMessage = {
 
 const { checkBlacklist } = await import("../src/middleware/blacklist.middleware.js");
 ok("a PN blacklist entry matches a LID sender", await checkBlacklist(sock, baseMessage));
+// Moderation metadata is cache-first now (utils/groupMetadataCache.cjs): the
+// mock swaps below model a roster change, which in production arrives as a
+// pushed groups.update event and refreshes the cache — so invalidate here.
+const groupMetadataCache = require("./src/utils/groupMetadataCache.cjs");
 sock.groupMetadata = async () => adminMetadata;
+groupMetadataCache.flushAll();
 ok("the same cross-format sender is exempt when they are an admin", !(await checkBlacklist(sock, baseMessage)));
 
 const { handleAntiLink } = require("./src/commands/group/antilink.cjs");
 const { handleMediaControl } = require("./src/commands/group/media.cjs");
 const { handleForbiddenWords } = require("./src/commands/mod.cjs");
 sock.groupMetadata = async () => ordinaryMetadata;
+groupMetadataCache.flushAll();
 ok("anti-link sees a wrapped caption", await handleAntiLink(sock, baseMessage));
 ok("media control sees wrapped media", await handleMediaControl(sock, baseMessage));
 ok("forbidden-word control is actually enforced", await handleForbiddenWords(sock, baseMessage));
 
 const { handleAntiSpam } = await import("../src/middleware/antispam.middleware.js");
 sock.groupMetadata = async () => adminMetadata;
+groupMetadataCache.flushAll();
 await handleAntiSpam(sock, baseMessage);
 await handleAntiSpam(sock, baseMessage);
 equal("cross-format admins cannot be kicked by antispam", kicks, 0);

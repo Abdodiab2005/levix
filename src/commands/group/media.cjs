@@ -3,6 +3,7 @@ const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs
 const logger = require("../../utils/logger.cjs");
 const { isOwnerJidSync, isAdminInGroupSync } = require("../../utils/permissions.cjs");
 const { mediaType } = require("../../utils/messageContent.cjs");
+const { resolveGroupMetadata } = require("../../utils/groupMetadataCache.cjs");
 
 const VALID_TYPES = ["image", "video", "sticker", "audio"];
 
@@ -88,7 +89,8 @@ async function handleMediaControl(sock, msg, _legacyConfig, _normalizeJid) {
 
   const senderId = msg.key.participant || msg.key.remoteJid;
 
-  const groupMetadata = await sock.groupMetadata(groupId);
+  // Cache-first: this runs on every group message while media control is on.
+  const groupMetadata = await resolveGroupMetadata(sock, groupId);
   const senderIds = [senderId, msg.key.participantAlt, msg.key.participantPn].filter(Boolean);
   const isOwner = msg.key.fromMe || senderIds.some(isOwnerJidSync);
   const isSenderAdmin = senderIds.some((id) => isAdminInGroupSync(groupMetadata, id));

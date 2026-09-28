@@ -115,13 +115,20 @@ function detectModelCapabilities(provider = settings.get("ai_provider"), model =
   const resolved = resolveCapabilities(p, m);
   const caps = resolved.capabilities;
 
+  // "Unknown" is not "unsupported": for a model the registry has never seen
+  // (a gateway's own ids, a model newer than the catalog) the operator's
+  // toggles are the only gate, so report the capability as available and let
+  // ai_vision_enabled / ai_stt_enabled decide. Forcing it false here would
+  // silently drop every image/audio part on custom endpoints.
+  const known = resolved.capabilitySource === "seed" || resolved.capabilitySource === "provider";
+
   return {
     provider: p,
     model: m,
     capabilities: caps,
     capabilitySource: resolved.capabilitySource,
-    supportsVision: Boolean(caps.vision),
-    supportsAudioStt: Boolean(caps.stt),
+    supportsVision: known ? Boolean(caps.vision) : true,
+    supportsAudioStt: known ? Boolean(caps.stt) : true,
     visionRecommended: Boolean(caps.vision) && !settings.get("ai_vision_enabled"),
   };
 }

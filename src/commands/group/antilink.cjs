@@ -3,6 +3,7 @@ const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs
 const logger = require("../../utils/logger.cjs");
 const { isOwnerJidSync, isAdminInGroupSync } = require("../../utils/permissions.cjs");
 const { visibleText } = require("../../utils/messageContent.cjs");
+const { resolveGroupMetadata } = require("../../utils/groupMetadataCache.cjs");
 
 // --- The Main Command Logic ---
 const command = {
@@ -117,7 +118,8 @@ async function handleAntiLink(sock, msg, _legacyConfig, _normalizeJid) {
 
   const senderId = msg.key.participant || msg.key.remoteJid;
 
-  const groupMetadata = await sock.groupMetadata(groupId);
+  // Cache-first: this runs on every group message while antilink is enabled.
+  const groupMetadata = await resolveGroupMetadata(sock, groupId);
   // Centralized checks — handle LID/PN cross-format and bootstrap roster.
   const senderIds = [senderId, msg.key.participantAlt, msg.key.participantPn].filter(Boolean);
   const isOwner = msg.key.fromMe || senderIds.some(isOwnerJidSync);

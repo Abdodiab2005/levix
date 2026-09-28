@@ -41,9 +41,30 @@ async function deleteAllChatHistoriesAsync() {
   }
 }
 
+// Read-only, for the dashboard's conversation inspector.
+async function listChatHistoriesAsync() {
+  try {
+    return store.listChatHistories();
+  } catch (err) {
+    logger.error({ err }, "[storage-hub] listChatHistoriesAsync failed");
+    return [];
+  }
+}
+
+async function getChatHistoryWithMetaAsync(chatId) {
+  try {
+    return store.getChatHistoryWithMeta(chatId);
+  } catch (err) {
+    logger.error({ err }, "[storage-hub] getChatHistoryWithMetaAsync failed");
+    return null;
+  }
+}
+
 module.exports = {
   getChatHistoryAsync,
   saveChatHistoryAsync,
   deleteChatHistoryAsync,
   deleteAllChatHistoriesAsync,
+  listChatHistoriesAsync,
+  getChatHistoryWithMetaAsync,
 };

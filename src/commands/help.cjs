@@ -139,7 +139,11 @@ module.exports = {
           const aliasSnippet = aliases.length
             ? ` _(${aliases.map((a) => prefix + a).join(", ")})_`
             : "";
-          text += `│  ◦ *${prefix}${cmd.name}*${aliasSnippet}\n`;
+          // The description goes on its own line UNDER the command, never
+          // beside it: WhatsApp lays a line out by its first strong character,
+          // and an Arabic description next to an LTR command name gets its
+          // words reordered into unreadability. The colon ends the name line.
+          text += `│  ◦ *${prefix}${cmd.name}*${aliasSnippet}:\n`;
           text += `│     ${cmd.description}\n`;
           // The parameters are the whole point of a help list — show them.
           usageLines(cmd, prefix).forEach((line) => {
@@ -181,16 +185,18 @@ module.exports = {
       );
     }
 
+    // Same bidi rule as the list: an Arabic label ends its own line and the
+    // value starts the next one, so no line mixes RTL and LTR content.
     let usageText = `╭───「 *Command Details* 」\n│\n`;
-    usageText += `├─ *الأمر:* ${prefix}${command.name}\n`;
+    usageText += `├─ *الأمر:*\n│     ${prefix}${command.name}\n`;
 
     const commandAliases = aliasesOf(command);
     if (commandAliases.length) {
-      usageText += `├─ *اختصارات:* ${commandAliases.map((a) => `${prefix}${a}`).join(", ")}\n`;
+      usageText += `├─ *اختصارات:*\n│     ${commandAliases.map((a) => `${prefix}${a}`).join(", ")}\n`;
     }
 
     if (command.description) {
-      usageText += `├─ *الوصف:* ${command.description}\n`;
+      usageText += `├─ *الوصف:*\n│     ${command.description}\n`;
     }
 
     usageText += `├─ *الاستخدام:*\n`;
@@ -205,9 +211,9 @@ module.exports = {
       });
     }
 
-    usageText += `├─ *المكان:* ${CHAT_LABELS[command.chat] || command.chat || "كل المحادثات"}\n`;
+    usageText += `├─ *المكان:*\n│     ${CHAT_LABELS[command.chat] || command.chat || "كل المحادثات"}\n`;
     const isGroupCommand = commands.group.includes(command);
-    usageText += `├─ *الصلاحية:* ${permissionFor(command, isGroupCommand)}\n`;
+    usageText += `├─ *الصلاحية:*\n│     ${permissionFor(command, isGroupCommand)}\n`;
 
     if (command.userAdminRequired) {
       usageText += `├─ ⚠️ لازم تكون مشرف\n`;

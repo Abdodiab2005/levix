@@ -19,6 +19,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -47,6 +49,11 @@ class PanelActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Same as MainActivity: edge-to-edge everywhere, light bar icons.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+        )
         sock = File(HostState.dataDir(this), "panel.sock")
         bridgeJs = try {
             assets.open("panel-bridge.js").use { it.readBytes().toString(StandardCharsets.UTF_8) }
@@ -67,12 +74,18 @@ class PanelActivity : AppCompatActivity() {
         }
         setContentView(container)
 
+        // An edge-to-edge window is no longer resized for the keyboard, so the
+        // IME inset joins the padding or a focused field in the panel ends up
+        // underneath it. Consumed here: the WebView sits inside that padding
+        // and must not inset itself a second time.
         ViewCompat.setOnApplyWindowInsetsListener(container) { v, windowInsets ->
             val insets = windowInsets.getInsets(
-                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+                WindowInsetsCompat.Type.systemBars() or
+                    WindowInsetsCompat.Type.displayCutout() or
+                    WindowInsetsCompat.Type.ime()
             )
             v.setPadding(insets.left, insets.top, insets.right, insets.bottom)
-            windowInsets
+            WindowInsetsCompat.CONSUMED
         }
 
         web.settings.javaScriptEnabled = true

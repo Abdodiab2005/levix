@@ -182,8 +182,24 @@ async function saveBotOwnerMetadata(sock) {
   }
 }
 
-// Cache all group metadata
-async function cacheAllGroups(sock) {
+// Cache all group metadata — but not on every reconnect.
+//
+// Low-data design: `groupFetchAllParticipating()` pulls every group WITH its
+// participants and description, and it used to run on every connection open —
+// up to six times during one retry ladder. The full roster is only fetched
+// when the last one is older than the TTL below (or on the first open after a
+// process start, or explicitly forced); in between, pushed `groups.upsert` /
+// `groups.update` events keep the cache current, and per-message reads fall
+// back to single-group queries through resolveGroupMetadata() on a miss.
+export const GROUP_SYNC_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+let lastFullGroupSyncAt = 0;
+
+export async function cacheAllGroups(sock, { force = false, now = Date.now() } = {}) {
+  if (!force && lastFullGroupSyncAt && now - lastFullGroupSyncAt < GROUP_SYNC_TTL_MS) {
+    logger.info("[Cache] Recent full group sync is still fresh — skipping groupFetchAllParticipating");
+    return;
+  }
+
   logger.info("[Cache] Fetching and caching metadata for all groups...");
 
   try {
@@ -199,6 +215,9 @@ async function cacheAllGroups(sock) {
       cachedCount++;
     }
 
+    // Only a successful fetch counts as fresh — a failed one retries on the
+    // next connection open.
+    lastFullGroupSyncAt = now;
     logger.info(`[Cache] Successfully cached ${cachedCount} groups.`);
   } catch (err) {
     logger.error("[Error] Failed to fetch and cache groups:", err);

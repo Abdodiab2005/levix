@@ -18,7 +18,7 @@ Features:
 
 - **JDK 17**
 - **Android SDK 36** (`compileSdk = 36`, `targetSdk = 36`, `minSdk = 29`)
-- `curl`, `python3`, `dpkg-deb`, `zip`, `rsync`
+- `curl`, `python3`, `dpkg-deb`, `zip`, `unzip`, `rsync`, `make`, `pkg-config`
 - An **ARM64** or **ARMv7 (32-bit)** device (Android 10+ / API 29+)
 - `npm ci` run in the project root and `frontend/`
 
@@ -30,7 +30,9 @@ The Node 24 Bionic binaries are not tracked in git. Fetch them once (both ABIs b
 android/scripts/fetch-node-android.sh
 ```
 
-This script retrieves the verified Termux packages (aarch64 + arm) and the per-ABI static FFmpeg, extracts the ELF binaries, configures `$ORIGIN` dynamic linking, and verifies that every 64-bit ELF is 16 KB page aligned (a Google Play requirement for apps targeting API 35+).
+This script retrieves the verified Termux packages (aarch64 + arm), extracts the ELF binaries, configures `$ORIGIN` dynamic linking, and builds FFmpeg (with libopus) from source for each ABI through `android/scripts/build-ffmpeg-android.sh`. That build uses NDK r29 from `$ANDROID_HOME/ndk/29.0.14206865` when it is installed (`sdkmanager "ndk;29.0.14206865"`) and downloads it into the cache otherwise; the result is cached until the script changes.
+
+Every 64-bit ELF is then checked for what a 16 KB-page device needs (a Google Play requirement for apps targeting API 35+): 16 KB segment alignment, a RELRO region that shares no page with writable data, and an NDK of r28 or newer. The FFmpeg prebuilt this replaced failed the last two — it was built with NDK r15c, and Play reported it as a crash risk on 16 KB devices.
 
 ## Building the APKs
 

@@ -1,6 +1,7 @@
 import { createRequire } from "module";
 import { getSenderCandidates, isAdminInGroup, sameUser } from "../utils/permissions.esm.js";
 import { getGroupSettings } from "../utils/storage.esm.js";
+import { resolveGroupMetadata } from "../utils/groupMetadataCache.cjs";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -19,7 +20,9 @@ export async function checkBlacklist(sock, msg) {
   );
 
   if (listed) {
-    const groupMetadata = await sock.groupMetadata(groupId);
+    // Cache-first: admin detection for a blacklisted sender, only when the
+    // blacklist actually matched (see utils/groupMetadataCache.cjs).
+    const groupMetadata = await resolveGroupMetadata(sock, groupId);
     const isSenderAdmin = senderCandidates.some((candidate) =>
       isAdminInGroup(groupMetadata, candidate),
     );

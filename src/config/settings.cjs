@@ -43,6 +43,14 @@ const SETTINGS = [
     hint: "Preferred language for AI replies and status updates. Can also be switched with !lang.",
   },
   {
+    key: "link_previews_enabled",
+    type: "bool",
+    default: false,
+    group: "general",
+    label: "Link previews in messages",
+    hint: "Off (default) means the bot never fetches pages or images to preview a URL it sends — a real saving on mobile data, since AI answers with sources, short links and scheduled messages all contain URLs. On lets WhatsApp-style previews generate (one page fetch per URL sent).",
+  },
+  {
     key: "bot_min_delay_ms",
     type: "int",
     default: 400,
@@ -306,10 +314,10 @@ const SETTINGS = [
   {
     key: "thumbnail_remote",
     type: "bool",
-    default: true,
+    default: false,
     group: "media",
     label: "Previews for remote media",
-    hint: "Download media sent by URL to build a thumbnail before forwarding it.",
+    hint: "Off (default) keeps the bot from downloading media over the network just to build a thumbnail — send paths pass local files or buffers, so this rarely matters. On allows fetching a remote URL (up to the size limit below) when a send is given media by URL.",
   },
   {
     key: "thumbnail_remote_max_mb",

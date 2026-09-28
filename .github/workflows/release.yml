@@ -177,25 +177,30 @@ jobs:
             ~/.cache/levix-android
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: android-${{ runner.os }}-${{ hashFiles('android/scripts/fetch-node-android.sh', 'android/gradle/wrapper/gradle-wrapper.properties', 'package-lock.json', 'frontend/package-lock.json') }}
+          key: android-${{ runner.os }}-${{ hashFiles('android/scripts/fetch-node-android.sh', 'android/scripts/build-ffmpeg-android.sh', 'android/gradle/wrapper/gradle-wrapper.properties', 'package-lock.json', 'frontend/package-lock.json') }}
           restore-keys: |
             android-${{ runner.os }}-
-      - name: Fetch Node Android runtimes (arm64 + armv7)
-        run: bash android/scripts/fetch-node-android.sh
-      - name: Set up Android SDK (API 36)
+      - name: Set up Android SDK (API 36) + NDK
         run: |
           set -e
-          if [ -d "$ANDROID_HOME/platforms/android-36" ]; then
-            echo "platforms;android-36 already present"
-            exit 0
-          fi
           # sdkmanager is not on the runner's PATH; it lives in the SDK.
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           if [ ! -x "$SDKMANAGER" ]; then
             SDKMANAGER="$(command -v sdkmanager)"
           fi
-          yes | "$SDKMANAGER" --licenses > /dev/null || true
-          "$SDKMANAGER" "platforms;android-36" > /dev/null
+          # The NDK FFmpeg is built with; the build script is the one place
+          # that names it.
+          NDK_VERSION="$(sed -n 's/^NDK_VERSION="\(.*\)"$/\1/p' android/scripts/build-ffmpeg-android.sh)"
+          PACKAGES=()
+          [ -d "$ANDROID_HOME/platforms/android-36" ] || PACKAGES+=("platforms;android-36")
+          [ -f "$ANDROID_HOME/ndk/$NDK_VERSION/source.properties" ] || PACKAGES+=("ndk;$NDK_VERSION")
+          if [ "${#PACKAGES[@]}" -gt 0 ]; then
+            yes | "$SDKMANAGER" --licenses > /dev/null || true
+            "$SDKMANAGER" "${PACKAGES[@]}" > /dev/null
+          fi
+          command -v pkg-config > /dev/null || sudo apt-get install -y pkg-config
+      - name: Fetch Node runtimes + build FFmpeg (arm64 + armv7)
+        run: bash android/scripts/fetch-node-android.sh
       - name: Decode Release Keystore
         env:
           LEVIX_KEYSTORE_BASE64: ${{ secrets.LEVIX_KEYSTORE_BASE64 }}

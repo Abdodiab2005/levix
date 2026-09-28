@@ -31,9 +31,9 @@ function tmpPath(ext) {
   );
 }
 
-async function synthesizeMp3(text, mp3Path) {
+async function synthesizeMp3(text, mp3Path, lang = "ar") {
   const parts = await googleTTS.getAllAudioBase64(text, {
-    lang: "ar",
+    lang,
     slow: false,
     timeout: 15_000,
     splitPunct: "،,.!?؟؛;:\n",
@@ -105,6 +105,31 @@ async function transcodeToOpus(mp3Path) {
   return null;
 }
 
+/**
+ * Text -> sendable voice payload, shared by the !tts command and the AI
+ * agent's `speak` tool. Resolves to { audio, mimetype, ptt }: Opus/OGG for a
+ * proper push-to-talk note when ffmpeg can transcode, raw MP3 otherwise.
+ * Temp files are cleaned up here either way.
+ */
+async function synthesizeVoice(text, lang = "ar") {
+  const mp3Path = tmpPath("mp3");
+  try {
+    await synthesizeMp3(text, mp3Path, lang);
+
+    const oggPath = await transcodeToOpus(mp3Path);
+    if (oggPath && fs.existsSync(oggPath)) {
+      const audio = await fsp.readFile(oggPath);
+      await fsp.unlink(oggPath).catch(() => {});
+      return { audio, mimetype: "audio/ogg; codecs=opus", ptt: true };
+    }
+
+    const audio = await fsp.readFile(mp3Path);
+    return { audio, mimetype: "audio/mpeg", ptt: false };
+  } finally {
+    await fsp.unlink(mp3Path).catch(() => {});
+  }
+}
+
 module.exports = {
   name: "tts",
   aliases: ["tovoice", "speak"],
@@ -133,34 +158,21 @@ module.exports = {
       );
     }
 
-    let mp3Path = null;
-    let oggPath = null;
-
     // One status line: it disappears once the voice note is on its way.
     const status = await createStatus(sock, chatId, "🎙️ بحوّل النص لصوت...", {
       replyTo: msg,
     });
 
     try {
-      mp3Path = tmpPath("mp3");
-      await synthesizeMp3(textToConvert, mp3Path);
+      const voice = await synthesizeVoice(textToConvert);
 
-      // Try to transcode to Opus for proper PTT delivery.
-      try {
-        oggPath = await transcodeToOpus(mp3Path);
-      } catch (err) {
-        logger.warn({ err: err?.message }, "[TTS] Opus transcode failed, will fall back to MP3");
-        oggPath = null;
-      }
-
-      if (oggPath && fs.existsSync(oggPath)) {
-        const audioBuffer = await fsp.readFile(oggPath);
+      if (voice.ptt) {
         await sendBotMessage(
           sock,
           chatId,
           {
-            audio: audioBuffer,
-            mimetype: "audio/ogg; codecs=opus",
+            audio: voice.audio,
+            mimetype: voice.mimetype,
             ptt: true,
           },
           { replyTo: msg, typing: false },
@@ -168,13 +180,12 @@ module.exports = {
       } else {
         // Fallback: send the raw MP3 with the correct mimetype. Cannot be
         // PTT — WhatsApp requires Opus for that — but at least it plays.
-        const audioBuffer = await fsp.readFile(mp3Path);
         await sendBotMessage(
           sock,
           chatId,
           {
-            audio: audioBuffer,
-            mimetype: "audio/mpeg",
+            audio: voice.audio,
+            mimetype: voice.mimetype,
             ptt: false,
           },
           { replyTo: msg, typing: false },
@@ -188,13 +199,9 @@ module.exports = {
     } catch (error) {
       logger.error({ err: error }, "[TTS] Error converting text to speech");
       await status.fail(error, "حصلت مشكلة وأنا بحوّل النص لصوت");
-    } finally {
-      for (const p of [mp3Path, oggPath]) {
-        if (!p) continue;
-        try {
-          await fsp.unlink(p);
-        } catch {}
-      }
     }
   },
+
+  // exported for the AI agent's `speak` tool — one synthesizer, two doors
+  _synthesizeVoice: synthesizeVoice,
 };
