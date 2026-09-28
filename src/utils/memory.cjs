@@ -334,43 +334,58 @@ function searchMemory(query, { scope = "chat", chatId } = {}) {
   return entries.filter((entry) => entry.content.toLowerCase().includes(needle));
 }
 
-function renderEntries(entries, limitChars) {
-  const lines = [];
-  let used = 0;
-  // Newest facts matter most, so fill from the end and restore order after.
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const line = `- ${entries[i].content.replace(/\n/g, " ")}`;
-    if (used + line.length > limitChars) break;
-    used += line.length + 1;
-    lines.unshift(line);
-  }
-  return lines.join("\n");
+/**
+ * The meaningful content of one memory file: the bot's entries AND any prose
+ * the operator wrote by hand (dashboard editor or a text editor). Entry
+ * metadata rides in trailing HTML comments and the file's own header/notes
+ * start with `#` or `>` — both are stripped; everything else is injected
+ * verbatim, so an edit made from the panel reaches the model the way it was
+ * written. Returns "" for a file with nothing to say.
+ */
+function memoryFileContext(raw) {
+  const lines = String(raw || "")
+    .split("\n")
+    .map((line) => line.replace(/<!--.*?-->/g, "").trimEnd())
+    .filter((line) => line.trim() && !line.startsWith("#") && !line.startsWith(">"));
+  return lines.join("\n").trim();
+}
+
+/** Keep the tail of a block (newest entries are appended at the bottom), cut on a line boundary. */
+function clipTail(text, limitChars) {
+  if (text.length <= limitChars) return text;
+  const kept = text.slice(-Math.max(1, limitChars));
+  const firstNewline = kept.indexOf("\n");
+  return firstNewline === -1 ? kept : kept.slice(firstNewline + 1);
 }
 
 /**
  * The memory block injected into the model's system instruction.
  * Returns "" when both files are empty, so a fresh install pays nothing.
+ *
+ * Both scopes are injected in full (prose included), each capped at half the
+ * character budget when both have content so one busy file can't starve the
+ * other.
  */
 function buildMemoryContext(chatId, { limitChars = maxContextChars() } = {}) {
-  const globalEntries = listMemory({ scope: "global" });
-  const chatEntries = chatId ? listMemory({ scope: "chat", chatId }) : [];
-  if (!globalEntries.length && !chatEntries.length) return "";
+  const globalText = memoryFileContext(readRaw(GLOBAL_FILE));
+  const chatText = chatId ? memoryFileContext(readRaw(memoryFilePath("chat", chatId))) : "";
+  if (!globalText && !chatText) return "";
 
-  const perScope = Math.floor(limitChars / (globalEntries.length && chatEntries.length ? 2 : 1));
+  const perScope = Math.floor(limitChars / (globalText && chatText ? 2 : 1));
   const blocks = [];
 
-  if (globalEntries.length) {
-    blocks.push(`### ذاكرة عامة (global.md)\n${renderEntries(globalEntries, perScope)}`);
+  if (globalText) {
+    blocks.push(`### ذاكرة عامة (global.md)\n${clipTail(globalText, perScope)}`);
   }
-  if (chatEntries.length) {
+  if (chatText) {
     blocks.push(
-      `### ذاكرة المحادثة دي (${safeFileName(chatId)}.md)\n${renderEntries(chatEntries, perScope)}`,
+      `### ذاكرة المحادثة دي (${safeFileName(chatId)}.md)\n${clipTail(chatText, perScope)}`,
     );
   }
 
   return [
     "## 🧠 الذاكرة الدائمة",
-    "دي معلومات اتحفظت قبل كده. اعتبرها حقيقة واستخدمها من غير ما تقول إنك بتقرأ من ملف.",
+    "دي معلومات اتحفظت قبل كده — سطور بالعلامة `-` اتسجلت بالبوت أو بصاحب البوت، وأي نص حر مكتوب هنا اتكتب بإيد صاحب البوت. اعتبر كل ده حقيقة واستخدمه من غير ما تقول إنك بتقرأ من ملف.",
     "",
     ...blocks,
   ].join("\n");

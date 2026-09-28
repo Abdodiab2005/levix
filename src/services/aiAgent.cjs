@@ -399,7 +399,9 @@ function formatSources(sources) {
  * @param {Array}    options.parts    - the Gemini parts for this message
  * @param {Array}    [options.history]- prior conversation
  * @param {object}   [options.status] - live status message (see utils/statusMessage.cjs)
- * @param {object}   [options.context]- { chatId, senderId, senderName, isOwner, isAdmin, isGroup, chatName }
+ * @param {object}   [options.context]- { caller, chatId, senderId, senderName, isOwner, isAdmin, isGroup, chatName }
+ *                                      `caller` (aiToolAuth.resolveCaller) is the only thing the
+ *                                      tools authorize against; the rest feeds the system prompt.
  * @param {boolean}  [options.useTools=true]
  * @returns {Promise<{text: string, history: Array, toolCalls: Array, steps: number}>}
  */
@@ -499,6 +501,7 @@ async function runGeminiTurn({
   useTools = true,
   maxSteps = null,
   systemInstruction = null,
+  search = null,
 } = {}) {
   const genAI = geminiClient();
   if (!genAI) throw new Error("GEMINI_API_KEY غير معرف");
@@ -530,7 +533,9 @@ async function runGeminiTurn({
     });
   };
 
-  let searchOffered = googleSearchEnabled();
+  // One-shot callers (the summarize tool) pass search:false explicitly; the
+  // chat agent follows the setting.
+  let searchOffered = search === null ? googleSearchEnabled() : Boolean(search);
   let chat = openChat(searchOffered);
   const toolCalls = [];
   // Only ever filled from real grounding metadata; see extractSources().

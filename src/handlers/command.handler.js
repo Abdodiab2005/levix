@@ -4,6 +4,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { checkBotAdmin, checkCommandPermission } from "../middleware/permissions.middleware.js";
 import { sendBotMessage } from "../utils/sendBotMessage.esm.js";
+import { resolveGroupMetadata } from "../utils/groupMetadataCache.cjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -289,9 +290,10 @@ export async function handleCommand(sock, msg, body) {
   }
 
   try {
-    const groupMetadata = isGroup
-      ? await sock.groupMetadata(msg.key.remoteJid).catch(() => null)
-      : null;
+    // Cache-first: a live query only when no cached metadata exists yet (see
+    // utils/groupMetadataCache.cjs — this used to be one network round-trip
+    // per command attempt in every group).
+    const groupMetadata = isGroup ? await resolveGroupMetadata(sock, msg.key.remoteJid) : null;
 
     if (command.name !== "group") {
       // Enforce the `chat` constraint declared by the command. Until now this

@@ -11,6 +11,7 @@ import {
 
 const require = createRequire(import.meta.url);
 const runtimeConfig = require("../config/runtime-config.cjs");
+const { evaluatePermissionLevel } = require("../utils/permissionLevel.cjs");
 const logger = require("../utils/logger.cjs");
 
 /**
@@ -28,6 +29,41 @@ function resolvePermissionLevel(commandName) {
 }
 
 /**
+ * Who sent `msg`, as far as permissions are concerned. The same answer backs
+ * the command dispatcher and the AI agent's tools (services/aiToolAuth.cjs),
+ * so a person is never an admin for one door and a member for the other.
+ *
+ * @param {object} msg           - Baileys message
+ * @param {object} groupMetadata - Group metadata (null for private chats)
+ * @param {object} sock          - Baileys socket
+ * @returns {{isGroup: boolean, senderId: string|null, candidates: string[],
+ *            isOwner: boolean, isBotAdmin: boolean, isGroupAdmin: boolean,
+ *            isSenderAdmin: boolean}}
+ */
+export function resolveSender(msg, groupMetadata, sock) {
+  const isGroup = Boolean(msg?.key?.remoteJid?.endsWith("@g.us"));
+  const senderId = getSenderId(msg, sock);
+
+  // v7/LID: check every identifier the sender could appear under (LID + PN
+  // alternates), so owner/admin detection isn't defeated by a LID<->PN mismatch.
+  const senderCandidates = getSenderCandidates(msg, sock);
+  const candidates = senderCandidates.length ? senderCandidates : [senderId].filter(Boolean);
+
+  // fromMe is an immediate owner indicator (the bot is always its own owner).
+  const isOwner = Boolean(msg?.key?.fromMe) || candidates.some((c) => isOwnerJid(c));
+
+  // Bot-level admins (granted with `!perm add admin`, from the dashboard, or by
+  // asking the AI) count as admins everywhere — including DMs, where there is
+  // no group roster to consult.
+  const isBotAdmin = !isOwner && candidates.some((c) => isBotAdminUser(c));
+
+  const isGroupAdmin = isGroup && candidates.some((c) => isAdminInGroup(groupMetadata, c));
+  const isSenderAdmin = isBotAdmin || isGroupAdmin;
+
+  return { isGroup, senderId, candidates, isOwner, isBotAdmin, isGroupAdmin, isSenderAdmin };
+}
+
+/**
  * Check if user has permission to execute a command.
  *
  * @param {string} commandName - Canonical command name
@@ -37,70 +73,21 @@ function resolvePermissionLevel(commandName) {
  * @returns {{hasPermission: boolean, reason: string, isOwner: boolean, isSenderAdmin: boolean}}
  */
 export function checkCommandPermission(commandName, msg, groupMetadata, sock) {
-  const isGroup = msg.key.remoteJid?.endsWith("@g.us");
-  const senderId = getSenderId(msg, sock);
-
-  // v7/LID: check every identifier the sender could appear under (LID + PN
-  // alternates), so owner/admin detection isn't defeated by a LID<->PN mismatch.
-  const senderCandidates = getSenderCandidates(msg, sock);
-  const candidates = senderCandidates.length ? senderCandidates : [senderId];
-
-  // fromMe is an immediate owner indicator (the bot is always its own owner).
-  const isOwner = msg.key.fromMe || candidates.some((c) => isOwnerJid(c));
-
-  // Bot-level admins (granted with `!perm add admin`, from the dashboard, or by
-  // asking the AI) count as admins everywhere — including DMs, where there is
-  // no group roster to consult.
-  const isBotAdmin = !isOwner && candidates.some((c) => isBotAdminUser(c));
-
-  const isSenderAdmin =
-    isBotAdmin || (isGroup ? candidates.some((c) => isAdminInGroup(groupMetadata, c)) : false);
-
+  const sender = resolveSender(msg, groupMetadata, sock);
   const permissionLevel = resolvePermissionLevel(commandName);
+  const { hasPermission, reason, unknownLevel } = evaluatePermissionLevel(permissionLevel, sender);
 
-  let hasPermission = false;
-  let reason = "";
-
-  switch (permissionLevel) {
-    case "MEMBERS":
-    case "ALL":
-      hasPermission = true;
-      break;
-
-    case "OWNER_ONLY":
-      hasPermission = isOwner;
-      reason = "🚫 هذا الأمر متاح للمالك فقط.";
-      break;
-
-    case "ADMINS_ONLY":
-      if (!isGroup) {
-        // Owners and bot-admins can run admin-only commands from anywhere —
-        // useful for the operator pinging the bot privately to manage a group.
-        hasPermission = isOwner || isBotAdmin;
-        reason = "⚠️ هذا الأمر يعمل في المجموعات فقط (أو للمالك في الخاص).";
-      } else {
-        hasPermission = isSenderAdmin || isOwner;
-        reason = "🚫 هذا الأمر متاح للمشرفين فقط.";
-      }
-      break;
-
-    case "ADMINS_OWNER":
-      if (!isGroup) {
-        hasPermission = isOwner || isBotAdmin;
-        reason = "⚠️ هذا الأمر يعمل في المجموعات أو للمالك فقط.";
-      } else {
-        hasPermission = isOwner || isSenderAdmin;
-        reason = "🚫 هذا الأمر متاح للمشرفين والمالك فقط.";
-      }
-      break;
-
-    default:
-      logger.warn(`Unknown permission level: ${permissionLevel} for command: ${commandName}`);
-      hasPermission = false;
-      reason = "🚫 مستوى الصلاحية غير معروف.";
+  if (unknownLevel) {
+    logger.warn(`Unknown permission level: ${permissionLevel} for command: ${commandName}`);
   }
 
-  return { hasPermission, reason, isOwner, isSenderAdmin, isBotAdmin };
+  return {
+    hasPermission,
+    reason,
+    isOwner: sender.isOwner,
+    isSenderAdmin: sender.isSenderAdmin,
+    isBotAdmin: sender.isBotAdmin,
+  };
 }
 
 /**

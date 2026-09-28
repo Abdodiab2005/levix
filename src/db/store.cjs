@@ -792,6 +792,28 @@ function deleteAllChatHistories() {
   q("DELETE FROM ai_history").run();
 }
 
+// Read-only views for the dashboard's conversation inspector: which chats
+// have stored history (no message content), and one chat's history with its
+// last-updated stamp. `json_array_length` counts the stored turns without
+// parsing the blob in JavaScript.
+function listChatHistories() {
+  return q(
+    `SELECT chat_id AS chatId,
+            updated_at AS updatedAt,
+            json_array_length(history) AS turns
+     FROM ai_history
+     ORDER BY updated_at DESC`,
+  ).all();
+}
+
+function getChatHistoryWithMeta(chatId) {
+  const row = q("SELECT history, updated_at AS updatedAt FROM ai_history WHERE chat_id = ?").get(
+    chatId,
+  );
+  if (!row) return null;
+  return { history: parseJson(row.history, []), updatedAt: row.updatedAt };
+}
+
 // ===================================================================
 // --- Baileys auth ---
 // ===================================================================
@@ -975,6 +997,8 @@ module.exports = {
   countSchedules,
   // AI history
   getChatHistory,
+  getChatHistoryWithMeta,
+  listChatHistories,
   saveChatHistory,
   deleteChatHistory,
   deleteAllChatHistories,

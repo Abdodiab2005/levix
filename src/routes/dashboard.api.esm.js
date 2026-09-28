@@ -323,6 +323,8 @@ router.patch("/settings", (req, res) => {
         visionEnabled: key === "ai_vision_enabled" ? value : settings.get("ai_vision_enabled"),
         sttEnabled: key === "ai_stt_enabled" ? value : settings.get("ai_stt_enabled"),
         capabilities: resolved.capabilities,
+        capabilitySource: resolved.capabilitySource,
+        autoDetect: settings.get("ai_auto_detect_capabilities"),
       });
       if (key === "ai_vision_enabled") value = next.visionEnabled;
       if (key === "ai_stt_enabled") value = next.sttEnabled;
@@ -359,6 +361,8 @@ router.patch("/settings", (req, res) => {
         visionEnabled: settings.get("ai_vision_enabled"),
         sttEnabled: settings.get("ai_stt_enabled"),
         capabilities: resolved.capabilities,
+        capabilitySource: resolved.capabilitySource,
+        autoDetect: settings.get("ai_auto_detect_capabilities"),
       });
       if (Boolean(settings.get("ai_vision_enabled")) !== next.visionEnabled) {
         settings.set("ai_vision_enabled", next.visionEnabled);
@@ -512,16 +516,16 @@ router.get("/ai/memory", (req, res) => {
   try {
     const scopes = [];
 
-    if (fs.existsSync(memory.GLOBAL_FILE)) {
-      const stat = fs.statSync(memory.GLOBAL_FILE);
-      scopes.push({
-        scope: "global",
-        label: "Global memory",
-        entries: memory.listMemory({ scope: "global" }).length,
-        bytes: stat.size,
-        updatedAt: stat.mtimeMs,
-      });
-    }
+    // Global is always offered — even before the file exists — so the editor
+    // can create it with the first save.
+    const stat = fs.existsSync(memory.GLOBAL_FILE) ? fs.statSync(memory.GLOBAL_FILE) : null;
+    scopes.push({
+      scope: "global",
+      label: "Global memory",
+      entries: memory.listMemory({ scope: "global" }).length,
+      bytes: stat?.size ?? 0,
+      updatedAt: stat?.mtimeMs ?? null,
+    });
 
     if (fs.existsSync(memory.CHATS_DIR)) {
       for (const file of fs.readdirSync(memory.CHATS_DIR)) {
@@ -580,6 +584,83 @@ router.delete("/ai/memory/:scope", (req, res) => {
     return badRequest(res, error.message);
   }
 });
+
+// ===========================================================================
+// AI conversation inspector — read-only views of the stored `ai_history`
+//
+// The bot deliberately keeps only its own conversation windows, and the panel
+// may look at them but never change them: deletes stay with `!del` / `!delall`
+// in WhatsApp, so this endpoint is GET-only on purpose.
+// ===========================================================================
+
+const MAX_INSPECTOR_MESSAGES = 200;
+const MAX_INSPECTOR_TEXT_CHARS = 2000;
+
+router.get("/ai/conversations", (req, res) => {
+  getChatHistoryListAsync()
+    .then((conversations) => res.json({ success: true, conversations }))
+    .catch((error) => fail(res, error, "Error listing conversations"));
+});
+
+router.get("/ai/conversations/:chatId", (req, res) => {
+  getChatConversationAsync(req.params.chatId)
+    .then((conversation) => {
+      if (!conversation) return badRequest(res, "No stored conversation for that chat");
+      res.json({ success: true, ...conversation });
+    })
+    .catch((error) => fail(res, error, "Error reading conversation"));
+});
+
+async function getChatHistoryListAsync() {
+  const { listChatHistoriesAsync } = require("../utils/storage-hub.cjs");
+  const rows = await listChatHistoriesAsync();
+  return (rows || []).map((row) => ({
+    chatId: row.chatId,
+    turns: row.turns ?? 0,
+    updatedAt: row.updatedAt ?? null,
+  }));
+}
+
+// Flatten the canonical Gemini-parts history into display rows: text, media
+// references (mime only — the bytes were never stored) and tool activity.
+// Oldest first, capped to the most recent MAX_INSPECTOR_MESSAGES rows.
+async function getChatConversationAsync(chatId) {
+  const { getChatHistoryWithMetaAsync } = require("../utils/storage-hub.cjs");
+  const meta = await getChatHistoryWithMetaAsync(chatId);
+  if (!meta) return null;
+
+  const messages = [];
+  for (const entry of Array.isArray(meta.history) ? meta.history : []) {
+    const role = entry?.role === "model" ? "model" : "user";
+    for (const part of Array.isArray(entry?.parts) ? entry.parts : []) {
+      if (messages.length >= MAX_INSPECTOR_MESSAGES) break;
+      if (typeof part?.text === "string" && part.text.trim()) {
+        messages.push({ role, kind: "text", text: part.text.slice(0, MAX_INSPECTOR_TEXT_CHARS) });
+      } else if (part?.fileData || part?.inlineData) {
+        messages.push({
+          role,
+          kind: "media",
+          mimeType: part?.fileData?.mimeType || part?.inlineData?.mimeType || null,
+        });
+      } else if (part?.functionCall) {
+        messages.push({
+          role: "model",
+          kind: "tool",
+          name: part.functionCall.name || "unknown",
+        });
+      } else if (part?.functionResponse) {
+        messages.push({
+          role: "user",
+          kind: "toolResult",
+          name: part.functionResponse.name || "unknown",
+        });
+      }
+    }
+    if (messages.length >= MAX_INSPECTOR_MESSAGES) break;
+  }
+
+  return { chatId, updatedAt: meta.updatedAt ?? null, truncated: messages.length >= MAX_INSPECTOR_MESSAGES, messages };
+}
 
 // ===========================================================================
 // Groups

@@ -96,6 +96,20 @@ export async function sendBotMessage(sock, jid, content, options = {}) {
     if (quotedMsg) opts.quoted = quotedMsg;
   }
 
+  // Link previews are opt-in (default off, see `link_previews_enabled`):
+  // without an explicit `linkPreview`, Baileys fetches the page behind any URL
+  // in the text. `null` skips that. The socket-level wrapper in core/socket.js
+  // enforces the same rule for callers that bypass this helper.
+  if (
+    content &&
+    typeof content === "object" &&
+    typeof content.text === "string" &&
+    !("linkPreview" in content) &&
+    !settings.get("link_previews_enabled")
+  ) {
+    content = { ...content, linkPreview: null };
+  }
+
   try {
     const sent = await sock.sendMessage(jid, content, opts);
     lastSendTime.set(jid, Date.now());

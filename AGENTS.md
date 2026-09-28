@@ -164,6 +164,7 @@ src/
 │   ├── aiAgent.cjs   # The Gemini agent loop + provider dispatch (tools, memory, live status)
 │   ├── aiProviders.cjs # The openai/anthropic loops over their own wire formats
 │   ├── aiTools.cjs   # The tools the agent can call
+│   ├── aiToolAuth.cjs # who a tool call acts for, and whether they may
 │   ├── llmDiscovery.cjs # live, credential-scoped model discovery
 │   └── modelRegistry.cjs # model catalog and capability lookup
 └── utils/            # Utility functions (Mixed)
@@ -524,9 +525,14 @@ memory/*.md                   (long-term memory, capped)
 | --- | --- |
 | `web_search` | DuckDuckGo, or Google Programmable Search when `GOOGLE_SEARCH_API_KEY` + `GOOGLE_SEARCH_CX` are set |
 | `fetch_url` | opens an **HTTPS-only** page and reads its text — the host is resolved and every redirect hop is re-checked against private/loopback/link-local ranges, and redirects cannot downgrade to HTTP |
-| `save_memory` | writes a fact to `memory/global.md` or `memory/chats/<chat>.md` — global scope is gated on the **caller** being admin/owner |
-| `search_memory` / `forget_memory` | read / delete memory entries — deletes are gated on the **caller**, same rule as `!memory forget` |
-| `grant_role` / `revoke_role` / `list_roles` | bot owner / admin roles — gated on the **caller**, owner only |
+| `save_memory` | writes a fact to `memory/global.md` or `memory/chats/<chat>.md` — gated like `!memory add` (global: owner or bot admin) |
+| `search_memory` / `forget_memory` | read / delete memory entries — gated like `!memory search` / `!memory forget` |
+| `grant_role` / `revoke_role` / `list_roles` | bot owner / admin roles — gated like `!perm` (owner only by default; the owner role always needs the owner), and a role target must be one the sender named |
+| `create_reminder` / `cancel_reminder` | a one-off message into this chat, through the scheduler — gated like `!schedule` / `!deleteschedule` |
+| `calculate` | the `!calc` parser (never `eval`) |
+| `speak` | the reply as a WhatsApp voice note, through the `!tts` synthesizer — gated like `!tts` |
+| `create_poll` | a native WhatsApp poll, through `!poll`'s builder (same 2-12 option limits) — gated like `!poll` |
+| `summarize_chat` | one-shot, tool-less model call over the stored conversation window, then up to 8 short facts into long-term memory — saves to a chat gated like `!memory add`, global scope needs the owner/admin role. Runs only when the user asks; the model cannot choose the saved text, only request the summary |
 | `get_datetime` | current time in `BOT_TIMEZONE` |
 
 **Google Search is not in that table on purpose.** It is Gemini's own built-in
@@ -586,17 +592,35 @@ voice note onto it as well.
 
 `gemini-3.1-pro-preview-customtools` was audited and **rejected**: it is a
 separate endpoint tuned for agents that mix **bash** with custom tools, so the
-model stops preferring bash. Levix has no bash tool — its nine are search,
-fetch, memory, roles and the clock — and Google warns the variant can show
+model stops preferring bash. Levix has no bash tool — its tools are search,
+fetch, memory, roles, reminders, a calculator and the clock — and Google warns the variant can show
 "quality fluctuations in some use cases which don't benefit from such tools".
 
 Tools never throw: a failure comes back as `{ error }` so the model can explain
 it. Bounded by `AI_MAX_TOOL_STEPS` rounds and `AI_TOOL_TIMEOUT_MS` per call.
 
-Anything privileged is checked **in the tool, against the real sender** — never
-in the prompt. The agent reads web pages and other people's messages, so any of
-them can ask it to write to the shared memory or hand out a role; the tool is
-what says no.
+Anything privileged is checked **against the real sender** — never in the
+prompt, never from tool arguments. The agent reads web pages, quoted messages
+and other people's text, so any of them can ask it to write to the shared
+memory, hand out a role or schedule a message; `src/services/aiToolAuth.cjs` is
+what says no:
+
+- `gemini.cjs` resolves the **caller** once, from the message that invoked the
+  AI, with the dispatcher's own `resolveSender()` (every LID/PN candidate), and
+  freezes it. Only a caller minted by `resolveCaller()` is trusted — a copy, a
+  plain `{ isOwner: true }`, or anything built from arguments is nobody. A
+  quoted message's author is a *target*, never the caller.
+- A tool with a side effect declares `access: { command, role? }`: the command
+  it stands in for, plus the role that command checks inside (global memory,
+  the owner role). `runTool()` evaluates it **before** `run()` — the command's
+  live level from `runtime-config` through the same
+  `evaluatePermissionLevel()` (`src/utils/permissionLevel.cjs`) the dispatcher
+  uses — so a dashboard change to `!schedule` moves `create_reminder` with it.
+- `run()` receives only the arguments the tool's schema declares (frozen), and
+  takes every identity it acts on — chat, sender, targets — from the caller.
+
+A new tool that writes, sends, schedules, or reads owner/admin data needs an
+`access` entry; `tests/ai-tool-authz.test.mjs` pins the rules.
 
 **Sub-commands**
 - `!gemini <text>` / `!ask` / `!ai` — ask the agent
@@ -813,6 +837,35 @@ caller anyway, so the UI marks them locked instead of lying.
 **There is no `.env` file and no config file.** Everything an operator can
 change is a row in the database, edited from the control panel.
 
+**Low-data usage is an explicit design goal** — many operators run this on
+expensive or limited mobile connections. The defaults are chosen so the bot
+never spends a byte the operator didn't ask for:
+
+- `syncFullHistory: false` + `shouldSyncHistoryMessage: () => false` — the
+  multi-megabyte history blob is never requested, ever. Do not "fix" this.
+- **Link previews are opt-in** (`link_previews_enabled`, default off): the
+  outbound wrapper (`src/core/socket.js`) and `sendBotMessage` pass
+  `linkPreview: null` for any text that doesn't set it explicitly, because
+  Baileys otherwise silently fetches the page behind every URL in outgoing
+  messages (and uploads the preview image for high quality). AI answers with
+  Sources blocks, short links and scheduled messages all contain URLs.
+- **Remote thumbnails are opt-in** (`thumbnail_remote`, default off): the bot
+  doesn't download media over the network just to build a send preview.
+- **Group metadata is cache-first** (`src/utils/groupMetadataCache.cjs`):
+  per-message paths call `resolveGroupMetadata()` and only a cache miss makes
+  one live query.
+- **Full group rosters are TTL-gated** (`GROUP_SYNC_TTL_MS` in
+  `src/core/connection.js`, 6h): `groupFetchAllParticipating()` runs on the
+  first connection open and then only when stale or forced; pushed `groups.*`
+  events keep the cache fresh in between.
+
+What still hits the network, and why that's the floor: the WebSocket and its
+keepalives, encryption prekeys and retry/resend negotiation, three small init
+queries per connect (props, blocklist, privacy settings), small app-state
+patches, and the WhatsApp pushes for every chat the account is in (selective
+receiving is not possible — selectivity lives in what we *do* with them, which
+is nothing for status/broadcast/newsletter).
+
 A setting resolves in two steps, and both the panel and the WhatsApp commands
 go through the same accessors:
 
@@ -897,7 +950,13 @@ logger.debug('Debug info');
 
 1. **Module System Mixing**: Always check if file is ESM or CommonJS before importing
 2. **JID Normalization**: Use `normalizeJid()` for all JID operations (v7 compatibility)
-3. **Group Metadata Cache**: Cached in `src/core/socket.js:7`, automatically updated
+3. **Group Metadata Cache**: one shared instance in
+   `src/utils/groupMetadataCache.cjs`, populated on connection open
+   (`cacheAllGroups`, TTL-gated), by pushed `groups.*` events, and by
+   write-back on miss. Per-message paths must read it through
+   `resolveGroupMetadata(sock, jid)` — `sock.groupMetadata()` is ALWAYS a live
+   server query (Baileys never consults its own `cachedGroupMetadata` hook for
+   it), so calling it per message costs a network round-trip each time.
 4. **Async Command Execution**: All command `execute` functions should be `async`
 5. **Message Types**: Handle `conversation`, `extendedTextMessage`, `imageMessage`, etc.
 6. **Connection Retry**: owned by `src/core/session.js`, staged linear backoff
@@ -987,6 +1046,11 @@ logger.debug('Debug info');
     JIDs and device suffixes can name the same user. Moderation and role gates
     must use `sameUser()`, `getSenderCandidates()` and `isAdminInGroup()` rather
     than exact string equality.
+28. **An AI tool with a side effect declares `access`.** Name the command it
+    stands in for (`{ command: "schedule" }`) and let `runTool()` enforce it
+    against `ctx.caller`. Never read who is calling from the tool's arguments,
+    and never hand-roll `isOwner` checks inside `run()` — see
+    `src/services/aiToolAuth.cjs`.
 
 ## Testing Workflow
 

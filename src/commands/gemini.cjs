@@ -35,11 +35,8 @@ const {
 const { sendBotMessage, sendBotError } = require("../utils/sendBotMessage.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const { formatMarkdownForWhatsApp } = require("../utils/markdownParser.cjs");
-const {
-  isOwnerJidSync,
-  isBotAdminUserSync,
-  isAdminInGroupSync,
-} = require("../utils/permissions.cjs");
+const { isOwnerJidSync } = require("../utils/permissions.cjs");
+const { resolveCaller } = require("../services/aiToolAuth.cjs");
 const {
   runAgent,
   formatSources,
@@ -253,8 +250,6 @@ module.exports = {
 
     const senderId = msg.key.fromMe ? null : isGroup ? msg.key.participant : msg.key.remoteJid;
     const isOwner = msg.key.fromMe || isOwnerJidSync(senderId);
-    const isBotAdmin = isOwner || isBotAdminUserSync(senderId);
-    const isGroupAdmin = Boolean(isGroup && isAdminInGroupSync(groupMetadata, senderId));
 
     // Resolve sub-command. Aliases like !del arrive via ctx.invokedName, while
     // `!gemini del ...` arrives as args[0].
@@ -601,28 +596,30 @@ module.exports = {
       );
     }
 
-    // Everyone the agent needs to know about, plus the ids its role tools act
-    // on (a mention/reply is how "خلي فلان أدمن" gets resolved).
-    const contextInfo = msg.message?.extendedTextMessage?.contextInfo;
+    // Who the agent acts for: the sender of THIS message, resolved exactly the
+    // way the command dispatcher resolves them, and frozen. The tools
+    // authorize against it and nothing else — not the quoted message's author,
+    // not a name in a web page, not anything the model writes into arguments.
+    const caller = await resolveCaller({ msg, sock, groupMetadata, text: body || "" });
     const agentContext = {
+      caller,
+      // Infrastructure, not identity: tools that post media (speak, poll)
+      // send through the socket this run started with. Who they act for is
+      // `caller` and only `caller`.
+      sock,
+      // What the system prompt tells the model about the conversation.
       chatId,
-      senderId,
+      senderId: caller.senderId,
       senderName: userName,
-      isOwner,
-      isAdmin: isBotAdmin,
-      isGroupAdmin,
+      isOwner: caller.isOwner,
+      isAdmin: caller.isOwner || caller.isBotAdmin,
       isGroup,
-      chatName: groupMetadata?.subject || null,
-      mentionedJids: contextInfo?.mentionedJid || [],
-      quotedParticipant: contextInfo?.participant || null,
-      userText: body || "",
+      chatName: caller.chatName,
     };
 
     // Mentions/replies are ids the model can't invent — hand them over so
     // "اعمل الراجل ده أدمن" has something concrete to act on.
-    const targets = [...(agentContext.mentionedJids || []), agentContext.quotedParticipant].filter(
-      Boolean,
-    );
+    const targets = [...caller.mentionedJids, caller.quotedParticipant].filter(Boolean);
     if (targets.length) {
       parts.unshift({
         text: `(معرفات مذكورة في الرسالة: ${[...new Set(targets)].join(", ")})`,

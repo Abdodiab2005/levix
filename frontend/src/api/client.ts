@@ -139,12 +139,32 @@ export const api = {
     api.get<{ persona: { header?: string; body?: string } | string }>("/ai/persona"),
   updatePersona: (persona: string) => api.put("/ai/persona", { body: persona }),
   getMemoryFiles: () =>
-    api.get<{ files?: string[]; scopes?: Array<{ scope: string; label: string }> }>("/ai/memory"),
+    api.get<{
+      files?: string[];
+      scopes?: Array<{ scope: string; label: string; entries?: number; bytes?: number; updatedAt?: number | null }>;
+    }>("/ai/memory"),
   getMemoryFile: (name: string) =>
     api.get<{ content: string }>(`/ai/memory/${encodeURIComponent(name)}`),
   updateMemoryFile: (name: string, content: string) =>
     api.put(`/ai/memory/${encodeURIComponent(name)}`, { content }),
   deleteMemoryFile: (name: string) => api.delete(`/ai/memory/${encodeURIComponent(name)}`),
+  getAiConversations: () =>
+    api.get<{ conversations: Array<{ chatId: string; turns: number; updatedAt: number | null }> }>(
+      "/ai/conversations",
+    ),
+  getAiConversation: (chatId: string) =>
+    api.get<{
+      chatId: string;
+      updatedAt: number | null;
+      truncated: boolean;
+      messages: Array<{
+        role: "user" | "model";
+        kind: "text" | "media" | "tool" | "toolResult";
+        text?: string;
+        mimeType?: string | null;
+        name?: string;
+      }>;
+    }>(`/ai/conversations/${encodeURIComponent(chatId)}`),
   getRecipients: () =>
     api.get<{
       recipients: Array<{

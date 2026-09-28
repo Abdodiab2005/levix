@@ -15,9 +15,9 @@
         <item name="colorOnSurface">@color/levix_text</item>
         <item name="colorOnSurfaceVariant">@color/levix_text_muted</item>
 
-        <!-- Status & Navigation Bars -->
-        <item name="android:statusBarColor">@color/levix_bg</item>
-        <item name="android:navigationBarColor">@color/levix_bg</item>
+        <!-- System bars: transparent, drawn over by the activities
+             (enableEdgeToEdge). statusBarColor / navigationBarColor are
+             deprecated since Android 15 and ignored there. -->
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
     </style>

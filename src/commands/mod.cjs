@@ -3,6 +3,7 @@
 const { getGroupSettings, saveGroupSettings } = require("../utils/storage.cjs");
 const { isOwnerJidSync, isAdminInGroupSync } = require("../utils/permissions.cjs");
 const { visibleText } = require("../utils/messageContent.cjs");
+const { resolveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
 
 // الهيكل الافتراضي لإعدادات المراقبة
 const defaultModSettings = {
@@ -197,7 +198,8 @@ async function handleForbiddenWords(sock, msg) {
 
   const senderId = msg.key.participant || msg.key.remoteJid;
   const senderIds = [senderId, msg.key.participantAlt, msg.key.participantPn].filter(Boolean);
-  const groupMetadata = await sock.groupMetadata(groupId);
+  // Cache-first: this runs on every group message while forbidden words are on.
+  const groupMetadata = await resolveGroupMetadata(sock, groupId);
   if (
     msg.key.fromMe ||
     senderIds.some(isOwnerJidSync) ||

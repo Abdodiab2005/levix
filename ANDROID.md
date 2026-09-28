@@ -114,7 +114,7 @@ Levix includes intelligent network and connection lifecycle handling:
 
 ## Media & Native Audio Transcoding (FFmpeg)
 
-Levix bundles a native build of **FFmpeg** (`libffmpeg.so` — ARM64 or ARMv7, matching the APK) inside the APK.
+Levix bundles a native build of **FFmpeg** (`libffmpeg.so` — ARM64 or ARMv7, matching the APK) inside the APK, compiled from source with NDK r29 so it is safe on 16 KB-page devices.
 - **Voice Notes (`!tts`)**: The Text-to-Speech command automatically transcodes Google TTS MP3 audio into true WhatsApp PTT voice notes (`audio/ogg; codecs=opus`).
 - **Media Previews**: Video and picture thumbnails (`jpegThumbnail`) are generated locally on the phone before sending, ensuring crisp previews in chat bubbles and quotes.
 - No external packages or Termux setup are required.
@@ -159,15 +159,15 @@ If you prefer to compile Levix Host from source:
 ### 1. Prerequisites
 - **JDK 17** & **Android SDK 36** (`$ANDROID_HOME` configured)
 - **Node.js 24+** on your development machine
-- Tools: `zip`, `rsync`, `curl`, `python3`, `dpkg-deb` (for extracting the runtime packages)
+- Tools: `zip`, `unzip`, `rsync`, `curl`, `python3`, `dpkg-deb` (for extracting the runtime packages), `make` and `pkg-config` (for building FFmpeg)
 
 ### 2. Fetch the Embedded Node.js Runtimes (ARM64 + ARMv7)
-Download and unpack the Node.js 24 binaries for Android (both ABIs, plus a per-ABI FFmpeg):
+Download and unpack the Node.js 24 binaries for Android and build FFmpeg for each ABI (the first run downloads NDK r29 unless `$ANDROID_HOME/ndk/29.0.14206865` exists):
 ```bash
 android/scripts/fetch-node-android.sh                 # both ABIs
 android/scripts/fetch-node-android.sh arm64-v8a       # one ABI only
 ```
-The script verifies every 64-bit ELF is 16 KB page aligned — required by Google Play for apps targeting API 35+ — and fails the build otherwise.
+The script verifies every 64-bit ELF is safe on 16 KB-page devices — 16 KB aligned, RELRO not sharing a page with writable data, built with NDK r28+ — as Google Play requires for apps targeting API 35+, and fails the build otherwise.
 
 ### 3. Build the APKs
 Run Gradle to assemble one APK per ABI:

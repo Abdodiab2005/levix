@@ -42,7 +42,11 @@ export const getBaileysConfig = (cachedGroupMetadata, { pairingCode = false } = 
   placeholderResendCache,
   enableAutoSessionRecreation: true,
   enableRecentMessageCache: true,
-  generateHighQualityLinkPreview: true,
+  // High-quality link previews upload the fetched page image to WhatsApp's
+  // media servers. Even when the operator opts into previews
+  // (link_previews_enabled), the plain jpegThumbnail path is enough — this
+  // flag stays off to keep that optional feature as cheap as possible.
+  generateHighQualityLinkPreview: false,
 
   // V7: Add getMessage for message history
   getMessage: async (key) => {

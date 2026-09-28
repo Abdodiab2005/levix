@@ -330,14 +330,29 @@ function resolveCapabilities(provider, modelId, providerCaps = null) {
 /**
  * Independent vision / STT guards. Unsupported features are forced off;
  * supported features keep the operator's existing choice.
+ *
+ * "Unknown" is not "unsupported": a model the registry has never seen (a new
+ * Gemini drop, a gateway's own id) must keep the operator's toggles exactly as
+ * they are, otherwise enabling vision/STT on a custom endpoint is impossible —
+ * the save would be silently reverted. Only seed/live metadata that says
+ * `vision: false` / `stt: false` counts as proof, and even that only when the
+ * operator left auto-detection on (`ai_auto_detect_capabilities`).
  */
-function applyCapabilityGuards({ visionEnabled, sttEnabled, capabilities }) {
+function applyCapabilityGuards({
+  visionEnabled,
+  sttEnabled,
+  capabilities,
+  capabilitySource = "seed",
+  autoDetect = true,
+}) {
   const caps = normalizeCapabilities(capabilities);
+  const known = capabilitySource === "seed" || capabilitySource === "provider";
+  const enforce = Boolean(autoDetect) && known;
   return {
-    visionEnabled: caps.vision ? Boolean(visionEnabled) : false,
-    sttEnabled: caps.stt ? Boolean(sttEnabled) : false,
-    visionLocked: !caps.vision,
-    sttLocked: !caps.stt,
+    visionEnabled: enforce && !caps.vision ? false : Boolean(visionEnabled),
+    sttEnabled: enforce && !caps.stt ? false : Boolean(sttEnabled),
+    visionLocked: enforce && !caps.vision,
+    sttLocked: enforce && !caps.stt,
   };
 }
 

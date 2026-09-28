@@ -8,6 +8,8 @@ import {
   Eye,
   FileText,
   Globe,
+  History,
+  MessageSquare,
   Mic,
   RefreshCw,
   Save,
@@ -62,9 +64,32 @@ export const AIAssistantView: React.FC = () => {
   // Persona & Memory modals
   const [personaModalOpen, setPersonaModalOpen] = useState(false);
   const [personaText, setPersonaText] = useState("");
-  const [_memoryFiles, setMemoryFiles] = useState<string[]>([]);
+  const [memoryScopes, setMemoryScopes] = useState<
+    Array<{ scope: string; label: string; entries: number }>
+  >([]);
   const [selectedMemoryFile, setSelectedMemoryFile] = useState<string | null>(null);
   const [memoryContent, setMemoryContent] = useState("");
+  const [memoryLoading, setMemoryLoading] = useState(false);
+
+  // Conversation inspector (read-only)
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [conversations, setConversations] = useState<
+    Array<{ chatId: string; turns: number; updatedAt: number | null }>
+  >([]);
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
+  const [conversation, setConversation] = useState<{
+    chatId: string;
+    updatedAt: number | null;
+    truncated: boolean;
+    messages: Array<{
+      role: "user" | "model";
+      kind: "text" | "media" | "tool" | "toolResult";
+      text?: string;
+      mimeType?: string | null;
+      name?: string;
+    }>;
+  } | null>(null);
+  const [inspectorLoading, setInspectorLoading] = useState(false);
 
   const presets: ProviderPreset[] = [
     {
@@ -339,18 +364,30 @@ export const AIAssistantView: React.FC = () => {
   const supportsVision = Boolean(currentModelObj.capabilities.vision);
   const supportsStt = Boolean(currentModelObj.capabilities.stt);
 
+  // "Unknown" is not "unsupported": a model the registry has never seen (a
+  // gateway's own ids, a brand-new Gemini drop) must NOT lock the toggles or
+  // trigger the auto-disable below — otherwise changing the base URL to a
+  // custom endpoint silently switches vision/STT off and keeps them off.
+  // Only catalog/live metadata that explicitly says the capability is missing
+  // locks the feature, and only while auto-detection is enabled.
+  const capsKnown =
+    currentModelObj.capabilitySource === "provider" || currentModelObj.capabilitySource === "seed";
+  const autoDetect = settings["ai_auto_detect_capabilities"] !== false;
+  const visionLocked = capsKnown && autoDetect && !supportsVision;
+  const sttLocked = capsKnown && autoDetect && !supportsStt;
+
   // Independent capability auto-disabling and clearing of stale incompatible configuration
   useEffect(() => {
     if (loading) return;
 
-    if (!supportsVision && settings["ai_vision_enabled"]) {
+    if (visionLocked && settings["ai_vision_enabled"]) {
       updateSetting("ai_vision_enabled", false, true);
     }
 
-    if (!supportsStt && settings["ai_stt_enabled"]) {
+    if (sttLocked && settings["ai_stt_enabled"]) {
       updateSetting("ai_stt_enabled", false, true);
     }
-  }, [currentModelVal, supportsVision, supportsStt, loading]);
+  }, [currentModelVal, visionLocked, sttLocked, loading]);
 
   const openPersonaEditor = async () => {
     try {
@@ -381,21 +418,50 @@ export const AIAssistantView: React.FC = () => {
   const loadMemoryFiles = async () => {
     try {
       const res = await api.getMemoryFiles();
-      const names =
-        res?.files ||
-        (res?.scopes || []).map((s) => s.scope);
-      setMemoryFiles(names);
+      const scopes = (res?.scopes || []).map((s) => ({
+        scope: s.scope,
+        label: s.label,
+        entries: s.entries ?? 0,
+      }));
+      // The server always lists global first; keep that guarantee if the
+      // response is ever empty or the request fails, so the editor can still
+      // create the file with its first save.
+      setMemoryScopes(
+        scopes.some((s) => s.scope === "global")
+          ? scopes
+          : [{ scope: "global", label: "Global memory", entries: 0 }, ...scopes],
+      );
     } catch (err: any) {
+      setMemoryScopes([{ scope: "global", label: "Global memory", entries: 0 }]);
       toast(err.message, "error");
     }
   };
 
-  const viewMemoryFile = async (name: string) => {
+  const openMemoryScope = async (scope: string) => {
+    setSelectedMemoryFile(scope);
+    setMemoryContent("");
+    setMemoryLoading(true);
     try {
-      const res = await api.getMemoryFile(name);
+      const res = await api.getMemoryFile(scope);
       setMemoryContent(res?.content || "");
     } catch (err: any) {
       toast(err.message, "error");
+    } finally {
+      setMemoryLoading(false);
+    }
+  };
+
+  const openMemoryManager = async () => {
+    setSelectedMemoryFile("global");
+    setMemoryLoading(true);
+    await loadMemoryFiles();
+    try {
+      const res = await api.getMemoryFile("global");
+      setMemoryContent(res?.content || "");
+    } catch (err: any) {
+      toast(err.message, "error");
+    } finally {
+      setMemoryLoading(false);
     }
   };
 
@@ -404,11 +470,49 @@ export const AIAssistantView: React.FC = () => {
     try {
       await api.updateMemoryFile(selectedMemoryFile, memoryContent);
       toast(language === "ar" ? "تم حفظ ملف الذاكرة بنجاح!" : "Memory file updated!", "success");
+      loadMemoryFiles();
       setSelectedMemoryFile(null);
     } catch (err: any) {
       toast(err.message, "error");
     }
   };
+
+  const openInspector = async () => {
+    setInspectorOpen(true);
+    setSelectedConversation(null);
+    setConversation(null);
+    setInspectorLoading(true);
+    try {
+      const res = await api.getAiConversations();
+      setConversations(res?.conversations || []);
+    } catch (err: any) {
+      toast(err.message, "error");
+    } finally {
+      setInspectorLoading(false);
+    }
+  };
+
+  const openConversation = async (chatId: string) => {
+    setSelectedConversation(chatId);
+    setConversation(null);
+    setInspectorLoading(true);
+    try {
+      const res = await api.getAiConversation(chatId);
+      setConversation(res || null);
+    } catch (err: any) {
+      toast(err.message, "error");
+    } finally {
+      setInspectorLoading(false);
+    }
+  };
+
+  const formatStamp = (ts: number | null) =>
+    ts
+      ? new Date(ts).toLocaleString(language === "ar" ? "ar-EG" : "en-GB", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+      : "—";
 
   if (loading) {
     return (
@@ -725,103 +829,43 @@ export const AIAssistantView: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
-            {/* Vision */}
-            <div
-              className={`p-2 rounded-lg border flex items-center justify-between ${
-                supportsVision ? "bg-ok/10 border-ok/25 text-ok" : "bg-panel border-line text-muted"
-              }`}
-            >
-              <div className="flex items-center gap-1.5 font-medium">
-                <Eye size={14} />
-                <span>{t("capVision")}</span>
+            {[
+              { icon: Eye, label: t("capVision"), on: supportsVision },
+              { icon: Mic, label: t("capStt"), on: supportsStt },
+              {
+                icon: Volume2,
+                label: t("capAudio"),
+                on: Boolean(currentModelObj.capabilities.audioInput),
+              },
+              {
+                icon: FileText,
+                label: t("capText"),
+                on: Boolean(
+                  currentModelObj.capabilities.textInput && currentModelObj.capabilities.textOutput,
+                ),
+              },
+              { icon: FileText, label: t("capPdf"), on: Boolean(currentModelObj.capabilities.pdfInput) },
+              {
+                icon: Eye,
+                label: t("capVideo"),
+                on: Boolean(currentModelObj.capabilities.videoInput),
+              },
+            ].map(({ icon: Icon, label, on }) => (
+              <div
+                key={label}
+                className={`p-2 rounded-lg border flex items-center justify-between ${
+                  capsKnown && on ? "bg-ok/10 border-ok/25 text-ok" : "bg-panel border-line text-muted"
+                }`}
+              >
+                <div className="flex items-center gap-1.5 font-medium">
+                  <Icon size={14} />
+                  <span>{label}</span>
+                </div>
+                <span className="text-[10px] font-bold">
+                  {capsKnown ? (on ? t("supported") : t("unsupported")) : "—"}
+                </span>
               </div>
-              <span className="text-[10px] font-bold">
-                {supportsVision ? t("supported") : t("unsupported")}
-              </span>
-            </div>
-
-            {/* Speech / STT */}
-            <div
-              className={`p-2 rounded-lg border flex items-center justify-between ${
-                supportsStt ? "bg-ok/10 border-ok/25 text-ok" : "bg-panel border-line text-muted"
-              }`}
-            >
-              <div className="flex items-center gap-1.5 font-medium">
-                <Mic size={14} />
-                <span>{t("capStt")}</span>
-              </div>
-              <span className="text-[10px] font-bold">
-                {supportsStt ? t("supported") : t("unsupported")}
-              </span>
-            </div>
-
-            {/* Audio Input */}
-            <div
-              className={`p-2 rounded-lg border flex items-center justify-between ${
-                currentModelObj.capabilities.audioInput
-                  ? "bg-ok/10 border-ok/25 text-ok"
-                  : "bg-panel border-line text-muted"
-              }`}
-            >
-              <div className="flex items-center gap-1.5 font-medium">
-                <Volume2 size={14} />
-                <span>{t("capAudio")}</span>
-              </div>
-              <span className="text-[10px] font-bold">
-                {currentModelObj.capabilities.audioInput ? t("supported") : t("unsupported")}
-              </span>
-            </div>
-
-            {/* Text I/O */}
-            <div
-              className={`p-2 rounded-lg border flex items-center justify-between ${
-                currentModelObj.capabilities.textInput && currentModelObj.capabilities.textOutput
-                  ? "bg-ok/10 border-ok/25 text-ok"
-                  : "bg-panel border-line text-muted"
-              }`}
-            >
-              <div className="flex items-center gap-1.5 font-medium">
-                <FileText size={14} />
-                <span>{t("capText")}</span>
-              </div>
-              <span className="text-[10px] font-bold">
-                {currentModelObj.capabilities.textInput && currentModelObj.capabilities.textOutput
-                  ? t("supported")
-                  : t("unsupported")}
-              </span>
-            </div>
-
-            <div
-              className={`p-2 rounded-lg border flex items-center justify-between ${
-                currentModelObj.capabilities.pdfInput
-                  ? "bg-ok/10 border-ok/25 text-ok"
-                  : "bg-panel border-line text-muted"
-              }`}
-            >
-              <div className="flex items-center gap-1.5 font-medium">
-                <FileText size={14} />
-                <span>{t("capPdf")}</span>
-              </div>
-              <span className="text-[10px] font-bold">
-                {currentModelObj.capabilities.pdfInput ? t("supported") : t("unsupported")}
-              </span>
-            </div>
-
-            <div
-              className={`p-2 rounded-lg border flex items-center justify-between ${
-                currentModelObj.capabilities.videoInput
-                  ? "bg-ok/10 border-ok/25 text-ok"
-                  : "bg-panel border-line text-muted"
-              }`}
-            >
-              <div className="flex items-center gap-1.5 font-medium">
-                <Eye size={14} />
-                <span>{t("capVideo")}</span>
-              </div>
-              <span className="text-[10px] font-bold">
-                {currentModelObj.capabilities.videoInput ? t("supported") : t("unsupported")}
-              </span>
-            </div>
+            ))}
           </div>
         </div>
       </div>
@@ -835,20 +879,20 @@ export const AIAssistantView: React.FC = () => {
           <div className="relative rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
             <div className="absolute top-3.5 end-3.5">
               <Toggle
-                checked={Boolean(settings["ai_vision_enabled"]) && supportsVision}
-                disabled={!supportsVision}
+                checked={visionLocked ? false : Boolean(settings["ai_vision_enabled"])}
+                disabled={visionLocked}
                 onChange={(val) => {
-                  if (supportsVision) updateSetting("ai_vision_enabled", val);
+                  if (!visionLocked) updateSetting("ai_vision_enabled", val);
                 }}
               />
             </div>
             <div className="pe-12">
               <div className="flex items-center gap-2 text-text-main mb-1">
-                <Eye size={17} className={supportsVision ? "text-brand-cyan shrink-0" : "text-muted shrink-0"} />
+                <Eye size={17} className={visionLocked ? "text-muted shrink-0" : "text-brand-cyan shrink-0"} />
                 <span className="font-bold text-sm">{t("aiVision")}</span>
               </div>
               <p className="text-xs text-muted leading-relaxed">{t("aiVisionDesc")}</p>
-              {!supportsVision && (
+              {visionLocked && (
                 <p className="text-[11px] text-amber-500 font-semibold mt-2 flex items-center gap-1">
                   <AlertTriangle size={13} className="shrink-0" />
                   <span>{t("visionUnsupportedNotice")}</span>
@@ -861,20 +905,20 @@ export const AIAssistantView: React.FC = () => {
           <div className="relative rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
             <div className="absolute top-3.5 end-3.5">
               <Toggle
-                checked={Boolean(settings["ai_stt_enabled"] ?? true) && supportsStt}
-                disabled={!supportsStt}
+                checked={sttLocked ? false : Boolean(settings["ai_stt_enabled"] ?? true)}
+                disabled={sttLocked}
                 onChange={(val) => {
-                  if (supportsStt) updateSetting("ai_stt_enabled", val);
+                  if (!sttLocked) updateSetting("ai_stt_enabled", val);
                 }}
               />
             </div>
             <div className="pe-12">
               <div className="flex items-center gap-2 text-text-main mb-1">
-                <Mic size={17} className={supportsStt ? "text-purple-400 shrink-0" : "text-muted shrink-0"} />
+                <Mic size={17} className={sttLocked ? "text-muted shrink-0" : "text-purple-400 shrink-0"} />
                 <span className="font-bold text-sm">{t("aiSttEnabled")}</span>
               </div>
               <p className="text-xs text-muted leading-relaxed">{t("aiSttEnabledDesc")}</p>
-              {!supportsStt && (
+              {sttLocked && (
                 <p className="text-[11px] text-amber-500 font-semibold mt-2 flex items-center gap-1">
                   <AlertTriangle size={13} className="shrink-0" />
                   <span>{t("sttUnsupportedNotice")}</span>
@@ -895,9 +939,9 @@ export const AIAssistantView: React.FC = () => {
             <select
               className="w-full h-10 px-3 rounded-lg border border-line bg-panel text-text-main text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50 disabled:opacity-50"
               value={settings["ai_stt_provider"] || "auto"}
-              disabled={!supportsStt}
+              disabled={sttLocked}
               onChange={(e) => {
-                if (supportsStt) updateSetting("ai_stt_provider", e.target.value);
+                if (!sttLocked) updateSetting("ai_stt_provider", e.target.value);
               }}
             >
               <option value="auto">{t("sttAuto")}</option>
@@ -928,8 +972,8 @@ export const AIAssistantView: React.FC = () => {
         </div>
       </div>
 
-      {/* Persona Prompt & Long-term Memory Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+      {/* Persona Prompt, Long-term Memory, Conversation Inspector Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
         <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5 text-text-main mb-2">
@@ -957,14 +1001,27 @@ export const AIAssistantView: React.FC = () => {
           </div>
           <button
             type="button"
-            onClick={() => {
-              loadMemoryFiles();
-              setSelectedMemoryFile("global");
-              viewMemoryFile("global");
-            }}
+            onClick={openMemoryManager}
             className="w-full h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50 flex items-center justify-center gap-2"
           >
             <span>{t("manageMemory")}</span>
+          </button>
+        </div>
+
+        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2.5 text-text-main mb-2">
+              <History size={20} className="text-brand-blue shrink-0" />
+              <h3 className="text-base font-bold">{t("aiInspector")}</h3>
+            </div>
+            <p className="text-xs sm:text-sm text-muted leading-relaxed">{t("aiInspectorDesc")}</p>
+          </div>
+          <button
+            type="button"
+            onClick={openInspector}
+            className="w-full h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50 flex items-center justify-center gap-2"
+          >
+            <span>{t("openInspector")}</span>
           </button>
         </div>
       </div>
@@ -1003,12 +1060,12 @@ export const AIAssistantView: React.FC = () => {
         />
       </Modal>
 
-      {/* Memory File Modal */}
+      {/* Memory File Modal: global vs per-chat scopes on one side, editor on the other */}
       <Modal
         isOpen={Boolean(selectedMemoryFile)}
         onClose={() => setSelectedMemoryFile(null)}
-        title={`Memory File: ${selectedMemoryFile || ""}`}
-        maxWidth="750px"
+        title={t("memoryFiles")}
+        maxWidth="900px"
         footer={
           <div className="flex items-center justify-end gap-2.5 w-full">
             <button
@@ -1021,7 +1078,8 @@ export const AIAssistantView: React.FC = () => {
             <button
               type="button"
               onClick={saveMemoryFile}
-              className="px-5 h-10 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/25 transition-colors flex items-center gap-2"
+              disabled={memoryLoading}
+              className="px-5 h-10 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/25 transition-colors flex items-center gap-2 disabled:opacity-50"
             >
               <Save size={16} />
               <span>{t("save")}</span>
@@ -1029,12 +1087,149 @@ export const AIAssistantView: React.FC = () => {
           </div>
         }
       >
-        <textarea
-          className="w-full rounded-xl border border-line bg-panel-raised p-3.5 text-text-main font-mono text-xs sm:text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-          rows={12}
-          value={memoryContent}
-          onChange={(e) => setMemoryContent(e.target.value)}
-        />
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="md:w-60 shrink-0 flex flex-col gap-1.5 md:max-h-[420px] overflow-y-auto">
+            {memoryScopes.map((s) => {
+              const isGlobal = s.scope === "global";
+              const active = selectedMemoryFile === s.scope;
+              return (
+                <button
+                  key={s.scope}
+                  type="button"
+                  onClick={() => openMemoryScope(s.scope)}
+                  className={`text-start p-2.5 rounded-xl border transition-colors ${
+                    active
+                      ? "bg-brand-blue/15 border-brand-blue/60"
+                      : "bg-panel-raised border-line hover:bg-panel-hover"
+                  }`}
+                >
+                  <span className="flex items-center gap-2 font-bold text-xs text-text-main min-w-0">
+                    {isGlobal ? (
+                      <Globe size={14} className="text-brand-cyan shrink-0" />
+                    ) : (
+                      <MessageSquare size={14} className="text-brand-blue shrink-0" />
+                    )}
+                    <span className="truncate">
+                      {isGlobal ? t("memoryGlobalScope") : s.scope}
+                    </span>
+                  </span>
+                  <span className="block text-[10px] text-muted mt-1">
+                    {isGlobal ? t("memoryGlobalScopeHint") : t("memoryChatScopeHint")}
+                    {" · "}
+                    {t("memoryEntriesCount").replace("{n}", String(s.entries))}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex-1 min-w-0 flex flex-col gap-2">
+            <p className="text-[11px] text-muted leading-relaxed">{t("memoryProseHint")}</p>
+            {memoryLoading ? (
+              <div className="flex items-center justify-center min-h-[340px] text-muted">
+                <div className="w-6 h-6 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin mr-2" />
+                <span className="text-sm font-semibold">{t("starting")}</span>
+              </div>
+            ) : (
+              <textarea
+                className="w-full min-h-[340px] flex-1 rounded-xl border border-line bg-panel-raised p-3.5 text-text-main font-mono text-xs sm:text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                rows={12}
+                value={memoryContent}
+                onChange={(e) => setMemoryContent(e.target.value)}
+                placeholder={t("memoryEditorPlaceholder")}
+              />
+            )}
+          </div>
+        </div>
+      </Modal>
+
+      {/* Conversation Inspector Modal — read-only */}
+      <Modal
+        isOpen={inspectorOpen}
+        onClose={() => setInspectorOpen(false)}
+        title={t("aiInspector")}
+        maxWidth="750px"
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => setInspectorOpen(false)}
+              className="px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors"
+            >
+              {t("cancel")}
+            </button>
+          </div>
+        }
+      >
+        {inspectorLoading ? (
+          <div className="flex items-center justify-center min-h-[280px] text-muted">
+            <div className="w-6 h-6 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin mr-2" />
+            <span className="text-sm font-semibold">{t("starting")}</span>
+          </div>
+        ) : !selectedConversation ? (
+          <div className="flex flex-col gap-1.5">
+            {conversations.length === 0 && (
+              <p className="text-xs text-muted text-center py-8">{t("noConversations")}</p>
+            )}
+            {conversations.map((row) => (
+              <button
+                key={row.chatId}
+                type="button"
+                onClick={() => openConversation(row.chatId)}
+                className="text-start p-3 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover transition-colors"
+              >
+                <span className="flex items-center gap-2 font-bold text-xs text-text-main">
+                  <MessageSquare size={14} className="text-brand-blue shrink-0" />
+                  <span className="truncate font-mono">{row.chatId}</span>
+                </span>
+                <span className="block text-[10px] text-muted mt-1">
+                  {t("convTurns").replace("{n}", String(row.turns))} · {formatStamp(row.updatedAt)}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedConversation(null)}
+                className="text-xs font-bold text-brand-cyan hover:underline"
+              >
+                ← {t("backToList")}
+              </button>
+              <span className="text-[10px] text-muted font-mono truncate">
+                {selectedConversation}
+              </span>
+            </div>
+            {conversation?.truncated && (
+              <p className="text-[11px] text-amber-500 font-semibold">{t("convTruncated")}</p>
+            )}
+            <div className="flex flex-col gap-1.5 max-h-[420px] overflow-y-auto">
+              {conversation?.messages.length === 0 && (
+                <p className="text-xs text-muted text-center py-6">{t("noConversations")}</p>
+              )}
+              {conversation?.messages.map((m, i) => (
+                <div
+                  key={i}
+                  className={`p-2.5 rounded-xl border text-xs ${
+                    m.kind === "tool" || m.kind === "toolResult"
+                      ? "bg-panel border-line text-muted font-mono"
+                      : m.role === "model"
+                        ? "bg-brand-blue/10 border-brand-blue/25 text-text-main"
+                        : "bg-panel-raised border-line text-text-main"
+                  }`}
+                >
+                  {m.kind === "text" && (
+                    <p className="whitespace-pre-wrap break-words leading-relaxed">{m.text}</p>
+                  )}
+                  {m.kind === "media" && <span>📎 {m.mimeType || t("convMedia")}</span>}
+                  {m.kind === "tool" && <span>⚙️ {m.name}</span>}
+                  {m.kind === "toolResult" && <span>↩️ {m.name}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
