@@ -5,8 +5,14 @@ const normalizeJid = require("../utils/normalizeJid.esm.js").default;
 
 module.exports = {
   name: "todo",
-  description: "Manages your personal to-do list.",
-  usage: "todo list\ntodo add <المهمة>\ntodo del <رقم المهمة>",
+  description: {
+    en: "Manages your personal to-do list.",
+    ar: "يدير قائمة مهامك الشخصية.",
+  },
+  usage: {
+    en: "todo list\ntodo add <task>\ntodo del <task number>",
+    ar: "todo list\ntodo add <المهمة>\ntodo del <رقم المهمة>",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {

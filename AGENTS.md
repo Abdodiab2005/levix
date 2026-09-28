@@ -365,7 +365,12 @@ session records the proxy the live socket was built with and reports
 ### Command System
 
 Commands are loaded dynamically from `src/commands/`:
-- Each command exports: `{ name, aliases, description, chat, execute }`
+- Each command exports: `{ name, aliases, description, usage, chat, execute }`
+- `description` and `usage` are `{ en, ar }` — `!help` shows the bot's
+  language (`bot_language`; in `auto`, the script the message was typed in),
+  `!help ar` / `!help en` and `!help <command> [ar|en]` pick one, and the
+  dashboard shows the panel's. `src/utils/commandDocs.cjs` does the picking;
+  `tests/help-i18n.test.mjs` fails a command that ships only one language
 - Commands are registered in a Map with aliases
 - Loaded on startup via `src/handlers/command.handler.js:16`
 
@@ -374,7 +379,8 @@ Commands are loaded dynamically from `src/commands/`:
 module.exports = {
   name: "ping",
   aliases: ["p"],
-  description: "Check bot latency",
+  description: { en: "Check bot latency", ar: "يقيس سرعة استجابة البوت" },
+  usage: { en: "ping", ar: "ping" },
   chat: "all", // "all", "group", "private"
   async execute(sock, msg, args, body, groupMetadata) {
     // Command logic here
@@ -923,7 +929,8 @@ configure.
    module.exports = {
      name: "commandname",
      aliases: ["alias1", "alias2"],
-     description: "What the command does",
+     description: { en: "What the command does", ar: "ماذا يفعل الأمر" },
+     usage: { en: "commandname <arg>", ar: "commandname <معامل>" },
      chat: "all", // "all", "group", or "private"
      async execute(sock, msg, args, body, groupMetadata) {
        // Implementation
@@ -981,9 +988,11 @@ logger.debug('Debug info');
    `src/utils/thumbnail.cjs` generates `jpegThumbnail` + width/height/seconds with
    ffmpeg-static and `src/core/socket.js` patches `sock.sendMessage` so every send
    path gets one. Pass your own `jpegThumbnail` to opt out.
-9. **Command `usage`**: Written WITHOUT the prefix (`"kick @عضو [السبب]"`), one
-   variant per line. `!help` prepends the live prefix and prints them as the
-   command's parameters.
+9. **Command `usage`**: Written WITHOUT the prefix, one variant per line, in
+   both languages: `{ en: "kick @member [reason]", ar: "kick @عضو [السبب]" }`.
+   `!help` prepends the live prefix and prints them as the command's
+   parameters. Placeholders are translated; literal sub-commands and flags
+   (`add`, `on|off`, `--multi`) are not.
 10. **Never post progress messages**: use `createStatus()` and edit one message
     (see "One message per command"). A command that sends "جاري..." and then a
     result is a bug.

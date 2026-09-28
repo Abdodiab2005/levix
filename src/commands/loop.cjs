@@ -91,8 +91,14 @@ function renderLine(template, number, index) {
 module.exports = {
   name: "loop",
   aliases: ["repeat", "كرر", "تكرار"],
-  description: "يكرر نص أو أرقام — في رسالة واحدة أو رسائل منفصلة.",
-  usage: "loop <عدد|من-إلى[:خطوة]> [النص] [-s رسائل منفصلة] [-n بدون ترقيم]",
+  description: {
+    en: "Repeats text or numbers — in one message or as separate messages.",
+    ar: "يكرر نصًا أو أرقامًا — في رسالة واحدة أو في رسائل منفصلة.",
+  },
+  usage: {
+    en: "loop <count|from-to[:step]> [text] [-s separate messages] [-n no numbering]",
+    ar: "loop <عدد|من-إلى[:خطوة]> [النص] [-s رسائل منفصلة] [-n بدون ترقيم]",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {

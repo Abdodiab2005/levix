@@ -3,8 +3,14 @@ const { getAllNotes } = require("../utils/storage.cjs");
 
 module.exports = {
   name: "notes",
-  description: "Lists all saved note keywords for the group.",
-  usage: "notes",
+  description: {
+    en: "Lists all saved note keywords for the group.",
+    ar: "يعرض الكلمات المفتاحية لكل الملاحظات المحفوظة في المجموعة.",
+  },
+  usage: {
+    en: "notes",
+    ar: "notes",
+  },
   chat: "all",
 
   async execute(sock, msg) {

@@ -3,8 +3,14 @@ const logger = require("../../utils/logger.cjs");
 
 module.exports = {
   name: "all",
-  description: "Mentions all members of the group.",
-  usage: "all [رسالة التنبيه]",
+  description: {
+    en: "Mentions every member of the group.",
+    ar: "يذكر (منشن) جميع أعضاء المجموعة.",
+  },
+  usage: {
+    en: "all [message]",
+    ar: "all [رسالة التنبيه]",
+  },
   chat: "group",
 
   async execute(sock, msg, args) {

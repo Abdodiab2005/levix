@@ -3,8 +3,14 @@ const { deleteNote } = require("../../utils/storage.cjs");
 
 module.exports = {
   name: "deletenote",
-  description: "Deletes a saved note.",
-  usage: "deletenote #الكلمة-المفتاحية",
+  description: {
+    en: "Deletes a saved note.",
+    ar: "يحذف ملاحظة محفوظة.",
+  },
+  usage: {
+    en: "deletenote #keyword",
+    ar: "deletenote #الكلمة-المفتاحية",
+  },
   chat: "all",
   userAdminRequired: true,
 

@@ -3,8 +3,14 @@ const logger = require("../../utils/logger.cjs");
 
 module.exports = {
   name: "promote",
-  description: "Promotes a member to an admin.",
-  usage: "promote @عضو",
+  description: {
+    en: "Promotes a member to admin.",
+    ar: "يرقّي عضوًا إلى مشرف.",
+  },
+  usage: {
+    en: "promote @member",
+    ar: "promote @عضو",
+  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true,

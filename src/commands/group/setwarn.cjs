@@ -3,8 +3,14 @@ const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs
 
 module.exports = {
   name: "setwarn",
-  description: "Configures the automatic warning system.",
-  usage: "setwarn max <عدد>\nsetwarn action <KICK|NONE>",
+  description: {
+    en: "Configures the automatic warning system.",
+    ar: "يضبط نظام التحذيرات التلقائي.",
+  },
+  usage: {
+    en: "setwarn max <count>\nsetwarn action <KICK|NONE>",
+    ar: "setwarn max <عدد>\nsetwarn action <KICK|NONE>",
+  },
   chat: "group",
   userAdminRequired: true,
 

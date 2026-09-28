@@ -336,8 +336,14 @@ const HELP_TEXT =
 module.exports = {
   name: "calc",
   aliases: ["calculate", "حساب", "احسب", "="],
-  description: "آلة حاسبة: عمليات حسابية، نِسب، أُسس، ودوال رياضية.",
-  usage: "calc <معادلة>",
+  description: {
+    en: "Calculator: arithmetic, percentages, powers and math functions.",
+    ar: "آلة حاسبة: عمليات حسابية، ونِسب مئوية، وأُسس، ودوال رياضية.",
+  },
+  usage: {
+    en: "calc <expression>",
+    ar: "calc <معادلة>",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {

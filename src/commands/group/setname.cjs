@@ -3,8 +3,14 @@ const logger = require("../../utils/logger.cjs");
 
 module.exports = {
   name: "setname",
-  description: "Changes the group's subject/name.",
-  usage: "setname <الاسم الجديد>",
+  description: {
+    en: "Changes the group's name.",
+    ar: "يغيّر اسم المجموعة.",
+  },
+  usage: {
+    en: "setname <new name>",
+    ar: "setname <الاسم الجديد>",
+  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true,

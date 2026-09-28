@@ -53,8 +53,14 @@ function buildPollContent(question, options, { multi = false } = {}) {
 module.exports = {
   name: "poll",
   aliases: ["vote", "استفتاء", "تصويت"],
-  description: "ينشئ استفتاء (تصويت) داخل الشات.",
-  usage: "poll <السؤال> | <خيار1> | <خيار2> [| ...] [--multi]",
+  description: {
+    en: "Creates a poll in the chat.",
+    ar: "ينشئ استفتاءً (تصويتًا) داخل المحادثة.",
+  },
+  usage: {
+    en: "poll <question> | <option 1> | <option 2> [| ...] [--multi]",
+    ar: "poll <السؤال> | <خيار1> | <خيار2> [| ...] [--multi]",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {

@@ -63,8 +63,14 @@ if (manifest) {
 
 module.exports = {
   name: "group",
-  description: "Main command for all group management actions.",
-  usage: "group <أمر فرعي> [المعاملات]",
+  description: {
+    en: "Main command for all group management actions.",
+    ar: "الأمر الرئيسي لكل إجراءات إدارة المجموعة.",
+  },
+  usage: {
+    en: "group <sub-command> [arguments]",
+    ar: "group <أمر فرعي> [المعاملات]",
+  },
   chat: "group",
 
   async execute(sock, msg, args, body, groupMetadata) {

@@ -11,6 +11,7 @@ const __dirname = dirname(__filename);
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
+const { localize, bothLanguages } = require("../utils/commandDocs.cjs");
 
 // Commands collection (keyed by both names and aliases)
 const commands = new Map();
@@ -158,8 +159,12 @@ export function getCommandCatalog() {
       name: command.name,
       key,
       category: command.__category || "general",
-      description: command.description || "",
-      usage: command.usage || null,
+      // Strings, as the dashboard has always had them (English first), plus
+      // both languages so it can follow its own UI language.
+      description: localize(command.description, "en"),
+      descriptions: bothLanguages(command.description),
+      usage: command.usage ? localize(command.usage, "en") : null,
+      usages: command.usage ? bothLanguages(command.usage) : null,
       chat: command.chat || "all",
       declaredAliases: command.__declaredAliases || [],
       aliases: runtimeConfig.getAliases(command.name, command.__declaredAliases || []),

@@ -3,8 +3,14 @@ const { deleteScheduledJob, getScheduledJobs } = require("../../scheduler.cjs");
 
 module.exports = {
   name: "deleteschedule",
-  description: "Deletes a scheduled job by its ID.",
-  usage: "deleteschedule <id>",
+  description: {
+    en: "Deletes a scheduled message by its ID.",
+    ar: "يحذف رسالة مجدولة برقمها التعريفي (ID).",
+  },
+  usage: {
+    en: "deleteschedule <id>",
+    ar: "deleteschedule <id>",
+  },
   chat: "all",
   userAdminRequired: true,
 

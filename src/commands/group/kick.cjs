@@ -8,8 +8,14 @@ const {
 
 module.exports = {
   name: "kick",
-  description: "Removes a member from the group.",
-  usage: "kick @عضو [السبب]",
+  description: {
+    en: "Removes a member from the group.",
+    ar: "يطرد عضوًا من المجموعة.",
+  },
+  usage: {
+    en: "kick @member [reason]",
+    ar: "kick @عضو [السبب]",
+  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true,

@@ -12,8 +12,14 @@ const logger = require("../utils/logger.cjs");
 
 module.exports = {
   name: "prayer",
-  description: "Gets prayer times for a specific city.",
-  usage: "prayer <المدينة بالإنجليزية>",
+  description: {
+    en: "Shows prayer times for a city.",
+    ar: "يعرض مواقيت الصلاة لمدينة معيّنة.",
+  },
+  usage: {
+    en: "prayer <city in English>",
+    ar: "prayer <اسم المدينة بالإنجليزية>",
+  },
   chat: "all", // This command can be used anywhere
 
   async execute(sock, msg, args) {

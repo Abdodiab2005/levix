@@ -4,8 +4,14 @@ const logger = require("../../utils/logger.cjs");
 
 module.exports = {
   name: "save",
-  description: "Saves a new note for the group.",
-  usage: "save #الكلمة-المفتاحية <نص الملاحظة>",
+  description: {
+    en: "Saves a new note for the group.",
+    ar: "يحفظ ملاحظة جديدة للمجموعة.",
+  },
+  usage: {
+    en: "save #keyword <note text>",
+    ar: "save #الكلمة-المفتاحية <نص الملاحظة>",
+  },
   chat: "group",
   userAdminRequired: true,
 

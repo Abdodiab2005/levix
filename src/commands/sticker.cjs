@@ -48,8 +48,14 @@ async function streamToBuffer(stream) {
 module.exports = {
   name: "sticker",
   aliases: ["s", "ملصق", "toimg", "tosticker"],
-  description: "Convert images/videos to stickers, or convert stickers to images/videos",
-  usage: "sticker (reply to image/video/sticker) or toimg (reply to sticker)",
+  description: {
+    en: "Turns images/videos into stickers, or stickers back into images/videos.",
+    ar: "يحوّل الصور والفيديوهات إلى ملصقات، أو الملصقات إلى صور وفيديوهات.",
+  },
+  usage: {
+    en: "sticker   (reply to an image, video or sticker)\ntoimg   (reply to a sticker)",
+    ar: "sticker   (رد على صورة أو فيديو أو ملصق)\ntoimg   (رد على ملصق)",
+  },
   chat: "all",
 
   async execute(sock, msg, args, body, groupMetadata, { invokedName } = {}) {

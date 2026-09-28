@@ -4,9 +4,14 @@ const logger = require("../../utils/logger.cjs");
 
 module.exports = {
   name: "welcome",
-  description: "Manages the group's welcome message system.",
-  usage:
-    "welcome [status]\nwelcome <on|off>\nwelcome add <نص الترحيب>\nwelcome list\nwelcome delete <رقم>",
+  description: {
+    en: "Manages the group's welcome messages.",
+    ar: "يدير رسائل الترحيب في المجموعة.",
+  },
+  usage: {
+    en: "welcome [status]\nwelcome <on|off>\nwelcome add <welcome text>\nwelcome list\nwelcome delete <number>",
+    ar: "welcome [status]\nwelcome <on|off>\nwelcome add <نص الترحيب>\nwelcome list\nwelcome delete <رقم>",
+  },
   chat: "group",
   userAdminRequired: true,
 

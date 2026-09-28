@@ -3,8 +3,14 @@ const logger = require("../../utils/logger.cjs");
 
 module.exports = {
   name: "setrules",
-  description: "Sets the rules for the current group.",
-  usage: "setrules <القواعد>",
+  description: {
+    en: "Sets the rules for this group.",
+    ar: "يضبط قواعد هذه المجموعة.",
+  },
+  usage: {
+    en: "setrules <rules>",
+    ar: "setrules <القواعد>",
+  },
   chat: "group",
   userAdminRequired: true,
 

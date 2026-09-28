@@ -3,8 +3,14 @@ const { getScheduledJobs } = require("../../scheduler.cjs");
 
 module.exports = {
   name: "listschedules",
-  description: "Lists all active and pending scheduled jobs.",
-  usage: "listschedules",
+  description: {
+    en: "Lists all active and pending scheduled messages.",
+    ar: "يعرض كل الرسائل المجدولة النشطة والمعلّقة.",
+  },
+  usage: {
+    en: "listschedules",
+    ar: "listschedules",
+  },
   chat: "all",
   userAdminRequired: true,
 

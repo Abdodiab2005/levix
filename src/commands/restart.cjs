@@ -4,8 +4,14 @@ const logger = require("../utils/logger.cjs");
 
 module.exports = {
   name: "restart",
-  description: "Restarts the bot.",
-  usage: "restart",
+  description: {
+    en: "Restarts the bot.",
+    ar: "يعيد تشغيل البوت.",
+  },
+  usage: {
+    en: "restart",
+    ar: "restart",
+  },
   chat: "all",
 
   async execute(sock, msg) {

@@ -5,8 +5,14 @@ const logger = require("../utils/logger.cjs");
 
 module.exports = {
   name: "shutdown",
-  description: "Stops the bot process permanently using PM2.",
-  usage: "shutdown",
+  description: {
+    en: "Stops the bot process permanently (via PM2).",
+    ar: "يوقف عملية البوت نهائيًا (عبر PM2).",
+  },
+  usage: {
+    en: "shutdown",
+    ar: "shutdown",
+  },
   chat: "all",
 
   async execute(sock, msg) {

@@ -40,7 +40,7 @@ const SETTINGS = [
     },
     group: "general",
     label: "Bot response language",
-    hint: "Preferred language for AI replies and status updates. Can also be switched with !lang.",
+    hint: "Preferred language for AI replies, status updates and !help. Auto follows the language each message is written in. Can also be switched with !lang.",
   },
   {
     key: "link_previews_enabled",

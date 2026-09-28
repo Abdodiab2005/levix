@@ -9,8 +9,14 @@ const urlRegex = new RegExp(/^(https?:\/\/[^\s/$.?#].[^\s]*)$/i);
 
 module.exports = {
   name: "shortlink",
-  description: "Shortens a long URL using the is.gd service.",
-  usage: "shortlink <الرابط>",
+  description: {
+    en: "Shortens a long URL with the is.gd service.",
+    ar: "يختصر رابطًا طويلًا باستخدام خدمة is.gd.",
+  },
+  usage: {
+    en: "shortlink <url>",
+    ar: "shortlink <الرابط>",
+  },
   chat: "all", // This command can be used anywhere
 
   async execute(sock, msg, args) {

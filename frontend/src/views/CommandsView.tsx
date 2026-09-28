@@ -140,10 +140,13 @@ export const CommandsView: React.FC = () => {
     }
   };
 
+  // Each command documents itself in both languages; show the panel's.
+  const describe = (c: CommandItem) => c.descriptions?.[language] || c.description;
+
   const filtered = commands.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.description.toLowerCase().includes(search.toLowerCase()) ||
+      describe(c).toLowerCase().includes(search.toLowerCase()) ||
       c.aliases.some((a) => a.toLowerCase().includes(search.toLowerCase())),
   );
 
@@ -280,7 +283,7 @@ export const CommandsView: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-4 py-3.5 max-w-xs text-text-main text-xs md:text-sm">
-                    {cmd.description}
+                    {describe(cmd)}
                   </td>
                   <td className="px-4 py-3.5">
                     <span className="inline-flex px-2.5 py-0.5 rounded-lg bg-brand-blue/10 text-brand-cyan text-xs font-semibold">

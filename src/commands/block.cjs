@@ -5,8 +5,14 @@ const normalizeJid = require("../utils/normalizeJid.esm.js");
 
 module.exports = {
   name: "block",
-  description: "Blocks a user from contacting the bot on WhatsApp.",
-  usage: "block [@عضو|رقم]   (أو رد على رسالته)",
+  description: {
+    en: "Blocks a user from contacting the bot on WhatsApp.",
+    ar: "يحظر مستخدمًا من التواصل مع البوت على واتساب.",
+  },
+  usage: {
+    en: "block [@member|number]   (or reply to their message)",
+    ar: "block [@عضو|رقم]   (أو رد على رسالته)",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {

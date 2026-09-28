@@ -97,8 +97,14 @@ async function rolesReport() {
 module.exports = {
   name: "perm",
   aliases: ["perms", "owner", "admin", "role", "roles", "صلاحيات"],
-  description: "إدارة صلاحيات البوت: إضافة/إزالة مالك أو أدمن، وعرض القائمة الحالية.",
-  usage: "perm list\nperm add admin @عضو\nperm add owner <رقم>\nperm remove admin @عضو",
+  description: {
+    en: "Manages bot roles: add or remove an owner or admin, and list the current ones.",
+    ar: "يدير صلاحيات البوت: إضافة مالك أو أدمن أو إزالته، وعرض القائمة الحالية.",
+  },
+  usage: {
+    en: "perm list\nperm add admin @member\nperm add owner <number>\nperm remove admin @member",
+    ar: "perm list\nperm add admin @عضو\nperm add owner <رقم>\nperm remove admin @عضو",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {

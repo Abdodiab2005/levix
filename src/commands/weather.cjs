@@ -8,8 +8,14 @@ const settings = require("../config/settings.cjs");
 
 module.exports = {
   name: "weather",
-  description: "Gets the current weather for a specific city.",
-  usage: "weather <المدينة بالإنجليزية>",
+  description: {
+    en: "Shows the current weather for a city.",
+    ar: "يعرض حالة الطقس الحالية لمدينة معيّنة.",
+  },
+  usage: {
+    en: "weather <city in English>",
+    ar: "weather <اسم المدينة بالإنجليزية>",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {

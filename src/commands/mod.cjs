@@ -49,9 +49,14 @@ function setFeatureEnabled(settings, key, enabled) {
 module.exports = {
   name: "mod",
   aliases: ["moderation", "settings"],
-  description: "التحكم في إعدادات المراقبة للجروب.",
-  usage:
-    "mod status\nmod <enable|disable> <antiLink|antiSpam|forbiddenWords>\nmod words <add|remove> <الكلمة>\nmod words list",
+  description: {
+    en: "Controls the group's moderation settings.",
+    ar: "يتحكم في إعدادات الإشراف على المجموعة.",
+  },
+  usage: {
+    en: "mod status\nmod <enable|disable> <antiLink|antiSpam|forbiddenWords>\nmod words <add|remove> <word>\nmod words list",
+    ar: "mod status\nmod <enable|disable> <antiLink|antiSpam|forbiddenWords>\nmod words <add|remove> <الكلمة>\nmod words list",
+  },
   chat: "group", // يعمل في الجروبات فقط
   botAdminRequired: false, // لا يتطلب أن يكون البوت مشرفًا لتغيير الإعدادات
 

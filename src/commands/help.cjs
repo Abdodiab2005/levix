@@ -1,51 +1,68 @@
+// !help — every command, or one command, in Arabic or English.
+//
+//   help                 the list, in the bot's language
+//   help ar | help en    the list, in that language
+//   help <command>       one command, in the bot's language
+//   help <command> ar    one command, in that language (`help ar <command>` too)
+//
+// "The bot's language" is the `bot_language` setting; when that is "auto" it is
+// the script the message was typed in (see utils/commandDocs.cjs). Each
+// command carries its own description and usage as `{ en, ar }`.
+
 const fs = require("fs");
 const path = require("path");
 const logger = require("../utils/logger.cjs");
 const brand = require("../config/brand.cjs");
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
+const { parseLang, resolveLang, localize } = require("../utils/commandDocs.cjs");
 
-// Recursive function to get all command files
-function getAllCommandFiles(dirPath, fileList = []) {
-  const files = fs.readdirSync(dirPath);
+// Every command module, the way the loader finds them: from the generated
+// manifest in a packaged build (there is no directory to read inside an
+// executable), else from the directory.
+function commandModules() {
+  try {
+    const manifest = require("./_manifest.cjs");
+    if (Array.isArray(manifest)) {
+      return manifest.map((entry) => ({ module: entry.module, category: entry.category }));
+    }
+  } catch (error) {
+    if (error?.code !== "MODULE_NOT_FOUND") {
+      logger.error({ err: error }, "[help] command manifest failed to load");
+    }
+  }
 
-  files.forEach((file) => {
-    const filePath = path.join(dirPath, file);
-    if (fs.statSync(filePath).isDirectory()) {
-      fileList = getAllCommandFiles(filePath, fileList);
-    } else if (file.endsWith(".cjs") || file.endsWith(".js")) {
-      fileList.push(filePath);
+  const found = [];
+  for (const entry of fs.readdirSync(__dirname, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      for (const file of fs.readdirSync(path.join(__dirname, entry.name))) {
+        if (!file.endsWith(".cjs") || file.startsWith("_")) continue;
+        found.push({ file: path.join(__dirname, entry.name, file), category: entry.name });
+      }
+    } else if (entry.name.endsWith(".cjs") && !entry.name.startsWith("_")) {
+      found.push({ file: path.join(__dirname, entry.name), category: null });
+    }
+  }
+  return found.map(({ file, category }) => {
+    try {
+      return { module: require(file), category };
+    } catch (error) {
+      logger.error(error, `Could not load command from ${file}:`);
+      return { module: null, category };
     }
   });
-
-  return fileList;
 }
 
 // Cache the loaded command modules so we don't re-require on every invocation.
 let cached = null;
 function loadAllCommands() {
   if (cached) return cached;
-  const commandsPath = path.join(__dirname);
-  const files = getAllCommandFiles(commandsPath).filter(
-    (file) => path.basename(file) !== "help.cjs" && path.basename(file) !== "help.js",
-  );
 
   const commands = { general: [], group: [] };
-  for (const file of files) {
-    try {
-      const command = require(file);
-      if (!command?.name || !command?.description) continue;
-      const relativePath = path.relative(commandsPath, file);
-      if (path.dirname(relativePath) === "group") {
-        commands.group.push(command);
-      } else {
-        commands.general.push(command);
-      }
-    } catch (error) {
-      logger.error(error, `Could not load command from ${file}:`);
-    }
+  for (const { module: command, category } of commandModules()) {
+    if (!command?.name || !command?.description || command === module.exports) continue;
+    (category === "group" ? commands.group : commands.general).push(command);
   }
-
   commands.general.push(module.exports);
 
   // Build alias index for inverse lookup.
@@ -84,11 +101,11 @@ function aliasesOf(command) {
 }
 
 /**
- * `usage` is authored WITHOUT the prefix ("kick @user [reason]") and may hold
+ * `usage` is authored WITHOUT the prefix ("kick @member [reason]") and may hold
  * several variants separated by newlines. Render each one with the live prefix.
  */
-function usageLines(command, prefix) {
-  const raw = command.usage || command.name;
+function usageLines(command, prefix, lang) {
+  const raw = localize(command.usage, lang) || command.name;
   return String(raw)
     .split("\n")
     .map((line) => line.trim())
@@ -96,135 +113,238 @@ function usageLines(command, prefix) {
     .map((line) => `${prefix}${line}`);
 }
 
+function examplesOf(command, lang) {
+  const examples = command.examples;
+  if (Array.isArray(examples)) return examples;
+  const picked = examples && (examples[lang] || examples.en || examples.ar);
+  return Array.isArray(picked) ? picked : [];
+}
+
+// Everything !help itself says, in both languages.
+const TEXT = {
+  en: {
+    title: `🤖 ${brand.name} Commands`,
+    general: "General Commands",
+    group: "Group Commands",
+    legendTitle: "Legend",
+    legend: "`<...>` required · `[...]` optional · `a|b` pick one",
+    languageTitle: "Language",
+    footer: (p) => `Type *${p}help <command>* for details`,
+    detailTitle: "Command Details",
+    command: "Command:",
+    aliases: "Aliases:",
+    description: "Description:",
+    usage: "Usage:",
+    examples: "Examples:",
+    where: "Where:",
+    permission: "Permission:",
+    userAdmin: "⚠️ You must be a group admin",
+    botAdmin: "⚠️ The bot must be a group admin",
+    detailLegend: "`<...>` required · `[...]` optional",
+    notFound: (query, p) =>
+      `❌ Command "*${query}*" not found.\nType \`${p}help\` to list every command.`,
+    permissions: {
+      MEMBERS: "Everyone",
+      ALL: "Everyone",
+      ADMINS_ONLY: "Group admins only",
+      ADMINS_OWNER: "Group admins and the owner",
+      OWNER_ONLY: "Owner only",
+    },
+    chats: {
+      all: "All chats",
+      group: "Groups only",
+      private: "Private chats only",
+    },
+  },
+  ar: {
+    title: `🤖 أوامر ${brand.name}`,
+    general: "الأوامر العامة",
+    group: "أوامر المجموعات",
+    legendTitle: "الرموز",
+    legend: "`<...>` مطلوب · `[...]` اختياري · `a|b` اختر واحدًا",
+    languageTitle: "اللغة",
+    footer: (p) => `اكتب *${p}help <أمر>* لمزيد من التفاصيل`,
+    detailTitle: "تفاصيل الأمر",
+    command: "الأمر:",
+    aliases: "الاختصارات:",
+    description: "الوصف:",
+    usage: "الاستخدام:",
+    examples: "أمثلة:",
+    where: "المكان:",
+    permission: "الصلاحية:",
+    userAdmin: "⚠️ يجب أن تكون مشرفًا",
+    botAdmin: "⚠️ يجب أن يكون البوت مشرفًا",
+    detailLegend: "`<...>` مطلوب · `[...]` اختياري",
+    notFound: (query, p) => `❌ الأمر "*${query}*" غير موجود.\nاكتب \`${p}help\` لعرض كل الأوامر.`,
+    permissions: {
+      MEMBERS: "الجميع",
+      ALL: "الجميع",
+      ADMINS_ONLY: "المشرفون فقط",
+      ADMINS_OWNER: "المشرفون والمالك",
+      OWNER_ONLY: "المالك فقط",
+    },
+    chats: {
+      all: "كل المحادثات",
+      group: "المجموعات فقط",
+      private: "المحادثات الخاصة فقط",
+    },
+  },
+};
+
 // Permission level as configured for this command (group sub-commands live in
 // their own map). Shown in the detail view so members know why a command is
 // refusing them.
-const PERMISSION_LABELS = {
-  MEMBERS: "الكل",
-  ALL: "الكل",
-  ADMINS_ONLY: "المشرفين فقط",
-  ADMINS_OWNER: "المشرفين والمالك",
-  OWNER_ONLY: "المالك فقط",
-};
-
-function permissionFor(command, isGroupCommand) {
+function permissionFor(command, isGroupCommand, t) {
   const level = runtimeConfig.getPermission(
     isGroupCommand ? `group:${command.name}` : command.name,
   );
-  return PERMISSION_LABELS[level] || level;
+  return t.permissions[level] || level;
 }
 
-const CHAT_LABELS = {
-  all: "كل المحادثات",
-  group: "المجموعات فقط",
-  private: "الخاص فقط",
-};
+/** A language word may sit anywhere after !help; whatever is left is the command. */
+function parseArgs(args = []) {
+  let lang = null;
+  const rest = [];
+  for (const arg of args) {
+    const picked = lang ? null : parseLang(arg);
+    if (picked) lang = picked;
+    else rest.push(arg);
+  }
+  return { lang, query: rest[0] || null };
+}
+
+function renderList(commands, prefix, lang) {
+  const t = TEXT[lang];
+  const section = (title, list) => {
+    let text = `├─ *${title}*\n`;
+    list.forEach((cmd) => {
+      const aliases = aliasesOf(cmd);
+      const aliasSnippet = aliases.length
+        ? ` _(${aliases.map((a) => prefix + a).join(", ")})_`
+        : "";
+      // The description goes on its own line UNDER the command, never
+      // beside it: WhatsApp lays a line out by its first strong character,
+      // and an Arabic description next to an LTR command name gets its
+      // words reordered into unreadability. The colon ends the name line.
+      text += `│  ◦ *${prefix}${cmd.name}*${aliasSnippet}:\n`;
+      text += `│     ${localize(cmd.description, lang)}\n`;
+      // The parameters are the whole point of a help list — show them.
+      usageLines(cmd, prefix, lang).forEach((line) => {
+        text += `│     ⌨️ \`${line}\`\n`;
+      });
+    });
+    return `${text}│\n`;
+  };
+
+  // A command switched off from the dashboard can't run, so it has no
+  // business in the menu.
+  const live = (list) => list.filter((cmd) => !runtimeConfig.isDisabled(cmd.name));
+  const general = live(commands.general);
+  const group = live(commands.group);
+
+  let text = `╭───「 *${t.title}* 」\n│\n`;
+  if (general.length) text += section(t.general, general);
+  if (group.length) text += section(t.group, group);
+
+  text += `├─ *${t.legendTitle}*\n`;
+  text += `│  ${t.legend}\n│\n`;
+  // Starts with the LTR command, so the line lays out left-to-right in both
+  // menus and each language name stays next to its own command.
+  text += `├─ *${t.languageTitle}*\n`;
+  text += `│  \`${prefix}help ar\` — العربية · \`${prefix}help en\` — English\n│\n`;
+  text += `╰───「 ${t.footer(prefix)} 」`;
+  return text;
+}
+
+function renderDetail(command, isGroupCommand, prefix, lang) {
+  const t = TEXT[lang];
+  // Same bidi rule as the list: a label ends its own line and the value
+  // starts the next one, so no line mixes RTL and LTR content.
+  let text = `╭───「 *${t.detailTitle}* 」\n│\n`;
+  text += `├─ *${t.command}*\n│     ${prefix}${command.name}\n`;
+
+  const commandAliases = aliasesOf(command);
+  if (commandAliases.length) {
+    text += `├─ *${t.aliases}*\n│     ${commandAliases.map((a) => `${prefix}${a}`).join(", ")}\n`;
+  }
+
+  const description = localize(command.description, lang);
+  if (description) {
+    text += `├─ *${t.description}*\n│     ${description}\n`;
+  }
+
+  text += `├─ *${t.usage}*\n`;
+  usageLines(command, prefix, lang).forEach((line) => {
+    text += `│     \`${line}\`\n`;
+  });
+
+  const examples = examplesOf(command, lang);
+  if (examples.length) {
+    text += `├─ *${t.examples}*\n`;
+    examples.forEach((example) => {
+      text += `│     \`${prefix}${example}\`\n`;
+    });
+  }
+
+  text += `├─ *${t.where}*\n│     ${t.chats[command.chat] || command.chat || t.chats.all}\n`;
+  text += `├─ *${t.permission}*\n│     ${permissionFor(command, isGroupCommand, t)}\n`;
+
+  if (command.userAdminRequired) text += `├─ ${t.userAdmin}\n`;
+  if (command.botAdminRequired) text += `├─ ${t.botAdmin}\n`;
+
+  text += `│\n├─ ${t.detailLegend}\n`;
+  text += `│\n╰───「 ${brand.name} 」`;
+  return text;
+}
 
 module.exports = {
   name: "help",
-  aliases: ["menu", "commands", "h"],
-  description: "Shows a list of all commands or info about a specific command.",
-  usage: "help [اسم الأمر]",
+  aliases: ["menu", "commands", "h", "مساعدة", "الاوامر", "اوامر"],
+  description: {
+    en: "Lists every command, or shows the details of one — in Arabic or English.",
+    ar: "يعرض كل الأوامر أو تفاصيل أمر واحد — بالعربية أو الإنجليزية.",
+  },
+  usage: {
+    en: "help [ar|en]\nhelp <command> [ar|en]",
+    ar: "help [ar|en]\nhelp <اسم الأمر> [ar|en]",
+  },
   chat: "all",
 
-  async execute(sock, msg, args) {
+  async execute(sock, msg, args = [], body = "", _groupMetadata = null, ctx = {}) {
     const prefix = currentPrefix();
     const { commands, aliasIndex } = loadAllCommands();
+    const parsed = parseArgs(args);
+    const lang = parsed.lang || resolveLang(`${ctx?.invokedName || ""} ${body || args.join(" ")}`);
 
-    if (!args[0]) {
-      const section = (title, list) => {
-        let text = `├─ *${title}*\n`;
-        list.forEach((cmd) => {
-          const aliases = aliasesOf(cmd);
-          const aliasSnippet = aliases.length
-            ? ` _(${aliases.map((a) => prefix + a).join(", ")})_`
-            : "";
-          // The description goes on its own line UNDER the command, never
-          // beside it: WhatsApp lays a line out by its first strong character,
-          // and an Arabic description next to an LTR command name gets its
-          // words reordered into unreadability. The colon ends the name line.
-          text += `│  ◦ *${prefix}${cmd.name}*${aliasSnippet}:\n`;
-          text += `│     ${cmd.description}\n`;
-          // The parameters are the whole point of a help list — show them.
-          usageLines(cmd, prefix).forEach((line) => {
-            text += `│     ⌨️ \`${line}\`\n`;
-          });
-        });
-        return `${text}│\n`;
-      };
-
-      // A command switched off from the dashboard can't run, so it has no
-      // business in the menu.
-      const live = (list) => list.filter((cmd) => !runtimeConfig.isDisabled(cmd.name));
-
-      const general = live(commands.general);
-      const group = live(commands.group);
-
-      let helpText = `╭───「 *🤖 ${brand.name} Commands* 」\n│\n`;
-      if (general.length) helpText += section("General Commands", general);
-      if (group.length) helpText += section("Group Commands", group);
-
-      helpText += `├─ *الرموز*\n`;
-      helpText += `│  \`<...>\` مطلوب · \`[...]\` اختياري · \`a|b\` اختر واحد\n│\n`;
-      helpText += `╰───「 اكتب *${prefix}help <أمر>* لتفاصيل أكتر 」`;
-
-      return sendBotMessage(sock, msg.key.remoteJid, { text: helpText }, { replyTo: msg });
+    if (!parsed.query) {
+      return sendBotMessage(
+        sock,
+        msg.key.remoteJid,
+        { text: renderList(commands, prefix, lang) },
+        { replyTo: msg },
+      );
     }
 
-    const query = args[0].startsWith(prefix) ? args[0].slice(prefix.length) : args[0];
+    const query = parsed.query.startsWith(prefix)
+      ? parsed.query.slice(prefix.length)
+      : parsed.query;
     const command = findCommand(query, commands, aliasIndex);
 
     if (!command) {
       return sendBotMessage(
         sock,
         msg.key.remoteJid,
-        {
-          text: `❌ الأمر "*${args[0]}*" غير موجود.\n` + `اكتب \`${prefix}help\` لعرض كل الأوامر.`,
-        },
+        { text: TEXT[lang].notFound(parsed.query, prefix) },
         { replyTo: msg },
       );
     }
 
-    // Same bidi rule as the list: an Arabic label ends its own line and the
-    // value starts the next one, so no line mixes RTL and LTR content.
-    let usageText = `╭───「 *Command Details* 」\n│\n`;
-    usageText += `├─ *الأمر:*\n│     ${prefix}${command.name}\n`;
-
-    const commandAliases = aliasesOf(command);
-    if (commandAliases.length) {
-      usageText += `├─ *اختصارات:*\n│     ${commandAliases.map((a) => `${prefix}${a}`).join(", ")}\n`;
-    }
-
-    if (command.description) {
-      usageText += `├─ *الوصف:*\n│     ${command.description}\n`;
-    }
-
-    usageText += `├─ *الاستخدام:*\n`;
-    usageLines(command, prefix).forEach((line) => {
-      usageText += `│     \`${line}\`\n`;
-    });
-
-    if (command.examples?.length) {
-      usageText += `├─ *أمثلة:*\n`;
-      command.examples.forEach((example) => {
-        usageText += `│     \`${prefix}${example}\`\n`;
-      });
-    }
-
-    usageText += `├─ *المكان:*\n│     ${CHAT_LABELS[command.chat] || command.chat || "كل المحادثات"}\n`;
     const isGroupCommand = commands.group.includes(command);
-    usageText += `├─ *الصلاحية:*\n│     ${permissionFor(command, isGroupCommand)}\n`;
-
-    if (command.userAdminRequired) {
-      usageText += `├─ ⚠️ لازم تكون مشرف\n`;
-    }
-    if (command.botAdminRequired) {
-      usageText += `├─ ⚠️ لازم البوت يكون مشرف\n`;
-    }
-
-    usageText += `│\n├─ \`<...>\` مطلوب · \`[...]\` اختياري\n`;
-    usageText += `│\n╰───「 ${brand.name} 」`;
-
-    return sendBotMessage(sock, msg.key.remoteJid, { text: usageText }, { replyTo: msg });
+    return sendBotMessage(
+      sock,
+      msg.key.remoteJid,
+      { text: renderDetail(command, isGroupCommand, prefix, lang) },
+      { replyTo: msg },
+    );
   },
 };

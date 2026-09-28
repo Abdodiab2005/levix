@@ -3,8 +3,14 @@ const logger = require("../../utils/logger.cjs");
 
 module.exports = {
   name: "removeall",
-  description: "Removes all non-admin members from the group after confirmation.",
-  usage: "removeall",
+  description: {
+    en: "Removes every non-admin member from the group, after confirmation.",
+    ar: "يطرد كل الأعضاء غير المشرفين من المجموعة بعد التأكيد.",
+  },
+  usage: {
+    en: "removeall",
+    ar: "removeall",
+  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true,

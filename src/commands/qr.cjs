@@ -4,8 +4,14 @@ const logger = require("../utils/logger.cjs");
 
 module.exports = {
   name: "qr",
-  description: "Generates a QR code from text.",
-  usage: "qr <نص|رابط>",
+  description: {
+    en: "Generates a QR code from text.",
+    ar: "ينشئ رمز QR من نص.",
+  },
+  usage: {
+    en: "qr <text|link>",
+    ar: "qr <نص|رابط>",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {

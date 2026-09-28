@@ -8,9 +8,14 @@ const { resolveGroupMetadata } = require("../../utils/groupMetadataCache.cjs");
 // --- The Main Command Logic ---
 const command = {
   name: "antilink",
-  description: "Advanced control for the anti-link feature.",
-  usage:
-    "antilink [status]\nantilink <on|off>\nantilink mode <ALL|WHITELIST|BLACKLIST>\nantilink <allow|disallow> <دومين>",
+  description: {
+    en: "Advanced control of the anti-link protection.",
+    ar: "تحكم متقدم في ميزة منع الروابط.",
+  },
+  usage: {
+    en: "antilink [status]\nantilink <on|off>\nantilink mode <ALL|WHITELIST|BLACKLIST>\nantilink <allow|disallow> <domain>",
+    ar: "antilink [status]\nantilink <on|off>\nantilink mode <ALL|WHITELIST|BLACKLIST>\nantilink <allow|disallow> <النطاق>",
+  },
   chat: "group",
   userAdminRequired: true,
 

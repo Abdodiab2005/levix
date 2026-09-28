@@ -4,8 +4,14 @@ const logger = require("../../utils/logger.cjs");
 
 module.exports = {
   name: "approveall",
-  description: "Manages the auto-approve feature for join requests.",
-  usage: "approveall <on|off>",
+  description: {
+    en: "Manages automatic approval of join requests.",
+    ar: "يدير الموافقة التلقائية على طلبات الانضمام.",
+  },
+  usage: {
+    en: "approveall <on|off>",
+    ar: "approveall <on|off>",
+  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true, // The bot must be an admin to approve requests

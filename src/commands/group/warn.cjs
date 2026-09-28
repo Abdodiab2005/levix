@@ -10,8 +10,14 @@ const {
 
 module.exports = {
   name: "warn",
-  description: "Warns a user and takes action if the limit is reached.",
-  usage: "warn @عضو [السبب]",
+  description: {
+    en: "Warns a member, and takes action once the limit is reached.",
+    ar: "يوجّه تحذيرًا لعضو، ويتخذ إجراءً عند بلوغ الحد.",
+  },
+  usage: {
+    en: "warn @member [reason]",
+    ar: "warn @عضو [السبب]",
+  },
   chat: "group",
   userAdminRequired: true,
 

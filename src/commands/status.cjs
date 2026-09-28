@@ -22,8 +22,14 @@ function formatUptime(seconds) {
 
 module.exports = {
   name: "status",
-  description: "Displays the bot's system status.",
-  usage: "status",
+  description: {
+    en: "Shows the bot's system status.",
+    ar: "يعرض حالة نظام البوت.",
+  },
+  usage: {
+    en: "status",
+    ar: "status",
+  },
   chat: "all", // Can be used in any chat
 
   async execute(sock, msg) {

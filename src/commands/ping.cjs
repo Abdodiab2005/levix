@@ -2,8 +2,14 @@
 
 module.exports = {
   name: "ping",
-  description: "A simple command to check if the bot is responsive.",
-  usage: "ping",
+  description: {
+    en: "Checks that the bot is responding.",
+    ar: "يتحقق من أن البوت يستجيب.",
+  },
+  usage: {
+    en: "ping",
+    ar: "ping",
+  },
   chat: "all", // <-- الخاصية الجديدة. يمكن أن تكون 'group' أو 'private'
 
   async execute(sock, msg) {

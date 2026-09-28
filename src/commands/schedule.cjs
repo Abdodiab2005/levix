@@ -6,8 +6,14 @@ const DATETIME_RE = /^(\d{1,2}):(\d{2})\s+(\d{1,2})-(\d{1,2})-(\d{4})$/;
 
 module.exports = {
   name: "schedule",
-  description: "Schedules a message to be sent in the future.",
-  usage: 'schedule "HH:mm DD-MM-YYYY" "الرسالة"',
+  description: {
+    en: "Schedules a message to be sent later.",
+    ar: "يجدول رسالة لتُرسل في وقت لاحق.",
+  },
+  usage: {
+    en: 'schedule "HH:mm DD-MM-YYYY" "message"',
+    ar: 'schedule "HH:mm DD-MM-YYYY" "الرسالة"',
+  },
   chat: "all",
 
   async execute(sock, msg, args) {

@@ -54,9 +54,14 @@ function formatEntries(entries, { limit = 30 } = {}) {
 module.exports = {
   name: "memory",
   aliases: ["mem", "ذاكرة", "remember"],
-  description: "الذاكرة الدائمة للبوت (ملفات .md): إضافة، عرض، بحث، حذف، أو تصدير الملف.",
-  usage:
-    "memory\nmemory add <المعلومة>\nmemory add global <المعلومة>\nmemory search <كلمة>\nmemory forget <رقم|جزء من النص>\nmemory clear [global]\nmemory file [global]",
+  description: {
+    en: "The bot's long-term memory (.md files): add, list, search, forget, or export the file.",
+    ar: "الذاكرة الدائمة للبوت (ملفات .md): إضافة، أو عرض، أو بحث، أو حذف، أو تصدير الملف.",
+  },
+  usage: {
+    en: "memory\nmemory add <fact>\nmemory add global <fact>\nmemory search <word>\nmemory forget <number|part of the text>\nmemory clear [global]\nmemory file [global]",
+    ar: "memory\nmemory add <المعلومة>\nmemory add global <المعلومة>\nmemory search <كلمة>\nmemory forget <رقم|جزء من النص>\nmemory clear [global]\nmemory file [global]",
+  },
   chat: "all",
 
   async execute(sock, msg, args, body, groupMetadata) {

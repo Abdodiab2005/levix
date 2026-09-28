@@ -4,8 +4,14 @@ const logger = require("../../utils/logger.cjs");
 
 module.exports = {
   name: "rules",
-  description: "Displays the group rules.",
-  usage: "rules",
+  description: {
+    en: "Shows the group rules.",
+    ar: "يعرض قواعد المجموعة.",
+  },
+  usage: {
+    en: "rules",
+    ar: "rules",
+  },
   chat: "group",
 
   async execute(sock, msg) {

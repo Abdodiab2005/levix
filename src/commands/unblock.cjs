@@ -4,8 +4,14 @@ const normalizeJid = require("../utils/normalizeJid.esm.js");
 
 module.exports = {
   name: "unblock",
-  description: "Unblocks a user.",
-  usage: "unblock [@عضو|رقم]   (أو رد على رسالته)",
+  description: {
+    en: "Unblocks a user.",
+    ar: "يلغي حظر مستخدم.",
+  },
+  usage: {
+    en: "unblock [@member|number]   (or reply to their message)",
+    ar: "unblock [@عضو|رقم]   (أو رد على رسالته)",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {

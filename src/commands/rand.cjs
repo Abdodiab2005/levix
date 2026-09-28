@@ -61,8 +61,14 @@ function rollDice(spec) {
 module.exports = {
   name: "rand",
   aliases: ["random", "roll", "عشوائي", "قرعة"],
-  description: "أرقام عشوائية، نرد، عملة، أو اختيار من قائمة.",
-  usage: "rand [<أقصى> | <أدنى> <أقصى> | dice [2d6] | coin | pick أ | ب | ج]",
+  description: {
+    en: "Random numbers, dice, a coin flip, or a pick from a list.",
+    ar: "أرقام عشوائية، أو نرد، أو رمي عملة، أو اختيار من قائمة.",
+  },
+  usage: {
+    en: "rand [<max> | <min> <max> | dice [2d6] | coin | pick a | b | c]",
+    ar: "rand [<أقصى> | <أدنى> <أقصى> | dice [2d6] | coin | pick أ | ب | ج]",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {

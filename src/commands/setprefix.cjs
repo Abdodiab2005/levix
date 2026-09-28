@@ -6,8 +6,14 @@ const runtimeConfig = require("../config/runtime-config.cjs");
 module.exports = {
   name: "setprefix",
   aliases: ["prefix"],
-  description: "Set custom prefix for the bot (Owner only)",
-  usage: "setprefix <البادئة الجديدة>",
+  description: {
+    en: "Sets the bot's command prefix (owner only).",
+    ar: "يغيّر بادئة أوامر البوت (للمالك فقط).",
+  },
+  usage: {
+    en: "setprefix <new prefix>",
+    ar: "setprefix <البادئة الجديدة>",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {

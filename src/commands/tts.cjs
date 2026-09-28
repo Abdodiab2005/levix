@@ -133,8 +133,14 @@ async function synthesizeVoice(text, lang = "ar") {
 module.exports = {
   name: "tts",
   aliases: ["tovoice", "speak"],
-  description: "Convert text to speech (FREE - no API costs)",
-  usage: "tts <النص>   (أو رد على رسالة نصية)",
+  description: {
+    en: "Converts text to speech (free — no API costs).",
+    ar: "يحوّل النص إلى كلام مسموع (مجاني — بدون تكلفة API).",
+  },
+  usage: {
+    en: "tts <text>   (or reply to a text message)",
+    ar: "tts <النص>   (أو رد على رسالة نصية)",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {

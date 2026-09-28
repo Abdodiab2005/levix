@@ -242,10 +242,14 @@ function summarizeEntry(e, idx) {
 module.exports = {
   name: "gemini",
   aliases: ["ask", "ai", "resetai", "del", "delall", "generate"],
-  description:
-    "مساعد ذكي بأدوات (بحث، فتح روابط، ذاكرة دائمة). sub-commands: add/send/clear/show للسياق، generate للصور، del/delall لمسح المحادثة.",
-  usage:
-    "gemini <النص>\ngemini add <النص>\ngemini send\ngemini show\ngemini clear\ngenerate <وصف الصورة>\ndel   (مسح ذاكرة المحادثة)\ndelall   (مسح كل المحادثات)",
+  description: {
+    en: "AI assistant with tools (web search, reading links, long-term memory). Sub-commands: add/send/clear/show for context, generate for images, del/delall to clear the conversation.",
+    ar: "مساعد ذكي بأدوات (بحث في الويب، قراءة الروابط، ذاكرة دائمة). أوامر فرعية: add/send/clear/show للسياق، وgenerate للصور، وdel/delall لمسح المحادثة.",
+  },
+  usage: {
+    en: "gemini <text>\ngemini add <text>\ngemini send\ngemini show\ngemini clear\ngenerate <image description>\ndel   (clear this chat's conversation)\ndelall   (clear every conversation)",
+    ar: "gemini <النص>\ngemini add <النص>\ngemini send\ngemini show\ngemini clear\ngenerate <وصف الصورة>\ndel   (مسح سجل محادثة هذا الشات)\ndelall   (مسح كل المحادثات)",
+  },
   chat: "all",
 
   async execute(sock, msg, args, body, groupMetadata, ctx = {}) {

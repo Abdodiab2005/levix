@@ -4,8 +4,14 @@ const logger = require("../../utils/logger.cjs");
 
 module.exports = {
   name: "clearwarns",
-  description: "Clears all warnings for a specific user.",
-  usage: "clearwarns @عضو",
+  description: {
+    en: "Clears all of a member's warnings.",
+    ar: "يمسح كل تحذيرات عضو معيّن.",
+  },
+  usage: {
+    en: "clearwarns @member",
+    ar: "clearwarns @عضو",
+  },
   chat: "group",
   userAdminRequired: true,
 

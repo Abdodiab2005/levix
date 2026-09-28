@@ -4,8 +4,14 @@ const logger = require("../../utils/logger.cjs");
 
 module.exports = {
   name: "setpp", // pp = profile picture
-  description: "Changes the group's profile picture.",
-  usage: "setpp   (رد على صورة)",
+  description: {
+    en: "Changes the group's profile picture.",
+    ar: "يغيّر صورة المجموعة.",
+  },
+  usage: {
+    en: "setpp   (reply to an image)",
+    ar: "setpp   (رد على صورة)",
+  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true,

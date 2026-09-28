@@ -3,8 +3,14 @@ const { getAllNotes, getNote } = require("../../utils/storage.cjs");
 
 module.exports = {
   name: "note",
-  description: "Retrieves a saved note.",
-  usage: "note #الكلمة-المفتاحية",
+  description: {
+    en: "Shows a saved note.",
+    ar: "يعرض ملاحظة محفوظة.",
+  },
+  usage: {
+    en: "note #keyword",
+    ar: "note #الكلمة-المفتاحية",
+  },
   chat: "all",
 
   async execute(sock, msg, args) {
