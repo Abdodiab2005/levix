@@ -1,0 +1,89 @@
+name: Upload release AAB to Google Play
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "GitHub release tag to upload (for example: v4.2.0)"
+        required: true
+        type: string
+      track:
+        description: "Google Play track"
+        required: true
+        default: "alpha"
+        type: choice
+        options:
+          - alpha
+          - internal
+          - beta
+      status:
+        description: "Google Play release status"
+        required: true
+        default: "draft"
+        type: choice
+        options:
+          - draft
+          - completed
+      confirm:
+        description: "Type PUBLISH to confirm this upload"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: google-play-${{ inputs.track }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Upload ${{ inputs.release_tag }} to Google Play
+    if: ${{ inputs.confirm == 'PUBLISH' }}
+    runs-on: ubuntu-latest
+
+    # Configure this environment in:
+    # Settings -> Environments -> google-play
+    # Add yourself as a required reviewer if you want a second approval gate.
+    environment: google-play
+
+    steps:
+      - name: Download AAB from GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          gh release view "$TAG" --repo "${{ github.repository }}" > /dev/null
+
+          gh release download "$TAG"             --repo "${{ github.repository }}"             --pattern "levix-android.aab"             --dir dist
+
+          test -s dist/levix-android.aab
+
+          echo "Release asset:"
+          ls -lh dist/levix-android.aab
+          sha256sum dist/levix-android.aab
+
+      - name: Upload AAB to Google Play
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: net.leviro.levix
+          releaseFiles: dist/levix-android.aab
+          tracks: ${{ inputs.track }}
+          status: ${{ inputs.status }}
+          releaseName: ${{ inputs.release_tag }}
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "## Google Play upload"
+            echo
+            echo "- GitHub release: \`${{ inputs.release_tag }}\`"
+            echo "- Package: \`net.leviro.levix\`"
+            echo "- Track: \`${{ inputs.track }}\`"
+            echo "- Status: \`${{ inputs.status }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
