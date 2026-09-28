@@ -22,15 +22,36 @@ import http from "node:http";
  * @param {string[]} [options.fileStates] - the Files API side: the first entry
  *   is the state an upload comes back in, each later one answers the next
  *   `files.get`. Defaults to ["ACTIVE"].
+ * @param {string} [options.prefix] - serve under a path, the way a reverse
+ *   proxy does (`https://proxy.example/gemini`). Anything outside it gets the
+ *   proxy's own HTML 404, and the upload URL handed back is Google's, so the
+ *   SDK's host-only rewrite of it lands outside the prefix — what a real
+ *   gateway under a path does to every upload.
+ * @param {boolean} [options.filesApi=true] - false: a gateway that forwards
+ *   generateContent only; every upload request gets the HTML 404.
  */
-export async function startGenaiServer(replies = [], { fileStates = ["ACTIVE"] } = {}) {
+export async function startGenaiServer(
+  replies = [],
+  { fileStates = ["ACTIVE"], prefix = "", filesApi = true } = {},
+) {
   const requests = [];
   // Files API traffic is kept apart from `requests`, so body(n) still means
   // "the nth generateContent" in tests that upload something first.
   const uploads = [];
   const fileGets = [];
+  // Upload requests that were refused with the HTML 404.
+  const refused = [];
   let index = 0;
   let baseUrl = "";
+
+  const nginx404 = (res, url) => {
+    refused.push(url);
+    res.writeHead(404, { "content-type": "text/html" });
+    res.end(
+      "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n" +
+        "<center><h1>404 Not Found</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n",
+    );
+  };
 
   const fileResource = (upload, state) => ({
     name: upload.name,
@@ -45,6 +66,12 @@ export async function startGenaiServer(replies = [], { fileStates = ["ACTIVE"] }
     req.on("data", (chunk) => chunks.push(chunk));
     req.on("end", () => {
       const raw = Buffer.concat(chunks);
+
+      if (prefix) {
+        if (!req.url.startsWith(`${prefix}/`)) return nginx404(res, req.url);
+        req.url = req.url.slice(prefix.length);
+      }
+      if (!filesApi && req.url.startsWith("/upload")) return nginx404(res, req.url);
 
       // The resumable upload @google/genai speaks: a `start` that declares the
       // MIME type in a header and gets an upload URL back, then the bytes.
@@ -63,7 +90,9 @@ export async function startGenaiServer(replies = [], { fileStates = ["ACTIVE"] }
         uploads.push(upload);
         res.writeHead(200, {
           "content-type": "application/json",
-          "x-goog-upload-url": `${baseUrl}/upload-session/${uploads.length}`,
+          "x-goog-upload-url": prefix
+            ? `https://generativelanguage.googleapis.com/upload/v1beta/files?upload_id=${uploads.length}`
+            : `${baseUrl}/upload-session/${uploads.length}`,
         });
         res.end("{}");
         return;
@@ -103,11 +132,13 @@ export async function startGenaiServer(replies = [], { fileStates = ["ACTIVE"] }
   });
 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  baseUrl = `http://127.0.0.1:${server.address().port}`;
+  baseUrl = `http://127.0.0.1:${server.address().port}${prefix}`;
 
   return {
     baseUrl,
     requests,
+    /** Requests answered with the proxy's HTML 404. */
+    refused,
     /** Files API uploads: { name, mimeType (the declared header), bytes }. */
     uploads,
     /** The file names `files.get` was asked about, in order. */

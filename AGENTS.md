@@ -174,7 +174,8 @@ src/
     ├── textDecode.cjs    # charset / entity / mojibake decoding
     ├── messageContent.cjs # unwrap visible text/media from Baileys envelopes
     ├── geminiMedia.cjs # WhatsApp media -> Gemini: bare MIME types, in-memory
-    │                 # download, Files API upload (MIME in `config`, no temp file)
+    │                 # download, Files API upload (MIME in `config`, no temp
+    │                 # file), inline when the endpoint has no Files API
     ├── providerUrl.cjs # provider URL validation + DNS-pinned fetch
     ├── logger.cjs    # Pino (worker transports, or in-process when packaged)
     ├── storage.cjs   # Sync storage API (CommonJS) — re-exports src/db/store.cjs
@@ -515,7 +516,12 @@ the setting per message.
   context buffer, `!generate`, and the expired-file fallback. Media handling is
   the one place the provider matters here: on gemini it uploads to the Files
   API through `src/utils/geminiMedia.cjs` (the MIME type rides in `config`,
-  parameters stripped — `audio/ogg; codecs=opus` is sent as `audio/ogg`); on
+  parameters stripped — `audio/ogg; codecs=opus` is sent as `audio/ogg`). An
+  endpoint with no Files API — a gateway set as `gemini_base_url`, or any
+  proxy under a path, since the SDK rewrites Google's upload URL to the base
+  URL's host but keeps Google's path — makes `geminiMediaPart()` send the bytes
+  inline instead (up to 15 MB) and remember that for the base URL; only a
+  404/405/501 or an HTML answer triggers it, never a key or quota error. On
   openai/anthropic the media part becomes a one-line note (no upload API exists
   on those paths) and the caption still reaches the model. The download type is
   the message's WhatsApp type, not its MIME type: a photo sent as a document

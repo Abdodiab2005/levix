@@ -4,7 +4,12 @@ const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 const logger = require("../utils/logger.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const { unwrapMessage } = require("../utils/messageContent.cjs");
-const { baseMimeType, downloadMedia, uploadToGemini } = require("../utils/geminiMedia.cjs");
+const {
+  INLINE_MEDIA_LIMIT,
+  baseMimeType,
+  downloadMedia,
+  uploadToGemini,
+} = require("../utils/geminiMedia.cjs");
 
 const settings = require("../config/settings.cjs");
 const {
@@ -63,10 +68,9 @@ const TRANSCRIBE_PROMPT =
   "Please transcribe this audio message accurately. Return ONLY the transcription text without any additional commentary, explanations, or formatting. Just the raw transcribed text.";
 
 // A voice note is a few hundred KB, so it rides inline in the request: one
-// round trip, instead of an upload, a finalize and then the request. Past this
-// size (Gemini caps a whole inline request at 20 MB) it goes through the Files
-// API instead.
-const INLINE_AUDIO_LIMIT = 15 * 1024 * 1024;
+// round trip, instead of an upload, a finalize and then the request. Past
+// INLINE_MEDIA_LIMIT (Gemini caps a whole inline request at 20 MB) it goes
+// through the Files API instead.
 
 async function transcribeWithGemini(audioBuffer, mimetype) {
   const gemini = geminiStt();
@@ -82,7 +86,7 @@ async function transcribeWithGemini(audioBuffer, mimetype) {
   // `audio/ogg`, and the codec parameter is not part of it.
   const mimeType = baseMimeType(mimetype, "audio");
   let audioPart;
-  if (audioBuffer.length <= INLINE_AUDIO_LIMIT) {
+  if (audioBuffer.length <= INLINE_MEDIA_LIMIT) {
     audioPart = { inlineData: { mimeType, data: audioBuffer.toString("base64") } };
   } else {
     const file = await uploadToGemini(gemini.genAI, audioBuffer, mimeType, {
