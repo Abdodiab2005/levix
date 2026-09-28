@@ -21,7 +21,7 @@ const {
   mediaKind,
   baseMimeType,
   downloadMedia,
-  uploadToGemini,
+  geminiMediaPart,
 } = require("../utils/geminiMedia.cjs");
 const { tr } = require("../utils/i18n.cjs");
 const aiIdentity = require("../config/ai-identity.cjs");
@@ -455,23 +455,19 @@ class GeminiProvider extends BaseAIProvider {
       return null;
     }
 
-    // The MIME type goes in `config` (see utils/geminiMedia.cjs) — passing it
-    // anywhere else is what made every upload fail with "Can not determine
-    // mimeType".
+    // Uploaded through the Files API, or inline when the configured endpoint
+    // has none (a gateway / reverse proxy) — see utils/geminiMedia.cjs.
     const mimeType = baseMimeType(rawMime, kind);
     const buffer = await downloadMedia(
       downloadContentFromMessage,
       mediaMessage,
       downloadType || kind,
     );
-    const file = await uploadToGemini(genAI, buffer, mimeType);
-    parts.push({
-      fileData: {
-        fileUri: file.uri,
-        mimeType: file.mimeType || mimeType,
-      },
+    const part = await geminiMediaPart(genAI, buffer, mimeType, {
+      baseUrl: settings.get("gemini_base_url"),
     });
-    return file.uri;
+    parts.push(part);
+    return part.fileData?.fileUri || `inline:${kind}`;
   }
 
   async runTurn(options) {

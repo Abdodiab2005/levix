@@ -33,10 +33,11 @@ useTempDataDir("levix-gemini-media");
 
 const settings = harnessRequire("./src/config/settings.cjs");
 const { GoogleGenAI } = harnessRequire("@google/genai");
-const { baseMimeType, mediaKind, uploadToGemini } = harnessRequire(
+const { baseMimeType, mediaKind, uploadToGemini, isMissingUploadEndpoint } = harnessRequire(
   "./src/utils/geminiMedia.cjs",
 );
-harnessRequire("./src/services/aiAgent.cjs"); // registers the gemini provider
+const aiAgent = harnessRequire("./src/services/aiAgent.cjs");
+// (requiring aiAgent above is also what registers the gemini provider)
 const { getProvider } = harnessRequire("./src/services/aiRouter.cjs");
 
 settings.set("ai_provider", "gemini");
@@ -166,6 +167,100 @@ await withGemini({ fileStates: ["PROCESSING", "FAILED"] }, async ({ genAI }) => 
   }
   ok("a file Google failed to process is an error, not a dead URI", error !== null);
 });
+
+section("a gateway under a path: the photo goes inline (the second screenshot)");
+
+// `gemini_base_url` pointing at a reverse proxy under a path. Text and voice
+// notes worked through it; every photo died on "404 Not Found … nginx",
+// because the SDK rewrites Google's upload URL to the proxy's host but keeps
+// Google's path, which is outside the proxy's prefix.
+await withGemini(
+  { prefix: "/gemini" },
+  async ({ fake, genAI }) => {
+    const bytes = Buffer.from("\xff\xd8\xff-a-photo", "latin1");
+    const parts = [];
+    let error = null;
+    try {
+      await getProvider("gemini").prepareMedia(parts, { mimetype: "image/jpeg" }, null, {
+        downloadContentFromMessage: fakeDownloader(bytes).download,
+        genAI,
+        downloadType: "image",
+      });
+    } catch (err) {
+      error = err;
+    }
+    ok(`no error reaches the user (${error?.message?.slice(0, 60) || "none"})`, error === null);
+    ok("the upload really was refused with the proxy's 404", fake.refused.length >= 1);
+    equal("the photo became an inline part", parts[0]?.inlineData?.mimeType, "image/jpeg");
+    ok(
+      "…carrying its bytes",
+      Buffer.from(parts[0]?.inlineData?.data || "", "base64").equals(bytes),
+    );
+
+    // And the model gets it, through the same prefixed endpoint.
+    const result = await aiAgent.runAgent({
+      parts: [...parts, { text: "describe it" }],
+      history: [],
+    });
+    equal("the answer came back", result.text, "a man in a chair");
+    const sent = fake.body(0)?.contents?.at(-1)?.parts || [];
+    ok("the request carried the photo inline", sent.some((part) => part.inlineData?.data));
+    ok("…and no file reference", !sent.some((part) => part.fileData));
+
+    // The next photo doesn't pay for a doomed upload again.
+    const refusedBefore = fake.refused.length;
+    const uploadsBefore = fake.uploads.length;
+    const again = [];
+    await getProvider("gemini").prepareMedia(again, { mimetype: "image/jpeg" }, null, {
+      downloadContentFromMessage: fakeDownloader(bytes).download,
+      genAI,
+      downloadType: "image",
+    });
+    ok("the second photo went straight inline", !!again[0]?.inlineData);
+    equal("…with no upload attempt", fake.uploads.length, uploadsBefore);
+    equal("…and nothing refused", fake.refused.length, refusedBefore);
+  },
+  [textReply("a man in a chair")],
+);
+
+section("a gateway with no upload route at all");
+
+await withGemini({ filesApi: false }, async ({ fake, genAI }) => {
+  const parts = [];
+  await getProvider("gemini").prepareMedia(parts, { mimetype: "image/png" }, null, {
+    downloadContentFromMessage: fakeDownloader(Buffer.from("\x89PNG-bytes", "latin1")).download,
+    genAI,
+    downloadType: "image",
+  });
+  ok("refused at the first upload request", fake.refused.length === 1);
+  equal("and sent inline instead", parts[0]?.inlineData?.mimeType, "image/png");
+});
+
+section("a working Files API is still used, per endpoint");
+
+await withGemini({}, async ({ fake, genAI }) => {
+  const parts = [];
+  await getProvider("gemini").prepareMedia(parts, { mimetype: "image/jpeg" }, null, {
+    downloadContentFromMessage: fakeDownloader(Buffer.from("\xff\xd8-photo", "latin1")).download,
+    genAI,
+    downloadType: "image",
+  });
+  ok("another endpoint's missing Files API isn't held against this one", !!parts[0]?.fileData);
+  equal("one upload", fake.uploads.length, 1);
+});
+
+section("only a missing endpoint falls back — a real error still surfaces");
+
+ok("404", isMissingUploadEndpoint({ status: 404 }));
+ok("405", isMissingUploadEndpoint({ status: 405 }));
+ok("an HTML page instead of JSON", isMissingUploadEndpoint({ message: '{"error":{"message":"<html>…"}}' }));
+ok(
+  "the SDK's missing-upload-URL complaint",
+  isMissingUploadEndpoint({ message: "Failed to get upload url. Server did not return the x-google-upload-url in the headers" }),
+);
+ok("a bad key is not", !isMissingUploadEndpoint({ status: 403, message: "API key not valid" }));
+ok("a quota error is not", !isMissingUploadEndpoint({ status: 429, message: "RESOURCE_EXHAUSTED" }));
+ok("a server error is not", !isMissingUploadEndpoint({ status: 500, message: "internal" }));
 
 // ---------------------------------------------------------------------------
 

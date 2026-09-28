@@ -14,6 +14,18 @@
 // Nothing here touches the disk. The bytes go up as a Blob, so there is no temp
 // file written next to the code (which a global install, a packaged binary or
 // the Android build may not even allow) and nothing to clean up afterwards.
+//
+// And not every Gemini endpoint has a Files API. A gateway or reverse proxy set
+// as `gemini_base_url` often forwards generateContent and nothing else — and
+// even one that forwards everything breaks if it lives under a path: the SDK
+// takes the upload URL Google hands back and swaps in the base URL's host only,
+// so `https://proxy.example/gemini` uploads to `https://proxy.example/upload/…`
+// and gets the proxy's own 404. Text and voice notes worked (they ride inside
+// the request); every photo failed. geminiMediaPart() tries the upload, and
+// when the endpoint isn't there sends the bytes inline instead — and remembers,
+// so the next photo doesn't pay for the failed upload again.
+
+const logger = require("./logger.cjs");
 
 // Used only when WhatsApp sent no MIME type at all.
 const FALLBACK_MIME = {
@@ -22,6 +34,10 @@ const FALLBACK_MIME = {
   audio: "audio/ogg",
   document: "application/octet-stream",
 };
+
+// Gemini caps a whole inline request at 20 MB; media past this goes through the
+// Files API or not at all.
+const INLINE_MEDIA_LIMIT = 15 * 1024 * 1024;
 
 // A video is usable only once Google has processed it; images and audio are
 // normally ACTIVE straight away.
@@ -96,4 +112,57 @@ async function uploadToGemini(
   return file;
 }
 
-module.exports = { mediaKind, baseMimeType, downloadMedia, uploadToGemini };
+/**
+ * True when an upload failed because the endpoint has no Files API — not
+ * because of the key, the quota or the file. A 404/405/501, an HTML page where
+ * JSON belongs, or the SDK's own complaints about the upload handshake.
+ */
+function isMissingUploadEndpoint(error) {
+  const status = Number(error?.status || error?.code || error?.response?.status);
+  if ([404, 405, 501].includes(status)) return true;
+  const message = String(error?.message || "");
+  return /<html|upload url|upload status is not finalized/i.test(message);
+}
+
+// Base URLs whose Files API turned out to be missing. In memory on purpose: a
+// restart (or a changed base URL) tries the upload again.
+const inlineOnly = new Set();
+
+/**
+ * The part that puts `buffer` in front of Gemini: a `fileData` reference when
+ * the Files API is there, else the bytes inline.
+ *
+ * Inline media rides along in the stored conversation, the way the
+ * OpenAI-compatible and Anthropic providers already keep their images, so a
+ * follow-up question can still see the photo.
+ */
+async function geminiMediaPart(genAI, buffer, mimeType, { baseUrl = "", ...uploadOptions } = {}) {
+  const key = baseUrl || "(default)";
+  const inline = () => ({ inlineData: { mimeType, data: buffer.toString("base64") } });
+  const fitsInline = buffer.length <= INLINE_MEDIA_LIMIT;
+
+  if (inlineOnly.has(key) && fitsInline) return inline();
+
+  try {
+    const file = await uploadToGemini(genAI, buffer, mimeType, uploadOptions);
+    return { fileData: { fileUri: file.uri, mimeType: file.mimeType || mimeType } };
+  } catch (error) {
+    if (!fitsInline || !isMissingUploadEndpoint(error)) throw error;
+    inlineOnly.add(key);
+    logger.warn(
+      { status: error?.status, baseUrl: baseUrl || null },
+      "[geminiMedia] this Gemini endpoint has no Files API — sending media inline from now on",
+    );
+    return inline();
+  }
+}
+
+module.exports = {
+  INLINE_MEDIA_LIMIT,
+  mediaKind,
+  baseMimeType,
+  downloadMedia,
+  uploadToGemini,
+  geminiMediaPart,
+  isMissingUploadEndpoint,
+};
