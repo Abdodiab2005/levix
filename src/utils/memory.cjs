@@ -86,8 +86,8 @@ function headerFor(scope, chatId, chatName) {
     return [
       "# 🧠 الذاكرة العامة",
       "",
-      "> معلومات محفوظة لكل المحادثات. ملف Markdown عادي — عدّله بإيدك وقت ما تحب.",
-      "> كل سطر بيبدأ بـ `-` هو معلومة محفوظة.",
+      "> معلومات محفوظة لكل المحادثات. ملف Markdown عادي — يمكنك تعديله يدويًا في أي وقت.",
+      "> كل سطر يبدأ بـ `-` يمثّل معلومة محفوظة.",
       "",
       "",
     ].join("\n");
@@ -98,8 +98,8 @@ function headerFor(scope, chatId, chatName) {
     `<!-- chat: ${chatId || "unknown"} -->`,
     chatName ? `<!-- name: ${chatName} -->` : null,
     "",
-    "> معلومات محفوظة لهذه المحادثة فقط. ملف Markdown عادي — عدّله بإيدك وقت ما تحب.",
-    "> كل سطر بيبدأ بـ `-` هو معلومة محفوظة.",
+    "> معلومات محفوظة لهذه المحادثة فقط. ملف Markdown عادي — يمكنك تعديله يدويًا في أي وقت.",
+    "> كل سطر يبدأ بـ `-` يمثّل معلومة محفوظة.",
     "",
     "",
   ]
@@ -212,7 +212,7 @@ function addMemory({ scope = "chat", chatId, content, by, chatName } = {}) {
   const text = String(content || "")
     .trim()
     .slice(0, MAX_ENTRY_CHARS);
-  if (!text) throw new Error(tr("There is nothing to save", "مفيش محتوى أحفظه"));
+  if (!text) throw new Error(tr("There is nothing to save", "لا يوجد محتوى لحفظه"));
 
   const filePath = memoryFilePath(normalizedScope, chatId);
   ensureDirs();
@@ -380,13 +380,13 @@ function buildMemoryContext(chatId, { limitChars = maxContextChars() } = {}) {
   }
   if (chatText) {
     blocks.push(
-      `### ذاكرة المحادثة دي (${safeFileName(chatId)}.md)\n${clipTail(chatText, perScope)}`,
+      `### ذاكرة هذه المحادثة (${safeFileName(chatId)}.md)\n${clipTail(chatText, perScope)}`,
     );
   }
 
   return [
     "## 🧠 الذاكرة الدائمة",
-    "دي معلومات اتحفظت قبل كده — سطور بالعلامة `-` اتسجلت بالبوت أو بصاحب البوت، وأي نص حر مكتوب هنا اتكتب بإيد صاحب البوت. اعتبر كل ده حقيقة واستخدمه من غير ما تقول إنك بتقرأ من ملف.",
+    "هذه معلومات حُفظت سابقًا. الأسطر التي تبدأ بـ `-` أضافها البوت أو مالكه، وأي نص حر كتبه مالك البوت يدويًا. تعامل مع هذه المعلومات بوصفها حقائق، واستخدمها دون الإشارة إلى أنك تقرؤها من ملف.",
     "",
     ...blocks,
   ].join("\n");

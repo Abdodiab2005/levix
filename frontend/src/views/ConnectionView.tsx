@@ -141,14 +141,14 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
     }
     await handleAction(
       () => api.startSession({ method: "pairing", phone: cleanPhone }),
-      language === "ar" ? "جاري طلب كود الربط من واتساب..." : "Requesting pairing code...",
+      language === "ar" ? "جارٍ طلب رمز الربط من واتساب..." : "Requesting pairing code...",
     );
   };
 
   const handleStartQr = async () => {
     await handleAction(
       () => api.startSession({ method: "qr" }),
-      language === "ar" ? "جاري بدء الاتصال برمز QR..." : "Starting QR code connection...",
+      language === "ar" ? "جارٍ بدء الاتصال برمز QR..." : "Starting QR code connection...",
     );
   };
 
@@ -537,10 +537,10 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
           <h3 className="text-base sm:text-lg font-bold text-text-main mb-1.5">
             {state === "linking"
               ? language === "ar"
-                ? "جاري إتمام الربط مع الهاتف..."
+                ? "جارٍ إتمام الربط مع الهاتف..."
                 : "Finishing link handshake..."
               : language === "ar"
-                ? "جاري بدء تشغيل الجلسة..."
+                ? "جارٍ بدء تشغيل الجلسة..."
                 : "Initializing WhatsApp session..."}
           </h3>
           <p className="text-xs sm:text-sm text-muted max-w-md">
@@ -671,7 +671,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
               <div className="w-9 h-9 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin" />
               <span className="text-xs sm:text-sm font-semibold animate-pulse">
                 {language === "ar"
-                  ? "جاري تجهيز بيانات الربط من واتساب..."
+                  ? "جارٍ تجهيز بيانات الربط من واتساب..."
                   : "Preparing pairing details from WhatsApp..."}
               </span>
             </div>
@@ -712,4 +712,3 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
     </div>
   );
 };
-

@@ -46,7 +46,7 @@ const HELP_TEXT_AR =
   "🎲 *عشوائي*\n\n" +
   "`!rand` رقم من 1 لـ 100\n" +
   "`!rand <أقصى>` رقم من 1 للرقم ده\n" +
-  "`!rand <أدنى> <أقصى>` رقم بين الاتنين\n" +
+  "`!rand <أدنى> <أقصى>` رقم بين الحدّين\n" +
   "`!rand dice [عدد d أوجه]` نرد — مثال `!rand dice 2d6`\n" +
   "`!rand coin` ملك ولا كتابة\n" +
   "`!rand pick خيار | خيار | خيار` يختار واحد";
@@ -127,7 +127,7 @@ module.exports = {
         return reply(
           tr(
             `❌ Too many options (the limit is ${MAX_CHOICES}).`,
-            `❌ الخيارات كتير أوي (الحد ${MAX_CHOICES}).`,
+            `❌ الخيارات كثيرة جدًا (الحد ${MAX_CHOICES}).`,
           ),
         );
       }

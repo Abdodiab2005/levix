@@ -36,7 +36,7 @@ module.exports = {
         `🌐 *Bot language*
 
 ⚙️ *Current:* \`${labels[currentLang] || currentLang}\`
-• \`${prefix}lang ar\` — العربية الفصحى دائماً
+• \`${prefix}lang ar\` — Modern Standard Arabic, always
 • \`${prefix}lang en\` — English always
 • \`${prefix}lang auto\` — follow the language of each message
 
@@ -50,7 +50,7 @@ Commands, !help and the AI all answer in it.
 • \`${prefix}lang en\` — English always
 • \`${prefix}lang auto\` — تلقائي حسب لغة الرسالة
 
-الأوامر و!help والذكاء الاصطناعي كلهم بيردوا بيها.
+ستستخدمها جميع الأوامر و!help والذكاء الاصطناعي في الردود.
 
 🔢 *لتحويل الأرقام* استخدم \`${prefix}digit\` — مثال: \`${prefix}digit 12345\``,
       );
@@ -96,7 +96,7 @@ Commands, !help and the AI all answer in it.
         await sock.sendMessage(
           chatId,
           {
-            text: "✅ تم ضبط لغة البوت على *العربية الفصحى*. الأوامر والذكاء الاصطناعي هيردوا بالعربي دائماً.",
+            text: "✅ تم ضبط لغة البوت على *العربية الفصحى*. ستكون ردود الأوامر والذكاء الاصطناعي بالعربية دائمًا.",
           },
           { quoted: msg },
         );

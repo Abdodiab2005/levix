@@ -76,7 +76,7 @@ function labelFor(user) {
 // is async — awaiting them is not optional.
 async function rolesReport() {
   const { owners, admins, bootstrapOwners, bootstrapAdmins } = await listRoles();
-  const none = tr("• (none)", "• (مفيش)");
+  const none = tr("• (none)", "• (لا شيء)");
   const lines = [tr("*🔑 Bot roles*", "*🔑 صلاحيات البوت*"), ""];
 
   lines.push(tr(`*👑 Owners (${owners.length}):*`, `*👑 المالكين (${owners.length}):*`));
@@ -220,7 +220,7 @@ module.exports = {
         {
           text: tr(
             `❌ *I couldn't change the role*\n\n*Details:* ${error.message}`,
-            `❌ *مقدرتش أعدّل الصلاحية*\n\n*التفاصيل:* ${error.message}`,
+            `❌ *تعذّر تعديل الصلاحية*\n\n*التفاصيل:* ${error.message}`,
           ),
         },
         { replyTo: msg },

@@ -39,7 +39,7 @@ module.exports = {
       saveGroupSettings(groupId, settings);
 
       await sock.sendMessage(groupId, {
-        text: tr("✅ The group's rules were saved.", "✅ تم حفظ قواعد الجروب بنجاح في قاعدة البيانات."),
+        text: tr("✅ The group's rules were saved.", "✅ تم حفظ قواعد المجموعة بنجاح في قاعدة البيانات."),
       });
     } catch (error) {
       // Improved logging for better debugging

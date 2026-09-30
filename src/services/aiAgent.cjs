@@ -502,7 +502,7 @@ async function runGeminiTurn({
   search = null,
 } = {}) {
   const genAI = geminiClient();
-  if (!genAI) throw new Error(tr("No Gemini API key is set", "GEMINI_API_KEY غير معرف"));
+  if (!genAI) throw new Error(tr("No Gemini API key is set", "لم يُضبط مفتاح Gemini API"));
   await assertProviderRequestUrl(settings.get("gemini_base_url"), { allowLoopback: true });
 
   const stepBudget = maxSteps ?? settings.get("ai_max_tool_steps");
@@ -622,7 +622,7 @@ async function runGeminiTurn({
   if (!text && steps >= stepBudget) {
     text = tr(
       "I ran the tools I have but couldn't reach a final answer. Try asking more clearly.",
-      "شغّلت الأدوات المتاحة بس مقدرتش أوصل لإجابة نهائية. جرّب تسأل بصيغة أوضح.",
+      "استخدمت الأدوات المتاحة، لكنني لم أتمكن من الوصول إلى إجابة نهائية. حاول صياغة السؤال بوضوح أكبر.",
     );
   }
 

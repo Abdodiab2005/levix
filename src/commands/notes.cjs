@@ -22,7 +22,7 @@ module.exports = {
 
     if (keywords.length === 0) {
       return await sock.sendMessage(groupId, {
-        text: tr("This group has no saved notes.", "لا توجد ملاحظات محفوظة في هذا الجروب."),
+        text: tr("This group has no saved notes.", "لا توجد ملاحظات محفوظة في هذه المجموعة."),
       });
     }
 

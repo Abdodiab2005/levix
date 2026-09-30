@@ -108,7 +108,7 @@ async function runSubCommand(sock, msg, args, body, groupMetadata, subCommand) {
   // just the direct `!kick`.
   if (runtimeConfig.isDisabled(subCommand.name)) {
     return await sock.sendMessage(msg.key.remoteJid, {
-      text: tr("⛔ This command is turned off right now.", "⛔ الأمر ده متوقف حاليًا."),
+      text: tr("⛔ This command is turned off right now.", "⛔ هذا الأمر معطّل حاليًا."),
     });
   }
 

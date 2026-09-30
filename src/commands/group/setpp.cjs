@@ -26,14 +26,14 @@ module.exports = {
       return await sock.sendMessage(groupId, {
         text: tr(
           "To change the group's picture, reply to the image you want with this command.",
-          "لتغيير صورة الجروب، يرجى الرد على الصورة التي تريدها بهذا الأمر.",
+          "لتغيير صورة المجموعة، يرجى الرد على الصورة التي تريدها بهذا الأمر.",
         ),
       });
     }
 
     try {
       await sock.sendMessage(groupId, {
-        text: tr("🖼️ Changing the group's picture...", "🖼️ جاري تغيير صورة الجروب..."),
+        text: tr("🖼️ Changing the group's picture...", "🖼️ جارٍ تغيير صورة المجموعة..."),
       });
 
       // Download the image from the quoted message
@@ -51,7 +51,7 @@ module.exports = {
       await sock.updateProfilePicture(groupId, imageBuffer);
 
       await sock.sendMessage(groupId, {
-        text: tr("✅ The group's picture was updated.", "✅ تم تحديث صورة الجروب بنجاح."),
+        text: tr("✅ The group's picture was updated.", "✅ تم تحديث صورة المجموعة بنجاح."),
       });
     } catch (error) {
       logger.error({ err: error }, "Error in !group setpp command");

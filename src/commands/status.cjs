@@ -57,8 +57,8 @@ module.exports = {
       //    binary is otherwise invisible.
       const ffmpeg = await checkFfmpeg();
       const ffmpegLine = ffmpeg.ok
-        ? `✅ ${ffmpeg.version || tr("working", "شغال")}`
-        : tr(`❌ not working (${ffmpeg.path})`, `❌ مش شغال (${ffmpeg.path})`);
+        ? `✅ ${ffmpeg.version || tr("working", "يعمل")}`
+        : tr(`❌ not working (${ffmpeg.path})`, `❌ لا يعمل (${ffmpeg.path})`);
 
       // --- BUILDING THE REPLY ---
       const reply = tr(

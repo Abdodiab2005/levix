@@ -757,7 +757,7 @@ async function runProviderAgent(
           parsed.text ||
           tr(
             "I ran the tools I have but couldn't reach a final answer. Try asking more clearly.",
-            "شغّلت الأدوات المتاحة بس مقدرتش أوصل لإجابة نهائية. جرّب تسأل بصيغة أوضح.",
+            "استخدمت الأدوات المتاحة، لكنني لم أتمكن من الوصول إلى إجابة نهائية. حاول صياغة السؤال بوضوح أكبر.",
           ),
         canonical,
         toolCalls,

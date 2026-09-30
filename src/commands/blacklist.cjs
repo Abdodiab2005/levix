@@ -118,7 +118,7 @@ module.exports = {
           return await sock.sendMessage(groupId, {
             text: tr(
               `@${normalizedTargetJid.split("@")[0]} isn't on the blacklist.`,
-              `العضو @${normalizedTargetJid.split("@")[0]} ليس في القائمة السوداء أصلاً.`,
+              `العضو @${normalizedTargetJid.split("@")[0]} ليس في القائمة السوداء بالفعل.`,
             ),
             mentions: [normalizedTargetJid],
           });

@@ -244,14 +244,14 @@ async function assertPublicUrl(rawUrl) {
   try {
     url = new URL(rawUrl);
   } catch {
-    throw new Error("الرابط مش صالح");
+    throw new Error("الرابط غير صالح");
   }
-  if (url.protocol !== "https:") throw new Error("مسموح بروابط HTTPS بس");
+  if (url.protocol !== "https:") throw new Error("يُسمح بروابط HTTPS فقط");
 
   const host = url.hostname.replace(/^\[|\]$/g, "");
 
   if (net.isIP(host)) {
-    if (isForbiddenIp(host)) throw new Error("الرابط ده ممنوع");
+    if (isForbiddenIp(host)) throw new Error("هذا الرابط محظور");
     return { url, host, addresses: [{ address: host, family: net.isIP(host) }] };
   }
 
@@ -259,10 +259,10 @@ async function assertPublicUrl(rawUrl) {
   try {
     addresses = await dns.lookup(host, { all: true, verbatim: true });
   } catch {
-    throw new Error("مش قادر أوصل للدومين ده");
+    throw new Error("تعذّر الوصول إلى هذا النطاق");
   }
   if (!addresses.length || addresses.some((a) => isForbiddenIp(a.address))) {
-    throw new Error("الرابط ده ممنوع");
+    throw new Error("هذا الرابط محظور");
   }
 
   return { url, host, addresses };
@@ -281,7 +281,7 @@ function pinnedAgent(expectedHost, addresses) {
       ? addresses.filter(({ family }) => family === requestedFamily)
       : addresses;
     if (!candidates.length) {
-      const error = new Error("مفيش عنوان متوافق للدومين ده");
+      const error = new Error("لا يوجد عنوان متوافق لهذا النطاق");
       error.code = "EAI_ADDRFAMILY";
       return callback(error);
     }
@@ -328,7 +328,7 @@ async function fetchUrl(rawUrl) {
     const location = response.headers?.location;
     const isRedirect = response.status >= 300 && response.status < 400 && location;
     if (!isRedirect) break;
-    if (hop >= MAX_REDIRECTS) throw new Error("الرابط بيحوّل كتير أوي");
+    if (hop >= MAX_REDIRECTS) throw new Error("تجاوز الرابط الحد المسموح لعمليات إعادة التوجيه");
 
     target = await assertPublicUrl(new URL(location, url).toString());
   }
@@ -405,7 +405,7 @@ const TOOLS = {
         required: ["query"],
       },
     },
-    describe: (args) => `🔍 جاري البحث عن: ${preview(args?.query, 50)}`,
+    describe: (args) => `🔍 جارٍ البحث عن: ${preview(args?.query, 50)}`,
     describeEn: (args) => `🔍 Searching for: ${preview(args?.query, 50)}`,
     async run(args) {
       const query = String(args?.query || "").trim();
@@ -446,7 +446,7 @@ const TOOLS = {
         required: ["query"],
       },
     },
-    describe: (args) => `📚 جاري البحث في ويكيبيديا: ${preview(args?.query, 45)}`,
+    describe: (args) => `📚 جارٍ البحث في ويكيبيديا: ${preview(args?.query, 45)}`,
     describeEn: (args) => `📚 Searching Wikipedia: ${preview(args?.query, 45)}`,
     async run(args) {
       const query = String(args?.query || "").trim();
@@ -476,7 +476,7 @@ const TOOLS = {
         required: ["query"],
       },
     },
-    describe: (args) => `📰 جاري البحث عن الأخبار: ${preview(args?.query, 45)}`,
+    describe: (args) => `📰 جارٍ البحث عن الأخبار: ${preview(args?.query, 45)}`,
     describeEn: (args) => `📰 Searching news: ${preview(args?.query, 45)}`,
     async run(args) {
       const query = String(args?.query || "").trim();
@@ -505,7 +505,7 @@ const TOOLS = {
         required: ["url"],
       },
     },
-    describe: (args) => `🌐 جاري فتح الرابط: ${preview(args?.url, 45)}`,
+    describe: (args) => `🌐 جارٍ فتح الرابط: ${preview(args?.url, 45)}`,
     describeEn: (args) => `🌐 Opening link: ${preview(args?.url, 45)}`,
     async run(args) {
       const url = String(args?.url || "").trim();
@@ -518,7 +518,7 @@ const TOOLS = {
     declaration: {
       name: "save_memory",
       description:
-        "Save a fact to long-term memory so it survives across conversations. Use it whenever the user says things like 'save this', 'remember that', 'احفظ ده في ذاكرتك'. scope 'chat' keeps it to this conversation, scope 'global' shares it with every chat.",
+        "Save a fact to long-term memory so it survives across conversations. Use it whenever the user says things like 'save this', 'remember that', 'احفظ هذا في ذاكرتك'. scope 'chat' keeps it to this conversation, scope 'global' shares it with every chat.",
       parameters: {
         type: T.OBJECT,
         properties: {
@@ -535,7 +535,7 @@ const TOOLS = {
       },
     },
     describe: (args) =>
-      `🧠 جاري الحفظ في ${scopeOf(args) === "global" ? "الذاكرة العامة" : "ذاكرة المحادثة"}: ${preview(
+      `🧠 جارٍ الحفظ في ${scopeOf(args) === "global" ? "الذاكرة العامة" : "ذاكرة المحادثة"}: ${preview(
         args?.content,
       )}`,
     describeEn: (args) =>
@@ -585,7 +585,7 @@ const TOOLS = {
         },
       },
     },
-    describe: () => "🧠 جاري البحث في الذاكرة...",
+    describe: () => "🧠 جارٍ البحث في الذاكرة...",
     describeEn: () => "🧠 Searching memory...",
     // `!memory search` reads both scopes for anyone who may run `!memory`.
     access: { command: "memory" },
@@ -619,7 +619,7 @@ const TOOLS = {
         required: ["ref"],
       },
     },
-    describe: (args) => `🗑️ جاري الحذف من الذاكرة: ${preview(args?.ref)}`,
+    describe: (args) => `🗑️ جارٍ الحذف من الذاكرة: ${preview(args?.ref)}`,
     describeEn: (args) => `🗑️ Removing from memory: ${preview(args?.ref)}`,
     // `!memory forget`: global needs the owner or a bot admin; chat memory
     // also lets an admin of this group tidy their own chat.
@@ -659,7 +659,7 @@ const TOOLS = {
       },
     },
     describe: (args) =>
-      `🔑 جاري فحص صلاحيات: ${preview(args?.target, 25)} (${args?.role || "admin"})`,
+      `🔑 جارٍ فحص صلاحيات: ${preview(args?.target, 25)} (${args?.role || "admin"})`,
     describeEn: (args) =>
       `🔑 Checking permissions: ${preview(args?.target, 25)} (${args?.role || "admin"})`,
     // `!perm add`: that command's level (owner only unless the operator
@@ -699,7 +699,7 @@ const TOOLS = {
         required: ["target"],
       },
     },
-    describe: (args) => `🔑 جاري سحب الصلاحية من: ${preview(args?.target, 25)}`,
+    describe: (args) => `🔑 جارٍ سحب الصلاحية من: ${preview(args?.target, 25)}`,
     describeEn: (args) => `🔑 Revoking permissions from: ${preview(args?.target, 25)}`,
     // `!perm remove`, gated exactly like grant_role.
     access: (args) => ({ command: "perm", role: roleOf(args) === "owner" ? "owner" : undefined }),
@@ -723,7 +723,7 @@ const TOOLS = {
         "List who currently holds bot owner / admin roles. Allowed for whoever may run !perm (the owner, by default).",
       parameters: { type: T.OBJECT, properties: {} },
     },
-    describe: () => "🔑 جاري جلب قائمة الصلاحيات...",
+    describe: () => "🔑 جارٍ جلب قائمة الصلاحيات...",
     describeEn: () => "🔑 Fetching roles list...",
     // `!perm list` — the roster is `!perm`'s to show.
     access: { command: "perm" },
@@ -753,7 +753,7 @@ const TOOLS = {
         },
       },
     },
-    describe: () => "🕒 جاري التحقق من الوقت الحالي...",
+    describe: () => "🕒 جارٍ التحقق من الوقت الحالي...",
     describeEn: () => "🕒 Checking current time...",
     async run(args) {
       const timeZone = args?.timezone || settings.get("bot_timezone");
@@ -788,7 +788,7 @@ const TOOLS = {
         required: ["expression"],
       },
     },
-    describe: (args) => `🧮 جاري الحساب: ${preview(args?.expression, 40)}`,
+    describe: (args) => `🧮 جارٍ الحساب: ${preview(args?.expression, 40)}`,
     describeEn: (args) => `🧮 Calculating: ${preview(args?.expression, 40)}`,
     async run(args) {
       const expression = String(args?.expression || "").trim();
@@ -829,7 +829,7 @@ const TOOLS = {
         required: ["message"],
       },
     },
-    describe: (args) => `⏰ جاري إعداد التذكير: ${preview(args?.message, 40)}`,
+    describe: (args) => `⏰ جارٍ إعداد التذكير: ${preview(args?.message, 40)}`,
     describeEn: (args) => `⏰ Setting a reminder: ${preview(args?.message, 40)}`,
     // Posting into a chat at a later time is exactly what `!schedule` does, so
     // it takes `!schedule`'s permission level — whatever the dashboard sets.
@@ -911,7 +911,7 @@ const TOOLS = {
         required: ["id"],
       },
     },
-    describe: (args) => `⏰ جاري إلغاء التذكير: ${preview(args?.id, 20)}`,
+    describe: (args) => `⏰ جارٍ إلغاء التذكير: ${preview(args?.id, 20)}`,
     describeEn: (args) => `⏰ Cancelling reminder: ${preview(args?.id, 20)}`,
     // Deleting a scheduled job is `!deleteschedule`'s job, so its level.
     access: { command: "deleteschedule" },
@@ -937,7 +937,7 @@ const TOOLS = {
     declaration: {
       name: "speak",
       description:
-        "Send your answer as a WhatsApp VOICE NOTE (text-to-speech) instead of text. Only when the user explicitly asks to hear it — 'قولها بصوت', 'read it aloud', 'send it as voice'. The text must be ready to be read aloud; keep it short.",
+        "Send your answer as a WhatsApp VOICE NOTE (text-to-speech) instead of text. Only when the user explicitly asks to hear it — 'اقرأها بصوت', 'read it aloud', 'send it as voice'. The text must be ready to be read aloud; keep it short.",
       parameters: {
         type: T.OBJECT,
         properties: {
@@ -953,7 +953,7 @@ const TOOLS = {
         required: ["text"],
       },
     },
-    describe: (args) => `🎙️ جاري تحويل الرد لرسالة صوتية: ${preview(args?.text, 40)}`,
+    describe: (args) => `🎙️ جارٍ تحويل الرد لرسالة صوتية: ${preview(args?.text, 40)}`,
     describeEn: (args) => `🎙️ Converting the reply to a voice note: ${preview(args?.text, 40)}`,
     // Posting a voice note into this chat is what `!tts` does, so its level.
     access: { command: "tts" },
@@ -1003,7 +1003,7 @@ const TOOLS = {
         required: ["question", "options"],
       },
     },
-    describe: (args) => `📊 جاري إنشاء الاستفتاء: ${preview(args?.question, 40)}`,
+    describe: (args) => `📊 جارٍ إنشاء الاستفتاء: ${preview(args?.question, 40)}`,
     describeEn: (args) => `📊 Creating a poll: ${preview(args?.question, 40)}`,
     // A poll is a group message like any other, so `!poll`'s level.
     access: { command: "poll" },
@@ -1042,7 +1042,7 @@ const TOOLS = {
         },
       },
     },
-    describe: () => "🧠 جاري تلخيص المحادثة وحفظ المهم...",
+    describe: () => "🧠 جارٍ تلخيص المحادثة وحفظ المهم...",
     describeEn: () => "🧠 Summarizing the chat and saving what matters...",
     // Saving chat memory is what `!memory add` allows here; the global scope
     // reaches every chat's prompt, so it takes save_memory's owner/admin role.
@@ -1171,7 +1171,7 @@ async function summarizeWithProvider(transcript) {
 function describeCall(name, args, lang = currentLang()) {
   const tool = TOOLS[name];
   const isEn = lang === "en";
-  const fallback = isEn ? `⚙️ Running: ${name}` : `⚙️ جاري تشغيل: ${name}`;
+  const fallback = isEn ? `⚙️ Running: ${name}` : `⚙️ جارٍ تشغيل: ${name}`;
   if (!tool) return fallback;
   try {
     if (isEn && typeof tool.describeEn === "function") {

@@ -68,7 +68,7 @@ function codeMessage(code) {
         `If you didn't request this, ignore this message — nobody else can use it.`,
       `🔐 *${brand.name} — كود إعادة تعيين كلمة السر: ${code}*\n\n` +
         `ادخل الكود في لوحة التحكم خلال ١٠ دقائق. ` +
-        `لو مش إنت اللي طلبته، اهمل الرسالة — مفيش حد تاني يقدر يستخدمه.`,
+        `إذا لم تطلب هذا الرمز، فتجاهل الرسالة — لا يمكن لأحد سواك استخدامه.`,
     ),
   );
 }

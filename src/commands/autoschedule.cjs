@@ -64,7 +64,7 @@ module.exports = {
       return await sock.sendMessage(creatorJid, {
         text: tr(
           "I couldn't schedule that message. Check the time and try again.",
-          "معرفتش أجدول الرسالة دي. راجع الوقت وجرب تاني.",
+          "تعذّرت جدولة هذه الرسالة. راجع الوقت وحاول مرة أخرى.",
         ),
       });
     }
