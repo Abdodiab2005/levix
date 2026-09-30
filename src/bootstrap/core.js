@@ -68,7 +68,7 @@ export async function bootstrapCore({ autoStart = false } = {}) {
 
   // WhatsApp commands (!stopbot, !restart) drive the same state machine the
   // panel does — nothing here ever touches a socket directly.
-  require("./session-holder.cjs").setSession(session);
+  require("../core/session-holder.cjs").setSession(session);
 
   const startup = sessionStartupPolicy({ autoStart, wasPaired });
   if (startup.start) await session.start({ reason: startup.reason });
