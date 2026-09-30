@@ -86,6 +86,9 @@ function startBinary(args, { waitFor, timeoutMs = 90000, extraEnv = {} } = {}) {
     env: { ...env, ...extraEnv },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  // On Windows, `exit` can precede the closing of the process's pipes. Keep
+  // the sandbox until `close` so the executable and its cwd are released.
+  const closed = new Promise((resolve) => child.once("close", resolve));
   let output = "";
   const seen = new Promise((resolve, reject) => {
     const timer = setTimeout(
@@ -112,17 +115,13 @@ function startBinary(args, { waitFor, timeoutMs = 90000, extraEnv = {} } = {}) {
       return output;
     },
     async stop() {
-      child.kill("SIGTERM");
-      await new Promise((resolve) => {
-        const timer = setTimeout(() => {
-          child.kill("SIGKILL");
-          resolve();
-        }, 10000);
-        child.once("exit", () => {
-          clearTimeout(timer);
-          resolve();
-        });
-      });
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+      const timer = setTimeout(() => child.kill("SIGKILL"), 10000);
+      try {
+        await closed;
+      } finally {
+        clearTimeout(timer);
+      }
     },
   };
 }
@@ -314,7 +313,9 @@ console.log("\n· recovery commands against a real installation");
 
 // --- done -----------------------------------------------------------------
 
-rmSync(sandbox, { recursive: true, force: true });
+// Windows may hold the recently stopped executable briefly after `close`.
+// Retry transient sharing violations rather than failing a successful run.
+rmSync(sandbox, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
 
 console.log(`\n${"═".repeat(60)}`);
 console.log(`  ${passed} checks · ${failures.length} failed`);
