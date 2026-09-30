@@ -34,6 +34,14 @@ const PREFIX_PRESETS = ["!", "/", ".", "#", "$", "?"];
 // not a settings file and is refused before it can touch anything.
 const EXPORT_FORMAT = "levix-settings";
 
+// UTF-8-safe base64 for handing the export to the Android host bridge.
+function toBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
 export const SettingsView: React.FC = () => {
   const { t, language, setLanguage } = useI18n();
   const { toast } = useToast();
@@ -68,11 +76,26 @@ export const SettingsView: React.FC = () => {
     setExportingSettings(true);
     try {
       const payload = await api.exportSettings();
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const json = JSON.stringify(payload, null, 2);
+      const fileName = `levix-settings-${payload.exportedAt?.slice(0, 10) || "export"}.json`;
+
+      // Inside the Android host a blob download is a dead end — the WebView
+      // has no download manager wired for blob: URLs, so the file would just
+      // vanish. Hand the bytes to the host instead: it saves into
+      // Downloads/Levix and answers with the location to show.
+      const host = (window as any).LevixHost;
+      if (host && typeof host.saveExportFile === "function") {
+        const result = JSON.parse(host.saveExportFile(fileName, toBase64(json)));
+        if (!result?.ok) throw new Error(result?.error || t("exportSettingsError"));
+        toast(`${t("exportSettingsSuccess")} — ${t("exportSavedTo")} ${result.dir}`, "success");
+        return;
+      }
+
+      const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `levix-settings-${payload.exportedAt?.slice(0, 10) || "export"}.json`;
+      link.download = fileName;
       link.click();
       URL.revokeObjectURL(url);
       toast(t("exportSettingsSuccess"), "success");
@@ -520,24 +543,24 @@ export const SettingsView: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-row gap-3">
               <button
                 type="button"
                 onClick={handleExportSettings}
                 disabled={exportingSettings}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-5 h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/20 transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
+                className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-5 h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/20 transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
               >
-                <Download size={16} />
-                <span>{t("exportSettings")}</span>
+                <Download size={16} className="shrink-0" />
+                <span className="truncate">{t("exportSettings")}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => importFileRef.current?.click()}
-                className="flex-1 inline-flex items-center justify-center gap-2 px-5 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50"
+                className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-5 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50"
               >
-                <Upload size={16} />
-                <span>{t("importSettings")}</span>
+                <Upload size={16} className="shrink-0" />
+                <span className="truncate">{t("importSettings")}</span>
               </button>
               <input
                 ref={importFileRef}
