@@ -1,13 +1,20 @@
-// file: /commands/restart.js
-const { delay } = require("@whiskeysockets/baileys");
+// Restarts the WhatsApp connection — not the process.
+//
+// It used to SIGTERM the whole bot and lean on the supervisor to bring it
+// back, which took the control panel down with the socket. What people mean
+// by restart here is the connection: session.reconnect() is the same
+// stop()+start() the panel's Connection screen uses, so the state machine
+// stays the only socket owner and a restart never kicks whoever is watching
+// the panel out.
+const { getSession } = require("../core/session-holder.cjs");
 const logger = require("../utils/logger.cjs");
 const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "restart",
   description: {
-    en: "Restarts the bot.",
-    ar: "يعيد تشغيل البوت.",
+    en: "Reconnects WhatsApp (the process and panel stay up).",
+    ar: "يعيد تشغيل اتصال واتساب (عملية البوت واللوحة يفضلوا شغالين).",
   },
   usage: {
     en: "restart",
@@ -16,24 +23,46 @@ module.exports = {
   chat: "all",
 
   async execute(sock, msg) {
-    logger.warn("Received !restart command. Restarting bot...");
+    const chatId = msg.key.remoteJid;
+    const session = getSession();
+    if (!session) {
+      return await sock.sendMessage(chatId, {
+        text: tr("The session manager isn't ready yet.", "مدير الجلسة لسه مش جاهز."),
+      });
+    }
 
-    // Send a confirmation message before exiting
-    await sock.sendMessage(msg.key.remoteJid, {
+    // Goes out while the current socket is still alive.
+    await sock.sendMessage(chatId, {
       text: tr(
-        "✅ Restarting the bot... back in a moment.",
-        "✅ جاري إعادة تشغيل البوت... سأعود بعد لحظات.",
+        "🔄 Reconnecting WhatsApp... back in a moment.",
+        "🔄 جاري إعادة تشغيل اتصال واتساب... هرجع في لحظة.",
       ),
     });
 
-    // A small delay to ensure the message is sent before the process exits
-    await delay(2000); // 2-second delay
+    let state = null;
+    try {
+      state = await session.reconnect({ reason: "command" });
+      logger.info("[commands] WhatsApp connection restarted by !restart");
+    } catch (error) {
+      logger.error({ err: error, command: "restart" }, "Failed to reconnect WhatsApp");
+    }
 
-    // SIGTERM to ourselves, not process.exit(): that is the path in
-    // src/index.js that cancels the reconnect timers, closes the WhatsApp
-    // socket, flushes the store and closes the database. Exiting straight from
-    // here skipped all four and left the WAL unchecked-pointed. The supervisor
-    // (pm2 / systemd / docker) brings the process back.
-    process.kill(process.pid, "SIGTERM");
+    if (state?.connected) {
+      await sock.sendMessage(chatId, {
+        text: tr("✅ WhatsApp is back online.", "✅ اتصال واتساب رجع يشتغل."),
+      });
+    } else {
+      // Not connected (a QR wait, a retry, a failure) — say where things
+      // stand instead of claiming success. The old socket is gone either way,
+      // so this send is best-effort.
+      await sock
+        .sendMessage(chatId, {
+          text: tr(
+            `Connection state now: ${state?.status || "unknown"}. Check the panel's Connection screen.`,
+            `حالة الاتصال دلوقتي: ${state?.status || "غير معروفة"}. راجع شاشة Connection في لوحة التحكم.`,
+          ),
+        })
+        .catch(() => {});
+    }
   },
 };

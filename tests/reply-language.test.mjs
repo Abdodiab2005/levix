@@ -11,14 +11,19 @@
 // on any Arabic letter that comes back.
 
 import { join } from "node:path";
-import { equal, finish, ok, require, ROOT, section, useTempDataDir } from "./harness.mjs";
+import { equal, finish, ok, ROOT, require, section, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("levix-reply-language");
 
 const settings = require("./src/config/settings.cjs");
-const { detectLang, syntaxWords, langForCommand, withLang, currentLang, tr } = require(
-  "./src/utils/i18n.cjs",
-);
+const {
+  detectLang,
+  syntaxWords,
+  langForCommand,
+  withLang,
+  currentLang,
+  tr,
+} = require("./src/utils/i18n.cjs");
 
 settings.set("bot_min_delay_ms", 0);
 settings.set("bot_max_delay_ms", 0);
@@ -58,7 +63,10 @@ equal("!todo list", detectLang("list", { syntax: syntaxWords(todo) }), "ar");
 equal("!todo add buy milk", detectLang("add buy milk", { syntax: syntaxWords(todo) }), "en");
 equal("!rand dice 2d6", detectLang("dice 2d6", { syntax: syntaxWords(rand) }), "ar");
 equal("!rand coin", detectLang("coin", { syntax: syntaxWords(rand) }), "ar");
-ok("declared keywords count too (perm: grant, me)", syntaxWords(perm).has("grant") && syntaxWords(perm).has("me"));
+ok(
+  "declared keywords count too (perm: grant, me)",
+  syntaxWords(perm).has("grant") && syntaxWords(perm).has("me"),
+);
 equal("!perm grant admin me", detectLang("grant admin me", { syntax: syntaxWords(perm) }), "ar");
 equal(
   "!deleteschedule <id>",
@@ -237,13 +245,15 @@ const SWEEP_DM = [
   "!weather",
   "!prayer",
   "!schedule",
-  "!schedule \"bad\" \"x\"",
+  '!schedule "bad" "x"',
   "!autoschedule",
   "!deleteschedule",
   "!deleteschedule nope",
   "!listschedules",
   "!sticker",
   "!debt",
+  "!stopbot",
+  "!restart",
 ];
 const SWEEP_GROUP = [
   "!group",
@@ -326,7 +336,8 @@ section("with the bot set to Arabic, nothing comes back English-only");
 
   const found = [];
   for (const text of SWEEP_DM) {
-    for (const reply of await run(text)) if (englishOnly(reply)) found.push(`${text} -> ${reply.slice(0, 80)}`);
+    for (const reply of await run(text))
+      if (englishOnly(reply)) found.push(`${text} -> ${reply.slice(0, 80)}`);
   }
   for (const text of SWEEP_GROUP) {
     for (const reply of await run(text, { chat: GROUP, participant: SELF })) {

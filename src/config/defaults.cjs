@@ -47,12 +47,13 @@ const COMMAND_PERMISSIONS = Object.freeze({
   perm: "OWNER_ONLY",
   setprefix: "OWNER_ONLY",
   restart: "OWNER_ONLY",
-  shutdown: "OWNER_ONLY",
+  stopbot: "OWNER_ONLY",
   status: "OWNER_ONLY",
   lang: "MEMBERS",
   digit: "MEMBERS",
   block: "OWNER_ONLY",
   unblock: "OWNER_ONLY",
+  send: "MEMBERS",
   group: {
     default_permission: "ADMINS_OWNER",
     sub_commands: {
