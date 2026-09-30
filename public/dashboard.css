@@ -2903,3 +2903,73 @@ html[dir="rtl"] .logout-btn svg {
     transition-duration: 0.001ms !important;
   }
 }
+/* --- gateway: password visibility, reset link, screen guard ------------- */
+
+.input-wrap {
+  position: relative;
+}
+
+.input-wrap input {
+  padding-inline-end: 44px;
+}
+
+.eye-btn {
+  position: absolute;
+  inset-inline-end: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.eye-btn:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--line) 55%, transparent);
+}
+
+.eye-btn svg {
+  width: 17px;
+  height: 17px;
+}
+
+.auth-alt {
+  margin-top: 14px;
+  text-align: center;
+}
+
+.link-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #70a3ff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+/* The password screens blur themselves whenever the page can't be watched —
+   another tab, a minimised window, the task switcher. Best effort: the web
+   platform cannot truly forbid screenshots, but this keeps the form out of
+   task-switcher thumbnails and casual captures. Printing one of these pages
+   gets a blank sheet instead. */
+html.screen-guard .gateway-panel {
+  filter: blur(18px);
+}
+
+@media print {
+
+  .gateway-panel {
+    display: none;
+  }
+}

@@ -124,6 +124,27 @@ export const api = {
   getSettings: () => api.get<{ settings: any[]; prefix?: string; success: boolean }>("/settings"),
   updateSetting: (key: string, value: any) => api.patch("/settings", { key, value }),
   updatePrefix: (prefix: string) => api.patch("/settings", { key: "prefix", value: prefix }),
+  exportSettings: () =>
+    api.get<{
+      format: string;
+      version: number;
+      exportedAt: string;
+      settings: Record<string, any>;
+      commands: {
+        prefix: string;
+        permissions: Record<string, string>;
+        aliases: Record<string, string[]>;
+        disabled: string[];
+      };
+    }>("/settings/export"),
+  importSettings: (payload: unknown) =>
+    api.post<{
+      success: boolean;
+      applied: string[];
+      skipped: Array<{ key: string; reason: string }>;
+      restartNeeded: string[];
+      counts: { permissions: number; aliases: number; disabled: number };
+    }>("/settings/import", payload),
   getCommands: () => api.get<{ commands: any[]; prefix?: string; success: boolean }>("/commands"),
   updateCommand: (name: string, payload: any) =>
     api.patch(`/commands/${encodeURIComponent(name)}`, payload),
@@ -141,7 +162,13 @@ export const api = {
   getMemoryFiles: () =>
     api.get<{
       files?: string[];
-      scopes?: Array<{ scope: string; label: string; entries?: number; bytes?: number; updatedAt?: number | null }>;
+      scopes?: Array<{
+        scope: string;
+        label: string;
+        entries?: number;
+        bytes?: number;
+        updatedAt?: number | null;
+      }>;
     }>("/ai/memory"),
   getMemoryFile: (name: string) =>
     api.get<{ content: string }>(`/ai/memory/${encodeURIComponent(name)}`),

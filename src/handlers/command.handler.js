@@ -3,8 +3,8 @@ import { createRequire } from "module";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { checkBotAdmin, checkCommandPermission } from "../middleware/permissions.middleware.js";
-import { sendBotMessage } from "../utils/sendBotMessage.esm.js";
 import { resolveGroupMetadata } from "../utils/groupMetadataCache.cjs";
+import { sendBotMessage } from "../utils/sendBotMessage.esm.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -32,6 +32,7 @@ const EDIT_IN_PLACE_EXCLUDE = new Set([
   "prayer",
   "tts",
   "stt",
+  "send",
   "weather",
   "qr",
   "status",
@@ -319,10 +320,7 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
           sock,
           msg.key.remoteJid,
           {
-            text: tr(
-              "⚠️ This command only works in groups.",
-              "⚠️ هذا الأمر يعمل في المجموعات فقط.",
-            ),
+            text: tr("⚠️ This command only works in groups.", "⚠️ هذا الأمر يعمل في المجموعات فقط."),
           },
           { replyTo: msg },
         );

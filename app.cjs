@@ -26,6 +26,7 @@ const { getQrCode } = require("./src/utils/storage.cjs");
 const { clientAddress, isDirectLocalRequest } = require("./src/utils/requestOrigin.cjs");
 const { blockedFor, recordFailure, clearAttempts } = require("./src/panel/login-throttle.cjs");
 const { isPanelSessionValid, stampPanelSession } = require("./src/panel/session-auth.cjs");
+const { requestResetCode, completeReset } = require("./src/panel/password-reset.cjs");
 
 const SESSION_COOKIE_NAME = "wa.sid";
 const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
@@ -48,7 +49,9 @@ function isAllowedOrigin(origin, host) {
 // Sec-Fetch-Site entirely, so password-gated login gets a narrow fallback for
 // Origin:null. First-run setup is deliberately excluded: a loopback request
 // otherwise skips the setup code and could claim an unconfigured panel.
-const OPAQUE_ORIGIN_AUTH_PATHS = new Set(["/login"]);
+// The reset endpoints are auth doors of the same shape — code-gated and
+// throttled — so they ride along with login.
+const OPAQUE_ORIGIN_AUTH_PATHS = new Set(["/login", "/reset/request", "/reset/confirm"]);
 function isAllowedMutationRequest(req) {
   const origin = req.get("origin");
   const host = req.get("host");
@@ -288,13 +291,13 @@ app.get("/", noStore, (req, res) => {
     }
     return res.render("dashboard");
   }
-  return res.render("login", { error: null });
+  return res.render("login", { error: null, minLength: secrets.MIN_PASSWORD_LENGTH });
 });
 
 app.get("/login", noStore, (req, res) => {
   if (!secrets.hasDashboardPassword()) return res.redirect("/setup");
   if (isPanelSessionValid(req.session)) return res.redirect("/");
-  return res.render("login", { error: null });
+  return res.render("login", { error: null, minLength: secrets.MIN_PASSWORD_LENGTH });
 });
 
 app.post("/login", (req, res, next) => {
@@ -306,13 +309,17 @@ app.post("/login", (req, res, next) => {
     res.set("Retry-After", String(retryAfter));
     return res.status(429).render("login", {
       error: "Too many attempts. Try again later.",
+      minLength: secrets.MIN_PASSWORD_LENGTH,
     });
   }
 
   if (!secrets.verifyDashboardPassword(req.body?.password)) {
     recordFailure(peer);
     logger.warn({ ip: peer }, "[dashboard] Failed login attempt");
-    return res.status(401).render("login", { error: "Incorrect Password" });
+    return res.status(401).render("login", {
+      error: "Incorrect Password",
+      minLength: secrets.MIN_PASSWORD_LENGTH,
+    });
   }
 
   clearAttempts(peer);
@@ -326,6 +333,45 @@ app.post("/login", (req, res, next) => {
       res.redirect(303, "/");
     });
   });
+});
+
+// --- Password reset over WhatsApp -----------------------------------------
+//
+// For the operator who forgot the panel password. The code goes to the linked
+// account's own WhatsApp chat; see src/panel/password-reset.cjs for why this
+// is the recovery path that fits Levix. The offline fallback is still
+// `levix reset-password` on the server.
+
+app.post("/reset/request", async (req, res) => {
+  if (!secrets.hasDashboardPassword()) {
+    return res.status(400).json({ ok: false, reason: "no_password" });
+  }
+  const result = await requestResetCode(clientAddress(req));
+  const status = { throttled: 429, no_session: 409, send_failed: 502 }[result.reason] ?? 200;
+  if (result.ok) res.set("Cache-Control", "no-store");
+  return res.status(status).json(result);
+});
+
+app.post("/reset/confirm", (req, res) => {
+  if (!secrets.hasDashboardPassword()) {
+    return res.status(400).json({ ok: false, reason: "no_password" });
+  }
+  const { code, password, confirm } = req.body || {};
+  const result = completeReset(code, password, confirm);
+  if (!result.ok) {
+    // A wrong code counts toward the login lockout, so spraying guesses at
+    // this door locks the same peer out of /login too.
+    if (result.reason === "wrong_code" || result.reason === "too_many_attempts") {
+      recordFailure(clientAddress(req));
+    }
+    return res.status(result.reason === "invalid_password" ? 400 : 401).json(result);
+  }
+
+  // The epoch moved: push every live panel session out before the browser
+  // that reset the password signs back in.
+  disconnectInvalidPanelSockets();
+  res.set("Cache-Control", "no-store");
+  return res.json({ ok: true });
 });
 
 // POST, not GET: a link that changes state gets fired by an <img> or by the

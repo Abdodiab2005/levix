@@ -102,7 +102,14 @@ section("the autoschedule command persists a real weekly job");
     equal("the job is recurring", job.type, "recurring");
     equal("the message is saved", job.message, "موعد الفريق");
     equal("the target chat is saved", job.targetJid, "120363@g.us");
-    ok("the confirmation says weekly", replies.at(-1).content.text.includes("أسبوعيًا"));
+    // The success confirmation is deliberately silent: a ✅ reaction on the
+    // command message, no separate "message scheduled" bubble.
+    const confirmation = replies.at(-1).content;
+    ok("the confirmation is a reaction, not a message", !confirmation.text);
+    ok(
+      "the confirmation reacts ✅ on the command message",
+      confirmation.react?.text === "✅",
+    );
 
     await autoschedule.execute(sock, msg, ["weekly", "not-a-day", "18:30", "x"]);
     equal("an invalid day saves nothing", scheduler.getScheduledJobs().length, 1);

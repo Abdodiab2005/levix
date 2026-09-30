@@ -586,8 +586,7 @@ function set(key, value) {
   }
 
   const clean = validate(definition, value);
-  const toStore =
-    definition.type === "secret" ? require("./vault.cjs").seal(String(clean)) : clean;
+  const toStore = definition.type === "secret" ? require("./vault.cjs").seal(String(clean)) : clean;
   storage.saveBotSetting(`setting:${key}`, toStore);
   // Never log the value of a secret.
   logger.info(`[settings] ${key} -> ${definition.type === "secret" ? "(updated)" : clean}`);
@@ -629,4 +628,7 @@ module.exports = {
   sourceOf,
   SETTING_KEYS: [...BY_KEY.keys()],
   SECRET_SETTING_KEYS: [...SECRET_SETTING_KEYS],
+  RESTART_SETTING_KEYS: SETTINGS.filter((definition) => definition.restart === true).map(
+    (definition) => definition.key,
+  ),
 };
