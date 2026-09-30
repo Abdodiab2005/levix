@@ -1,7 +1,7 @@
 // file: /commands/block.js (Upgraded with private chat context)
 const logger = require("../utils/logger.cjs");
 const { isOwnerJidSync } = require("../utils/permissions.cjs");
-const normalizeJid = require("../utils/normalizeJid.esm.js");
+const normalizeJid = require("../utils/normalizeJid.esm.js").default;
 const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {

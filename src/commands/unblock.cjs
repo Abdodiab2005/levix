@@ -1,6 +1,6 @@
 // file: /commands/unblock.js (Upgraded with private chat context)
 const logger = require("../utils/logger.cjs");
-const normalizeJid = require("../utils/normalizeJid.esm.js");
+const normalizeJid = require("../utils/normalizeJid.esm.js").default;
 const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {
