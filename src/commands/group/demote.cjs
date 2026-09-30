@@ -39,7 +39,7 @@ module.exports = {
       return await sock.sendMessage(groupId, {
         text: tr(
           `⚠️ @${targetJid.split("@")[0]} isn't an admin.`,
-          `⚠️ العضو @${targetJid.split("@")[0]} ليس مشرفًا أصلاً.`,
+          `⚠️ العضو @${targetJid.split("@")[0]} ليس مشرفًا بالفعل.`,
         ),
         mentions: [targetJid],
       });
@@ -48,7 +48,7 @@ module.exports = {
     // Safety check: Cannot demote the group creator
     if (targetUser.admin === "superadmin") {
       return await sock.sendMessage(groupId, {
-        text: tr("The group's creator can't be demoted.", "لا يمكن عزل منشئ الجروب."),
+        text: tr("The group's creator can't be demoted.", "لا يمكن عزل منشئ المجموعة."),
       });
     }
 

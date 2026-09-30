@@ -63,7 +63,7 @@ module.exports = {
       });
     }
 
-    const status = await createStatus(sock, chatId, tr("📥 Sending...", "📥 جاري الإرسال..."), {
+    const status = await createStatus(sock, chatId, tr("📥 Sending...", "📥 جارٍ الإرسال..."), {
       replyTo: msg,
     });
 
@@ -108,7 +108,7 @@ module.exports = {
         error,
         tr(
           "Couldn't re-send it — the media may have expired",
-          "معرفتش أبعته — ممكن الميديا تكون انتهت",
+          "تعذّر إرساله — ربما انتهت صلاحية ملف الوسائط",
         ),
       );
     }

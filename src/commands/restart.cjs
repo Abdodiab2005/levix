@@ -14,7 +14,7 @@ module.exports = {
   name: "restart",
   description: {
     en: "Reconnects WhatsApp (the process and panel stay up).",
-    ar: "يعيد تشغيل اتصال واتساب (عملية البوت واللوحة يفضلوا شغالين).",
+    ar: "يعيد تشغيل اتصال واتساب (مع استمرار تشغيل البوت ولوحة التحكم).",
   },
   usage: {
     en: "restart",
@@ -27,7 +27,7 @@ module.exports = {
     const session = getSession();
     if (!session) {
       return await sock.sendMessage(chatId, {
-        text: tr("The session manager isn't ready yet.", "مدير الجلسة لسه مش جاهز."),
+        text: tr("The session manager isn't ready yet.", "مدير الجلسة غير جاهز بعد."),
       });
     }
 
@@ -35,7 +35,7 @@ module.exports = {
     await sock.sendMessage(chatId, {
       text: tr(
         "🔄 Reconnecting WhatsApp... back in a moment.",
-        "🔄 جاري إعادة تشغيل اتصال واتساب... هرجع في لحظة.",
+        "🔄 جارٍ إعادة تشغيل اتصال واتساب... سأعود خلال لحظات.",
       ),
     });
 
@@ -59,7 +59,7 @@ module.exports = {
         .sendMessage(chatId, {
           text: tr(
             `Connection state now: ${state?.status || "unknown"}. Check the panel's Connection screen.`,
-            `حالة الاتصال دلوقتي: ${state?.status || "غير معروفة"}. راجع شاشة Connection في لوحة التحكم.`,
+            `حالة الاتصال الحالية: ${state?.status || "غير معروفة"}. راجع صفحة الاتصال في لوحة التحكم.`,
           ),
         })
         .catch(() => {});

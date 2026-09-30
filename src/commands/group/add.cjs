@@ -84,7 +84,7 @@ module.exports = {
         return await sock.sendMessage(groupId, {
           text: tr(
             `⚠️ @${targetJid.split("@")[0]} is already in the group.`,
-            `⚠️ العضو @${targetJid.split("@")[0]} موجود بالفعل في الجروب.`,
+            `⚠️ العضو @${targetJid.split("@")[0]} موجود بالفعل في المجموعة.`,
           ),
           mentions: [targetJid],
         });
@@ -93,7 +93,7 @@ module.exports = {
       await sock.sendMessage(groupId, {
         text: tr(
           `Trying to add @${targetJid.split("@")[0]}...`,
-          `جاري محاولة إضافة @${targetJid.split("@")[0]}...`,
+          `جارٍ محاولة إضافة @${targetJid.split("@")[0]}...`,
         ),
         mentions: [targetJid],
       });

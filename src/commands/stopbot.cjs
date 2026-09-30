@@ -15,7 +15,7 @@ module.exports = {
   aliases: ["stop", "pause"],
   description: {
     en: "Pauses the WhatsApp connection (the bot process and panel keep running).",
-    ar: "يوقف اتصال واتساب مؤقتًا (عملية البوت ولوحة التحكم يفضلوا شغالين).",
+    ar: "يوقف اتصال واتساب مؤقتًا (مع استمرار تشغيل البوت ولوحة التحكم).",
   },
   usage: {
     en: "stopbot",
@@ -28,7 +28,7 @@ module.exports = {
     const session = getSession();
     if (!session) {
       return await sock.sendMessage(chatId, {
-        text: tr("The session manager isn't ready yet.", "مدير الجلسة لسه مش جاهز."),
+        text: tr("The session manager isn't ready yet.", "مدير الجلسة غير جاهز بعد."),
       });
     }
 
@@ -37,7 +37,7 @@ module.exports = {
       return await sock.sendMessage(chatId, {
         text: tr(
           "The WhatsApp connection isn't up — nothing to pause.",
-          "اتصال واتساب مش شغال أصلًا — مفيش حاجة أوقفها.",
+          "اتصال واتساب متوقف بالفعل.",
         ),
       });
     }
@@ -47,7 +47,7 @@ module.exports = {
     await sock.sendMessage(chatId, {
       text: tr(
         "⏸️ Pausing the WhatsApp connection. The bot and the control panel stay up — resume from the Connection screen in the panel.",
-        "⏸️ جاري إيقاف اتصال واتساب مؤقتًا. البوت واللوحة هيفضلوا شغالين — شغّله تاني من شاشة Connection في لوحة التحكم.",
+        "⏸️ جارٍ إيقاف اتصال واتساب مؤقتًا. سيستمر تشغيل البوت ولوحة التحكم. يمكنك استئناف الاتصال من صفحة الاتصال في لوحة التحكم.",
       ),
     });
 
@@ -60,7 +60,7 @@ module.exports = {
       await sock.sendMessage(chatId, {
         text: tr(
           "Couldn't pause the connection. Try the panel's Connection screen.",
-          "معرفتش أوقف الاتصال. جرب شاشة Connection في لوحة التحكم.",
+          "تعذّر إيقاف الاتصال. حاول من صفحة الاتصال في لوحة التحكم.",
         ),
       });
     }

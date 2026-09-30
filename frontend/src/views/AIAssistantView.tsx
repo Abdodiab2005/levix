@@ -406,7 +406,7 @@ export const AIAssistantView: React.FC = () => {
     try {
       await api.updatePersona(personaText);
       toast(
-        language === "ar" ? "تم تحديث برومبت الشخصية بنجاح!" : "Persona updated successfully!",
+        language === "ar" ? "تم تحديث توجيه الشخصية بنجاح!" : "Persona updated successfully!",
         "success",
       );
       setPersonaModalOpen(false);

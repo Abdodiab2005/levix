@@ -243,7 +243,7 @@ function summarizeEntry(e, idx) {
     bits.push(
       tr(
         `🖼️↩️ quoted media (${e.quotedMediaParts.length})`,
-        `🖼️↩️ ميديا مقتبسة (${e.quotedMediaParts.length})`,
+        `🖼️↩️ وسائط مقتبسة (${e.quotedMediaParts.length})`,
       ),
     );
   }
@@ -259,7 +259,7 @@ module.exports = {
   },
   usage: {
     en: "gemini <text>\ngemini add <text>\ngemini send\ngemini show\ngemini clear\ngenerate <image description>\ndel   (clear this chat's conversation)\ndelall   (clear every conversation)",
-    ar: "gemini <النص>\ngemini add <النص>\ngemini send\ngemini show\ngemini clear\ngenerate <وصف الصورة>\ndel   (مسح سجل محادثة هذا الشات)\ndelall   (مسح كل المحادثات)",
+    ar: "gemini <النص>\ngemini add <النص>\ngemini send\ngemini show\ngemini clear\ngenerate <وصف الصورة>\ndel   (مسح سجل هذه المحادثة)\ndelall   (مسح كل المحادثات)",
   },
   chat: "all",
 
@@ -310,7 +310,7 @@ module.exports = {
             "✅ Conversation history cleared.\n" +
               "_(Long-term memory isn't cleared this way — use `!memory clear` if that's what you meant.)_",
             "✅ تم مسح سجل المحادثة.\n" +
-              "_(الذاكرة الدائمة مش بتتمسح كده — استخدم `!memory clear` لو ده اللي تقصده.)_",
+              "_(لا تُحذف الذاكرة الدائمة بهذه الطريقة. استخدم `!memory clear` إذا أردت حذفها.)_",
           ),
         },
         { replyTo: msg },
@@ -350,7 +350,7 @@ module.exports = {
           {
             text: tr(
               "Describe the image you want after the command. Example: !generate a cat wearing a hat",
-              "اكتب وصف للصورة اللي عايزها بعد الأمر. مثال: !generate قطة ترتدي قبعة",
+              "اكتب وصفًا للصورة التي تريدها بعد الأمر. مثال: !generate قطة ترتدي قبعة",
             ),
           },
           { replyTo: msg },
@@ -360,7 +360,7 @@ module.exports = {
       const status = await createStatus(
         sock,
         chatId,
-        tr("🎨 Making the image...", "🎨 بجهّز الصورة..."),
+        tr("🎨 Making the image...", "🎨 جارٍ إنشاء الصورة..."),
         { replyTo: msg },
       );
 
@@ -372,7 +372,7 @@ module.exports = {
           throw new Error(
             tr(
               "No Gemini API key is set — image generation only runs on Gemini",
-              "مفتاح Gemini API غير معرف — توليد الصور يعمل على Gemini فقط",
+              "لم يُضبط مفتاح Gemini API — توليد الصور يعمل على Gemini فقط",
             ),
           );
         }
@@ -397,7 +397,7 @@ module.exports = {
           (part) => part?.inlineData?.data,
         );
         if (!image) {
-          throw new Error(tr("The model answered without an image", "الموديل رجّع رد من غير صورة"));
+          throw new Error(tr("The model answered without an image", "أعاد النموذج ردًا دون صورة"));
         }
         const imageBuffer = Buffer.from(image.inlineData.data, "base64");
 
@@ -413,7 +413,7 @@ module.exports = {
         );
       } catch (error) {
         logger.error({ err: error }, `Error in !generate command`);
-        await status.fail(error, tr("I couldn't make the image", "للأسف معرفتش أعمل الصورة"));
+        await status.fail(error, tr("I couldn't make the image", "تعذّر إنشاء الصورة"));
       }
       return;
     }
@@ -429,8 +429,8 @@ module.exports = {
             text: tr(
               "📭 Nothing to add to the context.\n\n" +
                 "Write text after the command, reply to a message, or send media with the caption `!gemini add`.",
-              "📭 مفيش حاجة أضيفها للـ context.\n\n" +
-                "اكتب نص بعد الأمر، أو رد على رسالة، أو ابعت ميديا مع كابشن `!gemini add`.",
+              "📭 لا يوجد محتوى لإضافته إلى السياق.\n\n" +
+                "اكتب نصًا بعد الأمر، أو ردّ على رسالة، أو أرسل ملف وسائط مع الوصف `!gemini add`.",
             ),
           },
           { replyTo: msg },
@@ -444,7 +444,7 @@ module.exports = {
           {
             text: tr(
               `The context is full (${MAX_BUFFER_ENTRIES} messages at most). Send \`!gemini send\` or \`!gemini clear\`.`,
-              `الـ context ممتلئ (حد أقصى ${MAX_BUFFER_ENTRIES} رسائل). ابعت \`!gemini send\` أو \`!gemini clear\`.`,
+              `السياق ممتلئ (حد أقصى ${MAX_BUFFER_ENTRIES} رسائل). أرسل \`!gemini send\` أو \`!gemini clear\`.`,
             ),
           },
           { replyTo: msg },
@@ -459,8 +459,8 @@ module.exports = {
             text: tr(
               "The context is too big, or too many contexts are open. " +
                 "Send `!gemini send` or `!gemini clear` and try again.",
-              "الـ context كبير جدًا أو عدد الـ contexts المفتوحة وصل للحد. " +
-                "ابعت `!gemini send` أو `!gemini clear` وحاول تاني.",
+              "السياق كبير جدًا، أو بلغ عدد السياقات المفتوحة الحد الأقصى. " +
+                "أرسل `!gemini send` أو `!gemini clear` وحاول مرة أخرى.",
             ),
           },
           { replyTo: msg },
@@ -474,8 +474,8 @@ module.exports = {
           text: tr(
             `✅ Added to the context. (Total now: *${stored.length}*)\n\n` +
               "Keep going with `!gemini add ...`, or send it all with `!gemini send`.",
-            `✅ اتضافت للـ context. (إجمالي الآن: *${stored.length}*)\n\n` +
-              "كمل بـ `!gemini add ...` ، أو ابعت كله بـ `!gemini send`.",
+            `✅ أُضيفت إلى السياق. (إجمالي الآن: *${stored.length}*)\n\n` +
+              "تابع باستخدام `!gemini add ...`، أو أرسل المحتوى كله باستخدام `!gemini send`.",
           ),
         },
         { replyTo: msg },
@@ -492,9 +492,9 @@ module.exports = {
           text: had
             ? tr(
                 `🗑️ Cleared *${had}* messages from the context.`,
-                `🗑️ تم مسح *${had}* رسالة من الـ context.`,
+                `🗑️ تم مسح *${had}* رسالة من السياق.`,
               )
-            : tr("📭 The context was already empty.", "📭 الـ context كان فاضي أصلاً."),
+            : tr("📭 The context was already empty.", "📭 السياق فارغ بالفعل."),
         },
         { replyTo: msg },
       );
@@ -509,7 +509,7 @@ module.exports = {
           {
             text: tr(
               "📭 The context is empty. Start with `!gemini add ...`.",
-              "📭 الـ context فاضي. ابدأ بـ `!gemini add ...`.",
+              "📭 السياق فارغ. ابدأ بـ `!gemini add ...`.",
             ),
           },
           { replyTo: msg },
@@ -522,12 +522,12 @@ module.exports = {
           text:
             tr(
               `📋 *Current context:* (${buf.length} messages)\n\n`,
-              `📋 *الـ context الحالي:* (${buf.length} رسالة)\n\n`,
+              `📋 *السياق الحالي:* (${buf.length} رسالة)\n\n`,
             ) +
             buf.map((e, i) => summarizeEntry(e, i)).join("\n") +
             tr(
               "\n\nSend it all with `!gemini send` or clear it with `!gemini clear`.",
-              "\n\nابعت كله بـ `!gemini send` أو امسحه بـ `!gemini clear`.",
+              "\n\nأرسل المحتوى كله باستخدام `!gemini send` أو امسحه باستخدام `!gemini clear`.",
             ),
         },
         { replyTo: msg },
@@ -551,8 +551,8 @@ module.exports = {
             text: tr(
               "📭 The context is empty and `!gemini send` has no text.\n\n" +
                 "Start with `!gemini add ...`, or write text with `!gemini send ...`.",
-              "📭 الـ context فاضي ومفيش نص في `!gemini send`.\n\n" +
-                "ابدأ بـ `!gemini add ...` الأول، أو اكتب نص مع `!gemini send ...`.",
+              "📭 السياق فارغ ولا يوجد نص في `!gemini send`.\n\n" +
+                "ابدأ بـ `!gemini add ...` أولًا، أو اكتب نصًا مع `!gemini send ...`.",
             ),
           },
           { replyTo: msg },
@@ -671,7 +671,7 @@ module.exports = {
             sock,
             chatId,
             mediaError,
-            tr("There was a problem with the quoted message", "حصلت مشكلة في الرسالة المقتبسة"),
+            tr("There was a problem with the quoted message", "حدثت مشكلة في الرسالة المقتبسة"),
             {
               replyTo: msg,
             },
@@ -708,7 +708,7 @@ module.exports = {
         {
           text: tr(
             `Settings problem: no API key is set for the current AI provider (${activeProvider.label || activeProvider.id}) — set it in the control panel.`,
-            `خطأ في الإعدادات: مفتاح مزود الذكاء الاصطناعي الحالي (${activeProvider.label || activeProvider.id}) غير معرف — عدّله من لوحة التحكم.`,
+            `خطأ في الإعدادات: لم يُضبط مفتاح مزوّد الذكاء الاصطناعي الحالي (${activeProvider.label || activeProvider.id}) — اضبطه من لوحة التحكم.`,
           ),
         },
         { replyTo: msg },
@@ -749,7 +749,7 @@ module.exports = {
     }
 
     // The one message that will carry the whole run.
-    const status = await createStatus(sock, chatId, tr("🤖 Thinking...", "🤖 جاري التفكير..."), {
+    const status = await createStatus(sock, chatId, tr("🤖 Thinking...", "🤖 جارٍ التفكير..."), {
       replyTo: msg,
     });
 
@@ -789,7 +789,7 @@ module.exports = {
         result.text?.trim() ||
         tr(
           "The model sent no answer. Try asking another way.",
-          "مفيش رد جه من الموديل. جرّب تصيغ السؤال بشكل تاني.",
+          "لم يردّ النموذج. حاول صياغة السؤال بطريقة أخرى.",
         );
       // Appended only when Gemini really grounded the answer on a search —
       // formatSources() returns "" for an answer the model gave from its own

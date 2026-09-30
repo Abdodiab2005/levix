@@ -140,7 +140,7 @@ module.exports = {
   },
   usage: {
     en: "tts <text>   (or reply to a text message)",
-    ar: "tts <النص>   (أو رد على رسالة نصية)",
+    ar: "tts <النص>   (أو ردّ على رسالة نصية)",
   },
   chat: "all",
 
@@ -161,7 +161,7 @@ module.exports = {
         {
           text: tr(
             "📢 Usage:\n!tts <text>\n\nor reply to a text message with !tts\n\n✨ Completely free — no costs!",
-            "📢 الاستخدام:\n!tts <النص>\n\nأو رد على رسالة نصية بالأمر !tts\n\n✨ مجاني تماماً - بدون تكاليف!",
+            "📢 الاستخدام:\n!tts <النص>\n\nأو ردّ على رسالة نصية بالأمر !tts\n\n✨ الخدمة مجانية!",
           ),
         },
         { replyTo: msg },

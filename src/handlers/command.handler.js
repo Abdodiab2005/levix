@@ -299,7 +299,7 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
     await sendBotMessage(
       sock,
       msg.key.remoteJid,
-      { text: tr("⛔ This command is turned off right now.", "⛔ الأمر ده متوقف حاليًا.") },
+      { text: tr("⛔ This command is turned off right now.", "⛔ هذا الأمر معطّل حاليًا.") },
       { replyTo: msg },
     );
     return true;

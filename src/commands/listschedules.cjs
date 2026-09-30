@@ -46,7 +46,7 @@ module.exports = {
       const inGroup = job.targetJid.endsWith("@g.us");
       reply += tr(
         `*Where:* ${inGroup ? "this group" : "a private chat"}\n\n`,
-        `*الوجهة:* ${inGroup ? "هذا الجروب" : "محادثة خاصة"}\n\n`,
+        `*الوجهة:* ${inGroup ? "هذه المجموعة" : "محادثة خاصة"}\n\n`,
       );
     });
 

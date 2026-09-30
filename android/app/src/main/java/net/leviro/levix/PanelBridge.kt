@@ -1,5 +1,9 @@
 package net.leviro.levix
 
+import android.content.ContentValues
+import android.content.Context
+import android.os.Environment
+import android.provider.MediaStore
 import android.util.Base64
 import android.webkit.JavascriptInterface
 import org.json.JSONObject
@@ -13,10 +17,50 @@ class PanelBridge(
     private val sock: File,
     private val bridgeJs: String = "",
     private val onPickContact: (() -> Unit)? = null,
+    private val appContext: Context? = null,
 ) {
     @JavascriptInterface
     fun pickContact() {
         onPickContact?.invoke()
+    }
+
+    /**
+     * The panel hands its settings export to the host instead of a download:
+     * a WebView has no download manager wired for the blob: URLs the page
+     * creates, so the file would vanish. It lands in Downloads/Levix, where
+     * every Files app looks, and the return value is what the panel shows the
+     * operator as the save location.
+     */
+    @JavascriptInterface
+    fun saveExportFile(fileName: String, base64: String): String {
+        val context = appContext
+        return try {
+            requireNotNull(context) { "no host context" }
+            require(fileName.isNotBlank()) { "file name is required" }
+            val safeName = fileName.replace(Regex("[\\\\/:*?\"<>|]"), "_").take(120)
+            val bytes = Base64.decode(base64, Base64.DEFAULT)
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, safeName)
+                put(MediaStore.Downloads.MIME_TYPE, "application/json")
+                put(MediaStore.Downloads.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/Levix")
+            }
+            val uri = context.contentResolver
+                .insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: error("Downloads is not writable")
+            context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                ?: error("could not open the file for writing")
+            JSONObject()
+                .put("ok", true)
+                .put("name", safeName)
+                .put("dir", "${Environment.DIRECTORY_DOWNLOADS}/Levix")
+                .toString()
+        } catch (error: Exception) {
+            HostLog.event("panel saveExport ${error.message}")
+            JSONObject()
+                .put("ok", false)
+                .put("error", error.message ?: "save failed")
+                .toString()
+        }
     }
 
     @JavascriptInterface

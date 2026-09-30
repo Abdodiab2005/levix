@@ -31,7 +31,7 @@ module.exports = {
       return await sock.sendMessage(groupId, {
         text: tr(
           "⚠️ That name is too long. The limit is 25 characters.",
-          "⚠️ اسم الجروب طويل جدًا. الحد الأقصى هو 25 حرفًا.",
+          "⚠️ اسم المجموعة طويل جدًا. الحد الأقصى هو 25 حرفًا.",
         ),
       });
     }
@@ -39,14 +39,14 @@ module.exports = {
     try {
       await sock.groupUpdateSubject(groupId, newName);
       await sock.sendMessage(groupId, {
-        text: tr(`✅ The group is now called:\n*${newName}*`, `✅ تم تغيير اسم الجروب بنجاح إلى:\n*${newName}*`),
+        text: tr(`✅ The group is now called:\n*${newName}*`, `✅ تم تغيير اسم المجموعة بنجاح إلى:\n*${newName}*`),
       });
     } catch (error) {
       logger.error({ err: error }, "Error in !group setname command");
       await sock.sendMessage(groupId, {
         text: tr(
           "Something went wrong. Make sure I'm an admin and allowed to change the group's name.",
-          "حدث خطأ. تأكد من أنني مشرف ولدي صلاحية تغيير اسم الجروب.",
+          "حدث خطأ. تأكد من أنني مشرف ولدي صلاحية تغيير اسم المجموعة.",
         ),
       });
     }

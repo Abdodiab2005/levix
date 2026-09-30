@@ -146,14 +146,14 @@ module.exports = {
     const requested = countOf(range);
 
     const emptyRange = () =>
-      reply(tr("❌ That range doesn't produce any numbers.", "❌ المدى ده مش بيطلع أي أرقام."));
+      reply(tr("❌ That range doesn't produce any numbers.", "❌ لا ينتج هذا النطاق أي أعداد."));
     if (requested < 1) return emptyRange();
     if (requested > limit) {
       return reply(
         tr(
           `❌ ${requested} repetitions is too many.\n` +
             `The limit is ${limit} ${split ? "separate messages" : "repetitions in one message"}.`,
-          `❌ ${requested} تكرار كتير أوي.\n` +
+          `❌ عدد التكرارات المطلوب (${requested}) كبير جدًا.\n` +
             `الحد الأقصى ${limit} ${split ? "رسالة منفصلة" : "تكرار في الرسالة الواحدة"}.`,
         ),
       );
@@ -182,7 +182,7 @@ module.exports = {
     let text = lines.map((line, i) => (numbered ? `${i + 1}. ${line}` : line)).join("\n");
 
     if (text.length > MAX_OUTPUT_CHARS) {
-      text = `${text.slice(0, MAX_OUTPUT_CHARS)}\n…\n${tr("_(cut short — too long)_", "_(اتقصت عشان طولها)_")}`;
+      text = `${text.slice(0, MAX_OUTPUT_CHARS)}\n…\n${tr("_(cut short — too long)_", "_(اختُصر النص لطوله)_")}`;
     }
 
     return reply(text);

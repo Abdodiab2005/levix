@@ -32,7 +32,7 @@ module.exports = {
         await sock.sendMessage(groupId, {
           text: tr(
             "This group has no rules yet. Admins can set them with `!setrules`.",
-            "لم يتم تعيين أي قواعد لهذا الجروب حتى الآن. يمكن للمشرفين تعيينها باستخدام `!setrules`.",
+            "لم يتم تعيين أي قواعد لهذه المجموعة حتى الآن. يمكن للمشرفين تعيينها باستخدام `!setrules`.",
           ),
         });
       }

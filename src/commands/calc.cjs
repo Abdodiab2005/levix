@@ -62,10 +62,10 @@ const FUNCTIONS = {
 function factorial(n) {
   if (!Number.isInteger(n)) {
     throw new CalcError(
-      tr("Factorial (!) only works on whole numbers", "المضروب (!) يشتغل على أرقام صحيحة بس"),
+      tr("Factorial (!) only works on whole numbers", "يُحسب المضروب (!) للأعداد الصحيحة فقط"),
     );
   }
-  if (n < 0) throw new CalcError(tr("Negative numbers have no factorial", "مفيش مضروب لرقم سالب"));
+  if (n < 0) throw new CalcError(tr("Negative numbers have no factorial", "لا يُعرَّف المضروب للأعداد السالبة"));
   if (n > 170) return Infinity; // beyond this a double is Infinity anyway
   let result = 1;
   for (let i = 2; i <= n; i++) result *= i;
@@ -154,7 +154,7 @@ function tokenize(text) {
       continue;
     }
 
-    throw new CalcError(tr(`Unknown symbol: \`${char}\``, `رمز مش مفهوم: \`${char}\``));
+    throw new CalcError(tr(`Unknown symbol: \`${char}\``, `رمز غير معروف: \`${char}\``));
   }
 
   return tokens;
@@ -207,7 +207,7 @@ function parse(tokens) {
         pos++;
         const right = parseUnary();
         if (right === 0) {
-          throw new CalcError(tr("Modulo by zero isn't defined", "باقي القسمة على صفر مش معرّف"));
+          throw new CalcError(tr("Modulo by zero isn't defined", "باقي القسمة على صفر غير معرّف"));
         }
         left %= right;
       } else if (startsValue(peek())) {
@@ -297,7 +297,7 @@ function parse(tokens) {
 
       if (name in CONSTANTS) return CONSTANTS[name];
 
-      throw new CalcError(tr(`I don't know what \`${name}\` is`, `مش عارف يعني إيه \`${name}\``));
+      throw new CalcError(tr(`I don't know what \`${name}\` is`, `لا أعرف معنى \`${name}\``));
     }
 
     throw new CalcError(
@@ -318,12 +318,12 @@ function evaluate(expression) {
   const normalized = normalize(expression);
   if (!normalized) throw new CalcError(tr("Type an expression first", "اكتب معادلة الأول"));
   if (normalized.length > 300) {
-    throw new CalcError(tr("The expression is too long", "المعادلة طويلة أوي"));
+    throw new CalcError(tr("The expression is too long", "التعبير الرياضي طويل جدًا"));
   }
 
   const value = parse(tokenize(normalized));
   if (typeof value !== "number" || Number.isNaN(value)) {
-    throw new CalcError(tr("The result isn't a valid number", "النتيجة مش رقم صالح"));
+    throw new CalcError(tr("The result isn't a valid number", "النتيجة ليست عددًا صالحًا"));
   }
   return { normalized, value };
 }
@@ -425,14 +425,14 @@ module.exports = {
       const reason =
         error instanceof CalcError
           ? error.message
-          : tr("I couldn't understand that expression", "المعادلة مش مفهومة");
+          : tr("I couldn't understand that expression", "تعذّر فهم التعبير الرياضي");
       return sendBotMessage(
         sock,
         chatId,
         {
           text: tr(
             `❌ ${reason}\n\nSend \`!calc\` on its own to see examples.`,
-            `❌ ${reason}\n\nاكتب \`!calc\` لوحده عشان تشوف الأمثلة.`,
+            `❌ ${reason}\n\nاكتب \`!calc\` وحده لعرض الأمثلة.`,
           ),
         },
         { replyTo: msg },

@@ -248,7 +248,7 @@ module.exports = {
     const status = await createStatus(
       sock,
       chatId,
-      tr("🎧 Transcribing...", "🎧 جاري تحويل الصوت إلى نص..."),
+      tr("🎧 Transcribing...", "🎧 جارٍ تحويل الصوت إلى نص..."),
       {
         replyTo: msg,
       },

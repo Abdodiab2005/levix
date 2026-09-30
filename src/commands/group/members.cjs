@@ -21,7 +21,7 @@ module.exports = {
 
       // Send a temporary message to let the user know we're working on it
       await sock.sendMessage(groupId, {
-        text: tr("Fetching the member list...", "جاري جلب قائمة الأعضاء..."),
+        text: tr("Fetching the member list...", "جارٍ جلب قائمة الأعضاء..."),
       });
 
       // Fetch the group's metadata
@@ -33,7 +33,7 @@ module.exports = {
       // Start with a header
       let replyText = tr(
         `*Group members:*\n*Total: ${members.length}*\n\n`,
-        `*قائمة أعضاء الجروب:*\n*العدد الإجمالي: ${members.length}*\n\n`,
+        `*قائمة أعضاء المجموعة:*\n*العدد الإجمالي: ${members.length}*\n\n`,
       );
 
       // Create an array of JIDs for the mentions property

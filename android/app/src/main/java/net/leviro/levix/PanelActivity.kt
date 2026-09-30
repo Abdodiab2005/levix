@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.provider.ContactsContract
 import android.view.WindowManager
 import android.webkit.CookieManager
+import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -45,6 +46,21 @@ class PanelActivity : AppCompatActivity() {
     ) { result ->
         val uri = result.data?.data.takeIf { result.resultCode == Activity.RESULT_OK }
         deliverPickedContact(uri)
+    }
+
+    // The panel's settings import reads a file through <input type="file">.
+    // A stock WebChromeClient never opens the picker on Android, so the button
+    // silently did nothing — this delivers the picked file back to the page.
+    private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+
+    private val pickFile = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val callback = fileChooserCallback
+        fileChooserCallback = null
+        callback?.onReceiveValue(
+            WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data),
+        )
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -115,11 +131,30 @@ class PanelActivity : AppCompatActivity() {
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false)
         web.addJavascriptInterface(
-            PanelBridge(sock, bridgeJs) { runOnUiThread { launchContactPicker() } },
+            PanelBridge(sock, bridgeJs, { runOnUiThread { launchContactPicker() } }, applicationContext),
             "LevixHost",
         )
 
-        web.webChromeClient = WebChromeClient()
+        web.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(
+                webView: WebView?,
+                callback: ValueCallback<Array<Uri>>,
+                params: FileChooserParams,
+            ): Boolean {
+                // One chooser at a time; a stale callback gets null so the
+                // page is never left waiting on a dead picker.
+                fileChooserCallback?.onReceiveValue(null)
+                fileChooserCallback = callback
+                return try {
+                    pickFile.launch(fileChoiceIntent())
+                    true
+                } catch (error: Exception) {
+                    HostLog.event("file chooser ${error.message}")
+                    fileChooserCallback = null
+                    false
+                }
+            }
+        }
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(
                 view: WebView,
@@ -187,6 +222,21 @@ class PanelActivity : AppCompatActivity() {
     }
 
     /**
+     * Openable files, with JSON highlighted. The page validates the content
+     * itself, so the picker only needs to not hide what the file managers
+     * actually label a .json file (application/json, plain text, or a generic
+     * octet-stream).
+     */
+    private fun fileChoiceIntent(): Intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+        addCategory(Intent.CATEGORY_OPENABLE)
+        type = "*/*"
+        putExtra(
+            Intent.EXTRA_MIME_TYPES,
+            arrayOf("application/json", "text/plain", "application/octet-stream"),
+        )
+    }
+
+    /**
      * The password screens (login, first-run setup) must not leak into a
      * screenshot or the recents thumbnail: FLAG_SECURE blanks them out at the
      * compositor, which the web platform cannot do. It follows the URL, so it
@@ -240,6 +290,8 @@ class PanelActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        fileChooserCallback?.onReceiveValue(null)
+        fileChooserCallback = null
         web.destroy()
         super.onDestroy()
     }
