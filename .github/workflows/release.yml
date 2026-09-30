@@ -71,7 +71,11 @@ jobs:
         run: |
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
-          if [[ "$version" == *-* ]]; then
+          # A retry after a later artifact fails must not fail on a version
+          # already published by the first run.
+          if npm view "levix-bot@${version}" version --json 2>/dev/null | grep -Fqx "\"${version}\""; then
+            echo "levix-bot@${version} is already published; continuing the release"
+          elif [[ "$version" == *-* ]]; then
             tag="${version#*-}"
             tag="${tag%%.*}"
             npm publish --provenance --access public --tag "$tag"
