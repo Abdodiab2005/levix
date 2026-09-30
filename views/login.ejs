@@ -32,7 +32,7 @@
 
       <section class="gateway-panel">
         <div class="gateway-panel-inner">
-          <form class="card auth-card" action="/login" method="post">
+          <form class="card auth-card" id="login-card" action="/login" method="post">
             <div class="auth-head">
               <span class="eyebrow">Secure access</span>
               <h1>Welcome back</h1>
@@ -41,14 +41,20 @@
 
             <label class="field">
               <span>Control panel password</span>
-              <input
-                type="password"
-                name="password"
-                autocomplete="current-password"
-                placeholder="Enter your password"
-                autofocus
-                required
-              />
+              <div class="input-wrap">
+                <input
+                  type="password"
+                  name="password"
+                  autocomplete="current-password"
+                  placeholder="Enter your password"
+                  autofocus
+                  required
+                />
+                <button type="button" class="eye-btn" aria-label="Show password">
+                  <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                </button>
+              </div>
             </label>
 
             <button type="submit" class="btn btn-primary auth-submit">
@@ -59,11 +65,205 @@
             <% if (error) { %>
             <div class="error" role="alert"><%= error %></div>
             <% } %>
+
+            <div class="auth-alt">
+              <button type="button" class="link-btn" id="forgot-link">Forgot password?</button>
+            </div>
           </form>
+
+          <div class="card auth-card" id="reset-card" hidden>
+            <div class="auth-head">
+              <span class="eyebrow">Password reset</span>
+              <h1>Reset your password</h1>
+              <p class="sub">
+                Levix sends a one-time code to your WhatsApp — the linked account's own chat.
+                The code works for 10 minutes.
+              </p>
+            </div>
+
+            <button type="button" class="btn btn-primary auth-submit" id="reset-send">
+              Send code to WhatsApp
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+
+            <form id="reset-form" hidden>
+              <label class="field">
+                <span>Reset code</span>
+                <input
+                  type="text"
+                  id="reset-code"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  maxlength="6"
+                  placeholder="6 digits"
+                  required
+                />
+              </label>
+
+              <label class="field">
+                <span>New password</span>
+                <div class="input-wrap">
+                  <input
+                    type="password"
+                    id="reset-pass"
+                    autocomplete="new-password"
+                    placeholder="At least <%= minLength %> characters"
+                    minlength="<%= minLength %>"
+                    required
+                  />
+                  <button type="button" class="eye-btn" aria-label="Show password">
+                    <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                  </button>
+                </div>
+              </label>
+
+              <label class="field">
+                <span>Repeat password</span>
+                <div class="input-wrap">
+                  <input
+                    type="password"
+                    id="reset-confirm"
+                    autocomplete="new-password"
+                    placeholder="Type it again"
+                    minlength="<%= minLength %>"
+                    required
+                  />
+                  <button type="button" class="eye-btn" aria-label="Show password">
+                    <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+                  </button>
+                </div>
+              </label>
+
+              <button type="submit" class="btn btn-primary auth-submit">
+                Set new password
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </button>
+            </form>
+
+            <div class="error" id="reset-error" role="alert" hidden></div>
+            <div class="auth-alt">
+              <button type="button" class="link-btn" id="reset-back">Back to sign in</button>
+            </div>
+          </div>
 
           <div class="foot"><%= brand.name %> by <%= brand.developer %> · <%= brand.studio %></div>
         </div>
       </section>
     </main>
+
+    <script src="/gateway.js"></script>
+    <script>
+      (function () {
+        var loginCard = document.getElementById("login-card");
+        var resetCard = document.getElementById("reset-card");
+        var sendBtn = document.getElementById("reset-send");
+        var form = document.getElementById("reset-form");
+        var errorBox = document.getElementById("reset-error");
+
+        function showReset() {
+          loginCard.hidden = true;
+          resetCard.hidden = false;
+        }
+        function showLogin() {
+          resetCard.hidden = true;
+          loginCard.hidden = false;
+          document.getElementById("forgot-link").focus();
+        }
+        function showError(text) {
+          errorBox.textContent = text;
+          errorBox.hidden = false;
+        }
+        function hideError() {
+          errorBox.hidden = true;
+        }
+        async function postJson(url, body) {
+          const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body || {}),
+          });
+          let data = {};
+          try {
+            data = await response.json();
+          } catch {}
+          return data;
+        }
+
+        document.getElementById("forgot-link").addEventListener("click", showReset);
+        document.getElementById("reset-back").addEventListener("click", showLogin);
+
+        sendBtn.addEventListener("click", async function () {
+          sendBtn.disabled = true;
+          hideError();
+          try {
+            const result = await postJson("/reset/request");
+            if (result.ok) {
+              sendBtn.hidden = true;
+              form.hidden = false;
+              document.getElementById("reset-code").focus();
+            } else if (result.reason === "throttled") {
+              showError("Too many requests. Try again in " + (result.retryAfter || 60) + " seconds.");
+            } else if (result.reason === "no_session") {
+              showError(
+                "WhatsApp isn't connected, so the code can't be sent. " +
+                  "Sign in on the server and run `levix reset-password`, or start the WhatsApp session first."
+              );
+            } else if (result.reason === "send_failed") {
+              showError("Couldn't send the WhatsApp message. Try again in a minute.");
+            } else {
+              showError("Couldn't start the reset. Try again.");
+            }
+          } catch {
+            showError("Couldn't reach the server. Try again.");
+          }
+          sendBtn.disabled = false;
+        });
+
+        form.addEventListener("submit", async function (event) {
+          event.preventDefault();
+          hideError();
+          try {
+            const result = await postJson("/reset/confirm", {
+              code: document.getElementById("reset-code").value,
+              password: document.getElementById("reset-pass").value,
+              confirm: document.getElementById("reset-confirm").value,
+            });
+            if (result.ok) {
+              form.hidden = true;
+              sendBtn.hidden = true;
+              showError("Password updated. Taking you to sign in…");
+              setTimeout(function () {
+                window.location.href = "/";
+              }, 900);
+              return;
+            }
+            if (result.reason === "wrong_code") {
+              showError(
+                "Wrong code." +
+                  (result.attemptsLeft ? " " + result.attemptsLeft + " attempts left." : "")
+              );
+            } else if (
+              result.reason === "expired" ||
+              result.reason === "no_pending" ||
+              result.reason === "too_many_attempts"
+            ) {
+              showError("That code is no longer valid. Send a new one.");
+              form.hidden = true;
+              sendBtn.hidden = false;
+            } else if (result.reason === "mismatch") {
+              showError("The two passwords don't match.");
+            } else if (result.reason === "invalid_password") {
+              showError(result.message || "That password isn't allowed.");
+            } else {
+              showError("Couldn't reset the password. Try again.");
+            }
+          } catch {
+            showError("Couldn't reach the server. Try again.");
+          }
+        });
+      })();
+    </script>
   </body>
 </html>

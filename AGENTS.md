@@ -707,6 +707,10 @@ for the owner role. The account that scanned the QR is an owner from the start.
 - **Once**: One-time scheduled message (specific date/time)
 - **Recurring**: Cron-based repeating messages
 
+**Creation is silent by design**: `!schedule` / `!autoschedule` confirm with a
+✅ reaction on the command message, not a separate "message scheduled" bubble.
+Errors still reply as messages.
+
 **Commands**:
 - `!schedule` - Create new schedule
 - `!listschedules` - View all schedules
@@ -753,6 +757,10 @@ account".
   poll; `--multi` allows several answers.
 - **`!rand`** (`src/commands/rand.cjs`) — random numbers, `dice 2d6`, `coin`,
   `pick a | b | c`.
+- **`!send`** (`src/commands/send.cjs`) — reply to a status/story or any
+  message with it and the bot re-sends that content here (photo, video, voice
+  note, sticker, document or text). Downloads straight from the reply's
+  `quotedMessage` — nothing is cached or archived.
 - **`!memory`** (`src/commands/memory.cjs`) — the Markdown long-term memory.
 - **`!perm`** (`src/commands/perm.cjs`) — bot owner / admin roles.
 
@@ -843,6 +851,20 @@ the bot does can be changed from it, live:
 | Settings → password | the panel's own password | `bot_settings` (scrypt hash) |
 | Settings → Feedback | nothing local — one message to the developer | forwarded server-side to `levix.leviro.net/api/feedback` (`src/panel/feedback.cjs`) |
 
+**Sharing settings.** The General tab exports every non-secret override to a
+JSON file (`GET /dashboard/api/settings/export`, `src/services/
+settingsTransfer.cjs`) and imports a friend's file back
+(`POST .../settings/import`). Two rules the module enforces: secrets never
+leave and an import can never plant one (API keys, the proxy password — every
+`type: "secret"` setting is skipped on both sides), and only settings whose
+source is the dashboard are exported, so untouched keys keep following the
+importer's own shipped defaults. The command table (prefix, permission /
+alias overrides, disabled commands) rides along; per-group config and the
+memory files do not — they are data, not settings. One bad value in a shared
+file is skipped and reported, never fatal. `applySettingChange()` is also the
+one implementation PATCH `/settings` uses, so a hand edit and an import cannot
+drift apart.
+
 The main dashboard is the React 19 + Vite + TypeScript SPA in `frontend/`,
 compiled to `public/dashboard/`. The EJS files in `views/` are the login,
 setup, QR and fallback gateway pages. Runtime browser dependencies are served
@@ -858,6 +880,17 @@ for how a value resolves. Browser mutations must be same-origin; an opaque
 Every authenticated panel session carries the current password epoch. Changing
 or resetting the password invalidates older HTTP and Socket.IO sessions before
 more QR or account data can be pushed.
+
+**Forgot password.** The login page's reset asks the bot to WhatsApp a one-time
+code to the linked account's own chat (`src/panel/password-reset.cjs`; the code
+is hashed, 10 minutes, five attempts, requests throttled per peer and globally,
+wrong guesses count toward the login lockout). It needs the WhatsApp session up
+— that is why it exists: WebAuthn/passkeys require HTTPS or localhost, and the
+panel is very often opened at plain `http://<lan-ip>:3001`. `levix
+reset-password` stays the offline fallback. The gateway password screens also
+blur themselves when the page loses focus, print to nothing, and — in the
+Android app (`PanelActivity`) — set `FLAG_SECURE` while `/login` or `/setup` is
+on screen, which is the only real screenshot block available on each platform.
 
 **What the dashboard deliberately can't do:** change the bot's name or its
 author (`brand.cjs`), or lower the permission of a command that declares
@@ -1092,6 +1125,12 @@ logger.debug('Debug info');
     module-level constant (the language is per message). Arabic words a
     command *accepts* (`اضف`, `عام`) are input, not replies, and stay as they
     are.
+30. **`require()` of an ESM module returns the namespace, not the default.**
+    When a module has named exports (`normalizeJid.esm.js`), CommonJS callers
+    must take `.default` explicitly — `block.cjs`/`unblock.cjs` once called the
+    namespace itself and every `!block` died with "normalizeJid is not a
+    function". Modules whose only export is `default` come through `require()`
+    unwrapped, which is why the bug hid until someone ran the command.
 
 ## Testing Workflow
 

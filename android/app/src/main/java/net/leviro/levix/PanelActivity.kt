@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.ContactsContract
+import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
@@ -148,6 +149,7 @@ class PanelActivity : AppCompatActivity() {
                     view?.stopLoading()
                     return
                 }
+                applyScreenCaptureGuard(url)
                 if (!bridgeJs.isEmpty()) {
                     view?.evaluateJavascript(bridgeJs, null)
                 }
@@ -182,6 +184,28 @@ class PanelActivity : AppCompatActivity() {
             type = ContactsContract.CommonDataKinds.Phone.CONTENT_TYPE
         }
         pickPhone.launch(intent)
+    }
+
+    /**
+     * The password screens (login, first-run setup) must not leak into a
+     * screenshot or the recents thumbnail: FLAG_SECURE blanks them out at the
+     * compositor, which the web platform cannot do. It follows the URL, so it
+     * lifts again once the panel is signed in.
+     */
+    private fun applyScreenCaptureGuard(rawUrl: String?) {
+        val path = rawUrl?.let {
+            try {
+                URI(it).path
+            } catch (_: Exception) {
+                null
+            }
+        } ?: ""
+        val onPasswordScreen = path == "/login" || path == "/setup"
+        if (onPasswordScreen) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
     }
 
     private fun deliverPickedContact(uri: Uri?) {

@@ -66,6 +66,8 @@ export async function bootstrapPanel({ core } = {}) {
   // The routes read the live socket off the session manager, so a reconnect
   // needs no re-wiring here.
   if (core?.session) setSession(core.session);
+  // The WhatsApp-code password reset talks to the same session manager.
+  if (core?.session) require("../panel/password-reset.cjs").setSession(core.session);
 
   // After every route is registered — the 404 and the error handler have to be
   // last, or they swallow what comes after them.

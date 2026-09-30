@@ -26,13 +26,13 @@ import {
   countSchedules,
   countTodos,
   countWarnings,
+  describePeer,
   getAllGroupDirectory,
   getAllGroupSettings,
   getAllNotesFlat,
   getAllTodos,
   getAllUsers,
   getAllWarnings,
-  describePeer,
   getGroupDirectory,
   getGroupSettings,
   getRecentDebts,
@@ -68,11 +68,7 @@ const {
 } = require("../../scheduler.cjs");
 const { describeScheduledJob } = require("../utils/recurrence.cjs");
 const { discoverProviderModels, DiscoveryError } = require("../services/llmDiscovery.cjs");
-const {
-  invalidateDiscoveryCache,
-  applyCapabilityGuards,
-  resolveCapabilities,
-} = require("../services/modelRegistry.cjs");
+const settingsTransfer = require("../services/settingsTransfer.cjs");
 const cron = require("node-cron");
 
 const router = Router();
@@ -301,82 +297,55 @@ router.get("/settings", (req, res) => {
 
 router.patch("/settings", (req, res) => {
   const { key } = req.body || {};
-  let { value } = req.body || {};
   if (typeof key !== "string" || !key) return badRequest(res, "key is required");
 
   try {
     if (key === "prefix") {
-      const prefix = runtimeConfig.setPrefix(value);
+      const prefix = runtimeConfig.setPrefix(req.body?.value);
       return res.json({ success: true, prefix });
     }
 
-    if (key === "ai_vision_enabled" || key === "ai_stt_enabled") {
-      const provider = String(settings.get("ai_provider") || "gemini");
-      const modelKey =
-        provider === "gemini"
-          ? "gemini_model"
-          : provider === "anthropic"
-            ? "anthropic_model"
-            : "openai_model";
-      const resolved = resolveCapabilities(provider, settings.get(modelKey));
-      const next = applyCapabilityGuards({
-        visionEnabled: key === "ai_vision_enabled" ? value : settings.get("ai_vision_enabled"),
-        sttEnabled: key === "ai_stt_enabled" ? value : settings.get("ai_stt_enabled"),
-        capabilities: resolved.capabilities,
-        capabilitySource: resolved.capabilitySource,
-        autoDetect: settings.get("ai_auto_detect_capabilities"),
-      });
-      if (key === "ai_vision_enabled") value = next.visionEnabled;
-      if (key === "ai_stt_enabled") value = next.sttEnabled;
-    }
-
-    settings.set(key, value);
-    if (typeof key === "string" && (key.includes("api_key") || key.includes("base_url"))) {
-      const prov = key.startsWith("gemini")
-        ? "gemini"
-        : key.startsWith("anthropic")
-          ? "anthropic"
-          : key.startsWith("openai")
-            ? "openai"
-            : null;
-      if (prov) invalidateDiscoveryCache(prov);
-      else invalidateDiscoveryCache();
-    }
-    if (
-      key === "ai_provider" ||
-      key === "gemini_model" ||
-      key === "openai_model" ||
-      key === "anthropic_model"
-    ) {
-      const provider = key === "ai_provider" ? String(value || "gemini") : key.split("_")[0];
-      const modelKey =
-        provider === "gemini"
-          ? "gemini_model"
-          : provider === "anthropic"
-            ? "anthropic_model"
-            : "openai_model";
-      const modelId = key.endsWith("_model") ? value : settings.get(modelKey);
-      const resolved = resolveCapabilities(provider, modelId);
-      const next = applyCapabilityGuards({
-        visionEnabled: settings.get("ai_vision_enabled"),
-        sttEnabled: settings.get("ai_stt_enabled"),
-        capabilities: resolved.capabilities,
-        capabilitySource: resolved.capabilitySource,
-        autoDetect: settings.get("ai_auto_detect_capabilities"),
-      });
-      if (Boolean(settings.get("ai_vision_enabled")) !== next.visionEnabled) {
-        settings.set("ai_vision_enabled", next.visionEnabled);
-      }
-      if (Boolean(settings.get("ai_stt_enabled")) !== next.sttEnabled) {
-        settings.set("ai_stt_enabled", next.sttEnabled);
-      }
-    }
+    // Capability guards, discovery-cache drops and the save itself live in one
+    // place the import route shares (settingsTransfer.applySettingChange), so
+    // a hand edit and a shared file can't drift apart.
+    settingsTransfer.applySettingChange(key, req.body?.value);
     return res.json({
       success: true,
       // Never echo a value back: for a secret that would hand it to anyone who
       // gets a look at the page.
       settings: settings.describe(),
     });
+  } catch (error) {
+    return badRequest(res, error.message);
+  }
+});
+
+// --- Share settings --------------------------------------------------------
+//
+// The file a friend can load: every non-secret override (settingsTransfer
+// owns what is in and what stays out). The import applies what it understands
+// and reports the rest, so a file from a different version never half-kills
+// an install in silence.
+
+// (no per-route no-store needed: the /dashboard/api mount already sets it)
+router.get("/settings/export", (req, res) => {
+  try {
+    const payload = settingsTransfer.exportSettings();
+    const date = payload.exportedAt.slice(0, 10);
+    res.set("Content-Type", "application/json; charset=utf-8");
+    res.set("Content-Disposition", `attachment; filename="levix-settings-${date}.json"`);
+    return res.json(payload);
+  } catch (error) {
+    return fail(res, error, "Error exporting settings");
+  }
+});
+
+router.post("/settings/import", (req, res) => {
+  try {
+    const report = settingsTransfer.applyImport(req.body || {});
+    // Aliases and disabled commands are cached in the dispatcher's index.
+    rebuildCommandIndex();
+    return res.json({ success: true, ...report });
   } catch (error) {
     return badRequest(res, error.message);
   }
@@ -659,7 +628,12 @@ async function getChatConversationAsync(chatId) {
     if (messages.length >= MAX_INSPECTOR_MESSAGES) break;
   }
 
-  return { chatId, updatedAt: meta.updatedAt ?? null, truncated: messages.length >= MAX_INSPECTOR_MESSAGES, messages };
+  return {
+    chatId,
+    updatedAt: meta.updatedAt ?? null,
+    truncated: messages.length >= MAX_INSPECTOR_MESSAGES,
+    messages,
+  };
 }
 
 // ===========================================================================
@@ -671,15 +645,10 @@ function groupView(groupId, stored) {
   const directory = getGroupDirectory(groupId) || null;
   const config = stored || {};
   const subject = live?.subject || directory?.subject || null;
-  const memberCount =
-    live?.participants?.length ?? directory?.participant_count ?? null;
+  const memberCount = live?.participants?.length ?? directory?.participant_count ?? null;
   const mediaEnabled = !!config.media_control?.enabled;
   const blocked = config.media_control?.blocked_types || [];
-  const mediaRestriction = !mediaEnabled
-    ? "none"
-    : blocked.length >= 4
-      ? "block_all"
-      : "custom";
+  const mediaRestriction = !mediaEnabled ? "none" : blocked.length >= 4 ? "block_all" : "custom";
 
   return {
     id: groupId,
@@ -1185,7 +1154,8 @@ router.post("/security/password", (req, res) => {
   clearAttempts(peer);
   stampPanelSession(req.session);
   req.session.save((err) => {
-    if (err) return res.status(500).json({ success: false, error: "Could not refresh the session" });
+    if (err)
+      return res.status(500).json({ success: false, error: "Could not refresh the session" });
     try {
       const { disconnectInvalidPanelSockets } = require("../../app.cjs");
       disconnectInvalidPanelSockets();

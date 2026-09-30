@@ -1,6 +1,7 @@
 // file: frontend/src/views/SettingsView.tsx
 
 import {
+  Download,
   Eye,
   EyeOff,
   Globe,
@@ -9,22 +10,29 @@ import {
   Lock,
   MessageSquareHeart,
   Save,
+  Share2,
   Shield,
   Sliders,
   Terminal,
+  Upload,
 } from "lucide-react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { FeedbackForm } from "../components/FeedbackForm";
-import { Toggle } from "../components/Toggle";
+import { Modal } from "../components/Modal";
 import { useToast } from "../components/Toasts";
+import { Toggle } from "../components/Toggle";
 import { useI18n } from "../context/I18nContext";
 import { cn } from "../utils/cn";
 
 type SettingsTab = "general" | "integrations" | "proxy" | "security" | "storage" | "feedback";
 
 const PREFIX_PRESETS = ["!", "/", ".", "#", "$", "?"];
+
+// Marker written by the backend's settingsTransfer service — anything else is
+// not a settings file and is refused before it can touch anything.
+const EXPORT_FORMAT = "levix-settings";
 
 export const SettingsView: React.FC = () => {
   const { t, language, setLanguage } = useI18n();
@@ -46,8 +54,74 @@ export const SettingsView: React.FC = () => {
 
   // Secret toggles
   const [showProxyPass, setShowProxyPass] = useState(false);
+  const [showPanelPass, setShowPanelPass] = useState(false);
   const [showWeatherKey, setShowWeatherKey] = useState(false);
   const [showYoutubeKey, setShowYoutubeKey] = useState(false);
+
+  // Settings export / import
+  const [exportingSettings, setExportingSettings] = useState(false);
+  const [applyingImport, setApplyingImport] = useState(false);
+  const [importPreview, setImportPreview] = useState<any>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
+
+  const handleExportSettings = async () => {
+    setExportingSettings(true);
+    try {
+      const payload = await api.exportSettings();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `levix-settings-${payload.exportedAt?.slice(0, 10) || "export"}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast(t("exportSettingsSuccess"), "success");
+    } catch (err: any) {
+      toast(err.message || t("exportSettingsError"), "error");
+    } finally {
+      setExportingSettings(false);
+    }
+  };
+
+  const handleImportFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    let payload: any;
+    try {
+      payload = JSON.parse(await file.text());
+    } catch {
+      toast(t("importSettingsError"), "error");
+      return;
+    }
+    if (payload?.format !== EXPORT_FORMAT) {
+      toast(t("importSettingsError"), "error");
+      return;
+    }
+    setImportPreview(payload);
+  };
+
+  const handleImportApply = async () => {
+    if (!importPreview) return;
+    setApplyingImport(true);
+    try {
+      const report = await api.importSettings(importPreview);
+      const bits = [`${report.applied?.length || 0} ${t("importSettingsCount")}`];
+      if (report.skipped?.length) {
+        bits.push(`${t("importSkipped")}: ${report.skipped.length}`);
+      }
+      if (report.restartNeeded?.length) {
+        bits.push(`${t("importRestartNeeded")}: ${report.restartNeeded.join(", ")}`);
+      }
+      toast(`${t("importSuccess")} — ${bits.join(" · ")}`, "success");
+      setImportPreview(null);
+      await loadSettings();
+    } catch (err: any) {
+      toast(err.message, "error");
+    } finally {
+      setApplyingImport(false);
+    }
+  };
 
   const loadSettings = async () => {
     try {
@@ -431,6 +505,49 @@ export const SettingsView: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Share settings: export / import */}
+          <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col gap-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-line">
+              <div className="w-10 h-10 rounded-xl bg-brand-blue/10 text-brand-blue flex items-center justify-center shrink-0">
+                <Share2 size={20} />
+              </div>
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-text-main">
+                  {t("shareSettingsTitle")}
+                </h3>
+                <p className="text-xs sm:text-sm text-muted mt-0.5">{t("shareSettingsDesc")}</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                type="button"
+                onClick={handleExportSettings}
+                disabled={exportingSettings}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-5 h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/20 transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
+              >
+                <Download size={16} />
+                <span>{t("exportSettings")}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => importFileRef.current?.click()}
+                className="flex-1 inline-flex items-center justify-center gap-2 px-5 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50"
+              >
+                <Upload size={16} />
+                <span>{t("importSettings")}</span>
+              </button>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+            </div>
+          </div>
         </div>
       )}
 
@@ -530,7 +647,9 @@ export const SettingsView: React.FC = () => {
                 <Globe size={22} />
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-base sm:text-lg font-bold text-text-main truncate">{t("proxyTitle")}</h3>
+                <h3 className="text-base sm:text-lg font-bold text-text-main truncate">
+                  {t("proxyTitle")}
+                </h3>
                 <p className="text-xs sm:text-sm text-muted mt-0.5 truncate">{t("proxyDesc")}</p>
               </div>
             </div>
@@ -648,27 +767,47 @@ export const SettingsView: React.FC = () => {
                 <label className="block text-xs sm:text-sm font-bold text-text-main">
                   {t("currentPassword")}
                 </label>
-                <input
-                  type="password"
-                  className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-                  required
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                />
+                <div className="relative">
+                  <input
+                    type={showPanelPass ? "text" : "password"}
+                    className="w-full h-11 px-3.5 pe-11 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                    required
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    aria-label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                    onClick={() => setShowPanelPass(!showPanelPass)}
+                    className="absolute top-1.5 end-1.5 w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-text-main transition-colors"
+                  >
+                    {showPanelPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1.5">
                 <label className="block text-xs sm:text-sm font-bold text-text-main">
                   {t("newPassword")}
                 </label>
-                <input
-                  type="password"
-                  className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-                  required
-                  minLength={8}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
+                <div className="relative">
+                  <input
+                    type={showPanelPass ? "text" : "password"}
+                    className="w-full h-11 px-3.5 pe-11 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                    required
+                    minLength={8}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    aria-label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                    onClick={() => setShowPanelPass(!showPanelPass)}
+                    className="absolute top-1.5 end-1.5 w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-text-main transition-colors"
+                  >
+                    {showPanelPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
                 <span className="block text-[11px] text-muted">{t("passwordMinLength")}</span>
               </div>
 
@@ -676,14 +815,24 @@ export const SettingsView: React.FC = () => {
                 <label className="block text-xs sm:text-sm font-bold text-text-main">
                   {t("confirmPassword")}
                 </label>
-                <input
-                  type="password"
-                  className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-                  required
-                  minLength={8}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                />
+                <div className="relative">
+                  <input
+                    type={showPanelPass ? "text" : "password"}
+                    className="w-full h-11 px-3.5 pe-11 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                    required
+                    minLength={8}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    aria-label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                    onClick={() => setShowPanelPass(!showPanelPass)}
+                    className="absolute top-1.5 end-1.5 w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-text-main transition-colors"
+                  >
+                    {showPanelPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
 
               <button
@@ -754,6 +903,59 @@ export const SettingsView: React.FC = () => {
           TAB 6: Feedback & support — the operator's line to the developer
          ==================================================================== */}
       {activeTab === "feedback" && <FeedbackForm />}
+
+      {/* Import confirmation: the file is about to overwrite this install's
+          settings, so the operator sees what is in it before it lands. */}
+      <Modal
+        isOpen={!!importPreview}
+        onClose={() => setImportPreview(null)}
+        title={t("importTitle")}
+        footer={
+          <div className="flex gap-3 justify-end">
+            <button
+              type="button"
+              onClick={() => setImportPreview(null)}
+              className="px-5 h-10 rounded-xl border border-line text-muted hover:text-text-main font-bold text-xs sm:text-sm transition-colors"
+            >
+              {language === "ar" ? "إلغاء" : "Cancel"}
+            </button>
+            <button
+              type="button"
+              onClick={handleImportApply}
+              disabled={applyingImport}
+              className="px-5 h-10 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/20 transition-all disabled:opacity-50"
+            >
+              {t("importApply")}
+            </button>
+          </div>
+        }
+      >
+        {importPreview && (
+          <div className="flex flex-col gap-3 text-xs sm:text-sm text-text-main">
+            <p className="text-muted">{t("importSummary")}</p>
+            <ul className="flex flex-col gap-1.5 bg-panel-raised rounded-xl border border-line p-4">
+              <li>
+                {t("importPrefix")}:{" "}
+                <span className="font-mono font-bold">{importPreview.commands?.prefix}</span>
+              </li>
+              <li>
+                {Object.keys(importPreview.settings || {}).length} {t("importSettingsCount")}
+              </li>
+              <li>
+                {Object.keys(importPreview.commands?.permissions || {}).length}{" "}
+                {t("importPermissionsCount")}
+              </li>
+              <li>
+                {Object.keys(importPreview.commands?.aliases || {}).length}{" "}
+                {t("importAliasesCount")}
+              </li>
+              <li>
+                {(importPreview.commands?.disabled || []).length} {t("importDisabledCount")}
+              </li>
+            </ul>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };
