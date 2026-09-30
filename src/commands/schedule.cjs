@@ -1,6 +1,7 @@
 // file: commands/schedule.js
 const { scheduleNewJob, saveScheduledJob } = require("../../scheduler.cjs");
-const { zonedTimeToDate, defaultTimezone } = require("../utils/datetime.cjs");
+const { zonedTimeToDate } = require("../utils/datetime.cjs");
+const logger = require("../utils/logger.cjs");
 const { tr } = require("../utils/i18n.cjs");
 
 const DATETIME_RE = /^(\d{1,2}):(\d{2})\s+(\d{1,2})-(\d{1,2})-(\d{4})$/;
@@ -92,14 +93,11 @@ module.exports = {
 
     saveScheduledJob(newJob);
 
-    const when = scheduleDate.toLocaleString(tr("en-GB", "ar-EG"), {
-      timeZone: defaultTimezone(),
-    });
-    await sock.sendMessage(creatorJid, {
-      text: tr(
-        `✅ Your message is scheduled for:\n*${when}*`,
-        `✅ تم جدولة رسالتك بنجاح ليتم إرسالها في:\n*${when}*`,
-      ),
-    });
+    // تأكيد صامت: تفاعل على رسالة الإنشاء بدل رسالة "تم الجدولة" المنفصلة
+    try {
+      await sock.sendMessage(targetJid, { react: { text: "✅", key: msg.key } });
+    } catch (error) {
+      logger.warn({ err: error, command: "schedule" }, "failed to react to the scheduled message");
+    }
   },
 };

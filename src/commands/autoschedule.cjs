@@ -1,6 +1,6 @@
 const { scheduleNewJob, saveScheduledJob } = require("../../scheduler.cjs");
 const { randomUUID } = require("node:crypto");
-const { defaultTimezone } = require("../utils/datetime.cjs");
+const logger = require("../utils/logger.cjs");
 const { parseRecurringArgs } = require("../utils/recurrence.cjs");
 const { tr } = require("../utils/i18n.cjs");
 
@@ -71,17 +71,14 @@ module.exports = {
 
     saveScheduledJob(newJob);
 
-    await sock.sendMessage(creatorJid, {
-      text:
-        parsed.type === "weekly"
-          ? tr(
-              `✅ Scheduled weekly on ${args[1]} at ${parsed.time} (${defaultTimezone()})`,
-              `✅ تم جدولة الرسالة أسبوعيًا يوم ${args[1]} الساعة ${parsed.time} (${defaultTimezone()})`,
-            )
-          : tr(
-              `✅ Scheduled daily at ${parsed.time} (${defaultTimezone()})`,
-              `✅ تم جدولة الرسالة يوميًا الساعة ${parsed.time} (${defaultTimezone()})`,
-            ),
-    });
+    // تأكيد صامت: تفاعل على رسالة الإنشاء بدل رسالة "تم الجدولة" المنفصلة
+    try {
+      await sock.sendMessage(targetJid, { react: { text: "✅", key: msg.key } });
+    } catch (error) {
+      logger.warn(
+        { err: error, command: "autoschedule" },
+        "failed to react to the scheduled message",
+      );
+    }
   },
 };
