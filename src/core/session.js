@@ -49,7 +49,6 @@
 import { DisconnectReason } from "@whiskeysockets/baileys";
 import { createRequire } from "module";
 import { RETRY_SCHEDULE_MS } from "../config/constants.js";
-import { bootstrapAdmins, bootstrapOwners } from "../utils/permissions.esm.js";
 import {
   clearAuthState,
   clearWhatsAppDirectory,
@@ -59,6 +58,7 @@ import {
   pauseAllSchedules,
   saveQrCode,
 } from "../utils/storage.esm.js";
+import { bootstrapAdmins, bootstrapOwners } from "../utils/permissions.esm.js";
 import { classifyDisconnect, handleConnectionOpen } from "./connection.js";
 import { setupEventListeners } from "./events.js";
 import {

@@ -503,10 +503,8 @@ section("the library cap is read when the sticker is saved");
     settings.set("sticker_library_limit", null);
   }
   const described = settings.describe().find((item) => item.key === "sticker_library_limit");
-  equal("the setting has an Arabic label", described.labelAr, "حجم مكتبة الملصقات");
-  ok("and an Arabic hint", typeof described.hintAr === "string" && described.hintAr.length > 0);
-  const port = settings.describe().find((item) => item.key === "port");
-  ok("other settings do not grow an Arabic label", !("labelAr" in port));
+  equal("the setting is described like its neighbours", described.label, "Sticker library size");
+  ok("the hint says the cap is read on save", described.hint.includes("Read on every save"));
 }
 
 section("store-only zip");

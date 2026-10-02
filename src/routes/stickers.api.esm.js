@@ -16,7 +16,6 @@ const settings = require("../config/settings.cjs");
 const library = require("../stickers/library.cjs");
 const uploads = require("../stickers/uploads.cjs");
 const studioModule = require("../stickers/studio.cjs");
-const { zipStore } = require("../stickers/zip.cjs");
 const owner = require("../stickers/owner.cjs");
 const {
   CODES,
@@ -28,6 +27,7 @@ const {
 const {
   CANVAS,
   EXPORT_MAX_IDS,
+  MAX_INPUT_SIDE,
   PACKS_MAX_PER_OWNER,
   SEND_MAX_IDS,
   STICKER_MAX_SECONDS,
@@ -207,7 +207,7 @@ router.get(
         uploadBytes: UPLOAD_MAX_BYTES,
         videoSeconds: VIDEO_MAX_SOURCE_SECONDS,
         stickerSeconds: STICKER_MAX_SECONDS,
-        maxSide: CANVAS,
+        maxSide: MAX_INPUT_SIDE,
         libraryMax: settings.get("sticker_library_limit"),
         packsMax: PACKS_MAX_PER_OWNER,
       },
@@ -382,23 +382,10 @@ router.post(
       throw new StickerError("INVALID_OPTIONS", { field: "format" });
     }
     const ids = parseIds(body.ids, EXPORT_MAX_IDS);
-    const who = panelOwner();
-    const entries = [];
-    for (const id of ids) {
-      if (body.format === "webp") {
-        const sticker = library.getSticker(who, id);
-        entries.push({
-          name: library.fileNameFor(sticker, "webp"),
-          data: library.readStickerFile(who, id),
-        });
-      } else {
-        const out = await studio().exportImage(who, id, "png");
-        entries.push({ name: out.fileName, data: out.buffer });
-      }
-    }
+    const archive = await studio().exportZip(panelOwner(), ids, body.format);
     res.set("Content-Type", "application/zip");
     res.set("Content-Disposition", contentDisposition("stickers.zip"));
-    res.send(zipStore(entries));
+    res.send(archive);
   }),
 );
 
