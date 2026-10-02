@@ -10,6 +10,7 @@
     <string name="hero_subtitle_running">Levix is running in the background and ready to assist you.</string>
     <string name="hero_subtitle_stopped">Levix is currently stopped. Tap Start to activate your assistant.</string>
     <string name="btn_open_panel">Open Control Panel</string>
+    <string name="panel_share_file">Share file</string>
     <string name="btn_start_host">Start Assistant</string>
     <string name="btn_stop_host">Stop Assistant</string>
 
@@ -142,6 +143,11 @@
     <string name="media_clear">Clear</string>
     <string name="media_save">Save</string>
     <string name="media_share">Share</string>
+    <string name="media_sticker_make">Make sticker</string>
+    <string name="media_sticker_save">Add to stickers</string>
+    <string name="media_sticker_too_large">Too large for a sticker — pick something under 16 MB.</string>
+    <string name="media_sticker_size_unknown">Android did not report this file\'s size, so it can\'t be turned into a sticker.</string>
+    <string name="media_sticker_unsupported">Only images, GIFs and videos can become stickers.</string>
     <string name="media_favorite">Favorite</string>
     <string name="media_remove_favorite">Remove favorite</string>
     <string name="media_selected_state">Selected</string>
@@ -153,6 +159,7 @@
     <string name="media_saved_success">Saved successfully</string>
     <string name="media_already_saved">Already saved</string>
     <string name="media_save_failed">Save failed</string>
+    <string name="media_share_failed">Nothing on this device can open that file.</string>
     <string name="media_unavailable">This file is no longer available.</string>
     <string name="media_unsupported">No app can open this format.</string>
     <string name="media_delete_saved_only">Only Levix-saved copies can be deleted.</string>

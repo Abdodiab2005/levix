@@ -123,7 +123,77 @@ The hub asks for media permission when you open it, after an explanation. Androi
 Levix bundles a native build of **FFmpeg** (`libffmpeg.so` — ARM64 or ARMv7, matching the APK) inside the APK, compiled from source with NDK r29 so it is safe on 16 KB-page devices.
 - **Voice Notes (`!tts`)**: The Text-to-Speech command automatically transcodes Google TTS MP3 audio into true WhatsApp PTT voice notes (`audio/ogg; codecs=opus`).
 - **Media Previews**: Video and picture thumbnails (`jpegThumbnail`) are generated locally on the phone before sending, ensuring crisp previews in chat bubbles and quotes.
+- **Stickers**: The WebP encode, animation and muxing that Sticker Studio needs (see below).
 - No external packages or Termux setup are required.
+
+---
+
+## Sticker Studio
+
+Sticker Studio is the panel's sticker screen. It is reached from the native side rather than opened by hand, because the panel runs in a WebView with no file picker of its own and no way to reach a `content://` URI belonging to the Media Hub.
+
+### The two actions in the Media Hub
+
+Any single item in **Media Hub** can be turned into a sticker, in two places:
+
+- the **viewer**, on the action row under the picture — hidden for items with no sticker form;
+- the **selection bar**, on **Make sticker** — visible only when exactly one stickerable file is selected, since Sticker Studio takes one file at a time.
+
+The label follows the file:
+
+| Label | When | What the panel does |
+| --- | --- | --- |
+| **Make sticker** | an image, GIF or video | opens the converter: trim, frame, and re-encode to WebP |
+| **Add to stickers** | a WhatsApp sticker (`.webp`) | keeps the file as it is and only adds it to your library |
+
+Voice notes, audio and documents get no action at all — they have no sticker form, so nothing is shown rather than something that would always refuse.
+
+Tapping either one opens the panel on its Sticker Studio screen. Nothing is read on the phone at that moment: the app records the URI it already has permission to read, and the panel picks it up from there. If the file is over the cap, or Android never reported its size, you get a message instead of a screen.
+
+### Why the cap is 16 MB
+
+16 MB is Sticker Studio's own upload ceiling, and it is written down twice — `PendingStickers.MAX_BYTES` and `PanelFiles.MAX_BRIDGE_BYTES` — with a unit test asserting the two agree. The number exists because of how the file travels:
+
+> The bytes cross into the page as **one base64 string on a single synchronous JavaScript bridge call**, and the page waits for it.
+
+A 16 MB file is already ~21 MB of base64 plus a decoded copy in the same heap. Checking the size before the read — rather than after — is what keeps an oversized file from being held in memory at all. The size is checked against MediaStore's own metadata, so an item whose size was never reported is refused instead of being discovered to be 200 MB later.
+
+### The three bridge methods
+
+The panel talks to the app through `window.LevixHost` (`PanelBridge`). Three methods carry files:
+
+| Method | Direction | What it does |
+| --- | --- | --- |
+| `takePendingSticker()` | panel → app | takes the file the Media Hub parked, and returns its bytes as base64 with `{"ok":true,"intent","name","mime","data"}` |
+| `shareFile(fileName, mime, base64)` | panel → app | hands an exported sticker to the system share sheet |
+| `saveDownload(fileName, mime, base64)` | panel → app | writes a file into `Downloads/Levix` |
+
+`takePendingSticker()` is **one-shot**: the holder is cleared even when the read goes on to fail, so a failed pick can never be retried by a later page load and converted twice. Nothing about a user's photo outlives the process — the handover is in-memory by design.
+
+Both outbound methods enforce the same rules, in `PanelFiles`:
+
+- **an allowlisted MIME type** — `application/zip`, `image/gif`, `image/png`, `image/webp`, `video/mp4`. A share sheet that accepted `application/octet-stream` would be a file dropper in disguise;
+- **a safe name** — separators, control characters and the punctuation Windows and FAT reject become underscores, a leading dot can never hide the file, and the length is capped;
+- **the 16 MB cap**, checked on the encoded length *before* decoding.
+
+Anything refused comes back as `{"ok":false,"error"}` and is logged to the app's log screen.
+
+Share copies are written to the FileProvider's cache folder (`cache/shared/`) and swept once they are more than a day old, so a host service that lives for weeks does not keep every sticker it ever shared.
+
+### The FFmpeg components this needs
+
+`android/scripts/build-ffmpeg-android.sh` builds **libwebp 1.6.0** (with a pinned SHA-256) and adds these components:
+
+| Kind | Components | Why |
+| --- | --- | --- |
+| libraries | `libwebp` + `libwebpmux` + `libsharpyuv` | WebP encode/decode, animation, and muxing; libwebp's own sharp/colour-space helpers |
+| encoders | `libwebp`, `libwebp_anim`, `rawvideo` | still stickers, animated stickers, and raw frames |
+| demuxers | `rawvideo`, `image_gif_pipe` | reading GIF frames to animate them |
+| muxers | `webp`, `rawvideo` | writing a `.webp` container |
+
+Static and PIC, `CC`/`AR`/`RANLIB` supplied by the cross toolchain, so the result stays position-independent and safe on 16 KB-page devices. The ARM64 binary grows by roughly 5% against the build without it.
+
+The filters FFmpeg already enables at defaults are what the studio's own pipeline needs — `pad`, `fps`, `scale`, `crop`, `trim`, `transpose`, `split`, `colorkey`, `overlay`, `palettegen`, `paletteuse` — so nothing was added or removed there.
 
 ---
 

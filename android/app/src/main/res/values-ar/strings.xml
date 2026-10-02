@@ -10,6 +10,7 @@
     <string name="hero_subtitle_running">ليفيكس يعمل في الخلفية ومستعد لمساعدتك فوراً.</string>
     <string name="hero_subtitle_stopped">ليفيكس متوقف حالياً. اضغط على تشغيل لتفعيل المساعد.</string>
     <string name="btn_open_panel">فتح لوحة التحكم</string>
+    <string name="panel_share_file">مشاركة الملف</string>
     <string name="btn_start_host">تشغيل المساعد</string>
     <string name="btn_stop_host">إيقاف المساعد</string>
 
@@ -142,6 +143,11 @@
     <string name="media_clear">مسح</string>
     <string name="media_save">حفظ</string>
     <string name="media_share">مشاركة</string>
+    <string name="media_sticker_make">إنشاء ملصق</string>
+    <string name="media_sticker_save">إضافة إلى الملصقات</string>
+    <string name="media_sticker_too_large">الحجم كبير جدًا على الملصق — اختر ملفًا أصغر من 16 ميغابايت.</string>
+    <string name="media_sticker_size_unknown">لم يُبلّغ أندرويد عن حجم هذا الملف، لذلك لا يمكن تحويله إلى ملصق.</string>
+    <string name="media_sticker_unsupported">الصور وملفات GIF والفيديو فقط هي التي يمكن أن تصبح ملصقات.</string>
     <string name="media_favorite">المفضلة</string>
     <string name="media_remove_favorite">إزالة من المفضلة</string>
     <string name="media_selected_state">محدد</string>
@@ -153,6 +159,7 @@
     <string name="media_saved_success">تم الحفظ بنجاح</string>
     <string name="media_already_saved">محفوظ مسبقاً</string>
     <string name="media_save_failed">فشل الحفظ</string>
+    <string name="media_share_failed">لا يوجد تطبيق على هذا الجهاز يستطيع فتح هذا الملف.</string>
     <string name="media_unavailable">هذا الملف لم يعد متاحاً.</string>
     <string name="media_unsupported">لا يوجد تطبيق لفتح هذا التنسيق.</string>
     <string name="media_delete_saved_only">يمكن حذف النسخ المحفوظة بواسطة ليفيكس فقط.</string>

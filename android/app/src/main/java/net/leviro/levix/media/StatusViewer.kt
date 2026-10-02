@@ -30,6 +30,7 @@ class StatusViewer(
     private val isFavorite: (String) -> Boolean,
     private val onSave: (MediaItem) -> Unit,
     private val onShare: (MediaItem) -> Unit,
+    private val onSticker: (MediaItem) -> Unit,
     private val onOpen: (MediaItem) -> Unit,
     private val onFavorite: (MediaItem) -> Unit,
     private val onDelete: (MediaItem) -> Unit,
@@ -78,6 +79,10 @@ class StatusViewer(
         }
         action(R.string.media_save, onSave)
         action(R.string.media_share, onShare)
+        // Hidden until the first page says it could become a sticker; the label
+        // then follows the page, since a .webp sticker is only added as it is.
+        lateinit var sticker: TextView
+        sticker = action(R.string.media_sticker_make, onSticker)
         action(R.string.media_open, onOpen)
         lateinit var favorite: TextView
         favorite = action(R.string.media_favorite) { current ->
@@ -94,6 +99,7 @@ class StatusViewer(
                 typeLabel(current.mediaType),
                 dateText(current),
             )
+            updateStickerLabel(sticker, current)
             updateFavoriteLabel(favorite, current)
             delete.visibility = if (current.isSaved && current.source == MediaSource.LEVIX_SAVED) {
                 View.VISIBLE
@@ -140,6 +146,23 @@ class StatusViewer(
     private fun updateFavoriteLabel(favorite: TextView, current: MediaItem) {
         favorite.text = activity.getString(
             if (isFavorite(current.id)) R.string.media_remove_favorite else R.string.media_favorite,
+        )
+    }
+
+    /**
+     * A sticker action per page. Voice notes, audio and documents get nothing:
+     * the row hides the label rather than showing an action that would always
+     * refuse, and a .webp sticker is only added to the library as it is.
+     */
+    private fun updateStickerLabel(sticker: TextView, current: MediaItem) {
+        val intent = MediaLogic.stickerIntent(current)
+        sticker.visibility = if (intent == StickerIntent.NONE) View.GONE else View.VISIBLE
+        sticker.text = activity.getString(
+            when (intent) {
+                StickerIntent.CREATE -> R.string.media_sticker_make
+                StickerIntent.SAVE -> R.string.media_sticker_save
+                StickerIntent.NONE -> R.string.media_sticker_make
+            },
         )
     }
 

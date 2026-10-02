@@ -41,6 +41,10 @@ Data only leaves your device as a direct result of features you use:
    developer as a Telegram message. Nothing is attached from WhatsApp — no
    message, chat, contact, credential or key — and nothing is sent unless you
    press Send.
+5. **Your own Levix instance, for a sticker** — when you tap **Make sticker** or
+   **Add to stickers** on a file in Media Hub, that one file is uploaded to the
+   Levix server running on this phone, because that is what does the conversion.
+   It goes nowhere else. Browsing Media Hub uploads nothing.
 
 Everything else — the database, your settings, API keys, memory files, the
 control panel — stays in the app's private storage on the device.
@@ -87,6 +91,7 @@ Notes:
 | **Web pages the AI opens** | HTTPS requests to the page's server | Only when an AI answer uses the fetch-page tool | Reading a page you asked about |
 | **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |
 | **The developer** (via `levix.leviro.net/api/feedback`, delivered as a Telegram message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact — plus the Levix version, the platform, and the sending app's user-agent | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
+| **Your own Levix server** (the instance running on this phone, reached at `http://127.0.0.1:3001` — never the developer, never an AI provider) | The one image, GIF or video you picked in the Media Hub, as a single upload | Only when you tap **Make sticker** / **Add to stickers** | Sticker Studio works server-side, so it has to receive the file you chose |
 
 Apart from feedback you deliberately send, the developer of Levix is **not** a
 recipient of any of the above. The AI provider's use of the content you send it
@@ -108,6 +113,32 @@ is governed by that provider's own privacy policy.
 
 The Media Hub can also request read-only access to a WhatsApp Media folder through Android's folder picker when hidden statuses or documents are unavailable through MediaStore. It retains that local grant until you revoke it. Browsing, search, thumbnails, favorites, Storage Insights, saving copies, and deleting Levix-saved copies are all local to the device. The Media Hub makes no network requests and does not send media, file names, or folder structure to Levix or to an AI provider. Sharing a file happens only when you explicitly choose an app in Android's share sheet.
 
+### Sticker Studio
+
+**A file you pick stays on the device.** Browsing Media Hub, and having an item
+offered as a sticker, are entirely local: nothing is uploaded just because you
+scrolled past a photo or long-pressed it.
+
+A file is handed over in exactly one situation — you tap **Make sticker** or
+**Add to stickers** for that one file. It then goes to **your own Levix server**
+(the instance running on this phone), and nowhere else: not to the developer, not
+to an AI provider, not to any third-party service. Sticker Studio needs the file
+server-side to convert and to send, and your instance is the server. From there
+the sticker goes to WhatsApp only if you send it, which is the same as any
+message you send through Levix.
+
+Two smaller points about the file while it is being handled:
+
+- The handover is **one-shot and in memory**. The app records only a reference to
+  the file it already has permission to read; it is not copied or cached, and it
+  is read once, by the screen you opened. Nothing about your photo is written to
+  a staging area, and nothing outlives the app process.
+- Files you **share out** of Sticker Studio are temporary copies in the app's
+  private cache, and only of the formats Sticker Studio produces (WebP, PNG,
+  GIF, MP4, or a pack ZIP). They are deleted automatically after a day. Choosing
+  where a shared file goes is the share sheet's job — the app grants a read
+  permission to the app *you* pick and nothing more.
+
 No location, camera, microphone, contacts, SMS, or unrestricted storage permissions are
 requested. The in-app WebView loads only the local control panel
 (`http://127.0.0.1:3001`); it does not load third-party web content.
@@ -125,6 +156,12 @@ requested. The in-app WebView loads only the local control panel
 - **Feedback you chose to send** — it is a message in the developer's inbox, not
   a record in a database, and the app has no copy of it. Ask the developer to
   delete it (section 9) and it will be deleted.
+- **A file picked for a sticker** — the handover is in-memory and one-shot, so
+  nothing to delete: once the panel reads it, the app has no copy left. It lives
+  on afterwards only inside your own Levix server's data directory, alongside
+  your other Levix data, and goes when you unlink WhatsApp or uninstall.
+- **A sticker you shared out** — a temporary copy in the app's private cache,
+  swept automatically once it is more than a day old.
 
 ## 5. Security
 
