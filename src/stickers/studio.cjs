@@ -196,6 +196,7 @@ function createStudio({ media, jobs, library, uploads } = {}) {
     const src = source || "PANEL_UPLOAD";
     if (!SOURCES.has(src)) throw new StickerError("INVALID_OPTIONS", { field: "source" });
     assertPack(owner, packId);
+    const epoch = lib.epoch?.();
 
     let submitted;
     try {
@@ -224,8 +225,9 @@ function createStudio({ media, jobs, library, uploads } = {}) {
               sourceMime: produced.sourceMime || sniffed.mime,
               source: src,
               name,
+              epoch,
             });
-            if (packId) lib.addToPack(owner, packId, [saved.sticker.id]);
+            if (packId) lib.addToPack(owner, packId, [saved.sticker.id], { epoch });
             const sticker = lib.getSticker(owner, saved.sticker.id);
             return {
               sticker,
@@ -247,6 +249,7 @@ function createStudio({ media, jobs, library, uploads } = {}) {
     // The route returns 202 and does not await this. The handler keeps the
     // rejection from becoming an unhandled rejection; callers can still await.
     submitted.promise.catch((error) => {
+      if (removeInput) dropWorkFile(inputPath);
       logger.warn({ err: error, jobId: submitted.id }, "[Stickers] create job failed");
     });
     return { jobId: submitted.id, promise: submitted.promise };
@@ -299,7 +302,7 @@ function createStudio({ media, jobs, library, uploads } = {}) {
       dropWorkFile(inputPath);
       throw error;
     }
-    return submitted.promise;
+    return submitted.promise.finally(() => dropWorkFile(inputPath));
   }
 
   function createFromUpload({ owner, uploadId, options, overlayPng, source, packId, name }) {

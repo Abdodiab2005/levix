@@ -2,6 +2,9 @@
 // so the converter extracts each animated frame as a static WebP for decoding.
 const { createHash } = require("node:crypto");
 const { StickerError } = require("./errors.cjs");
+const { ANIMATED_MAX_FRAMES } = require("./limits.cjs");
+const MAX_CHUNKS = ANIMATED_MAX_FRAMES + 32;
+const MAX_FRAME_PARTS = 8;
 
 function corrupt() {
   throw new StickerError("CORRUPT");
@@ -37,6 +40,7 @@ function parse(buffer) {
   }
   const chunks = [];
   for (let at = 12; at < riffEnd; ) {
+    if (chunks.length >= MAX_CHUNKS) corrupt();
     if (at + 8 > riffEnd) corrupt();
     const type = buffer.toString("ascii", at, at + 4);
     const len = buffer.readUInt32LE(at + 4);
@@ -99,6 +103,7 @@ function parse(buffer) {
       if (x + w > width || y + h > height) corrupt();
       const parts = [];
       for (let at = 16; at < d.length; ) {
+        if (parts.length >= MAX_FRAME_PARTS) corrupt();
         if (at + 8 > d.length) corrupt();
         const len = d.readUInt32LE(at + 4);
         const end = at + 8 + len;

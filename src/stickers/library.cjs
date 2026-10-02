@@ -32,6 +32,11 @@ const SORTS = new Set(["newest", "oldest", "name", "recent"]);
 const FILTERS = new Set(["all", "favorites", "recent", "animated", "static"]);
 const DEFAULT_LIBRARY_LIMIT = 1000;
 const MAX_BATCH = 100_000;
+let epoch = 0;
+
+function assertEpoch(captured) {
+  if (captured !== undefined && captured !== epoch) throw new StickerError("CANCELLED");
+}
 
 const RESERVED_PACK_NAMES = new Set();
 for (const words of Object.values(PACK_SUBCOMMANDS)) {
@@ -293,6 +298,7 @@ function integerOrNull(value) {
 }
 
 function saveSticker(owner, input) {
+  assertEpoch(input?.epoch);
   const bound = bind(owner);
   const sourceBuffer = input?.buffer;
   if (!Buffer.isBuffer(sourceBuffer) || sourceBuffer.length === 0)
@@ -592,7 +598,8 @@ function membershipResult(bound, packId, ids, mutate) {
   });
 }
 
-function addToPack(owner, packId, ids) {
+function addToPack(owner, packId, ids, options = {}) {
+  assertEpoch(options.epoch);
   const bound = bind(owner);
   return membershipResult(bound, packId, ids, (pack, sticker, now) =>
     store.stickerPackAdd(pack.id, sticker.id, now),
@@ -670,6 +677,8 @@ function mergePacks(owner, sourceId, intoPackId) {
 }
 
 function clearAll() {
+  require("./jobs.cjs").cancelAll();
+  epoch++;
   store.stickerClearAll();
   try {
     fs.rmSync(dataPath("stickers"), { recursive: true, force: true });
@@ -708,5 +717,6 @@ module.exports = {
   reorderPack,
   mergePacks,
   clearAll,
+  epoch: () => epoch,
   fileNameFor,
 };
