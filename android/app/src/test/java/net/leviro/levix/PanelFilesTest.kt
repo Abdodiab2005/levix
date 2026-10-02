@@ -1,6 +1,5 @@
 package net.leviro.levix
 
-import net.leviro.levix.media.PendingStickers
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -119,31 +118,14 @@ class PanelFilesTest {
         assertFalse(PanelFiles.sanitizeName("a/".repeat(200) + "b").contains('/'))
     }
 
-    @Test
-    fun fitsBridgeCapIsInclusiveAtBothEnds() {
-        assertFalse(PanelFiles.fitsBridgeCap(0))
-        assertFalse(PanelFiles.fitsBridgeCap(-1))
-        assertTrue(PanelFiles.fitsBridgeCap(1))
-        assertTrue(PanelFiles.fitsBridgeCap(PanelFiles.MAX_BRIDGE_BYTES - 1))
-        assertTrue(PanelFiles.fitsBridgeCap(PanelFiles.MAX_BRIDGE_BYTES))
-        assertFalse(PanelFiles.fitsBridgeCap(PanelFiles.MAX_BRIDGE_BYTES + 1))
-        // One cap, written twice: what the bridge will carry out is what the
-        // Media Hub will hand in, and it mirrors Sticker Studio's upload limit.
-        assertEquals(16L * 1024 * 1024, PanelFiles.MAX_BRIDGE_BYTES)
-        assertEquals(PendingStickers.MAX_BYTES, PanelFiles.MAX_BRIDGE_BYTES)
-    }
-
-    @Test
-    fun encodedFitsCapRefusesBeforeDecoding() {
-        // 4 base64 characters per 3 bytes, plus slack for padding and wrapping.
-        val atCap = (PanelFiles.MAX_BRIDGE_BYTES / 3 * 4).toInt()
-        val limit = atCap + 1024
-        assertTrue(PanelFiles.encodedFitsCap(""))
-        assertTrue(PanelFiles.encodedFitsCap("A".repeat(atCap)))
-        assertTrue(PanelFiles.encodedFitsCap("A".repeat(limit)))
-        assertFalse(PanelFiles.encodedFitsCap("A".repeat(limit + 1)))
-        // A file at the cap encodes under the bar; that is what the slack is
-        // for, and losing it would refuse a legal 16 MB sticker.
-        assertTrue(atCap < limit)
+    @Test fun callIdsAndExportRoutesAreRestricted() {
+        assertTrue(PanelFiles.validCallId("abc_1-Z"))
+        assertFalse(PanelFiles.validCallId("bad');alert(1)"))
+        assertFalse(PanelFiles.validCallId("x".repeat(65)))
+        assertTrue(PanelFiles.exportAllowed("/dashboard/api/stickers/export", "POST"))
+        assertTrue(PanelFiles.exportAllowed("/dashboard/api/stickers/a/export?format=webp", "GET"))
+        assertFalse(PanelFiles.exportAllowed("/dashboard/api/stickers/../settings", "GET"))
+        assertFalse(PanelFiles.exportAllowed("/dashboard/api/settings/export", "GET"))
+        assertFalse(PanelFiles.exportAllowed("/dashboard/api/stickers/export", "DELETE"))
     }
 }

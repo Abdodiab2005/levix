@@ -214,6 +214,7 @@ object PanelHttp {
         uri: URI,
         headers: Map<String, String>,
         body: ByteArray,
+        chunked: Boolean = false,
     ) {
         val host = if (uri.port > 0) "${uri.host}:${uri.port}" else (uri.host ?: "127.0.0.1:3001")
         val sent = linkedMapOf<String, String>()
@@ -240,7 +241,10 @@ object PanelHttp {
         if (cookie != null && !sent.keys.any { it.equals("Cookie", true) }) {
             put("Cookie", cookie)
         }
-        if (body.isNotEmpty()) put("Content-Length", body.size.toString())
+        if (chunked) {
+            sent.keys.filter { it.equals("Content-Length", true) }.toList().forEach { sent.remove(it) }
+            put("Transfer-Encoding", "chunked")
+        } else if (body.isNotEmpty()) put("Content-Length", body.size.toString())
         else if (method != "GET" && method != "HEAD") put("Content-Length", "0")
 
         val buf = StringBuilder()
@@ -252,6 +256,41 @@ object PanelHttp {
         out.write(buf.toString().toByteArray(Charsets.US_ASCII))
         if (body.isNotEmpty() && method != "HEAD") out.write(body)
         out.flush()
+    }
+
+    /** One native transfer over the same authenticated socket as the panel. */
+    fun stream(
+        sock: File,
+        method: String,
+        path: String,
+        headers: Map<String, String>,
+        jsonBody: String?,
+        source: InputStream?,
+        maxUploadBytes: Long,
+        onSocket: (LocalSocket) -> Unit,
+        limitFor: (PanelWire.Response) -> Long,
+        outputFor: (PanelWire.Response) -> OutputStream,
+    ): PanelWire.Response {
+        require(path.startsWith('/')) { "invalid panel path" }
+        val uri = URI(ORIGIN + path)
+        val local = connect(sock)
+        onSocket(local)
+        try {
+            val body = jsonBody?.toByteArray(Charsets.UTF_8) ?: ByteArray(0)
+            writeRequest(local.outputStream, method, path, uri, headers, body, source != null)
+            if (source != null) {
+                val size = PanelWire.writeChunked(source, local.outputStream, maxUploadBytes)
+                if (size == 0L) throw IOException("NO_MEDIA")
+            }
+            return PanelWire.readResponse(BufferedInputStream(local.inputStream), limitFor, outputFor,
+                truncateAtLimit = true)
+        } finally {
+            onSocketClosed(local)
+        }
+    }
+
+    private fun onSocketClosed(local: LocalSocket) {
+        try { local.close() } catch (_: Exception) { }
     }
 
     private fun readResponse(input: BufferedInputStream, url: String): Exchange {

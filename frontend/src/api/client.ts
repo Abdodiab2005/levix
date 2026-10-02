@@ -290,6 +290,8 @@ export const api = {
       headers,
     });
   },
+  uploadExistingStickerSource: (id: string) =>
+    request<StickerUpload>(`/stickers/${encodeURIComponent(id)}/uploads`, { method: "POST" }),
   createStickerJob: (payload: {
     uploadId: string;
     options?: EditOptions;

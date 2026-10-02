@@ -150,35 +150,24 @@ Voice notes, audio and documents get no action at all — they have no sticker f
 
 Tapping either one opens the panel on its Sticker Studio screen. Nothing is read on the phone at that moment: the app records the URI it already has permission to read, and the panel picks it up from there. If the file is over the cap, or Android never reported its size, you get a message instead of a screen.
 
-### Why the cap is 16 MB
+### Source and export transfers
 
-16 MB is Sticker Studio's own upload ceiling, and it is written down twice — `PendingStickers.MAX_BYTES` and `PanelFiles.MAX_BRIDGE_BYTES` — with a unit test asserting the two agree. The number exists because of how the file travels:
+The Media Hub offers files up to 16 MB, mirroring Sticker Studio's server upload limit (`src/stickers/limits.cjs`, `UPLOAD_MAX_BYTES`). It still rejects items with unknown size before opening the panel. This is an offer rule, not a WebView bridge limit: Android streams the selected `content://` URI to Node over the local unix socket, and Node enforces the upload limit again while reading. The panel receives a short-lived token and a loopback preview URL. A preview GET opens the URI as a stream in `shouldInterceptRequest`; no source file is copied into the bridge.
 
-> The bytes cross into the page as **one base64 string on a single synchronous JavaScript bridge call**, and the page waits for it.
+### Sticker Studio host methods
 
-A 16 MB file is already ~21 MB of base64 plus a decoded copy in the same heap. Checking the size before the read — rather than after — is what keeps an oversized file from being held in memory at all. The size is checked against MediaStore's own metadata, so an item whose size was never reported is refused instead of being discovered to be 200 MB later.
+| Method | What it does |
+| --- | --- |
+| `takePendingSticker()` | One-shot Media Hub hand-off; returns `intent`, `token`, `url`, `name`, `mime`, and `size`, with no bytes |
+| `pickStickerSource(callId)` | Opens Android's image/video picker, then returns source metadata through `window.__levixHostDone` |
+| `uploadSource(callId, token, fileName, maxBytes)` | Streams the selected URI to the local Sticker Studio upload route |
+| `exportFile(callId, action, path, method, jsonBody, fileName, mime)` | Streams an export from Node to the share cache or Downloads/Levix |
+| `cancel(callId)` | Closes an active transfer and returns a cancelled result |
 
-### The three bridge methods
+The asynchronous methods acknowledge immediately and deliver small JSON through `window.__levixHostDone(callId, result)`. Tokens expire after one hour; the activity keeps at most eight and clears them when it closes. Share files are written to `cache/shared/` and swept after 24 hours. Save writes a pending MediaStore Downloads row and publishes it only after the stream finishes. Both export destinations enforce the Sticker Studio MIME allowlist and sanitize the file name.
 
-The panel talks to the app through `window.LevixHost` (`PanelBridge`). Three methods carry files:
-
-| Method | Direction | What it does |
-| --- | --- | --- |
-| `takePendingSticker()` | panel → app | takes the file the Media Hub parked, and returns its bytes as base64 with `{"ok":true,"intent","name","mime","data"}` |
-| `shareFile(fileName, mime, base64)` | panel → app | hands an exported sticker to the system share sheet |
-| `saveDownload(fileName, mime, base64)` | panel → app | writes a file into `Downloads/Levix` |
-
-`takePendingSticker()` is **one-shot**: the holder is cleared even when the read goes on to fail, so a failed pick can never be retried by a later page load and converted twice. Nothing about a user's photo outlives the process — the handover is in-memory by design.
-
-Both outbound methods enforce the same rules, in `PanelFiles`:
-
-- **an allowlisted MIME type** — `application/zip`, `image/gif`, `image/png`, `image/webp`, `video/mp4`. A share sheet that accepted `application/octet-stream` would be a file dropper in disguise;
-- **a safe name** — separators, control characters and the punctuation Windows and FAT reject become underscores, a leading dot can never hide the file, and the length is capped;
-- **the 16 MB cap**, checked on the encoded length *before* decoding.
-
-Anything refused comes back as `{"ok":false,"error"}` and is logged to the app's log screen.
-
-Share copies are written to the FileProvider's cache folder (`cache/shared/`) and swept once they are more than a day old, so a host service that lives for weeks does not keep every sticker it ever shared.
+The ordinary `request()` bridge still carries other panel POST bodies; the small settings JSON export still uses `saveExportFile()`.
+Re-editing a sticker from the library creates its upload on the server, so its preview Blob is never posted through the bridge.
 
 ### The FFmpeg components this needs
 

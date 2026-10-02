@@ -143,12 +143,17 @@ function sniffFile(file, media) {
  */
 function acceptStream(owner, stream, { filename, media } = {}) {
   if (!owner?.key) return Promise.reject(new StickerError("INVALID_OPTIONS", { field: "owner" }));
+  const declared = Number(stream.headers?.["content-length"]);
+  if (Number.isFinite(declared) && declared > UPLOAD_MAX_BYTES) {
+    return Promise.reject(new StickerError("TOO_LARGE", { limitBytes: UPLOAD_MAX_BYTES }));
+  }
   const med = loadMedia(media);
   const id = crypto.randomBytes(16).toString("hex");
   const file = path.join(tmpDir(), `upload-${id}`);
   return new Promise((resolve, reject) => {
     let size = 0;
     let settled = false;
+    let ended = false;
     const out = fs.createWriteStream(file);
     const fail = (error) => {
       if (settled) return;
@@ -157,8 +162,14 @@ function acceptStream(owner, stream, { filename, media } = {}) {
       stream.removeAllListeners("data");
       stream.removeAllListeners("end");
       stream.removeAllListeners("error");
-      out.destroy();
-      fs.rm(file, { force: true }, () => reject(error));
+      stream.removeAllListeners("aborted");
+      stream.removeAllListeners("close");
+      const cleanup = () => fs.rm(file, { force: true }, () => reject(error));
+      if (out.closed) cleanup();
+      else {
+        out.once("close", cleanup);
+        out.destroy();
+      }
     };
 
     stream.on("data", (chunk) => {
@@ -175,8 +186,13 @@ function acceptStream(owner, stream, { filename, media } = {}) {
       if (!settled) stream.resume();
     });
     stream.on("error", (error) => fail(error));
+    stream.on("aborted", () => fail(new StickerError("CANCELLED")));
+    stream.on("close", () => {
+      if (!ended) fail(new StickerError("CANCELLED"));
+    });
     out.on("error", (error) => fail(storageError(error)));
     stream.on("end", () => {
+      ended = true;
       if (settled) return;
       out.end(() => {
         if (settled) return;

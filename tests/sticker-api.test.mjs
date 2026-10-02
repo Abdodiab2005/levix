@@ -5,7 +5,8 @@
 // server is started in-process here.
 
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { request as rawRequest } from "node:http";
 import {
   equal,
   finish,
@@ -252,6 +253,41 @@ installFinalHandlers();
 
 const { base } = await listen(server);
 const http = httpClient(base);
+let rawCookie = "";
+
+function rawUpload(chunks, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const req = rawRequest(
+      `${base}/dashboard/api/stickers/uploads`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/octet-stream",
+          ...headers,
+          ...(rawCookie ? { cookie: rawCookie } : {}),
+        },
+      },
+      (res) => {
+        const parts = [];
+        res.on("data", (part) => parts.push(part));
+        res.on("end", () =>
+          resolve({ status: res.statusCode, body: JSON.parse(Buffer.concat(parts).toString()) }),
+        );
+      },
+    );
+    req.on("error", reject);
+    for (const chunk of chunks) req.write(chunk);
+    req.end();
+  });
+}
+
+function uploadFiles() {
+  try {
+    return readdirSync(dataPath("tmp", "stickers")).filter((name) => name.startsWith("upload-"));
+  } catch {
+    return [];
+  }
+}
 
 async function bodyOf(res) {
   const text = await res.text();
@@ -305,6 +341,8 @@ try {
 
   res = await http.form("/setup", { password: "a-good-password", confirm: "a-good-password" });
   equal("setup signs the operator in", res.status, 303);
+  rawCookie = res.headers.get("set-cookie")?.split(";")[0] || "";
+  const sessionCookie = rawCookie;
   await bodyOf(res);
 
   section("capabilities");
@@ -316,6 +354,34 @@ try {
   equal("animated is reported", body.animated, true);
   ok("background removal lists plain", body.backgroundRemoval?.includes("plain"));
   equal("upload cap is the shared limit", body.limits.uploadBytes, UPLOAD_MAX_BYTES);
+  // Two copies of the same number outside Node: the panel's pre-check for a
+  // Media Hub save, and the Media Hub's offer rule. Both must follow the server.
+  const product = (source, pattern) => {
+    const found = source.match(pattern);
+    return found ? found[1].split("*").reduce((n, part) => n * Number.parseInt(part, 10), 1) : null;
+  };
+  equal(
+    "the panel's copy of the upload cap matches",
+    product(
+      readFileSync(new URL("../frontend/src/utils/stickerLimits.ts", import.meta.url), "utf8"),
+      /UPLOAD_MAX_BYTES = ([\d\s*]+);/,
+    ),
+    UPLOAD_MAX_BYTES,
+  );
+  equal(
+    "the Media Hub's offer rule matches",
+    product(
+      readFileSync(
+        new URL(
+          "../android/app/src/main/java/net/leviro/levix/media/PendingSticker.kt",
+          import.meta.url,
+        ),
+        "utf8",
+      ).replace(/(\d+)L/g, "$1"),
+      /MAX_BYTES = ([\d\s*]+)\n/,
+    ),
+    UPLOAD_MAX_BYTES,
+  );
   equal("source video cap is 60s", body.limits.videoSeconds, 60);
   equal("sticker cap is 10s", body.limits.stickerSeconds, 10);
   equal("max side is the largest source the panel may upload", body.limits.maxSide, MAX_INPUT_SIDE);
@@ -351,6 +417,57 @@ try {
   equal("oversized code", body.code, "TOO_LARGE");
   equal("the limit is named", body.limitBytes, UPLOAD_MAX_BYTES);
 
+  section("raw chunked upload streaming and disconnect cleanup");
+  const sample = makeJpeg();
+  const normal = await upload(sample);
+  const normalBody = await bodyOf(normal);
+  const chunked = await rawUpload([sample.subarray(0, 2), sample.subarray(2)], {
+    "transfer-encoding": "chunked",
+  });
+  equal("chunked upload succeeds", chunked.status, 201);
+  for (const field of ["kind", "mime", "width", "height", "size"]) {
+    equal(`chunked ${field} matches normal upload`, chunked.body[field], normalBody[field]);
+  }
+  const beforeRefusal = uploadFiles().length;
+  const oversized = await rawUpload([Buffer.alloc(UPLOAD_MAX_BYTES), Buffer.from([1])], {
+    "transfer-encoding": "chunked",
+  });
+  equal("chunked over limit returns 413", oversized.status, 413);
+  equal("chunked over limit has code", oversized.body.code, "TOO_LARGE");
+  equal("oversized chunk leaves no file", uploadFiles().length, beforeRefusal);
+  const declared = await rawUpload([], { "content-length": String(UPLOAD_MAX_BYTES + 1) });
+  equal("declared over limit returns 413 before body", declared.status, 413);
+  equal("declared over limit has code", declared.body.code, "TOO_LARGE");
+  equal("declared over limit leaves no file", uploadFiles().length, beforeRefusal);
+  await new Promise((resolve) => {
+    const req = rawRequest(`${base}/dashboard/api/stickers/uploads`, {
+      method: "POST",
+      headers: {
+        cookie: rawCookie,
+        "content-length": "1000",
+        "content-type": "application/octet-stream",
+      },
+    });
+    req.on("error", () => resolve());
+    req.write(sample);
+    setTimeout(() => {
+      req.destroy();
+      resolve();
+    }, 30);
+  });
+  // Cleanup runs on the server's own schedule once it notices the socket closed.
+  for (let i = 0; i < 100 && uploadFiles().length !== beforeRefusal; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  equal("aborted upload leaves no file or record", uploadFiles().length, beforeRefusal);
+  const unknown = await rawUpload([Buffer.from("not-media")], { "transfer-encoding": "chunked" });
+  equal("chunked non-media returns 415", unknown.status, 415);
+  equal("chunked non-media code", unknown.body.code, "UNSUPPORTED_TYPE");
+  rawCookie = "";
+  const anonymous = await rawUpload([sample], { "transfer-encoding": "chunked" });
+  equal("chunked upload without cookie returns 401", anonymous.status, 401);
+  rawCookie = sessionCookie;
+
   section("jobs: re-encode, keep bytes, dedupe, failure, busy");
 
   const beforeEncode = media.calls.length;
@@ -362,6 +479,13 @@ try {
   equal("the jpeg error is null", jpeg.done.body.error, null);
   equal("the sticker is named", jpeg.done.body.sticker.name, "Jpeg One");
   equal("the source is the panel", jpeg.done.body.sticker.source, "PANEL_UPLOAD");
+  res = await http.call(`/dashboard/api/stickers/${jpeg.done.body.sticker.id}/uploads`, {
+    method: "POST",
+  });
+  body = await bodyOf(res);
+  equal("library re-edit creates a server-side upload", res.status, 201);
+  equal("library re-edit keeps its webp type", body.mime, "image/webp");
+  ok("library re-edit returns a new upload id", /^[0-9a-f]{32}$/.test(body.uploadId));
   ok("a jpeg is re-encoded", media.calls.length === beforeEncode + 1);
   const jpegUpload = uploads.get(owner.forPanel(), jpeg.record.uploadId);
   equal("a jpeg is converted from its upload file", media.calls.at(-1).inputPath, jpegUpload.path);
@@ -817,6 +941,11 @@ try {
   body = await bodyOf(res);
   equal("export hides the other owner", res.status, 404);
   equal("export miss code", body.code, "NOT_FOUND");
+
+  res = await http.call(`/dashboard/api/stickers/${hiddenId}/uploads`, { method: "POST" });
+  body = await bodyOf(res);
+  equal("server-side re-edit hides the other owner", res.status, 404);
+  equal("server-side re-edit miss code", body.code, "NOT_FOUND");
 
   res = await http.json(`/dashboard/api/stickers/${hiddenId}`, { favorite: true }, "PATCH");
   body = await bodyOf(res);

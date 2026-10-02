@@ -91,7 +91,7 @@ Notes:
 | **Web pages the AI opens** | HTTPS requests to the page's server | Only when an AI answer uses the fetch-page tool | Reading a page you asked about |
 | **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |
 | **The developer** (via `levix.leviro.net/api/feedback`, delivered as a Telegram message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact — plus the Levix version, the platform, and the sending app's user-agent | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
-| **Your own Levix server** (the instance running on this phone, reached at `http://127.0.0.1:3001` — never the developer, never an AI provider) | The one image, GIF or video you picked in the Media Hub, as a single upload | Only when you tap **Make sticker** / **Add to stickers** | Sticker Studio works server-side, so it has to receive the file you chose |
+| **Your own Levix server** (the instance running on this phone, reached at `http://127.0.0.1:3001` — never the developer, never an AI provider) | The one image, GIF or video you picked in Sticker Studio or the Media Hub, as a single upload | Only when you choose it in Sticker Studio or tap **Make sticker** / **Add to stickers** | Sticker Studio works server-side, so it has to receive the file you chose |
 
 Apart from feedback you deliberately send, the developer of Levix is **not** a
 recipient of any of the above. The AI provider's use of the content you send it
@@ -119,7 +119,7 @@ The Media Hub can also request read-only access to a WhatsApp Media folder throu
 offered as a sticker, are entirely local: nothing is uploaded just because you
 scrolled past a photo or long-pressed it.
 
-A file is handed over in exactly one situation — you tap **Make sticker** or
+A file is handed over when you choose it in Sticker Studio or tap **Make sticker** or
 **Add to stickers** for that one file. It then goes to **your own Levix server**
 (the instance running on this phone), and nowhere else: not to the developer, not
 to an AI provider, not to any third-party service. Sticker Studio needs the file
@@ -131,8 +131,9 @@ Two smaller points about the file while it is being handled:
 
 - The handover is **one-shot and in memory**. The app records only a reference to
   the file it already has permission to read; it is not copied or cached, and it
-  is read once, by the screen you opened. Nothing about your photo is written to
-  a staging area, and nothing outlives the app process.
+  is streamed to the local server only when you upload it. A preview reads it
+  through a short-lived local URL. Nothing about your photo is written to an
+  app staging area, and the reference disappears when the app process ends.
 - Files you **share out** of Sticker Studio are temporary copies in the app's
   private cache, and only of the formats Sticker Studio produces (WebP, PNG,
   GIF, MP4, or a pack ZIP). They are deleted automatically after a day. Choosing
