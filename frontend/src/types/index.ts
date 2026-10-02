@@ -126,3 +126,100 @@ export interface LogItem {
   msg: string;
   context?: any;
 }
+
+export interface Sticker {
+  id: string;
+  name: string;
+  animated: boolean;
+  width: number;
+  height: number;
+  durationMs: number;
+  fileSize: number;
+  sourceMime: string;
+  source: string;
+  favorite: boolean;
+  createdAt: number;
+  updatedAt: number;
+  lastUsedAt: number | null;
+  packIds: string[];
+  url: string;
+  thumbUrl: string;
+}
+
+export interface Pack {
+  id: string;
+  name: string;
+  count: number;
+  coverUrl: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface EditOptions {
+  fit?: "contain" | "cover";
+  zoom?: number;
+  panX?: number;
+  panY?: number;
+  rotate?: 0 | 90 | 180 | 270;
+  background?: string;
+  removeBackground?: { mode: "plain"; tolerance?: number } | null;
+  trim?: { start: number; duration: number } | null;
+}
+
+/** Panel create job. `MEDIA_HUB` is the Android handoff; everything else is an upload. */
+export type StickerJobSource = "PANEL_UPLOAD" | "MEDIA_HUB";
+
+export interface StickerUpload {
+  uploadId: string;
+  kind: string;
+  mime: string;
+  width: number;
+  height: number;
+  durationMs: number;
+  animated: boolean;
+  size: number;
+}
+
+export interface StickerList {
+  items: Sticker[];
+  total: number;
+}
+
+export interface StickerBulkResult {
+  affected: number;
+  skipped: Array<{ id: string; code: string }>;
+}
+
+export interface StickerFile {
+  blob: Blob;
+  fileName: string | null;
+  /** Set on a PNG export of an animated sticker (X-Levix-Animated: 1). */
+  animated: boolean;
+}
+
+export interface Job {
+  id: string;
+  state: "queued" | "running" | "done" | "failed";
+  stage: "probing" | "decoding" | "encoding" | "optimizing" | null;
+  progress: number;
+  error: { code: string; message?: string; packs?: Array<{ id: string; name: string }> } | null;
+  sticker: Sticker | null;
+  created: boolean | null;
+  qualityReduced: boolean | null;
+}
+
+export interface Capabilities {
+  webp: boolean;
+  animated: boolean;
+  gif: boolean;
+  mp4: boolean;
+  backgroundRemoval: string[];
+  limits: {
+    uploadBytes: number;
+    videoSeconds: number;
+    stickerSeconds: number;
+    maxSide: number;
+    libraryMax: number;
+    packsMax: number;
+  };
+}

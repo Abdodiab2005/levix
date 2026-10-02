@@ -8,6 +8,7 @@ import {
   Radio,
   Settings,
   Shield,
+  Sticker,
   Terminal,
   Users,
   X,
@@ -25,7 +26,8 @@ export type ViewTab =
   | "groups"
   | "schedules"
   | "settings"
-  | "logs";
+  | "logs"
+  | "stickers";
 
 interface SidebarProps {
   currentView: ViewTab;
@@ -62,6 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "ai", label: t("ai"), icon: Bot },
     { id: "groups", label: t("groups"), icon: Users },
     { id: "schedules", label: t("schedules"), icon: Calendar },
+    { id: "stickers", label: t("stickers"), icon: Sticker },
     { labelCategory: t("settings") },
     { id: "settings", label: t("settings"), icon: Settings },
     { id: "logs", label: t("logs"), icon: FileText },

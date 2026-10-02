@@ -35,11 +35,7 @@ interface ConnectionViewProps {
   onStatusUpdate?: (status: Partial<SessionStatus>) => void;
 }
 
-export const ConnectionView: FC<ConnectionViewProps> = ({
-  status,
-  onRefresh,
-  onStatusUpdate,
-}) => {
+export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onStatusUpdate }) => {
   const { t, language } = useI18n();
   const { toast } = useToast();
   const [showUnlinkModal, setShowUnlinkModal] = useState(false);
@@ -356,11 +352,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
           )}
 
           {/* 3a. Known session (paused / idle / disconnected): resume, never QR or pairing codes */}
-          {!isConnected &&
-            !isStarting &&
-            !isWaitingQr &&
-            !isReconnecting &&
-            linked && (
+          {!isConnected && !isStarting && !isWaitingQr && !isReconnecting && linked && (
             <div className="flex flex-col gap-3 w-full max-w-xl">
               {isPaused && (
                 <p className="text-xs sm:text-sm text-muted leading-relaxed">
@@ -426,7 +418,9 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
                   }`}
                 >
                   <Smartphone size={16} />
-                  <span>{language === "ar" ? "كود الربط الرقمي (الهاتف)" : "Pairing Code (Phone)"}</span>
+                  <span>
+                    {language === "ar" ? "كود الربط الرقمي (الهاتف)" : "Pairing Code (Phone)"}
+                  </span>
                 </button>
 
                 <button
@@ -448,12 +442,17 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
                 <form onSubmit={handleStartPairing} className="flex flex-col gap-3 max-w-xl w-full">
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
                     <div className="relative flex-1">
-                      <Phone size={17} className="absolute top-1/2 -translate-y-1/2 start-3.5 text-muted pointer-events-none" />
+                      <Phone
+                        size={17}
+                        className="absolute top-1/2 -translate-y-1/2 start-3.5 text-muted pointer-events-none"
+                      />
                       <input
                         type="tel"
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value)}
-                        placeholder={language === "ar" ? "201012345678 (مع كود الدولة)" : "e.g. 201012345678"}
+                        placeholder={
+                          language === "ar" ? "201012345678 (مع كود الدولة)" : "e.g. 201012345678"
+                        }
                         dir="ltr"
                         className="w-full h-12 sm:h-11 ps-10 pe-4 rounded-xl border border-line bg-panel-raised text-text-main font-mono text-sm placeholder:text-muted/60 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all"
                       />
@@ -605,7 +604,11 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
                   {language === "ar" ? "خطوات الإدخال في واتساب:" : "Steps to enter in WhatsApp:"}
                 </div>
                 <ol className="text-xs text-muted space-y-2 list-decimal list-inside leading-relaxed">
-                  <li>{language === "ar" ? "افتح تطبيق واتساب على هاتفك." : "Open WhatsApp on your phone."}</li>
+                  <li>
+                    {language === "ar"
+                      ? "افتح تطبيق واتساب على هاتفك."
+                      : "Open WhatsApp on your phone."}
+                  </li>
                   <li>
                     {language === "ar"
                       ? "اذهب إلى الإعدادات > الأجهزة المرتبطة > ربط جهاز."
@@ -618,7 +621,11 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
                         : "Tap 'Link with phone number instead' at bottom of screen."}
                     </strong>
                   </li>
-                  <li>{language === "ar" ? "اكتب هذا الكود وسيتم ربط البوت مباشرة!" : "Enter the code above to connect immediately!"}</li>
+                  <li>
+                    {language === "ar"
+                      ? "اكتب هذا الكود وسيتم ربط البوت مباشرة!"
+                      : "Enter the code above to connect immediately!"}
+                  </li>
                 </ol>
               </div>
             </div>
@@ -707,6 +714,9 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
           {language === "ar"
             ? "هل أنت متأكد من رغبتك في إلغاء ربط جلسة واتساب الحالية؟ ستحتاج إلى مسح رمز QR جديد أو إدخال كود ربط لإعادة ربط الحساب."
             : "Are you sure you want to unlink this WhatsApp session? You will need to scan a new QR code or enter a pairing code to reconnect."}
+        </p>
+        <p className="text-xs sm:text-sm text-muted leading-relaxed mt-2">
+          {t("unlinkStickersWarning")}
         </p>
       </Modal>
     </div>
