@@ -457,9 +457,14 @@ and blacklist middleware, the prefix lookup, every permission check) with no
 | `debts` | `!debt` ledger | — |
 | `schedules` | `!schedule` / `!autoschedule` jobs | — |
 | `forward_scores` | forward counters per message | `forward_score_ttl_days` (30) |
+| `stickers` | Sticker Studio library, one row per sticker per owner; the WebP is a file named by its sha256 | wiped on unlink |
+| `sticker_packs` | named sticker packs per owner | wiped on unlink |
+| `sticker_pack_items` | pack membership and order | cascade with the sticker or the pack; wiped on unlink |
 
 `forward_scores` gains a row per forwarded message, so it expires; the sweep
-runs at boot and every six hours (`sweepExpired()` in `db.cjs`).
+runs at boot and every six hours (`sweepExpired()` in `db.cjs`). Sticker files
+live under `<data>/stickers/<sha[0..2]>/` and are removed with the rows on
+unlink (`library.clearAll()`).
 
 The bot does **not** archive other people's messages. Nothing incoming is
 written beyond the forward counter and the sender's last-seen row; deleted and
@@ -1113,9 +1118,10 @@ logger.debug('Debug info');
     when there isn't one (that's how the single-executable build works). If you
     add another directory scan at load time, give it the same fallback.
 26. **Unlink is an account boundary.** It clears the WhatsApp directory, roles,
-    AI history, long-term memory and buffered AI context, and pauses schedules
-    created for the old account. Do not leave account-derived state active for
-    the next phone that pairs.
+    AI history, long-term memory and buffered AI context, the sticker library
+    (every sticker, pack, and file), and pauses schedules created for the old
+    account. Do not leave account-derived state active for the next phone that
+    pairs.
 27. **Compare WhatsApp identities with the shared helpers.** LIDs, phone-number
     JIDs and device suffixes can name the same user. Moderation and role gates
     must use `sameUser()`, `getSenderCandidates()` and `isAdminInGroup()` rather

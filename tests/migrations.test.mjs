@@ -27,6 +27,9 @@ const EXPECTED_TABLES = [
   "todos",
   "user_metadata",
   "warnings",
+  "stickers",
+  "sticker_packs",
+  "sticker_pack_items",
 ];
 
 const tablesOf = (database) =>
@@ -72,10 +75,7 @@ for (const table of EXPECTED_TABLES) {
   for (const column of ["last_run_at", "last_delivery_status", "last_error"]) {
     ok(`…with schedule column ${column}`, scheduleColumns.includes(column));
   }
-  ok(
-    "…with user_metadata.saved_name",
-    columnsOf(fresh, "user_metadata").includes("saved_name"),
-  );
+  ok("…with user_metadata.saved_name", columnsOf(fresh, "user_metadata").includes("saved_name"));
   fresh.close();
 }
 
@@ -83,11 +83,10 @@ section("an existing database gains saved_name without losing users");
 
 {
   const database = scratchDatabase();
-  migrate(database, MIGRATIONS.slice(0, MIGRATIONS.length - 1));
-  ok(
-    "saved_name is not there yet",
-    !columnsOf(database, "user_metadata").includes("saved_name"),
-  );
+  // v1–v3. Pinned, not "everything but the last": appending v5 must not make
+  // this migration include v4, or saved_name would already be there.
+  migrate(database, MIGRATIONS.slice(0, 3));
+  ok("saved_name is not there yet", !columnsOf(database, "user_metadata").includes("saved_name"));
   database
     .prepare(
       `INSERT INTO user_metadata (user_jid, phone_number, is_owner, is_admin, first_seen, last_seen, display_name)
@@ -106,6 +105,47 @@ section("an existing database gains saved_name without losing users");
     .get("201012345678@s.whatsapp.net");
   equal("the display name survives", row.display_name, "Ali");
   equal("saved_name starts empty", row.saved_name, null);
+  database.close();
+}
+
+section("an existing v4 database gains the sticker tables without losing users");
+
+{
+  const database = scratchDatabase();
+  migrate(database, MIGRATIONS.slice(0, 4));
+  ok("stickers are not there yet", !tablesOf(database).includes("stickers"));
+  ok("saved_name is already there", columnsOf(database, "user_metadata").includes("saved_name"));
+  database
+    .prepare(
+      `INSERT INTO user_metadata (user_jid, phone_number, is_owner, is_admin, first_seen, last_seen, display_name)
+       VALUES (?, ?, 0, 0, ?, ?, ?)`,
+    )
+    .run("201098765432@s.whatsapp.net", "201098765432", 2, 2, "Nour");
+
+  migrate(database);
+  equal("the upgrade reaches the latest version", versionOf(database), MIGRATIONS.length);
+  for (const table of ["stickers", "sticker_packs", "sticker_pack_items"]) {
+    ok(`table ${table} exists after upgrade`, tablesOf(database).includes(table));
+  }
+  const indexes = database
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index'")
+    .all()
+    .map((row) => row.name);
+  ok("owner/created index exists", indexes.includes("idx_stickers_owner_created"));
+  ok("items-by-sticker index exists", indexes.includes("idx_sticker_pack_items_sticker"));
+  const fks = database.prepare("PRAGMA foreign_key_list(sticker_pack_items)").all();
+  ok(
+    "pack items cascade from the pack",
+    fks.some((fk) => fk.table === "sticker_packs" && fk.on_delete === "CASCADE"),
+  );
+  ok(
+    "pack items cascade from the sticker",
+    fks.some((fk) => fk.table === "stickers" && fk.on_delete === "CASCADE"),
+  );
+  const row = database
+    .prepare("SELECT display_name FROM user_metadata WHERE user_jid = ?")
+    .get("201098765432@s.whatsapp.net");
+  equal("the user survives the sticker migration", row.display_name, "Nour");
   database.close();
 }
 
