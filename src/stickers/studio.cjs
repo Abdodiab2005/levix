@@ -128,6 +128,53 @@ function createStudio({ media, jobs, library, uploads } = {}) {
     }
   }
 
+  function prepareBuffer({ buffer, options, overlayPng }) {
+    if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new StickerError("NO_MEDIA");
+    const med = useMedia();
+    const sniffed = med.sniff(buffer);
+    if (!sniffed) throw new StickerError("UNSUPPORTED_TYPE");
+    const opts = normalizeOptions(options);
+    const keep = fitsKeep(sniffed, opts, overlayPng, buffer.length) && acceptableWebp(buffer, med);
+    const keepBuffer = keep ? buffer : null;
+    const inputPath = keepBuffer ? null : writeWorkFile(buffer, sniffed);
+    return { sniffed, opts, keepBuffer, inputPath };
+  }
+
+  async function produce({
+    med,
+    sniffed,
+    keepBuffer,
+    inputPath,
+    opts,
+    overlayPng,
+    maxSourceSeconds,
+    signal,
+    progress,
+  }) {
+    if (!keepBuffer) {
+      return med.createSticker({
+        inputPath,
+        sniffed,
+        options: opts,
+        overlayPng,
+        maxSourceSeconds,
+        signal,
+        onProgress: progress,
+      });
+    }
+    progress("encoding", 1);
+    const described = med.describeWebp(keepBuffer);
+    return {
+      buffer: keepBuffer,
+      width: described.width,
+      height: described.height,
+      animated: !!described.animated,
+      durationMs: described.durationMs ?? 0,
+      sourceMime: sniffed.mime,
+      qualityReduced: false,
+    };
+  }
+
   function runCreate({
     owner,
     inputPath,
@@ -155,30 +202,17 @@ function createStudio({ media, jobs, library, uploads } = {}) {
       submitted = useJobs().submit(
         async ({ signal, progress }) => {
           try {
-            let produced;
-            if (keepBuffer) {
-              progress("encoding", 1);
-              const described = med.describeWebp(keepBuffer);
-              produced = {
-                buffer: keepBuffer,
-                width: described.width,
-                height: described.height,
-                animated: !!described.animated,
-                durationMs: described.durationMs ?? 0,
-                sourceMime: sniffed.mime,
-                qualityReduced: false,
-              };
-            } else {
-              produced = await med.createSticker({
-                inputPath,
-                sniffed,
-                options: opts,
-                overlayPng,
-                maxSourceSeconds,
-                signal,
-                onProgress: progress,
-              });
-            }
+            const produced = await produce({
+              med,
+              sniffed,
+              keepBuffer,
+              inputPath,
+              opts,
+              overlayPng,
+              maxSourceSeconds,
+              signal,
+              progress,
+            });
             const thumb = await med.makeThumbnail(produced.buffer, { signal });
             const saved = lib.saveSticker(owner, {
               buffer: produced.buffer,
@@ -218,19 +252,10 @@ function createStudio({ media, jobs, library, uploads } = {}) {
     return { jobId: submitted.id, promise: submitted.promise };
   }
 
-  function createFromBuffer(input) {
-    const buffer = input?.buffer;
-    if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new StickerError("NO_MEDIA");
-    const med = useMedia();
-    const sniffed = med.sniff(buffer);
-    if (!sniffed) throw new StickerError("UNSUPPORTED_TYPE");
-    const opts = normalizeOptions(input.options);
-    const keep =
-      fitsKeep(sniffed, opts, input.overlayPng, buffer.length) && acceptableWebp(buffer, med);
-    // The source buffer stays in the queued closure only when those bytes are
-    // the sticker. Anything else is read back from the work file.
-    const keepBuffer = keep ? buffer : null;
-    const inputPath = keepBuffer ? null : writeWorkFile(buffer, sniffed);
+  function createFromBuffer(input = {}) {
+    // Reject an inaccessible pack before creating a temporary work file.
+    assertPack(input.owner, input.packId);
+    const { sniffed, opts, keepBuffer, inputPath } = prepareBuffer(input);
     return runCreate({
       owner: input.owner,
       inputPath,
@@ -244,6 +269,37 @@ function createStudio({ media, jobs, library, uploads } = {}) {
       maxSourceSeconds: input.maxSourceSeconds,
       removeInput: inputPath != null,
     });
+  }
+
+  async function convertBuffer({ buffer, options, maxSourceSeconds }) {
+    const { sniffed, opts, keepBuffer, inputPath } = prepareBuffer({ buffer, options });
+    let submitted;
+    try {
+      submitted = useJobs().submit(
+        async ({ signal, progress }) => {
+          try {
+            const result = await produce({
+              med: useMedia(),
+              sniffed,
+              keepBuffer,
+              inputPath,
+              opts,
+              maxSourceSeconds,
+              signal,
+              progress,
+            });
+            return result.buffer;
+          } finally {
+            dropWorkFile(inputPath);
+          }
+        },
+        { kind: "create" },
+      );
+    } catch (error) {
+      dropWorkFile(inputPath);
+      throw error;
+    }
+    return submitted.promise;
   }
 
   function createFromUpload({ owner, uploadId, options, overlayPng, source, packId, name }) {
@@ -404,6 +460,7 @@ function createStudio({ media, jobs, library, uploads } = {}) {
 
   return {
     createFromBuffer,
+    convertBuffer,
     createFromUpload,
     exportImage,
     exportZip,

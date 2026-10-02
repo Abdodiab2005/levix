@@ -1,17 +1,12 @@
-const fs = require("node:fs");
-const path = require("node:path");
-const { randomUUID } = require("node:crypto");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 const brand = require("../config/brand.cjs");
-const { ensureDataDir } = require("../config/paths.cjs");
+const runtimeConfig = require("../config/runtime-config.cjs");
 const { downloadMedia } = require("./geminiMedia.cjs");
 const { pickMedia, quotedOf } = require("./messageContent.cjs");
 const media = require("../stickers/media.cjs");
-const jobs = require("../stickers/jobs.cjs");
 const library = require("../stickers/library.cjs");
 const { StickerError, isStickerError, userMessage } = require("../stickers/errors.cjs");
-const { BOT_VIDEO_MAX_SECONDS, WHATSAPP_MEDIA_MAX_BYTES } = require("../stickers/limits.cjs");
-const { normalizeOptions } = require("../stickers/options.cjs");
+const { WHATSAPP_MEDIA_MAX_BYTES } = require("../stickers/limits.cjs");
 const { tr } = require("./i18n.cjs");
 
 function targetOf(msg, { quotedOnly = false } = {}) {
@@ -51,30 +46,24 @@ async function sendLibrarySticker(sock, jid, owner, sticker) {
   library.touch(owner, [sticker.id]);
 }
 
-// A full library cannot hand converted bytes back from studio.createFromBuffer.
-// Keep the same converter and queue for a send that is intentionally not saved.
-async function convertForSend(buffer, options) {
-  const sniffed = media.sniff(buffer);
-  if (!sniffed) throw new StickerError("UNSUPPORTED_TYPE");
-  const file = path.join(ensureDataDir("tmp", "stickers"), `bot-${randomUUID()}.${sniffed.ext}`);
-  try {
-    fs.writeFileSync(file, buffer);
-    const job = jobs.submit(
-      ({ signal, progress }) =>
-        media.createSticker({
-          inputPath: file,
-          sniffed,
-          options: normalizeOptions(options),
-          maxSourceSeconds: BOT_VIDEO_MAX_SECONDS,
-          signal,
-          onProgress: progress,
-        }),
-      { kind: "create" },
+function commandHint(name, args = "") {
+  return `${runtimeConfig.getPrefix()}${name}${args ? ` ${args}` : ""}`;
+}
+
+function countLabel(count, kind = "sticker") {
+  const n = Number(count);
+  const singular = kind === "pack" ? "pack" : "sticker";
+  const english = `${n} ${singular}${n === 1 ? "" : "s"}`;
+  if (kind === "pack") {
+    return tr(
+      english,
+      n === 1 ? "حزمة واحدة" : n === 2 ? "حزمتان" : n <= 10 ? `${n} حزم` : `${n} حزمة`,
     );
-    return (await job.promise).buffer;
-  } finally {
-    fs.rmSync(file, { force: true });
   }
+  return tr(
+    english,
+    n === 1 ? "ملصق واحد" : n === 2 ? "ملصقان" : n <= 10 ? `${n} ملصقات` : `${n} ملصقًا`,
+  );
 }
 
 function errorText(error) {
@@ -89,6 +78,7 @@ module.exports = {
   packedSticker,
   firstPackName,
   sendLibrarySticker,
-  convertForSend,
+  commandHint,
+  countLabel,
   errorText,
 };

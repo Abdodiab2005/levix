@@ -3,7 +3,12 @@ const { BOT_PAGE_SIZE } = require("../stickers/limits.cjs");
 const { StickerError } = require("../stickers/errors.cjs");
 const ownerModule = require("../stickers/owner.cjs");
 const library = require("../stickers/library.cjs");
-const { sendLibrarySticker, errorText } = require("../utils/stickerBot.cjs");
+const {
+  sendLibrarySticker,
+  commandHint,
+  countLabel,
+  errorText,
+} = require("../utils/stickerBot.cjs");
 
 function parse(args) {
   const parts = [...args];
@@ -35,8 +40,8 @@ module.exports = {
     ar: "يعرض ملصقاتك الحديثة أو المفضلة أو الموجودة في حزمة.",
   },
   usage: {
-    en: "stickers [recent|favorites|pack <name>] [page]",
-    ar: "stickers [الأحدث|المفضلة|حزمة <الاسم>] [الصفحة]",
+    en: "stickers [page]\nstickers recent [page]\nstickers favorites [page]\nstickers pack <name> [page]",
+    ar: "stickers [الصفحة]\nstickers الأحدث [الصفحة]\nstickers المفضلة [الصفحة]\nstickers حزمة <الاسم> [الصفحة]",
   },
   keywords: ["recent", "الأحدث", "favorites", "المفضلة", "pack", "حزمة"],
   chat: "all",
@@ -60,29 +65,31 @@ module.exports = {
         query.pack = pack.id;
         label = pack.name;
       } else {
-        query.filter = "recent";
+        query.filter = "all";
         query.sort = "recent";
       }
       const { items, total } = library.listStickers(who, query);
       if (!total)
         return sock.sendMessage(jid, {
           text: tr(
-            "No stickers here yet. Reply to media with !sticker or !pack <name> to save one.",
-            "لا توجد ملصقات هنا بعد. رد على وسائط بالأمر !sticker أو !pack <الاسم> لحفظ ملصق.",
+            `No stickers here yet. Reply to media with ${commandHint("sticker")} or ${commandHint("pack", "<name>")} to save one.`,
+            `لا توجد ملصقات هنا بعد. رد على وسائط بالأمر ${commandHint("sticker")} أو ${commandHint("pack", "<الاسم>")} لحفظ ملصق.`,
           ),
         });
       const pages = Math.ceil(total / BOT_PAGE_SIZE);
       if (selected.page > pages) throw new StickerError("INVALID_OPTIONS");
       const next =
-        selected.mode === "pack"
-          ? `!stickers pack ${selected.name} ${selected.page + 1}`
-          : selected.mode === "favorites"
-            ? `!stickers favorites ${selected.page + 1}`
-            : `!stickers ${selected.page + 1}`;
+        selected.page < pages
+          ? selected.mode === "pack"
+            ? commandHint("stickers", `pack ${selected.name} ${selected.page + 1}`)
+            : selected.mode === "favorites"
+              ? commandHint("stickers", `favorites ${selected.page + 1}`)
+              : commandHint("stickers", String(selected.page + 1))
+          : null;
       await sock.sendMessage(jid, {
         text: tr(
-          `${label} — page ${selected.page}/${pages} · ${next} for more`,
-          `${label} — الصفحة ${selected.page}/${pages} · ${next} للمزيد`,
+          `${label} — ${countLabel(total)} · page ${selected.page}/${pages}${next ? ` · ${next} for more` : ""}`,
+          `${label} — ${countLabel(total)} · الصفحة ${selected.page}/${pages}${next ? ` · ${next} للمزيد` : ""}`,
         ),
       });
       for (const sticker of items) await sendLibrarySticker(sock, jid, who, sticker);

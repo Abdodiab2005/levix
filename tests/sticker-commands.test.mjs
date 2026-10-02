@@ -12,9 +12,15 @@ require("./src/utils/geminiMedia.cjs").downloadMedia = async (_download, media) 
 };
 
 const settings = require("./src/config/settings.cjs");
+const runtimeConfig = require("./src/config/runtime-config.cjs");
+const { db } = require("./src/db/db.cjs");
 const library = require("./src/stickers/library.cjs");
 const owner = require("./src/stickers/owner.cjs");
 const studio = require("./src/stickers/studio.cjs");
+const media = require("./src/stickers/media.cjs");
+const webpModule = require("./src/stickers/webp.cjs");
+const jobs = require("./src/stickers/jobs.cjs");
+const { countLabel } = require("./src/utils/stickerBot.cjs");
 const limits = require("./src/stickers/limits.cjs");
 const defaults = require("./src/config/defaults.cjs");
 const { withLang } = require("./src/utils/i18n.cjs");
@@ -68,6 +74,16 @@ const webp = make("red.webp", [
   "lavfi",
   "-i",
   "color=c=red:s=32x32:d=1",
+  "-frames:v",
+  "1",
+  "-c:v",
+  "libwebp",
+]);
+const greenWebp = make("green.webp", [
+  "-f",
+  "lavfi",
+  "-i",
+  "color=c=green:s=32x32:d=1",
   "-frames:v",
   "1",
   "-c:v",
@@ -151,19 +167,92 @@ section("catalog, permissions, aliases and syntax");
     );
     for (const alias of [name, ...command.aliases])
       equal(`${alias} has one owner`, allAliases.get(alias).size, 1);
+    for (const lang of ["en", "ar"]) {
+      ok(
+        `${name} ${lang} usage uses lines`,
+        command.usages[lang].split("\n").every((line) => line.startsWith(name)),
+      );
+      ok(`${name} ${lang} usage has no joined variants`, !/[;؛]/.test(command.usages[lang]));
+    }
   }
   const pack = require("./src/commands/pack.cjs");
   for (const word of Object.values(limits.PACK_SUBCOMMANDS).flat())
     ok(`${word} is syntax`, pack.keywords.includes(word));
 }
 
+section("sticker and pack counts agree in both languages");
+for (const [n, enSticker, arSticker, enPack, arPack] of [
+  [1, "1 sticker", "ملصق واحد", "1 pack", "حزمة واحدة"],
+  [2, "2 stickers", "ملصقان", "2 packs", "حزمتان"],
+  [5, "5 stickers", "5 ملصقات", "5 packs", "5 حزم"],
+  [11, "11 stickers", "11 ملصقًا", "11 packs", "11 حزمة"],
+]) {
+  equal(
+    `English ${n} stickers`,
+    withLang("en", () => countLabel(n)),
+    enSticker,
+  );
+  equal(
+    `Arabic ${n} stickers`,
+    withLang("ar", () => countLabel(n)),
+    arSticker,
+  );
+  equal(
+    `English ${n} packs`,
+    withLang("en", () => countLabel(n, "pack")),
+    enPack,
+  );
+  equal(
+    `Arabic ${n} packs`,
+    withLang("ar", () => countLabel(n, "pack")),
+    arPack,
+  );
+}
+
 section("sticker creation, ownership and safe errors");
 {
+  const submit = jobs.submit;
+  let submitted = 0;
+  jobs.submit = (...args) => {
+    submitted++;
+    return submit(...args);
+  };
   const image = await run("!sticker crop", { attached: mediaMessage("image", png) });
   equal("image sends one sticker", count(image, "sticker"), 1);
+  equal("save path submits one conversion job", submitted, 1);
   equal("image appears for panel owner", library.listStickers(owner.forPanel()).total, 1);
   const record = library.listStickers(owner.forPanel()).items[0];
   equal("source is bot command", record.source, "BOT_COMMAND");
+  const taggedByBot = image.find((item) => item.sticker)?.sticker;
+  ok("bot send has EXIF", !!webpModule.readMetadata(taggedByBot));
+  ok(
+    "bot save has no EXIF",
+    !webpModule.readMetadata(library.readStickerFile(owner.forPanel(), record.id)),
+  );
+  ok(
+    "pack reply to sent sticker dedupes",
+    /Already in your library/.test(
+      lastLine(await run("!pack memes", { quoted: mediaMessage("sticker", taggedByBot) })),
+    ),
+  );
+  equal(
+    "pack association uses original id",
+    library.getPack(owner.forPanel(), library.findPackByName(owner.forPanel(), "memes").id).items[0]
+      .id,
+    record.id,
+  );
+  const differentlyTagged = media.withStickerMetadata(
+    library.readStickerFile(owner.forPanel(), record.id),
+    { packName: "unrelated name", publisher: "Someone" },
+  );
+  ok(
+    "remove ignores EXIF pack name",
+    /remains in your library/.test(
+      lastLine(
+        await run("!pack remove memes", { quoted: mediaMessage("sticker", differentlyTagged) }),
+      ),
+    ),
+  );
   const moving = await run("!sticker", { quoted: mediaMessage("video", video) });
   equal("video sends a sticker", count(moving, "sticker"), 1);
   const other = await run("!sticker", {
@@ -186,9 +275,29 @@ section("sticker creation, ownership and safe errors");
   );
   equal(
     "unsupported localized",
-    lastLine(await run("!sticker", { attached: mediaMessage("document", Buffer.from("garbage")) })),
+    lastLine(
+      await run("!sticker", {
+        attached: mediaMessage("document", Buffer.from("garbage"), { mimetype: "image/png" }),
+      }),
+    ),
     await withLang("en", () => userMessage(new StickerError("UNSUPPORTED_TYPE"))),
   );
+  const beforeUnsupported = downloads;
+  for (const [type, mime] of [
+    ["audio", "audio/ogg"],
+    ["document", "application/pdf"],
+  ]) {
+    equal(
+      `${type} rejected`,
+      lastLine(
+        await run("!sticker", {
+          attached: mediaMessage(type, Buffer.from("file"), { mimetype: mime }),
+        }),
+      ),
+      await withLang("en", () => userMessage(new StickerError("UNSUPPORTED_TYPE"))),
+    );
+  }
+  equal("audio and nonmedia documents rejected before download", downloads, beforeUnsupported);
   const before = downloads;
   const big = mediaMessage("image", png, { fileLength: limits.WHATSAPP_MEDIA_MAX_BYTES + 1 });
   equal(
@@ -219,10 +328,13 @@ section("sticker creation, ownership and safe errors");
   }
   studio.createFromBuffer = original;
   settings.set("sticker_library_limit", 1);
+  submitted = 0;
   const full = await run("!sticker", { attached: mediaMessage("image", greenPng) });
   equal("full library still sends", count(full, "sticker"), 1);
+  equal("full library submits one conversion job", submitted, 1);
   equal("full library does not save", library.listStickers(owner.forPanel()).total, 2);
   settings.set("sticker_library_limit", 1000);
+  jobs.submit = submit;
   settings.set("bot_language", "ar");
   equal(
     "Arabic no-media reply",
@@ -251,10 +363,11 @@ section("toimage and the sticker shortcut");
     "gif playback video",
     gif.some((item) => item.video && item.gifPlayback),
   );
-  equal(
-    "static gif reports invalid options",
-    lastLine(await run("!toimage gif", { quoted: staticQuote })),
-    await withLang("en", () => userMessage(new StickerError("INVALID_OPTIONS"))),
+  const staticGif = await run("!toimage gif", { quoted: staticQuote });
+  equal("static gif sends PNG", count(staticGif, "image"), 1);
+  ok(
+    "static gif explains fallback",
+    /not animated/.test(staticGif.find((item) => item.image)?.caption || ""),
   );
   equal(
     "!sticker reply to sticker uses toimage",
@@ -340,11 +453,90 @@ section("pack grammar, dedupe and retention");
   ok("Arabic delete", /بقيت/.test(lastLine(await run("!حزمة حذف قطة"))));
   settings.set("bot_language", "en");
   ok("missing pack", /no pack/.test(lastLine(await run("!pack show absent"))));
+
+  const foreign = media.withStickerMetadata(greenWebp, {
+    packName: "Another app",
+    publisher: "Other",
+  });
+  ok(
+    "foreign sticker saved",
+    /Saved sticker/.test(
+      lastLine(await run("!pack foreign", { quoted: mediaMessage("sticker", foreign) })),
+    ),
+  );
+  const foreignId = library.getPack(
+    owner.forPanel(),
+    library.findPackByName(owner.forPanel(), "foreign").id,
+  ).items[0].id;
+  const savedForeign = library.readStickerFile(owner.forPanel(), foreignId);
+  equal("foreign EXIF is removed from storage", webpModule.readMetadata(savedForeign), null);
+  ok("foreign bytes canonicalized", savedForeign.equals(media.canonicalWebp(greenWebp)));
+
+  ok("Latin Create ignores case", /Created/.test(lastLine(await run("!pack Create Mixed"))));
+  ok(
+    "Latin ADD ignores case",
+    /Already in your library/.test(lastLine(await run("!pack ADD Mixed", { quoted: quote }))),
+  );
+  ok("Latin SHOW ignores case", /1 sticker/.test(lastLine(await run("!pack SHOW Mixed"))));
+  ok(
+    "Latin REMOVE ignores case",
+    /remains in your library/.test(lastLine(await run("!pack REMOVE Mixed", { quoted: quote }))),
+  );
+  ok("Latin DELETE ignores case", /Deleted/.test(lastLine(await run("!pack DELETE Mixed"))));
+
+  const broken = mediaMessage("image", Buffer.from("not an image"));
+  ok(
+    "failed new-pack save replies with error",
+    /file type/.test(lastLine(await run("!pack doomed", { quoted: broken }))),
+  );
+  equal(
+    "failed new-pack save rolls back empty pack",
+    library.findPackByName(owner.forPanel(), "doomed"),
+    null,
+  );
+  await run("!pack create stable");
+  await run("!pack stable", { quoted: broken });
+  ok("failed save preserves existing pack", !!library.findPackByName(owner.forPanel(), "stable"));
 }
 
 section("packs and sticker pages");
 {
   const who = owner.forPanel();
+  const oldBytes = make("old.webp", [
+    "-f",
+    "lavfi",
+    "-i",
+    "color=c=blue:s=32x32:d=1",
+    "-frames:v",
+    "1",
+    "-c:v",
+    "libwebp",
+  ]);
+  const old = library.saveSticker(who, {
+    buffer: oldBytes,
+    thumbBuffer: oldBytes,
+    width: 32,
+    height: 32,
+    animated: false,
+    durationMs: 0,
+    sourceMime: "image/webp",
+    source: "BOT_COMMAND",
+    name: "old",
+  }).sticker;
+  db.prepare("UPDATE stickers SET created_at = ?, last_used_at = NULL WHERE id = ?").run(
+    Date.now() - 40 * 24 * 60 * 60 * 1000,
+    old.id,
+  );
+  equal(
+    "30-day filter excludes old sticker",
+    library.listStickers(who, { filter: "recent" }).items.some((item) => item.id === old.id),
+    false,
+  );
+  const allBeforePaging = await run("!stickers");
+  ok(
+    "default recency includes old sticker",
+    count(allBeforePaging, "sticker") === library.listStickers(who).total,
+  );
   for (let i = 0; i < 7; i++) {
     const bytes = make(`fixture-${i}.webp`, [
       "-f",
@@ -373,14 +565,50 @@ section("packs and sticker pages");
   const first = await run("!stickers");
   equal("first page cap", count(first, "sticker"), limits.BOT_PAGE_SIZE);
   ok("first page header", /page 1\//.test(lines(first)[0]));
+  ok("first page offers a next page", /!stickers 2 for more/.test(lines(first)[0]));
   const second = await run("!stickers 2");
   ok("second page cap", count(second, "sticker") <= limits.BOT_PAGE_SIZE);
+  const finalPage = Math.ceil(library.listStickers(who).total / limits.BOT_PAGE_SIZE);
+  ok(
+    "last page has no next-page hint",
+    !/for more/.test(lines(await run(`!stickers ${finalPage}`))[0]),
+  );
   const other = await run("!stickers", { fromMe: false, jid: OTHER });
   ok("other sender does not see self's page", count(other, "sticker") <= 1);
   settings.set("bot_language", "ar");
   ok("Arabic packs", /حزمك/.test(lastLine(await run("!حزم"))));
   ok("Arabic stickers header", /الصفحة/.test(lines(await run("!ملصقاتي الأحدث"))[0]));
   settings.set("bot_language", "en");
+}
+
+section("command hints use the live prefix");
+runtimeConfig.setPrefix("#");
+try {
+  ok("pack usage uses live prefix", /#pack <name>/.test(lastLine(await run("#pack"))));
+  ok("pack show uses live prefix", /#stickers pack/.test(lastLine(await run("#pack show stable"))));
+  ok(
+    "packs empty state uses live prefix",
+    /#pack <name>/.test(lastLine(await run("#packs", { fromMe: false, jid: OTHER }))),
+  );
+  ok("toimage usage uses live prefix", /#toimage/.test(lastLine(await run("#toimage"))));
+  ok(
+    "animated caption uses live prefix",
+    /#toimage gif/.test(
+      (await run("#toimage", { quoted: mediaMessage("sticker", animated) })).find(
+        (item) => item.image,
+      )?.caption || "",
+    ),
+  );
+  ok(
+    "stickers page hint uses live prefix",
+    /#stickers 2 for more/.test(lines(await run("#stickers"))[0]),
+  );
+  ok(
+    "stickers empty state uses live prefix",
+    /#sticker/.test(lastLine(await run("#stickers favorites"))),
+  );
+} finally {
+  runtimeConfig.setPrefix("!");
 }
 
 finish();

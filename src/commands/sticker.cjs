@@ -5,7 +5,6 @@ const {
   downloadTarget,
   packedSticker,
   sendLibrarySticker,
-  convertForSend,
   errorText,
 } = require("../utils/stickerBot.cjs");
 const { quotedOf, pickMedia } = require("../utils/messageContent.cjs");
@@ -13,6 +12,7 @@ const { StickerError } = require("../stickers/errors.cjs");
 const { BOT_VIDEO_MAX_SECONDS } = require("../stickers/limits.cjs");
 const ownerModule = require("../stickers/owner.cjs");
 const media = require("../stickers/media.cjs");
+const library = require("../stickers/library.cjs");
 const studio = require("../stickers/studio.cjs");
 const toimage = require("./toimage.cjs");
 
@@ -24,8 +24,8 @@ module.exports = {
     ar: "ينشئ ملصقًا من صورة أو صورة متحركة أو فيديو.",
   },
   usage: {
-    en: "sticker [crop] [nobg] (attach or reply to media)",
-    ar: "sticker [قص] [بدون-خلفية] (أرفق وسائط أو رد عليها)",
+    en: "sticker [crop] [nobg] (attach an image, GIF or video)\nsticker [crop] [nobg] (reply to media)\nsticker (reply to a sticker for PNG)",
+    ar: "sticker [قص] [بدون-خلفية] (أرفق صورة أو صورة متحركة أو فيديو)\nsticker [قص] [بدون-خلفية] (رد على وسائط)\nsticker (رد على ملصق لصورة PNG)",
   },
   keywords: ["crop", "قص", "nobg", "بدون-خلفية"],
   chat: "all",
@@ -45,6 +45,11 @@ module.exports = {
     if (!target) return sock.sendMessage(jid, { text: errorText(new StickerError("NO_MEDIA")) });
     let status;
     try {
+      if (
+        target.type === "audio" ||
+        (target.type === "document" && !/^(image|video)\//i.test(target.media?.mimetype || ""))
+      )
+        throw new StickerError("UNSUPPORTED_TYPE");
       const words = new Set(args.map((arg) => String(arg).toLowerCase()));
       const options = {};
       if (words.has("crop") || words.has("قص")) options.fit = "cover";
@@ -61,7 +66,7 @@ module.exports = {
         tr("🎨 Creating sticker...", "🎨 جارٍ إنشاء الملصق..."),
         { replyTo: msg },
       );
-      try {
+      if (library.hasRoom(who)) {
         const { promise } = studio.createFromBuffer({
           owner: who,
           buffer,
@@ -71,9 +76,12 @@ module.exports = {
         });
         const { sticker } = await promise;
         await sendLibrarySticker(sock, jid, who, sticker);
-      } catch (error) {
-        if (error?.code !== "LIBRARY_FULL") throw error;
-        const converted = await convertForSend(buffer, options);
+      } else {
+        const converted = await studio.convertBuffer({
+          buffer,
+          options,
+          maxSourceSeconds: BOT_VIDEO_MAX_SECONDS,
+        });
         await sock.sendMessage(jid, { sticker: packedSticker(converted) });
       }
       await status.remove();

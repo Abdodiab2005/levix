@@ -75,6 +75,18 @@ const losslessWebp = make("lossless.webp", [
   "-lossless",
   "1",
 ]);
+const alphaWebp = make("alpha.webp", [
+  "-f",
+  "lavfi",
+  "-i",
+  "color=c=red@0.5:s=32x32:d=1,format=rgba",
+  "-frames:v",
+  "1",
+  "-c:v",
+  "libwebp",
+  "-lossless",
+  "0",
+]);
 const redFrame = make("red.webp", [
   "-f",
   "lavfi",
@@ -372,6 +384,40 @@ equal(
   ],
   "G",
 );
+section("metadata canonicalization");
+for (const [name, bytes, firstChunk] of [
+  ["simple VP8", lossyWebp.bytes, "VP8 "],
+  ["simple VP8L", losslessWebp.bytes, "VP8L"],
+  ["VP8X with alpha", alphaWebp.bytes, "VP8X"],
+  ["animated VP8X", animatedWebp.bytes, "VP8X"],
+]) {
+  equal(`${name} shape`, webp.parse(bytes).chunks[0].type, firstChunk);
+  const tagged = media.withStickerMetadata(bytes, { packName: "Foreign", publisher: "Other" });
+  ok(
+    `${name} canonical tagged equals original`,
+    media.canonicalWebp(tagged).equals(media.canonicalWebp(bytes)),
+  );
+  equal(`${name} metadata removed`, webp.readMetadata(media.canonicalWebp(tagged)), null);
+  const second = media.withStickerMetadata(tagged, { packName: "Another", publisher: "Other" });
+  ok(
+    `${name} pack metadata changes no content`,
+    media.canonicalWebp(second).equals(media.canonicalWebp(bytes)),
+  );
+}
+{
+  const tagged = media.withStickerMetadata(alphaWebp.bytes, { packName: "A", publisher: "P" });
+  const parts = webp.parse(tagged).chunks;
+  const flags = Buffer.from(parts[0].data);
+  flags[0] |= 0x04;
+  const withXmp = riff([
+    chunk("VP8X", flags),
+    ...parts.slice(1).map((part) => part.raw),
+    chunk("XMP ", Buffer.from("foreign")),
+  ]);
+  const cleaned = media.canonicalWebp(withXmp);
+  ok("EXIF and XMP removed together", cleaned.equals(media.canonicalWebp(alphaWebp.bytes)));
+  equal("metadata flags cleared", webp.parse(cleaned).chunks[0].data[0] & 0x0c, 0);
+}
 const corrupt = Buffer.from(staticResult.buffer.subarray(0, 40));
 equal(
   "truncated WebP",

@@ -3,8 +3,8 @@ const { createStatus } = require("../utils/statusMessage.cjs");
 const {
   targetOf,
   downloadTarget,
-  packedSticker,
-  firstPackName,
+  commandHint,
+  countLabel,
   errorText,
 } = require("../utils/stickerBot.cjs");
 const { StickerError } = require("../stickers/errors.cjs");
@@ -17,8 +17,9 @@ const keywords = Object.values(PACK_SUBCOMMANDS).flat();
 
 function parse(args) {
   const [first, ...rest] = args;
+  const word = /^[a-z]+$/i.test(first || "") ? first.toLowerCase() : first;
   const action =
-    Object.entries(PACK_SUBCOMMANDS).find(([, words]) => words.includes(first))?.[0] || "auto";
+    Object.entries(PACK_SUBCOMMANDS).find(([, words]) => words.includes(word))?.[0] || "auto";
   if (action === "rename") {
     const text = rest.join(" ").trim();
     const names = text.includes("|")
@@ -42,16 +43,6 @@ function requirePack(who, name) {
   return pack;
 }
 
-function findQuotedSticker(who, packId, buffer) {
-  for (const sticker of library.getPack(who, packId).items) {
-    const raw = library.readStickerFile(who, sticker.id);
-    if (raw.equals(buffer) || packedSticker(raw, firstPackName(who, sticker)).equals(buffer)) {
-      return sticker;
-    }
-  }
-  throw new StickerError("NOT_FOUND");
-}
-
 module.exports = {
   name: "pack",
   aliases: ["حزمة"],
@@ -60,8 +51,8 @@ module.exports = {
     ar: "ينشئ حزم الملصقات ويديرها ويضيف إليها.",
   },
   usage: {
-    en: "pack <name> (reply to media to add); pack create|add|remove|show|delete <name>; pack rename <old> | <new>",
-    ar: "pack <الاسم> (رد على وسائط للإضافة)؛ pack إنشاء|إضافة|إزالة|عرض|حذف <الاسم>؛ pack تسمية <القديم> | <الجديد>",
+    en: "pack <name> (reply to media to add)\npack <name> (show without a reply)\npack create <name>\npack add <name>\npack remove <name>\npack rename <old> | <new>\npack delete <name>\npack show <name>",
+    ar: "pack <الاسم> (رد على وسائط للإضافة)\npack <الاسم> (عرض بلا رد)\npack إنشاء <الاسم>\npack إضافة <الاسم>\npack إزالة <الاسم>\npack تسمية <القديم> | <الجديد>\npack حذف <الاسم>\npack عرض <الاسم>",
   },
   keywords,
   chat: "all",
@@ -83,8 +74,8 @@ module.exports = {
         line = tr(`Renamed pack to ${renamed.name}.`, `أُعيدت تسمية الحزمة إلى ${renamed.name}.`);
       } else if (!parsed.name) {
         line = tr(
-          "Use !pack <name> while replying to media, or !pack create <name>.",
-          "استخدم !pack <الاسم> عند الرد على وسائط، أو !pack إنشاء <الاسم>.",
+          `Use ${commandHint("pack", "<name>")} while replying to media, or ${commandHint("pack", "create <name>")}.`,
+          `استخدم ${commandHint("pack", "<الاسم>")} عند الرد على وسائط، أو ${commandHint("pack", "إنشاء <الاسم>")}.`,
         );
       } else if (parsed.action === "create") {
         const pack = library.createPack(who, parsed.name);
@@ -101,7 +92,7 @@ module.exports = {
         const target = targetOf(msg, { quotedOnly: true });
         if (target?.type !== "sticker") throw new StickerError("NO_MEDIA");
         const buffer = await downloadTarget(target);
-        const sticker = findQuotedSticker(who, pack.id, buffer);
+        const sticker = library.findStickerByContent(who, buffer);
         const removed = library.removeFromPack(who, pack.id, [sticker.id]);
         if (!removed.affected) throw new StickerError("NOT_FOUND");
         line = tr(
@@ -113,34 +104,48 @@ module.exports = {
         if (parsed.action === "show" || (parsed.action === "auto" && !target)) {
           const pack = requirePack(who, parsed.name);
           line = tr(
-            `${pack.name} — ${pack.count} stickers. Use !stickers pack ${pack.name} to see them.`,
-            `${pack.name} — ${pack.count} ملصق. استخدم !stickers حزمة ${pack.name} لعرضها.`,
+            `${pack.name} — ${countLabel(pack.count)}. Use ${commandHint("stickers", `pack ${pack.name}`)} to see them.`,
+            `${pack.name} — ${countLabel(pack.count)}. استخدم ${commandHint("stickers", `حزمة ${pack.name}`)} لعرضها.`,
           );
         } else {
           if (!target) throw new StickerError("NO_MEDIA");
           let pack = library.findPackByName(who, parsed.name);
-          if (!pack) pack = library.createPack(who, parsed.name);
-          const buffer = await downloadTarget(target);
-          status = await createStatus(
-            sock,
-            jid,
-            tr("🎨 Saving sticker...", "🎨 جارٍ حفظ الملصق..."),
-            { replyTo: msg },
-          );
-          const { promise } = studio.createFromBuffer({
-            owner: who,
-            buffer,
-            source: target.type === "sticker" ? "WHATSAPP_STICKER" : "BOT_COMMAND",
-            packId: pack.id,
-            maxSourceSeconds: BOT_VIDEO_MAX_SECONDS,
-          });
-          const result = await promise;
-          line = result.created
-            ? tr(`Saved sticker to ${pack.name}.`, `حُفظ الملصق في ${pack.name}.`)
-            : tr(
-                `Already in your library; added to ${pack.name}.`,
-                `الملصق موجود في مكتبتك بالفعل؛ أُضيف إلى ${pack.name}.`,
-              );
+          const createdPack = !pack;
+          if (createdPack) pack = library.createPack(who, parsed.name);
+          try {
+            const buffer = await downloadTarget(target);
+            status = await createStatus(
+              sock,
+              jid,
+              tr("🎨 Saving sticker...", "🎨 جارٍ حفظ الملصق..."),
+              { replyTo: msg },
+            );
+            const { promise } = studio.createFromBuffer({
+              owner: who,
+              buffer,
+              source: target.type === "sticker" ? "WHATSAPP_STICKER" : "BOT_COMMAND",
+              packId: pack.id,
+              maxSourceSeconds: BOT_VIDEO_MAX_SECONDS,
+            });
+            const result = await promise;
+            line = result.created
+              ? tr(`Saved sticker to ${pack.name}.`, `حُفظ الملصق في ${pack.name}.`)
+              : tr(
+                  `Already in your library; added to ${pack.name}.`,
+                  `الملصق موجود في مكتبتك بالفعل؛ أُضيف إلى ${pack.name}.`,
+                );
+          } catch (error) {
+            if (createdPack) {
+              try {
+                if (library.getPack(who, pack.id).pack.count === 0)
+                  library.deletePack(who, pack.id);
+              } catch {
+                // Preserve the original conversion error; a concurrent change
+                // may have removed or filled the pack before cleanup.
+              }
+            }
+            throw error;
+          }
         }
       }
       if (status) await status.finish(line);

@@ -1,6 +1,6 @@
 const { tr } = require("../utils/i18n.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
-const { targetOf, downloadTarget, errorText } = require("../utils/stickerBot.cjs");
+const { targetOf, downloadTarget, commandHint, errorText } = require("../utils/stickerBot.cjs");
 const media = require("../stickers/media.cjs");
 const jobs = require("../stickers/jobs.cjs");
 
@@ -11,7 +11,10 @@ module.exports = {
     en: "Turn a replied sticker into a PNG or animated video.",
     ar: "يحوّل الملصق المردود عليه إلى صورة PNG أو فيديو متحرك.",
   },
-  usage: { en: "toimage [doc|gif] (reply to a sticker)", ar: "toimage [ملف|متحرك] (رد على ملصق)" },
+  usage: {
+    en: "toimage (reply to a sticker)\ntoimage doc (reply to a sticker)\ntoimage gif (reply to an animated sticker)",
+    ar: "toimage (رد على ملصق)\ntoimage ملف (رد على ملصق)\ntoimage متحرك (رد على ملصق متحرك)",
+  },
   keywords: ["doc", "ملف", "gif", "متحرك"],
   chat: "all",
   async execute(sock, msg, args = []) {
@@ -20,19 +23,22 @@ module.exports = {
     if (target?.type !== "sticker") {
       return sock.sendMessage(jid, {
         text: tr(
-          "Reply to a sticker with !toimage [doc|gif].",
-          "رد على ملصق بالأمر !toimage [ملف|متحرك].",
+          `Reply to a sticker with ${commandHint("toimage", "[doc|gif]")}.`,
+          `رد على ملصق بالأمر ${commandHint("toimage", "[ملف|متحرك]")}.`,
         ),
       });
     }
     let status;
     try {
       const buffer = await downloadTarget(target);
-      const mode = args.some((arg) => ["gif", "متحرك"].includes(String(arg).toLowerCase()))
-        ? "gif"
-        : args.some((arg) => ["doc", "ملف"].includes(String(arg).toLowerCase()))
-          ? "doc"
-          : "png";
+      const wantsGif = args.some((arg) => ["gif", "متحرك"].includes(String(arg).toLowerCase()));
+      const staticGif = wantsGif && !media.describeWebp(buffer).animated;
+      const mode =
+        wantsGif && !staticGif
+          ? "gif"
+          : args.some((arg) => ["doc", "ملف"].includes(String(arg).toLowerCase()))
+            ? "doc"
+            : "png";
       status = await createStatus(
         sock,
         jid,
@@ -45,6 +51,17 @@ module.exports = {
         { kind: "export" },
       );
       const result = await job.promise;
+      const caption = staticGif
+        ? tr(
+            "This sticker is not animated, so I sent a PNG.",
+            "هذا الملصق غير متحرك، لذا أرسلت صورة PNG.",
+          )
+        : result.animated
+          ? tr(
+              `First frame of an animated sticker. Use ${commandHint("toimage", "gif")} for the animation.`,
+              `الإطار الأول من ملصق متحرك. استخدم ${commandHint("toimage", "متحرك")} للحصول على الحركة.`,
+            )
+          : undefined;
       if (mode === "gif") {
         await sock.sendMessage(jid, { video: result, mimetype: "video/mp4", gifPlayback: true });
       } else if (mode === "doc") {
@@ -52,23 +69,13 @@ module.exports = {
           document: result.buffer,
           mimetype: "image/png",
           fileName: "sticker.png",
-          caption: result.animated
-            ? tr(
-                "First frame of an animated sticker. Use !toimage gif for the animation.",
-                "الإطار الأول من ملصق متحرك. استخدم !toimage متحرك للحصول على الحركة.",
-              )
-            : undefined,
+          caption,
         });
       } else {
         await sock.sendMessage(jid, {
           image: result.buffer,
           mimetype: "image/png",
-          caption: result.animated
-            ? tr(
-                "First frame of an animated sticker. Use !toimage gif for the animation.",
-                "الإطار الأول من ملصق متحرك. استخدم !toimage متحرك للحصول على الحركة.",
-              )
-            : undefined,
+          caption,
         });
       }
       await status.remove();
