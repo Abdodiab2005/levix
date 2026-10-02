@@ -72,6 +72,18 @@ section("dedupe keeps one row and one file per owner");
   const who = self();
   const first = save(who, "pixel-cat", { name: "Cat" });
   ok("the first save is new", first.created);
+  equal(
+    "content lookup finds the owner's row",
+    library.findStickerByContent(who, Buffer.from("pixel-cat")).id,
+    first.sticker.id,
+  );
+  equal(
+    "content lookup hides another owner",
+    codeOf(() =>
+      library.findStickerByContent(person("201777000000@s.whatsapp.net"), Buffer.from("pixel-cat")),
+    ),
+    "NOT_FOUND",
+  );
   const second = save(who, "pixel-cat", { name: "Other" });
   ok("the same bytes are not created again", !second.created);
   equal("it is the same sticker", second.sticker.id, first.sticker.id);
@@ -489,7 +501,9 @@ section("the library cap is read when the sticker is saved");
   const who = person("201700000001@s.whatsapp.net");
   settings.set("sticker_library_limit", 1);
   try {
+    ok("hasRoom before save", library.hasRoom(who));
     const first = save(who, "full-1");
+    ok("hasRoom after save", !library.hasRoom(who));
     equal(
       "a new sticker past the cap",
       codeOf(() => save(who, "full-2")),
@@ -498,6 +512,7 @@ section("the library cap is read when the sticker is saved");
     ok("the same bytes still dedupe", !save(who, "full-1").created);
     equal("it is the existing sticker", save(who, "full-1").sticker.id, first.sticker.id);
     settings.set("sticker_library_limit", 1000);
+    ok("hasRoom reads changed setting", library.hasRoom(who));
     ok("a raised cap applies without a restart", save(who, "full-2").created);
   } finally {
     settings.set("sticker_library_limit", null);

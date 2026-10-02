@@ -143,6 +143,22 @@ function extractFrame(buffer, index) {
   return riff([chunk("VP8X", payload), ...frame.parts.map((p) => p.raw)]);
 }
 
+// Pack metadata belongs to the send, not the saved content. Rebuild the RIFF
+// after dropping both metadata chunks, including the extension flags that
+// announce them. A simple image tagged for WhatsApp becomes simple again.
+function canonical(buffer) {
+  const meta = parse(buffer);
+  const remaining = meta.chunks.filter((item) => item.type !== "EXIF" && item.type !== "XMP ");
+  if (remaining[0]?.type !== "VP8X") return riff(remaining.map((item) => item.raw));
+  const needsExtended = remaining.some((item) =>
+    ["ALPH", "ANIM", "ANMF", "ICCP"].includes(item.type),
+  );
+  const payload = Buffer.from(remaining[0].data);
+  payload[0] &= ~0x0c; // EXIF (0x08), XMP (0x04)
+  const body = remaining.slice(1).map((item) => item.raw);
+  return riff(needsExtended ? [chunk("VP8X", payload), ...body] : body);
+}
+
 function metadata(buffer, { packId, packName, publisher, emojis = [] }) {
   const meta = parse(buffer);
   const id =
@@ -207,4 +223,4 @@ function readMetadata(buffer) {
   }
 }
 
-module.exports = { parse, extractFrame, metadata, readMetadata };
+module.exports = { parse, extractFrame, metadata, readMetadata, canonical };

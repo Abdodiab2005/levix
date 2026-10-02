@@ -302,6 +302,10 @@ function withStickerMetadata(buffer, data) {
   return webp.metadata(buffer, data);
 }
 
+function canonicalWebp(buffer) {
+  return webp.canonical(buffer);
+}
+
 function paint(canvas, pixels, frame, canvasWidth) {
   const { x, y, width, height, blend } = frame;
   for (let row = 0; row < height; row++) {
@@ -684,6 +688,7 @@ module.exports = {
   makeThumbnail,
   describeWebp,
   withStickerMetadata,
+  canonicalWebp,
   capabilities,
   sweepTemp,
   filterGraph,

@@ -17,6 +17,7 @@ const settings = require("../config/settings.cjs");
 const store = require("../db/store.cjs");
 const logger = require("../utils/logger.cjs");
 const { StickerError } = require("./errors.cjs");
+const webp = require("./webp.cjs");
 const {
   PACK_NAME_MAX,
   PACK_SUBCOMMANDS,
@@ -53,6 +54,24 @@ function libraryLimit() {
     // A broken settings read must not refuse every save.
   }
   return DEFAULT_LIBRARY_LIMIT;
+}
+
+function canonicalContent(buffer) {
+  if (
+    buffer.length < 12 ||
+    buffer.toString("ascii", 0, 4) !== "RIFF" ||
+    buffer.toString("ascii", 8, 12) !== "WEBP"
+  )
+    return buffer;
+  try {
+    return webp.canonical(buffer);
+  } catch (error) {
+    // Old library callers and API fixtures can provide opaque bytes with a
+    // WebP-looking header. Keep their existing storage behavior. The studio
+    // validates actual WhatsApp media before it reaches this function.
+    if (error instanceof StickerError && error.code === "CORRUPT") return buffer;
+    throw error;
+  }
 }
 
 function bind(owner) {
@@ -275,8 +294,10 @@ function integerOrNull(value) {
 
 function saveSticker(owner, input) {
   const bound = bind(owner);
-  const buffer = input?.buffer;
-  if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new StickerError("NO_MEDIA");
+  const sourceBuffer = input?.buffer;
+  if (!Buffer.isBuffer(sourceBuffer) || sourceBuffer.length === 0)
+    throw new StickerError("NO_MEDIA");
+  const buffer = canonicalContent(sourceBuffer);
   if (!SOURCES.has(input.source)) throw new StickerError("INVALID_OPTIONS", { field: "source" });
   const name = sanitizeStickerName(input.name);
   const sha = crypto.createHash("sha256").update(buffer).digest("hex");
@@ -331,6 +352,18 @@ function saveSticker(owner, input) {
     throw storageError(error);
   }
   return { sticker: present(bound, store.stickerGet(bound.candidates, id)), created: true };
+}
+
+function hasRoom(owner) {
+  const bound = bind(owner);
+  return store.stickerCount(bound.candidates) < libraryLimit();
+}
+
+function findStickerByContent(owner, buffer) {
+  const bound = bind(owner);
+  if (!Buffer.isBuffer(buffer) || !buffer.length) throw new StickerError("NOT_FOUND");
+  const sha = crypto.createHash("sha256").update(canonicalContent(buffer)).digest("hex");
+  return present(bound, store.stickerFindBySha(bound.candidates, sha));
 }
 
 function getSticker(owner, id) {
@@ -653,6 +686,8 @@ function clearAll() {
 
 module.exports = {
   saveSticker,
+  hasRoom,
+  findStickerByContent,
   getSticker,
   readStickerFile,
   readThumbnail,
