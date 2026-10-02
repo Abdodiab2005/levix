@@ -148,6 +148,9 @@ jobs:
           command -v pkg-config > /dev/null || sudo apt-get install -y pkg-config
       - name: Fetch Node runtimes + build FFmpeg (arm64 + armv7)
         run: bash android/scripts/fetch-node-android.sh
+      - name: Android unit tests
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
       - name: Build Android Debug APKs
         working-directory: android
         run: ./gradlew :app:assembleDebug --stacktrace
