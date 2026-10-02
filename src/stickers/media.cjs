@@ -208,6 +208,53 @@ function validateOverlay(buffer) {
     throw new StickerError("INVALID_OPTIONS", { field: "overlay" });
 }
 
+// Map the canvas window back into the rotated source before scaling. Lanczos
+// needs a few source pixels outside the visible area, bounded by the maximum
+// intermediate size even when a one-pixel edge is zoomed to the whole canvas.
+function visibleSource(width, height, options, placed) {
+  const quarter = options.rotate === 90 || options.rotate === 270;
+  const sourceWidth = quarter ? height : width;
+  const sourceHeight = quarter ? width : height;
+  const cap = Math.floor(Math.min(L.CANVAS * 4, L.CANVAS * options.zoom + L.CANVAS / 2));
+  function axis(sourceSize, scaledSize, offset) {
+    const scale = scaledSize / sourceSize;
+    const first = Math.max(0, -offset);
+    const last = Math.min(L.CANVAS, offset + scaledSize) - offset;
+    const margin = Math.min(3, Math.floor((cap - L.CANVAS) / (2 * scale)));
+    const start = Math.max(0, Math.floor(first / scale) - margin);
+    const end = Math.min(sourceSize, Math.ceil(last / scale) + margin);
+    const natural =
+      start === 0 && end === sourceSize
+        ? scaledSize
+        : Math.max(1, Math.round((end - start) * scale));
+    const bounded = Math.min(cap, natural);
+    const oldVisibleStart = first - start * scale;
+    const visibleFraction =
+      natural > L.CANVAS ? Math.max(0, Math.min(1, oldVisibleStart / (natural - L.CANVAS))) : 0;
+    return {
+      start,
+      size: Math.max(1, end - start),
+      scaled: bounded,
+      offset:
+        natural > cap
+          ? -Math.round(visibleFraction * (bounded - L.CANVAS))
+          : offset + Math.round(start * scale),
+    };
+  }
+  const x = axis(sourceWidth, placed.width, placed.x);
+  const y = axis(sourceHeight, placed.height, placed.y);
+  return {
+    x: x.start,
+    y: y.start,
+    width: x.size,
+    height: y.size,
+    scaledWidth: x.scaled,
+    scaledHeight: y.scaled,
+    overlayX: x.offset,
+    overlayY: y.offset,
+  };
+}
+
 function filterGraph(
   width,
   height,
@@ -216,23 +263,25 @@ function filterGraph(
 ) {
   const o = normalizeOptions(options);
   const p = placement(width, height, o);
+  const visible = visibleSource(width, height, o, p);
   // placement() is the same 512-canvas geometry the panel preview uses.
   const stages = ["[0:v]format=rgba"];
   if (o.removeBackground) stages.push(`colorkey=${keyColor}:${o.removeBackground.tolerance}:0.05`);
   if (o.rotate === 90) stages.push("transpose=clock");
   else if (o.rotate === 270) stages.push("transpose=cclock");
   else if (o.rotate === 180) stages.push("hflip,vflip");
-  stages.push(`scale=${p.width}:${p.height}:flags=lanczos`);
+  stages.push(`crop=${visible.width}:${visible.height}:${visible.x}:${visible.y}`);
+  stages.push(`scale=${visible.scaledWidth}:${visible.scaledHeight}:flags=lanczos`);
   const color = o.background === "transparent" ? "black@0.0" : `0x${o.background.slice(1)}`;
   const parts = [
     `${stages.join(",")}[scaled]`,
     `color=c=${color}:s=512x512:r=${fps},format=rgba[bg]`,
-    `[bg][scaled]overlay=${p.x}:${p.y}:shortest=1:format=auto[base]`,
+    `[bg][scaled]overlay=${visible.overlayX}:${visible.overlayY}:shortest=1:format=auto[base]`,
   ];
   // The PNG is one frame; repeat it while the already bounded base stream runs.
   if (overlay) parts.push("[base][1:v]overlay=0:0:eof_action=repeat:format=auto[out]");
   else parts.push("[base]format=rgba[out]");
-  return { graph: parts.join(";"), placement: p };
+  return { graph: parts.join(";"), placement: p, visible };
 }
 
 async function capabilities() {
@@ -623,6 +672,8 @@ async function toGif(buffer, { signal } = {}) {
 async function toMp4(buffer, { signal } = {}) {
   const meta = webp.parse(buffer);
   if (!meta.animated) throw new StickerError("INVALID_OPTIONS", { field: "format" });
+  const videoWidth = Math.ceil(meta.width / 2) * 2;
+  const videoHeight = Math.ceil(meta.height / 2) * 2;
   const file = tempPath("mp4");
   try {
     for (const encoder of ["libx264", "mpeg4"]) {
@@ -633,7 +684,7 @@ async function toMp4(buffer, { signal } = {}) {
             "-t",
             String(Math.min(10, meta.durationMs / 1000)),
             "-filter_complex",
-            "color=c=white:s=512x512:r=15[white];[white][0:v]overlay=0:0:shortest=1:format=auto,format=yuv420p,scale=trunc(iw/2)*2:trunc(ih/2)*2[out]",
+            `color=c=white:s=${videoWidth}x${videoHeight}:r=15[white];[white][0:v]overlay=0:0:shortest=1:format=auto,format=yuv420p[out]`,
             "-map",
             "[out]",
             "-c:v",

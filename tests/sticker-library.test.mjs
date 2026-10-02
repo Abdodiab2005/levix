@@ -2,7 +2,7 @@
 // Media conversion is not involved here — saving takes WebP bytes directly.
 
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
 import { Readable } from "node:stream";
 import { equal, finish, ok, require, section, throws, useTempDataDir } from "./harness.mjs";
 
@@ -652,6 +652,75 @@ section("unlink clears every sticker, pack, and file");
     "NOT_FOUND",
   );
   ok("the file is gone", !existsSync(stickerFile(Buffer.from("unlink-me"))));
+}
+
+section("unlink cancels running and queued sticker work");
+
+{
+  const { createStudio } = require("./src/stickers/studio.cjs");
+  const who = person("201900000099@s.whatsapp.net");
+  let thumbnailStarted = 0;
+  let conversionStarted = 0;
+  let releaseThumbs;
+  const thumbnailGate = new Promise((resolve) => {
+    releaseThumbs = resolve;
+  });
+  const fakeMedia = {
+    sniff: () => ({ kind: "webp", mime: "image/webp", ext: "webp" }),
+    describeWebp: () => ({ width: 64, height: 64, animated: false, durationMs: 0 }),
+    async makeThumbnail() {
+      thumbnailStarted++;
+      await thumbnailGate;
+      return Buffer.from("thumbnail");
+    },
+    async createSticker() {
+      conversionStarted++;
+      throw new Error("queued conversion should not run");
+    },
+  };
+  const studio = createStudio({ media: fakeMedia });
+  const jobs = ["late-1", "late-2"].map((value) =>
+    studio.createFromBuffer({ owner: who, buffer: Buffer.from(value) }),
+  );
+  jobs.push(
+    studio.createFromBuffer({ owner: who, buffer: Buffer.from("queued-3"), options: { zoom: 2 } }),
+  );
+  const workFiles = () => {
+    const dir = dataPath("tmp", "stickers");
+    return existsSync(dir) ? readdirSync(dir).filter((name) => name.startsWith("work-")) : [];
+  };
+  equal("queued conversion has a temporary work file", workFiles().length, 1);
+  const failures = jobs.map((job) => job.promise.catch((error) => error));
+  for (let i = 0; i < 20 && thumbnailStarted < 2; i++) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  equal("two keep-bytes jobs reached thumbnail", thumbnailStarted, 2);
+  const oldEpoch = library.epoch();
+  library.clearAll();
+  releaseThumbs();
+  const errors = await Promise.all(failures);
+  await new Promise((resolve) => setImmediate(resolve));
+  ok(
+    "all jobs cancelled",
+    errors.every((error) => error?.code === "CANCELLED"),
+  );
+  equal("queued job never reached thumbnail", thumbnailStarted, 2);
+  equal("queued conversion never ran", conversionStarted, 0);
+  equal("queued work file was removed", workFiles().length, 0);
+  equal("no sticker rows after worker settles", library.listStickers(who).total, 0);
+  equal("no sticker files after worker settles", existsSync(dataPath("stickers")), false);
+  equal(
+    "old epoch cannot save",
+    codeOf(() => save(who, "late-write", { epoch: oldEpoch })),
+    "CANCELLED",
+  );
+  const pack = library.createPack(who, "After unlink");
+  equal(
+    "old epoch cannot add to pack",
+    codeOf(() => library.addToPack(who, pack.id, [], { epoch: oldEpoch })),
+    "CANCELLED",
+  );
+  library.clearAll();
 }
 
 function readZip(buffer) {

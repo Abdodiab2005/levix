@@ -174,9 +174,117 @@ const opts = normalizeOptions({
 });
 const graph = media.filterGraph(64, 32, opts);
 const p = placement(64, 32, opts);
-ok("placement scale", graph.graph.includes(`scale=${p.width}:${p.height}`));
-ok("placement offset", graph.graph.includes(`overlay=${p.x}:${p.y}`));
+equal(
+  "shared placement remains the geometry source",
+  JSON.stringify(graph.placement),
+  JSON.stringify(p),
+);
+ok(
+  "visible source is cropped before scaling",
+  graph.graph.includes(`crop=${graph.visible.width}:${graph.visible.height}`),
+);
+ok(
+  "visible scale is bounded",
+  graph.visible.scaledWidth <= 2048 && graph.visible.scaledHeight <= 2048,
+);
+ok(
+  "visible offset",
+  graph.graph.includes(`overlay=${graph.visible.overlayX}:${graph.visible.overlayY}`),
+);
 ok("background color", graph.graph.includes("0xabcdef"));
+for (const height of [1, 8]) {
+  const skinny = make(`skinny-${height}.png`, [
+    "-f",
+    "lavfi",
+    "-i",
+    `color=c=red:s=4096x${height}:d=1,format=rgb24`,
+    "-frames:v",
+    "1",
+  ]);
+  const options = normalizeOptions({ fit: "cover", zoom: 4 });
+  const bounded = media.filterGraph(4096, height, options);
+  const scale = /scale=(\d+):(\d+):flags=lanczos/.exec(bounded.graph);
+  ok(
+    `skinny ${height} small scale`,
+    !!scale && Number(scale[1]) <= 2048 && Number(scale[2]) <= 2048,
+  );
+  ok(
+    `skinny ${height} frame cap`,
+    bounded.visible.scaledWidth <= 2048 && bounded.visible.scaledHeight <= 2048,
+  );
+  const result = await media.createSticker({
+    inputPath: skinny.file,
+    sniffed: media.sniff(skinny.bytes),
+    options,
+  });
+  equal(`skinny ${height} output width`, media.describeWebp(result.buffer).width, 512);
+  equal(`skinny ${height} output height`, media.describeWebp(result.buffer).height, 512);
+}
+const patterned = make("patterned.png", [
+  "-f",
+  "lavfi",
+  "-i",
+  "testsrc=s=96x64:d=1",
+  "-frames:v",
+  "1",
+]);
+async function renderGraph(graphText) {
+  return (
+    await runFfmpeg(
+      [
+        "-f",
+        "png_pipe",
+        "-protocol_whitelist",
+        "file,pipe",
+        "-i",
+        patterned.file,
+        "-filter_complex",
+        graphText,
+        "-map",
+        "[out]",
+        "-frames:v",
+        "1",
+        "-pix_fmt",
+        "rgba",
+        "-f",
+        "rawvideo",
+        "pipe:1",
+      ],
+      { maxOutputBytes: 2 * 1024 * 1024 },
+    )
+  ).buffer;
+}
+for (const [label, rawOptions] of [
+  ["contain", { fit: "contain" }],
+  ["cover", { fit: "cover" }],
+  ["pan", { fit: "cover", zoom: 2, panX: 0.5, panY: -0.5 }],
+  ["rotate", { fit: "cover", zoom: 2, panX: -0.5, rotate: 90 }],
+]) {
+  const options = normalizeOptions(rawOptions);
+  const placed = placement(96, 64, options);
+  const rotation =
+    options.rotate === 90
+      ? ",transpose=clock"
+      : options.rotate === 270
+        ? ",transpose=cclock"
+        : options.rotate === 180
+          ? ",hflip,vflip"
+          : "";
+  const oldGraph = `[0:v]format=rgba${rotation},scale=${placed.width}:${placed.height}:flags=lanczos[scaled];color=c=black@0.0:s=512x512:r=15,format=rgba[bg];[bg][scaled]overlay=${placed.x}:${placed.y}:shortest=1:format=auto[base];[base]format=rgba[out]`;
+  const [before, after] = await Promise.all([
+    renderGraph(oldGraph),
+    renderGraph(media.filterGraph(96, 64, options).graph),
+  ]);
+  equal(`${label} rendered pixel count`, after.length, before.length);
+  let biggestDifference = 0;
+  for (let i = 0; i < after.length; i++)
+    biggestDifference = Math.max(biggestDifference, Math.abs(after[i] - before[i]));
+  ok(
+    `${label} pixels match old graph`,
+    biggestDifference <= 3,
+    `max channel difference ${biggestDifference}`,
+  );
+}
 const badOverlay = Buffer.from(png.bytes);
 equal(
   "overlay validation",
@@ -375,6 +483,24 @@ const gifOut = await media.toGif(gifResult.buffer);
 equal("GIF export", media.sniff(gifOut)?.kind, "gif");
 const mp4Out = await media.toMp4(gifResult.buffer);
 equal("MP4 export", media.sniff(mp4Out)?.kind, "video");
+const largeAnimated = make("large-animated.webp", [
+  "-f",
+  "lavfi",
+  "-i",
+  "testsrc=s=600x400:r=2:d=1",
+  "-t",
+  "1",
+  "-c:v",
+  "libwebp_anim",
+]);
+const largeMp4 = await media.toMp4(largeAnimated.bytes);
+equal("kept wide sticker MP4 width and height", rgba(largeMp4, "mov").length, 600 * 400 * 4);
+const largeProbe = spawnSync(
+  bin,
+  ["-hide_banner", "-i", "pipe:0", "-frames:v", "0", "-f", "null", "-"],
+  { input: largeMp4 },
+);
+ok("kept wide sticker MP4 reports 600x400", /Video:[^\n]*600x400/.test(String(largeProbe.stderr)));
 const first = await media.toPng(gifResult.buffer);
 equal("animated PNG flag", first.animated, true);
 equal(
@@ -502,6 +628,32 @@ const frameLimitFixture = riff([
   chunk("ANIM", anim),
   ...Array.from({ length: L.ANIMATED_MAX_FRAMES + 1 }, () => frame(redFrame.bytes, 0, 0, 4, 4, 0)),
 ]);
+const excessChunks = riff([
+  lossyWebp.bytes.subarray(12),
+  ...Array(200001).fill(chunk("JUNK", Buffer.alloc(0))),
+]);
+equal(
+  "200002 top-level chunks rejected",
+  throws("chunk cap", () => webp.parse(excessChunks))?.code,
+  "CORRUPT",
+);
+const excessFrameParts = riff([
+  chunk("VP8X", header),
+  chunk("ANIM", anim),
+  chunk(
+    "ANMF",
+    Buffer.concat([
+      Buffer.alloc(16),
+      ...Array(8).fill(chunk("JUNK", Buffer.alloc(0))),
+      webp.parse(redFrame.bytes).chunks[0].raw,
+    ]),
+  ),
+]);
+equal(
+  "ANMF sub-chunk cap",
+  throws("frame part cap", () => webp.parse(excessFrameParts))?.code,
+  "CORRUPT",
+);
 const wideHeader = Buffer.from(header);
 wideHeader.writeUIntLE(L.EXISTING_MAX_SIDE, 4, 3);
 const wideFixture = riff([
@@ -544,12 +696,13 @@ ok("GIF keeps transparent pixel", gifPixels[3] < 128);
 ok("GIF keeps blue pixel", gifPixels[(0 * 4 + 2) * 4 + 2] > 180 && gifPixels[(0 * 4 + 2) * 4] < 80);
 const whiteMp4 = await media.toMp4(transparentFixture);
 const mp4Pixels = rgba(whiteMp4, "mov");
-const whiteCorner = (511 * 512 + 511) * 4;
+const whiteCorner = mp4Pixels.length - 4;
 ok(
   "MP4 flattens transparency onto white",
   mp4Pixels[whiteCorner] > 235 &&
     mp4Pixels[whiteCorner + 1] > 235 &&
     mp4Pixels[whiteCorner + 2] > 235,
+  `${mp4Pixels.length} bytes; corner ${[...mp4Pixels.subarray(whiteCorner, whiteCorner + 4)]}`,
 );
 section("quality warning thresholds");
 for (const [label, source, steps, expected] of [
@@ -568,6 +721,60 @@ for (const [label, source, steps, expected] of [
   equal(label, result.qualityReduced, expected);
 }
 section("queue");
+const cancelledQueue = createQueue({ concurrency: 1, maxQueued: 2, timeoutMs: 1000 });
+let finishCancelled;
+let queuedRan = false;
+let runningAborted = false;
+const runningJob = cancelledQueue.submit(
+  ({ signal }) =>
+    new Promise((resolve) => {
+      finishCancelled = resolve;
+      signal.addEventListener(
+        "abort",
+        () => {
+          runningAborted = true;
+          resolve("late");
+        },
+        { once: true },
+      );
+    }),
+  { kind: "create" },
+);
+const queuedJob = cancelledQueue.submit(async () => {
+  queuedRan = true;
+  return "wrong";
+});
+const runningFailure = runningJob.promise.catch((error) => error);
+const queuedFailure = queuedJob.promise.catch((error) => error);
+await new Promise((resolve) => setImmediate(resolve));
+cancelledQueue.cancelAll();
+equal("running job cancelled", (await runningFailure).code, "CANCELLED");
+equal("queued job cancelled", (await queuedFailure).code, "CANCELLED");
+equal("running record failed", cancelledQueue.get(runningJob.id)?.error?.code, "CANCELLED");
+equal("queued record failed", cancelledQueue.get(queuedJob.id)?.error?.code, "CANCELLED");
+equal("running signal aborted", runningAborted, true);
+equal("queued work did not run", queuedRan, false);
+finishCancelled?.();
+const exportQueue = createQueue();
+const exportedBytes = Buffer.alloc(1024 * 1024);
+const exportJob = exportQueue.submit(async () => ({ buffer: exportedBytes }), { kind: "export" });
+equal("export caller receives bytes", (await exportJob.promise).buffer, exportedBytes);
+equal("export record has no result bytes", exportQueue.get(exportJob.id)?.result, null);
+const createResultJob = exportQueue.submit(
+  async () => ({
+    sticker: { id: "one" },
+    created: true,
+    qualityReduced: false,
+    buffer: exportedBytes,
+  }),
+  { kind: "create" },
+);
+await createResultJob.promise;
+equal(
+  "create record retains only sticker DTO",
+  JSON.stringify(exportQueue.get(createResultJob.id)?.result),
+  JSON.stringify({ sticker: { id: "one" }, created: true, qualityReduced: false }),
+);
 const q = createQueue({ concurrency: 1, maxQueued: 1, timeoutMs: 20, retentionMs: 20 });
 let release;
 const one = q.submit(
