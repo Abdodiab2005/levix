@@ -1,8 +1,11 @@
 // The glue between an upload (or a WhatsApp buffer) and the library.
 //
-// media.cjs and jobs.cjs belong to the media agent and are required only when
-// a call needs them, so this module loads in a worktree where they do not
-// exist yet. Tests pass fakes that honour the same signatures.
+// media.cjs and jobs.cjs are required only when a call needs them. Tests pass
+// fakes that honour the same signatures. Every conversion goes through the job
+// queue, so a burst of export requests cannot start unbounded FFmpeg processes.
+// An upload is converted from its own file (the panel retries that same id).
+// Only a buffer — the bot — is copied to a work file, and only when the bytes
+// cannot be kept as they are.
 
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -14,20 +17,30 @@ const logger = require("../utils/logger.cjs");
 const { StickerError } = require("./errors.cjs");
 const { EXISTING_MAX_SIDE, STICKER_MAX_BYTES, VIDEO_MAX_SOURCE_SECONDS } = require("./limits.cjs");
 const { isDefaultOptions, normalizeOptions } = require("./options.cjs");
+const { zipStore } = require("./zip.cjs");
 
 const SOURCES = new Set(["BOT_COMMAND", "PANEL_UPLOAD", "WHATSAPP_STICKER", "MEDIA_HUB"]);
 const ID_RE = /^[0-9a-f]{16}$/;
 const JOB_MAP_MAX = 1000;
+const SNIFF_BYTES = 512;
 
 function extOf(sniffed) {
   const ext = String(sniffed?.ext || "bin").replace(/[^a-z0-9]/gi, "");
   return ext || "bin";
 }
 
-function canKeep(buffer, sniffed, options, overlay, media) {
+function fitsKeep(sniffed, options, overlay, byteLength) {
   // An overlay is drawn over the whole sticker, so the bytes cannot be kept.
-  if (sniffed?.kind !== "webp" || overlay?.length) return false;
-  if (!isDefaultOptions(options) || buffer.length > STICKER_MAX_BYTES) return false;
+  return (
+    sniffed?.kind === "webp" &&
+    !overlay?.length &&
+    isDefaultOptions(options) &&
+    byteLength > 0 &&
+    byteLength <= STICKER_MAX_BYTES
+  );
+}
+
+function acceptableWebp(buffer, media) {
   try {
     const info = media.describeWebp(buffer);
     return (
@@ -38,6 +51,42 @@ function canKeep(buffer, sniffed, options, overlay, media) {
     );
   } catch {
     return false;
+  }
+}
+
+function sniffHeader(file, media) {
+  const fd = fs.openSync(file, "r");
+  try {
+    const buf = Buffer.alloc(SNIFF_BYTES);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+    if (n <= 0) return null;
+    return media.sniff(buf.subarray(0, n));
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function writeWorkFile(buffer, sniffed) {
+  const dir = ensureDataDir("tmp", "stickers");
+  const temp = path.join(dir, `work-${crypto.randomBytes(8).toString("hex")}.${extOf(sniffed)}`);
+  try {
+    fs.writeFileSync(temp, buffer);
+  } catch (error) {
+    fs.rmSync(temp, { force: true });
+    if (error?.code === "EACCES" || error?.code === "ENOSPC" || error?.code === "EROFS") {
+      throw new StickerError("STORAGE_UNAVAILABLE", {}, { cause: error });
+    }
+    throw error;
+  }
+  return temp;
+}
+
+function dropWorkFile(file) {
+  if (!file) return;
+  try {
+    fs.rmSync(file, { force: true });
+  } catch {
+    // The job already failed. A leftover work file is swept with the temp dir.
   }
 }
 
@@ -81,36 +130,25 @@ function createStudio({ media, jobs, library, uploads } = {}) {
 
   function runCreate({
     owner,
-    buffer,
+    inputPath,
+    sniffed,
+    keepBuffer,
     options,
     overlayPng,
     source,
     packId,
     name,
     maxSourceSeconds,
+    removeInput,
   }) {
     const med = useMedia();
     const lib = useLibrary();
-    if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new StickerError("NO_MEDIA");
-    const sniffed = med.sniff(buffer);
     if (!sniffed) throw new StickerError("UNSUPPORTED_TYPE");
+    if (!keepBuffer && !inputPath) throw new StickerError("NO_MEDIA");
     const opts = normalizeOptions(options);
     const src = source || "PANEL_UPLOAD";
     if (!SOURCES.has(src)) throw new StickerError("INVALID_OPTIONS", { field: "source" });
     assertPack(owner, packId);
-
-    const keep = canKeep(buffer, sniffed, opts, overlayPng, med);
-    const dir = ensureDataDir("tmp", "stickers");
-    const temp = path.join(dir, `work-${crypto.randomBytes(8).toString("hex")}.${extOf(sniffed)}`);
-    try {
-      fs.writeFileSync(temp, buffer);
-    } catch (error) {
-      fs.rmSync(temp, { force: true });
-      if (error?.code === "EACCES" || error?.code === "ENOSPC" || error?.code === "EROFS") {
-        throw new StickerError("STORAGE_UNAVAILABLE", {}, { cause: error });
-      }
-      throw error;
-    }
 
     let submitted;
     try {
@@ -118,11 +156,11 @@ function createStudio({ media, jobs, library, uploads } = {}) {
         async ({ signal, progress }) => {
           try {
             let produced;
-            if (keep) {
+            if (keepBuffer) {
               progress("encoding", 1);
-              const described = med.describeWebp(buffer);
+              const described = med.describeWebp(keepBuffer);
               produced = {
-                buffer,
+                buffer: keepBuffer,
                 width: described.width,
                 height: described.height,
                 animated: !!described.animated,
@@ -132,7 +170,7 @@ function createStudio({ media, jobs, library, uploads } = {}) {
               };
             } else {
               produced = await med.createSticker({
-                inputPath: temp,
+                inputPath,
                 sniffed,
                 options: opts,
                 overlayPng,
@@ -161,13 +199,13 @@ function createStudio({ media, jobs, library, uploads } = {}) {
               qualityReduced: !!produced.qualityReduced,
             };
           } finally {
-            fs.rmSync(temp, { force: true });
+            if (removeInput) dropWorkFile(inputPath);
           }
         },
         { kind: "create" },
       );
     } catch (error) {
-      fs.rmSync(temp, { force: true });
+      if (removeInput) dropWorkFile(inputPath);
       throw error;
     }
 
@@ -181,63 +219,150 @@ function createStudio({ media, jobs, library, uploads } = {}) {
   }
 
   function createFromBuffer(input) {
-    return runCreate(input);
+    const buffer = input?.buffer;
+    if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new StickerError("NO_MEDIA");
+    const med = useMedia();
+    const sniffed = med.sniff(buffer);
+    if (!sniffed) throw new StickerError("UNSUPPORTED_TYPE");
+    const opts = normalizeOptions(input.options);
+    const keep =
+      fitsKeep(sniffed, opts, input.overlayPng, buffer.length) && acceptableWebp(buffer, med);
+    // The source buffer stays in the queued closure only when those bytes are
+    // the sticker. Anything else is read back from the work file.
+    const keepBuffer = keep ? buffer : null;
+    const inputPath = keepBuffer ? null : writeWorkFile(buffer, sniffed);
+    return runCreate({
+      owner: input.owner,
+      inputPath,
+      sniffed,
+      keepBuffer,
+      options: opts,
+      overlayPng: input.overlayPng,
+      source: input.source,
+      packId: input.packId,
+      name: input.name,
+      maxSourceSeconds: input.maxSourceSeconds,
+      removeInput: inputPath != null,
+    });
   }
 
   function createFromUpload({ owner, uploadId, options, overlayPng, source, packId, name }) {
     const record = useUploads().get(owner, uploadId);
     if (!record) throw new StickerError("NOT_FOUND");
-    let buffer;
+    const med = useMedia();
+    let sniffed;
     try {
-      buffer = fs.readFileSync(record.path);
+      sniffed = sniffHeader(record.path, med);
     } catch (error) {
       logger.error({ err: error }, "[Stickers] upload file disappeared");
       throw new StickerError("NOT_FOUND");
     }
+    if (!sniffed) throw new StickerError("UNSUPPORTED_TYPE");
+    const opts = normalizeOptions(options);
+    let keepBuffer = null;
+    // Only a small WebP is worth reading. A video or a large image stays on
+    // disk and is converted from that path; the job must not delete it,
+    // because "Try again" submits the same upload id.
+    if (fitsKeep(sniffed, opts, overlayPng, record.size)) {
+      let bytes;
+      try {
+        bytes = fs.readFileSync(record.path);
+      } catch (error) {
+        logger.error({ err: error }, "[Stickers] upload file disappeared");
+        throw new StickerError("NOT_FOUND");
+      }
+      if (bytes.length <= STICKER_MAX_BYTES && acceptableWebp(bytes, med)) keepBuffer = bytes;
+    }
     return runCreate({
       owner,
-      buffer,
-      options,
+      inputPath: record.path,
+      sniffed,
+      keepBuffer,
+      options: opts,
       overlayPng,
       source: source || "PANEL_UPLOAD",
       packId,
       name: name == null ? record.filename : name,
       maxSourceSeconds: VIDEO_MAX_SOURCE_SECONDS,
+      removeInput: false,
     });
+  }
+
+  // Export jobs are awaited by the request that queued them, so they are not
+  // remembered. Remembering them would push create jobs out of the owner map.
+  function queueExport(run) {
+    const submitted = useJobs().submit(run, { kind: "export" });
+    submitted.promise.catch((error) => {
+      logger.warn({ err: error, jobId: submitted.id }, "[Stickers] export job failed");
+    });
+    return submitted.promise;
   }
 
   async function exportImage(owner, stickerId, format) {
     const lib = useLibrary();
     const sticker = lib.getSticker(owner, stickerId);
-    const webp = lib.readStickerFile(owner, stickerId);
     if (format === "webp") {
       return {
-        buffer: webp,
+        buffer: lib.readStickerFile(owner, stickerId),
         mime: "image/webp",
         fileName: lib.fileNameFor(sticker, "webp"),
         animated: sticker.animated,
       };
     }
-    if (format === "png") {
-      const png = await useMedia().toPng(webp, {});
-      return {
-        buffer: png.buffer,
-        mime: "image/png",
-        fileName: lib.fileNameFor(sticker, "png"),
-        animated: !!png.animated,
-      };
+    if (format !== "png" && format !== "gif") {
+      throw new StickerError("INVALID_OPTIONS", { field: "format" });
     }
-    if (format === "gif") {
-      if (!sticker.animated) throw new StickerError("INVALID_OPTIONS", { field: "format" });
-      const gif = await useMedia().toGif(webp, {});
+    // A static gif is rejected before it takes a queue slot.
+    if (format === "gif" && !sticker.animated) {
+      throw new StickerError("INVALID_OPTIONS", { field: "format" });
+    }
+    return queueExport(async ({ signal }) => {
+      const webp = lib.readStickerFile(owner, stickerId);
+      if (format === "png") {
+        const png = await useMedia().toPng(webp, { signal });
+        return {
+          buffer: png.buffer,
+          mime: "image/png",
+          fileName: lib.fileNameFor(sticker, "png"),
+          animated: !!png.animated,
+        };
+      }
+      const gif = await useMedia().toGif(webp, { signal });
       return {
         buffer: gif,
         mime: "image/gif",
         fileName: lib.fileNameFor(sticker, "gif"),
         animated: true,
       };
+    });
+  }
+
+  async function exportZip(owner, ids, format) {
+    if (format !== "webp" && format !== "png") {
+      throw new StickerError("INVALID_OPTIONS", { field: "format" });
     }
-    throw new StickerError("INVALID_OPTIONS", { field: "format" });
+    const lib = useLibrary();
+    // Resolve every id before taking a slot, so a missing sticker is a 404
+    // and not a queued conversion.
+    const stickers = ids.map((id) => lib.getSticker(owner, id));
+    if (format === "webp") {
+      return zipStore(
+        stickers.map((sticker) => ({
+          name: lib.fileNameFor(sticker, "webp"),
+          data: lib.readStickerFile(owner, sticker.id),
+        })),
+      );
+    }
+    return queueExport(async ({ signal, progress }) => {
+      const entries = [];
+      for (let i = 0; i < stickers.length; i++) {
+        const sticker = stickers[i];
+        const png = await useMedia().toPng(lib.readStickerFile(owner, sticker.id), { signal });
+        entries.push({ name: lib.fileNameFor(sticker, "png"), data: png.buffer });
+        progress("encoding", (i + 1) / stickers.length);
+      }
+      return zipStore(entries);
+    });
   }
 
   function firstPackName(owner, sticker) {
@@ -281,6 +406,7 @@ function createStudio({ media, jobs, library, uploads } = {}) {
     createFromBuffer,
     createFromUpload,
     exportImage,
+    exportZip,
     sendStickers,
     getJob,
   };

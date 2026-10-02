@@ -1,10 +1,11 @@
 // Sticker Studio HTTP API, against the real panel session and the real library.
-// media.cjs and jobs.cjs are the other agent's files, so this process injects
-// fakes that honour the contract. The child fixture used by the panel tests
-// cannot do that, which is why the server is started in-process here.
+// This process injects fake media and jobs so the HTTP contract can be checked
+// without FFmpeg. tests/sticker-e2e.test.mjs drives the real modules. The
+// child fixture used by the panel tests cannot inject fakes, which is why the
+// server is started in-process here.
 
 import { createHash } from "node:crypto";
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import {
   equal,
   finish,
@@ -22,9 +23,11 @@ const { app, server, io, dashboardJson, requireLoginApi, noStore, installFinalHa
   require("./app.cjs");
 const stickerApi = await import("../src/routes/stickers.api.esm.js");
 const { StickerError } = require("./src/stickers/errors.cjs");
-const { UPLOAD_MAX_BYTES } = require("./src/stickers/limits.cjs");
+const { MAX_INPUT_SIDE, UPLOAD_MAX_BYTES } = require("./src/stickers/limits.cjs");
 const studioFactory = require("./src/stickers/studio.cjs");
 const library = require("./src/stickers/library.cjs");
+const uploads = require("./src/stickers/uploads.cjs");
+const owner = require("./src/stickers/owner.cjs");
 const settings = require("./src/config/settings.cjs");
 const { dataPath } = require("./src/config/paths.cjs");
 
@@ -107,6 +110,7 @@ function createFakeMedia() {
         overlay: !!input.overlayPng,
         zoom: input.options?.zoom,
         kind: input.sniffed?.kind,
+        inputPath: input.inputPath,
       });
       input.onProgress?.("encoding", 1);
       if (media.failCreate) throw new StickerError("CONVERSION_FAILED");
@@ -150,8 +154,10 @@ function createFakeJobs() {
   let seq = 0;
   return {
     busy: false,
-    submit(run, { kind }) {
+    submits: [],
+    submit(run, { kind } = {}) {
       if (this.busy) throw new StickerError("BUSY");
+      this.submits.push({ kind });
       const id = `job${++seq}`;
       const job = {
         id,
@@ -312,7 +318,7 @@ try {
   equal("upload cap is the shared limit", body.limits.uploadBytes, UPLOAD_MAX_BYTES);
   equal("source video cap is 60s", body.limits.videoSeconds, 60);
   equal("sticker cap is 10s", body.limits.stickerSeconds, 10);
-  equal("max side is the 512 canvas", body.limits.maxSide, 512);
+  equal("max side is the largest source the panel may upload", body.limits.maxSide, MAX_INPUT_SIDE);
   equal("library cap starts at the setting default", body.limits.libraryMax, 1000);
   equal("pack cap is 100", body.limits.packsMax, 100);
 
@@ -357,6 +363,11 @@ try {
   equal("the sticker is named", jpeg.done.body.sticker.name, "Jpeg One");
   equal("the source is the panel", jpeg.done.body.sticker.source, "PANEL_UPLOAD");
   ok("a jpeg is re-encoded", media.calls.length === beforeEncode + 1);
+  const jpegUpload = uploads.get(owner.forPanel(), jpeg.record.uploadId);
+  equal("a jpeg is converted from its upload file", media.calls.at(-1).inputPath, jpegUpload.path);
+  ok("the upload path is not a work file", !String(jpegUpload.path).includes("work-"));
+  ok("the upload file survives a successful job", existsSync(jpegUpload.path));
+  equal("an upload conversion leaves no work file", workFiles().length, 0);
   const jpegId = jpeg.done.body.sticker.id;
 
   const keptBytes = makeWebp(64, 48, "percent-cat");
@@ -441,6 +452,21 @@ try {
   equal("a failed job has no sticker", failed.done.body.sticker, null);
   equal("a failed job has created null", failed.done.body.created, null);
   equal("a failed job has qualityReduced null", failed.done.body.qualityReduced, null);
+  const failedUpload = uploads.get(owner.forPanel(), failed.record.uploadId);
+  ok("a failed job leaves the upload in place", failedUpload && existsSync(failedUpload.path));
+  equal("a failed upload conversion leaves no work file", workFiles().length, 0);
+
+  const retryRes = await http.json("/dashboard/api/stickers/jobs", {
+    uploadId: failed.record.uploadId,
+    name: "retried",
+  });
+  const retryPosted = await bodyOf(retryRes);
+  equal("the same upload can be submitted again", retryRes.status, 202);
+  const retried = await waitJob(retryPosted.jobId);
+  equal("the retried job finishes", retried.body.state, "done");
+  equal("the retried upload creates a sticker", retried.body.created, true);
+  ok("the upload file survives the retry", existsSync(failedUpload.path));
+  equal("the retried conversion leaves no work file", workFiles().length, 0);
 
   jobs.busy = true;
   const busyUpload = await upload(makeJpeg());
@@ -451,6 +477,32 @@ try {
   equal("a full queue is 429", res.status, 429);
   equal("busy code", body.code, "BUSY");
   equal("a refused job leaves no work file", workFiles().length, 0);
+
+  const bot = studio.createFromBuffer({
+    owner: owner.forPanel(),
+    buffer: makeJpeg(),
+    source: "BOT_COMMAND",
+    name: "from the bot",
+  });
+  const botResult = await bot.promise;
+  equal("a bot buffer is converted", botResult.created, true);
+  ok("a bot conversion reads a work file", String(media.calls.at(-1).inputPath).includes("work-"));
+  equal("the bot work file is removed", workFiles().length, 0);
+
+  jobs.busy = true;
+  let busyBot = null;
+  try {
+    studio.createFromBuffer({
+      owner: owner.forPanel(),
+      buffer: makeJpeg(),
+      source: "BOT_COMMAND",
+    });
+  } catch (error) {
+    busyBot = error;
+  }
+  jobs.busy = false;
+  equal("a full queue refuses a bot conversion", busyBot?.code, "BUSY");
+  equal("a refused bot conversion leaves no work file", workFiles().length, 0);
 
   const animatedBytes = makeWebp(80, 80, "motion", true);
   const animated = await createFrom(animatedBytes, { job: { name: "Motion" } });
@@ -494,11 +546,7 @@ try {
     body.items.some((item) => item.id === animatedId) && body.items.every((item) => item.animated),
   );
 
-  res = await http.json(
-    `/dashboard/api/stickers/${"ab".repeat(8)}`,
-    { name: "nope" },
-    "PATCH",
-  );
+  res = await http.json(`/dashboard/api/stickers/${"ab".repeat(8)}`, { name: "nope" }, "PATCH");
   body = await bodyOf(res);
   equal("a missing sticker is 404", res.status, 404);
   equal("missing sticker code", body.code, "NOT_FOUND");
@@ -820,6 +868,7 @@ try {
   equal("foreign job code", body.code, "NOT_FOUND");
   ok("the foreign job body has no sticker", body.sticker === undefined);
   await foreign.promise;
+  equal("a kept bot webp writes no work file", workFiles().length, 0);
 
   res = await http.call(`/dashboard/api/stickers/jobs/${kept.posted.jobId}`);
   body = await bodyOf(res);
@@ -828,6 +877,14 @@ try {
 
   section("export and send");
 
+  const beforeWebpFile = jobs.submits.length;
+  res = await http.call(`/dashboard/api/stickers/${keptId}/export?format=webp`);
+  equal("webp export status", res.status, 200);
+  equal("webp export type", res.headers.get("content-type"), "image/webp");
+  equal("a webp export does not queue a conversion", jobs.submits.length, beforeWebpFile);
+  await res.arrayBuffer();
+
+  const beforeWebpZip = jobs.submits.length;
   res = await http.json("/dashboard/api/stickers/export", {
     ids: [keptId, animatedId],
     format: "webp",
@@ -840,21 +897,58 @@ try {
     "entry names come from the stickers",
     names.some((name) => name.includes("Percent")) && names.some((name) => name.includes("Motion")),
   );
+  equal("a webp zip does not queue a conversion", jobs.submits.length, beforeWebpZip);
 
+  const beforePng = jobs.submits.length;
   res = await http.call(`/dashboard/api/stickers/${animatedId}/export?format=png`);
   equal("png export status", res.status, 200);
   equal("an animated png is marked", res.headers.get("x-levix-animated"), "1");
+  equal("a png export queues one conversion", jobs.submits.length, beforePng + 1);
+  equal("a png export is an export job", jobs.submits.at(-1).kind, "export");
   await res.arrayBuffer();
 
+  const beforeStaticGif = jobs.submits.length;
   res = await http.call(`/dashboard/api/stickers/${keptId}/export?format=gif`);
   body = await bodyOf(res);
   equal("gif of a static sticker is 400", res.status, 400);
   equal("static gif code", body.code, "INVALID_OPTIONS");
+  equal("a static gif takes no queue slot", jobs.submits.length, beforeStaticGif);
 
+  const beforeGif = jobs.submits.length;
   res = await http.call(`/dashboard/api/stickers/${animatedId}/export?format=gif`);
   equal("gif of an animated sticker is 200", res.status, 200);
   equal("gif content type", res.headers.get("content-type"), "image/gif");
+  equal("a gif export queues one conversion", jobs.submits.length, beforeGif + 1);
+  equal("a gif export is an export job", jobs.submits.at(-1).kind, "export");
   await res.arrayBuffer();
+
+  jobs.busy = true;
+  const beforeBusyExport = jobs.submits.length;
+  res = await http.call(`/dashboard/api/stickers/${animatedId}/export?format=png`);
+  body = await bodyOf(res);
+  equal("a busy png export is 429", res.status, 429);
+  equal("busy png export code", body.code, "BUSY");
+  res = await http.json("/dashboard/api/stickers/export", {
+    ids: [keptId, animatedId],
+    format: "png",
+  });
+  body = await bodyOf(res);
+  equal("a busy png zip is 429", res.status, 429);
+  equal("busy png zip code", body.code, "BUSY");
+  equal("a refused export is not queued", jobs.submits.length, beforeBusyExport);
+  jobs.busy = false;
+
+  const beforePngZip = jobs.submits.length;
+  res = await http.json("/dashboard/api/stickers/export", {
+    ids: [keptId, animatedId],
+    format: "png",
+  });
+  equal("png zip status", res.status, 200);
+  ok("png zip content type", (res.headers.get("content-type") || "").includes("application/zip"));
+  const pngNames = readZip(Buffer.from(await res.arrayBuffer()));
+  equal("the png zip has both stickers", pngNames.length, 2);
+  equal("a png zip is one queued conversion", jobs.submits.length, beforePngZip + 1);
+  equal("a png zip is an export job", jobs.submits.at(-1).kind, "export");
 
   const tooMany = Array.from({ length: 201 }, (_, i) => i.toString(16).padStart(16, "0"));
   res = await http.json("/dashboard/api/stickers/export", { ids: tooMany, format: "webp" });
