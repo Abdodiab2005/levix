@@ -1,6 +1,7 @@
 import { api } from "../api/client";
 import type { Sticker } from "../types";
-import { saveBlob, shareBlob, stickerFileName, type Delivered } from "./stickerFiles";
+import { canHostExport } from "./hostBridge";
+import { type Delivered, deliverHost, saveBlob, shareBlob, stickerFileName } from "./stickerFiles";
 
 const MIME = {
   webp: "image/webp",
@@ -17,6 +18,15 @@ export async function saveOne(
   sticker: Sticker,
   format: "webp" | "png" | "gif",
 ): Promise<Delivered> {
+  if (canHostExport())
+    return deliverHost(
+      "save",
+      `/dashboard/api/stickers/${encodeURIComponent(sticker.id)}/export?format=${format}`,
+      "GET",
+      "",
+      stickerFileName(sticker.name, format),
+      MIME[format],
+    );
   const file = await api.exportSticker(sticker.id, format);
   const saved = named(
     file.fileName,
@@ -24,13 +34,22 @@ export async function saveOne(
     file.blob,
     MIME[format],
   );
-  return saveBlob(saved.blob, saved.name, saved.mime);
+  return saveBlob(saved.blob, saved.name);
 }
 
 export async function shareOne(
   sticker: Sticker,
   format: "webp" | "png" | "gif",
 ): Promise<Delivered> {
+  if (canHostExport())
+    return deliverHost(
+      "share",
+      `/dashboard/api/stickers/${encodeURIComponent(sticker.id)}/export?format=${format}`,
+      "GET",
+      "",
+      stickerFileName(sticker.name, format),
+      MIME[format],
+    );
   const file = await api.exportSticker(sticker.id, format);
   const saved = named(
     file.fileName,
@@ -42,12 +61,30 @@ export async function shareOne(
 }
 
 export async function saveZip(ids: string[], format: "webp" | "png"): Promise<Delivered> {
+  if (canHostExport())
+    return deliverHost(
+      "save",
+      "/dashboard/api/stickers/export",
+      "POST",
+      JSON.stringify({ ids, format }),
+      `stickers-${format}.zip`,
+      MIME.zip,
+    );
   const file = await api.exportStickers(ids, format);
   const saved = named(file.fileName, `stickers-${format}.zip`, file.blob, MIME.zip);
-  return saveBlob(saved.blob, saved.name, saved.mime);
+  return saveBlob(saved.blob, saved.name);
 }
 
 export async function shareZip(ids: string[], format: "webp" | "png"): Promise<Delivered> {
+  if (canHostExport())
+    return deliverHost(
+      "share",
+      "/dashboard/api/stickers/export",
+      "POST",
+      JSON.stringify({ ids, format }),
+      `stickers-${format}.zip`,
+      MIME.zip,
+    );
   const file = await api.exportStickers(ids, format);
   const saved = named(file.fileName, `stickers-${format}.zip`, file.blob, MIME.zip);
   return shareBlob(saved.blob, saved.name, saved.mime);

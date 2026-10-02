@@ -1,5 +1,6 @@
 // Numeric caps copied from src/stickers/limits.cjs. The server remains the authority.
 
+export const UPLOAD_MAX_BYTES = 16 * 1024 * 1024;
 export const EXPORT_MAX_IDS = 200;
 export const SEND_MAX_IDS = 10;
 export const PACK_NAME_MAX = 40;

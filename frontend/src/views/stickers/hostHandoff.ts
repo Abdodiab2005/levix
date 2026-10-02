@@ -1,11 +1,14 @@
 import { ApiError, api } from "../../api/client";
 import type { StickerJobSource } from "../../types";
-import { base64ToBlob, takePendingSticker } from "../../utils/hostBridge";
+import { takePendingSticker, uploadHostSource } from "../../utils/hostBridge";
+import { UPLOAD_MAX_BYTES } from "../../utils/stickerLimits";
 
 export interface CreateSeed {
-  blob: Blob;
+  blob: Blob | Promise<Blob>;
   name: string;
   source: StickerJobSource;
+  token?: string;
+  existingId?: string;
 }
 
 export type HandoffEvent =
@@ -20,9 +23,9 @@ export function bindHandoffNotice(listener: ((event: HandoffEvent) => void) | nu
   onEvent = listener;
 }
 
-async function saveToLibrary(blob: Blob, name: string) {
+async function saveToLibrary(token: string, name: string) {
   try {
-    const upload = await api.uploadStickerSource(blob, name);
+    const upload = await uploadHostSource(token, name, UPLOAD_MAX_BYTES);
     const { jobId } = await api.createStickerJob({
       uploadId: upload.uploadId,
       source: "MEDIA_HUB",
@@ -61,13 +64,17 @@ export function claimCreateSeed(): CreateSeed | null {
   const pending = takePendingSticker();
   if (pending?.intent === "create") {
     queuedCreate = {
-      blob: base64ToBlob(pending.data, pending.mime),
+      blob: fetch(pending.url).then((response) => {
+        if (!response.ok) throw new Error("source unavailable");
+        return response.blob();
+      }),
       name: pending.name || "sticker",
       source: "MEDIA_HUB",
+      token: pending.token,
     };
   } else if (pending?.intent === "save" && !saving) {
     saving = true;
-    void saveToLibrary(base64ToBlob(pending.data, pending.mime), pending.name || "sticker");
+    void saveToLibrary(pending.token, pending.name || "sticker");
   }
   return queuedCreate;
 }

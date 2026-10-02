@@ -47,10 +47,8 @@ data class PendingSticker(
  */
 object PendingStickers {
     /**
-     * Sticker Studio's own upload ceiling, and the whole reason this number is
-     * written down here: the bytes reach JavaScript as ONE base64 string on a
-     * synchronous bridge call. 16 MB is already ~21 MB of base64 and a decoded
-     * copy in the same heap, and the server refuses anything larger anyway.
+     * Media Hub's offer rule mirrors the server upload ceiling in
+     * src/stickers/limits.cjs (UPLOAD_MAX_BYTES).
      */
     const val MAX_BYTES = 16L * 1024 * 1024
 

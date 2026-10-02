@@ -43,6 +43,14 @@ class PanelActivity : AppCompatActivity() {
     private lateinit var web: WebView
     private lateinit var sock: File
     private lateinit var bridgeJs: String
+    private lateinit var stickerHost: StickerHost
+    private val stickerSources = StickerSources()
+    private val stickerPickerIds = ArrayDeque<String>()
+
+    private val pickSticker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val id = stickerPickerIds.removeFirstOrNull()
+        if (id != null) stickerHost.picked(id, result.data?.data.takeIf { result.resultCode == Activity.RESULT_OK })
+    }
 
     private val pickPhone = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -133,6 +141,26 @@ class PanelActivity : AppCompatActivity() {
 
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false)
+        stickerHost = StickerHost(this, sock, stickerSources,
+            { id, result -> runOnUiThread {
+                web.evaluateJavascript(
+                    "window.__levixHostDone(${JSONObject.quote(id)}, ${result})", null)
+            } },
+            { id -> runOnUiThread {
+                stickerPickerIds.addLast(id)
+                try {
+                    pickSticker.launch(Intent(Intent.ACTION_GET_CONTENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "*/*"
+                        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
+                    })
+                } catch (error: Exception) {
+                    HostLog.event("sticker picker ${error.message}")
+                    stickerPickerIds.remove(id)
+                    stickerHost.picked(id, null)
+                }
+            } },
+            { file, mime -> runOnUiThread { shareStickerFile(file, mime) } })
         web.addJavascriptInterface(
             PanelBridge(
                 sock,
@@ -141,7 +169,7 @@ class PanelActivity : AppCompatActivity() {
                 applicationContext,
                 { runOnUiThread { HostLogShare.share(this) } },
                 { runOnUiThread { finish() } },
-                { file, mime -> runOnUiThread { shareStickerFile(file, mime) } },
+                stickerHost,
             ),
             "LevixHost",
         )
@@ -181,6 +209,16 @@ class PanelActivity : AppCompatActivity() {
             ): WebResourceResponse? {
                 val url = request.url?.toString() ?: return null
                 if (!isLoopback(url)) return blockedResponse()
+                if (request.url.path?.startsWith("/__levix-host/source/") == true) {
+                    val token = request.url.path!!.removePrefix("/__levix-host/source/")
+                    val source = stickerSources.get(token)
+                    if (request.method != "GET" || source == null) return sourceNotFound()
+                    return try {
+                        val input = contentResolver.openInputStream(Uri.parse(source.uri)) ?: return sourceNotFound()
+                        WebResourceResponse(source.mime.substringBefore(';'), null, 200, "OK",
+                            mapOf("Content-Type" to source.mime, "Cache-Control" to "no-store"), input)
+                    } catch (_: Exception) { sourceNotFound() }
+                }
                 return try {
                     PanelHttp.intercept(sock, request, bridgeJs)
                 } catch (error: Throwable) {
@@ -322,8 +360,11 @@ class PanelActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        fileChooserCallback?.onReceiveValue(null)
+        stickerHost.destroy()
+        stickerPickerIds.clear()
+        val chooser = fileChooserCallback
         fileChooserCallback = null
+        chooser?.onReceiveValue(null)
         web.destroy()
         super.onDestroy()
     }
@@ -386,6 +427,12 @@ class PanelActivity : AppCompatActivity() {
             "Forbidden",
             mapOf("Cache-Control" to "no-store"),
             java.io.ByteArrayInputStream("Blocked by Levix".toByteArray()),
+        )
+
+        private fun sourceNotFound(): WebResourceResponse = WebResourceResponse(
+            "text/plain", "utf-8", 404, "Not Found",
+            mapOf("Cache-Control" to "no-store"),
+            java.io.ByteArrayInputStream(ByteArray(0)),
         )
     }
 }

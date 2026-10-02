@@ -6,13 +6,14 @@ import { useToast } from "../components/Toasts";
 import { useI18n } from "../context/I18nContext";
 import type { Capabilities, Sticker } from "../types";
 import { cn } from "../utils/cn";
+import { canPickHostSource } from "../utils/hostBridge";
 import { explainError, stickerErrorMessage } from "../utils/stickerErrors";
 import { CreateView } from "./stickers/CreateView";
 import {
   bindHandoffNotice,
+  type CreateSeed,
   claimCreateSeed,
   clearCreateSeed,
-  type CreateSeed,
 } from "./stickers/hostHandoff";
 import { LibraryView } from "./stickers/LibraryView";
 import { PacksView } from "./stickers/PacksView";
@@ -134,7 +135,12 @@ export const StickerStudioView: React.FC<StickerStudioViewProps> = ({ isConnecte
           : trimmed.toLowerCase().endsWith(".webp")
             ? trimmed
             : `${trimmed}.webp`;
-        setIncoming({ blob, name: fileName, source: "PANEL_UPLOAD" });
+        setIncoming({
+          blob,
+          name: fileName,
+          source: "PANEL_UPLOAD",
+          ...(canPickHostSource() ? { existingId: sticker.id } : {}),
+        });
         changeTab("create");
       } catch (err) {
         toast(explainError(t, err), "error");

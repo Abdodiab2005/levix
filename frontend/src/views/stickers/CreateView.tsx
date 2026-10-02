@@ -13,8 +13,9 @@ import type {
   StickerUpload,
 } from "../../types";
 import { fill } from "../../utils/fill";
-import { explainError, jobStageMessage, stickerErrorMessage } from "../../utils/stickerErrors";
+import { canPickHostSource, pickHostSource, uploadHostSource } from "../../utils/hostBridge";
 import { markUsed, saveOne, shareOne } from "../../utils/stickerDelivery";
+import { explainError, jobStageMessage, stickerErrorMessage } from "../../utils/stickerErrors";
 import type { Delivered } from "../../utils/stickerFiles";
 import { STICKER_NAME_MAX } from "../../utils/stickerLimits";
 import { uploadBlockReason } from "../../utils/uploadCheck";
@@ -22,7 +23,7 @@ import { CreateControls } from "./CreateControls";
 import { CreateStage } from "./CreateStage";
 import type { CreateSeed } from "./hostHandoff";
 import { LayerEditor } from "./LayerEditor";
-import { overlayDataUrl, type OverlayLayer } from "./overlay";
+import { type OverlayLayer, overlayDataUrl } from "./overlay";
 import { PackPicker } from "./PackPicker";
 import { RecipientPicker } from "./RecipientPicker";
 import { Button, LoadingState } from "./ui";
@@ -91,7 +92,13 @@ export const CreateView: React.FC<CreateViewProps> = ({
   const urlRef = useRef<string | null>(null);
   const consumed = useRef<CreateSeed | null>(null);
   const beginRef = useRef<
-    (blob: Blob, fileName: string, nextSource: StickerJobSource) => Promise<void>
+    (
+      blob: Blob,
+      fileName: string,
+      nextSource: StickerJobSource,
+      token?: string,
+      existingId?: string,
+    ) => Promise<void>
   >(async () => {});
 
   useEffect(() => {
@@ -111,7 +118,13 @@ export const CreateView: React.FC<CreateViewProps> = ({
     setMediaUrl(url);
   };
 
-  const beginUpload = async (blob: Blob, fileName: string, nextSource: StickerJobSource) => {
+  const beginUpload = async (
+    blob: Blob,
+    fileName: string,
+    nextSource: StickerJobSource,
+    token?: string,
+    existingId?: string,
+  ) => {
     if (!capabilities?.webp) return;
     const file = blob instanceof File ? blob : new File([blob], fileName, { type: blob.type });
     const blocked = await uploadBlockReason(file, capabilities.limits);
@@ -122,7 +135,11 @@ export const CreateView: React.FC<CreateViewProps> = ({
     setUploading(true);
     setSource(nextSource);
     try {
-      const result = await api.uploadStickerSource(file, fileName);
+      const result = token
+        ? await uploadHostSource(token, fileName, capabilities.limits.uploadBytes)
+        : existingId
+          ? await api.uploadExistingStickerSource(existingId)
+          : await api.uploadStickerSource(file, fileName);
       replaceUrl(file);
       setUpload(result);
       setOptions(DEFAULT_OPTIONS);
@@ -139,7 +156,11 @@ export const CreateView: React.FC<CreateViewProps> = ({
     if (!incoming || !capabilities || incoming === consumed.current) return;
     consumed.current = incoming;
     onConsumedIncoming();
-    void beginRef.current(incoming.blob, incoming.name, incoming.source);
+    void Promise.resolve(incoming.blob)
+      .then((blob) =>
+        beginRef.current(blob, incoming.name, incoming.source, incoming.token, incoming.existingId),
+      )
+      .catch((err) => toast(explainError(t, err), "error"));
   }, [incoming, capabilities, onConsumedIncoming]);
 
   const reset = () => {
@@ -319,6 +340,23 @@ export const CreateView: React.FC<CreateViewProps> = ({
         {!upload && (
           <label
             className={`flex flex-col items-center justify-center gap-2 min-h-64 rounded-2xl border border-dashed ${over ? "border-brand-blue bg-brand-blue/10" : "border-line bg-panel"} p-6 cursor-pointer`}
+            onClick={(event) => {
+              if (!canPickHostSource()) return;
+              event.preventDefault();
+              void pickHostSource()
+                .then(async (picked) => {
+                  if (!picked) return;
+                  const response = await fetch(picked.url);
+                  if (!response.ok) throw new Error("source unavailable");
+                  await beginUpload(
+                    await response.blob(),
+                    picked.name,
+                    "PANEL_UPLOAD",
+                    picked.token,
+                  );
+                })
+                .catch((err) => toast(explainError(t, err), "error"));
+            }}
             onDragOver={(event) => {
               event.preventDefault();
               setOver(true);
@@ -327,6 +365,7 @@ export const CreateView: React.FC<CreateViewProps> = ({
             onDrop={(event) => {
               event.preventDefault();
               setOver(false);
+              if (canPickHostSource()) return;
               const file = event.dataTransfer.files[0];
               if (file) void beginUpload(file, file.name, "PANEL_UPLOAD");
             }}
@@ -338,6 +377,7 @@ export const CreateView: React.FC<CreateViewProps> = ({
               type="file"
               accept="image/*,video/*,.webp,.gif"
               className="sr-only"
+              disabled={canPickHostSource()}
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 event.target.value = "";

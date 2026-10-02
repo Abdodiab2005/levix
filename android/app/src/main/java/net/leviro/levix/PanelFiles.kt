@@ -5,14 +5,21 @@ import java.util.Locale
 /**
  * The rules the panel bridge applies to a file before it touches the disk or
  * the share sheet: a name a filesystem will accept, a MIME type on the
- * allowlist, and a size the JS bridge can carry.
+ * allowlist, and a narrow export route.
  *
  * Deliberately pure and dependency-free so the decisions are unit-tested
  * instead of only reachable through a WebView.
  */
 object PanelFiles {
-    /** See PendingStickers.MAX_BYTES: base64 across one synchronous bridge call. */
-    const val MAX_BRIDGE_BYTES = 16L * 1024 * 1024
+    fun validCallId(id: String): Boolean = id.matches(Regex("[A-Za-z0-9_-]{1,64}"))
+
+    fun exportAllowed(path: String, method: String): Boolean {
+        if (method != "GET" && method != "POST") return false
+        if (!path.startsWith("/dashboard/api/stickers/") &&
+            !path.startsWith("/dashboard/api/sticker-packs/")) return false
+        return !path.contains("..") && !path.contains('\\') && !path.contains('#') &&
+            !path.contains("//") && !path.any { it.code < 32 }
+    }
 
     /**
      * What Sticker Studio can hand back out of the panel: an exported sticker,
@@ -49,9 +56,6 @@ object PanelFiles {
         return cleaned.ifBlank { fallback }
     }
 
-    /** A size the bridge will carry, once decoded. */
-    fun fitsBridgeCap(size: Long): Boolean = size in 1..MAX_BRIDGE_BYTES
-
     /**
      * Share copies in cacheDir/shared are dead weight the moment the share
      * sheet is done, and a host service can live for weeks. Anything older than
@@ -62,12 +66,4 @@ object PanelFiles {
     /** The FileProvider sub-folder the share sheet is pointed at. */
     const val SHARED_DIR = "shared"
 
-    /**
-     * The same cap before decoding: 4 base64 characters per 3 bytes, plus
-     * slack for padding and any line breaks the page wrapped. Checking first
-     * is what stops a stray 100 MB string from being turned into a 75 MB array
-     * first and refused afterwards.
-     */
-    fun encodedFitsCap(encoded: String): Boolean =
-        encoded.length <= MAX_BRIDGE_BYTES / 3 * 4 + 1024
 }

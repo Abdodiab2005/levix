@@ -1,4 +1,4 @@
-import { bufferToBase64, canUseHostBridge, hostSaveDownload, hostShareFile } from "./hostBridge";
+import { hostExport } from "./hostBridge";
 
 export type Delivered =
   | { ok: true; via: "host"; dir: string; name: string }
@@ -23,22 +23,14 @@ function browserDownload(blob: Blob, fileName: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
-/** Save a blob. The Android bridge needs base64; a browser gets a short-lived object URL. */
-export async function saveBlob(blob: Blob, fileName: string, mime: string): Promise<Delivered> {
-  if (canUseHostBridge()) {
-    const saved = await hostSaveDownload(fileName, mime, bufferToBase64(await blob.arrayBuffer()));
-    if (saved) return { ok: true, via: "host", dir: saved.dir, name: saved.name };
-  }
+/** Browser downloads keep their existing blob URL path. */
+export async function saveBlob(blob: Blob, fileName: string): Promise<Delivered> {
   browserDownload(blob, fileName);
   return { ok: true, via: "browser" };
 }
 
-/** Share one file, then fall back to a download. A cancelled share sheet is not a failure. */
+/** A cancelled share sheet is not a failure. */
 export async function shareBlob(blob: Blob, fileName: string, mime: string): Promise<Delivered> {
-  if (canUseHostBridge()) {
-    const ok = await hostShareFile(fileName, mime, bufferToBase64(await blob.arrayBuffer()));
-    if (ok) return { ok: true, via: "share" };
-  }
   const file = new File([blob], fileName, { type: mime });
   const canShare =
     typeof navigator.share === "function" &&
@@ -56,4 +48,22 @@ export async function shareBlob(blob: Blob, fileName: string, mime: string): Pro
   }
   browserDownload(blob, fileName);
   return { ok: true, via: "browser" };
+}
+
+export async function deliverHost(
+  action: "share" | "save",
+  path: string,
+  method: "GET" | "POST",
+  body: string,
+  fileName: string,
+  mime: string,
+): Promise<Delivered> {
+  const result = await hostExport(action, path, method, body, fileName, mime);
+  if (action === "share") return { ok: true, via: "share" };
+  return {
+    ok: true,
+    via: "host",
+    name: result.name || fileName,
+    dir: result.dir || "Downloads/Levix",
+  };
 }

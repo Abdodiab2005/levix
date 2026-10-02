@@ -963,16 +963,20 @@ lives for `UPLOAD_TTL_MS` (1 hour).
 **Media Hub.** On Android, the viewer and a single selection in Media Hub
 hand one stickerable item to the panel. `StickerHandoffs.prepare` parks the
 content URI already granted to the hub (`PendingStickers`, in memory only)
-and opens the panel at `#stickers` (`PANEL_HASH`). The bytes are read when
-the page calls `LevixHost.takePendingSticker()` (`PanelBridge`): one base64
-payload, with intent `create` for an image or video (trim, frame, re-encode)
-or `save` for an existing WebP (keep the file, add it to the library). The
-holder is cleared even when that read fails, so a failed pick is not
-converted twice. Voice notes, audio, and documents are not offered. The bytes
+and opens the panel at `#stickers` (`PANEL_HASH`). The page calls
+`LevixHost.takePendingSticker()` (`PanelBridge`) for a token and
+preview URL, with intent `create` for an image or video (trim, frame, re-encode)
+or `save` for an existing WebP (keep the file, add it to the library). Android
+streams the URI to the local Node upload route; file bytes never enter the
+JavaScript bridge. The holder is cleared on the one-shot hand-off, so a failed
+pick is not converted twice. Voice notes, audio, and documents are not offered. The bytes
 then go to `POST /dashboard/api/stickers/uploads`, and the conversion job is
 `POST /dashboard/api/stickers/jobs` with `source: "MEDIA_HUB"` (the other
 accepted source is `PANEL_UPLOAD`). The cap is 16 MB
 (`PendingStickers.MAX_BYTES`, the same ceiling as `UPLOAD_MAX_BYTES`).
+Re-editing a library sticker in the Android panel uses
+`POST /dashboard/api/stickers/:id/uploads` to create an upload on the server;
+its preview Blob is not posted through the WebView bridge.
 
 **Unlink.** `clearAccountScopedState()` in `src/core/session.js` calls
 `library.clearAll()`, which deletes every sticker, pack, and `sticker_owners`

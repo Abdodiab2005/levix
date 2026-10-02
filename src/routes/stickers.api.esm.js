@@ -6,6 +6,7 @@
 // The upload is not JSON. jsonUnlessStickerUpload skips the dashboard parser
 // for that one path so the route can cap the body while it is still a stream.
 
+import { Readable } from "node:stream";
 import { Router } from "express";
 import { createRequire } from "module";
 import normalizeJid from "../utils/normalizeJid.esm.js";
@@ -257,6 +258,22 @@ router.post(
       }
     }
     const record = await uploads.acceptStream(panelOwner(), req, { filename, media: media() });
+    res.status(201).json(record);
+  }),
+);
+
+// Re-editing a library sticker in the Android host keeps its bytes on the
+// server instead of uploading the WebView's preview Blob through the bridge.
+router.post(
+  "/stickers/:id/uploads",
+  asyncRoute(async (req, res) => {
+    const id = requireStickerId(req.params.id);
+    const sticker = library.getSticker(panelOwner(), id);
+    const bytes = library.readStickerFile(panelOwner(), id);
+    const record = await uploads.acceptStream(panelOwner(), Readable.from(bytes), {
+      filename: sticker.name,
+      media: media(),
+    });
     res.status(201).json(record);
   }),
 );
