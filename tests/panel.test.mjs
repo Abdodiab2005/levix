@@ -181,6 +181,44 @@ try {
     "Every Friday at 18:30 (Africa/Cairo)",
   );
   equal("delivery failures reach the panel", schedulePayload.schedules[0].lastError, "offline");
+  ok(
+    "Arabic when is returned for the panel",
+    String(schedulePayload.schedules[0].whenAr || "").includes("الجمعة"),
+  );
+
+  res = await http.json("/dashboard/api/schedules", {
+    targetJid: "201555555555@s.whatsapp.net",
+    message: "morning",
+    type: "recurring",
+    recurrence: { kind: "daily", time: "09:00" },
+    targetName: "Mona Hassan",
+  });
+  equal("a structured recurrence is accepted", res.status, 200);
+  const created = await res.json();
+  equal("cronString is persisted from the recurrence", created.schedule.cronString, "0 9 * * *");
+  equal("when is English", created.schedule.when, "Daily at 09:00 (Africa/Cairo)");
+  equal("whenAr is Arabic", created.schedule.whenAr, "يومياً الساعة 09:00 (Africa/Cairo)");
+  equal("picked name is stored as savedName", created.schedule.savedName, "Mona Hassan");
+  equal("phone is shown", created.schedule.phone, "+201555555555");
+  ok("no LID in the label", !String(created.schedule.targetLabel).includes("@"));
+
+  res = await http.json("/dashboard/api/schedules", {
+    targetJid: "201666666666@s.whatsapp.net",
+    message: "nope",
+    type: "recurring",
+    recurrence: { kind: "weekly", time: "09:00", weekdays: [] },
+  });
+  equal("empty weekdays are rejected before the cap", res.status, 400);
+
+  res = await http.json("/dashboard/api/schedules", {
+    targetJid: "201666666666@s.whatsapp.net",
+    message: "compat",
+    type: "recurring",
+    cronString: "0 8 * * 1",
+  });
+  equal("raw cronString remains accepted for old callers", res.status, 200);
+  const compat = await res.json();
+  equal("compat cronString is persisted", compat.schedule.cronString, "0 8 * * 1");
 
   res = await http.call("/dashboard/api/schedules/missing/retry", { method: "POST" });
   equal("retry requires a live WhatsApp connection", res.status, 409);

@@ -411,7 +411,79 @@ function rowToUser(row) {
     firstSeen: row.first_seen,
     lastSeen: row.last_seen,
     displayName: row.display_name ?? null,
+    savedName: row.saved_name ?? null,
   };
+}
+
+function isLidJid(value) {
+  return String(value || "").includes("@lid");
+}
+
+function isGroupJid(value) {
+  return String(value || "").endsWith("@g.us");
+}
+
+function asLidJid(value) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const local = raw.split(":")[0].split("@")[0];
+  if (!local) return null;
+  if (raw.includes("@lid") || (!raw.includes("@") && !/^\d{8,15}$/.test(local))) {
+    return `${local}@lid`;
+  }
+  return null;
+}
+
+function asPnJid(value) {
+  const phone = digitsOf(value);
+  if (!phone || phone.length < 8 || phone.length > 15) return null;
+  return `${phone}@s.whatsapp.net`;
+}
+
+function personName(value) {
+  const text = String(value || "").trim();
+  if (!text || text.includes("@")) return null;
+  return text.slice(0, 128);
+}
+
+function lidLocalPart(value) {
+  if (!isLidJid(value)) return null;
+  return String(value).split("@")[0].split(":")[0];
+}
+
+/**
+ * Find the existing user_metadata row for a person named by any mix of JID,
+ * LID and phone, including the lid_mapping table, so a LID and a phone JID
+ * of the same person land on one record.
+ */
+function resolveExistingUser(userData) {
+  const candidates = [];
+  const add = (value) => {
+    if (value && !candidates.includes(value)) candidates.push(value);
+  };
+  add(userData?.jid);
+  add(userData?.lid);
+  add(userData?.phone);
+  if (userData?.jid) {
+    add(getPnForLid(userData.jid));
+    add(getLidForPn(userData.jid));
+    if (!isLidJid(userData.jid)) add(asPnJid(userData.jid));
+  }
+  if (userData?.lid) {
+    add(getPnForLid(userData.lid));
+    add(asLidJid(userData.lid));
+  }
+  if (userData?.phone) {
+    const pnJid = asPnJid(userData.phone);
+    add(pnJid);
+    if (pnJid) add(getLidForPn(pnJid));
+  }
+  for (const identifier of candidates) {
+    const found = getUserMetadata(identifier);
+    if (found) return found;
+  }
+  return null;
 }
 
 function userRow(jid) {
@@ -427,37 +499,53 @@ function userRow(jid) {
  * next message. Same story for `lid` / `phone` / `displayName`: a missing
  * field keeps whatever we already knew instead of nulling it out.
  *
- * @param {object} userData - { jid, lid?, phone?, isOwner?, isAdmin?, displayName? }
+ * @param {object} userData - { jid, lid?, phone?, isOwner?, isAdmin?, displayName?, savedName? }
  */
 function saveUserMetadata(userData) {
   if (!userData?.jid) return;
   const now = Date.now();
-  const existing = userRow(userData.jid);
+  const resolved = resolveExistingUser(userData);
+  const jid =
+    resolved?.jid ||
+    (isLidJid(userData.jid) ? userData.jid : asPnJid(userData.jid) || userData.jid);
+  const existing = userRow(jid) || (resolved ? userRow(resolved.jid) : null);
+
+  let phone = userData.phone || existing?.phone_number || null;
+  const lidDigits = lidLocalPart(userData.jid);
+  if (phone && lidDigits && String(phone).replace(/\D/g, "") === lidDigits) {
+    phone = existing?.phone_number || null;
+  }
+  if (phone && isLidJid(phone)) phone = existing?.phone_number || null;
+
+  const incomingSaved = personName(userData.savedName);
+  const incomingPush = personName(userData.displayName);
 
   const row = {
-    user_jid: userData.jid,
-    user_lid: userData.lid || existing?.user_lid || null,
-    phone_number: userData.phone || existing?.phone_number || null,
+    user_jid: jid,
+    user_lid: userData.lid || existing?.user_lid || (isLidJid(userData.jid) ? userData.jid : null),
+    phone_number: phone,
     is_owner:
       userData.isOwner === undefined ? (existing?.is_owner === 1 ? 1 : 0) : bool(userData.isOwner),
     is_admin:
       userData.isAdmin === undefined ? (existing?.is_admin === 1 ? 1 : 0) : bool(userData.isAdmin),
     first_seen: existing?.first_seen ?? now,
     last_seen: now,
-    display_name: userData.displayName || existing?.display_name || null,
+    display_name: incomingPush || existing?.display_name || null,
+    saved_name: incomingSaved || existing?.saved_name || null,
   };
 
   q(
     `INSERT INTO user_metadata
-       (user_jid, user_lid, phone_number, is_owner, is_admin, first_seen, last_seen, display_name)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       (user_jid, user_lid, phone_number, is_owner, is_admin, first_seen, last_seen, display_name, saved_name)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_jid) DO UPDATE SET
        user_lid     = excluded.user_lid,
        phone_number = excluded.phone_number,
        is_owner     = excluded.is_owner,
        is_admin     = excluded.is_admin,
        last_seen    = excluded.last_seen,
-       display_name = excluded.display_name`,
+       display_name = excluded.display_name,
+       saved_name   = excluded.saved_name`,
   ).run(
     row.user_jid,
     row.user_lid,
@@ -467,7 +555,71 @@ function saveUserMetadata(userData) {
     row.first_seen,
     row.last_seen,
     row.display_name,
+    row.saved_name,
   );
+}
+
+/**
+ * Store an address-book name for a number only when none is saved yet.
+ * Used when the panel creates a schedule from a picked phone-book contact.
+ */
+function rememberSavedName(identifier, name) {
+  const savedName = personName(name);
+  if (!identifier || !savedName) return null;
+  const existing = getUserMetadata(identifier);
+  if (existing?.savedName) return existing;
+  let jid = existing?.jid;
+  if (!jid) {
+    if (String(identifier).includes("@")) jid = identifier;
+    else {
+      const phone = digitsOf(identifier);
+      jid = phone ? `${phone}@s.whatsapp.net` : identifier;
+    }
+  }
+  saveUserMetadata({
+    jid,
+    lid: existing?.lid || (isLidJid(identifier) ? identifier : null),
+    phone: existing?.phone || digitsOf(identifier),
+    savedName,
+  });
+  return getUserMetadata(jid);
+}
+
+function isIgnoredContactId(id) {
+  const value = String(id || "");
+  if (!value) return true;
+  if (value.endsWith("@g.us")) return true;
+  if (value.includes("@broadcast") || value.includes("@newsletter")) return true;
+  if (value === "status@broadcast") return true;
+  return false;
+}
+
+/**
+ * Persist a Baileys v7 contact record from `contacts.upsert` / `contacts.update`.
+ * `name` is the address-book name; `notify` is the push name. Never writes a
+ * push name into saved_name.
+ */
+function applyContactRecord(contact) {
+  if (!contact?.id || isIgnoredContactId(contact.id) || isGroupJid(contact.id)) return;
+
+  const id = String(contact.id);
+  const lid = asLidJid(contact.lid) || (isLidJid(id) ? asLidJid(id) : null);
+  const pnJid =
+    asPnJid(contact.phoneNumber) || (!isLidJid(id) ? asPnJid(id) : null);
+  if (lid && pnJid) storeLidPnMapping(lid, pnJid);
+
+  const jid = pnJid || lid || id;
+  if (isIgnoredContactId(jid)) return;
+
+  const savedName = personName(contact.name);
+  const pushName = personName(contact.notify) || personName(contact.verifiedName);
+  saveUserMetadata({
+    jid,
+    lid,
+    phone: pnJid ? digitsOf(pnJid) : null,
+    ...(savedName ? { savedName } : {}),
+    ...(pushName ? { displayName: pushName } : {}),
+  });
 }
 
 /**
@@ -881,6 +1033,7 @@ function resolveUserPhone(jid) {
       const digits = String(pn).split("@")[0].replace(/\D/g, "");
       if (digits) return digits;
     }
+    if (raw.includes("@lid")) return null;
   }
   if (/^\d{8,15}$/.test(local)) return local;
   return null;
@@ -888,26 +1041,43 @@ function resolveUserPhone(jid) {
 
 function describePeer(jid) {
   const id = String(jid || "");
-  if (!id) return { jid: "", kind: "unknown", label: "", phone: null, memberCount: null };
+  if (!id) {
+    return {
+      jid: "",
+      kind: "unknown",
+      label: "",
+      phone: null,
+      savedName: null,
+      pushName: null,
+      memberCount: null,
+    };
+  }
   if (id.endsWith("@g.us")) {
     const dir = getGroupDirectory(id);
-    const label = dir?.subject || null;
+    const label = personName(dir?.subject) || "Group";
     return {
       jid: id,
       kind: "group",
-      label: label || "Group",
+      label,
       phone: null,
+      savedName: null,
+      pushName: null,
       memberCount: dir?.participant_count ?? null,
     };
   }
   const phone = resolveUserPhone(id);
   const meta = getUserMetadata(id);
-  const label = meta?.displayName || (phone ? `+${phone}` : id.split("@")[0]);
+  const savedName = personName(meta?.savedName);
+  const pushName = personName(meta?.displayName);
+  const phoneLabel = phone ? `+${phone}` : null;
+  const label = savedName || pushName || phoneLabel || "Contact";
   return {
     jid: id,
     kind: "contact",
     label,
-    phone: phone ? `+${phone}` : null,
+    phone: phoneLabel,
+    savedName,
+    pushName,
     memberCount: null,
   };
 }
@@ -966,6 +1136,8 @@ module.exports = {
   getAllLidMappings,
   // User metadata & roles
   saveUserMetadata,
+  rememberSavedName,
+  applyContactRecord,
   getUserMetadata,
   isUserOwner,
   isUserBotAdmin,

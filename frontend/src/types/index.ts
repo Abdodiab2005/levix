@@ -83,10 +83,14 @@ export interface ScheduleItem {
   targetLabel?: string;
   targetKind?: "group" | "contact" | string;
   targetPhone?: string | null;
+  savedName?: string | null;
+  pushName?: string | null;
+  phone?: string | null;
   message: string;
   cronString?: string;
   scheduledTime?: number;
   when: string;
+  whenAr?: string;
   status: "active" | "paused" | "completed";
   lastRunAt?: number;
   lastDeliveryStatus?: "success" | "failed";

@@ -66,6 +66,8 @@ export const getTopForwardedMessages = store.getTopForwardedMessages;
 
 // ===== User metadata & bot roles =====
 export const saveUserMetadata = store.saveUserMetadata;
+export const rememberSavedName = store.rememberSavedName;
+export const applyContactRecord = store.applyContactRecord;
 export const getUserMetadata = store.getUserMetadata;
 export const isUserOwner = store.isUserOwner;
 export const isUserBotAdmin = store.isUserBotAdmin;

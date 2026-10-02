@@ -72,7 +72,41 @@ for (const table of EXPECTED_TABLES) {
   for (const column of ["last_run_at", "last_delivery_status", "last_error"]) {
     ok(`…with schedule column ${column}`, scheduleColumns.includes(column));
   }
+  ok(
+    "…with user_metadata.saved_name",
+    columnsOf(fresh, "user_metadata").includes("saved_name"),
+  );
   fresh.close();
+}
+
+section("an existing database gains saved_name without losing users");
+
+{
+  const database = scratchDatabase();
+  migrate(database, MIGRATIONS.slice(0, MIGRATIONS.length - 1));
+  ok(
+    "saved_name is not there yet",
+    !columnsOf(database, "user_metadata").includes("saved_name"),
+  );
+  database
+    .prepare(
+      `INSERT INTO user_metadata (user_jid, phone_number, is_owner, is_admin, first_seen, last_seen, display_name)
+       VALUES (?, ?, 0, 0, ?, ?, ?)`,
+    )
+    .run("201012345678@s.whatsapp.net", "201012345678", 1, 1, "Ali");
+
+  migrate(database);
+  equal("the upgrade reaches the latest version", versionOf(database), MIGRATIONS.length);
+  ok(
+    "saved_name exists after upgrade",
+    columnsOf(database, "user_metadata").includes("saved_name"),
+  );
+  const row = database
+    .prepare("SELECT * FROM user_metadata WHERE user_jid = ?")
+    .get("201012345678@s.whatsapp.net");
+  equal("the display name survives", row.display_name, "Ali");
+  equal("saved_name starts empty", row.saved_name, null);
+  database.close();
 }
 
 section("an existing v1 schedule survives the v2 upgrade");
