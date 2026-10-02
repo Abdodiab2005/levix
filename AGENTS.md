@@ -157,7 +157,8 @@ src/
 │   ├── permissions.middleware.js
 │   └── forward-tracking.middleware.js
 ├── routes/
-│   └── dashboard.api.esm.js # everything the control panel reads/writes
+│   ├── dashboard.api.esm.js # everything the control panel reads/writes
+│   └── stickers.api.esm.js  # Sticker Studio library, packs, upload, and jobs
 ├── panel/            # login throttling, session epochs, bounded session store
 │   └── feedback.cjs  # validates + forwards Settings → Feedback to the developer
 ├── services/         # External services
@@ -774,6 +775,17 @@ account".
   `quotedMessage` — nothing is cached or archived.
 - **`!memory`** (`src/commands/memory.cjs`) — the Markdown long-term memory.
 - **`!perm`** (`src/commands/perm.cjs`) — bot owner / admin roles.
+- **`!sticker`** (`src/commands/sticker.cjs`, aliases `s`, `ملصق`, `tosticker`) —
+  an image, GIF, or short video becomes a sticker and is saved in Sticker
+  Studio when the sender's library has room. See "Sticker Studio".
+- **`!toimage`** (`src/commands/toimage.cjs`, aliases `toimg`, `صورة`) — a
+  replied sticker as a PNG, or `gif` / `متحرك` for the animation.
+- **`!pack`** (`src/commands/pack.cjs`, alias `حزمة`) — create, fill, and
+  manage sticker packs.
+- **`!packs`** (`src/commands/packs.cjs`, alias `حزم`) — list packs and the
+  library total.
+- **`!stickers`** (`src/commands/stickers.cjs`, alias `ملصقاتي`) — page through
+  recent, favorite, or packed stickers.
 
 ### 5b. Domain setup (`levix domain`, `src/domain/`)
 
@@ -843,6 +855,121 @@ Everything that comes off the network goes through here:
 - `stripHtml(html)` — page text for the AI agent.
 
 The AI agent's `fetch_url` tool runs every page it opens through these.
+
+### 8. Sticker Studio
+
+The panel and the bot share one library. `src/routes/stickers.api.esm.js` is
+mounted at `/dashboard/api` behind the same session as the rest of the panel
+(`src/bootstrap/panel.js`). The upload is raw bytes: `jsonUnlessStickerUpload`
+skips the JSON parser for `POST /stickers/uploads` so the route can cap the
+body while it is still a stream. The panel operator is owner `"self"`.
+
+**Modules** (`src/stickers/`):
+
+| file | what it owns |
+| --- | --- |
+| `owner.cjs` | who a sticker belongs to (`forPanel`, `forMessage`) |
+| `library.cjs` | rows, packs, and the content-addressed files |
+| `studio.cjs` | an upload or a WhatsApp buffer, through the queue, into the library |
+| `media.cjs` | the converter for an image, a GIF, a video, or an existing WebP |
+| `webp.cjs` | RIFF parse, canonical bytes, and the pack metadata written on send |
+| `ffmpeg.cjs` | the one FFmpeg runner |
+| `jobs.cjs` | the conversion queue |
+| `uploads.cjs` | panel uploads in `<data>/tmp/stickers`, swept by `UPLOAD_TTL_MS` |
+| `options.cjs` | the edit schema: fit, zoom, pan, rotate, background, trim |
+| `limits.cjs` | the numbers the converter, the library, the API, and the bot share |
+| `errors.cjs` | one error vocabulary for the panel JSON and the bot's `tr()` replies |
+| `zip.cjs` | a store-only ZIP of an export |
+
+Bot commands reach the library through `src/utils/stickerBot.cjs`.
+
+**Owners.** `"self"` is the linked WhatsApp account and the panel: a `fromMe`
+message, or a sender `sameUser` matches against the paired `creds.me` id or
+lid (`forPanel` / `isPairedAccount`). Everyone else is keyed by their phone
+JID when this message maps to one, otherwise by their LID. `forMessage` keeps
+the identifiers on the message plus one direct mapping of each. A LID adds its
+phone JID. A phone JID adds a LID only when that LID is already on the
+message, or it is the only LID stored for the number. A second LID that only
+shares the number is not a candidate, so its rows are not read and not
+rewritten onto the phone key. A row already stored under the phone JID stays
+with that number: a recycled phone inherits it, the same way a role granted to
+the number does. WhatsApp gives no signal that separates a new owner of the
+number from the same person now messaging with a phone JID.
+
+**Files.** Each WebP is stored by its sha256 at
+`<data>/stickers/<sha[0..2]>/<sha>.webp`, with `<sha>.thumb.webp` beside it.
+`webp.canonical` strips the EXIF and XMP chunks, and the VP8X flags that
+announce them, before that hash, so pack metadata is not part of the saved
+bytes. Sending puts the metadata back (`webp.metadata`, through
+`media.withStickerMetadata` / `packedSticker`): the pack name is the sticker's
+first pack, or the product name from `brand.cjs`, and the publisher is the
+product name. The file is removed only when no row, of any owner, still points
+at that hash (`removeIfOrphan`).
+
+**Packs and deletion.** A pack name is 1–40 letters, digits, spaces, `-`, or
+`_`, unique per owner ignoring case, and it cannot be a `!pack` sub-command
+word (`PACK_SUBCOMMANDS`). An owner can keep `PACKS_MAX_PER_OWNER` (100)
+packs. Deleting a pack leaves its stickers in the library; `deleteStickers`
+on that call removes only stickers that belonged to the pack alone. Deleting
+a sticker that is still in a pack returns `IN_USE` unless the caller passes
+`confirm` (`DELETE /stickers/:id?confirm=1`). Removing a sticker from a pack
+does not delete it. How many stickers one owner can keep is the
+`sticker_library_limit` setting (default 1000), read on every save. A full
+library refuses a new row. `!sticker` still converts and sends the result
+without saving when `hasRoom` is false.
+
+**The queue** (`limits.cjs`, enforced by `jobs.cjs`). Two conversions run at
+once (`JOB_CONCURRENCY`) and sixteen more may wait (`JOB_MAX_QUEUED`); past
+that, `submit` throws `BUSY`. A job times out at `JOB_TIMEOUT_MS` (90s). The
+slot stays taken for 5 seconds (`timeoutGraceMs`) while the aborted worker
+finishes. A finished record is dropped after `JOB_RETENTION_MS` (10 minutes).
+Each FFmpeg step is capped by `FFMPEG_STEP_TIMEOUT_MS` (60s). An upload file
+lives for `UPLOAD_TTL_MS` (1 hour).
+
+**Commands.** All five default to `MEMBERS` in `src/config/defaults.cjs`.
+
+- `!sticker` — aliases `s`, `ملصق`, `tosticker`. An image, GIF, or video
+  attached or replied to becomes a sticker. The bot accepts at most
+  `BOT_VIDEO_MAX_SECONDS` (10) of video, because it has no trim control.
+  `crop` / `قص` uses cover fit; `nobg` / `بدون-خلفية` keys out a flat
+  background (`removeBackground.mode: "plain"`). Replying to a sticker runs
+  `!toimage`. When the library has room the sticker is saved with source
+  `BOT_COMMAND` and sent back from the library; otherwise it is converted and
+  sent without a row.
+- `!toimage` — aliases `toimg`, `صورة`. Reply to a sticker. The default is a
+  PNG image; `doc` / `ملف` sends that PNG as a document; `gif` / `متحرك` sends
+  an animated sticker as a video. A static sticker asked for as a gif comes
+  back as a PNG.
+- `!pack` — alias `حزمة`. `create` / `new` / `إنشاء` / `انشاء` / `جديد`, `add`
+  / `أضف` / `اضف` / `إضافة` / `اضافة`, `remove` / `rm` / `أزل` / `ازل` /
+  `إزالة` / `ازالة`, `rename` / `تسمية` / `إعادة-تسمية` / `اعادة-تسمية`,
+  `delete` / `del` / `احذف` / `حذف`, `show` / `list` / `عرض`. Replying to
+  media with `!pack <name>` creates the pack when it is missing and adds the
+  sticker. An existing sticker is saved as `WHATSAPP_STICKER`; other media as
+  `BOT_COMMAND`. `delete` removes the pack and keeps the stickers.
+- `!packs` — alias `حزم`. Lists up to 30 packs and the library total.
+- `!stickers` — alias `ملصقاتي`. Sends one page (`BOT_PAGE_SIZE`, 5) of recent
+  stickers, favorites (`favorites` / `المفضلة`), or one pack (`pack` / `حزمة`
+  plus the name).
+
+**Media Hub.** On Android, the viewer and a single selection in Media Hub
+hand one stickerable item to the panel. `StickerHandoffs.prepare` parks the
+content URI already granted to the hub (`PendingStickers`, in memory only)
+and opens the panel at `#stickers` (`PANEL_HASH`). The bytes are read when
+the page calls `LevixHost.takePendingSticker()` (`PanelBridge`): one base64
+payload, with intent `create` for an image or video (trim, frame, re-encode)
+or `save` for an existing WebP (keep the file, add it to the library). The
+holder is cleared even when that read fails, so a failed pick is not
+converted twice. Voice notes, audio, and documents are not offered. The bytes
+then go to `POST /dashboard/api/stickers/uploads`, and the conversion job is
+`POST /dashboard/api/stickers/jobs` with `source: "MEDIA_HUB"` (the other
+accepted source is `PANEL_UPLOAD`). The cap is 16 MB
+(`PendingStickers.MAX_BYTES`, the same ceiling as `UPLOAD_MAX_BYTES`).
+
+**Unlink.** `clearAccountScopedState()` in `src/core/session.js` calls
+`library.clearAll()`, which deletes every sticker and pack row, removes
+`<data>/stickers`, and discards pending uploads. The next phone that pairs
+does not inherit them.
 
 ## Dashboard (`views/` + `public/` + `src/routes/dashboard.api.esm.js`)
 
