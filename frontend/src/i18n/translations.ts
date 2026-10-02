@@ -45,6 +45,7 @@ export const translations = {
     add: "إضافة",
     refresh: "تحديث",
     logout: "تسجيل الخروج",
+    backToApp: "العودة للتطبيق",
     close: "إغلاق",
     copy: "نسخ",
     copied: "تم النسخ!",
@@ -280,6 +281,10 @@ export const translations = {
     clearLogs: "مسح السجلات",
     allLogs: "جميع المستويات",
     noLogs: "لا توجد سجلات مسجلة حتى الآن.",
+    logSourceBot: "البوت",
+    logSourceHost: "مضيف أندرويد",
+    shareLogs: "مشاركة السجلات",
+    share: "مشاركة",
 
     // Alerts and notifications
     savedSuccessfully: "تم حفظ الإعدادات بنجاح!",
@@ -457,6 +462,7 @@ export const translations = {
     add: "Add",
     refresh: "Refresh",
     logout: "Sign Out",
+    backToApp: "Back to app",
     close: "Close",
     copy: "Copy",
     copied: "Copied!",
@@ -696,6 +702,10 @@ export const translations = {
     clearLogs: "Clear Logs",
     allLogs: "All Levels",
     noLogs: "No log entries to display.",
+    logSourceBot: "Bot",
+    logSourceHost: "Android host",
+    shareLogs: "Share logs",
+    share: "Share",
 
     // Alerts and notifications
     savedSuccessfully: "Settings saved successfully!",

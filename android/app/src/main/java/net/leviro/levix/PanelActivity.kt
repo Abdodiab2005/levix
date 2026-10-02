@@ -131,7 +131,14 @@ class PanelActivity : AppCompatActivity() {
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false)
         web.addJavascriptInterface(
-            PanelBridge(sock, bridgeJs, { runOnUiThread { launchContactPicker() } }, applicationContext),
+            PanelBridge(
+                sock,
+                bridgeJs,
+                { runOnUiThread { launchContactPicker() } },
+                applicationContext,
+                { runOnUiThread { HostLogShare.share(this) } },
+                { runOnUiThread { finish() } },
+            ),
             "LevixHost",
         )
 
@@ -295,6 +302,8 @@ class PanelActivity : AppCompatActivity() {
         web.destroy()
         super.onDestroy()
     }
+
+
 
     companion object {
         const val EXTRA_URL = "url"

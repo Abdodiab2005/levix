@@ -334,6 +334,10 @@
                 android:layout_marginEnd="6dp"
                 android:layout_weight="1"
                 android:background="@drawable/bg_card_panel"
+                android:clickable="true"
+                android:focusable="true"
+                android:contentDescription="@string/action_open_whatsapp_settings"
+                android:foreground="?attr/selectableItemBackground"
                 android:orientation="vertical"
                 android:padding="14dp">
 
@@ -369,6 +373,14 @@
                         android:textColor="@color/levix_text_muted"
                         android:textSize="10sp"
                         android:textStyle="bold" />
+
+                    <ImageView
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_marginStart="4dp"
+                        android:src="@drawable/ic_chevron_right"
+                        android:importantForAccessibility="no"
+                        app:tint="@color/levix_text_muted" />
                 </LinearLayout>
 
                 <TextView
@@ -389,7 +401,8 @@
                     android:layout_marginTop="4dp"
                     android:ellipsize="end"
                     android:lineSpacingMultiplier="1.15"
-                    android:maxLines="2"
+                    android:maxLines="1"
+                    android:singleLine="true"
                     android:text="@string/card_whatsapp_desc_offline"
                     android:textColor="@color/levix_text_muted"
                     android:textSize="12sp" />
@@ -551,16 +564,13 @@
                 android:visibility="gone" />
         </LinearLayout>
 
-        <!-- Collapsible Diagnostics & Logs Card -->
+        <!-- Compact Diagnostics Row: Share logs only -->
         <LinearLayout
-            android:id="@+id/cardSignalsHeader"
+            android:id="@+id/cardDiagnostics"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
             android:background="@drawable/bg_card_panel"
-            android:clickable="true"
-            android:focusable="true"
-            android:foreground="?attr/selectableItemBackground"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:padding="14dp">
@@ -583,110 +593,34 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:fontFamily="sans-serif-medium"
-                    android:text="@string/section_diagnostics"
+                    android:text="@string/section_diagnostics_short"
                     android:textColor="@color/levix_text"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
                 <TextView
-                    android:id="@+id/diagnosticsHintText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/diagnostics_expand_hint"
+                    android:text="@string/diagnostics_panel_hint"
                     android:textColor="@color/levix_text_muted"
                     android:textSize="11sp" />
             </LinearLayout>
 
-            <ImageView
-                android:id="@+id/chevronLogs"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:contentDescription="Expand or collapse"
-                android:src="@drawable/ic_chevron_down" />
-        </LinearLayout>
-
-        <!-- Expandable Diagnostics Content (Collapsed by default) -->
-        <LinearLayout
-            android:id="@+id/diagnosticsContainer"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:background="@drawable/bg_card_panel"
-            android:orientation="vertical"
-            android:padding="14dp"
-            android:visibility="gone">
-
-            <!-- Actions Row: Share & Copy Logs -->
-            <LinearLayout
-                android:layout_width="match_parent"
+            <Button
+                android:id="@+id/btnShareLogs"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal">
-
-                <Button
-                    android:id="@+id/btnShareLogs"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="6dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_btn_outlined"
-                    android:drawableStart="@drawable/ic_share"
-                    android:drawablePadding="6dp"
-                    android:fontFamily="sans-serif-medium"
-                    android:minHeight="40dp"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:text="@string/btn_share_logs"
-                    android:textAllCaps="false"
-                    android:textColor="@color/levix_blue_bright"
-                    android:textSize="12sp" />
-
-                <Button
-                    android:id="@+id/btnCopyLogs"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_btn_outlined"
-                    android:drawableStart="@drawable/ic_copy"
-                    android:drawablePadding="6dp"
-                    android:fontFamily="sans-serif-medium"
-                    android:minHeight="40dp"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:text="@string/btn_copy_logs"
-                    android:textAllCaps="false"
-                    android:textColor="@color/levix_text_muted"
-                    android:textSize="12sp" />
-            </LinearLayout>
-
-            <TextView
-                android:id="@+id/logPathText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:fontFamily="monospace"
-                android:text="Saved to: Android/data/net.leviro.levix/files/logs/host.log"
-                android:textColor="@color/levix_text_faint"
-                android:textSize="10sp" />
-
-            <!-- Compact Preview Box -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/bg_console_box"
-                android:padding="10dp">
-
-                <TextView
-                    android:id="@+id/consoleLogText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="monospace"
-                    android:lineSpacingMultiplier="1.2"
-                    android:text="@string/no_logs"
-                    android:textColor="@color/levix_text_muted"
-                    android:textSize="11sp" />
-            </LinearLayout>
+                android:background="@drawable/bg_btn_outlined"
+                android:drawableStart="@drawable/ic_share"
+                android:drawablePadding="6dp"
+                android:fontFamily="sans-serif-medium"
+                android:minHeight="38dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="@string/btn_share_logs"
+                android:textAllCaps="false"
+                android:textColor="@color/levix_blue_bright"
+                android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

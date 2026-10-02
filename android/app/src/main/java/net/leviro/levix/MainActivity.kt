@@ -1,13 +1,9 @@
 package net.leviro.levix
 
 import android.Manifest
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -16,14 +12,12 @@ import android.view.View
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.core.os.LocaleListCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -60,17 +54,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var batteryBadge: TextView
     private lateinit var batteryButton: Button
 
-    // Collapsible Diagnostics & Logs
-    private lateinit var cardSignalsHeader: View
-    private lateinit var diagnosticsHintText: TextView
-    private lateinit var chevronLogs: ImageView
-    private lateinit var diagnosticsContainer: View
+    // Diagnostics & Logs
     private lateinit var btnShareLogs: Button
-    private lateinit var btnCopyLogs: Button
-    private lateinit var logPathText: TextView
-    private lateinit var consoleLogText: TextView
-
-    private var isLogsExpanded = false
 
     private val refresh = object : Runnable {
         override fun run() {
@@ -165,6 +150,7 @@ class MainActivity : AppCompatActivity() {
         cardWhatsApp = findViewById(R.id.cardWhatsApp)
         whatsAppBadge = findViewById(R.id.whatsAppBadge)
         whatsAppDetailText = findViewById(R.id.whatsAppDetailText)
+        cardWhatsApp.setOnClickListener { openPanelAt("connection") }
 
         cardEngine = findViewById(R.id.cardEngine)
         engineBadge = findViewById(R.id.engineBadge)
@@ -176,14 +162,7 @@ class MainActivity : AppCompatActivity() {
         batteryBadge = findViewById(R.id.batteryBadge)
         batteryButton = findViewById(R.id.batteryButton)
 
-        cardSignalsHeader = findViewById(R.id.cardSignalsHeader)
-        diagnosticsHintText = findViewById(R.id.diagnosticsHintText)
-        chevronLogs = findViewById(R.id.chevronLogs)
-        diagnosticsContainer = findViewById(R.id.diagnosticsContainer)
         btnShareLogs = findViewById(R.id.btnShareLogs)
-        btnCopyLogs = findViewById(R.id.btnCopyLogs)
-        logPathText = findViewById(R.id.logPathText)
-        consoleLogText = findViewById(R.id.consoleLogText)
 
         // Listeners
         startButton.setOnClickListener { requestStart() }
@@ -191,34 +170,12 @@ class MainActivity : AppCompatActivity() {
         panelButton.setOnClickListener { openPanel() }
         batteryButton.setOnClickListener { HostBattery.requestUnrestricted(this) }
 
-        cardSignalsHeader.setOnClickListener {
-            toggleLogsAccordion()
-        }
-
         btnShareLogs.setOnClickListener {
-            shareLogs()
-        }
-
-        btnCopyLogs.setOnClickListener {
-            copyLogs()
+            HostLogShare.share(this)
         }
 
         render(HostState.snapshot)
         maybeOpenPanel(intent)
-    }
-
-    private fun toggleLogsAccordion() {
-        isLogsExpanded = !isLogsExpanded
-        diagnosticsContainer.visibility = if (isLogsExpanded) View.VISIBLE else View.GONE
-        chevronLogs.setImageResource(
-            if (isLogsExpanded) R.drawable.ic_chevron_up else R.drawable.ic_chevron_down
-        )
-        diagnosticsHintText.text = getString(
-            if (isLogsExpanded) R.string.diagnostics_collapse_hint else R.string.diagnostics_expand_hint
-        )
-        if (isLogsExpanded) {
-            renderDiagnostics()
-        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -239,6 +196,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun openPanel() {
         val url = HostState.snapshot.panelUrl ?: "http://127.0.0.1:3001/"
+        startActivity(
+            Intent(this, PanelActivity::class.java)
+                .putExtra(PanelActivity.EXTRA_URL, url)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        )
+    }
+
+    private fun openPanelAt(hash: String) {
+        val base = HostState.snapshot.panelUrl ?: "http://127.0.0.1:3001/"
+        val url = base.trimEnd('/') + "/#" + hash
         startActivity(
             Intent(this, PanelActivity::class.java)
                 .putExtra(PanelActivity.EXTRA_URL, url)
@@ -276,44 +243,7 @@ class MainActivity : AppCompatActivity() {
         LevixHostService.start(this)
     }
 
-    private fun shareLogs() {
-        val logFile = HostLog.getLogFile(this)
-        if (!logFile.exists() || logFile.length() == 0L) {
-            Toast.makeText(this, R.string.no_logs, Toast.LENGTH_SHORT).show()
-            return
-        }
 
-        try {
-            val uri: Uri = FileProvider.getUriForFile(
-                this,
-                "${packageName}.fileprovider",
-                logFile,
-            )
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "Levix Diagnostics Logs")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            startActivity(Intent.createChooser(shareIntent, "Share Levix Logs"))
-        } catch (_: Exception) {
-            val text = HostLog.getFullLogText(this)
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, text)
-                putExtra(Intent.EXTRA_SUBJECT, "Levix Diagnostics Logs")
-            }
-            startActivity(Intent.createChooser(shareIntent, "Share Levix Logs"))
-        }
-    }
-
-    private fun copyLogs() {
-        val text = HostLog.getFullLogText(this)
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("Levix Host Logs", text)
-        clipboard.setPrimaryClip(clip)
-        Toast.makeText(this, R.string.logs_copied, Toast.LENGTH_SHORT).show()
-    }
 
     private fun render(snapshot: HostState.Snapshot) {
         // 1. Top Status Pill
@@ -330,11 +260,6 @@ class MainActivity : AppCompatActivity() {
 
         // 5. Battery Protection Card
         renderBatteryCard()
-
-        // 6. Diagnostics (if expanded)
-        if (isLogsExpanded) {
-            renderDiagnostics()
-        }
     }
 
     private fun renderStatusPill(snapshot: HostState.Snapshot) {
@@ -375,7 +300,7 @@ class MainActivity : AppCompatActivity() {
         if (!snapshot.running) {
             whatsAppBadge.text = getString(R.string.status_offline).uppercase()
             whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_text_muted))
-            whatsAppDetailText.text = "Assistant stopped"
+            whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_offline)
             return
         }
 
@@ -383,37 +308,37 @@ class MainActivity : AppCompatActivity() {
             "connected" -> {
                 whatsAppBadge.text = getString(R.string.status_connected).uppercase()
                 whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_ok))
-                whatsAppDetailText.text = "Connected & active"
+                whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_connected_short)
             }
             "waiting_for_qr" -> {
-                whatsAppBadge.text = "LINK NEEDED"
+                whatsAppBadge.text = getString(R.string.status_pairing).uppercase()
                 whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_warn))
-                whatsAppDetailText.text = "Waiting for device pairing"
+                whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_pairing_short)
             }
             "paused" -> {
                 whatsAppBadge.text = getString(R.string.status_paused).uppercase()
                 whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_warn))
-                whatsAppDetailText.text = "Network paused"
+                whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_paused_short)
             }
             "reconnecting" -> {
-                whatsAppBadge.text = "RECONNECT".uppercase()
+                whatsAppBadge.text = getString(R.string.status_reconnecting).uppercase()
                 whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_warn))
-                whatsAppDetailText.text = "Auto-reconnecting…"
+                whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_reconnecting_short)
             }
             "retry_exhausted" -> {
-                whatsAppBadge.text = "FAILED"
+                whatsAppBadge.text = getString(R.string.status_failed).uppercase()
                 whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_danger))
-                whatsAppDetailText.text = "Reconnection failed"
+                whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_failed)
             }
             "logged_out" -> {
-                whatsAppBadge.text = "EXPIRED"
+                whatsAppBadge.text = getString(R.string.status_expired).uppercase()
                 whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_danger))
-                whatsAppDetailText.text = "Credentials expired"
+                whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_expired)
             }
             else -> {
                 whatsAppBadge.text = getString(R.string.status_starting).uppercase()
                 whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_cyan))
-                whatsAppDetailText.text = "Connecting…"
+                whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_connecting)
             }
         }
     }
@@ -422,18 +347,18 @@ class MainActivity : AppCompatActivity() {
         if (!snapshot.running) {
             engineBadge.text = getString(R.string.status_stopped).uppercase()
             engineBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_text_muted))
-            engineDetailText.text = "Engine inactive"
+            engineDetailText.text = getString(R.string.card_engine_desc_stopped_short)
             return
         }
 
         if (snapshot.levixReady) {
             engineBadge.text = getString(R.string.status_operational).uppercase()
             engineBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_ok))
-            engineDetailText.text = "Core active & ready"
+            engineDetailText.text = getString(R.string.card_engine_desc_running_short)
         } else {
             engineBadge.text = getString(R.string.status_starting).uppercase()
             engineBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_cyan))
-            engineDetailText.text = "Initializing core…"
+            engineDetailText.text = getString(R.string.card_engine_desc_starting_short)
         }
     }
 
@@ -443,22 +368,16 @@ class MainActivity : AppCompatActivity() {
             batteryBadge.text = getString(R.string.status_protected).uppercase()
             batteryBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_ok))
             batteryIcon.setColorFilter(ContextCompat.getColor(this, R.color.levix_ok))
-            batteryHint.text = "Background protection active"
+            batteryHint.text = getString(R.string.battery_ok_short)
             batteryButton.visibility = View.GONE
         } else {
             batteryBadge.text = getString(R.string.status_restricted).uppercase()
             batteryBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_warn))
             batteryIcon.setColorFilter(ContextCompat.getColor(this, R.color.levix_warn))
-            batteryHint.text = "Restricted by system. Protect 24/7 uptime."
+            batteryHint.text = getString(R.string.battery_restricted_hint)
             batteryButton.visibility = View.VISIBLE
             batteryButton.text = getString(R.string.btn_battery)
         }
-    }
-
-    private fun renderDiagnostics() {
-        logPathText.text = getString(R.string.log_file_location, HostLog.getAccessiblePath(this))
-        val recent = HostLog.readRecentLines(4)
-        consoleLogText.text = recent.ifEmpty { getString(R.string.no_logs) }
     }
 
     companion object {
