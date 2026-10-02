@@ -31,6 +31,7 @@ const CODES = Object.freeze({
   IN_USE: "IN_USE",
   STORAGE_UNAVAILABLE: "STORAGE_UNAVAILABLE",
   NOT_CONNECTED: "NOT_CONNECTED",
+  CANCELLED: "CANCELLED",
 });
 
 const HTTP_STATUS = Object.freeze({
@@ -55,6 +56,7 @@ const HTTP_STATUS = Object.freeze({
   IN_USE: 409,
   STORAGE_UNAVAILABLE: 503,
   NOT_CONNECTED: 503,
+  CANCELLED: 409,
 });
 
 class StickerError extends Error {
@@ -204,6 +206,8 @@ function message(pick, error) {
         "WhatsApp is not connected, so nothing can be sent.",
         "واتساب غير متصل، فلا يمكن إرسال شيء.",
       );
+    case "CANCELLED":
+      return pick("The conversion was cancelled.", "أُلغي التحويل.");
     default:
       return pick("Something went wrong with the sticker.", "حدث خطأ في الملصق.");
   }
