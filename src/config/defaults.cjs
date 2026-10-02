@@ -54,6 +54,11 @@ const COMMAND_PERMISSIONS = Object.freeze({
   block: "OWNER_ONLY",
   unblock: "OWNER_ONLY",
   send: "MEMBERS",
+  sticker: "MEMBERS",
+  toimage: "MEMBERS",
+  pack: "MEMBERS",
+  packs: "MEMBERS",
+  stickers: "MEMBERS",
   group: {
     default_permission: "ADMINS_OWNER",
     sub_commands: {

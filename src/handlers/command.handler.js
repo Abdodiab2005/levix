@@ -49,6 +49,10 @@ const EDIT_IN_PLACE_EXCLUDE = new Set([
   "loop",
   "rand",
   "poll",
+  "sticker",
+  "toimage",
+  "pack",
+  "stickers",
 ]);
 
 // Wrap a socket so commands reply nicely:
