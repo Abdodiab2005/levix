@@ -6,9 +6,11 @@ function unwrapMessage(message) {
   for (let i = 0; i < 6; i++) {
     if (inner.viewOnceMessage?.message) inner = inner.viewOnceMessage.message;
     else if (inner.viewOnceMessageV2?.message) inner = inner.viewOnceMessageV2.message;
-    else if (inner.viewOnceMessageV2Extension?.message) inner = inner.viewOnceMessageV2Extension.message;
+    else if (inner.viewOnceMessageV2Extension?.message)
+      inner = inner.viewOnceMessageV2Extension.message;
     else if (inner.ephemeralMessage?.message) inner = inner.ephemeralMessage.message;
-    else if (inner.documentWithCaptionMessage?.message) inner = inner.documentWithCaptionMessage.message;
+    else if (inner.documentWithCaptionMessage?.message)
+      inner = inner.documentWithCaptionMessage.message;
     else if (inner.editedMessage?.message) inner = inner.editedMessage.message;
     else break;
   }
@@ -27,7 +29,13 @@ function visibleText(message) {
   );
 }
 
-const MEDIA_KEYS = ["imageMessage", "videoMessage", "stickerMessage", "audioMessage", "documentMessage"];
+const MEDIA_KEYS = [
+  "imageMessage",
+  "videoMessage",
+  "stickerMessage",
+  "audioMessage",
+  "documentMessage",
+];
 
 function mediaType(message) {
   const inner = unwrapMessage(message);
@@ -37,4 +45,22 @@ function mediaType(message) {
   return "";
 }
 
-module.exports = { unwrapMessage, visibleText, mediaType };
+function pickMedia(message) {
+  const inner = unwrapMessage(message);
+  for (const type of ["sticker", "image", "video", "audio", "document"]) {
+    const media = inner[`${type}Message`];
+    if (media) return { media, type };
+  }
+  return null;
+}
+
+function quotedOf(msg) {
+  const inner = unwrapMessage(msg?.message);
+  for (const key of ["extendedTextMessage", "imageMessage", "videoMessage", "documentMessage"]) {
+    const quoted = inner[key]?.contextInfo?.quotedMessage;
+    if (quoted) return quoted;
+  }
+  return null;
+}
+
+module.exports = { unwrapMessage, visibleText, mediaType, pickMedia, quotedOf };

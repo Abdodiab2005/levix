@@ -37,9 +37,17 @@ const { app, server, dashboardJson, requireLoginApi, noStore, installFinalHandle
 
 if (has("routes")) {
   const dashboardApi = (await import(`${ROOT}/src/routes/dashboard.api.esm.js`)).default;
+  const stickerApi = await import(`${ROOT}/src/routes/stickers.api.esm.js`);
   const { loadCommands } = await import(`${ROOT}/src/handlers/command.handler.js`);
   await loadCommands();
-  app.use("/dashboard/api", requireLoginApi, noStore, dashboardJson, dashboardApi);
+  app.use(
+    "/dashboard/api",
+    requireLoginApi,
+    noStore,
+    stickerApi.jsonUnlessStickerUpload(dashboardJson),
+    stickerApi.default,
+    dashboardApi,
+  );
 }
 
 installFinalHandlers();

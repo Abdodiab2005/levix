@@ -104,6 +104,7 @@ proxies, headless mode, backups, and troubleshooting.
 | Scheduling | One-off, daily, and weekly messages with durable jobs, delivery status, and manual retry |
 | Control panel | Live connection state, command settings, roles, permissions, keys, memory, schedules, and logs |
 | Media | Text, images, video, audio, QR codes, text-to-speech, and speech-to-text |
+| Stickers | Turn a photo, GIF, or short video into a sticker, and keep a personal library and packs from chat or the panel |
 | Deployment | Android APK, npm, Docker, systemd installer, standalone binaries, headless mode, and safe domain setup |
 | Storage | One SQLite database and one data directory for settings, sessions, memory, and logs |
 

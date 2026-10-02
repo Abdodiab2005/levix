@@ -37,6 +37,7 @@ import {
   getGroupSettings,
   getRecentDebts,
   getSchedules,
+  rememberSavedName,
   saveGroupSettings,
 } from "../utils/storage.esm.js";
 
@@ -66,7 +67,11 @@ const {
   scheduleNewJob,
   saveScheduledJob,
 } = require("../../scheduler.cjs");
-const { describeScheduledJob } = require("../utils/recurrence.cjs");
+const {
+  describeScheduledJob,
+  recurrenceErrorMessage,
+  recurrenceToCron,
+} = require("../utils/recurrence.cjs");
 const { discoverProviderModels, DiscoveryError } = require("../services/llmDiscovery.cjs");
 const settingsTransfer = require("../services/settingsTransfer.cjs");
 const cron = require("node-cron");
@@ -960,10 +965,14 @@ function scheduleView(job) {
   const peer = describePeer(job.targetJid);
   return {
     ...job,
-    when: describeScheduledJob(job, timezone),
+    when: describeScheduledJob(job, timezone, "en"),
+    whenAr: describeScheduledJob(job, timezone, "ar"),
     targetLabel: peer.label,
     targetKind: peer.kind,
     targetPhone: peer.phone,
+    savedName: peer.savedName ?? null,
+    pushName: peer.pushName ?? null,
+    phone: peer.phone,
   };
 }
 
@@ -986,6 +995,9 @@ router.get("/recipients", (req, res) => {
         name: live?.subject || peer.label,
         type: "group",
         memberCount: live?.participants?.length ?? peer.memberCount,
+        savedName: null,
+        pushName: null,
+        phone: null,
       });
     };
 
@@ -998,12 +1010,18 @@ router.get("/recipients", (req, res) => {
     for (const u of users.slice(0, 80)) {
       const jid = u.jid;
       if (!jid || seen.has(jid) || String(jid).endsWith("@g.us")) continue;
-      seen.add(jid);
       const peer = describePeer(jid);
+      const personKey = peer.phone || u.lid || jid;
+      if (seen.has(personKey)) continue;
+      seen.add(jid);
+      seen.add(personKey);
+      if (u.lid) seen.add(u.lid);
       recipients.push({
         id: jid,
         name: peer.label,
         phone: peer.phone,
+        savedName: peer.savedName ?? null,
+        pushName: peer.pushName ?? null,
         type: "contact",
       });
     }
@@ -1022,7 +1040,8 @@ router.post(
       return badRequest(res, "Maximum 3 scheduled messages reached");
     }
 
-    const { targetJid, message, type, cronString, scheduledTime } = req.body || {};
+    const { targetJid, message, type, cronString, scheduledTime, recurrence, targetName } =
+      req.body || {};
     if (!targetJid || !message) {
       return badRequest(res, "Recipient and message are required");
     }
@@ -1038,10 +1057,20 @@ router.post(
     };
 
     if (job.type === "recurring") {
-      if (!cronString || !cron.validate(cronString)) {
-        return badRequest(res, "Invalid cron expression");
+      if (recurrence && typeof recurrence === "object") {
+        const built = recurrenceToCron(recurrence);
+        if (built.error) return badRequest(res, recurrenceErrorMessage(built.error));
+        if (!cron.validate(built.cronString)) {
+          return badRequest(res, recurrenceErrorMessage("recurrence"));
+        }
+        job.cronString = built.cronString;
+      } else if (cronString && cron.validate(cronString)) {
+        // Raw cron is accepted only for existing callers/tests. The panel
+        // sends a structured `recurrence` object and never a cron string.
+        job.cronString = cronString;
+      } else {
+        return badRequest(res, "Invalid recurrence");
       }
-      job.cron = cronString;
     } else {
       const timeMs = Number(scheduledTime);
       if (!timeMs || timeMs <= Date.now()) {
@@ -1050,13 +1079,17 @@ router.post(
       job.date = new Date(timeMs).toISOString();
     }
 
-    saveScheduledJob(job);
-    const sock = currentSocket();
-    if (sock) {
-      scheduleNewJob(sock, job);
+    if (targetName && !String(job.targetJid).endsWith("@g.us")) {
+      rememberSavedName(job.targetJid, targetName);
     }
 
-    res.json({ success: true, schedule: scheduleView(job) });
+    const saved = saveScheduledJob(job);
+    const sock = currentSocket();
+    if (sock) {
+      scheduleNewJob(sock, saved);
+    }
+
+    res.json({ success: true, schedule: scheduleView(saved) });
   }),
 );
 

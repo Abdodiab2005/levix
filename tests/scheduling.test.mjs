@@ -69,6 +69,176 @@ section("daily and weekly recurrence parsing");
   );
 }
 
+section("recurrence builder -> cron for every kind");
+
+{
+  const daily = recurrence.recurrenceToCron({ kind: "daily", time: "9:05" });
+  equal("daily cron", daily.cronString, "5 9 * * *");
+
+  const weekly = recurrence.recurrenceToCron({
+    kind: "weekly",
+    time: "09:00",
+    weekdays: [1, 4],
+  });
+  equal("weekly multi-day cron", weekly.cronString, "0 9 * * 1,4");
+
+  const weeklySorted = recurrence.recurrenceToCron({
+    kind: "weekly",
+    time: "18:30",
+    weekdays: [5, 1, 1],
+  });
+  equal("weekly days are unique and sorted", weeklySorted.cronString, "30 18 * * 1,5");
+
+  const monthly = recurrence.recurrenceToCron({
+    kind: "monthly",
+    time: "07:00",
+    dayOfMonth: 31,
+  });
+  equal("monthly cron", monthly.cronString, "0 7 31 * *");
+
+  const hourly = recurrence.recurrenceToCron({
+    kind: "hourly",
+    time: "00:15",
+    everyHours: 3,
+  });
+  equal("hourly cron", hourly.cronString, "15 */3 * * *");
+
+  equal(
+    "bad time is rejected",
+    recurrence.recurrenceToCron({ kind: "daily", time: "25:00" }).error,
+    "time",
+  );
+  equal(
+    "minute 60 is rejected",
+    recurrence.recurrenceToCron({ kind: "daily", time: "09:60" }).error,
+    "time",
+  );
+  equal(
+    "empty weekdays are rejected",
+    recurrence.recurrenceToCron({ kind: "weekly", time: "09:00", weekdays: [] }).error,
+    "weekdays",
+  );
+  equal(
+    "missing weekdays are rejected",
+    recurrence.recurrenceToCron({ kind: "weekly", time: "09:00" }).error,
+    "weekdays",
+  );
+  equal(
+    "day 0 is rejected",
+    recurrence.recurrenceToCron({ kind: "monthly", time: "09:00", dayOfMonth: 0 }).error,
+    "dayOfMonth",
+  );
+  equal(
+    "day 32 is rejected",
+    recurrence.recurrenceToCron({ kind: "monthly", time: "09:00", dayOfMonth: 32 }).error,
+    "dayOfMonth",
+  );
+  equal(
+    "every 0 hours is rejected",
+    recurrence.recurrenceToCron({ kind: "hourly", time: "00:00", everyHours: 0 }).error,
+    "everyHours",
+  );
+  equal(
+    "every 13 hours is rejected",
+    recurrence.recurrenceToCron({ kind: "hourly", time: "00:00", everyHours: 13 }).error,
+    "everyHours",
+  );
+  equal(
+    "every 5 hours is rejected (does not divide 24)",
+    recurrence.recurrenceToCron({ kind: "hourly", time: "00:00", everyHours: 5 }).error,
+    "everyHours",
+  );
+  equal(
+    "every 7 hours is rejected (does not divide 24)",
+    recurrence.recurrenceToCron({ kind: "hourly", time: "00:00", everyHours: 7 }).error,
+    "everyHours",
+  );
+}
+
+section("describeScheduledJob covers every builder shape in both languages");
+
+{
+  const tz = "Africa/Cairo";
+  const describe = (cronString, lang) =>
+    recurrence.describeScheduledJob({ type: "recurring", cronString }, tz, lang);
+
+  equal("daily en", describe("0 9 * * *", "en"), "Daily at 09:00 (Africa/Cairo)");
+  equal("daily ar", describe("0 9 * * *", "ar"), "يومياً الساعة 09:00 (Africa/Cairo)");
+
+  equal("weekly one day en", describe("30 18 * * 5", "en"), "Every Friday at 18:30 (Africa/Cairo)");
+  equal(
+    "weekly one day ar",
+    describe("30 18 * * 5", "ar"),
+    "كل يوم الجمعة الساعة 18:30 (Africa/Cairo)",
+  );
+
+  equal(
+    "weekly two days en",
+    describe("0 9 * * 1,4", "en"),
+    "Every Monday and Thursday at 09:00 (Africa/Cairo)",
+  );
+  equal(
+    "weekly two days ar",
+    describe("0 9 * * 1,4", "ar"),
+    "كل يوم الاثنين والخميس الساعة 09:00 (Africa/Cairo)",
+  );
+
+  equal(
+    "monthly en",
+    describe("0 9 15 * *", "en"),
+    "Every month on day 15 at 09:00 (Africa/Cairo)",
+  );
+  equal(
+    "monthly ar",
+    describe("0 9 15 * *", "ar"),
+    "كل شهر في اليوم 15 الساعة 09:00 (Africa/Cairo)",
+  );
+
+  equal(
+    "hourly en",
+    describe("15 */3 * * *", "en"),
+    "Every 3 hours at minute 15 (Africa/Cairo)",
+  );
+  equal(
+    "hourly ar",
+    describe("15 */3 * * *", "ar"),
+    "كل 3 ساعات عند الدقيقة 15 (Africa/Cairo)",
+  );
+  equal("hourly one en", describe("0 */1 * * *", "en"), "Every hour at minute 0 (Africa/Cairo)");
+  equal("hourly one ar", describe("0 */1 * * *", "ar"), "كل ساعة عند الدقيقة 0 (Africa/Cairo)");
+  equal("hourly two ar", describe("0 */2 * * *", "ar"), "كل ساعتين عند الدقيقة 0 (Africa/Cairo)");
+  equal(
+    "hourly twelve ar",
+    describe("0 */12 * * *", "ar"),
+    "كل 12 ساعة عند الدقيقة 0 (Africa/Cairo)",
+  );
+}
+
+section("a panel recurring job persists cronString");
+
+{
+  const built = recurrence.recurrenceToCron({ kind: "daily", time: "09:00" });
+  const job = {
+    id: "panel-cron-regression",
+    type: "recurring",
+    targetJid: "201000000000@s.whatsapp.net",
+    message: "hello",
+    cronString: built.cronString,
+    status: "active",
+    creatorJid: "dashboard@levix",
+  };
+  scheduler.saveScheduledJob(job);
+  const stored = storage.getSchedule(job.id);
+  equal("cronString is persisted", stored.cronString, "0 9 * * *");
+  ok("node-cron accepts the stored expression", cron.validate(stored.cronString));
+
+  const source = readFileSync(join(ROOT, "src/routes/dashboard.api.esm.js"), "utf8");
+  ok("the route assigns job.cronString", /job\.cronString\s*=/.test(source));
+  ok("the route does not assign job.cron", !/job\.cron\s*=/.test(source));
+
+  scheduler.deleteScheduledJob(job.id);
+}
+
 section("the autoschedule command persists a real weekly job");
 
 {

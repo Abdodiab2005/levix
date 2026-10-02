@@ -10,6 +10,7 @@
     <string name="hero_subtitle_running">ليفيكس يعمل في الخلفية ومستعد لمساعدتك فوراً.</string>
     <string name="hero_subtitle_stopped">ليفيكس متوقف حالياً. اضغط على تشغيل لتفعيل المساعد.</string>
     <string name="btn_open_panel">فتح لوحة التحكم</string>
+    <string name="panel_share_file">مشاركة الملف</string>
     <string name="btn_start_host">تشغيل المساعد</string>
     <string name="btn_stop_host">إيقاف المساعد</string>
 
@@ -42,14 +43,8 @@
     <string name="btn_battery">تفعيل حماية البطارية</string>
 
     <!-- Diagnostics / Beta Logs -->
-    <string name="section_diagnostics">التشخيص وسجلات النظام</string>
     <string name="diagnostics_sub">سجلات تتبع الأخطاء البرمجية أثناء الإصدار التجريبي</string>
-    <string name="diagnostics_expand_hint">اضغط لعرض إشارات وتفاصيل السجلات</string>
-    <string name="diagnostics_collapse_hint">اضغط لإخفاء السجلات</string>
     <string name="btn_share_logs">مشاركة السجلات</string>
-    <string name="btn_copy_logs">نسخ السجلات</string>
-    <string name="log_file_location">تم الحفظ في: %1$s</string>
-    <string name="logs_copied">تم نسخ السجلات إلى الحافظة بنجاح</string>
     <string name="no_logs">لا توجد سجلات مسجلة بعد.</string>
 
     <!-- Status Badges -->
@@ -86,4 +81,164 @@
     <string name="notif_wa_paused">واتساب: ⏸️ متوقف مؤقتاً (لا يوجد إنترنت)</string>
     <string name="notif_open">فتح</string>
     <string name="notif_stop">إيقاف</string>
+    <!-- Compact tile strings -->
+    <string name="section_diagnostics_short">التشخيص</string>
+    <string name="diagnostics_panel_hint">السجلات الكاملة في تبويب السجلات في لوحة التحكم. شاركها لتقارير الأخطاء.</string>
+    <string name="card_whatsapp_desc_connected_short">متصل ونشط</string>
+    <string name="card_whatsapp_desc_pairing_short">في انتظار ربط الجهاز</string>
+    <string name="card_whatsapp_desc_paused_short">الشبكة متوقفة مؤقتاً</string>
+    <string name="card_whatsapp_desc_reconnecting_short">إعادة الاتصال تلقائياً…</string>
+    <string name="card_whatsapp_desc_failed">فشلت إعادة الاتصال</string>
+    <string name="card_whatsapp_desc_expired">انتهت صلاحية بيانات الاعتماد</string>
+    <string name="card_whatsapp_desc_connecting">جاري الاتصال…</string>
+    <string name="status_failed">فشل</string>
+    <string name="status_expired">منتهي الصلاحية</string>
+    <string name="card_engine_desc_stopped_short">المحرك غير نشط</string>
+    <string name="card_engine_desc_running_short">المحرك نشط وجاهز</string>
+    <string name="card_engine_desc_starting_short">جاري تهيئة المحرك…</string>
+    <string name="battery_ok_short">حماية الخلفية نشطة</string>
+    <string name="battery_restricted_hint">مقيد من قبل النظام. فعّل الحماية لضمان العمل المتواصل.</string>
+    <string name="action_open_whatsapp_settings">فتح إعدادات واتساب في لوحة التحكم</string>
+
+    <!-- Native Media Hub -->
+    <string name="media_hub_title">مركز الوسائط</string>
+    <string name="media_hub_subtitle">تصفح الحالات ووسائط واتساب على هذا الهاتف</string>
+    <string name="media_back">رجوع</string>
+    <string name="media_open">فتح</string>
+    <string name="media_insights">إحصاءات التخزين</string>
+    <string name="media_sort">ترتيب</string>
+    <string name="media_search">ابحث بالاسم أو النوع أو التاريخ</string>
+    <string name="media_all">الكل</string>
+    <string name="media_whatsapp">واتساب</string>
+    <string name="media_business">واتساب للأعمال</string>
+    <string name="media_statuses">الحالات</string>
+    <string name="media_images">الصور</string>
+    <string name="media_videos">الفيديوهات</string>
+    <string name="media_voice">الرسائل الصوتية</string>
+    <string name="media_audio">الصوتيات</string>
+    <string name="media_documents">المستندات</string>
+    <string name="media_stickers">الملصقات</string>
+    <string name="media_saved">المحفوظة</string>
+    <string name="media_today">اليوم</string>
+    <string name="media_yesterday">أمس</string>
+    <string name="media_week">هذا الأسبوع</string>
+    <string name="media_large">كبيرة ≥ ١٠ م.ب</string>
+    <string name="media_favorites">المفضلة</string>
+    <string name="media_allow">السماح بالوصول للوسائط</string>
+    <string name="media_settings">إعدادات التطبيق</string>
+    <string name="media_rationale">يحتاج ليفيكس إلى إذن الوسائط لعرض صور واتساب ومقاطع الفيديو والصوت المخزنة على جهازك. تبقى الملفات على جهازك ولا تُرفع.</string>
+    <string name="media_partial">تظهر الصور والفيديوهات المحددة فقط. حدّد المزيد أو اسمح بالكل من الإعدادات.</string>
+    <string name="media_audio_permission">اسمح بالوصول إلى الصوت لعرض الرسائل الصوتية وصوتيات واتساب.</string>
+    <string name="media_select_more">تحديد المزيد</string>
+    <string name="media_access_removed">أُلغي الوصول — امنح الإذن مجدداً.</string>
+    <string name="media_enable_status_info">قد تتطلب الحالات أو المستندات إذن الوصول إلى مجلد وسائط واتساب.</string>
+    <string name="media_enable_status">تمكين الوصول للحالات</string>
+    <string name="media_wrong_folder">اختر مجلد وسائط واتساب أو مجلد .Statuses.</string>
+    <string name="media_not_installed">واتساب غير مثبت أو لا توجد وسائط.</string>
+    <string name="media_empty">لا توجد وسائط هنا. اسحب للأسفل للتحديث.</string>
+    <string name="media_refresh">تحديث</string>
+    <string name="media_refreshing">جارٍ التحديث…</string>
+    <string name="media_loading">جارٍ تحميل الوسائط…</string>
+    <string name="media_select_all">تحديد الكل</string>
+    <string name="media_clear">مسح</string>
+    <string name="media_save">حفظ</string>
+    <string name="media_share">مشاركة</string>
+    <string name="media_sticker_make">إنشاء ملصق</string>
+    <string name="media_sticker_save">إضافة إلى الملصقات</string>
+    <string name="media_sticker_too_large">الحجم كبير جدًا على الملصق — اختر ملفًا أصغر من 16 ميغابايت.</string>
+    <string name="media_sticker_size_unknown">لم يُبلّغ أندرويد عن حجم هذا الملف، لذلك لا يمكن تحويله إلى ملصق.</string>
+    <string name="media_sticker_unsupported">الصور وملفات GIF والفيديو فقط هي التي يمكن أن تصبح ملصقات.</string>
+    <string name="media_favorite">المفضلة</string>
+    <string name="media_remove_favorite">إزالة من المفضلة</string>
+    <string name="media_selected_state">محدد</string>
+    <string name="media_delete_saved_copy">حذف النسخة المحفوظة</string>
+    <string name="media_delete">حذف</string>
+    <string name="media_cancel">إلغاء</string>
+    <string name="media_progress">جارٍ حفظ %1$d من %2$d…</string>
+    <string name="media_favorite_progress">جارٍ تحديث %1$d من %2$d…</string>
+    <string name="media_saved_success">تم الحفظ بنجاح</string>
+    <string name="media_already_saved">محفوظ مسبقاً</string>
+    <string name="media_save_failed">فشل الحفظ</string>
+    <string name="media_share_failed">لا يوجد تطبيق على هذا الجهاز يستطيع فتح هذا الملف.</string>
+    <string name="media_unavailable">هذا الملف لم يعد متاحاً.</string>
+    <string name="media_unsupported">لا يوجد تطبيق لفتح هذا التنسيق.</string>
+    <string name="media_delete_saved_only">يمكن حذف النسخ المحفوظة بواسطة ليفيكس فقط.</string>
+    <string name="media_delete_progress">جارٍ حذف %1$d من %2$d…</string>
+    <string name="media_delete_failed">تعذر حذف بعض النسخ المحفوظة.</string>
+    <string name="media_largest">أكبر الملفات</string>
+    <string name="media_recent">أضيف مؤخراً</string>
+    <string name="media_newest">الأحدث</string>
+    <string name="media_oldest">الأقدم</string>
+    <string name="media_largest_sort">الأكبر</string>
+    <string name="media_smallest">الأصغر</string>
+    <string name="media_preview">معاينة الوسائط</string>
+    <string name="media_choose_app">اختر تطبيق واتساب</string>
+    <string name="media_viewer_title">%1$s · %2$s · %3$s</string>
+    <string name="media_back_glyph">‹</string>
+    <string name="media_insights_glyph">◫</string>
+    <string name="media_sort_glyph">↕</string>
+    <plurals name="media_count">
+        <item quantity="zero">%1$d عنصر</item>
+        <item quantity="one">%1$d عنصر</item>
+        <item quantity="two">%1$d عنصران</item>
+        <item quantity="few">%1$d عناصر</item>
+        <item quantity="many">%1$d عنصراً</item>
+        <item quantity="other">%1$d عنصر</item>
+    </plurals>
+    <plurals name="media_selected_count">
+        <item quantity="zero">تم تحديد %1$d</item>
+        <item quantity="one">تم تحديد %1$d</item>
+        <item quantity="two">تم تحديد %1$d</item>
+        <item quantity="few">تم تحديد %1$d</item>
+        <item quantity="many">تم تحديد %1$d</item>
+        <item quantity="other">تم تحديد %1$d</item>
+    </plurals>
+    <plurals name="media_delete_confirm">
+        <item quantity="zero">هل تريد حذف %1$d نسخة محفوظة بواسطة ليفيكس؟</item>
+        <item quantity="one">هل تريد حذف %1$d نسخة محفوظة بواسطة ليفيكس؟</item>
+        <item quantity="two">هل تريد حذف %1$d نسختين محفوظتين بواسطة ليفيكس؟</item>
+        <item quantity="few">هل تريد حذف %1$d نسخ محفوظة بواسطة ليفيكس؟</item>
+        <item quantity="many">هل تريد حذف %1$d نسخة محفوظة بواسطة ليفيكس؟</item>
+        <item quantity="other">هل تريد حذف %1$d نسخة محفوظة بواسطة ليفيكس؟</item>
+    </plurals>
+    <plurals name="media_saved_count">
+        <item quantity="zero">تم الحفظ: %1$d</item>
+        <item quantity="one">تم الحفظ: %1$d</item>
+        <item quantity="two">تم الحفظ: %1$d</item>
+        <item quantity="few">تم الحفظ: %1$d</item>
+        <item quantity="many">تم الحفظ: %1$d</item>
+        <item quantity="other">تم الحفظ: %1$d</item>
+    </plurals>
+    <plurals name="media_already_saved_count">
+        <item quantity="zero">محفوظ مسبقاً: %1$d</item>
+        <item quantity="one">محفوظ مسبقاً: %1$d</item>
+        <item quantity="two">محفوظ مسبقاً: %1$d</item>
+        <item quantity="few">محفوظ مسبقاً: %1$d</item>
+        <item quantity="many">محفوظ مسبقاً: %1$d</item>
+        <item quantity="other">محفوظ مسبقاً: %1$d</item>
+    </plurals>
+    <plurals name="media_failed_count">
+        <item quantity="zero">فشل: %1$d</item>
+        <item quantity="one">فشل: %1$d</item>
+        <item quantity="two">فشل: %1$d</item>
+        <item quantity="few">فشل: %1$d</item>
+        <item quantity="many">فشل: %1$d</item>
+        <item quantity="other">فشل: %1$d</item>
+    </plurals>
+    <plurals name="media_insights_total">
+        <item quantity="zero">%1$d عنصر واتساب · %2$s</item>
+        <item quantity="one">%1$d عنصر واتساب · %2$s</item>
+        <item quantity="two">%1$d عنصران واتساب · %2$s</item>
+        <item quantity="few">%1$d عناصر واتساب · %2$s</item>
+        <item quantity="many">%1$d عنصراً واتساب · %2$s</item>
+        <item quantity="other">%1$d عنصر واتساب · %2$s</item>
+    </plurals>
+    <plurals name="media_seconds">
+        <item quantity="zero">%1$d ث</item>
+        <item quantity="one">%1$d ث</item>
+        <item quantity="two">%1$d ث</item>
+        <item quantity="few">%1$d ث</item>
+        <item quantity="many">%1$d ث</item>
+        <item quantity="other">%1$d ث</item>
+    </plurals>
 </resources>

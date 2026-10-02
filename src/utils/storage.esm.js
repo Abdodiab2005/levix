@@ -55,6 +55,7 @@ export const deleteQrCode = store.deleteQrCode;
 export const storeLidPnMapping = store.storeLidPnMapping;
 export const storeLidPnMappings = store.storeLidPnMappings;
 export const getLidForPn = store.getLidForPn;
+export const getLidsForPn = store.getLidsForPn;
 export const getLidsForPns = store.getLidsForPns;
 export const getPnForLid = store.getPnForLid;
 export const getAllLidMappings = store.getAllLidMappings;
@@ -66,6 +67,8 @@ export const getTopForwardedMessages = store.getTopForwardedMessages;
 
 // ===== User metadata & bot roles =====
 export const saveUserMetadata = store.saveUserMetadata;
+export const rememberSavedName = store.rememberSavedName;
+export const applyContactRecord = store.applyContactRecord;
 export const getUserMetadata = store.getUserMetadata;
 export const isUserOwner = store.isUserOwner;
 export const isUserBotAdmin = store.isUserBotAdmin;

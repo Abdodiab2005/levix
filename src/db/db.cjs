@@ -193,6 +193,387 @@ const MIGRATIONS = [
       );
     `);
   },
+  // v4 — address-book name from the linked phone (Baileys `contact.name`),
+  // distinct from the push name in display_name. Cleared with user_metadata
+  // on unlink.
+  (database) => {
+    database.exec(`
+      ALTER TABLE user_metadata ADD COLUMN saved_name TEXT;
+    `);
+  },
+  // v5 — Sticker Studio. One row per sticker per owner; the WebP itself lives
+  // outside the database, content-addressed by sha256, and is deleted only
+  // when no row (any owner) still points at it. Pack items cascade so a
+  // deleted sticker or pack cannot leave a dangling membership. Wiped on
+  // unlink with the rest of the account.
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS stickers (
+        id           TEXT PRIMARY KEY,
+        owner        TEXT NOT NULL,
+        sha256       TEXT NOT NULL,
+        name         TEXT NOT NULL DEFAULT '',
+        animated     INTEGER NOT NULL DEFAULT 0,
+        width        INTEGER,
+        height       INTEGER,
+        duration_ms  INTEGER,
+        file_size    INTEGER NOT NULL,
+        source       TEXT NOT NULL,
+        source_mime  TEXT,
+        is_favorite  INTEGER NOT NULL DEFAULT 0,
+        created_at   INTEGER NOT NULL,
+        updated_at   INTEGER NOT NULL,
+        last_used_at INTEGER,
+        UNIQUE (owner, sha256)
+      );
+      CREATE INDEX IF NOT EXISTS idx_stickers_owner_created
+        ON stickers (owner, created_at);
+      CREATE INDEX IF NOT EXISTS idx_stickers_owner_name
+        ON stickers (owner, name);
+      CREATE INDEX IF NOT EXISTS idx_stickers_sha
+        ON stickers (sha256);
+
+      CREATE TABLE IF NOT EXISTS sticker_packs (
+        id         TEXT PRIMARY KEY,
+        owner      TEXT NOT NULL,
+        name       TEXT NOT NULL,
+        name_key   TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE (owner, name_key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_sticker_packs_owner
+        ON sticker_packs (owner, name_key);
+
+      CREATE TABLE IF NOT EXISTS sticker_pack_items (
+        pack_id    TEXT NOT NULL,
+        sticker_id TEXT NOT NULL,
+        position   INTEGER NOT NULL,
+        added_at   INTEGER NOT NULL,
+        PRIMARY KEY (pack_id, sticker_id),
+        FOREIGN KEY (pack_id) REFERENCES sticker_packs (id) ON DELETE CASCADE,
+        FOREIGN KEY (sticker_id) REFERENCES stickers (id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_sticker_pack_items_sticker
+        ON sticker_pack_items (sticker_id);
+      CREATE INDEX IF NOT EXISTS idx_sticker_pack_items_order
+        ON sticker_pack_items (pack_id, position);
+    `);
+  },
+  // v6 — a sticker library belongs to sticker_owners.id, never a phone JID.
+  // A legacy phone key is attached to a LID only when lid_mapping holds exactly
+  // one normalized LID for that number. Zero or several stay unbound: the rows
+  // are kept and no sender can open them. Keys that resolve to the same LID
+  // are merged here. This step is frozen: it inlines its own JID normalization
+  // and does not import the application.
+  (database) => {
+    const crypto = require("node:crypto");
+
+    database.exec(`
+      CREATE TABLE sticker_owners (
+        id         TEXT PRIMARY KEY,
+        kind       TEXT NOT NULL CHECK (kind IN ('self','user')),
+        account    TEXT UNIQUE,
+        legacy_key TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_sticker_owners_self
+        ON sticker_owners (kind) WHERE kind = 'self';
+    `);
+
+    // Frozen copy of normalizeJid. A shipped migration cannot follow later edits.
+    const normalizeJid = (jid) => {
+      if (!jid) return jid;
+      const text = String(jid);
+      if (text.includes("@lid")) {
+        if (text.includes(":")) return `${text.split(":")[0]}@lid`;
+        return text;
+      }
+      if (text.includes(":")) return `${text.split(":")[0]}@${text.split("@")[1]}`;
+      return text;
+    };
+    const isLid = (jid) => typeof jid === "string" && jid.includes("@lid");
+    const isPn = (jid) => typeof jid === "string" && jid.includes("@s.whatsapp.net");
+
+    const run = (sql, ...params) => database.prepare(sql).run(...params);
+    const all = (sql, ...params) => database.prepare(sql).all(...params);
+
+    // Same row set as store.getLidsForPn, then distinct normalized LIDs.
+    const lidsForPn = (pn) => {
+      if (!pn) return [];
+      const found = new Set();
+      const consider = (rows) => {
+        for (const row of rows) {
+          if (!row?.lid || !row?.pn) continue;
+          if (normalizeJid(row.pn) !== pn && row.pn !== pn) continue;
+          const lid = normalizeJid(row.lid);
+          if (isLid(lid)) found.add(lid);
+        }
+      };
+      consider(all("SELECT lid, pn FROM lid_mapping WHERE pn = ?", pn));
+      if (!String(pn).includes(":")) {
+        const at = String(pn).lastIndexOf("@");
+        if (at > 0) {
+          const user = String(pn).slice(0, at);
+          consider(
+            all("SELECT lid, pn FROM lid_mapping WHERE pn >= ? AND pn < ?", `${user}:`, `${user};`),
+          );
+        }
+      }
+      return [...found];
+    };
+
+    const classify = (legacy) => {
+      if (legacy === "self") {
+        return {
+          bucket: "self",
+          kind: "self",
+          account: null,
+          legacyKey: "self",
+          normalized: "self",
+          original: legacy,
+        };
+      }
+      const norm = normalizeJid(legacy);
+      if (isLid(norm)) {
+        return {
+          bucket: `account:${norm}`,
+          kind: "user",
+          account: norm,
+          legacyKey: norm,
+          normalized: norm,
+          original: legacy,
+        };
+      }
+      if (isPn(norm)) {
+        const lids = lidsForPn(norm);
+        if (lids.length === 1) {
+          return {
+            bucket: `account:${lids[0]}`,
+            kind: "user",
+            account: lids[0],
+            legacyKey: norm,
+            normalized: norm,
+            original: legacy,
+          };
+        }
+        return {
+          bucket: `unbound-pn:${norm}`,
+          kind: "user",
+          account: null,
+          legacyKey: norm,
+          normalized: norm,
+          original: legacy,
+        };
+      }
+      return {
+        bucket: `raw:${legacy}`,
+        kind: "user",
+        account: null,
+        legacyKey: legacy,
+        normalized: norm,
+        original: legacy,
+      };
+    };
+
+    const legacyOwners = all(
+      `SELECT owner FROM stickers
+       UNION
+       SELECT owner FROM sticker_packs`,
+    );
+    if (!legacyOwners.length) return;
+
+    const groups = new Map();
+    for (const row of legacyOwners) {
+      const info = classify(row.owner);
+      const group = groups.get(info.bucket);
+      if (group) group.entries.push(info);
+      else groups.set(info.bucket, { kind: info.kind, account: info.account, entries: [info] });
+    }
+
+    const usedIds = new Set();
+    const newId = () => {
+      for (;;) {
+        const id = crypto.randomBytes(8).toString("hex");
+        if (!usedIds.has(id)) {
+          usedIds.add(id);
+          return id;
+        }
+      }
+    };
+    const now = Date.now();
+
+    const renumberPack = (packId) => {
+      const items = all(
+        `SELECT sticker_id FROM sticker_pack_items
+         WHERE pack_id = ?
+         ORDER BY position ASC, added_at ASC, sticker_id ASC`,
+        packId,
+      );
+      for (let index = 0; index < items.length; index += 1) {
+        run(
+          "UPDATE sticker_pack_items SET position = ? WHERE pack_id = ? AND sticker_id = ?",
+          index,
+          packId,
+          items[index].sticker_id,
+        );
+      }
+    };
+
+    const retargetItems = (fromStickerId, toStickerId) => {
+      const items = all(
+        "SELECT pack_id FROM sticker_pack_items WHERE sticker_id = ?",
+        fromStickerId,
+      );
+      for (const item of items) {
+        const exists = database
+          .prepare("SELECT 1 AS x FROM sticker_pack_items WHERE pack_id = ? AND sticker_id = ?")
+          .get(item.pack_id, toStickerId);
+        if (exists) {
+          run(
+            "DELETE FROM sticker_pack_items WHERE pack_id = ? AND sticker_id = ?",
+            item.pack_id,
+            fromStickerId,
+          );
+        } else {
+          run(
+            "UPDATE sticker_pack_items SET sticker_id = ? WHERE pack_id = ? AND sticker_id = ?",
+            toStickerId,
+            item.pack_id,
+            fromStickerId,
+          );
+        }
+        renumberPack(item.pack_id);
+      }
+    };
+
+    const appendPack = (fromPackId, toPackId) => {
+      const items = all(
+        `SELECT sticker_id FROM sticker_pack_items
+         WHERE pack_id = ?
+         ORDER BY position ASC, added_at ASC`,
+        fromPackId,
+      );
+      for (const item of items) {
+        const exists = database
+          .prepare("SELECT 1 AS x FROM sticker_pack_items WHERE pack_id = ? AND sticker_id = ?")
+          .get(toPackId, item.sticker_id);
+        if (exists) continue;
+        const count = database
+          .prepare("SELECT COUNT(*) AS n FROM sticker_pack_items WHERE pack_id = ?")
+          .get(toPackId).n;
+        run(
+          `INSERT INTO sticker_pack_items (pack_id, sticker_id, position, added_at)
+           VALUES (?, ?, ?, ?)`,
+          toPackId,
+          item.sticker_id,
+          count,
+          now,
+        );
+      }
+    };
+
+    const placeholders = (values) => values.map(() => "?").join(", ");
+
+    const mergeStickers = (legacyKeys) => {
+      if (legacyKeys.length < 2) return;
+      const marks = placeholders(legacyKeys);
+      const rows = all(`SELECT * FROM stickers WHERE owner IN (${marks})`, ...legacyKeys);
+      const bySha = new Map();
+      for (const row of rows) {
+        const group = bySha.get(row.sha256);
+        if (group) group.push(row);
+        else bySha.set(row.sha256, [row]);
+      }
+      for (const group of bySha.values()) {
+        if (group.length < 2) continue;
+        group.sort(
+          (a, b) => a.created_at - b.created_at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+        );
+        const keep = group[0];
+        let name = keep.name;
+        let favorite = keep.is_favorite;
+        let lastUsed = keep.last_used_at;
+        let created = keep.created_at;
+        for (const extra of group.slice(1)) {
+          if (!name && extra.name) name = extra.name;
+          if (extra.is_favorite) favorite = 1;
+          if (extra.last_used_at != null && (lastUsed == null || extra.last_used_at > lastUsed)) {
+            lastUsed = extra.last_used_at;
+          }
+          if (extra.created_at < created) created = extra.created_at;
+          retargetItems(extra.id, keep.id);
+          run("DELETE FROM stickers WHERE id = ?", extra.id);
+        }
+        run(
+          `UPDATE stickers
+           SET name = ?, is_favorite = ?, last_used_at = ?, created_at = ?
+           WHERE id = ?`,
+          name,
+          favorite,
+          lastUsed,
+          created,
+          keep.id,
+        );
+      }
+    };
+
+    const mergePacks = (legacyKeys) => {
+      if (legacyKeys.length < 2) return;
+      const marks = placeholders(legacyKeys);
+      const packs = all(`SELECT * FROM sticker_packs WHERE owner IN (${marks})`, ...legacyKeys);
+      const byName = new Map();
+      for (const pack of packs) {
+        const group = byName.get(pack.name_key);
+        if (group) group.push(pack);
+        else byName.set(pack.name_key, [pack]);
+      }
+      for (const group of byName.values()) {
+        if (group.length < 2) continue;
+        group.sort(
+          (a, b) => a.created_at - b.created_at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+        );
+        const keep = group[0];
+        for (const extra of group.slice(1)) {
+          appendPack(extra.id, keep.id);
+          run("DELETE FROM sticker_pack_items WHERE pack_id = ?", extra.id);
+          run("DELETE FROM sticker_packs WHERE id = ?", extra.id);
+          renumberPack(keep.id);
+        }
+      }
+    };
+
+    const repoint = (legacyKeys, ownerId) => {
+      const marks = placeholders(legacyKeys);
+      run(`UPDATE stickers SET owner = ? WHERE owner IN (${marks})`, ownerId, ...legacyKeys);
+      run(`UPDATE sticker_packs SET owner = ? WHERE owner IN (${marks})`, ownerId, ...legacyKeys);
+    };
+
+    for (const group of groups.values()) {
+      // Stickers still carry the v5 owner string. Merge and repoint those,
+      // and only then give the survivor the new id.
+      const originals = [...new Set(group.entries.map((entry) => entry.original))];
+      const accountMatch = group.account
+        ? group.entries.find((entry) => entry.normalized === group.account)
+        : null;
+      const legacyKey = accountMatch
+        ? accountMatch.legacyKey
+        : group.entries.map((entry) => entry.legacyKey).sort()[0];
+      const id = newId();
+      run(
+        `INSERT INTO sticker_owners (id, kind, account, legacy_key, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        id,
+        group.kind,
+        group.account,
+        legacyKey,
+        now,
+      );
+      mergeStickers(originals);
+      mergePacks(originals);
+      repoint(originals, id);
+    }
+  },
 ];
 
 function migrate(database, migrations = MIGRATIONS) {

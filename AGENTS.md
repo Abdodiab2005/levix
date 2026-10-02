@@ -157,7 +157,8 @@ src/
 │   ├── permissions.middleware.js
 │   └── forward-tracking.middleware.js
 ├── routes/
-│   └── dashboard.api.esm.js # everything the control panel reads/writes
+│   ├── dashboard.api.esm.js # everything the control panel reads/writes
+│   └── stickers.api.esm.js  # Sticker Studio library, packs, upload, and jobs
 ├── panel/            # login throttling, session epochs, bounded session store
 │   └── feedback.cjs  # validates + forwards Settings → Feedback to the developer
 ├── services/         # External services
@@ -457,9 +458,15 @@ and blacklist middleware, the prefix lookup, every permission check) with no
 | `debts` | `!debt` ledger | — |
 | `schedules` | `!schedule` / `!autoschedule` jobs | — |
 | `forward_scores` | forward counters per message | `forward_score_ttl_days` (30) |
+| `sticker_owners` | who a Sticker Studio library belongs to. `id` is an internal 16-hex key; `kind` is `self` (the panel and the linked account, at most one) or `user`. `account` is that person's normalized LID, or the linked phone JID only when the credentials carry no lid. Null means the row is unbound and no sender can open it | wiped on unlink |
+| `stickers` | Sticker Studio library, one row per sticker per `sticker_owners` id; the WebP is a file named by its sha256 | wiped on unlink |
+| `sticker_packs` | named sticker packs per owner | wiped on unlink |
+| `sticker_pack_items` | pack membership and order | cascade with the sticker or the pack; wiped on unlink |
 
 `forward_scores` gains a row per forwarded message, so it expires; the sweep
-runs at boot and every six hours (`sweepExpired()` in `db.cjs`).
+runs at boot and every six hours (`sweepExpired()` in `db.cjs`). Sticker files
+live under `<data>/stickers/<sha[0..2]>/` and are removed with the rows on
+unlink (`library.clearAll()`).
 
 The bot does **not** archive other people's messages. Nothing incoming is
 written beyond the forward counter and the sender's last-seen row; deleted and
@@ -769,6 +776,17 @@ account".
   `quotedMessage` — nothing is cached or archived.
 - **`!memory`** (`src/commands/memory.cjs`) — the Markdown long-term memory.
 - **`!perm`** (`src/commands/perm.cjs`) — bot owner / admin roles.
+- **`!sticker`** (`src/commands/sticker.cjs`, aliases `s`, `ملصق`, `tosticker`) —
+  an image, GIF, or short video becomes a sticker and is saved in Sticker
+  Studio when the sender's library has room. See "Sticker Studio".
+- **`!toimage`** (`src/commands/toimage.cjs`, aliases `toimg`, `صورة`) — a
+  replied sticker as a PNG, or `gif` / `متحرك` for the animation.
+- **`!pack`** (`src/commands/pack.cjs`, alias `حزمة`) — create, fill, and
+  manage sticker packs.
+- **`!packs`** (`src/commands/packs.cjs`, alias `حزم`) — list packs and the
+  library total.
+- **`!stickers`** (`src/commands/stickers.cjs`, alias `ملصقاتي`) — page through
+  recent, favorite, or packed stickers.
 
 ### 5b. Domain setup (`levix domain`, `src/domain/`)
 
@@ -838,6 +856,132 @@ Everything that comes off the network goes through here:
 - `stripHtml(html)` — page text for the AI agent.
 
 The AI agent's `fetch_url` tool runs every page it opens through these.
+
+### 8. Sticker Studio
+
+The panel and the bot share one library. `src/routes/stickers.api.esm.js` is
+mounted at `/dashboard/api` behind the same session as the rest of the panel
+(`src/bootstrap/panel.js`). The upload is raw bytes: `jsonUnlessStickerUpload`
+skips the JSON parser for `POST /stickers/uploads` so the route can cap the
+body while it is still a stream. The panel operator shares the linked account's library.
+
+**Modules** (`src/stickers/`):
+
+| file | what it owns |
+| --- | --- |
+| `owner.cjs` | who a sticker belongs to (`forPanel`, `forMessage`) |
+| `library.cjs` | rows, packs, and the content-addressed files |
+| `studio.cjs` | an upload or a WhatsApp buffer, through the queue, into the library |
+| `media.cjs` | the converter for an image, a GIF, a video, or an existing WebP |
+| `webp.cjs` | RIFF parse, canonical bytes, and the pack metadata written on send |
+| `ffmpeg.cjs` | the one FFmpeg runner |
+| `jobs.cjs` | the conversion queue |
+| `uploads.cjs` | panel uploads in `<data>/tmp/stickers`, swept by `UPLOAD_TTL_MS` |
+| `options.cjs` | the edit schema: fit, zoom, pan, rotate, background, trim |
+| `limits.cjs` | the numbers the converter, the library, the API, and the bot share |
+| `errors.cjs` | one error vocabulary for the panel JSON and the bot's `tr()` replies |
+| `zip.cjs` | a store-only ZIP of an export |
+
+Bot commands reach the library through `src/utils/stickerBot.cjs`.
+
+**Owners.** A library belongs to one `sticker_owners` row, and `stickers.owner`
+/ `sticker_packs.owner` store that row's id (16 hex characters), not a phone
+number and not a LID. `forPanel` / `forMessage` in `owner.cjs` are the only
+code that turns a WhatsApp identity into an id. `kind = 'self'` is the panel
+and the linked account (at most one row). Its `account` is the paired
+`creds.me.lid`, normalized (`<digits>@lid`, no device suffix), or normalized
+`creds.me.id` only when the credentials have no lid; when Baileys later fills
+in `me.lid` for that same pairing, the row moves onto the LID. Everyone else is
+`kind = 'user'` with `account` set to the sender's normalized LID. The LID is
+the one on the message (`getSenderCandidates`). A message that carries only a
+phone JID asks Baileys for the current mapping
+(`signalRepository.lidMapping.getLIDForPN`, about five seconds; a throw or a
+timeout is "unknown"). Levix's `lid_mapping` table is a history of every LID
+ever seen for a number and is not consulted. No LID means the sender is not
+identified and the command says so. A recycled phone number comes with a new
+LID, so the new person gets an empty library. Relinking to a different account
+makes that account's row `self` and leaves the previous account's stickers on
+a `user` row that only the previous LID can open. Unlink deletes every
+`sticker_owners` row with the stickers and packs.
+
+**Files.** Each WebP is stored by its sha256 at
+`<data>/stickers/<sha[0..2]>/<sha>.webp`, with `<sha>.thumb.webp` beside it.
+`webp.canonical` strips the EXIF and XMP chunks, and the VP8X flags that
+announce them, before that hash, so pack metadata is not part of the saved
+bytes. Sending puts the metadata back (`webp.metadata`, through
+`media.withStickerMetadata` / `packedSticker`): the pack name is the sticker's
+first pack, or the product name from `brand.cjs`, and the publisher is the
+product name. The file is removed only when no row, of any owner, still points
+at that hash (`removeIfOrphan`).
+
+**Packs and deletion.** A pack name is 1–40 letters, digits, spaces, `-`, or
+`_`, unique per owner ignoring case, and it cannot be a `!pack` sub-command
+word (`PACK_SUBCOMMANDS`). An owner can keep `PACKS_MAX_PER_OWNER` (100)
+packs. Deleting a pack leaves its stickers in the library; `deleteStickers`
+on that call removes only stickers that belonged to the pack alone. Deleting
+a sticker that is still in a pack returns `IN_USE` unless the caller passes
+`confirm` (`DELETE /stickers/:id?confirm=1`). Removing a sticker from a pack
+does not delete it. How many stickers one owner can keep is the
+`sticker_library_limit` setting (default 1000), read on every save. A full
+library refuses a new row. `!sticker` still converts and sends the result
+without saving when `hasRoom` is false.
+
+**The queue** (`limits.cjs`, enforced by `jobs.cjs`). Two conversions run at
+once (`JOB_CONCURRENCY`) and sixteen more may wait (`JOB_MAX_QUEUED`); past
+that, `submit` throws `BUSY`. A job times out at `JOB_TIMEOUT_MS` (90s). The
+slot stays taken for 5 seconds (`timeoutGraceMs`) while the aborted worker
+finishes. A finished record is dropped after `JOB_RETENTION_MS` (10 minutes).
+Each FFmpeg step is capped by `FFMPEG_STEP_TIMEOUT_MS` (60s). An upload file
+lives for `UPLOAD_TTL_MS` (1 hour).
+
+**Commands.** All five default to `MEMBERS` in `src/config/defaults.cjs`.
+
+- `!sticker` — aliases `s`, `ملصق`, `tosticker`. An image, GIF, or video
+  attached or replied to becomes a sticker. The bot accepts at most
+  `BOT_VIDEO_MAX_SECONDS` (10) of video, because it has no trim control.
+  `crop` / `قص` uses cover fit; `nobg` / `بدون-خلفية` keys out a flat
+  background (`removeBackground.mode: "plain"`). Replying to a sticker runs
+  `!toimage`. When the library has room the sticker is saved with source
+  `BOT_COMMAND` and sent back from the library; otherwise it is converted and
+  sent without a row.
+- `!toimage` — aliases `toimg`, `صورة`. Reply to a sticker. The default is a
+  PNG image; `doc` / `ملف` sends that PNG as a document; `gif` / `متحرك` sends
+  an animated sticker as a video. A static sticker asked for as a gif comes
+  back as a PNG.
+- `!pack` — alias `حزمة`. `create` / `new` / `إنشاء` / `انشاء` / `جديد`, `add`
+  / `أضف` / `اضف` / `إضافة` / `اضافة`, `remove` / `rm` / `أزل` / `ازل` /
+  `إزالة` / `ازالة`, `rename` / `تسمية` / `إعادة-تسمية` / `اعادة-تسمية`,
+  `delete` / `del` / `احذف` / `حذف`, `show` / `list` / `عرض`. Replying to
+  media with `!pack <name>` creates the pack when it is missing and adds the
+  sticker. An existing sticker is saved as `WHATSAPP_STICKER`; other media as
+  `BOT_COMMAND`. `delete` removes the pack and keeps the stickers.
+- `!packs` — alias `حزم`. Lists up to 30 packs and the library total.
+- `!stickers` — alias `ملصقاتي`. Sends one page (`BOT_PAGE_SIZE`, 5) of recent
+  stickers, favorites (`favorites` / `المفضلة`), or one pack (`pack` / `حزمة`
+  plus the name).
+
+**Media Hub.** On Android, the viewer and a single selection in Media Hub
+hand one stickerable item to the panel. `StickerHandoffs.prepare` parks the
+content URI already granted to the hub (`PendingStickers`, in memory only)
+and opens the panel at `#stickers` (`PANEL_HASH`). The page calls
+`LevixHost.takePendingSticker()` (`PanelBridge`) for a token and
+preview URL, with intent `create` for an image or video (trim, frame, re-encode)
+or `save` for an existing WebP (keep the file, add it to the library). Android
+streams the URI to the local Node upload route; file bytes never enter the
+JavaScript bridge. The holder is cleared on the one-shot hand-off, so a failed
+pick is not converted twice. Voice notes, audio, and documents are not offered. The bytes
+then go to `POST /dashboard/api/stickers/uploads`, and the conversion job is
+`POST /dashboard/api/stickers/jobs` with `source: "MEDIA_HUB"` (the other
+accepted source is `PANEL_UPLOAD`). The cap is 16 MB
+(`PendingStickers.MAX_BYTES`, the same ceiling as `UPLOAD_MAX_BYTES`).
+Re-editing a library sticker in the Android panel uses
+`POST /dashboard/api/stickers/:id/uploads` to create an upload on the server;
+its preview Blob is not posted through the WebView bridge.
+
+**Unlink.** `clearAccountScopedState()` in `src/core/session.js` calls
+`library.clearAll()`, which deletes every sticker, pack, and `sticker_owners`
+row, removes `<data>/stickers`, and discards pending uploads. The next phone
+that pairs starts a new self library and does not inherit the previous one.
 
 ## Dashboard (`views/` + `public/` + `src/routes/dashboard.api.esm.js`)
 
@@ -1113,9 +1257,11 @@ logger.debug('Debug info');
     when there isn't one (that's how the single-executable build works). If you
     add another directory scan at load time, give it the same fallback.
 26. **Unlink is an account boundary.** It clears the WhatsApp directory, roles,
-    AI history, long-term memory and buffered AI context, and pauses schedules
-    created for the old account. Do not leave account-derived state active for
-    the next phone that pairs.
+    AI history, long-term memory and buffered AI context, the sticker library
+    (every sticker, pack, and file), and pauses schedules created for the old
+    account. Do not leave account-derived state active for the next phone that
+    pairs. Sticker unlink deletes the `sticker_owners` rows as well as the
+    stickers, packs and files, so the next pairing starts a new `self` library.
 27. **Compare WhatsApp identities with the shared helpers.** LIDs, phone-number
     JIDs and device suffixes can name the same user. Moderation and role gates
     must use `sameUser()`, `getSenderCandidates()` and `isAdminInGroup()` rather

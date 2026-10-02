@@ -114,10 +114,75 @@ Levix includes intelligent network and connection lifecycle handling:
 
 ## Media & Native Audio Transcoding (FFmpeg)
 
+### Media Hub
+
+Open **Media Hub** from the native host screen to browse WhatsApp and WhatsApp Business statuses, photos, videos, voice notes, audio, documents, and stickers. Search, filter, favorite, share, and save copies to user-visible Levix folders. Storage Insights shows local totals and large files. Only copies saved by Levix can be deleted in the hub.
+
+The hub asks for media permission when you open it, after an explanation. Android 14's selected-media permission shows only the items you selected; you can select more or allow full access in system settings. Hidden `.Statuses` folders and some documents may not appear in MediaStore. In that case, use **Enable status access** to grant read-only access to the WhatsApp Media folder through Android's folder picker. Levix remembers the grant and asks again only if access is removed. Media Hub never uploads files, names, thumbnails, or folder details.
+
 Levix bundles a native build of **FFmpeg** (`libffmpeg.so` — ARM64 or ARMv7, matching the APK) inside the APK, compiled from source with NDK r29 so it is safe on 16 KB-page devices.
 - **Voice Notes (`!tts`)**: The Text-to-Speech command automatically transcodes Google TTS MP3 audio into true WhatsApp PTT voice notes (`audio/ogg; codecs=opus`).
 - **Media Previews**: Video and picture thumbnails (`jpegThumbnail`) are generated locally on the phone before sending, ensuring crisp previews in chat bubbles and quotes.
+- **Stickers**: The WebP encode, animation and muxing that Sticker Studio needs (see below).
 - No external packages or Termux setup are required.
+
+---
+
+## Sticker Studio
+
+Sticker Studio is the panel's sticker screen. It is reached from the native side rather than opened by hand, because the panel runs in a WebView with no file picker of its own and no way to reach a `content://` URI belonging to the Media Hub.
+
+### The two actions in the Media Hub
+
+Any single item in **Media Hub** can be turned into a sticker, in two places:
+
+- the **viewer**, on the action row under the picture — hidden for items with no sticker form;
+- the **selection bar**, on **Make sticker** — visible only when exactly one stickerable file is selected, since Sticker Studio takes one file at a time.
+
+The label follows the file:
+
+| Label | When | What the panel does |
+| --- | --- | --- |
+| **Make sticker** | an image, GIF or video | opens the converter: trim, frame, and re-encode to WebP |
+| **Add to stickers** | a WhatsApp sticker (`.webp`) | keeps the file as it is and only adds it to your library |
+
+Voice notes, audio and documents get no action at all — they have no sticker form, so nothing is shown rather than something that would always refuse.
+
+Tapping either one opens the panel on its Sticker Studio screen. Nothing is read on the phone at that moment: the app records the URI it already has permission to read, and the panel picks it up from there. If the file is over the cap, or Android never reported its size, you get a message instead of a screen.
+
+### Source and export transfers
+
+The Media Hub offers files up to 16 MB, mirroring Sticker Studio's server upload limit (`src/stickers/limits.cjs`, `UPLOAD_MAX_BYTES`). It still rejects items with unknown size before opening the panel. This is an offer rule, not a WebView bridge limit: Android streams the selected `content://` URI to Node over the local unix socket, and Node enforces the upload limit again while reading. The panel receives a short-lived token and a loopback preview URL. A preview GET opens the URI as a stream in `shouldInterceptRequest`; no source file is copied into the bridge.
+
+### Sticker Studio host methods
+
+| Method | What it does |
+| --- | --- |
+| `takePendingSticker()` | One-shot Media Hub hand-off; returns `intent`, `token`, `url`, `name`, `mime`, and `size`, with no bytes |
+| `pickStickerSource(callId)` | Opens Android's image/video picker, then returns source metadata through `window.__levixHostDone` |
+| `uploadSource(callId, token, fileName, maxBytes)` | Streams the selected URI to the local Sticker Studio upload route |
+| `exportFile(callId, action, path, method, jsonBody, fileName, mime)` | Streams an export from Node to the share cache or Downloads/Levix |
+| `cancel(callId)` | Closes an active transfer and returns a cancelled result |
+
+The asynchronous methods acknowledge immediately and deliver small JSON through `window.__levixHostDone(callId, result)`. Tokens expire after one hour; the activity keeps at most eight and clears them when it closes. Share files are written to `cache/shared/` and swept after 24 hours. Save writes a pending MediaStore Downloads row and publishes it only after the stream finishes. Both export destinations enforce the Sticker Studio MIME allowlist and sanitize the file name.
+
+The ordinary `request()` bridge still carries other panel POST bodies; the small settings JSON export still uses `saveExportFile()`.
+Re-editing a sticker from the library creates its upload on the server, so its preview Blob is never posted through the bridge.
+
+### The FFmpeg components this needs
+
+`android/scripts/build-ffmpeg-android.sh` builds **libwebp 1.6.0** (with a pinned SHA-256) and adds these components:
+
+| Kind | Components | Why |
+| --- | --- | --- |
+| libraries | `libwebp` + `libwebpmux` + `libsharpyuv` | WebP encode/decode, animation, and muxing; libwebp's own sharp/colour-space helpers |
+| encoders | `libwebp`, `libwebp_anim`, `rawvideo` | still stickers, animated stickers, and raw frames |
+| demuxers | `rawvideo`, `image_gif_pipe` | reading GIF frames to animate them |
+| muxers | `webp`, `rawvideo` | writing a `.webp` container |
+
+Static and PIC, `CC`/`AR`/`RANLIB` supplied by the cross toolchain, so the result stays position-independent and safe on 16 KB-page devices. The ARM64 binary grows by roughly 5% against the build without it.
+
+The filters FFmpeg already enables at defaults are what the studio's own pipeline needs — `pad`, `fps`, `scale`, `crop`, `trim`, `transpose`, `split`, `colorkey`, `overlay`, `palettegen`, `paletteuse` — so nothing was added or removed there.
 
 ---
 

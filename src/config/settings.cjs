@@ -345,6 +345,16 @@ const SETTINGS = [
     label: "ffmpeg path",
     hint: "Only if the bundled ffmpeg-static binary can't run on this machine.",
   },
+  {
+    key: "sticker_library_limit",
+    type: "int",
+    default: 1000,
+    min: 1,
+    max: 100000,
+    group: "media",
+    label: "Sticker library size",
+    hint: "How many stickers one person can keep in Sticker Studio. Read on every save, so a change applies without a restart. A full library refuses new stickers until some are deleted.",
+  },
 
   // --- WhatsApp proxy ----------------------------------------------------
   //

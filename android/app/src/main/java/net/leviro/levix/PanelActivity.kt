@@ -2,6 +2,7 @@ package net.leviro.levix
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -20,11 +21,14 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import java.io.File
@@ -40,6 +44,14 @@ class PanelActivity : AppCompatActivity() {
     private lateinit var web: WebView
     private lateinit var sock: File
     private lateinit var bridgeJs: String
+    private lateinit var stickerHost: StickerHost
+    private val stickerSources = StickerSources()
+    private val stickerPickerIds = ArrayDeque<String>()
+
+    private val pickSticker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val id = stickerPickerIds.removeFirstOrNull()
+        if (id != null) stickerHost.picked(id, result.data?.data.takeIf { result.resultCode == Activity.RESULT_OK })
+    }
 
     private val pickPhone = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -130,8 +142,36 @@ class PanelActivity : AppCompatActivity() {
 
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, false)
+        stickerHost = StickerHost(this, sock, stickerSources,
+            { id, result -> runOnUiThread {
+                web.evaluateJavascript(
+                    "window.__levixHostDone(${JSONObject.quote(id)}, ${result})", null)
+            } },
+            { id -> runOnUiThread {
+                stickerPickerIds.addLast(id)
+                try {
+                    pickSticker.launch(Intent(Intent.ACTION_GET_CONTENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "*/*"
+                        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
+                    })
+                } catch (error: Exception) {
+                    HostLog.event("sticker picker ${error.message}")
+                    stickerPickerIds.remove(id)
+                    stickerHost.picked(id, null)
+                }
+            } },
+            { file, mime -> runOnUiThread { shareStickerFile(file, mime) } })
         web.addJavascriptInterface(
-            PanelBridge(sock, bridgeJs, { runOnUiThread { launchContactPicker() } }, applicationContext),
+            PanelBridge(
+                sock,
+                bridgeJs,
+                { runOnUiThread { launchContactPicker() } },
+                applicationContext,
+                { runOnUiThread { HostLogShare.share(this) } },
+                { runOnUiThread { finish() } },
+                stickerHost,
+            ),
             "LevixHost",
         )
 
@@ -170,6 +210,16 @@ class PanelActivity : AppCompatActivity() {
             ): WebResourceResponse? {
                 val url = request.url?.toString() ?: return null
                 if (!isLoopback(url)) return blockedResponse()
+                if (request.url.path?.startsWith("/__levix-host/source/") == true) {
+                    val token = request.url.path!!.removePrefix("/__levix-host/source/")
+                    val source = stickerSources.get(token)
+                    if (request.method != "GET" || source == null) return sourceNotFound()
+                    return try {
+                        val input = contentResolver.openInputStream(source.uri.toUri()) ?: return sourceNotFound()
+                        WebResourceResponse(source.mime.substringBefore(';'), null, 200, "OK",
+                            mapOf("Content-Type" to source.mime, "Cache-Control" to "no-store"), input)
+                    } catch (_: Exception) { sourceNotFound() }
+                }
                 return try {
                     PanelHttp.intercept(sock, request, bridgeJs)
                 } catch (error: Throwable) {
@@ -258,6 +308,27 @@ class PanelActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * The share sheet for a file Sticker Studio produced. A WebView holds a
+     * blob: URL that no other app can open and no chooser can grant, so the
+     * bytes are written to the FileProvider's cache and sent from there with a
+     * one-shot read grant.
+     */
+    private fun shareStickerFile(file: File, mime: String) {
+        try {
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = mime
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(send, getString(R.string.panel_share_file)))
+        } catch (error: Exception) {
+            HostLog.event("panel share sticker ${error.message}")
+            Toast.makeText(this, R.string.media_share_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun deliverPickedContact(uri: Uri?) {
         if (!::web.isInitialized) return
         val payload = JSONObject()
@@ -290,14 +361,46 @@ class PanelActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        fileChooserCallback?.onReceiveValue(null)
+        stickerHost.destroy()
+        stickerPickerIds.clear()
+        val chooser = fileChooserCallback
         fileChooserCallback = null
+        chooser?.onReceiveValue(null)
         web.destroy()
         super.onDestroy()
     }
 
+
+
     companion object {
         const val EXTRA_URL = "url"
+
+        /**
+         * The one place a panel URL with a screen hash is built, so the app has
+         * a single definition of "open the panel on Sticker Studio" (a client
+         * route hash, not a server path) and never doubles a slash.
+         */
+        fun urlForHash(base: String?, hash: String): String {
+            val root = base.orEmpty().ifBlank { "http://127.0.0.1:3001/" }
+            return root.trimEnd('/') + "/#" + hash
+        }
+
+        /**
+         * Opens the panel on one of its screens. The hash is a client route
+         * ("connection", "stickers"), not a server path.
+         *
+         * CLEAR_TOP because the panel may already be in the task: with the
+         * default launch mode it takes the old instance down and builds a fresh
+         * one on the URL below, so a second hand-off never lands on a page
+         * still showing the first one's file.
+         */
+        fun open(context: Context, hash: String) {
+            context.startActivity(
+                Intent(context, PanelActivity::class.java)
+                    .putExtra(EXTRA_URL, urlForHash(HostState.snapshot.panelUrl, hash))
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            )
+        }
 
         fun loopbackUrl(raw: String?): String {
             val fallback = "http://127.0.0.1:3001/"
@@ -325,6 +428,12 @@ class PanelActivity : AppCompatActivity() {
             "Forbidden",
             mapOf("Cache-Control" to "no-store"),
             java.io.ByteArrayInputStream("Blocked by Levix".toByteArray()),
+        )
+
+        private fun sourceNotFound(): WebResourceResponse = WebResourceResponse(
+            "text/plain", "utf-8", 404, "Not Found",
+            mapOf("Cache-Control" to "no-store"),
+            java.io.ByteArrayInputStream(ByteArray(0)),
         )
     }
 }

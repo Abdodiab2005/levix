@@ -12,16 +12,54 @@ import java.io.File
 /**
  * fetch / XHR / form POST from the panel page. WebView intercept cannot
  * read POST bodies; those go through this bridge onto the unix socket.
+ *
+ * Sticker Studio file operations delegate to StickerHost and return immediately.
+ * This class retains the existing synchronous bridge for ordinary panel requests.
  */
 class PanelBridge(
     private val sock: File,
     private val bridgeJs: String = "",
     private val onPickContact: (() -> Unit)? = null,
     private val appContext: Context? = null,
+    private val onShareLogs: (() -> Unit)? = null,
+    private val onClosePanel: (() -> Unit)? = null,
+    private val stickerHost: StickerHost? = null,
 ) {
     @JavascriptInterface
     fun pickContact() {
         onPickContact?.invoke()
+    }
+
+    /**
+     * Returns the last N lines of the Android host log so the panel's
+     * Logs tab can display them without leaving the WebView.
+     */
+    @JavascriptInterface
+    fun hostLog(maxLines: Int): String {
+        return try {
+            val capped = maxLines.coerceIn(1, 500)
+            HostLog.readRecentLines(capped)
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    /**
+     * Triggers the native share-logs flow (same as the Share button
+     * on the native dashboard) from inside the WebView panel.
+     */
+    @JavascriptInterface
+    fun shareHostLogs() {
+        onShareLogs?.invoke()
+    }
+
+    /**
+     * Closes the panel WebView and returns to the native dashboard.
+     * Called from the panel's "Back to app" header button.
+     */
+    @JavascriptInterface
+    fun closePanel() {
+        onClosePanel?.invoke()
     }
 
     /**
@@ -62,6 +100,29 @@ class PanelBridge(
                 .toString()
         }
     }
+
+    @JavascriptInterface
+    fun takePendingSticker(): String = stickerHost?.takePending()
+        ?: JSONObject().put("ok", false).toString()
+
+    @JavascriptInterface
+    fun pickStickerSource(callId: String): String = stickerHost?.pick(callId)
+        ?: JSONObject().put("ok", false).put("error", "host unavailable").toString()
+
+    @JavascriptInterface
+    fun uploadSource(callId: String, token: String, fileName: String, maxBytes: Long): String =
+        stickerHost?.upload(callId, token, fileName, maxBytes)
+            ?: JSONObject().put("ok", false).put("error", "host unavailable").toString()
+
+    @JavascriptInterface
+    fun exportFile(callId: String, action: String, path: String, method: String,
+        jsonBody: String, fileName: String, mime: String): String =
+        stickerHost?.export(callId, action, path, method, jsonBody, fileName, mime)
+            ?: JSONObject().put("ok", false).put("error", "host unavailable").toString()
+
+    @JavascriptInterface
+    fun cancel(callId: String): String = stickerHost?.cancel(callId)
+        ?: JSONObject().put("ok", false).put("error", "host unavailable").toString()
 
     @JavascriptInterface
     fun request(url: String, method: String, headersJson: String, bodyB64: String): String {

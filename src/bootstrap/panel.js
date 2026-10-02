@@ -46,10 +46,19 @@ export async function bootstrapPanel({ core } = {}) {
   const { default: dashboardApiRoutes, setSession } = await import(
     "../routes/dashboard.api.esm.js"
   );
+  const stickerApi = await import("../routes/stickers.api.esm.js");
 
-  // Same session as the control panel: these routes hand back groups, debts
-  // and warnings with people's numbers in them.
-  app.use("/dashboard/api", requireLoginApi, noStore, dashboardJson, dashboardApiRoutes);
+  // Same session as the control panel. One chain and one JSON parser: the
+  // sticker upload is raw bytes (any Content-Type, up to the upload cap) and
+  // express.json would consume it before the route can enforce that cap.
+  app.use(
+    "/dashboard/api",
+    requireLoginApi,
+    noStore,
+    stickerApi.jsonUnlessStickerUpload(dashboardJson),
+    stickerApi.default,
+    dashboardApiRoutes,
+  );
   logger.info("Dashboard API routes registered");
 
   // Everything the bot reports goes out to the browsers watching the panel.
@@ -65,7 +74,10 @@ export async function bootstrapPanel({ core } = {}) {
 
   // The routes read the live socket off the session manager, so a reconnect
   // needs no re-wiring here.
-  if (core?.session) setSession(core.session);
+  if (core?.session) {
+    setSession(core.session);
+    stickerApi.setSession(core.session);
+  }
   // The WhatsApp-code password reset talks to the same session manager.
   if (core?.session) require("../panel/password-reset.cjs").setSession(core.session);
 

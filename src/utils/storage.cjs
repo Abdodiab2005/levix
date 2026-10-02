@@ -48,6 +48,8 @@ module.exports = {
   getTopForwardedMessages: store.getTopForwardedMessages,
   // User Metadata
   saveUserMetadata: store.saveUserMetadata,
+  rememberSavedName: store.rememberSavedName,
+  applyContactRecord: store.applyContactRecord,
   getUserMetadata: store.getUserMetadata,
   isUserOwner: store.isUserOwner,
   isUserBotAdmin: store.isUserBotAdmin,
@@ -59,6 +61,7 @@ module.exports = {
   storeLidPnMapping: store.storeLidPnMapping,
   storeLidPnMappings: store.storeLidPnMappings,
   getLidForPn: store.getLidForPn,
+  getLidsForPn: store.getLidsForPn,
   getLidsForPns: store.getLidsForPns,
   getPnForLid: store.getPnForLid,
   getAllLidMappings: store.getAllLidMappings,

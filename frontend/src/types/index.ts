@@ -64,14 +64,25 @@ export interface SettingItem {
   restart?: boolean;
 }
 
+/** The four levels runtime-config.PERMISSION_LEVELS stores. */
+export type PermissionLevel = "MEMBERS" | "ADMINS_ONLY" | "ADMINS_OWNER" | "OWNER_ONLY";
+
 export interface CommandItem {
   name: string;
   aliases: string[];
   description: string;
   descriptions?: { en?: string; ar?: string };
+  usage?: string | null;
+  usages?: { en?: string; ar?: string } | null;
+  /** "general", or "group" for a `group/<name>` sub-command. */
+  category?: string;
+  /** The permissions key: the name, or `group:<name>` for a sub-command. */
+  key?: string;
   chat: "all" | "group" | "private";
-  permission: "MEMBERS" | "ADMIN_ONLY" | "OWNER_ONLY";
-  defaultPermission: "MEMBERS" | "ADMIN_ONLY" | "OWNER_ONLY";
+  permission: PermissionLevel;
+  defaultPermission: PermissionLevel;
+  /** Declares `userAdminRequired` — a real WhatsApp group admin, so the level is fixed. */
+  permissionLocked?: boolean;
   enabled: boolean;
   overridden: boolean;
 }
@@ -83,10 +94,14 @@ export interface ScheduleItem {
   targetLabel?: string;
   targetKind?: "group" | "contact" | string;
   targetPhone?: string | null;
+  savedName?: string | null;
+  pushName?: string | null;
+  phone?: string | null;
   message: string;
   cronString?: string;
   scheduledTime?: number;
   when: string;
+  whenAr?: string;
   status: "active" | "paused" | "completed";
   lastRunAt?: number;
   lastDeliveryStatus?: "success" | "failed";
@@ -110,4 +125,101 @@ export interface LogItem {
   level: "info" | "warn" | "error" | "debug";
   msg: string;
   context?: any;
+}
+
+export interface Sticker {
+  id: string;
+  name: string;
+  animated: boolean;
+  width: number;
+  height: number;
+  durationMs: number;
+  fileSize: number;
+  sourceMime: string;
+  source: string;
+  favorite: boolean;
+  createdAt: number;
+  updatedAt: number;
+  lastUsedAt: number | null;
+  packIds: string[];
+  url: string;
+  thumbUrl: string;
+}
+
+export interface Pack {
+  id: string;
+  name: string;
+  count: number;
+  coverUrl: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface EditOptions {
+  fit?: "contain" | "cover";
+  zoom?: number;
+  panX?: number;
+  panY?: number;
+  rotate?: 0 | 90 | 180 | 270;
+  background?: string;
+  removeBackground?: { mode: "plain"; tolerance?: number } | null;
+  trim?: { start: number; duration: number } | null;
+}
+
+/** Panel create job. `MEDIA_HUB` is the Android handoff; everything else is an upload. */
+export type StickerJobSource = "PANEL_UPLOAD" | "MEDIA_HUB";
+
+export interface StickerUpload {
+  uploadId: string;
+  kind: string;
+  mime: string;
+  width: number;
+  height: number;
+  durationMs: number;
+  animated: boolean;
+  size: number;
+}
+
+export interface StickerList {
+  items: Sticker[];
+  total: number;
+}
+
+export interface StickerBulkResult {
+  affected: number;
+  skipped: Array<{ id: string; code: string }>;
+}
+
+export interface StickerFile {
+  blob: Blob;
+  fileName: string | null;
+  /** Set on a PNG export of an animated sticker (X-Levix-Animated: 1). */
+  animated: boolean;
+}
+
+export interface Job {
+  id: string;
+  state: "queued" | "running" | "done" | "failed";
+  stage: "probing" | "decoding" | "encoding" | "optimizing" | null;
+  progress: number;
+  error: { code: string; message?: string; packs?: Array<{ id: string; name: string }> } | null;
+  sticker: Sticker | null;
+  created: boolean | null;
+  qualityReduced: boolean | null;
+}
+
+export interface Capabilities {
+  webp: boolean;
+  animated: boolean;
+  gif: boolean;
+  mp4: boolean;
+  backgroundRemoval: string[];
+  limits: {
+    uploadBytes: number;
+    videoSeconds: number;
+    stickerSeconds: number;
+    maxSide: number;
+    libraryMax: number;
+    packsMax: number;
+  };
 }

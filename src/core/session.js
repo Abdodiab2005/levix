@@ -91,6 +91,13 @@ function clearAccountScopedState() {
     logger.warn({ err: error }, "[Session] failed to clear AI context buffers after unlink");
   }
   try {
+    // Same boundary as the memory wipe above: the next phone that pairs must
+    // not inherit this account's stickers, packs, or files.
+    require("../stickers/library.cjs").clearAll();
+  } catch (error) {
+    logger.warn({ err: error }, "[Session] failed to clear the sticker library after unlink");
+  }
+  try {
     groupMetadataCache.flushAll();
   } catch {}
 }

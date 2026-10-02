@@ -1,6 +1,6 @@
 // file: frontend/src/components/Header.tsx
 
-import { Check, Globe, LogOut, Menu, Moon, Sun } from "lucide-react";
+import { ArrowLeft, Check, Globe, LogOut, Menu, Moon, Sun } from "lucide-react";
 import React from "react";
 import { useI18n } from "../context/I18nContext";
 import type { SessionStatus } from "../types";
@@ -52,9 +52,22 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileMenu, title, statu
     localStorage.setItem("levix_theme", nextTheme);
   };
 
+  const isInApp = typeof (window as any).LevixHost?.closePanel === "function";
+
   return (
     <header className="h-16 sticky top-0 z-30 flex items-center justify-between px-4 md:px-6 bg-panel/85 backdrop-blur-md border-b border-line">
       <div className="flex items-center gap-3 min-w-0">
+        {isInApp && (
+          <button
+            type="button"
+            onClick={() => (window as any).LevixHost.closePanel()}
+            className="inline-flex items-center justify-center w-11 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50"
+            title={t("backToApp")}
+            aria-label={t("backToApp")}
+          >
+            <ArrowLeft size={20} className="rtl:-scale-x-100 transition-transform" />
+          </button>
+        )}
         <button
           type="button"
           onClick={onToggleMobileMenu}

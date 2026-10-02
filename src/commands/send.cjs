@@ -8,27 +8,10 @@
 // decrypt it again — nothing is cached and nothing is archived.
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 const { downloadMedia } = require("../utils/geminiMedia.cjs");
-const { unwrapMessage, visibleText } = require("../utils/messageContent.cjs");
+const { visibleText, pickMedia, quotedOf } = require("../utils/messageContent.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const logger = require("../utils/logger.cjs");
 const { tr } = require("../utils/i18n.cjs");
-
-// The media in a message plus the download type that decrypts it — the type
-// WhatsApp filed it under, not the MIME type (same rule as the AI command).
-function pickMedia(message) {
-  const inner = unwrapMessage(message);
-  if (inner.stickerMessage) return { media: inner.stickerMessage, type: "sticker" };
-  if (inner.imageMessage) return { media: inner.imageMessage, type: "image" };
-  if (inner.videoMessage) return { media: inner.videoMessage, type: "video" };
-  if (inner.audioMessage) return { media: inner.audioMessage, type: "audio" };
-  if (inner.documentMessage) return { media: inner.documentMessage, type: "document" };
-  return null;
-}
-
-function quotedOf(msg) {
-  const own = unwrapMessage(msg.message);
-  return own.extendedTextMessage?.contextInfo?.quotedMessage || null;
-}
 
 module.exports = {
   name: "send",
