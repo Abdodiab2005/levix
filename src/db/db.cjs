@@ -201,6 +201,65 @@ const MIGRATIONS = [
       ALTER TABLE user_metadata ADD COLUMN saved_name TEXT;
     `);
   },
+  // v5 — Sticker Studio. One row per sticker per owner; the WebP itself lives
+  // outside the database, content-addressed by sha256, and is deleted only
+  // when no row (any owner) still points at it. Pack items cascade so a
+  // deleted sticker or pack cannot leave a dangling membership. Wiped on
+  // unlink with the rest of the account.
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS stickers (
+        id           TEXT PRIMARY KEY,
+        owner        TEXT NOT NULL,
+        sha256       TEXT NOT NULL,
+        name         TEXT NOT NULL DEFAULT '',
+        animated     INTEGER NOT NULL DEFAULT 0,
+        width        INTEGER,
+        height       INTEGER,
+        duration_ms  INTEGER,
+        file_size    INTEGER NOT NULL,
+        source       TEXT NOT NULL,
+        source_mime  TEXT,
+        is_favorite  INTEGER NOT NULL DEFAULT 0,
+        created_at   INTEGER NOT NULL,
+        updated_at   INTEGER NOT NULL,
+        last_used_at INTEGER,
+        UNIQUE (owner, sha256)
+      );
+      CREATE INDEX IF NOT EXISTS idx_stickers_owner_created
+        ON stickers (owner, created_at);
+      CREATE INDEX IF NOT EXISTS idx_stickers_owner_name
+        ON stickers (owner, name);
+      CREATE INDEX IF NOT EXISTS idx_stickers_sha
+        ON stickers (sha256);
+
+      CREATE TABLE IF NOT EXISTS sticker_packs (
+        id         TEXT PRIMARY KEY,
+        owner      TEXT NOT NULL,
+        name       TEXT NOT NULL,
+        name_key   TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE (owner, name_key)
+      );
+      CREATE INDEX IF NOT EXISTS idx_sticker_packs_owner
+        ON sticker_packs (owner, name_key);
+
+      CREATE TABLE IF NOT EXISTS sticker_pack_items (
+        pack_id    TEXT NOT NULL,
+        sticker_id TEXT NOT NULL,
+        position   INTEGER NOT NULL,
+        added_at   INTEGER NOT NULL,
+        PRIMARY KEY (pack_id, sticker_id),
+        FOREIGN KEY (pack_id) REFERENCES sticker_packs (id) ON DELETE CASCADE,
+        FOREIGN KEY (sticker_id) REFERENCES stickers (id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_sticker_pack_items_sticker
+        ON sticker_pack_items (sticker_id);
+      CREATE INDEX IF NOT EXISTS idx_sticker_pack_items_order
+        ON sticker_pack_items (pack_id, position);
+    `);
+  },
 ];
 
 function migrate(database, migrations = MIGRATIONS) {

@@ -345,6 +345,19 @@ const SETTINGS = [
     label: "ffmpeg path",
     hint: "Only if the bundled ffmpeg-static binary can't run on this machine.",
   },
+  {
+    key: "sticker_library_limit",
+    type: "int",
+    default: 1000,
+    min: 1,
+    max: 100000,
+    group: "media",
+    label: "Sticker library size",
+    hint: "How many stickers one person can keep in Sticker Studio. Read on every save, so a change applies without a restart. A full library refuses new stickers until some are deleted.",
+    labelAr: "حجم مكتبة الملصقات",
+    hintAr:
+      "عدد الملصقات التي يمكن لشخص واحد الاحتفاظ بها في استوديو الملصقات. يُقرأ عند كل عملية حفظ، لذلك يسري التغيير دون إعادة تشغيل. المكتبة الممتلئة ترفض الملصقات الجديدة حتى يُحذف بعضها.",
+  },
 
   // --- WhatsApp proxy ----------------------------------------------------
   //
@@ -612,6 +625,8 @@ function describe() {
       choiceLabels: definition.choiceLabels ?? null,
       restart: definition.restart === true,
       source: sourceOf(definition.key),
+      ...(definition.labelAr ? { labelAr: definition.labelAr } : {}),
+      ...(definition.hintAr ? { hintAr: definition.hintAr } : {}),
     };
 
     if (definition.type === "secret") {
