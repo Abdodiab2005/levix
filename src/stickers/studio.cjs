@@ -108,9 +108,7 @@ function createStudio({ media, jobs, library, uploads } = {}) {
 
   function owns(owner, id) {
     const key = jobOwners.get(id);
-    if (!key || !owner) return false;
-    if (key === owner.key) return true;
-    return Array.isArray(owner.candidates) && owner.candidates.includes(key);
+    return Boolean(key && owner?.key && key === owner.key);
   }
 
   function assertPack(owner, packId) {

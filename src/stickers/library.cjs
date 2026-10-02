@@ -1,5 +1,6 @@
-// The sticker library. Every call takes an owner ({ key, candidates }) and
-// treats another owner's ids as missing. Files are content-addressed by the
+// The sticker library. Every call takes an owner ({ key }) and treats another
+// owner's ids as missing. `key` is opaque: a sticker_owners id for a WhatsApp
+// sender, or any string a caller passes. Files are content-addressed by the
 // WebP's sha256 under <data>/stickers/<sha[0..2]>/ and are removed only when
 // no row, of any owner, still points at that hash.
 //
@@ -83,18 +84,7 @@ function bind(owner) {
   if (!owner || typeof owner.key !== "string" || !owner.key || owner.key.length > 128) {
     throw new StickerError("INVALID_OPTIONS", { field: "owner" });
   }
-  const candidates = [];
-  const push = (value) => {
-    if (typeof value !== "string" || !value || value.length > 128) return;
-    if (!candidates.includes(value) && candidates.length < 32) candidates.push(value);
-  };
-  push(owner.key);
-  if (Array.isArray(owner.candidates)) {
-    for (const value of owner.candidates) push(value);
-  }
-  // Before this call's own transaction. Rekey opens one and must not nest.
-  store.stickerRekey(candidates, owner.key);
-  return { key: owner.key, candidates };
+  return { key: owner.key };
 }
 
 function eachId(ids, field = "ids") {
@@ -248,14 +238,14 @@ function packDto(row) {
 
 function present(bound, row) {
   if (!row) throw new StickerError("NOT_FOUND");
-  const membership = store.stickerPackMembership(bound.candidates, [row.id]);
+  const membership = store.stickerPackMembership(bound.key, [row.id]);
   return stickerDto(row, membership.get(row.id) || []);
 }
 
 function presentMany(bound, rows) {
   if (!rows.length) return [];
   const membership = store.stickerPackMembership(
-    bound.candidates,
+    bound.key,
     rows.map((row) => row.id),
   );
   return rows.map((row) => stickerDto(row, membership.get(row.id) || []));
@@ -265,7 +255,7 @@ function requireStickerRow(bound, id) {
   if (typeof id !== "string" || !ID_RE.test(id)) {
     throw new StickerError("INVALID_OPTIONS", { field: "id" });
   }
-  const row = store.stickerGet(bound.candidates, id);
+  const row = store.stickerGet(bound.key, id);
   if (!row) throw new StickerError("NOT_FOUND");
   return row;
 }
@@ -274,7 +264,7 @@ function requirePack(bound, id) {
   if (typeof id !== "string" || !ID_RE.test(id)) {
     throw new StickerError("INVALID_OPTIONS", { field: "packId" });
   }
-  const pack = store.stickerPackGet(bound.candidates, id);
+  const pack = store.stickerPackGet(bound.key, id);
   if (!pack) throw new StickerError("NOT_FOUND");
   return pack;
 }
@@ -310,20 +300,20 @@ function saveSticker(owner, input) {
   const thumb =
     Buffer.isBuffer(input.thumbBuffer) && input.thumbBuffer.length ? input.thumbBuffer : null;
 
-  const existing = store.stickerFindBySha(bound.candidates, sha);
+  const existing = store.stickerFindBySha(bound.key, sha);
   if (existing) {
     // The row won the race against a deleted file. Put the bytes back, still
     // one copy, and hand the original sticker back.
     writeIfAbsent(webpPath(sha), buffer);
     if (thumb) writeIfAbsent(thumbPath(sha), thumb);
     return {
-      sticker: present(bound, store.stickerGet(bound.candidates, existing.id)),
+      sticker: present(bound, store.stickerGet(bound.key, existing.id)),
       created: false,
     };
   }
 
   const limit = libraryLimit();
-  if (store.stickerCount(bound.candidates) >= limit) {
+  if (store.stickerCount(bound.key) >= limit) {
     throw new StickerError("LIBRARY_FULL", { limit });
   }
 
@@ -351,25 +341,25 @@ function saveSticker(owner, input) {
     });
   } catch (error) {
     if (isUnique(error)) {
-      const raced = store.stickerFindBySha(bound.candidates, sha);
+      const raced = store.stickerFindBySha(bound.key, sha);
       if (raced) return { sticker: present(bound, raced), created: false };
     }
     removeIfOrphan(sha);
     throw storageError(error);
   }
-  return { sticker: present(bound, store.stickerGet(bound.candidates, id)), created: true };
+  return { sticker: present(bound, store.stickerGet(bound.key, id)), created: true };
 }
 
 function hasRoom(owner) {
   const bound = bind(owner);
-  return store.stickerCount(bound.candidates) < libraryLimit();
+  return store.stickerCount(bound.key) < libraryLimit();
 }
 
 function findStickerByContent(owner, buffer) {
   const bound = bind(owner);
   if (!Buffer.isBuffer(buffer) || !buffer.length) throw new StickerError("NOT_FOUND");
   const sha = crypto.createHash("sha256").update(canonicalContent(buffer)).digest("hex");
-  return present(bound, store.stickerFindBySha(bound.candidates, sha));
+  return present(bound, store.stickerFindBySha(bound.key, sha));
 }
 
 function getSticker(owner, id) {
@@ -417,7 +407,7 @@ function listStickers(owner, query = {}) {
   }
   const q = query.q == null ? "" : String(query.q);
   if (q.length > 200) throw new StickerError("INVALID_OPTIONS", { field: "q" });
-  const { rows, total } = store.stickerQuery(bound.candidates, {
+  const { rows, total } = store.stickerQuery(bound.key, {
     q,
     sort,
     filter,
@@ -443,7 +433,7 @@ function updateSticker(owner, id, patch = {}) {
     fields.updatedAt = Date.now();
     store.stickerUpdate(row.id, fields);
   }
-  return present(bound, store.stickerGet(bound.candidates, row.id));
+  return present(bound, store.stickerGet(bound.key, row.id));
 }
 
 function deleteStickers(owner, ids, options = {}) {
@@ -452,7 +442,7 @@ function deleteStickers(owner, ids, options = {}) {
   const rows = list.map((id) => requireStickerRow(bound, id));
   if (!options.confirm) {
     for (const row of rows) {
-      const packs = store.stickerPacksUsing(bound.candidates, row.id);
+      const packs = store.stickerPacksUsing(bound.key, row.id);
       if (packs.length) throw new StickerError("IN_USE", { packs });
     }
   }
@@ -475,7 +465,7 @@ function applyEach(owner, ids, fn) {
   let affected = 0;
   const skipped = [];
   for (const id of list) {
-    const row = store.stickerGet(bound.candidates, id);
+    const row = store.stickerGet(bound.key, id);
     if (!row) {
       skipped.push({ id, code: "NOT_FOUND" });
       continue;
@@ -507,10 +497,10 @@ function touch(owner, ids) {
 function createPack(owner, name) {
   const bound = bind(owner);
   const parsed = normalizePackName(name);
-  if (store.stickerPackByKey(bound.candidates, parsed.nameKey)) {
+  if (store.stickerPackByKey(bound.key, parsed.nameKey)) {
     throw new StickerError("PACK_EXISTS", { name: parsed.name });
   }
-  if (store.stickerPackCount(bound.candidates) >= PACKS_MAX_PER_OWNER) {
+  if (store.stickerPackCount(bound.key) >= PACKS_MAX_PER_OWNER) {
     throw new StickerError("PACK_LIMIT", { limit: PACKS_MAX_PER_OWNER });
   }
   const now = Date.now();
@@ -528,12 +518,12 @@ function createPack(owner, name) {
     if (isUnique(error)) throw new StickerError("PACK_EXISTS", { name: parsed.name });
     throw error;
   }
-  return packDto(store.stickerPackGet(bound.candidates, id));
+  return packDto(store.stickerPackGet(bound.key, id));
 }
 
 function listPacks(owner) {
   const bound = bind(owner);
-  return store.stickerPackList(bound.candidates).map(packDto);
+  return store.stickerPackList(bound.key).map(packDto);
 }
 
 function getPack(owner, id) {
@@ -547,10 +537,10 @@ function updatePack(owner, id, name) {
   const bound = bind(owner);
   const pack = requirePack(bound, id);
   const parsed = normalizePackName(name);
-  const other = store.stickerPackByKey(bound.candidates, parsed.nameKey);
+  const other = store.stickerPackByKey(bound.key, parsed.nameKey);
   if (other && other.id !== pack.id) throw new StickerError("PACK_EXISTS", { name: parsed.name });
   store.stickerPackRename(pack.id, parsed.name, parsed.nameKey, Date.now());
-  return packDto(store.stickerPackGet(bound.candidates, pack.id));
+  return packDto(store.stickerPackGet(bound.key, pack.id));
 }
 
 function deletePack(owner, id, options = {}) {
@@ -575,7 +565,7 @@ function findPackByName(owner, name) {
     if (error instanceof StickerError && error.code === "INVALID_NAME") return null;
     throw error;
   }
-  const row = store.stickerPackByKey(bound.candidates, parsed.nameKey);
+  const row = store.stickerPackByKey(bound.key, parsed.nameKey);
   return row ? packDto(row) : null;
 }
 
@@ -587,7 +577,7 @@ function membershipResult(bound, packId, ids, mutate) {
     const skipped = [];
     const now = Date.now();
     for (const id of list) {
-      const sticker = store.stickerGet(bound.candidates, id);
+      const sticker = store.stickerGet(bound.key, id);
       if (!sticker) {
         skipped.push({ id, code: "NOT_FOUND" });
         continue;
@@ -624,7 +614,7 @@ function moveToPack(owner, ids, packId, options = {}) {
     const skipped = [];
     const now = Date.now();
     for (const id of list) {
-      const sticker = store.stickerGet(bound.candidates, id);
+      const sticker = store.stickerGet(bound.key, id);
       if (!sticker) {
         skipped.push({ id, code: "NOT_FOUND" });
         continue;
@@ -634,7 +624,7 @@ function moveToPack(owner, ids, packId, options = {}) {
       } else {
         for (const membership of store.stickerPackIdsOf(sticker.id)) {
           if (membership.pack_id === pack.id) continue;
-          if (!store.stickerPackGet(bound.candidates, membership.pack_id)) continue;
+          if (!store.stickerPackGet(bound.key, membership.pack_id)) continue;
           store.stickerPackRemoveItem(membership.pack_id, sticker.id);
         }
       }
@@ -673,7 +663,7 @@ function mergePacks(owner, sourceId, intoPackId) {
     store.stickerPackRenumber(target.id);
     return added;
   });
-  return { pack: packDto(store.stickerPackGet(bound.candidates, intoPackId)), moved };
+  return { pack: packDto(store.stickerPackGet(bound.key, intoPackId)), moved };
 }
 
 function clearAll() {

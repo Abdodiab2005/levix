@@ -14,6 +14,8 @@
 // handlers need the *same* singleton, and only a CJS module can be required
 // synchronously from both sides.
 
+const crypto = require("node:crypto");
+
 const logger = require("../utils/logger.cjs");
 const normalizeJid = require("../utils/normalizeJid.cjs");
 const { db, q, parseJson, sweepExpired, checkpoint, DB_PATH } = require("./db.cjs");
@@ -1146,138 +1148,123 @@ function sqlIn(values) {
   return values.map(() => "?").join(", ");
 }
 
-function stickerRekey(candidates, key) {
-  const from = candidates.filter((owner) => owner !== key);
-  if (!from.length || !key) return;
+function newStickerOwnerId() {
+  return crypto.randomBytes(8).toString("hex");
+}
 
-  const stray = q(
-    `SELECT 1 AS x FROM stickers WHERE owner IN (${sqlIn(from)})
-     UNION ALL
-     SELECT 1 AS x FROM sticker_packs WHERE owner IN (${sqlIn(from)})
-     LIMIT 1`,
-  ).get(...from, ...from);
-  if (!stray) return;
+function stickerOwnerInsert(id, kind, account) {
+  q(
+    `INSERT INTO sticker_owners (id, kind, account, legacy_key, created_at)
+     VALUES (?, ?, ?, NULL, ?)`,
+  ).run(id, kind, account, Date.now());
+}
 
-  withImmediateTransaction(() => {
-    const rows = q(`SELECT * FROM stickers WHERE owner IN (${sqlIn(candidates)})`).all(
-      ...candidates,
-    );
-    const bySha = new Map();
-    for (const row of rows) {
-      const group = bySha.get(row.sha256);
-      if (group) group.push(row);
-      else bySha.set(row.sha256, [row]);
+/**
+ * The panel library. `pairedAccount` is the linked account's normalized LID,
+ * or its normalized phone JID when the credentials carry no lid, or null when
+ * nothing is paired. One IMMEDIATE transaction when a row has to change; a
+ * plain read when it does not.
+ *
+ * The partial unique index allows one `self` row, so an old self is demoted
+ * before another row is promoted. A missing self whose account is already
+ * taken promotes that row: a second insert would violate UNIQUE(account).
+ *
+ * `pairedPhone` is set only when the account is a LID: the same pairing's
+ * phone JID. A self row still bound to it was bound before the credentials
+ * carried a lid, so it moves onto the LID. A stray row already holding that
+ * LID loses its account; it is kept, unreachable, and the panel keeps the
+ * library it had.
+ * @param {string|null} pairedAccount
+ * @param {string|null} [pairedPhone]
+ * @returns {{ key: string }}
+ */
+function stickerOwnerReconcileSelf(pairedAccount, pairedPhone = null) {
+  const account = pairedAccount || null;
+  const self = q("SELECT id, account FROM sticker_owners WHERE kind = 'self'").get();
+  if (self && (account == null || self.account === account)) return { key: self.id };
+
+  return withImmediateTransaction(() => {
+    const current = q("SELECT id, account FROM sticker_owners WHERE kind = 'self'").get() || null;
+    if (current && (account == null || current.account === account)) return { key: current.id };
+
+    if (current && account && pairedPhone && current.account === pairedPhone) {
+      q("UPDATE sticker_owners SET account = NULL WHERE account = ? AND id <> ?").run(
+        account,
+        current.id,
+      );
+      q("UPDATE sticker_owners SET account = ? WHERE id = ?").run(account, current.id);
+      return { key: current.id };
     }
-    for (const group of bySha.values()) {
-      group.sort((a, b) => {
-        if ((a.owner === key) !== (b.owner === key)) return a.owner === key ? -1 : 1;
-        return a.created_at - b.created_at;
-      });
-      const keep = group[0];
-      let name = keep.name;
-      let favorite = keep.is_favorite;
-      let lastUsed = keep.last_used_at;
-      let created = keep.created_at;
-      for (const extra of group.slice(1)) {
-        if (!name && extra.name) name = extra.name;
-        if (extra.is_favorite) favorite = 1;
-        if (extra.last_used_at != null && (lastUsed == null || extra.last_used_at > lastUsed)) {
-          lastUsed = extra.last_used_at;
+
+    if (!current) {
+      if (account) {
+        const existing = q("SELECT id FROM sticker_owners WHERE account = ?").get(account);
+        if (existing) {
+          q("UPDATE sticker_owners SET kind = 'self' WHERE id = ?").run(existing.id);
+          return { key: existing.id };
         }
-        if (extra.created_at < created) created = extra.created_at;
-        stickerRetargetItems(extra.id, keep.id);
-        q("DELETE FROM stickers WHERE id = ?").run(extra.id);
       }
-      q(
-        `UPDATE stickers
-         SET owner = ?, name = ?, is_favorite = ?, last_used_at = ?, created_at = ?
-         WHERE id = ?`,
-      ).run(key, name, favorite, lastUsed, created, keep.id);
+      const id = newStickerOwnerId();
+      stickerOwnerInsert(id, "self", account);
+      return { key: id };
     }
 
-    const packs = q(`SELECT * FROM sticker_packs WHERE owner IN (${sqlIn(candidates)})`).all(
-      ...candidates,
-    );
-    const byName = new Map();
-    for (const pack of packs) {
-      const group = byName.get(pack.name_key);
-      if (group) group.push(pack);
-      else byName.set(pack.name_key, [pack]);
-    }
-    for (const group of byName.values()) {
-      group.sort((a, b) => {
-        if ((a.owner === key) !== (b.owner === key)) return a.owner === key ? -1 : 1;
-        return a.created_at - b.created_at;
-      });
-      const keep = group[0];
-      for (const extra of group.slice(1)) {
-        stickerAppendPack(extra.id, keep.id);
-        q("DELETE FROM sticker_packs WHERE id = ?").run(extra.id);
-        stickerPackRenumber(keep.id);
+    if (current.account == null) {
+      const existing = account
+        ? q("SELECT id FROM sticker_owners WHERE account = ?").get(account)
+        : null;
+      if (!existing) {
+        q("UPDATE sticker_owners SET account = ? WHERE id = ?").run(account, current.id);
+        return { key: current.id };
       }
-      if (keep.owner !== key) {
-        q("UPDATE sticker_packs SET owner = ? WHERE id = ?").run(key, keep.id);
-      }
+      q("UPDATE sticker_owners SET kind = 'user', account = NULL WHERE id = ?").run(current.id);
+      q("UPDATE sticker_owners SET kind = 'self' WHERE id = ?").run(existing.id);
+      return { key: existing.id };
     }
+
+    // Bound to A, and the paired account is a different B. A keeps the old
+    // library. B must not see it.
+    q("UPDATE sticker_owners SET kind = 'user' WHERE id = ?").run(current.id);
+    const existing = q("SELECT id FROM sticker_owners WHERE account = ?").get(account);
+    if (existing) {
+      q("UPDATE sticker_owners SET kind = 'self' WHERE id = ?").run(existing.id);
+      return { key: existing.id };
+    }
+    const id = newStickerOwnerId();
+    stickerOwnerInsert(id, "self", account);
+    return { key: id };
   });
 }
 
-function stickerRetargetItems(fromStickerId, toStickerId) {
-  const items = q("SELECT pack_id FROM sticker_pack_items WHERE sticker_id = ?").all(fromStickerId);
-  for (const item of items) {
-    const exists = q(
-      "SELECT 1 AS x FROM sticker_pack_items WHERE pack_id = ? AND sticker_id = ?",
-    ).get(item.pack_id, toStickerId);
-    if (exists) {
-      q("DELETE FROM sticker_pack_items WHERE pack_id = ? AND sticker_id = ?").run(
-        item.pack_id,
-        fromStickerId,
-      );
-    } else {
-      q("UPDATE sticker_pack_items SET sticker_id = ? WHERE pack_id = ? AND sticker_id = ?").run(
-        toStickerId,
-        item.pack_id,
-        fromStickerId,
-      );
-    }
-    stickerPackRenumber(item.pack_id);
-  }
+/** The row whose account is this LID, created on first use. May be `self`. */
+function stickerOwnerEnsure(account) {
+  if (!account) return { key: null };
+  const existing = q("SELECT id FROM sticker_owners WHERE account = ?").get(account);
+  if (existing) return { key: existing.id };
+  const id = newStickerOwnerId();
+  q(
+    `INSERT INTO sticker_owners (id, kind, account, legacy_key, created_at)
+     VALUES (?, 'user', ?, NULL, ?)
+     ON CONFLICT(account) DO NOTHING`,
+  ).run(id, account, Date.now());
+  const row = q("SELECT id FROM sticker_owners WHERE account = ?").get(account);
+  if (!row) throw new Error("sticker owner was not created");
+  return { key: row.id };
 }
 
-function stickerAppendPack(fromPackId, toPackId) {
-  const items = q(
-    `SELECT sticker_id FROM sticker_pack_items
-     WHERE pack_id = ? ORDER BY position ASC, added_at ASC`,
-  ).all(fromPackId);
-  const now = Date.now();
-  for (const item of items) stickerPackAdd(toPackId, item.sticker_id, now);
+function stickerCount(owner) {
+  if (!owner) return 0;
+  return q("SELECT COUNT(*) AS n FROM stickers WHERE owner = ?").get(owner).n;
 }
 
-function stickerCount(candidates) {
-  if (!candidates.length) return 0;
-  return q(`SELECT COUNT(*) AS n FROM stickers WHERE owner IN (${sqlIn(candidates)})`).get(
-    ...candidates,
-  ).n;
+function stickerFindBySha(owner, sha) {
+  if (!owner) return null;
+  return q("SELECT * FROM stickers WHERE sha256 = ? AND owner = ?").get(sha, owner) || null;
 }
 
-function stickerFindBySha(candidates, sha) {
-  if (!candidates.length) return null;
-  return (
-    q(
-      `SELECT * FROM stickers WHERE sha256 = ? AND owner IN (${sqlIn(candidates)})
-       ORDER BY created_at ASC LIMIT 1`,
-    ).get(sha, ...candidates) || null
-  );
-}
-
-function stickerGet(candidates, id) {
-  if (!candidates.length) return null;
-  return (
-    q(`SELECT * FROM stickers WHERE id = ? AND owner IN (${sqlIn(candidates)})`).get(
-      id,
-      ...candidates,
-    ) || null
-  );
+function stickerGet(owner, id) {
+  if (!owner) return null;
+  return q("SELECT * FROM stickers WHERE id = ? AND owner = ?").get(id, owner) || null;
 }
 
 function stickerInsert(row) {
@@ -1344,10 +1331,10 @@ const STICKER_SORTS = {
   recent: "COALESCE(s.last_used_at, s.created_at) DESC, s.id DESC",
 };
 
-function stickerQuery(candidates, filter) {
-  if (!candidates.length) return { rows: [], total: 0 };
-  const clauses = [`s.owner IN (${sqlIn(candidates)})`];
-  const params = [...candidates];
+function stickerQuery(owner, filter) {
+  if (!owner) return { rows: [], total: 0 };
+  const clauses = ["s.owner = ?"];
+  const params = [owner];
 
   const text = String(filter.q || "")
     .trim()
@@ -1369,19 +1356,19 @@ function stickerQuery(candidates, filter) {
       `NOT EXISTS (
          SELECT 1 FROM sticker_pack_items i
          JOIN sticker_packs p ON p.id = i.pack_id
-         WHERE i.sticker_id = s.id AND p.owner IN (${sqlIn(candidates)})
+         WHERE i.sticker_id = s.id AND p.owner = ?
        )`,
     );
-    params.push(...candidates);
+    params.push(owner);
   } else if (filter.pack) {
     clauses.push(
       `EXISTS (
          SELECT 1 FROM sticker_pack_items i
          JOIN sticker_packs p ON p.id = i.pack_id
-         WHERE i.sticker_id = s.id AND i.pack_id = ? AND p.owner IN (${sqlIn(candidates)})
+         WHERE i.sticker_id = s.id AND i.pack_id = ? AND p.owner = ?
        )`,
     );
-    params.push(filter.pack, ...candidates);
+    params.push(filter.pack, owner);
   }
 
   const where = clauses.join(" AND ");
@@ -1400,16 +1387,16 @@ function stickerQuery(candidates, filter) {
   return { rows, total };
 }
 
-function stickerPackMembership(candidates, stickerIds) {
+function stickerPackMembership(owner, stickerIds) {
   const map = new Map();
-  if (!candidates.length || !stickerIds.length) return map;
+  if (!owner || !stickerIds.length) return map;
   const rows = q(
     `SELECT i.sticker_id, i.pack_id
      FROM sticker_pack_items i
      JOIN sticker_packs p ON p.id = i.pack_id
-     WHERE i.sticker_id IN (${sqlIn(stickerIds)}) AND p.owner IN (${sqlIn(candidates)})
+     WHERE i.sticker_id IN (${sqlIn(stickerIds)}) AND p.owner = ?
      ORDER BY i.added_at ASC, i.pack_id ASC`,
-  ).all(...stickerIds, ...candidates);
+  ).all(...stickerIds, owner);
   for (const row of rows) {
     const list = map.get(row.sticker_id);
     if (list) list.push(row.pack_id);
@@ -1418,15 +1405,15 @@ function stickerPackMembership(candidates, stickerIds) {
   return map;
 }
 
-function stickerPacksUsing(candidates, stickerId) {
-  if (!candidates.length) return [];
+function stickerPacksUsing(owner, stickerId) {
+  if (!owner) return [];
   return q(
     `SELECT p.id, p.name
      FROM sticker_pack_items i
      JOIN sticker_packs p ON p.id = i.pack_id
-     WHERE i.sticker_id = ? AND p.owner IN (${sqlIn(candidates)})
+     WHERE i.sticker_id = ? AND p.owner = ?
      ORDER BY LOWER(p.name) ASC, p.id ASC`,
-  ).all(stickerId, ...candidates);
+  ).all(stickerId, owner);
 }
 
 function stickerPackIdsOf(stickerId) {
@@ -1440,19 +1427,18 @@ function stickerClearAll() {
       .map((row) => row.sha256);
     q("DELETE FROM stickers").run();
     q("DELETE FROM sticker_packs").run();
+    q("DELETE FROM sticker_owners").run();
     return shas;
   });
 }
 
-function stickerPackCount(candidates) {
-  if (!candidates.length) return 0;
-  return q(`SELECT COUNT(*) AS n FROM sticker_packs WHERE owner IN (${sqlIn(candidates)})`).get(
-    ...candidates,
-  ).n;
+function stickerPackCount(owner) {
+  if (!owner) return 0;
+  return q("SELECT COUNT(*) AS n FROM sticker_packs WHERE owner = ?").get(owner).n;
 }
 
-function stickerPackList(candidates) {
-  if (!candidates.length) return [];
+function stickerPackList(owner) {
+  if (!owner) return [];
   return q(
     `SELECT p.*,
        (SELECT COUNT(*) FROM sticker_pack_items i WHERE i.pack_id = p.id) AS item_count,
@@ -1462,13 +1448,13 @@ function stickerPackList(candidates) {
          JOIN stickers s ON s.id = i.sticker_id
          WHERE i.pack_id = p.id ORDER BY i.position ASC, i.added_at ASC LIMIT 1) AS cover_sha
      FROM sticker_packs p
-     WHERE p.owner IN (${sqlIn(candidates)})
+     WHERE p.owner = ?
      ORDER BY p.name COLLATE NOCASE ASC, p.id ASC`,
-  ).all(...candidates);
+  ).all(owner);
 }
 
-function stickerPackGet(candidates, id) {
-  if (!candidates.length) return null;
+function stickerPackGet(owner, id) {
+  if (!owner) return null;
   return (
     q(
       `SELECT p.*,
@@ -1479,13 +1465,13 @@ function stickerPackGet(candidates, id) {
            JOIN stickers s ON s.id = i.sticker_id
            WHERE i.pack_id = p.id ORDER BY i.position ASC, i.added_at ASC LIMIT 1) AS cover_sha
        FROM sticker_packs p
-       WHERE p.id = ? AND p.owner IN (${sqlIn(candidates)})`,
-    ).get(id, ...candidates) || null
+       WHERE p.id = ? AND p.owner = ?`,
+    ).get(id, owner) || null
   );
 }
 
-function stickerPackByKey(candidates, nameKey) {
-  if (!candidates.length) return null;
+function stickerPackByKey(owner, nameKey) {
+  if (!owner) return null;
   return (
     q(
       `SELECT p.*,
@@ -1496,8 +1482,8 @@ function stickerPackByKey(candidates, nameKey) {
            JOIN stickers s ON s.id = i.sticker_id
            WHERE i.pack_id = p.id ORDER BY i.position ASC, i.added_at ASC LIMIT 1) AS cover_sha
        FROM sticker_packs p
-       WHERE p.name_key = ? AND p.owner IN (${sqlIn(candidates)})`,
-    ).get(nameKey, ...candidates) || null
+       WHERE p.name_key = ? AND p.owner = ?`,
+    ).get(nameKey, owner) || null
   );
 }
 
@@ -1706,7 +1692,8 @@ module.exports = {
   migrateSecretsAtRest,
   // Sticker Studio
   withImmediateTransaction,
-  stickerRekey,
+  stickerOwnerReconcileSelf,
+  stickerOwnerEnsure,
   stickerCount,
   stickerFindBySha,
   stickerGet,

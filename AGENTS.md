@@ -458,7 +458,8 @@ and blacklist middleware, the prefix lookup, every permission check) with no
 | `debts` | `!debt` ledger | — |
 | `schedules` | `!schedule` / `!autoschedule` jobs | — |
 | `forward_scores` | forward counters per message | `forward_score_ttl_days` (30) |
-| `stickers` | Sticker Studio library, one row per sticker per owner; the WebP is a file named by its sha256 | wiped on unlink |
+| `sticker_owners` | who a Sticker Studio library belongs to. `id` is an internal 16-hex key; `kind` is `self` (the panel and the linked account, at most one) or `user`. `account` is that person's normalized LID, or the linked phone JID only when the credentials carry no lid. Null means the row is unbound and no sender can open it | wiped on unlink |
+| `stickers` | Sticker Studio library, one row per sticker per `sticker_owners` id; the WebP is a file named by its sha256 | wiped on unlink |
 | `sticker_packs` | named sticker packs per owner | wiped on unlink |
 | `sticker_pack_items` | pack membership and order | cascade with the sticker or the pack; wiped on unlink |
 
@@ -862,7 +863,7 @@ The panel and the bot share one library. `src/routes/stickers.api.esm.js` is
 mounted at `/dashboard/api` behind the same session as the rest of the panel
 (`src/bootstrap/panel.js`). The upload is raw bytes: `jsonUnlessStickerUpload`
 skips the JSON parser for `POST /stickers/uploads` so the route can cap the
-body while it is still a stream. The panel operator is owner `"self"`.
+body while it is still a stream. The panel operator shares the linked account's library.
 
 **Modules** (`src/stickers/`):
 
@@ -883,18 +884,25 @@ body while it is still a stream. The panel operator is owner `"self"`.
 
 Bot commands reach the library through `src/utils/stickerBot.cjs`.
 
-**Owners.** `"self"` is the linked WhatsApp account and the panel: a `fromMe`
-message, or a sender `sameUser` matches against the paired `creds.me` id or
-lid (`forPanel` / `isPairedAccount`). Everyone else is keyed by their phone
-JID when this message maps to one, otherwise by their LID. `forMessage` keeps
-the identifiers on the message plus one direct mapping of each. A LID adds its
-phone JID. A phone JID adds a LID only when that LID is already on the
-message, or it is the only LID stored for the number. A second LID that only
-shares the number is not a candidate, so its rows are not read and not
-rewritten onto the phone key. A row already stored under the phone JID stays
-with that number: a recycled phone inherits it, the same way a role granted to
-the number does. WhatsApp gives no signal that separates a new owner of the
-number from the same person now messaging with a phone JID.
+**Owners.** A library belongs to one `sticker_owners` row, and `stickers.owner`
+/ `sticker_packs.owner` store that row's id (16 hex characters), not a phone
+number and not a LID. `forPanel` / `forMessage` in `owner.cjs` are the only
+code that turns a WhatsApp identity into an id. `kind = 'self'` is the panel
+and the linked account (at most one row). Its `account` is the paired
+`creds.me.lid`, normalized (`<digits>@lid`, no device suffix), or normalized
+`creds.me.id` only when the credentials have no lid; when Baileys later fills
+in `me.lid` for that same pairing, the row moves onto the LID. Everyone else is
+`kind = 'user'` with `account` set to the sender's normalized LID. The LID is
+the one on the message (`getSenderCandidates`). A message that carries only a
+phone JID asks Baileys for the current mapping
+(`signalRepository.lidMapping.getLIDForPN`, about five seconds; a throw or a
+timeout is "unknown"). Levix's `lid_mapping` table is a history of every LID
+ever seen for a number and is not consulted. No LID means the sender is not
+identified and the command says so. A recycled phone number comes with a new
+LID, so the new person gets an empty library. Relinking to a different account
+makes that account's row `self` and leaves the previous account's stickers on
+a `user` row that only the previous LID can open. Unlink deletes every
+`sticker_owners` row with the stickers and packs.
 
 **Files.** Each WebP is stored by its sha256 at
 `<data>/stickers/<sha[0..2]>/<sha>.webp`, with `<sha>.thumb.webp` beside it.
@@ -967,9 +975,9 @@ accepted source is `PANEL_UPLOAD`). The cap is 16 MB
 (`PendingStickers.MAX_BYTES`, the same ceiling as `UPLOAD_MAX_BYTES`).
 
 **Unlink.** `clearAccountScopedState()` in `src/core/session.js` calls
-`library.clearAll()`, which deletes every sticker and pack row, removes
-`<data>/stickers`, and discards pending uploads. The next phone that pairs
-does not inherit them.
+`library.clearAll()`, which deletes every sticker, pack, and `sticker_owners`
+row, removes `<data>/stickers`, and discards pending uploads. The next phone
+that pairs starts a new self library and does not inherit the previous one.
 
 ## Dashboard (`views/` + `public/` + `src/routes/dashboard.api.esm.js`)
 
@@ -1248,7 +1256,8 @@ logger.debug('Debug info');
     AI history, long-term memory and buffered AI context, the sticker library
     (every sticker, pack, and file), and pauses schedules created for the old
     account. Do not leave account-derived state active for the next phone that
-    pairs.
+    pairs. Sticker unlink deletes the `sticker_owners` rows as well as the
+    stickers, packs and files, so the next pairing starts a new `self` library.
 27. **Compare WhatsApp identities with the shared helpers.** LIDs, phone-number
     JIDs and device suffixes can name the same user. Moderation and role gates
     must use `sameUser()`, `getSenderCandidates()` and `isAdminInGroup()` rather

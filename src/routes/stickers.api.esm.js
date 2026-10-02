@@ -1,6 +1,6 @@
 // Sticker Studio HTTP API. Mounted at /dashboard/api behind the same session
-// check as the rest of the panel. The operator is owner "self" — the linked
-// WhatsApp account's library. Errors are the sticker vocabulary; anything else
+// check as the rest of the panel. The operator shares the linked account's
+// library (`owner.forPanel()`). Errors are the sticker vocabulary; anything else
 // is logged and answered as INTERNAL, never with the exception text.
 //
 // The upload is not JSON. jsonUnlessStickerUpload skips the dashboard parser

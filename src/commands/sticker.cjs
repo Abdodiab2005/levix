@@ -35,7 +35,7 @@ module.exports = {
     if (quoted && pickMedia(quoted)?.type === "sticker") {
       return toimage.execute(sock, msg, []);
     }
-    const who = ownerModule.forMessage(msg);
+    const who = await ownerModule.forMessage(msg, sock);
     if (!who.key) {
       return sock.sendMessage(jid, {
         text: tr("I couldn't identify the sender.", "تعذّر تحديد هوية المرسل."),

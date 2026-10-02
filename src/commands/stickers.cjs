@@ -47,7 +47,7 @@ module.exports = {
   chat: "all",
   async execute(sock, msg, args = []) {
     const jid = msg.key.remoteJid;
-    const who = ownerModule.forMessage(msg);
+    const who = await ownerModule.forMessage(msg, sock);
     if (!who.key)
       return sock.sendMessage(jid, {
         text: tr("I couldn't identify the sender.", "تعذّر تحديد هوية المرسل."),
