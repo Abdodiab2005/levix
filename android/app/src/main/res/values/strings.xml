@@ -98,4 +98,108 @@
     <string name="battery_ok_short">Background protection active</string>
     <string name="battery_restricted_hint">Restricted by system. Protect 24/7 uptime.</string>
     <string name="action_open_whatsapp_settings">Open WhatsApp settings in panel</string>
+
+    <!-- Native Media Hub -->
+    <string name="media_hub_title">Media Hub</string>
+    <string name="media_hub_subtitle">Browse statuses and WhatsApp media on this phone</string>
+    <string name="media_back">Back</string>
+    <string name="media_open">Open</string>
+    <string name="media_insights">Storage insights</string>
+    <string name="media_sort">Sort</string>
+    <string name="media_search">Search files, type or date</string>
+    <string name="media_all">All</string>
+    <string name="media_whatsapp">WhatsApp</string>
+    <string name="media_business">WhatsApp Business</string>
+    <string name="media_statuses">Statuses</string>
+    <string name="media_images">Images</string>
+    <string name="media_videos">Videos</string>
+    <string name="media_voice">Voice notes</string>
+    <string name="media_audio">Audio</string>
+    <string name="media_documents">Documents</string>
+    <string name="media_stickers">Stickers</string>
+    <string name="media_saved">Saved</string>
+    <string name="media_today">Today</string>
+    <string name="media_yesterday">Yesterday</string>
+    <string name="media_week">This week</string>
+    <string name="media_large">Large ≥ 10 MB</string>
+    <string name="media_favorites">Favorites</string>
+    <string name="media_allow">Allow media access</string>
+    <string name="media_settings">App settings</string>
+    <string name="media_rationale">Levix needs media access to discover and display WhatsApp photos, videos and audio stored on your device. Your files stay on your device and are not uploaded.</string>
+    <string name="media_partial">Only selected photos and videos are visible. Select more or allow all in Settings.</string>
+    <string name="media_audio_permission">Allow audio access to see WhatsApp voice notes and audio.</string>
+    <string name="media_select_more">Select more</string>
+    <string name="media_access_removed">Access was removed — grant again.</string>
+    <string name="media_enable_status_info">Statuses or documents may need access to the WhatsApp Media folder.</string>
+    <string name="media_enable_status">Enable status access</string>
+    <string name="media_wrong_folder">Choose a WhatsApp Media or .Statuses folder.</string>
+    <string name="media_not_installed">WhatsApp is not installed, or no media is available.</string>
+    <string name="media_empty">No media found here. Pull down to refresh.</string>
+    <string name="media_refresh">Refresh</string>
+    <string name="media_refreshing">Refreshing…</string>
+    <string name="media_loading">Loading media…</string>
+    <string name="media_select_all">Select all</string>
+    <string name="media_clear">Clear</string>
+    <string name="media_save">Save</string>
+    <string name="media_share">Share</string>
+    <string name="media_favorite">Favorite</string>
+    <string name="media_remove_favorite">Remove favorite</string>
+    <string name="media_selected_state">Selected</string>
+    <string name="media_delete_saved_copy">Delete saved copy</string>
+    <string name="media_delete">Delete</string>
+    <string name="media_cancel">Cancel</string>
+    <string name="media_progress">Saving %1$d of %2$d…</string>
+    <string name="media_favorite_progress">Updating %1$d of %2$d…</string>
+    <string name="media_saved_success">Saved successfully</string>
+    <string name="media_already_saved">Already saved</string>
+    <string name="media_save_failed">Save failed</string>
+    <string name="media_unavailable">This file is no longer available.</string>
+    <string name="media_unsupported">No app can open this format.</string>
+    <string name="media_delete_saved_only">Only Levix-saved copies can be deleted.</string>
+    <string name="media_delete_progress">Deleting %1$d of %2$d…</string>
+    <string name="media_delete_failed">Some saved copies could not be deleted.</string>
+    <string name="media_largest">Largest files</string>
+    <string name="media_recent">Recently added</string>
+    <string name="media_newest">Newest</string>
+    <string name="media_oldest">Oldest</string>
+    <string name="media_largest_sort">Largest</string>
+    <string name="media_smallest">Smallest</string>
+    <string name="media_preview">Media preview</string>
+    <string name="media_choose_app">Choose WhatsApp app</string>
+    <string name="media_viewer_title">%1$s · %2$s · %3$s</string>
+    <string name="media_back_glyph">‹</string>
+    <string name="media_insights_glyph">◫</string>
+    <string name="media_sort_glyph">↕</string>
+    <plurals name="media_count">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
+    <plurals name="media_selected_count">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+    <plurals name="media_delete_confirm">
+        <item quantity="one">Delete %1$d Levix-saved copy?</item>
+        <item quantity="other">Delete %1$d Levix-saved copies?</item>
+    </plurals>
+    <plurals name="media_saved_count">
+        <item quantity="one">Saved: %1$d</item>
+        <item quantity="other">Saved: %1$d</item>
+    </plurals>
+    <plurals name="media_already_saved_count">
+        <item quantity="one">Already saved: %1$d</item>
+        <item quantity="other">Already saved: %1$d</item>
+    </plurals>
+    <plurals name="media_failed_count">
+        <item quantity="one">Failed: %1$d</item>
+        <item quantity="other">Failed: %1$d</item>
+    </plurals>
+    <plurals name="media_insights_total">
+        <item quantity="one">%1$d WhatsApp item · %2$s</item>
+        <item quantity="other">%1$d WhatsApp items · %2$s</item>
+    </plurals>
+    <plurals name="media_seconds">
+        <item quantity="one">%1$d s</item>
+        <item quantity="other">%1$d s</item>
+    </plurals>
 </resources>

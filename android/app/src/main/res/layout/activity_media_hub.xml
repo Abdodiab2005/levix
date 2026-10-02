@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/mediaRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+        <TextView
+            android:id="@+id/mediaBack"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/media_back"
+            android:gravity="center"
+            android:text="@string/media_back_glyph"
+            android:textColor="@color/levix_text"
+            android:textSize="32sp" />
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/media_hub_title"
+            android:textColor="@color/levix_text"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/mediaInsights"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/media_insights"
+            android:gravity="center"
+            android:text="@string/media_insights_glyph"
+            android:textColor="@color/levix_cyan"
+            android:textSize="24sp" />
+        <TextView
+            android:id="@+id/mediaSort"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/media_sort"
+            android:gravity="center"
+            android:text="@string/media_sort_glyph"
+            android:textColor="@color/levix_cyan"
+            android:textSize="24sp" />
+    </LinearLayout>
+
+    <EditText
+        android:id="@+id/mediaSearch"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_card_raised"
+        android:hint="@string/media_search"
+        android:importantForAutofill="no"
+        android:inputType="text"
+        android:maxLines="1"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:textColor="@color/levix_text"
+        android:textColorHint="@color/levix_text_muted" />
+
+    <HorizontalScrollView
+        android:id="@+id/mediaSourcesScroll"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:scrollbars="none">
+        <LinearLayout
+            android:id="@+id/mediaSources"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:scrollbars="none">
+        <LinearLayout
+            android:id="@+id/mediaCategories"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:scrollbars="none">
+        <LinearLayout
+            android:id="@+id/mediaFilters"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
+
+    <LinearLayout
+        android:id="@+id/mediaBanner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/bg_card_panel"
+        android:orientation="vertical"
+        android:padding="14dp"
+        android:visibility="gone">
+        <TextView
+            android:id="@+id/mediaBannerText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/levix_text"
+            android:textSize="14sp" />
+        <LinearLayout
+            style="?android:attr/buttonBarStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/mediaBannerAction"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:text="@string/media_allow" />
+            <Button
+                android:id="@+id/mediaBannerOther"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:layout_marginTop="8dp"
+                android:text="@string/media_settings"
+                android:visibility="gone" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/mediaCount"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="4dp"
+        android:paddingBottom="8dp"
+        android:textColor="@color/levix_text_muted"
+        android:textSize="13sp" />
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/mediaList"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingBottom="12dp" />
+
+    <LinearLayout
+        android:id="@+id/mediaSelection"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_card_raised"
+        android:gravity="center_vertical"
+        android:orientation="vertical"
+        android:padding="6dp"
+        android:visibility="gone">
+        <TextView
+            android:id="@+id/mediaSelectionCount"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/levix_text"
+            android:textSize="14sp" />
+        <HorizontalScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none">
+            <LinearLayout
+                style="?android:attr/buttonBarStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <Button
+                    android:id="@+id/mediaSelectAll"
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:text="@string/media_select_all" />
+                <Button
+                    android:id="@+id/mediaClear"
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:text="@string/media_clear" />
+                <Button
+                    android:id="@+id/mediaSave"
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:text="@string/media_save" />
+                <Button
+                    android:id="@+id/mediaShare"
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:text="@string/media_share" />
+                <Button
+                    android:id="@+id/mediaFavorite"
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:text="@string/media_favorite" />
+                <Button
+                    android:id="@+id/mediaDelete"
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:text="@string/media_delete" />
+            </LinearLayout>
+        </HorizontalScrollView>
+    </LinearLayout>
+</LinearLayout>

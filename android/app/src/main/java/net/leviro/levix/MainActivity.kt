@@ -21,6 +21,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.os.LocaleListCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import net.leviro.levix.media.MediaHubActivity
 
 class MainActivity : AppCompatActivity() {
     private val uiHandler = Handler(Looper.getMainLooper())
@@ -168,6 +169,7 @@ class MainActivity : AppCompatActivity() {
         startButton.setOnClickListener { requestStart() }
         stopButton.setOnClickListener { LevixHostService.stop(this) }
         panelButton.setOnClickListener { openPanel() }
+        findViewById<View>(R.id.cardMediaHub).setOnClickListener { startActivity(Intent(this, MediaHubActivity::class.java)) }
         batteryButton.setOnClickListener { HostBattery.requestUnrestricted(this) }
 
         btnShareLogs.setOnClickListener {

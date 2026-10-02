@@ -114,6 +114,12 @@ Levix includes intelligent network and connection lifecycle handling:
 
 ## Media & Native Audio Transcoding (FFmpeg)
 
+### Media Hub
+
+Open **Media Hub** from the native host screen to browse WhatsApp and WhatsApp Business statuses, photos, videos, voice notes, audio, documents, and stickers. Search, filter, favorite, share, and save copies to user-visible Levix folders. Storage Insights shows local totals and large files. Only copies saved by Levix can be deleted in the hub.
+
+The hub asks for media permission when you open it, after an explanation. Android 14's selected-media permission shows only the items you selected; you can select more or allow full access in system settings. Hidden `.Statuses` folders and some documents may not appear in MediaStore. In that case, use **Enable status access** to grant read-only access to the WhatsApp Media folder through Android's folder picker. Levix remembers the grant and asks again only if access is removed. Media Hub never uploads files, names, thumbnails, or folder details.
+
 Levix bundles a native build of **FFmpeg** (`libffmpeg.so` — ARM64 or ARMv7, matching the APK) inside the APK, compiled from source with NDK r29 so it is safe on 16 KB-page devices.
 - **Voice Notes (`!tts`)**: The Text-to-Speech command automatically transcodes Google TTS MP3 audio into true WhatsApp PTT voice notes (`audio/ogg; codecs=opus`).
 - **Media Previews**: Video and picture thumbnails (`jpegThumbnail`) are generated locally on the phone before sending, ensuring crisp previews in chat bubbles and quotes.
