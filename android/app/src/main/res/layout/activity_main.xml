@@ -467,6 +467,56 @@
 
         <!-- Redesigned Compact Card: Battery Guard -->
         <LinearLayout
+            android:id="@+id/cardMediaHub"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:minHeight="72dp"
+            android:background="@drawable/bg_card_panel"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="16dp">
+            <ImageView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:contentDescription="@string/media_hub_title"
+                android:src="@drawable/ic_card_whatsapp" />
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/media_hub_title"
+                    android:textColor="@color/levix_text"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="@string/media_hub_subtitle"
+                    android:singleLine="true"
+                    android:ellipsize="end"
+                    android:textColor="@color/levix_text_muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
+            <TextView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:gravity="center"
+                android:contentDescription="@string/media_open"
+                android:text="›"
+                android:textColor="@color/levix_cyan"
+                android:textSize="28sp" />
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/cardBattery"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

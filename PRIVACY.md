@@ -102,8 +102,13 @@ is governed by that provider's own privacy policy.
 | `WAKE_LOCK` | Keep the CPU awake while processing in the background |
 | `RECEIVE_BOOT_COMPLETED` | Resume the host after device reboot |
 | `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | Offer (never silently apply) a battery-optimization exemption so Android doesn't kill the host |
+| `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, `READ_MEDIA_AUDIO` (Android 13+) | Discover and display WhatsApp media in the native Media Hub, only after you choose to grant access there |
+| `READ_MEDIA_VISUAL_USER_SELECTED` (Android 14+) | Allow the Media Hub to show only photos and videos you select |
+| `READ_EXTERNAL_STORAGE` (Android 12 and earlier) | Discover WhatsApp media in the native Media Hub on older Android versions |
 
-No location, camera, microphone, contacts, SMS, or storage permissions are
+The Media Hub can also request read-only access to a WhatsApp Media folder through Android's folder picker when hidden statuses or documents are unavailable through MediaStore. It retains that local grant until you revoke it. Browsing, search, thumbnails, favorites, Storage Insights, saving copies, and deleting Levix-saved copies are all local to the device. The Media Hub makes no network requests and does not send media, file names, or folder structure to Levix or to an AI provider. Sharing a file happens only when you explicitly choose an app in Android's share sheet.
+
+No location, camera, microphone, contacts, SMS, or unrestricted storage permissions are
 requested. The in-app WebView loads only the local control panel
 (`http://127.0.0.1:3001`); it does not load third-party web content.
 
