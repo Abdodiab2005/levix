@@ -145,7 +145,8 @@ export const api = {
       restartNeeded: string[];
       counts: { permissions: number; aliases: number; disabled: number };
     }>("/settings/import", payload),
-  getCommands: () => api.get<{ commands: any[]; prefix?: string; success: boolean }>("/commands"),
+  getCommands: () =>
+    api.get<{ commands: any[]; prefix?: string; levels?: string[]; success: boolean }>("/commands"),
   updateCommand: (name: string, payload: any) =>
     api.patch(`/commands/${encodeURIComponent(name)}`, payload),
   getSchedules: () =>
