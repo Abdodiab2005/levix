@@ -110,6 +110,12 @@ function message(pick, error) {
         "لا يمكن تحويل هذا النوع من الملفات إلى ملصق. استخدم صورة JPEG أو PNG أو WebP أو GIF أو فيديو MP4/WebM.",
       );
     case "TOO_LARGE":
+      if (d.limitFrames) {
+        return pick(
+          `The animation has too many frames (limit ${d.limitFrames}).`,
+          `في الرسم المتحرك إطارات كثيرة جدًا (الحد ${d.limitFrames}).`,
+        );
+      }
       return pick(
         `The file is too large (limit ${formatMb(d.limitBytes)}).`,
         `الملف كبير جدًا (الحد ${formatMb(d.limitBytes)}).`,
@@ -122,7 +128,7 @@ function message(pick, error) {
     case "VIDEO_TOO_LONG":
       return pick(
         `The video is too long (limit ${d.limitSeconds || 10} seconds). Send a shorter clip, or trim it in the panel's Sticker Studio.`,
-        `الفيديو طويل جدًا (الحد ${d.limitSeconds || 10} ثوانٍ). أرسل مقطعًا أقصر، أو قصّه في استوديو الملصقات في لوحة التحكم.`,
+        `الفيديو طويل جدًا (الحد ${secondsAr(d.limitSeconds || 10)}). أرسل مقطعًا أقصر، أو اقتطع جزءًا منه في استوديو الملصقات في لوحة التحكم.`,
       );
     case "CORRUPT":
       return pick(
@@ -201,6 +207,15 @@ function message(pick, error) {
     default:
       return pick("Something went wrong with the sticker.", "حدث خطأ في الملصق.");
   }
+}
+
+// Arabic counts agree with the number: 3–10 take the plural, 11 and up the
+// singular accusative.
+function secondsAr(n) {
+  if (n === 1) return "ثانية واحدة";
+  if (n === 2) return "ثانيتان";
+  if (n >= 3 && n <= 10) return `${n} ثوانٍ`;
+  return `${n} ثانية`;
 }
 
 function formatMb(bytes) {
