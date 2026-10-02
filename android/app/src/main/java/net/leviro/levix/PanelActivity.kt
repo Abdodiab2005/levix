@@ -28,6 +28,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import java.io.File
@@ -214,7 +215,7 @@ class PanelActivity : AppCompatActivity() {
                     val source = stickerSources.get(token)
                     if (request.method != "GET" || source == null) return sourceNotFound()
                     return try {
-                        val input = contentResolver.openInputStream(Uri.parse(source.uri)) ?: return sourceNotFound()
+                        val input = contentResolver.openInputStream(source.uri.toUri()) ?: return sourceNotFound()
                         WebResourceResponse(source.mime.substringBefore(';'), null, 200, "OK",
                             mapOf("Content-Type" to source.mime, "Cache-Control" to "no-store"), input)
                     } catch (_: Exception) { sourceNotFound() }

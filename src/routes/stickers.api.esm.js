@@ -268,9 +268,10 @@ router.post(
   "/stickers/:id/uploads",
   asyncRoute(async (req, res) => {
     const id = requireStickerId(req.params.id);
-    const sticker = library.getSticker(panelOwner(), id);
-    const bytes = library.readStickerFile(panelOwner(), id);
-    const record = await uploads.acceptStream(panelOwner(), Readable.from(bytes), {
+    const who = panelOwner();
+    const sticker = library.getSticker(who, id);
+    const bytes = library.readStickerFile(who, id);
+    const record = await uploads.acceptStream(who, Readable.from(bytes), {
       filename: sticker.name,
       media: media(),
     });
