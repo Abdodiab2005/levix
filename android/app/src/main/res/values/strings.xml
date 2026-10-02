@@ -42,14 +42,8 @@
     <string name="btn_battery">Enable Battery Guard</string>
 
     <!-- Diagnostics / Beta Logs -->
-    <string name="section_diagnostics">Diagnostics &amp; Logs</string>
     <string name="diagnostics_sub">Accessible logs for debugging during Beta / RC</string>
-    <string name="diagnostics_expand_hint">Tap to expand debug signals &amp; logs</string>
-    <string name="diagnostics_collapse_hint">Tap to collapse logs</string>
     <string name="btn_share_logs">Share Logs</string>
-    <string name="btn_copy_logs">Copy Logs</string>
-    <string name="log_file_location">Saved to: %1$s</string>
-    <string name="logs_copied">Logs copied to clipboard</string>
     <string name="no_logs">No log entries available yet.</string>
 
     <!-- Status Badges -->
@@ -86,4 +80,22 @@
     <string name="notif_wa_paused">WhatsApp: ⏸️ Paused (No Internet)</string>
     <string name="notif_open">Open</string>
     <string name="notif_stop">Stop</string>
+    <!-- Compact tile strings -->
+    <string name="section_diagnostics_short">Diagnostics</string>
+    <string name="diagnostics_panel_hint">Full logs in the panel\'s Logs tab. Share for bug reports.</string>
+    <string name="card_whatsapp_desc_connected_short">Connected &amp; active</string>
+    <string name="card_whatsapp_desc_pairing_short">Waiting for device pairing</string>
+    <string name="card_whatsapp_desc_paused_short">Network paused</string>
+    <string name="card_whatsapp_desc_reconnecting_short">Auto-reconnecting…</string>
+    <string name="card_whatsapp_desc_failed">Reconnection failed</string>
+    <string name="card_whatsapp_desc_expired">Credentials expired</string>
+    <string name="card_whatsapp_desc_connecting">Connecting…</string>
+    <string name="status_failed">Failed</string>
+    <string name="status_expired">Expired</string>
+    <string name="card_engine_desc_stopped_short">Engine inactive</string>
+    <string name="card_engine_desc_running_short">Core active &amp; ready</string>
+    <string name="card_engine_desc_starting_short">Initializing core…</string>
+    <string name="battery_ok_short">Background protection active</string>
+    <string name="battery_restricted_hint">Restricted by system. Protect 24/7 uptime.</string>
+    <string name="action_open_whatsapp_settings">Open WhatsApp settings in panel</string>
 </resources>

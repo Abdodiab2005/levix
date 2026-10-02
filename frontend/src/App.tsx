@@ -129,7 +129,7 @@ const MainLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen min-h-[100dvh] flex bg-bg text-text-main bg-ambient-glow overflow-x-hidden relative">
+    <div className="min-h-screen min-h-[100dvh] flex bg-bg text-text-main bg-ambient-glow overflow-x-clip relative">
       <Sidebar
         currentView={currentView}
         onSelectView={handleSelectView}

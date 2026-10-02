@@ -42,14 +42,8 @@
     <string name="btn_battery">تفعيل حماية البطارية</string>
 
     <!-- Diagnostics / Beta Logs -->
-    <string name="section_diagnostics">التشخيص وسجلات النظام</string>
     <string name="diagnostics_sub">سجلات تتبع الأخطاء البرمجية أثناء الإصدار التجريبي</string>
-    <string name="diagnostics_expand_hint">اضغط لعرض إشارات وتفاصيل السجلات</string>
-    <string name="diagnostics_collapse_hint">اضغط لإخفاء السجلات</string>
     <string name="btn_share_logs">مشاركة السجلات</string>
-    <string name="btn_copy_logs">نسخ السجلات</string>
-    <string name="log_file_location">تم الحفظ في: %1$s</string>
-    <string name="logs_copied">تم نسخ السجلات إلى الحافظة بنجاح</string>
     <string name="no_logs">لا توجد سجلات مسجلة بعد.</string>
 
     <!-- Status Badges -->
@@ -86,4 +80,22 @@
     <string name="notif_wa_paused">واتساب: ⏸️ متوقف مؤقتاً (لا يوجد إنترنت)</string>
     <string name="notif_open">فتح</string>
     <string name="notif_stop">إيقاف</string>
+    <!-- Compact tile strings -->
+    <string name="section_diagnostics_short">التشخيص</string>
+    <string name="diagnostics_panel_hint">السجلات الكاملة في تبويب السجلات في لوحة التحكم. شاركها لتقارير الأخطاء.</string>
+    <string name="card_whatsapp_desc_connected_short">متصل ونشط</string>
+    <string name="card_whatsapp_desc_pairing_short">في انتظار ربط الجهاز</string>
+    <string name="card_whatsapp_desc_paused_short">الشبكة متوقفة مؤقتاً</string>
+    <string name="card_whatsapp_desc_reconnecting_short">إعادة الاتصال تلقائياً…</string>
+    <string name="card_whatsapp_desc_failed">فشلت إعادة الاتصال</string>
+    <string name="card_whatsapp_desc_expired">انتهت صلاحية بيانات الاعتماد</string>
+    <string name="card_whatsapp_desc_connecting">جاري الاتصال…</string>
+    <string name="status_failed">فشل</string>
+    <string name="status_expired">منتهي الصلاحية</string>
+    <string name="card_engine_desc_stopped_short">المحرك غير نشط</string>
+    <string name="card_engine_desc_running_short">المحرك نشط وجاهز</string>
+    <string name="card_engine_desc_starting_short">جاري تهيئة المحرك…</string>
+    <string name="battery_ok_short">حماية الخلفية نشطة</string>
+    <string name="battery_restricted_hint">مقيد من قبل النظام. فعّل الحماية لضمان العمل المتواصل.</string>
+    <string name="action_open_whatsapp_settings">فتح إعدادات واتساب في لوحة التحكم</string>
 </resources>

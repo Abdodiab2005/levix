@@ -2973,3 +2973,35 @@ html.screen-guard .gateway-panel {
     display: none;
   }
 }
+
+.gateway-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
+  margin-bottom: 0.75rem;
+  border-radius: 0.625rem;
+  border: 1px solid var(--line);
+  background: var(--panel-raised);
+  color: var(--text-main);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1;
+}
+.gateway-back-btn[hidden] {
+  display: none;
+}
+.gateway-back-btn:hover {
+  background: var(--panel-hover);
+  color: var(--brand-cyan);
+}
+.gateway-back-btn svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+.gateway-back-btn[dir="rtl"] svg {
+  transform: scaleX(-1);
+}
