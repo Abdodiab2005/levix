@@ -786,10 +786,7 @@ try {
 
   section("another owner is invisible");
 
-  const stranger = {
-    key: "201555000111@s.whatsapp.net",
-    candidates: ["201555000111@s.whatsapp.net"],
-  };
+  const stranger = { key: "201555000111@s.whatsapp.net" };
   const hidden = library.saveSticker(stranger, {
     buffer: makeWebp(30, 30, "hidden-bytes"),
     thumbBuffer: makeWebp(8, 8, "hidden-thumb"),

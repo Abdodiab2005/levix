@@ -102,7 +102,7 @@ const animated = make("move.webp", [
   "0",
 ]);
 const SELF = "201999999999@s.whatsapp.net";
-const OTHER = "201555555555@s.whatsapp.net";
+const OTHER = "555555555555@lid";
 
 function mediaMessage(type, bytes, extra = {}) {
   return {
@@ -263,7 +263,8 @@ section("sticker creation, ownership and safe errors");
   equal("other sender gets a sticker", count(other, "sticker"), 1);
   equal(
     "other library is separate",
-    library.listStickers(owner.forMessage({ key: { remoteJid: OTHER, fromMe: false } })).total,
+    library.listStickers(await owner.forMessage({ key: { remoteJid: OTHER, fromMe: false } }))
+      .total,
     1,
   );
   equal("self still has only two", library.listStickers(owner.forPanel()).total, 2);

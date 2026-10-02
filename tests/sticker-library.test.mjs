@@ -20,7 +20,7 @@ const { UPLOAD_TTL_MS, PACKS_MAX_PER_OWNER } = require("./src/stickers/limits.cj
 const zlib = require("node:zlib");
 
 const self = () => owner.forPanel();
-const person = (key, ...more) => ({ key, candidates: [key, ...more] });
+const person = (key) => ({ key });
 
 function sha256(buffer) {
   return createHash("sha256").update(buffer).digest("hex");
@@ -98,46 +98,47 @@ section("dedupe keeps one row and one file per owner");
   );
 }
 
-section("a person seen as a LID and later as a phone number is one library");
+section("a LID is one library and a phone string is not its key");
 
 {
   const lid = "111222333444555@lid";
   const pn = "201555000111@s.whatsapp.net";
   const bytes = Buffer.from("lid-then-pn");
-  const lidOwner = owner.forMessage({ key: { remoteJid: lid } });
-  equal("a bare LID is its own key", lidOwner.key, lid);
+  const lidOwner = await owner.forMessage({ key: { remoteJid: lid } });
+  ok("a bare LID gets an internal id", /^[0-9a-f]{16}$/.test(lidOwner.key));
   const named = save(lidOwner, bytes, { name: "Cat" });
   library.setFavorite(lidOwner, [named.sticker.id], true);
 
   const pnOnly = person(pn);
   const duplicate = save(pnOnly, bytes, { name: "" });
-  ok("without the mapping the phone key is a second row", duplicate.created);
+  ok("an opaque phone key is a second row", duplicate.created);
 
   store.storeLidPnMapping(lid, pn);
-  const unified = owner.forMessage({ key: { remoteJid: lid } });
-  equal("once mapped, the LID resolves to the phone JID", unified.key, pn);
-  ok("both identifiers are candidates", unified.candidates.includes(lid));
+  const unified = await owner.forMessage({ key: { remoteJid: lid } });
+  equal("lid_mapping does not change the LID's key", unified.key, lidOwner.key);
   const list = library.listStickers(unified, {});
-  equal("the two rows collapse", list.total, 1);
-  equal("the name survives the merge", list.items[0].name, "Cat");
-  ok("the favorite survives the merge", list.items[0].favorite);
+  equal("the LID library stays one row", list.total, 1);
+  equal("the name stays on that row", list.items[0].name, "Cat");
+  ok("the favorite stays on that row", list.items[0].favorite);
   const again = save(unified, bytes);
   ok("saving the bytes again is the kept sticker", !again.created);
-  equal("still one file", library.listStickers(person(pn, lid), {}).total, 1);
+  equal("the opaque phone library is still its own row", library.listStickers(pnOnly, {}).total, 1);
+  ok("both rows share one file", existsSync(stickerFile(bytes)));
 
   const lid2 = "999888777666555@lid";
   const pn2 = "201555000222@s.whatsapp.net";
-  const only = save(owner.forMessage({ key: { remoteJid: lid2 } }), "only-lid", { name: "Only" });
+  const onlyOwner = await owner.forMessage({ key: { remoteJid: lid2 } });
+  const only = save(onlyOwner, "only-lid", { name: "Only" });
   store.storeLidPnMapping(lid2, pn2);
-  const later = owner.forMessage({ key: { remoteJid: pn2 } });
-  equal("a later phone message is the canonical key", later.key, pn2);
+  const later = await owner.forMessage({ key: { remoteJid: pn2 } });
+  equal("a phone message with no Baileys mapping has no key", later.key, null);
   equal(
-    "it finds the sticker saved under the LID",
-    library.getSticker(later, only.sticker.id).name,
+    "the LID library is unchanged",
+    library.getSticker(onlyOwner, only.sticker.id).name,
     "Only",
   );
   const missed = codeOf(() => library.getSticker(person(lid2), only.sticker.id));
-  equal("a stale LID-only owner does not open a second library", missed, "NOT_FOUND");
+  equal("a stale LID string does not open the library", missed, "NOT_FOUND");
 }
 
 section("two LIDs mapped to one phone do not share a library");
@@ -146,9 +147,8 @@ section("two LIDs mapped to one phone do not share a library");
   const lidA = "111000000000001@lid";
   const lidB = "111000000000002@lid";
   const pn = "201888000111@s.whatsapp.net";
-  const saved = save(owner.forMessage({ key: { remoteJid: lidA } }), "a-secret", {
-    name: "A only",
-  });
+  const a = await owner.forMessage({ key: { remoteJid: lidA } });
+  const saved = save(a, "a-secret", { name: "A only" });
   store.storeLidPnMapping(lidA, pn);
   store.storeLidPnMapping(lidB, pn);
 
@@ -156,11 +156,10 @@ section("two LIDs mapped to one phone do not share a library");
     return db.prepare("SELECT owner FROM stickers WHERE id = ?").get(id).owner;
   }
 
-  const b = owner.forMessage({ key: { remoteJid: lidB } });
-  equal("B's canonical key is the shared phone", b.key, pn);
-  ok("B keeps their own LID", b.candidates.includes(lidB));
-  ok("B resolves that LID to the phone", b.candidates.includes(pn));
-  ok("B does not gain A's LID", !b.candidates.includes(lidA));
+  const b = await owner.forMessage({ key: { remoteJid: lidB } });
+  ok("B's key is an internal id", /^[0-9a-f]{16}$/.test(b.key));
+  ok("B's key is not A's", b.key !== a.key);
+  ok("B's key is not the phone", b.key !== pn);
   equal("B's list is empty", library.listStickers(b, {}).total, 0);
   equal(
     "B cannot read A's sticker",
@@ -177,35 +176,30 @@ section("two LIDs mapped to one phone do not share a library");
     codeOf(() => library.deleteStickers(b, [saved.sticker.id], { confirm: true })),
     "NOT_FOUND",
   );
-  equal("A's row was not rekeyed", ownerOf(saved.sticker.id), lidA);
-  equal(
-    "A still has the sticker",
-    library.getSticker(person(lidA), saved.sticker.id).name,
-    "A only",
-  );
+  equal("A's row was not rekeyed", ownerOf(saved.sticker.id), a.key);
+  equal("A still has the sticker", library.getSticker(a, saved.sticker.id).name, "A only");
 
-  const asPhone = owner.forMessage({ key: { remoteJid: pn } });
-  equal("a shared phone pulls in no LID", asPhone.candidates.length, 1);
-  equal("that candidate is the phone itself", asPhone.candidates[0], pn);
-  library.listStickers(asPhone, {});
-  equal("a phone message did not rekey A's row", ownerOf(saved.sticker.id), lidA);
+  const asPhone = await owner.forMessage({ key: { remoteJid: pn } });
+  equal("a shared phone with no Baileys mapping has no key", asPhone.key, null);
+  equal("a phone message did not rekey A's row", ownerOf(saved.sticker.id), a.key);
 
-  const grouped = owner.forMessage({
+  const grouped = await owner.forMessage({
     key: {
       remoteJid: "120363000111222@g.us",
       participant: lidB,
       participantAlt: pn,
     },
   });
-  ok("a group message does not pull in the other LID", !grouped.candidates.includes(lidA));
+  equal("a group message from B is B's library", grouped.key, b.key);
+  equal("a group message does not open A's library", ownerOf(saved.sticker.id), a.key);
 
   const onPhone = save(person(pn), "on-the-number", { name: "On the number" });
   equal(
-    "a row already keyed by the phone JID is visible to B",
-    library.getSticker(b, onPhone.sticker.id).name,
-    "On the number",
+    "a row keyed by the phone string is hidden from B",
+    codeOf(() => library.getSticker(b, onPhone.sticker.id)),
+    "NOT_FOUND",
   );
-  equal("A's LID row is still A's", ownerOf(saved.sticker.id), lidA);
+  equal("A's row is still A's", ownerOf(saved.sticker.id), a.key);
 }
 
 section("the paired account shares the panel library");
@@ -218,37 +212,64 @@ section("the paired account shares the panel library");
       me: { id: "201777000333:12@s.whatsapp.net", lid: "424242424242@lid" },
     }),
   );
+  const panel = owner.forPanel().key;
+  ok("the panel key is an internal id", /^[0-9a-f]{16}$/.test(panel));
   equal(
-    "fromMe is self",
-    owner.forMessage({ key: { fromMe: true, remoteJid: "201000000009@s.whatsapp.net" } }).key,
-    "self",
+    "fromMe is the panel",
+    (await owner.forMessage({ key: { fromMe: true, remoteJid: "201000000009@s.whatsapp.net" } }))
+      .key,
+    panel,
   );
   equal(
-    "the paired phone, device suffix included, is self",
-    owner.forMessage({ key: { remoteJid: "201777000333@s.whatsapp.net" } }).key,
-    "self",
+    "the paired LID is the panel",
+    (await owner.forMessage({ key: { remoteJid: "424242424242@lid" } })).key,
+    panel,
   );
   equal(
-    "the paired LID is self",
-    owner.forMessage({ key: { remoteJid: "424242424242@lid" } }).key,
-    "self",
+    "the paired phone's current LID is the panel",
+    (
+      await owner.forMessage(
+        { key: { remoteJid: "201777000333:9@s.whatsapp.net" } },
+        {
+          signalRepository: {
+            lidMapping: { getLIDForPN: async () => "424242424242:3@lid" },
+          },
+        },
+      )
+    ).key,
+    panel,
   );
-  const stranger = owner.forMessage({ key: { remoteJid: "201666000444:12@s.whatsapp.net" } });
   equal(
-    "someone else keeps a phone key, suffix stripped",
-    stranger.key,
-    "201666000444@s.whatsapp.net",
+    "the paired phone alone is not identified",
+    (await owner.forMessage({ key: { remoteJid: "201777000333@s.whatsapp.net" } })).key,
+    null,
   );
-  const group = owner.forMessage({
+  const stranger = await owner.forMessage({
+    key: { remoteJid: "201666000444:12@s.whatsapp.net" },
+  });
+  equal("someone else with only a phone is not identified", stranger.key, null);
+  const group = await owner.forMessage({
     key: {
       remoteJid: "120363999@g.us",
       participant: "555666777888@lid",
       participantAlt: "201444000333@s.whatsapp.net",
     },
   });
-  equal("a group sender prefers the phone JID", group.key, "201444000333@s.whatsapp.net");
-  ok("and still matches the LID", group.candidates.includes("555666777888@lid"));
-  equal("the panel is self", owner.forPanel().key, "self");
+  ok("a group LID is its own library", /^[0-9a-f]{16}$/.test(group.key) && group.key !== panel);
+  equal(
+    "a second group message keeps that key",
+    (
+      await owner.forMessage({
+        key: {
+          remoteJid: "120363999@g.us",
+          participant: "555666777888@lid",
+          participantAlt: "201444000333@s.whatsapp.net",
+        },
+      })
+    ).key,
+    group.key,
+  );
+  equal("the panel stays that id", owner.forPanel().key, panel);
   store.authRemove("creds");
 }
 

@@ -65,12 +65,7 @@ function publicRecord(record) {
 }
 
 function sameOwner(record, owner) {
-  const known = new Set([record.ownerKey, ...(record.candidates || [])]);
-  if (known.has(owner?.key)) return true;
-  for (const candidate of owner?.candidates || []) {
-    if (known.has(candidate)) return true;
-  }
-  return false;
+  return Boolean(owner?.key) && record.ownerKey === owner.key;
 }
 
 function sweepStale(now = Date.now()) {
@@ -138,7 +133,7 @@ function sniffFile(file, media) {
 
 /**
  * Stream `stream` to disk for `owner`. Resolves the public record (no path).
- * @param {{ key: string, candidates?: string[] }} owner
+ * @param {{ key: string }} owner
  * @param {import("node:stream").Readable} stream
  */
 function acceptStream(owner, stream, { filename, media } = {}) {
@@ -202,7 +197,6 @@ function acceptStream(owner, stream, { filename, media } = {}) {
             const record = {
               id,
               ownerKey: owner.key,
-              candidates: [...(owner.candidates || [owner.key])],
               path: file,
               filename: safeName(filename),
               kind: info.kind,
