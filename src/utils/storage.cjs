@@ -61,6 +61,7 @@ module.exports = {
   storeLidPnMapping: store.storeLidPnMapping,
   storeLidPnMappings: store.storeLidPnMappings,
   getLidForPn: store.getLidForPn,
+  getLidsForPn: store.getLidsForPn,
   getLidsForPns: store.getLidsForPns,
   getPnForLid: store.getPnForLid,
   getAllLidMappings: store.getAllLidMappings,

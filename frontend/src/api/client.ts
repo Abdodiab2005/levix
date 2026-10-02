@@ -1,6 +1,19 @@
 // file: frontend/src/api/client.ts
 
-class ApiError extends Error {
+import type {
+  Capabilities,
+  EditOptions,
+  Job,
+  Pack,
+  Sticker,
+  StickerBulkResult,
+  StickerFile,
+  StickerJobSource,
+  StickerList,
+  StickerUpload,
+} from "../types";
+
+export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
@@ -8,6 +21,10 @@ class ApiError extends Error {
   ) {
     super(message);
     this.name = "ApiError";
+  }
+
+  get code(): string | undefined {
+    return this.data?.code;
   }
 }
 
@@ -17,7 +34,7 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
     : `/dashboard/api${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`;
 
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(options.body instanceof Blob ? {} : { "Content-Type": "application/json" }),
     ...(options.headers as Record<string, string>),
   };
 
@@ -43,6 +60,37 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
   }
 
   return data as T;
+}
+
+function fileNameFromDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (star?.[1]) {
+    try {
+      return decodeURIComponent(star[1]);
+    } catch {
+      return star[1];
+    }
+  }
+  const plain = /filename="([^"]*)"/.exec(header);
+  return plain?.[1] || null;
+}
+
+async function requestFile(endpoint: string, options: RequestInit = {}): Promise<StickerFile> {
+  const response = await fetch(`/dashboard/api${endpoint}`, options);
+  if (response.status === 401) {
+    window.location.href = "/login";
+    throw new ApiError(401, "Session expired");
+  }
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new ApiError(response.status, data?.error || "Sticker operation failed", data);
+  }
+  return {
+    blob: await response.blob(),
+    fileName: fileNameFromDisposition(response.headers.get("Content-Disposition")),
+    animated: response.headers.get("X-Levix-Animated") === "1",
+  };
 }
 
 export interface ModelCapabilities {
@@ -214,4 +262,88 @@ export const api = {
   getFeedbackMeta: () => api.get<FeedbackMeta>("/feedback/meta"),
   sendFeedback: (payload: FeedbackPayload) => api.post<{ success: boolean }>("/feedback", payload),
   getLogs: () => api.get<{ logs: any[] }>("/logs"),
+  // Sticker Studio
+  getStickerCapabilities: () => api.get<Capabilities>("/stickers/capabilities"),
+  getStickers: (query: {
+    q?: string;
+    sort?: string;
+    filter?: string;
+    pack?: string;
+    offset?: number;
+    limit?: number;
+  }) => {
+    const params = new URLSearchParams();
+    if (query.q) params.set("q", query.q);
+    if (query.sort) params.set("sort", query.sort);
+    if (query.filter) params.set("filter", query.filter);
+    if (query.pack) params.set("pack", query.pack);
+    if (query.offset !== undefined) params.set("offset", query.offset.toString());
+    if (query.limit !== undefined) params.set("limit", query.limit.toString());
+    return api.get<StickerList>(`/stickers?${params.toString()}`);
+  },
+  uploadStickerSource: (file: File | Blob, filename?: string) => {
+    const headers: Record<string, string> = {};
+    if (filename) headers["X-Filename"] = encodeURIComponent(filename);
+    return request<StickerUpload>("/stickers/uploads", {
+      method: "POST",
+      body: file,
+      headers,
+    });
+  },
+  createStickerJob: (payload: {
+    uploadId: string;
+    options?: EditOptions;
+    overlay?: string;
+    name?: string;
+    packId?: string;
+    source?: StickerJobSource;
+  }) => api.post<{ jobId: string }>("/stickers/jobs", payload),
+  getStickerJob: (id: string) => api.get<Job>(`/stickers/jobs/${encodeURIComponent(id)}`),
+  exportSticker: (id: string, format: "webp" | "png" | "gif") =>
+    requestFile(`/stickers/${encodeURIComponent(id)}/export?format=${format}`),
+  exportStickers: (ids: string[], format: "webp" | "png") =>
+    requestFile("/stickers/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids, format }),
+    }),
+  updateSticker: (id: string, payload: { name?: string; favorite?: boolean }) =>
+    api.patch<Sticker>(`/stickers/${encodeURIComponent(id)}`, payload),
+  deleteSticker: (id: string, confirm?: boolean) =>
+    api.delete<{ deleted: string[] }>(
+      `/stickers/${encodeURIComponent(id)}${confirm ? "?confirm=1" : ""}`,
+    ),
+  bulkStickers: (payload: {
+    action:
+      | "favorite"
+      | "unfavorite"
+      | "delete"
+      | "addToPack"
+      | "moveToPack"
+      | "removeFromPack"
+      | "touch";
+    ids: string[];
+    packId?: string;
+    fromPackId?: string;
+    confirm?: boolean;
+  }) => api.post<StickerBulkResult>("/stickers/bulk", payload),
+  sendStickers: (payload: { ids: string[]; jid: string }) =>
+    api.post<{ sent: number }>("/stickers/send", payload),
+  getPacks: () => api.get<{ packs: Pack[] }>("/sticker-packs"),
+  createPack: (name: string) => api.post<Pack>("/sticker-packs", { name }),
+  getPack: (id: string) =>
+    api.get<{ pack: Pack; items: Sticker[] }>(`/sticker-packs/${encodeURIComponent(id)}`),
+  updatePack: (id: string, name: string) =>
+    api.patch<Pack>(`/sticker-packs/${encodeURIComponent(id)}`, { name }),
+  // deletedPack is the pack id. The route does not return the pack object.
+  deletePack: (id: string, deleteStickers?: boolean) =>
+    api.delete<{ deletedPack: string; deletedStickers: string[] }>(
+      `/sticker-packs/${encodeURIComponent(id)}${deleteStickers ? "?deleteStickers=1" : ""}`,
+    ),
+  reorderPack: (id: string, ids: string[]) =>
+    api.put<{ ok: true }>(`/sticker-packs/${encodeURIComponent(id)}/order`, { ids }),
+  mergePack: (id: string, intoPackId: string) =>
+    api.post<{ pack: Pack; moved: number }>(`/sticker-packs/${encodeURIComponent(id)}/merge`, {
+      intoPackId,
+    }),
 };

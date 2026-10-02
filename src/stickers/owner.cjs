@@ -39,11 +39,8 @@ function pushCandidate(into, value) {
 // Every distinct LID whose stored phone normalizes to `pn`.
 function lidsMappedTo(pn) {
   const lids = [];
-  for (const row of store.getAllLidMappings()) {
-    if (!row?.pn || !row?.lid) continue;
-    const rowPn = normalizeJid(row.pn);
-    if (rowPn !== pn && row.pn !== pn) continue;
-    const lid = normalizeJid(row.lid);
+  for (const raw of store.getLidsForPn(pn)) {
+    const lid = normalizeJid(raw);
     if (!isLidJid(lid) || lids.includes(lid)) continue;
     lids.push(lid);
   }

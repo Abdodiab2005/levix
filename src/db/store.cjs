@@ -15,6 +15,7 @@
 // synchronously from both sides.
 
 const logger = require("../utils/logger.cjs");
+const normalizeJid = require("../utils/normalizeJid.cjs");
 const { db, q, parseJson, sweepExpired, checkpoint, DB_PATH } = require("./db.cjs");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -378,6 +379,33 @@ function storeLidPnMappings(mappings) {
 function getLidForPn(pn) {
   const row = q("SELECT lid FROM lid_mapping WHERE pn = ?").get(pn);
   return row ? row.lid : null;
+}
+
+// Every LID stored for this phone. Writers persist the pn they are given
+// (storeLidPnMapping); a device suffix is the only form normalizeJid folds
+// onto the same number, so the lookup is an index read of that pn plus the
+// `user:` prefix, not a scan of the table.
+function getLidsForPn(pn) {
+  if (!pn) return [];
+  const found = new Map();
+  const consider = (rows) => {
+    for (const row of rows) {
+      if (!row?.lid || !row?.pn || found.has(row.lid)) continue;
+      if (normalizeJid(row.pn) !== pn && row.pn !== pn) continue;
+      found.set(row.lid, row.lid);
+    }
+  };
+  consider(q("SELECT lid, pn FROM lid_mapping WHERE pn = ?").all(pn));
+  if (!String(pn).includes(":")) {
+    const at = String(pn).lastIndexOf("@");
+    if (at > 0) {
+      const user = String(pn).slice(0, at);
+      consider(
+        q("SELECT lid, pn FROM lid_mapping WHERE pn >= ? AND pn < ?").all(`${user}:`, `${user};`),
+      );
+    }
+  }
+  return [...found.keys()];
 }
 
 function getLidsForPns(pns) {
@@ -1622,6 +1650,7 @@ module.exports = {
   storeLidPnMapping,
   storeLidPnMappings,
   getLidForPn,
+  getLidsForPn,
   getLidsForPns,
   getPnForLid,
   getAllLidMappings,

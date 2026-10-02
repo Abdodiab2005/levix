@@ -74,6 +74,20 @@ ok("lid->pn", store.getPnForLid("111@lid") === "201111111111@s.whatsapp.net");
 ok("pn->lid", store.getLidForPn("202222222222@s.whatsapp.net") === "222@lid");
 ok("lids bulk", store.getLidsForPns(["201111111111@s.whatsapp.net"]).size === 1);
 ok("lid all", store.getAllLidMappings().length === 2);
+store.storeLidPnMapping("333@lid", "203333333333@s.whatsapp.net");
+store.storeLidPnMapping("444@lid", "203333333333:4@s.whatsapp.net");
+store.storeLidPnMapping("555:9@lid", "203333333333@s.whatsapp.net");
+equal(
+  "every lid stored for one phone",
+  store.getLidsForPn("203333333333@s.whatsapp.net").sort().join(),
+  "333@lid,444@lid,555:9@lid",
+);
+equal(
+  "a device-suffixed phone matches only that stored row",
+  store.getLidsForPn("203333333333:4@s.whatsapp.net").join(),
+  "444@lid",
+);
+ok("an unknown phone has no lids", store.getLidsForPn("209000000000@s.whatsapp.net").length === 0);
 
 section("users & roles: the four-step lookup");
 store.saveUserMetadata({

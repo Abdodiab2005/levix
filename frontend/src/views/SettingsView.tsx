@@ -919,6 +919,30 @@ export const SettingsView: React.FC = () => {
               <span className="block text-[11px] text-muted">{t("maxFetchBytesDesc")}</span>
             </div>
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label
+                htmlFor="sticker-library-limit"
+                className="block text-xs sm:text-sm font-bold text-text-main"
+              >
+                {t("stickerLibraryLimit")}
+              </label>
+              <input
+                id="sticker-library-limit"
+                type="number"
+                min={1}
+                max={100000}
+                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                value={settings["sticker_library_limit"] || 1000}
+                onChange={(e) =>
+                  setSettings({ ...settings, sticker_library_limit: Number(e.target.value) })
+                }
+                onBlur={(e) => updateSetting("sticker_library_limit", Number(e.target.value))}
+              />
+              <span className="block text-[11px] text-muted">{t("stickerLibraryLimitDesc")}</span>
+            </div>
+          </div>
         </div>
       )}
 

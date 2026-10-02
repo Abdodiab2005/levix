@@ -17,25 +17,30 @@ import { LogsView } from "./views/LogsView";
 import { OverviewView } from "./views/OverviewView";
 import { SchedulesView } from "./views/SchedulesView";
 import { SettingsView } from "./views/SettingsView";
+import { StickerStudioView } from "./views/StickerStudioView";
+
+const VALID_VIEWS: ViewTab[] = [
+  "overview",
+  "connection",
+  "commands",
+  "ai",
+  "groups",
+  "schedules",
+  "settings",
+  "logs",
+  "stickers",
+];
+
+function viewFromHash(): ViewTab {
+  const head = window.location.hash.replace(/^#/, "").split("/")[0] as ViewTab;
+  return VALID_VIEWS.includes(head) ? head : "overview";
+}
 
 const MainLayout: React.FC = () => {
   const { t } = useI18n();
   const { toast } = useToast();
 
-  const [currentView, setCurrentView] = useState<ViewTab>(() => {
-    const hash = window.location.hash.replace(/^#/, "") as ViewTab;
-    const validViews: ViewTab[] = [
-      "overview",
-      "connection",
-      "commands",
-      "ai",
-      "groups",
-      "schedules",
-      "settings",
-      "logs",
-    ];
-    return validViews.includes(hash) ? hash : "overview";
-  });
+  const [currentView, setCurrentView] = useState<ViewTab>(viewFromHash);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -77,7 +82,7 @@ const MainLayout: React.FC = () => {
   const activeStatus: SessionStatus | null =
     initialStatus || socketStatus
       ? {
-          state: ((socketStatus?.state || initialStatus?.state || "idle") as SessionState),
+          state: (socketStatus?.state || initialStatus?.state || "idle") as SessionState,
           ...(initialStatus || {}),
           ...(socketStatus || {}),
         }
@@ -110,8 +115,8 @@ const MainLayout: React.FC = () => {
 
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash.replace(/^#/, "") as ViewTab;
-      if (hash) setCurrentView(hash);
+      const head = window.location.hash.replace(/^#/, "").split("/")[0] as ViewTab;
+      if (VALID_VIEWS.includes(head)) setCurrentView(head);
     };
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
@@ -126,6 +131,7 @@ const MainLayout: React.FC = () => {
     schedules: t("schedules"),
     settings: t("settings"),
     logs: t("logs"),
+    stickers: t("stickers"),
   };
 
   return (
@@ -162,6 +168,7 @@ const MainLayout: React.FC = () => {
           )}
           {currentView === "groups" && <GroupsView />}
           {currentView === "settings" && <SettingsView />}
+          {currentView === "stickers" && <StickerStudioView isConnected={isConnected} />}
           {currentView === "logs" && <LogsView socket={socket} />}
         </main>
       </div>

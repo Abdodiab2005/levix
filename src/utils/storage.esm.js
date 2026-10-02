@@ -55,6 +55,7 @@ export const deleteQrCode = store.deleteQrCode;
 export const storeLidPnMapping = store.storeLidPnMapping;
 export const storeLidPnMappings = store.storeLidPnMappings;
 export const getLidForPn = store.getLidForPn;
+export const getLidsForPn = store.getLidsForPn;
 export const getLidsForPns = store.getLidsForPns;
 export const getPnForLid = store.getPnForLid;
 export const getAllLidMappings = store.getAllLidMappings;
