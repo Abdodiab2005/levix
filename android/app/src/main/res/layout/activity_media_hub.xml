@@ -203,6 +203,12 @@
                     android:layout_height="48dp"
                     android:text="@string/media_share" />
                 <Button
+                    android:id="@+id/mediaSticker"
+                    style="?android:attr/buttonBarButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:text="@string/media_sticker_make" />
+                <Button
                     android:id="@+id/mediaFavorite"
                     style="?android:attr/buttonBarButtonStyle"
                     android:layout_width="wrap_content"

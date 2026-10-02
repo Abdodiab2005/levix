@@ -48,6 +48,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.leviro.levix.PanelActivity
 import net.leviro.levix.R
 import java.time.Instant
 import java.time.ZoneId
@@ -199,6 +200,7 @@ class MediaHubActivity : AppCompatActivity() {
         }
         findViewById<View>(R.id.mediaSave).setOnClickListener { saveItems(selected()) }
         findViewById<View>(R.id.mediaShare).setOnClickListener { shareItems(selected()) }
+        findViewById<View>(R.id.mediaSticker).setOnClickListener { stickerItems(selected()) }
         findViewById<View>(R.id.mediaFavorite).setOnClickListener { favoriteItems(selected()) }
         findViewById<View>(R.id.mediaDelete).setOnClickListener { confirmDelete(selected()) }
 
@@ -405,6 +407,13 @@ class MediaHubActivity : AppCompatActivity() {
         findViewById<View>(R.id.mediaSelection).visibility = if (count > 0) View.VISIBLE else View.GONE
         findViewById<TextView>(R.id.mediaSelectionCount).text =
             resources.getQuantityString(R.plurals.media_selected_count, count, count)
+        // Sticker Studio takes one file at a time, so the action is only there
+        // when a single stickerable file is picked. The label follows whether
+        // that file is already a sticker.
+        val target = stickerTarget(selected())
+        val sticker = findViewById<Button>(R.id.mediaSticker)
+        sticker.visibility = if (target == null) View.GONE else View.VISIBLE
+        sticker.setText(stickerLabel(target))
     }
 
     private fun showBanner(all: List<MediaItem>) {
@@ -537,6 +546,7 @@ class MediaHubActivity : AppCompatActivity() {
                 isFavorite = { id -> id in repo.favorites() },
                 onSave = { saveItems(listOf(it)) },
                 onShare = { shareItems(listOf(it)) },
+                onSticker = ::openStickerStudio,
                 onOpen = ::openItem,
                 onFavorite = { current ->
                     repo.toggleFavorite(current.id)
@@ -655,6 +665,38 @@ class MediaHubActivity : AppCompatActivity() {
             toast(R.string.media_unsupported)
         } catch (_: Exception) {
             toast(R.string.media_unavailable)
+        }
+    }
+
+    /** The single stickerable file behind the action, or null when there isn't one. */
+    private fun stickerTarget(items: List<MediaItem>): MediaItem? =
+        items.singleOrNull()?.takeIf { MediaLogic.stickerable(it) }
+
+    /** An existing .webp sticker is only added to the library; anything else is re-cut. */
+    private fun stickerLabel(item: MediaItem?): Int = when (item?.let(MediaLogic::stickerIntent)) {
+        StickerIntent.SAVE -> R.string.media_sticker_save
+        else -> R.string.media_sticker_make
+    }
+
+    /** The selection bar's sticker action: one file, or nothing to act on. */
+    private fun stickerItems(items: List<MediaItem>) {
+        stickerTarget(items)?.let(::openStickerStudio)
+    }
+
+    /**
+     * Parks one file for Sticker Studio and opens the panel on its screen.
+     *
+     * Nothing is read here: StickerHandoffs.prepare() only records the URI the
+     * Media Hub already has permission to read, and the bytes are read on the
+     * WebView's own thread when the panel asks for them — so this stays off the
+     * IO path even for a 16 MB video.
+     */
+    private fun openStickerStudio(item: MediaItem) {
+        when (StickerHandoffs.prepare(item)) {
+            StickerHandoff.READY -> PanelActivity.open(this, StickerHandoffs.PANEL_HASH)
+            StickerHandoff.TOO_LARGE -> toast(R.string.media_sticker_too_large)
+            StickerHandoff.SIZE_UNKNOWN -> toast(R.string.media_sticker_size_unknown)
+            StickerHandoff.UNSUPPORTED -> toast(R.string.media_sticker_unsupported)
         }
     }
 

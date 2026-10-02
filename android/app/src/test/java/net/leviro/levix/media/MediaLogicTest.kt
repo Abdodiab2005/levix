@@ -271,4 +271,122 @@ class MediaLogicTest {
             override fun open(uri: String): java.io.InputStream? = throw FileNotFoundException()
         }, "gone"))
     }
+
+    @Test
+    fun stickerIntentPerMediaType() {
+        val size = PendingStickers.MAX_BYTES
+        assertEquals(
+            StickerIntent.CREATE,
+            MediaLogic.stickerIntent(item("a", size = size, type = MediaType.IMAGE)),
+        )
+        assertEquals(
+            StickerIntent.CREATE,
+            MediaLogic.stickerIntent(item("b", size = size, type = MediaType.VIDEO)),
+        )
+        // An animated GIF is indexed as a video, so it goes through the converter.
+        assertEquals(
+            StickerIntent.CREATE,
+            MediaLogic.stickerIntent(item("c", size = size, type = MediaType.VIDEO, name = "c.gif")),
+        )
+        // A WhatsApp sticker is already a WebP on the right canvas.
+        assertEquals(
+            StickerIntent.SAVE,
+            MediaLogic.stickerIntent(item("d", size = size, type = MediaType.STICKER)),
+        )
+        for (type in listOf(MediaType.VOICE, MediaType.AUDIO, MediaType.DOCUMENT)) {
+            assertEquals(
+                "a $type has no sticker form",
+                StickerIntent.NONE,
+                MediaLogic.stickerIntent(item("e", size = size, type = type)),
+            )
+        }
+    }
+
+    @Test
+    fun stickerIntentRefusesUnmeasurableAndOversizedFiles() {
+        val tooBig = PendingStickers.MAX_BYTES + 1
+        assertEquals(
+            StickerIntent.NONE,
+            MediaLogic.stickerIntent(item("a", size = 0, type = MediaType.IMAGE)),
+        )
+        assertEquals(
+            StickerIntent.NONE,
+            MediaLogic.stickerIntent(item("b", size = -1, type = MediaType.IMAGE)),
+        )
+        assertEquals(
+            StickerIntent.NONE,
+            MediaLogic.stickerIntent(item("c", size = tooBig, type = MediaType.IMAGE)),
+        )
+        assertEquals(
+            StickerIntent.NONE,
+            MediaLogic.stickerIntent(item("d", size = tooBig, type = MediaType.VIDEO)),
+        )
+        // The cap itself still fits; the refusal is strictly over it.
+        assertEquals(
+            StickerIntent.CREATE,
+            MediaLogic.stickerIntent(item("e", size = PendingStickers.MAX_BYTES)),
+        )
+        assertFalse(MediaLogic.stickerable(item("f", size = tooBig)))
+        assertTrue(MediaLogic.stickerable(item("g", size = 1, type = MediaType.STICKER)))
+    }
+
+    @Test
+    fun pendingStickerIsTakenOnce() {
+        PendingStickers.clear()
+        assertNull(PendingStickers.peek())
+        assertNull(PendingStickers.take())
+
+        val parked = PendingSticker(
+            uri = "content://media/one",
+            mime = "image/jpeg",
+            name = "one.jpg",
+            intent = StickerIntent.CREATE,
+        )
+        PendingStickers.set(parked)
+        assertEquals(parked, PendingStickers.peek())
+        assertEquals(parked, PendingStickers.take())
+        // A second page load must not convert the same file again.
+        assertNull(PendingStickers.peek())
+        assertNull(PendingStickers.take())
+
+        // A newer pick replaces the older one rather than queueing behind it.
+        PendingStickers.set(parked)
+        val newer = parked.copy(uri = "content://media/two", intent = StickerIntent.SAVE)
+        PendingStickers.set(newer)
+        assertEquals(newer, PendingStickers.take())
+        PendingStickers.clear()
+    }
+
+    @Test
+    fun handoffParksOnlyStickerableFiles() {
+        PendingStickers.clear()
+        val ready = StickerHandoffs.prepare(
+            item("a", size = 2_048, type = MediaType.IMAGE, name = "cat.jpg"),
+        )
+        assertEquals(StickerHandoff.READY, ready)
+        assertEquals(
+            PendingSticker(
+                uri = "content://media/a",
+                mime = "image/jpeg",
+                name = "cat.jpg",
+                intent = StickerIntent.CREATE,
+            ),
+            PendingStickers.take(),
+        )
+
+        assertEquals(
+            StickerHandoff.TOO_LARGE,
+            StickerHandoffs.prepare(item("b", size = PendingStickers.MAX_BYTES + 1)),
+        )
+        assertEquals(
+            StickerHandoff.SIZE_UNKNOWN,
+            StickerHandoffs.prepare(item("c", size = 0, type = MediaType.IMAGE)),
+        )
+        assertEquals(
+            StickerHandoff.UNSUPPORTED,
+            StickerHandoffs.prepare(item("d", size = 4_096, type = MediaType.DOCUMENT)),
+        )
+        // A refused pick leaves nothing parked for a later panel visit.
+        assertNull(PendingStickers.take())
+    }
 }
