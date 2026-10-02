@@ -151,7 +151,7 @@ class MainActivity : AppCompatActivity() {
         cardWhatsApp = findViewById(R.id.cardWhatsApp)
         whatsAppBadge = findViewById(R.id.whatsAppBadge)
         whatsAppDetailText = findViewById(R.id.whatsAppDetailText)
-        cardWhatsApp.setOnClickListener { openPanelAt("connection") }
+        cardWhatsApp.setOnClickListener { PanelActivity.open(this, "connection") }
 
         cardEngine = findViewById(R.id.cardEngine)
         engineBadge = findViewById(R.id.engineBadge)
@@ -198,16 +198,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun openPanel() {
         val url = HostState.snapshot.panelUrl ?: "http://127.0.0.1:3001/"
-        startActivity(
-            Intent(this, PanelActivity::class.java)
-                .putExtra(PanelActivity.EXTRA_URL, url)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP),
-        )
-    }
-
-    private fun openPanelAt(hash: String) {
-        val base = HostState.snapshot.panelUrl ?: "http://127.0.0.1:3001/"
-        val url = base.trimEnd('/') + "/#" + hash
         startActivity(
             Intent(this, PanelActivity::class.java)
                 .putExtra(PanelActivity.EXTRA_URL, url)

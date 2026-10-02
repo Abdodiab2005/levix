@@ -11,10 +11,23 @@
 # built with an NDK older than r28 for exactly this. r28+ lays the segments
 # out for 16 KB pages by default.
 #
-# What goes in is what Levix asks FFmpeg for: Opus voice notes (!tts, through
-# libopus), JPEG thumbnails of the images and videos it sends, and demuxers /
-# decoders for the media WhatsApp carries. Filters, parsers and bitstream
-# filters keep FFmpeg's defaults.
+# What goes in is what Levix asks FFmpeg for:
+#
+#   * Opus voice notes (!tts), through libopus.
+#   * JPEG thumbnails of the images and videos it sends.
+#   * Sticker Studio (!sticker and the panel's converter). A WhatsApp sticker
+#     is WebP, and the sticker *encoder* does not exist in FFmpeg itself: it is
+#     libwebp, built here for the same ABI and toolchain. Without it this
+#     binary can read a sticker but can never write one, so `!sticker` cannot
+#     work on Android at all. libwebpmux (and the libsharpyuv it is built with)
+#     comes along because libwebp_anim — the animated-sticker encoder, and the
+#     one that produces the WebP container itself — is mux-library-only.
+#     The sticker graph is a pipe: raw frames in through the rawvideo demuxer,
+#     out through the rawvideo muxer, plus the single-image pipe demuxers for
+#     the PNG/JPEG/WebP/GIF bytes the panel and the bot hand over.
+#   * Demuxers / decoders for the media WhatsApp carries.
+#
+# Filters, parsers and bitstream filters keep FFmpeg's defaults.
 #
 # Usage: build-ffmpeg-android.sh <abi> <output-file>
 #
@@ -41,13 +54,24 @@ FFMPEG_VERSION="8.1.3"
 FFMPEG_SHA256="7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3"
 OPUS_VERSION="1.6.1"
 OPUS_SHA256="6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1"
+# The latest stable libwebp, pinned by version AND hash like everything else
+# here. That release is what carries libsharpyuv, which libwebpmux links and
+# FFmpeg's libwebp_anim encoder therefore needs.
+WEBP_VERSION="1.6.0"
+WEBP_SHA256="e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564"
 # The app's minSdk: the oldest Android the binary has to start on.
 API=29
 
 DECODERS="aac,aac_fixed,aac_latm,amrnb,amrwb,bmp,flac,gif,h263,h264,hevc,mjpeg,mp3,mp3float,mpeg4,opus,pcm_f32le,pcm_s16be,pcm_s16le,pcm_u8,png,rawvideo,vorbis,vp8,vp9,webp"
-ENCODERS="aac,flac,gif,libopus,mjpeg,mpeg4,pcm_s16le,png"
-DEMUXERS="aac,amr,avi,flac,gif,h264,hevc,image2,image2pipe,image_bmp_pipe,image_jpeg_pipe,image_png_pipe,image_webp_pipe,matroska,mov,mp3,mpegps,mpegts,ogg,wav"
-MUXERS="adts,gif,image2,image2pipe,ipod,matroska,mjpeg,mov,mp3,mp4,ogg,opus,wav,webm"
+# libwebp/libwebp_anim write the stickers; rawvideo moves the frames between the
+# scale/pad/overlay filters and the encoder as raw packets on a pipe.
+ENCODERS="aac,flac,gif,libopus,libwebp,libwebp_anim,mjpeg,mpeg4,pcm_s16le,png,rawvideo"
+# image_*_pipe are FFmpeg's single-image pipe demuxers (the real 8.x names);
+# the sticker converter pipes bytes in rather than naming a file.
+DEMUXERS="aac,amr,avi,flac,gif,h264,hevc,image2,image2pipe,image_bmp_pipe,image_gif_pipe,image_jpeg_pipe,image_png_pipe,image_webp_pipe,matroska,mov,mp3,mpegps,mpegts,ogg,rawvideo,wav"
+# The webp muxer is what turns the animated encoder's per-frame output into
+# the VP8X/ANMF container WhatsApp requires.
+MUXERS="adts,gif,image2,image2pipe,ipod,matroska,mjpeg,mov,mp3,mp4,ogg,opus,rawvideo,wav,webm,webp"
 
 case "$ABI" in
   arm64-v8a)
@@ -137,6 +161,8 @@ fetch "https://ffmpeg.org/releases/ffmpeg-$FFMPEG_VERSION.tar.xz" \
   "$DOWNLOADS/ffmpeg-$FFMPEG_VERSION.tar.xz" "$FFMPEG_SHA256"
 fetch "https://downloads.xiph.org/releases/opus/opus-$OPUS_VERSION.tar.gz" \
   "$DOWNLOADS/opus-$OPUS_VERSION.tar.gz" "$OPUS_SHA256"
+fetch "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-$WEBP_VERSION.tar.gz" \
+  "$DOWNLOADS/libwebp-$WEBP_VERSION.tar.gz" "$WEBP_SHA256"
 
 WORK="$CACHE/ffmpeg/work-$ABI"
 PREFIX="$WORK/prefix"
@@ -169,6 +195,38 @@ tar -xzf "$DOWNLOADS/opus-$OPUS_VERSION.tar.gz" -C "$WORK"
   run opus-install make install
 )
 
+# libwebp ships configure and Makefile.in but not the autotools that generated
+# them, and the tarball's timestamps make make believe the sources are newer.
+# Touch the generated files in dependency order instead of requiring
+# autoconf/automake/libtool on the build machine.
+restamp_generated_autotools() {
+  local src="$1"
+  find "$src" \( -name '*.m4' -o -name 'configure.ac' -o -name 'Makefile.am' -o -name 'config.h.in' \) \
+    -exec touch {} +
+  touch "$src/aclocal.m4"
+  touch "$src/configure"
+  find "$src" -name 'Makefile.in' -exec touch {} +
+}
+
+echo "==> [$ABI] building libwebp $WEBP_VERSION..."
+tar -xzf "$DOWNLOADS/libwebp-$WEBP_VERSION.tar.gz" -C "$WORK"
+(
+  cd "$WORK/libwebp-$WEBP_VERSION"
+  restamp_generated_autotools .
+  run webp-configure ./configure \
+    --host="$TRIPLE" \
+    --prefix="$PREFIX" \
+    --enable-static --disable-shared --with-pic \
+    --enable-libwebpmux --enable-libwebpdemux \
+    --disable-libwebpdecoder --disable-libwebpextras \
+    --disable-png --disable-jpeg --disable-tiff --disable-gif \
+    --disable-gl --disable-sdl --disable-wic \
+    --disable-neon-rtcd \
+    CC="$CC" AR="$AR" RANLIB="$RANLIB" CFLAGS="-O2"
+  run webp-make make -j"$JOBS"
+  run webp-install make install
+)
+
 echo "==> [$ABI] building FFmpeg $FFMPEG_VERSION..."
 tar -xJf "$DOWNLOADS/ffmpeg-$FFMPEG_VERSION.tar.xz" -C "$WORK"
 (
@@ -196,7 +254,7 @@ tar -xJf "$DOWNLOADS/ffmpeg-$FFMPEG_VERSION.tar.xz" -C "$WORK"
     --disable-encoders --enable-encoder="$ENCODERS" \
     --disable-demuxers --enable-demuxer="$DEMUXERS" \
     --disable-muxers --enable-muxer="$MUXERS" \
-    --enable-libopus
+    --enable-libopus --enable-libwebp
   # A component whose dependency is missing is dropped with only a warning.
   grep '^WARNING' "$WORK/ffmpeg-configure.log" >&2 || true
   run ffmpeg-make make -j"$JOBS"

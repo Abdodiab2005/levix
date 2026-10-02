@@ -48,6 +48,29 @@ object MediaLogic {
         .split('/')
         .any { it == ".statuses" }
 
+    /**
+     * What Sticker Studio can be asked to do with an item, or NONE when the
+     * item has no business becoming a sticker.
+     *
+     * A WhatsApp sticker is already a WebP that fits the canvas, so it is only
+     * added to the library. Anything else that is a picture or a clip is
+     * opened in the converter, which frames and re-encodes it. Voice notes,
+     * audio and documents have no sticker form at all, and an image whose size
+     * the store did not report cannot be checked against the 16 MB upload cap
+     * up front, so it is refused rather than handed over.
+     */
+    fun stickerIntent(item: MediaItem): StickerIntent {
+        if (item.size <= 0 || item.size > PendingStickers.MAX_BYTES) return StickerIntent.NONE
+        return when (item.mediaType) {
+            MediaType.STICKER -> StickerIntent.SAVE
+            MediaType.IMAGE, MediaType.VIDEO -> StickerIntent.CREATE
+            MediaType.VOICE, MediaType.AUDIO, MediaType.DOCUMENT -> StickerIntent.NONE
+        }
+    }
+
+    /** True when the item can be offered as a sticker at all. */
+    fun stickerable(item: MediaItem): Boolean = stickerIntent(item) != StickerIntent.NONE
+
     fun type(path: String, mime: String): MediaType {
         val normalized = path.lowercase(Locale.ROOT)
         return when {
