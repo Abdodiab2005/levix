@@ -239,6 +239,94 @@ store.storeLidPnMapping("123@lid", "201012345678");
 const peer = store.describePeer("123@lid");
 equal("LID peer shows the phone", peer.phone, "+201012345678");
 equal("LID peer uses the display name", peer.label, "Ali");
+equal("LID peer exposes the push name", peer.pushName, "Ali");
+equal("LID peer has no saved name yet", peer.savedName, null);
+
+section("saved-name precedence over push name");
+{
+  store.saveUserMetadata({
+    jid: "201098765432@s.whatsapp.net",
+    lid: "888@lid",
+    phone: "201098765432",
+    displayName: "CoolGuy",
+    savedName: "Mona Hassan",
+  });
+  store.storeLidPnMapping("888@lid", "201098765432@s.whatsapp.net");
+
+  const byPn = store.describePeer("201098765432@s.whatsapp.net");
+  const byLid = store.describePeer("888@lid");
+  equal("saved name beats push name", byPn.label, "Mona Hassan");
+  equal("saved name field", byPn.savedName, "Mona Hassan");
+  equal("push name field stays separate", byPn.pushName, "CoolGuy");
+  equal("phone is always present", byPn.phone, "+201098765432");
+  equal("LID and PN share one label", byLid.label, "Mona Hassan");
+  equal("LID lookup shows the same phone", byLid.phone, "+201098765432");
+  ok("the label is not a LID", !byLid.label.includes("@") && !byLid.label.includes("lid"));
+  ok("the label is not a JID", !byPn.label.includes("@"));
+
+  store.saveUserMetadata({
+    jid: "201098765432@s.whatsapp.net",
+    displayName: "NewPush",
+  });
+  equal(
+    "push name never overwrites saved name",
+    store.getUserMetadata("201098765432@s.whatsapp.net").savedName,
+    "Mona Hassan",
+  );
+  equal(
+    "push name still updates",
+    store.getUserMetadata("201098765432@s.whatsapp.net").displayName,
+    "NewPush",
+  );
+
+  const before = store.getAllUsers().length;
+  store.applyContactRecord({
+    id: "888@lid",
+    name: "Mona Hassan",
+    notify: "CoolGuy",
+    phoneNumber: "201098765432@s.whatsapp.net",
+  });
+  equal("LID and PN of one person stay one row", store.getAllUsers().length, before);
+  equal(
+    "contact.name is stored as saved name",
+    store.getUserMetadata("201098765432").savedName,
+    "Mona Hassan",
+  );
+
+  store.applyContactRecord({
+    id: "201098765432@s.whatsapp.net",
+    notify: "ShouldNotBecomeSaved",
+  });
+  equal(
+    "notify does not overwrite saved name",
+    store.getUserMetadata("201098765432").savedName,
+    "Mona Hassan",
+  );
+  equal(
+    "notify updates the push name",
+    store.getUserMetadata("201098765432").displayName,
+    "ShouldNotBecomeSaved",
+  );
+
+  store.saveUserMetadata({ jid: "123456789012345@lid" });
+  const lidOnly = store.describePeer("123456789012345@lid");
+  equal("a LID with no names is labelled Contact", lidOnly.label, "Contact");
+  equal("a LID with no mapping has no phone", lidOnly.phone, null);
+  ok("no LID digits leak into the label", !lidOnly.label.includes("123456789012345"));
+
+  store.rememberSavedName("201011122233@s.whatsapp.net", "Picked Name");
+  equal(
+    "picked contact name is stored when none exists",
+    store.getUserMetadata("201011122233").savedName,
+    "Picked Name",
+  );
+  store.rememberSavedName("201011122233@s.whatsapp.net", "Ignored Later Name");
+  equal(
+    "rememberSavedName does not overwrite",
+    store.getUserMetadata("201011122233").savedName,
+    "Picked Name",
+  );
+}
 
 store.upsertGroupDirectory("120363@g.us", { subject: "Family", participantCount: 12 });
 const groupPeer = store.describePeer("120363@g.us");

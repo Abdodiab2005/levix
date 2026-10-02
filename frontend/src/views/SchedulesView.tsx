@@ -14,7 +14,7 @@ import {
   X,
 } from "lucide-react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { Modal } from "../components/Modal";
 import type { ViewTab } from "../components/Sidebar";
@@ -22,13 +22,47 @@ import { useToast } from "../components/Toasts";
 import { useI18n } from "../context/I18nContext";
 import type { ScheduleItem } from "../types";
 
+type RepeatKind = "daily" | "weekly" | "monthly" | "hourly";
+
 interface RecipientItem {
   id: string;
   name: string;
   type: "group" | "contact";
   phone?: string | null;
+  savedName?: string | null;
+  pushName?: string | null;
   memberCount?: number | null;
 }
+
+const WEEKDAY_KEYS = [
+  "weekdaySun",
+  "weekdayMon",
+  "weekdayTue",
+  "weekdayWed",
+  "weekdayThu",
+  "weekdayFri",
+  "weekdaySat",
+] as const;
+
+const WEEKDAY_FULL_EN = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+const WEEKDAY_FULL_AR = [
+  "الأحد",
+  "الاثنين",
+  "الثلاثاء",
+  "الأربعاء",
+  "الخميس",
+  "الجمعة",
+  "السبت",
+];
+const HOURLY_INTERVALS = [1, 2, 3, 4, 6, 8, 12];
 
 function hasPhoneBookPicker() {
   const host = (window as { LevixHost?: { pickContact?: () => void } }).LevixHost;
@@ -40,6 +74,100 @@ function digitsToWhatsAppJid(phone: string): string | null {
   if (digits.startsWith("00")) digits = digits.slice(2);
   if (digits.length < 8 || digits.length > 15) return null;
   return `${digits}@s.whatsapp.net`;
+}
+
+function personName(value?: string | null): string | null {
+  const text = String(value || "").trim();
+  if (!text || text.includes("@")) return null;
+  return text;
+}
+
+function contactTitle(
+  item: {
+    savedName?: string | null;
+    pushName?: string | null;
+    name?: string | null;
+    phone?: string | null;
+    targetLabel?: string | null;
+  },
+  fallback: string,
+): string {
+  return (
+    personName(item.savedName) ||
+    personName(item.pushName) ||
+    personName(item.name) ||
+    personName(item.targetLabel) ||
+    item.phone ||
+    fallback
+  );
+}
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function joinWeekdayNames(days: number[], ar: boolean) {
+  const names = days.map((day) => (ar ? WEEKDAY_FULL_AR[day] : WEEKDAY_FULL_EN[day]));
+  if (ar) return names.join(" و");
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+function arabicEveryHours(n: number) {
+  if (n === 1) return "كل ساعة";
+  if (n === 2) return "كل ساعتين";
+  if (n >= 3 && n <= 10) return `كل ${n} ساعات`;
+  return `كل ${n} ساعة`;
+}
+
+function previewRecurrence(
+  kind: RepeatKind,
+  time: string,
+  weekdays: number[],
+  dayOfMonth: number,
+  everyHours: number,
+  minute: number,
+  timezone: string,
+  ar: boolean,
+): string | null {
+  const timeOk = /^\d{1,2}:\d{2}$/.test(time);
+  const zone = timezone || "UTC";
+  if (kind === "hourly") {
+    if (!Number.isInteger(everyHours) || !HOURLY_INTERVALS.includes(everyHours)) return null;
+    if (!Number.isInteger(minute) || minute < 0 || minute > 59) return null;
+    if (ar) {
+      const body = `${arabicEveryHours(everyHours)} عند الدقيقة ${minute}`;
+      return `${body} (${zone})`;
+    }
+    const body =
+      everyHours === 1
+        ? `Every hour at minute ${minute}`
+        : `Every ${everyHours} hours at minute ${minute}`;
+    return `${body} (${zone})`;
+  }
+  if (!timeOk) return null;
+  const [h, m] = time.split(":").map(Number);
+  if (h > 23 || m > 59) return null;
+  const hhmm = `${pad2(h)}:${pad2(m)}`;
+  if (kind === "daily") {
+    return ar ? `يومياً الساعة ${hhmm} (${zone})` : `Daily at ${hhmm} (${zone})`;
+  }
+  if (kind === "weekly") {
+    const days = [...new Set(weekdays.filter((d) => d >= 0 && d <= 6))].sort((a, b) => a - b);
+    if (!days.length) return null;
+    const names = joinWeekdayNames(days, ar);
+    return ar
+      ? `كل يوم ${names} الساعة ${hhmm} (${zone})`
+      : `Every ${names} at ${hhmm} (${zone})`;
+  }
+  if (kind === "monthly") {
+    if (!Number.isInteger(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) return null;
+    return ar
+      ? `كل شهر في اليوم ${dayOfMonth} الساعة ${hhmm} (${zone})`
+      : `Every month on day ${dayOfMonth} at ${hhmm} (${zone})`;
+  }
+  return null;
 }
 
 interface SchedulesViewProps {
@@ -67,12 +195,33 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [message, setMessage] = useState("");
   const [scheduleType, setScheduleType] = useState<"recurring" | "once">("recurring");
-  const [cronString, setCronString] = useState("0 9 * * *");
+  const [repeatKind, setRepeatKind] = useState<RepeatKind>("daily");
+  const [sendTime, setSendTime] = useState("09:00");
+  const [weekdays, setWeekdays] = useState<number[]>([1]);
+  const [dayOfMonth, setDayOfMonth] = useState(1);
+  const [everyHours, setEveryHours] = useState(1);
+  const [hourlyMinute, setHourlyMinute] = useState(0);
   const [oneOffTime, setOneOffTime] = useState("");
   const [creating, setCreating] = useState(false);
 
   const MAX_SCHEDULES = 3;
   const isLimitReached = schedules.length >= MAX_SCHEDULES;
+  const ar = language === "ar";
+
+  const recurrencePreview = useMemo(
+    () =>
+      previewRecurrence(
+        repeatKind,
+        sendTime,
+        weekdays,
+        dayOfMonth,
+        everyHours,
+        hourlyMinute,
+        timezone,
+        ar,
+      ),
+    [repeatKind, sendTime, weekdays, dayOfMonth, everyHours, hourlyMinute, timezone, ar],
+  );
 
   const loadSchedules = async () => {
     try {
@@ -95,7 +244,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       if (res?.recipients) {
         setRecipients(res.recipients);
       }
-    } catch (err: any) {
+    } catch {
       // silently handle, user can retry
     } finally {
       setLoadingRecipients(false);
@@ -179,12 +328,29 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       return;
     }
     const phone = `+${jid.split("@")[0]}`;
+    const saved = personName(picked.name);
     setSelectedRecipient({
       id: jid,
-      name: picked.name || phone,
+      name: saved || phone,
+      savedName: saved,
+      pushName: null,
       phone,
       type: "contact",
     });
+  };
+
+  const resetForm = () => {
+    setSelectedRecipient(null);
+    setSearchRecipient("");
+    setMessage("");
+    setScheduleType("recurring");
+    setRepeatKind("daily");
+    setSendTime("09:00");
+    setWeekdays([1]);
+    setDayOfMonth(1);
+    setEveryHours(1);
+    setHourlyMinute(0);
+    setOneOffTime("");
   };
 
   const handleOpenAddModal = () => {
@@ -201,11 +367,15 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       toast(t("maxSchedulesReached"), "warning");
       return;
     }
-    setSelectedRecipient(null);
-    setSearchRecipient("");
-    setMessage("");
+    resetForm();
     setShowAddModal(true);
     if (!recipients.length) loadRecipients();
+  };
+
+  const toggleWeekday = (day: number) => {
+    setWeekdays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b),
+    );
   };
 
   const handleCreateSchedule = async () => {
@@ -234,15 +404,37 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       return;
     }
 
+    if (scheduleType === "recurring" && repeatKind === "weekly" && weekdays.length === 0) {
+      toast(t("weekdayRequired"), "warning");
+      return;
+    }
+
     setCreating(true);
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       targetJid: selectedRecipient.id,
       message: message.trim(),
       type: scheduleType,
     };
 
+    if (selectedRecipient.type === "contact") {
+      const targetName =
+        personName(selectedRecipient.savedName) || personName(selectedRecipient.name);
+      if (targetName && targetName !== selectedRecipient.phone) {
+        payload.targetName = targetName;
+      }
+    }
+
     if (scheduleType === "recurring") {
-      payload.cronString = cronString;
+      const recurrence: Record<string, unknown> = { kind: repeatKind };
+      if (repeatKind === "hourly") {
+        recurrence.everyHours = everyHours;
+        recurrence.time = `00:${pad2(hourlyMinute)}`;
+      } else {
+        recurrence.time = sendTime;
+        if (repeatKind === "weekly") recurrence.weekdays = weekdays;
+        if (repeatKind === "monthly") recurrence.dayOfMonth = dayOfMonth;
+      }
+      payload.recurrence = recurrence;
     } else {
       payload.scheduledTime = new Date(oneOffTime).getTime();
     }
@@ -251,8 +443,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       await api.createSchedule(payload);
       toast(t("savedSuccessfully"), "success");
       setShowAddModal(false);
-      setSelectedRecipient(null);
-      setMessage("");
+      resetForm();
       loadSchedules();
     } catch (err: any) {
       toast(err.message, "error");
@@ -266,10 +457,62 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     if (!q) return true;
     return (
       r.name.toLowerCase().includes(q) ||
-      (r.phone && r.phone.includes(q)) ||
-      r.id.toLowerCase().includes(q)
+      Boolean(r.savedName?.toLowerCase().includes(q)) ||
+      Boolean(r.pushName?.toLowerCase().includes(q)) ||
+      Boolean(r.phone?.toLowerCase().includes(q))
     );
   });
+
+  const renderContactLines = (
+    item: {
+      type?: string;
+      savedName?: string | null;
+      pushName?: string | null;
+      name?: string | null;
+      phone?: string | null;
+      targetLabel?: string | null;
+      targetKind?: string | null;
+      targetPhone?: string | null;
+      targetJid?: string;
+    },
+    titleClass: string,
+    showIcon = true,
+  ) => {
+    const isGroup =
+      item.type === "group" ||
+      item.targetKind === "group" ||
+      Boolean(item.targetJid?.includes("@g.us"));
+    if (isGroup) {
+      const label =
+        personName(item.name) ||
+        (personName(item.targetLabel) && item.targetLabel !== "Group"
+          ? item.targetLabel
+          : null) ||
+        t("groupFallback");
+      return (
+        <span className="inline-flex items-center gap-1.5 text-brand-cyan min-w-0">
+          {showIcon && <Users size={14} className="shrink-0" />}
+          <span className={`${titleClass} truncate`}>{label}</span>
+        </span>
+      );
+    }
+    const phone = item.phone || item.targetPhone || null;
+    const title = contactTitle(item, t("contactFallback"));
+    const showPhone = Boolean(phone && title !== phone);
+    return (
+      <span className="inline-flex items-center gap-1.5 text-ok min-w-0">
+        {showIcon && <User size={14} className="shrink-0" />}
+        <span className="min-w-0">
+          <span className={`${titleClass} truncate block`}>{title}</span>
+          {showPhone && (
+            <span className="block text-[11px] text-muted font-mono" dir="ltr">
+              {phone}
+            </span>
+          )}
+        </span>
+      </span>
+    );
+  };
 
   return (
     <div className="flex flex-col gap-5 sm:gap-6">
@@ -317,18 +560,15 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                     : "bg-brand-cyan/10 text-brand-cyan border-brand-cyan/20"
                 }`}
               >
-                {schedules.length} / {MAX_SCHEDULES} {language === "ar" ? "مجدول" : "scheduled"}
+                {schedules.length} / {MAX_SCHEDULES} {t("scheduledCount")}
               </span>
             </div>
             <p className="text-xs md:text-sm text-muted mt-1">
-              {language === "ar" ? "المنطقة الزمنية:" : "Timezone:"}{" "}
+              {t("timezoneLabel")}:{" "}
               <code className="text-brand-cyan font-mono font-semibold px-1.5 py-0.5 rounded bg-bg-soft border border-line">
                 {timezone}
               </code>{" "}
-              ·{" "}
-              {language === "ar"
-                ? "إرسال دوري ومحدد بالوقت"
-                : "Cron & one-off automated message deliveries"}
+              · {t("headerSubtitle")}
             </p>
           </div>
         </div>
@@ -380,11 +620,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 <td colSpan={6} className="text-center py-16 text-muted text-xs sm:text-sm">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Calendar size={28} className="text-muted/40" />
-                    <span>
-                      {language === "ar"
-                        ? "لا توجد رسائل مجدولة حالياً."
-                        : "No active schedules found."}
-                    </span>
+                    <span>{t("noSchedules")}</span>
                   </div>
                 </td>
               </tr>
@@ -393,36 +629,25 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 <tr key={s.id} className="hover:bg-panel-hover/50 transition-colors">
                   <td className="px-5 py-4 text-xs text-text-main">
                     <bdi>
-                      {s.targetKind === "group" || s.targetJid.includes("@g.us") ? (
-                        <span className="inline-flex items-center gap-1.5 text-brand-cyan">
-                          <Users size={14} />
-                          <span className="font-semibold truncate max-w-[12rem]">
-                            {s.targetLabel && s.targetLabel !== "Group"
-                              ? s.targetLabel
-                              : language === "ar"
-                                ? "مجموعة"
-                                : "Group"}
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 text-ok">
-                          <User size={14} />
-                          <span className="font-semibold">
-                            {s.targetPhone ||
-                              (s.targetLabel && !s.targetLabel.includes("@lid")
-                                ? s.targetLabel
-                                : null) ||
-                              (language === "ar" ? "جهة اتصال" : "Contact")}
-                          </span>
-                        </span>
+                      {renderContactLines(
+                        {
+                          targetJid: s.targetJid,
+                          targetKind: s.targetKind,
+                          targetLabel: s.targetLabel,
+                          targetPhone: s.targetPhone,
+                          savedName: s.savedName,
+                          pushName: s.pushName,
+                          phone: s.phone,
+                        },
+                        "font-semibold max-w-[12rem]",
                       )}
                     </bdi>
                   </td>
                   <td className="px-5 py-4 max-w-xs text-text-main truncate text-xs sm:text-sm">
                     {s.message}
                   </td>
-                  <td className="px-5 py-4 text-xs font-mono text-muted">
-                    {s.when || s.cronString || "—"}
+                  <td className="px-5 py-4 text-xs text-muted">
+                    {ar ? s.whenAr || s.when : s.when || s.cronString || "—"}
                   </td>
                   <td className="px-5 py-4">
                     <span
@@ -432,13 +657,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                           : "bg-purple-500/10 text-purple-400"
                       }`}
                     >
-                      {s.type === "recurring"
-                        ? language === "ar"
-                          ? "متكرر"
-                          : "Recurring"
-                        : language === "ar"
-                          ? "مرة واحدة"
-                          : "Once"}
+                      {s.type === "recurring" ? t("typeRecurring") : t("typeOnce")}
                     </span>
                   </td>
                   <td className="px-5 py-4">
@@ -458,13 +677,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                       )}
                       <span>
                         {s.lastDeliveryStatus === "failed"
-                          ? language === "ar"
-                            ? "فشل الإرسال"
-                            : "Failed"
+                          ? t("deliveryFailed")
                           : s.status === "active"
-                            ? language === "ar"
-                              ? "نشط"
-                              : "Active"
+                            ? t("deliveryActive")
                             : s.status}
                       </span>
                     </span>
@@ -503,6 +718,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         title={t("scheduleNewMsg")}
+        maxWidth="560px"
         footer={
           <div className="flex items-center justify-end gap-2.5 w-full">
             <button
@@ -518,7 +734,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               disabled={creating || !selectedRecipient || !message.trim()}
               className="px-5 h-10 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/20 transition-all disabled:opacity-50"
             >
-              {creating ? t("saving") : language === "ar" ? "جدولة الرسالة" : "Schedule"}
+              {creating ? t("saving") : t("scheduleAction")}
             </button>
           </div>
         }
@@ -526,9 +742,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         <div className="flex flex-col gap-4 py-1">
           {/* Target Recipient Selector (No raw JIDs!) */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-text-main">
+            <div className="block text-xs font-bold text-text-main">
               {t("selectRecipient")} <span className="text-danger">*</span>
-            </label>
+            </div>
 
             {selectedRecipient ? (
               <div className="flex items-center justify-between p-3 rounded-xl border border-brand-blue/40 bg-brand-blue/10">
@@ -537,13 +753,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                     {selectedRecipient.type === "group" ? <Users size={16} /> : <User size={16} />}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-xs sm:text-sm font-bold text-text-main truncate">
-                      {selectedRecipient.name}
-                    </div>
-                    {selectedRecipient.phone && (
-                      <div className="text-[11px] text-muted font-mono" dir="ltr">
-                        {selectedRecipient.phone}
-                      </div>
+                    {renderContactLines(
+                      selectedRecipient,
+                      "text-xs sm:text-sm font-bold text-text-main",
+                      false,
                     )}
                   </div>
                 </div>
@@ -551,7 +764,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   type="button"
                   onClick={() => setSelectedRecipient(null)}
                   className="p-1 rounded-lg hover:bg-panel text-muted hover:text-danger transition-colors"
-                  title="Change chat"
+                  title={t("changeChat")}
                 >
                   <X size={16} />
                 </button>
@@ -562,10 +775,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   <div className="relative flex-1">
                     <Search size={16} className="absolute start-3 top-3 text-muted" />
                     <input
-                      type="text"
+                      type="search"
                       value={searchRecipient}
                       onChange={(e) => setSearchRecipient(e.target.value)}
                       placeholder={t("searchRecipients")}
+                      aria-label={t("searchRecipients")}
                       className="w-full h-10 ps-9 pe-3 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                     />
                   </div>
@@ -602,24 +816,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                             {rec.type === "group" ? <Users size={14} /> : <User size={14} />}
                           </div>
                           <div className="min-w-0">
-                            <div className="text-xs font-bold text-text-main truncate">
-                              {rec.name}
-                            </div>
-                            {rec.phone && (
-                              <div className="text-[10px] text-muted font-mono" dir="ltr">
-                                {rec.phone}
-                              </div>
-                            )}
+                            {renderContactLines(rec, "text-xs font-bold text-text-main", false)}
                           </div>
                         </div>
                         <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-panel text-muted shrink-0">
-                          {rec.type === "group"
-                            ? language === "ar"
-                              ? "مجموعة"
-                              : "Group"
-                            : language === "ar"
-                              ? "محادثة"
-                              : "Contact"}
+                          {rec.type === "group" ? t("groupFallback") : t("contactFallback")}
                         </span>
                       </button>
                     ))
@@ -631,73 +832,169 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
           {/* Schedule Type */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-text-main">
-              {language === "ar" ? "نوع الجدولة" : "Schedule Type"}
+            <label htmlFor="schedule-type" className="block text-xs font-bold text-text-main">
+              {t("scheduleType")}
             </label>
             <select
+              id="schedule-type"
               className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
               value={scheduleType}
-              onChange={(e) => setScheduleType(e.target.value as any)}
+              onChange={(e) => setScheduleType(e.target.value as "recurring" | "once")}
             >
-              <option value="recurring">
-                {language === "ar" ? "دوري متكرر (Cron Expression)" : "Recurring (Cron Expression)"}
-              </option>
-              <option value="once">
-                {language === "ar"
-                  ? "مرة واحدة (تاريخ ووقت محدد)"
-                  : "One-Off (Specific Date & Time)"}
-              </option>
+              <option value="recurring">{t("scheduleRecurring")}</option>
+              <option value="once">{t("scheduleOnce")}</option>
             </select>
           </div>
 
           {scheduleType === "recurring" ? (
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-text-main">
-                {language === "ar"
-                  ? "تعبير Cron (دقيقة ساعة يوم شهر يوم-الأسبوع)"
-                  : "Cron Expression (5 fields: min hour day month weekday)"}
-              </label>
-              <input
-                type="text"
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised font-mono text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-                value={cronString}
-                onChange={(e) => setCronString(e.target.value)}
-                placeholder="0 9 * * *"
-              />
-              <span className="block text-xs text-muted">
-                {language === "ar" ? "مثال: " : "e.g. "}
-                <code className="text-brand-cyan">0 9 * * *</code> (
-                {language === "ar" ? "يومياً الساعة 9:00 صباحاً" : "Every day at 9:00 AM"})
-              </span>
+            <div className="space-y-3 rounded-xl border border-line bg-panel-raised/40 p-3.5">
+              <div className="space-y-1.5">
+                <label htmlFor="repeat-kind" className="block text-xs font-bold text-text-main">
+                  {t("repeat")}
+                </label>
+                <select
+                  id="repeat-kind"
+                  className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                  value={repeatKind}
+                  onChange={(e) => setRepeatKind(e.target.value as RepeatKind)}
+                >
+                  <option value="daily">{t("repeatDaily")}</option>
+                  <option value="weekly">{t("repeatWeekly")}</option>
+                  <option value="monthly">{t("repeatMonthly")}</option>
+                  <option value="hourly">{t("repeatHourly")}</option>
+                </select>
+              </div>
+
+              {repeatKind === "weekly" && (
+                <fieldset className="space-y-1.5">
+                  <legend className="block text-xs font-bold text-text-main">{t("weekdays")}</legend>
+                  <div className="flex flex-wrap gap-1.5">
+                    {WEEKDAY_KEYS.map((key, day) => {
+                      const selected = weekdays.includes(day);
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => toggleWeekday(day)}
+                          className={`h-9 px-2.5 rounded-lg text-xs font-bold border transition-colors ${
+                            selected
+                              ? "bg-brand-blue text-white border-brand-blue"
+                              : "bg-panel-raised text-text-main border-line hover:bg-panel-hover"
+                          }`}
+                        >
+                          {t(key)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              )}
+
+              {repeatKind === "monthly" && (
+                <div className="space-y-1.5">
+                  <label htmlFor="day-of-month" className="block text-xs font-bold text-text-main">
+                    {t("dayOfMonth")}
+                  </label>
+                  <input
+                    id="day-of-month"
+                    type="number"
+                    min={1}
+                    max={31}
+                    inputMode="numeric"
+                    className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                    value={dayOfMonth}
+                    onChange={(e) => setDayOfMonth(Number(e.target.value))}
+                  />
+                  <p className="text-xs text-muted">{t("monthDayHint")}</p>
+                </div>
+              )}
+
+              {repeatKind === "hourly" ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label htmlFor="every-hours" className="block text-xs font-bold text-text-main">
+                      {t("everyHours")}
+                    </label>
+                    <select
+                      id="every-hours"
+                      className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                      value={everyHours}
+                      onChange={(e) => setEveryHours(Number(e.target.value))}
+                    >
+                      {HOURLY_INTERVALS.map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label htmlFor="hourly-minute" className="block text-xs font-bold text-text-main">
+                      {t("atMinute")}
+                    </label>
+                    <input
+                      id="hourly-minute"
+                      type="number"
+                      min={0}
+                      max={59}
+                      inputMode="numeric"
+                      className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                      value={hourlyMinute}
+                      onChange={(e) => setHourlyMinute(Number(e.target.value))}
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <label htmlFor="send-time" className="block text-xs font-bold text-text-main">
+                    {t("sendTime")}
+                    <span className="ms-1.5 font-semibold text-muted">
+                      ({timezone})
+                    </span>
+                  </label>
+                  <input
+                    id="send-time"
+                    type="time"
+                    className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                    value={sendTime}
+                    onChange={(e) => setSendTime(e.target.value)}
+                    dir="ltr"
+                  />
+                </div>
+              )}
+
+              <p className="text-xs text-text-main/90 bg-bg-soft border border-line rounded-lg px-3 py-2">
+                <span className="font-bold text-muted">{t("recurrencePreview")}: </span>
+                <span dir="auto">{recurrencePreview || "—"}</span>
+              </p>
             </div>
           ) : (
             <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-text-main">
-                {language === "ar" ? "موعد وتاريخ الإرسال" : "Delivery Date & Time"}
+              <label htmlFor="one-off-time" className="block text-xs font-bold text-text-main">
+                {t("deliveryDateTime")}
               </label>
               <input
+                id="one-off-time"
                 type="datetime-local"
                 className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                 value={oneOffTime}
                 onChange={(e) => setOneOffTime(e.target.value)}
+                dir="ltr"
               />
             </div>
           )}
 
-          {/* Message Text */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-text-main">
-              {language === "ar" ? "نص الرسالة" : "Message Text"}{" "}
-              <span className="text-danger">*</span>
+            <label htmlFor="schedule-message" className="block text-xs font-bold text-text-main">
+              {t("messageText")} <span className="text-danger">*</span>
             </label>
             <textarea
+              id="schedule-message"
               className="w-full p-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50 resize-y min-h-[90px]"
               rows={3}
-              placeholder={
-                language === "ar"
-                  ? "اكتب الرسالة التي سيتم إرسالها تلقائياً..."
-                  : "Message to be sent automatically..."
-              }
+              placeholder={t("messagePlaceholder")}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
             />

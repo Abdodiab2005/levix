@@ -193,6 +193,14 @@ const MIGRATIONS = [
       );
     `);
   },
+  // v4 — address-book name from the linked phone (Baileys `contact.name`),
+  // distinct from the push name in display_name. Cleared with user_metadata
+  // on unlink.
+  (database) => {
+    database.exec(`
+      ALTER TABLE user_metadata ADD COLUMN saved_name TEXT;
+    `);
+  },
 ];
 
 function migrate(database, migrations = MIGRATIONS) {

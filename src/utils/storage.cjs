@@ -48,6 +48,8 @@ module.exports = {
   getTopForwardedMessages: store.getTopForwardedMessages,
   // User Metadata
   saveUserMetadata: store.saveUserMetadata,
+  rememberSavedName: store.rememberSavedName,
+  applyContactRecord: store.applyContactRecord,
   getUserMetadata: store.getUserMetadata,
   isUserOwner: store.isUserOwner,
   isUserBotAdmin: store.isUserBotAdmin,

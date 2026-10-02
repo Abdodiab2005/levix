@@ -4,7 +4,11 @@ import {
   handleGroupParticipantsUpdate,
 } from "../handlers/group.handler.js";
 import { handleIncomingMessage } from "../handlers/message.handler.js";
-import { storeLidPnMappings, upsertGroupDirectory } from "../utils/storage.esm.js";
+import {
+  applyContactRecord,
+  storeLidPnMappings,
+  upsertGroupDirectory,
+} from "../utils/storage.esm.js";
 import { groupMetadataCache } from "./socket.js";
 
 const require = createRequire(import.meta.url);
@@ -61,6 +65,16 @@ export function setupEventListeners(
 
   // Save credentials
   if (saveCreds) sock.ev.on("creds.update", saveCreds);
+
+  // Address-book names (`name`) and push names (`notify`) from the linked phone.
+  // No history sync — these events are the live contact list WhatsApp already
+  // pushes. persist `name` as saved_name; never treat `notify` as a saved name.
+  const persistContacts = (contacts) => {
+    const list = Array.isArray(contacts) ? contacts : contacts ? [contacts] : [];
+    for (const contact of list) applyContactRecord(contact);
+  };
+  sock.ev.on("contacts.upsert", contained("contacts.upsert", persistContacts));
+  sock.ev.on("contacts.update", contained("contacts.update", persistContacts));
 
   // V7: LID mapping updates
   sock.ev.on("lid-mapping.update", (updates) => {
