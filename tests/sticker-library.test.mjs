@@ -140,6 +140,74 @@ section("a person seen as a LID and later as a phone number is one library");
   equal("a stale LID-only owner does not open a second library", missed, "NOT_FOUND");
 }
 
+section("two LIDs mapped to one phone do not share a library");
+
+{
+  const lidA = "111000000000001@lid";
+  const lidB = "111000000000002@lid";
+  const pn = "201888000111@s.whatsapp.net";
+  const saved = save(owner.forMessage({ key: { remoteJid: lidA } }), "a-secret", {
+    name: "A only",
+  });
+  store.storeLidPnMapping(lidA, pn);
+  store.storeLidPnMapping(lidB, pn);
+
+  function ownerOf(id) {
+    return db.prepare("SELECT owner FROM stickers WHERE id = ?").get(id).owner;
+  }
+
+  const b = owner.forMessage({ key: { remoteJid: lidB } });
+  equal("B's canonical key is the shared phone", b.key, pn);
+  ok("B keeps their own LID", b.candidates.includes(lidB));
+  ok("B resolves that LID to the phone", b.candidates.includes(pn));
+  ok("B does not gain A's LID", !b.candidates.includes(lidA));
+  equal("B's list is empty", library.listStickers(b, {}).total, 0);
+  equal(
+    "B cannot read A's sticker",
+    codeOf(() => library.getSticker(b, saved.sticker.id)),
+    "NOT_FOUND",
+  );
+  equal(
+    "B cannot update A's sticker",
+    codeOf(() => library.updateSticker(b, saved.sticker.id, { name: "stolen" })),
+    "NOT_FOUND",
+  );
+  equal(
+    "B cannot delete A's sticker",
+    codeOf(() => library.deleteStickers(b, [saved.sticker.id], { confirm: true })),
+    "NOT_FOUND",
+  );
+  equal("A's row was not rekeyed", ownerOf(saved.sticker.id), lidA);
+  equal(
+    "A still has the sticker",
+    library.getSticker(person(lidA), saved.sticker.id).name,
+    "A only",
+  );
+
+  const asPhone = owner.forMessage({ key: { remoteJid: pn } });
+  equal("a shared phone pulls in no LID", asPhone.candidates.length, 1);
+  equal("that candidate is the phone itself", asPhone.candidates[0], pn);
+  library.listStickers(asPhone, {});
+  equal("a phone message did not rekey A's row", ownerOf(saved.sticker.id), lidA);
+
+  const grouped = owner.forMessage({
+    key: {
+      remoteJid: "120363000111222@g.us",
+      participant: lidB,
+      participantAlt: pn,
+    },
+  });
+  ok("a group message does not pull in the other LID", !grouped.candidates.includes(lidA));
+
+  const onPhone = save(person(pn), "on-the-number", { name: "On the number" });
+  equal(
+    "a row already keyed by the phone JID is visible to B",
+    library.getSticker(b, onPhone.sticker.id).name,
+    "On the number",
+  );
+  equal("A's LID row is still A's", ownerOf(saved.sticker.id), lidA);
+}
+
 section("the paired account shares the panel library");
 
 {

@@ -406,7 +406,9 @@ router.get(
   "/stickers/:id/file",
   asyncRoute(async (req, res) => {
     const buffer = library.readStickerFile(panelOwner(), requireStickerId(req.params.id));
-    res.set("Cache-Control", "private, max-age=86400");
+    // Private, and revalidated on every load. Express still answers a matching
+    // If-None-Match with 304, so a reload does not resend the bytes.
+    res.set("Cache-Control", "private, no-cache");
     res.set("Content-Type", "image/webp");
     res.send(buffer);
   }),
@@ -416,7 +418,7 @@ router.get(
   "/stickers/:id/thumb",
   asyncRoute(async (req, res) => {
     const buffer = library.readThumbnail(panelOwner(), requireStickerId(req.params.id));
-    res.set("Cache-Control", "private, max-age=86400");
+    res.set("Cache-Control", "private, no-cache");
     res.set("Content-Type", "image/webp");
     res.send(buffer);
   }),

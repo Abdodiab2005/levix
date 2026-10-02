@@ -387,13 +387,13 @@ try {
   const fileBytes = Buffer.from(await res.arrayBuffer());
   equal("the file route returns the original bytes", res.status, 200);
   equal("file content type", res.headers.get("content-type"), "image/webp");
-  equal("file cache header", res.headers.get("cache-control"), "private, max-age=86400");
+  equal("file cache header", res.headers.get("cache-control"), "private, no-cache");
   ok("the bytes were not re-encoded", fileBytes.equals(keptBytes));
 
   res = await http.call(kept.done.body.sticker.thumbUrl);
   equal("the thumb route is webp", res.status, 200);
   equal("thumb content type", res.headers.get("content-type"), "image/webp");
-  equal("thumb cache header", res.headers.get("cache-control"), "private, max-age=86400");
+  equal("thumb cache header", res.headers.get("cache-control"), "private, no-cache");
   await res.arrayBuffer();
 
   const again = await createFrom(keptBytes, { job: { name: "second save" } });
