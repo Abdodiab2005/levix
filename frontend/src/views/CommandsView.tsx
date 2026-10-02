@@ -8,12 +8,24 @@ import { Modal } from "../components/Modal";
 import { useToast } from "../components/Toasts";
 import { Toggle } from "../components/Toggle";
 import { useI18n } from "../context/I18nContext";
-import type { CommandItem } from "../types";
+import type { CommandItem, PermissionLevel } from "../types";
+
+// What the server sends in GET /commands `levels`, in case it ever grows one the
+// panel doesn't have a label for yet (an unlabelled level still renders, as its
+// raw key, rather than disappearing from the list).
+const FALLBACK_LEVELS = ["MEMBERS", "ADMINS_ONLY", "ADMINS_OWNER", "OWNER_ONLY"];
+
+// Arabic letters. An alias written in them is still a literal keyword the command
+// answers to — `!حساب` is exactly as much a name as `!calc` — so it stays visible
+// and editable in either language. The panel only says WHICH script it is in, so
+// the Arabic ones never read as untranslated interface text.
+const ARABIC_SCRIPT = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
 
 export const CommandsView: React.FC = () => {
   const { t, language } = useI18n();
   const { toast } = useToast();
   const [commands, setCommands] = useState<CommandItem[]>([]);
+  const [levels, setLevels] = useState<string[]>(FALLBACK_LEVELS);
   const [prefix, setPrefix] = useState<string>("!");
   const [isEditingPrefix, setIsEditingPrefix] = useState(false);
   const [newPrefixInput, setNewPrefixInput] = useState("!");
@@ -34,6 +46,7 @@ export const CommandsView: React.FC = () => {
         setPrefix(res.prefix);
         setNewPrefixInput(res.prefix);
       }
+      if (Array.isArray(res?.levels) && res.levels.length) setLevels(res.levels);
     } catch (err: any) {
       toast(err.message, "error");
     } finally {
@@ -67,10 +80,9 @@ export const CommandsView: React.FC = () => {
     );
     try {
       await api.updateCommand(cmd.name, { enabled });
+      // `t()` puts `{name}` back in — one wording per language, no inline ternary.
       toast(
-        language === "ar"
-          ? `تم ${enabled ? "تفعيل" : "تعطيل"} الأمر '${cmd.name}'`
-          : `Command '${cmd.name}' ${enabled ? "enabled" : "disabled"}`,
+        t(enabled ? "commandEnabled" : "commandDisabled").replace("{name}", cmd.name),
         "success",
       );
     } catch (err: any) {
@@ -79,16 +91,13 @@ export const CommandsView: React.FC = () => {
     }
   };
 
-  const handlePermissionChange = async (cmd: CommandItem, permission: any) => {
+  const handlePermissionChange = async (cmd: CommandItem, permission: PermissionLevel) => {
     setCommands((prev) =>
       prev.map((c) => (c.name === cmd.name ? { ...c, permission, overridden: true } : c)),
     );
     try {
       await api.updateCommand(cmd.name, { permission });
-      toast(
-        language === "ar" ? `تم تحديث رتبة '${cmd.name}'` : `Permission for '${cmd.name}' updated`,
-        "success",
-      );
+      toast(t("permissionUpdated").replace("{name}", cmd.name), "success");
     } catch (err: any) {
       toast(err.message, "error");
       loadCommands();
@@ -109,10 +118,7 @@ export const CommandsView: React.FC = () => {
       .toLowerCase();
     if (!clean) return;
     if (tempAliases.includes(clean)) {
-      toast(
-        language === "ar" ? "هذا الاسم المستعار مضاف بالفعل" : "Alias already added",
-        "warning",
-      );
+      toast(t("aliasAlreadyAdded"), "warning");
       return;
     }
     setTempAliases([...tempAliases, clean]);
@@ -140,15 +146,48 @@ export const CommandsView: React.FC = () => {
     }
   };
 
-  // Each command documents itself in both languages; show the panel's.
-  const describe = (c: CommandItem) => c.descriptions?.[language] || c.description;
+  // Every command documents itself in both languages; show the panel's. `usage`
+  // is the English string and `usages` both languages, so the panel follows its
+  // own UI language here exactly as the bot's own `!help` follows the message's.
+  const describe = (c: CommandItem) => c.descriptions?.[language] || c.description || "";
+  const usageOf = (c: CommandItem) => c.usages?.[language] || c.usage || "";
 
-  const filtered = commands.filter(
-    (c) =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      describe(c).toLowerCase().includes(search.toLowerCase()) ||
-      c.aliases.some((a) => a.toLowerCase().includes(search.toLowerCase())),
-  );
+  /** One `!`-prefixed line per usage variant, the way the bot prints them. */
+  const usageLines = (c: CommandItem) =>
+    usageOf(c)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => `${prefix}${line}`);
+
+  const permissionLabel = (level: string) =>
+    ({
+      MEMBERS: t("permMembers"),
+      // `ALL` is accepted by the evaluator but is not a stored level; keep the
+      // label anyway so an old override renders as words, not as a raw key.
+      ALL: t("permMembers"),
+      ADMINS_ONLY: t("permAdminsOnly"),
+      ADMINS_OWNER: t("permAdminsOwner"),
+      OWNER_ONLY: t("permOwnerOnly"),
+    })[level] || level;
+
+  const scopeLabel = (chat: string) =>
+    ({ all: t("scopeAll"), group: t("scopeGroup"), private: t("scopePrivate") })[chat] ||
+    chat;
+
+  // Search the name, every alias (either script), the description the panel is
+  // showing, and both languages of the docs — so an operator searching in
+  // English on an Arabic panel still finds the command.
+  const query = search.trim().toLowerCase();
+  const filtered = query
+    ? commands.filter((c) =>
+        [c.name, ...(c.aliases || []), describe(c), c.description, usageOf(c), c.usages?.en, c.usages?.ar]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(query),
+      )
+    : commands;
 
   return (
     <div className="flex flex-col gap-5 sm:gap-6">
@@ -197,18 +236,14 @@ export const CommandsView: React.FC = () => {
                     setIsEditingPrefix(true);
                   }}
                   className="px-2.5 py-0.5 rounded-lg bg-brand-cyan/15 text-brand-cyan border border-brand-cyan/30 font-mono font-bold text-xs hover:bg-brand-cyan/25 transition-colors"
-                  title={language === "ar" ? "اضغط لتعديل البادئة" : "Click to change prefix"}
+                  title={t("editPrefixHint")}
                 >
                   {prefix}
                 </button>
               )}
             </div>
           </div>
-          <p className="text-xs md:text-sm text-muted mt-1">
-            {language === "ar"
-              ? "إدارة رتب الأوامر والأسماء المستعارة وتفعيلها أو تعطيلها مباشرة"
-              : "Manage role permissions, edit aliases, or enable/disable bot commands live"}
-          </p>
+          <p className="text-xs md:text-sm text-muted mt-1">{t("commandsSub")}</p>
         </div>
 
         <div className="relative w-full md:w-72 shrink-0">
@@ -246,6 +281,12 @@ export const CommandsView: React.FC = () => {
                   </div>
                 </td>
               </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="text-center py-12 text-muted text-xs md:text-sm">
+                  {t("noMatchingCommands")}
+                </td>
+              </tr>
             ) : (
               filtered.map((cmd) => (
                 <tr key={cmd.name} className="hover:bg-panel-hover/50 transition-colors">
@@ -258,17 +299,31 @@ export const CommandsView: React.FC = () => {
                   <td className="px-4 py-3.5">
                     <div className="flex items-center gap-2 flex-wrap">
                       {cmd.aliases?.length ? (
-                        cmd.aliases.map((a) => (
-                          <span
-                            key={a}
-                            className="inline-flex items-center font-mono text-[11px] px-2 py-0.5 rounded-md bg-panel-raised border border-line text-muted"
-                          >
-                            <bdi>
-                              {prefix}
-                              {a}
-                            </bdi>
-                          </span>
-                        ))
+                        cmd.aliases.map((a) => {
+                          const isArabic = ARABIC_SCRIPT.test(a);
+                          const otherScript = isArabic !== (language === "ar");
+                          return (
+                            <span
+                              key={a}
+                              className="inline-flex items-center gap-1.5 font-mono text-[11px] px-2 py-0.5 rounded-md bg-panel-raised border border-line text-muted"
+                              title={
+                                otherScript
+                                  ? t(isArabic ? "aliasScriptArabic" : "aliasScriptLatin")
+                                  : undefined
+                              }
+                            >
+                              <bdi>
+                                {prefix}
+                                {a}
+                              </bdi>
+                              {otherScript && (
+                                <span className="font-sans font-bold text-[9px] uppercase tracking-wide text-brand-cyan/80">
+                                  {isArabic ? "AR" : "EN"}
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })
                       ) : (
                         <span className="text-xs text-muted/60">—</span>
                       )}
@@ -284,37 +339,40 @@ export const CommandsView: React.FC = () => {
                   </td>
                   <td className="px-4 py-3.5 max-w-xs text-text-main text-xs md:text-sm">
                     {describe(cmd)}
+                    {/* The parameters are the point of a catalog — they follow the
+                        panel's language too, one line per usage variant. */}
+                    {usageLines(cmd).length > 0 && (
+                      <ul
+                        className="mt-1.5 flex flex-col gap-0.5 list-none"
+                        aria-label={t("usage")}
+                        title={t("usageHint")}
+                      >
+                        {usageLines(cmd).map((line) => (
+                          <li key={line}>
+                            <code className="font-mono text-[11px] text-muted bg-panel-raised border border-line rounded px-1.5 py-0.5 w-fit max-w-full overflow-x-auto">
+                              <bdi>{line}</bdi>
+                            </code>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </td>
                   <td className="px-4 py-3.5">
                     <span className="inline-flex px-2.5 py-0.5 rounded-lg bg-brand-blue/10 text-brand-cyan text-xs font-semibold">
-                      {cmd.chat === "all"
-                        ? language === "ar"
-                          ? "الكل"
-                          : "All"
-                        : cmd.chat === "group"
-                          ? language === "ar"
-                            ? "المجموعات"
-                            : "Group"
-                          : language === "ar"
-                            ? "خاص"
-                            : "Private"}
+                      {scopeLabel(cmd.chat)}
                     </span>
                   </td>
                   <td className="px-4 py-3.5">
                     <select
                       className="h-9 px-2.5 rounded-lg border border-line bg-panel-raised text-text-main text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                       value={cmd.permission}
-                      onChange={(e) => handlePermissionChange(cmd, e.target.value)}
+                      onChange={(e) => handlePermissionChange(cmd, e.target.value as PermissionLevel)}
                     >
-                      <option value="MEMBERS">
-                        {language === "ar" ? "الجميع (الأعضاء)" : "Members (Everyone)"}
-                      </option>
-                      <option value="ADMIN_ONLY">
-                        {language === "ar" ? "مشرفو المجموعة" : "Group Admins"}
-                      </option>
-                      <option value="OWNER_ONLY">
-                        {language === "ar" ? "مالك البوت فقط" : "Bot Owner Only"}
-                      </option>
+                      {levels.map((level) => (
+                        <option key={level} value={level}>
+                          {permissionLabel(level)}
+                        </option>
+                      ))}
                     </select>
                   </td>
                   <td className="px-4 py-3.5 text-center">
@@ -356,35 +414,45 @@ export const CommandsView: React.FC = () => {
         }
       >
         <div className="flex flex-col gap-4 py-1">
-          <p className="text-xs sm:text-sm text-muted">
-            {language === "ar"
-              ? "الأسماء المستعارة تتيح استدعاء هذا الأمر بأسماء بديلة (مثل: p بدلاً من ping)."
-              : "Aliases allow invoking this command using alternative names."}
-          </p>
+          <p className="text-xs sm:text-sm text-muted">{t("aliasesHelp")}</p>
 
           {/* Existing Aliases Chips */}
           <div className="space-y-1.5">
             <span className="text-xs font-bold text-muted block">{t("thAliases")}</span>
             <div className="flex items-center gap-2 flex-wrap min-h-[42px] p-2 rounded-xl border border-line bg-panel-raised">
               {tempAliases.length > 0 ? (
-                tempAliases.map((a) => (
-                  <span
-                    key={a}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-line text-xs font-mono font-bold text-text-main"
-                  >
-                    <span>
-                      {prefix}
-                      {a}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveAlias(a)}
-                      className="text-muted hover:text-danger p-0.5 rounded transition-colors"
+                tempAliases.map((a) => {
+                  const isArabic = ARABIC_SCRIPT.test(a);
+                  const otherScript = isArabic !== (language === "ar");
+                  return (
+                    <span
+                      key={a}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-panel border border-line text-xs font-mono font-bold text-text-main"
+                      title={
+                        otherScript
+                          ? t(isArabic ? "aliasScriptArabic" : "aliasScriptLatin")
+                          : undefined
+                      }
                     >
-                      <X size={13} />
-                    </button>
-                  </span>
-                ))
+                      <bdi>
+                        {prefix}
+                        {a}
+                      </bdi>
+                      {otherScript && (
+                        <span className="font-sans font-bold text-[9px] uppercase tracking-wide text-brand-cyan/80">
+                          {isArabic ? "AR" : "EN"}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAlias(a)}
+                        className="text-muted hover:text-danger p-0.5 rounded transition-colors"
+                      >
+                        <X size={13} />
+                      </button>
+                    </span>
+                  );
+                })
               ) : (
                 <span className="text-xs text-muted/60 px-1">{t("noAliases")}</span>
               )}

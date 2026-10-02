@@ -64,14 +64,25 @@ export interface SettingItem {
   restart?: boolean;
 }
 
+/** The four levels runtime-config.PERMISSION_LEVELS stores. */
+export type PermissionLevel = "MEMBERS" | "ADMINS_ONLY" | "ADMINS_OWNER" | "OWNER_ONLY";
+
 export interface CommandItem {
   name: string;
   aliases: string[];
   description: string;
   descriptions?: { en?: string; ar?: string };
+  usage?: string | null;
+  usages?: { en?: string; ar?: string } | null;
+  /** "general", or "group" for a `group/<name>` sub-command. */
+  category?: string;
+  /** The permissions key: the name, or `group:<name>` for a sub-command. */
+  key?: string;
   chat: "all" | "group" | "private";
-  permission: "MEMBERS" | "ADMIN_ONLY" | "OWNER_ONLY";
-  defaultPermission: "MEMBERS" | "ADMIN_ONLY" | "OWNER_ONLY";
+  permission: PermissionLevel;
+  defaultPermission: PermissionLevel;
+  /** Declares `userAdminRequired` — a real WhatsApp group admin, so the level is fixed. */
+  permissionLocked?: boolean;
   enabled: boolean;
   overridden: boolean;
 }
