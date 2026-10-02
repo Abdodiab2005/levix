@@ -146,7 +146,11 @@ export const PacksView: React.FC<PacksViewProps> = ({
       <div className="flex flex-col sm:flex-row gap-2">
         <input
           value={name}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => {
+            const next = event.target.value;
+            setName(next);
+            if (nameError) setNameError(packNameLengthError(next) ? t("packNameLength") : null);
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();

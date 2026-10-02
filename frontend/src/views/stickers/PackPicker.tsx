@@ -92,7 +92,11 @@ export const PackPicker: React.FC<PackPickerProps> = ({
             <input
               id="new-pack-name"
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                const next = event.target.value;
+                setName(next);
+                if (error) setError(packNameLengthError(next) ? t("packNameLength") : null);
+              }}
               placeholder={t("newPackPlaceholder")}
               className={fieldClass}
               maxLength={80}
