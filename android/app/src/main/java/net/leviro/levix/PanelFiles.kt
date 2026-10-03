@@ -22,6 +22,15 @@ object PanelFiles {
     }
 
     /**
+     * The native multipart upload bridge may only POST these two panel
+     * routes — the feedback form and scheduled messages. Everything else the
+     * page sends must travel the WebView's own request path, so a compromised
+     * page cannot turn the bridge into an arbitrary upload pipe.
+     */
+    fun uploadAllowed(path: String): Boolean =
+        path == "/dashboard/api/feedback" || path == "/dashboard/api/schedules"
+
+    /**
      * What Sticker Studio can hand back out of the panel: an exported sticker,
      * its PNG/GIF form, an MP4 preview, or a pack ZIP. Nothing else may leave
      * the app through the bridge — a share sheet that accepted

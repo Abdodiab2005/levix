@@ -59,6 +59,15 @@
   if (!window.__levixBridge) {
     window.__levixBridge = true;
 
+    // Remember a deep link (#connection, #stickers, …) opened while signed
+    // out: the login/setup screens render at the original URL, so the hash
+    // must be known again once authentication succeeds.
+    try {
+      if (location.hash && location.hash.length > 1) {
+        sessionStorage.setItem("__levixDeepLink", location.hash);
+      }
+    } catch (e) {}
+
     var origFetch = window.fetch;
     window.fetch = function (input, init) {
       init = init || {};
@@ -203,13 +212,38 @@
           document.close();
           return;
         }
-        var dest = "http://127.0.0.1:3001/";
-        if (res.url && normPath(res.url) !== normPath(abs)) dest = res.url;
-        location.replace(dest);
+        navigateAfterAuth(res, abs);
       } catch (err) {
-        location.replace("http://127.0.0.1:3001/");
+        navigateAfterAuth(null, abs);
       }
     },
     true
   );
+
+  // After a successful login/setup submit, land on the panel with the
+  // original deep link intact. The password screens render at the deep-linked
+  // URL itself, so the "redirect" is often the same path — where a plain
+  // location.replace would at most move the fragment and never refetch,
+  // leaving the login form on screen.
+  function navigateAfterAuth(res, abs) {
+    var keepHash = location.hash && location.hash.length > 1
+      ? location.hash
+      : (function () {
+          try { return sessionStorage.getItem("__levixDeepLink") || ""; } catch (e) { return ""; }
+        })();
+    try { sessionStorage.removeItem("__levixDeepLink"); } catch (e) {}
+    var dest = "http://127.0.0.1:3001/" + keepHash;
+    if (res && res.url && normPath(res.url) !== normPath(abs)) dest = res.url + keepHash;
+    if (normPath(dest) !== normPath(location.href)) {
+      location.replace(dest);
+    } else if (dest !== location.href) {
+      try {
+        var at = dest.indexOf("#");
+        location.hash = at >= 0 ? dest.slice(at) : "";
+      } catch (e) {}
+      location.reload();
+    } else {
+      location.reload();
+    }
+  }
 })();

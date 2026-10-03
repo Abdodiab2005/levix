@@ -11,6 +11,7 @@
     <string name="hero_subtitle_stopped">ليفيكس متوقف حالياً. اضغط على تشغيل لتفعيل المساعد.</string>
     <string name="btn_open_panel">فتح لوحة التحكم</string>
     <string name="panel_share_file">مشاركة الملف</string>
+    <string name="panel_starting">جارٍ تشغيل Levix…</string>
     <string name="btn_start_host">تشغيل المساعد</string>
     <string name="btn_stop_host">إيقاف المساعد</string>
 
@@ -174,6 +175,8 @@
     <string name="media_preview">معاينة الوسائط</string>
     <string name="media_choose_app">اختر تطبيق واتساب</string>
     <string name="media_viewer_title">%1$s · %2$s · %3$s</string>
+    <string name="media_more">إجراءات إضافية</string>
+    <string name="media_more_glyph">⋮</string>
     <string name="media_back_glyph">‹</string>
     <string name="media_insights_glyph">◫</string>
     <string name="media_sort_glyph">↕</string>

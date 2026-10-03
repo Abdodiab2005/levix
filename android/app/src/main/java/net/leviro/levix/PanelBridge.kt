@@ -114,6 +114,16 @@ class PanelBridge(
         stickerHost?.upload(callId, token, fileName, maxBytes)
             ?: JSONObject().put("ok", false).put("error", "host unavailable").toString()
 
+    /**
+     * Native multipart upload for the panel forms (feedback attachment,
+     * scheduled-message media): the payload fields ride as text parts and the
+     * picked file streams as the "file" part, over the panel's own socket.
+     */
+    @JavascriptInterface
+    fun uploadForm(callId: String, path: String, payloadJson: String, token: String, maxBytes: Long): String =
+        stickerHost?.uploadForm(callId, path, payloadJson, token, maxBytes)
+            ?: JSONObject().put("ok", false).put("error", "host unavailable").toString()
+
     @JavascriptInterface
     fun exportFile(callId: String, action: String, path: String, method: String,
         jsonBody: String, fileName: String, mime: String): String =

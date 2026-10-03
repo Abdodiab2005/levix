@@ -152,6 +152,67 @@ class StickerHost(
         }
     }
 
+    /**
+     * Generic multipart upload for the panel forms the WebView cannot carry
+     * itself (feedback attachment, scheduled-message media): the payload
+     * fields ride as text parts, the picked file streams as the "file" part,
+     * and the whole body goes over the same authenticated socket as the panel
+     * requests. The route is pinned by PanelFiles.uploadAllowed.
+     */
+    fun uploadForm(id: String, path: String, payloadJson: String, token: String, maxBytes: Long): String {
+        if (!valid(id)) return bad("invalid call id")
+        if (!PanelFiles.uploadAllowed(path)) return bad("invalid upload route")
+        if (maxBytes < 1) return bad("invalid upload limit")
+        if (payloadJson.toByteArray(Charsets.UTF_8).size > 64 * 1024) return bad("request is too large")
+        if (sources.get(token) == null) return failure("UNAVAILABLE").toString()
+        return submit(id) { transfer ->
+            val source = sources.get(token) ?: return@submit failure("UNAVAILABLE")
+            val stream = try { context.contentResolver.openInputStream(source.uri.toUri()) }
+                catch (_: Exception) { null } ?: return@submit failure("UNAVAILABLE")
+            transfer.source = stream
+            val payload = try { JSONObject(payloadJson.ifBlank { "{}" }) } catch (_: Exception) { JSONObject() }
+            val boundary = "levix" + java.util.UUID.randomUUID().toString().replace("-", "")
+            val fields = StringBuilder()
+            val keys = payload.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val value = payload.optString(key, "")
+                if (value.isEmpty()) continue
+                fields.append("--").append(boundary).append("\r\n")
+                    .append("Content-Disposition: form-data; name=\"")
+                    .append(key.replace("\"", "")).append("\"\r\n\r\n")
+                    .append(value).append("\r\n")
+            }
+            val fileName = Uri.encode(source.name.ifBlank { "file" })
+            fields.append("--").append(boundary).append("\r\n")
+                .append("Content-Disposition: form-data; name=\"file\"; filename=\"")
+                .append(fileName).append("\"; filename*=UTF-8''").append(fileName).append("\r\n")
+                .append("Content-Type: ").append(source.mime.ifBlank { "application/octet-stream" })
+                .append("\r\n\r\n")
+            val preamble = fields.toString().toByteArray(Charsets.UTF_8)
+            val epilogue = "\r\n--$boundary--\r\n".toByteArray(Charsets.UTF_8)
+            val body = ByteArrayOutputStream()
+            try {
+                val combined = java.io.SequenceInputStream(
+                    java.io.SequenceInputStream(preamble.inputStream(), stream),
+                    epilogue.inputStream(),
+                )
+                val response = PanelHttp.stream(sock, "POST", path,
+                    mapOf("Content-Type" to "multipart/form-data; boundary=$boundary"),
+                    null, combined, maxBytes, {
+                        if (transfer.cancelled) it.close() else transfer.socket = it
+                    }, { 64 * 1024L }, { body })
+                JSONObject().put("ok", true).put("status", response.status)
+                    .put("body", body.toString(Charsets.UTF_8.name()))
+            } catch (_: PanelWire.TooLarge) {
+                failure("TOO_LARGE")
+            } catch (error: Exception) {
+                if (error.message == "NO_MEDIA") failure("NO_MEDIA")
+                else if (transfer.cancelled) cancelled() else failure("UNAVAILABLE")
+            }
+        }
+    }
+
     fun export(id: String, action: String, path: String, method: String, jsonBody: String,
         fileName: String, mime: String): String {
         if (!valid(id)) return bad("invalid call id")
