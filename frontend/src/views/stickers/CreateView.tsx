@@ -19,7 +19,7 @@ import { explainError, jobStageMessage, stickerErrorMessage } from "../../utils/
 import type { Delivered } from "../../utils/stickerFiles";
 import { STICKER_NAME_MAX } from "../../utils/stickerLimits";
 import { uploadBlockReason } from "../../utils/uploadCheck";
-import { CreateControls } from "./CreateControls";
+import { CreateControls, TrimControls } from "./CreateControls";
 import { CreateStage } from "./CreateStage";
 import type { CreateSeed } from "./hostHandoff";
 import { LayerEditor } from "./LayerEditor";
@@ -412,6 +412,14 @@ export const CreateView: React.FC<CreateViewProps> = ({
                 )
               }
             />
+            <TrimControls
+              options={options}
+              onChange={(patch) => setOptions((prev) => ({ ...prev, ...patch }))}
+              kind={upload.kind}
+              durationMs={upload.durationMs}
+              limits={capabilities.limits}
+              animatedOk={capabilities.animated}
+            />
           </>
         )}
         {(job.running || job.job?.state === "queued" || job.job?.state === "running") && (
@@ -449,11 +457,7 @@ export const CreateView: React.FC<CreateViewProps> = ({
           <CreateControls
             options={options}
             onChange={(patch) => setOptions((prev) => ({ ...prev, ...patch }))}
-            kind={upload.kind}
-            durationMs={upload.durationMs}
-            limits={capabilities.limits}
             canRemoveBackground={capabilities.backgroundRemoval.includes("plain")}
-            animatedOk={capabilities.animated}
             name={name}
             onName={setName}
             packId={packId}

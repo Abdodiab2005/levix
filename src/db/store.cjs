@@ -861,6 +861,17 @@ function countDebts(settled = false) {
 // A job is `{ id, type, targetJid, message, cronString?, date?, status,
 // creatorJid, lastRunAt?, lastDeliveryStatus?, lastError? }`.
 
+/** The `media` column holds a small JSON object, or NULL for a text job. */
+function parseMediaColumn(value) {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function scheduleRow(row) {
   if (!row) return null;
   return {
@@ -876,6 +887,7 @@ function scheduleRow(row) {
     lastRunAt: row.last_run_at ?? null,
     lastDeliveryStatus: row.last_delivery_status ?? null,
     lastError: row.last_error ?? null,
+    media: parseMediaColumn(row.media),
   };
 }
 
@@ -891,8 +903,8 @@ function saveSchedule(job) {
   q(
     `INSERT INTO schedules
        (id, type, target_jid, message, cron_string, date, status, creator_jid,
-        created_at, last_run_at, last_delivery_status, last_error)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        created_at, last_run_at, last_delivery_status, last_error, media)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        type        = excluded.type,
        target_jid  = excluded.target_jid,
@@ -903,7 +915,8 @@ function saveSchedule(job) {
        creator_jid = excluded.creator_jid,
        last_run_at = excluded.last_run_at,
        last_delivery_status = excluded.last_delivery_status,
-       last_error = excluded.last_error`,
+       last_error = excluded.last_error,
+       media = excluded.media`,
   ).run(
     String(job.id),
     job.type,
@@ -917,6 +930,7 @@ function saveSchedule(job) {
     job.lastRunAt ?? null,
     job.lastDeliveryStatus ?? null,
     job.lastError ?? null,
+    job.media ? JSON.stringify(job.media) : null,
   );
   return getSchedule(job.id);
 }

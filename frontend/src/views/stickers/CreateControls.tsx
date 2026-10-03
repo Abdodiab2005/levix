@@ -7,11 +7,7 @@ import { Button, FieldLabel, fieldClass } from "./ui";
 interface CreateControlsProps {
   options: EditOptions;
   onChange: (patch: Partial<EditOptions>) => void;
-  kind: string;
-  durationMs: number;
-  limits: Capabilities["limits"];
   canRemoveBackground: boolean;
-  animatedOk: boolean;
   name: string;
   onName: (value: string) => void;
   packId: string;
@@ -29,11 +25,7 @@ function choice(background: string | undefined): "transparent" | "white" | "blac
 export const CreateControls: React.FC<CreateControlsProps> = ({
   options,
   onChange,
-  kind,
-  durationMs,
-  limits,
   canRemoveBackground,
-  animatedOk,
   name,
   onName,
   packId,
@@ -41,23 +33,12 @@ export const CreateControls: React.FC<CreateControlsProps> = ({
   packs,
 }) => {
   const { t } = useI18n();
-  const trimmable = kind === "video" || kind === "gif";
-  const mediaSeconds = durationMs > 0 ? durationMs / 1000 : limits.videoSeconds;
-  const maxStart = Math.min(limits.videoSeconds, Math.max(0, mediaSeconds));
   const background = choice(options.background);
   const tolerance = options.removeBackground?.tolerance ?? 0.15;
   const rotate = options.rotate ?? 0;
 
-  const setTrim = (start: number, duration: number) => {
-    const safeStart = Math.min(maxStart, Math.max(0, start));
-    const safeDuration = Math.min(limits.stickerSeconds, Math.max(0.5, duration));
-    onChange({ trim: { start: safeStart, duration: safeDuration } });
-  };
-
   return (
     <div className="flex flex-col gap-3">
-      {!animatedOk && trimmable && <p className="text-xs text-warn">{t("animatedUnavailable")}</p>}
-
       <div>
         <FieldLabel htmlFor="sticker-fit">{t("fit")}</FieldLabel>
         <select
@@ -198,55 +179,6 @@ export const CreateControls: React.FC<CreateControlsProps> = ({
         </div>
       )}
 
-      {trimmable && (
-        <div className="flex flex-col gap-2">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={Boolean(options.trim)}
-              onChange={(event) => {
-                if (!event.target.checked) onChange({ trim: null });
-                else setTrim(0, Math.min(limits.stickerSeconds, Math.max(0.5, mediaSeconds)));
-              }}
-            />
-            {t("trim")}
-          </label>
-          <p className="text-xs text-muted">
-            {kind === "gif" ? t("gifTrimNote") : t("trimApplied")}
-          </p>
-          {options.trim && (
-            <>
-              <label className="text-xs font-bold" htmlFor="trim-start">
-                {t("trimStart")} ({options.trim.start.toFixed(1)} {t("trimSeconds")})
-              </label>
-              <input
-                id="trim-start"
-                type="range"
-                min={0}
-                max={maxStart}
-                step={0.1}
-                value={options.trim.start}
-                onChange={(event) =>
-                  setTrim(Number(event.target.value), options.trim?.duration ?? 0.5)
-                }
-              />
-              <label className="text-xs font-bold" htmlFor="trim-duration">
-                {t("trimDuration")} ({options.trim.duration.toFixed(1)} {t("trimSeconds")})
-              </label>
-              <input
-                id="trim-duration"
-                type="range"
-                min={0.5}
-                max={limits.stickerSeconds}
-                step={0.1}
-                value={options.trim.duration}
-                onChange={(event) => setTrim(options.trim?.start ?? 0, Number(event.target.value))}
-              />
-            </>
-          )}
-        </div>
-      )}
-
       <div>
         <FieldLabel htmlFor="sticker-name">{t("stickerName")}</FieldLabel>
         <input
@@ -274,6 +206,83 @@ export const CreateControls: React.FC<CreateControlsProps> = ({
           ))}
         </select>
       </div>
+    </div>
+  );
+};
+
+/**
+ * The trim timeline lives directly under the video preview, not in the
+ * sidebar, so the ranges being edited sit next to the media they cut.
+ */
+export const TrimControls: React.FC<{
+  options: EditOptions;
+  onChange: (patch: Partial<EditOptions>) => void;
+  kind: string;
+  durationMs: number;
+  limits: Capabilities["limits"];
+  animatedOk: boolean;
+}> = ({ options, onChange, kind, durationMs, limits, animatedOk }) => {
+  const { t } = useI18n();
+  const trimmable = kind === "video" || kind === "gif";
+  if (!trimmable) return null;
+  const mediaSeconds = durationMs > 0 ? durationMs / 1000 : limits.videoSeconds;
+  const maxStart = Math.min(limits.videoSeconds, Math.max(0, mediaSeconds));
+  const setTrim = (start: number, duration: number) => {
+    const safeStart = Math.min(maxStart, Math.max(0, start));
+    const safeDuration = Math.min(limits.stickerSeconds, Math.max(0.5, duration));
+    onChange({ trim: { start: safeStart, duration: safeDuration } });
+  };
+  return (
+    <div className="rounded-2xl border border-line bg-panel p-3 flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <label className="flex items-center gap-2 text-sm font-bold">
+          <input
+            type="checkbox"
+            checked={Boolean(options.trim)}
+            onChange={(event) => {
+              if (!event.target.checked) onChange({ trim: null });
+              else setTrim(0, Math.min(limits.stickerSeconds, Math.max(0.5, mediaSeconds)));
+            }}
+          />
+          {t("trim")}
+        </label>
+        {options.trim && (
+          <span className="text-xs font-mono text-muted" dir="ltr">
+            {options.trim.start.toFixed(1)}s →{" "}
+            {(options.trim.start + options.trim.duration).toFixed(1)}s
+          </span>
+        )}
+      </div>
+      {!animatedOk && <p className="text-xs text-warn">{t("animatedUnavailable")}</p>}
+      <p className="text-xs text-muted">{kind === "gif" ? t("gifTrimNote") : t("trimApplied")}</p>
+      {options.trim && (
+        <>
+          <label className="text-xs font-bold" htmlFor="trim-start">
+            {t("trimStart")} ({options.trim.start.toFixed(1)} {t("trimSeconds")})
+          </label>
+          <input
+            id="trim-start"
+            type="range"
+            min={0}
+            max={maxStart}
+            step={0.1}
+            value={options.trim.start}
+            onChange={(event) => setTrim(Number(event.target.value), options.trim?.duration ?? 0.5)}
+          />
+          <label className="text-xs font-bold" htmlFor="trim-duration">
+            {t("trimDuration")} ({options.trim.duration.toFixed(1)} {t("trimSeconds")})
+          </label>
+          <input
+            id="trim-duration"
+            type="range"
+            min={0.5}
+            max={limits.stickerSeconds}
+            step={0.1}
+            value={options.trim.duration}
+            onChange={(event) => setTrim(options.trim?.start ?? 0, Number(event.target.value))}
+          />
+        </>
+      )}
     </div>
   );
 };

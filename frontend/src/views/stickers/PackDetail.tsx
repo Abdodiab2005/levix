@@ -148,7 +148,7 @@ export const PackDetail: React.FC<PackDetailProps> = ({
       )}
       {!loading && !error && items.length === 0 && (
         <EmptyState
-          icon={<GripVertical size={28} className="text-muted/40" />}
+          icon={<GripVertical size={28} className="text-muted" />}
           text={t("packEmpty")}
         />
       )}

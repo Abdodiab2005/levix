@@ -574,6 +574,12 @@ const MIGRATIONS = [
       repoint(originals, id);
     }
   },
+  // v6 — scheduled messages can carry one media file. The bytes live in
+  // <data>/media/schedules/<job id>; this column holds the metadata the
+  // delivery needs (kind, MIME type, file name).
+  (database) => {
+    database.exec(`ALTER TABLE schedules ADD COLUMN media TEXT;`);
+  },
 ];
 
 function migrate(database, migrations = MIGRATIONS) {

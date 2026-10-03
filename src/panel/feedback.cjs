@@ -14,8 +14,8 @@
 //
 // Nothing is sent unless the operator presses Send, and nothing about WhatsApp
 // — no message, chat, contact, credential or key — is ever attached. What goes
-// out is exactly the four fields below plus the runtime facts in
-// describeRuntime().
+// out is exactly the four fields below, an optional file the operator picked
+// themselves, and the runtime facts in describeRuntime().
 
 const fs = require("node:fs");
 const logger = require("../utils/logger.cjs");
@@ -29,6 +29,9 @@ const TOPICS = Object.freeze(["bug", "idea", "question", "praise", "other"]);
 const MESSAGE_MIN = 10;
 const MESSAGE_MAX = 2000;
 const CONTACT_MAX = 200;
+// One screenshot or log file rides along as multipart; the receiving end
+// forwards it to Telegram as a document, whose own bot-API cap is 50 MB.
+const ATTACHMENT_MAX = 20 * 1024 * 1024;
 
 // One operator, pressing a button. This only exists so a stuck retry loop in a
 // browser tab cannot turn into a flood the receiving end has to absorb.
@@ -150,32 +153,57 @@ function safeRemoteError(value) {
 }
 
 /**
- * Forward one validated submission.
+ * Forward one validated submission. An attachment (already size-checked by
+ * the route) turns the forward into multipart: the fields travel as a JSON
+ * "payload" part and the file as "file", and the endpoint delivers it to
+ * Telegram as a document instead of a message.
  *
  * @param {{ message: string, topic: string, rating: number|null, contact: string|null }} feedback
+ * @param {{ buffer: Buffer, name: string, type: string, size: number } | null} attachment
  * @returns {Promise<{ ok: true } | { ok: false, status: number, error: string }>}
  */
-async function submitFeedback(feedback) {
+async function submitFeedback(feedback, attachment = null) {
   const endpoint = process.env.LEVIX_FEEDBACK_URL || DEFAULT_ENDPOINT;
   const runtime = describeRuntime();
 
   recordAttempt();
 
+  const envelope = {
+    ...feedback,
+    source: "panel",
+    app: { version: runtime.version, platform: runtime.platform, locale: runtime.locale },
+  };
+
   let response;
   let data = null;
   try {
+    let body;
+    const headers = {
+      "User-Agent": `Levix/${runtime.version} (${runtime.platform})`,
+    };
+    const hasFile =
+      attachment && Buffer.isBuffer(attachment.buffer) && attachment.buffer.length > 0;
+    if (hasFile) {
+      const form = new FormData();
+      form.set("payload", JSON.stringify(envelope));
+      form.set(
+        "file",
+        new Blob([attachment.buffer], {
+          type: attachment.type || "application/octet-stream",
+        }),
+        attachment.name || "attachment",
+      );
+      body = form;
+    } else {
+      headers["Content-Type"] = "application/json";
+      body = JSON.stringify(envelope);
+    }
     response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": `Levix/${runtime.version} (${runtime.platform})`,
-      },
-      body: JSON.stringify({
-        ...feedback,
-        source: "panel",
-        app: { version: runtime.version, platform: runtime.platform, locale: runtime.locale },
-      }),
-      signal: AbortSignal.timeout(15000),
+      headers,
+      body,
+      // Room for a 20 MB attachment on a slow uplink, not for a hang.
+      signal: AbortSignal.timeout(120000),
     });
     data = await response.json().catch(() => null);
   } catch (error) {
@@ -223,6 +251,7 @@ module.exports = {
   MESSAGE_MIN,
   MESSAGE_MAX,
   CONTACT_MAX,
+  ATTACHMENT_MAX,
   validateFeedback,
   describeRuntime,
   feedbackRetryAfter,

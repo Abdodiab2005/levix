@@ -17,6 +17,24 @@ const { detectLang, withLang, tr } = require("./src/utils/i18n.cjs");
 const RETENTION_MS = 1000 * 60 * 60 * 24 * 3;
 const cacheCleanupCron = "0 */6 * * *"; // every 6 hours
 
+// A scheduled message can carry one media file. The bytes live under
+// <data>/media/schedules/<job id> — a subfolder, which the retention sweep
+// skips (it only unlinks files) — and are deleted with the job, not by age.
+const SCHEDULE_MEDIA_MAX_BYTES = 20 * 1024 * 1024;
+
+function scheduleMediaPath(jobId) {
+  // basename so a hand-crafted job id can never climb out of the folder
+  return path.join(ensureDataDir("media"), "schedules", path.basename(String(jobId)));
+}
+
+function removeScheduleMedia(jobId) {
+  try {
+    fs.rmSync(scheduleMediaPath(jobId), { force: true });
+  } catch (err) {
+    logger.warn({ err, jobId }, "[Scheduler] failed to remove scheduled media");
+  }
+}
+
 function getScheduledJobs() {
   try {
     return storage.getSchedules();
@@ -151,6 +169,44 @@ function recordDelivery(jobId, status, runAt, error = null) {
   }
 }
 
+/**
+ * What sendMessage receives for one job: text, or the stored media with the
+ * text as its caption. Runs inside withLang() so tr() picks the right header.
+ */
+function buildScheduledPayload(job) {
+  const header = tr("*Scheduled message 🗓️*", "*رسالة مجدولة 🗓️*");
+  const text = job.message ? `${header}\n\n${job.message}` : header;
+  if (!job.media) return { text };
+
+  const buffer = fs.readFileSync(scheduleMediaPath(job.id));
+  const mimetype = job.media.mimeType || "application/octet-stream";
+  switch (job.media.kind) {
+    case "image":
+      return {
+        image: buffer,
+        mimetype,
+        caption: job.message ? text : undefined,
+      };
+    case "video":
+      return {
+        video: buffer,
+        mimetype,
+        caption: job.message ? text : undefined,
+      };
+    case "audio":
+      return { audio: buffer, mimetype, ptt: false };
+    case "sticker":
+      return { sticker: buffer };
+    default:
+      return {
+        document: buffer,
+        mimetype,
+        fileName: job.media.fileName || undefined,
+        caption: job.message ? text : undefined,
+      };
+  }
+}
+
 async function deliverScheduledJob(sock, job) {
   if (deliveriesInFlight.has(job.id)) {
     logger.warn(`[Scheduler] Job ${job.id} is already being delivered — skipping overlap`);
@@ -161,13 +217,12 @@ async function deliverScheduledJob(sock, job) {
   const runAt = Date.now();
 
   try {
-    await sock.sendMessage(job.targetJid, {
+    await sock.sendMessage(
+      job.targetJid,
       // No message is being answered here, so the header follows the scheduled
       // text itself (in "auto"), or the bot's language.
-      text: withLang(detectLang(job.message), () =>
-        tr(`*Scheduled message 🗓️*\n\n${job.message}`, `*رسالة مجدولة 🗓️*\n\n${job.message}`),
-      ),
-    });
+      withLang(detectLang(job.message || " "), () => buildScheduledPayload(job)),
+    );
     recordDelivery(job.id, "sent", runAt);
     logger.info(`[Scheduler] Executed job ${job.id} -> ${job.targetJid}`);
     return { ok: true, reason: "sent" };
@@ -193,6 +248,9 @@ async function executeScheduledJob(sock, job) {
         "[Scheduler] failed to record one-off schedule status",
       );
     }
+    // A sent one-off never fires again, so its media copy is dead weight —
+    // but a failed one stays retryable and keeps its file.
+    if (result.ok) removeScheduleMedia(job.id);
   }
 
   return result;
@@ -264,6 +322,7 @@ async function retryScheduledJob(sock, jobId) {
 function deleteScheduledJob(jobId) {
   stopTask(jobId);
   storage.deleteSchedule(jobId);
+  removeScheduleMedia(jobId);
   logger.info(`[Scheduler] Deleted job ${jobId}.`);
   return true;
 }
@@ -286,6 +345,7 @@ function scheduleJobNow(job) {
 }
 
 module.exports = {
+  SCHEDULE_MEDIA_MAX_BYTES,
   initializeScheduledJobs,
   stopAllScheduledJobs,
   scheduleNewJob,
@@ -294,5 +354,6 @@ module.exports = {
   getScheduledJobs,
   saveScheduledJob,
   deleteScheduledJob,
+  scheduleMediaPath,
   updateJobStatus,
 };

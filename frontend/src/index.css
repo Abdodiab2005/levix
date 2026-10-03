@@ -79,10 +79,15 @@ html[lang="ar"] {
   letter-spacing: normal !important;
 }
 
-/* Subtle Custom Scrollbar */
+/* Subtle Custom Scrollbar — the thumb is inset from the content edge, so
+   items never sit flush against it */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 12px;
+  height: 12px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -90,9 +95,23 @@ html[lang="ar"] {
 ::-webkit-scrollbar-thumb {
   background: var(--line);
   border-radius: 999px;
+  /* the transparent border is the padding between thumb and content */
+  border: 4px solid transparent;
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--muted);
+  border: 4px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Hide the scrollbar but keep the row scrollable (tab strips, chip rows) */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 /* Radial ambient background glow */

@@ -6,17 +6,21 @@ import {
   ExternalLink,
   HeartHandshake,
   Lightbulb,
+  Paperclip,
   Send,
   Shield,
   Sparkles,
   Star,
+  X,
 } from "lucide-react";
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, type FeedbackMeta, type FeedbackTopic } from "../api/client";
-import { useToast } from "./Toasts";
 import { useI18n } from "../context/I18nContext";
 import { cn } from "../utils/cn";
+import type { HostSource } from "../utils/hostBridge";
+import { canPickHostSource, pickHostSource, uploadHostForm } from "../utils/hostBridge";
+import { useToast } from "./Toasts";
 
 /**
  * The panel's line to the developer, and the app's answer to Google Play's
@@ -24,11 +28,16 @@ import { cn } from "../utils/cn";
  * written here to levix.leviro.net/api/feedback from the server side, so this
  * form never talks to anything but the panel it is already signed in to.
  *
+ * An optional file rides along (screenshot, log): on the browser it is a
+ * multipart XHR so the upload can show progress; on the Android host the
+ * native bridge streams it instead, because the WebView bridge cannot carry
+ * FormData.
+ *
  * The limits below are re-checked by the backend (src/panel/feedback.cjs); they
  * are here to answer the operator immediately, not to be trusted.
  */
 
-const FALLBACK = { messageMin: 10, messageMax: 2000 };
+const FALLBACK = { messageMin: 10, messageMax: 2000, attachmentMax: 20 * 1024 * 1024 };
 
 const TOPIC_META: Record<
   FeedbackTopic,
@@ -60,8 +69,12 @@ export const FeedbackForm: React.FC = () => {
   const [message, setMessage] = useState("");
   const [rating, setRating] = useState(0);
   const [contact, setContact] = useState("");
+  const [attachment, setAttachment] = useState<File | null>(null);
+  const [hostFile, setHostFile] = useState<HostSource | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Only the limits and the runtime line; a failure here leaves the form
@@ -74,6 +87,8 @@ export const FeedbackForm: React.FC = () => {
 
   const messageMin = meta?.messageMin ?? FALLBACK.messageMin;
   const messageMax = meta?.messageMax ?? FALLBACK.messageMax;
+  const attachmentMax = meta?.attachmentMax ?? FALLBACK.attachmentMax;
+  const attachmentMaxMb = Math.round(attachmentMax / (1024 * 1024));
   const trimmed = message.trim();
   const missing = Math.max(0, messageMin - trimmed.length);
 
@@ -81,24 +96,60 @@ export const FeedbackForm: React.FC = () => {
     (id) => id in TOPIC_META,
   );
 
+  const tooLargeToast = () =>
+    toast(t("feedbackFileTooLarge").replace("{max}", String(attachmentMaxMb)), "error");
+
+  const pickHostAttachment = async () => {
+    try {
+      const picked = await pickHostSource();
+      if (!picked) return;
+      if (picked.size > attachmentMax) {
+        tooLargeToast();
+        return;
+      }
+      setHostFile(picked);
+    } catch (err: any) {
+      toast(err?.message || "Could not attach the file", "error");
+    }
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (missing > 0 || sending) return;
 
     setSending(true);
+    setProgress(hostFile ? 0 : null);
+    const payload = {
+      message: trimmed,
+      topic,
+      rating: rating || null,
+      contact: contact.trim() || null,
+    };
     try {
-      await api.sendFeedback({
-        message: trimmed,
-        topic,
-        rating: rating || null,
-        contact: contact.trim() || null,
-      });
+      if (hostFile) {
+        await uploadHostForm<{ success: boolean }>(
+          "/dashboard/api/feedback",
+          {
+            message: payload.message,
+            topic: payload.topic,
+            ...(payload.rating ? { rating: String(payload.rating) } : {}),
+            ...(payload.contact ? { contact: payload.contact } : {}),
+          },
+          hostFile.token,
+          attachmentMax + 1024 * 1024,
+        );
+      } else if (attachment) {
+        await api.sendFeedbackMultipart(payload, attachment, (fraction) => setProgress(fraction));
+      } else {
+        await api.sendFeedback(payload);
+      }
       setSent(true);
       toast(t("feedbackSent"), "success");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(err?.message, "error");
     } finally {
       setSending(false);
+      setProgress(null);
     }
   };
 
@@ -107,7 +158,14 @@ export const FeedbackForm: React.FC = () => {
     setContact("");
     setRating(0);
     setTopic("bug");
+    setAttachment(null);
+    setHostFile(null);
     setSent(false);
+  };
+
+  const clearAttachment = () => {
+    setAttachment(null);
+    setHostFile(null);
   };
 
   if (sent) {
@@ -199,6 +257,58 @@ export const FeedbackForm: React.FC = () => {
           </span>
         </div>
 
+        {/* attachment */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs sm:text-sm font-bold text-text-main">{t("feedbackAttach")}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {hostFile || attachment ? (
+              <span className="inline-flex items-center gap-2 ps-3 pe-2 h-10 rounded-xl border border-line bg-panel-raised text-xs sm:text-sm text-text-main max-w-full">
+                <Paperclip size={14} className="text-brand-cyan shrink-0" />
+                <span className="truncate max-w-[200px]">{hostFile?.name ?? attachment?.name}</span>
+                <button
+                  type="button"
+                  onClick={clearAttachment}
+                  aria-label={t("feedbackRemoveAttachment")}
+                  className="w-7 h-7 rounded-lg text-muted hover:text-danger hover:bg-danger/10 flex items-center justify-center transition-colors"
+                >
+                  <X size={14} />
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() =>
+                  canPickHostSource() ? void pickHostAttachment() : fileInputRef.current?.click()
+                }
+                className="inline-flex items-center gap-2 px-3 h-10 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm font-bold hover:bg-panel-hover transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50"
+              >
+                <Paperclip size={14} className="text-brand-cyan shrink-0" />
+                <span>{t("feedbackAttach")}</span>
+              </button>
+            )}
+            <span className="text-[11px] text-muted">
+              {t("feedbackAttachmentHint").replace("{max}", String(attachmentMaxMb))}
+            </span>
+          </div>
+          {!canPickHostSource() && (
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                event.target.value = "";
+                if (!file) return;
+                if (file.size > attachmentMax) {
+                  tooLargeToast();
+                  return;
+                }
+                setAttachment(file);
+              }}
+            />
+          )}
+        </div>
+
         {/* rating */}
         <fieldset className="flex flex-col gap-2">
           <legend className="text-xs sm:text-sm font-bold text-text-main mb-1">
@@ -241,6 +351,29 @@ export const FeedbackForm: React.FC = () => {
             className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
           />
         </div>
+
+        {/* upload progress: a real fraction in the browser, an indeterminate
+            bar on the Android host where the native bridge streams the file */}
+        {sending && (hostFile || attachment) && (
+          <div className="flex flex-col gap-1">
+            <div className="h-2 rounded-full bg-line overflow-hidden">
+              {hostFile ? (
+                <div className="h-full w-1/3 rounded-full bg-brand-blue animate-pulse" />
+              ) : (
+                <div
+                  className="h-full rounded-full bg-brand-blue transition-[width]"
+                  style={{ width: `${Math.max(4, Math.round((progress ?? 0) * 100))}%` }}
+                />
+              )}
+            </div>
+            <span className="text-[11px] text-muted tabular-nums">
+              {t("feedbackSending")}
+              {!hostFile && progress !== null && progress > 0
+                ? ` ${Math.round(progress * 100)}%`
+                : "…"}
+            </span>
+          </div>
+        )}
 
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-1">
           {meta?.runtime ? (

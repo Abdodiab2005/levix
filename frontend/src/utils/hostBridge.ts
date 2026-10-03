@@ -6,6 +6,13 @@ interface LevixHost {
   takePendingSticker?(): string;
   pickStickerSource?(id: string): string;
   uploadSource?(id: string, token: string, name: string, maxBytes: number): string;
+  uploadForm?(
+    id: string,
+    path: string,
+    payloadJson: string,
+    token: string,
+    maxBytes: number,
+  ): string;
   exportFile?(
     id: string,
     action: string,
@@ -49,7 +56,7 @@ function installDone() {
 }
 
 function call(
-  method: "pickStickerSource" | "uploadSource" | "exportFile",
+  method: "pickStickerSource" | "uploadSource" | "uploadForm" | "exportFile",
   args: (string | number)[],
   signal?: AbortSignal,
 ): Promise<HostResult> {
@@ -73,15 +80,23 @@ function call(
           ? h.pickStickerSource?.(id)
           : method === "uploadSource"
             ? h.uploadSource?.(id, args[0] as string, args[1] as string, args[2] as number)
-            : h.exportFile?.(
-                id,
-                args[0] as string,
-                args[1] as string,
-                args[2] as string,
-                args[3] as string,
-                args[4] as string,
-                args[5] as string,
-              );
+            : method === "uploadForm"
+              ? h.uploadForm?.(
+                  id,
+                  args[0] as string,
+                  args[1] as string,
+                  args[2] as string,
+                  args[3] as number,
+                )
+              : h.exportFile?.(
+                  id,
+                  args[0] as string,
+                  args[1] as string,
+                  args[2] as string,
+                  args[3] as string,
+                  args[4] as string,
+                  args[5] as string,
+                );
       const reply = JSON.parse(raw || "") as HostResult;
       if (!reply.ok) {
         waiting.delete(id);
@@ -164,6 +179,35 @@ export async function uploadHostSource(
     return JSON.parse(result.body || "") as StickerUpload;
   } catch {
     throw new ApiError(result.status, "Invalid upload response", { code: "INTERNAL" });
+  }
+}
+
+/** The native multipart upload exists only next to the native picker. */
+export function canHostUploadForm(): boolean {
+  return (
+    typeof host()?.uploadForm === "function" && typeof host()?.pickStickerSource === "function"
+  );
+}
+
+/**
+ * Multipart POST of a host-picked file plus small text fields, streamed
+ * natively (feedback attachment, scheduled-message media). The panel route
+ * must be one of the paths the bridge allowlists.
+ */
+export async function uploadHostForm<T = unknown>(
+  path: string,
+  payload: Record<string, string>,
+  token: string,
+  maxBytes: number,
+  signal?: AbortSignal,
+): Promise<T> {
+  const result = await call("uploadForm", [path, JSON.stringify(payload), token, maxBytes], signal);
+  if (!result.ok || !result.status || result.status < 200 || result.status >= 300)
+    throw apiError(result);
+  try {
+    return (result.body ? JSON.parse(result.body) : {}) as T;
+  } catch {
+    throw new ApiError(result.status || 0, "Invalid upload response", { code: "INTERNAL" });
   }
 }
 

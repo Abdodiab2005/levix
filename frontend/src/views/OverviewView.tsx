@@ -29,7 +29,7 @@ interface OverviewViewProps {
 }
 
 export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
-  const { t, language } = useI18n();
+  const { t } = useI18n();
   const { toast } = useToast();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,9 +56,9 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
-    if (days) return `${days}d ${hours}h`;
-    if (hours) return `${hours}h ${mins}m`;
-    return `${mins}m`;
+    if (days) return `${days} ${t("uptimeDayUnit")} ${hours} ${t("uptimeHourUnit")}`;
+    if (hours) return `${hours} ${t("uptimeHourUnit")} ${mins} ${t("uptimeMinuteUnit")}`;
+    return `${mins} ${t("uptimeMinuteUnit")}`;
   };
 
   const isConnected = status?.state === "connected";
@@ -105,7 +105,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
     {
       id: "commands",
       title: t("commands"),
-      desc: `${stats?.commandCount ?? 56} active bot commands & aliases`,
+      desc: t("quickCommandsDesc").replace("{n}", String(stats?.commandCount ?? 0)),
       icon: Terminal,
       color: "text-brand-blue bg-blue-500/10 border-blue-500/20",
     },
@@ -145,7 +145,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
                 }`}
               >
                 <span className="pulse-dot" />
-                {isConnected ? "ONLINE" : "OFFLINE"}
+                {isConnected ? t("online") : t("offline")}
               </span>
             </div>
             <p className="text-xs sm:text-sm text-muted truncate mt-1">

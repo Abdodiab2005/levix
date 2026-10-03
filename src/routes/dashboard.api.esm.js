@@ -38,8 +38,11 @@ import {
   getRecentDebts,
   getSchedules,
   rememberSavedName,
+  resolveUserPhone,
   saveGroupSettings,
 } from "../utils/storage.esm.js";
+import normalizeJid, { isLidJid } from "../utils/normalizeJid.esm.js";
+import { fileToBuffer, MultipartError, readMultipartForm } from "../utils/multipart.esm.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -50,6 +53,7 @@ const secrets = require("../config/secrets.cjs");
 const { clientAddress } = require("../utils/requestOrigin.cjs");
 const { blockedFor, recordFailure, clearAttempts } = require("../panel/login-throttle.cjs");
 const {
+  ATTACHMENT_MAX: FEEDBACK_ATTACHMENT_MAX,
   TOPICS: FEEDBACK_TOPICS,
   MESSAGE_MAX: FEEDBACK_MESSAGE_MAX,
   MESSAGE_MIN: FEEDBACK_MESSAGE_MIN,
@@ -62,8 +66,10 @@ const { stampPanelSession } = require("../panel/session-auth.cjs");
 const { DATA_DIR } = require("../config/paths.cjs");
 const { PERSONA_FILE, activeProviderKeySetting } = require("../services/aiAgent.cjs");
 const {
+  SCHEDULE_MEDIA_MAX_BYTES,
   deleteScheduledJob,
   retryScheduledJob,
+  scheduleMediaPath,
   scheduleNewJob,
   saveScheduledJob,
 } = require("../../scheduler.cjs");
@@ -1008,16 +1014,20 @@ router.get("/recipients", (req, res) => {
     const users = getAllUsers() || [];
     users.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
     for (const u of users.slice(0, 80)) {
-      const jid = u.jid;
-      if (!jid || seen.has(jid) || String(jid).endsWith("@g.us")) continue;
-      const peer = describePeer(jid);
-      const personKey = peer.phone || u.lid || jid;
+      if (!u.jid || seen.has(u.jid) || String(u.jid).endsWith("@g.us")) continue;
+      const peer = describePeer(u.jid);
+      const personKey = peer.phone || u.lid || u.jid;
       if (seen.has(personKey)) continue;
-      seen.add(jid);
+      // The phone-number JID wins when one is known: it is the stable
+      // identity to schedule against, and it keeps an @lid row from ever
+      // reaching the picker as a raw id.
+      const id = peer.phone ? `${peer.phone}@s.whatsapp.net` : u.jid;
+      seen.add(u.jid);
+      seen.add(id);
       seen.add(personKey);
       if (u.lid) seen.add(u.lid);
       recipients.push({
-        id: jid,
+        id,
         name: peer.label,
         phone: peer.phone,
         savedName: peer.savedName ?? null,
@@ -1032,6 +1042,15 @@ router.get("/recipients", (req, res) => {
   }
 });
 
+/** Which WhatsApp shape an uploaded file is delivered as. */
+function scheduleMediaKind(mime) {
+  const base = String(mime || "").split(";")[0].trim().toLowerCase();
+  if (base.startsWith("image/")) return "image";
+  if (base.startsWith("video/")) return "video";
+  if (base.startsWith("audio/")) return "audio";
+  return "document";
+}
+
 router.post(
   "/schedules",
   asyncRoute(async (req, res) => {
@@ -1040,21 +1059,66 @@ router.post(
       return badRequest(res, "Maximum 3 scheduled messages reached");
     }
 
-    const { targetJid, message, type, cronString, scheduledTime, recurrence, targetName } =
-      req.body || {};
-    if (!targetJid || !message) {
-      return badRequest(res, "Recipient and message are required");
+    // The panel sends JSON; a scheduled message with media arrives as
+    // multipart/form-data (browser FormData or the Android host bridge), with
+    // the same fields as text parts plus one file part.
+    let body = req.body || {};
+    let file = null;
+    if (String(req.headers["content-type"] || "").toLowerCase().startsWith("multipart/form-data")) {
+      try {
+        const parsed = await readMultipartForm(req, { maxFileSize: SCHEDULE_MEDIA_MAX_BYTES });
+        body = parsed.fields;
+        file = parsed.file;
+      } catch (error) {
+        if (error instanceof MultipartError) return badRequest(res, error.message);
+        throw error;
+      }
+    }
+
+    let recurrence = body.recurrence;
+    if (recurrence && typeof recurrence === "string") {
+      try {
+        recurrence = JSON.parse(recurrence);
+      } catch {
+        recurrence = null;
+      }
+    }
+
+    const { targetJid, message, type, cronString, scheduledTime, targetName } = body;
+    if (!targetJid || (!message && !file)) {
+      return badRequest(res, "Recipient and a message or a file are required");
     }
 
     const id = Date.now().toString();
+
+    // An @lid target is resolved to its phone-number JID while the mapping is
+    // fresh, so delivery and the label never depend on the LID still being
+    // mapped months later. Unresolvable LIDs are kept as they are.
+    let target = normalizeJid(String(targetJid).trim());
+    if (isLidJid(target)) {
+      const phone = resolveUserPhone(target);
+      if (phone) target = `${phone}@s.whatsapp.net`;
+    }
+
     const job = {
       id,
       type: type === "once" ? "once" : "recurring",
-      targetJid: String(targetJid).trim(),
-      message: String(message).trim(),
+      targetJid: target,
+      message: String(message ?? "").trim(),
       creatorJid: "dashboard@levix",
       status: "active",
     };
+
+    if (file) {
+      const mediaPath = scheduleMediaPath(id);
+      fs.mkdirSync(path.dirname(mediaPath), { recursive: true });
+      fs.writeFileSync(mediaPath, await fileToBuffer(file));
+      job.media = {
+        kind: scheduleMediaKind(file.type),
+        mimeType: file.type || "application/octet-stream",
+        fileName: file.name || null,
+      };
+    }
 
     if (job.type === "recurring") {
       if (recurrence && typeof recurrence === "object") {
@@ -1079,7 +1143,7 @@ router.post(
       job.date = new Date(timeMs).toISOString();
     }
 
-    if (targetName && !String(job.targetJid).endsWith("@g.us")) {
+    if (targetName && !job.targetJid.endsWith("@g.us")) {
       rememberSavedName(job.targetJid, targetName);
     }
 
@@ -1210,6 +1274,7 @@ router.get("/feedback/meta", (req, res) => {
     topics: FEEDBACK_TOPICS,
     messageMin: FEEDBACK_MESSAGE_MIN,
     messageMax: FEEDBACK_MESSAGE_MAX,
+    attachmentMax: FEEDBACK_ATTACHMENT_MAX,
     // Shown next to the form so the operator can see what travels with it.
     runtime: { version: runtime.version, platform: runtime.platform },
   });
@@ -1217,10 +1282,32 @@ router.get("/feedback/meta", (req, res) => {
 
 // Leaves this machine only when the operator presses Send, and carries nothing
 // but the form's own fields plus the version and platform — see feedback.cjs.
+// An optional attachment (a screenshot, a log) rides along as multipart and is
+// forwarded to the same endpoint, which delivers it to Telegram as a file.
 router.post(
   "/feedback",
   asyncRoute(async (req, res) => {
-    const parsed = validateFeedback(req.body || {});
+    let body = req.body || {};
+    let attachment = null;
+    if (String(req.headers["content-type"] || "").toLowerCase().startsWith("multipart/form-data")) {
+      try {
+        const parsed = await readMultipartForm(req, { maxFileSize: FEEDBACK_ATTACHMENT_MAX });
+        body = parsed.fields;
+        if (parsed.file) {
+          attachment = {
+            buffer: await fileToBuffer(parsed.file),
+            name: parsed.file.name || "attachment",
+            type: parsed.file.type || "application/octet-stream",
+            size: parsed.file.size,
+          };
+        }
+      } catch (error) {
+        if (error instanceof MultipartError) return badRequest(res, error.message);
+        throw error;
+      }
+    }
+
+    const parsed = validateFeedback(body);
     if (!parsed.ok) return badRequest(res, parsed.error);
 
     const retryAfter = feedbackRetryAfter();
@@ -1232,7 +1319,7 @@ router.post(
       });
     }
 
-    const result = await submitFeedback(parsed.value);
+    const result = await submitFeedback(parsed.value, attachment);
     if (!result.ok) {
       return res.status(result.status).json({ success: false, error: result.error });
     }
