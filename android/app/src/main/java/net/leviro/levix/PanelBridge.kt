@@ -109,9 +109,24 @@ class PanelBridge(
     fun pickStickerSource(callId: String): String = stickerHost?.pick(callId)
         ?: JSONObject().put("ok", false).put("error", "host unavailable").toString()
 
+    /** Any openable file, for the panel forms that upload through [uploadForm]. */
+    @JavascriptInterface
+    fun pickFile(callId: String): String = stickerHost?.pick(callId, anyFile = true)
+        ?: JSONObject().put("ok", false).put("error", "host unavailable").toString()
+
     @JavascriptInterface
     fun uploadSource(callId: String, token: String, fileName: String, maxBytes: Long): String =
         stickerHost?.upload(callId, token, fileName, maxBytes)
+            ?: JSONObject().put("ok", false).put("error", "host unavailable").toString()
+
+    /**
+     * Native multipart upload for the panel forms (feedback attachment,
+     * scheduled-message media): the payload fields ride as text parts and the
+     * picked file streams as the "file" part, over the panel's own socket.
+     */
+    @JavascriptInterface
+    fun uploadForm(callId: String, path: String, payloadJson: String, token: String, maxBytes: Long): String =
+        stickerHost?.uploadForm(callId, path, payloadJson, token, maxBytes)
             ?: JSONObject().put("ok", false).put("error", "host unavailable").toString()
 
     @JavascriptInterface

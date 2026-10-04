@@ -50,7 +50,7 @@ export const StickerGrid: React.FC<StickerGridProps> = ({
   }
   if (items.length === 0) {
     return (
-      <EmptyState icon={<StickerIcon size={28} className="text-muted/40" />} text={emptyText} />
+      <EmptyState icon={<StickerIcon size={28} className="text-muted" />} text={emptyText} />
     );
   }
 

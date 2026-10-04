@@ -87,6 +87,12 @@ export interface CommandItem {
   overridden: boolean;
 }
 
+export interface ScheduleMedia {
+  kind: "image" | "video" | "audio" | "document" | string;
+  mimeType?: string;
+  fileName?: string | null;
+}
+
 export interface ScheduleItem {
   id: string;
   type: "recurring" | "once";
@@ -103,9 +109,11 @@ export interface ScheduleItem {
   when: string;
   whenAr?: string;
   status: "active" | "paused" | "completed";
+  createdAt?: number;
   lastRunAt?: number;
   lastDeliveryStatus?: "success" | "failed";
   lastError?: string;
+  media?: ScheduleMedia;
 }
 
 export interface GroupItem {

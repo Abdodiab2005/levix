@@ -252,7 +252,9 @@ export const AIAssistantView: React.FC = () => {
     }
   };
 
-  const handleFetchModels = async (forceRefresh = false) => {
+  // `cacheOnly` is the silent load on open: the cached live list, or the
+  // recommended one, and never a request to the provider.
+  const handleFetchModels = async (forceRefresh = false, cacheOnly = false) => {
     setFetchingModels(true);
     const typedKey = String(settings[selectedPreset.keySetting] || "").trim();
     const hasStoredKey = Boolean(configuredKeys[selectedPreset.keySetting]);
@@ -263,9 +265,11 @@ export const AIAssistantView: React.FC = () => {
         apiKey?: string;
         baseUrl?: string;
         refresh?: boolean;
+        cacheOnly?: boolean;
       } = {
         provider: selectedPreset.provider,
         refresh: forceRefresh,
+        cacheOnly,
       };
       if (typedKey) payload.apiKey = typedKey;
       if (selectedPreset.baseUrlSetting && settings[selectedPreset.baseUrlSetting]) {
@@ -287,22 +291,15 @@ export const AIAssistantView: React.FC = () => {
           },
         }));
 
-        if (res.live && res.success) {
+        // Model discovery stays silent on success — the model list updating
+        // in place is the feedback. Toasts are for problems only.
+        if (!res.live && res.requiresApiKey && forceRefresh) {
           toast(
             language === "ar"
-              ? `تم التحقق بنجاح وجلب ${res.models.length} نموذجاً متاحاً لحسابك`
-              : `Discovered ${res.models.length} live models available for your account`,
-            "success",
+              ? "يرجى إدخال مفتاح API أولاً لاكتشاف النماذج المتاحة لحسابك"
+              : "Enter an API key to discover account models",
+            "info",
           );
-        } else if (res.requiresApiKey) {
-          if (forceRefresh) {
-            toast(
-              language === "ar"
-                ? "يرجى إدخال مفتاح API أولاً لاكتشاف النماذج المتاحة لحسابك"
-                : "Enter an API key to discover account models",
-              "info",
-            );
-          }
         } else if (!res.success && res.error) {
           toast(res.error.message || "Failed to discover models", "error");
         }
@@ -321,23 +318,23 @@ export const AIAssistantView: React.FC = () => {
         toast(res.error.message || "Failed to discover models", "error");
       }
     } catch (err: any) {
-      toast(err.message || "Failed to fetch models", "error");
+      if (!cacheOnly) toast(err.message || "Failed to fetch models", "error");
     } finally {
       setFetchingModels(false);
     }
   };
 
+  // Live discovery is a manual step (the refresh buttons). Opening the view
+  // only fills the list from the cache or the recommended models, so the
+  // dropdown is never empty and no provider request or toast happens.
   useEffect(() => {
-    if (!loading) {
-      handleFetchModels(false);
-    }
-  }, [selectedPreset.id, configuredKeys[selectedPreset.keySetting], loading]);
+    if (!loading) handleFetchModels(false, true);
+  }, [selectedPreset.id, loading]);
 
   const currentModelList: NormalizedModel[] = discoveryState[selectedPreset.id]?.models || [];
   const isLiveVerified = Boolean(discoveryState[selectedPreset.id]?.live);
   const requiresApiKey = Boolean(
-    discoveryState[selectedPreset.id]?.requiresApiKey ??
-      !configuredKeys[selectedPreset.keySetting],
+    discoveryState[selectedPreset.id]?.requiresApiKey ?? !configuredKeys[selectedPreset.keySetting],
   );
 
   const currentModelVal = settings[selectedPreset.modelSetting] || selectedPreset.defaultModel;
@@ -393,9 +390,7 @@ export const AIAssistantView: React.FC = () => {
     try {
       const res = await api.getPersona();
       const persona = res?.persona;
-      setPersonaText(
-        typeof persona === "string" ? persona : persona?.body || "",
-      );
+      setPersonaText(typeof persona === "string" ? persona : persona?.body || "");
       setPersonaModalOpen(true);
     } catch (err: any) {
       toast(err.message, "error");
@@ -544,7 +539,7 @@ export const AIAssistantView: React.FC = () => {
           {/* Toggle Switch in corner */}
           <div className="shrink-0 flex items-center gap-2 bg-panel/60 border border-line/70 rounded-xl px-2.5 py-1.5 shadow-xs">
             <span className="text-xs font-bold text-muted hidden sm:inline">
-              {Boolean(settings["ai_agent"])
+              {settings["ai_agent"]
                 ? language === "ar"
                   ? "مفعل"
                   : "Enabled"
@@ -563,14 +558,14 @@ export const AIAssistantView: React.FC = () => {
         <div className="flex items-center gap-2 pt-1 border-t border-line/40">
           <span
             className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
-              Boolean(settings["ai_agent"])
+              settings["ai_agent"]
                 ? "bg-ok/15 text-ok border-ok/30"
                 : "bg-danger/10 text-danger border-danger/25"
             }`}
           >
             <span className="pulse-dot" />
             <span>
-              {Boolean(settings["ai_agent"])
+              {settings["ai_agent"]
                 ? t("aiAgentEnabled")
                 : language === "ar"
                   ? "مساعد الذكاء الاصطناعي معطل"
@@ -787,17 +782,21 @@ export const AIAssistantView: React.FC = () => {
                   updateSetting(selectedPreset.modelSetting, e.target.value);
                 }}
               >
-                <optgroup label={isLiveVerified ? t("modelsAvailableLive") : t("modelsRecommendedSeed")}>
+                <optgroup
+                  label={isLiveVerified ? t("modelsAvailableLive") : t("modelsRecommendedSeed")}
+                >
                   {currentModelList.map((m) => (
                     <option key={m.id} value={m.id}>
-                      {m.displayName && m.displayName !== m.id ? `${m.displayName} (${m.id})` : m.id}
+                      {m.displayName && m.displayName !== m.id
+                        ? `${m.displayName} (${m.id})`
+                        : m.id}
                       {m.recommended ? " ★" : ""}
                     </option>
                   ))}
                 </optgroup>
-                {!currentModelList.some((m) => m.id.toLowerCase() === currentModelVal.toLowerCase()) && (
-                  <option value={currentModelVal}>{currentModelVal} (current)</option>
-                )}
+                {!currentModelList.some(
+                  (m) => m.id.toLowerCase() === currentModelVal.toLowerCase(),
+                ) && <option value={currentModelVal}>{currentModelVal} (current)</option>}
               </select>
             )}
           </div>
@@ -809,7 +808,9 @@ export const AIAssistantView: React.FC = () => {
             <span className="font-bold text-text-main flex items-center gap-1.5">
               <Sparkles size={14} className="text-brand-cyan shrink-0" />
               {language === "ar" ? "القدرات:" : "Capabilities:"}{" "}
-              <span className="font-mono text-brand-cyan">{currentModelObj.displayName || currentModelVal}</span>
+              <span className="font-mono text-brand-cyan">
+                {currentModelObj.displayName || currentModelVal}
+              </span>
             </span>
             <span
               className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
@@ -844,7 +845,11 @@ export const AIAssistantView: React.FC = () => {
                   currentModelObj.capabilities.textInput && currentModelObj.capabilities.textOutput,
                 ),
               },
-              { icon: FileText, label: t("capPdf"), on: Boolean(currentModelObj.capabilities.pdfInput) },
+              {
+                icon: FileText,
+                label: t("capPdf"),
+                on: Boolean(currentModelObj.capabilities.pdfInput),
+              },
               {
                 icon: Eye,
                 label: t("capVideo"),
@@ -854,7 +859,9 @@ export const AIAssistantView: React.FC = () => {
               <div
                 key={label}
                 className={`p-2 rounded-lg border flex items-center justify-between ${
-                  capsKnown && on ? "bg-ok/10 border-ok/25 text-ok" : "bg-panel border-line text-muted"
+                  capsKnown && on
+                    ? "bg-ok/10 border-ok/25 text-ok"
+                    : "bg-panel border-line text-muted"
                 }`}
               >
                 <div className="flex items-center gap-1.5 font-medium">
@@ -888,7 +895,10 @@ export const AIAssistantView: React.FC = () => {
             </div>
             <div className="pe-12">
               <div className="flex items-center gap-2 text-text-main mb-1">
-                <Eye size={17} className={visionLocked ? "text-muted shrink-0" : "text-brand-cyan shrink-0"} />
+                <Eye
+                  size={17}
+                  className={visionLocked ? "text-muted shrink-0" : "text-brand-cyan shrink-0"}
+                />
                 <span className="font-bold text-sm">{t("aiVision")}</span>
               </div>
               <p className="text-xs text-muted leading-relaxed">{t("aiVisionDesc")}</p>
@@ -914,7 +924,10 @@ export const AIAssistantView: React.FC = () => {
             </div>
             <div className="pe-12">
               <div className="flex items-center gap-2 text-text-main mb-1">
-                <Mic size={17} className={sttLocked ? "text-muted shrink-0" : "text-purple-400 shrink-0"} />
+                <Mic
+                  size={17}
+                  className={sttLocked ? "text-muted shrink-0" : "text-purple-400 shrink-0"}
+                />
                 <span className="font-bold text-sm">{t("aiSttEnabled")}</span>
               </div>
               <p className="text-xs text-muted leading-relaxed">{t("aiSttEnabledDesc")}</p>
@@ -1109,9 +1122,7 @@ export const AIAssistantView: React.FC = () => {
                     ) : (
                       <MessageSquare size={14} className="text-brand-blue shrink-0" />
                     )}
-                    <span className="truncate">
-                      {isGlobal ? t("memoryGlobalScope") : s.scope}
-                    </span>
+                    <span className="truncate">{isGlobal ? t("memoryGlobalScope") : s.scope}</span>
                   </span>
                   <span className="block text-[10px] text-muted mt-1">
                     {isGlobal ? t("memoryGlobalScopeHint") : t("memoryChatScopeHint")}

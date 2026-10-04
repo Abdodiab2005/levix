@@ -88,7 +88,7 @@ const stub = createServer((req, res) => {
     try {
       parsed = JSON.parse(body);
     } catch {}
-    received.push({ url: req.url, headers: req.headers, body: parsed });
+    received.push({ url: req.url, headers: req.headers, body: parsed, raw: body });
     if (parsed?.message?.includes("REFUSE-ME")) {
       res.writeHead(503, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: false, error: "Feedback delivery is not configured." }));
@@ -175,6 +175,38 @@ try {
     !/whatsapp|s\.whatsapp\.net|@g\.us|creds|apiKey|api_key|password/i.test(wire),
   );
 
+  section("an attachment rides along as multipart");
+
+  // A text file keeps this honest: the stub accumulates the body as a string,
+  // so asserting on text proves the bytes arrived without fighting encoding.
+  const boundary = "----levix-feedback-test";
+  const logContent = "Levix 4.4.1 boot log\nall systems nominal\n";
+  const multipart = [
+    `--${boundary}\r\nContent-Disposition: form-data; name="message"\r\n\r\nA screenshot of the broken QR screen.\r\n`,
+    `--${boundary}\r\nContent-Disposition: form-data; name="topic"\r\n\r\nbug\r\n`,
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="panel.log"\r\nContent-Type: text/plain\r\n\r\n${logContent}\r\n`,
+    `--${boundary}--\r\n`,
+  ].join("");
+  res = await http.call("/dashboard/api/feedback", {
+    method: "POST",
+    headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+    body: multipart,
+  });
+  equal("the panel accepts the attachment", res.status, 200);
+
+  const attached = received[received.length - 1];
+  ok(
+    "the forward is multipart too",
+    String(attached.headers["content-type"] || "").startsWith("multipart/form-data"),
+  );
+  ok("the fields travel as a JSON payload part", attached.raw.includes('name="payload"'));
+  ok(
+    "the message rides inside the payload",
+    attached.raw.includes("A screenshot of the broken QR screen."),
+  );
+  ok("the file part keeps its name", attached.raw.includes('filename="panel.log"'));
+  ok("the file bytes are intact", attached.raw.includes("all systems nominal"));
+
   section("the receiving end's answer is passed through, not swallowed");
 
   res = await http.json("/dashboard/api/feedback", {
@@ -189,7 +221,8 @@ try {
 
   section("a stuck retry loop cannot become a flood");
 
-  // Two attempts have been forwarded so far; the throttle allows five an hour.
+  // Three attempts have been forwarded so far — the good one, the refused
+  // one, the multipart one; the throttle allows five an hour.
   const statuses = [];
   for (let i = 0; i < 4; i += 1) {
     res = await http.json("/dashboard/api/feedback", {
@@ -197,8 +230,9 @@ try {
     });
     statuses.push(res.status);
   }
-  equal("the third, fourth and fifth go out", statuses.slice(0, 3).join(","), "200,200,200");
-  equal("the sixth is throttled", statuses[3], 429);
+  equal("the fourth and fifth go out", statuses.slice(0, 2).join(","), "200,200");
+  equal("the sixth is throttled", statuses[2], 429);
+  ok("and the seventh is throttled too", statuses[3] === 429);
   res = await http.json("/dashboard/api/feedback", { message: "one more long enough message" });
   equal("and it stays throttled", res.status, 429);
   ok("the throttle says when to come back", Number(res.headers.get("retry-after")) > 0);

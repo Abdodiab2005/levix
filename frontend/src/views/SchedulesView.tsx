@@ -5,6 +5,7 @@ import {
   BookUser,
   Calendar,
   CheckCircle2,
+  Paperclip,
   Plus,
   RefreshCw,
   Search,
@@ -14,13 +15,19 @@ import {
   X,
 } from "lucide-react";
 import type React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import { Modal } from "../components/Modal";
 import type { ViewTab } from "../components/Sidebar";
 import { useToast } from "../components/Toasts";
 import { useI18n } from "../context/I18nContext";
 import type { ScheduleItem } from "../types";
+import {
+  canHostUploadForm,
+  type HostSource,
+  pickHostFile,
+  uploadHostForm,
+} from "../utils/hostBridge";
 
 type RepeatKind = "daily" | "weekly" | "monthly" | "hourly";
 
@@ -53,15 +60,7 @@ const WEEKDAY_FULL_EN = [
   "Friday",
   "Saturday",
 ];
-const WEEKDAY_FULL_AR = [
-  "الأحد",
-  "الاثنين",
-  "الثلاثاء",
-  "الأربعاء",
-  "الخميس",
-  "الجمعة",
-  "السبت",
-];
+const WEEKDAY_FULL_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 const HOURLY_INTERVALS = [1, 2, 3, 4, 6, 8, 12];
 
 function hasPhoneBookPicker() {
@@ -79,6 +78,9 @@ function digitsToWhatsAppJid(phone: string): string | null {
 function personName(value?: string | null): string | null {
   const text = String(value || "").trim();
   if (!text || text.includes("@")) return null;
+  // A bare long number is an id (a LID the mapping never resolved), not a
+  // name — fall through to the phone display or the generic label instead.
+  if (/^\d{8,}$/.test(text)) return null;
   return text;
 }
 
@@ -121,6 +123,25 @@ function arabicEveryHours(n: number) {
   return `كل ${n} ساعة`;
 }
 
+function mediaKindLabel(
+  t: (key: "mediaKindImage" | "mediaKindVideo" | "mediaKindAudio" | "mediaKindDocument") => string,
+  kind: string,
+): string {
+  if (kind === "image") return t("mediaKindImage");
+  if (kind === "video") return t("mediaKindVideo");
+  if (kind === "audio") return t("mediaKindAudio");
+  if (kind === "document") return t("mediaKindDocument");
+  return kind;
+}
+
+/** One label + value line of the details modal. */
+const DetailRow: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
+  <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-3">
+    <span className="sm:w-32 shrink-0 font-bold text-muted">{label}</span>
+    <span className="min-w-0">{children}</span>
+  </div>
+);
+
 function previewRecurrence(
   kind: RepeatKind,
   time: string,
@@ -157,9 +178,7 @@ function previewRecurrence(
     const days = [...new Set(weekdays.filter((d) => d >= 0 && d <= 6))].sort((a, b) => a - b);
     if (!days.length) return null;
     const names = joinWeekdayNames(days, ar);
-    return ar
-      ? `كل يوم ${names} الساعة ${hhmm} (${zone})`
-      : `Every ${names} at ${hhmm} (${zone})`;
+    return ar ? `كل يوم ${names} الساعة ${hhmm} (${zone})` : `Every ${names} at ${hhmm} (${zone})`;
   }
   if (kind === "monthly") {
     if (!Number.isInteger(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) return null;
@@ -204,7 +223,17 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [oneOffTime, setOneOffTime] = useState("");
   const [creating, setCreating] = useState(false);
 
+  // Optional media that travels with the scheduled message
+  const [scheduleMedia, setScheduleMedia] = useState<File | null>(null);
+  const [scheduleMediaHost, setScheduleMediaHost] = useState<HostSource | null>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+
+  // Row details modal
+  const [detailSchedule, setDetailSchedule] = useState<ScheduleItem | null>(null);
+
   const MAX_SCHEDULES = 3;
+  const MEDIA_MAX_BYTES = 20 * 1024 * 1024;
+  const MEDIA_MAX_MB = 20;
   const isLimitReached = schedules.length >= MAX_SCHEDULES;
   const ar = language === "ar";
 
@@ -351,6 +380,27 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     setEveryHours(1);
     setHourlyMinute(0);
     setOneOffTime("");
+    setScheduleMedia(null);
+    setScheduleMediaHost(null);
+  };
+
+  const clearScheduleMedia = () => {
+    setScheduleMedia(null);
+    setScheduleMediaHost(null);
+  };
+
+  const pickHostMedia = async () => {
+    try {
+      const picked = await pickHostFile();
+      if (!picked) return;
+      if (picked.size > MEDIA_MAX_BYTES) {
+        toast(t("feedbackFileTooLarge").replace("{max}", String(MEDIA_MAX_MB)), "error");
+        return;
+      }
+      setScheduleMediaHost(picked);
+    } catch (err: any) {
+      toast(err?.message || "Could not attach the file", "error");
+    }
   };
 
   const handleOpenAddModal = () => {
@@ -386,9 +436,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       );
       return;
     }
-    if (!message.trim()) {
+    if (!message.trim() && !scheduleMedia && !scheduleMediaHost) {
       toast(
-        language === "ar" ? "يرجى كتابة نص الرسالة" : "Please write the message text",
+        language === "ar"
+          ? "يرجى كتابة نص الرسالة أو إرفاق ملف"
+          : "Please write the message text or attach a file",
         "warning",
       );
       return;
@@ -440,7 +492,26 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     }
 
     try {
-      await api.createSchedule(payload);
+      // Multipart fields arrive as text parts: plain strings, except the
+      // structured recurrence object which the backend JSON-parses.
+      const fields: Record<string, string> = {};
+      for (const [key, value] of Object.entries(payload)) {
+        fields[key] = key === "recurrence" ? JSON.stringify(value) : String(value);
+      }
+      if (scheduleMediaHost) {
+        // Android host: the native bridge streams the file; the fields ride
+        // along as text parts of the same multipart body.
+        await uploadHostForm<{ success: boolean }>(
+          "/dashboard/api/schedules",
+          fields,
+          scheduleMediaHost.token,
+          MEDIA_MAX_BYTES + 1024 * 1024,
+        );
+      } else if (scheduleMedia) {
+        await api.postMultipart("/schedules", fields, scheduleMedia);
+      } else {
+        await api.createSchedule(payload);
+      }
       toast(t("savedSuccessfully"), "success");
       setShowAddModal(false);
       resetForm();
@@ -485,9 +556,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     if (isGroup) {
       const label =
         personName(item.name) ||
-        (personName(item.targetLabel) && item.targetLabel !== "Group"
-          ? item.targetLabel
-          : null) ||
+        (personName(item.targetLabel) && item.targetLabel !== "Group" ? item.targetLabel : null) ||
         t("groupFallback");
       return (
         <span className="inline-flex items-center gap-1.5 text-brand-cyan min-w-0">
@@ -626,7 +695,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               </tr>
             ) : (
               schedules.map((s) => (
-                <tr key={s.id} className="hover:bg-panel-hover/50 transition-colors">
+                <tr
+                  key={s.id}
+                  onClick={() => setDetailSchedule(s)}
+                  className="cursor-pointer hover:bg-panel-hover/50 transition-colors"
+                >
                   <td className="px-5 py-4 text-xs text-text-main">
                     <bdi>
                       {renderContactLines(
@@ -644,7 +717,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                     </bdi>
                   </td>
                   <td className="px-5 py-4 max-w-xs text-text-main truncate text-xs sm:text-sm">
-                    {s.message}
+                    {s.media && <Paperclip size={12} className="inline me-1 text-brand-cyan" />}
+                    {s.message || (s.media?.fileName ? s.media.fileName : "—")}
                   </td>
                   <td className="px-5 py-4 text-xs text-muted">
                     {ar ? s.whenAr || s.when : s.when || s.cronString || "—"}
@@ -689,16 +763,23 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                       {s.lastDeliveryStatus === "failed" && (
                         <button
                           type="button"
-                          onClick={() => handleRetry(s.id)}
+                          onClick={(event) => {
+                            // the row itself opens the details modal
+                            event.stopPropagation();
+                            void handleRetry(s.id);
+                          }}
                           className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-line bg-panel-raised hover:bg-panel-hover text-brand-cyan transition-colors"
-                          title="Retry delivery"
+                          title={t("retryDelivery")}
                         >
                           <RefreshCw size={14} />
                         </button>
                       )}
                       <button
                         type="button"
-                        onClick={() => handleDelete(s.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleDelete(s.id);
+                        }}
                         className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-danger/25 bg-danger/10 hover:bg-danger/20 text-danger transition-colors"
                         title={t("delete")}
                       >
@@ -731,7 +812,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             <button
               type="button"
               onClick={handleCreateSchedule}
-              disabled={creating || !selectedRecipient || !message.trim()}
+              disabled={
+                creating ||
+                !selectedRecipient ||
+                (!message.trim() && !scheduleMedia && !scheduleMediaHost)
+              }
               className="px-5 h-10 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/20 transition-all disabled:opacity-50"
             >
               {creating ? t("saving") : t("scheduleAction")}
@@ -867,7 +952,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
               {repeatKind === "weekly" && (
                 <fieldset className="space-y-1.5">
-                  <legend className="block text-xs font-bold text-text-main">{t("weekdays")}</legend>
+                  <legend className="block text-xs font-bold text-text-main">
+                    {t("weekdays")}
+                  </legend>
                   <div className="flex flex-wrap gap-1.5">
                     {WEEKDAY_KEYS.map((key, day) => {
                       const selected = weekdays.includes(day);
@@ -930,7 +1017,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label htmlFor="hourly-minute" className="block text-xs font-bold text-text-main">
+                    <label
+                      htmlFor="hourly-minute"
+                      className="block text-xs font-bold text-text-main"
+                    >
                       {t("atMinute")}
                     </label>
                     <input
@@ -950,9 +1040,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 <div className="space-y-1.5">
                   <label htmlFor="send-time" className="block text-xs font-bold text-text-main">
                     {t("sendTime")}
-                    <span className="ms-1.5 font-semibold text-muted">
-                      ({timezone})
-                    </span>
+                    <span className="ms-1.5 font-semibold text-muted">({timezone})</span>
                   </label>
                   <input
                     id="send-time"
@@ -988,7 +1076,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
           <div className="space-y-1.5">
             <label htmlFor="schedule-message" className="block text-xs font-bold text-text-main">
-              {t("messageText")} <span className="text-danger">*</span>
+              {t("messageText")}{" "}
+              {!scheduleMedia && !scheduleMediaHost && <span className="text-danger">*</span>}
             </label>
             <textarea
               id="schedule-message"
@@ -999,7 +1088,208 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               onChange={(e) => setMessage(e.target.value)}
             />
           </div>
+
+          {/* Optional media — image, video, audio or document */}
+          <div className="space-y-1.5">
+            <span className="block text-xs font-bold text-text-main">
+              {t("scheduleAttachMedia")}
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              {scheduleMediaHost || scheduleMedia ? (
+                <span className="inline-flex items-center gap-2 ps-3 pe-2 h-10 rounded-xl border border-brand-blue/40 bg-brand-blue/10 text-xs sm:text-sm text-text-main max-w-full">
+                  <Paperclip size={14} className="text-brand-cyan shrink-0" />
+                  <span className="truncate max-w-[220px]">
+                    {scheduleMediaHost?.name ?? scheduleMedia?.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearScheduleMedia}
+                    aria-label={t("scheduleRemoveMedia")}
+                    className="w-7 h-7 rounded-lg text-muted hover:text-danger hover:bg-danger/10 flex items-center justify-center transition-colors"
+                  >
+                    <X size={14} />
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    canHostUploadForm() ? void pickHostMedia() : mediaInputRef.current?.click()
+                  }
+                  className="inline-flex items-center gap-2 px-3 h-10 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm font-bold hover:bg-panel-hover transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50"
+                >
+                  <Paperclip size={14} className="text-brand-cyan shrink-0" />
+                  <span>{t("scheduleAttachMedia")}</span>
+                </button>
+              )}
+              <span className="text-[11px] text-muted">
+                {t("scheduleMediaHint").replace("{max}", String(MEDIA_MAX_MB))}
+              </span>
+            </div>
+            {!canHostUploadForm() && (
+              <input
+                ref={mediaInputRef}
+                type="file"
+                className="sr-only"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  event.target.value = "";
+                  if (!file) return;
+                  if (file.size > MEDIA_MAX_BYTES) {
+                    toast(
+                      t("feedbackFileTooLarge").replace("{max}", String(MEDIA_MAX_MB)),
+                      "error",
+                    );
+                    return;
+                  }
+                  setScheduleMedia(file);
+                }}
+              />
+            )}
+          </div>
         </div>
+      </Modal>
+
+      {/* Schedule details — one row tap opens everything the table truncates */}
+      <Modal
+        isOpen={!!detailSchedule}
+        onClose={() => setDetailSchedule(null)}
+        title={t("scheduleDetails")}
+        maxWidth="560px"
+        footer={
+          <div className="flex items-center justify-between w-full gap-2">
+            {detailSchedule?.lastDeliveryStatus === "failed" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const id = detailSchedule.id;
+                  setDetailSchedule(null);
+                  void handleRetry(id);
+                }}
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-brand-cyan font-bold text-xs sm:text-sm transition-colors"
+              >
+                <RefreshCw size={14} />
+                <span>{t("retryDelivery")}</span>
+              </button>
+            ) : (
+              <span />
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setDetailSchedule(null)}
+                className="px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors"
+              >
+                {t("close")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const id = detailSchedule?.id;
+                  setDetailSchedule(null);
+                  if (id) void handleDelete(id);
+                }}
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-xl bg-danger hover:bg-danger/90 text-white font-bold text-xs sm:text-sm transition-colors"
+              >
+                <Trash2 size={14} />
+                <span>{t("delete")}</span>
+              </button>
+            </div>
+          </div>
+        }
+      >
+        {detailSchedule && (
+          <div className="flex flex-col gap-3.5 py-1 text-xs sm:text-sm">
+            <DetailRow label={t("thTarget")}>
+              <bdi>
+                {renderContactLines(
+                  {
+                    targetJid: detailSchedule.targetJid,
+                    targetKind: detailSchedule.targetKind,
+                    targetLabel: detailSchedule.targetLabel,
+                    targetPhone: detailSchedule.targetPhone,
+                    savedName: detailSchedule.savedName,
+                    pushName: detailSchedule.pushName,
+                    phone: detailSchedule.phone,
+                  },
+                  "font-semibold",
+                  false,
+                )}
+              </bdi>
+            </DetailRow>
+            <DetailRow label={t("thMessage")}>
+              {detailSchedule.message ? (
+                <span className="whitespace-pre-wrap break-words">{detailSchedule.message}</span>
+              ) : (
+                <span className="text-muted">—</span>
+              )}
+            </DetailRow>
+            {detailSchedule.media && (
+              <DetailRow label={t("detailMedia")}>
+                <span className="inline-flex items-center gap-1.5 min-w-0">
+                  <Paperclip size={13} className="text-brand-cyan shrink-0" />
+                  <span className="truncate">
+                    {mediaKindLabel(t, detailSchedule.media.kind)}
+                    {detailSchedule.media.fileName ? ` · ${detailSchedule.media.fileName}` : ""}
+                  </span>
+                </span>
+              </DetailRow>
+            )}
+            <DetailRow label={t("thSchedule")}>
+              <span dir="auto">
+                {ar ? detailSchedule.whenAr || detailSchedule.when : detailSchedule.when}
+              </span>
+            </DetailRow>
+            <DetailRow label={t("thType")}>
+              {detailSchedule.type === "recurring" ? t("typeRecurring") : t("typeOnce")}
+            </DetailRow>
+            <DetailRow label={t("thDelivery")}>
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+                  detailSchedule.lastDeliveryStatus === "failed"
+                    ? "bg-danger/10 text-danger border border-danger/25"
+                    : detailSchedule.status === "active"
+                      ? "bg-ok/10 text-ok border border-ok/25"
+                      : "bg-muted/10 text-muted"
+                }`}
+              >
+                {detailSchedule.lastDeliveryStatus === "failed" ? (
+                  <AlertCircle size={13} />
+                ) : (
+                  <CheckCircle2 size={13} />
+                )}
+                <span>
+                  {detailSchedule.lastDeliveryStatus === "failed"
+                    ? t("deliveryFailed")
+                    : detailSchedule.status === "active"
+                      ? t("deliveryActive")
+                      : detailSchedule.status}
+                </span>
+              </span>
+            </DetailRow>
+            {detailSchedule.lastRunAt && (
+              <DetailRow label={t("detailLastRun")}>
+                {new Date(detailSchedule.lastRunAt).toLocaleString(
+                  language === "ar" ? "ar-EG" : "en-GB",
+                )}
+              </DetailRow>
+            )}
+            {detailSchedule.lastError && (
+              <DetailRow label={t("detailError")}>
+                <span className="text-danger break-words" dir="auto">
+                  {detailSchedule.lastError}
+                </span>
+              </DetailRow>
+            )}
+            {detailSchedule.createdAt && (
+              <DetailRow label={t("detailCreated")}>
+                {new Date(detailSchedule.createdAt).toLocaleString(
+                  language === "ar" ? "ar-EG" : "en-GB",
+                )}
+              </DetailRow>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   );

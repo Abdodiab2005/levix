@@ -25,7 +25,7 @@ class StickerHost(
     private val sock: File,
     val sources: StickerSources,
     private val deliver: (String, JSONObject) -> Unit,
-    private val launchPicker: (String) -> Unit,
+    private val launchPicker: (String, Boolean) -> Unit,
     private val share: (File, String) -> Unit,
 ) {
     private class Transfer {
@@ -76,12 +76,17 @@ class StickerHost(
         return accepted()
     }
 
-    fun pick(id: String): String {
+    /**
+     * Sticker Studio asks for images and videos only; the panel's file forms
+     * (feedback attachment, scheduled-message media) pass [anyFile] and take
+     * whatever the operator picks.
+     */
+    fun pick(id: String, anyFile: Boolean = false): String {
         if (!valid(id)) return bad("invalid call id")
         val previous = picker
         if (previous != null) answer(previous, cancelled())
         picker = id
-        launchPicker(id)
+        launchPicker(id, anyFile)
         return accepted()
     }
 
@@ -139,6 +144,71 @@ class StickerHost(
                 val response = PanelHttp.stream(sock, "POST", "/dashboard/api/stickers/uploads",
                     mapOf("X-Filename" to Uri.encode(name), "Content-Type" to "application/octet-stream"),
                     null, stream, maxBytes, {
+                        if (transfer.cancelled) it.close() else transfer.socket = it
+                    }, { 64 * 1024L }, { body })
+                JSONObject().put("ok", true).put("status", response.status)
+                    .put("body", body.toString(Charsets.UTF_8.name()))
+            } catch (_: PanelWire.TooLarge) {
+                failure("TOO_LARGE")
+            } catch (error: Exception) {
+                if (error.message == "NO_MEDIA") failure("NO_MEDIA")
+                else if (transfer.cancelled) cancelled() else failure("UNAVAILABLE")
+            }
+        }
+    }
+
+    /**
+     * Generic multipart upload for the panel forms the WebView cannot carry
+     * itself (feedback attachment, scheduled-message media): the payload
+     * fields ride as text parts, the picked file streams as the "file" part,
+     * and the whole body goes over the same authenticated socket as the panel
+     * requests. The route is pinned by PanelFiles.uploadAllowed.
+     */
+    fun uploadForm(id: String, path: String, payloadJson: String, token: String, maxBytes: Long): String {
+        if (!valid(id)) return bad("invalid call id")
+        if (!PanelFiles.uploadAllowed(path)) return bad("invalid upload route")
+        if (maxBytes < 1) return bad("invalid upload limit")
+        if (payloadJson.toByteArray(Charsets.UTF_8).size > 64 * 1024) return bad("request is too large")
+        if (sources.get(token) == null) return failure("UNAVAILABLE").toString()
+        return submit(id) { transfer ->
+            val source = sources.get(token) ?: return@submit failure("UNAVAILABLE")
+            val stream = try { context.contentResolver.openInputStream(source.uri.toUri()) }
+                catch (_: Exception) { null } ?: return@submit failure("UNAVAILABLE")
+            transfer.source = stream
+            val payload = try { JSONObject(payloadJson.ifBlank { "{}" }) } catch (_: Exception) { JSONObject() }
+            val boundary = "levix" + java.util.UUID.randomUUID().toString().replace("-", "")
+            val fields = StringBuilder()
+            val keys = payload.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val value = payload.optString(key, "")
+                if (value.isEmpty()) continue
+                fields.append("--").append(boundary).append("\r\n")
+                    .append("Content-Disposition: form-data; name=\"")
+                    .append(key.replace("\"", "")).append("\"\r\n\r\n")
+                    .append(value).append("\r\n")
+            }
+            val fileName = Uri.encode(source.name.ifBlank { "file" })
+            fields.append("--").append(boundary).append("\r\n")
+                .append("Content-Disposition: form-data; name=\"file\"; filename=\"")
+                .append(fileName).append("\"; filename*=UTF-8''").append(fileName).append("\r\n")
+                .append("Content-Type: ").append(source.mime.ifBlank { "application/octet-stream" })
+                .append("\r\n\r\n")
+            val preamble = fields.toString().toByteArray(Charsets.UTF_8)
+            val epilogue = "\r\n--$boundary--\r\n".toByteArray(Charsets.UTF_8)
+            val body = ByteArrayOutputStream()
+            try {
+                val combined = java.io.SequenceInputStream(
+                    java.io.SequenceInputStream(preamble.inputStream(), stream),
+                    epilogue.inputStream(),
+                )
+                val response = PanelHttp.stream(sock, "POST", path,
+                    mapOf("Content-Type" to "multipart/form-data; boundary=$boundary"),
+                    null, combined, maxBytes, {
+                        // The feedback route forwards the file upstream and
+                        // may wait up to 120 s for the answer; the default 60 s
+                        // read timeout would report a delivered send as failed.
+                        it.soTimeout = FORM_RESPONSE_TIMEOUT_MS
                         if (transfer.cancelled) it.close() else transfer.socket = it
                     }, { 64 * 1024L }, { body })
                 JSONObject().put("ok", true).put("status", response.status)
@@ -262,5 +332,10 @@ class StickerHost(
     private fun sweep(folder: File) {
         val cutoff = System.currentTimeMillis() - PanelFiles.SHARED_MAX_AGE_MS
         folder.listFiles()?.forEach { if (it.isFile && it.lastModified() < cutoff) it.delete() }
+    }
+
+    private companion object {
+        /** Above the 120 s upstream timeout in src/panel/feedback.cjs. */
+        const val FORM_RESPONSE_TIMEOUT_MS = 150_000
     }
 }

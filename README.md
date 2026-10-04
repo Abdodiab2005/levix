@@ -211,8 +211,9 @@ privately rather than opening a public issue.
 The bot forwards it server-side to `levix.leviro.net/api/feedback`, which
 delivers it as a Telegram message; the same form is on the web at
 [levix.leviro.net/feedback](https://levix.leviro.net/feedback). It carries your
-message, the topic, an optional rating and an optional contact, plus the version
-and platform — and nothing from WhatsApp. Nothing leaves until you press Send.
+message, the topic, an optional rating, an optional contact and one optional
+file you attach (a screenshot or a log, up to 20 MB), plus the version and
+platform — and nothing from WhatsApp. Nothing leaves until you press Send.
 
 Prefer a public, trackable bug report with logs attached? Open an
 [issue](https://github.com/Abdodiab2005/levix/issues) instead.

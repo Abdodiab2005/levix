@@ -1,5 +1,12 @@
 import { startProviderServer } from "./fixtures/provider-server.mjs";
-import { finish, require as harnessRequire, ok, section, useTempDataDir } from "./harness.mjs";
+import {
+  equal,
+  finish,
+  require as harnessRequire,
+  ok,
+  section,
+  useTempDataDir,
+} from "./harness.mjs";
 
 useTempDataDir("model-discovery");
 
@@ -75,10 +82,30 @@ section("openai: live discovery, filtering, and capabilities");
   });
 
   try {
+    // The panel's silent load on open: nothing cached yet, so the
+    // recommended list comes back and the provider is never asked.
+    const cold = await discoverProviderModels("openai", {
+      apiKey: "sk-test-openai-secret-key-12345",
+      baseUrl: `${fakeOpenAI.baseUrl}/v1`,
+      cacheOnly: true,
+    });
+    ok("cacheOnly with an empty cache succeeds", cold.success);
+    ok("cacheOnly with an empty cache is not live", cold.live === false);
+    ok("cacheOnly falls back to the recommended list", cold.models.length > 0);
+    equal("cacheOnly sends no request to the provider", fakeOpenAI.requests.length, 0);
+
     const res = await discoverProviderModels("openai", {
       apiKey: "sk-test-openai-secret-key-12345",
       baseUrl: `${fakeOpenAI.baseUrl}/v1`,
     });
+
+    const warm = await discoverProviderModels("openai", {
+      apiKey: "sk-test-openai-secret-key-12345",
+      baseUrl: `${fakeOpenAI.baseUrl}/v1`,
+      cacheOnly: true,
+    });
+    ok("cacheOnly returns the cached live list", warm.live === true && warm.cached === true);
+    equal("and still costs no request", fakeOpenAI.requests.length, 1);
 
     ok("openai discovery succeeded", res.success);
     ok("marked as live authenticated", res.live === true);

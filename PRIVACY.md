@@ -36,11 +36,12 @@ Data only leaves your device as a direct result of features you use:
    it).
 4. **The developer, if you send feedback** — the panel's **Settings → Feedback**
    form sends what you typed (your message, the topic, an optional 1–5 rating,
-   an optional contact) plus the Levix version and the platform it runs on. It
+   an optional contact), one optional file you pick yourself (a screenshot or a
+   log, up to 20 MB), plus the Levix version and the platform it runs on. It
    travels through `levix.leviro.net/api/feedback` and is delivered to the
-   developer as a Telegram message. Nothing is attached from WhatsApp — no
-   message, chat, contact, credential or key — and nothing is sent unless you
-   press Send.
+   developer as a Telegram message, or as a Telegram document when a file is
+   attached. Nothing is attached from WhatsApp — no message, chat, contact,
+   credential or key — and nothing is sent unless you press Send.
 5. **Your own Levix instance, for a sticker** — when you tap **Make sticker** or
    **Add to stickers** on a file in Media Hub, that one file is uploaded to the
    Levix server running on this phone, because that is what does the conversion.
@@ -90,7 +91,7 @@ Notes:
 | **DuckDuckGo** or **Google Programmable Search** (if you configured it) | The search query | Only when an AI answer uses the web-search tool | Web-grounded answers |
 | **Web pages the AI opens** | HTTPS requests to the page's server | Only when an AI answer uses the fetch-page tool | Reading a page you asked about |
 | **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |
-| **The developer** (via `levix.leviro.net/api/feedback`, delivered as a Telegram message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact — plus the Levix version, the platform, and the sending app's user-agent | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
+| **The developer** (via `levix.leviro.net/api/feedback`, delivered as a Telegram message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact, an optional file you attach yourself — plus the Levix version, the platform, and the sending app's user-agent | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
 | **Your own Levix server** (the instance running on this phone, reached at `http://127.0.0.1:3001` — never the developer, never an AI provider) | The one image, GIF or video you picked in Sticker Studio or the Media Hub, as a single upload | Only when you choose it in Sticker Studio or tap **Make sticker** / **Add to stickers** | Sticker Studio works server-side, so it has to receive the file you chose |
 
 Apart from feedback you deliberately send, the developer of Levix is **not** a
@@ -219,11 +220,11 @@ Declare these data types:
 | Personal info → **Phone number** | Yes | No | Required | App functionality |
 | Messages → **Other in-app messages** | Yes | No | Optional | App functionality, Customer support |
 | Personal info → **Email address** | Yes | No | Optional | Customer support |
-| Photos and videos → **Photos** | Yes | No | Optional | App functionality |
-| Photos and videos → **Videos** | Yes | No | Optional | App functionality |
+| Photos and videos → **Photos** | Yes | No | Optional | App functionality, Customer support |
+| Photos and videos → **Videos** | Yes | No | Optional | App functionality, Customer support |
 | Audio files → **Voice or sound recordings** | Yes | No | Optional | App functionality |
-| Audio files → **Other audio files** | Yes | No | Optional | App functionality |
-| Files and docs → **Files and docs** | Yes | No | Optional | App functionality |
+| Audio files → **Other audio files** | Yes | No | Optional | App functionality, Customer support |
+| Files and docs → **Files and docs** | Yes | No | Optional | App functionality, Customer support |
 | Contacts → **Contacts** | Yes | No | Optional | App functionality |
 | App activity → **In-app search history** | Yes | No | Optional | App functionality |
 | App activity → **Other user-generated content** | Yes | No | Optional | App functionality |
@@ -233,9 +234,10 @@ For every data type above:
 
 - **Processed ephemerally:** No.
 - **Collection purpose:** App functionality, plus **Customer support** for the
-  two rows the feedback form touches — the message text (Messages → Other
-  in-app messages) and the contact you may optionally leave (Personal info →
-  Email address). Both are optional: the form works without a contact, and
+  rows the feedback form touches — the message text (Messages → Other in-app
+  messages), the contact you may optionally leave (Personal info → Email
+  address), and the one file you may optionally attach (Photos, Videos, Other
+  audio files, Files and docs). The contact and the file are optional, and
   nothing is sent until you press Send.
 - **Sharing purpose:** none, because the form is declared as collected rather
   than shared under Google Play's applicable user-initiated/service-provider

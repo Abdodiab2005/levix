@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.MediaController
+import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.VideoView
 import androidx.appcompat.app.AppCompatActivity
@@ -55,41 +56,79 @@ class StatusViewer(
         val pager = ViewPager2(activity)
         pager.adapter = PageAdapter(pager)
 
+        // Only the two everyday actions stay inline; everything else lives in
+        // the overflow menu so the bar stays one short, calm row.
         val actions = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(4), dp(8), dp(10))
         }
-        fun action(label: Int, onClick: (MediaItem) -> Unit): TextView {
+        fun inline(label: Int, onClick: (MediaItem) -> Unit) {
             val button = TextView(activity).apply {
                 text = activity.getString(label)
                 gravity = Gravity.CENTER
-                minWidth = dp(64)
+                minWidth = dp(72)
                 minHeight = dp(48)
-                textSize = 13f
-                maxLines = 2
-                setPadding(dp(4), dp(4), dp(4), dp(4))
+                textSize = 14f
+                setPadding(dp(12), dp(4), dp(12), dp(4))
                 setTextColor(ContextCompat.getColor(activity, R.color.levix_cyan))
-                setOnClickListener { onClick(pages[pager.currentItem]) }
+                setOnClickListener {
+                    val target = pages.getOrNull(pager.currentItem) ?: return@setOnClickListener
+                    onClick(target)
+                }
             }
-            actions.addView(
-                button,
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-            )
-            return button
+            actions.addView(button)
         }
-        action(R.string.media_save, onSave)
-        action(R.string.media_share, onShare)
-        // Hidden until the first page says it could become a sticker; the label
-        // then follows the page, since a .webp sticker is only added as it is.
-        lateinit var sticker: TextView
-        sticker = action(R.string.media_sticker_make, onSticker)
-        action(R.string.media_open, onOpen)
-        lateinit var favorite: TextView
-        favorite = action(R.string.media_favorite) { current ->
-            onFavorite(current)
-            updateFavoriteLabel(favorite, current)
+        inline(R.string.media_save, onSave)
+        inline(R.string.media_share, onShare)
+        actions.addView(View(activity), LinearLayout.LayoutParams(0, 1, 1f))
+        val more = TextView(activity).apply {
+            text = MORE_GLYPH
+            gravity = Gravity.CENTER
+            minWidth = dp(48)
+            minHeight = dp(48)
+            textSize = 22f
+            contentDescription = activity.getString(R.string.media_more)
+            setTextColor(ContextCompat.getColor(activity, R.color.levix_text))
+            setOnClickListener { anchor ->
+                val current = pages.getOrNull(pager.currentItem) ?: return@setOnClickListener
+                val menu = PopupMenu(activity, anchor)
+                val intent = MediaLogic.stickerIntent(current)
+                if (intent != StickerIntent.NONE) {
+                    menu.menu.add(
+                        0, MENU_STICKER, 0,
+                        activity.getString(
+                            if (intent == StickerIntent.SAVE) R.string.media_sticker_save
+                            else R.string.media_sticker_make,
+                        ),
+                    )
+                }
+                menu.menu.add(0, MENU_OPEN, 1, activity.getString(R.string.media_open))
+                menu.menu.add(
+                    0, MENU_FAVORITE, 2,
+                    activity.getString(
+                        if (isFavorite(current.id)) R.string.media_remove_favorite
+                        else R.string.media_favorite,
+                    ),
+                )
+                if (current.isSaved && current.source == MediaSource.LEVIX_SAVED) {
+                    menu.menu.add(0, MENU_DELETE, 3, activity.getString(R.string.media_delete_saved_copy))
+                }
+                menu.setOnMenuItemClickListener { choice ->
+                    val target = pages.getOrNull(pager.currentItem)
+                        ?: return@setOnMenuItemClickListener true
+                    when (choice.itemId) {
+                        MENU_STICKER -> onSticker(target)
+                        MENU_OPEN -> onOpen(target)
+                        MENU_FAVORITE -> onFavorite(target)
+                        MENU_DELETE -> onDelete(target)
+                    }
+                    true
+                }
+                menu.show()
+            }
         }
-        val delete = action(R.string.media_delete_saved_copy, onDelete)
+        actions.addView(more)
 
         fun updatePage(position: Int) {
             val current = pages[position]
@@ -99,13 +138,6 @@ class StatusViewer(
                 typeLabel(current.mediaType),
                 dateText(current),
             )
-            updateStickerLabel(sticker, current)
-            updateFavoriteLabel(favorite, current)
-            delete.visibility = if (current.isSaved && current.source == MediaSource.LEVIX_SAVED) {
-                View.VISIBLE
-            } else {
-                View.GONE
-            }
             val recycler = pager.getChildAt(0) as? RecyclerView
             if (recycler != null) {
                 for (index in 0 until recycler.childCount) {
@@ -143,29 +175,6 @@ class StatusViewer(
         dialog?.dismiss()
     }
 
-    private fun updateFavoriteLabel(favorite: TextView, current: MediaItem) {
-        favorite.text = activity.getString(
-            if (isFavorite(current.id)) R.string.media_remove_favorite else R.string.media_favorite,
-        )
-    }
-
-    /**
-     * A sticker action per page. Voice notes, audio and documents get nothing:
-     * the row hides the label rather than showing an action that would always
-     * refuse, and a .webp sticker is only added to the library as it is.
-     */
-    private fun updateStickerLabel(sticker: TextView, current: MediaItem) {
-        val intent = MediaLogic.stickerIntent(current)
-        sticker.visibility = if (intent == StickerIntent.NONE) View.GONE else View.VISIBLE
-        sticker.text = activity.getString(
-            when (intent) {
-                StickerIntent.CREATE -> R.string.media_sticker_make
-                StickerIntent.SAVE -> R.string.media_sticker_save
-                StickerIntent.NONE -> R.string.media_sticker_make
-            },
-        )
-    }
-
     private fun stopVideos(pager: ViewPager2) {
         val recycler = pager.getChildAt(0) as? RecyclerView ?: return
         for (index in 0 until recycler.childCount) {
@@ -180,6 +189,13 @@ class StatusViewer(
             val box = LinearLayout(parent.context).apply {
                 gravity = Gravity.CENTER
                 orientation = LinearLayout.VERTICAL
+                // ViewPager2 refuses any page root that does not fill it — a
+                // wrap_content child crashes on first measure ("Pages must
+                // fill the whole ViewPager2").
+                layoutParams = RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                )
             }
             return Holder(box)
         }
@@ -287,6 +303,11 @@ class StatusViewer(
 
     companion object {
         private const val VIDEO_TAG = "video"
+        private const val MORE_GLYPH = "⋮"
+        private const val MENU_STICKER = 1
+        private const val MENU_OPEN = 2
+        private const val MENU_FAVORITE = 3
+        private const val MENU_DELETE = 4
         private val VISUAL_TYPES = setOf(MediaType.IMAGE, MediaType.VIDEO, MediaType.STICKER)
     }
 }

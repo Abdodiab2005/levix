@@ -159,68 +159,45 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_card_raised"
+        android:baselineAligned="false"
         android:gravity="center_vertical"
-        android:orientation="vertical"
+        android:orientation="horizontal"
         android:padding="6dp"
         android:visibility="gone">
         <TextView
             android:id="@+id/mediaSelectionCount"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
             android:textColor="@color/levix_text"
             android:textSize="14sp" />
-        <HorizontalScrollView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:scrollbars="none">
-            <LinearLayout
-                style="?android:attr/buttonBarStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-                <Button
-                    android:id="@+id/mediaSelectAll"
-                    style="?android:attr/buttonBarButtonStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:text="@string/media_select_all" />
-                <Button
-                    android:id="@+id/mediaClear"
-                    style="?android:attr/buttonBarButtonStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:text="@string/media_clear" />
-                <Button
-                    android:id="@+id/mediaSave"
-                    style="?android:attr/buttonBarButtonStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:text="@string/media_save" />
-                <Button
-                    android:id="@+id/mediaShare"
-                    style="?android:attr/buttonBarButtonStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:text="@string/media_share" />
-                <Button
-                    android:id="@+id/mediaSticker"
-                    style="?android:attr/buttonBarButtonStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:text="@string/media_sticker_make" />
-                <Button
-                    android:id="@+id/mediaFavorite"
-                    style="?android:attr/buttonBarButtonStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:text="@string/media_favorite" />
-                <Button
-                    android:id="@+id/mediaDelete"
-                    style="?android:attr/buttonBarButtonStyle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:text="@string/media_delete" />
-            </LinearLayout>
-        </HorizontalScrollView>
+        <Button
+            android:id="@+id/mediaSave"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="@string/media_save" />
+        <Button
+            android:id="@+id/mediaShare"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="@string/media_share" />
+        <Button
+            android:id="@+id/mediaDelete"
+            style="?android:attr/buttonBarButtonStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:text="@string/media_delete" />
+        <TextView
+            android:id="@+id/mediaMore"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/media_more"
+            android:gravity="center"
+            android:text="@string/media_more_glyph"
+            android:textColor="@color/levix_text"
+            android:textSize="22sp" />
     </LinearLayout>
 </LinearLayout>

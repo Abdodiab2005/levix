@@ -177,7 +177,7 @@ export const PacksView: React.FC<PacksViewProps> = ({
         </div>
       )}
       {!loading && !error && packs.length === 0 && (
-        <EmptyState icon={<Package size={28} className="text-muted/40" />} text={t("noPacks")} />
+        <EmptyState icon={<Package size={28} className="text-muted" />} text={t("noPacks")} />
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

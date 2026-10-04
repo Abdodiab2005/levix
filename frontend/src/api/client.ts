@@ -121,6 +121,7 @@ export interface FeedbackMeta {
   topics: FeedbackTopic[];
   messageMin: number;
   messageMax: number;
+  attachmentMax?: number;
   runtime: { version: string; platform: string };
 }
 
@@ -197,6 +198,45 @@ export const api = {
     api.get<{ commands: any[]; prefix?: string; levels?: string[]; success: boolean }>("/commands"),
   updateCommand: (name: string, payload: any) =>
     api.patch(`/commands/${encodeURIComponent(name)}`, payload),
+  /**
+   * One multipart POST with small text fields and one file (schedule media,
+   * feedback attachments that need no progress). Never set a Content-Type
+   * here: the browser must build the multipart boundary itself.
+   */
+  postMultipart: <T = any>(endpoint: string, fields: Record<string, string>, file: File) =>
+    new Promise<T>((resolve, reject) => {
+      const form = new FormData();
+      for (const [key, value] of Object.entries(fields)) {
+        if (value !== undefined && value !== null && value !== "") form.set(key, value);
+      }
+      form.set("file", file);
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `/dashboard/api${endpoint}`);
+      xhr.responseType = "json";
+      xhr.onload = () => {
+        const data =
+          xhr.response && typeof xhr.response === "object" ? (xhr.response as any) : null;
+        if (xhr.status === 401) {
+          window.location.href = "/login";
+          reject(new ApiError(401, "Session expired"));
+          return;
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data as T);
+        } else {
+          reject(
+            new ApiError(
+              xhr.status,
+              data?.error || data?.message || `HTTP ${xhr.status}: Request failed`,
+              data,
+            ),
+          );
+        }
+      };
+      xhr.onerror = () => reject(new ApiError(0, "Network error"));
+      xhr.send(form);
+    }),
+
   getSchedules: () =>
     api.get<{ schedules: any[]; timezone: string; success: boolean }>("/schedules"),
   createSchedule: (payload: any) => api.post("/schedules", payload),
@@ -255,12 +295,59 @@ export const api = {
     apiKey?: string;
     baseUrl?: string;
     refresh?: boolean;
+    cacheOnly?: boolean;
   }) => api.post<FetchAiModelsResponse>("/ai/models", payload || {}),
   changePassword: (current: string, next: string) =>
     api.post("/security/password", { current, next }),
   // The bot forwards this to the developer; nothing about it is stored locally.
   getFeedbackMeta: () => api.get<FeedbackMeta>("/feedback/meta"),
   sendFeedback: (payload: FeedbackPayload) => api.post<{ success: boolean }>("/feedback", payload),
+  /**
+   * The same feedback with one file, as multipart/form-data. XHR rather than
+   * fetch because upload progress is the point. Only used off the Android
+   * host, where the native bridge owns file uploads instead.
+   */
+  sendFeedbackMultipart: (
+    payload: FeedbackPayload,
+    attachment: File,
+    onProgress?: (fraction: number) => void,
+  ) =>
+    new Promise<{ success: boolean }>((resolve, reject) => {
+      const form = new FormData();
+      form.set("message", payload.message);
+      form.set("topic", payload.topic);
+      if (payload.rating) form.set("rating", String(payload.rating));
+      if (payload.contact) form.set("contact", payload.contact);
+      form.set("file", attachment, attachment.name);
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/dashboard/api/feedback");
+      xhr.responseType = "json";
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) onProgress(event.loaded / event.total);
+      };
+      xhr.onload = () => {
+        const data =
+          xhr.response && typeof xhr.response === "object" ? (xhr.response as any) : null;
+        if (xhr.status === 401) {
+          window.location.href = "/login";
+          reject(new ApiError(401, "Session expired"));
+          return;
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data ?? { success: true });
+        } else {
+          reject(
+            new ApiError(
+              xhr.status,
+              data?.error || data?.message || `HTTP ${xhr.status}: Request failed`,
+              data,
+            ),
+          );
+        }
+      };
+      xhr.onerror = () => reject(new ApiError(0, "Network error"));
+      xhr.send(form);
+    }),
   getLogs: () => api.get<{ logs: any[] }>("/logs"),
   // Sticker Studio
   getStickerCapabilities: () => api.get<Capabilities>("/stickers/capabilities"),

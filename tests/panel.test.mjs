@@ -223,6 +223,66 @@ try {
   res = await http.call("/dashboard/api/schedules/missing/retry", { method: "POST" });
   equal("retry requires a live WhatsApp connection", res.status, 409);
 
+  section("a scheduled message can carry one file");
+
+  const recipients = await (await http.call("/dashboard/api/recipients")).json();
+  const mona = recipients.recipients.find((r) => r.phone === "+201555555555");
+  equal(
+    "a contact is offered by its phone JID, digits only",
+    mona?.id,
+    "201555555555@s.whatsapp.net",
+  );
+  ok(
+    "no recipient id carries the '+' of the phone label",
+    recipients.recipients.every((r) => !String(r.id).startsWith("+")),
+  );
+
+  // The three-job cap is full; make room.
+  res = await http.call(`/dashboard/api/schedules/${compat.schedule.id}`, { method: "DELETE" });
+  equal("a schedule is deleted to make room", res.status, 200);
+
+  const { existsSync, readdirSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const scheduleMediaDir = join(dataDir, "media", "schedules");
+  const mediaFiles = () => (existsSync(scheduleMediaDir) ? readdirSync(scheduleMediaDir) : []);
+  const voiceForm = (fields) => {
+    const form = new FormData();
+    for (const [key, value] of Object.entries(fields)) form.set(key, value);
+    form.set("file", new Blob([Buffer.from("ID3 fake mp3")], { type: "audio/mpeg" }), "note.mp3");
+    return form;
+  };
+
+  res = await http.call("/dashboard/api/schedules", {
+    method: "POST",
+    body: voiceForm({
+      targetJid: "201777777777@s.whatsapp.net",
+      type: "recurring",
+      recurrence: JSON.stringify({ kind: "weekly", time: "09:00", weekdays: [] }),
+    }),
+  });
+  equal("an invalid job with a file is refused", res.status, 400);
+  equal("and leaves no orphaned file behind", mediaFiles().length, 0);
+
+  res = await http.call("/dashboard/api/schedules", {
+    method: "POST",
+    body: voiceForm({
+      targetJid: "+201777777777@s.whatsapp.net",
+      message: "listen to this",
+      type: "recurring",
+      recurrence: JSON.stringify({ kind: "daily", time: "10:00" }),
+    }),
+  });
+  equal("a job with a file is accepted as multipart", res.status, 200);
+  const withMedia = (await res.json()).schedule;
+  equal("the '+' never reaches the stored JID", withMedia.targetJid, "201777777777@s.whatsapp.net");
+  equal("an mp3 is delivered as audio", withMedia.media?.kind, "audio");
+  equal("the file name is kept", withMedia.media?.fileName, "note.mp3");
+  ok("the bytes are stored under the job id", mediaFiles().includes(withMedia.id));
+
+  res = await http.call(`/dashboard/api/schedules/${withMedia.id}`, { method: "DELETE" });
+  equal("the job with a file is deleted", res.status, 200);
+  ok("its file goes with it", !mediaFiles().includes(withMedia.id));
+
   section("changing the panel password");
 
   res = await http.json("/dashboard/api/security/password", {

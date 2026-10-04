@@ -10,6 +10,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.ContactsContract
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.ValueCallback
@@ -21,6 +24,9 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.ProgressBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
@@ -103,6 +109,41 @@ class PanelActivity : AppCompatActivity() {
         }
         setContentView(container)
 
+        // The WebView shows nothing until the panel socket answers, which can
+        // take a while when the host is still booting. A small loading screen
+        // covers that window so the deep-link never opens on an empty page.
+        val loadingScreen = FrameLayout(this).apply {
+            setBackgroundColor(Color.parseColor("#07101f"))
+            isClickable = true
+        }
+        val loadingBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+        }
+        loadingBox.addView(ProgressBar(this))
+        loadingBox.addView(TextView(this).apply {
+            text = getString(R.string.panel_starting)
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#A4B5CF"))
+            textSize = 14f
+            setPadding(0, dp(14), 0, 0)
+        })
+        loadingScreen.addView(
+            loadingBox,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER,
+            ),
+        )
+        container.addView(
+            loadingScreen,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT,
+            ),
+        )
+
         // An edge-to-edge window is no longer resized for the keyboard, so the
         // IME inset joins the padding or a focused field in the panel ends up
         // underneath it. Consumed here: the WebView sits inside that padding
@@ -147,13 +188,18 @@ class PanelActivity : AppCompatActivity() {
                 web.evaluateJavascript(
                     "window.__levixHostDone(${JSONObject.quote(id)}, ${result})", null)
             } },
-            { id -> runOnUiThread {
+            { id, anyFile -> runOnUiThread {
                 stickerPickerIds.addLast(id)
                 try {
+                    // Sticker Studio only shows images and videos; the
+                    // feedback and scheduled-message forms take any file and
+                    // the backend validates what it receives.
                     pickSticker.launch(Intent(Intent.ACTION_GET_CONTENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
                         type = "*/*"
-                        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
+                        if (!anyFile) {
+                            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
+                        }
                     })
                 } catch (error: Exception) {
                     HostLog.event("sticker picker ${error.message}")
@@ -240,6 +286,10 @@ class PanelActivity : AppCompatActivity() {
                 }
             }
 
+            override fun onPageFinished(view: WebView?, url: String?) {
+                loadingScreen.visibility = View.GONE
+            }
+
             override fun onReceivedError(
                 view: WebView,
                 request: WebResourceRequest,
@@ -272,18 +322,14 @@ class PanelActivity : AppCompatActivity() {
     }
 
     /**
-     * Openable files, with JSON highlighted. The page validates the content
-     * itself, so the picker only needs to not hide what the file managers
-     * actually label a .json file (application/json, plain text, or a generic
-     * octet-stream).
+     * Any openable file. The panel decides what a given input accepts — the
+     * settings import wants JSON, scheduled messages and feedback want media,
+     * documents and anything else — so the picker must not pre-filter and
+     * silently hide files the page is asking for.
      */
     private fun fileChoiceIntent(): Intent = Intent(Intent.ACTION_GET_CONTENT).apply {
         addCategory(Intent.CATEGORY_OPENABLE)
         type = "*/*"
-        putExtra(
-            Intent.EXTRA_MIME_TYPES,
-            arrayOf("application/json", "text/plain", "application/octet-stream"),
-        )
     }
 
     /**
@@ -359,6 +405,8 @@ class PanelActivity : AppCompatActivity() {
             null,
         )
     }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onDestroy() {
         stickerHost.destroy()

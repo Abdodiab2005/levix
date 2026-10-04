@@ -275,8 +275,9 @@ automatically. When something is wrong — or right — the panel is where you s
    the message, and press **Send**.
 
 The message goes to the developer directly. What travels with it: your text, the
-topic, an optional 1–5 rating, an optional way to reach you, and the Levix
-version and platform so a bug report says which build it came from. Nothing from
+topic, an optional 1–5 rating, an optional way to reach you, one optional file
+you attach yourself (a screenshot or a log, up to 20 MB), and the Levix version
+and platform so a bug report says which build it came from. Nothing from
 WhatsApp is attached — no message, chat, contact, credential or key — and nothing
 is sent until you press Send. The same form is on the web at
 [levix.leviro.net/feedback](https://levix.leviro.net/feedback) if the host will

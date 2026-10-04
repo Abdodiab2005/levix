@@ -188,20 +188,37 @@ class MediaHubActivity : AppCompatActivity() {
                 render()
             }
         }
-        findViewById<View>(R.id.mediaSelectAll).setOnClickListener {
-            model.selection.selectAll(shown)
-            renderSelectionBar()
-            adapter.notifyAllSelectionChanged()
-        }
-        findViewById<View>(R.id.mediaClear).setOnClickListener {
-            model.selection.clear()
-            renderSelectionBar()
-            adapter.notifyAllSelectionChanged()
+        // Selection bar: only Save / Share / Delete stay inline; the rest of
+        // the multi-select actions collapse into the overflow menu.
+        findViewById<View>(R.id.mediaMore).setOnClickListener { anchor ->
+            val menu = PopupMenu(this, anchor)
+            menu.menu.add(0, MENU_SELECT_ALL, 0, R.string.media_select_all)
+            menu.menu.add(0, MENU_FAVORITE, 1, R.string.media_favorite)
+            stickerTarget(selected())?.let {
+                menu.menu.add(0, MENU_STICKER, 2, stickerLabel(it))
+            }
+            menu.menu.add(0, MENU_CLEAR, 3, R.string.media_clear)
+            menu.setOnMenuItemClickListener { choice ->
+                when (choice.itemId) {
+                    MENU_SELECT_ALL -> {
+                        model.selection.selectAll(shown)
+                        renderSelectionBar()
+                        adapter.notifyAllSelectionChanged()
+                    }
+                    MENU_FAVORITE -> favoriteItems(selected())
+                    MENU_STICKER -> stickerItems(selected())
+                    MENU_CLEAR -> {
+                        model.selection.clear()
+                        renderSelectionBar()
+                        adapter.notifyAllSelectionChanged()
+                    }
+                }
+                true
+            }
+            menu.show()
         }
         findViewById<View>(R.id.mediaSave).setOnClickListener { saveItems(selected()) }
         findViewById<View>(R.id.mediaShare).setOnClickListener { shareItems(selected()) }
-        findViewById<View>(R.id.mediaSticker).setOnClickListener { stickerItems(selected()) }
-        findViewById<View>(R.id.mediaFavorite).setOnClickListener { favoriteItems(selected()) }
         findViewById<View>(R.id.mediaDelete).setOnClickListener { confirmDelete(selected()) }
 
         var touchY = 0f
@@ -407,13 +424,6 @@ class MediaHubActivity : AppCompatActivity() {
         findViewById<View>(R.id.mediaSelection).visibility = if (count > 0) View.VISIBLE else View.GONE
         findViewById<TextView>(R.id.mediaSelectionCount).text =
             resources.getQuantityString(R.plurals.media_selected_count, count, count)
-        // Sticker Studio takes one file at a time, so the action is only there
-        // when a single stickerable file is picked. The label follows whether
-        // that file is already a sticker.
-        val target = stickerTarget(selected())
-        val sticker = findViewById<Button>(R.id.mediaSticker)
-        sticker.visibility = if (target == null) View.GONE else View.VISIBLE
-        sticker.setText(stickerLabel(target))
     }
 
     private fun showBanner(all: List<MediaItem>) {
@@ -801,6 +811,13 @@ class MediaHubActivity : AppCompatActivity() {
     })
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private companion object {
+        const val MENU_SELECT_ALL = 1
+        const val MENU_FAVORITE = 2
+        const val MENU_STICKER = 3
+        const val MENU_CLEAR = 4
+    }
 
     private fun toast(id: Int) {
         toast(getString(id))

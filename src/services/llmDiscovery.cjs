@@ -49,11 +49,15 @@ async function requestJson(url, { headers, timeoutMs = REQUEST_TIMEOUT_MS } = {}
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const resp = await safeProviderFetch(url, {
-      method: "GET",
-      headers: { Accept: "application/json", ...headers },
-      signal: controller.signal,
-    }, { allowLoopback: true });
+    const resp = await safeProviderFetch(
+      url,
+      {
+        method: "GET",
+        headers: { Accept: "application/json", ...headers },
+        signal: controller.signal,
+      },
+      { allowLoopback: true },
+    );
     return resp;
   } catch (err) {
     if (err && err.name === "AbortError") {
@@ -306,10 +310,9 @@ class GeminiDiscoveryAdapter extends BaseDiscoveryAdapter {
 
   async discover({ apiKey, baseUrl = "https://generativelanguage.googleapis.com" }) {
     const key = this.validateCredentials(apiKey);
-    const rootUrl = assertProviderBaseUrl(
-      baseUrl || "https://generativelanguage.googleapis.com",
-      { allowLoopback: true },
-    );
+    const rootUrl = assertProviderBaseUrl(baseUrl || "https://generativelanguage.googleapis.com", {
+      allowLoopback: true,
+    });
 
     const rawList = [];
     let pageToken = "";
@@ -386,7 +389,13 @@ async function discoverProviderModels(optionsOrProvider = "gemini", maybeOptions
     options = optionsOrProvider;
   }
 
-  const { provider = "gemini", apiKey = "", baseUrl = "", refresh = false } = options;
+  const {
+    provider = "gemini",
+    apiKey = "",
+    baseUrl = "",
+    refresh = false,
+    cacheOnly = false,
+  } = options;
   const provKey = String(provider || "gemini").toLowerCase();
   const adapter = ADAPTERS[provKey];
 
@@ -428,6 +437,19 @@ async function discoverProviderModels(optionsOrProvider = "gemini", maybeOptions
         cached: true,
       };
     }
+  }
+
+  // Opening the panel must not spend a request on the operator's key: with
+  // nothing cached it gets the recommended list, and Refresh goes live.
+  if (cacheOnly && !refresh) {
+    return {
+      success: true,
+      live: false,
+      requiresApiKey: false,
+      fallback: true,
+      provider: provKey,
+      models: getSeedModels(provKey),
+    };
   }
 
   try {
