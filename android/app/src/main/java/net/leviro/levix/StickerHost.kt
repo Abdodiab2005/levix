@@ -25,7 +25,7 @@ class StickerHost(
     private val sock: File,
     val sources: StickerSources,
     private val deliver: (String, JSONObject) -> Unit,
-    private val launchPicker: (String) -> Unit,
+    private val launchPicker: (String, Boolean) -> Unit,
     private val share: (File, String) -> Unit,
 ) {
     private class Transfer {
@@ -76,12 +76,17 @@ class StickerHost(
         return accepted()
     }
 
-    fun pick(id: String): String {
+    /**
+     * Sticker Studio asks for images and videos only; the panel's file forms
+     * (feedback attachment, scheduled-message media) pass [anyFile] and take
+     * whatever the operator picks.
+     */
+    fun pick(id: String, anyFile: Boolean = false): String {
         if (!valid(id)) return bad("invalid call id")
         val previous = picker
         if (previous != null) answer(previous, cancelled())
         picker = id
-        launchPicker(id)
+        launchPicker(id, anyFile)
         return accepted()
     }
 
@@ -200,6 +205,10 @@ class StickerHost(
                 val response = PanelHttp.stream(sock, "POST", path,
                     mapOf("Content-Type" to "multipart/form-data; boundary=$boundary"),
                     null, combined, maxBytes, {
+                        // The feedback route forwards the file upstream and
+                        // may wait up to 120 s for the answer; the default 60 s
+                        // read timeout would report a delivered send as failed.
+                        it.soTimeout = FORM_RESPONSE_TIMEOUT_MS
                         if (transfer.cancelled) it.close() else transfer.socket = it
                     }, { 64 * 1024L }, { body })
                 JSONObject().put("ok", true).put("status", response.status)
@@ -323,5 +332,10 @@ class StickerHost(
     private fun sweep(folder: File) {
         val cutoff = System.currentTimeMillis() - PanelFiles.SHARED_MAX_AGE_MS
         folder.listFiles()?.forEach { if (it.isFile && it.lastModified() < cutoff) it.delete() }
+    }
+
+    private companion object {
+        /** Above the 120 s upstream timeout in src/panel/feedback.cjs. */
+        const val FORM_RESPONSE_TIMEOUT_MS = 150_000
     }
 }

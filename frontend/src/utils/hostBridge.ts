@@ -5,6 +5,7 @@ import type { StickerUpload } from "../types";
 interface LevixHost {
   takePendingSticker?(): string;
   pickStickerSource?(id: string): string;
+  pickFile?(id: string): string;
   uploadSource?(id: string, token: string, name: string, maxBytes: number): string;
   uploadForm?(
     id: string,
@@ -56,7 +57,7 @@ function installDone() {
 }
 
 function call(
-  method: "pickStickerSource" | "uploadSource" | "uploadForm" | "exportFile",
+  method: "pickStickerSource" | "pickFile" | "uploadSource" | "uploadForm" | "exportFile",
   args: (string | number)[],
   signal?: AbortSignal,
 ): Promise<HostResult> {
@@ -78,25 +79,27 @@ function call(
       const raw =
         method === "pickStickerSource"
           ? h.pickStickerSource?.(id)
-          : method === "uploadSource"
-            ? h.uploadSource?.(id, args[0] as string, args[1] as string, args[2] as number)
-            : method === "uploadForm"
-              ? h.uploadForm?.(
-                  id,
-                  args[0] as string,
-                  args[1] as string,
-                  args[2] as string,
-                  args[3] as number,
-                )
-              : h.exportFile?.(
-                  id,
-                  args[0] as string,
-                  args[1] as string,
-                  args[2] as string,
-                  args[3] as string,
-                  args[4] as string,
-                  args[5] as string,
-                );
+          : method === "pickFile"
+            ? h.pickFile?.(id)
+            : method === "uploadSource"
+              ? h.uploadSource?.(id, args[0] as string, args[1] as string, args[2] as number)
+              : method === "uploadForm"
+                ? h.uploadForm?.(
+                    id,
+                    args[0] as string,
+                    args[1] as string,
+                    args[2] as string,
+                    args[3] as number,
+                  )
+                : h.exportFile?.(
+                    id,
+                    args[0] as string,
+                    args[1] as string,
+                    args[2] as string,
+                    args[3] as string,
+                    args[4] as string,
+                    args[5] as string,
+                  );
       const reply = JSON.parse(raw || "") as HostResult;
       if (!reply.ok) {
         waiting.delete(id);
@@ -182,11 +185,16 @@ export async function uploadHostSource(
   }
 }
 
-/** The native multipart upload exists only next to the native picker. */
+/** The native multipart upload exists only next to the native any-file picker. */
 export function canHostUploadForm(): boolean {
-  return (
-    typeof host()?.uploadForm === "function" && typeof host()?.pickStickerSource === "function"
-  );
+  return typeof host()?.uploadForm === "function" && typeof host()?.pickFile === "function";
+}
+
+/** Any openable file through the native picker (feedback, scheduled media). */
+export async function pickHostFile(): Promise<HostSource | null> {
+  const result = await call("pickFile", []);
+  if (!result.ok && !result.cancelled) throw apiError(result);
+  return result.ok && result.token && result.url ? (result as HostSource) : null;
 }
 
 /**

@@ -295,6 +295,7 @@ export const api = {
     apiKey?: string;
     baseUrl?: string;
     refresh?: boolean;
+    cacheOnly?: boolean;
   }) => api.post<FetchAiModelsResponse>("/ai/models", payload || {}),
   changePassword: (current: string, next: string) =>
     api.post("/security/password", { current, next }),

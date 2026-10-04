@@ -170,40 +170,38 @@ function recordDelivery(jobId, status, runAt, error = null) {
 }
 
 /**
- * What sendMessage receives for one job: text, or the stored media with the
- * text as its caption. Runs inside withLang() so tr() picks the right header.
+ * What sendMessage receives for one job, in order: the text, or the stored
+ * media with the text as its caption. Audio and stickers take no caption, so
+ * their text follows as a message of its own instead of being dropped. Runs
+ * inside withLang() so tr() picks the right header.
  */
-function buildScheduledPayload(job) {
+function buildScheduledPayloads(job) {
   const header = tr("*Scheduled message 🗓️*", "*رسالة مجدولة 🗓️*");
   const text = job.message ? `${header}\n\n${job.message}` : header;
-  if (!job.media) return { text };
+  if (!job.media) return [{ text }];
 
   const buffer = fs.readFileSync(scheduleMediaPath(job.id));
   const mimetype = job.media.mimeType || "application/octet-stream";
+  const caption = job.message ? text : undefined;
+  const followUp = job.message ? [{ text }] : [];
   switch (job.media.kind) {
     case "image":
-      return {
-        image: buffer,
-        mimetype,
-        caption: job.message ? text : undefined,
-      };
+      return [{ image: buffer, mimetype, caption }];
     case "video":
-      return {
-        video: buffer,
-        mimetype,
-        caption: job.message ? text : undefined,
-      };
+      return [{ video: buffer, mimetype, caption }];
     case "audio":
-      return { audio: buffer, mimetype, ptt: false };
+      return [{ audio: buffer, mimetype, ptt: false }, ...followUp];
     case "sticker":
-      return { sticker: buffer };
+      return [{ sticker: buffer }, ...followUp];
     default:
-      return {
-        document: buffer,
-        mimetype,
-        fileName: job.media.fileName || undefined,
-        caption: job.message ? text : undefined,
-      };
+      return [
+        {
+          document: buffer,
+          mimetype,
+          fileName: job.media.fileName || undefined,
+          caption,
+        },
+      ];
   }
 }
 
@@ -217,12 +215,12 @@ async function deliverScheduledJob(sock, job) {
   const runAt = Date.now();
 
   try {
-    await sock.sendMessage(
-      job.targetJid,
-      // No message is being answered here, so the header follows the scheduled
-      // text itself (in "auto"), or the bot's language.
-      withLang(detectLang(job.message || " "), () => buildScheduledPayload(job)),
-    );
+    // No message is being answered here, so the header follows the scheduled
+    // text itself (in "auto"), or the bot's language.
+    const payloads = withLang(detectLang(job.message || " "), () => buildScheduledPayloads(job));
+    for (const payload of payloads) {
+      await sock.sendMessage(job.targetJid, payload);
+    }
     recordDelivery(job.id, "sent", runAt);
     logger.info(`[Scheduler] Executed job ${job.id} -> ${job.targetJid}`);
     return { ok: true, reason: "sent" };

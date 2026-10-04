@@ -194,16 +194,8 @@ section("describeScheduledJob covers every builder shape in both languages");
     "كل شهر في اليوم 15 الساعة 09:00 (Africa/Cairo)",
   );
 
-  equal(
-    "hourly en",
-    describe("15 */3 * * *", "en"),
-    "Every 3 hours at minute 15 (Africa/Cairo)",
-  );
-  equal(
-    "hourly ar",
-    describe("15 */3 * * *", "ar"),
-    "كل 3 ساعات عند الدقيقة 15 (Africa/Cairo)",
-  );
+  equal("hourly en", describe("15 */3 * * *", "en"), "Every 3 hours at minute 15 (Africa/Cairo)");
+  equal("hourly ar", describe("15 */3 * * *", "ar"), "كل 3 ساعات عند الدقيقة 15 (Africa/Cairo)");
   equal("hourly one en", describe("0 */1 * * *", "en"), "Every hour at minute 0 (Africa/Cairo)");
   equal("hourly one ar", describe("0 */1 * * *", "ar"), "كل ساعة عند الدقيقة 0 (Africa/Cairo)");
   equal("hourly two ar", describe("0 */2 * * *", "ar"), "كل ساعتين عند الدقيقة 0 (Africa/Cairo)");
@@ -276,10 +268,7 @@ section("the autoschedule command persists a real weekly job");
     // command message, no separate "message scheduled" bubble.
     const confirmation = replies.at(-1).content;
     ok("the confirmation is a reaction, not a message", !confirmation.text);
-    ok(
-      "the confirmation reacts ✅ on the command message",
-      confirmation.react?.text === "✅",
-    );
+    ok("the confirmation reacts ✅ on the command message", confirmation.react?.text === "✅");
 
     await autoschedule.execute(sock, msg, ["weekly", "not-a-day", "18:30", "x"]);
     equal("an invalid day saves nothing", scheduler.getScheduledJobs().length, 1);
@@ -342,6 +331,45 @@ section("a failed one-off is never reported as sent");
   equal("a successful retry marks it sent", stored.status, "sent");
   equal("the last delivery is sent", stored.lastDeliveryStatus, "sent");
   equal("success clears the old error", stored.lastError, null);
+}
+
+section("a scheduled file goes out with its text, then is cleaned up");
+
+{
+  const { existsSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { dirname } = await import("node:path");
+  const job = {
+    id: "one-off-voice",
+    type: "once",
+    targetJid: "201000000000@s.whatsapp.net",
+    creatorJid: "dashboard@levix",
+    message: "listen to this",
+    date: new Date(Date.now() + 60_000).toISOString(),
+    status: "failed",
+    media: { kind: "audio", mimeType: "audio/mpeg", fileName: "note.mp3" },
+  };
+  const mediaPath = scheduler.scheduleMediaPath(job.id);
+  mkdirSync(dirname(mediaPath), { recursive: true });
+  writeFileSync(mediaPath, Buffer.from("ID3 fake mp3"));
+  scheduler.saveScheduledJob(job);
+  equal("the media metadata round-trips", storage.getSchedule(job.id).media?.kind, "audio");
+
+  const sentPayloads = [];
+  const result = await scheduler.retryScheduledJob(
+    {
+      async sendMessage(_jid, content) {
+        sentPayloads.push(content);
+      },
+    },
+    job.id,
+  );
+  ok("the voice job is delivered", result.ok);
+  ok("the audio goes first", Buffer.isBuffer(sentPayloads[0]?.audio));
+  ok(
+    "audio takes no caption, so the text follows as its own message",
+    sentPayloads.length === 2 && String(sentPayloads[1]?.text).includes(job.message),
+  );
+  ok("a sent one-off drops its file", !existsSync(mediaPath));
 }
 
 section("recurring failures stay active and retries cannot overlap");

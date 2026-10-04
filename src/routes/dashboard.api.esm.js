@@ -418,6 +418,7 @@ router.post(
       apiKey,
       baseUrl,
       refresh = false,
+      cacheOnly = false,
     } = req.body || {};
 
     const provKey = String(provider || "gemini").toLowerCase();
@@ -444,6 +445,7 @@ router.post(
         apiKey: effectiveKey,
         baseUrl: effectiveBaseUrl,
         refresh: Boolean(refresh),
+        cacheOnly: Boolean(cacheOnly),
       });
 
       return res.json(result);
@@ -1021,7 +1023,9 @@ router.get("/recipients", (req, res) => {
       // The phone-number JID wins when one is known: it is the stable
       // identity to schedule against, and it keeps an @lid row from ever
       // reaching the picker as a raw id.
-      const id = peer.phone ? `${peer.phone}@s.whatsapp.net` : u.jid;
+      // peer.phone is the "+<digits>" display label; a JID wants the digits.
+      const digits = peer.phone ? peer.phone.replace(/\D/g, "") : "";
+      const id = digits ? `${digits}@s.whatsapp.net` : u.jid;
       seen.add(u.jid);
       seen.add(id);
       seen.add(personKey);
@@ -1042,12 +1046,29 @@ router.get("/recipients", (req, res) => {
   }
 });
 
+// The formats WhatsApp renders inline. Anything else (SVG, HEIC, MKV, WAV…)
+// would arrive as a broken image/video/voice bubble, so it goes as a document.
+const INLINE_IMAGE = new Set(["image/jpeg", "image/png", "image/webp"]);
+const INLINE_VIDEO = new Set(["video/mp4", "video/3gpp"]);
+const INLINE_AUDIO = new Set([
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/aac",
+  "audio/ogg",
+  "audio/opus",
+  "audio/amr",
+]);
+
 /** Which WhatsApp shape an uploaded file is delivered as. */
 function scheduleMediaKind(mime) {
-  const base = String(mime || "").split(";")[0].trim().toLowerCase();
-  if (base.startsWith("image/")) return "image";
-  if (base.startsWith("video/")) return "video";
-  if (base.startsWith("audio/")) return "audio";
+  const base = String(mime || "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+  if (INLINE_IMAGE.has(base)) return "image";
+  if (INLINE_VIDEO.has(base)) return "video";
+  if (INLINE_AUDIO.has(base)) return "audio";
   return "document";
 }
 
@@ -1064,7 +1085,11 @@ router.post(
     // the same fields as text parts plus one file part.
     let body = req.body || {};
     let file = null;
-    if (String(req.headers["content-type"] || "").toLowerCase().startsWith("multipart/form-data")) {
+    if (
+      String(req.headers["content-type"] || "")
+        .toLowerCase()
+        .startsWith("multipart/form-data")
+    ) {
       try {
         const parsed = await readMultipartForm(req, { maxFileSize: SCHEDULE_MEDIA_MAX_BYTES });
         body = parsed.fields;
@@ -1094,7 +1119,8 @@ router.post(
     // An @lid target is resolved to its phone-number JID while the mapping is
     // fresh, so delivery and the label never depend on the LID still being
     // mapped months later. Unresolvable LIDs are kept as they are.
-    let target = normalizeJid(String(targetJid).trim());
+    // A phone JID never carries the "+" of the display label.
+    let target = normalizeJid(String(targetJid).trim().replace(/^\+/, ""));
     if (isLidJid(target)) {
       const phone = resolveUserPhone(target);
       if (phone) target = `${phone}@s.whatsapp.net`;
@@ -1108,17 +1134,6 @@ router.post(
       creatorJid: "dashboard@levix",
       status: "active",
     };
-
-    if (file) {
-      const mediaPath = scheduleMediaPath(id);
-      fs.mkdirSync(path.dirname(mediaPath), { recursive: true });
-      fs.writeFileSync(mediaPath, await fileToBuffer(file));
-      job.media = {
-        kind: scheduleMediaKind(file.type),
-        mimeType: file.type || "application/octet-stream",
-        fileName: file.name || null,
-      };
-    }
 
     if (job.type === "recurring") {
       if (recurrence && typeof recurrence === "object") {
@@ -1141,6 +1156,19 @@ router.post(
         return badRequest(res, "Scheduled time must be in the future");
       }
       job.date = new Date(timeMs).toISOString();
+    }
+
+    // Written only once the job is known to be valid, so a refused request
+    // never leaves a file behind with no row to delete it.
+    if (file) {
+      const mediaPath = scheduleMediaPath(id);
+      fs.mkdirSync(path.dirname(mediaPath), { recursive: true });
+      fs.writeFileSync(mediaPath, await fileToBuffer(file));
+      job.media = {
+        kind: scheduleMediaKind(file.type),
+        mimeType: file.type || "application/octet-stream",
+        fileName: file.name || null,
+      };
     }
 
     if (targetName && !job.targetJid.endsWith("@g.us")) {
@@ -1289,7 +1317,11 @@ router.post(
   asyncRoute(async (req, res) => {
     let body = req.body || {};
     let attachment = null;
-    if (String(req.headers["content-type"] || "").toLowerCase().startsWith("multipart/form-data")) {
+    if (
+      String(req.headers["content-type"] || "")
+        .toLowerCase()
+        .startsWith("multipart/form-data")
+    ) {
       try {
         const parsed = await readMultipartForm(req, { maxFileSize: FEEDBACK_ATTACHMENT_MAX });
         body = parsed.fields;

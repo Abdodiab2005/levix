@@ -188,15 +188,18 @@ class PanelActivity : AppCompatActivity() {
                 web.evaluateJavascript(
                     "window.__levixHostDone(${JSONObject.quote(id)}, ${result})", null)
             } },
-            { id -> runOnUiThread {
+            { id, anyFile -> runOnUiThread {
                 stickerPickerIds.addLast(id)
                 try {
-                    // Any openable file: the picker serves the sticker studio
-                    // as well as scheduled-message media, and each page
-                    // validates what it receives.
+                    // Sticker Studio only shows images and videos; the
+                    // feedback and scheduled-message forms take any file and
+                    // the backend validates what it receives.
                     pickSticker.launch(Intent(Intent.ACTION_GET_CONTENT).apply {
                         addCategory(Intent.CATEGORY_OPENABLE)
                         type = "*/*"
+                        if (!anyFile) {
+                            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*"))
+                        }
                     })
                 } catch (error: Exception) {
                     HostLog.event("sticker picker ${error.message}")
@@ -373,7 +376,8 @@ class PanelActivity : AppCompatActivity() {
     }
 
     private fun deliverPickedContact(uri: Uri?) {
-        if (!::web.isInitialized) return        val payload = JSONObject()
+        if (!::web.isInitialized) return
+        val payload = JSONObject()
         if (uri != null) {
             try {
                 contentResolver.query(

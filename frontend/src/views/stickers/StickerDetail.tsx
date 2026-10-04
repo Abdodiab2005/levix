@@ -1,4 +1,4 @@
-import { Download, MoreVertical, Send, Share2, Star, Trash2 } from "lucide-react";
+import { Download, MoreVertical, Send, Share2, Star } from "lucide-react";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { Modal } from "../../components/Modal";

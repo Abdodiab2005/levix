@@ -2,10 +2,10 @@
 // file (the feedback attachment, scheduled-message media).
 //
 // Node ships undici's Request/FormData/File, so there is no parser dependency
-// to install. The request body is handed to Request as a stream
-// (duplex: "half"), which is why the declared Content-Length is checked
-// first: undici buffers file parts in memory, and the cap has to bite before
-// that buffering starts.
+// to install. undici buffers file parts in memory, so the cap has to bite
+// before that buffering finishes: a declared Content-Length is refused up
+// front, and a chunked body (the Android bridge streams one, with no length)
+// is counted as it arrives and cut off at the same cap.
 
 const MAX_TOTAL_BYTES = 26 * 1024 * 1024; // a 20 MB file + fields + MIME overhead
 
@@ -28,16 +28,30 @@ export async function readMultipartForm(req, options = {}) {
     throw new MultipartError("Attachment is too large");
   }
 
+  let tooLarge = false;
+  async function* capped() {
+    let received = 0;
+    for await (const chunk of req) {
+      received += chunk.length;
+      if (received > MAX_TOTAL_BYTES) {
+        tooLarge = true;
+        throw new MultipartError("Attachment is too large");
+      }
+      yield chunk;
+    }
+  }
+
   const request = new Request("http://localhost/", {
     method: "POST",
     headers: { "content-type": contentType },
-    body: req,
+    body: capped(),
     duplex: "half",
   });
   let form;
   try {
     form = await request.formData();
   } catch {
+    if (tooLarge) throw new MultipartError("Attachment is too large");
     // A body that is not really multipart (the browser builds these, so this
     // is a broken client, not an operator error) is refused, not crashed on.
     throw new MultipartError("Could not read the upload");

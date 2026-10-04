@@ -19,7 +19,7 @@ import { api, type FeedbackMeta, type FeedbackTopic } from "../api/client";
 import { useI18n } from "../context/I18nContext";
 import { cn } from "../utils/cn";
 import type { HostSource } from "../utils/hostBridge";
-import { canPickHostSource, pickHostSource, uploadHostForm } from "../utils/hostBridge";
+import { canHostUploadForm, pickHostFile, uploadHostForm } from "../utils/hostBridge";
 import { useToast } from "./Toasts";
 
 /**
@@ -101,7 +101,7 @@ export const FeedbackForm: React.FC = () => {
 
   const pickHostAttachment = async () => {
     try {
-      const picked = await pickHostSource();
+      const picked = await pickHostFile();
       if (!picked) return;
       if (picked.size > attachmentMax) {
         tooLargeToast();
@@ -278,7 +278,7 @@ export const FeedbackForm: React.FC = () => {
               <button
                 type="button"
                 onClick={() =>
-                  canPickHostSource() ? void pickHostAttachment() : fileInputRef.current?.click()
+                  canHostUploadForm() ? void pickHostAttachment() : fileInputRef.current?.click()
                 }
                 className="inline-flex items-center gap-2 px-3 h-10 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm font-bold hover:bg-panel-hover transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50"
               >
@@ -290,7 +290,7 @@ export const FeedbackForm: React.FC = () => {
               {t("feedbackAttachmentHint").replace("{max}", String(attachmentMaxMb))}
             </span>
           </div>
-          {!canPickHostSource() && (
+          {!canHostUploadForm() && (
             <input
               ref={fileInputRef}
               type="file"

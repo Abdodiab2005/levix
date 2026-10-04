@@ -23,9 +23,9 @@ import { useToast } from "../components/Toasts";
 import { useI18n } from "../context/I18nContext";
 import type { ScheduleItem } from "../types";
 import {
-  canPickHostSource,
+  canHostUploadForm,
   type HostSource,
-  pickHostSource,
+  pickHostFile,
   uploadHostForm,
 } from "../utils/hostBridge";
 
@@ -391,7 +391,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   const pickHostMedia = async () => {
     try {
-      const picked = await pickHostSource();
+      const picked = await pickHostFile();
       if (!picked) return;
       if (picked.size > MEDIA_MAX_BYTES) {
         toast(t("feedbackFileTooLarge").replace("{max}", String(MEDIA_MAX_MB)), "error");
@@ -763,16 +763,23 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                       {s.lastDeliveryStatus === "failed" && (
                         <button
                           type="button"
-                          onClick={() => handleRetry(s.id)}
+                          onClick={(event) => {
+                            // the row itself opens the details modal
+                            event.stopPropagation();
+                            void handleRetry(s.id);
+                          }}
                           className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-line bg-panel-raised hover:bg-panel-hover text-brand-cyan transition-colors"
-                          title="Retry delivery"
+                          title={t("retryDelivery")}
                         >
                           <RefreshCw size={14} />
                         </button>
                       )}
                       <button
                         type="button"
-                        onClick={() => handleDelete(s.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleDelete(s.id);
+                        }}
                         className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-danger/25 bg-danger/10 hover:bg-danger/20 text-danger transition-colors"
                         title={t("delete")}
                       >
@@ -1107,7 +1114,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 <button
                   type="button"
                   onClick={() =>
-                    canPickHostSource() ? void pickHostMedia() : mediaInputRef.current?.click()
+                    canHostUploadForm() ? void pickHostMedia() : mediaInputRef.current?.click()
                   }
                   className="inline-flex items-center gap-2 px-3 h-10 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm font-bold hover:bg-panel-hover transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50"
                 >
@@ -1119,7 +1126,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 {t("scheduleMediaHint").replace("{max}", String(MEDIA_MAX_MB))}
               </span>
             </div>
-            {!canPickHostSource() && (
+            {!canHostUploadForm() && (
               <input
                 ref={mediaInputRef}
                 type="file"

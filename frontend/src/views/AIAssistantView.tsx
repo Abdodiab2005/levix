@@ -252,7 +252,9 @@ export const AIAssistantView: React.FC = () => {
     }
   };
 
-  const handleFetchModels = async (forceRefresh = false) => {
+  // `cacheOnly` is the silent load on open: the cached live list, or the
+  // recommended one, and never a request to the provider.
+  const handleFetchModels = async (forceRefresh = false, cacheOnly = false) => {
     setFetchingModels(true);
     const typedKey = String(settings[selectedPreset.keySetting] || "").trim();
     const hasStoredKey = Boolean(configuredKeys[selectedPreset.keySetting]);
@@ -263,9 +265,11 @@ export const AIAssistantView: React.FC = () => {
         apiKey?: string;
         baseUrl?: string;
         refresh?: boolean;
+        cacheOnly?: boolean;
       } = {
         provider: selectedPreset.provider,
         refresh: forceRefresh,
+        cacheOnly,
       };
       if (typedKey) payload.apiKey = typedKey;
       if (selectedPreset.baseUrlSetting && settings[selectedPreset.baseUrlSetting]) {
@@ -314,15 +318,18 @@ export const AIAssistantView: React.FC = () => {
         toast(res.error.message || "Failed to discover models", "error");
       }
     } catch (err: any) {
-      toast(err.message || "Failed to fetch models", "error");
+      if (!cacheOnly) toast(err.message || "Failed to fetch models", "error");
     } finally {
       setFetchingModels(false);
     }
   };
 
-  // Model fetching is a manual step: the refresh buttons next to the model
-  // list run it. Auto-fetching on every open produced a network request and
-  // a toast nobody asked for.
+  // Live discovery is a manual step (the refresh buttons). Opening the view
+  // only fills the list from the cache or the recommended models, so the
+  // dropdown is never empty and no provider request or toast happens.
+  useEffect(() => {
+    if (!loading) handleFetchModels(false, true);
+  }, [selectedPreset.id, loading]);
 
   const currentModelList: NormalizedModel[] = discoveryState[selectedPreset.id]?.models || [];
   const isLiveVerified = Boolean(discoveryState[selectedPreset.id]?.live);

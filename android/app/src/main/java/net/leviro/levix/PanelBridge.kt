@@ -109,6 +109,11 @@ class PanelBridge(
     fun pickStickerSource(callId: String): String = stickerHost?.pick(callId)
         ?: JSONObject().put("ok", false).put("error", "host unavailable").toString()
 
+    /** Any openable file, for the panel forms that upload through [uploadForm]. */
+    @JavascriptInterface
+    fun pickFile(callId: String): String = stickerHost?.pick(callId, anyFile = true)
+        ?: JSONObject().put("ok", false).put("error", "host unavailable").toString()
+
     @JavascriptInterface
     fun uploadSource(callId: String, token: String, fileName: String, maxBytes: Long): String =
         stickerHost?.upload(callId, token, fileName, maxBytes)

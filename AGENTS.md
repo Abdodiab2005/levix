@@ -731,7 +731,11 @@ Errors still reply as messages.
 
 **Storage**: the `schedules` table (it used to be `config/schedule.json`, which
 the panel couldn't see and a crash mid-write could truncate). Jobs are
-`{ id, type, targetJid, message, cronString?, date?, status, creatorJid }`.
+`{ id, type, targetJid, message, cronString?, date?, status, creatorJid, media? }`.
+A panel-created job may carry one file (≤ 20 MB, sent multipart): its bytes
+live at `<data>/media/schedules/<id>`, `media` holds `{ kind, mimeType,
+fileName }`, and the file is removed when the job is deleted or a one-off is
+sent. Audio and stickers take no caption, so their text follows separately.
 
 **Initialization**: called on every successful connection — `scheduleNewJob()`
 stops the previous timer for the same id first, or a weekly message would be
