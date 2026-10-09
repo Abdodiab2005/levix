@@ -157,6 +157,15 @@ Both take `value`, `onChange`, `options` (`{ value, label, icon? }`), and `aria-
 />
 ```
 
+### UserText
+
+A name or a message the operator typed (a sticker pack, a sticker, a keyword, a chat subject). It sets `dir="auto"` so Arabic, English, and mixed strings each lay out inside both the RTL and the LTR UI, and it wraps with `break-words` instead of cutting words off. Set `lines` (`1`–`3`) for dense cards and chips: the element clamps and, when the child is a string, gets the full text as its `title`. Use it for every user-entered string, or `dir="auto"` when the element already is a primitive (an `<option>`).
+
+```tsx
+<UserText className="font-bold">{pack.name}</UserText>
+<UserText as="p" lines={2}>{sticker.name}</UserText>
+```
+
 ### RelativeTime
 
 A `<time>` whose text comes from `Intl.RelativeTimeFormat` in the active language. `value` is unix milliseconds, an ISO string, or a `Date`. The tooltip is the absolute time. Mounted instances share one 30s ticker.

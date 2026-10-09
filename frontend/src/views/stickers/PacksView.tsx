@@ -15,6 +15,7 @@ import {
   OverflowMenu,
   RadioGroup,
   Select,
+  UserText,
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { Pack, Sticker } from "../../types";
@@ -170,6 +171,7 @@ export const PacksView: React.FC<PacksViewProps> = ({
           }}
           placeholder={t("newPackPlaceholder")}
           aria-label={t("packName")}
+          dir="auto"
           maxLength={PACK_NAME_MAX + 20}
         />
         <Button
@@ -200,7 +202,7 @@ export const PacksView: React.FC<PacksViewProps> = ({
             <Button
               variant="ghost"
               onClick={() => setOpenId(pack.id)}
-              className="h-auto min-h-11 flex-1 justify-start gap-3 px-1"
+              className="h-auto min-h-11 min-w-0 flex-1 justify-start gap-3 px-1"
               aria-label={t("openPack")}
             >
               {pack.coverUrl ? (
@@ -215,8 +217,10 @@ export const PacksView: React.FC<PacksViewProps> = ({
                   <Package size={20} />
                 </span>
               )}
-              <span className="min-w-0">
-                <span className="block font-bold text-text-main truncate">{pack.name}</span>
+              <span className="min-w-0 flex-1">
+                <UserText lines={2} className="font-bold text-text-main text-start">
+                  {pack.name}
+                </UserText>
                 <span className="block text-xs text-muted">
                   {fill(t("stickerCount"), { n: pack.count })}
                 </span>
@@ -274,6 +278,7 @@ export const PacksView: React.FC<PacksViewProps> = ({
           value={renameValue}
           onChange={(event) => setRenameValue(event.target.value)}
           aria-label={t("packName")}
+          dir="auto"
         />
       </Dialog>
 

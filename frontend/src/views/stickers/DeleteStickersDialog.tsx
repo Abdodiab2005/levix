@@ -1,5 +1,6 @@
 import type React from "react";
-import { Button, Dialog } from "../../components/ui";
+import { Fragment } from "react";
+import { Button, Dialog, UserText } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
 import type { NamedPack } from "./useDeleteStickers";
@@ -26,7 +27,6 @@ export const DeleteStickersDialog: React.FC<DeleteStickersDialogProps> = ({
   onConfirmEverywhere,
 }) => {
   const { t } = useI18n();
-  const names = packs.map((pack) => pack.name).join(", ");
 
   return (
     <Dialog
@@ -55,9 +55,15 @@ export const DeleteStickersDialog: React.FC<DeleteStickersDialogProps> = ({
         {inUse ? (
           <>
             <p>{count === 1 ? t("inUseBody") : t("inUseBulkBody")}</p>
-            {names && (
+            {packs.length > 0 && (
               <p>
-                {t("inUsePacksLabel")}: {names}
+                {t("inUsePacksLabel")}:{" "}
+                {packs.map((pack, index) => (
+                  <Fragment key={pack.id}>
+                    {index > 0 && ", "}
+                    <UserText as="bdi">{pack.name}</UserText>
+                  </Fragment>
+                ))}
               </p>
             )}
             <p className="text-xs text-muted">{t("deleteEverywhereHint")}</p>

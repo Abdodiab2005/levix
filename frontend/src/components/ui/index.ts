@@ -50,3 +50,4 @@ export { RelativeTime, type RelativeTimeProps } from "./relative-time";
 export { SortMenu, type SortMenuProps, type SortOption } from "./sort";
 export { SegmentedControl, type TabOption, Tabs } from "./tabs";
 export { Toolbar } from "./toolbar";
+export { UserText, type UserTextProps } from "./user-text";

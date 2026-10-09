@@ -1130,6 +1130,7 @@ The control panel UI is `frontend/src/components/ui/`. Read `frontend/src/compon
 - MUST lay out with logical CSS (`ms-` / `me-` / `ps-` / `pe-` / `start` / `end`) so Arabic RTL works. NEVER `ml-` / `mr-` / `pl-` / `pr-` / `left-` / `right-` for layout.
 - MUST keep touch targets at least 40px. `IconButton` `label` is required. Menus MUST use `role="menu"` / `role="menuitem"`, arrow keys, `aria-haspopup`, and `aria-expanded`. Dialogs MUST trap focus and return it on close.
 - MUST keep light and dark on the existing theme tokens. MUST keep working inside the Android WebView (`PanelActivity`). No CDN and no new npm dependency for UI.
+- MUST render user-entered text (a pack or sticker name, a keyword, a message) through the `UserText` primitive — or with `dir="auto"` where the element cannot take it, such as an `<option>` — never single-line truncated without a `title`. Headings and detail views wrap; dense grid cards and chips may clamp to two lines at most.
 
 ## Configuration
 

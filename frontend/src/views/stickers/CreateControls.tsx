@@ -184,6 +184,7 @@ export const CreateControls: React.FC<CreateControlsProps> = ({
           id="sticker-name"
           value={name}
           maxLength={STICKER_NAME_MAX}
+          dir="auto"
           onChange={(event) => onName(event.target.value)}
           placeholder={t("stickerNamePlaceholder")}
         />

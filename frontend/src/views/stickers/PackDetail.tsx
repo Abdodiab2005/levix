@@ -3,7 +3,7 @@ import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
 import { useToast } from "../../components/Toasts";
-import { Button, EmptyState, IconButton, LoadingState } from "../../components/ui";
+import { Button, EmptyState, IconButton, LoadingState, UserText } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { Pack, Sticker } from "../../types";
 import { fill } from "../../utils/fill";
@@ -132,8 +132,10 @@ export const PackDetail: React.FC<PackDetailProps> = ({
           {t("backToPacks")}
         </Button>
         {pack && (
-          <div className="min-w-0">
-            <h3 className="text-base font-bold text-text-main truncate">{pack.name}</h3>
+          <div className="min-w-0 max-w-full">
+            <h3 className="text-base font-bold text-text-main">
+              <UserText>{pack.name}</UserText>
+            </h3>
             <p className="text-xs text-muted">{fill(t("stickerCount"), { n: pack.count })}</p>
           </div>
         )}
@@ -201,8 +203,8 @@ export const PackDetail: React.FC<PackDetailProps> = ({
                     onFavorite={() => commands.toggleFavorite(item)}
                   />
                 </div>
-                <p className="flex-1 min-w-0 text-sm font-semibold truncate">
-                  {item.name || t("stickerPreview")}
+                <p className="flex-1 min-w-0 text-sm font-semibold">
+                  <UserText>{item.name || t("stickerPreview")}</UserText>
                 </p>
                 <IconButton
                   label={t("reorderUp")}

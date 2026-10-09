@@ -2,7 +2,7 @@ import type React from "react";
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import { useToast } from "../../components/Toasts";
-import { Button, Dialog, FieldLabel, Input } from "../../components/ui";
+import { Button, Dialog, FieldLabel, Input, UserText } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { Pack } from "../../types";
 import { explainError } from "../../utils/stickerErrors";
@@ -75,10 +75,10 @@ export const PackPicker: React.FC<PackPickerProps> = ({
                 key={pack.id}
                 variant="ghost"
                 onClick={() => onPick(pack.id)}
-                className="h-auto w-full justify-start px-3 py-2.5"
+                className="h-auto w-full min-w-0 justify-start px-3 py-2.5"
               >
-                {pack.name}
-                <span className="ms-2 font-medium text-muted">{pack.count}</span>
+                <UserText className="flex-1 text-start">{pack.name}</UserText>
+                <span className="ms-2 shrink-0 font-medium text-muted">{pack.count}</span>
               </Button>
             ))}
           </div>
@@ -96,6 +96,7 @@ export const PackPicker: React.FC<PackPickerProps> = ({
               }}
               placeholder={t("newPackPlaceholder")}
               maxLength={80}
+              dir="auto"
             />
             <Button variant="primary" onClick={create} disabled={busy}>
               {t("createPack")}

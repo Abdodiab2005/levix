@@ -10,6 +10,7 @@ import {
   MenuSeparator,
   OverflowMenu,
   Select,
+  UserText,
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { Pack, Sticker } from "../../types";
@@ -69,7 +70,7 @@ export const StickerDetail: React.FC<StickerDetailProps> = ({
     <Dialog
       isOpen={!!sticker}
       onClose={onClose}
-      title={sticker.name || t("stickerPreview")}
+      title={<UserText>{sticker.name || t("stickerPreview")}</UserText>}
       maxWidth="42.5rem"
       footer={
         <div className="flex w-full justify-end gap-2">
@@ -148,6 +149,7 @@ export const StickerDetail: React.FC<StickerDetailProps> = ({
             value={name}
             onChange={(event) => setName(event.target.value)}
             maxLength={STICKER_NAME_MAX}
+            dir="auto"
             aria-label={t("stickerName")}
             placeholder={t("stickerNamePlaceholder")}
           />
@@ -164,7 +166,7 @@ export const StickerDetail: React.FC<StickerDetailProps> = ({
             <ul className="flex flex-col gap-1.5">
               {member.map((pack) => (
                 <li key={pack.id} className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm">{pack.name}</span>
+                  <UserText className="flex-1 text-sm">{pack.name}</UserText>
                   <IconButton
                     label={t("removeFromPack")}
                     variant="ghost"
