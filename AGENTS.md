@@ -189,7 +189,8 @@ src/
 Outside `src/`:
 
 ```
-frontend/         # React 19 + Vite + TypeScript dashboard SPA (bilingual Arabic RTL / English)
+frontend/         # React 19 + Vite + TypeScript dashboard SPA (bilingual Arabic RTL / English).
+                  # UI primitives live in frontend/src/components/ui/ — see "Design system — STRICT RULES"
 views/            # Gateway pages (login.ejs · setup.ejs · qr.ejs) + fallback dashboard.ejs
 public/           # Static assets (socket.io.min.js, qrcode.min.js) and public/dashboard/ (built SPA)
 public/brand/     # Generated logo and branding files (committed)
@@ -1039,7 +1040,9 @@ one implementation PATCH `/settings` uses, so a hand edit and an import cannot
 drift apart.
 
 The main dashboard is the React 19 + Vite + TypeScript SPA in `frontend/`,
-compiled to `public/dashboard/`. The EJS files in `views/` are the login,
+compiled to `public/dashboard/`. Screens are built only from the design system
+in `frontend/src/components/ui/` (barrel import, catalogue in
+`frontend/src/components/ui/README.md`). The EJS files in `views/` are the login,
 setup, QR and fallback gateway pages. Runtime browser dependencies are served
 locally—there is no CDN dependency.
 
@@ -1069,6 +1072,23 @@ on screen, which is the only real screenshot block available on each platform.
 author (`brand.cjs`), or lower the permission of a command that declares
 `userAdminRequired` — those call WhatsApp admin actions and would refuse the
 caller anyway, so the UI marks them locked instead of lying.
+
+## Design system — STRICT RULES
+
+The control panel UI is `frontend/src/components/ui/`. Read `frontend/src/components/ui/README.md` before adding or changing a screen. Tokens live in `frontend/src/index.css` (`@theme` and `:root` / `[data-theme="light"]`).
+
+- MUST build every button, icon button, card, panel, field, input, textarea, select, toggle, checkbox, radio, dialog, confirm, popover, sheet, menu, overflow menu, filter, sort menu, tabs, segmented control, empty state, spinner, skeleton, badge, and toolbar from `frontend/src/components/ui`. Import them from that barrel.
+- NEVER hand-roll one of those in a view. NEVER paste a long one-off Tailwind string to fake one. A `className` on a primitive may only adjust layout.
+- MUST colour only through the tokens: `bg`, `panel`, `line`, `text-main`, `muted`, `faint`, `brand-*`, `ok`, `warn`, `danger`, `info`. NEVER a raw hex and NEVER a one-off palette (`text-red-400`, `bg-slate-*`, `bg-[#...]`).
+- If a primitive does not exist, MUST add it under `frontend/src/components/ui/` as one base plus a variant map, compose specialised pieces from that base, export it from `index.ts`, document it in the README, then use it. NEVER fork a copy in a view.
+- R1. A simple, self-explanatory action MUST be an `IconButton` (`label` is the tooltip and the accessible name). NEVER a large icon-and-text button for share, download, copy, edit, delete, refresh, close, open-externally, or export. Text, with an optional icon, is only for the screen's primary action and for actions an icon does not explain ("Start session", "Save", "Create pack").
+- R2. MUST put non-essential, secondary, rarely used, and rare destructive actions in `OverflowMenu`. Only essential actions stay on the surface.
+- R3. Filters MUST be one `FilterButton` (popover on desktop, bottom sheet under 640px). NEVER a row of filter chips or selects.
+- R4. Sorting MUST be one `SortMenu`. NEVER a row of sort options or a visible sort `<select>`.
+- MUST put every new visible string, including tooltips and the words Filter, Sort, and More, in `frontend/src/i18n/translations.ts` in both `en` and `ar`.
+- MUST lay out with logical CSS (`ms-` / `me-` / `ps-` / `pe-` / `start` / `end`) so Arabic RTL works. NEVER `ml-` / `mr-` / `pl-` / `pr-` / `left-` / `right-` for layout.
+- MUST keep touch targets at least 40px. `IconButton` `label` is required. Menus MUST use `role="menu"` / `role="menuitem"`, arrow keys, `aria-haspopup`, and `aria-expanded`. Dialogs MUST trap focus and return it on close.
+- MUST keep light and dark on the existing theme tokens. MUST keep working inside the Android WebView (`PanelActivity`). No CDN and no new npm dependency for UI.
 
 ## Configuration
 

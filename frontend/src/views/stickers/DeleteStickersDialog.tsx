@@ -1,9 +1,8 @@
 import type React from "react";
-import { Modal } from "../../components/Modal";
+import { Button, Dialog } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
 import type { NamedPack } from "./useDeleteStickers";
-import { Button } from "./ui";
 
 interface DeleteStickersDialogProps {
   open: boolean;
@@ -30,12 +29,12 @@ export const DeleteStickersDialog: React.FC<DeleteStickersDialogProps> = ({
   const names = packs.map((pack) => pack.name).join(", ");
 
   return (
-    <Modal
+    <Dialog
       isOpen={open}
       onClose={onClose}
       title={t("deleteStickersTitle")}
       footer={
-        <div className="flex flex-wrap justify-end gap-2 w-full">
+        <div className="flex w-full flex-wrap justify-end gap-2">
           <Button onClick={onClose} disabled={busy}>
             {t("cancel")}
           </Button>
@@ -61,12 +60,12 @@ export const DeleteStickersDialog: React.FC<DeleteStickersDialogProps> = ({
                 {t("inUsePacksLabel")}: {names}
               </p>
             )}
-            <p className="text-muted text-xs">{t("deleteEverywhereHint")}</p>
+            <p className="text-xs text-muted">{t("deleteEverywhereHint")}</p>
           </>
         ) : (
           <p>{t("deleteConfirm")}</p>
         )}
       </div>
-    </Modal>
+    </Dialog>
   );
 };

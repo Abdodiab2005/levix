@@ -1,13 +1,13 @@
 import type React from "react";
 import { useEffect, useRef } from "react";
+import { Button, FilterButton, Input, Select, SortMenu, Toolbar } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { Sticker } from "../../types";
 import { BulkBar } from "./BulkBar";
-import { StickerGrid } from "./StickerGrid";
 import { useStickerCommands } from "./StickerCommands";
-import { Button, fieldClass } from "./ui";
+import { StickerGrid } from "./StickerGrid";
 import { useSelection } from "./useSelection";
-import { useStickerList, type StickerFilter, type StickerSort } from "./useStickerList";
+import { type StickerFilter, useStickerList } from "./useStickerList";
 
 interface LibraryViewProps {
   preset: StickerFilter;
@@ -64,61 +64,71 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     (item) => selection.selected.has(item.id) && item.animated,
   );
 
+  const filterCount = (list.lockedFilter || list.filter === "all" ? 0 : 1) + (list.pack ? 1 : 0);
+
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-        <input
+      <Toolbar>
+        <Input
           type="search"
           value={list.q}
           onChange={(event) => list.setQ(event.target.value)}
           placeholder={t("searchStickers")}
           aria-label={t("searchStickers")}
-          className={fieldClass}
+          className="min-w-48 flex-1"
         />
-        <select
-          aria-label={t("sortBy")}
-          value={list.sort}
-          onChange={(event) => list.setSort(event.target.value as StickerSort)}
-          className={fieldClass}
+        <FilterButton
+          label={t("filter")}
+          resetLabel={t("reset")}
+          activeCount={filterCount}
+          onReset={() => {
+            if (!list.lockedFilter) list.setFilter("all");
+            list.setPack("");
+          }}
         >
-          <option value="newest">{t("sortNewest")}</option>
-          <option value="oldest">{t("sortOldest")}</option>
-          <option value="name">{t("sortName")}</option>
-          <option value="recent">{t("sortRecent")}</option>
-        </select>
-        {!list.lockedFilter && (
-          <select
-            aria-label={t("filterBy")}
-            value={list.filter}
-            onChange={(event) => list.setFilter(event.target.value as StickerFilter)}
-            className={fieldClass}
+          {!list.lockedFilter && (
+            <Select
+              aria-label={t("filterBy")}
+              value={list.filter}
+              onChange={(event) => list.setFilter(event.target.value as StickerFilter)}
+            >
+              <option value="all">{t("allStickers")}</option>
+              <option value="favorites">{t("favorites")}</option>
+              <option value="recent">{t("recent")}</option>
+              <option value="animated">{t("animated")}</option>
+              <option value="static">{t("static")}</option>
+            </Select>
+          )}
+          <Select
+            aria-label={t("packFilter")}
+            value={list.pack}
+            onChange={(event) => list.setPack(event.target.value)}
           >
-            <option value="all">{t("allStickers")}</option>
-            <option value="favorites">{t("favorites")}</option>
-            <option value="recent">{t("recent")}</option>
-            <option value="animated">{t("animated")}</option>
-            <option value="static">{t("static")}</option>
-          </select>
-        )}
-        <select
-          aria-label={t("packFilter")}
-          value={list.pack}
-          onChange={(event) => list.setPack(event.target.value)}
-          className={fieldClass}
-        >
-          <option value="">{t("anyPack")}</option>
-          <option value="none">{t("noPack")}</option>
-          {list.packs.map((pack) => (
-            <option key={pack.id} value={pack.id}>
-              {pack.name}
-            </option>
-          ))}
-        </select>
-      </div>
+            <option value="">{t("anyPack")}</option>
+            <option value="none">{t("noPack")}</option>
+            {list.packs.map((pack) => (
+              <option key={pack.id} value={pack.id}>
+                {pack.name}
+              </option>
+            ))}
+          </Select>
+        </FilterButton>
+        <SortMenu
+          label={t("sort")}
+          value={list.sort}
+          onChange={(value) => list.setSort(value)}
+          options={[
+            { value: "newest", label: t("sortNewest") },
+            { value: "oldest", label: t("sortOldest") },
+            { value: "name", label: t("sortName") },
+            { value: "recent", label: t("sortRecent") },
+          ]}
+        />
+      </Toolbar>
 
       {list.items.length > 0 && selectedIds.length === 0 && (
         <div>
-          <Button variant="quiet" className="h-8 px-2" onClick={selection.selectAll}>
+          <Button variant="ghost" size="sm" onClick={selection.selectAll}>
             {t("selectAll")}
           </Button>
         </div>

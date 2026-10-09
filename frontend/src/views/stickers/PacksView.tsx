@@ -2,15 +2,26 @@ import { Merge, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api/client";
-import { Modal } from "../../components/Modal";
 import { useToast } from "../../components/Toasts";
+import {
+  Button,
+  Card,
+  Dialog,
+  EmptyState,
+  Input,
+  LoadingState,
+  MenuItem,
+  MenuSeparator,
+  OverflowMenu,
+  RadioGroup,
+  Select,
+} from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { Pack, Sticker } from "../../types";
 import { fill } from "../../utils/fill";
 import { explainError } from "../../utils/stickerErrors";
 import { PACK_NAME_MAX, packNameLengthError } from "../../utils/stickerLimits";
 import { PackDetail } from "./PackDetail";
-import { Button, EmptyState, fieldClass, LoadingState } from "./ui";
 
 interface PacksViewProps {
   isConnected: boolean;
@@ -143,8 +154,8 @@ export const PacksView: React.FC<PacksViewProps> = ({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col sm:flex-row gap-2">
-        <input
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
           value={name}
           onChange={(event) => {
             const next = event.target.value;
@@ -160,10 +171,13 @@ export const PacksView: React.FC<PacksViewProps> = ({
           placeholder={t("newPackPlaceholder")}
           aria-label={t("packName")}
           maxLength={PACK_NAME_MAX + 20}
-          className={fieldClass}
         />
-        <Button variant="primary" onClick={() => void create()} disabled={busy}>
-          <Plus size={16} />
+        <Button
+          variant="primary"
+          onClick={() => void create()}
+          disabled={busy}
+          icon={<Plus size={16} />}
+        >
           {t("createPack")}
         </Button>
       </div>
@@ -182,14 +196,11 @@ export const PacksView: React.FC<PacksViewProps> = ({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {packs.map((pack) => (
-          <div
-            key={pack.id}
-            className="rounded-2xl border border-line bg-panel p-3 flex items-center gap-3"
-          >
-            <button
-              type="button"
+          <Card key={pack.id} className="flex items-center gap-3">
+            <Button
+              variant="ghost"
               onClick={() => setOpenId(pack.id)}
-              className="flex items-center gap-3 flex-1 min-w-0 text-start focus-visible:ring-2 focus-visible:ring-brand-blue/50 rounded-xl"
+              className="h-auto min-h-11 flex-1 justify-start gap-3 px-1"
               aria-label={t("openPack")}
             >
               {pack.coverUrl ? (
@@ -210,53 +221,48 @@ export const PacksView: React.FC<PacksViewProps> = ({
                   {fill(t("stickerCount"), { n: pack.count })}
                 </span>
               </span>
-            </button>
-            <div className="flex flex-col gap-1">
-              <Button
-                className="h-8 px-2"
-                title={t("renamePack")}
-                onClick={() => {
+            </Button>
+            <OverflowMenu label={t("moreActions")}>
+              <MenuItem
+                icon={<Pencil size={16} />}
+                onSelect={() => {
                   setRenameTarget(pack);
                   setRenameValue(pack.name);
                 }}
               >
-                <Pencil size={14} />
-                <span className="sr-only">{t("renamePack")}</span>
-              </Button>
-              <Button
-                className="h-8 px-2"
-                title={t("mergeInto")}
-                onClick={() => {
+                {t("renamePack")}
+              </MenuItem>
+              <MenuItem
+                icon={<Merge size={16} />}
+                onSelect={() => {
                   setMergeTarget(pack);
                   setIntoPackId("");
                 }}
               >
-                <Merge size={14} />
-                <span className="sr-only">{t("merge")}</span>
-              </Button>
-              <Button
-                className="h-8 px-2"
-                variant="danger"
-                title={t("deletePack")}
-                onClick={() => {
+                {t("merge")}
+              </MenuItem>
+              <MenuSeparator />
+              <MenuItem
+                danger
+                icon={<Trash2 size={16} />}
+                onSelect={() => {
                   setDeleteTarget(pack);
                   setDeleteStickers(false);
                 }}
               >
-                <Trash2 size={14} />
-                <span className="sr-only">{t("deletePack")}</span>
-              </Button>
-            </div>
-          </div>
+                {t("deletePack")}
+              </MenuItem>
+            </OverflowMenu>
+          </Card>
         ))}
       </div>
 
-      <Modal
+      <Dialog
         isOpen={renameTarget !== null}
         onClose={() => setRenameTarget(null)}
         title={t("renamePack")}
         footer={
-          <div className="flex justify-end gap-2 w-full">
+          <div className="flex w-full justify-end gap-2">
             <Button onClick={() => setRenameTarget(null)}>{t("cancel")}</Button>
             <Button variant="primary" onClick={() => void rename()} disabled={busy}>
               {t("save")}
@@ -264,20 +270,19 @@ export const PacksView: React.FC<PacksViewProps> = ({
           </div>
         }
       >
-        <input
+        <Input
           value={renameValue}
           onChange={(event) => setRenameValue(event.target.value)}
           aria-label={t("packName")}
-          className={fieldClass}
         />
-      </Modal>
+      </Dialog>
 
-      <Modal
+      <Dialog
         isOpen={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
         title={t("deletePackTitle")}
         footer={
-          <div className="flex justify-end gap-2 w-full">
+          <div className="flex w-full justify-end gap-2">
             <Button onClick={() => setDeleteTarget(null)}>{t("cancel")}</Button>
             <Button variant="danger" onClick={() => void remove()} disabled={busy}>
               {t("delete")}
@@ -285,32 +290,23 @@ export const PacksView: React.FC<PacksViewProps> = ({
           </div>
         }
       >
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            aria-pressed={!deleteStickers}
-            onClick={() => setDeleteStickers(false)}
-            className="text-start px-3 py-3 rounded-xl border border-line hover:bg-panel-hover aria-pressed:border-brand-blue"
-          >
-            <span className="block text-sm font-bold">{t("deleteKeepStickers")}</span>
-          </button>
-          <button
-            type="button"
-            aria-pressed={deleteStickers}
-            onClick={() => setDeleteStickers(true)}
-            className="text-start px-3 py-3 rounded-xl border border-line hover:bg-panel-hover aria-pressed:border-danger"
-          >
-            <span className="block text-sm font-bold">{t("deletePackAndStickers")}</span>
-          </button>
-        </div>
-      </Modal>
+        <RadioGroup
+          name="delete-pack-mode"
+          value={deleteStickers ? "stickers" : "keep"}
+          onChange={(value) => setDeleteStickers(value === "stickers")}
+          options={[
+            { value: "keep", label: t("deleteKeepStickers") },
+            { value: "stickers", label: t("deletePackAndStickers") },
+          ]}
+        />
+      </Dialog>
 
-      <Modal
+      <Dialog
         isOpen={mergeTarget !== null}
         onClose={() => setMergeTarget(null)}
         title={t("mergeTitle")}
         footer={
-          <div className="flex justify-end gap-2 w-full">
+          <div className="flex w-full justify-end gap-2">
             <Button onClick={() => setMergeTarget(null)}>{t("cancel")}</Button>
             <Button variant="primary" onClick={() => void merge()} disabled={busy || !intoPackId}>
               {t("confirmMerge")}
@@ -323,11 +319,10 @@ export const PacksView: React.FC<PacksViewProps> = ({
           <label className="text-xs font-bold" htmlFor="merge-into">
             {t("mergeInto")}
           </label>
-          <select
+          <Select
             id="merge-into"
             value={intoPackId}
             onChange={(event) => setIntoPackId(event.target.value)}
-            className={fieldClass}
           >
             <option value="">{t("selectPack")}</option>
             {packs
@@ -337,9 +332,9 @@ export const PacksView: React.FC<PacksViewProps> = ({
                   {pack.name}
                 </option>
               ))}
-          </select>
+          </Select>
         </div>
-      </Modal>
+      </Dialog>
     </div>
   );
 };

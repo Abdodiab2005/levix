@@ -4,6 +4,7 @@ import {
   Bot,
   Check,
   CheckCircle2,
+  ChevronLeft,
   Database,
   Eye,
   FileText,
@@ -19,9 +20,24 @@ import {
 import type React from "react";
 import { useEffect, useState } from "react";
 import { api, type NormalizedModel } from "../api/client";
-import { Modal } from "../components/Modal";
 import { useToast } from "../components/Toasts";
-import { Toggle } from "../components/Toggle";
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  Dialog,
+  EmptyState,
+  Field,
+  IconButton,
+  Input,
+  LoadingState,
+  Select,
+  Spinner,
+  StatusPill,
+  Textarea,
+  Toggle,
+} from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 
 interface ProviderPreset {
@@ -510,128 +526,97 @@ export const AIAssistantView: React.FC = () => {
       : "—";
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center p-12 text-muted">
-        <div className="w-6 h-6 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin mr-2" />
-        <span className="text-sm font-semibold">{t("starting")}</span>
-      </div>
-    );
+    return <LoadingState text={t("starting")} />;
   }
 
   return (
     <div className="flex flex-col gap-5 sm:gap-6">
-      {/* Master Toggle Header Card */}
-      <div className="rounded-2xl border border-line bg-gradient-to-br from-panel-raised via-panel to-panel p-4 sm:p-6 shadow-sm flex flex-col gap-3.5">
-        {/* Top Row: Bot icon + Title & Subtitle on Start, Toggle Switch on End */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-brand-blue to-brand-cyan text-white flex items-center justify-center shrink-0 shadow-md shadow-brand-blue/20">
-              <Bot size={22} className="sm:w-6 sm:h-6" />
+      <Card className="flex flex-col gap-3.5">
+        <CardHeader
+          icon={<Bot size={20} />}
+          title={t("aiTitle")}
+          description={t("aiSubtitle")}
+          actions={
+            <div className="flex items-center gap-2">
+              <span className="hidden text-xs font-bold text-muted sm:inline">
+                {settings["ai_agent"]
+                  ? language === "ar"
+                    ? "مفعل"
+                    : "Enabled"
+                  : language === "ar"
+                    ? "معطل"
+                    : "Disabled"}
+              </span>
+              <Toggle
+                checked={Boolean(settings["ai_agent"])}
+                onChange={(val) => updateSetting("ai_agent", val)}
+                aria-label={t("aiTitle")}
+              />
             </div>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-base sm:text-xl font-extrabold text-text-main truncate">
-                {t("aiTitle")}
-              </h2>
-              <p className="text-xs sm:text-sm text-muted truncate">{t("aiSubtitle")}</p>
+          }
+        />
+        <div className="border-t border-line pt-3">
+          <StatusPill tone={settings["ai_agent"] ? "ok" : "danger"} dot pulse>
+            {settings["ai_agent"]
+              ? t("aiAgentEnabled")
+              : language === "ar"
+                ? "مساعد الذكاء الاصطناعي معطل"
+                : "AI Assistant Disabled"}
+          </StatusPill>
+        </div>
+      </Card>
+
+      <Card className="flex flex-col gap-5">
+        <CardHeader
+          icon={<Sparkles size={18} />}
+          title={t("aiProvider")}
+          actions={
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-muted">
+                {language === "ar" ? "المزود النشط:" : "Active:"}
+              </span>
+              <Badge tone="info">
+                {selectedPreset.name}
+                {" • "}
+                <span className="font-mono">{currentModelVal}</span>
+              </Badge>
             </div>
-          </div>
+          }
+        />
 
-          {/* Toggle Switch in corner */}
-          <div className="shrink-0 flex items-center gap-2 bg-panel/60 border border-line/70 rounded-xl px-2.5 py-1.5 shadow-xs">
-            <span className="text-xs font-bold text-muted hidden sm:inline">
-              {settings["ai_agent"]
-                ? language === "ar"
-                  ? "مفعل"
-                  : "Enabled"
-                : language === "ar"
-                  ? "معطل"
-                  : "Disabled"}
-            </span>
-            <Toggle
-              checked={Boolean(settings["ai_agent"])}
-              onChange={(val) => updateSetting("ai_agent", val)}
-            />
-          </div>
-        </div>
-
-        {/* Dedicated State Badge */}
-        <div className="flex items-center gap-2 pt-1 border-t border-line/40">
-          <span
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
-              settings["ai_agent"]
-                ? "bg-ok/15 text-ok border-ok/30"
-                : "bg-danger/10 text-danger border-danger/25"
-            }`}
-          >
-            <span className="pulse-dot" />
-            <span>
-              {settings["ai_agent"]
-                ? t("aiAgentEnabled")
-                : language === "ar"
-                  ? "مساعد الذكاء الاصطناعي معطل"
-                  : "AI Assistant Disabled"}
-            </span>
-          </span>
-        </div>
-      </div>
-
-      {/* Quick Setup & Active Provider Card */}
-      <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col gap-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-line">
-          <div className="flex items-center gap-2.5">
-            <Sparkles size={18} className="text-brand-cyan shrink-0" />
-            <h3 className="text-base sm:text-lg font-bold text-text-main">{t("aiProvider")}</h3>
-          </div>
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <span className="text-xs text-muted font-medium">
-              {language === "ar" ? "المزود النشط:" : "Active:"}
-            </span>
-            <span className="text-xs font-bold text-brand-cyan px-2.5 py-1 rounded-lg bg-brand-cyan/10 border border-brand-cyan/25">
-              {selectedPreset.name} &bull; <span className="font-mono">{currentModelVal}</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Provider Selector: clean, mobile-first responsive segmented cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
           {presets.map((p) => {
             const isSelected = selectedPreset.id === p.id;
             return (
-              <button
+              <Button
                 key={p.id}
-                type="button"
+                variant={isSelected ? "primary" : "secondary"}
+                aria-pressed={isSelected}
                 onClick={() => selectPreset(p)}
-                className={`p-3.5 rounded-xl border text-start transition-all flex flex-col justify-between gap-2.5 focus-visible:ring-2 focus-visible:ring-brand-blue/50 ${
-                  isSelected
-                    ? "bg-brand-blue/15 border-brand-blue/60 shadow-sm ring-1 ring-brand-blue/40"
-                    : "bg-panel-raised border-line hover:bg-panel-hover"
-                }`}
+                className="h-auto w-full flex-col items-stretch justify-between gap-2.5 px-3.5 py-3.5"
               >
-                <div className="flex items-center justify-between w-full">
-                  <span className="font-bold text-xs sm:text-sm text-text-main">{p.name}</span>
+                <span className="flex w-full items-center justify-between">
+                  <span className="text-xs font-bold sm:text-sm">{p.name}</span>
                   {isSelected ? (
-                    <span className="w-5 h-5 rounded-full bg-brand-blue text-white flex items-center justify-center shrink-0">
-                      <Check size={12} strokeWidth={3} />
-                    </span>
+                    <Check size={14} strokeWidth={3} />
                   ) : (
-                    <span className="w-2 h-2 rounded-full bg-line" />
+                    <span className="size-2 rounded-full bg-current opacity-40" />
                   )}
-                </div>
-                <span className="text-[10px] sm:text-[11px] font-mono text-muted truncate block">
+                </span>
+                <span className="block truncate text-start font-mono text-[10px] opacity-80 sm:text-[11px]">
                   {p.defaultModel}
                 </span>
-              </button>
+              </Button>
             );
           })}
         </div>
 
-        {/* Warning banner if API key is missing */}
         {requiresApiKey && (
-          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-3">
-            <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+          <div className="flex items-start gap-3 rounded-xl border border-warn/25 bg-warn/10 p-3.5">
+            <AlertTriangle size={18} className="mt-0.5 shrink-0 text-warn" />
             <div className="text-xs text-text-main">
               <p className="font-bold">{t("connectKeyFirstPrompt")}</p>
-              <p className="text-muted mt-0.5">
+              <p className="mt-0.5 text-muted">
                 {language === "ar"
                   ? "النماذج المعروضة أدناه هي نماذج مقترحة من الدليل المحلي وليست مؤكدة لحسابك حتى يتم ربط المفتاح."
                   : "Models shown below are catalog recommendations and are not verified for your account until a key is configured."}
@@ -640,42 +625,42 @@ export const AIAssistantView: React.FC = () => {
           </div>
         )}
 
-        {/* Discovery error banner if discovery failed */}
         {discoveryState[selectedPreset.id]?.error && (
-          <div className="p-3 rounded-xl bg-danger/10 border border-danger/25 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs text-danger font-semibold">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-danger/25 bg-danger/10 p-3">
+            <div className="flex min-w-0 items-center gap-2 text-xs font-semibold text-danger">
               <AlertCircle size={16} className="shrink-0" />
-              <span>{discoveryState[selectedPreset.id]?.error}</span>
+              <span className="min-w-0">{discoveryState[selectedPreset.id]?.error}</span>
             </div>
-            <button
-              type="button"
+            <IconButton
+              variant="ghost"
+              label={t("refreshModels")}
+              icon={<RefreshCw size={16} />}
               onClick={() => handleFetchModels(true)}
-              className="text-xs font-bold underline hover:opacity-80 shrink-0"
-            >
-              {t("refreshModels")}
-            </button>
+              loading={fetchingModels}
+            />
           </div>
         )}
 
-        {/* Dynamic Provider Inputs: key first, then URL, then model */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-line">
-          {/* API Key */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label htmlFor="input-api-key" className="block text-xs font-bold text-muted">
-                {t("apiKey")}
-              </label>
-              {configuredKeys[selectedPreset.keySetting] && (
-                <span className="text-[10px] text-ok font-semibold flex items-center gap-1">
-                  <CheckCircle2 size={11} />
-                  {language === "ar" ? "محفوظ" : "Saved"}
-                </span>
-              )}
-            </div>
-            <input
+        <div className="grid grid-cols-1 gap-4 border-t border-line pt-4 md:grid-cols-3">
+          <Field
+            className="min-w-0"
+            htmlFor="input-api-key"
+            label={
+              <span className="flex w-full items-center justify-between gap-2">
+                <span>{t("apiKey")}</span>
+                {configuredKeys[selectedPreset.keySetting] && (
+                  <Badge tone="ok">
+                    <CheckCircle2 size={11} />
+                    {language === "ar" ? "محفوظ" : "Saved"}
+                  </Badge>
+                )}
+              </span>
+            }
+          >
+            <Input
               id="input-api-key"
               type="password"
-              className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main font-mono text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+              className="font-mono"
               value={settings[selectedPreset.keySetting] || ""}
               onChange={(e) =>
                 setSettings({ ...settings, [selectedPreset.keySetting]: e.target.value })
@@ -689,18 +674,14 @@ export const AIAssistantView: React.FC = () => {
                     : "Enter API key"
               }
             />
-          </div>
+          </Field>
 
-          {/* Base URL (if applicable) */}
           {selectedPreset.baseUrlSetting && (
-            <div className="space-y-1.5">
-              <label htmlFor="input-base-url" className="block text-xs font-bold text-muted">
-                {t("baseUrl")}
-              </label>
-              <input
+            <Field className="min-w-0" label={t("baseUrl")} htmlFor="input-base-url">
+              <Input
                 id="input-base-url"
                 type="text"
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main font-mono text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                className="font-mono"
                 value={settings[selectedPreset.baseUrlSetting] || ""}
                 onChange={(e) => {
                   if (selectedPreset.baseUrlSetting) {
@@ -714,32 +695,21 @@ export const AIAssistantView: React.FC = () => {
                 }}
                 placeholder={selectedPreset.defaultBaseUrl}
               />
-            </div>
+            </Field>
           )}
 
-          {/* Model Name Selector / Input */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
-                <label htmlFor="input-model-name" className="block text-xs font-bold text-muted">
+                <label htmlFor="input-model-name" className="text-xs font-bold text-text-main">
                   {t("modelName")}
                 </label>
-                {isLiveVerified ? (
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-ok/15 text-ok border border-ok/30">
-                    {t("sourceLive")}
-                  </span>
-                ) : (
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-brand-cyan/15 text-brand-cyan border border-brand-cyan/30">
-                    {t("sourceSeed")}
-                  </span>
-                )}
+                <Badge tone={isLiveVerified ? "ok" : "info"}>
+                  {isLiveVerified ? t("sourceLive") : t("sourceSeed")}
+                </Badge>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCustomModel(!isCustomModel)}
-                  className="text-[11px] text-brand-cyan hover:underline font-semibold"
-                >
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="sm" onClick={() => setIsCustomModel(!isCustomModel)}>
                   {isCustomModel
                     ? language === "ar"
                       ? "القائمة"
@@ -747,25 +717,22 @@ export const AIAssistantView: React.FC = () => {
                     : language === "ar"
                       ? "مخصص"
                       : "Custom"}
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <IconButton
+                  variant="ghost"
+                  label={t("refreshModels")}
+                  icon={<RefreshCw size={16} />}
                   onClick={() => handleFetchModels(true)}
-                  disabled={fetchingModels}
-                  className="inline-flex items-center gap-1 text-[11px] text-brand-blue hover:text-brand-blue/80 font-bold"
-                  title={t("refreshModels")}
-                >
-                  <RefreshCw size={11} className={fetchingModels ? "animate-spin" : ""} />
-                  <span>{fetchingModels ? t("refreshing") : t("refreshModels")}</span>
-                </button>
+                  loading={fetchingModels}
+                />
               </div>
             </div>
 
             {isCustomModel ? (
-              <input
+              <Input
                 id="input-model-name"
                 type="text"
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main font-mono text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                className="font-mono"
                 value={settings[selectedPreset.modelSetting] || ""}
                 onChange={(e) =>
                   setSettings({ ...settings, [selectedPreset.modelSetting]: e.target.value })
@@ -774,9 +741,9 @@ export const AIAssistantView: React.FC = () => {
                 placeholder={selectedPreset.defaultModel}
               />
             ) : (
-              <select
+              <Select
                 id="input-model-name"
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main font-mono text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                className="font-mono"
                 value={currentModelVal}
                 onChange={(e) => {
                   updateSetting(selectedPreset.modelSetting, e.target.value);
@@ -797,36 +764,35 @@ export const AIAssistantView: React.FC = () => {
                 {!currentModelList.some(
                   (m) => m.id.toLowerCase() === currentModelVal.toLowerCase(),
                 ) && <option value={currentModelVal}>{currentModelVal} (current)</option>}
-              </select>
+              </Select>
             )}
           </div>
         </div>
 
-        {/* Dedicated Model Capabilities Status Card */}
-        <div className="p-3.5 rounded-xl border border-line bg-panel-raised/60 flex flex-col gap-2.5">
+        <div className="flex flex-col gap-2.5 rounded-xl border border-line bg-panel-raised/60 p-3.5">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-            <span className="font-bold text-text-main flex items-center gap-1.5">
-              <Sparkles size={14} className="text-brand-cyan shrink-0" />
+            <span className="flex items-center gap-1.5 font-bold text-text-main">
+              <Sparkles size={14} className="shrink-0 text-brand-cyan" />
               {language === "ar" ? "القدرات:" : "Capabilities:"}{" "}
               <span className="font-mono text-brand-cyan">
                 {currentModelObj.displayName || currentModelVal}
               </span>
             </span>
-            <span
-              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+            <Badge
+              tone={
                 currentModelObj.capabilitySource === "provider"
-                  ? "bg-ok/15 text-ok border-ok/30"
+                  ? "ok"
                   : currentModelObj.capabilitySource === "seed"
-                    ? "bg-brand-blue/15 text-brand-blue border-brand-blue/30"
-                    : "bg-muted/15 text-muted border-line"
-              }`}
+                    ? "info"
+                    : "neutral"
+              }
             >
               {currentModelObj.capabilitySource === "provider"
                 ? t("sourceLive")
                 : currentModelObj.capabilitySource === "seed"
                   ? t("sourceSeed")
                   : t("sourceUnknown")}
-            </span>
+            </Badge>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
@@ -875,82 +841,74 @@ export const AIAssistantView: React.FC = () => {
             ))}
           </div>
         </div>
-      </div>
+      </Card>
 
-      {/* Model Capabilities & Toggles */}
-      <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col gap-4">
-        <h3 className="text-base font-bold text-text-main">{t("capabilities")}</h3>
+      <Card className="flex flex-col gap-4">
+        <CardHeader title={t("capabilities")} />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Vision Toggle */}
-          <div className="relative rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
-            <div className="absolute top-3.5 end-3.5">
-              <Toggle
-                checked={visionLocked ? false : Boolean(settings["ai_vision_enabled"])}
-                disabled={visionLocked}
-                onChange={(val) => {
-                  if (!visionLocked) updateSetting("ai_vision_enabled", val);
-                }}
-              />
-            </div>
-            <div className="pe-12">
-              <div className="flex items-center gap-2 text-text-main mb-1">
-                <Eye
-                  size={17}
-                  className={visionLocked ? "text-muted shrink-0" : "text-brand-cyan shrink-0"}
-                />
-                <span className="font-bold text-sm">{t("aiVision")}</span>
-              </div>
-              <p className="text-xs text-muted leading-relaxed">{t("aiVisionDesc")}</p>
-              {visionLocked && (
-                <p className="text-[11px] text-amber-500 font-semibold mt-2 flex items-center gap-1">
-                  <AlertTriangle size={13} className="shrink-0" />
-                  <span>{t("visionUnsupportedNotice")}</span>
-                </p>
-              )}
-            </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="flex flex-col gap-3 rounded-xl border border-line bg-panel-raised p-4">
+            <Toggle
+              checked={visionLocked ? false : Boolean(settings["ai_vision_enabled"])}
+              disabled={visionLocked}
+              onChange={(val) => {
+                if (!visionLocked) updateSetting("ai_vision_enabled", val);
+              }}
+              label={
+                <span className="inline-flex items-center gap-2">
+                  <Eye
+                    size={17}
+                    className={visionLocked ? "shrink-0 text-muted" : "shrink-0 text-brand-cyan"}
+                  />
+                  {t("aiVision")}
+                </span>
+              }
+              description={t("aiVisionDesc")}
+            />
+            {visionLocked && (
+              <p className="flex items-center gap-1 text-[11px] font-semibold text-warn">
+                <AlertTriangle size={13} className="shrink-0" />
+                <span>{t("visionUnsupportedNotice")}</span>
+              </p>
+            )}
           </div>
 
-          {/* STT Toggle (Speech-to-Text) */}
-          <div className="relative rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
-            <div className="absolute top-3.5 end-3.5">
-              <Toggle
-                checked={sttLocked ? false : Boolean(settings["ai_stt_enabled"] ?? true)}
-                disabled={sttLocked}
-                onChange={(val) => {
-                  if (!sttLocked) updateSetting("ai_stt_enabled", val);
-                }}
-              />
-            </div>
-            <div className="pe-12">
-              <div className="flex items-center gap-2 text-text-main mb-1">
-                <Mic
-                  size={17}
-                  className={sttLocked ? "text-muted shrink-0" : "text-purple-400 shrink-0"}
-                />
-                <span className="font-bold text-sm">{t("aiSttEnabled")}</span>
-              </div>
-              <p className="text-xs text-muted leading-relaxed">{t("aiSttEnabledDesc")}</p>
-              {sttLocked && (
-                <p className="text-[11px] text-amber-500 font-semibold mt-2 flex items-center gap-1">
-                  <AlertTriangle size={13} className="shrink-0" />
-                  <span>{t("sttUnsupportedNotice")}</span>
-                </p>
-              )}
-            </div>
+          <div className="flex flex-col gap-3 rounded-xl border border-line bg-panel-raised p-4">
+            <Toggle
+              checked={sttLocked ? false : Boolean(settings["ai_stt_enabled"] ?? true)}
+              disabled={sttLocked}
+              onChange={(val) => {
+                if (!sttLocked) updateSetting("ai_stt_enabled", val);
+              }}
+              label={
+                <span className="inline-flex items-center gap-2">
+                  <Mic
+                    size={17}
+                    className={sttLocked ? "shrink-0 text-muted" : "shrink-0 text-brand-purple"}
+                  />
+                  {t("aiSttEnabled")}
+                </span>
+              }
+              description={t("aiSttEnabledDesc")}
+            />
+            {sttLocked && (
+              <p className="flex items-center gap-1 text-[11px] font-semibold text-warn">
+                <AlertTriangle size={13} className="shrink-0" />
+                <span>{t("sttUnsupportedNotice")}</span>
+              </p>
+            )}
           </div>
 
-          {/* STT Provider Selector */}
-          <div className="rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
+          <div className="flex flex-col justify-between gap-3 rounded-xl border border-line bg-panel-raised p-4">
             <div>
-              <div className="flex items-center gap-2 text-text-main mb-1">
-                <Mic size={17} className="text-purple-400 shrink-0" />
-                <span className="font-bold text-sm">{t("aiStt")}</span>
+              <div className="mb-1 flex items-center gap-2 text-text-main">
+                <Mic size={17} className="shrink-0 text-brand-purple" />
+                <span className="text-sm font-bold">{t("aiStt")}</span>
               </div>
-              <p className="text-xs text-muted leading-relaxed">{t("sttDesc")}</p>
+              <p className="text-xs leading-relaxed text-muted">{t("sttDesc")}</p>
             </div>
-            <select
-              className="w-full h-10 px-3 rounded-lg border border-line bg-panel text-text-main text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50 disabled:opacity-50"
+            <Select
+              aria-label={t("aiStt")}
               value={settings["ai_stt_provider"] || "auto"}
               disabled={sttLocked}
               onChange={(e) => {
@@ -960,189 +918,149 @@ export const AIAssistantView: React.FC = () => {
               <option value="auto">{t("sttAuto")}</option>
               <option value="gemini">{t("sttGemini")}</option>
               <option value="openai">{t("sttOpenAI")}</option>
-            </select>
+            </Select>
           </div>
 
-          {/* Bot Language Selector */}
-          <div className="rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
+          <div className="flex flex-col justify-between gap-3 rounded-xl border border-line bg-panel-raised p-4">
             <div>
-              <div className="flex items-center gap-2 text-text-main mb-1">
-                <Globe size={17} className="text-ok shrink-0" />
-                <span className="font-bold text-sm">{t("botLanguage")}</span>
+              <div className="mb-1 flex items-center gap-2 text-text-main">
+                <Globe size={17} className="shrink-0 text-ok" />
+                <span className="text-sm font-bold">{t("botLanguage")}</span>
               </div>
-              <p className="text-xs text-muted leading-relaxed">{t("botLanguageDesc")}</p>
+              <p className="text-xs leading-relaxed text-muted">{t("botLanguageDesc")}</p>
             </div>
-            <select
-              className="w-full h-10 px-3 rounded-lg border border-line bg-panel text-text-main text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            <Select
+              aria-label={t("botLanguage")}
               value={settings["bot_language"] || "auto"}
               onChange={(e) => updateSetting("bot_language", e.target.value)}
             >
               <option value="auto">{t("langAuto")}</option>
               <option value="ar">{t("langAr")}</option>
               <option value="en">{t("langEn")}</option>
-            </select>
+            </Select>
           </div>
         </div>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <Card className="flex flex-col justify-between gap-4">
+          <CardHeader
+            icon={<FileText size={20} />}
+            title={t("personaPrompt")}
+            description={t("personaDesc")}
+          />
+          <Button variant="secondary" className="w-full" onClick={openPersonaEditor}>
+            {t("editPersona")}
+          </Button>
+        </Card>
+
+        <Card className="flex flex-col justify-between gap-4">
+          <CardHeader
+            icon={<Database size={20} />}
+            title={t("memoryFiles")}
+            description={t("memoryDesc")}
+          />
+          <Button variant="secondary" className="w-full" onClick={openMemoryManager}>
+            {t("manageMemory")}
+          </Button>
+        </Card>
+
+        <Card className="flex flex-col justify-between gap-4">
+          <CardHeader
+            icon={<History size={20} />}
+            title={t("aiInspector")}
+            description={t("aiInspectorDesc")}
+          />
+          <Button variant="secondary" className="w-full" onClick={openInspector}>
+            {t("openInspector")}
+          </Button>
+        </Card>
       </div>
 
-      {/* Persona Prompt, Long-term Memory, Conversation Inspector Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2.5 text-text-main mb-2">
-              <FileText size={20} className="text-brand-blue shrink-0" />
-              <h3 className="text-base font-bold">{t("personaPrompt")}</h3>
-            </div>
-            <p className="text-xs sm:text-sm text-muted leading-relaxed">{t("personaDesc")}</p>
-          </div>
-          <button
-            type="button"
-            onClick={openPersonaEditor}
-            className="w-full h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50 flex items-center justify-center gap-2"
-          >
-            <span>{t("editPersona")}</span>
-          </button>
-        </div>
-
-        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2.5 text-text-main mb-2">
-              <Database size={20} className="text-brand-cyan shrink-0" />
-              <h3 className="text-base font-bold">{t("memoryFiles")}</h3>
-            </div>
-            <p className="text-xs sm:text-sm text-muted leading-relaxed">{t("memoryDesc")}</p>
-          </div>
-          <button
-            type="button"
-            onClick={openMemoryManager}
-            className="w-full h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50 flex items-center justify-center gap-2"
-          >
-            <span>{t("manageMemory")}</span>
-          </button>
-        </div>
-
-        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2.5 text-text-main mb-2">
-              <History size={20} className="text-brand-blue shrink-0" />
-              <h3 className="text-base font-bold">{t("aiInspector")}</h3>
-            </div>
-            <p className="text-xs sm:text-sm text-muted leading-relaxed">{t("aiInspectorDesc")}</p>
-          </div>
-          <button
-            type="button"
-            onClick={openInspector}
-            className="w-full h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50 flex items-center justify-center gap-2"
-          >
-            <span>{t("openInspector")}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Persona Prompt Modal */}
-      <Modal
+      <Dialog
         isOpen={personaModalOpen}
         onClose={() => setPersonaModalOpen(false)}
         title={t("personaPrompt")}
         maxWidth="750px"
         footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <button
-              type="button"
-              onClick={() => setPersonaModalOpen(false)}
-              className="px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors"
-            >
+          <>
+            <Button variant="secondary" onClick={() => setPersonaModalOpen(false)}>
               {t("cancel")}
-            </button>
-            <button
-              type="button"
-              onClick={savePersona}
-              className="px-5 h-10 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/25 transition-colors flex items-center gap-2"
-            >
-              <Save size={16} />
-              <span>{t("save")}</span>
-            </button>
-          </div>
+            </Button>
+            <Button variant="primary" icon={<Save size={16} />} onClick={savePersona}>
+              {t("save")}
+            </Button>
+          </>
         }
       >
-        <textarea
-          className="w-full rounded-xl border border-line bg-panel-raised p-3.5 text-text-main font-mono text-xs sm:text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+        <Textarea
+          className="font-mono"
           rows={12}
           value={personaText}
           onChange={(e) => setPersonaText(e.target.value)}
         />
-      </Modal>
+      </Dialog>
 
-      {/* Memory File Modal: global vs per-chat scopes on one side, editor on the other */}
-      <Modal
+      <Dialog
         isOpen={Boolean(selectedMemoryFile)}
         onClose={() => setSelectedMemoryFile(null)}
         title={t("memoryFiles")}
         maxWidth="900px"
         footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <button
-              type="button"
-              onClick={() => setSelectedMemoryFile(null)}
-              className="px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors"
-            >
+          <>
+            <Button variant="secondary" onClick={() => setSelectedMemoryFile(null)}>
               {t("cancel")}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="primary"
+              icon={<Save size={16} />}
               onClick={saveMemoryFile}
               disabled={memoryLoading}
-              className="px-5 h-10 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/25 transition-colors flex items-center gap-2 disabled:opacity-50"
             >
-              <Save size={16} />
-              <span>{t("save")}</span>
-            </button>
-          </div>
+              {t("save")}
+            </Button>
+          </>
         }
       >
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="md:w-60 shrink-0 flex flex-col gap-1.5 md:max-h-[420px] overflow-y-auto">
+        <div className="flex flex-col gap-4 md:flex-row">
+          <div className="flex shrink-0 flex-col gap-1.5 md:max-h-[420px] md:w-60 md:overflow-y-auto">
             {memoryScopes.map((s) => {
               const isGlobal = s.scope === "global";
               const active = selectedMemoryFile === s.scope;
               return (
-                <button
+                <Button
                   key={s.scope}
-                  type="button"
+                  variant={active ? "primary" : "secondary"}
+                  aria-pressed={active}
                   onClick={() => openMemoryScope(s.scope)}
-                  className={`text-start p-2.5 rounded-xl border transition-colors ${
-                    active
-                      ? "bg-brand-blue/15 border-brand-blue/60"
-                      : "bg-panel-raised border-line hover:bg-panel-hover"
-                  }`}
+                  className="h-auto w-full flex-col items-stretch gap-1 px-2.5 py-2.5"
                 >
-                  <span className="flex items-center gap-2 font-bold text-xs text-text-main min-w-0">
+                  <span className="flex min-w-0 items-center gap-2 text-xs font-bold">
                     {isGlobal ? (
-                      <Globe size={14} className="text-brand-cyan shrink-0" />
+                      <Globe size={14} className="shrink-0" />
                     ) : (
-                      <MessageSquare size={14} className="text-brand-blue shrink-0" />
+                      <MessageSquare size={14} className="shrink-0" />
                     )}
                     <span className="truncate">{isGlobal ? t("memoryGlobalScope") : s.scope}</span>
                   </span>
-                  <span className="block text-[10px] text-muted mt-1">
+                  <span className="block text-start text-[10px] opacity-80">
                     {isGlobal ? t("memoryGlobalScopeHint") : t("memoryChatScopeHint")}
                     {" · "}
                     {t("memoryEntriesCount").replace("{n}", String(s.entries))}
                   </span>
-                </button>
+                </Button>
               );
             })}
           </div>
-          <div className="flex-1 min-w-0 flex flex-col gap-2">
-            <p className="text-[11px] text-muted leading-relaxed">{t("memoryProseHint")}</p>
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <p className="text-[11px] leading-relaxed text-muted">{t("memoryProseHint")}</p>
             {memoryLoading ? (
-              <div className="flex items-center justify-center min-h-[340px] text-muted">
-                <div className="w-6 h-6 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin mr-2" />
-                <span className="text-sm font-semibold">{t("starting")}</span>
+              <div className="flex min-h-[340px] items-center justify-center">
+                <Spinner className="size-6" label={t("starting")} />
               </div>
             ) : (
-              <textarea
-                className="w-full min-h-[340px] flex-1 rounded-xl border border-line bg-panel-raised p-3.5 text-text-main font-mono text-xs sm:text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+              <Textarea
+                className="min-h-[340px] flex-1 font-mono"
                 rows={12}
                 value={memoryContent}
                 onChange={(e) => setMemoryContent(e.target.value)}
@@ -1151,83 +1069,82 @@ export const AIAssistantView: React.FC = () => {
             )}
           </div>
         </div>
-      </Modal>
+      </Dialog>
 
-      {/* Conversation Inspector Modal — read-only */}
-      <Modal
+      <Dialog
         isOpen={inspectorOpen}
         onClose={() => setInspectorOpen(false)}
         title={t("aiInspector")}
         maxWidth="750px"
         footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <button
-              type="button"
-              onClick={() => setInspectorOpen(false)}
-              className="px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors"
-            >
-              {t("cancel")}
-            </button>
-          </div>
+          <Button variant="secondary" onClick={() => setInspectorOpen(false)}>
+            {t("cancel")}
+          </Button>
         }
       >
         {inspectorLoading ? (
-          <div className="flex items-center justify-center min-h-[280px] text-muted">
-            <div className="w-6 h-6 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin mr-2" />
-            <span className="text-sm font-semibold">{t("starting")}</span>
+          <div className="flex min-h-[280px] items-center justify-center">
+            <Spinner className="size-6" label={t("starting")} />
           </div>
         ) : !selectedConversation ? (
-          <div className="flex flex-col gap-1.5">
-            {conversations.length === 0 && (
-              <p className="text-xs text-muted text-center py-8">{t("noConversations")}</p>
-            )}
-            {conversations.map((row) => (
-              <button
-                key={row.chatId}
-                type="button"
-                onClick={() => openConversation(row.chatId)}
-                className="text-start p-3 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover transition-colors"
-              >
-                <span className="flex items-center gap-2 font-bold text-xs text-text-main">
-                  <MessageSquare size={14} className="text-brand-blue shrink-0" />
-                  <span className="truncate font-mono">{row.chatId}</span>
-                </span>
-                <span className="block text-[10px] text-muted mt-1">
-                  {t("convTurns").replace("{n}", String(row.turns))} · {formatStamp(row.updatedAt)}
-                </span>
-              </button>
-            ))}
-          </div>
+          conversations.length === 0 ? (
+            <EmptyState
+              icon={<MessageSquare size={20} />}
+              text={t("noConversations")}
+              className="py-8"
+            />
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {conversations.map((row) => (
+                <Button
+                  key={row.chatId}
+                  variant="secondary"
+                  onClick={() => openConversation(row.chatId)}
+                  className="h-auto w-full flex-col items-stretch gap-1 px-3 py-3"
+                >
+                  <span className="flex items-center gap-2 text-xs font-bold">
+                    <MessageSquare size={14} className="shrink-0 text-brand-blue" />
+                    <span className="truncate font-mono">{row.chatId}</span>
+                  </span>
+                  <span className="block text-start text-[10px] text-muted">
+                    {t("convTurns").replace("{n}", String(row.turns))} ·{" "}
+                    {formatStamp(row.updatedAt)}
+                  </span>
+                </Button>
+              ))}
+            </div>
+          )
         ) : (
           <div className="flex flex-col gap-2.5">
             <div className="flex items-center justify-between gap-2">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<ChevronLeft size={16} className="rtl:rotate-180" />}
                 onClick={() => setSelectedConversation(null)}
-                className="text-xs font-bold text-brand-cyan hover:underline"
               >
-                ← {t("backToList")}
-              </button>
-              <span className="text-[10px] text-muted font-mono truncate">
+                {t("backToList")}
+              </Button>
+              <span className="truncate font-mono text-[10px] text-muted">
                 {selectedConversation}
               </span>
             </div>
             {conversation?.truncated && (
-              <p className="text-[11px] text-amber-500 font-semibold">{t("convTruncated")}</p>
+              <p className="text-[11px] font-semibold text-warn">{t("convTruncated")}</p>
             )}
-            <div className="flex flex-col gap-1.5 max-h-[420px] overflow-y-auto">
+            <div className="flex max-h-[420px] flex-col gap-1.5 overflow-y-auto">
               {conversation?.messages.length === 0 && (
-                <p className="text-xs text-muted text-center py-6">{t("noConversations")}</p>
+                <EmptyState text={t("noConversations")} className="py-6" />
               )}
               {conversation?.messages.map((m, i) => (
                 <div
                   key={i}
-                  className={`p-2.5 rounded-xl border text-xs ${
+                  className={`rounded-xl border p-2.5 text-xs ${
                     m.kind === "tool" || m.kind === "toolResult"
-                      ? "bg-panel border-line text-muted font-mono"
+                      ? "border-line bg-panel font-mono text-muted"
                       : m.role === "model"
-                        ? "bg-brand-blue/10 border-brand-blue/25 text-text-main"
-                        : "bg-panel-raised border-line text-text-main"
+                        ? "border-brand-blue/25 bg-brand-blue/10 text-text-main"
+                        : "border-line bg-panel-raised text-text-main"
                   }`}
                 >
                   {m.kind === "text" && (
@@ -1241,7 +1158,7 @@ export const AIAssistantView: React.FC = () => {
             </div>
           </div>
         )}
-      </Modal>
+      </Dialog>
     </div>
   );
 };

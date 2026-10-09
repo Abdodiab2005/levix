@@ -1,9 +1,9 @@
 import { Sticker as StickerIcon } from "lucide-react";
 import type React from "react";
+import { Button, EmptyState, LoadingState } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { Sticker } from "../../types";
 import { fill } from "../../utils/fill";
-import { Button, EmptyState, LoadingState } from "./ui";
 import { StickerTile } from "./StickerTile";
 
 interface StickerGridProps {
@@ -49,9 +49,7 @@ export const StickerGrid: React.FC<StickerGridProps> = ({
     );
   }
   if (items.length === 0) {
-    return (
-      <EmptyState icon={<StickerIcon size={28} className="text-muted" />} text={emptyText} />
-    );
+    return <EmptyState icon={<StickerIcon size={28} className="text-muted" />} text={emptyText} />;
   }
 
   return (

@@ -3,9 +3,9 @@ import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useToast } from "../components/Toasts";
+import { PageHeader, Tabs } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 import type { Capabilities, Sticker } from "../types";
-import { cn } from "../utils/cn";
 import { canPickHostSource } from "../utils/hostBridge";
 import { explainError, stickerErrorMessage } from "../utils/stickerErrors";
 import { CreateView } from "./stickers/CreateView";
@@ -160,15 +160,11 @@ export const StickerStudioView: React.FC<StickerStudioViewProps> = ({ isConnecte
 
   return (
     <div className="flex flex-col gap-5 sm:gap-6">
-      <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex items-center gap-3.5">
-        <div className="w-12 h-12 rounded-2xl bg-brand-cyan/10 text-brand-cyan flex items-center justify-center shrink-0">
-          <StickerIcon size={24} />
-        </div>
-        <div>
-          <h2 className="text-lg md:text-xl font-bold text-text-main">{t("stickers")}</h2>
-          <p className="text-xs md:text-sm text-muted mt-0.5">{t("stickersDesc")}</p>
-        </div>
-      </div>
+      <PageHeader
+        icon={<StickerIcon size={24} />}
+        title={t("stickers")}
+        description={t("stickersDesc")}
+      />
 
       {encoderMissing && (
         <div className="rounded-2xl border border-warn/30 bg-warn/10 p-4 flex items-center gap-3">
@@ -177,24 +173,14 @@ export const StickerStudioView: React.FC<StickerStudioViewProps> = ({ isConnecte
         </div>
       )}
 
-      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-        <div className="flex items-center gap-2 min-w-max">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => changeTab(tab.id)}
-              className={cn(
-                "px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap min-h-10",
-                activeTab === tab.id
-                  ? "bg-brand-blue text-white shadow-md shadow-brand-blue/25"
-                  : "text-muted hover:bg-panel-hover hover:text-text-main",
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <Tabs
+          aria-label={t("stickers")}
+          className="min-w-max"
+          value={activeTab}
+          onChange={changeTab}
+          options={tabs.map((tab) => ({ value: tab.id, label: tab.label }))}
+        />
       </div>
 
       {activeTab === "library" && (

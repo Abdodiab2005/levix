@@ -1,8 +1,9 @@
-import { Plus, Upload } from "lucide-react";
+import { Download, Plus, Share2, Upload } from "lucide-react";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
 import { useToast } from "../../components/Toasts";
+import { Button, IconButton, LoadingState, MenuItem, OverflowMenu } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type {
   Capabilities,
@@ -26,7 +27,6 @@ import { LayerEditor } from "./LayerEditor";
 import { type OverlayLayer, overlayDataUrl } from "./overlay";
 import { PackPicker } from "./PackPicker";
 import { RecipientPicker } from "./RecipientPicker";
-import { Button, LoadingState } from "./ui";
 import { useStickerJob } from "./useStickerJob";
 
 const DEFAULT_OPTIONS: EditOptions = {
@@ -228,7 +228,7 @@ export const CreateView: React.FC<CreateViewProps> = ({
   if (done) {
     return (
       <div className="flex flex-col gap-4 max-w-md mx-auto">
-        <div className="aspect-square rounded-2xl border border-line overflow-hidden bg-[repeating-conic-gradient(#2a2a2e_0%_25%,#1c1c20_0%_50%)] bg-[length:20px_20px]">
+        <div className="aspect-square overflow-hidden rounded-2xl border border-line bg-[repeating-conic-gradient(var(--panel-raised)_0%_25%,var(--bg)_0%_50%)] bg-[length:20px_20px]">
           <img
             src={done.url}
             alt={done.name || t("stickerPreview")}
@@ -238,48 +238,25 @@ export const CreateView: React.FC<CreateViewProps> = ({
         {job.job?.created === false && <p className="text-sm text-ok">{t("alreadyInLibrary")}</p>}
         {job.job?.qualityReduced && <p className="text-sm text-warn">{t("qualityReduced")}</p>}
         {job.job?.created !== false && <p className="text-sm text-ok">{t("stickerCreated")}</p>}
-        <div className="flex flex-wrap gap-2">
-          <Button
+        <div className="flex flex-wrap items-center gap-2">
+          <IconButton
+            label={t("downloadWebp")}
+            icon={<Download size={18} />}
             onClick={() => {
               void saveOne(done, "webp")
                 .then((result) => announce(result, done))
                 .catch((err) => toast(explainError(t, err), "error"));
             }}
-          >
-            {t("downloadWebp")}
-          </Button>
-          <Button
-            onClick={() => {
-              if (done.animated) toast(t("firstFrameHint"), "info");
-              void saveOne(done, "png")
-                .then((result) => announce(result, done))
-                .catch((err) => toast(explainError(t, err), "error"));
-            }}
-          >
-            {t("downloadPng")}
-          </Button>
-          {done.animated && (
-            <Button
-              disabled={!capabilities.gif}
-              title={t("gifOnlyAnimated")}
-              onClick={() => {
-                void saveOne(done, "gif")
-                  .then((result) => announce(result, done))
-                  .catch((err) => toast(explainError(t, err), "error"));
-              }}
-            >
-              {t("downloadGif")}
-            </Button>
-          )}
-          <Button
+          />
+          <IconButton
+            label={t("shareSticker")}
+            icon={<Share2 size={18} />}
             onClick={() => {
               void shareOne(done, "webp")
                 .then((result) => announce(result, done))
                 .catch((err) => toast(explainError(t, err), "error"));
             }}
-          >
-            {t("shareSticker")}
-          </Button>
+          />
           <Button
             disabled={!isConnected}
             title={isConnected ? undefined : t("notConnectedHint")}
@@ -292,6 +269,31 @@ export const CreateView: React.FC<CreateViewProps> = ({
             {t("createAnother")}
           </Button>
           <Button onClick={onGoLibrary}>{t("goToLibrary")}</Button>
+          <OverflowMenu label={t("moreActions")}>
+            <MenuItem
+              onSelect={() => {
+                if (done.animated) toast(t("firstFrameHint"), "info");
+                void saveOne(done, "png")
+                  .then((result) => announce(result, done))
+                  .catch((err) => toast(explainError(t, err), "error"));
+              }}
+            >
+              {t("downloadPng")}
+            </MenuItem>
+            {done.animated && (
+              <MenuItem
+                disabled={!capabilities.gif}
+                title={t("gifOnlyAnimated")}
+                onSelect={() => {
+                  void saveOne(done, "gif")
+                    .then((result) => announce(result, done))
+                    .catch((err) => toast(explainError(t, err), "error"));
+                }}
+              >
+                {t("downloadGif")}
+              </MenuItem>
+            )}
+          </OverflowMenu>
         </div>
         {!isConnected && <p className="text-xs text-muted">{t("notConnectedHint")}</p>}
         <RecipientPicker
@@ -520,8 +522,12 @@ export const CreateView: React.FC<CreateViewProps> = ({
           />
         )}
         <div className="flex flex-wrap gap-2">
-          <Button variant="primary" disabled={!upload || job.running || uploading} onClick={create}>
-            <Plus size={16} />
+          <Button
+            variant="primary"
+            disabled={!upload || job.running || uploading}
+            onClick={create}
+            icon={<Plus size={16} />}
+          >
             {t("createBtn")}
           </Button>
           {upload && (

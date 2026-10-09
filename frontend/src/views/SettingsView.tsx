@@ -20,11 +20,22 @@ import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { FeedbackForm } from "../components/FeedbackForm";
-import { Modal } from "../components/Modal";
 import { useToast } from "../components/Toasts";
-import { Toggle } from "../components/Toggle";
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  Dialog,
+  Field,
+  IconButton,
+  Input,
+  Select,
+  Spinner,
+  Tabs,
+  Toggle,
+} from "../components/ui";
 import { useI18n } from "../context/I18nContext";
-import { cn } from "../utils/cn";
 
 type SettingsTab = "general" | "integrations" | "proxy" | "security" | "storage" | "feedback";
 
@@ -228,181 +239,76 @@ export const SettingsView: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-12 text-muted">
-        <div className="w-6 h-6 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin mr-2" />
-        <span className="text-sm font-semibold">{t("loading")}</span>
+      <div className="flex items-center justify-center p-12">
+        <Spinner className="size-6" label={t("loading")} />
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-5 sm:gap-6">
-      {/* Settings Navigation Bar - Mobile-first horizontal scroll */}
-      <div
-        role="tablist"
-        aria-label="Settings Categories"
-        className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-panel border border-line overflow-x-auto no-scrollbar shadow-sm"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === "general"}
-          onClick={() => setActiveTab("general")}
-          className={cn(
-            "flex items-center gap-2 px-3.5 py-2.5 min-h-[44px] rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50",
-            activeTab === "general"
-              ? "bg-brand-blue text-white shadow-md shadow-brand-blue/25"
-              : "text-muted hover:text-text-main hover:bg-panel-hover",
-          )}
-        >
-          <Sliders size={17} className="shrink-0" />
-          <span>{t("tabGeneral")}</span>
-        </button>
+      <Tabs
+        value={activeTab}
+        onChange={setActiveTab}
+        aria-label={t("settings")}
+        className="overflow-x-auto"
+        options={[
+          { value: "general", label: t("tabGeneral"), icon: <Sliders size={17} /> },
+          { value: "integrations", label: t("tabIntegrations"), icon: <Key size={17} /> },
+          { value: "proxy", label: t("tabProxy"), icon: <Globe size={17} /> },
+          { value: "security", label: t("tabSecurity"), icon: <Shield size={17} /> },
+          { value: "storage", label: t("tabStorage"), icon: <HardDrive size={17} /> },
+          { value: "feedback", label: t("tabFeedback"), icon: <MessageSquareHeart size={17} /> },
+        ]}
+      />
 
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === "integrations"}
-          onClick={() => setActiveTab("integrations")}
-          className={cn(
-            "flex items-center gap-2 px-3.5 py-2.5 min-h-[44px] rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50",
-            activeTab === "integrations"
-              ? "bg-brand-blue text-white shadow-md shadow-brand-blue/25"
-              : "text-muted hover:text-text-main hover:bg-panel-hover",
-          )}
-        >
-          <Key size={17} className="shrink-0" />
-          <span>{t("tabIntegrations")}</span>
-        </button>
-
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === "proxy"}
-          onClick={() => setActiveTab("proxy")}
-          className={cn(
-            "flex items-center gap-2 px-3.5 py-2.5 min-h-[44px] rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50",
-            activeTab === "proxy"
-              ? "bg-brand-blue text-white shadow-md shadow-brand-blue/25"
-              : "text-muted hover:text-text-main hover:bg-panel-hover",
-          )}
-        >
-          <Globe size={17} className="shrink-0" />
-          <span>{t("tabProxy")}</span>
-        </button>
-
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === "security"}
-          onClick={() => setActiveTab("security")}
-          className={cn(
-            "flex items-center gap-2 px-3.5 py-2.5 min-h-[44px] rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50",
-            activeTab === "security"
-              ? "bg-brand-blue text-white shadow-md shadow-brand-blue/25"
-              : "text-muted hover:text-text-main hover:bg-panel-hover",
-          )}
-        >
-          <Shield size={17} className="shrink-0" />
-          <span>{t("tabSecurity")}</span>
-        </button>
-
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === "storage"}
-          onClick={() => setActiveTab("storage")}
-          className={cn(
-            "flex items-center gap-2 px-3.5 py-2.5 min-h-[44px] rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50",
-            activeTab === "storage"
-              ? "bg-brand-blue text-white shadow-md shadow-brand-blue/25"
-              : "text-muted hover:text-text-main hover:bg-panel-hover",
-          )}
-        >
-          <HardDrive size={17} className="shrink-0" />
-          <span>{t("tabStorage")}</span>
-        </button>
-
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === "feedback"}
-          onClick={() => setActiveTab("feedback")}
-          className={cn(
-            "flex items-center gap-2 px-3.5 py-2.5 min-h-[44px] rounded-xl font-bold text-xs sm:text-sm whitespace-nowrap transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50",
-            activeTab === "feedback"
-              ? "bg-brand-blue text-white shadow-md shadow-brand-blue/25"
-              : "text-muted hover:text-text-main hover:bg-panel-hover",
-          )}
-        >
-          <MessageSquareHeart size={17} className="shrink-0" />
-          <span>{t("tabFeedback")}</span>
-        </button>
-      </div>
-
-      {/* ====================================================================
-          TAB 1: General & Prefix
-         ==================================================================== */}
       {activeTab === "general" && (
         <div className="flex flex-col gap-5">
-          {/* Hero Prefix Customization Card */}
-          <div className="rounded-2xl border border-line bg-gradient-to-br from-panel-raised to-panel p-4 sm:p-6 shadow-sm flex flex-col gap-4 sm:gap-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-line">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-brand-cyan/10 text-brand-cyan flex items-center justify-center shrink-0">
-                  <Terminal size={22} />
+          <Card className="flex flex-col gap-4 sm:gap-5">
+            <CardHeader
+              icon={<Terminal size={22} />}
+              title={t("prefixTitle")}
+              description={t("prefixDesc")}
+              actions={
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-muted">{t("activePrefix")}:</span>
+                  <Badge tone="info" className="font-mono">
+                    {prefix}
+                  </Badge>
                 </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-bold text-text-main">
-                    {t("prefixTitle")}
-                  </h3>
-                  <p className="text-xs sm:text-sm text-muted mt-0.5">{t("prefixDesc")}</p>
-                </div>
-              </div>
+              }
+            />
 
-              <div className="flex items-center gap-2 self-start sm:self-auto">
-                <span className="text-xs text-muted font-semibold">{t("activePrefix")}:</span>
-                <span className="inline-flex items-center justify-center px-3 py-1 rounded-lg bg-brand-cyan/15 text-brand-cyan font-mono font-bold text-base border border-brand-cyan/30 shadow-sm">
-                  {prefix}
-                </span>
-              </div>
-            </div>
-
-            {/* Quick Presets & Custom Input */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-1">
+            <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
               <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted font-semibold">{t("prefixPresets")}</span>
-                <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-semibold text-muted">{t("prefixPresets")}</span>
+                <div className="flex flex-wrap items-center gap-2">
                   {PREFIX_PRESETS.map((p) => {
                     const isCurrent = prefix === p;
                     return (
-                      <button
+                      <IconButton
                         key={p}
-                        type="button"
-                        className={cn(
-                          "w-10 h-10 sm:w-11 sm:h-11 rounded-xl border font-mono font-bold text-sm transition-all flex items-center justify-center focus-visible:ring-2 focus-visible:ring-brand-blue/50",
-                          isCurrent
-                            ? "bg-brand-cyan text-slate-900 border-brand-cyan shadow-sm"
-                            : "bg-panel-raised border-line text-text-main hover:bg-panel-hover",
-                        )}
+                        label={p}
+                        size="md"
+                        variant={isCurrent ? "primary" : "secondary"}
+                        className="font-mono"
                         onClick={() => {
                           setPrefixInput(p);
                           handleSavePrefix(p);
                         }}
                       >
                         {p}
-                      </button>
+                      </IconButton>
                     );
                   })}
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1.5 flex-1 min-w-[200px]">
-                <span className="text-xs text-muted font-semibold">{t("changePrefix")}</span>
+              <Field label={t("changePrefix")} className="min-w-[200px] flex-1">
                 <div className="flex items-center gap-2">
-                  <input
+                  <Input
                     type="text"
-                    className="w-20 sm:w-24 h-11 px-3 text-center font-mono font-bold text-base rounded-xl border border-line bg-panel text-text-main focus:outline-none focus:ring-2 focus:ring-brand-blue/50 shrink-0"
+                    className="h-11 w-20 text-center font-mono sm:w-24"
                     maxLength={3}
                     placeholder={t("prefixPlaceholder")}
                     value={prefixInput}
@@ -411,316 +317,236 @@ export const SettingsView: React.FC = () => {
                       if (e.key === "Enter") handleSavePrefix();
                     }}
                   />
-                  <button
-                    type="button"
+                  <Button
+                    variant="primary"
+                    icon={<Save size={16} />}
                     onClick={() => handleSavePrefix()}
                     disabled={savingPrefix || prefixInput.trim() === prefix}
-                    className="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm whitespace-nowrap transition-all shadow-md shadow-brand-blue/20 focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
+                    loading={savingPrefix}
                   >
-                    <Save size={16} />
-                    <span>{savingPrefix ? t("saving") : t("prefixSaveBtn")}</span>
-                  </button>
+                    {savingPrefix ? t("saving") : t("prefixSaveBtn")}
+                  </Button>
                 </div>
-              </div>
+              </Field>
             </div>
 
-            {/* Live Command Syntax Preview */}
-            <div className="rounded-xl bg-bg-soft/70 border border-line p-3 flex flex-wrap items-center gap-2 text-xs sm:text-sm">
-              <span className="font-semibold text-muted">{t("prefixPreview")}</span>
-              <div className="px-2 py-0.5 rounded-lg bg-panel border border-line font-mono font-medium text-brand-cyan text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-muted sm:text-sm">
+                {t("prefixPreview")}
+              </span>
+              <Badge tone="info" className="font-mono">
                 <code>{prefixInput || prefix}help</code>
-              </div>
-              <div className="px-2 py-0.5 rounded-lg bg-panel border border-line font-mono font-medium text-brand-cyan text-xs">
+              </Badge>
+              <Badge tone="info" className="font-mono">
                 <code>{prefixInput || prefix}lang ar</code>
-              </div>
-              <div className="px-2 py-0.5 rounded-lg bg-panel border border-line font-mono font-medium text-brand-cyan text-xs">
+              </Badge>
+              <Badge tone="info" className="font-mono">
                 <code>{prefixInput || prefix}sticker</code>
-              </div>
+              </Badge>
             </div>
-          </div>
+          </Card>
 
-          {/* Bot Behavior & Localization */}
-          <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col gap-4">
-            <h3 className="text-base sm:text-lg font-bold text-text-main">
-              {language === "ar" ? "سلوك النظام والردود" : "System Behavior & Delays"}
-            </h3>
+          <Card className="flex flex-col gap-4">
+            <CardHeader
+              title={language === "ar" ? "سلوك النظام والردود" : "System Behavior & Delays"}
+            />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Interface Language */}
-              <div className="space-y-1.5">
-                <label className="block text-xs sm:text-sm font-bold text-text-main">
-                  {t("interfaceLanguage")}
-                </label>
-                <select
-                  className="w-full h-11 px-3 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value as any)}
-                >
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label={t("interfaceLanguage")} description={t("interfaceLanguageDesc")}>
+                <Select value={language} onChange={(e) => setLanguage(e.target.value as any)}>
                   <option value="ar">العربية (RTL - اليمين لليسار)</option>
                   <option value="en">English (LTR - Left to Right)</option>
-                </select>
-                <span className="block text-[11px] text-muted">{t("interfaceLanguageDesc")}</span>
-              </div>
+                </Select>
+              </Field>
 
-              {/* Bot Response Language */}
-              <div className="space-y-1.5">
-                <label className="block text-xs sm:text-sm font-bold text-text-main">
-                  {t("botLanguage")}
-                </label>
-                <select
-                  className="w-full h-11 px-3 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+              <Field label={t("botLanguage")} description={t("botLanguageDesc")}>
+                <Select
                   value={settings["bot_language"] || "auto"}
                   onChange={(e) => updateSetting("bot_language", e.target.value)}
                 >
                   <option value="auto">{t("langAuto")}</option>
                   <option value="ar">{t("langAr")}</option>
                   <option value="en">{t("langEn")}</option>
-                </select>
-                <span className="block text-[11px] text-muted">{t("botLanguageDesc")}</span>
-              </div>
+                </Select>
+              </Field>
 
-              {/* Timezone */}
-              <div className="space-y-1.5">
-                <label className="block text-xs sm:text-sm font-bold text-text-main">
-                  {t("botTimezone")}
-                </label>
-                <input
+              <Field label={t("botTimezone")} description={t("botTimezoneDesc")}>
+                <Input
                   type="text"
-                  className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised font-mono text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                  className="font-mono"
                   placeholder="Africa/Cairo"
                   value={settings["bot_timezone"] || "Africa/Cairo"}
                   onChange={(e) => setSettings({ ...settings, bot_timezone: e.target.value })}
                   onBlur={(e) => updateSetting("bot_timezone", e.target.value)}
                 />
-                <span className="block text-[11px] text-muted">{t("botTimezoneDesc")}</span>
-              </div>
+              </Field>
 
-              {/* Reply Delays */}
-              <div className="space-y-1.5">
-                <label className="block text-xs sm:text-sm font-bold text-text-main">
-                  {t("botMinDelay")}
-                </label>
-                <input
+              <Field label={t("botMinDelay")} description={t("delaysDesc")}>
+                <Input
                   type="number"
-                  className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                   value={settings["bot_min_delay_ms"] || 400}
                   onChange={(e) =>
                     setSettings({ ...settings, bot_min_delay_ms: Number(e.target.value) })
                   }
                   onBlur={(e) => updateSetting("bot_min_delay_ms", Number(e.target.value))}
                 />
-                <span className="block text-[11px] text-muted">{t("delaysDesc")}</span>
-              </div>
+              </Field>
 
-              <div className="space-y-1.5">
-                <label className="block text-xs sm:text-sm font-bold text-text-main">
-                  {t("botMaxDelay")}
-                </label>
-                <input
+              <Field label={t("botMaxDelay")}>
+                <Input
                   type="number"
-                  className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                   value={settings["bot_max_delay_ms"] || 900}
                   onChange={(e) =>
                     setSettings({ ...settings, bot_max_delay_ms: Number(e.target.value) })
                   }
                   onBlur={(e) => updateSetting("bot_max_delay_ms", Number(e.target.value))}
                 />
-              </div>
+              </Field>
             </div>
-          </div>
+          </Card>
 
-          {/* Share settings: export / import */}
-          <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col gap-4">
-            <div className="flex items-center gap-3 pb-3 border-b border-line">
-              <div className="w-10 h-10 rounded-xl bg-brand-blue/10 text-brand-blue flex items-center justify-center shrink-0">
-                <Share2 size={20} />
-              </div>
-              <div>
-                <h3 className="text-base sm:text-lg font-bold text-text-main">
-                  {t("shareSettingsTitle")}
-                </h3>
-                <p className="text-xs sm:text-sm text-muted mt-0.5">{t("shareSettingsDesc")}</p>
-              </div>
-            </div>
-
-            <div className="flex flex-row gap-3">
-              <button
-                type="button"
-                onClick={handleExportSettings}
-                disabled={exportingSettings}
-                className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-5 h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/20 transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
-              >
-                <Download size={16} className="shrink-0" />
-                <span className="truncate">{t("exportSettings")}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => importFileRef.current?.click()}
-                className="flex-1 min-w-0 inline-flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-5 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50"
-              >
-                <Upload size={16} className="shrink-0" />
-                <span className="truncate">{t("importSettings")}</span>
-              </button>
-              <input
-                ref={importFileRef}
-                type="file"
-                accept="application/json,.json"
-                className="hidden"
-                onChange={handleImportFile}
-              />
-            </div>
-          </div>
+          <Card>
+            <CardHeader
+              icon={<Share2 size={20} />}
+              title={t("shareSettingsTitle")}
+              description={t("shareSettingsDesc")}
+              actions={
+                <>
+                  <IconButton
+                    label={t("exportSettings")}
+                    icon={<Download size={18} />}
+                    onClick={handleExportSettings}
+                    loading={exportingSettings}
+                  />
+                  <Button
+                    variant="secondary"
+                    icon={<Upload size={16} />}
+                    onClick={() => importFileRef.current?.click()}
+                  >
+                    {t("importSettings")}
+                  </Button>
+                </>
+              }
+            />
+            <input
+              ref={importFileRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={handleImportFile}
+            />
+          </Card>
         </div>
       )}
 
-      {/* ====================================================================
-          TAB 2: Integrations & API Keys
-         ==================================================================== */}
       {activeTab === "integrations" && (
-        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col gap-5">
-          <div className="flex items-center gap-3.5 pb-4 border-b border-line">
-            <div className="w-11 h-11 rounded-xl bg-brand-cyan/10 text-brand-cyan flex items-center justify-center shrink-0">
-              <Key size={22} />
-            </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-bold text-text-main">
-                {t("tabIntegrations")}
-              </h3>
-              <p className="text-xs sm:text-sm text-muted mt-0.5">{t("integrationsDesc")}</p>
-            </div>
-          </div>
+        <Card className="flex flex-col gap-5">
+          <CardHeader
+            icon={<Key size={22} />}
+            title={t("tabIntegrations")}
+            description={t("integrationsDesc")}
+          />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* OpenWeatherMap API Key */}
-            <div className="rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
-              <div>
-                <label className="block text-xs sm:text-sm font-bold text-text-main mb-1">
-                  {t("weatherApiKey")}
-                </label>
-                <p className="text-xs text-muted mb-3">
-                  {language === "ar"
-                    ? "مطلوب لتشغيل أمر الطقس والأحوال الجوية !weather"
-                    : "Required for the !weather forecast command"}
-                </p>
-                <div className="relative">
-                  <input
-                    type={showWeatherKey ? "text" : "password"}
-                    className="w-full h-11 px-3.5 pe-11 rounded-xl border border-line bg-panel text-text-main font-mono text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-                    placeholder="OpenWeatherMap API Key"
-                    value={settings["openweathermap_api_key"] || ""}
-                    onChange={(e) =>
-                      setSettings({ ...settings, openweathermap_api_key: e.target.value })
-                    }
-                    onBlur={(e) => updateSetting("openweathermap_api_key", e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowWeatherKey(!showWeatherKey)}
-                    className="absolute top-1.5 end-1.5 w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-text-main transition-colors"
-                  >
-                    {showWeatherKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <Field
+              label={t("weatherApiKey")}
+              description={
+                language === "ar"
+                  ? "مطلوب لتشغيل أمر الطقس والأحوال الجوية !weather"
+                  : "Required for the !weather forecast command"
+              }
+            >
+              <div className="flex items-center gap-2">
+                <Input
+                  type={showWeatherKey ? "text" : "password"}
+                  className="min-w-0 flex-1 font-mono"
+                  placeholder="OpenWeatherMap API Key"
+                  value={settings["openweathermap_api_key"] || ""}
+                  onChange={(e) =>
+                    setSettings({ ...settings, openweathermap_api_key: e.target.value })
+                  }
+                  onBlur={(e) => updateSetting("openweathermap_api_key", e.target.value)}
+                />
+                <IconButton
+                  variant="ghost"
+                  label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                  icon={showWeatherKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                  onClick={() => setShowWeatherKey(!showWeatherKey)}
+                />
               </div>
-            </div>
+            </Field>
 
-            {/* YouTube Data API Key */}
-            <div className="rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
-              <div>
-                <label className="block text-xs sm:text-sm font-bold text-text-main mb-1">
-                  {t("youtubeApiKey")}
-                </label>
-                <p className="text-xs text-muted mb-3">
-                  {language === "ar"
-                    ? "مطلوب لأدوات البحث ومعلومات الفيديوهات من يوتيوب"
-                    : "Required for YouTube search and video tools"}
-                </p>
-                <div className="relative">
-                  <input
-                    type={showYoutubeKey ? "text" : "password"}
-                    className="w-full h-11 px-3.5 pe-11 rounded-xl border border-line bg-panel text-text-main font-mono text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-                    placeholder="YouTube Data API Key"
-                    value={settings["youtube_api_key"] || ""}
-                    onChange={(e) => setSettings({ ...settings, youtube_api_key: e.target.value })}
-                    onBlur={(e) => updateSetting("youtube_api_key", e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowYoutubeKey(!showYoutubeKey)}
-                    className="absolute top-1.5 end-1.5 w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-text-main transition-colors"
-                  >
-                    {showYoutubeKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
+            <Field
+              label={t("youtubeApiKey")}
+              description={
+                language === "ar"
+                  ? "مطلوب لأدوات البحث ومعلومات الفيديوهات من يوتيوب"
+                  : "Required for YouTube search and video tools"
+              }
+            >
+              <div className="flex items-center gap-2">
+                <Input
+                  type={showYoutubeKey ? "text" : "password"}
+                  className="min-w-0 flex-1 font-mono"
+                  placeholder="YouTube Data API Key"
+                  value={settings["youtube_api_key"] || ""}
+                  onChange={(e) => setSettings({ ...settings, youtube_api_key: e.target.value })}
+                  onBlur={(e) => updateSetting("youtube_api_key", e.target.value)}
+                />
+                <IconButton
+                  variant="ghost"
+                  label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                  icon={showYoutubeKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                  onClick={() => setShowYoutubeKey(!showYoutubeKey)}
+                />
               </div>
-            </div>
+            </Field>
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* ====================================================================
-          TAB 3: WhatsApp Proxy
-         ==================================================================== */}
       {activeTab === "proxy" && (
-        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col gap-5">
-          <div className="flex items-center justify-between gap-3 pb-4 border-b border-line">
-            <div className="flex items-center gap-3.5 min-w-0 flex-1">
-              <div className="w-11 h-11 rounded-xl bg-blue-500/10 text-brand-blue flex items-center justify-center shrink-0">
-                <Globe size={22} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h3 className="text-base sm:text-lg font-bold text-text-main truncate">
-                  {t("proxyTitle")}
-                </h3>
-                <p className="text-xs sm:text-sm text-muted mt-0.5 truncate">{t("proxyDesc")}</p>
-              </div>
-            </div>
-            <div className="shrink-0">
-              <Toggle
-                checked={Boolean(settings["whatsapp_proxy_enabled"])}
-                onChange={(val) => updateSetting("whatsapp_proxy_enabled", val)}
-              />
-            </div>
+        <Card className="flex flex-col gap-5">
+          <div className="flex items-center justify-between gap-3">
+            <CardHeader
+              className="min-w-0 flex-1"
+              icon={<Globe size={22} />}
+              title={t("proxyTitle")}
+              description={t("proxyDesc")}
+            />
+            <Toggle
+              className="shrink-0"
+              checked={Boolean(settings["whatsapp_proxy_enabled"])}
+              onChange={(val) => updateSetting("whatsapp_proxy_enabled", val)}
+            />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <label className="block text-xs sm:text-sm font-bold text-text-main">
-                {t("proxyProtocol")}
-              </label>
-              <select
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Field label={t("proxyProtocol")}>
+              <Select
                 value={settings["whatsapp_proxy_protocol"] || "http"}
                 onChange={(e) => updateSetting("whatsapp_proxy_protocol", e.target.value)}
               >
                 <option value="http">HTTP</option>
                 <option value="https">HTTPS</option>
                 <option value="socks5">SOCKS5</option>
-              </select>
-            </div>
+              </Select>
+            </Field>
 
-            <div className="space-y-1.5">
-              <label className="block text-xs sm:text-sm font-bold text-text-main">
-                {t("proxyHost")}
-              </label>
-              <input
+            <Field label={t("proxyHost")}>
+              <Input
                 type="text"
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised font-mono text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                className="font-mono"
                 placeholder="proxy.example.com"
                 value={settings["whatsapp_proxy_host"] || ""}
                 onChange={(e) => setSettings({ ...settings, whatsapp_proxy_host: e.target.value })}
                 onBlur={(e) => updateSetting("whatsapp_proxy_host", e.target.value)}
               />
-            </div>
+            </Field>
 
-            <div className="space-y-1.5">
-              <label className="block text-xs sm:text-sm font-bold text-text-main">
-                {t("proxyPort")}
-              </label>
-              <input
+            <Field label={t("proxyPort")}>
+              <Input
                 type="number"
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                 placeholder="1080"
                 value={settings["whatsapp_proxy_port"] || ""}
                 onChange={(e) =>
@@ -728,259 +554,202 @@ export const SettingsView: React.FC = () => {
                 }
                 onBlur={(e) => updateSetting("whatsapp_proxy_port", Number(e.target.value))}
               />
-            </div>
+            </Field>
 
-            <div className="space-y-1.5">
-              <label className="block text-xs sm:text-sm font-bold text-text-main">
-                {t("proxyUsername")}
-              </label>
-              <input
+            <Field label={t("proxyUsername")}>
+              <Input
                 type="text"
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised font-mono text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                className="font-mono"
                 value={settings["whatsapp_proxy_username"] || ""}
                 onChange={(e) =>
                   setSettings({ ...settings, whatsapp_proxy_username: e.target.value })
                 }
                 onBlur={(e) => updateSetting("whatsapp_proxy_username", e.target.value)}
               />
-            </div>
+            </Field>
 
-            <div className="space-y-1.5">
-              <label className="block text-xs sm:text-sm font-bold text-text-main">
-                {t("proxyPassword")}
-              </label>
-              <div className="relative">
-                <input
+            <Field label={t("proxyPassword")}>
+              <div className="flex items-center gap-2">
+                <Input
                   type={showProxyPass ? "text" : "password"}
-                  className="w-full h-11 px-3.5 pe-11 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                  className="min-w-0 flex-1"
                   value={settings["whatsapp_proxy_password"] || ""}
                   onChange={(e) =>
                     setSettings({ ...settings, whatsapp_proxy_password: e.target.value })
                   }
                   onBlur={(e) => updateSetting("whatsapp_proxy_password", e.target.value)}
                 />
-                <button
-                  type="button"
+                <IconButton
+                  variant="ghost"
+                  label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                  icon={showProxyPass ? <EyeOff size={16} /> : <Eye size={16} />}
                   onClick={() => setShowProxyPass(!showProxyPass)}
-                  className="absolute top-1.5 end-1.5 w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-text-main transition-colors"
-                >
-                  {showProxyPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
+                />
               </div>
-            </div>
+            </Field>
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* ====================================================================
-          TAB 4: Security & Password
-         ==================================================================== */}
       {activeTab === "security" && (
         <div className="flex flex-col gap-5">
-          <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col gap-4 max-w-xl">
-            <div className="flex items-center gap-3 pb-3 border-b border-line">
-              <Lock size={20} className="text-ok" />
-              <h3 className="text-base sm:text-lg font-bold text-text-main">
-                {t("changePassword")}
-              </h3>
-            </div>
+          <Card className="flex max-w-xl flex-col gap-4">
+            <CardHeader icon={<Lock size={20} />} title={t("changePassword")} />
 
             <form onSubmit={handlePasswordChange} className="flex flex-col gap-3.5">
-              <div className="space-y-1.5">
-                <label className="block text-xs sm:text-sm font-bold text-text-main">
-                  {t("currentPassword")}
-                </label>
-                <div className="relative">
-                  <input
+              <Field label={t("currentPassword")}>
+                <div className="flex items-center gap-2">
+                  <Input
                     type={showPanelPass ? "text" : "password"}
-                    className="w-full h-11 px-3.5 pe-11 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                    className="min-w-0 flex-1"
                     required
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
                   />
-                  <button
-                    type="button"
-                    aria-label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                  <IconButton
+                    variant="ghost"
+                    label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                    icon={showPanelPass ? <EyeOff size={16} /> : <Eye size={16} />}
                     onClick={() => setShowPanelPass(!showPanelPass)}
-                    className="absolute top-1.5 end-1.5 w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-text-main transition-colors"
-                  >
-                    {showPanelPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+                  />
                 </div>
-              </div>
+              </Field>
 
-              <div className="space-y-1.5">
-                <label className="block text-xs sm:text-sm font-bold text-text-main">
-                  {t("newPassword")}
-                </label>
-                <div className="relative">
-                  <input
+              <Field label={t("newPassword")} description={t("passwordMinLength")}>
+                <div className="flex items-center gap-2">
+                  <Input
                     type={showPanelPass ? "text" : "password"}
-                    className="w-full h-11 px-3.5 pe-11 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                    className="min-w-0 flex-1"
                     required
                     minLength={8}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                   />
-                  <button
-                    type="button"
-                    aria-label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                  <IconButton
+                    variant="ghost"
+                    label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                    icon={showPanelPass ? <EyeOff size={16} /> : <Eye size={16} />}
                     onClick={() => setShowPanelPass(!showPanelPass)}
-                    className="absolute top-1.5 end-1.5 w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-text-main transition-colors"
-                  >
-                    {showPanelPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+                  />
                 </div>
-                <span className="block text-[11px] text-muted">{t("passwordMinLength")}</span>
-              </div>
+              </Field>
 
-              <div className="space-y-1.5">
-                <label className="block text-xs sm:text-sm font-bold text-text-main">
-                  {t("confirmPassword")}
-                </label>
-                <div className="relative">
-                  <input
+              <Field label={t("confirmPassword")}>
+                <div className="flex items-center gap-2">
+                  <Input
                     type={showPanelPass ? "text" : "password"}
-                    className="w-full h-11 px-3.5 pe-11 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                    className="min-w-0 flex-1"
                     required
                     minLength={8}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                   />
-                  <button
-                    type="button"
-                    aria-label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                  <IconButton
+                    variant="ghost"
+                    label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                    icon={showPanelPass ? <EyeOff size={16} /> : <Eye size={16} />}
                     onClick={() => setShowPanelPass(!showPanelPass)}
-                    className="absolute top-1.5 end-1.5 w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-text-main transition-colors"
-                  >
-                    {showPanelPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+                  />
                 </div>
-              </div>
+              </Field>
 
-              <button
+              <Button
                 type="submit"
+                variant="primary"
+                className="mt-2 w-full self-start sm:w-auto"
+                icon={<Save size={16} />}
                 disabled={changingPass}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/20 transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50 self-start mt-2"
+                loading={changingPass}
               >
-                <Save size={16} />
-                <span>{changingPass ? t("saving") : t("save")}</span>
-              </button>
+                {changingPass ? t("saving") : t("save")}
+              </Button>
             </form>
-          </div>
+          </Card>
         </div>
       )}
 
-      {/* ====================================================================
-          TAB 5: Storage & Media
-         ==================================================================== */}
       {activeTab === "storage" && (
-        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col gap-5">
-          <div className="flex items-center gap-3.5 pb-4 border-b border-line">
-            <div className="w-11 h-11 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0">
-              <HardDrive size={22} />
-            </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-bold text-text-main">{t("storageTitle")}</h3>
-              <p className="text-xs sm:text-sm text-muted mt-0.5">{t("storageDesc")}</p>
-            </div>
-          </div>
+        <Card className="flex flex-col gap-5">
+          <CardHeader
+            icon={<HardDrive size={22} />}
+            title={t("storageTitle")}
+            description={t("storageDesc")}
+          />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="block text-xs sm:text-sm font-bold text-text-main">
-                {t("forwardTtl")}
-              </label>
-              <input
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label={t("forwardTtl")} description={t("forwardTtlDesc")}>
+              <Input
                 type="number"
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                 value={settings["forward_score_ttl_days"] || 30}
                 onChange={(e) =>
                   setSettings({ ...settings, forward_score_ttl_days: Number(e.target.value) })
                 }
                 onBlur={(e) => updateSetting("forward_score_ttl_days", Number(e.target.value))}
               />
-              <span className="block text-[11px] text-muted">{t("forwardTtlDesc")}</span>
-            </div>
+            </Field>
 
-            <div className="space-y-1.5">
-              <label className="block text-xs sm:text-sm font-bold text-text-main">
-                {t("maxFetchBytes")}
-              </label>
-              <input
+            <Field label={t("maxFetchBytes")} description={t("maxFetchBytesDesc")}>
+              <Input
                 type="number"
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                 value={settings["max_fetch_bytes"] || 524288}
                 onChange={(e) =>
                   setSettings({ ...settings, max_fetch_bytes: Number(e.target.value) })
                 }
                 onBlur={(e) => updateSetting("max_fetch_bytes", Number(e.target.value))}
               />
-              <span className="block text-[11px] text-muted">{t("maxFetchBytesDesc")}</span>
-            </div>
+            </Field>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label
-                htmlFor="sticker-library-limit"
-                className="block text-xs sm:text-sm font-bold text-text-main"
-              >
-                {t("stickerLibraryLimit")}
-              </label>
-              <input
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field
+              label={t("stickerLibraryLimit")}
+              htmlFor="sticker-library-limit"
+              description={t("stickerLibraryLimitDesc")}
+            >
+              <Input
                 id="sticker-library-limit"
                 type="number"
                 min={1}
                 max={100000}
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                 value={settings["sticker_library_limit"] || 1000}
                 onChange={(e) =>
                   setSettings({ ...settings, sticker_library_limit: Number(e.target.value) })
                 }
                 onBlur={(e) => updateSetting("sticker_library_limit", Number(e.target.value))}
               />
-              <span className="block text-[11px] text-muted">{t("stickerLibraryLimitDesc")}</span>
-            </div>
+            </Field>
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* ====================================================================
-          TAB 6: Feedback & support — the operator's line to the developer
-         ==================================================================== */}
       {activeTab === "feedback" && <FeedbackForm />}
 
       {/* Import confirmation: the file is about to overwrite this install's
           settings, so the operator sees what is in it before it lands. */}
-      <Modal
+      <Dialog
         isOpen={!!importPreview}
         onClose={() => setImportPreview(null)}
         title={t("importTitle")}
         footer={
-          <div className="flex gap-3 justify-end">
-            <button
-              type="button"
-              onClick={() => setImportPreview(null)}
-              className="px-5 h-10 rounded-xl border border-line text-muted hover:text-text-main font-bold text-xs sm:text-sm transition-colors"
-            >
+          <>
+            <Button variant="secondary" onClick={() => setImportPreview(null)}>
               {language === "ar" ? "إلغاء" : "Cancel"}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="primary"
               onClick={handleImportApply}
               disabled={applyingImport}
-              className="px-5 h-10 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/20 transition-all disabled:opacity-50"
+              loading={applyingImport}
             >
               {t("importApply")}
-            </button>
-          </div>
+            </Button>
+          </>
         }
       >
         {importPreview && (
-          <div className="flex flex-col gap-3 text-xs sm:text-sm text-text-main">
+          <div className="flex flex-col gap-3 text-xs text-text-main sm:text-sm">
             <p className="text-muted">{t("importSummary")}</p>
-            <ul className="flex flex-col gap-1.5 bg-panel-raised rounded-xl border border-line p-4">
+            <ul className="flex flex-col gap-1.5 rounded-xl border border-line bg-panel-raised p-4">
               <li>
                 {t("importPrefix")}:{" "}
                 <span className="font-mono font-bold">{importPreview.commands?.prefix}</span>
@@ -1002,7 +771,7 @@ export const SettingsView: React.FC = () => {
             </ul>
           </div>
         )}
-      </Modal>
+      </Dialog>
     </div>
   );
 };

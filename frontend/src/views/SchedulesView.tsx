@@ -17,9 +17,25 @@ import {
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
-import { Modal } from "../components/Modal";
 import type { ViewTab } from "../components/Sidebar";
 import { useToast } from "../components/Toasts";
+import {
+  Badge,
+  Button,
+  Card,
+  Dialog,
+  EmptyState,
+  Field,
+  IconButton,
+  Input,
+  MenuItem,
+  OverflowMenu,
+  PageHeader,
+  Select,
+  Spinner,
+  StatusPill,
+  Textarea,
+} from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 import type { ScheduleItem } from "../types";
 import {
@@ -603,53 +619,40 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => onNavigate?.("connection")}
-            className="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl bg-warn hover:bg-warn/90 text-bg font-bold text-xs sm:text-sm shadow-sm transition-all shrink-0"
-          >
-            <span>{language === "ar" ? "الذهاب للاتصال" : "Go to Connection"}</span>
-          </button>
+          <Button variant="primary" className="shrink-0" onClick={() => onNavigate?.("connection")}>
+            {language === "ar" ? "الذهاب للاتصال" : "Go to Connection"}
+          </Button>
         </div>
       )}
 
-      {/* Header Card */}
-      <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-brand-cyan/10 text-brand-cyan flex items-center justify-center shrink-0">
-            <Calendar size={24} />
-          </div>
-          <div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-lg md:text-xl font-bold text-text-main">{t("schedules")}</h2>
-              <span
-                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                  isLimitReached
-                    ? "bg-warn/15 text-warn border-warn/30"
-                    : "bg-brand-cyan/10 text-brand-cyan border-brand-cyan/20"
-                }`}
-              >
-                {schedules.length} / {MAX_SCHEDULES} {t("scheduledCount")}
-              </span>
-            </div>
-            <p className="text-xs md:text-sm text-muted mt-1">
-              {t("timezoneLabel")}:{" "}
-              <code className="text-brand-cyan font-mono font-semibold px-1.5 py-0.5 rounded bg-bg-soft border border-line">
-                {timezone}
-              </code>{" "}
-              · {t("headerSubtitle")}
-            </p>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleOpenAddModal}
-          disabled={isLimitReached || !isConnected}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 h-12 sm:h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/20 transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Plus size={18} />
-          <span>
+      <PageHeader
+        icon={<Calendar size={24} />}
+        title={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            {t("schedules")}
+            <Badge tone={isLimitReached ? "warn" : "info"}>
+              {schedules.length} / {MAX_SCHEDULES} {t("scheduledCount")}
+            </Badge>
+          </span>
+        }
+        description={
+          <>
+            {t("timezoneLabel")}:{" "}
+            <code className="rounded border border-line bg-bg-soft px-1.5 py-0.5 font-mono font-semibold text-brand-cyan">
+              {timezone}
+            </code>{" "}
+            · {t("headerSubtitle")}
+          </>
+        }
+        actions={
+          <Button
+            variant="primary"
+            size="lg"
+            className="w-full sm:w-auto"
+            icon={<Plus size={18} />}
+            onClick={handleOpenAddModal}
+            disabled={isLimitReached || !isConnected}
+          >
             {!isConnected
               ? language === "ar"
                 ? "يلزم اتصال واتساب"
@@ -657,13 +660,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               : isLimitReached
                 ? t("limitReached")
                 : t("scheduleNewMsg")}
-          </span>
-        </button>
-      </div>
+          </Button>
+        }
+      />
 
-      {/* Table Container */}
-      <div className="rounded-2xl border border-line bg-panel overflow-hidden shadow-sm overflow-x-auto">
-        <table className="w-full min-w-[680px] text-start border-collapse text-sm">
+      <Card padded={false} className="overflow-x-auto">
+        <table className="w-full min-w-[680px] border-collapse text-start text-sm">
           <thead>
             <tr className="bg-panel-raised border-b border-line text-xs font-bold text-muted uppercase tracking-wider">
               <th className="px-5 py-4 text-start">{t("thTarget")}</th>
@@ -677,20 +679,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           <tbody className="divide-y divide-line/40">
             {loading ? (
               <tr>
-                <td colSpan={6} className="text-center py-16 text-muted">
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <div className="w-6 h-6 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin" />
-                    <span className="text-xs">{t("loading")}</span>
-                  </div>
+                <td colSpan={6} className="py-16 text-center">
+                  <Spinner className="size-6" label={t("loading")} />
                 </td>
               </tr>
             ) : schedules.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-16 text-muted text-xs sm:text-sm">
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <Calendar size={28} className="text-muted/40" />
-                    <span>{t("noSchedules")}</span>
-                  </div>
+                <td colSpan={6}>
+                  <EmptyState icon={<Calendar size={28} />} text={t("noSchedules")} />
                 </td>
               </tr>
             ) : (
@@ -724,25 +720,19 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                     {ar ? s.whenAr || s.when : s.when || s.cronString || "—"}
                   </td>
                   <td className="px-5 py-4">
-                    <span
-                      className={`inline-flex px-2.5 py-0.5 rounded-lg text-xs font-semibold ${
-                        s.type === "recurring"
-                          ? "bg-brand-blue/10 text-brand-cyan"
-                          : "bg-purple-500/10 text-purple-400"
-                      }`}
-                    >
+                    <Badge tone={s.type === "recurring" ? "info" : "neutral"}>
                       {s.type === "recurring" ? t("typeRecurring") : t("typeOnce")}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="px-5 py-4">
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+                    <StatusPill
+                      tone={
                         s.lastDeliveryStatus === "failed"
-                          ? "bg-danger/10 text-danger border border-danger/25"
+                          ? "danger"
                           : s.status === "active"
-                            ? "bg-ok/10 text-ok border border-ok/25"
-                            : "bg-muted/10 text-muted"
-                      }`}
+                            ? "ok"
+                            : "neutral"
+                      }
                     >
                       {s.lastDeliveryStatus === "failed" ? (
                         <AlertCircle size={13} />
@@ -756,35 +746,33 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                             ? t("deliveryActive")
                             : s.status}
                       </span>
-                    </span>
+                    </StatusPill>
                   </td>
                   <td className="px-5 py-4 text-center">
-                    <div className="flex items-center justify-center gap-2">
+                    <div
+                      className="flex items-center justify-center gap-2"
+                      onClick={(event) => event.stopPropagation()}
+                    >
                       {s.lastDeliveryStatus === "failed" && (
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            // the row itself opens the details modal
-                            event.stopPropagation();
+                        <IconButton
+                          label={t("retryDelivery")}
+                          icon={<RefreshCw size={16} />}
+                          onClick={() => {
                             void handleRetry(s.id);
                           }}
-                          className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-line bg-panel-raised hover:bg-panel-hover text-brand-cyan transition-colors"
-                          title={t("retryDelivery")}
-                        >
-                          <RefreshCw size={14} />
-                        </button>
+                        />
                       )}
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleDelete(s.id);
-                        }}
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-danger/25 bg-danger/10 hover:bg-danger/20 text-danger transition-colors"
-                        title={t("delete")}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <OverflowMenu label={t("moreActions")}>
+                        <MenuItem
+                          danger
+                          icon={<Trash2 size={16} />}
+                          onSelect={() => {
+                            void handleDelete(s.id);
+                          }}
+                        >
+                          {t("delete")}
+                        </MenuItem>
+                      </OverflowMenu>
                     </div>
                   </td>
                 </tr>
@@ -792,36 +780,31 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             )}
           </tbody>
         </table>
-      </div>
+      </Card>
 
-      {/* Add Schedule Modal with Chat Search & Select */}
-      <Modal
+      <Dialog
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         title={t("scheduleNewMsg")}
         maxWidth="560px"
         footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <button
-              type="button"
-              onClick={() => setShowAddModal(false)}
-              className="px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors"
-            >
+          <>
+            <Button variant="secondary" onClick={() => setShowAddModal(false)}>
               {t("cancel")}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="primary"
+              loading={creating}
               onClick={handleCreateSchedule}
               disabled={
                 creating ||
                 !selectedRecipient ||
                 (!message.trim() && !scheduleMedia && !scheduleMediaHost)
               }
-              className="px-5 h-10 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/20 transition-all disabled:opacity-50"
             >
               {creating ? t("saving") : t("scheduleAction")}
-            </button>
-          </div>
+            </Button>
+          </>
         }
       >
         <div className="flex flex-col gap-4 py-1">
@@ -845,56 +828,58 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                     )}
                   </div>
                 </div>
-                <button
-                  type="button"
+                <IconButton
+                  label={t("changeChat")}
+                  variant="ghost"
+                  icon={<X size={16} />}
                   onClick={() => setSelectedRecipient(null)}
-                  className="p-1 rounded-lg hover:bg-panel text-muted hover:text-danger transition-colors"
-                  title={t("changeChat")}
-                >
-                  <X size={16} />
-                </button>
+                />
               </div>
             ) : (
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Search size={16} className="absolute start-3 top-3 text-muted" />
-                    <input
+                  <div className="relative min-w-0 flex-1">
+                    <Search
+                      size={16}
+                      className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-muted"
+                    />
+                    <Input
                       type="search"
                       value={searchRecipient}
                       onChange={(e) => setSearchRecipient(e.target.value)}
                       placeholder={t("searchRecipients")}
                       aria-label={t("searchRecipients")}
-                      className="w-full h-10 ps-9 pe-3 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                      className="ps-9"
                     />
                   </div>
                   {hasPhoneBookPicker() && (
-                    <button
-                      type="button"
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="shrink-0"
+                      icon={<BookUser size={15} />}
                       onClick={handlePickPhoneContact}
-                      className="inline-flex items-center justify-center gap-1.5 h-10 px-3 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main text-xs font-bold shrink-0"
                       title={t("pickPhoneContactHint")}
                     >
-                      <BookUser size={15} />
                       <span className="hidden sm:inline">{t("pickPhoneContact")}</span>
-                    </button>
+                    </Button>
                   )}
                 </div>
 
                 <div className="max-h-48 overflow-y-auto rounded-xl border border-line bg-panel-raised divide-y divide-line/40">
                   {loadingRecipients ? (
-                    <div className="p-4 text-center text-xs text-muted">{t("loading")}</div>
-                  ) : filteredRecipients.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-muted">
-                      {t("noRecipientsFound")}
+                    <div className="flex justify-center p-4">
+                      <Spinner label={t("loading")} />
                     </div>
+                  ) : filteredRecipients.length === 0 ? (
+                    <EmptyState className="px-4 py-4" text={t("noRecipientsFound")} />
                   ) : (
                     filteredRecipients.map((rec) => (
-                      <button
+                      <Button
                         key={rec.id}
-                        type="button"
+                        variant="ghost"
                         onClick={() => setSelectedRecipient(rec)}
-                        className="w-full p-2.5 flex items-center justify-between gap-2 hover:bg-panel text-start transition-colors"
+                        className="h-auto w-full justify-between gap-2 rounded-none px-2.5 py-2.5 text-start"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div className="w-7 h-7 rounded-lg bg-panel border border-line flex items-center justify-center shrink-0 text-muted">
@@ -904,10 +889,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                             {renderContactLines(rec, "text-xs font-bold text-text-main", false)}
                           </div>
                         </div>
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-panel text-muted shrink-0">
+                        <Badge tone="neutral" className="shrink-0">
                           {rec.type === "group" ? t("groupFallback") : t("contactFallback")}
-                        </span>
-                      </button>
+                        </Badge>
+                      </Button>
                     ))
                   )}
                 </div>
@@ -915,31 +900,22 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             )}
           </div>
 
-          {/* Schedule Type */}
-          <div className="space-y-1.5">
-            <label htmlFor="schedule-type" className="block text-xs font-bold text-text-main">
-              {t("scheduleType")}
-            </label>
-            <select
+          <Field label={t("scheduleType")} htmlFor="schedule-type">
+            <Select
               id="schedule-type"
-              className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
               value={scheduleType}
               onChange={(e) => setScheduleType(e.target.value as "recurring" | "once")}
             >
               <option value="recurring">{t("scheduleRecurring")}</option>
               <option value="once">{t("scheduleOnce")}</option>
-            </select>
-          </div>
+            </Select>
+          </Field>
 
           {scheduleType === "recurring" ? (
             <div className="space-y-3 rounded-xl border border-line bg-panel-raised/40 p-3.5">
-              <div className="space-y-1.5">
-                <label htmlFor="repeat-kind" className="block text-xs font-bold text-text-main">
-                  {t("repeat")}
-                </label>
-                <select
+              <Field label={t("repeat")} htmlFor="repeat-kind">
+                <Select
                   id="repeat-kind"
-                  className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                   value={repeatKind}
                   onChange={(e) => setRepeatKind(e.target.value as RepeatKind)}
                 >
@@ -947,8 +923,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   <option value="weekly">{t("repeatWeekly")}</option>
                   <option value="monthly">{t("repeatMonthly")}</option>
                   <option value="hourly">{t("repeatHourly")}</option>
-                </select>
-              </div>
+                </Select>
+              </Field>
 
               {repeatKind === "weekly" && (
                 <fieldset className="space-y-1.5">
@@ -959,19 +935,15 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                     {WEEKDAY_KEYS.map((key, day) => {
                       const selected = weekdays.includes(day);
                       return (
-                        <button
+                        <Button
                           key={key}
-                          type="button"
+                          size="sm"
+                          variant={selected ? "primary" : "secondary"}
                           aria-pressed={selected}
                           onClick={() => toggleWeekday(day)}
-                          className={`h-9 px-2.5 rounded-lg text-xs font-bold border transition-colors ${
-                            selected
-                              ? "bg-brand-blue text-white border-brand-blue"
-                              : "bg-panel-raised text-text-main border-line hover:bg-panel-hover"
-                          }`}
                         >
                           {t(key)}
-                        </button>
+                        </Button>
                       );
                     })}
                   </div>
@@ -979,33 +951,28 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               )}
 
               {repeatKind === "monthly" && (
-                <div className="space-y-1.5">
-                  <label htmlFor="day-of-month" className="block text-xs font-bold text-text-main">
-                    {t("dayOfMonth")}
-                  </label>
-                  <input
+                <Field
+                  label={t("dayOfMonth")}
+                  htmlFor="day-of-month"
+                  description={t("monthDayHint")}
+                >
+                  <Input
                     id="day-of-month"
                     type="number"
                     min={1}
                     max={31}
                     inputMode="numeric"
-                    className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                     value={dayOfMonth}
                     onChange={(e) => setDayOfMonth(Number(e.target.value))}
                   />
-                  <p className="text-xs text-muted">{t("monthDayHint")}</p>
-                </div>
+                </Field>
               )}
 
               {repeatKind === "hourly" ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label htmlFor="every-hours" className="block text-xs font-bold text-text-main">
-                      {t("everyHours")}
-                    </label>
-                    <select
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label={t("everyHours")} htmlFor="every-hours">
+                    <Select
                       id="every-hours"
-                      className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                       value={everyHours}
                       onChange={(e) => setEveryHours(Number(e.target.value))}
                     >
@@ -1014,43 +981,39 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                           {n}
                         </option>
                       ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label
-                      htmlFor="hourly-minute"
-                      className="block text-xs font-bold text-text-main"
-                    >
-                      {t("atMinute")}
-                    </label>
-                    <input
+                    </Select>
+                  </Field>
+                  <Field label={t("atMinute")} htmlFor="hourly-minute">
+                    <Input
                       id="hourly-minute"
                       type="number"
                       min={0}
                       max={59}
                       inputMode="numeric"
-                      className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                       value={hourlyMinute}
                       onChange={(e) => setHourlyMinute(Number(e.target.value))}
                       dir="ltr"
                     />
-                  </div>
+                  </Field>
                 </div>
               ) : (
-                <div className="space-y-1.5">
-                  <label htmlFor="send-time" className="block text-xs font-bold text-text-main">
-                    {t("sendTime")}
-                    <span className="ms-1.5 font-semibold text-muted">({timezone})</span>
-                  </label>
-                  <input
+                <Field
+                  label={
+                    <>
+                      {t("sendTime")}
+                      <span className="ms-1.5 font-semibold text-muted">({timezone})</span>
+                    </>
+                  }
+                  htmlFor="send-time"
+                >
+                  <Input
                     id="send-time"
                     type="time"
-                    className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                     value={sendTime}
                     onChange={(e) => setSendTime(e.target.value)}
                     dir="ltr"
                   />
-                </div>
+                </Field>
               )}
 
               <p className="text-xs text-text-main/90 bg-bg-soft border border-line rounded-lg px-3 py-2">
@@ -1059,35 +1022,34 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               </p>
             </div>
           ) : (
-            <div className="space-y-1.5">
-              <label htmlFor="one-off-time" className="block text-xs font-bold text-text-main">
-                {t("deliveryDateTime")}
-              </label>
-              <input
+            <Field label={t("deliveryDateTime")} htmlFor="one-off-time">
+              <Input
                 id="one-off-time"
                 type="datetime-local"
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
                 value={oneOffTime}
                 onChange={(e) => setOneOffTime(e.target.value)}
                 dir="ltr"
               />
-            </div>
+            </Field>
           )}
 
-          <div className="space-y-1.5">
-            <label htmlFor="schedule-message" className="block text-xs font-bold text-text-main">
-              {t("messageText")}{" "}
-              {!scheduleMedia && !scheduleMediaHost && <span className="text-danger">*</span>}
-            </label>
-            <textarea
+          <Field
+            label={
+              <>
+                {t("messageText")}{" "}
+                {!scheduleMedia && !scheduleMediaHost && <span className="text-danger">*</span>}
+              </>
+            }
+            htmlFor="schedule-message"
+          >
+            <Textarea
               id="schedule-message"
-              className="w-full p-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50 resize-y min-h-[90px]"
               rows={3}
               placeholder={t("messagePlaceholder")}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
             />
-          </div>
+          </Field>
 
           {/* Optional media — image, video, audio or document */}
           <div className="space-y-1.5">
@@ -1096,31 +1058,29 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             </span>
             <div className="flex flex-wrap items-center gap-2">
               {scheduleMediaHost || scheduleMedia ? (
-                <span className="inline-flex items-center gap-2 ps-3 pe-2 h-10 rounded-xl border border-brand-blue/40 bg-brand-blue/10 text-xs sm:text-sm text-text-main max-w-full">
-                  <Paperclip size={14} className="text-brand-cyan shrink-0" />
-                  <span className="truncate max-w-[220px]">
+                <span className="inline-flex max-w-full items-center gap-2 rounded-xl border border-brand-blue/40 bg-brand-blue/10 ps-3 pe-1 text-xs text-text-main sm:text-sm">
+                  <Paperclip size={14} className="shrink-0 text-brand-cyan" />
+                  <span className="max-w-[220px] truncate">
                     {scheduleMediaHost?.name ?? scheduleMedia?.name}
                   </span>
-                  <button
-                    type="button"
+                  <IconButton
+                    label={t("scheduleRemoveMedia")}
+                    variant="ghost"
+                    icon={<X size={14} />}
                     onClick={clearScheduleMedia}
-                    aria-label={t("scheduleRemoveMedia")}
-                    className="w-7 h-7 rounded-lg text-muted hover:text-danger hover:bg-danger/10 flex items-center justify-center transition-colors"
-                  >
-                    <X size={14} />
-                  </button>
+                  />
                 </span>
               ) : (
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Paperclip size={14} className="text-brand-cyan" />}
                   onClick={() =>
                     canHostUploadForm() ? void pickHostMedia() : mediaInputRef.current?.click()
                   }
-                  className="inline-flex items-center gap-2 px-3 h-10 rounded-xl border border-line bg-panel-raised text-text-main text-xs sm:text-sm font-bold hover:bg-panel-hover transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50"
                 >
-                  <Paperclip size={14} className="text-brand-cyan shrink-0" />
-                  <span>{t("scheduleAttachMedia")}</span>
-                </button>
+                  {t("scheduleAttachMedia")}
+                </Button>
               )}
               <span className="text-[11px] text-muted">
                 {t("scheduleMediaHint").replace("{max}", String(MEDIA_MAX_MB))}
@@ -1148,52 +1108,45 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             )}
           </div>
         </div>
-      </Modal>
+      </Dialog>
 
-      {/* Schedule details — one row tap opens everything the table truncates */}
-      <Modal
+      <Dialog
         isOpen={!!detailSchedule}
         onClose={() => setDetailSchedule(null)}
         title={t("scheduleDetails")}
         maxWidth="560px"
         footer={
-          <div className="flex items-center justify-between w-full gap-2">
+          <div className="flex w-full items-center justify-between gap-2">
             {detailSchedule?.lastDeliveryStatus === "failed" ? (
-              <button
-                type="button"
+              <IconButton
+                label={t("retryDelivery")}
+                icon={<RefreshCw size={16} />}
                 onClick={() => {
                   const id = detailSchedule.id;
                   setDetailSchedule(null);
                   void handleRetry(id);
                 }}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-brand-cyan font-bold text-xs sm:text-sm transition-colors"
-              >
-                <RefreshCw size={14} />
-                <span>{t("retryDelivery")}</span>
-              </button>
+              />
             ) : (
               <span />
             )}
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setDetailSchedule(null)}
-                className="px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors"
-              >
+              <Button variant="secondary" onClick={() => setDetailSchedule(null)}>
                 {t("close")}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const id = detailSchedule?.id;
-                  setDetailSchedule(null);
-                  if (id) void handleDelete(id);
-                }}
-                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-xl bg-danger hover:bg-danger/90 text-white font-bold text-xs sm:text-sm transition-colors"
-              >
-                <Trash2 size={14} />
-                <span>{t("delete")}</span>
-              </button>
+              </Button>
+              <OverflowMenu label={t("moreActions")}>
+                <MenuItem
+                  danger
+                  icon={<Trash2 size={16} />}
+                  onSelect={() => {
+                    const id = detailSchedule?.id;
+                    setDetailSchedule(null);
+                    if (id) void handleDelete(id);
+                  }}
+                >
+                  {t("delete")}
+                </MenuItem>
+              </OverflowMenu>
             </div>
           </div>
         }
@@ -1244,14 +1197,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               {detailSchedule.type === "recurring" ? t("typeRecurring") : t("typeOnce")}
             </DetailRow>
             <DetailRow label={t("thDelivery")}>
-              <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold ${
+              <StatusPill
+                tone={
                   detailSchedule.lastDeliveryStatus === "failed"
-                    ? "bg-danger/10 text-danger border border-danger/25"
+                    ? "danger"
                     : detailSchedule.status === "active"
-                      ? "bg-ok/10 text-ok border border-ok/25"
-                      : "bg-muted/10 text-muted"
-                }`}
+                      ? "ok"
+                      : "neutral"
+                }
               >
                 {detailSchedule.lastDeliveryStatus === "failed" ? (
                   <AlertCircle size={13} />
@@ -1265,7 +1218,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                       ? t("deliveryActive")
                       : detailSchedule.status}
                 </span>
-              </span>
+              </StatusPill>
             </DetailRow>
             {detailSchedule.lastRunAt && (
               <DetailRow label={t("detailLastRun")}>
@@ -1290,7 +1243,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             )}
           </div>
         )}
-      </Modal>
+      </Dialog>
     </div>
   );
 };

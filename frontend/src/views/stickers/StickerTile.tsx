@@ -1,5 +1,6 @@
 import { Check, Star } from "lucide-react";
 import type React from "react";
+import { Badge, Button, IconButton } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { Sticker } from "../../types";
 import { cn } from "../../utils/cn";
@@ -11,6 +12,9 @@ interface StickerTileProps {
   onOpen: () => void;
   onFavorite: () => void;
 }
+
+const checker =
+  "bg-[repeating-conic-gradient(var(--panel-raised)_0%_25%,var(--bg)_0%_50%)] bg-[length:16px_16px]";
 
 export const StickerTile: React.FC<StickerTileProps> = ({
   sticker,
@@ -25,53 +29,47 @@ export const StickerTile: React.FC<StickerTileProps> = ({
   return (
     <div
       className={cn(
-        "relative aspect-square rounded-xl border bg-panel overflow-hidden",
+        "relative aspect-square overflow-hidden rounded-xl border bg-panel",
         selected ? "border-brand-blue ring-2 ring-brand-blue/50" : "border-line",
       )}
     >
-      <button
-        type="button"
+      <Button
+        variant="ghost"
         onClick={() => onOpen()}
-        className="absolute inset-0 focus-visible:ring-2 focus-visible:ring-brand-blue/50"
         aria-label={t("stickerOpen")}
+        className="absolute inset-0 h-auto min-h-0 w-full rounded-none p-0 hover:bg-transparent"
       >
         <img
           src={sticker.thumbUrl}
           alt=""
           loading="lazy"
           draggable={false}
-          className="w-full h-full object-contain bg-[repeating-conic-gradient(#2a2a2e_0%_25%,#1c1c20_0%_50%)] bg-[length:16px_16px]"
+          className={cn("h-full w-full object-contain", checker)}
         />
-      </button>
-      <button
-        type="button"
+      </Button>
+      <IconButton
+        label={t("stickerSelect")}
+        variant={selected ? "primary" : "secondary"}
         aria-pressed={selected}
-        aria-label={t("stickerSelect")}
+        className="absolute top-1 start-1 z-10"
         onClick={(event) => onToggle(event.shiftKey)}
-        className={cn(
-          "absolute top-1 start-1 z-10 w-7 h-7 rounded-lg border flex items-center justify-center focus-visible:ring-2 focus-visible:ring-brand-blue/50",
-          selected
-            ? "bg-brand-blue border-brand-blue text-white"
-            : "bg-panel/90 border-line text-transparent hover:text-muted",
-        )}
-      >
-        <Check size={16} strokeWidth={3} />
-      </button>
+        icon={<Check size={16} strokeWidth={3} className={selected ? undefined : "opacity-40"} />}
+      />
       {sticker.animated && (
-        <span className="absolute bottom-1 start-1 z-10 px-1.5 py-0.5 rounded-md bg-black/70 text-white text-[10px] font-bold pointer-events-none">
+        <Badge tone="neutral" className="pointer-events-none absolute bottom-1 start-1 z-10">
           {t("gifBadge")}
-        </span>
+        </Badge>
       )}
-      <button
-        type="button"
-        onClick={onFavorite}
+      <IconButton
+        label={sticker.favorite ? t("unfavorite") : t("favorite")}
         aria-pressed={sticker.favorite}
-        aria-label={sticker.favorite ? t("unfavorite") : t("favorite")}
-        title={sticker.favorite ? t("favoriteBadge") : t("favorite")}
-        className="absolute top-1 end-1 z-10 w-7 h-7 rounded-lg bg-panel/90 border border-line flex items-center justify-center focus-visible:ring-2 focus-visible:ring-brand-blue/50"
-      >
-        <Star size={14} className={sticker.favorite ? "fill-warn text-warn" : "text-muted"} />
-      </button>
+        variant="secondary"
+        className="absolute top-1 end-1 z-10"
+        onClick={onFavorite}
+        icon={
+          <Star size={16} className={sticker.favorite ? "fill-warn text-warn" : "text-muted"} />
+        }
+      />
       <span className="sr-only">{label}</span>
     </div>
   );
