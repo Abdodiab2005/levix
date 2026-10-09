@@ -17,6 +17,7 @@ import {
 import type React from "react";
 import { useI18n } from "../context/I18nContext";
 import { cn } from "../utils/cn";
+import { Button, IconButton } from "./ui";
 
 export type ViewTab =
   | "overview"
@@ -47,8 +48,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const brand = (window as any).__BRAND__ || {
     name: "Levix",
     tagline: "Private control room",
-    // The server injects the real version into __BRAND__; this fallback
-    // bundle-time copy is only read when that script is missing.
     version: "",
     developer: "Abdelrhman Diab",
     studio: "Leviro",
@@ -75,42 +74,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {isOpenMobile && (
         <button
           type="button"
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden border-0 p-0 cursor-default"
+          className="fixed inset-0 z-40 cursor-default border-0 bg-black/60 p-0 backdrop-blur-sm md:hidden"
           onClick={onCloseMobile}
-          aria-label="Close mobile sidebar backdrop"
+          aria-label={t("closeNavigation")}
         />
       )}
       <aside
         className={cn(
-          "fixed top-0 bottom-0 start-0 z-50 w-72 md:w-64 md:static md:z-auto bg-panel border-e border-line flex flex-col transition-transform duration-200 ease-out",
+          "fixed start-0 top-0 bottom-0 z-50 flex w-72 flex-col border-e border-line bg-panel transition-transform duration-200 ease-out md:static md:z-auto md:w-64",
           isOpenMobile ? "translate-x-0" : "max-md:-translate-x-full rtl:max-md:translate-x-full",
         )}
         aria-label="Main Navigation"
       >
-        <div className="p-4 flex items-center justify-between border-b border-line">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-blue via-brand-blue to-brand-cyan flex items-center justify-center shadow-md shadow-brand-blue/20 shrink-0 text-white">
+        <div className="flex items-center justify-between border-b border-line p-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-blue via-brand-blue to-brand-cyan text-white shadow-md shadow-brand-blue/20">
               <Zap size={20} />
             </div>
             <div className="min-w-0">
-              <div className="font-extrabold text-base text-text-main leading-tight tracking-tight truncate">
+              <div className="truncate text-base font-extrabold leading-tight tracking-tight text-text-main">
                 {brand.name}
               </div>
-              <div className="text-xs text-muted leading-none truncate mt-0.5">{brand.tagline}</div>
+              <div className="mt-0.5 truncate text-xs leading-none text-muted">{brand.tagline}</div>
             </div>
           </div>
-
-          <button
-            type="button"
+          <IconButton
+            className="md:hidden"
+            label={t("closeNavigation")}
+            icon={<X size={18} />}
             onClick={onCloseMobile}
-            className="inline-flex md:hidden items-center justify-center w-10 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main transition-colors shrink-0"
-            aria-label="Close menu"
-          >
-            <X size={18} />
-          </button>
+          />
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
           {navItems.map((item) => {
             if (item.labelCategory) {
               return (
@@ -122,41 +118,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               );
             }
-            if (!item.icon) return null;
+            if (!item.icon || !item.id) return null;
             const Icon = item.icon;
             const isActive = currentView === item.id;
             return (
-              <button
+              <Button
                 key={item.id}
-                type="button"
+                variant={isActive ? "primary" : "ghost"}
+                className="w-full justify-start"
+                icon={<Icon size={20} />}
                 onClick={() => {
-                  if (item.id) {
-                    onSelectView(item.id as ViewTab);
-                    onCloseMobile();
-                  }
+                  onSelectView(item.id as ViewTab);
+                  onCloseMobile();
                 }}
-                className={cn(
-                  "w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 text-start min-h-[44px]",
-                  isActive
-                    ? "bg-brand-blue text-white shadow-md shadow-brand-blue/25 font-bold"
-                    : "text-muted hover:bg-panel-hover hover:text-text-main",
-                )}
               >
-                <Icon size={20} className="shrink-0" />
                 <span className="truncate">{item.label}</span>
-              </button>
+              </Button>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-line text-xs text-faint flex flex-col gap-2.5">
+        <div className="flex flex-col gap-2.5 border-t border-line p-4 text-xs text-faint">
           <div className="flex items-center justify-between text-[11px] text-muted">
             <span className="font-mono">{brand.version ? `v${brand.version}` : ""}</span>
             <span className="flex items-center gap-1.5">
               <Shield size={14} className="text-brand-cyan" /> Local-first
             </span>
           </div>
-          <div className="text-[11px] text-muted truncate">
+          <div className="truncate text-[11px] text-muted">
             &copy; {brand.copyrightYear || 2026}{" "}
             <a
               href={brand.developerSite || "#"}

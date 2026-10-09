@@ -2,7 +2,7 @@ import type React from "react";
 import { useEffect, useRef } from "react";
 import type { EditOptions } from "../../types";
 import { CANVAS, placement } from "../../utils/stickerPlacement";
-import { hitTest, paintOverlay, type HitBox, type OverlayLayer } from "./overlay";
+import { type HitBox, hitTest, type OverlayLayer, paintOverlay } from "./overlay";
 
 interface CreateStageProps {
   mediaUrl: string;
@@ -202,16 +202,11 @@ export const CreateStage: React.FC<CreateStageProps> = ({
         <div
           role="img"
           aria-label={label}
-          className="absolute top-0 start-0 origin-top-left"
+          className="absolute top-0 start-0 origin-top-left bg-[repeating-conic-gradient(var(--panel-raised)_0%_25%,var(--bg)_0%_50%)] bg-[length:32px_32px]"
           style={{
             width: CANVAS,
             height: CANVAS,
             transform: "scale(var(--stage-scale, 1))",
-            backgroundColor: "#1a1a1e",
-            backgroundImage:
-              "linear-gradient(45deg, #2c2c31 25%, transparent 25%), linear-gradient(-45deg, #2c2c31 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #2c2c31 75%), linear-gradient(-45deg, transparent 75%, #2c2c31 75%)",
-            backgroundSize: "32px 32px",
-            backgroundPosition: "0 0, 0 16px, 16px -16px, -16px 0",
           }}
         >
           {background && <div className="absolute inset-0" style={{ background }} />}

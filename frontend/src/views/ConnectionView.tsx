@@ -16,12 +16,23 @@ import {
   Unlink,
 } from "lucide-react";
 import * as QRCode from "qrcode";
-import type { FC } from "react";
 import type React from "react";
+import type { FC } from "react";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { Modal } from "../components/Modal";
 import { useToast } from "../components/Toasts";
+import {
+  Button,
+  Card,
+  Dialog,
+  IconButton,
+  Input,
+  MenuItem,
+  OverflowMenu,
+  SegmentedControl,
+  Spinner,
+  StatusPill,
+} from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 import type { SessionStatus } from "../types";
 
@@ -72,12 +83,20 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
         QRCode.toDataURL ||
         (QRCode as { default?: { toDataURL?: typeof QRCode.toDataURL } }).default?.toDataURL;
       if (typeof toDataURL === "function") {
+        const styles = getComputedStyle(document.documentElement);
+        const lightTheme = document.documentElement.getAttribute("data-theme") === "light";
+        const dark = (
+          lightTheme ? styles.getPropertyValue("--text") : styles.getPropertyValue("--bg")
+        ).trim();
+        const light = (
+          lightTheme ? styles.getPropertyValue("--panel") : styles.getPropertyValue("--text")
+        ).trim();
         toDataURL(status.qr, {
           width: 280,
           margin: 2,
           color: {
-            dark: "#0b1629",
-            light: "#ffffff",
+            dark,
+            light,
           },
         })
           .then((url: string) => setQrDataUrl(url))
@@ -179,7 +198,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
   return (
     <div className="flex flex-col gap-5 sm:gap-6">
       {/* Primary Connection Hero Card */}
-      <div className="rounded-2xl border border-line bg-gradient-to-br from-panel-raised via-panel to-panel p-4 sm:p-6 shadow-sm flex flex-col gap-5">
+      <Card className="flex flex-col gap-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
           <div className="flex items-center gap-3.5">
             <div
@@ -263,9 +282,9 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                 </div>
               </div>
             </div>
-            <span className="text-xs font-bold text-ok px-2.5 py-1 rounded-lg bg-ok/15 border border-ok/30 shrink-0">
+            <StatusPill tone="ok" className="shrink-0">
               {language === "ar" ? "متصل" : "Online"}
-            </span>
+            </StatusPill>
           </div>
         )}
 
@@ -274,50 +293,40 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
           {/* 1. When CONNECTED: Show Stop, Reconnect, Unlink, Restart */}
           {isConnected && (
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3">
-              <button
-                type="button"
+              <Button
+                variant="danger"
+                icon={<Square size={16} />}
                 onClick={() => handleAction(api.stopSession, t("stop"))}
                 disabled={acting}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 h-12 sm:h-11 rounded-xl border border-danger/40 bg-danger/10 hover:bg-danger/20 text-danger font-bold text-sm transition-all focus-visible:ring-2 focus-visible:ring-danger/50 disabled:opacity-50"
+                className="w-full sm:w-auto"
               >
-                <Square size={16} />
-                <span>{t("stop")}</span>
-              </button>
+                {t("stop")}
+              </Button>
 
-              <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                <button
-                  type="button"
+              <div className="flex items-center gap-2.5">
+                <IconButton
+                  label={t("reconnect")}
+                  icon={<RefreshCw size={18} />}
                   onClick={() => handleAction(api.reconnectSession, t("reconnecting"))}
                   disabled={acting}
-                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
-                  title={t("reconnect")}
-                >
-                  <RefreshCw size={15} />
-                  <span>{t("reconnect")}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowUnlinkModal(true)}
-                  disabled={acting}
-                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-danger/30 bg-danger/10 hover:bg-danger/20 text-danger font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-danger/50 disabled:opacity-50"
-                  title={t("unlink")}
-                >
-                  <Unlink size={15} />
-                  <span>{t("unlink")}</span>
-                </button>
-
+                />
+                <OverflowMenu label={t("moreActions")}>
+                  <MenuItem
+                    danger
+                    icon={<Unlink size={16} />}
+                    disabled={acting}
+                    onSelect={() => setShowUnlinkModal(true)}
+                  >
+                    {t("unlink")}
+                  </MenuItem>
+                </OverflowMenu>
                 {!hideRestart && (
-                  <button
-                    type="button"
+                  <IconButton
+                    label={t("restart")}
+                    icon={<RotateCcw size={18} />}
                     onClick={() => handleAction(api.restartBot, t("restart"))}
                     disabled={acting}
-                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
-                    title={t("restart")}
-                  >
-                    <RotateCcw size={15} />
-                    <span>{t("restart")}</span>
-                  </button>
+                  />
                 )}
               </div>
             </div>
@@ -326,27 +335,23 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
           {/* 2. When STARTING or LINKING or WAITING FOR QR or RECONNECTING: Show Cancel/Stop & Restart */}
           {(isStarting || isWaitingQr || isReconnecting) && (
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
-              <button
-                type="button"
+              <Button
+                variant="danger"
+                icon={<Square size={16} />}
                 onClick={() => handleAction(api.stopSession, t("stop"))}
                 disabled={acting}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 h-12 sm:h-11 rounded-xl border border-danger/40 bg-danger/10 hover:bg-danger/20 text-danger font-bold text-sm transition-all focus-visible:ring-2 focus-visible:ring-danger/50 disabled:opacity-50"
+                className="w-full sm:w-auto"
               >
-                <Square size={16} />
-                <span>{language === "ar" ? "إلغاء المحاولة" : "Cancel Attempt"}</span>
-              </button>
+                {language === "ar" ? "إلغاء المحاولة" : "Cancel Attempt"}
+              </Button>
 
               {!hideRestart && (
-                <button
-                  type="button"
+                <IconButton
+                  label={t("restart")}
+                  icon={<RotateCcw size={18} />}
                   onClick={() => handleAction(api.restartBot, t("restart"))}
                   disabled={acting}
-                  className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
-                  title={t("restart")}
-                >
-                  <RotateCcw size={15} />
-                  <span>{t("restart")}</span>
-                </button>
+                />
               )}
             </div>
           )}
@@ -365,39 +370,35 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                       : "Paused while the device is offline. It will resume when the network returns, or tap Resume."}
                 </p>
               )}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                <button
-                  type="button"
+              <div className="flex flex-wrap items-center gap-2.5">
+                <Button
+                  variant="primary"
+                  icon={<Radio size={16} />}
                   onClick={() => handleAction(api.startSession, resumeLabel)}
                   disabled={acting}
-                  className="inline-flex items-center justify-center gap-2 px-6 h-12 sm:h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-sm shadow-md shadow-brand-blue/25 transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50 w-full sm:w-fit"
+                  className="w-full sm:w-auto"
                 >
-                  <Radio size={16} />
-                  <span>{resumeLabel}</span>
-                </button>
+                  {resumeLabel}
+                </Button>
                 {canUnlink && (
-                  <button
-                    type="button"
-                    onClick={() => setShowUnlinkModal(true)}
-                    disabled={acting}
-                    className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-danger/30 bg-danger/10 hover:bg-danger/20 text-danger font-bold text-xs sm:text-sm transition-all disabled:opacity-50"
-                    title={t("unlink")}
-                  >
-                    <Unlink size={15} />
-                    <span>{t("unlink")}</span>
-                  </button>
+                  <OverflowMenu label={t("moreActions")}>
+                    <MenuItem
+                      danger
+                      icon={<Unlink size={16} />}
+                      disabled={acting}
+                      onSelect={() => setShowUnlinkModal(true)}
+                    >
+                      {t("unlink")}
+                    </MenuItem>
+                  </OverflowMenu>
                 )}
                 {!hideRestart && (
-                  <button
-                    type="button"
+                  <IconButton
+                    label={t("restart")}
+                    icon={<RotateCcw size={18} />}
                     onClick={() => handleAction(api.restartBot, t("restart"))}
                     disabled={acting}
-                    className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all disabled:opacity-50"
-                    title={t("restart")}
-                  >
-                    <RotateCcw size={15} />
-                    <span>{t("restart")}</span>
-                  </button>
+                  />
                 )}
               </div>
             </div>
@@ -406,36 +407,24 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
           {/* 3b. No saved session / logged out: QR or pairing code */}
           {!isConnected && !isStarting && !isWaitingQr && !isReconnecting && needsPairing && (
             <div className="flex flex-col gap-4 w-full">
-              {/* Method Selector Tabs */}
-              <div className="flex items-center gap-1.5 p-1 rounded-xl bg-panel-raised border border-line w-full sm:w-fit">
-                <button
-                  type="button"
-                  onClick={() => setPairingMethod("pairing")}
-                  className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 h-10 rounded-lg text-xs sm:text-sm font-bold transition-all ${
-                    pairingMethod === "pairing"
-                      ? "bg-brand-blue text-white shadow-sm shadow-brand-blue/30"
-                      : "text-muted hover:text-text-main"
-                  }`}
-                >
-                  <Smartphone size={16} />
-                  <span>
-                    {language === "ar" ? "كود الربط الرقمي (الهاتف)" : "Pairing Code (Phone)"}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setPairingMethod("qr")}
-                  className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 h-10 rounded-lg text-xs sm:text-sm font-bold transition-all ${
-                    pairingMethod === "qr"
-                      ? "bg-brand-blue text-white shadow-sm shadow-brand-blue/30"
-                      : "text-muted hover:text-text-main"
-                  }`}
-                >
-                  <QrCode size={16} />
-                  <span>{language === "ar" ? "مسح رمز QR" : "QR Code Scan"}</span>
-                </button>
-              </div>
+              <SegmentedControl
+                aria-label={t("connection")}
+                value={pairingMethod}
+                onChange={setPairingMethod}
+                className="w-full sm:w-fit"
+                options={[
+                  {
+                    value: "pairing",
+                    label: language === "ar" ? "كود الربط الرقمي (الهاتف)" : "Pairing Code (Phone)",
+                    icon: <Smartphone size={16} />,
+                  },
+                  {
+                    value: "qr",
+                    label: language === "ar" ? "مسح رمز QR" : "QR Code Scan",
+                    icon: <QrCode size={16} />,
+                  },
+                ]}
+              />
 
               {/* Method 1: Phone Pairing Form */}
               {pairingMethod === "pairing" && (
@@ -446,7 +435,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                         size={17}
                         className="absolute top-1/2 -translate-y-1/2 start-3.5 text-muted pointer-events-none"
                       />
-                      <input
+                      <Input
                         type="tel"
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value)}
@@ -454,17 +443,18 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                           language === "ar" ? "201012345678 (مع كود الدولة)" : "e.g. 201012345678"
                         }
                         dir="ltr"
-                        className="w-full h-12 sm:h-11 ps-10 pe-4 rounded-xl border border-line bg-panel-raised text-text-main font-mono text-sm placeholder:text-muted/60 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue/20 outline-none transition-all"
+                        className="ps-10"
                       />
                     </div>
-                    <button
+                    <Button
                       type="submit"
+                      variant="primary"
+                      icon={<Key size={16} />}
                       disabled={acting}
-                      className="inline-flex items-center justify-center gap-2 px-6 h-12 sm:h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-sm shadow-md shadow-brand-blue/25 transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50 shrink-0"
+                      className="w-full sm:w-auto"
                     >
-                      <Key size={16} />
-                      <span>{language === "ar" ? "الحصول على كود الربط" : "Get Pairing Code"}</span>
-                    </button>
+                      {language === "ar" ? "الحصول على كود الربط" : "Get Pairing Code"}
+                    </Button>
                   </div>
                   <p className="text-xs text-muted leading-relaxed">
                     {language === "ar"
@@ -477,15 +467,15 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
               {/* Method 2: QR Scan Start */}
               {pairingMethod === "qr" && (
                 <div className="flex flex-col gap-2 max-w-xl">
-                  <button
-                    type="button"
+                  <Button
+                    variant="primary"
+                    icon={<QrCode size={18} />}
                     onClick={handleStartQr}
                     disabled={acting}
-                    className="inline-flex items-center justify-center gap-2 px-6 h-12 sm:h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-sm shadow-md shadow-brand-blue/25 transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50 w-full sm:w-fit"
+                    className="w-full sm:w-auto"
                   >
-                    <QrCode size={18} />
-                    <span>{language === "ar" ? "بدء الربط عبر رمز QR" : "Start QR Linking"}</span>
-                  </button>
+                    {language === "ar" ? "بدء الربط عبر رمز QR" : "Start QR Linking"}
+                  </Button>
                   <p className="text-xs text-muted">
                     {language === "ar"
                       ? "سيتم إنشاء رمز QR لمسحه من هاتف آخر أو من شاشة الحاسوب عبر كاميرا واتساب."
@@ -497,39 +487,34 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
               {/* Secondary Controls: Unlink & Restart */}
               <div className="flex items-center gap-2.5 pt-1">
                 {canUnlink && (
-                  <button
-                    type="button"
-                    onClick={() => setShowUnlinkModal(true)}
-                    disabled={acting}
-                    className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-danger/30 bg-danger/10 hover:bg-danger/20 text-danger font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-danger/50 disabled:opacity-50"
-                    title={t("unlink")}
-                  >
-                    <Unlink size={15} />
-                    <span>{t("unlink")}</span>
-                  </button>
+                  <OverflowMenu label={t("moreActions")}>
+                    <MenuItem
+                      danger
+                      icon={<Unlink size={16} />}
+                      disabled={acting}
+                      onSelect={() => setShowUnlinkModal(true)}
+                    >
+                      {t("unlink")}
+                    </MenuItem>
+                  </OverflowMenu>
                 )}
-
                 {!hideRestart && (
-                  <button
-                    type="button"
+                  <IconButton
+                    label={t("restart")}
+                    icon={<RotateCcw size={18} />}
                     onClick={() => handleAction(api.restartBot, t("restart"))}
                     disabled={acting}
-                    className="inline-flex items-center justify-center gap-1.5 sm:gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50 disabled:opacity-50"
-                    title={t("restart")}
-                  >
-                    <RotateCcw size={15} />
-                    <span>{t("restart")}</span>
-                  </button>
+                  />
                 )}
               </div>
             </div>
           )}
         </div>
-      </div>
+      </Card>
 
       {/* Starting / Linking Progress Feedback Card */}
       {isStarting && (
-        <div className="rounded-2xl border border-line bg-panel p-6 sm:p-8 shadow-sm flex flex-col items-center text-center">
+        <Card className="flex flex-col items-center text-center">
           <div className="w-12 h-12 rounded-2xl bg-brand-blue/15 text-brand-blue flex items-center justify-center mb-4 border border-brand-blue/30">
             <RefreshCw size={24} className="animate-spin" />
           </div>
@@ -547,12 +532,12 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
               ? "يتم الآن إنشاء مقبس الاتصال، ستظهر بيانات الربط خلال ثوانٍ معدودة."
               : "Creating connection socket. Pairing details will appear in just a few seconds."}
           </p>
-        </div>
+        </Card>
       )}
 
       {/* QR Code / Pairing Container */}
       {isWaitingQr && (
-        <div className="rounded-2xl border border-line bg-panel p-6 sm:p-8 shadow-sm flex flex-col items-center text-center max-w-2xl mx-auto w-full">
+        <Card className="mx-auto flex w-full max-w-2xl flex-col items-center text-center">
           {status?.pairingCode ? (
             /* 1. Pairing Code Display with Copy Button & Steps */
             <div className="flex flex-col items-center w-full animate-in fade-in zoom-in-95 duration-300">
@@ -580,22 +565,19 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                     ? `${status.pairingCode.slice(0, 4)} - ${status.pairingCode.slice(4)}`
                     : status.pairingCode}
                 </div>
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
+                  icon={copiedCode ? <Check size={18} /> : <Copy size={18} />}
                   onClick={copyPairingCode}
-                  className="inline-flex items-center justify-center gap-2 px-6 h-11 rounded-xl bg-brand-cyan hover:bg-brand-cyan/90 text-bg font-extrabold text-sm shadow-md shadow-brand-cyan/25 transition-all active:scale-95"
                 >
-                  {copiedCode ? <Check size={18} /> : <Copy size={18} />}
-                  <span>
-                    {copiedCode
-                      ? language === "ar"
-                        ? "تم النسخ بنجاح!"
-                        : "Copied!"
-                      : language === "ar"
-                        ? "نسخ كود الربط"
-                        : "Copy Code"}
-                  </span>
-                </button>
+                  {copiedCode
+                    ? language === "ar"
+                      ? "تم النسخ بنجاح!"
+                      : "Copied!"
+                    : language === "ar"
+                      ? "نسخ كود الربط"
+                      : "Copy Code"}
+                </Button>
               </div>
 
               {/* Instructions Box */}
@@ -642,7 +624,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                   : "Open WhatsApp on your phone, go to Linked Devices, and scan this code to link."}
               </p>
 
-              <div className="p-3 sm:p-4 bg-white rounded-2xl shadow-xl border border-line animate-in fade-in zoom-in-95 duration-300">
+              <div className="p-3 sm:p-4 bg-panel rounded-2xl shadow-xl border border-line animate-in fade-in zoom-in-95 duration-300">
                 <img
                   src={qrDataUrl}
                   alt="WhatsApp QR Code"
@@ -657,57 +639,47 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                     ? "هل تستخدم التطبيق من نفس الهاتف ولا تستطيع مسح الرمز؟"
                     : "Using the app on the same phone and can't scan?"}
                 </p>
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
+                  icon={<Smartphone size={16} />}
                   onClick={handleSwitchToPhone}
                   disabled={acting}
-                  className="w-full inline-flex items-center justify-center gap-2 px-4 h-12 sm:h-11 rounded-xl border border-brand-cyan/40 bg-brand-cyan/10 hover:bg-brand-cyan/20 text-brand-cyan font-bold text-xs sm:text-sm transition-all focus-visible:ring-2 focus-visible:ring-brand-cyan/50"
+                  className="w-full"
                 >
-                  <Smartphone size={17} />
-                  <span>
-                    {language === "ar"
-                      ? "الربط برقم الهاتف (كود الربط الرقمي) بدلاً من QR"
-                      : "Link with Phone Pairing Code Instead"}
-                  </span>
-                </button>
+                  {language === "ar"
+                    ? "الربط برقم الهاتف (كود الربط الرقمي) بدلاً من QR"
+                    : "Link with Phone Pairing Code Instead"}
+                </Button>
               </div>
             </div>
           ) : (
             /* 3. Generating / Waiting Spinner */
-            <div className="flex flex-col items-center gap-3 py-8 text-muted">
-              <div className="w-9 h-9 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin" />
-              <span className="text-xs sm:text-sm font-semibold animate-pulse">
+            <div className="flex flex-col items-center gap-3 py-8">
+              <Spinner className="size-8" />
+              <span className="text-xs sm:text-sm font-semibold text-muted animate-pulse">
                 {language === "ar"
                   ? "جارٍ تجهيز بيانات الربط من واتساب..."
                   : "Preparing pairing details from WhatsApp..."}
               </span>
             </div>
           )}
-        </div>
+        </Card>
       )}
 
       {/* Confirm Unlink Modal */}
-      <Modal
+      <Dialog
         isOpen={showUnlinkModal}
         onClose={() => setShowUnlinkModal(false)}
         title={t("unlink")}
         footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <button
-              type="button"
-              onClick={() => setShowUnlinkModal(false)}
-              className="px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors"
-            >
+          <>
+            <Button variant="secondary" onClick={() => setShowUnlinkModal(false)}>
               {t("cancel")}
-            </button>
-            <button
-              type="button"
-              onClick={confirmUnlink}
-              className="px-4 h-10 rounded-xl bg-danger hover:bg-danger/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-danger/25 transition-colors"
-            >
+            </Button>
+            <Button variant="danger" onClick={confirmUnlink}>
               {t("unlink")}
-            </button>
-          </div>
+            </Button>
+          </>
         }
       >
         <p className="text-xs sm:text-sm text-text-main leading-relaxed">
@@ -718,7 +690,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
         <p className="text-xs sm:text-sm text-muted leading-relaxed mt-2">
           {t("unlinkStickersWarning")}
         </p>
-      </Modal>
+      </Dialog>
     </div>
   );
 };

@@ -3,7 +3,6 @@
 import {
   Activity,
   Bot,
-  Calendar,
   ChevronRight,
   Clock,
   Folder,
@@ -20,6 +19,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { ViewTab } from "../components/Sidebar";
 import { useToast } from "../components/Toasts";
+import { Button, Card, PageHeader, StatusPill } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 import type { DashboardStats, SessionStatus } from "../types";
 
@@ -93,212 +93,167 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
       title: t("connection"),
       desc: isConnected ? t("connected") : t(status?.state as any, "disconnected"),
       icon: Radio,
-      color: "text-brand-cyan bg-brand-cyan/10 border-brand-cyan/20",
+      color: "border-brand-cyan/20 bg-brand-cyan/10 text-brand-cyan",
     },
     {
       id: "ai",
       title: t("ai"),
       desc: t("aiAssistantDesc") || "Autonomous tool-calling AI agent",
       icon: Bot,
-      color: "text-purple-400 bg-purple-500/10 border-purple-500/20",
+      color: "border-brand-purple/20 bg-brand-purple/10 text-brand-purple",
     },
     {
       id: "commands",
       title: t("commands"),
       desc: t("quickCommandsDesc").replace("{n}", String(stats?.commandCount ?? 0)),
       icon: Terminal,
-      color: "text-brand-blue bg-blue-500/10 border-blue-500/20",
+      color: "border-brand-blue/20 bg-brand-blue/10 text-brand-blue",
     },
     {
       id: "settings",
       title: t("settings"),
       desc: t("settingsSub") || "Prefix, ports, delays, security & storage",
       icon: Sliders,
-      color: "text-ok bg-ok/10 border-ok/20",
+      color: "border-ok/20 bg-ok/10 text-ok",
+    },
+  ];
+
+  const statsCards = [
+    {
+      label: t("totalGroups"),
+      value: stats?.totalGroups ?? 0,
+      icon: Users,
+      tone: "border-brand-blue/20 bg-brand-blue/10 text-brand-blue",
+    },
+    {
+      label: t("commandCount"),
+      value: stats?.commandCount ?? 0,
+      icon: Terminal,
+      tone: "border-brand-cyan/20 bg-brand-cyan/10 text-brand-cyan",
+    },
+    {
+      label: t("uptime"),
+      value: formatUptime(stats?.uptime || 0),
+      icon: Clock,
+      tone: "border-ok/20 bg-ok/10 text-ok",
+    },
+    {
+      label: t("activeSchedules"),
+      value: stats?.activeSchedules ?? 0,
+      icon: MessageSquare,
+      tone: "border-brand-purple/20 bg-brand-purple/10 text-brand-purple",
     },
   ];
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Hero Session Card */}
-      <div className="rounded-2xl border border-line bg-gradient-to-br from-panel-raised via-panel to-panel p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-5">
-        <div className="flex items-center gap-4 min-w-0 flex-1">
-          <div
-            className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border ${
-              isConnected
-                ? "bg-ok/15 text-ok border-ok/30 shadow-sm shadow-ok/20"
-                : "bg-warn/15 text-warn border-warn/30 shadow-sm shadow-warn/20"
-            }`}
-          >
-            <Activity size={24} />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-lg sm:text-xl font-extrabold text-text-main tracking-tight truncate">
-                {isConnected ? t("connected") : t(status?.state as any, "disconnected")}
-              </h2>
-              <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                  isConnected
-                    ? "bg-ok/10 text-ok border-ok/30"
-                    : "bg-warn/10 text-warn border-warn/30"
-                }`}
-              >
-                <span className="pulse-dot" />
-                {isConnected ? t("online") : t("offline")}
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-muted truncate mt-1">
-              {isConnected ? (
-                status?.user?.id ? (
-                  <bdi dir="ltr">{`+${status.user.id.split("@")[0]}`}</bdi>
-                ) : (
-                  t("activeListening")
-                )
-              ) : (
-                t("pausedOrLinking")
-              )}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2.5 flex-wrap shrink-0">
-          {isConnected ? (
-            <button
-              type="button"
-              onClick={handleStop}
-              className="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-danger/15 hover:border-danger/40 hover:text-danger text-text-main text-xs sm:text-sm font-bold transition-all focus-visible:ring-2 focus-visible:ring-danger/50"
-            >
-              <Square size={16} />
-              <span>{t("stop")}</span>
-            </button>
+      <PageHeader
+        icon={<Activity size={24} />}
+        title={isConnected ? t("connected") : t(status?.state as any, "disconnected")}
+        description={
+          isConnected ? (
+            status?.user?.id ? (
+              <bdi dir="ltr">{`+${status.user.id.split("@")[0]}`}</bdi>
+            ) : (
+              t("activeListening")
+            )
           ) : (
-            <button
-              type="button"
-              onClick={handleStart}
-              className="inline-flex items-center justify-center gap-2 px-5 h-11 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white text-xs sm:text-sm font-bold shadow-md shadow-brand-blue/25 transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50"
+            t("pausedOrLinking")
+          )
+        }
+        actions={
+          <>
+            <StatusPill tone={isConnected ? "ok" : "warn"} dot pulse>
+              {isConnected ? t("online") : t("offline")}
+            </StatusPill>
+            {isConnected ? (
+              <Button variant="danger" icon={<Square size={16} />} onClick={handleStop}>
+                {t("stop")}
+              </Button>
+            ) : (
+              <Button variant="primary" icon={<Play size={16} />} onClick={handleStart}>
+                {t("start")}
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              icon={<Radio size={16} />}
+              onClick={() => onNavigate("connection")}
             >
-              <Play size={16} />
-              <span>{t("start")}</span>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => onNavigate("connection")}
-            className="inline-flex items-center justify-center gap-2 px-4 h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main text-xs sm:text-sm font-bold transition-all focus-visible:ring-2 focus-visible:ring-brand-blue/50"
-          >
-            <Radio size={16} className="text-brand-cyan" />
-            <span>{t("connection")}</span>
-          </button>
-        </div>
-      </div>
+              {t("connection")}
+            </Button>
+          </>
+        }
+      />
 
-      {/* Responsive Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
-        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-5 shadow-sm space-y-2 sm:space-y-3 hover:border-brand-blue/40 transition-colors">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] sm:text-xs font-bold text-muted uppercase tracking-wider truncate">
-              {t("totalGroups")}
-            </span>
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-blue-500/10 text-brand-blue flex items-center justify-center shrink-0 border border-blue-500/20">
-              <Users size={18} />
-            </div>
-          </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-text-main font-mono tracking-tight">
-            {loading ? "—" : (stats?.totalGroups ?? 0)}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-5 shadow-sm space-y-2 sm:space-y-3 hover:border-brand-cyan/40 transition-colors">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] sm:text-xs font-bold text-muted uppercase tracking-wider truncate">
-              {t("commandCount")}
-            </span>
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-brand-cyan/10 text-brand-cyan flex items-center justify-center shrink-0 border border-brand-cyan/20">
-              <Terminal size={18} />
-            </div>
-          </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-text-main font-mono tracking-tight">
-            {loading ? "—" : (stats?.commandCount ?? 0)}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-5 shadow-sm space-y-2 sm:space-y-3 hover:border-ok/40 transition-colors">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] sm:text-xs font-bold text-muted uppercase tracking-wider truncate">
-              {t("uptime")}
-            </span>
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-ok/10 text-ok flex items-center justify-center shrink-0 border border-ok/20">
-              <Clock size={18} />
-            </div>
-          </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-text-main font-mono tracking-tight">
-            {loading ? "—" : formatUptime(stats?.uptime || 0)}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-5 shadow-sm space-y-2 sm:space-y-3 hover:border-purple-500/40 transition-colors">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] sm:text-xs font-bold text-muted uppercase tracking-wider truncate">
-              {t("activeSchedules")}
-            </span>
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20">
-              <MessageSquare size={18} />
-            </div>
-          </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-text-main font-mono tracking-tight">
-            {loading ? "—" : (stats?.activeSchedules ?? 0)}
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Access Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {quickNavCards.map((card) => {
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+        {statsCards.map((card) => {
           const Icon = card.icon;
           return (
-            <button
-              key={card.id}
-              type="button"
-              onClick={() => onNavigate(card.id)}
-              className="group rounded-2xl border border-line bg-panel hover:bg-panel-hover p-4 sm:p-5 shadow-sm text-start flex flex-col justify-between gap-3 sm:gap-4 transition-all hover:-translate-y-0.5 hover:border-brand-blue/30 focus-visible:ring-2 focus-visible:ring-brand-blue/50"
-            >
-              <div className="flex items-center justify-between w-full">
+            <Card key={card.label}>
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-[11px] font-bold uppercase tracking-wider text-muted sm:text-xs">
+                  {card.label}
+                </span>
                 <div
-                  className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 border ${card.color}`}
+                  className={`flex size-10 shrink-0 items-center justify-center rounded-xl border ${card.tone}`}
                 >
                   <Icon size={18} />
                 </div>
-                <div className="w-7 h-7 rounded-full bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-muted group-hover:text-brand-cyan group-hover:border-brand-cyan/40 group-hover:bg-brand-cyan/10 transition-all">
-                  <ChevronRight
-                    size={14}
-                    className="rtl:rotate-180 transition-transform group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5"
-                  />
-                </div>
               </div>
-              <div>
-                <h3 className="text-xs sm:text-sm font-bold text-text-main group-hover:text-brand-cyan transition-colors">
-                  {card.title}
-                </h3>
-                <p className="text-[11px] sm:text-xs text-muted mt-0.5 line-clamp-2 leading-relaxed">
-                  {card.desc}
-                </p>
+              <div className="mt-2 font-mono text-2xl font-extrabold tracking-tight text-text-main sm:text-3xl">
+                {loading ? "—" : card.value}
               </div>
-            </button>
+            </Card>
           );
         })}
       </div>
 
-      {/* Directory & Runtime Footer Banner */}
-      <div className="rounded-2xl border border-line bg-panel p-4 shadow-sm flex items-center gap-3.5">
-        <Folder size={20} className="text-faint shrink-0" />
-        <div className="flex-1 min-w-0">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        {quickNavCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <Card
+              key={card.id}
+              padded={false}
+              className="transition-colors hover:border-brand-blue/30"
+            >
+              <Button
+                variant="ghost"
+                onClick={() => onNavigate(card.id)}
+                className="h-auto w-full flex-col items-stretch justify-between gap-3 rounded-2xl p-4 text-start sm:gap-4 sm:p-5"
+              >
+                <div className="flex w-full items-center justify-between">
+                  <div
+                    className={`flex size-10 shrink-0 items-center justify-center rounded-xl border ${card.color}`}
+                  >
+                    <Icon size={18} />
+                  </div>
+                  <span className="flex size-10 items-center justify-center rounded-full border border-line bg-panel-hover text-muted">
+                    <ChevronRight size={14} className="rtl:rotate-180" />
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-text-main sm:text-sm">{card.title}</h3>
+                  <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-muted sm:text-xs">
+                    {card.desc}
+                  </p>
+                </div>
+              </Button>
+            </Card>
+          );
+        })}
+      </div>
+
+      <Card className="flex items-center gap-3.5">
+        <Folder size={20} className="shrink-0 text-faint" />
+        <div className="min-w-0 flex-1">
           <div className="text-xs font-semibold text-muted">{t("dataDir")}</div>
-          <div className="text-xs font-mono text-text-main truncate text-start" dir="ltr">
+          <div className="truncate text-start font-mono text-xs text-text-main" dir="ltr">
             {stats?.dataDir || "..."}
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   );
 };

@@ -4,9 +4,19 @@ import { Edit3, Plus, Search, Tag, X } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import { Modal } from "../components/Modal";
 import { useToast } from "../components/Toasts";
-import { Toggle } from "../components/Toggle";
+import {
+  Badge,
+  Button,
+  Card,
+  Dialog,
+  EmptyState,
+  IconButton,
+  Input,
+  Select,
+  Spinner,
+  Toggle,
+} from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 import type { CommandItem, PermissionLevel } from "../types";
 
@@ -172,8 +182,7 @@ export const CommandsView: React.FC = () => {
     })[level] || level;
 
   const scopeLabel = (chat: string) =>
-    ({ all: t("scopeAll"), group: t("scopeGroup"), private: t("scopePrivate") })[chat] ||
-    chat;
+    ({ all: t("scopeAll"), group: t("scopeGroup"), private: t("scopePrivate") })[chat] || chat;
 
   // Search the name, every alias (either script), the description the panel is
   // showing, and both languages of the docs — so an operator searching in
@@ -181,7 +190,15 @@ export const CommandsView: React.FC = () => {
   const query = search.trim().toLowerCase();
   const filtered = query
     ? commands.filter((c) =>
-        [c.name, ...(c.aliases || []), describe(c), c.description, usageOf(c), c.usages?.en, c.usages?.ar]
+        [
+          c.name,
+          ...(c.aliases || []),
+          describe(c),
+          c.description,
+          usageOf(c),
+          c.usages?.en,
+          c.usages?.ar,
+        ]
           .filter(Boolean)
           .join(" ")
           .toLowerCase()
@@ -192,7 +209,7 @@ export const CommandsView: React.FC = () => {
   return (
     <div className="flex flex-col gap-5 sm:gap-6">
       {/* Header and Search */}
-      <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <Card className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
             <h2 className="text-lg md:text-xl font-bold text-text-main">{t("commands")}</h2>
@@ -202,44 +219,36 @@ export const CommandsView: React.FC = () => {
               <span className="text-xs text-muted font-semibold">{t("activePrefix")}:</span>
               {isEditingPrefix ? (
                 <div className="inline-flex items-center gap-1.5">
-                  <input
+                  <Input
                     type="text"
                     maxLength={3}
                     value={newPrefixInput}
                     onChange={(e) => setNewPrefixInput(e.target.value)}
-                    className="w-12 h-7 px-1.5 text-center font-mono font-bold text-xs rounded-lg border border-line bg-panel text-text-main focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                    className="w-14 text-center font-mono"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") handleUpdatePrefix();
                       if (e.key === "Escape") setIsEditingPrefix(false);
                     }}
                   />
-                  <button
-                    type="button"
-                    onClick={handleUpdatePrefix}
-                    className="px-2 h-7 rounded-lg bg-brand-blue text-white font-bold text-xs hover:bg-brand-blue/90 transition-colors"
-                  >
+                  <Button variant="primary" size="sm" onClick={handleUpdatePrefix}>
                     {t("save")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsEditingPrefix(false)}
-                    className="px-2 h-7 rounded-lg border border-line bg-panel-raised text-muted font-bold text-xs hover:bg-panel-hover transition-colors"
-                  >
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => setIsEditingPrefix(false)}>
                     {t("cancel")}
-                  </button>
+                  </Button>
                 </div>
               ) : (
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  title={t("editPrefixHint")}
                   onClick={() => {
                     setNewPrefixInput(prefix);
                     setIsEditingPrefix(true);
                   }}
-                  className="px-2.5 py-0.5 rounded-lg bg-brand-cyan/15 text-brand-cyan border border-brand-cyan/30 font-mono font-bold text-xs hover:bg-brand-cyan/25 transition-colors"
-                  title={t("editPrefixHint")}
                 >
                   {prefix}
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -247,19 +256,19 @@ export const CommandsView: React.FC = () => {
         </div>
 
         <div className="relative w-full md:w-72 shrink-0">
-          <Search size={18} className="absolute start-3.5 top-3 text-muted" />
-          <input
+          <Search size={18} className="pointer-events-none absolute start-3.5 top-3 text-muted" />
+          <Input
             type="text"
-            className="w-full h-11 ps-10 pe-3.5 rounded-xl border border-line bg-panel-raised text-text-main text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+            className="ps-10"
             placeholder={t("searchPlaceholder")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-      </div>
+      </Card>
 
       {/* Table Container with Mobile Horizontal Scroll */}
-      <div className="rounded-2xl border border-line bg-panel overflow-hidden shadow-sm overflow-x-auto">
+      <Card padded={false} className="overflow-x-auto">
         <table className="w-full min-w-[760px] text-start border-collapse text-sm">
           <thead>
             <tr className="bg-panel-raised border-b border-line text-xs font-bold text-muted uppercase tracking-wider">
@@ -274,17 +283,14 @@ export const CommandsView: React.FC = () => {
           <tbody className="divide-y divide-line/40">
             {loading ? (
               <tr>
-                <td colSpan={6} className="text-center py-12 text-muted">
-                  <div className="flex flex-col items-center justify-center gap-2">
-                    <div className="w-6 h-6 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin" />
-                    <span className="text-xs">{t("loading")}</span>
-                  </div>
+                <td colSpan={6} className="py-12 text-center">
+                  <Spinner className="size-6" label={t("loading")} />
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-12 text-muted text-xs md:text-sm">
-                  {t("noMatchingCommands")}
+                <td colSpan={6}>
+                  <EmptyState text={t("noMatchingCommands")} />
                 </td>
               </tr>
             ) : (
@@ -325,16 +331,14 @@ export const CommandsView: React.FC = () => {
                           );
                         })
                       ) : (
-                        <span className="text-xs text-muted/60">—</span>
+                        <span className="text-xs text-faint">—</span>
                       )}
-                      <button
-                        type="button"
+                      <IconButton
+                        label={t("editAliases")}
+                        icon={<Edit3 size={16} />}
+                        size="sm"
                         onClick={() => openAliasModal(cmd)}
-                        className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-panel-raised hover:bg-brand-blue/15 hover:text-brand-cyan text-muted border border-line transition-colors"
-                        title={t("editAliases")}
-                      >
-                        <Edit3 size={12} />
-                      </button>
+                      />
                     </div>
                   </td>
                   <td className="px-4 py-3.5 max-w-xs text-text-main text-xs md:text-sm">
@@ -358,22 +362,22 @@ export const CommandsView: React.FC = () => {
                     )}
                   </td>
                   <td className="px-4 py-3.5">
-                    <span className="inline-flex px-2.5 py-0.5 rounded-lg bg-brand-blue/10 text-brand-cyan text-xs font-semibold">
-                      {scopeLabel(cmd.chat)}
-                    </span>
+                    <Badge tone="info">{scopeLabel(cmd.chat)}</Badge>
                   </td>
                   <td className="px-4 py-3.5">
-                    <select
-                      className="h-9 px-2.5 rounded-lg border border-line bg-panel-raised text-text-main text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                    <Select
+                      aria-label={t("thRequiredRole")}
                       value={cmd.permission}
-                      onChange={(e) => handlePermissionChange(cmd, e.target.value as PermissionLevel)}
+                      onChange={(e) =>
+                        handlePermissionChange(cmd, e.target.value as PermissionLevel)
+                      }
                     >
                       {levels.map((level) => (
                         <option key={level} value={level}>
                           {permissionLabel(level)}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </td>
                   <td className="px-4 py-3.5 text-center">
                     <Toggle
@@ -386,31 +390,22 @@ export const CommandsView: React.FC = () => {
             )}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {/* Alias Editor Modal */}
-      <Modal
+      <Dialog
         isOpen={Boolean(editingAliasesCmd)}
         onClose={() => setEditingAliasesCmd(null)}
         title={`${t("aliasesFor")} ${prefix}${editingAliasesCmd?.name || ""}`}
         footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <button
-              type="button"
-              onClick={() => setEditingAliasesCmd(null)}
-              className="px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors"
-            >
+          <>
+            <Button variant="secondary" onClick={() => setEditingAliasesCmd(null)}>
               {t("cancel")}
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveAliases}
-              disabled={savingAliases}
-              className="px-5 h-10 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/25 transition-colors disabled:opacity-50"
-            >
+            </Button>
+            <Button variant="primary" onClick={handleSaveAliases} loading={savingAliases}>
               {savingAliases ? t("saving") : t("save")}
-            </button>
-          </div>
+            </Button>
+          </>
         }
       >
         <div className="flex flex-col gap-4 py-1">
@@ -443,29 +438,31 @@ export const CommandsView: React.FC = () => {
                           {isArabic ? "AR" : "EN"}
                         </span>
                       )}
-                      <button
-                        type="button"
+                      <IconButton
+                        variant="ghost"
+                        size="sm"
+                        label={t("delete")}
+                        icon={<X size={16} />}
                         onClick={() => handleRemoveAlias(a)}
-                        className="text-muted hover:text-danger p-0.5 rounded transition-colors"
-                      >
-                        <X size={13} />
-                      </button>
+                      />
                     </span>
                   );
                 })
               ) : (
-                <span className="text-xs text-muted/60 px-1">{t("noAliases")}</span>
+                <span className="text-xs text-faint px-1">{t("noAliases")}</span>
               )}
             </div>
           </div>
 
           {/* Add New Alias Input */}
           <div className="space-y-1.5">
-            <label htmlFor="new-alias-input" className="text-xs font-bold text-muted block">{t("addAlias")}</label>
+            <label htmlFor="new-alias-input" className="text-xs font-bold text-muted block">
+              {t("addAlias")}
+            </label>
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
-                <Tag size={16} className="absolute start-3 top-3 text-muted" />
-                <input
+                <Tag size={16} className="pointer-events-none absolute start-3 top-3 text-muted" />
+                <Input
                   id="new-alias-input"
                   type="text"
                   value={newAliasText}
@@ -477,21 +474,21 @@ export const CommandsView: React.FC = () => {
                     }
                   }}
                   placeholder={t("newAliasPlaceholder")}
-                  className="w-full h-11 ps-9 pe-3 rounded-xl border border-line bg-panel text-text-main font-mono text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+                  className="ps-10"
                 />
               </div>
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                icon={<Plus size={16} />}
                 onClick={handleAddAlias}
-                className="inline-flex items-center justify-center gap-1.5 px-4 h-11 rounded-xl bg-panel-raised hover:bg-panel-hover border border-line text-text-main font-bold text-xs sm:text-sm transition-colors shrink-0"
+                className="shrink-0"
               >
-                <Plus size={16} />
-                <span>{t("add")}</span>
-              </button>
+                {t("add")}
+              </Button>
             </div>
           </div>
         </div>
-      </Modal>
+      </Dialog>
     </div>
   );
 };

@@ -2,10 +2,9 @@ import { Search } from "lucide-react";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api/client";
-import { Modal } from "../../components/Modal";
+import { Button, Dialog, Input, LoadingState } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { explainError } from "../../utils/stickerErrors";
-import { Button, fieldClass, LoadingState } from "./ui";
 
 interface Recipient {
   id: string;
@@ -65,7 +64,7 @@ export const RecipientPicker: React.FC<RecipientPickerProps> = ({
   }, [items, query]);
 
   return (
-    <Modal
+    <Dialog
       isOpen={open}
       onClose={onClose}
       title={t("sendViaWhatsapp")}
@@ -74,13 +73,13 @@ export const RecipientPicker: React.FC<RecipientPickerProps> = ({
       <div className="flex flex-col gap-3">
         <div className="relative">
           <Search size={16} className="absolute start-3 top-3 text-muted" />
-          <input
+          <Input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("searchRecipients")}
             aria-label={t("searchRecipients")}
-            className={`${fieldClass} ps-9`}
+            className="ps-9"
           />
         </div>
         {loading && <LoadingState text={t("loading")} />}
@@ -88,17 +87,17 @@ export const RecipientPicker: React.FC<RecipientPickerProps> = ({
         {!loading && !error && shown.length === 0 && (
           <p className="text-sm text-muted">{t("noRecipients")}</p>
         )}
-        <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto">
+        <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
           {shown.map((item) => (
-            <button
+            <Button
               key={item.id}
-              type="button"
+              variant="secondary"
               disabled={busy}
               onClick={() => onPick(item.id)}
-              className="w-full text-start px-3 py-2.5 rounded-xl border border-line hover:bg-panel-hover disabled:opacity-50"
+              className="h-auto w-full flex-col items-start px-3 py-2.5"
             >
-              <span className="block text-sm font-semibold truncate">{item.name}</span>
-              <span className="block text-[11px] text-muted">
+              <span className="block w-full truncate text-sm font-semibold">{item.name}</span>
+              <span className="block w-full text-[11px] font-medium text-muted">
                 {item.type === "group" ? t("recipientGroup") : t("recipientContact")}
                 {item.phone ? (
                   <span dir="ltr" className="ms-2">
@@ -106,11 +105,11 @@ export const RecipientPicker: React.FC<RecipientPickerProps> = ({
                   </span>
                 ) : null}
               </span>
-            </button>
+            </Button>
           ))}
         </div>
         {busy && <p className="text-xs text-muted">{t("sending")}</p>}
       </div>
-    </Modal>
+    </Dialog>
   );
 };

@@ -50,6 +50,24 @@ export const translations = {
     close: "إغلاق",
     copy: "نسخ",
     copied: "تم النسخ!",
+    filter: "تصفية",
+    sort: "ترتيب",
+    more: "المزيد",
+    reset: "إعادة التعيين",
+    autoScroll: "تمرير تلقائي",
+    dismiss: "إخفاء",
+    openNavigation: "فتح القائمة",
+    closeNavigation: "إغلاق القائمة",
+    logsSubtitle: "سجل أحداث النظام واتصالات واتساب واستدعاءات الذكاء الاصطناعي في الوقت الفعلي",
+    groupsSubtitle:
+      "إدارة مجموعات واتساب، الحماية من الروابط، تقييد الوسائط، ورسائل الترحيب التلقائية",
+    groupsCount: "{n} مجموعة",
+    noGroupsTitle: "لا توجد مجموعات حتى الآن",
+    noGroupsBody:
+      "بمجرد إضافة البوت إلى مجموعات واتساب، ستظهر تلقائياً هنا مع خيارات الإشراف والحماية.",
+    unnamedGroup: "مجموعة بدون اسم",
+    mediaNone: "بلا قيود (الكل)",
+    mediaBlockAll: "حظر كافة الوسائط",
 
     // Diagnostics & Health Cards
     clientIdentity: "هوية العميل",
@@ -722,6 +740,24 @@ export const translations = {
     close: "Close",
     copy: "Copy",
     copied: "Copied!",
+    filter: "Filter",
+    sort: "Sort",
+    more: "More",
+    reset: "Reset",
+    autoScroll: "Auto-scroll",
+    dismiss: "Dismiss",
+    openNavigation: "Open navigation",
+    closeNavigation: "Close menu",
+    logsSubtitle: "Real-time streaming console for WhatsApp socket, AI calls, and bot commands",
+    groupsSubtitle:
+      "WhatsApp group moderation, anti-link defense, media filtering, and automated greetings",
+    groupsCount: "{n} groups",
+    noGroupsTitle: "No active groups found",
+    noGroupsBody:
+      "Once the bot is added to WhatsApp groups, they will automatically appear here with full moderation and anti-link controls.",
+    unnamedGroup: "Unnamed group",
+    mediaNone: "No Restrictions",
+    mediaBlockAll: "Block All Media",
 
     // Diagnostics & Health Cards
     clientIdentity: "Client Identity",
