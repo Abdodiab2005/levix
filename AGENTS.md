@@ -162,6 +162,7 @@ src/
 ├── panel/            # login throttling, session epochs, bounded session store
 │   └── feedback.cjs  # validates + forwards Settings → Feedback to the developer
 ├── services/         # External services
+│   ├── autoDelete.cjs # Keyword auto-delete: match, revoke / delete-for-me, keepCopy
 │   ├── aiAgent.cjs   # The Gemini agent loop + provider dispatch (tools, memory, live status)
 │   ├── aiProviders.cjs # The openai/anthropic loops over their own wire formats
 │   ├── aiTools.cjs   # The tools the agent can call
@@ -353,17 +354,22 @@ session records the proxy the live socket was built with and reports
 
 1. **Incoming Message** → `src/core/events.js:44` (messages.upsert event)
 2. **Message Handler** → `src/handlers/message.handler.js:14` (handleIncomingMessage)
-3. **Middleware Chain**:
+3. **Keyword auto-delete** → `src/services/autoDelete.cjs` (after the
+   content/status skip, before blacklist / commands / group moderation).
+   First matching enabled rule wins; a successful delete stops the pipeline.
+   The `!autodelete` command message itself is never matched.
+4. **Middleware Chain**:
    - Forward tracking → `src/middleware/forward-tracking.middleware.js`
    - Check blacklist → `src/middleware/blacklist.middleware.js`
    - Anti-spam → `src/middleware/antispam.middleware.js`
-4. **Command Detection** → `src/handlers/command.handler.js:44` (handleCommand)
+5. **Command Detection** → `src/handlers/command.handler.js:44` (handleCommand)
    - Parse prefix (default: `!`)
    - Match command name or alias
    - Execute command with context
-5. **Group Moderation** (if in group):
+6. **Group Moderation** (if in group):
    - Anti-link → `src/commands/group/antilink.js`
    - Media control → `src/commands/group/media.js`
+   - Forbidden words → `src/commands/mod.cjs` (unchanged; separate from auto-delete)
 
 ### Command System
 
@@ -462,15 +468,19 @@ and blacklist middleware, the prefix lookup, every permission check) with no
 | `stickers` | Sticker Studio library, one row per sticker per `sticker_owners` id; the WebP is a file named by its sha256 | wiped on unlink |
 | `sticker_packs` | named sticker packs per owner | wiped on unlink |
 | `sticker_pack_items` | pack membership and order | cascade with the sticker or the pack; wiped on unlink |
+| `auto_delete_rules` | keyword auto-delete rules (keywords, match mode, chat/sender scope, counters) | — (operator config; counters reset on unlink) |
+| `auto_delete_log` | opt-in text/caption copies of messages an auto-delete rule actually deleted (never media bytes) | `auto_delete_keep_days` (30), also capped at 5000 newest; wiped on unlink |
 
 `forward_scores` gains a row per forwarded message, so it expires; the sweep
 runs at boot and every six hours (`sweepExpired()` in `db.cjs`). Sticker files
 live under `<data>/stickers/<sha[0..2]>/` and are removed with the rows on
-unlink (`library.clearAll()`).
+unlink (`library.clearAll()`). `auto_delete_log` is swept on the same timer.
 
 The bot does **not** archive other people's messages. Nothing incoming is
-written beyond the forward counter and the sender's last-seen row; deleted and
-edited messages are not captured at all.
+written beyond the forward counter, the sender's last-seen row, and — only
+when an auto-delete rule with `keepCopy` actually deletes a message — a
+text/caption copy in `auto_delete_log`. Deleted and edited messages are not
+captured otherwise.
 
 Long-term AI memory is **not** in the database — it lives in `memory/*.md`
 inside the data directory.
@@ -791,6 +801,14 @@ account".
   library total.
 - **`!stickers`** (`src/commands/stickers.cjs`, alias `ملصقاتي`) — page through
   recent, favorite, or packed stickers.
+- **`!autodelete`** (`src/commands/autodelete.cjs`, aliases `ad`, `حذف_تلقائي`) —
+  owner-only keyword auto-delete. `list` · `add <word> [| <word> ...]` (a
+  simple contains / all-chats / everyone rule) · `remove <id>` · `on` / `off
+  <id>` · `stats [id]` · `reset <id>`. Advanced options (match mode, chat
+  scope, selected senders, includeOwn, forEveryone, keepCopy) are the panel
+  JSON API: `GET/POST /dashboard/api/auto-delete/rules`,
+  `PATCH/DELETE /dashboard/api/auto-delete/rules/:id`,
+  `POST .../rules/:id/reset`, `GET/DELETE /dashboard/api/auto-delete/log`.
 
 ### 5b. Domain setup (`levix domain`, `src/domain/`)
 
@@ -1001,6 +1019,7 @@ the bot does can be changed from it, live:
 | Groups | antilink · antispam · media · welcome · warnings · rules | `group_settings` |
 | Roles | bot owner / admin | `user_metadata` (same path as `!perm`) |
 | Tables | debts · warnings · notes · todos · users · schedules | read-only (schedules can be deleted) |
+| Auto-delete (JSON API; UI later) | keyword rules, counters, opt-in kept copies | `auto_delete_rules` / `auto_delete_log` via `/dashboard/api/auto-delete/*` |
 | Settings | API keys, model, timezone, delays, thumbnails, port, proxy | `bot_settings` (`setting:*`) |
 | Settings → password | the panel's own password | `bot_settings` (scrypt hash) |
 | Settings → Feedback | nothing local — one message to the developer | forwarded server-side to `levix.leviro.net/api/feedback` (`src/panel/feedback.cjs`) |
@@ -1211,6 +1230,9 @@ logger.debug('Debug info');
     of other people's messages, and has no anti-delete / anti-edit handler. The
     only in-memory message store is `recentMessageCache.esm.js`, which holds
     messages the bot ITSELF sent so Baileys' `getMessage` can answer a retry.
+    Opt-in exception: an auto-delete rule with `keepCopy` stores the
+    text/caption (never media bytes) of messages that rule actually deleted, in
+    `auto_delete_log`, swept by `auto_delete_keep_days`.
 14. **Don't add third-party media downloaders**: downloading from YouTube /
     TikTok / Facebook / Instagram violates those platforms' terms, so those
     commands were removed on purpose.
@@ -1262,10 +1284,12 @@ logger.debug('Debug info');
     add another directory scan at load time, give it the same fallback.
 26. **Unlink is an account boundary.** It clears the WhatsApp directory, roles,
     AI history, long-term memory and buffered AI context, the sticker library
-    (every sticker, pack, and file), and pauses schedules created for the old
-    account. Do not leave account-derived state active for the next phone that
-    pairs. Sticker unlink deletes the `sticker_owners` rows as well as the
-    stickers, packs and files, so the next pairing starts a new `self` library.
+    (every sticker, pack, and file), auto-delete kept copies and counters
+    (the rules themselves stay — they are operator configuration), and pauses
+    schedules created for the old account. Do not leave account-derived state
+    active for the next phone that pairs. Sticker unlink deletes the
+    `sticker_owners` rows as well as the stickers, packs and files, so the next
+    pairing starts a new `self` library.
 27. **Compare WhatsApp identities with the shared helpers.** LIDs, phone-number
     JIDs and device suffixes can name the same user. Moderation and role gates
     must use `sameUser()`, `getSenderCandidates()` and `isAdminInGroup()` rather

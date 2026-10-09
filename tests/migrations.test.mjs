@@ -31,6 +31,8 @@ const EXPECTED_TABLES = [
   "sticker_owners",
   "sticker_packs",
   "sticker_pack_items",
+  "auto_delete_rules",
+  "auto_delete_log",
 ];
 
 const tablesOf = (database) =>
@@ -147,6 +149,19 @@ section("an existing v4 database gains the sticker tables without losing users")
     .prepare("SELECT display_name FROM user_metadata WHERE user_jid = ?")
     .get("201098765432@s.whatsapp.net");
   equal("the user survives the sticker migration", row.display_name, "Nour");
+  database.close();
+}
+
+section("an existing v7 database gains auto-delete tables");
+
+{
+  const database = scratchDatabase();
+  migrate(database, MIGRATIONS.slice(0, 7));
+  ok("auto_delete_rules is not there yet", !tablesOf(database).includes("auto_delete_rules"));
+  migrate(database);
+  equal("the upgrade reaches the latest version", versionOf(database), MIGRATIONS.length);
+  ok("auto_delete_rules exists after upgrade", tablesOf(database).includes("auto_delete_rules"));
+  ok("auto_delete_log exists after upgrade", tablesOf(database).includes("auto_delete_log"));
   database.close();
 }
 

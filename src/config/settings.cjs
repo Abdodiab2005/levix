@@ -471,6 +471,16 @@ const SETTINGS = [
     label: "Forward counters kept (days)",
     hint: "How long the !score counters survive. They gain a row per forwarded message.",
   },
+  {
+    key: "auto_delete_keep_days",
+    type: "int",
+    default: 30,
+    min: 1,
+    max: 365,
+    group: "server",
+    label: "Auto-delete copies kept (days)",
+    hint: "How long opt-in copies of auto-deleted messages (text/caption only) survive.",
+  },
 ];
 
 const BY_KEY = new Map(SETTINGS.map((definition) => [definition.key, definition]));

@@ -53,6 +53,7 @@ const COMMAND_PERMISSIONS = Object.freeze({
   digit: "MEMBERS",
   block: "OWNER_ONLY",
   unblock: "OWNER_ONLY",
+  autodelete: "OWNER_ONLY",
   send: "MEMBERS",
   sticker: "MEMBERS",
   toimage: "MEMBERS",

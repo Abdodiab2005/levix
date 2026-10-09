@@ -63,14 +63,18 @@ control panel — stays in the app's private storage on the device.
 | AI conversation history | Local DB (`ai_history`) | Conversational context; wiped with `!del` / `!delall` |
 | Long-term AI memory | `memory/*.md` files in app storage | Facts you asked the bot to remember |
 | Todos, notes, debts, schedules, warnings, user roles | Local DB | The bot's own features |
+| Auto-delete rules | Local DB (`auto_delete_rules`) | Keyword auto-delete configuration |
+| Opt-in copies of auto-deleted messages (text/caption only) | Local DB (`auto_delete_log`, auto-expiring) | Only when a rule with keep-copy on actually deletes a message |
 | Forward counters and sender last-seen metadata | Local DB (auto-expiring) | The anti-forward feature |
 | Logs | App-private `logs/` + Android Logcat | Debugging |
 
 Notes:
 
-- The bot does **not** archive other people's messages. Nothing incoming is
-  stored beyond the metadata rows listed above; deleted/edited messages are
-  not captured.
+- The bot does **not** archive other people's messages by default. Nothing
+  incoming is stored beyond the metadata rows listed above; deleted/edited
+  messages are not captured. The one exception is an auto-delete rule with
+  keep-copy turned on: it stores the text or caption (never media bytes) of
+  messages that rule actually deleted, and those rows expire.
 - Some data stored locally — especially AI conversation history, long-term
   memory, names and WhatsApp identifiers — can be included as context in a
   later AI request when you choose to use an AI feature. Local storage does

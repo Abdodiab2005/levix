@@ -80,6 +80,7 @@ const {
 } = require("../utils/recurrence.cjs");
 const { discoverProviderModels, DiscoveryError } = require("../services/llmDiscovery.cjs");
 const settingsTransfer = require("../services/settingsTransfer.cjs");
+const autoDelete = require("../services/autoDelete.cjs");
 const cron = require("node-cron");
 
 const router = Router();
@@ -1540,6 +1541,83 @@ router.post("/session/unlink", (req, res, next) => {
 router.post("/session/restart", (req, res, next) => {
   req.url = "/bot/restart";
   router.handle(req, res, next);
+});
+
+// ===========================================================================
+// Keyword auto-delete
+// ===========================================================================
+
+function autoDeleteFail(res, error, label) {
+  if (error?.status === 400 || error?.status === 404 || error?.name === "AutoDeleteError") {
+    return res.status(error.status || 400).json({ success: false, error: error.message });
+  }
+  return fail(res, error, label);
+}
+
+router.get("/auto-delete/rules", (_req, res) => {
+  try {
+    res.json({ success: true, rules: autoDelete.listRules() });
+  } catch (error) {
+    autoDeleteFail(res, error, "Error listing auto-delete rules");
+  }
+});
+
+router.post("/auto-delete/rules", (req, res) => {
+  try {
+    const rule = autoDelete.createRule(req.body || {});
+    res.json({ success: true, rule });
+  } catch (error) {
+    autoDeleteFail(res, error, "Error creating an auto-delete rule");
+  }
+});
+
+router.patch("/auto-delete/rules/:id", (req, res) => {
+  try {
+    const rule = autoDelete.updateRule(req.params.id, req.body || {});
+    res.json({ success: true, rule });
+  } catch (error) {
+    autoDeleteFail(res, error, "Error updating an auto-delete rule");
+  }
+});
+
+router.delete("/auto-delete/rules/:id", (req, res) => {
+  try {
+    autoDelete.deleteRule(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    autoDeleteFail(res, error, "Error deleting an auto-delete rule");
+  }
+});
+
+router.post("/auto-delete/rules/:id/reset", (req, res) => {
+  try {
+    const rule = autoDelete.resetCounter(req.params.id);
+    res.json({ success: true, rule });
+  } catch (error) {
+    autoDeleteFail(res, error, "Error resetting an auto-delete counter");
+  }
+});
+
+router.get("/auto-delete/log", (req, res) => {
+  try {
+    const log = autoDelete.listLog({
+      ruleId: req.query.ruleId,
+      limit: req.query.limit,
+      offset: req.query.offset,
+    });
+    res.json({ success: true, log });
+  } catch (error) {
+    autoDeleteFail(res, error, "Error listing auto-delete copies");
+  }
+});
+
+router.delete("/auto-delete/log", (req, res) => {
+  try {
+    const cleared = autoDelete.clearLog(req.query.ruleId);
+    res.json({ success: true, cleared });
+  } catch (error) {
+    autoDeleteFail(res, error, "Error clearing auto-delete copies");
+  }
 });
 
 export default router;

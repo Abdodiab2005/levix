@@ -254,6 +254,15 @@ const SWEEP_DM = [
   "!debt",
   "!stopbot",
   "!restart",
+  "!autodelete",
+  "!autodelete list",
+  "!autodelete add",
+  "!autodelete add spam",
+  "!autodelete remove nope",
+  "!autodelete on 1",
+  "!autodelete off 1",
+  "!autodelete stats",
+  "!autodelete reset 1",
 ];
 const SWEEP_GROUP = [
   "!group",

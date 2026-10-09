@@ -3,6 +3,7 @@ import { handleAntiSpam } from "../middleware/antispam.middleware.js";
 import { checkBlacklist } from "../middleware/blacklist.middleware.js";
 import { trackForwardedMessage } from "../middleware/forward-tracking.middleware.js";
 import normalizeJid from "../utils/normalizeJid.esm.js";
+import { getSenderCandidates, isBotAdminInGroup, sameUser } from "../utils/permissions.esm.js";
 import { rememberMessage } from "../utils/recentMessageCache.esm.js";
 import { saveUserMetadata, updateUserLastSeen } from "../utils/storage.esm.js";
 import { handleCommand } from "./command.handler.js";
@@ -11,6 +12,7 @@ const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
 const { visibleText } = require("../utils/messageContent.cjs");
 const { detectLang, withLang } = require("../utils/i18n.cjs");
+const autoDelete = require("../services/autoDelete.cjs");
 
 // Envelopes that carry no user-visible content: message revokes and edits
 // (protocolMessage), reactions, poll votes, the undecrypted edit envelope, and
@@ -77,6 +79,19 @@ export async function handleIncomingMessage(sock, m) {
   // otherwise sending an image with caption "!gemini حلل ده" is invisible
   // to the command handler and the user sees nothing happen.
   const body = visibleText(msg.message);
+
+  // Keyword auto-delete: after content/status skip, before blacklist/commands
+  // /moderation. A successful delete stops the rest of the pipeline.
+  try {
+    const deleted = await autoDelete.handleIncoming(sock, msg, body, {
+      sameUser,
+      getSenderCandidates,
+      isBotAdminInGroup,
+    });
+    if (deleted) return;
+  } catch (error) {
+    logger.error({ err: error }, "auto-delete hook failed");
+  }
 
   // Everything the bot says about this message — a moderation warning, a
   // command's reply — goes out in one language (see utils/i18n.cjs). A

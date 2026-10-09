@@ -106,3 +106,17 @@ export const countSchedules = store.countSchedules;
 
 // ===== AI conversation history =====
 export const deleteAllChatHistories = store.deleteAllChatHistories;
+
+// ===== Keyword auto-delete =====
+export const listAutoDeleteRules = store.listAutoDeleteRules;
+export const getAutoDeleteRule = store.getAutoDeleteRule;
+export const countAutoDeleteRules = store.countAutoDeleteRules;
+export const insertAutoDeleteRule = store.insertAutoDeleteRule;
+export const updateAutoDeleteRule = store.updateAutoDeleteRule;
+export const deleteAutoDeleteRule = store.deleteAutoDeleteRule;
+export const incrementAutoDeleteCounter = store.incrementAutoDeleteCounter;
+export const resetAutoDeleteCounter = store.resetAutoDeleteCounter;
+export const insertAutoDeleteLog = store.insertAutoDeleteLog;
+export const listAutoDeleteLog = store.listAutoDeleteLog;
+export const clearAutoDeleteLog = store.clearAutoDeleteLog;
+export const clearAutoDeleteOnUnlink = store.clearAutoDeleteOnUnlink;
