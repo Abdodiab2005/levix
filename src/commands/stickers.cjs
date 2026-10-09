@@ -1,4 +1,5 @@
 const { tr } = require("../utils/i18n.cjs");
+const { isolate } = require("../utils/bidi.cjs");
 const { BOT_PAGE_SIZE } = require("../stickers/limits.cjs");
 const { StickerError } = require("../stickers/errors.cjs");
 const ownerModule = require("../stickers/owner.cjs");
@@ -13,21 +14,26 @@ const {
 function parse(args) {
   const parts = [...args];
   let page = 1;
-  if (/^[1-9]\d*$/.test(parts.at(-1) || "")) page = Number(parts.pop());
+  let pageExplicit = false;
+  if (/^[1-9]\d*$/.test(parts.at(-1) || "")) {
+    page = Number(parts.pop());
+    pageExplicit = true;
+  }
   if (!Number.isSafeInteger(page) || page > 1_000_000) throw new StickerError("INVALID_OPTIONS");
   const first = parts.shift()?.toLowerCase();
   if (!first || first === "recent" || first === "الأحدث") {
     if (parts.length) throw new StickerError("INVALID_OPTIONS");
-    return { mode: "recent", page };
+    return { mode: "recent", page, pageExplicit };
   }
   if (first === "favorites" || first === "المفضلة") {
     if (parts.length) throw new StickerError("INVALID_OPTIONS");
-    return { mode: "favorites", page };
+    return { mode: "favorites", page, pageExplicit };
   }
   if (first === "pack" || first === "حزمة") {
     const name = parts.join(" ").trim();
     if (!name) throw new StickerError("INVALID_NAME");
-    return { mode: "pack", name, page };
+    const fullName = pageExplicit ? `${name} ${page}` : name;
+    return { mode: "pack", name, fullName, page, pageExplicit };
   }
   throw new StickerError("INVALID_OPTIONS");
 }
@@ -54,20 +60,32 @@ module.exports = {
       });
     try {
       const selected = parse(args);
-      const query = { limit: BOT_PAGE_SIZE, offset: (selected.page - 1) * BOT_PAGE_SIZE };
+      const query = { limit: BOT_PAGE_SIZE };
       let label = tr("Recent stickers", "الملصقات الحديثة");
       if (selected.mode === "favorites") {
         query.filter = "favorites";
         label = tr("Favorite stickers", "الملصقات المفضلة");
       } else if (selected.mode === "pack") {
-        const pack = library.findPackByName(who, selected.name);
-        if (!pack) throw new StickerError("PACK_NOT_FOUND", { name: selected.name });
+        // A trailing number is a page unless the whole text names an existing
+        // pack (a pack can itself end in a number: "عيد 2").
+        let name = selected.name;
+        if (selected.pageExplicit) {
+          const asName = library.findPackByName(who, selected.fullName);
+          if (asName) {
+            name = selected.fullName;
+            selected.page = 1;
+          }
+        }
+        const pack = library.findPackByName(who, name);
+        if (!pack) throw new StickerError("PACK_NOT_FOUND", { name });
         query.pack = pack.id;
-        label = pack.name;
+        selected.name = pack.name;
+        label = isolate(pack.name);
       } else {
         query.filter = "all";
         query.sort = "recent";
       }
+      query.offset = (selected.page - 1) * BOT_PAGE_SIZE;
       const { items, total } = library.listStickers(who, query);
       if (!total)
         return sock.sendMessage(jid, {

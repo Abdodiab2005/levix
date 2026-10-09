@@ -718,6 +718,30 @@ try {
   equal("an arabic pack name is accepted", res.status, 201);
   const arabicId = body.id;
 
+  res = await http.json("/dashboard/api/sticker-packs", { name: '"Mixed Pack"' });
+  body = await bodyOf(res);
+  equal("a quoted multi-word name is accepted", res.status, 201);
+  equal("the quotes are decoration", body.name, "Mixed Pack");
+
+  res = await http.json("/dashboard/api/sticker-packs", { name: "Mixed   Pack" });
+  body = await bodyOf(res);
+  equal("a whitespace-collapsed duplicate is 409", res.status, 409);
+  equal("the duplicate code is PACK_EXISTS", body.code, "PACK_EXISTS");
+
+  res = await http.json("/dashboard/api/sticker-packs", { name: "two\nlines" });
+  body = await bodyOf(res);
+  equal("a newline is not a valid name", res.status, 400);
+  equal("newline code", body.code, "INVALID_NAME");
+
+  res = await http.json(
+    `/dashboard/api/sticker-packs/${arabicId}`,
+    { name: "«حزمة العيد»" },
+    "PATCH",
+  );
+  body = await bodyOf(res);
+  equal("an Arabic rename with guillemets is accepted", res.status, 200);
+  equal("guillemets are decoration", body.name, "حزمة العيد");
+
   res = await http.json("/dashboard/api/stickers/bulk", {
     action: "addToPack",
     ids: [jpegId, animatedId],

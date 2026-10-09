@@ -1,4 +1,5 @@
 const { tr } = require("../utils/i18n.cjs");
+const { isolate } = require("../utils/bidi.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const {
   targetOf,
@@ -22,17 +23,16 @@ function parse(args) {
     Object.entries(PACK_SUBCOMMANDS).find(([, words]) => words.includes(word))?.[0] || "auto";
   if (action === "rename") {
     const text = rest.join(" ").trim();
-    const names = text.includes("|")
-      ? text.split("|").map((s) => s.trim())
-      : rest.length === 2
-        ? rest
-        : [];
-    return {
-      action,
-      oldName: names[0] || "",
-      newName: names[1] || "",
-      valid: names.length === 2 && names.every(Boolean),
-    };
+    // `|` is the explicit separator and is not a legal pack-name character, so
+    // its presence is unambiguous. Without it, the command resolves the pack
+    // itself in execute(): the longest leading words that name an existing pack
+    // are the target and the rest is the new name.
+    const parts = text.split("|").map((s) => s.trim());
+    if (parts.length === 2 && parts[0] && parts[1]) {
+      return { action, mode: "pair", oldName: parts[0], newName: parts[1], valid: true };
+    }
+    if (!text.includes("|")) return { action, mode: "single", text, valid: false };
+    return { action, mode: "invalid", oldName: "", newName: "", valid: false };
   }
   return { action, name: (action === "auto" ? args : rest).join(" ").trim() };
 }
@@ -68,10 +68,28 @@ module.exports = {
     try {
       let line;
       if (parsed.action === "rename") {
-        if (!parsed.valid) throw new StickerError("INVALID_NAME");
-        const pack = requirePack(who, parsed.oldName);
-        const renamed = library.updatePack(who, pack.id, parsed.newName);
-        line = tr(`Renamed pack to ${renamed.name}.`, `أُعيدت تسمية الحزمة إلى ${renamed.name}.`);
+        let oldName = parsed.oldName;
+        let newName = parsed.newName;
+        if (!parsed.valid && parsed.mode === "single") {
+          const found = library.findLeadingPackName(who, parsed.text);
+          if (found?.newName) {
+            oldName = found.pack.name;
+            newName = found.newName;
+          }
+        }
+        if (!oldName || !newName) {
+          line = tr(
+            `Use ${commandHint("pack", "rename <old> | <new>")}.`,
+            `استخدم ${commandHint("pack", "تسمية <القديم> | <الجديد>")}.`,
+          );
+        } else {
+          const pack = requirePack(who, oldName);
+          const renamed = library.updatePack(who, pack.id, newName);
+          line = tr(
+            `Renamed pack to ${isolate(renamed.name)}.`,
+            `أُعيدت تسمية الحزمة إلى ${isolate(renamed.name)}.`,
+          );
+        }
       } else if (!parsed.name) {
         line = tr(
           `Use ${commandHint("pack", "<name>")} while replying to media, or ${commandHint("pack", "create <name>")}.`,
@@ -79,13 +97,13 @@ module.exports = {
         );
       } else if (parsed.action === "create") {
         const pack = library.createPack(who, parsed.name);
-        line = tr(`Created pack ${pack.name}.`, `أُنشئت الحزمة ${pack.name}.`);
+        line = tr(`Created pack ${isolate(pack.name)}.`, `أُنشئت الحزمة ${isolate(pack.name)}.`);
       } else if (parsed.action === "delete") {
         const pack = requirePack(who, parsed.name);
         library.deletePack(who, pack.id);
         line = tr(
-          `Deleted pack ${pack.name}. Its stickers remain in your library.`,
-          `حُذفت الحزمة ${pack.name}. بقيت ملصقاتها في مكتبتك.`,
+          `Deleted pack ${isolate(pack.name)}. Its stickers remain in your library.`,
+          `حُذفت الحزمة ${isolate(pack.name)}. بقيت ملصقاتها في مكتبتك.`,
         );
       } else if (parsed.action === "remove") {
         const pack = requirePack(who, parsed.name);
@@ -96,16 +114,16 @@ module.exports = {
         const removed = library.removeFromPack(who, pack.id, [sticker.id]);
         if (!removed.affected) throw new StickerError("NOT_FOUND");
         line = tr(
-          `Removed the sticker from ${pack.name}. It remains in your library.`,
-          `أُزيل الملصق من ${pack.name}. بقي في مكتبتك.`,
+          `Removed the sticker from ${isolate(pack.name)}. It remains in your library.`,
+          `أُزيل الملصق من ${isolate(pack.name)}. بقي في مكتبتك.`,
         );
       } else {
         const target = targetOf(msg, { quotedOnly: true });
         if (parsed.action === "show" || (parsed.action === "auto" && !target)) {
           const pack = requirePack(who, parsed.name);
           line = tr(
-            `${pack.name} — ${countLabel(pack.count)}. Use ${commandHint("stickers", `pack ${pack.name}`)} to see them.`,
-            `${pack.name} — ${countLabel(pack.count)}. استخدم ${commandHint("stickers", `حزمة ${pack.name}`)} لعرضها.`,
+            `${isolate(pack.name)} — ${countLabel(pack.count)}. Use ${commandHint("stickers", `pack ${pack.name}`)} to see them.`,
+            `${isolate(pack.name)} — ${countLabel(pack.count)}. استخدم ${commandHint("stickers", `حزمة ${pack.name}`)} لعرضها.`,
           );
         } else {
           if (!target) throw new StickerError("NO_MEDIA");
@@ -129,10 +147,13 @@ module.exports = {
             });
             const result = await promise;
             line = result.created
-              ? tr(`Saved sticker to ${pack.name}.`, `حُفظ الملصق في ${pack.name}.`)
+              ? tr(
+                  `Saved sticker to ${isolate(pack.name)}.`,
+                  `حُفظ الملصق في ${isolate(pack.name)}.`,
+                )
               : tr(
-                  `Already in your library; added to ${pack.name}.`,
-                  `الملصق موجود في مكتبتك بالفعل؛ أُضيف إلى ${pack.name}.`,
+                  `Already in your library; added to ${isolate(pack.name)}.`,
+                  `الملصق موجود في مكتبتك بالفعل؛ أُضيف إلى ${isolate(pack.name)}.`,
                 );
           } catch (error) {
             if (createdPack) {
