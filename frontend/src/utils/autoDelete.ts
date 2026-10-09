@@ -1,4 +1,4 @@
-// Mirrors src/services/autoDelete.cjs (limits, keyword normalization, sender ids).
+// Mirrors src/services/autoDelete.cjs (limits, keyword display form, sender ids).
 import type {
   AutoDeleteChatScope,
   AutoDeleteMatch,
@@ -46,14 +46,16 @@ export function normalizeMatchText(input: string): string {
   return text;
 }
 
+/** Chip text sent to the API: NFC, internal whitespace collapsed, trimmed. */
 export function prepareKeyword(raw: string): { value: string } | { error: "empty" | "long" } {
-  const trimmed = String(raw ?? "").trim();
-  if (!trimmed) return { error: "empty" };
-  if (trimmed.length > AUTO_DELETE_LIMITS.keywordChars) return { error: "long" };
-  const normalized = normalizeMatchText(trimmed);
-  if (!normalized) return { error: "empty" };
-  if (normalized.length > AUTO_DELETE_LIMITS.keywordChars) return { error: "long" };
-  return { value: normalized };
+  const displayed = String(raw ?? "")
+    .normalize("NFC")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!displayed) return { error: "empty" };
+  if (displayed.length > AUTO_DELETE_LIMITS.keywordChars) return { error: "long" };
+  if (!normalizeMatchText(displayed)) return { error: "empty" };
+  return { value: displayed };
 }
 
 export class SenderInputError extends Error {

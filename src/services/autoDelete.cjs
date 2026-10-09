@@ -1,9 +1,17 @@
 // Keyword auto-delete: rules, matching, and the per-message delete hook.
 //
-// Matching is always normalized (NFKC, Arabic diacritics/alef/ya, lowercase,
-// collapsed whitespace). The first enabled rule that matches wins. A message
-// that invokes this command is exempt only when the sender may run it right
-// now, so `!autodelete add x` cannot delete itself while a member writing
+// Keywords are stored and returned as entered: trimmed, NFC, internal
+// whitespace collapsed. Matching uses a normalized form (NFKC, Arabic
+// diacritics/alef/ya, lowercase, collapsed whitespace), derived on first
+// match and memoized per cached rule object, next to the compiled word
+// patterns. The store drops those objects on any write.
+// De-duplication uses that normalized form and keeps the first spelling.
+// Rows saved before this split are already normalized; normalization is
+// idempotent, so they keep matching without a migration.
+//
+// The first enabled rule that matches wins. A message that invokes this
+// command is exempt only when the sender may run it right now, so
+// `!autodelete add x` cannot delete itself while a member writing
 // `!autodelete <keyword>` still matches.
 
 const logger = require("../utils/logger.cjs");
@@ -53,9 +61,9 @@ function wordPattern(keyword) {
   );
 }
 
-// Word-mode regexes, compiled once per cached rule object. The store drops
-// those objects when the enabled-rule cache is rebuilt (any write).
-const wordPatternsByRule = new WeakMap();
+// Normalized keywords and word-mode regexes, one entry per cached rule object.
+// The store drops those objects when the rule cache is rebuilt (any write).
+const matchIndexByRule = new WeakMap();
 
 function compileWordPatterns(keywords) {
   return (keywords || []).map((keyword) => {
@@ -67,13 +75,20 @@ function compileWordPatterns(keywords) {
   });
 }
 
-function wordPatternsFor(rule) {
-  if (rule?.match !== "word") return null;
-  let patterns = wordPatternsByRule.get(rule);
-  if (patterns) return patterns;
-  patterns = compileWordPatterns(rule.keywords);
-  wordPatternsByRule.set(rule, patterns);
-  return patterns;
+function indexRuleForMatch(rule) {
+  const matchKeywords = (rule?.keywords || []).map((keyword) => normalizeMatchText(keyword));
+  const patterns = rule?.match === "word" ? compileWordPatterns(matchKeywords) : null;
+  const index = { matchKeywords, patterns };
+  if (rule && typeof rule === "object") matchIndexByRule.set(rule, index);
+  return index;
+}
+
+function matchIndexFor(rule) {
+  if (rule && typeof rule === "object") {
+    const cached = matchIndexByRule.get(rule);
+    if (cached) return cached;
+  }
+  return indexRuleForMatch(rule);
 }
 
 /** Visible text ready to compare: NFKC, tashkeel/tatweel stripped, alef/ya unified. */
@@ -86,6 +101,14 @@ function normalizeMatchText(input) {
   text = text.toLowerCase();
   text = text.replace(/\s+/g, " ").trim();
   return text;
+}
+
+/** Spelling we store and show. Matching goes through normalizeMatchText. */
+function displayKeyword(input) {
+  return String(input ?? "")
+    .normalize("NFC")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function keywordMatches(normalizedText, keyword, mode, compiledPattern) {
@@ -120,9 +143,8 @@ function ruleMatches(rule, ctx) {
   if (rule.senders?.mode === "selected") {
     if (!senderListMatches(rule.senders.list, ctx.senderCandidates, ctx.sameUser)) return false;
   }
-  const keywords = rule.keywords || [];
-  const patterns = rule.match === "word" ? wordPatternsFor(rule) : null;
-  return keywords.some((keyword, i) =>
+  const { matchKeywords, patterns } = matchIndexFor(rule);
+  return matchKeywords.some((keyword, i) =>
     keywordMatches(ctx.normalizedText, keyword, rule.match, patterns ? patterns[i] : undefined),
   );
 }
@@ -192,15 +214,15 @@ function normalizeKeywords(raw) {
     if (typeof item !== "string" && typeof item !== "number") {
       throw new AutoDeleteError("Each keyword must be a string");
     }
-    const trimmed = String(item).trim();
-    if (trimmed.length < 1 || trimmed.length > MAX_KEYWORD_CHARS) {
+    const displayed = displayKeyword(item);
+    if (displayed.length < 1 || displayed.length > MAX_KEYWORD_CHARS) {
       throw new AutoDeleteError("Each keyword must be 1 to 100 characters");
     }
-    const normalized = normalizeMatchText(trimmed);
+    const normalized = normalizeMatchText(displayed);
     if (!normalized) throw new AutoDeleteError("Keyword is empty after normalization");
     if (seen.has(normalized)) continue;
     seen.add(normalized);
-    out.push(normalized);
+    out.push(displayed);
   }
   if (!out.length) throw new AutoDeleteError("A rule needs 1 to 50 keywords");
   return out;

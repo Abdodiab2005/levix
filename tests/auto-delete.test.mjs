@@ -535,6 +535,82 @@ section("command replies in both languages");
   );
 }
 
+section("keyword display form");
+
+{
+  wipeRules();
+  const created = autoDelete.createRule({
+    keywords: ["  اشترك   الآن  ", "Promo Code"],
+  });
+  equal("create keeps the typed spelling", created.keywords.join("|"), "اشترك الآن|Promo Code");
+  const updated = autoDelete.updateRule(created.id, { keywords: ["  Hello   World  "] });
+  equal("update keeps the typed spelling", updated.keywords.join("|"), "Hello World");
+  equal("get keeps the typed spelling", autoDelete.getRule(created.id).keywords[0], "Hello World");
+  equal(
+    "list keeps the typed spelling",
+    autoDelete.listRules().find((rule) => rule.id === created.id)?.keywords[0],
+    "Hello World",
+  );
+
+  const dup = autoDelete.createRule({
+    keywords: ["الآن", "الان", "الْآن", "Promo Code", "promo   code", "PROMO CODE"],
+  });
+  equal("duplicate spellings collapse to the first", dup.keywords.join("|"), "الآن|Promo Code");
+
+  wipeRules();
+  autoDelete.createRule({ keywords: ["الآن"] });
+  ok("keyword الآن deletes الان", await runHook(fakeSock(), makeMsg({ text: "الان" }), "الان"));
+  ok("keyword الآن deletes الْآن", await runHook(fakeSock(), makeMsg({ text: "الْآن" }), "الْآن"));
+  ok(
+    "keyword الآن misses an unrelated word",
+    !(await runHook(fakeSock(), makeMsg({ text: "مرحبا" }), "مرحبا")),
+  );
+
+  wipeRules();
+  autoDelete.createRule({ keywords: ["الآن"], match: "word" });
+  ok(
+    "word keyword الآن deletes الان",
+    await runHook(fakeSock(), makeMsg({ text: "قل الان" }), "قل الان"),
+  );
+  ok(
+    "word keyword الآن deletes الْآن",
+    await runHook(fakeSock(), makeMsg({ text: "قل الْآن" }), "قل الْآن"),
+  );
+  ok(
+    "word keyword الآن misses a longer token",
+    !(await runHook(fakeSock(), makeMsg({ text: "قلالان" }), "قلالان")),
+  );
+
+  wipeRules();
+  autoDelete.createRule({ keywords: ["Promo Code"], match: "word" });
+  ok(
+    "Promo Code still matches promo code",
+    await runHook(fakeSock(), makeMsg({ text: "see PROMO code" }), "see PROMO code"),
+  );
+
+  wipeRules();
+  const legacy = store.insertAutoDeleteRule({
+    keywords: ["الان"],
+    match: "contains",
+    enabled: true,
+  });
+  equal("legacy normalized row is not rewritten", legacy.keywords[0], "الان");
+  ok(
+    "legacy normalized row still deletes الْآن",
+    await runHook(fakeSock(), makeMsg({ text: "الْآن" }), "الْآن"),
+  );
+
+  wipeRules();
+  const added = await runCommand(["add", "اشترك", "الآن", "|", "Promo", "Code"], "en");
+  ok("command add keeps the typed spelling", added.includes("اشترك الآن, Promo Code"));
+  ok("command add does not fold the alef", !added.includes("اشترك الان"));
+  ok("command add does not lowercase", !added.includes("promo code"));
+  const listed = await runCommand(["list"], "en");
+  ok("command list keeps Arabic spelling", listed.includes("اشترك الآن"));
+  ok("command list keeps Promo Code", listed.includes("Promo Code"));
+  ok("command list does not lowercase", !listed.includes("promo code"));
+}
+
 section("validation");
 
 {
@@ -607,14 +683,38 @@ section("API validation");
     equal("name too long -> 400", res.status, 400);
 
     res = await http.json("/dashboard/api/auto-delete/rules", {
-      keywords: ["hello", "Hello", "  HELLO  "],
+      keywords: ["Hello", "hello", "  HELLO  "],
       match: "word",
       keepCopy: true,
     });
     equal("create succeeds", res.status, 200);
     const created = await res.json();
     equal("keywords de-duplicated", created.rule.keywords.length, 1);
+    equal("API create keeps the first spelling", created.rule.keywords[0], "Hello");
+    ok("API create does not return the match form", created.rule.matchKeywords === undefined);
     const id = created.rule.id;
+
+    res = await http.json(
+      `/dashboard/api/auto-delete/rules/${id}`,
+      { keywords: ["  اشترك   الآن  ", "Promo Code", "promo code"] },
+      "PATCH",
+    );
+    equal("update keywords", res.status, 200);
+    const updated = await res.json();
+    equal(
+      "API update keeps display form",
+      updated.rule.keywords.join("|"),
+      "اشترك الآن|Promo Code",
+    );
+
+    res = await http.call("/dashboard/api/auto-delete/rules");
+    equal("list rules", res.status, 200);
+    const listed = await res.json();
+    equal(
+      "API list keeps display form",
+      listed.rules.find((rule) => rule.id === id)?.keywords?.join("|"),
+      "اشترك الآن|Promo Code",
+    );
 
     res = await http.json(`/dashboard/api/auto-delete/rules/${id}`, { enabled: false }, "PATCH");
     equal("patch toggle", res.status, 200);
