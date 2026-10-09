@@ -10,6 +10,13 @@ export {
   type IconButtonProps,
 } from "./button";
 export { Card, CardHeader, type CardProps, PageHeader, Panel, Section } from "./card";
+export {
+  Chip,
+  ChipInput,
+  type ChipInputProps,
+  type ChipProps,
+  type ChipRejectReason,
+} from "./chip";
 export { ConfirmDialog, type ConfirmDialogProps, Dialog, type DialogProps } from "./dialog";
 export { EmptyState, LoadingState, Skeleton, Spinner } from "./feedback";
 export {
@@ -39,6 +46,7 @@ export {
   type OverflowMenuProps,
 } from "./menu";
 export { Popover, type PopoverProps } from "./popover";
+export { RelativeTime, type RelativeTimeProps } from "./relative-time";
 export { SortMenu, type SortMenuProps, type SortOption } from "./sort";
 export { SegmentedControl, type TabOption, Tabs } from "./tabs";
 export { Toolbar } from "./toolbar";

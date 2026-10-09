@@ -41,7 +41,15 @@ export function useFocusTrap(
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         if (event.defaultPrevented) return;
+        const root = ref.current;
+        if (root) {
+          const overlays = document.querySelectorAll("[data-overlay]");
+          const top = overlays.item(overlays.length - 1);
+          // A contact picker (or confirm) stacked on another dialog handles Escape alone.
+          if (top && top !== root) return;
+        }
         event.preventDefault();
+        event.stopImmediatePropagation();
         onEscapeRef.current?.();
         return;
       }

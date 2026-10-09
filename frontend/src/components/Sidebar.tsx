@@ -5,6 +5,7 @@ import {
   Calendar,
   FileText,
   LayoutGrid,
+  MessageSquareX,
   Radio,
   Settings,
   Shield,
@@ -25,6 +26,7 @@ export type ViewTab =
   | "commands"
   | "ai"
   | "groups"
+  | "autodelete"
   | "schedules"
   | "settings"
   | "logs"
@@ -62,6 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "commands", label: t("commands"), icon: Terminal },
     { id: "ai", label: t("ai"), icon: Bot },
     { id: "groups", label: t("groups"), icon: Users },
+    { id: "autodelete", label: t("autoDelete"), icon: MessageSquareX },
     { id: "schedules", label: t("schedules"), icon: Calendar },
     { id: "stickers", label: t("stickers"), icon: Sticker },
     { labelCategory: t("settings") },

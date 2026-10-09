@@ -85,7 +85,7 @@ Per-row settings stay as `Select` or `Toggle`. A list filter does not — that i
 
 ### Dialog / ConfirmDialog
 
-`Dialog` keeps the old modal contract: `isOpen`, `onClose`, `title`, `children`, `footer`, `maxWidth`. Escape and the backdrop close it. Focus is trapped and returned to the trigger. `ConfirmDialog` composes `Dialog` with cancel and confirm buttons (`variant` `danger` or `primary`, `loading`).
+`Dialog` keeps the old modal contract: `isOpen`, `onClose`, `title`, `children`, `footer`, `maxWidth`. Escape and the backdrop close it. Focus is trapped and returned to the trigger. The body scrolls and the footer stays on screen. The footer's bottom padding (the body's, when there is no footer) is `max(1rem, env(safe-area-inset-bottom))`. `ConfirmDialog` composes `Dialog` with cancel and confirm buttons (`variant` `danger` or `primary`, `loading`).
 
 ```tsx
 <ConfirmDialog
@@ -100,7 +100,7 @@ Per-row settings stay as `Select` or `Toggle`. A list filter does not — that i
 
 ### Popover
 
-Anchored to `trigger`. Click-outside and Escape close it. It flips to stay on screen and treats `align` `start` / `end` as logical (RTL-aware). Under 640px it renders as a bottom sheet. `haspopup` is `"menu"` or `"dialog"`.
+Anchored to `trigger`. Click-outside and Escape close it. It flips to stay on screen and treats `align` `start` / `end` as logical (RTL-aware). Under 640px it renders as a bottom sheet, with bottom padding `max(1rem, env(safe-area-inset-bottom))` so the last control clears the home indicator. `haspopup` is `"menu"` or `"dialog"`.
 
 Build menus and filters on this. Do not position a dropdown by hand.
 
@@ -139,6 +139,31 @@ One `ArrowUpDown` button. `options` is `{ value, label }[]`. The current value g
 ### Tabs / SegmentedControl
 
 Both take `value`, `onChange`, `options` (`{ value, label, icon? }`), and `aria-label`. `SegmentedControl` is one enclosed group (source switch, short modes). `Tabs` is a row of pills for a scrolling section switch.
+
+### Chip / ChipInput
+
+`Chip` is a token. Pass `onRemove` and `removeLabel` to make it removable (an `IconButton`). `dir` defaults to `auto` for text the operator typed.
+
+`ChipInput` is that chip plus a draft field. Enter, comma, or an Arabic comma commits the draft. Backspace on an empty draft removes the last chip. Pasting `a, b, c` splits on commas. `max` and `maxLength` reject the extra token through `onReject` (`"max"`, `"long"`, `"empty"`, `"duplicate"`). `prepare` maps a raw token to the stored string (keyword normalization). `countLabel` is the counter, already translated. `removeLabel` names each remove button.
+
+```tsx
+<ChipInput
+  value={keywords}
+  onChange={setKeywords}
+  max={50}
+  removeLabel={(word) => fill(t("removeKeyword"), { word })}
+  countLabel={fill(t("keywordCount"), { n: keywords.length, max: 50 })}
+  aria-label={t("keywordsLabel")}
+/>
+```
+
+### RelativeTime
+
+A `<time>` whose text comes from `Intl.RelativeTimeFormat` in the active language. `value` is unix milliseconds, an ISO string, or a `Date`. The tooltip is the absolute time. Mounted instances share one 30s ticker.
+
+```tsx
+<RelativeTime value={rule.lastDeletedAt} className="text-xs text-muted" />
+```
 
 ### EmptyState / Spinner / Skeleton / LoadingState
 

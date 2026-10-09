@@ -216,6 +216,55 @@ export interface Job {
   qualityReduced: boolean | null;
 }
 
+export type AutoDeleteMatch = "contains" | "word" | "exact";
+export type AutoDeleteChatScope = "all" | "groups" | "private";
+export type AutoDeleteSenderMode = "everyone" | "selected";
+
+export interface AutoDeleteSenders {
+  mode: AutoDeleteSenderMode;
+  list: string[];
+}
+
+export interface AutoDeleteRuleInput {
+  name?: string | null;
+  enabled?: boolean;
+  keywords?: string[];
+  match?: AutoDeleteMatch;
+  chatScope?: AutoDeleteChatScope;
+  senders?: AutoDeleteSenders;
+  includeOwn?: boolean;
+  forEveryone?: boolean;
+  keepCopy?: boolean;
+}
+
+export interface AutoDeleteRule {
+  id: number;
+  name: string | null;
+  enabled: boolean;
+  keywords: string[];
+  match: AutoDeleteMatch;
+  chatScope: AutoDeleteChatScope;
+  senders: AutoDeleteSenders;
+  includeOwn: boolean;
+  forEveryone: boolean;
+  keepCopy: boolean;
+  deletedCount: number;
+  lastDeletedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AutoDeleteLogEntry {
+  id: number;
+  ruleId: number;
+  chatJid: string;
+  sender: string | null;
+  text: string;
+  mediaType: string;
+  mode: string;
+  createdAt: number;
+}
+
 export interface Capabilities {
   webp: boolean;
   animated: boolean;

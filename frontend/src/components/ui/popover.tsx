@@ -198,7 +198,10 @@ export function Popover({
       )}
       style={
         sheet
-          ? { animation: "modal-enter 150ms ease-out" }
+          ? {
+              animation: "modal-enter 150ms ease-out",
+              paddingBottom: "max(1rem, env(safe-area-inset-bottom))",
+            }
           : {
               top: coords?.top ?? 0,
               left: coords?.left ?? 0,
