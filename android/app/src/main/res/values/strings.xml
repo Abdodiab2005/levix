@@ -99,7 +99,25 @@
     <string name="card_engine_desc_starting_short">Initializing core…</string>
     <string name="battery_ok_short">Background protection active</string>
     <string name="battery_restricted_hint">Restricted by system. Protect 24/7 uptime.</string>
-    <string name="action_open_whatsapp_settings">Open WhatsApp settings in panel</string>
+    <string name="action_show_whatsapp_status">Show WhatsApp connection status</string>
+
+    <!-- WhatsApp status sheet -->
+    <string name="wa_status_sheet_title">WhatsApp Connection</string>
+    <string name="wa_status_header_cd">WhatsApp status: %1$s</string>
+    <string name="wa_detail_state">State</string>
+    <string name="wa_detail_since">Since</string>
+    <string name="wa_detail_error">Error</string>
+    <string name="wa_detail_network">Network</string>
+    <string name="wa_detail_engine">Engine</string>
+    <string name="wa_detail_unknown">—</string>
+    <string name="wa_network_online">Online</string>
+    <string name="wa_network_offline">Offline</string>
+    <string name="wa_engine_running">Running</string>
+    <string name="wa_engine_stopped">Not running</string>
+    <string name="card_whatsapp_desc_failed_long">Reconnection failed after several attempts. Your settings and data are safe; start the assistant again or reconnect from the control panel.</string>
+    <string name="card_whatsapp_desc_expired_long">This device is no longer linked to WhatsApp. Pair it again from the control panel to resume.</string>
+    <string name="card_whatsapp_desc_connecting_long">Connecting to WhatsApp. The status will update automatically.</string>
+    <string name="card_whatsapp_desc_offline_long">The assistant is not running, so there is no WhatsApp connection. Start the assistant to connect.</string>
 
     <!-- Native Media Hub -->
     <string name="media_hub_title">Media Hub</string>

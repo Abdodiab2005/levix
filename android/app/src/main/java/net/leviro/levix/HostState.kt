@@ -28,6 +28,7 @@ object HostState {
         val whatsAppState: String? = null,
         val whatsAppCode: Int? = null,
         val whatsAppReason: String? = null,
+        val whatsAppSinceMs: Long = 0L,
     )
 
     @Volatile
@@ -155,7 +156,19 @@ object HostState {
     fun setWhatsAppStatus(state: String?, code: Int?, reason: String?) {
         val current = snapshot
         if (!current.running) return
-        publish(current.copy(whatsAppState = state, whatsAppCode = code, whatsAppReason = reason))
+        // "Since" tracks the state value, not the last message: a retry that
+        // repeats the same state must not reset the clock.
+        val sinceMs =
+            if (state != current.whatsAppState) System.currentTimeMillis()
+            else current.whatsAppSinceMs
+        publish(
+            current.copy(
+                whatsAppState = state,
+                whatsAppCode = code,
+                whatsAppReason = reason,
+                whatsAppSinceMs = sinceMs,
+            ),
+        )
     }
 
     private fun publish(next: Snapshot) {
