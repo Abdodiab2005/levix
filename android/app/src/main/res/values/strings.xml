@@ -126,6 +126,8 @@
     <string name="media_open">Open</string>
     <string name="media_insights">Storage insights</string>
     <string name="media_sort">Sort</string>
+    <string name="media_filter">Filter</string>
+    <string name="media_filter_active">Filter: %1$s</string>
     <string name="media_search">Search files, type or date</string>
     <string name="media_all">All</string>
     <string name="media_whatsapp">WhatsApp</string>

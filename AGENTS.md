@@ -199,6 +199,28 @@ Dockerfile · docker-compose.yml
 data/             # Created at runtime, gitignored (or ~/.levix)
 ```
 
+### Android UI — STRICT RULES
+
+The native UI is a small design system, not a pile of layouts. Read
+`android/app/src/main/res/values/styles.xml` before touching a screen.
+
+- Style every view with `style="@style/Widget.Levix.…"`. Add a style instead
+  of copying attributes; extend our base with `parent=` (never fork it).
+- Type lives in `TextAppearance.Levix.*` (size, weight, colour). A view style
+  names a role (`CardTitle`, `Badge`, `Button.Outlined`), never a raw size.
+- Colours come from `@color/…` (`colors.xml`) and sizes, paddings, gaps and
+  radii from `@dimen/…` (`dimens.xml`). No hex, no bare `dp`/`sp`, in a layout.
+- Icon-only actions are icon buttons with `contentDescription` **and**
+  `tooltipText`; keep text on the primary action (Start/Stop, Open panel).
+- Secondary and rare actions go in a `⋮` overflow `PopupMenu`, not inline.
+- One filter icon opens a filter sheet/menu; one sort button opens the sort
+  menu. Never a row of filter/sort chips.
+- Use `start`/`end` only, never `left`/`right`, so Arabic RTL mirrors cleanly.
+- Every new string goes in **both** `values/strings.xml` and
+  `values-ar/strings.xml`.
+- The WebView panel follows the web design system in "Design system — STRICT
+  RULES" (`frontend/src/components/ui`); native screens follow this section.
+
 ### Startup
 
 Two shapes, one core. The difference is which bootstrap runs, not a flag

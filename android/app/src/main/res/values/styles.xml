@@ -1,42 +1,501 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Reusable text styles for the native bottom sheets. Named (not inline)
-         so another screen can inherit from them instead of copying attributes. -->
+    <!--
+        Levix native design system. Two layers, so a screen changes in one place:
 
-    <style name="Widget.Levix.SheetEyebrow" parent="Widget.AppCompat.TextView">
-        <item name="android:fontFamily">sans-serif-medium</item>
-        <item name="android:textAllCaps">true</item>
-        <item name="android:textColor">@color/levix_cyan</item>
-        <item name="android:textSize">11sp</item>
-        <item name="android:textStyle">bold</item>
-        <item name="android:letterSpacing">0.08</item>
-    </style>
+          TextAppearance.Levix.*   pure type: family, size, weight, colour, spacing
+          Widget.Levix.*           a whole view: type plus its box — background
+                                   and padding — so a layout names the *role* of
+                                   the view (a card title, a badge, a pill) and
+                                   never the raw sp/dp/colour that role means.
 
-    <style name="Widget.Levix.SheetTitle" parent="Widget.AppCompat.TextView">
+        Rules (see AGENTS.md, "Android UI — STRICT RULES"):
+        layouts use style="@style/Widget.Levix.…" only; colours come from
+        @color/… (colors.xml); sizes/radii/padding come from @dimen/… (dimens.xml).
+        Never a hex code, never a bare dp, in a layout.
+    -->
+
+    <!-- ==================== Text appearances (pure type) ==================== -->
+
+    <style name="TextAppearance.Levix.Brand" parent="TextAppearance.AppCompat">
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/levix_text</item>
         <item name="android:textSize">20sp</item>
         <item name="android:textStyle">bold</item>
     </style>
 
-    <style name="Widget.Levix.SheetBody" parent="Widget.AppCompat.TextView">
+    <style name="TextAppearance.Levix.Tagline" parent="TextAppearance.AppCompat">
         <item name="android:textColor">@color/levix_text_muted</item>
-        <item name="android:textSize">13sp</item>
-        <item name="android:lineSpacingMultiplier">1.25</item>
-    </style>
-
-    <style name="Widget.Levix.DetailLabel" parent="Widget.AppCompat.TextView">
-        <item name="android:textColor">@color/levix_text_faint</item>
         <item name="android:textSize">12sp</item>
     </style>
 
-    <style name="Widget.Levix.DetailValue" parent="Widget.AppCompat.TextView">
+    <style name="TextAppearance.Levix.Pill" parent="TextAppearance.AppCompat">
         <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:textColor">@color/levix_text</item>
         <item name="android:textSize">12sp</item>
         <item name="android:textStyle">bold</item>
     </style>
 
+    <style name="TextAppearance.Levix.Eyebrow" parent="TextAppearance.AppCompat">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/levix_cyan</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.08</item>
+    </style>
+
+    <style name="TextAppearance.Levix.HeroTitle" parent="TextAppearance.AppCompat">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/levix_text</item>
+        <item name="android:textSize">21sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:lineSpacingMultiplier">1.2</item>
+    </style>
+
+    <style name="TextAppearance.Levix.HeroSubtitle" parent="TextAppearance.AppCompat">
+        <item name="android:textColor">@color/levix_text_muted</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:lineSpacingMultiplier">1.2</item>
+    </style>
+
+    <style name="TextAppearance.Levix.Hint" parent="TextAppearance.AppCompat">
+        <item name="android:textColor">@color/levix_warn</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="TextAppearance.Levix.CardTitle" parent="TextAppearance.AppCompat">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/levix_text</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextAppearance.Levix.CardTitle.Large" parent="TextAppearance.Levix.CardTitle">
+        <item name="android:textSize">15sp</item>
+    </style>
+
+    <!-- Media Hub titles are deliberately not the medium face: the screen is a
+         dense list, and the lighter weight keeps it calm next to the glyphs. -->
+    <style name="TextAppearance.Levix.CardTitle.Media" parent="TextAppearance.Levix.CardTitle">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="TextAppearance.Levix.ScreenTitle" parent="TextAppearance.AppCompat">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textColor">@color/levix_text</item>
+        <item name="android:textSize">22sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextAppearance.Levix.SectionTitle" parent="TextAppearance.AppCompat">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/levix_text</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextAppearance.Levix.SectionSub" parent="TextAppearance.AppCompat">
+        <item name="android:textColor">@color/levix_text_muted</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="TextAppearance.Levix.Subtitle" parent="TextAppearance.AppCompat">
+        <item name="android:textColor">@color/levix_text_muted</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
+    <style name="TextAppearance.Levix.Caption" parent="TextAppearance.AppCompat">
+        <item name="android:textColor">@color/levix_text_muted</item>
+        <item name="android:textSize">13sp</item>
+    </style>
+
+    <style name="TextAppearance.Levix.Detail" parent="TextAppearance.AppCompat">
+        <item name="android:textColor">@color/levix_text_muted</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:lineSpacingMultiplier">1.15</item>
+    </style>
+
+    <style name="TextAppearance.Levix.Badge" parent="TextAppearance.AppCompat">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/levix_text_muted</item>
+        <item name="android:textSize">10sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextAppearance.Levix.Banner" parent="TextAppearance.AppCompat">
+        <item name="android:textColor">@color/levix_text</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="TextAppearance.Levix.SelectionCount" parent="TextAppearance.AppCompat">
+        <item name="android:textColor">@color/levix_text</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <!-- Sheet detail rows (read-only key/value). -->
+    <style name="TextAppearance.Levix.DetailLabel" parent="TextAppearance.AppCompat">
+        <item name="android:textColor">@color/levix_text_faint</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="TextAppearance.Levix.DetailValue" parent="TextAppearance.AppCompat">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/levix_text</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextAppearance.Levix.SheetBody" parent="TextAppearance.AppCompat">
+        <item name="android:textColor">@color/levix_text_muted</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:lineSpacingMultiplier">1.25</item>
+    </style>
+
+    <!-- Glyphs are text, not images: one size/colour per role. -->
+    <style name="TextAppearance.Levix.Glyph" parent="TextAppearance.AppCompat">
+        <item name="android:textColor">@color/levix_text</item>
+    </style>
+
+    <style name="TextAppearance.Levix.Glyph.Back" parent="TextAppearance.Levix.Glyph">
+        <item name="android:textSize">32sp</item>
+    </style>
+
+    <style name="TextAppearance.Levix.Glyph.Action" parent="TextAppearance.Levix.Glyph">
+        <item name="android:textColor">@color/levix_cyan</item>
+        <item name="android:textSize">24sp</item>
+    </style>
+
+    <style name="TextAppearance.Levix.Glyph.More" parent="TextAppearance.Levix.Glyph">
+        <item name="android:textSize">22sp</item>
+    </style>
+
+    <style name="TextAppearance.Levix.Glyph.Chevron" parent="TextAppearance.Levix.Glyph">
+        <item name="android:textColor">@color/levix_cyan</item>
+        <item name="android:textSize">28sp</item>
+    </style>
+
+    <!-- ==================== Text widgets ==================== -->
+
+    <!-- Common root, so a dotted style name always resolves its implicit parent. -->
+    <style name="Widget.Levix" parent="" />
+
+    <style name="Widget.Levix.Text" parent="Widget.AppCompat.TextView" />
+
+    <style name="Widget.Levix.Text.Title.Brand" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.Brand</item>
+    </style>
+
+    <style name="Widget.Levix.Text.Tagline" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.Tagline</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:singleLine">true</item>
+    </style>
+
+    <style name="Widget.Levix.Text.Pill" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.Pill</item>
+        <item name="android:singleLine">true</item>
+    </style>
+
+    <style name="Widget.Levix.Text.Eyebrow" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.Eyebrow</item>
+    </style>
+
+    <style name="Widget.Levix.Text.Eyebrow.Caps" parent="Widget.Levix.Text.Eyebrow">
+        <item name="android:textAllCaps">true</item>
+    </style>
+
+    <style name="Widget.Levix.Text.Title.Hero" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.HeroTitle</item>
+    </style>
+
+    <style name="Widget.Levix.Text.Subtitle.Hero" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.HeroSubtitle</item>
+    </style>
+
+    <style name="Widget.Levix.Text.Hint" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.Hint</item>
+    </style>
+
+    <style name="Widget.Levix.Text.CardTitle" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.CardTitle</item>
+        <item name="android:singleLine">true</item>
+    </style>
+
+    <style name="Widget.Levix.Text.CardTitle.Large" parent="Widget.Levix.Text.CardTitle">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.CardTitle.Large</item>
+    </style>
+
+    <style name="Widget.Levix.Text.CardTitle.Media" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.CardTitle.Media</item>
+    </style>
+
+    <style name="Widget.Levix.Text.ScreenTitle" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.ScreenTitle</item>
+    </style>
+
+    <style name="Widget.Levix.Text.Section" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.SectionTitle</item>
+    </style>
+
+    <style name="Widget.Levix.Text.Section.Sub" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.SectionSub</item>
+    </style>
+
+    <style name="Widget.Levix.Text.Subtitle" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.Subtitle</item>
+    </style>
+
+    <style name="Widget.Levix.Text.Caption" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.Caption</item>
+    </style>
+
+    <style name="Widget.Levix.Text.Detail" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.Detail</item>
+    </style>
+
+    <style name="Widget.Levix.Text.Banner" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.Banner</item>
+    </style>
+
+    <style name="Widget.Levix.Text.SelectionCount" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.SelectionCount</item>
+    </style>
+
+    <style name="Widget.Levix.Text.DetailLabel" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.DetailLabel</item>
+    </style>
+
+    <style name="Widget.Levix.Text.DetailValue" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.DetailValue</item>
+    </style>
+
+    <style name="Widget.Levix.Text.Body.Sheet" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.SheetBody</item>
+    </style>
+
+    <!-- Status/badge pill: a small rounded label. -->
+    <style name="Widget.Levix.Text.Badge" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.Badge</item>
+        <item name="android:background">@drawable/bg_badge_subtle</item>
+        <item name="android:paddingStart">6dp</item>
+        <item name="android:paddingTop">2dp</item>
+        <item name="android:paddingEnd">6dp</item>
+        <item name="android:paddingBottom">2dp</item>
+        <item name="android:singleLine">true</item>
+    </style>
+
+    <!-- Battery Guard's badge is a touch wider and warn-coloured at rest. -->
+    <style name="Widget.Levix.Text.Badge.Wide" parent="Widget.Levix.Text.Badge">
+        <item name="android:textColor">@color/levix_warn</item>
+        <item name="android:paddingStart">7dp</item>
+        <item name="android:paddingEnd">7dp</item>
+    </style>
+
+    <!-- Pill-shaped label on the language toggle (a TextView that acts as a button). -->
+    <style name="Widget.Levix.Pill.Label" parent="Widget.Levix.Text">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.Pill</item>
+        <item name="android:background">@drawable/bg_status_pill</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingTop">6dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingBottom">6dp</item>
+    </style>
+
+    <!-- ==================== Buttons ==================== -->
+
+    <!-- Parented to the Material 3 button the theme already applies, so the
+         parts we do not override (insets, state animator, theme overlay) stay
+         exactly as they were before this refactor. -->
+    <style name="Widget.Levix.Button" parent="Widget.Material3.Button">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+
+    <style name="Widget.Levix.Button.Primary" parent="Widget.Levix.Button">
+        <item name="android:background">@drawable/bg_levix_gradient</item>
+        <item name="android:drawablePadding">8dp</item>
+        <item name="android:minHeight">@dimen/levix_button_min_height</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">18dp</item>
+        <item name="android:textColor">@color/levix_on_primary</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.Levix.Button.Outlined" parent="Widget.Levix.Button">
+        <item name="android:background">@drawable/bg_btn_outlined</item>
+        <item name="android:minHeight">@dimen/levix_button_min_height_compact</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:textColor">@color/levix_cyan</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="Widget.Levix.Button.Outlined.Warn" parent="Widget.Levix.Button.Outlined">
+        <item name="android:textColor">@color/levix_warn</item>
+    </style>
+
+    <style name="Widget.Levix.Button.Assist" parent="Widget.Levix.Button">
+        <item name="android:drawablePadding">6dp</item>
+        <item name="android:minHeight">@dimen/levix_button_min_height_assist</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="Widget.Levix.Button.Assist.Start" parent="Widget.Levix.Button.Assist">
+        <item name="android:background">@drawable/bg_btn_start_selector</item>
+        <item name="android:textColor">@color/btn_start_color</item>
+        <item name="drawableTint">@color/btn_start_color</item>
+    </style>
+
+    <style name="Widget.Levix.Button.Assist.Stop" parent="Widget.Levix.Button.Assist">
+        <item name="android:background">@drawable/bg_btn_stop_selector</item>
+        <item name="android:textColor">@color/btn_stop_color</item>
+        <item name="drawableTint">@color/btn_stop_color</item>
+    </style>
+
+    <!-- ==================== Icon-only buttons ==================== -->
+
+    <!-- ImageView glyphs/images. 48dp touch target, centred. -->
+    <style name="Widget.Levix.IconButton">
+        <item name="android:layout_width">@dimen/levix_icon_button</item>
+        <item name="android:layout_height">@dimen/levix_icon_button</item>
+        <item name="android:gravity">center</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <!-- A bordered, content-sized icon button (e.g. share logs). -->
+    <style name="Widget.Levix.IconButton.Outlined" parent="Widget.Levix.IconButton">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">@dimen/levix_button_min_height_compact</item>
+        <item name="android:background">@drawable/bg_btn_outlined</item>
+        <item name="android:padding">12dp</item>
+        <item name="android:scaleType">centerInside</item>
+    </style>
+
+    <!-- The small globe beside the brand: a 36dp pill. -->
+    <style name="Widget.Levix.IconButton.Pill" parent="Widget.Levix.IconButton">
+        <item name="android:layout_width">@dimen/levix_icon_button_sm</item>
+        <item name="android:layout_height">@dimen/levix_icon_button_sm</item>
+        <item name="android:background">@drawable/bg_status_pill</item>
+        <item name="android:padding">8dp</item>
+        <item name="android:scaleType">centerInside</item>
+    </style>
+
+    <!-- Text glyphs used as icon buttons (‹, ↕, ⋮, ›). -->
+    <style name="Widget.Levix.IconButton.Glyph" parent="Widget.AppCompat.TextView">
+        <item name="android:layout_width">@dimen/levix_icon_button</item>
+        <item name="android:layout_height">@dimen/levix_icon_button</item>
+        <item name="android:gravity">center</item>
+    </style>
+
+    <style name="Widget.Levix.IconButton.Glyph.Back" parent="Widget.Levix.IconButton.Glyph">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.Glyph.Back</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <style name="Widget.Levix.IconButton.Glyph.Action" parent="Widget.Levix.IconButton.Glyph">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.Glyph.Action</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <style name="Widget.Levix.IconButton.Glyph.More" parent="Widget.Levix.IconButton.Glyph">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.Glyph.More</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+    </style>
+
+    <!-- Decorative: the whole card around it is the button. -->
+    <style name="Widget.Levix.IconButton.Glyph.Chevron" parent="Widget.Levix.IconButton.Glyph">
+        <item name="android:textAppearance">@style/TextAppearance.Levix.Glyph.Chevron</item>
+    </style>
+
+    <!-- ==================== Containers ==================== -->
+
+    <style name="Widget.Levix.Card">
+        <item name="android:background">@drawable/bg_card_panel</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:padding">@dimen/levix_card_padding</item>
+    </style>
+
+    <!-- Raised, centred hero panel. -->
+    <style name="Widget.Levix.Card.Hero" parent="Widget.Levix.Card">
+        <item name="android:background">@drawable/bg_card_raised</item>
+        <item name="android:gravity">center_horizontal</item>
+        <item name="android:padding">@dimen/levix_card_padding_large</item>
+    </style>
+
+    <!-- A container of read-only rows (no outer padding; rows pad themselves). -->
+    <style name="Widget.Levix.Card.Rows" parent="Widget.Levix.Card">
+        <item name="android:background">@drawable/bg_card_raised</item>
+        <item name="android:paddingStart">@dimen/levix_card_padding</item>
+        <item name="android:paddingTop">4dp</item>
+        <item name="android:paddingEnd">@dimen/levix_card_padding</item>
+        <item name="android:paddingBottom">4dp</item>
+    </style>
+
+    <!-- A one-line card: an icon, a text block, then an action. -->
+    <style name="Widget.Levix.Card.Row" parent="Widget.Levix.Card">
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
+    <style name="Widget.Levix.Card.Row.Raised" parent="Widget.Levix.Card.Row">
+        <item name="android:background">@drawable/bg_card_raised</item>
+        <item name="android:padding">@dimen/levix_gap_sm</item>
+    </style>
+
+    <!-- A short media-hub tile, icon-first. -->
+    <style name="Widget.Levix.Card.Compact" parent="Widget.Levix.Card">
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:minHeight">72dp</item>
+        <item name="android:padding">@dimen/levix_card_padding_compact</item>
+    </style>
+
+    <!-- A plain horizontal toolbar row (no background). -->
+    <style name="Widget.Levix.Toolbar">
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
+    <!-- The vertical scroll body of a screen. -->
+    <style name="Widget.Levix.Screen">
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingStart">@dimen/levix_space_screen</item>
+        <item name="android:paddingTop">@dimen/levix_space_screen</item>
+        <item name="android:paddingEnd">@dimen/levix_space_screen</item>
+        <item name="android:paddingBottom">@dimen/levix_space_screen_bottom</item>
+    </style>
+
+    <!-- The live connection pill in the brand bar (a horizontal, centred row). -->
+    <style name="Widget.Levix.Pill">
+        <item name="android:background">@drawable/bg_status_pill</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:paddingStart">@dimen/levix_gap_lg</item>
+        <item name="android:paddingTop">@dimen/levix_gap_sm</item>
+        <item name="android:paddingEnd">14dp</item>
+        <item name="android:paddingBottom">@dimen/levix_gap_sm</item>
+    </style>
+
+    <!-- ==================== Legacy bottom-sheet names ====================
+         The WhatsApp status sheet predates this system. The names stay so the
+         existing layout keeps working, but each one now simply inherits the
+         system style it was always describing. -->
+    <style name="Widget.Levix.SheetEyebrow" parent="Widget.Levix.Text.Eyebrow.Caps" />
+    <style name="Widget.Levix.SheetTitle" parent="Widget.Levix.Text.Title.Brand" />
+    <style name="Widget.Levix.SheetBody" parent="Widget.Levix.Text.Body.Sheet" />
+    <style name="Widget.Levix.DetailLabel" parent="Widget.Levix.Text.DetailLabel" />
+    <style name="Widget.Levix.DetailValue" parent="Widget.Levix.Text.DetailValue" />
     <style name="Widget.Levix.DetailValue.Danger" parent="Widget.Levix.DetailValue">
         <item name="android:textColor">@color/levix_danger</item>
     </style>

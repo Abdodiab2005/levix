@@ -7,6 +7,7 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.database.ContentObserver
 import android.os.Build
 import android.os.Bundle
@@ -22,6 +23,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.TextView
@@ -64,7 +66,6 @@ class MediaHubActivity : AppCompatActivity() {
     private lateinit var bannerOther: Button
     private lateinit var sources: LinearLayout
     private lateinit var categories: LinearLayout
-    private lateinit var filters: LinearLayout
 
     private var source: MediaSource? = null
     private var category = "Statuses"
@@ -147,7 +148,6 @@ class MediaHubActivity : AppCompatActivity() {
         bannerOther = findViewById(R.id.mediaBannerOther)
         sources = findViewById(R.id.mediaSources)
         categories = findViewById(R.id.mediaCategories)
-        filters = findViewById(R.id.mediaFilters)
         adapter = MediaAdapter(
             context = this,
             resolver = contentResolver,
@@ -165,6 +165,21 @@ class MediaHubActivity : AppCompatActivity() {
 
     private fun bindControls() {
         findViewById<View>(R.id.mediaBack).setOnClickListener { finish() }
+        findViewById<View>(R.id.mediaFilter).setOnClickListener { view ->
+            PopupMenu(this, view).apply {
+                menu.setGroupCheckable(0, true, true)
+                MediaFilter.entries.forEach { option ->
+                    menu.add(0, option.ordinal, option.ordinal, filterTitle(option)).isCheckable = true
+                }
+                menu.findItem(filter.ordinal)?.isChecked = true
+                setOnMenuItemClickListener { choice ->
+                    filter = MediaFilter.entries[choice.itemId]
+                    render()
+                    true
+                }
+                show()
+            }
+        }
         findViewById<View>(R.id.mediaInsights).setOnClickListener { showInsights() }
         findViewById<View>(R.id.mediaSort).setOnClickListener { view ->
             PopupMenu(this, view).apply {
@@ -389,14 +404,6 @@ class MediaHubActivity : AppCompatActivity() {
             category = categoryKeys[index]
             render()
         }
-        val filterLabels = listOf(
-            R.string.media_all, R.string.media_today, R.string.media_yesterday, R.string.media_week,
-            R.string.media_large, R.string.media_saved, R.string.media_favorites,
-        )
-        chips(filters, filterLabels.map(::getString), filter.ordinal) { index ->
-            filter = MediaFilter.entries[index]
-            render()
-        }
         shown = MediaLogic.visible(
             all, category, source, filter, sort, query, Instant.now(), ZoneId.systemDefault(),
         )
@@ -417,6 +424,27 @@ class MediaHubActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.mediaCount).text = countText
         renderSelectionBar()
         showBanner(all)
+        updateFilterButton()
+    }
+
+    /**
+     * The filter icon doubles as the active-filter hint: muted when it shows
+     * everything, cyan when a filter is applied, and its label names the
+     * current filter so the grid's state is readable at a glance.
+     */
+    private fun updateFilterButton() {
+        val icon = findViewById<ImageView>(R.id.mediaFilter)
+        val active = filter != MediaFilter.ALL
+        icon.imageTintList = ColorStateList.valueOf(
+            getColor(if (active) R.color.levix_cyan else R.color.levix_text_muted),
+        )
+        val label = if (active) {
+            getString(R.string.media_filter_active, filterTitle(filter))
+        } else {
+            getString(R.string.media_filter)
+        }
+        icon.contentDescription = label
+        icon.tooltipText = label
     }
 
     private fun renderSelectionBar() {
@@ -799,6 +827,16 @@ class MediaHubActivity : AppCompatActivity() {
         MediaSort.OLDEST -> R.string.media_oldest
         MediaSort.LARGEST -> R.string.media_largest_sort
         MediaSort.SMALLEST -> R.string.media_smallest
+    })
+
+    private fun filterTitle(value: MediaFilter): String = getString(when (value) {
+        MediaFilter.ALL -> R.string.media_all
+        MediaFilter.TODAY -> R.string.media_today
+        MediaFilter.YESTERDAY -> R.string.media_yesterday
+        MediaFilter.THIS_WEEK -> R.string.media_week
+        MediaFilter.LARGE -> R.string.media_large
+        MediaFilter.SAVED -> R.string.media_saved
+        MediaFilter.FAVORITES -> R.string.media_favorites
     })
 
     private fun typeLabel(value: MediaType): String = getString(when (value) {
