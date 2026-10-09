@@ -56,7 +56,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var batteryButton: Button
 
     // Diagnostics & Logs
-    private lateinit var btnShareLogs: Button
+    private lateinit var btnShareLogs: View
 
     private val refresh = object : Runnable {
         override fun run() {
@@ -151,7 +151,7 @@ class MainActivity : AppCompatActivity() {
         cardWhatsApp = findViewById(R.id.cardWhatsApp)
         whatsAppBadge = findViewById(R.id.whatsAppBadge)
         whatsAppDetailText = findViewById(R.id.whatsAppDetailText)
-        cardWhatsApp.setOnClickListener { PanelActivity.open(this, "connection") }
+        cardWhatsApp.setOnClickListener { WhatsAppStatusSheet.show(this) }
 
         cardEngine = findViewById(R.id.cardEngine)
         engineBadge = findViewById(R.id.engineBadge)

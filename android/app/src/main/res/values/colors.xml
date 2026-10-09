@@ -20,6 +20,7 @@
     <color name="levix_border_bright">#2C4670</color>
 
     <!-- Typography -->
+    <color name="levix_on_primary">#FFFFFF</color>
     <color name="levix_text">#F2F6FF</color>
     <color name="levix_text_muted">#A4B5CF</color>
     <color name="levix_text_faint">#7086A8</color>

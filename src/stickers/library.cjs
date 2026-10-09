@@ -28,7 +28,25 @@ const {
 
 const SOURCES = new Set(["BOT_COMMAND", "PANEL_UPLOAD", "WHATSAPP_STICKER", "MEDIA_HUB"]);
 const ID_RE = /^[0-9a-f]{16}$/;
-const PACK_NAME_RE = /^[\p{L}\p{N}\p{M} _-]+$/u;
+// Letters, marks, numbers, the allowed punctuation, variation selectors and
+// emoji with their modifiers. A control or bidi-format character is rejected
+// before this test and is not in the class either, so a newline cannot slip
+// through collapsed to a space. ZWNJ/ZWJ (Persian, Urdu, and the joiners inside
+// an emoji sequence) are stripped before the test: they are only meaningful
+// between two already-valid characters, which a character class cannot say.
+const PACK_NAME_CHARS =
+  /^[\p{L}\p{N}\p{M}\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator} _'’.&,-]+$/u;
+const NAME_JOINERS_RE = /[\u200C\u200D]/g;
+const FORBIDDEN_NAME_RE = /[\p{Cc}\u202A-\u202E\u2066-\u2069]/u;
+const QUOTE_PAIRS = [
+  ['"', '"'],
+  ["'", "'"],
+  ["“", "”"],
+  ["«", "»"],
+  ["„", "‟"],
+  ["‹", "›"],
+];
+const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });
 const SORTS = new Set(["newest", "oldest", "name", "recent"]);
 const FILTERS = new Set(["all", "favorites", "recent", "animated", "static"]);
 const DEFAULT_LIBRARY_LIMIT = 1000;
@@ -39,12 +57,51 @@ function assertEpoch(captured) {
   if (captured !== undefined && captured !== epoch) throw new StickerError("CANCELLED");
 }
 
+function graphemeCount(text) {
+  let n = 0;
+  for (const _ of GRAPHEMES.segment(text)) n += 1;
+  return n;
+}
+
+// ZWNJ/ZWJ are allowed only as joiners between valid characters, so they are
+// dropped before the charset test (see PACK_NAME_CHARS).
+function isAllowedPackName(name) {
+  return PACK_NAME_CHARS.test(name.replace(NAME_JOINERS_RE, ""));
+}
+
+// One pair of surrounding quotes is decoration, not part of the name: users
+// type `!pack create "My Pack"` and `!pack create "حزمة العيد"`. A lone
+// apostrophe inside a name (Abdo's pack) is not a pair and is kept.
+function stripQuotes(raw) {
+  const text = String(raw ?? "").trim();
+  if (text.length < 2) return text;
+  for (const [open, close] of QUOTE_PAIRS) {
+    if (
+      text.startsWith(open) &&
+      text.endsWith(close) &&
+      text.length > open.length + close.length - 1
+    ) {
+      return text.slice(open.length, text.length - close.length).trim();
+    }
+  }
+  return text;
+}
+
+// The key a name is stored and matched by: case-insensitive, NFC. Names saved
+// before NFC normalization used NFKC keys, so both forms are looked up; that
+// keeps every already-stored pack addressable without a migration.
+function normalizationKeys(name) {
+  const keys = [name.normalize("NFC").toLowerCase()];
+  const compat = name.normalize("NFKC").toLowerCase();
+  if (compat !== keys[0]) keys.push(compat);
+  return keys;
+}
+
 const RESERVED_PACK_NAMES = new Set();
 for (const words of Object.values(PACK_SUBCOMMANDS)) {
   for (const word of words) {
-    RESERVED_PACK_NAMES.add(
-      String(word).normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase(),
-    );
+    const text = String(word).replace(/\s+/g, " ").trim();
+    for (const key of normalizationKeys(text)) RESERVED_PACK_NAMES.add(key);
   }
 }
 
@@ -106,18 +163,38 @@ function sanitizeStickerName(raw) {
   return [...text].slice(0, STICKER_NAME_MAX).join("");
 }
 
+// The one entry point for a pack name: a single surrounding quote pair is
+// decoration (see stripQuotes), a control or bidi-format character is refused
+// outright rather than collapsed away, then NFC, collapsed internal runs of
+// whitespace, a grapheme-count length check, and a charset test. Returns the
+// stored name plus every key it may already live under (NFC now, NFKC for
+// packs stored before this normalization).
 function normalizePackName(raw) {
   if (typeof raw !== "string") throw new StickerError("INVALID_NAME");
-  const name = raw.normalize("NFKC").replace(/\s+/g, " ").trim();
-  const length = [...name].length;
-  if (length < 1 || length > PACK_NAME_MAX || !PACK_NAME_RE.test(name)) {
+  const stripped = stripQuotes(raw);
+  if (FORBIDDEN_NAME_RE.test(stripped)) {
+    throw new StickerError("INVALID_NAME", { reason: "forbidden" });
+  }
+  const name = stripped.normalize("NFC").replace(/\s+/g, " ").trim();
+  const length = graphemeCount(name);
+  if (length < 1 || length > PACK_NAME_MAX || !isAllowedPackName(name)) {
     throw new StickerError("INVALID_NAME");
   }
-  const nameKey = name.toLowerCase();
-  if (RESERVED_PACK_NAMES.has(nameKey)) {
+  const nameKeys = normalizationKeys(name);
+  if (nameKeys.some((key) => RESERVED_PACK_NAMES.has(key))) {
     throw new StickerError("INVALID_NAME", { reason: "reserved" });
   }
-  return { name, nameKey };
+  return { name, nameKey: nameKeys[0], nameKeys };
+}
+
+// A name may have been stored under the NFC or the NFKC key, so every lookup
+// checks both. The first match wins.
+function packByAnyKey(bound, nameKeys) {
+  for (const key of nameKeys) {
+    const row = store.stickerPackByKey(bound.key, key);
+    if (row) return row;
+  }
+  return null;
 }
 
 function isUnique(error) {
@@ -497,7 +574,7 @@ function touch(owner, ids) {
 function createPack(owner, name) {
   const bound = bind(owner);
   const parsed = normalizePackName(name);
-  if (store.stickerPackByKey(bound.key, parsed.nameKey)) {
+  if (packByAnyKey(bound, parsed.nameKeys)) {
     throw new StickerError("PACK_EXISTS", { name: parsed.name });
   }
   if (store.stickerPackCount(bound.key) >= PACKS_MAX_PER_OWNER) {
@@ -537,7 +614,7 @@ function updatePack(owner, id, name) {
   const bound = bind(owner);
   const pack = requirePack(bound, id);
   const parsed = normalizePackName(name);
-  const other = store.stickerPackByKey(bound.key, parsed.nameKey);
+  const other = packByAnyKey(bound, parsed.nameKeys);
   if (other && other.id !== pack.id) throw new StickerError("PACK_EXISTS", { name: parsed.name });
   store.stickerPackRename(pack.id, parsed.name, parsed.nameKey, Date.now());
   return packDto(store.stickerPackGet(bound.key, pack.id));
@@ -565,8 +642,33 @@ function findPackByName(owner, name) {
     if (error instanceof StickerError && error.code === "INVALID_NAME") return null;
     throw error;
   }
-  const row = store.stickerPackByKey(bound.key, parsed.nameKey);
+  const row = packByAnyKey(bound, parsed.nameKeys);
   return row ? packDto(row) : null;
+}
+
+// Resolve the pack a rename refers to when the sender did not use `|`: the
+// longest leading run of words that names an existing pack is the target and
+// everything after it is the new name. `!pack rename My Pack New Name` moves
+// `My Pack` to `New Name`; `!pack rename حزمة العيد عيد` moves `حزمة` to
+// `العيد عيد` only if `حزمة العيد` itself is not a pack. A quoted pair is
+// handled by normalizePackName inside findPackByName, so `"My Pack"` matches.
+function findLeadingPackName(owner, text) {
+  const bound = bind(owner);
+  const raw = String(text ?? "").trim();
+  if (!raw) return null;
+  const words = raw.split(/\s+/);
+  for (let count = words.length - 1; count >= 1; count -= 1) {
+    const candidate = words.slice(0, count).join(" ");
+    let pack;
+    try {
+      pack = findPackByName(bound, candidate);
+    } catch (error) {
+      if (error instanceof StickerError && error.code === "INVALID_NAME") continue;
+      throw error;
+    }
+    if (pack) return { pack, newName: words.slice(count).join(" ").trim() };
+  }
+  return null;
 }
 
 function membershipResult(bound, packId, ids, mutate) {
@@ -701,6 +803,9 @@ module.exports = {
   updatePack,
   deletePack,
   findPackByName,
+  findLeadingPackName,
+  normalizePackName,
+  stripQuotes,
   addToPack,
   removeFromPack,
   moveToPack,

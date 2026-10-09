@@ -544,6 +544,26 @@ for (const [name, bytes, firstChunk] of [
   ok("EXIF and XMP removed together", cleaned.equals(media.canonicalWebp(alphaWebp.bytes)));
   equal("metadata flags cleared", webp.parse(cleaned).chunks[0].data[0] & 0x0c, 0);
 }
+section("pack metadata round-trips multi-word names");
+for (const packName of [
+  "My Pack",
+  "حزمة العيد",
+  "Mixed حزمة pack",
+  "Abdo's pack, 2",
+  "عيد 2",
+  "party 🎉",
+  "My Pack\u200cName",
+]) {
+  const tagged = media.withStickerMetadata(lossyWebp.bytes, { packName, publisher: "Levix" });
+  const meta = webp.readMetadata(tagged);
+  equal(`EXIF keeps ${packName}`, meta["sticker-pack-name"], packName);
+  equal(`EXIF keeps the publisher for ${packName}`, meta["sticker-pack-publisher"], "Levix");
+  equal(
+    `canonical drops the metadata for ${packName}`,
+    webp.readMetadata(media.canonicalWebp(tagged)),
+    null,
+  );
+}
 const corrupt = Buffer.from(staticResult.buffer.subarray(0, 40));
 equal(
   "truncated WebP",

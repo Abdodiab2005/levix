@@ -201,6 +201,28 @@ Dockerfile · docker-compose.yml
 data/             # Created at runtime, gitignored (or ~/.levix)
 ```
 
+### Android UI — STRICT RULES
+
+The native UI is a small design system, not a pile of layouts. Read
+`android/app/src/main/res/values/styles.xml` before touching a screen.
+
+- Style every view with `style="@style/Widget.Levix.…"`. Add a style instead
+  of copying attributes; extend our base with `parent=` (never fork it).
+- Type lives in `TextAppearance.Levix.*` (size, weight, colour). A view style
+  names a role (`CardTitle`, `Badge`, `Button.Outlined`), never a raw size.
+- Colours come from `@color/…` (`colors.xml`) and sizes, paddings, gaps and
+  radii from `@dimen/…` (`dimens.xml`). No hex, no bare `dp`/`sp`, in a layout.
+- Icon-only actions are icon buttons with `contentDescription` **and**
+  `tooltipText`; keep text on the primary action (Start/Stop, Open panel).
+- Secondary and rare actions go in a `⋮` overflow `PopupMenu`, not inline.
+- One filter icon opens a filter sheet/menu; one sort button opens the sort
+  menu. Never a row of filter/sort chips.
+- Use `start`/`end` only, never `left`/`right`, so Arabic RTL mirrors cleanly.
+- Every new string goes in **both** `values/strings.xml` and
+  `values-ar/strings.xml`.
+- The WebView panel follows the web design system in "Design system — STRICT
+  RULES" (`frontend/src/components/ui`); native screens follow this section.
+
 ### Startup
 
 Two shapes, one core. The difference is which bootstrap runs, not a flag
@@ -937,17 +959,31 @@ first pack, or the product name from `brand.cjs`, and the publisher is the
 product name. The file is removed only when no row, of any owner, still points
 at that hash (`removeIfOrphan`).
 
-**Packs and deletion.** A pack name is 1–40 letters, digits, spaces, `-`, or
-`_`, unique per owner ignoring case, and it cannot be a `!pack` sub-command
-word (`PACK_SUBCOMMANDS`). An owner can keep `PACKS_MAX_PER_OWNER` (100)
-packs. Deleting a pack leaves its stickers in the library; `deleteStickers`
-on that call removes only stickers that belonged to the pack alone. Deleting
-a sticker that is still in a pack returns `IN_USE` unless the caller passes
-`confirm` (`DELETE /stickers/:id?confirm=1`). Removing a sticker from a pack
-does not delete it. How many stickers one owner can keep is the
-`sticker_library_limit` setting (default 1000), read on every save. A full
-library refuses a new row. `!sticker` still converts and sends the result
+**Packs and deletion.** A pack name is 1–40 graphemes, unique per owner
+ignoring case, and it cannot be a `!pack` sub-command word
+(`PACK_SUBCOMMANDS`). It may hold letters, marks, digits, spaces, `- _ ' . & ,`,
+ZWNJ/ZWJ, and emoji. One surrounding quote pair (`"…"`, `'…'`, `«…»`, `“…”`) is
+decoration and is stripped; a control or bidi-format character (U+202A–202E,
+U+2066–2069) is refused rather than collapsed to a space. `normalizePackName` in
+`src/stickers/library.cjs` is the only entry point: it strips the pair, rejects
+the forbidden class, applies NFC, collapses whitespace, counts graphemes and
+tests the charset. Names are stored and keyed in NFC, but `findPackByName`
+also tries the NFKC key, so a pack stored by older code (which normalized
+NFKC) stays addressable without a migration; the same key list makes create and
+rename see an NFC/NFKC duplicate as `PACK_EXISTS`. An owner can keep
+`PACKS_MAX_PER_OWNER` (100) packs. Deleting a pack leaves its stickers in the
+library; `deleteStickers` on that call removes only stickers that belonged to
+the pack alone. Deleting a sticker that is still in a pack returns `IN_USE`
+unless the caller passes `confirm` (`DELETE /stickers/:id?confirm=1`). Removing
+a sticker from a pack does not delete it. How many stickers one owner can keep
+is the `sticker_library_limit` setting (default 1000), read on every save. A
+full library refuses a new row. `!sticker` still converts and sends the result
 without saving when `hasRoom` is false.
+
+Pack names appear inside sentences, so a reply isolates them with
+`isolate()` (`src/utils/bidi.cjs`, U+2068…U+2069) — a Latin name inside an
+Arabic reply (or the reverse) would otherwise reorder around the punctuation
+next to it. The copyable `commandHint(...)` forms are never isolated.
 
 **The queue** (`limits.cjs`, enforced by `jobs.cjs`). Two conversions run at
 once (`JOB_CONCURRENCY`) and sixteen more may wait (`JOB_MAX_QUEUED`); past
@@ -977,11 +1013,16 @@ lives for `UPLOAD_TTL_MS` (1 hour).
   `delete` / `del` / `احذف` / `حذف`, `show` / `list` / `عرض`. Replying to
   media with `!pack <name>` creates the pack when it is missing and adds the
   sticker. An existing sticker is saved as `WHATSAPP_STICKER`; other media as
-  `BOT_COMMAND`. `delete` removes the pack and keeps the stickers.
+  `BOT_COMMAND`. `delete` removes the pack and keeps the stickers. `rename`
+  takes `<old> | <new>`; without a `|` it treats the longest leading run of
+  words that names an existing pack as `<old>` and the rest as `<new>`, and
+  prints the usage line when it cannot resolve one.
 - `!packs` — alias `حزم`. Lists up to 30 packs and the library total.
 - `!stickers` — alias `ملصقاتي`. Sends one page (`BOT_PAGE_SIZE`, 5) of recent
   stickers, favorites (`favorites` / `المفضلة`), or one pack (`pack` / `حزمة`
-  plus the name).
+  plus the name). A trailing number is the page, unless the whole text
+  including it names an existing pack — a pack can end in a number (`عيد 2`) —
+  in which case the name wins and the page is 1.
 
 **Media Hub.** On Android, the viewer and a single selection in Media Hub
 hand one stickerable item to the panel. `StickerHandoffs.prepare` parks the

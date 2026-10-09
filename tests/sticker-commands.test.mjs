@@ -582,6 +582,53 @@ section("packs and sticker pages");
   settings.set("bot_language", "en");
 }
 
+section("multi-word packs through the commands");
+{
+  const FSI = "\u2068";
+  const PDI = "\u2069";
+  const quote = mediaMessage("sticker", webp);
+
+  ok("quoted create", /Created/.test(lastLine(await run('!pack create "Mixed Pack"'))));
+  ok("quoted name stored", !!library.findPackByName(owner.forPanel(), "Mixed Pack"));
+  ok("show finds the spaces", /0 stickers/.test(lastLine(await run("!pack show Mixed Pack"))));
+  const saved = lastLine(await run("!pack Mixed Pack", { quoted: quote }));
+  ok("save names the pack", /Mixed Pack/.test(saved));
+  ok("the name is isolated", saved.includes(FSI) && saved.includes(PDI));
+
+  await run("!pack create old one");
+  ok("rename without a bar", /Renamed/.test(lastLine(await run("!pack rename old one brand new"))));
+  ok("the new name exists", !!library.findPackByName(owner.forPanel(), "brand new"));
+  ok("the old name is gone", !library.findPackByName(owner.forPanel(), "old one"));
+
+  await run("!pack create quoted two");
+  ok(
+    "rename quoted without a bar",
+    /Renamed/.test(lastLine(await run('!pack rename "quoted two" bare name'))),
+  );
+  ok("the new bare name exists", !!library.findPackByName(owner.forPanel(), "bare name"));
+
+  ok("rename usage hint", /rename <old> \| <new>/.test(lastLine(await run("!pack rename"))));
+  settings.set("bot_language", "ar");
+  ok("Arabic rename usage hint", /تسمية <القديم>/.test(lastLine(await run("!حزمة تسمية"))));
+  settings.set("bot_language", "en");
+
+  await run("!pack create عيد 2");
+  await run("!pack عيد 2", { quoted: quote });
+  const page = await run("!stickers pack عيد 2");
+  ok(
+    "a numeric-suffix pack resolves",
+    !/no pack/.test(lastLine(page)) && /عيد 2/.test(lines(page)[0]),
+  );
+  ok("and starts at page 1", /page 1\//.test(lines(page)[0]));
+  equal("and sends its sticker", count(page, "sticker"), 1);
+
+  const missing = lastLine(await run("!pack show absent pack"));
+  ok("missing pack is named and isolated", /absent pack/.test(missing) && missing.includes(FSI));
+
+  const listed = lastLine(await run("!packs"));
+  ok("packs list isolates names", listed.includes(FSI) && /Mixed Pack/.test(listed));
+}
+
 section("command hints use the live prefix");
 runtimeConfig.setPrefix("#");
 try {

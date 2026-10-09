@@ -99,7 +99,25 @@
     <string name="card_engine_desc_starting_short">جاري تهيئة المحرك…</string>
     <string name="battery_ok_short">حماية الخلفية نشطة</string>
     <string name="battery_restricted_hint">مقيد من قبل النظام. فعّل الحماية لضمان العمل المتواصل.</string>
-    <string name="action_open_whatsapp_settings">فتح إعدادات واتساب في لوحة التحكم</string>
+    <string name="action_show_whatsapp_status">عرض حالة اتصال واتساب</string>
+
+    <!-- WhatsApp status sheet -->
+    <string name="wa_status_sheet_title">اتصال واتساب</string>
+    <string name="wa_status_header_cd">حالة واتساب: %1$s</string>
+    <string name="wa_detail_state">الحالة</string>
+    <string name="wa_detail_since">منذ</string>
+    <string name="wa_detail_error">الخطأ</string>
+    <string name="wa_detail_network">الشبكة</string>
+    <string name="wa_detail_engine">المحرك</string>
+    <string name="wa_detail_unknown">—</string>
+    <string name="wa_network_online">متصل</string>
+    <string name="wa_network_offline">غير متصل</string>
+    <string name="wa_engine_running">يعمل</string>
+    <string name="wa_engine_stopped">متوقف</string>
+    <string name="card_whatsapp_desc_failed_long">فشلت إعادة الاتصال بعد عدة محاولات. إعداداتك وبياناتك بأمان؛ شغّل المساعد مجدداً أو أعد الربط من لوحة التحكم.</string>
+    <string name="card_whatsapp_desc_expired_long">لم يعد هذا الجهاز مرتبطاً بواتساب. أعد الربط من لوحة التحكم للمتابعة.</string>
+    <string name="card_whatsapp_desc_connecting_long">جارٍ الاتصال بواتساب. ستتحدث الحالة تلقائياً.</string>
+    <string name="card_whatsapp_desc_offline_long">المساعد غير مشغّل، لذلك لا يوجد اتصال بواتساب. شغّل المساعد للاتصال.</string>
 
     <!-- Native Media Hub -->
     <string name="media_hub_title">مركز الوسائط</string>
@@ -108,6 +126,8 @@
     <string name="media_open">فتح</string>
     <string name="media_insights">إحصاءات التخزين</string>
     <string name="media_sort">ترتيب</string>
+    <string name="media_filter">تصفية</string>
+    <string name="media_filter_active">التصفية: %1$s</string>
     <string name="media_search">ابحث بالاسم أو النوع أو التاريخ</string>
     <string name="media_all">الكل</string>
     <string name="media_whatsapp">واتساب</string>
