@@ -11,6 +11,11 @@
 # Usage:
 #   fetch-node-android.sh [abi ...]        # default: arm64-v8a armeabi-v7a
 #   LEVIX_ANDROID_ABIS="arm64-v8a" ...     # same list via env (what Gradle reads)
+#   fetch-node-android.sh --print-stamp <abi>   # print the stamp, stage nothing
+#
+# Each staged runtime gets a stamp (node-runtime/<abi>/.levix-stamp) naming
+# the recipes it was built from; Gradle recomputes it and refuses to package a
+# runtime whose stamp is missing or different. See runtime_stamp() below.
 #
 # Google Play requires every 64-bit ELF to be 16 KB page aligned when the app
 # targets API 35+, so the script verifies arm64-v8a and fails the build
@@ -36,6 +41,34 @@ termux_arch() {
     *) echo "unknown ABI: $1 (expected arm64-v8a or armeabi-v7a)" >&2; return 1 ;;
   esac
 }
+
+# The stamp written into every staged runtime as $RUNTIME_STAMP_FILE.
+# node-runtime/<abi>/ is only rebuilt when this script runs, and Gradle
+# packages whatever is there — so a recipe change (FFmpeg gaining libwebp)
+# used to ship the binaries staged before it, silently. The stamp records the
+# recipes that produced the directory: the first 16 hex characters of each
+# input's sha256 (the same key build-ffmpeg-android.sh caches its build under).
+# android/app/build.gradle.kts recomputes it from the repo and fails the build
+# when it is missing or different. RUNTIME_STAMP_FILE, RUNTIME_STAMP_INPUTS and
+# the line format must match runtimeStampFile / runtimeStampInputs there;
+# tests/android-runtime-stamp.test.mjs holds the two sides together.
+RUNTIME_STAMP_FILE=".levix-stamp"
+RUNTIME_STAMP_INPUTS=(build-ffmpeg-android.sh fetch-node-android.sh)
+
+runtime_stamp() {
+  local abi="$1" input
+  echo "levix-runtime-stamp 1"
+  echo "abi $abi"
+  for input in "${RUNTIME_STAMP_INPUTS[@]}"; do
+    echo "$input $(sha256sum "$SCRIPTS/$input" | cut -c1-16)"
+  done
+}
+
+if [ "${1:-}" = "--print-stamp" ]; then
+  termux_arch "${2:?usage: fetch-node-android.sh --print-stamp <abi>}" > /dev/null
+  runtime_stamp "$2"
+  exit 0
+fi
 
 if [ "$#" -gt 0 ]; then
   ABIS=("$@")
@@ -339,6 +372,10 @@ for ABI in "${ABIS[@]}"; do
   bash "$SCRIPTS/build-ffmpeg-android.sh" "$ABI" "$RUNTIME/libffmpeg.so"
 
   verify_elfs "$RUNTIME" "$ABI"
+
+  # Last, so a run that stops anywhere above leaves no stamp (the directory
+  # was emptied at the start) and Gradle refuses the half-staged runtime.
+  runtime_stamp "$ABI" > "$RUNTIME/$RUNTIME_STAMP_FILE"
 
   echo "==> [$ABI] runtime ready:"
   ls -lh "$RUNTIME" | tail -n +2
