@@ -155,7 +155,7 @@ export const PacksView: React.FC<PacksViewProps> = ({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="flex items-center gap-2">
         <Input
           value={name}
           onChange={(event) => {
@@ -173,14 +173,17 @@ export const PacksView: React.FC<PacksViewProps> = ({
           aria-label={t("packName")}
           dir="auto"
           maxLength={PACK_NAME_MAX + 20}
+          className="min-w-0 flex-1"
         />
         <Button
           variant="primary"
           onClick={() => void create()}
           disabled={busy}
           icon={<Plus size={16} />}
+          className="shrink-0 whitespace-nowrap"
         >
-          {t("createPack")}
+          <span className="sm:hidden">{t("create")}</span>
+          <span className="hidden sm:inline">{t("createPack")}</span>
         </Button>
       </div>
       {nameError && <p className="text-xs text-danger">{nameError}</p>}

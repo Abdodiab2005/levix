@@ -3,6 +3,7 @@
 import {
   Bug,
   CheckCircle2,
+  ChevronDown,
   ExternalLink,
   HeartHandshake,
   Lightbulb,
@@ -11,7 +12,6 @@ import {
   Shield,
   Sparkles,
   Star,
-  X,
 } from "lucide-react";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
@@ -20,7 +20,7 @@ import { useI18n } from "../context/I18nContext";
 import type { HostSource } from "../utils/hostBridge";
 import { canHostUploadForm, pickHostFile, uploadHostForm } from "../utils/hostBridge";
 import { useToast } from "./Toasts";
-import { Button, Card, Field, IconButton, Input, Tabs, Textarea } from "./ui";
+import { Button, Card, Chip, Field, IconButton, Input, Tabs, Textarea } from "./ui";
 
 /**
  * The panel's line to the developer, and the app's answer to Google Play's
@@ -91,6 +91,14 @@ export const FeedbackForm: React.FC = () => {
   const attachmentMaxMb = Math.round(attachmentMax / (1024 * 1024));
   const trimmed = message.trim();
   const missing = Math.max(0, messageMin - trimmed.length);
+
+  /** Chip caption for the chosen file: `screenshot.png · 1.2 MB`. */
+  const formatFileSize = (bytes: number): string => {
+    if (bytes >= 1024 * 1024) {
+      return t("fileSizeMb").replace("{size}", (bytes / (1024 * 1024)).toFixed(1));
+    }
+    return t("fileSizeKb").replace("{size}", String(Math.max(1, Math.round(bytes / 1024))));
+  };
 
   const topics = (meta?.topics?.length ? meta.topics : TOPIC_ORDER).filter(
     (id) => id in TOPIC_META,
@@ -206,7 +214,7 @@ export const FeedbackForm: React.FC = () => {
               aria-label={t("feedbackTopicLabel")}
               value={topic}
               onChange={setTopic}
-              className="flex-wrap"
+              className="flex-wrap gap-1.5 sm:gap-2"
               options={topics.map((id) => {
                 const Icon = TOPIC_META[id].icon;
                 return {
@@ -235,40 +243,36 @@ export const FeedbackForm: React.FC = () => {
             </span>
           </Field>
 
-          {/* attachment */}
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs sm:text-sm font-bold text-text-main">
-              {t("feedbackAttach")}
-            </span>
-            <div className="flex flex-wrap items-center gap-2">
-              {hostFile || attachment ? (
-                <span className="inline-flex items-center gap-2 ps-3 pe-2 h-10 rounded-xl border border-line bg-panel-raised text-xs sm:text-sm text-text-main max-w-full">
-                  <Paperclip size={14} className="text-brand-cyan shrink-0" />
-                  <span className="truncate max-w-[200px]">
-                    {hostFile?.name ?? attachment?.name}
-                  </span>
-                  <IconButton
-                    label={t("feedbackRemoveAttachment")}
-                    variant="ghost"
-                    icon={<X size={16} />}
-                    onClick={clearAttachment}
-                  />
-                </span>
-              ) : (
-                <Button
-                  size="sm"
-                  icon={<Paperclip size={16} className="text-brand-cyan" />}
-                  onClick={() =>
-                    canHostUploadForm() ? void pickHostAttachment() : fileInputRef.current?.click()
-                  }
+          {/* attachment: a dashed drop-zone, its hint under it, the file as a chip */}
+          <Field
+            label={t("feedbackAttach")}
+            description={t("feedbackAttachmentHint").replace("{max}", String(attachmentMaxMb))}
+          >
+            {hostFile || attachment ? (
+              <span className="flex">
+                <Chip
+                  onRemove={clearAttachment}
+                  removeLabel={t("feedbackRemoveAttachment")}
+                  className="max-w-full"
                 >
-                  {t("feedbackAttach")}
-                </Button>
-              )}
-              <span className="text-[11px] text-muted">
-                {t("feedbackAttachmentHint").replace("{max}", String(attachmentMaxMb))}
+                  {`${hostFile?.name ?? attachment?.name} · ${formatFileSize(
+                    hostFile?.size ?? attachment?.size ?? 0,
+                  )}`}
+                </Chip>
               </span>
-            </div>
+            ) : (
+              <Button
+                type="button"
+                variant="secondary"
+                icon={<Paperclip size={16} className="text-brand-cyan" />}
+                className="w-full justify-center border-dashed"
+                onClick={() =>
+                  canHostUploadForm() ? void pickHostAttachment() : fileInputRef.current?.click()
+                }
+              >
+                {t("feedbackAttach")}
+              </Button>
+            )}
             {!canHostUploadForm() && (
               <input
                 ref={fileInputRef}
@@ -286,14 +290,14 @@ export const FeedbackForm: React.FC = () => {
                 }}
               />
             )}
-          </div>
+          </Field>
 
           {/* rating */}
           <fieldset className="flex flex-col gap-2">
             <legend className="text-xs sm:text-sm font-bold text-text-main mb-1">
               {t("feedbackRatingLabel")}
             </legend>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center justify-center gap-1">
               {[1, 2, 3, 4, 5].map((n) => (
                 <IconButton
                   key={n}
@@ -347,50 +351,57 @@ export const FeedbackForm: React.FC = () => {
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-1">
-            {meta?.runtime ? (
-              <span className="text-[11px] text-muted">
-                {t("feedbackRuntimeLabel")}: v{meta.runtime.version} · {meta.runtime.platform}
-              </span>
-            ) : (
-              <span />
-            )}
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={missing > 0}
-              loading={sending}
-              icon={<Send size={16} />}
-            >
-              {sending ? t("feedbackSending") : t("feedbackSendBtn")}
-            </Button>
+          <div className="flex flex-col gap-3 border-t border-line pt-4">
+            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+              {meta?.runtime ? (
+                <span className="text-[11px] text-muted">
+                  {t("feedbackRuntimeLabel")}: v{meta.runtime.version} · {meta.runtime.platform}
+                </span>
+              ) : (
+                <span />
+              )}
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={missing > 0}
+                loading={sending}
+                icon={<Send size={16} />}
+                className="w-full sm:w-auto"
+              >
+                {sending ? t("feedbackSending") : t("feedbackSendBtn")}
+              </Button>
+            </div>
+
+            {/* what goes with the message: one disclosure, right under Send */}
+            <details className="group rounded-xl border border-line bg-panel-raised">
+              <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-semibold text-muted select-none hover:text-text-main [&::-webkit-details-marker]:hidden">
+                <Shield size={14} className="shrink-0 text-brand-cyan" />
+                <span className="flex-1">{t("feedbackWhatIsSent")}</span>
+                <ChevronDown
+                  size={14}
+                  aria-hidden
+                  className="shrink-0 transition-transform group-open:rotate-180"
+                />
+              </summary>
+              <p className="px-3 pb-3 text-xs leading-relaxed text-muted">
+                {t("feedbackWhatIsSentDesc")}
+              </p>
+            </details>
+
+            <p className="text-xs leading-relaxed text-muted">
+              {t("feedbackGithubHint")}{" "}
+              <a
+                href="https://github.com/Abdodiab2005/levix/issues"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-semibold text-brand-cyan hover:underline"
+              >
+                {t("feedbackOpenGithub")}
+                <ExternalLink size={13} aria-hidden className="shrink-0" />
+              </a>
+            </p>
           </div>
         </form>
-      </Card>
-
-      <Card className="flex flex-col gap-3">
-        <div className="flex items-center gap-2.5">
-          <Shield size={16} className="text-brand-cyan shrink-0" />
-          <h4 className="text-xs sm:text-sm font-bold text-text-main">{t("feedbackWhatIsSent")}</h4>
-        </div>
-        <p className="text-xs sm:text-sm text-muted leading-relaxed">
-          {t("feedbackWhatIsSentDesc")}
-        </p>
-        <div className="pt-2 border-t border-line flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <span className="text-xs text-muted leading-relaxed">{t("feedbackGithubHint")}</span>
-          <IconButton
-            label={t("feedbackOpenGithub")}
-            variant="ghost"
-            icon={<ExternalLink size={16} />}
-            onClick={() =>
-              window.open(
-                "https://github.com/Abdodiab2005/levix/issues",
-                "_blank",
-                "noopener,noreferrer",
-              )
-            }
-          />
-        </div>
       </Card>
     </div>
   );

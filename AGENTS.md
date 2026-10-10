@@ -1104,6 +1104,7 @@ The control panel UI is `frontend/src/components/ui/`. Read `frontend/src/compon
 - R2. MUST put non-essential, secondary, rarely used, and rare destructive actions in `OverflowMenu`. Only essential actions stay on the surface.
 - R3. Filters MUST be one `FilterButton` (popover on desktop, bottom sheet under 640px). NEVER a row of filter chips or selects.
 - R4. Sorting MUST be one `SortMenu`. NEVER a row of sort options or a visible sort `<select>`.
+- R5. An `OverflowMenu` needs at least two items — a single secondary action is an `IconButton`. The overflow sits beside the primary action it belongs to (same row, at its end), never alone on its own row.
 - MUST put every new visible string, including tooltips and the words Filter, Sort, and More, in `frontend/src/i18n/translations.ts` in both `en` and `ar`.
 - MUST lay out with logical CSS (`ms-` / `me-` / `ps-` / `pe-` / `start` / `end`) so Arabic RTL works. NEVER `ml-` / `mr-` / `pl-` / `pr-` / `left-` / `right-` for layout.
 - MUST keep touch targets at least 40px. `IconButton` `label` is required. Menus MUST use `role="menu"` / `role="menuitem"`, arrow keys, `aria-haspopup`, and `aria-expanded`. Dialogs MUST trap focus and return it on close.

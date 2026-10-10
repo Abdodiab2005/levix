@@ -1,10 +1,12 @@
 // file: frontend/src/components/Sidebar.tsx
 
 import {
+  ArrowLeft,
   Bot,
   Calendar,
   FileText,
   LayoutGrid,
+  LogOut,
   MessageSquareX,
   Radio,
   Settings,
@@ -46,6 +48,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
 }) => {
   const { t } = useI18n();
+
+  const isInApp = typeof (window as any).LevixHost?.closePanel === "function";
 
   const brand = (window as any).__BRAND__ || {
     name: "Levix",
@@ -140,6 +144,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
         </nav>
+
+        <div className="flex flex-col gap-1 border-t border-line p-3">
+          {isInApp && (
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              icon={<ArrowLeft size={20} className="rtl:-scale-x-100" />}
+              onClick={() => (window as any).LevixHost.closePanel()}
+            >
+              <span className="truncate">{t("backToApp")}</span>
+            </Button>
+          )}
+          <form action="/logout" method="POST" className="m-0">
+            <Button
+              type="submit"
+              variant="ghost"
+              className="w-full justify-start text-danger hover:bg-danger/10 hover:text-danger"
+              icon={<LogOut size={20} className="rtl:-scale-x-100" />}
+            >
+              <span className="truncate">{t("logout")}</span>
+            </Button>
+          </form>
+        </div>
 
         <div className="flex flex-col gap-2.5 border-t border-line p-4 text-xs text-faint">
           <div className="flex items-center justify-between text-[11px] text-muted">

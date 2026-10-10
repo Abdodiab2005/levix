@@ -1,10 +1,10 @@
 // file: frontend/src/components/Header.tsx
 
-import { ArrowLeft, Globe, LogOut, Menu as MenuIcon, Moon, Sun } from "lucide-react";
+import { Globe, Menu as MenuIcon, Moon, Sun } from "lucide-react";
 import { type FC, useState } from "react";
 import { useI18n } from "../context/I18nContext";
 import type { SessionStatus } from "../types";
-import { IconButton, Menu, MenuItem, MenuLabel, MenuSeparator, OverflowMenu } from "./ui";
+import { IconButton, Menu, MenuItem, MenuLabel } from "./ui";
 
 interface HeaderProps {
   onToggleMobileMenu: () => void;
@@ -29,8 +29,6 @@ export const Header: FC<HeaderProps> = ({ onToggleMobileMenu, title, status: _st
     document.documentElement.setAttribute("data-theme", nextTheme);
     localStorage.setItem("levix_theme", nextTheme);
   };
-
-  const isInApp = typeof (window as any).LevixHost?.closePanel === "function";
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-line bg-panel/85 px-4 backdrop-blur-md md:px-6">
@@ -70,34 +68,18 @@ export const Header: FC<HeaderProps> = ({ onToggleMobileMenu, title, status: _st
           </MenuItem>
         </Menu>
 
-        <OverflowMenu id="btn-header-more" label={t("moreActions")}>
-          {isInApp && (
-            <MenuItem
-              icon={<ArrowLeft size={16} className="rtl:-scale-x-100 text-brand-cyan" />}
-              onSelect={() => (window as any).LevixHost.closePanel()}
-            >
-              {t("backToApp")}
-            </MenuItem>
-          )}
-          <MenuItem
-            icon={
-              theme === "dark" ? (
-                <Sun size={16} className="text-brand-cyan" />
-              ) : (
-                <Moon size={16} className="text-brand-cyan" />
-              )
-            }
-            onSelect={handleThemeToggle}
-          >
-            {theme === "dark" ? t("lightMode") : t("darkMode")}
-          </MenuItem>
-          <MenuSeparator />
-          <form action="/logout" method="POST" className="m-0">
-            <MenuItem type="submit" danger icon={<LogOut size={16} className="rtl:-scale-x-100" />}>
-              {t("logout")}
-            </MenuItem>
-          </form>
-        </OverflowMenu>
+        <IconButton
+          id="btn-header-theme"
+          label={theme === "dark" ? t("lightMode") : t("darkMode")}
+          icon={
+            theme === "dark" ? (
+              <Sun size={18} className="text-brand-cyan" />
+            ) : (
+              <Moon size={18} className="text-brand-cyan" />
+            )
+          }
+          onClick={handleThemeToggle}
+        />
       </div>
     </header>
   );

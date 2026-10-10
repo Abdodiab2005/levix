@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import * as QRCode from "qrcode";
 import type React from "react";
-import type { FC } from "react";
+import type { FC, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useToast } from "../components/Toasts";
@@ -38,6 +38,15 @@ import type { SessionStatus } from "../types";
 
 function isAndroidCompanionApp() {
   return typeof window !== "undefined" && Boolean((window as { LevixHost?: unknown }).LevixHost);
+}
+
+/** A secondary action that belongs beside a primary action's button. */
+interface SecondaryAction {
+  key: string;
+  label: string;
+  icon: ReactNode;
+  danger?: boolean;
+  onSelect: () => void;
 }
 
 interface ConnectionViewProps {
@@ -195,6 +204,61 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
   const rawPhone = status?.user?.id ? status.user.id.split("@")[0].split(":")[0] : null;
   const hideRestart = isAndroidCompanionApp();
 
+  const unlinkAction: SecondaryAction = {
+    key: "unlink",
+    label: t("unlink"),
+    icon: <Unlink size={16} />,
+    danger: true,
+    onSelect: () => setShowUnlinkModal(true),
+  };
+  const restartAction: SecondaryAction = {
+    key: "restart",
+    label: t("restart"),
+    icon: <RotateCcw size={16} />,
+    onSelect: () => handleAction(api.restartBot, t("restart")),
+  };
+  const reconnectAction: SecondaryAction = {
+    key: "reconnect",
+    label: t("reconnect"),
+    icon: <RefreshCw size={16} />,
+    onSelect: () => handleAction(api.reconnectSession, t("reconnecting")),
+  };
+  /** Restart only exists outside the Android companion app. */
+  const withRestart = (actions: SecondaryAction[]) =>
+    hideRestart ? actions : [...actions, restartAction];
+  /** Unlink + restart for the states that show secondary actions but no reconnect. */
+  const pairedSecondary = withRestart(canUnlink ? [unlinkAction] : []);
+
+  /**
+   * The secondary actions of a row, at the end of its primary button: two or
+   * more collapse into one OverflowMenu, a lone one stays an IconButton, and
+   * none renders nothing. A 3-dots button for a single item is noise.
+   */
+  const renderSecondary = (actions: SecondaryAction[]): ReactNode => {
+    if (actions.length === 0) return null;
+    if (actions.length === 1) {
+      const only = actions[0];
+      return (
+        <IconButton label={only.label} icon={only.icon} onClick={only.onSelect} disabled={acting} />
+      );
+    }
+    return (
+      <OverflowMenu label={t("moreActions")}>
+        {actions.map((action) => (
+          <MenuItem
+            key={action.key}
+            danger={action.danger}
+            icon={action.icon}
+            disabled={acting}
+            onSelect={action.onSelect}
+          >
+            {action.label}
+          </MenuItem>
+        ))}
+      </OverflowMenu>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-5 sm:gap-6">
       {/* Primary Connection Hero Card */}
@@ -290,69 +354,35 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
 
         {/* Action Controls: strictly conditional based on state */}
         <div>
-          {/* 1. When CONNECTED: Show Stop, Reconnect, Unlink, Restart */}
+          {/* 1. When CONNECTED: Stop beside an overflow holding Reconnect, Restart and Unlink */}
           {isConnected && (
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3">
+            <div className="flex w-full items-center gap-2.5">
               <Button
                 variant="danger"
                 icon={<Square size={16} />}
                 onClick={() => handleAction(api.stopSession, t("stop"))}
                 disabled={acting}
-                className="w-full sm:w-auto"
+                className="flex-1 sm:flex-none"
               >
                 {t("stop")}
               </Button>
-
-              <div className="flex items-center gap-2.5">
-                <IconButton
-                  label={t("reconnect")}
-                  icon={<RefreshCw size={18} />}
-                  onClick={() => handleAction(api.reconnectSession, t("reconnecting"))}
-                  disabled={acting}
-                />
-                <OverflowMenu label={t("moreActions")}>
-                  <MenuItem
-                    danger
-                    icon={<Unlink size={16} />}
-                    disabled={acting}
-                    onSelect={() => setShowUnlinkModal(true)}
-                  >
-                    {t("unlink")}
-                  </MenuItem>
-                </OverflowMenu>
-                {!hideRestart && (
-                  <IconButton
-                    label={t("restart")}
-                    icon={<RotateCcw size={18} />}
-                    onClick={() => handleAction(api.restartBot, t("restart"))}
-                    disabled={acting}
-                  />
-                )}
-              </div>
+              {renderSecondary(withRestart([reconnectAction, unlinkAction]))}
             </div>
           )}
 
-          {/* 2. When STARTING or LINKING or WAITING FOR QR or RECONNECTING: Show Cancel/Stop & Restart */}
+          {/* 2. When STARTING or LINKING or WAITING FOR QR or RECONNECTING: Cancel beside Restart */}
           {(isStarting || isWaitingQr || isReconnecting) && (
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+            <div className="flex w-full items-center gap-2.5">
               <Button
                 variant="danger"
                 icon={<Square size={16} />}
                 onClick={() => handleAction(api.stopSession, t("stop"))}
                 disabled={acting}
-                className="w-full sm:w-auto"
+                className="flex-1 sm:flex-none"
               >
                 {language === "ar" ? "إلغاء المحاولة" : "Cancel Attempt"}
               </Button>
-
-              {!hideRestart && (
-                <IconButton
-                  label={t("restart")}
-                  icon={<RotateCcw size={18} />}
-                  onClick={() => handleAction(api.restartBot, t("restart"))}
-                  disabled={acting}
-                />
-              )}
+              {renderSecondary(withRestart([]))}
             </div>
           )}
 
@@ -370,36 +400,17 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                       : "Paused while the device is offline. It will resume when the network returns, or tap Resume."}
                 </p>
               )}
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex items-center gap-2.5">
                 <Button
                   variant="primary"
                   icon={<Radio size={16} />}
                   onClick={() => handleAction(api.startSession, resumeLabel)}
                   disabled={acting}
-                  className="w-full sm:w-auto"
+                  className="flex-1 sm:flex-none"
                 >
                   {resumeLabel}
                 </Button>
-                {canUnlink && (
-                  <OverflowMenu label={t("moreActions")}>
-                    <MenuItem
-                      danger
-                      icon={<Unlink size={16} />}
-                      disabled={acting}
-                      onSelect={() => setShowUnlinkModal(true)}
-                    >
-                      {t("unlink")}
-                    </MenuItem>
-                  </OverflowMenu>
-                )}
-                {!hideRestart && (
-                  <IconButton
-                    label={t("restart")}
-                    icon={<RotateCcw size={18} />}
-                    onClick={() => handleAction(api.restartBot, t("restart"))}
-                    disabled={acting}
-                  />
-                )}
+                {renderSecondary(pairedSecondary)}
               </div>
             </div>
           )}
@@ -428,33 +439,34 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
 
               {/* Method 1: Phone Pairing Form */}
               {pairingMethod === "pairing" && (
-                <form onSubmit={handleStartPairing} className="flex flex-col gap-3 max-w-xl w-full">
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                    <div className="relative flex-1">
-                      <Phone
-                        size={17}
-                        className="absolute top-1/2 -translate-y-1/2 start-3.5 text-muted pointer-events-none"
-                      />
-                      <Input
-                        type="tel"
-                        value={phoneNumber}
-                        onChange={(e) => setPhoneNumber(e.target.value)}
-                        placeholder={
-                          language === "ar" ? "201012345678 (مع كود الدولة)" : "e.g. 201012345678"
-                        }
-                        dir="ltr"
-                        className="ps-10"
-                      />
-                    </div>
+                <form onSubmit={handleStartPairing} className="flex w-full max-w-xl flex-col gap-3">
+                  <div className="relative">
+                    <Phone
+                      size={17}
+                      className="absolute top-1/2 -translate-y-1/2 start-3.5 text-muted pointer-events-none"
+                    />
+                    <Input
+                      type="tel"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      placeholder={
+                        language === "ar" ? "201012345678 (مع كود الدولة)" : "e.g. 201012345678"
+                      }
+                      dir="ltr"
+                      className="ps-10"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2.5">
                     <Button
                       type="submit"
                       variant="primary"
                       icon={<Key size={16} />}
                       disabled={acting}
-                      className="w-full sm:w-auto"
+                      className="flex-1 whitespace-nowrap sm:flex-none"
                     >
                       {language === "ar" ? "الحصول على كود الربط" : "Get Pairing Code"}
                     </Button>
+                    {renderSecondary(pairedSecondary)}
                   </div>
                   <p className="text-xs text-muted leading-relaxed">
                     {language === "ar"
@@ -466,16 +478,19 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
 
               {/* Method 2: QR Scan Start */}
               {pairingMethod === "qr" && (
-                <div className="flex flex-col gap-2 max-w-xl">
-                  <Button
-                    variant="primary"
-                    icon={<QrCode size={18} />}
-                    onClick={handleStartQr}
-                    disabled={acting}
-                    className="w-full sm:w-auto"
-                  >
-                    {language === "ar" ? "بدء الربط عبر رمز QR" : "Start QR Linking"}
-                  </Button>
+                <div className="flex w-full max-w-xl flex-col gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <Button
+                      variant="primary"
+                      icon={<QrCode size={18} />}
+                      onClick={handleStartQr}
+                      disabled={acting}
+                      className="flex-1 whitespace-nowrap sm:flex-none"
+                    >
+                      {language === "ar" ? "بدء الربط عبر رمز QR" : "Start QR Linking"}
+                    </Button>
+                    {renderSecondary(pairedSecondary)}
+                  </div>
                   <p className="text-xs text-muted">
                     {language === "ar"
                       ? "سيتم إنشاء رمز QR لمسحه من هاتف آخر أو من شاشة الحاسوب عبر كاميرا واتساب."
@@ -483,30 +498,6 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                   </p>
                 </div>
               )}
-
-              {/* Secondary Controls: Unlink & Restart */}
-              <div className="flex items-center gap-2.5 pt-1">
-                {canUnlink && (
-                  <OverflowMenu label={t("moreActions")}>
-                    <MenuItem
-                      danger
-                      icon={<Unlink size={16} />}
-                      disabled={acting}
-                      onSelect={() => setShowUnlinkModal(true)}
-                    >
-                      {t("unlink")}
-                    </MenuItem>
-                  </OverflowMenu>
-                )}
-                {!hideRestart && (
-                  <IconButton
-                    label={t("restart")}
-                    icon={<RotateCcw size={18} />}
-                    onClick={() => handleAction(api.restartBot, t("restart"))}
-                    disabled={acting}
-                  />
-                )}
-              </div>
             </div>
           )}
         </div>
