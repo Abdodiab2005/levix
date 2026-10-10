@@ -107,7 +107,9 @@ export function paintOverlay(
       fillRoundRect(ctx, left, top, boxW, boxH, boxH / 2);
     }
     if (selectedId === layer.id) {
-      ctx.strokeStyle = "#38bdf8";
+      ctx.strokeStyle = getComputedStyle(document.documentElement)
+        .getPropertyValue("--color-brand-cyan")
+        .trim();
       ctx.lineWidth = 2;
       ctx.strokeRect(left - 3, top - 3, boxW + 6, boxH + 6);
     }

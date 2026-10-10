@@ -53,6 +53,7 @@ const EDIT_IN_PLACE_EXCLUDE = new Set([
   "toimage",
   "pack",
   "stickers",
+  "autodelete",
 ]);
 
 // Wrap a socket so commands reply nicely:

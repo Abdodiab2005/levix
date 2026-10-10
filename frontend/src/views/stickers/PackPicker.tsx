@@ -1,13 +1,12 @@
 import type React from "react";
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
-import { Modal } from "../../components/Modal";
 import { useToast } from "../../components/Toasts";
+import { Button, Dialog, FieldLabel, Input, UserText } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { Pack } from "../../types";
 import { explainError } from "../../utils/stickerErrors";
 import { packNameLengthError } from "../../utils/stickerLimits";
-import { Button, fieldClass } from "./ui";
 
 interface PackPickerProps {
   open: boolean;
@@ -60,7 +59,7 @@ export const PackPicker: React.FC<PackPickerProps> = ({
   };
 
   return (
-    <Modal
+    <Dialog
       isOpen={open}
       onClose={onClose}
       title={title}
@@ -70,26 +69,24 @@ export const PackPicker: React.FC<PackPickerProps> = ({
         {packs.length === 0 ? (
           <p className="text-sm text-muted">{t("noPacks")}</p>
         ) : (
-          <div className="flex flex-col gap-1.5 max-h-64 overflow-y-auto">
+          <div className="flex max-h-64 flex-col gap-1.5 overflow-y-auto">
             {packs.map((pack) => (
-              <button
+              <Button
                 key={pack.id}
-                type="button"
+                variant="ghost"
                 onClick={() => onPick(pack.id)}
-                className="w-full text-start px-3 py-2.5 rounded-xl border border-line hover:bg-panel-hover text-sm font-semibold"
+                className="h-auto w-full min-w-0 justify-start px-3 py-2.5"
               >
-                {pack.name}
-                <span className="text-muted font-medium ms-2">{pack.count}</span>
-              </button>
+                <UserText className="flex-1 text-start">{pack.name}</UserText>
+                <span className="ms-2 shrink-0 font-medium text-muted">{pack.count}</span>
+              </Button>
             ))}
           </div>
         )}
         <div className="flex flex-col gap-1.5 border-t border-line pt-3">
-          <label className="text-xs font-bold text-text-main" htmlFor="new-pack-name">
-            {t("newPack")}
-          </label>
+          <FieldLabel htmlFor="new-pack-name">{t("newPack")}</FieldLabel>
           <div className="flex gap-2">
-            <input
+            <Input
               id="new-pack-name"
               value={name}
               onChange={(event) => {
@@ -98,8 +95,8 @@ export const PackPicker: React.FC<PackPickerProps> = ({
                 if (error) setError(packNameLengthError(next) ? t("packNameLength") : null);
               }}
               placeholder={t("newPackPlaceholder")}
-              className={fieldClass}
               maxLength={80}
+              dir="auto"
             />
             <Button variant="primary" onClick={create} disabled={busy}>
               {t("createPack")}
@@ -108,6 +105,6 @@ export const PackPicker: React.FC<PackPickerProps> = ({
           {error && <p className="text-xs text-danger">{error}</p>}
         </div>
       </div>
-    </Modal>
+    </Dialog>
   );
 };

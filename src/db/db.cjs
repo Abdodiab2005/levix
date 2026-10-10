@@ -580,6 +580,45 @@ const MIGRATIONS = [
   (database) => {
     database.exec(`ALTER TABLE schedules ADD COLUMN media TEXT;`);
   },
+  // v8 — keyword auto-delete rules, plus an opt-in log of text/caption copies
+  // of messages a rule actually deleted (never media bytes).
+  (database) => {
+    database.exec(`
+      CREATE TABLE auto_delete_rules (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        name            TEXT,
+        enabled         INTEGER NOT NULL DEFAULT 1,
+        keywords        TEXT NOT NULL,
+        match_mode      TEXT NOT NULL CHECK (match_mode IN ('contains','word','exact')),
+        chat_scope      TEXT NOT NULL CHECK (chat_scope IN ('all','groups','private')),
+        senders_mode    TEXT NOT NULL CHECK (senders_mode IN ('everyone','selected')),
+        senders_list    TEXT NOT NULL DEFAULT '[]',
+        include_own     INTEGER NOT NULL DEFAULT 0,
+        for_everyone    INTEGER NOT NULL DEFAULT 1,
+        keep_copy       INTEGER NOT NULL DEFAULT 0,
+        deleted_count   INTEGER NOT NULL DEFAULT 0,
+        last_deleted_at INTEGER,
+        created_at      INTEGER NOT NULL,
+        updated_at      INTEGER NOT NULL
+      );
+      CREATE INDEX idx_auto_delete_rules_enabled
+        ON auto_delete_rules (enabled, id);
+
+      CREATE TABLE auto_delete_log (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        rule_id    INTEGER NOT NULL,
+        chat_jid   TEXT NOT NULL,
+        sender     TEXT,
+        text       TEXT,
+        media_type TEXT,
+        mode       TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY (rule_id) REFERENCES auto_delete_rules (id) ON DELETE CASCADE
+      );
+      CREATE INDEX idx_auto_delete_log_created ON auto_delete_log (created_at);
+      CREATE INDEX idx_auto_delete_log_rule ON auto_delete_log (rule_id, created_at);
+    `);
+  },
 ];
 
 function migrate(database, migrations = MIGRATIONS) {
@@ -648,6 +687,24 @@ function sweepExpired() {
     if (changes) logger.debug(`[DB] Swept ${changes} expired forward score(s)`);
   } catch (err) {
     logger.error({ err }, "[DB] sweep failed");
+  }
+  try {
+    let days = 30;
+    try {
+      days = require("../config/settings.cjs").get("auto_delete_keep_days");
+    } catch {
+      days = 30;
+    }
+    const cutoff = Date.now() - Number(days || 30) * 24 * 60 * 60 * 1000;
+    const { changes } = q("DELETE FROM auto_delete_log WHERE created_at < ?").run(cutoff);
+    if (changes) logger.debug(`[DB] Swept ${changes} expired auto-delete copies`);
+    q(
+      `DELETE FROM auto_delete_log WHERE id NOT IN (
+         SELECT id FROM auto_delete_log ORDER BY created_at DESC, id DESC LIMIT 5000
+       )`,
+    ).run();
+  } catch (err) {
+    logger.error({ err }, "[DB] auto-delete log sweep failed");
   }
 }
 

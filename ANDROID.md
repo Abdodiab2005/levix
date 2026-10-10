@@ -234,6 +234,8 @@ android/scripts/fetch-node-android.sh arm64-v8a       # one ABI only
 ```
 The script verifies every 64-bit ELF is safe on 16 KB-page devices — 16 KB aligned, RELRO not sharing a page with writable data, built with NDK r28+ — as Google Play requires for apps targeting API 35+, and fails the build otherwise.
 
+Each staged runtime is stamped (`~/.cache/levix-android/node-runtime/<abi>/.levix-stamp`) with the sha256 prefixes of `build-ffmpeg-android.sh` and `fetch-node-android.sh`. Gradle recomputes the stamp and refuses to package a runtime staged from older recipes — or one whose `libffmpeg.so` lacks the `libwebp`/`libwebp_anim` sticker encoders — and prints the command that refreshes it (`LEVIX_ANDROID_ABIS=<abi> bash android/scripts/fetch-node-android.sh`). Re-run the script whenever either recipe changes; Gradle will not run it for you.
+
 ### 3. Build the APKs
 Run Gradle to assemble one APK per ABI:
 ```bash

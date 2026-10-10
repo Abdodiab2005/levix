@@ -11,6 +11,11 @@ import java.util.zip.ZipInputStream
  *
  * JS is data (read, not mmap-exec). Native `.node` addons are stripped at
  * stage time because Android 10+ will not dlopen them from writable storage.
+ *
+ * The bundle stamp includes [android.content.pm.PackageInfo.lastUpdateTime]
+ * alongside versionName and versionCode so that reinstalling an APK with the
+ * same version (e.g. local debug rebuilds or re-releases with unchanged
+ * versionCode) invalidates the stamp and re-extracts the updated JS bundle.
  */
 object LevixAppBundle {
     private const val ASSET_ZIP = "levix-app.zip"
@@ -29,7 +34,7 @@ object LevixAppBundle {
         val app = context.applicationContext
         val dest = File(app.filesDir, "app")
         val info = app.packageManager.getPackageInfo(app.packageName, 0)
-        val version = "${info.versionName}-${if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()}"
+        val version = "${info.versionName}-${if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()}-${info.lastUpdateTime}"
         val stamp = File(dest, STAMP_NAME)
         val boot = File(dest, BOOT_FILE)
         if (boot.isFile && stamp.isFile && stamp.readText() == version) {

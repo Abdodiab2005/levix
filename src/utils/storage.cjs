@@ -91,4 +91,17 @@ module.exports = {
   countSchedules: store.countSchedules,
   // AI conversation history
   deleteAllChatHistories: store.deleteAllChatHistories,
+  // Keyword auto-delete
+  listAutoDeleteRules: store.listAutoDeleteRules,
+  getAutoDeleteRule: store.getAutoDeleteRule,
+  countAutoDeleteRules: store.countAutoDeleteRules,
+  insertAutoDeleteRule: store.insertAutoDeleteRule,
+  updateAutoDeleteRule: store.updateAutoDeleteRule,
+  deleteAutoDeleteRule: store.deleteAutoDeleteRule,
+  incrementAutoDeleteCounter: store.incrementAutoDeleteCounter,
+  resetAutoDeleteCounter: store.resetAutoDeleteCounter,
+  insertAutoDeleteLog: store.insertAutoDeleteLog,
+  listAutoDeleteLog: store.listAutoDeleteLog,
+  clearAutoDeleteLog: store.clearAutoDeleteLog,
+  clearAutoDeleteOnUnlink: store.clearAutoDeleteOnUnlink,
 };

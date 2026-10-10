@@ -151,7 +151,7 @@ class MainActivity : AppCompatActivity() {
         cardWhatsApp = findViewById(R.id.cardWhatsApp)
         whatsAppBadge = findViewById(R.id.whatsAppBadge)
         whatsAppDetailText = findViewById(R.id.whatsAppDetailText)
-        cardWhatsApp.setOnClickListener { PanelActivity.open(this, "connection") }
+        cardWhatsApp.setOnClickListener { WhatsAppStatusSheet.show(this) }
 
         cardEngine = findViewById(R.id.cardEngine)
         engineBadge = findViewById(R.id.engineBadge)

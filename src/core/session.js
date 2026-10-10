@@ -49,8 +49,10 @@
 import { DisconnectReason } from "@whiskeysockets/baileys";
 import { createRequire } from "module";
 import { RETRY_SCHEDULE_MS } from "../config/constants.js";
+import { bootstrapAdmins, bootstrapOwners } from "../utils/permissions.esm.js";
 import {
   clearAuthState,
+  clearAutoDeleteOnUnlink,
   clearWhatsAppDirectory,
   deleteAllChatHistories,
   deleteQrCode,
@@ -58,7 +60,6 @@ import {
   pauseAllSchedules,
   saveQrCode,
 } from "../utils/storage.esm.js";
-import { bootstrapAdmins, bootstrapOwners } from "../utils/permissions.esm.js";
 import { classifyDisconnect, handleConnectionOpen } from "./connection.js";
 import { setupEventListeners } from "./events.js";
 import {
@@ -100,6 +101,13 @@ function clearAccountScopedState() {
   try {
     groupMetadataCache.flushAll();
   } catch {}
+  try {
+    // Copies of deleted messages and the counters are account-derived; the
+    // rules themselves are operator configuration and stay.
+    clearAutoDeleteOnUnlink();
+  } catch (error) {
+    logger.warn({ err: error }, "[Session] failed to clear auto-delete copies after unlink");
+  }
 }
 
 // Baileys' `end()` awaits `ws.close()`, which waits for the socket's own

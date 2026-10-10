@@ -8,6 +8,7 @@
 // in `message` or `details`.
 
 const { tr } = require("../utils/i18n.cjs");
+const { isolate } = require("../utils/bidi.cjs");
 
 const CODES = Object.freeze({
   NO_MEDIA: "NO_MEDIA",
@@ -166,18 +167,18 @@ function message(pick, error) {
       return pick("That sticker is not in your library.", "هذا الملصق غير موجود في مكتبتك.");
     case "PACK_NOT_FOUND":
       return pick(
-        `There is no pack named "${d.name || ""}".`,
-        `لا توجد حزمة باسم "${d.name || ""}".`,
+        `There is no pack named "${isolate(d.name || "")}".`,
+        `لا توجد حزمة باسم "${isolate(d.name || "")}".`,
       );
     case "PACK_EXISTS":
       return pick(
-        `A pack named "${d.name || ""}" already exists.`,
-        `توجد حزمة باسم "${d.name || ""}" بالفعل.`,
+        `A pack named "${isolate(d.name || "")}" already exists.`,
+        `توجد حزمة باسم "${isolate(d.name || "")}" بالفعل.`,
       );
     case "INVALID_NAME":
       return pick(
-        "Pack names are 1–40 letters, digits, spaces, - or _, and can't be a command word.",
-        "اسم الحزمة من 1 إلى 40 حرفًا أو رقمًا أو مسافة أو - أو _، ولا يجوز أن يكون كلمة أمر.",
+        "Pack names are 1–40 characters: letters, digits, spaces, - _ ' . & , or emoji, and can't be a command word.",
+        "اسم الحزمة من 1 إلى 40 حرفًا: حروف أو أرقام أو مسافات أو - _ ' . & , أو رموز تعبيرية، ولا يجوز أن يكون كلمة أمر.",
       );
     case "INVALID_OPTIONS":
       return pick("Those sticker options are not valid.", "خيارات الملصق هذه غير صالحة.");

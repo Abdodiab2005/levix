@@ -2,8 +2,8 @@ import {
   AlertCircle,
   AlertTriangle,
   Bot,
-  Check,
   CheckCircle2,
+  ChevronLeft,
   Database,
   Eye,
   FileText,
@@ -19,9 +19,28 @@ import {
 import type React from "react";
 import { useEffect, useState } from "react";
 import { api, type NormalizedModel } from "../api/client";
-import { Modal } from "../components/Modal";
 import { useToast } from "../components/Toasts";
-import { Toggle } from "../components/Toggle";
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  Dialog,
+  EmptyState,
+  Field,
+  FormActions,
+  IconButton,
+  Input,
+  LoadingState,
+  PageHeader,
+  SaveField,
+  Select,
+  Spinner,
+  Textarea,
+  Toggle,
+  useDirtyForm,
+  useSavedValue,
+} from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 
 interface ProviderPreset {
@@ -36,6 +55,83 @@ interface ProviderPreset {
   baseUrlSetting?: string;
 }
 
+const PRESETS: ProviderPreset[] = [
+  {
+    id: "gemini",
+    name: "Google Gemini",
+    descKey: "providerGeminiDesc",
+    provider: "gemini",
+    defaultModel: "gemini-3.7-flash",
+    defaultBaseUrl: "",
+    keySetting: "gemini_api_key",
+    modelSetting: "gemini_model",
+    baseUrlSetting: "gemini_base_url",
+  },
+  {
+    id: "groq",
+    name: "Groq Cloud",
+    descKey: "providerGroqDesc",
+    provider: "openai",
+    defaultModel: "llama-3.3-70b-versatile",
+    defaultBaseUrl: "https://api.groq.com/openai/v1",
+    keySetting: "openai_api_key",
+    modelSetting: "openai_model",
+    baseUrlSetting: "openai_base_url",
+  },
+  {
+    id: "openai",
+    name: "OpenAI",
+    descKey: "providerOpenAIDesc",
+    provider: "openai",
+    defaultModel: "gpt-4o-mini",
+    defaultBaseUrl: "https://api.openai.com/v1",
+    keySetting: "openai_api_key",
+    modelSetting: "openai_model",
+    baseUrlSetting: "openai_base_url",
+  },
+  {
+    id: "ollama",
+    name: "Ollama (Local)",
+    descKey: "providerOllamaDesc",
+    provider: "openai",
+    defaultModel: "llama3.2",
+    defaultBaseUrl: "http://localhost:11434/v1",
+    keySetting: "openai_api_key",
+    modelSetting: "openai_model",
+    baseUrlSetting: "openai_base_url",
+  },
+  {
+    id: "anthropic",
+    name: "Anthropic Claude",
+    descKey: "providerAnthropicDesc",
+    provider: "anthropic",
+    defaultModel: "claude-sonnet-4-5",
+    defaultBaseUrl: "https://api.anthropic.com",
+    keySetting: "anthropic_api_key",
+    modelSetting: "anthropic_model",
+    baseUrlSetting: "anthropic_base_url",
+  },
+];
+
+function presetFromSettings(settings: Record<string, any>): ProviderPreset {
+  const currentProvider = settings["ai_provider"] || "gemini";
+  return (
+    PRESETS.find((p) => {
+      if (p.provider !== currentProvider) return false;
+      if (p.id === "gemini") return true;
+      if (p.id === "anthropic") return true;
+      if (p.id === "groq" && settings["openai_base_url"]?.includes("groq.com")) return true;
+      if (p.id === "ollama" && settings["openai_base_url"]?.includes("11434")) return true;
+      if (
+        p.id === "openai" &&
+        (!settings["openai_base_url"] || settings["openai_base_url"].includes("api.openai.com"))
+      )
+        return true;
+      return false;
+    }) || PRESETS[0]
+  );
+}
+
 export const AIAssistantView: React.FC = () => {
   const { t, language } = useI18n();
   const { toast } = useToast();
@@ -44,7 +140,6 @@ export const AIAssistantView: React.FC = () => {
   const [configuredKeys, setConfiguredKeys] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
 
-  // Model discovery state
   const [discoveryState, setDiscoveryState] = useState<
     Record<
       string,
@@ -61,7 +156,6 @@ export const AIAssistantView: React.FC = () => {
   const [fetchingModels, setFetchingModels] = useState(false);
   const [isCustomModel, setIsCustomModel] = useState(false);
 
-  // Persona & Memory modals
   const [personaModalOpen, setPersonaModalOpen] = useState(false);
   const [personaText, setPersonaText] = useState("");
   const [memoryScopes, setMemoryScopes] = useState<
@@ -71,7 +165,6 @@ export const AIAssistantView: React.FC = () => {
   const [memoryContent, setMemoryContent] = useState("");
   const [memoryLoading, setMemoryLoading] = useState(false);
 
-  // Conversation inspector (read-only)
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [conversations, setConversations] = useState<
     Array<{ chatId: string; turns: number; updatedAt: number | null }>
@@ -91,63 +184,19 @@ export const AIAssistantView: React.FC = () => {
   } | null>(null);
   const [inspectorLoading, setInspectorLoading] = useState(false);
 
-  const presets: ProviderPreset[] = [
-    {
-      id: "gemini",
-      name: "Google Gemini",
-      descKey: "providerGeminiDesc",
-      provider: "gemini",
-      defaultModel: "gemini-3.7-flash",
-      defaultBaseUrl: "",
-      keySetting: "gemini_api_key",
-      modelSetting: "gemini_model",
-      baseUrlSetting: "gemini_base_url",
-    },
-    {
-      id: "groq",
-      name: "Groq Cloud",
-      descKey: "providerGroqDesc",
-      provider: "openai",
-      defaultModel: "llama-3.3-70b-versatile",
-      defaultBaseUrl: "https://api.groq.com/openai/v1",
-      keySetting: "openai_api_key",
-      modelSetting: "openai_model",
-      baseUrlSetting: "openai_base_url",
-    },
-    {
-      id: "openai",
-      name: "OpenAI",
-      descKey: "providerOpenAIDesc",
-      provider: "openai",
-      defaultModel: "gpt-4o-mini",
-      defaultBaseUrl: "https://api.openai.com/v1",
-      keySetting: "openai_api_key",
-      modelSetting: "openai_model",
-      baseUrlSetting: "openai_base_url",
-    },
-    {
-      id: "ollama",
-      name: "Ollama (Local)",
-      descKey: "providerOllamaDesc",
-      provider: "openai",
-      defaultModel: "llama3.2",
-      defaultBaseUrl: "http://localhost:11434/v1",
-      keySetting: "openai_api_key",
-      modelSetting: "openai_model",
-      baseUrlSetting: "openai_base_url",
-    },
-    {
-      id: "anthropic",
-      name: "Anthropic Claude",
-      descKey: "providerAnthropicDesc",
-      provider: "anthropic",
-      defaultModel: "claude-sonnet-4-5",
-      defaultBaseUrl: "https://api.anthropic.com",
-      keySetting: "anthropic_api_key",
-      modelSetting: "anthropic_model",
-      baseUrlSetting: "anthropic_base_url",
-    },
-  ];
+  const savedPreset = presetFromSettings(settings);
+  const providerForm = useDirtyForm({
+    presetId: savedPreset.id,
+    apiKey: "",
+    baseUrl: savedPreset.baseUrlSetting
+      ? String(settings[savedPreset.baseUrlSetting] || savedPreset.defaultBaseUrl)
+      : "",
+    model: String(settings[savedPreset.modelSetting] || savedPreset.defaultModel),
+  });
+  const sttProvider = useSavedValue(String(settings["ai_stt_provider"] || "auto"));
+  const botLang = useSavedValue(String(settings["bot_language"] || "auto"));
+
+  const selectedPreset = PRESETS.find((p) => p.id === providerForm.draft.presetId) || savedPreset;
 
   const loadSettings = async () => {
     try {
@@ -159,6 +208,7 @@ export const AIAssistantView: React.FC = () => {
           map[s.key] = s.value;
           if (s.type === "secret") {
             conf[s.key] = Boolean(s.configured);
+            map[s.key] = "";
           }
         });
         setSettings(map);
@@ -178,85 +228,38 @@ export const AIAssistantView: React.FC = () => {
   const updateSetting = async (key: string, value: any, quiet = false) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
     try {
-      const res = await api.updateSetting(key, value);
+      await api.updateSetting(key, value);
       if (!quiet) toast(t("savedSuccessfully"), "success");
-      if (key.endsWith("_api_key")) {
-        setSettings((prev) => ({ ...prev, [key]: "" }));
-        setConfiguredKeys((prev) => ({ ...prev, [key]: Boolean(value) }));
-      }
-      if (res?.settings && Array.isArray(res.settings)) {
-        const next: Record<string, any> = {};
-        const conf: Record<string, boolean> = {};
-        res.settings.forEach((s: any) => {
-          if (s.type === "secret") {
-            conf[s.key] = Boolean(s.configured);
-            next[s.key] = "";
-          } else {
-            next[s.key] = s.value;
-          }
-        });
-        setSettings((prev) => ({ ...prev, ...next }));
-        setConfiguredKeys((prev) => ({ ...prev, ...conf }));
-      }
     } catch (err: any) {
       toast(err.message, "error");
     }
   };
 
-  // Determine active preset based on current settings
-  const currentProvider = settings["ai_provider"] || "gemini";
-  const selectedPreset =
-    presets.find((p) => {
-      if (p.provider !== currentProvider) return false;
-      if (p.id === "gemini") return true;
-      if (p.id === "anthropic") return true;
-      if (p.id === "groq" && settings["openai_base_url"]?.includes("groq.com")) return true;
-      if (p.id === "ollama" && settings["openai_base_url"]?.includes("11434")) return true;
-      if (
-        p.id === "openai" &&
-        (!settings["openai_base_url"] || settings["openai_base_url"].includes("api.openai.com"))
-      )
-        return true;
-      return false;
-    }) || presets[0];
-
-  const selectPreset = async (p: ProviderPreset) => {
-    const newSettings: Record<string, any> = {
-      ...settings,
-      ai_provider: p.provider,
-    };
-
-    if (p.baseUrlSetting) {
-      newSettings[p.baseUrlSetting] = p.defaultBaseUrl;
-    }
-    if (p.defaultModel) {
-      newSettings[p.modelSetting] = p.defaultModel;
-    }
-
-    setSettings(newSettings);
-
-    try {
-      await api.updateSetting("ai_provider", p.provider);
-      if (p.baseUrlSetting) {
-        await api.updateSetting(p.baseUrlSetting, p.defaultBaseUrl);
-      }
-      if (p.defaultModel) {
-        await api.updateSetting(p.modelSetting, p.defaultModel);
-      }
-      toast(
-        language === "ar" ? `تم التبديل إلى ${p.name}` : `Switched provider to ${p.name}`,
-        "success",
-      );
-    } catch (err: any) {
-      toast(err.message, "error");
+  const persistSetting = async (key: string, value: any) => {
+    await api.updateSetting(key, value);
+    if (key.endsWith("_api_key")) {
+      setSettings((prev) => ({ ...prev, [key]: "" }));
+      setConfiguredKeys((prev) => ({ ...prev, [key]: Boolean(value) }));
+    } else {
+      setSettings((prev) => ({ ...prev, [key]: value }));
     }
   };
 
-  // `cacheOnly` is the silent load on open: the cached live list, or the
-  // recommended one, and never a request to the provider.
+  const applyPreset = (id: string) => {
+    const next = PRESETS.find((p) => p.id === id);
+    if (!next) return;
+    const current = PRESETS.find((p) => p.id === providerForm.draft.presetId) || savedPreset;
+    providerForm.setDraft({
+      presetId: next.id,
+      apiKey: next.keySetting === current.keySetting ? providerForm.draft.apiKey : "",
+      baseUrl: next.defaultBaseUrl,
+      model: next.defaultModel,
+    });
+  };
+
   const handleFetchModels = async (forceRefresh = false, cacheOnly = false) => {
     setFetchingModels(true);
-    const typedKey = String(settings[selectedPreset.keySetting] || "").trim();
+    const typedKey = String(providerForm.draft.apiKey || "").trim();
     const hasStoredKey = Boolean(configuredKeys[selectedPreset.keySetting]);
 
     try {
@@ -272,8 +275,8 @@ export const AIAssistantView: React.FC = () => {
         cacheOnly,
       };
       if (typedKey) payload.apiKey = typedKey;
-      if (selectedPreset.baseUrlSetting && settings[selectedPreset.baseUrlSetting]) {
-        payload.baseUrl = settings[selectedPreset.baseUrlSetting];
+      if (selectedPreset.baseUrlSetting && providerForm.draft.baseUrl) {
+        payload.baseUrl = providerForm.draft.baseUrl;
       }
 
       const res = await api.fetchAiModels(payload);
@@ -291,15 +294,8 @@ export const AIAssistantView: React.FC = () => {
           },
         }));
 
-        // Model discovery stays silent on success — the model list updating
-        // in place is the feedback. Toasts are for problems only.
         if (!res.live && res.requiresApiKey && forceRefresh) {
-          toast(
-            language === "ar"
-              ? "يرجى إدخال مفتاح API أولاً لاكتشاف النماذج المتاحة لحسابك"
-              : "Enter an API key to discover account models",
-            "info",
-          );
+          toast(t("connectKeyFirstPrompt"), "info");
         } else if (!res.success && res.error) {
           toast(res.error.message || "Failed to discover models", "error");
         }
@@ -324,9 +320,6 @@ export const AIAssistantView: React.FC = () => {
     }
   };
 
-  // Live discovery is a manual step (the refresh buttons). Opening the view
-  // only fills the list from the cache or the recommended models, so the
-  // dropdown is never empty and no provider request or toast happens.
   useEffect(() => {
     if (!loading) handleFetchModels(false, true);
   }, [selectedPreset.id, loading]);
@@ -337,43 +330,43 @@ export const AIAssistantView: React.FC = () => {
     discoveryState[selectedPreset.id]?.requiresApiKey ?? !configuredKeys[selectedPreset.keySetting],
   );
 
-  const currentModelVal = settings[selectedPreset.modelSetting] || selectedPreset.defaultModel;
+  const savedModelVal = settings[savedPreset.modelSetting] || savedPreset.defaultModel;
+  const currentModelVal = providerForm.draft.model || selectedPreset.defaultModel;
 
-  const currentModelObj: NormalizedModel = currentModelList.find(
-    (m) => m.id.toLowerCase() === currentModelVal.toLowerCase(),
-  ) || {
-    id: currentModelVal,
-    displayName: currentModelVal,
-    provider: selectedPreset.provider,
-    recommended: false,
-    capabilities: {
-      textInput: true,
-      textOutput: true,
-      vision: false,
-      audioInput: false,
-      stt: false,
-      videoInput: false,
-      pdfInput: false,
-    },
-    capabilitySource: "unknown",
-  };
+  const modelForCaps = (id: string): NormalizedModel =>
+    currentModelList.find((m) => m.id.toLowerCase() === id.toLowerCase()) || {
+      id,
+      displayName: id,
+      provider: selectedPreset.provider,
+      recommended: false,
+      capabilities: {
+        textInput: true,
+        textOutput: true,
+        vision: false,
+        audioInput: false,
+        stt: false,
+        videoInput: false,
+        pdfInput: false,
+      },
+      capabilitySource: "unknown",
+    };
+
+  const currentModelObj = modelForCaps(currentModelVal);
+  const savedModelObj = modelForCaps(savedModelVal);
 
   const supportsVision = Boolean(currentModelObj.capabilities.vision);
   const supportsStt = Boolean(currentModelObj.capabilities.stt);
+  const savedSupportsVision = Boolean(savedModelObj.capabilities.vision);
+  const savedSupportsStt = Boolean(savedModelObj.capabilities.stt);
 
-  // "Unknown" is not "unsupported": a model the registry has never seen (a
-  // gateway's own ids, a brand-new Gemini drop) must NOT lock the toggles or
-  // trigger the auto-disable below — otherwise changing the base URL to a
-  // custom endpoint silently switches vision/STT off and keeps them off.
-  // Only catalog/live metadata that explicitly says the capability is missing
-  // locks the feature, and only while auto-detection is enabled.
   const capsKnown =
     currentModelObj.capabilitySource === "provider" || currentModelObj.capabilitySource === "seed";
+  const savedCapsKnown =
+    savedModelObj.capabilitySource === "provider" || savedModelObj.capabilitySource === "seed";
   const autoDetect = settings["ai_auto_detect_capabilities"] !== false;
-  const visionLocked = capsKnown && autoDetect && !supportsVision;
-  const sttLocked = capsKnown && autoDetect && !supportsStt;
+  const visionLocked = savedCapsKnown && autoDetect && !savedSupportsVision;
+  const sttLocked = savedCapsKnown && autoDetect && !savedSupportsStt;
 
-  // Independent capability auto-disabling and clearing of stale incompatible configuration
   useEffect(() => {
     if (loading) return;
 
@@ -384,7 +377,7 @@ export const AIAssistantView: React.FC = () => {
     if (sttLocked && settings["ai_stt_enabled"]) {
       updateSetting("ai_stt_enabled", false, true);
     }
-  }, [currentModelVal, visionLocked, sttLocked, loading]);
+  }, [savedModelVal, visionLocked, sttLocked, loading]);
 
   const openPersonaEditor = async () => {
     try {
@@ -418,9 +411,6 @@ export const AIAssistantView: React.FC = () => {
         label: s.label,
         entries: s.entries ?? 0,
       }));
-      // The server always lists global first; keep that guarantee if the
-      // response is ever empty or the request fails, so the editor can still
-      // create the file with its first save.
       setMemoryScopes(
         scopes.some((s) => s.scope === "global")
           ? scopes
@@ -509,640 +499,491 @@ export const AIAssistantView: React.FC = () => {
         })
       : "—";
 
+  const saveLabels = {
+    saveLabel: t("save"),
+    savedLabel: t("saved"),
+  };
+  const formLabels = {
+    saveLabel: t("save"),
+    discardLabel: t("discard"),
+    unsavedLabel: t("unsavedChanges"),
+    savedLabel: t("saved"),
+  };
+
+  const capabilityBadges = [
+    { icon: Eye, label: t("capVision"), on: supportsVision },
+    { icon: Mic, label: t("capStt"), on: supportsStt },
+    {
+      icon: Volume2,
+      label: t("capAudio"),
+      on: Boolean(currentModelObj.capabilities.audioInput),
+    },
+    {
+      icon: FileText,
+      label: t("capText"),
+      on: Boolean(
+        currentModelObj.capabilities.textInput && currentModelObj.capabilities.textOutput,
+      ),
+    },
+    {
+      icon: FileText,
+      label: t("capPdf"),
+      on: Boolean(currentModelObj.capabilities.pdfInput),
+    },
+    {
+      icon: Eye,
+      label: t("capVideo"),
+      on: Boolean(currentModelObj.capabilities.videoInput),
+    },
+  ];
+
   if (loading) {
-    return (
-      <div className="flex items-center justify-center p-12 text-muted">
-        <div className="w-6 h-6 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin mr-2" />
-        <span className="text-sm font-semibold">{t("starting")}</span>
-      </div>
-    );
+    return <LoadingState text={t("starting")} />;
   }
 
-  return (
-    <div className="flex flex-col gap-5 sm:gap-6">
-      {/* Master Toggle Header Card */}
-      <div className="rounded-2xl border border-line bg-gradient-to-br from-panel-raised via-panel to-panel p-4 sm:p-6 shadow-sm flex flex-col gap-3.5">
-        {/* Top Row: Bot icon + Title & Subtitle on Start, Toggle Switch on End */}
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-brand-blue to-brand-cyan text-white flex items-center justify-center shrink-0 shadow-md shadow-brand-blue/20">
-              <Bot size={22} className="sm:w-6 sm:h-6" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-base sm:text-xl font-extrabold text-text-main truncate">
-                {t("aiTitle")}
-              </h2>
-              <p className="text-xs sm:text-sm text-muted truncate">{t("aiSubtitle")}</p>
-            </div>
-          </div>
+  const agentOn = Boolean(settings["ai_agent"]);
 
-          {/* Toggle Switch in corner */}
-          <div className="shrink-0 flex items-center gap-2 bg-panel/60 border border-line/70 rounded-xl px-2.5 py-1.5 shadow-xs">
-            <span className="text-xs font-bold text-muted hidden sm:inline">
-              {settings["ai_agent"]
-                ? language === "ar"
-                  ? "مفعل"
-                  : "Enabled"
-                : language === "ar"
-                  ? "معطل"
-                  : "Disabled"}
+  return (
+    <div className="flex flex-col gap-3 sm:gap-4">
+      <PageHeader icon={<Bot size={20} />} title={t("aiTitle")} description={t("aiSubtitle")} />
+
+      <Card>
+        <div className="flex min-h-10 items-center justify-between gap-4">
+          <span className="text-sm font-semibold text-text-main">{t("aiAgentEnabled")}</span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold text-muted">
+              {agentOn ? t("toggleOn") : t("toggleOff")}
             </span>
             <Toggle
-              checked={Boolean(settings["ai_agent"])}
+              checked={agentOn}
               onChange={(val) => updateSetting("ai_agent", val)}
+              aria-label={t("aiAgentEnabled")}
             />
           </div>
         </div>
+      </Card>
 
-        {/* Dedicated State Badge */}
-        <div className="flex items-center gap-2 pt-1 border-t border-line/40">
-          <span
-            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
-              settings["ai_agent"]
-                ? "bg-ok/15 text-ok border-ok/30"
-                : "bg-danger/10 text-danger border-danger/25"
-            }`}
+      <Card className="flex flex-col gap-3">
+        <CardHeader icon={<Sparkles size={18} />} title={t("aiProvider")} />
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            aria-label={t("aiProvider")}
+            className="min-w-0 flex-1 sm:max-w-xs"
+            value={providerForm.draft.presetId}
+            onChange={(e) => applyPreset(e.target.value)}
           >
-            <span className="pulse-dot" />
-            <span>
-              {settings["ai_agent"]
-                ? t("aiAgentEnabled")
-                : language === "ar"
-                  ? "مساعد الذكاء الاصطناعي معطل"
-                  : "AI Assistant Disabled"}
-            </span>
-          </span>
-        </div>
-      </div>
-
-      {/* Quick Setup & Active Provider Card */}
-      <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col gap-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-line">
-          <div className="flex items-center gap-2.5">
-            <Sparkles size={18} className="text-brand-cyan shrink-0" />
-            <h3 className="text-base sm:text-lg font-bold text-text-main">{t("aiProvider")}</h3>
-          </div>
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <span className="text-xs text-muted font-medium">
-              {language === "ar" ? "المزود النشط:" : "Active:"}
-            </span>
-            <span className="text-xs font-bold text-brand-cyan px-2.5 py-1 rounded-lg bg-brand-cyan/10 border border-brand-cyan/25">
-              {selectedPreset.name} &bull; <span className="font-mono">{currentModelVal}</span>
-            </span>
-          </div>
+            {PRESETS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </Select>
+          <span className="font-mono text-xs text-muted">{currentModelVal}</span>
         </div>
 
-        {/* Provider Selector: clean, mobile-first responsive segmented cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3">
-          {presets.map((p) => {
-            const isSelected = selectedPreset.id === p.id;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => selectPreset(p)}
-                className={`p-3.5 rounded-xl border text-start transition-all flex flex-col justify-between gap-2.5 focus-visible:ring-2 focus-visible:ring-brand-blue/50 ${
-                  isSelected
-                    ? "bg-brand-blue/15 border-brand-blue/60 shadow-sm ring-1 ring-brand-blue/40"
-                    : "bg-panel-raised border-line hover:bg-panel-hover"
-                }`}
-              >
-                <div className="flex items-center justify-between w-full">
-                  <span className="font-bold text-xs sm:text-sm text-text-main">{p.name}</span>
-                  {isSelected ? (
-                    <span className="w-5 h-5 rounded-full bg-brand-blue text-white flex items-center justify-center shrink-0">
-                      <Check size={12} strokeWidth={3} />
-                    </span>
-                  ) : (
-                    <span className="w-2 h-2 rounded-full bg-line" />
-                  )}
-                </div>
-                <span className="text-[10px] sm:text-[11px] font-mono text-muted truncate block">
-                  {p.defaultModel}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        {requiresApiKey && <p className="text-xs text-warn">{t("connectKeyFirstPrompt")}</p>}
 
-        {/* Warning banner if API key is missing */}
-        {requiresApiKey && (
-          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-start gap-3">
-            <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5" />
-            <div className="text-xs text-text-main">
-              <p className="font-bold">{t("connectKeyFirstPrompt")}</p>
-              <p className="text-muted mt-0.5">
-                {language === "ar"
-                  ? "النماذج المعروضة أدناه هي نماذج مقترحة من الدليل المحلي وليست مؤكدة لحسابك حتى يتم ربط المفتاح."
-                  : "Models shown below are catalog recommendations and are not verified for your account until a key is configured."}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Discovery error banner if discovery failed */}
         {discoveryState[selectedPreset.id]?.error && (
-          <div className="p-3 rounded-xl bg-danger/10 border border-danger/25 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-xs text-danger font-semibold">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2 text-xs font-semibold text-danger">
               <AlertCircle size={16} className="shrink-0" />
-              <span>{discoveryState[selectedPreset.id]?.error}</span>
+              <span className="min-w-0">{discoveryState[selectedPreset.id]?.error}</span>
             </div>
-            <button
-              type="button"
+            <IconButton
+              variant="ghost"
+              label={t("refreshModels")}
+              icon={<RefreshCw size={16} />}
               onClick={() => handleFetchModels(true)}
-              className="text-xs font-bold underline hover:opacity-80 shrink-0"
-            >
-              {t("refreshModels")}
-            </button>
+              loading={fetchingModels}
+            />
           </div>
         )}
 
-        {/* Dynamic Provider Inputs: key first, then URL, then model */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-line">
-          {/* API Key */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label htmlFor="input-api-key" className="block text-xs font-bold text-muted">
-                {t("apiKey")}
-              </label>
-              {configuredKeys[selectedPreset.keySetting] && (
-                <span className="text-[10px] text-ok font-semibold flex items-center gap-1">
-                  <CheckCircle2 size={11} />
-                  {language === "ar" ? "محفوظ" : "Saved"}
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void providerForm.save(async (draft) => {
+              const p = PRESETS.find((item) => item.id === draft.presetId) || selectedPreset;
+              await persistSetting("ai_provider", p.provider);
+              if (p.baseUrlSetting) {
+                await persistSetting(p.baseUrlSetting, draft.baseUrl);
+              }
+              await persistSetting(p.modelSetting, draft.model);
+              if (draft.apiKey.trim()) {
+                await persistSetting(p.keySetting, draft.apiKey.trim());
+              }
+              providerForm.setDraft({ ...draft, apiKey: "" });
+            });
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") providerForm.revert();
+          }}
+        >
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <Field
+              className="min-w-0"
+              htmlFor="input-api-key"
+              label={
+                <span className="flex w-full items-center justify-between gap-2">
+                  <span>{t("apiKey")}</span>
+                  {configuredKeys[selectedPreset.keySetting] && (
+                    <Badge tone="ok">
+                      <CheckCircle2 size={11} />
+                      {t("saved")}
+                    </Badge>
+                  )}
                 </span>
+              }
+            >
+              <Input
+                id="input-api-key"
+                type="password"
+                className="font-mono"
+                value={providerForm.draft.apiKey}
+                onChange={(e) => providerForm.setField("apiKey", e.target.value)}
+                placeholder={
+                  configuredKeys[selectedPreset.keySetting] ? "••••••••••••" : t("enterApiKey")
+                }
+              />
+            </Field>
+
+            {selectedPreset.baseUrlSetting && (
+              <Field className="min-w-0" label={t("baseUrl")} htmlFor="input-base-url">
+                <Input
+                  id="input-base-url"
+                  type="text"
+                  className="font-mono"
+                  value={providerForm.draft.baseUrl}
+                  onChange={(e) => providerForm.setField("baseUrl", e.target.value)}
+                  placeholder={selectedPreset.defaultBaseUrl}
+                />
+              </Field>
+            )}
+
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <label htmlFor="input-model-name" className="text-xs font-bold text-text-main">
+                    {t("modelName")}
+                  </label>
+                  <Badge tone={isLiveVerified ? "ok" : "info"}>
+                    {isLiveVerified ? t("sourceLive") : t("sourceSeed")}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsCustomModel(!isCustomModel)}
+                  >
+                    {isCustomModel ? t("modelListToggle") : t("modelCustomToggle")}
+                  </Button>
+                  <IconButton
+                    type="button"
+                    variant="ghost"
+                    label={t("refreshModels")}
+                    icon={<RefreshCw size={16} />}
+                    onClick={() => handleFetchModels(true)}
+                    loading={fetchingModels}
+                  />
+                </div>
+              </div>
+
+              {isCustomModel ? (
+                <Input
+                  id="input-model-name"
+                  type="text"
+                  className="font-mono"
+                  value={providerForm.draft.model}
+                  onChange={(e) => providerForm.setField("model", e.target.value)}
+                  placeholder={selectedPreset.defaultModel}
+                />
+              ) : (
+                <Select
+                  id="input-model-name"
+                  className="font-mono"
+                  value={currentModelVal}
+                  onChange={(e) => providerForm.setField("model", e.target.value)}
+                >
+                  <optgroup
+                    label={isLiveVerified ? t("modelsAvailableLive") : t("modelsRecommendedSeed")}
+                  >
+                    {currentModelList.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.displayName && m.displayName !== m.id
+                          ? `${m.displayName} (${m.id})`
+                          : m.id}
+                        {m.recommended ? " ★" : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {!currentModelList.some(
+                    (m) => m.id.toLowerCase() === currentModelVal.toLowerCase(),
+                  ) && <option value={currentModelVal}>{currentModelVal} (current)</option>}
+                </Select>
               )}
             </div>
-            <input
-              id="input-api-key"
-              type="password"
-              className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main font-mono text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-              value={settings[selectedPreset.keySetting] || ""}
-              onChange={(e) =>
-                setSettings({ ...settings, [selectedPreset.keySetting]: e.target.value })
-              }
-              onBlur={(e) => updateSetting(selectedPreset.keySetting, e.target.value)}
-              placeholder={
-                configuredKeys[selectedPreset.keySetting]
-                  ? "••••••••••••"
-                  : language === "ar"
-                    ? "أدخل المفتاح"
-                    : "Enter API key"
-              }
-            />
           </div>
+          <FormActions
+            dirty={providerForm.dirty}
+            saving={providerForm.status === "saving"}
+            justSaved={providerForm.status === "saved"}
+            error={providerForm.error}
+            onDiscard={providerForm.revert}
+            {...formLabels}
+          />
+        </form>
 
-          {/* Base URL (if applicable) */}
-          {selectedPreset.baseUrlSetting && (
-            <div className="space-y-1.5">
-              <label htmlFor="input-base-url" className="block text-xs font-bold text-muted">
-                {t("baseUrl")}
-              </label>
-              <input
-                id="input-base-url"
-                type="text"
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main font-mono text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-                value={settings[selectedPreset.baseUrlSetting] || ""}
-                onChange={(e) => {
-                  if (selectedPreset.baseUrlSetting) {
-                    setSettings({ ...settings, [selectedPreset.baseUrlSetting]: e.target.value });
-                  }
-                }}
-                onBlur={(e) => {
-                  if (selectedPreset.baseUrlSetting) {
-                    updateSetting(selectedPreset.baseUrlSetting, e.target.value);
-                  }
-                }}
-                placeholder={selectedPreset.defaultBaseUrl}
-              />
-            </div>
-          )}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {capabilityBadges.map(({ icon: Icon, label, on }) => (
+            <Badge key={label} tone={capsKnown && on ? "ok" : "neutral"}>
+              <Icon size={12} />
+              {label}
+              {capsKnown ? (on ? ` · ${t("supported")}` : ` · ${t("unsupported")}`) : ""}
+            </Badge>
+          ))}
+          <Badge
+            tone={
+              currentModelObj.capabilitySource === "provider"
+                ? "ok"
+                : currentModelObj.capabilitySource === "seed"
+                  ? "info"
+                  : "neutral"
+            }
+          >
+            {currentModelObj.capabilitySource === "provider"
+              ? t("sourceLive")
+              : currentModelObj.capabilitySource === "seed"
+                ? t("sourceSeed")
+                : t("sourceUnknown")}
+          </Badge>
+        </div>
+      </Card>
 
-          {/* Model Name Selector / Input */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5">
-                <label htmlFor="input-model-name" className="block text-xs font-bold text-muted">
-                  {t("modelName")}
-                </label>
-                {isLiveVerified ? (
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-ok/15 text-ok border border-ok/30">
-                    {t("sourceLive")}
-                  </span>
-                ) : (
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-brand-cyan/15 text-brand-cyan border border-brand-cyan/30">
-                    {t("sourceSeed")}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCustomModel(!isCustomModel)}
-                  className="text-[11px] text-brand-cyan hover:underline font-semibold"
-                >
-                  {isCustomModel
-                    ? language === "ar"
-                      ? "القائمة"
-                      : "List"
-                    : language === "ar"
-                      ? "مخصص"
-                      : "Custom"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleFetchModels(true)}
-                  disabled={fetchingModels}
-                  className="inline-flex items-center gap-1 text-[11px] text-brand-blue hover:text-brand-blue/80 font-bold"
-                  title={t("refreshModels")}
-                >
-                  <RefreshCw size={11} className={fetchingModels ? "animate-spin" : ""} />
-                  <span>{fetchingModels ? t("refreshing") : t("refreshModels")}</span>
-                </button>
-              </div>
-            </div>
-
-            {isCustomModel ? (
-              <input
-                id="input-model-name"
-                type="text"
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main font-mono text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-                value={settings[selectedPreset.modelSetting] || ""}
-                onChange={(e) =>
-                  setSettings({ ...settings, [selectedPreset.modelSetting]: e.target.value })
-                }
-                onBlur={(e) => updateSetting(selectedPreset.modelSetting, e.target.value)}
-                placeholder={selectedPreset.defaultModel}
-              />
-            ) : (
-              <select
-                id="input-model-name"
-                className="w-full h-11 px-3.5 rounded-xl border border-line bg-panel-raised text-text-main font-mono text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-                value={currentModelVal}
-                onChange={(e) => {
-                  updateSetting(selectedPreset.modelSetting, e.target.value);
-                }}
-              >
-                <optgroup
-                  label={isLiveVerified ? t("modelsAvailableLive") : t("modelsRecommendedSeed")}
-                >
-                  {currentModelList.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.displayName && m.displayName !== m.id
-                        ? `${m.displayName} (${m.id})`
-                        : m.id}
-                      {m.recommended ? " ★" : ""}
-                    </option>
-                  ))}
-                </optgroup>
-                {!currentModelList.some(
-                  (m) => m.id.toLowerCase() === currentModelVal.toLowerCase(),
-                ) && <option value={currentModelVal}>{currentModelVal} (current)</option>}
-              </select>
+      <Card className="flex flex-col gap-3">
+        <CardHeader title={t("capabilities")} />
+        <div className="flex flex-col divide-y divide-line">
+          <div className="py-2">
+            <Toggle
+              checked={visionLocked ? false : Boolean(settings["ai_vision_enabled"])}
+              disabled={visionLocked}
+              onChange={(val) => {
+                if (!visionLocked) updateSetting("ai_vision_enabled", val);
+              }}
+              label={
+                <span className="inline-flex items-center gap-2">
+                  <Eye
+                    size={17}
+                    className={visionLocked ? "shrink-0 text-muted" : "shrink-0 text-brand-cyan"}
+                  />
+                  {t("aiVision")}
+                </span>
+              }
+              description={t("aiVisionDesc")}
+            />
+            {visionLocked && (
+              <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-warn">
+                <AlertTriangle size={13} className="shrink-0" />
+                <span>{t("visionUnsupportedNotice")}</span>
+              </p>
             )}
           </div>
-        </div>
 
-        {/* Dedicated Model Capabilities Status Card */}
-        <div className="p-3.5 rounded-xl border border-line bg-panel-raised/60 flex flex-col gap-2.5">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-            <span className="font-bold text-text-main flex items-center gap-1.5">
-              <Sparkles size={14} className="text-brand-cyan shrink-0" />
-              {language === "ar" ? "القدرات:" : "Capabilities:"}{" "}
-              <span className="font-mono text-brand-cyan">
-                {currentModelObj.displayName || currentModelVal}
-              </span>
-            </span>
-            <span
-              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                currentModelObj.capabilitySource === "provider"
-                  ? "bg-ok/15 text-ok border-ok/30"
-                  : currentModelObj.capabilitySource === "seed"
-                    ? "bg-brand-blue/15 text-brand-blue border-brand-blue/30"
-                    : "bg-muted/15 text-muted border-line"
-              }`}
-            >
-              {currentModelObj.capabilitySource === "provider"
-                ? t("sourceLive")
-                : currentModelObj.capabilitySource === "seed"
-                  ? t("sourceSeed")
-                  : t("sourceUnknown")}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
-            {[
-              { icon: Eye, label: t("capVision"), on: supportsVision },
-              { icon: Mic, label: t("capStt"), on: supportsStt },
-              {
-                icon: Volume2,
-                label: t("capAudio"),
-                on: Boolean(currentModelObj.capabilities.audioInput),
-              },
-              {
-                icon: FileText,
-                label: t("capText"),
-                on: Boolean(
-                  currentModelObj.capabilities.textInput && currentModelObj.capabilities.textOutput,
-                ),
-              },
-              {
-                icon: FileText,
-                label: t("capPdf"),
-                on: Boolean(currentModelObj.capabilities.pdfInput),
-              },
-              {
-                icon: Eye,
-                label: t("capVideo"),
-                on: Boolean(currentModelObj.capabilities.videoInput),
-              },
-            ].map(({ icon: Icon, label, on }) => (
-              <div
-                key={label}
-                className={`p-2 rounded-lg border flex items-center justify-between ${
-                  capsKnown && on
-                    ? "bg-ok/10 border-ok/25 text-ok"
-                    : "bg-panel border-line text-muted"
-                }`}
-              >
-                <div className="flex items-center gap-1.5 font-medium">
-                  <Icon size={14} />
-                  <span>{label}</span>
-                </div>
-                <span className="text-[10px] font-bold">
-                  {capsKnown ? (on ? t("supported") : t("unsupported")) : "—"}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Model Capabilities & Toggles */}
-      <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col gap-4">
-        <h3 className="text-base font-bold text-text-main">{t("capabilities")}</h3>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Vision Toggle */}
-          <div className="relative rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
-            <div className="absolute top-3.5 end-3.5">
-              <Toggle
-                checked={visionLocked ? false : Boolean(settings["ai_vision_enabled"])}
-                disabled={visionLocked}
-                onChange={(val) => {
-                  if (!visionLocked) updateSetting("ai_vision_enabled", val);
-                }}
-              />
-            </div>
-            <div className="pe-12">
-              <div className="flex items-center gap-2 text-text-main mb-1">
-                <Eye
-                  size={17}
-                  className={visionLocked ? "text-muted shrink-0" : "text-brand-cyan shrink-0"}
-                />
-                <span className="font-bold text-sm">{t("aiVision")}</span>
-              </div>
-              <p className="text-xs text-muted leading-relaxed">{t("aiVisionDesc")}</p>
-              {visionLocked && (
-                <p className="text-[11px] text-amber-500 font-semibold mt-2 flex items-center gap-1">
-                  <AlertTriangle size={13} className="shrink-0" />
-                  <span>{t("visionUnsupportedNotice")}</span>
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* STT Toggle (Speech-to-Text) */}
-          <div className="relative rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
-            <div className="absolute top-3.5 end-3.5">
-              <Toggle
-                checked={sttLocked ? false : Boolean(settings["ai_stt_enabled"] ?? true)}
-                disabled={sttLocked}
-                onChange={(val) => {
-                  if (!sttLocked) updateSetting("ai_stt_enabled", val);
-                }}
-              />
-            </div>
-            <div className="pe-12">
-              <div className="flex items-center gap-2 text-text-main mb-1">
-                <Mic
-                  size={17}
-                  className={sttLocked ? "text-muted shrink-0" : "text-purple-400 shrink-0"}
-                />
-                <span className="font-bold text-sm">{t("aiSttEnabled")}</span>
-              </div>
-              <p className="text-xs text-muted leading-relaxed">{t("aiSttEnabledDesc")}</p>
-              {sttLocked && (
-                <p className="text-[11px] text-amber-500 font-semibold mt-2 flex items-center gap-1">
-                  <AlertTriangle size={13} className="shrink-0" />
-                  <span>{t("sttUnsupportedNotice")}</span>
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* STT Provider Selector */}
-          <div className="rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 text-text-main mb-1">
-                <Mic size={17} className="text-purple-400 shrink-0" />
-                <span className="font-bold text-sm">{t("aiStt")}</span>
-              </div>
-              <p className="text-xs text-muted leading-relaxed">{t("sttDesc")}</p>
-            </div>
-            <select
-              className="w-full h-10 px-3 rounded-lg border border-line bg-panel text-text-main text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50 disabled:opacity-50"
-              value={settings["ai_stt_provider"] || "auto"}
+          <div className="py-2">
+            <Toggle
+              checked={sttLocked ? false : Boolean(settings["ai_stt_enabled"] ?? true)}
               disabled={sttLocked}
-              onChange={(e) => {
-                if (!sttLocked) updateSetting("ai_stt_provider", e.target.value);
+              onChange={(val) => {
+                if (!sttLocked) updateSetting("ai_stt_enabled", val);
               }}
+              label={
+                <span className="inline-flex items-center gap-2">
+                  <Mic
+                    size={17}
+                    className={sttLocked ? "shrink-0 text-muted" : "shrink-0 text-brand-purple"}
+                  />
+                  {t("aiSttEnabled")}
+                </span>
+              }
+              description={t("aiSttEnabledDesc")}
+            />
+            {sttLocked && (
+              <p className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-warn">
+                <AlertTriangle size={13} className="shrink-0" />
+                <span>{t("sttUnsupportedNotice")}</span>
+              </p>
+            )}
+          </div>
+
+          <div className="py-2">
+            <SaveField
+              label={t("aiStt")}
+              description={t("sttDesc")}
+              htmlFor="ai-stt-provider"
+              dirty={sttProvider.dirty}
+              saving={sttProvider.status === "saving"}
+              justSaved={sttProvider.status === "saved"}
+              error={sttProvider.error}
+              onSave={() => sttProvider.save((next) => persistSetting("ai_stt_provider", next))}
+              onRevert={sttProvider.revert}
+              {...saveLabels}
             >
-              <option value="auto">{t("sttAuto")}</option>
-              <option value="gemini">{t("sttGemini")}</option>
-              <option value="openai">{t("sttOpenAI")}</option>
-            </select>
+              <Select
+                id="ai-stt-provider"
+                aria-label={t("aiStt")}
+                value={sttProvider.value}
+                disabled={sttLocked}
+                onChange={(e) => sttProvider.setValue(e.target.value)}
+              >
+                <option value="auto">{t("sttAuto")}</option>
+                <option value="gemini">{t("sttGemini")}</option>
+                <option value="openai">{t("sttOpenAI")}</option>
+              </Select>
+            </SaveField>
           </div>
 
-          {/* Bot Language Selector */}
-          <div className="rounded-xl border border-line bg-panel-raised p-4 flex flex-col justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 text-text-main mb-1">
-                <Globe size={17} className="text-ok shrink-0" />
-                <span className="font-bold text-sm">{t("botLanguage")}</span>
-              </div>
-              <p className="text-xs text-muted leading-relaxed">{t("botLanguageDesc")}</p>
-            </div>
-            <select
-              className="w-full h-10 px-3 rounded-lg border border-line bg-panel text-text-main text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
-              value={settings["bot_language"] || "auto"}
-              onChange={(e) => updateSetting("bot_language", e.target.value)}
+          <div className="py-2">
+            <SaveField
+              label={t("botLanguage")}
+              description={t("botLanguageDesc")}
+              htmlFor="ai-bot-language"
+              dirty={botLang.dirty}
+              saving={botLang.status === "saving"}
+              justSaved={botLang.status === "saved"}
+              error={botLang.error}
+              onSave={() => botLang.save((next) => persistSetting("bot_language", next))}
+              onRevert={botLang.revert}
+              {...saveLabels}
             >
-              <option value="auto">{t("langAuto")}</option>
-              <option value="ar">{t("langAr")}</option>
-              <option value="en">{t("langEn")}</option>
-            </select>
+              <Select
+                id="ai-bot-language"
+                aria-label={t("botLanguage")}
+                value={botLang.value}
+                onChange={(e) => botLang.setValue(e.target.value)}
+              >
+                <option value="auto">{t("langAuto")}</option>
+                <option value="ar">{t("langAr")}</option>
+                <option value="en">{t("langEn")}</option>
+              </Select>
+            </SaveField>
           </div>
         </div>
-      </div>
+      </Card>
 
-      {/* Persona Prompt, Long-term Memory, Conversation Inspector Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2.5 text-text-main mb-2">
-              <FileText size={20} className="text-brand-blue shrink-0" />
-              <h3 className="text-base font-bold">{t("personaPrompt")}</h3>
-            </div>
-            <p className="text-xs sm:text-sm text-muted leading-relaxed">{t("personaDesc")}</p>
-          </div>
-          <button
-            type="button"
-            onClick={openPersonaEditor}
-            className="w-full h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50 flex items-center justify-center gap-2"
-          >
-            <span>{t("editPersona")}</span>
-          </button>
-        </div>
+      <Card className="flex flex-wrap gap-2">
+        <Button
+          variant="secondary"
+          icon={<FileText size={16} />}
+          onClick={openPersonaEditor}
+          title={t("personaDesc")}
+        >
+          {t("editPersona")}
+        </Button>
+        <Button
+          variant="secondary"
+          icon={<Database size={16} />}
+          onClick={openMemoryManager}
+          title={t("memoryDesc")}
+        >
+          {t("manageMemory")}
+        </Button>
+        <Button
+          variant="secondary"
+          icon={<History size={16} />}
+          onClick={openInspector}
+          title={t("aiInspectorDesc")}
+        >
+          {t("openInspector")}
+        </Button>
+      </Card>
 
-        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2.5 text-text-main mb-2">
-              <Database size={20} className="text-brand-cyan shrink-0" />
-              <h3 className="text-base font-bold">{t("memoryFiles")}</h3>
-            </div>
-            <p className="text-xs sm:text-sm text-muted leading-relaxed">{t("memoryDesc")}</p>
-          </div>
-          <button
-            type="button"
-            onClick={openMemoryManager}
-            className="w-full h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50 flex items-center justify-center gap-2"
-          >
-            <span>{t("manageMemory")}</span>
-          </button>
-        </div>
-
-        <div className="rounded-2xl border border-line bg-panel p-4 sm:p-6 shadow-sm flex flex-col justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2.5 text-text-main mb-2">
-              <History size={20} className="text-brand-blue shrink-0" />
-              <h3 className="text-base font-bold">{t("aiInspector")}</h3>
-            </div>
-            <p className="text-xs sm:text-sm text-muted leading-relaxed">{t("aiInspectorDesc")}</p>
-          </div>
-          <button
-            type="button"
-            onClick={openInspector}
-            className="w-full h-11 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors focus-visible:ring-2 focus-visible:ring-brand-blue/50 flex items-center justify-center gap-2"
-          >
-            <span>{t("openInspector")}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Persona Prompt Modal */}
-      <Modal
+      <Dialog
         isOpen={personaModalOpen}
         onClose={() => setPersonaModalOpen(false)}
         title={t("personaPrompt")}
         maxWidth="750px"
         footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <button
-              type="button"
-              onClick={() => setPersonaModalOpen(false)}
-              className="px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors"
-            >
+          <>
+            <Button variant="secondary" onClick={() => setPersonaModalOpen(false)}>
               {t("cancel")}
-            </button>
-            <button
-              type="button"
-              onClick={savePersona}
-              className="px-5 h-10 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/25 transition-colors flex items-center gap-2"
-            >
-              <Save size={16} />
-              <span>{t("save")}</span>
-            </button>
-          </div>
+            </Button>
+            <Button variant="primary" icon={<Save size={16} />} onClick={savePersona}>
+              {t("save")}
+            </Button>
+          </>
         }
       >
-        <textarea
-          className="w-full rounded-xl border border-line bg-panel-raised p-3.5 text-text-main font-mono text-xs sm:text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+        <Textarea
+          className="font-mono"
           rows={12}
           value={personaText}
           onChange={(e) => setPersonaText(e.target.value)}
         />
-      </Modal>
+      </Dialog>
 
-      {/* Memory File Modal: global vs per-chat scopes on one side, editor on the other */}
-      <Modal
+      <Dialog
         isOpen={Boolean(selectedMemoryFile)}
         onClose={() => setSelectedMemoryFile(null)}
         title={t("memoryFiles")}
         maxWidth="900px"
         footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <button
-              type="button"
-              onClick={() => setSelectedMemoryFile(null)}
-              className="px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors"
-            >
+          <>
+            <Button variant="secondary" onClick={() => setSelectedMemoryFile(null)}>
               {t("cancel")}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="primary"
+              icon={<Save size={16} />}
               onClick={saveMemoryFile}
               disabled={memoryLoading}
-              className="px-5 h-10 rounded-xl bg-brand-blue hover:bg-brand-blue/90 text-white font-bold text-xs sm:text-sm shadow-md shadow-brand-blue/25 transition-colors flex items-center gap-2 disabled:opacity-50"
             >
-              <Save size={16} />
-              <span>{t("save")}</span>
-            </button>
-          </div>
+              {t("save")}
+            </Button>
+          </>
         }
       >
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="md:w-60 shrink-0 flex flex-col gap-1.5 md:max-h-[420px] overflow-y-auto">
+        <div className="flex flex-col gap-4 md:flex-row">
+          <div className="flex shrink-0 flex-col gap-1.5 md:max-h-[420px] md:w-60 md:overflow-y-auto">
             {memoryScopes.map((s) => {
               const isGlobal = s.scope === "global";
               const active = selectedMemoryFile === s.scope;
               return (
-                <button
+                <Button
                   key={s.scope}
-                  type="button"
+                  variant={active ? "primary" : "secondary"}
+                  aria-pressed={active}
                   onClick={() => openMemoryScope(s.scope)}
-                  className={`text-start p-2.5 rounded-xl border transition-colors ${
-                    active
-                      ? "bg-brand-blue/15 border-brand-blue/60"
-                      : "bg-panel-raised border-line hover:bg-panel-hover"
-                  }`}
+                  className="h-auto w-full flex-col items-stretch gap-1 px-2.5 py-2.5"
                 >
-                  <span className="flex items-center gap-2 font-bold text-xs text-text-main min-w-0">
+                  <span className="flex min-w-0 items-center gap-2 text-xs font-bold">
                     {isGlobal ? (
-                      <Globe size={14} className="text-brand-cyan shrink-0" />
+                      <Globe size={14} className="shrink-0" />
                     ) : (
-                      <MessageSquare size={14} className="text-brand-blue shrink-0" />
+                      <MessageSquare size={14} className="shrink-0" />
                     )}
                     <span className="truncate">{isGlobal ? t("memoryGlobalScope") : s.scope}</span>
                   </span>
-                  <span className="block text-[10px] text-muted mt-1">
+                  <span className="block text-start text-[10px] opacity-80">
                     {isGlobal ? t("memoryGlobalScopeHint") : t("memoryChatScopeHint")}
                     {" · "}
                     {t("memoryEntriesCount").replace("{n}", String(s.entries))}
                   </span>
-                </button>
+                </Button>
               );
             })}
           </div>
-          <div className="flex-1 min-w-0 flex flex-col gap-2">
-            <p className="text-[11px] text-muted leading-relaxed">{t("memoryProseHint")}</p>
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <p className="text-[11px] leading-relaxed text-muted">{t("memoryProseHint")}</p>
             {memoryLoading ? (
-              <div className="flex items-center justify-center min-h-[340px] text-muted">
-                <div className="w-6 h-6 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin mr-2" />
-                <span className="text-sm font-semibold">{t("starting")}</span>
+              <div className="flex min-h-[340px] items-center justify-center">
+                <Spinner className="size-6" label={t("starting")} />
               </div>
             ) : (
-              <textarea
-                className="w-full min-h-[340px] flex-1 rounded-xl border border-line bg-panel-raised p-3.5 text-text-main font-mono text-xs sm:text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-blue/50"
+              <Textarea
+                className="min-h-[340px] flex-1 font-mono"
                 rows={12}
                 value={memoryContent}
                 onChange={(e) => setMemoryContent(e.target.value)}
@@ -1151,83 +992,82 @@ export const AIAssistantView: React.FC = () => {
             )}
           </div>
         </div>
-      </Modal>
+      </Dialog>
 
-      {/* Conversation Inspector Modal — read-only */}
-      <Modal
+      <Dialog
         isOpen={inspectorOpen}
         onClose={() => setInspectorOpen(false)}
         title={t("aiInspector")}
         maxWidth="750px"
         footer={
-          <div className="flex items-center justify-end gap-2.5 w-full">
-            <button
-              type="button"
-              onClick={() => setInspectorOpen(false)}
-              className="px-4 h-10 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover text-text-main font-bold text-xs sm:text-sm transition-colors"
-            >
-              {t("cancel")}
-            </button>
-          </div>
+          <Button variant="secondary" onClick={() => setInspectorOpen(false)}>
+            {t("cancel")}
+          </Button>
         }
       >
         {inspectorLoading ? (
-          <div className="flex items-center justify-center min-h-[280px] text-muted">
-            <div className="w-6 h-6 border-2 border-brand-cyan border-t-transparent rounded-full animate-spin mr-2" />
-            <span className="text-sm font-semibold">{t("starting")}</span>
+          <div className="flex min-h-[280px] items-center justify-center">
+            <Spinner className="size-6" label={t("starting")} />
           </div>
         ) : !selectedConversation ? (
-          <div className="flex flex-col gap-1.5">
-            {conversations.length === 0 && (
-              <p className="text-xs text-muted text-center py-8">{t("noConversations")}</p>
-            )}
-            {conversations.map((row) => (
-              <button
-                key={row.chatId}
-                type="button"
-                onClick={() => openConversation(row.chatId)}
-                className="text-start p-3 rounded-xl border border-line bg-panel-raised hover:bg-panel-hover transition-colors"
-              >
-                <span className="flex items-center gap-2 font-bold text-xs text-text-main">
-                  <MessageSquare size={14} className="text-brand-blue shrink-0" />
-                  <span className="truncate font-mono">{row.chatId}</span>
-                </span>
-                <span className="block text-[10px] text-muted mt-1">
-                  {t("convTurns").replace("{n}", String(row.turns))} · {formatStamp(row.updatedAt)}
-                </span>
-              </button>
-            ))}
-          </div>
+          conversations.length === 0 ? (
+            <EmptyState
+              icon={<MessageSquare size={20} />}
+              text={t("noConversations")}
+              className="py-8"
+            />
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {conversations.map((row) => (
+                <Button
+                  key={row.chatId}
+                  variant="secondary"
+                  onClick={() => openConversation(row.chatId)}
+                  className="h-auto w-full flex-col items-stretch gap-1 px-3 py-3"
+                >
+                  <span className="flex items-center gap-2 text-xs font-bold">
+                    <MessageSquare size={14} className="shrink-0 text-brand-blue" />
+                    <span className="truncate font-mono">{row.chatId}</span>
+                  </span>
+                  <span className="block text-start text-[10px] text-muted">
+                    {t("convTurns").replace("{n}", String(row.turns))} ·{" "}
+                    {formatStamp(row.updatedAt)}
+                  </span>
+                </Button>
+              ))}
+            </div>
+          )
         ) : (
           <div className="flex flex-col gap-2.5">
             <div className="flex items-center justify-between gap-2">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<ChevronLeft size={16} className="rtl:rotate-180" />}
                 onClick={() => setSelectedConversation(null)}
-                className="text-xs font-bold text-brand-cyan hover:underline"
               >
-                ← {t("backToList")}
-              </button>
-              <span className="text-[10px] text-muted font-mono truncate">
+                {t("backToList")}
+              </Button>
+              <span className="truncate font-mono text-[10px] text-muted">
                 {selectedConversation}
               </span>
             </div>
             {conversation?.truncated && (
-              <p className="text-[11px] text-amber-500 font-semibold">{t("convTruncated")}</p>
+              <p className="text-[11px] font-semibold text-warn">{t("convTruncated")}</p>
             )}
-            <div className="flex flex-col gap-1.5 max-h-[420px] overflow-y-auto">
+            <div className="flex max-h-[420px] flex-col gap-1.5 overflow-y-auto">
               {conversation?.messages.length === 0 && (
-                <p className="text-xs text-muted text-center py-6">{t("noConversations")}</p>
+                <EmptyState text={t("noConversations")} className="py-6" />
               )}
               {conversation?.messages.map((m, i) => (
                 <div
                   key={i}
-                  className={`p-2.5 rounded-xl border text-xs ${
+                  className={`rounded-xl border p-2.5 text-xs ${
                     m.kind === "tool" || m.kind === "toolResult"
-                      ? "bg-panel border-line text-muted font-mono"
+                      ? "border-line bg-panel font-mono text-muted"
                       : m.role === "model"
-                        ? "bg-brand-blue/10 border-brand-blue/25 text-text-main"
-                        : "bg-panel-raised border-line text-text-main"
+                        ? "border-brand-blue/25 bg-brand-blue/10 text-text-main"
+                        : "border-line bg-panel-raised text-text-main"
                   }`}
                 >
                   {m.kind === "text" && (
@@ -1241,7 +1081,7 @@ export const AIAssistantView: React.FC = () => {
             </div>
           </div>
         )}
-      </Modal>
+      </Dialog>
     </div>
   );
 };

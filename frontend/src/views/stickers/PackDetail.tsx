@@ -3,14 +3,14 @@ import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
 import { useToast } from "../../components/Toasts";
+import { Button, EmptyState, IconButton, LoadingState, UserText } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { Pack, Sticker } from "../../types";
 import { fill } from "../../utils/fill";
 import { explainError } from "../../utils/stickerErrors";
 import { BulkBar } from "./BulkBar";
-import { StickerTile } from "./StickerTile";
 import { useStickerCommands } from "./StickerCommands";
-import { Button, EmptyState, IconButton, LoadingState } from "./ui";
+import { StickerTile } from "./StickerTile";
 import { useSelection } from "./useSelection";
 
 interface PackDetailProps {
@@ -132,8 +132,10 @@ export const PackDetail: React.FC<PackDetailProps> = ({
           {t("backToPacks")}
         </Button>
         {pack && (
-          <div className="min-w-0">
-            <h3 className="text-base font-bold text-text-main truncate">{pack.name}</h3>
+          <div className="min-w-0 max-w-full">
+            <h3 className="text-base font-bold text-text-main">
+              <UserText>{pack.name}</UserText>
+            </h3>
             <p className="text-xs text-muted">{fill(t("stickerCount"), { n: pack.count })}</p>
           </div>
         )}
@@ -157,7 +159,7 @@ export const PackDetail: React.FC<PackDetailProps> = ({
         <>
           {selectedIds.length === 0 && (
             <div>
-              <Button variant="quiet" className="h-8 px-2" onClick={selection.selectAll}>
+              <Button variant="ghost" size="sm" onClick={selection.selectAll}>
                 {t("selectAll")}
               </Button>
             </div>
@@ -201,8 +203,8 @@ export const PackDetail: React.FC<PackDetailProps> = ({
                     onFavorite={() => commands.toggleFavorite(item)}
                   />
                 </div>
-                <p className="flex-1 min-w-0 text-sm font-semibold truncate">
-                  {item.name || t("stickerPreview")}
+                <p className="flex-1 min-w-0 text-sm font-semibold">
+                  <UserText>{item.name || t("stickerPreview")}</UserText>
                 </p>
                 <IconButton
                   label={t("reorderUp")}
@@ -218,20 +220,18 @@ export const PackDetail: React.FC<PackDetailProps> = ({
                 >
                   <ChevronDown size={14} />
                 </IconButton>
-                <button
-                  type="button"
+                <IconButton
+                  label={t("reorderDragHint")}
+                  variant="ghost"
+                  className="cursor-grab"
                   draggable={!orderBusy}
-                  aria-label={t("reorderDragHint")}
-                  title={t("reorderDragHint")}
-                  className="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-line text-muted cursor-grab"
                   onDragStart={(event) => {
                     dragId.current = item.id;
                     event.dataTransfer.effectAllowed = "move";
                     event.dataTransfer.setData("text/plain", item.id);
                   }}
-                >
-                  <GripVertical size={16} />
-                </button>
+                  icon={<GripVertical size={16} />}
+                />
               </li>
             ))}
           </ul>

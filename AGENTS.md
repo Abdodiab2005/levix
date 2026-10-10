@@ -162,6 +162,7 @@ src/
 ├── panel/            # login throttling, session epochs, bounded session store
 │   └── feedback.cjs  # validates + forwards Settings → Feedback to the developer
 ├── services/         # External services
+│   ├── autoDelete.cjs # Keyword auto-delete: match, revoke / delete-for-me, keepCopy
 │   ├── aiAgent.cjs   # The Gemini agent loop + provider dispatch (tools, memory, live status)
 │   ├── aiProviders.cjs # The openai/anthropic loops over their own wire formats
 │   ├── aiTools.cjs   # The tools the agent can call
@@ -188,7 +189,8 @@ src/
 Outside `src/`:
 
 ```
-frontend/         # React 19 + Vite + TypeScript dashboard SPA (bilingual Arabic RTL / English)
+frontend/         # React 19 + Vite + TypeScript dashboard SPA (bilingual Arabic RTL / English).
+                  # UI primitives live in frontend/src/components/ui/ — see "Design system — STRICT RULES"
 views/            # Gateway pages (login.ejs · setup.ejs · qr.ejs) + fallback dashboard.ejs
 public/           # Static assets (socket.io.min.js, qrcode.min.js) and public/dashboard/ (built SPA)
 public/brand/     # Generated logo and branding files (committed)
@@ -353,17 +355,22 @@ session records the proxy the live socket was built with and reports
 
 1. **Incoming Message** → `src/core/events.js:44` (messages.upsert event)
 2. **Message Handler** → `src/handlers/message.handler.js:14` (handleIncomingMessage)
-3. **Middleware Chain**:
+3. **Keyword auto-delete** → `src/services/autoDelete.cjs` (after the
+   content/status skip, before blacklist / commands / group moderation).
+   First matching enabled rule wins; a successful delete stops the pipeline.
+   The `!autodelete` command message itself is never matched.
+4. **Middleware Chain**:
    - Forward tracking → `src/middleware/forward-tracking.middleware.js`
    - Check blacklist → `src/middleware/blacklist.middleware.js`
    - Anti-spam → `src/middleware/antispam.middleware.js`
-4. **Command Detection** → `src/handlers/command.handler.js:44` (handleCommand)
+5. **Command Detection** → `src/handlers/command.handler.js:44` (handleCommand)
    - Parse prefix (default: `!`)
    - Match command name or alias
    - Execute command with context
-5. **Group Moderation** (if in group):
+6. **Group Moderation** (if in group):
    - Anti-link → `src/commands/group/antilink.js`
    - Media control → `src/commands/group/media.js`
+   - Forbidden words → `src/commands/mod.cjs` (unchanged; separate from auto-delete)
 
 ### Command System
 
@@ -462,15 +469,19 @@ and blacklist middleware, the prefix lookup, every permission check) with no
 | `stickers` | Sticker Studio library, one row per sticker per `sticker_owners` id; the WebP is a file named by its sha256 | wiped on unlink |
 | `sticker_packs` | named sticker packs per owner | wiped on unlink |
 | `sticker_pack_items` | pack membership and order | cascade with the sticker or the pack; wiped on unlink |
+| `auto_delete_rules` | keyword auto-delete rules (keywords, match mode, chat/sender scope, counters) | — (operator config; counters reset on unlink) |
+| `auto_delete_log` | opt-in text/caption copies of messages an auto-delete rule actually deleted (never media bytes) | `auto_delete_keep_days` (30), also capped at 5000 newest; wiped on unlink |
 
 `forward_scores` gains a row per forwarded message, so it expires; the sweep
 runs at boot and every six hours (`sweepExpired()` in `db.cjs`). Sticker files
 live under `<data>/stickers/<sha[0..2]>/` and are removed with the rows on
-unlink (`library.clearAll()`).
+unlink (`library.clearAll()`). `auto_delete_log` is swept on the same timer.
 
 The bot does **not** archive other people's messages. Nothing incoming is
-written beyond the forward counter and the sender's last-seen row; deleted and
-edited messages are not captured at all.
+written beyond the forward counter, the sender's last-seen row, and — only
+when an auto-delete rule with `keepCopy` actually deletes a message — a
+text/caption copy in `auto_delete_log`. Deleted and edited messages are not
+captured otherwise.
 
 Long-term AI memory is **not** in the database — it lives in `memory/*.md`
 inside the data directory.
@@ -791,6 +802,14 @@ account".
   library total.
 - **`!stickers`** (`src/commands/stickers.cjs`, alias `ملصقاتي`) — page through
   recent, favorite, or packed stickers.
+- **`!autodelete`** (`src/commands/autodelete.cjs`, aliases `ad`, `حذف_تلقائي`) —
+  owner-only keyword auto-delete. `list` · `add <word> [| <word> ...]` (a
+  simple contains / all-chats / everyone rule) · `remove <id>` · `on` / `off
+  <id>` · `stats [id]` · `reset <id>`. Advanced options (match mode, chat
+  scope, selected senders, includeOwn, forEveryone, keepCopy) are the panel
+  JSON API: `GET/POST /dashboard/api/auto-delete/rules`,
+  `PATCH/DELETE /dashboard/api/auto-delete/rules/:id`,
+  `POST .../rules/:id/reset`, `GET/DELETE /dashboard/api/auto-delete/log`.
 
 ### 5b. Domain setup (`levix domain`, `src/domain/`)
 
@@ -918,17 +937,31 @@ first pack, or the product name from `brand.cjs`, and the publisher is the
 product name. The file is removed only when no row, of any owner, still points
 at that hash (`removeIfOrphan`).
 
-**Packs and deletion.** A pack name is 1–40 letters, digits, spaces, `-`, or
-`_`, unique per owner ignoring case, and it cannot be a `!pack` sub-command
-word (`PACK_SUBCOMMANDS`). An owner can keep `PACKS_MAX_PER_OWNER` (100)
-packs. Deleting a pack leaves its stickers in the library; `deleteStickers`
-on that call removes only stickers that belonged to the pack alone. Deleting
-a sticker that is still in a pack returns `IN_USE` unless the caller passes
-`confirm` (`DELETE /stickers/:id?confirm=1`). Removing a sticker from a pack
-does not delete it. How many stickers one owner can keep is the
-`sticker_library_limit` setting (default 1000), read on every save. A full
-library refuses a new row. `!sticker` still converts and sends the result
+**Packs and deletion.** A pack name is 1–40 graphemes, unique per owner
+ignoring case, and it cannot be a `!pack` sub-command word
+(`PACK_SUBCOMMANDS`). It may hold letters, marks, digits, spaces, `- _ ' . & ,`,
+ZWNJ/ZWJ, and emoji. One surrounding quote pair (`"…"`, `'…'`, `«…»`, `“…”`) is
+decoration and is stripped; a control or bidi-format character (U+202A–202E,
+U+2066–2069) is refused rather than collapsed to a space. `normalizePackName` in
+`src/stickers/library.cjs` is the only entry point: it strips the pair, rejects
+the forbidden class, applies NFC, collapses whitespace, counts graphemes and
+tests the charset. Names are stored and keyed in NFC, but `findPackByName`
+also tries the NFKC key, so a pack stored by older code (which normalized
+NFKC) stays addressable without a migration; the same key list makes create and
+rename see an NFC/NFKC duplicate as `PACK_EXISTS`. An owner can keep
+`PACKS_MAX_PER_OWNER` (100) packs. Deleting a pack leaves its stickers in the
+library; `deleteStickers` on that call removes only stickers that belonged to
+the pack alone. Deleting a sticker that is still in a pack returns `IN_USE`
+unless the caller passes `confirm` (`DELETE /stickers/:id?confirm=1`). Removing
+a sticker from a pack does not delete it. How many stickers one owner can keep
+is the `sticker_library_limit` setting (default 1000), read on every save. A
+full library refuses a new row. `!sticker` still converts and sends the result
 without saving when `hasRoom` is false.
+
+Pack names appear inside sentences, so a reply isolates them with
+`isolate()` (`src/utils/bidi.cjs`, U+2068…U+2069) — a Latin name inside an
+Arabic reply (or the reverse) would otherwise reorder around the punctuation
+next to it. The copyable `commandHint(...)` forms are never isolated.
 
 **The queue** (`limits.cjs`, enforced by `jobs.cjs`). Two conversions run at
 once (`JOB_CONCURRENCY`) and sixteen more may wait (`JOB_MAX_QUEUED`); past
@@ -958,11 +991,16 @@ lives for `UPLOAD_TTL_MS` (1 hour).
   `delete` / `del` / `احذف` / `حذف`, `show` / `list` / `عرض`. Replying to
   media with `!pack <name>` creates the pack when it is missing and adds the
   sticker. An existing sticker is saved as `WHATSAPP_STICKER`; other media as
-  `BOT_COMMAND`. `delete` removes the pack and keeps the stickers.
+  `BOT_COMMAND`. `delete` removes the pack and keeps the stickers. `rename`
+  takes `<old> | <new>`; without a `|` it treats the longest leading run of
+  words that names an existing pack as `<old>` and the rest as `<new>`, and
+  prints the usage line when it cannot resolve one.
 - `!packs` — alias `حزم`. Lists up to 30 packs and the library total.
 - `!stickers` — alias `ملصقاتي`. Sends one page (`BOT_PAGE_SIZE`, 5) of recent
   stickers, favorites (`favorites` / `المفضلة`), or one pack (`pack` / `حزمة`
-  plus the name).
+  plus the name). A trailing number is the page, unless the whole text
+  including it names an existing pack — a pack can end in a number (`عيد 2`) —
+  in which case the name wins and the page is 1.
 
 **Media Hub.** On Android, the viewer and a single selection in Media Hub
 hand one stickerable item to the panel. `StickerHandoffs.prepare` parks the
@@ -1001,6 +1039,7 @@ the bot does can be changed from it, live:
 | Groups | antilink · antispam · media · welcome · warnings · rules | `group_settings` |
 | Roles | bot owner / admin | `user_metadata` (same path as `!perm`) |
 | Tables | debts · warnings · notes · todos · users · schedules | read-only (schedules can be deleted) |
+| Auto-delete (JSON API; UI later) | keyword rules, counters, opt-in kept copies | `auto_delete_rules` / `auto_delete_log` via `/dashboard/api/auto-delete/*` |
 | Settings | API keys, model, timezone, delays, thumbnails, port, proxy | `bot_settings` (`setting:*`) |
 | Settings → password | the panel's own password | `bot_settings` (scrypt hash) |
 | Settings → Feedback | nothing local — one message to the developer | forwarded server-side to `levix.leviro.net/api/feedback` (`src/panel/feedback.cjs`) |
@@ -1020,7 +1059,9 @@ one implementation PATCH `/settings` uses, so a hand edit and an import cannot
 drift apart.
 
 The main dashboard is the React 19 + Vite + TypeScript SPA in `frontend/`,
-compiled to `public/dashboard/`. The EJS files in `views/` are the login,
+compiled to `public/dashboard/`. Screens are built only from the design system
+in `frontend/src/components/ui/` (barrel import, catalogue in
+`frontend/src/components/ui/README.md`). The EJS files in `views/` are the login,
 setup, QR and fallback gateway pages. Runtime browser dependencies are served
 locally—there is no CDN dependency.
 
@@ -1050,6 +1091,26 @@ on screen, which is the only real screenshot block available on each platform.
 author (`brand.cjs`), or lower the permission of a command that declares
 `userAdminRequired` — those call WhatsApp admin actions and would refuse the
 caller anyway, so the UI marks them locked instead of lying.
+
+## Design system — STRICT RULES
+
+The control panel UI is `frontend/src/components/ui/`. Read `frontend/src/components/ui/README.md` before adding or changing a screen. Tokens live in `frontend/src/index.css` (`@theme` and `:root` / `[data-theme="light"]`).
+
+- MUST build every button, icon button, card, panel, field, input, textarea, select, toggle, checkbox, radio, dialog, confirm, popover, sheet, menu, overflow menu, filter, sort menu, tabs, segmented control, empty state, spinner, skeleton, badge, and toolbar from `frontend/src/components/ui`. Import them from that barrel.
+- NEVER hand-roll one of those in a view. NEVER paste a long one-off Tailwind string to fake one. A `className` on a primitive may only adjust layout.
+- MUST colour only through the tokens: `bg`, `panel`, `line`, `text-main`, `muted`, `faint`, `brand-*`, `ok`, `warn`, `danger`, `info`. NEVER a raw hex and NEVER a one-off palette (`text-red-400`, `bg-slate-*`, `bg-[#...]`).
+- If a primitive does not exist, MUST add it under `frontend/src/components/ui/` as one base plus a variant map, compose specialised pieces from that base, export it from `index.ts`, document it in the README, then use it. NEVER fork a copy in a view.
+- R1. A simple, self-explanatory action MUST be an `IconButton` (`label` is the tooltip and the accessible name). NEVER a large icon-and-text button for share, download, copy, edit, delete, refresh, close, open-externally, or export. Text, with an optional icon, is only for the screen's primary action and for actions an icon does not explain ("Start session", "Save", "Create pack").
+- R2. MUST put non-essential, secondary, rarely used, and rare destructive actions in `OverflowMenu`. Only essential actions stay on the surface.
+- R3. Filters MUST be one `FilterButton` (popover on desktop, bottom sheet under 640px). NEVER a row of filter chips or selects.
+- R4. Sorting MUST be one `SortMenu`. NEVER a row of sort options or a visible sort `<select>`.
+- R5. An `OverflowMenu` needs at least two items — a single secondary action is an `IconButton`. The overflow sits beside the primary action it belongs to (same row, at its end), never alone on its own row.
+- R6. Text, number, password, and select settings MUST use an explicit save. A single independent value (timezone, a standalone API key, a storage number, panel language, bot reply language, a per-row select) MUST use `SaveField` / `useSavedValue` from `frontend/src/components/ui`: the input plus an inline Save `IconButton` at its end, enabled only when the draft differs from the saved value, spinner while saving, a brief success state, Enter saves, Escape reverts, error shown under the field. Values that only make sense together (min+max human delay, the selected AI provider's API key + base URL + model, the WhatsApp proxy protocol/host/port/username/password) MUST use `useDirtyForm` + `FormActions`: one primary Save and a Discard, disabled until something changed, with an unsaved-changes hint. NEVER save those inputs on blur or on every change. A `Toggle` applies immediately — that is what a switch means. Dialog forms that already end in a submit button are fine.
+- MUST put every new visible string, including tooltips and the words Filter, Sort, and More, in `frontend/src/i18n/translations.ts` in both `en` and `ar`.
+- MUST lay out with logical CSS (`ms-` / `me-` / `ps-` / `pe-` / `start` / `end`) so Arabic RTL works. NEVER `ml-` / `mr-` / `pl-` / `pr-` / `left-` / `right-` for layout.
+- MUST keep touch targets at least 40px. `IconButton` `label` is required. Menus MUST use `role="menu"` / `role="menuitem"`, arrow keys, `aria-haspopup`, and `aria-expanded`. Dialogs MUST trap focus and return it on close.
+- MUST keep light and dark on the existing theme tokens. MUST keep working inside the Android WebView (`PanelActivity`). No CDN and no new npm dependency for UI.
+- MUST render user-entered text (a pack or sticker name, a keyword, a message) through the `UserText` primitive — or with `dir="auto"` where the element cannot take it, such as an `<option>` — never single-line truncated without a `title`. Headings and detail views wrap; dense grid cards and chips may clamp to two lines at most.
 
 ## Configuration
 
@@ -1211,6 +1272,9 @@ logger.debug('Debug info');
     of other people's messages, and has no anti-delete / anti-edit handler. The
     only in-memory message store is `recentMessageCache.esm.js`, which holds
     messages the bot ITSELF sent so Baileys' `getMessage` can answer a retry.
+    Opt-in exception: an auto-delete rule with `keepCopy` stores the
+    text/caption (never media bytes) of messages that rule actually deleted, in
+    `auto_delete_log`, swept by `auto_delete_keep_days`.
 14. **Don't add third-party media downloaders**: downloading from YouTube /
     TikTok / Facebook / Instagram violates those platforms' terms, so those
     commands were removed on purpose.
@@ -1262,10 +1326,12 @@ logger.debug('Debug info');
     add another directory scan at load time, give it the same fallback.
 26. **Unlink is an account boundary.** It clears the WhatsApp directory, roles,
     AI history, long-term memory and buffered AI context, the sticker library
-    (every sticker, pack, and file), and pauses schedules created for the old
-    account. Do not leave account-derived state active for the next phone that
-    pairs. Sticker unlink deletes the `sticker_owners` rows as well as the
-    stickers, packs and files, so the next pairing starts a new `self` library.
+    (every sticker, pack, and file), auto-delete kept copies and counters
+    (the rules themselves stay — they are operator configuration), and pauses
+    schedules created for the old account. Do not leave account-derived state
+    active for the next phone that pairs. Sticker unlink deletes the
+    `sticker_owners` rows as well as the stickers, packs and files, so the next
+    pairing starts a new `self` library.
 27. **Compare WhatsApp identities with the shared helpers.** LIDs, phone-number
     JIDs and device suffixes can name the same user. Moderation and role gates
     must use `sameUser()`, `getSenderCandidates()` and `isAdminInGroup()` rather

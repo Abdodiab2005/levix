@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Reusable text styles for the native bottom sheets. Named (not inline)
+         so another screen can inherit from them instead of copying attributes. -->
+
+    <style name="Widget.Levix.SheetEyebrow" parent="Widget.AppCompat.TextView">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:textColor">@color/levix_cyan</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.08</item>
+    </style>
+
+    <style name="Widget.Levix.SheetTitle" parent="Widget.AppCompat.TextView">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/levix_text</item>
+        <item name="android:textSize">20sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.Levix.SheetBody" parent="Widget.AppCompat.TextView">
+        <item name="android:textColor">@color/levix_text_muted</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:lineSpacingMultiplier">1.25</item>
+    </style>
+
+    <style name="Widget.Levix.DetailLabel" parent="Widget.AppCompat.TextView">
+        <item name="android:textColor">@color/levix_text_faint</item>
+        <item name="android:textSize">12sp</item>
+    </style>
+
+    <style name="Widget.Levix.DetailValue" parent="Widget.AppCompat.TextView">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">@color/levix_text</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Widget.Levix.DetailValue.Danger" parent="Widget.Levix.DetailValue">
+        <item name="android:textColor">@color/levix_danger</item>
+    </style>
+</resources>

@@ -1,6 +1,9 @@
 // file: frontend/src/api/client.ts
 
 import type {
+  AutoDeleteLogEntry,
+  AutoDeleteRule,
+  AutoDeleteRuleInput,
   Capabilities,
   EditOptions,
   Job,
@@ -435,4 +438,29 @@ export const api = {
     api.post<{ pack: Pack; moved: number }>(`/sticker-packs/${encodeURIComponent(id)}/merge`, {
       intoPackId,
     }),
+
+  listAutoDeleteRules: () =>
+    api.get<{ success: boolean; rules: AutoDeleteRule[] }>("/auto-delete/rules"),
+  createAutoDeleteRule: (body: AutoDeleteRuleInput) =>
+    api.post<{ success: boolean; rule: AutoDeleteRule }>("/auto-delete/rules", body),
+  updateAutoDeleteRule: (id: number, body: AutoDeleteRuleInput) =>
+    api.patch<{ success: boolean; rule: AutoDeleteRule }>(`/auto-delete/rules/${id}`, body),
+  deleteAutoDeleteRule: (id: number) =>
+    api.delete<{ success: boolean }>(`/auto-delete/rules/${id}`),
+  resetAutoDeleteRule: (id: number) =>
+    api.post<{ success: boolean; rule: AutoDeleteRule }>(`/auto-delete/rules/${id}/reset`),
+  listAutoDeleteLog: (query: { ruleId?: string; limit?: number; offset?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (query.ruleId) params.set("ruleId", query.ruleId);
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
+    if (query.offset !== undefined) params.set("offset", String(query.offset));
+    const qs = params.toString();
+    return api.get<{ success: boolean; log: AutoDeleteLogEntry[] }>(
+      `/auto-delete/log${qs ? `?${qs}` : ""}`,
+    );
+  },
+  clearAutoDeleteLog: (ruleId?: string) =>
+    api.delete<{ success: boolean; cleared: number }>(
+      ruleId ? `/auto-delete/log?ruleId=${encodeURIComponent(ruleId)}` : "/auto-delete/log",
+    ),
 };

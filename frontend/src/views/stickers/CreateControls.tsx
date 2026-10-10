@@ -1,8 +1,16 @@
 import type React from "react";
+import {
+  Button,
+  Card,
+  Checkbox,
+  FieldLabel,
+  Input,
+  SegmentedControl,
+  Select,
+} from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { Capabilities, EditOptions, Pack } from "../../types";
 import { STICKER_NAME_MAX } from "../../utils/stickerLimits";
-import { Button, FieldLabel, fieldClass } from "./ui";
 
 interface CreateControlsProps {
   options: EditOptions;
@@ -41,9 +49,8 @@ export const CreateControls: React.FC<CreateControlsProps> = ({
     <div className="flex flex-col gap-3">
       <div>
         <FieldLabel htmlFor="sticker-fit">{t("fit")}</FieldLabel>
-        <select
+        <Select
           id="sticker-fit"
-          className={fieldClass}
           value={options.fit || "contain"}
           onChange={(event) =>
             onChange({ fit: event.target.value === "cover" ? "cover" : "contain" })
@@ -51,7 +58,7 @@ export const CreateControls: React.FC<CreateControlsProps> = ({
         >
           <option value="contain">{t("contain")}</option>
           <option value="cover">{t("cover")}</option>
-        </select>
+        </Select>
       </div>
 
       <label className="text-xs font-bold" htmlFor="sticker-zoom">
@@ -65,6 +72,7 @@ export const CreateControls: React.FC<CreateControlsProps> = ({
         step={0.01}
         value={options.zoom ?? 1}
         onChange={(event) => onChange({ zoom: Number(event.target.value) })}
+        className="w-full accent-brand-blue"
       />
 
       <label className="text-xs font-bold" htmlFor="sticker-pan-x">
@@ -78,6 +86,7 @@ export const CreateControls: React.FC<CreateControlsProps> = ({
         step={0.01}
         value={options.panX ?? 0}
         onChange={(event) => onChange({ panX: Number(event.target.value) })}
+        className="w-full accent-brand-blue"
       />
 
       <label className="text-xs font-bold" htmlFor="sticker-pan-y">
@@ -91,6 +100,7 @@ export const CreateControls: React.FC<CreateControlsProps> = ({
         step={0.01}
         value={options.panY ?? 0}
         onChange={(event) => onChange({ panY: Number(event.target.value) })}
+        className="w-full accent-brand-blue"
       />
 
       <div className="flex flex-wrap gap-2">
@@ -105,30 +115,23 @@ export const CreateControls: React.FC<CreateControlsProps> = ({
         </Button>
       </div>
 
-      <p className="text-xs font-bold">{t("background")}</p>
-      <div className="flex flex-wrap gap-1">
-        {(
-          [
-            ["transparent", t("transparent")],
-            ["white", t("white")],
-            ["black", t("black")],
-            ["custom", t("customColor")],
-          ] as const
-        ).map(([id, label]) => (
-          <Button
-            key={id}
-            variant={background === id ? "primary" : "ghost"}
-            onClick={() => {
-              if (id === "transparent") onChange({ background: "transparent" });
-              else if (id === "white") onChange({ background: "#ffffff" });
-              else if (id === "black") onChange({ background: "#000000" });
-              else onChange({ background: "#3366ff" });
-            }}
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
+      <SegmentedControl
+        aria-label={t("background")}
+        className="max-w-full flex-wrap"
+        value={background}
+        onChange={(id) => {
+          if (id === "transparent") onChange({ background: "transparent" });
+          else if (id === "white") onChange({ background: "#ffffff" });
+          else if (id === "black") onChange({ background: "#000000" });
+          else onChange({ background: "#3366ff" });
+        }}
+        options={[
+          { value: "transparent", label: t("transparent") },
+          { value: "white", label: t("white") },
+          { value: "black", label: t("black") },
+          { value: "custom", label: t("customColor") },
+        ]}
+      />
       {background === "custom" && (
         <input
           type="color"
@@ -141,21 +144,16 @@ export const CreateControls: React.FC<CreateControlsProps> = ({
 
       {canRemoveBackground && (
         <div className="flex flex-col gap-2">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={options.removeBackground?.mode === "plain"}
-              onChange={(event) =>
-                onChange({
-                  removeBackground: event.target.checked
-                    ? { mode: "plain", tolerance: 0.15 }
-                    : null,
-                })
-              }
-            />
-            {t("removePlainBackground")}
-          </label>
-          <p className="text-xs text-muted">{t("stickerRemoveHint")}</p>
+          <Checkbox
+            checked={options.removeBackground?.mode === "plain"}
+            onChange={(event) =>
+              onChange({
+                removeBackground: event.target.checked ? { mode: "plain", tolerance: 0.15 } : null,
+              })
+            }
+            label={t("removePlainBackground")}
+            description={t("stickerRemoveHint")}
+          />
           {options.removeBackground?.mode === "plain" && (
             <>
               <label className="text-xs font-bold" htmlFor="sticker-tolerance">
@@ -173,6 +171,7 @@ export const CreateControls: React.FC<CreateControlsProps> = ({
                     removeBackground: { mode: "plain", tolerance: Number(event.target.value) },
                   })
                 }
+                className="w-full accent-brand-blue"
               />
             </>
           )}
@@ -181,30 +180,25 @@ export const CreateControls: React.FC<CreateControlsProps> = ({
 
       <div>
         <FieldLabel htmlFor="sticker-name">{t("stickerName")}</FieldLabel>
-        <input
+        <Input
           id="sticker-name"
           value={name}
           maxLength={STICKER_NAME_MAX}
+          dir="auto"
           onChange={(event) => onName(event.target.value)}
           placeholder={t("stickerNamePlaceholder")}
-          className={fieldClass}
         />
       </div>
       <div>
         <FieldLabel htmlFor="sticker-pack">{t("targetPack")}</FieldLabel>
-        <select
-          id="sticker-pack"
-          value={packId}
-          onChange={(event) => onPack(event.target.value)}
-          className={fieldClass}
-        >
+        <Select id="sticker-pack" value={packId} onChange={(event) => onPack(event.target.value)}>
           <option value="">{t("noPack")}</option>
           {packs.map((pack) => (
             <option key={pack.id} value={pack.id}>
               {pack.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
     </div>
   );
@@ -233,21 +227,18 @@ export const TrimControls: React.FC<{
     onChange({ trim: { start: safeStart, duration: safeDuration } });
   };
   return (
-    <div className="rounded-2xl border border-line bg-panel p-3 flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <label className="flex items-center gap-2 text-sm font-bold">
-          <input
-            type="checkbox"
-            checked={Boolean(options.trim)}
-            onChange={(event) => {
-              if (!event.target.checked) onChange({ trim: null });
-              else setTrim(0, Math.min(limits.stickerSeconds, Math.max(0.5, mediaSeconds)));
-            }}
-          />
-          {t("trim")}
-        </label>
+    <Card className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Checkbox
+          checked={Boolean(options.trim)}
+          onChange={(event) => {
+            if (!event.target.checked) onChange({ trim: null });
+            else setTrim(0, Math.min(limits.stickerSeconds, Math.max(0.5, mediaSeconds)));
+          }}
+          label={<span className="font-bold">{t("trim")}</span>}
+        />
         {options.trim && (
-          <span className="text-xs font-mono text-muted" dir="ltr">
+          <span className="font-mono text-xs text-muted" dir="ltr">
             {options.trim.start.toFixed(1)}s →{" "}
             {(options.trim.start + options.trim.duration).toFixed(1)}s
           </span>
@@ -268,6 +259,7 @@ export const TrimControls: React.FC<{
             step={0.1}
             value={options.trim.start}
             onChange={(event) => setTrim(Number(event.target.value), options.trim?.duration ?? 0.5)}
+            className="w-full accent-brand-blue"
           />
           <label className="text-xs font-bold" htmlFor="trim-duration">
             {t("trimDuration")} ({options.trim.duration.toFixed(1)} {t("trimSeconds")})
@@ -280,9 +272,10 @@ export const TrimControls: React.FC<{
             step={0.1}
             value={options.trim.duration}
             onChange={(event) => setTrim(options.trim?.start ?? 0, Number(event.target.value))}
+            className="w-full accent-brand-blue"
           />
         </>
       )}
-    </div>
+    </Card>
   );
 };

@@ -1,4 +1,5 @@
 const { tr } = require("../utils/i18n.cjs");
+const { isolate } = require("../utils/bidi.cjs");
 const ownerModule = require("../stickers/owner.cjs");
 const library = require("../stickers/library.cjs");
 const { commandHint, countLabel, errorText } = require("../utils/stickerBot.cjs");
@@ -29,7 +30,9 @@ module.exports = {
             `لا توجد حزم بعد. رد على وسائط بالأمر ${commandHint("pack", "<الاسم>")} لإنشاء حزمة. المكتبة: ${countLabel(total)}.`,
           ),
         });
-      const lines = packs.slice(0, 30).map((pack) => `${pack.name} — ${countLabel(pack.count)}`);
+      const lines = packs
+        .slice(0, 30)
+        .map((pack) => `${isolate(pack.name)} — ${countLabel(pack.count)}`);
       if (packs.length > 30)
         lines.push(
           tr(

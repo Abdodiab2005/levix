@@ -34,6 +34,8 @@ This script retrieves the verified Termux packages (aarch64 + arm), extracts the
 
 Every 64-bit ELF is then checked for what a 16 KB-page device needs (a Google Play requirement for apps targeting API 35+): 16 KB segment alignment, a RELRO region that shares no page with writable data, and an NDK of r28 or newer. The FFmpeg prebuilt this replaced failed the last two — it was built with NDK r15c, and Play reported it as a crash risk on 16 KB devices.
 
+Gradle packages whatever is staged under `~/.cache/levix-android/node-runtime/<abi>/`, and that directory only changes when this script runs — an APK once shipped an FFmpeg staged before the recipe gained libwebp, and Sticker Studio could not write WebP. So the script finishes each ABI by writing `node-runtime/<abi>/.levix-stamp`: the ABI plus the first 16 hex characters of the sha256 of `build-ffmpeg-android.sh` and `fetch-node-android.sh`. `app/build.gradle.kts` recomputes that stamp from the repo and fails the build when it is missing or different (and when the staged `libffmpeg.so` lacks the `libwebp` / `libwebp_anim` encoders), naming the ABI, what is stale and the command to run, e.g. `LEVIX_ANDROID_ABIS=arm64-v8a bash android/scripts/fetch-node-android.sh`. Gradle never runs the script for you. `tests/android-runtime-stamp.test.mjs` keeps the two recipes in agreement.
+
 ## Building the APKs
 
 ```bash

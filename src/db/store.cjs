@@ -1601,6 +1601,231 @@ function stickerPackItemCount(packId) {
   return q("SELECT COUNT(*) AS n FROM sticker_pack_items WHERE pack_id = ?").get(packId).n;
 }
 
+// ===================================================================
+// --- Keyword auto-delete ---
+// ===================================================================
+//
+// Rules are operator configuration. The per-message matcher reads an in-memory
+// copy so it does not JSON-parse every rule on every incoming message. Any
+// write invalidates that copy. Kept copies (keepCopy) are account-scoped and
+// wiped on unlink; the rules themselves stay.
+
+const AUTO_DELETE_LOG_CAP = 5000;
+
+let autoDeleteRuleCache = null;
+
+function invalidateAutoDeleteRuleCache() {
+  autoDeleteRuleCache = null;
+}
+
+function autoDeleteRuleRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name || null,
+    enabled: Boolean(row.enabled),
+    keywords: parseJson(row.keywords, []),
+    match: row.match_mode,
+    chatScope: row.chat_scope,
+    senders: {
+      mode: row.senders_mode,
+      list: parseJson(row.senders_list, []),
+    },
+    includeOwn: Boolean(row.include_own),
+    forEveryone: Boolean(row.for_everyone),
+    keepCopy: Boolean(row.keep_copy),
+    deletedCount: row.deleted_count || 0,
+    lastDeletedAt: row.last_deleted_at ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function listAutoDeleteRules() {
+  if (!autoDeleteRuleCache) {
+    autoDeleteRuleCache = q("SELECT * FROM auto_delete_rules ORDER BY id ASC")
+      .all()
+      .map(autoDeleteRuleRow);
+  }
+  return autoDeleteRuleCache;
+}
+
+function listEnabledAutoDeleteRules() {
+  return listAutoDeleteRules().filter((rule) => rule.enabled);
+}
+
+function getAutoDeleteRule(id) {
+  return autoDeleteRuleRow(q("SELECT * FROM auto_delete_rules WHERE id = ?").get(Number(id)));
+}
+
+function countAutoDeleteRules() {
+  return q("SELECT COUNT(*) AS n FROM auto_delete_rules").get().n;
+}
+
+function insertAutoDeleteRule(rule) {
+  const now = Date.now();
+  const { lastInsertRowid } = q(
+    `INSERT INTO auto_delete_rules
+       (name, enabled, keywords, match_mode, chat_scope, senders_mode, senders_list,
+        include_own, for_everyone, keep_copy, deleted_count, last_deleted_at,
+        created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)`,
+  ).run(
+    rule.name ?? null,
+    bool(rule.enabled !== false),
+    JSON.stringify(rule.keywords || []),
+    rule.match || "contains",
+    rule.chatScope || "all",
+    rule.senders?.mode || "everyone",
+    JSON.stringify(rule.senders?.list || []),
+    bool(rule.includeOwn),
+    bool(rule.forEveryone !== false),
+    bool(rule.keepCopy),
+    now,
+    now,
+  );
+  invalidateAutoDeleteRuleCache();
+  return getAutoDeleteRule(Number(lastInsertRowid));
+}
+
+function updateAutoDeleteRule(id, fields) {
+  const current = getAutoDeleteRule(id);
+  if (!current) return null;
+  const next = {
+    name: fields.name !== undefined ? fields.name : current.name,
+    enabled: fields.enabled !== undefined ? fields.enabled : current.enabled,
+    keywords: fields.keywords !== undefined ? fields.keywords : current.keywords,
+    match: fields.match !== undefined ? fields.match : current.match,
+    chatScope: fields.chatScope !== undefined ? fields.chatScope : current.chatScope,
+    senders: fields.senders !== undefined ? fields.senders : current.senders,
+    includeOwn: fields.includeOwn !== undefined ? fields.includeOwn : current.includeOwn,
+    forEveryone: fields.forEveryone !== undefined ? fields.forEveryone : current.forEveryone,
+    keepCopy: fields.keepCopy !== undefined ? fields.keepCopy : current.keepCopy,
+  };
+  q(
+    `UPDATE auto_delete_rules
+     SET name = ?, enabled = ?, keywords = ?, match_mode = ?, chat_scope = ?,
+         senders_mode = ?, senders_list = ?, include_own = ?, for_everyone = ?,
+         keep_copy = ?, updated_at = ?
+     WHERE id = ?`,
+  ).run(
+    next.name ?? null,
+    bool(next.enabled),
+    JSON.stringify(next.keywords || []),
+    next.match,
+    next.chatScope,
+    next.senders?.mode || "everyone",
+    JSON.stringify(next.senders?.list || []),
+    bool(next.includeOwn),
+    bool(next.forEveryone),
+    bool(next.keepCopy),
+    Date.now(),
+    Number(id),
+  );
+  invalidateAutoDeleteRuleCache();
+  return getAutoDeleteRule(id);
+}
+
+function deleteAutoDeleteRule(id) {
+  const { changes } = q("DELETE FROM auto_delete_rules WHERE id = ?").run(Number(id));
+  invalidateAutoDeleteRuleCache();
+  return changes > 0;
+}
+
+function incrementAutoDeleteCounter(id) {
+  const now = Date.now();
+  const { changes } = q(
+    `UPDATE auto_delete_rules
+     SET deleted_count = deleted_count + 1, last_deleted_at = ?, updated_at = ?
+     WHERE id = ?`,
+  ).run(now, now, Number(id));
+  invalidateAutoDeleteRuleCache();
+  return changes > 0;
+}
+
+function resetAutoDeleteCounter(id) {
+  q(
+    `UPDATE auto_delete_rules
+     SET deleted_count = 0, last_deleted_at = NULL, updated_at = ?
+     WHERE id = ?`,
+  ).run(Date.now(), Number(id));
+  invalidateAutoDeleteRuleCache();
+  return getAutoDeleteRule(id);
+}
+
+function autoDeleteLogRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    ruleId: row.rule_id,
+    chatJid: row.chat_jid,
+    sender: row.sender || null,
+    text: row.text || "",
+    mediaType: row.media_type || "",
+    mode: row.mode,
+    createdAt: row.created_at,
+  };
+}
+
+function capAutoDeleteLog(max = AUTO_DELETE_LOG_CAP) {
+  const limit = Math.max(0, Number(max) || 0);
+  q(
+    `DELETE FROM auto_delete_log WHERE id NOT IN (
+       SELECT id FROM auto_delete_log ORDER BY created_at DESC, id DESC LIMIT ?
+     )`,
+  ).run(limit);
+}
+
+function insertAutoDeleteLog(entry) {
+  const now = entry.createdAt ?? Date.now();
+  const { lastInsertRowid } = q(
+    `INSERT INTO auto_delete_log
+       (rule_id, chat_jid, sender, text, media_type, mode, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    Number(entry.ruleId),
+    entry.chatJid,
+    entry.sender ?? null,
+    entry.text ?? "",
+    entry.mediaType ?? "",
+    entry.mode,
+    now,
+  );
+  capAutoDeleteLog();
+  return autoDeleteLogRow(
+    q("SELECT * FROM auto_delete_log WHERE id = ?").get(Number(lastInsertRowid)),
+  );
+}
+
+function listAutoDeleteLog({ ruleId, limit = 50, offset = 0 } = {}) {
+  if (ruleId != null) {
+    return q(
+      `SELECT * FROM auto_delete_log WHERE rule_id = ?
+       ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
+    )
+      .all(Number(ruleId), Number(limit), Number(offset))
+      .map(autoDeleteLogRow);
+  }
+  return q("SELECT * FROM auto_delete_log ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?")
+    .all(Number(limit), Number(offset))
+    .map(autoDeleteLogRow);
+}
+
+function clearAutoDeleteLog(ruleId) {
+  if (ruleId != null) {
+    const { changes } = q("DELETE FROM auto_delete_log WHERE rule_id = ?").run(Number(ruleId));
+    return changes;
+  }
+  const { changes } = q("DELETE FROM auto_delete_log").run();
+  return changes;
+}
+
+function clearAutoDeleteOnUnlink() {
+  q("DELETE FROM auto_delete_log").run();
+  q("UPDATE auto_delete_rules SET deleted_count = 0, last_deleted_at = NULL").run();
+  invalidateAutoDeleteRuleCache();
+}
+
 module.exports = {
   // Lifecycle
   initStore,
@@ -1734,4 +1959,21 @@ module.exports = {
   stickerPackReorder,
   stickerPackExclusive,
   stickerPackItemCount,
+  // Keyword auto-delete
+  AUTO_DELETE_LOG_CAP,
+  listAutoDeleteRules,
+  listEnabledAutoDeleteRules,
+  getAutoDeleteRule,
+  countAutoDeleteRules,
+  insertAutoDeleteRule,
+  updateAutoDeleteRule,
+  deleteAutoDeleteRule,
+  incrementAutoDeleteCounter,
+  resetAutoDeleteCounter,
+  insertAutoDeleteLog,
+  listAutoDeleteLog,
+  clearAutoDeleteLog,
+  capAutoDeleteLog,
+  clearAutoDeleteOnUnlink,
+  invalidateAutoDeleteRuleCache,
 };

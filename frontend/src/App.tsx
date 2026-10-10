@@ -9,6 +9,7 @@ import { I18nProvider, useI18n } from "./context/I18nContext";
 import { useSocket } from "./hooks/useSocket";
 import type { SessionState, SessionStatus } from "./types";
 import { AIAssistantView } from "./views/AIAssistantView";
+import { AutoDeleteView } from "./views/autoDelete/AutoDeleteView";
 import { CommandsView } from "./views/CommandsView";
 import { ConnectionView } from "./views/ConnectionView";
 import { GroupsView } from "./views/GroupsView";
@@ -25,6 +26,7 @@ const VALID_VIEWS: ViewTab[] = [
   "commands",
   "ai",
   "groups",
+  "autodelete",
   "schedules",
   "settings",
   "logs",
@@ -128,6 +130,7 @@ const MainLayout: React.FC = () => {
     commands: t("commands"),
     ai: t("ai"),
     groups: t("groups"),
+    autodelete: t("autoDelete"),
     schedules: t("schedules"),
     settings: t("settings"),
     logs: t("logs"),
@@ -167,6 +170,7 @@ const MainLayout: React.FC = () => {
             <SchedulesView isConnected={isConnected} onNavigate={handleSelectView} />
           )}
           {currentView === "groups" && <GroupsView />}
+          {currentView === "autodelete" && <AutoDeleteView />}
           {currentView === "settings" && <SettingsView />}
           {currentView === "stickers" && <StickerStudioView isConnected={isConnected} />}
           {currentView === "logs" && <LogsView socket={socket} />}

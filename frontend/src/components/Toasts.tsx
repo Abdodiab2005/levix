@@ -3,6 +3,8 @@
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
 import type React from "react";
 import { createContext, useCallback, useContext, useState } from "react";
+import { useI18n } from "../context/I18nContext";
+import { IconButton } from "./ui";
 
 export interface Toast {
   id: string;
@@ -18,6 +20,7 @@ interface ToastContextType {
 const ToastContext = createContext<ToastContextType | null>(null);
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { t } = useI18n();
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const removeToast = useCallback((id: string) => {
@@ -40,32 +43,30 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         className="fixed bottom-5 end-5 z-50 flex flex-col gap-2.5 max-w-sm w-full px-4 pointer-events-none"
         aria-live="polite"
       >
-        {toasts.map((t) => (
+        {toasts.map((item) => (
           <div
-            key={t.id}
-            className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl border bg-panel-raised/95 backdrop-blur-md shadow-xl text-xs md:text-sm text-text-main transition-all ${
-              t.type === "success"
+            key={item.id}
+            className={`pointer-events-auto flex items-center gap-3 rounded-xl border bg-panel-raised/95 px-4 py-3 text-xs text-text-main shadow-xl backdrop-blur-md md:text-sm ${
+              item.type === "success"
                 ? "border-ok/35"
-                : t.type === "error"
+                : item.type === "error"
                   ? "border-danger/35"
-                  : t.type === "warning"
+                  : item.type === "warning"
                     ? "border-warn/35"
                     : "border-line"
             }`}
           >
-            {t.type === "success" && <CheckCircle2 size={18} className="text-ok shrink-0" />}
-            {t.type === "error" && <XCircle size={18} className="text-danger shrink-0" />}
-            {t.type === "warning" && <AlertTriangle size={18} className="text-warn shrink-0" />}
-            {t.type === "info" && <Info size={18} className="text-info shrink-0" />}
-            <span className="flex-1 font-medium">{t.message}</span>
-            <button
-              type="button"
-              onClick={() => removeToast(t.id)}
-              className="inline-flex items-center justify-center w-6 h-6 rounded-lg text-muted hover:text-text-main hover:bg-panel-hover transition-colors shrink-0"
-              aria-label="Dismiss notification"
-            >
-              <X size={14} />
-            </button>
+            {item.type === "success" && <CheckCircle2 size={18} className="shrink-0 text-ok" />}
+            {item.type === "error" && <XCircle size={18} className="shrink-0 text-danger" />}
+            {item.type === "warning" && <AlertTriangle size={18} className="shrink-0 text-warn" />}
+            {item.type === "info" && <Info size={18} className="shrink-0 text-info" />}
+            <span className="flex-1 font-medium">{item.message}</span>
+            <IconButton
+              variant="ghost"
+              label={t("dismiss")}
+              icon={<X size={16} />}
+              onClick={() => removeToast(item.id)}
+            />
           </div>
         ))}
       </div>

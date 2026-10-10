@@ -381,6 +381,139 @@ section("pack names");
   );
 }
 
+section("multi-word and decorated pack names");
+{
+  const who = person("201200000003@s.whatsapp.net");
+  equal("straight quotes are decoration", library.createPack(who, '"My Pack"').name, "My Pack");
+  equal("guillemets are decoration", library.createPack(who, "«حزمة العيد»").name, "حزمة العيد");
+  equal("curly quotes are decoration", library.createPack(who, "“Two words”").name, "Two words");
+  equal(
+    "an apostrophe inside a name stays",
+    library.createPack(who, "Abdo's pack").name,
+    "Abdo's pack",
+  );
+  equal(
+    "dot, comma and ampersand are allowed",
+    library.createPack(who, "Rock & Roll, Vol. 2").name,
+    "Rock & Roll, Vol. 2",
+  );
+  equal("a ZWNJ is kept", library.createPack(who, "می\u200cروم").name, "می\u200cروم");
+  equal("an emoji is kept", library.createPack(who, "party 🎉").name, "party 🎉");
+  equal(
+    "case-insensitive exact lookup still works",
+    library.findPackByName(who, "MY PACK").name,
+    "My Pack",
+  );
+  equal("an Arabic letter variant is not merged", library.findPackByName(who, "حزمه العيد"), null);
+  equal(
+    "an unmatched quote is not a name",
+    codeOf(() => library.createPack(who, '"My Pack')),
+    "INVALID_NAME",
+  );
+  equal(
+    "a lone close quote is not a name",
+    codeOf(() => library.createPack(who, "My Pack\u201d")),
+    "INVALID_NAME",
+  );
+  equal(
+    "a newline is rejected, not collapsed",
+    codeOf(() => library.createPack(who, "two\nlines")),
+    "INVALID_NAME",
+  );
+  equal(
+    "a tab is rejected",
+    codeOf(() => library.createPack(who, "two\tlines")),
+    "INVALID_NAME",
+  );
+  equal(
+    "a bidi override is rejected",
+    codeOf(() => library.createPack(who, "a\u202Eb")),
+    "INVALID_NAME",
+  );
+  equal(
+    "a bidi isolate is rejected",
+    codeOf(() => library.createPack(who, "a\u2068b")),
+    "INVALID_NAME",
+  );
+  equal(
+    "forty-one emoji is over the limit",
+    codeOf(() => library.createPack(who, "🎉".repeat(41))),
+    "INVALID_NAME",
+  );
+  ok("forty emoji is exactly the limit", !!library.createPack(who, "🎉".repeat(40)));
+  const zwj = "👨\u200D👩";
+  equal(
+    "length is graphemes, not code points",
+    library.createPack(who, zwj.repeat(40)).name,
+    zwj.repeat(40),
+  );
+  equal(
+    "forty-one graphemes is over",
+    codeOf(() => library.createPack(who, zwj.repeat(41))),
+    "INVALID_NAME",
+  );
+  equal(
+    "normalizePackName strips one quote pair",
+    library.normalizePackName('"My Pack"').name,
+    "My Pack",
+  );
+  equal("stripQuotes leaves the inside", library.stripQuotes("«حزمة»"), "حزمة");
+
+  const a = library.findPackByName(who, "My Pack");
+  const b = library.findPackByName(who, "my pack");
+  equal("lookup is case-insensitive", a.id, b.id);
+}
+
+section("rename resolves a leading pack name without a bar");
+{
+  const who = person("201200000004@s.whatsapp.net");
+  const mine = library.createPack(who, "My Pack");
+  library.createPack(who, "حزمة");
+  library.createPack(who, "عيد 2");
+  const one = library.findLeadingPackName(who, "My Pack New Name");
+  equal("the longest leading pack wins", one.pack.id, mine.id);
+  equal("the rest is the new name", one.newName, "New Name");
+  equal(
+    "a quoted leading name matches",
+    library.findLeadingPackName(who, '"My Pack" New').pack.id,
+    mine.id,
+  );
+  equal(
+    "Arabic leading name",
+    library.findLeadingPackName(who, "حزمة العيد عيد").newName,
+    "العيد عيد",
+  );
+  equal(
+    "a pack ending in a number is matched whole",
+    library.findLeadingPackName(who, "عيد 2 جديد").pack.name,
+    "عيد 2",
+  );
+  equal("no known pack means no match", library.findLeadingPackName(who, "Nobody Here"), null);
+  const renamed = library.updatePack(who, library.findPackByName(who, "My Pack").id, "New Name");
+  equal("the resolved name updates the pack", renamed.name, "New Name");
+}
+
+section("a pack stored under the old NFKC key is still found");
+{
+  const who = person("201200000005@s.whatsapp.net");
+  // The old code stored `name.normalize("NFKC")`; the new code stores NFC and
+  // keeps NFKC only as a lookup fallback. U+FEFB folds to U+0644 U+0627.
+  store.stickerPackInsert({
+    id: "0123456789abcdef",
+    owner: who.key,
+    name: "لا",
+    nameKey: "لا",
+    createdAt: 1,
+    updatedAt: 1,
+  });
+  equal("the presentation form finds the stored row", library.findPackByName(who, "ﻻ").name, "لا");
+  equal(
+    "the presentation form is a duplicate, not a second pack",
+    codeOf(() => library.createPack(who, "ﻻ")),
+    "PACK_EXISTS",
+  );
+}
+
 section("membership, order, and merge");
 
 {
