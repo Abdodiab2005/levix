@@ -126,8 +126,6 @@
     <string name="media_open">فتح</string>
     <string name="media_insights">إحصاءات التخزين</string>
     <string name="media_sort">ترتيب</string>
-    <string name="media_filter">تصفية</string>
-    <string name="media_filter_active">التصفية: %1$s</string>
     <string name="media_search">ابحث بالاسم أو النوع أو التاريخ</string>
     <string name="media_all">الكل</string>
     <string name="media_whatsapp">واتساب</string>

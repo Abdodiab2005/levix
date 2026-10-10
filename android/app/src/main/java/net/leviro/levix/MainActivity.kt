@@ -56,7 +56,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var batteryButton: Button
 
     // Diagnostics & Logs
-    private lateinit var btnShareLogs: View
+    private lateinit var btnShareLogs: Button
 
     private val refresh = object : Runnable {
         override fun run() {

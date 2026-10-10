@@ -9,7 +9,7 @@
                 android:centerColor="@color/levix_blue_mid"
                 android:endColor="@color/levix_cyan"
                 android:type="linear" />
-            <corners android:radius="@dimen/levix_radius_raised" />
+            <corners android:radius="14dp" />
         </shape>
     </item>
 </ripple>

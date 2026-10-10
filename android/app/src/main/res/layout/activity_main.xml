@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/rootScrollView"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -9,15 +8,20 @@
     android:fillViewport="true">
 
     <LinearLayout
-        style="@style/Widget.Levix.Screen"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="20dp"
+        android:paddingTop="20dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="40dp">
 
         <!-- Top Brand Bar -->
         <LinearLayout
-            style="@style/Widget.Levix.Toolbar"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content">
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <ImageView
                 android:layout_width="38dp"
@@ -35,36 +39,51 @@
 
                 <TextView
                     android:id="@+id/title"
-                    style="@style/Widget.Levix.Text.Title.Brand"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
                     android:singleLine="true"
-                    android:text="@string/app_name" />
+                    android:text="@string/app_name"
+                    android:textColor="@color/levix_text"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
 
                 <TextView
-                    style="@style/Widget.Levix.Text.Tagline"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/brand_tagline" />
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:text="@string/brand_tagline"
+                    android:textColor="@color/levix_text_muted"
+                    android:textSize="12sp" />
             </LinearLayout>
 
             <!-- Language Switch Button (Icon Only) -->
             <ImageView
                 android:id="@+id/btnLanguage"
-                style="@style/Widget.Levix.IconButton.Pill"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
                 android:layout_marginEnd="8dp"
-                android:contentDescription="@string/dialog_choose_language"
+                android:background="@drawable/bg_status_pill"
+                android:scaleType="centerInside"
+                android:padding="8dp"
                 android:src="@drawable/ic_globe"
-                android:tooltipText="@string/dialog_choose_language" />
+                android:contentDescription="@string/dialog_choose_language"
+                android:clickable="true"
+                android:focusable="true" />
 
-            <!-- Live Status Pill. The dot swaps its drawable from Kotlin, so
-                 the two views stay separate; lint's merge hint does not apply. -->
+            <!-- Live Status Pill -->
             <LinearLayout
                 android:id="@+id/statusPill"
-                style="@style/Widget.Levix.Pill"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                tools:ignore="UseCompoundDrawables">
+                android:background="@drawable/bg_status_pill"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="12dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="6dp">
 
                 <ImageView
                     android:id="@+id/statusDot"
@@ -75,55 +94,82 @@
 
                 <TextView
                     android:id="@+id/statusPillText"
-                    style="@style/Widget.Levix.Text.Pill"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="6dp"
-                    android:text="@string/status_stopped" />
+                    android:fontFamily="sans-serif-medium"
+                    android:singleLine="true"
+                    android:text="@string/status_stopped"
+                    android:textColor="@color/levix_text"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
 
         <!-- Hero Overview Card (Centered Text Layout) -->
         <LinearLayout
-            style="@style/Widget.Levix.Card.Hero"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/levix_gap_xl">
+            android:layout_marginTop="18dp"
+            android:background="@drawable/bg_card_raised"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:padding="20dp">
 
             <TextView
-                style="@style/Widget.Levix.Text.Eyebrow"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
                 android:gravity="center"
-                android:text="@string/hero_eyebrow" />
+                android:letterSpacing="0.08"
+                android:text="@string/hero_eyebrow"
+                android:textColor="@color/levix_cyan"
+                android:textSize="11sp"
+                android:textStyle="bold" />
 
             <TextView
-                style="@style/Widget.Levix.Text.Title.Hero"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
+                android:fontFamily="sans-serif-medium"
                 android:gravity="center"
-                android:text="@string/hero_title" />
+                android:lineSpacingMultiplier="1.2"
+                android:text="@string/hero_title"
+                android:textColor="@color/levix_text"
+                android:textSize="21sp"
+                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/heroSubtitleText"
-                style="@style/Widget.Levix.Text.Subtitle.Hero"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:gravity="center"
-                android:text="@string/hero_subtitle_stopped" />
+                android:lineSpacingMultiplier="1.2"
+                android:text="@string/hero_subtitle_stopped"
+                android:textColor="@color/levix_text_muted"
+                android:textSize="13sp" />
 
             <!-- Primary Action: Open Control Panel -->
             <Button
                 android:id="@+id/panelButton"
-                style="@style/Widget.Levix.Button.Primary"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="18dp"
+                android:background="@drawable/bg_levix_gradient"
                 android:drawableEnd="@drawable/ic_open_panel"
+                android:drawablePadding="8dp"
                 android:enabled="false"
-                android:text="@string/btn_open_panel" />
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:minHeight="48dp"
+                android:paddingStart="20dp"
+                android:paddingEnd="18dp"
+                android:text="@string/btn_open_panel"
+                android:textAllCaps="false"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold" />
 
             <!-- Assistant Actions: Start / Stop -->
             <LinearLayout
@@ -134,49 +180,75 @@
 
                 <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/startButton"
-                    style="@style/Widget.Levix.Button.Assist.Start"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="6dp"
                     android:layout_weight="1"
+                    android:background="@drawable/bg_btn_start_selector"
                     android:drawableStart="@drawable/ic_play"
-                    android:text="@string/btn_start_host" />
+                    android:drawablePadding="6dp"
+                    android:drawableTint="@color/btn_start_color"
+                    app:drawableTint="@color/btn_start_color"
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:minHeight="46dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="@string/btn_start_host"
+                    android:textAllCaps="false"
+                    android:textColor="@color/btn_start_color"
+                    android:textSize="12sp" />
 
                 <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/stopButton"
-                    style="@style/Widget.Levix.Button.Assist.Stop"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="6dp"
                     android:layout_weight="1"
+                    android:background="@drawable/bg_btn_stop_selector"
                     android:drawableStart="@drawable/ic_stop"
+                    android:drawablePadding="6dp"
+                    android:drawableTint="@color/btn_stop_color"
+                    app:drawableTint="@color/btn_stop_color"
                     android:enabled="false"
-                    android:text="@string/btn_stop_host" />
+                    android:fontFamily="sans-serif-medium"
+                    android:gravity="center"
+                    android:minHeight="46dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="@string/btn_stop_host"
+                    android:textAllCaps="false"
+                    android:textColor="@color/btn_stop_color"
+                    android:textSize="12sp" />
             </LinearLayout>
 
             <TextView
                 android:id="@+id/statusHint"
-                style="@style/Widget.Levix.Text.Hint"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:gravity="center"
+                android:textColor="@color/levix_warn"
+                android:textSize="12sp"
                 android:visibility="gone" />
         </LinearLayout>
 
         <!-- Dedicated Language Switcher Card on Main Interface -->
         <LinearLayout
             android:id="@+id/cardLanguageSwitch"
-            style="@style/Widget.Levix.Card.Row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
+            android:background="@drawable/bg_card_panel"
             android:clickable="true"
-            android:focusable="true">
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="14dp">
 
             <ImageView
-                android:layout_width="@dimen/levix_icon_md"
-                android:layout_height="@dimen/levix_icon_md"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
                 android:contentDescription="Language"
                 android:src="@drawable/ic_globe" />
 
@@ -189,25 +261,38 @@
                 android:orientation="vertical">
 
                 <TextView
-                    style="@style/Widget.Levix.Text.CardTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/pref_language_title" />
+                    android:fontFamily="sans-serif-medium"
+                    android:text="@string/pref_language_title"
+                    android:textColor="@color/levix_text"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
 
                 <TextView
-                    style="@style/Widget.Levix.Text.Subtitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="@string/pref_language_sub" />
+                    android:text="@string/pref_language_sub"
+                    android:textColor="@color/levix_text_muted"
+                    android:textSize="11sp" />
             </LinearLayout>
 
             <TextView
                 android:id="@+id/btnLanguageToggleCard"
-                style="@style/Widget.Levix.Pill.Label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/pref_language_btn" />
+                android:background="@drawable/bg_status_pill"
+                android:fontFamily="sans-serif-medium"
+                android:gravity="center"
+                android:paddingStart="12dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="6dp"
+                android:text="@string/pref_language_btn"
+                android:textColor="@color/levix_cyan"
+                android:textSize="12sp"
+                android:textStyle="bold" />
         </LinearLayout>
 
         <!-- Section: Status Overview Header (Logical Start-aligned) -->
@@ -218,16 +303,20 @@
             android:orientation="vertical">
 
             <TextView
-                style="@style/Widget.Levix.Text.Section"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/section_overview" />
+                android:fontFamily="sans-serif-medium"
+                android:text="@string/section_overview"
+                android:textColor="@color/levix_text"
+                android:textSize="16sp"
+                android:textStyle="bold" />
 
             <TextView
-                style="@style/Widget.Levix.Text.Section.Sub"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="@string/section_overview_sub" />
+                android:text="@string/section_overview_sub"
+                android:textColor="@color/levix_text_muted"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <!-- Redesigned 2-Column Tile Grid: WhatsApp & Bot Engine -->
@@ -240,24 +329,27 @@
             <!-- Tile 1: WhatsApp -->
             <LinearLayout
                 android:id="@+id/cardWhatsApp"
-                style="@style/Widget.Levix.Card"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="6dp"
                 android:layout_weight="1"
+                android:background="@drawable/bg_card_panel"
                 android:clickable="true"
-                android:contentDescription="@string/action_show_whatsapp_status"
                 android:focusable="true"
-                android:foreground="?attr/selectableItemBackground">
+                android:contentDescription="@string/action_show_whatsapp_status"
+                android:foreground="?attr/selectableItemBackground"
+                android:orientation="vertical"
+                android:padding="14dp">
 
                 <LinearLayout
-                    style="@style/Widget.Levix.Toolbar"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
                     <ImageView
-                        android:layout_width="@dimen/levix_icon_sm"
-                        android:layout_height="@dimen/levix_icon_sm"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
                         android:contentDescription="WhatsApp"
                         android:src="@drawable/ic_card_whatsapp" />
 
@@ -268,56 +360,74 @@
 
                     <TextView
                         android:id="@+id/whatsAppBadge"
-                        style="@style/Widget.Levix.Text.Badge"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/status_offline" />
+                        android:background="@drawable/bg_badge_subtle"
+                        android:fontFamily="sans-serif-medium"
+                        android:paddingStart="6dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="6dp"
+                        android:paddingBottom="2dp"
+                        android:singleLine="true"
+                        android:text="@string/status_offline"
+                        android:textColor="@color/levix_text_muted"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
 
                     <ImageView
                         android:layout_width="16dp"
                         android:layout_height="16dp"
-                        android:layout_marginStart="@dimen/levix_gap_xs"
+                        android:layout_marginStart="4dp"
                         android:src="@drawable/ic_chevron_right"
                         android:importantForAccessibility="no"
                         app:tint="@color/levix_text_muted" />
                 </LinearLayout>
 
                 <TextView
-                    style="@style/Widget.Levix.Text.CardTitle.Large"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="@string/card_whatsapp_title" />
+                    android:fontFamily="sans-serif-medium"
+                    android:singleLine="true"
+                    android:text="@string/card_whatsapp_title"
+                    android:textColor="@color/levix_text"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/whatsAppDetailText"
-                    style="@style/Widget.Levix.Text.Detail"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:ellipsize="end"
+                    android:lineSpacingMultiplier="1.15"
                     android:maxLines="1"
                     android:singleLine="true"
-                    android:text="@string/card_whatsapp_desc_offline" />
+                    android:text="@string/card_whatsapp_desc_offline"
+                    android:textColor="@color/levix_text_muted"
+                    android:textSize="12sp" />
             </LinearLayout>
 
             <!-- Tile 2: Bot Engine -->
             <LinearLayout
                 android:id="@+id/cardEngine"
-                style="@style/Widget.Levix.Card"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="6dp"
-                android:layout_weight="1">
+                android:layout_weight="1"
+                android:background="@drawable/bg_card_panel"
+                android:orientation="vertical"
+                android:padding="14dp">
 
                 <LinearLayout
-                    style="@style/Widget.Levix.Toolbar"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
                     <ImageView
-                        android:layout_width="@dimen/levix_icon_sm"
-                        android:layout_height="@dimen/levix_icon_sm"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
                         android:contentDescription="Engine"
                         android:src="@drawable/ic_card_engine" />
 
@@ -328,182 +438,240 @@
 
                     <TextView
                         android:id="@+id/engineBadge"
-                        style="@style/Widget.Levix.Text.Badge"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/status_stopped" />
+                        android:background="@drawable/bg_badge_subtle"
+                        android:fontFamily="sans-serif-medium"
+                        android:paddingStart="6dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="6dp"
+                        android:paddingBottom="2dp"
+                        android:singleLine="true"
+                        android:text="@string/status_stopped"
+                        android:textColor="@color/levix_text_muted"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
                 </LinearLayout>
 
                 <TextView
-                    style="@style/Widget.Levix.Text.CardTitle.Large"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="@string/card_engine_title" />
+                    android:fontFamily="sans-serif-medium"
+                    android:singleLine="true"
+                    android:text="@string/card_engine_title"
+                    android:textColor="@color/levix_text"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/engineDetailText"
-                    style="@style/Widget.Levix.Text.Detail"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:ellipsize="end"
+                    android:lineSpacingMultiplier="1.15"
                     android:maxLines="2"
-                    android:text="@string/card_engine_desc_stopped" />
+                    android:text="@string/card_engine_desc_stopped"
+                    android:textColor="@color/levix_text_muted"
+                    android:textSize="12sp" />
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Redesigned Compact Card: Media Hub -->
+        <!-- Redesigned Compact Card: Battery Guard -->
         <LinearLayout
             android:id="@+id/cardMediaHub"
-            style="@style/Widget.Levix.Card.Compact"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
+            android:minHeight="72dp"
+            android:background="@drawable/bg_card_panel"
             android:clickable="true"
-            android:focusable="true">
-
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="16dp">
             <ImageView
-                android:layout_width="@dimen/levix_icon_lg"
-                android:layout_height="@dimen/levix_icon_lg"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
                 android:contentDescription="@string/media_hub_title"
                 android:src="@drawable/ic_card_whatsapp" />
-
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="14dp"
                 android:layout_weight="1"
                 android:orientation="vertical">
-
                 <TextView
-                    style="@style/Widget.Levix.Text.CardTitle.Media"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/media_hub_title" />
-
+                    android:text="@string/media_hub_title"
+                    android:textColor="@color/levix_text"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
                 <TextView
-                    style="@style/Widget.Levix.Text.Section.Sub"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="3dp"
-                    android:ellipsize="end"
+                    android:text="@string/media_hub_subtitle"
                     android:singleLine="true"
-                    android:text="@string/media_hub_subtitle" />
+                    android:ellipsize="end"
+                    android:textColor="@color/levix_text_muted"
+                    android:textSize="12sp" />
             </LinearLayout>
-
             <TextView
-                style="@style/Widget.Levix.IconButton.Glyph.Chevron"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
+                android:gravity="center"
                 android:contentDescription="@string/media_open"
-                android:text="›" />
+                android:text="›"
+                android:textColor="@color/levix_cyan"
+                android:textSize="28sp" />
         </LinearLayout>
 
-        <!-- Compact Card: Battery Guard -->
         <LinearLayout
             android:id="@+id/cardBattery"
-            style="@style/Widget.Levix.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp">
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_card_panel"
+            android:orientation="vertical"
+            android:padding="14dp">
 
             <LinearLayout
-                style="@style/Widget.Levix.Toolbar"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content">
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
                 <ImageView
                     android:id="@+id/batteryIcon"
-                    android:layout_width="@dimen/levix_icon_sm"
-                    android:layout_height="@dimen/levix_icon_sm"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
                     android:contentDescription="Battery Guard"
                     android:src="@drawable/ic_card_battery" />
 
                 <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="@dimen/levix_gap_md"
+                    android:layout_marginStart="10dp"
                     android:layout_marginEnd="8dp"
                     android:layout_weight="1"
                     android:orientation="vertical">
 
                     <TextView
-                        style="@style/Widget.Levix.Text.CardTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/card_battery_title" />
+                        android:fontFamily="sans-serif-medium"
+                        android:singleLine="true"
+                        android:text="@string/card_battery_title"
+                        android:textColor="@color/levix_text"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
 
                     <TextView
                         android:id="@+id/batteryHint"
-                        style="@style/Widget.Levix.Text.Subtitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:ellipsize="end"
                         android:maxLines="2"
-                        android:text="@string/battery_hint" />
+                        android:text="@string/battery_hint"
+                        android:textColor="@color/levix_text_muted"
+                        android:textSize="11sp" />
                 </LinearLayout>
 
                 <TextView
                     android:id="@+id/batteryBadge"
-                    style="@style/Widget.Levix.Text.Badge.Wide"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="CHECKING" />
+                    android:background="@drawable/bg_badge_subtle"
+                    android:fontFamily="sans-serif-medium"
+                    android:paddingStart="7dp"
+                    android:paddingTop="2dp"
+                    android:paddingEnd="7dp"
+                    android:paddingBottom="2dp"
+                    android:singleLine="true"
+                    android:text="CHECKING"
+                    android:textColor="@color/levix_warn"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <Button
                 android:id="@+id/batteryButton"
-                style="@style/Widget.Levix.Button.Outlined.Warn"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
+                android:background="@drawable/bg_btn_outlined"
+                android:fontFamily="sans-serif-medium"
+                android:minHeight="38dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
                 android:text="@string/btn_battery"
+                android:textAllCaps="false"
+                android:textColor="@color/levix_warn"
+                android:textSize="12sp"
                 android:visibility="gone" />
         </LinearLayout>
 
         <!-- Compact Diagnostics Row: Share logs only -->
         <LinearLayout
             android:id="@+id/cardDiagnostics"
-            style="@style/Widget.Levix.Card.Row"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="@dimen/levix_gap_xl">
+            android:layout_marginTop="18dp"
+            android:background="@drawable/bg_card_panel"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="14dp">
 
             <ImageView
-                android:layout_width="@dimen/levix_icon_sm"
-                android:layout_height="@dimen/levix_icon_sm"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
                 android:contentDescription="Diagnostics"
                 android:src="@drawable/ic_terminal" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="@dimen/levix_gap_md"
+                android:layout_marginStart="10dp"
                 android:layout_marginEnd="8dp"
                 android:layout_weight="1"
                 android:orientation="vertical">
 
                 <TextView
-                    style="@style/Widget.Levix.Text.CardTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/section_diagnostics_short" />
+                    android:fontFamily="sans-serif-medium"
+                    android:text="@string/section_diagnostics_short"
+                    android:textColor="@color/levix_text"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
 
                 <TextView
-                    style="@style/Widget.Levix.Text.Subtitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/diagnostics_panel_hint" />
+                    android:text="@string/diagnostics_panel_hint"
+                    android:textColor="@color/levix_text_muted"
+                    android:textSize="11sp" />
             </LinearLayout>
 
-            <ImageView
+            <androidx.appcompat.widget.AppCompatButton
                 android:id="@+id/btnShareLogs"
-                style="@style/Widget.Levix.IconButton.Outlined"
-                android:contentDescription="@string/btn_share_logs"
-                android:src="@drawable/ic_share"
-                android:tooltipText="@string/btn_share_logs"
-                app:tint="@color/levix_cyan" />
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_btn_outlined"
+                android:drawableStart="@drawable/ic_share"
+                android:drawablePadding="6dp"
+                android:fontFamily="sans-serif-medium"
+                android:minHeight="38dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="@string/btn_share_logs"
+                android:textAllCaps="false"
+                android:textColor="@color/levix_cyan"
+                android:textSize="12sp"
+                app:drawableTint="@color/levix_cyan" />
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

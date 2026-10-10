@@ -89,7 +89,6 @@ class StatusViewer(
             minHeight = dp(48)
             textSize = 22f
             contentDescription = activity.getString(R.string.media_more)
-            tooltipText = activity.getString(R.string.media_more)
             setTextColor(ContextCompat.getColor(activity, R.color.levix_text))
             setOnClickListener { anchor ->
                 val current = pages.getOrNull(pager.currentItem) ?: return@setOnClickListener
