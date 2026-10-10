@@ -75,13 +75,64 @@ Icon only. `label` is required. Same variants and sizes. `pressed` sets `aria-pr
 
 `Field` wraps a control with `label`, `description`, and `error`. `Input`, `Textarea`, and `Select` are the native controls with the shared field style. `Checkbox` and `RadioGroup` are labelled choices. `Toggle` is the switch (`checked`, `onChange(checked)`, optional `label` and `description`).
 
-Per-row settings stay as `Select` or `Toggle`. A list filter does not — that is `FilterButton`.
+Per-row settings stay as `Select` (with `SaveField`) or `Toggle`. A list filter does not — that is `FilterButton`.
 
 ```tsx
 <Field label={t("packName")} htmlFor="pack-name" error={nameError}>
   <Input id="pack-name" value={name} onChange={(event) => setName(event.target.value)} />
 </Field>
 ```
+
+### SaveField / useSavedValue / FormActions / useDirtyForm
+
+Settings that the operator types or picks do not save on blur or on every change. A `Toggle` still applies immediately — that is what a switch means.
+
+**Per-field** — one independent value (timezone, a standalone API key, a storage number, panel language, bot reply language, a group media restriction, a command permission). `useSavedValue` holds the draft. `SaveField` renders the input plus an inline Save `IconButton` at its end: enabled only while the draft differs from the saved value, spinner while saving, a brief success check, Enter saves (on an `<input>`), Escape reverts, error under the field.
+
+```tsx
+const timezone = useSavedValue(savedTimezone);
+<SaveField
+  label={t("botTimezone")}
+  dirty={timezone.dirty}
+  saving={timezone.status === "saving"}
+  justSaved={timezone.status === "saved"}
+  error={timezone.error}
+  onSave={() => timezone.save(persistTimezone)}
+  onRevert={timezone.revert}
+  saveLabel={t("save")}
+  savedLabel={t("saved")}
+>
+  <Input value={timezone.value} onChange={(event) => timezone.setValue(event.target.value)} />
+</SaveField>
+```
+
+**One form** — values that only make sense together (min+max delay, the selected AI provider's API key + base URL + model, the WhatsApp proxy protocol/host/port/username/password). `useDirtyForm` holds the group. `FormActions` is one primary Save and a Discard, both disabled until something changed, with an "unsaved changes" hint. Wrap the fields in a `<form>`; Save is `type="submit"`.
+
+```tsx
+const delay = useDirtyForm({ min: savedMin, max: savedMax });
+<form
+  onSubmit={(event) => {
+    event.preventDefault();
+    delay.save(persistDelay);
+  }}
+>
+  <Input value={delay.draft.min} onChange={(event) => delay.setField("min", Number(event.target.value))} />
+  <Input value={delay.draft.max} onChange={(event) => delay.setField("max", Number(event.target.value))} />
+  <FormActions
+    dirty={delay.dirty}
+    saving={delay.status === "saving"}
+    justSaved={delay.status === "saved"}
+    error={delay.error}
+    onDiscard={delay.revert}
+    saveLabel={t("save")}
+    discardLabel={t("discard")}
+    unsavedLabel={t("unsavedChanges")}
+    savedLabel={t("saved")}
+  />
+</form>
+```
+
+Dialogs that already end in a submit button stay as they are.
 
 ### Dialog / ConfirmDialog
 

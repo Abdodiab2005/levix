@@ -28,14 +28,19 @@ import {
   CardHeader,
   Dialog,
   Field,
+  FormActions,
   IconButton,
   Input,
+  SaveField,
   Select,
   Spinner,
   Tabs,
   Toggle,
+  useDirtyForm,
+  useSavedValue,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
+import type { Language } from "../i18n/translations";
 
 type SettingsTab = "general" | "integrations" | "proxy" | "security" | "storage" | "feedback";
 
@@ -58,6 +63,7 @@ export const SettingsView: React.FC = () => {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const [settings, setSettings] = useState<Record<string, any>>({});
+  const [configuredKeys, setConfiguredKeys] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
 
   // Prefix management state
@@ -82,6 +88,49 @@ export const SettingsView: React.FC = () => {
   const [applyingImport, setApplyingImport] = useState(false);
   const [importPreview, setImportPreview] = useState<any>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
+
+  const persistSetting = async (key: string, value: any) => {
+    await api.updateSetting(key, value);
+    const secret = key.endsWith("_api_key") || key === "whatsapp_proxy_password";
+    if (secret) {
+      setSettings((prev) => ({ ...prev, [key]: "" }));
+      setConfiguredKeys((prev) => ({ ...prev, [key]: Boolean(String(value || "").trim()) }));
+    } else {
+      setSettings((prev) => ({ ...prev, [key]: value }));
+    }
+  };
+
+  const persistToggle = async (key: string, value: boolean) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+    try {
+      await api.updateSetting(key, value);
+      toast(t("savedSuccessfully"), "success");
+    } catch (err: any) {
+      toast(err.message, "error");
+      await loadSettings();
+    }
+  };
+
+  const panelLang = useSavedValue<Language>(language);
+  const botLang = useSavedValue(String(settings["bot_language"] || "auto"));
+  const timezone = useSavedValue(String(settings["bot_timezone"] || "Africa/Cairo"));
+  const weatherKey = useSavedValue(String(settings["openweathermap_api_key"] || ""));
+  const youtubeKey = useSavedValue(String(settings["youtube_api_key"] || ""));
+  const forwardTtl = useSavedValue(Number(settings["forward_score_ttl_days"] || 30));
+  const maxFetch = useSavedValue(Number(settings["max_fetch_bytes"] || 524288));
+  const stickerLimit = useSavedValue(Number(settings["sticker_library_limit"] || 1000));
+  const autoDeleteKeep = useSavedValue(Number(settings["auto_delete_keep_days"] || 30));
+  const delayForm = useDirtyForm({
+    min: Number(settings["bot_min_delay_ms"] ?? 400),
+    max: Number(settings["bot_max_delay_ms"] ?? 900),
+  });
+  const proxyForm = useDirtyForm({
+    protocol: String(settings["whatsapp_proxy_protocol"] || "http"),
+    host: String(settings["whatsapp_proxy_host"] || ""),
+    port: Number(settings["whatsapp_proxy_port"] || 0),
+    username: String(settings["whatsapp_proxy_username"] || ""),
+    password: String(settings["whatsapp_proxy_password"] || ""),
+  });
 
   const handleExportSettings = async () => {
     setExportingSettings(true);
@@ -162,10 +211,17 @@ export const SettingsView: React.FC = () => {
       const res = await api.getSettings();
       if (res?.settings) {
         const map: Record<string, any> = {};
+        const conf: Record<string, boolean> = {};
         res.settings.forEach((s: any) => {
-          map[s.key] = s.value;
+          if (s.type === "secret") {
+            conf[s.key] = Boolean(s.configured);
+            map[s.key] = "";
+          } else {
+            map[s.key] = s.value;
+          }
         });
         setSettings(map);
+        setConfiguredKeys(conf);
       }
       if (res?.prefix) {
         setPrefix(res.prefix);
@@ -181,16 +237,6 @@ export const SettingsView: React.FC = () => {
   useEffect(() => {
     loadSettings();
   }, []);
-
-  const updateSetting = async (key: string, value: any) => {
-    setSettings((prev) => ({ ...prev, [key]: value }));
-    try {
-      await api.updateSetting(key, value);
-      toast(t("savedSuccessfully"), "success");
-    } catch (err: any) {
-      toast(err.message, "error");
-    }
-  };
 
   const handleSavePrefix = async (valToSave?: string) => {
     const target = (valToSave !== undefined ? valToSave : prefixInput).trim();
@@ -235,6 +281,17 @@ export const SettingsView: React.FC = () => {
     } finally {
       setChangingPass(false);
     }
+  };
+
+  const saveLabels = {
+    saveLabel: t("save"),
+    savedLabel: t("saved"),
+  };
+  const formLabels = {
+    saveLabel: t("save"),
+    discardLabel: t("discard"),
+    unsavedLabel: t("unsavedChanges"),
+    savedLabel: t("saved"),
   };
 
   if (loading) {
@@ -352,82 +409,147 @@ export const SettingsView: React.FC = () => {
             />
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <Field label={t("interfaceLanguage")} description={t("interfaceLanguageDesc")}>
-                <Select value={language} onChange={(e) => setLanguage(e.target.value as any)}>
+              <SaveField
+                label={t("interfaceLanguage")}
+                description={t("interfaceLanguageDesc")}
+                htmlFor="panel-language"
+                dirty={panelLang.dirty}
+                saving={panelLang.status === "saving"}
+                justSaved={panelLang.status === "saved"}
+                error={panelLang.error}
+                onSave={() => panelLang.save(async (next) => setLanguage(next))}
+                onRevert={panelLang.revert}
+                {...saveLabels}
+              >
+                <Select
+                  id="panel-language"
+                  value={panelLang.value}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    if (next === "ar" || next === "en") panelLang.setValue(next);
+                  }}
+                >
                   <option value="ar">العربية (RTL - اليمين لليسار)</option>
                   <option value="en">English (LTR - Left to Right)</option>
                 </Select>
-              </Field>
+              </SaveField>
 
-              <Field label={t("botLanguage")} description={t("botLanguageDesc")}>
+              <SaveField
+                label={t("botLanguage")}
+                description={t("botLanguageDesc")}
+                htmlFor="bot-language"
+                dirty={botLang.dirty}
+                saving={botLang.status === "saving"}
+                justSaved={botLang.status === "saved"}
+                error={botLang.error}
+                onSave={() => botLang.save((next) => persistSetting("bot_language", next))}
+                onRevert={botLang.revert}
+                {...saveLabels}
+              >
                 <Select
-                  value={settings["bot_language"] || "auto"}
-                  onChange={(e) => updateSetting("bot_language", e.target.value)}
+                  id="bot-language"
+                  value={botLang.value}
+                  onChange={(e) => botLang.setValue(e.target.value)}
                 >
                   <option value="auto">{t("langAuto")}</option>
                   <option value="ar">{t("langAr")}</option>
                   <option value="en">{t("langEn")}</option>
                 </Select>
-              </Field>
+              </SaveField>
 
-              <Field label={t("botTimezone")} description={t("botTimezoneDesc")}>
+              <SaveField
+                label={t("botTimezone")}
+                description={t("botTimezoneDesc")}
+                htmlFor="bot-timezone"
+                dirty={timezone.dirty}
+                saving={timezone.status === "saving"}
+                justSaved={timezone.status === "saved"}
+                error={timezone.error}
+                onSave={() => timezone.save((next) => persistSetting("bot_timezone", next))}
+                onRevert={timezone.revert}
+                {...saveLabels}
+              >
                 <Input
+                  id="bot-timezone"
                   type="text"
                   className="font-mono"
                   placeholder="Africa/Cairo"
-                  value={settings["bot_timezone"] || "Africa/Cairo"}
-                  onChange={(e) => setSettings({ ...settings, bot_timezone: e.target.value })}
-                  onBlur={(e) => updateSetting("bot_timezone", e.target.value)}
+                  value={timezone.value}
+                  onChange={(e) => timezone.setValue(e.target.value)}
                 />
-              </Field>
-
-              <Field label={t("botMinDelay")} description={t("delaysDesc")}>
-                <Input
-                  type="number"
-                  value={settings["bot_min_delay_ms"] || 400}
-                  onChange={(e) =>
-                    setSettings({ ...settings, bot_min_delay_ms: Number(e.target.value) })
-                  }
-                  onBlur={(e) => updateSetting("bot_min_delay_ms", Number(e.target.value))}
-                />
-              </Field>
-
-              <Field label={t("botMaxDelay")}>
-                <Input
-                  type="number"
-                  value={settings["bot_max_delay_ms"] || 900}
-                  onChange={(e) =>
-                    setSettings({ ...settings, bot_max_delay_ms: Number(e.target.value) })
-                  }
-                  onBlur={(e) => updateSetting("bot_max_delay_ms", Number(e.target.value))}
-                />
-              </Field>
+              </SaveField>
             </div>
+
+            <form
+              className="flex flex-col gap-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void delayForm.save(async (draft) => {
+                  if (draft.min > draft.max) throw new Error(t("delayRangeError"));
+                  await persistSetting("bot_min_delay_ms", draft.min);
+                  await persistSetting("bot_max_delay_ms", draft.max);
+                });
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") delayForm.revert();
+              }}
+            >
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field
+                  label={t("botMinDelay")}
+                  description={t("delaysDesc")}
+                  htmlFor="bot-min-delay"
+                >
+                  <Input
+                    id="bot-min-delay"
+                    type="number"
+                    value={delayForm.draft.min}
+                    onChange={(e) => delayForm.setField("min", Number(e.target.value))}
+                  />
+                </Field>
+                <Field label={t("botMaxDelay")} htmlFor="bot-max-delay">
+                  <Input
+                    id="bot-max-delay"
+                    type="number"
+                    value={delayForm.draft.max}
+                    onChange={(e) => delayForm.setField("max", Number(e.target.value))}
+                  />
+                </Field>
+              </div>
+              <FormActions
+                dirty={delayForm.dirty}
+                saving={delayForm.status === "saving"}
+                justSaved={delayForm.status === "saved"}
+                error={delayForm.error}
+                onDiscard={delayForm.revert}
+                {...formLabels}
+              />
+            </form>
           </Card>
 
-          <Card>
+          <Card className="flex flex-col gap-4">
             <CardHeader
               icon={<Share2 size={20} />}
               title={t("shareSettingsTitle")}
               description={t("shareSettingsDesc")}
-              actions={
-                <>
-                  <IconButton
-                    label={t("exportSettings")}
-                    icon={<Download size={18} />}
-                    onClick={handleExportSettings}
-                    loading={exportingSettings}
-                  />
-                  <Button
-                    variant="secondary"
-                    icon={<Upload size={16} />}
-                    onClick={() => importFileRef.current?.click()}
-                  >
-                    {t("importSettings")}
-                  </Button>
-                </>
-              }
             />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                icon={<Upload size={16} />}
+                onClick={handleExportSettings}
+                loading={exportingSettings}
+              >
+                {t("exportAction")}
+              </Button>
+              <Button
+                variant="secondary"
+                icon={<Download size={16} />}
+                onClick={() => importFileRef.current?.click()}
+              >
+                {t("importSettings")}
+              </Button>
+            </div>
             <input
               ref={importFileRef}
               type="file"
@@ -448,59 +570,87 @@ export const SettingsView: React.FC = () => {
           />
 
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-            <Field
+            <SaveField
               label={t("weatherApiKey")}
               description={
                 language === "ar"
                   ? "مطلوب لتشغيل أمر الطقس والأحوال الجوية !weather"
                   : "Required for the !weather forecast command"
               }
-            >
-              <div className="flex items-center gap-2">
-                <Input
-                  type={showWeatherKey ? "text" : "password"}
-                  className="min-w-0 flex-1 font-mono"
-                  placeholder="OpenWeatherMap API Key"
-                  value={settings["openweathermap_api_key"] || ""}
-                  onChange={(e) =>
-                    setSettings({ ...settings, openweathermap_api_key: e.target.value })
-                  }
-                  onBlur={(e) => updateSetting("openweathermap_api_key", e.target.value)}
-                />
+              htmlFor="weather-api-key"
+              dirty={weatherKey.dirty}
+              saving={weatherKey.status === "saving"}
+              justSaved={weatherKey.status === "saved"}
+              error={weatherKey.error}
+              onSave={() =>
+                weatherKey.save(async (next) => {
+                  await persistSetting("openweathermap_api_key", next);
+                  weatherKey.setValue("");
+                })
+              }
+              onRevert={weatherKey.revert}
+              {...saveLabels}
+              actions={
                 <IconButton
                   variant="ghost"
-                  label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                  label={showWeatherKey ? t("hideSecret") : t("showSecret")}
                   icon={showWeatherKey ? <EyeOff size={16} /> : <Eye size={16} />}
                   onClick={() => setShowWeatherKey(!showWeatherKey)}
                 />
-              </div>
-            </Field>
+              }
+            >
+              <Input
+                id="weather-api-key"
+                type={showWeatherKey ? "text" : "password"}
+                className="font-mono"
+                placeholder={
+                  configuredKeys.openweathermap_api_key ? "••••••••••••" : "OpenWeatherMap API Key"
+                }
+                value={weatherKey.value}
+                onChange={(e) => weatherKey.setValue(e.target.value)}
+              />
+            </SaveField>
 
-            <Field
+            <SaveField
               label={t("youtubeApiKey")}
               description={
                 language === "ar"
                   ? "مطلوب لأدوات البحث ومعلومات الفيديوهات من يوتيوب"
                   : "Required for YouTube search and video tools"
               }
-            >
-              <div className="flex items-center gap-2">
-                <Input
-                  type={showYoutubeKey ? "text" : "password"}
-                  className="min-w-0 flex-1 font-mono"
-                  placeholder="YouTube Data API Key"
-                  value={settings["youtube_api_key"] || ""}
-                  onChange={(e) => setSettings({ ...settings, youtube_api_key: e.target.value })}
-                  onBlur={(e) => updateSetting("youtube_api_key", e.target.value)}
-                />
+              htmlFor="youtube-api-key"
+              dirty={youtubeKey.dirty}
+              saving={youtubeKey.status === "saving"}
+              justSaved={youtubeKey.status === "saved"}
+              error={youtubeKey.error}
+              onSave={() =>
+                youtubeKey.save(async (next) => {
+                  await persistSetting("youtube_api_key", next);
+                  youtubeKey.setValue("");
+                })
+              }
+              onRevert={youtubeKey.revert}
+              {...saveLabels}
+              actions={
                 <IconButton
                   variant="ghost"
-                  label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                  label={showYoutubeKey ? t("hideSecret") : t("showSecret")}
                   icon={showYoutubeKey ? <EyeOff size={16} /> : <Eye size={16} />}
                   onClick={() => setShowYoutubeKey(!showYoutubeKey)}
                 />
-              </div>
-            </Field>
+              }
+            >
+              <Input
+                id="youtube-api-key"
+                type={showYoutubeKey ? "text" : "password"}
+                className="font-mono"
+                placeholder={
+                  configuredKeys.youtube_api_key ? "••••••••••••" : "YouTube Data API Key"
+                }
+                value={youtubeKey.value}
+                onChange={(e) => youtubeKey.setValue(e.target.value)}
+              />
+            </SaveField>
           </div>
         </Card>
       )}
@@ -517,77 +667,103 @@ export const SettingsView: React.FC = () => {
             <Toggle
               className="shrink-0"
               checked={Boolean(settings["whatsapp_proxy_enabled"])}
-              onChange={(val) => updateSetting("whatsapp_proxy_enabled", val)}
+              onChange={(val) => persistToggle("whatsapp_proxy_enabled", val)}
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label={t("proxyProtocol")}>
-              <Select
-                value={settings["whatsapp_proxy_protocol"] || "http"}
-                onChange={(e) => updateSetting("whatsapp_proxy_protocol", e.target.value)}
-              >
-                <option value="http">HTTP</option>
-                <option value="https">HTTPS</option>
-                <option value="socks5">SOCKS5</option>
-              </Select>
-            </Field>
-
-            <Field label={t("proxyHost")}>
-              <Input
-                type="text"
-                className="font-mono"
-                placeholder="proxy.example.com"
-                value={settings["whatsapp_proxy_host"] || ""}
-                onChange={(e) => setSettings({ ...settings, whatsapp_proxy_host: e.target.value })}
-                onBlur={(e) => updateSetting("whatsapp_proxy_host", e.target.value)}
-              />
-            </Field>
-
-            <Field label={t("proxyPort")}>
-              <Input
-                type="number"
-                placeholder="1080"
-                value={settings["whatsapp_proxy_port"] || ""}
-                onChange={(e) =>
-                  setSettings({ ...settings, whatsapp_proxy_port: Number(e.target.value) })
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void proxyForm.save(async (draft) => {
+                await persistSetting("whatsapp_proxy_protocol", draft.protocol);
+                await persistSetting("whatsapp_proxy_host", draft.host);
+                await persistSetting("whatsapp_proxy_port", draft.port);
+                await persistSetting("whatsapp_proxy_username", draft.username);
+                if (draft.password.trim()) {
+                  await persistSetting("whatsapp_proxy_password", draft.password);
                 }
-                onBlur={(e) => updateSetting("whatsapp_proxy_port", Number(e.target.value))}
-              />
-            </Field>
+                proxyForm.setDraft({ ...draft, password: "" });
+              });
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") proxyForm.revert();
+            }}
+          >
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label={t("proxyProtocol")} htmlFor="proxy-protocol">
+                <Select
+                  id="proxy-protocol"
+                  value={proxyForm.draft.protocol}
+                  onChange={(e) => proxyForm.setField("protocol", e.target.value)}
+                >
+                  <option value="http">HTTP</option>
+                  <option value="https">HTTPS</option>
+                  <option value="socks5">SOCKS5</option>
+                </Select>
+              </Field>
 
-            <Field label={t("proxyUsername")}>
-              <Input
-                type="text"
-                className="font-mono"
-                value={settings["whatsapp_proxy_username"] || ""}
-                onChange={(e) =>
-                  setSettings({ ...settings, whatsapp_proxy_username: e.target.value })
-                }
-                onBlur={(e) => updateSetting("whatsapp_proxy_username", e.target.value)}
-              />
-            </Field>
-
-            <Field label={t("proxyPassword")}>
-              <div className="flex items-center gap-2">
+              <Field label={t("proxyHost")} htmlFor="proxy-host">
                 <Input
-                  type={showProxyPass ? "text" : "password"}
-                  className="min-w-0 flex-1"
-                  value={settings["whatsapp_proxy_password"] || ""}
-                  onChange={(e) =>
-                    setSettings({ ...settings, whatsapp_proxy_password: e.target.value })
-                  }
-                  onBlur={(e) => updateSetting("whatsapp_proxy_password", e.target.value)}
+                  id="proxy-host"
+                  type="text"
+                  className="font-mono"
+                  placeholder="proxy.example.com"
+                  value={proxyForm.draft.host}
+                  onChange={(e) => proxyForm.setField("host", e.target.value)}
                 />
-                <IconButton
-                  variant="ghost"
-                  label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
-                  icon={showProxyPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                  onClick={() => setShowProxyPass(!showProxyPass)}
+              </Field>
+
+              <Field label={t("proxyPort")} htmlFor="proxy-port">
+                <Input
+                  id="proxy-port"
+                  type="number"
+                  placeholder="1080"
+                  value={proxyForm.draft.port}
+                  onChange={(e) => proxyForm.setField("port", Number(e.target.value))}
                 />
-              </div>
-            </Field>
-          </div>
+              </Field>
+
+              <Field label={t("proxyUsername")} htmlFor="proxy-username">
+                <Input
+                  id="proxy-username"
+                  type="text"
+                  className="font-mono"
+                  value={proxyForm.draft.username}
+                  onChange={(e) => proxyForm.setField("username", e.target.value)}
+                />
+              </Field>
+
+              <Field label={t("proxyPassword")} htmlFor="proxy-password">
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="proxy-password"
+                    type={showProxyPass ? "text" : "password"}
+                    className="min-w-0 flex-1"
+                    placeholder={
+                      configuredKeys.whatsapp_proxy_password ? "••••••••••••" : undefined
+                    }
+                    value={proxyForm.draft.password}
+                    onChange={(e) => proxyForm.setField("password", e.target.value)}
+                  />
+                  <IconButton
+                    variant="ghost"
+                    label={showProxyPass ? t("hideSecret") : t("showSecret")}
+                    icon={showProxyPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                    onClick={() => setShowProxyPass(!showProxyPass)}
+                  />
+                </div>
+              </Field>
+            </div>
+            <FormActions
+              dirty={proxyForm.dirty}
+              saving={proxyForm.status === "saving"}
+              justSaved={proxyForm.status === "saved"}
+              error={proxyForm.error}
+              onDiscard={proxyForm.revert}
+              {...formLabels}
+            />
+          </form>
         </Card>
       )}
 
@@ -608,7 +784,7 @@ export const SettingsView: React.FC = () => {
                   />
                   <IconButton
                     variant="ghost"
-                    label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                    label={showPanelPass ? t("hideSecret") : t("showSecret")}
                     icon={showPanelPass ? <EyeOff size={16} /> : <Eye size={16} />}
                     onClick={() => setShowPanelPass(!showPanelPass)}
                   />
@@ -627,7 +803,7 @@ export const SettingsView: React.FC = () => {
                   />
                   <IconButton
                     variant="ghost"
-                    label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                    label={showPanelPass ? t("hideSecret") : t("showSecret")}
                     icon={showPanelPass ? <EyeOff size={16} /> : <Eye size={16} />}
                     onClick={() => setShowPanelPass(!showPanelPass)}
                   />
@@ -646,7 +822,7 @@ export const SettingsView: React.FC = () => {
                   />
                   <IconButton
                     variant="ghost"
-                    label={language === "ar" ? "إظهار كلمة السر" : "Show password"}
+                    label={showPanelPass ? t("hideSecret") : t("showSecret")}
                     icon={showPanelPass ? <EyeOff size={16} /> : <Eye size={16} />}
                     onClick={() => setShowPanelPass(!showPanelPass)}
                   />
@@ -677,47 +853,95 @@ export const SettingsView: React.FC = () => {
           />
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label={t("forwardTtl")} description={t("forwardTtlDesc")}>
+            <SaveField
+              label={t("forwardTtl")}
+              description={t("forwardTtlDesc")}
+              htmlFor="forward-ttl"
+              dirty={forwardTtl.dirty}
+              saving={forwardTtl.status === "saving"}
+              justSaved={forwardTtl.status === "saved"}
+              error={forwardTtl.error}
+              onSave={() =>
+                forwardTtl.save((next) => persistSetting("forward_score_ttl_days", next))
+              }
+              onRevert={forwardTtl.revert}
+              {...saveLabels}
+            >
               <Input
+                id="forward-ttl"
                 type="number"
-                value={settings["forward_score_ttl_days"] || 30}
-                onChange={(e) =>
-                  setSettings({ ...settings, forward_score_ttl_days: Number(e.target.value) })
-                }
-                onBlur={(e) => updateSetting("forward_score_ttl_days", Number(e.target.value))}
+                value={forwardTtl.value}
+                onChange={(e) => forwardTtl.setValue(Number(e.target.value))}
               />
-            </Field>
+            </SaveField>
 
-            <Field label={t("maxFetchBytes")} description={t("maxFetchBytesDesc")}>
+            <SaveField
+              label={t("maxFetchBytes")}
+              description={t("maxFetchBytesDesc")}
+              htmlFor="max-fetch-bytes"
+              dirty={maxFetch.dirty}
+              saving={maxFetch.status === "saving"}
+              justSaved={maxFetch.status === "saved"}
+              error={maxFetch.error}
+              onSave={() => maxFetch.save((next) => persistSetting("max_fetch_bytes", next))}
+              onRevert={maxFetch.revert}
+              {...saveLabels}
+            >
               <Input
+                id="max-fetch-bytes"
                 type="number"
-                value={settings["max_fetch_bytes"] || 524288}
-                onChange={(e) =>
-                  setSettings({ ...settings, max_fetch_bytes: Number(e.target.value) })
-                }
-                onBlur={(e) => updateSetting("max_fetch_bytes", Number(e.target.value))}
+                value={maxFetch.value}
+                onChange={(e) => maxFetch.setValue(Number(e.target.value))}
               />
-            </Field>
-          </div>
+            </SaveField>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field
+            <SaveField
               label={t("stickerLibraryLimit")}
               htmlFor="sticker-library-limit"
               description={t("stickerLibraryLimitDesc")}
+              dirty={stickerLimit.dirty}
+              saving={stickerLimit.status === "saving"}
+              justSaved={stickerLimit.status === "saved"}
+              error={stickerLimit.error}
+              onSave={() =>
+                stickerLimit.save((next) => persistSetting("sticker_library_limit", next))
+              }
+              onRevert={stickerLimit.revert}
+              {...saveLabels}
             >
               <Input
                 id="sticker-library-limit"
                 type="number"
                 min={1}
                 max={100000}
-                value={settings["sticker_library_limit"] || 1000}
-                onChange={(e) =>
-                  setSettings({ ...settings, sticker_library_limit: Number(e.target.value) })
-                }
-                onBlur={(e) => updateSetting("sticker_library_limit", Number(e.target.value))}
+                value={stickerLimit.value}
+                onChange={(e) => stickerLimit.setValue(Number(e.target.value))}
               />
-            </Field>
+            </SaveField>
+
+            <SaveField
+              label={t("autoDeleteKeepDays")}
+              htmlFor="auto-delete-keep-days"
+              description={t("autoDeleteKeepDaysDesc")}
+              dirty={autoDeleteKeep.dirty}
+              saving={autoDeleteKeep.status === "saving"}
+              justSaved={autoDeleteKeep.status === "saved"}
+              error={autoDeleteKeep.error}
+              onSave={() =>
+                autoDeleteKeep.save((next) => persistSetting("auto_delete_keep_days", next))
+              }
+              onRevert={autoDeleteKeep.revert}
+              {...saveLabels}
+            >
+              <Input
+                id="auto-delete-keep-days"
+                type="number"
+                min={1}
+                max={365}
+                value={autoDeleteKeep.value}
+                onChange={(e) => autoDeleteKeep.setValue(Number(e.target.value))}
+              />
+            </SaveField>
           </div>
         </Card>
       )}
@@ -733,7 +957,7 @@ export const SettingsView: React.FC = () => {
         footer={
           <>
             <Button variant="secondary" onClick={() => setImportPreview(null)}>
-              {language === "ar" ? "إلغاء" : "Cancel"}
+              {t("cancel")}
             </Button>
             <Button
               variant="primary"

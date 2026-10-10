@@ -13,9 +13,11 @@ import {
   EmptyState,
   IconButton,
   Input,
+  SaveField,
   Select,
   Spinner,
   Toggle,
+  useSavedValue,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 import type { CommandItem, PermissionLevel } from "../types";
@@ -101,17 +103,11 @@ export const CommandsView: React.FC = () => {
     }
   };
 
-  const handlePermissionChange = async (cmd: CommandItem, permission: PermissionLevel) => {
+  const persistPermission = async (cmd: CommandItem, permission: PermissionLevel) => {
+    await api.updateCommand(cmd.name, { permission });
     setCommands((prev) =>
       prev.map((c) => (c.name === cmd.name ? { ...c, permission, overridden: true } : c)),
     );
-    try {
-      await api.updateCommand(cmd.name, { permission });
-      toast(t("permissionUpdated").replace("{name}", cmd.name), "success");
-    } catch (err: any) {
-      toast(err.message, "error");
-      loadCommands();
-    }
   };
 
   // Open alias editor
@@ -365,19 +361,15 @@ export const CommandsView: React.FC = () => {
                     <Badge tone="info">{scopeLabel(cmd.chat)}</Badge>
                   </td>
                   <td className="px-4 py-3.5">
-                    <Select
-                      aria-label={t("thRequiredRole")}
-                      value={cmd.permission}
-                      onChange={(e) =>
-                        handlePermissionChange(cmd, e.target.value as PermissionLevel)
-                      }
-                    >
-                      {levels.map((level) => (
-                        <option key={level} value={level}>
-                          {permissionLabel(level)}
-                        </option>
-                      ))}
-                    </Select>
+                    <CommandPermissionField
+                      command={cmd}
+                      levels={levels}
+                      permissionLabel={permissionLabel}
+                      ariaLabel={t("thRequiredRole")}
+                      saveLabel={t("save")}
+                      savedLabel={t("saved")}
+                      onSave={persistPermission}
+                    />
                   </td>
                   <td className="px-4 py-3.5 text-center">
                     <Toggle
@@ -492,3 +484,47 @@ export const CommandsView: React.FC = () => {
     </div>
   );
 };
+
+function CommandPermissionField({
+  command,
+  levels,
+  permissionLabel,
+  ariaLabel,
+  saveLabel,
+  savedLabel,
+  onSave,
+}: {
+  command: CommandItem;
+  levels: string[];
+  permissionLabel: (level: string) => string;
+  ariaLabel: string;
+  saveLabel: string;
+  savedLabel: string;
+  onSave: (cmd: CommandItem, permission: PermissionLevel) => Promise<void>;
+}) {
+  const field = useSavedValue(command.permission);
+  return (
+    <SaveField
+      dirty={field.dirty}
+      saving={field.status === "saving"}
+      justSaved={field.status === "saved"}
+      error={field.error}
+      onSave={() => field.save((next) => onSave(command, next))}
+      onRevert={field.revert}
+      saveLabel={saveLabel}
+      savedLabel={savedLabel}
+    >
+      <Select
+        aria-label={ariaLabel}
+        value={field.value}
+        onChange={(event) => field.setValue(event.target.value as PermissionLevel)}
+      >
+        {levels.map((level) => (
+          <option key={level} value={level}>
+            {permissionLabel(level)}
+          </option>
+        ))}
+      </Select>
+    </SaveField>
+  );
+}

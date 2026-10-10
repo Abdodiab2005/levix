@@ -5,7 +5,17 @@ import type React from "react";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useToast } from "../components/Toasts";
-import { Badge, Card, EmptyState, PageHeader, Select, Spinner, Toggle } from "../components/ui";
+import {
+  Badge,
+  Card,
+  EmptyState,
+  PageHeader,
+  SaveField,
+  Select,
+  Spinner,
+  Toggle,
+  useSavedValue,
+} from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 import type { GroupItem } from "../types";
 import { fill } from "../utils/fill";
@@ -58,6 +68,11 @@ export const GroupsView: React.FC = () => {
       toast(err.message, "error");
       loadGroups();
     }
+  };
+
+  const persistMedia = async (jid: string, mediaRestriction: string) => {
+    await api.updateGroup(jid, { mediaRestriction });
+    setGroups((prev) => prev.map((g) => (g.jid === jid ? { ...g, mediaRestriction } : g)));
   };
 
   return (
@@ -128,14 +143,16 @@ export const GroupsView: React.FC = () => {
                     />
                   </td>
                   <td className="px-5 py-4">
-                    <Select
-                      aria-label={t("thMedia")}
+                    <GroupMediaField
+                      jid={g.jid}
                       value={g.mediaRestriction || "none"}
-                      onChange={(e) => handleUpdate(g.jid, { mediaRestriction: e.target.value })}
-                    >
-                      <option value="none">{t("mediaNone")}</option>
-                      <option value="block_all">{t("mediaBlockAll")}</option>
-                    </Select>
+                      noneLabel={t("mediaNone")}
+                      blockLabel={t("mediaBlockAll")}
+                      ariaLabel={t("thMedia")}
+                      saveLabel={t("save")}
+                      savedLabel={t("saved")}
+                      onSave={persistMedia}
+                    />
                   </td>
                   <td className="px-5 py-4 text-center">
                     <Toggle
@@ -152,3 +169,46 @@ export const GroupsView: React.FC = () => {
     </div>
   );
 };
+
+function GroupMediaField({
+  jid,
+  value,
+  noneLabel,
+  blockLabel,
+  ariaLabel,
+  saveLabel,
+  savedLabel,
+  onSave,
+}: {
+  jid: string;
+  value: string;
+  noneLabel: string;
+  blockLabel: string;
+  ariaLabel: string;
+  saveLabel: string;
+  savedLabel: string;
+  onSave: (jid: string, mediaRestriction: string) => Promise<void>;
+}) {
+  const field = useSavedValue(value);
+  return (
+    <SaveField
+      dirty={field.dirty}
+      saving={field.status === "saving"}
+      justSaved={field.status === "saved"}
+      error={field.error}
+      onSave={() => field.save((next) => onSave(jid, next))}
+      onRevert={field.revert}
+      saveLabel={saveLabel}
+      savedLabel={savedLabel}
+    >
+      <Select
+        aria-label={ariaLabel}
+        value={field.value}
+        onChange={(event) => field.setValue(event.target.value)}
+      >
+        <option value="none">{noneLabel}</option>
+        <option value="block_all">{blockLabel}</option>
+      </Select>
+    </SaveField>
+  );
+}
