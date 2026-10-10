@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -17,6 +19,35 @@ val levixAbis = (System.getenv("LEVIX_ANDROID_ABIS") ?: "arm64-v8a,armeabi-v7a")
     .distinct()
 
 val knownAbis = setOf("arm64-v8a", "armeabi-v7a")
+
+// The staged runtime under node-runtime/<abi>/ is only refreshed when someone
+// runs fetch-node-android.sh, and jniLibs packages whatever is there — an APK
+// once shipped an FFmpeg staged before the recipe gained libwebp, and Sticker
+// Studio could not write a sticker. fetch-node-android.sh stamps each runtime
+// with the recipes it was built from (runtime_stamp() there); the same stamp is
+// recomputed here and a missing or different one fails the build. The file
+// name, the inputs and the line format must match RUNTIME_STAMP_FILE /
+// RUNTIME_STAMP_INPUTS in the script (tests/android-runtime-stamp.test.mjs).
+// The script is deliberately not run from here: it downloads and compiles.
+val runtimeStampFile = ".levix-stamp"
+val runtimeStampInputs = listOf("build-ffmpeg-android.sh", "fetch-node-android.sh")
+val androidScriptsDir = File(repoRoot, "android/scripts")
+
+// The first 16 hex characters of the file's sha256 — `sha256sum | cut -c1-16`.
+fun sha256Prefix(file: File): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest(file.readBytes())
+        .joinToString("") { "%02x".format(it) }
+        .take(16)
+
+fun expectedRuntimeStamp(abi: String): List<String> =
+    listOf("levix-runtime-stamp 1", "abi $abi") +
+        runtimeStampInputs.map { "$it ${sha256Prefix(File(androidScriptsDir, it))}" }
+
+// The sticker encoders the panel needs, as the NUL-terminated names FFmpeg
+// registers them under. Catches a binary copied in by hand, which no stamp can.
+val requiredFfmpegEncoders = listOf("libwebp", "libwebp_anim")
+
 levixAbis.forEach { abi ->
     if (abi !in knownAbis) {
         throw GradleException("Unknown ABI '$abi' in LEVIX_ANDROID_ABIS (supported: $knownAbis)")
@@ -28,6 +59,43 @@ levixAbis.forEach { abi ->
                 "Missing $lib for $abi at $dir. Run android/scripts/fetch-node-android.sh first.",
             )
         }
+    }
+
+    val refresh = "LEVIX_ANDROID_ABIS=$abi bash android/scripts/fetch-node-android.sh"
+    val stamp = File(dir, runtimeStampFile)
+    val expected = expectedRuntimeStamp(abi)
+    val staged = if (stamp.isFile) stamp.readLines().map { it.trim() }.filter { it.isNotEmpty() } else null
+    if (staged != expected) {
+        val stale = if (staged == null) {
+            listOf("$stamp is missing — staged before runtime stamps existed, by hand, or by an interrupted run")
+        } else {
+            val have = staged.associate { it.substringBefore(' ') to it.substringAfter(' ', "") }
+            expected.mapNotNull { line ->
+                val key = line.substringBefore(' ')
+                val want = line.substringAfter(' ')
+                when (val got = have[key]) {
+                    want -> null
+                    null -> "$key: not in the staged stamp (repo: $want)"
+                    else -> "$key: the stamp says $got, the repository expects $want"
+                }
+            }.ifEmpty { listOf("$stamp does not match the expected format") }
+        }
+        throw GradleException(
+            "Stale Android runtime for $abi at $dir — it was not staged from the current " +
+                "android/scripts/{${runtimeStampInputs.joinToString(",")}}:\n" +
+                stale.joinToString("\n") { "  - $it" } +
+                "\nRe-stage it from the repository root (Gradle will not run it for you):\n  $refresh",
+        )
+    }
+
+    val ffmpegBytes = File(dir, "libffmpeg.so").readBytes().toString(Charsets.ISO_8859_1)
+    val missingEncoders = requiredFfmpegEncoders.filter { "\u0000$it\u0000" !in ffmpegBytes }
+    if (missingEncoders.isNotEmpty()) {
+        throw GradleException(
+            "Android runtime for $abi has an FFmpeg without the ${missingEncoders.joinToString(", ")} " +
+                "encoder(s) at ${File(dir, "libffmpeg.so")} — Sticker Studio cannot write WebP with it. " +
+                "Re-stage it from the repository root:\n  $refresh",
+        )
     }
 }
 
