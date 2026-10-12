@@ -190,13 +190,18 @@ export const PacksView: React.FC<PacksViewProps> = ({
 
       {loading && <LoadingState text={t("loading")} />}
       {error && !loading && (
-        <div className="flex flex-col items-center gap-3 py-10">
-          <p className="text-sm text-danger">{error}</p>
-          <Button onClick={load}>{t("retryLoad")}</Button>
-        </div>
+        <EmptyState
+          kind="error"
+          description={error}
+          action={<Button onClick={load}>{t("retryLoad")}</Button>}
+        />
       )}
       {!loading && !error && packs.length === 0 && (
-        <EmptyState icon={<Package size={28} className="text-muted" />} text={t("noPacks")} />
+        <EmptyState
+          kind="empty"
+          icon={<Package size={28} className="text-muted" />}
+          description={t("noPacks")}
+        />
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

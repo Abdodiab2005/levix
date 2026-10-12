@@ -6,6 +6,7 @@ import { useToast } from "../../components/Toasts";
 import { Button, EmptyState, IconButton, LoadingState, UserText } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { Pack, Sticker } from "../../types";
+import { cn } from "../../utils/cn";
 import { fill } from "../../utils/fill";
 import { explainError } from "../../utils/stickerErrors";
 import { BulkBar } from "./BulkBar";
@@ -125,7 +126,7 @@ export const PackDetail: React.FC<PackDetailProps> = ({
   const animatedSelected = items.some((item) => selection.selected.has(item.id) && item.animated);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className={cn("flex flex-col gap-3 min-w-0", selectedIds.length > 0 && "pb-16 sm:pb-0")}>
       <div className="flex flex-wrap items-center gap-2">
         <Button onClick={onBack}>
           <ChevronLeft size={16} className="rtl:-scale-x-100" />
@@ -143,15 +144,17 @@ export const PackDetail: React.FC<PackDetailProps> = ({
 
       {loading && items.length === 0 && <LoadingState text={t("loading")} />}
       {error && items.length === 0 && (
-        <div className="flex flex-col items-center gap-3 py-16">
-          <p className="text-sm text-danger">{error}</p>
-          <Button onClick={reload}>{t("retryLoad")}</Button>
-        </div>
+        <EmptyState
+          kind="error"
+          description={error}
+          action={<Button onClick={reload}>{t("retryLoad")}</Button>}
+        />
       )}
       {!loading && !error && items.length === 0 && (
         <EmptyState
+          kind="empty"
           icon={<GripVertical size={28} className="text-muted" />}
-          text={t("packEmpty")}
+          description={t("packEmpty")}
         />
       )}
 
@@ -160,7 +163,7 @@ export const PackDetail: React.FC<PackDetailProps> = ({
           {selectedIds.length === 0 && (
             <div>
               <Button variant="ghost" size="sm" onClick={selection.selectAll}>
-                {t("selectAll")}
+                {t("selectCurrentPage")}
               </Button>
             </div>
           )}
