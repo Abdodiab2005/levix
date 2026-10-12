@@ -2,12 +2,15 @@
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api/client";
+import { CrashBanner } from "./components/CrashBanner";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Header } from "./components/Header";
 import { Sidebar, type ViewTab } from "./components/Sidebar";
 import { ToastProvider, useToast } from "./components/Toasts";
 import { I18nProvider, useI18n } from "./context/I18nContext";
 import { useSocket } from "./hooks/useSocket";
 import type { SessionState, SessionStatus } from "./types";
+import { initWindowErrorHandlers } from "./utils/errorCapture";
 import { AIAssistantView } from "./views/AIAssistantView";
 import { AutoDeleteView } from "./views/autoDelete/AutoDeleteView";
 import { CommandsView } from "./views/CommandsView";
@@ -137,6 +140,11 @@ const MainLayout: React.FC = () => {
     stickers: t("stickers"),
   };
 
+  useEffect(() => {
+    const unbind = initWindowErrorHandlers();
+    return unbind;
+  }, []);
+
   return (
     <div className="min-h-screen min-h-[100dvh] flex bg-bg text-text-main bg-ambient-glow overflow-x-clip relative">
       <Sidebar
@@ -154,26 +162,29 @@ const MainLayout: React.FC = () => {
         />
 
         <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-          {currentView === "overview" && (
-            <OverviewView status={activeStatus} onNavigate={handleSelectView} />
-          )}
-          {currentView === "connection" && (
-            <ConnectionView
-              status={activeStatus}
-              onRefresh={refreshStatus}
-              onStatusUpdate={(s) => setInitialStatus((prev) => ({ ...(prev || {}), ...s }))}
-            />
-          )}
-          {currentView === "ai" && <AIAssistantView />}
-          {currentView === "commands" && <CommandsView />}
-          {currentView === "schedules" && (
-            <SchedulesView isConnected={isConnected} onNavigate={handleSelectView} />
-          )}
-          {currentView === "groups" && <GroupsView />}
-          {currentView === "autodelete" && <AutoDeleteView />}
-          {currentView === "settings" && <SettingsView />}
-          {currentView === "stickers" && <StickerStudioView isConnected={isConnected} />}
-          {currentView === "logs" && <LogsView socket={socket} />}
+          <CrashBanner />
+          <ErrorBoundary>
+            {currentView === "overview" && (
+              <OverviewView status={activeStatus} onNavigate={handleSelectView} />
+            )}
+            {currentView === "connection" && (
+              <ConnectionView
+                status={activeStatus}
+                onRefresh={refreshStatus}
+                onStatusUpdate={(s) => setInitialStatus((prev) => ({ ...(prev || {}), ...s }))}
+              />
+            )}
+            {currentView === "ai" && <AIAssistantView />}
+            {currentView === "commands" && <CommandsView />}
+            {currentView === "schedules" && (
+              <SchedulesView isConnected={isConnected} onNavigate={handleSelectView} />
+            )}
+            {currentView === "groups" && <GroupsView />}
+            {currentView === "autodelete" && <AutoDeleteView />}
+            {currentView === "settings" && <SettingsView />}
+            {currentView === "stickers" && <StickerStudioView isConnected={isConnected} />}
+            {currentView === "logs" && <LogsView socket={socket} />}
+          </ErrorBoundary>
         </main>
       </div>
     </div>

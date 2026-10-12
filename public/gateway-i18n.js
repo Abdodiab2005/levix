@@ -259,6 +259,37 @@
     for (var i = 0; i < nodes.length; i += 1) paint(nodes[i]);
   }
 
+  function setLanguage(nextLang) {
+    if (nextLang !== "ar" && nextLang !== "en") return;
+    lang = nextLang;
+    root.lang = lang;
+    root.dir = lang === "ar" ? "rtl" : "ltr";
+    window.LevixGatewayI18n.lang = lang;
+    apply();
+    window.dispatchEvent(new CustomEvent("levix-gateway-lang", { detail: { lang: lang } }));
+  }
+
+  function setTheme(nextTheme) {
+    if (nextTheme === "dark" || nextTheme === "light") {
+      root.setAttribute("data-theme", nextTheme);
+    }
+  }
+
+  window.addEventListener("levix-ui-prefs", function (event) {
+    var detail = event.detail || {};
+    if (detail.theme) setTheme(detail.theme);
+    if (detail.language) setLanguage(detail.language);
+  });
+
+  window.addEventListener("storage", function (event) {
+    if (event.key === "levix_theme" && (event.newValue === "dark" || event.newValue === "light")) {
+      setTheme(event.newValue);
+    }
+    if (event.key === "levix_lang" && (event.newValue === "ar" || event.newValue === "en")) {
+      setLanguage(event.newValue);
+    }
+  });
+
   window.LevixGatewayI18n = { lang: lang, t: t, apply: apply };
   apply();
 })();
