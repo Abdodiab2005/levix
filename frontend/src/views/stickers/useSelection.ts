@@ -1,22 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 
-export function useSelection(ids: string[]) {
+export function useSelection(ids: string[], resetKey?: unknown) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const anchor = useRef<number | null>(null);
-  const idsKey = ids.join("\n");
+  const prevResetKey = useRef(resetKey);
 
   useEffect(() => {
-    const known = new Set(idsKey ? idsKey.split("\n") : []);
-    setSelected((prev) => {
-      let changed = false;
-      const next = new Set<string>();
-      for (const id of prev) {
-        if (known.has(id)) next.add(id);
-        else changed = true;
-      }
-      return changed ? next : prev;
-    });
-  }, [idsKey]);
+    if (prevResetKey.current !== resetKey) {
+      prevResetKey.current = resetKey;
+      setSelected(new Set());
+      anchor.current = null;
+    }
+  }, [resetKey]);
 
   const toggle = (index: number, shift: boolean) => {
     const id = ids[index];
@@ -39,7 +34,16 @@ export function useSelection(ids: string[]) {
     });
   };
 
-  const selectAll = () => setSelected(new Set(ids));
+  const selectAll = () => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (id) next.add(id);
+      }
+      return next;
+    });
+  };
+
   const clear = () => {
     anchor.current = null;
     setSelected(new Set());

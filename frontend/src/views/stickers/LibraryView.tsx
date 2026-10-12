@@ -3,11 +3,12 @@ import { useEffect, useRef } from "react";
 import { Button, FilterButton, Input, Select, SortMenu, Toolbar } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { Sticker } from "../../types";
+import { cn } from "../../utils/cn";
 import { BulkBar } from "./BulkBar";
 import { useStickerCommands } from "./StickerCommands";
 import { StickerGrid } from "./StickerGrid";
 import { useSelection } from "./useSelection";
-import { type StickerFilter, useStickerList } from "./useStickerList";
+import { type StickerFilter, type StickerSort, useStickerList } from "./useStickerList";
 
 interface LibraryViewProps {
   preset: StickerFilter;
@@ -15,6 +16,7 @@ interface LibraryViewProps {
   gifEnabled: boolean;
   refreshKey: number;
   onOpenInCreate: (sticker: Sticker) => void;
+  onGoCreate?: () => void;
 }
 
 export const LibraryView: React.FC<LibraryViewProps> = ({
@@ -23,11 +25,13 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   gifEnabled,
   refreshKey,
   onOpenInCreate,
+  onGoCreate,
 }) => {
   const { t } = useI18n();
   const list = useStickerList(preset);
   const ids = list.items.map((item) => item.id);
-  const selection = useSelection(ids);
+  const resetKey = `${list.q}|${list.filter}|${list.sort}|${list.pack}`;
+  const selection = useSelection(ids, resetKey);
   const selectedIds = [...selection.selected];
   const fromPackId = list.pack && list.pack !== "none" ? list.pack : undefined;
   const reloadRef = useRef(list.reload);
@@ -51,14 +55,15 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     onPackCreated: list.loadPacks,
   });
 
-  const emptyText =
-    list.q || list.pack || (!list.lockedFilter && list.filter !== "all")
-      ? t("noResults")
-      : preset === "favorites"
-        ? t("favoritesEmpty")
-        : preset === "recent"
-          ? t("recentEmpty")
-          : t("emptyLibrary");
+  const isFiltered = Boolean(list.q || list.pack || (!list.lockedFilter && list.filter !== "all"));
+
+  const emptyText = isFiltered
+    ? t("noResults")
+    : preset === "favorites"
+      ? t("favoritesEmpty")
+      : preset === "recent"
+        ? t("recentEmpty")
+        : t("emptyLibrary");
 
   const animatedSelected = list.items.some(
     (item) => selection.selected.has(item.id) && item.animated,
@@ -66,8 +71,14 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
 
   const filterCount = (list.lockedFilter || list.filter === "all" ? 0 : 1) + (list.pack ? 1 : 0);
 
+  const clearFilters = () => {
+    list.setQ("");
+    if (!list.lockedFilter) list.setFilter("all");
+    list.setPack("");
+  };
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className={cn("flex flex-col gap-3 min-w-0", selectedIds.length > 0 && "pb-16 sm:pb-0")}>
       <Toolbar>
         <Input
           type="search"
@@ -116,7 +127,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         <SortMenu
           label={t("sort")}
           value={list.sort}
-          onChange={(value) => list.setSort(value)}
+          onChange={(value) => list.setSort(value as StickerSort)}
           options={[
             { value: "newest", label: t("sortNewest") },
             { value: "oldest", label: t("sortOldest") },
@@ -126,13 +137,14 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         />
       </Toolbar>
 
-      {list.items.length > 0 && selectedIds.length === 0 && (
-        <div>
+      <div className="flex items-center justify-between gap-2 px-0.5 text-xs text-muted">
+        <span>{t("resultCount").replace("{n}", String(list.total))}</span>
+        {list.items.length > 0 && (
           <Button variant="ghost" size="sm" onClick={selection.selectAll}>
-            {t("selectAll")}
+            {t("selectCurrentPage")}
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
       <BulkBar
         count={selectedIds.length}
@@ -157,17 +169,20 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       <StickerGrid
         items={list.items}
         total={list.total}
+        page={list.page}
+        pageCount={list.pageCount}
         loading={list.loading}
-        loadingMore={list.loadingMore}
         error={list.error}
-        hasMore={list.hasMore}
         emptyText={emptyText}
+        isFiltered={isFiltered}
         selected={selection.selected}
         onToggle={selection.toggle}
         onOpen={commands.openDetail}
         onFavorite={commands.toggleFavorite}
-        onLoadMore={list.loadMore}
+        onPageChange={list.setPage}
         onRetry={list.reload}
+        onClearFilters={isFiltered ? clearFilters : undefined}
+        onGoCreate={preset === "all" && !isFiltered ? onGoCreate : undefined}
       />
       {commands.dialogs}
     </div>

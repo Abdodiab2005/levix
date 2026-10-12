@@ -92,7 +92,6 @@ export function useStickerCommands({
     guard(async () => {
       if (!ids.length || ids.length > EXPORT_MAX_IDS) return;
       const single = ids.length === 1 ? findOne(ids[0]) : null;
-      if (ids.length === 1 && !single) return;
       const animated = ids.some((id) => findOne(id)?.animated);
       if (format === "png" && animated) toast(t("firstFrameHint"), "info");
       const result =
