@@ -1363,6 +1363,38 @@ logger.debug('Debug info');
 5. Check the logs, and the database if the change touches it
 6. To start from scratch: stop the bot and delete `data/`
 
+## Commits, pull requests and Google Play notes
+
+Every pull request description ends with a `## Google Play` section, and so
+does every commit that reaches `main` without a pull request. The section
+holds the "What's new" text an Android user should read for this change, in
+the format the release approval takes:
+
+```
+## Google Play
+Sticker Studio pages large libraries and keeps your selection across pages.
+[ar]
+استوديو الملصقات يقسم المكتبات الكبيرة إلى صفحات ويحتفظ بتحديدك بينها.
+```
+
+Plain text is the English (en-US) notes. A line holding only `[ar]` starts
+the Arabic notes. Each language stays within 500 characters. Write for users
+and describe what they can do or see; leave out internals, file names and PR
+numbers. When nothing an Android user sees changes (CI, docs, tests,
+server-only work), keep the heading and leave the section empty.
+
+At release time the owner gathers these sections into one text and pastes it
+as the approval comment of the `play` job (`.github/workflows/release.yml`,
+see PACKAGING.md "4b. Google Play"). That comment becomes the release's
+"What's new"; `scripts/play-release-notes.mjs` rejects an empty comment or a
+language over 500 characters.
+
+Publishing to Google Play is never automatic. The `play` job waits on the
+`google-play` environment, and its only required reviewer is the owner. An
+agent never approves that deployment, never removes the reviewer, and never
+uploads to Play any other way. Releases go to the `alpha` track until the
+owner sets the `PLAY_TRACK` repository variable to `production`.
+
 ## Code Style Notes
 
 - **Language**: Code comments mix Arabic and English (commands in Arabic)

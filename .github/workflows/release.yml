@@ -20,7 +20,7 @@
 # (scripts/play-release-notes.mjs, 500 characters per language). An empty
 # comment fails the job before anything is uploaded. Prereleases (tags with a
 # "-") skip Google Play. The track is the PLAY_TRACK repository variable,
-# production when unset.
+# alpha when unset; set it to production once the app has production access.
 #
 # Secrets: NPM_TOKEN, the LEVIX_DEPLOY_* set on the installer-production
 # environment, the LEVIX_KEYSTORE_* set for signing, and
@@ -458,7 +458,7 @@ jobs:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: net.leviro.levix
           releaseFiles: dist/levix-android.aab
-          tracks: ${{ vars.PLAY_TRACK || 'production' }}
+          tracks: ${{ vars.PLAY_TRACK || 'alpha' }}
           status: completed
           releaseName: ${{ github.ref_name }}
           whatsNewDirectory: dist/whatsnew
@@ -468,7 +468,7 @@ jobs:
           {
             echo "### Google Play"
             echo ""
-            echo "- \`${{ github.ref_name }}\` on the \`${{ vars.PLAY_TRACK || 'production' }}\` track"
+            echo "- \`${{ github.ref_name }}\` on the \`${{ vars.PLAY_TRACK || 'alpha' }}\` track"
             echo "- What's new:"
             for f in dist/whatsnew/whatsnew-*; do
               echo ""

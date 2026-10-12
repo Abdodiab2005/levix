@@ -378,9 +378,8 @@ Set up once:
 - In Settings → Environments → `google-play`, add a required reviewer.
 - Keep the `PLAY_SERVICE_ACCOUNT_JSON` secret (a service account with release
   rights in the Play Console) on the repository or on that environment.
-- Set the `PLAY_TRACK` repository variable to the track to publish to. It
-  defaults to `production`. Use `alpha` or `beta` while the app is still in
-  testing.
+- Releases go to the `alpha` track. Set the `PLAY_TRACK` repository variable
+  to `production` once the app has production access.
 
 Google Play refuses a `versionCode` it has seen before. `verify-version` fails
 the release when `versionName` in `android/app/build.gradle.kts` differs from
