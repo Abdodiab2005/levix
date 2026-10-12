@@ -75,6 +75,12 @@ Icon only. `label` is required. Same variants and sizes. `pressed` sets `aria-pr
 
 `Field` wraps a control with `label`, `description`, and `error`. `Input`, `Textarea`, and `Select` are the native controls with the shared field style. `Checkbox` and `RadioGroup` are labelled choices. `Toggle` is the switch (`checked`, `onChange(checked)`, optional `label` and `description`).
 
+`Toggle` keeps a 44px-high hit target around its 52×32px visible track. Its button ref, `id`, `disabled`, `role="switch"`, and `aria-checked` work as native controls do.
+
+For technical tokens (keys, URLs, emails, model IDs, JIDs, command names), pass `technical` to `Input`. It sets `dir="ltr"` and start alignment inside an RTL form. An explicit `dir` overrides it.
+
+`PasswordInput` extends native input props except `type` and `technical`, forwards the input ref, and owns an independent reveal state. It starts hidden and uses translated show/hide labels with `aria-pressed`. It defaults to `dir="ltr"`, `spellCheck={false}`, `autoCapitalize="off"`, and `autoCorrect="off"`; pass those props to override. Put it directly inside `Field` or `SaveField` and keep the saved secret out of `value`.
+
 Per-row settings stay as `Select` (with `SaveField`) or `Toggle`. A list filter does not — that is `FilterButton`.
 
 ```tsx
@@ -228,6 +234,18 @@ A `<time>` whose text comes from `Intl.RelativeTimeFormat` in the active languag
 ### EmptyState / Spinner / Skeleton / LoadingState
 
 `EmptyState` accepts `icon`, `title`, `description` (and `text` for a single muted line), plus an `action`. `Spinner` is the inline indicator (`label` makes it a status). `LoadingState` is the centred spinner. `Skeleton` is the pulse block.
+
+Set `kind="empty"` for no records, `kind="no-results"` for an empty search/filter, or `kind="error"` for a failed load. Each has a translated default title; `title` overrides it. Pass at most one `action` (Create, Clear filters, or Retry). Render the empty state outside any min-width table wrapper so it fits mobile screens.
+
+### Pagination / usePagination
+
+`<Pagination page={page} pageCount={pageCount} total={total} onPageChange={setPage} label={optionalAccessibleLabel} />` shows a count even for one page, and hides the controls when there is only one page. Its arrows follow RTL. Server-paged screens can use it directly.
+
+`usePagination<T>(items: T[], pageSize = 20, resetKey?: unknown)` returns `{ page, pageCount, pageItems, setPage, total }`. Filter and sort first, then pass the resulting array. Change `resetKey` when search, filters, or sort change; the hook resets to page 1 and clamps when the list shrinks.
+
+### InfoTip
+
+`<InfoTip label={t("indicatorLabel")} content={t("indicatorExplanation")}><Icon size={16} /></InfoTip>` accepts any icon child. The icon button has the accessible `label`; the explanation has `role="tooltip"` and is connected with `aria-describedby` while open. Hover or focus opens it. Tap toggles it; Escape and an outside tap close it. The tooltip stays inside the viewport.
 
 ### Toolbar
 

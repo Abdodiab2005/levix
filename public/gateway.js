@@ -4,6 +4,15 @@
 // itself fails to load: the page works without either one.
 
 (function () {
+  var isAr = false;
+  try { isAr = localStorage.getItem("levix_lang") === "ar"; } catch (e) {}
+  var showLabel = isAr ? "إظهار كلمة المرور" : "Show password";
+  var hideLabel = isAr ? "إخفاء كلمة المرور" : "Hide password";
+  document.querySelectorAll(".eye-btn").forEach(function (btn) {
+    btn.setAttribute("aria-label", showLabel);
+    btn.setAttribute("aria-pressed", "false");
+  });
+
   // Eye toggles. One delegated listener covers every password field on the
   // page — the button carries two icons and swaps which one is visible.
   document.addEventListener("click", function (event) {
@@ -13,12 +22,17 @@
     var input = btn.parentElement ? btn.parentElement.querySelector("input") : null;
     if (!input) return;
     var show = input.type === "password";
+    var start = input.selectionStart;
+    var end = input.selectionEnd;
     input.type = show ? "text" : "password";
+    input.focus({ preventScroll: true });
+    if (start !== null && end !== null) input.setSelectionRange(start, end);
     var on = btn.querySelector(".eye-on");
     var off = btn.querySelector(".eye-off");
     if (on) on.style.display = show ? "none" : "";
     if (off) off.style.display = show ? "" : "none";
-    btn.setAttribute("aria-label", show ? "Hide password" : "Show password");
+    btn.setAttribute("aria-label", show ? hideLabel : showLabel);
+    btn.setAttribute("aria-pressed", String(show));
   });
 
   // Blur the password screens whenever the page can't be watched: another

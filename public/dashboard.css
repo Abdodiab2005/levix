@@ -2910,18 +2910,18 @@ html[dir="rtl"] .logout-btn svg {
 }
 
 .input-wrap input {
-  padding-inline-end: 44px;
+  padding-inline-end: 52px;
 }
 
 .eye-btn {
   position: absolute;
-  inset-inline-end: 6px;
+  inset-inline-end: 2px;
   top: 50%;
   transform: translateY(-50%);
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -2932,6 +2932,11 @@ html[dir="rtl"] .logout-btn svg {
 .eye-btn:hover {
   color: var(--text);
   background: color-mix(in srgb, var(--line) 55%, transparent);
+}
+
+.eye-btn:focus-visible {
+  outline: 2px solid var(--blue-bright);
+  outline-offset: -2px;
 }
 
 .eye-btn svg {

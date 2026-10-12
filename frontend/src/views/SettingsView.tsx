@@ -2,8 +2,6 @@
 
 import {
   Download,
-  Eye,
-  EyeOff,
   Globe,
   HardDrive,
   Key,
@@ -31,6 +29,7 @@ import {
   FormActions,
   IconButton,
   Input,
+  PasswordInput,
   SaveField,
   Select,
   Spinner,
@@ -76,12 +75,6 @@ export const SettingsView: React.FC = () => {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changingPass, setChangingPass] = useState(false);
-
-  // Secret toggles
-  const [showProxyPass, setShowProxyPass] = useState(false);
-  const [showPanelPass, setShowPanelPass] = useState(false);
-  const [showWeatherKey, setShowWeatherKey] = useState(false);
-  const [showYoutubeKey, setShowYoutubeKey] = useState(false);
 
   // Settings export / import
   const [exportingSettings, setExportingSettings] = useState(false);
@@ -472,6 +465,7 @@ export const SettingsView: React.FC = () => {
                 <Input
                   id="bot-timezone"
                   type="text"
+                  technical
                   className="font-mono"
                   placeholder="Africa/Cairo"
                   value={timezone.value}
@@ -590,18 +584,9 @@ export const SettingsView: React.FC = () => {
               }
               onRevert={weatherKey.revert}
               {...saveLabels}
-              actions={
-                <IconButton
-                  variant="ghost"
-                  label={showWeatherKey ? t("hideSecret") : t("showSecret")}
-                  icon={showWeatherKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                  onClick={() => setShowWeatherKey(!showWeatherKey)}
-                />
-              }
             >
-              <Input
+              <PasswordInput
                 id="weather-api-key"
-                type={showWeatherKey ? "text" : "password"}
                 className="font-mono"
                 placeholder={
                   configuredKeys.openweathermap_api_key ? "••••••••••••" : "OpenWeatherMap API Key"
@@ -631,18 +616,9 @@ export const SettingsView: React.FC = () => {
               }
               onRevert={youtubeKey.revert}
               {...saveLabels}
-              actions={
-                <IconButton
-                  variant="ghost"
-                  label={showYoutubeKey ? t("hideSecret") : t("showSecret")}
-                  icon={showYoutubeKey ? <EyeOff size={16} /> : <Eye size={16} />}
-                  onClick={() => setShowYoutubeKey(!showYoutubeKey)}
-                />
-              }
             >
-              <Input
+              <PasswordInput
                 id="youtube-api-key"
-                type={showYoutubeKey ? "text" : "password"}
                 className="font-mono"
                 placeholder={
                   configuredKeys.youtube_api_key ? "••••••••••••" : "YouTube Data API Key"
@@ -707,6 +683,7 @@ export const SettingsView: React.FC = () => {
                 <Input
                   id="proxy-host"
                   type="text"
+                  technical
                   className="font-mono"
                   placeholder="proxy.example.com"
                   value={proxyForm.draft.host}
@@ -728,6 +705,7 @@ export const SettingsView: React.FC = () => {
                 <Input
                   id="proxy-username"
                   type="text"
+                  technical
                   className="font-mono"
                   value={proxyForm.draft.username}
                   onChange={(e) => proxyForm.setField("username", e.target.value)}
@@ -735,24 +713,12 @@ export const SettingsView: React.FC = () => {
               </Field>
 
               <Field label={t("proxyPassword")} htmlFor="proxy-password">
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="proxy-password"
-                    type={showProxyPass ? "text" : "password"}
-                    className="min-w-0 flex-1"
-                    placeholder={
-                      configuredKeys.whatsapp_proxy_password ? "••••••••••••" : undefined
-                    }
-                    value={proxyForm.draft.password}
-                    onChange={(e) => proxyForm.setField("password", e.target.value)}
-                  />
-                  <IconButton
-                    variant="ghost"
-                    label={showProxyPass ? t("hideSecret") : t("showSecret")}
-                    icon={showProxyPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                    onClick={() => setShowProxyPass(!showProxyPass)}
-                  />
-                </div>
+                <PasswordInput
+                  id="proxy-password"
+                  placeholder={configuredKeys.whatsapp_proxy_password ? "••••••••••••" : undefined}
+                  value={proxyForm.draft.password}
+                  onChange={(e) => proxyForm.setField("password", e.target.value)}
+                />
               </Field>
             </div>
             <FormActions
@@ -773,60 +739,37 @@ export const SettingsView: React.FC = () => {
             <CardHeader icon={<Lock size={20} />} title={t("changePassword")} />
 
             <form onSubmit={handlePasswordChange} className="flex flex-col gap-3.5">
-              <Field label={t("currentPassword")}>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type={showPanelPass ? "text" : "password"}
-                    className="min-w-0 flex-1"
-                    required
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                  />
-                  <IconButton
-                    variant="ghost"
-                    label={showPanelPass ? t("hideSecret") : t("showSecret")}
-                    icon={showPanelPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                    onClick={() => setShowPanelPass(!showPanelPass)}
-                  />
-                </div>
+              <Field label={t("currentPassword")} htmlFor="current-password">
+                <PasswordInput
+                  id="current-password"
+                  required
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                />
               </Field>
 
-              <Field label={t("newPassword")} description={t("passwordMinLength")}>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type={showPanelPass ? "text" : "password"}
-                    className="min-w-0 flex-1"
-                    required
-                    minLength={8}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                  />
-                  <IconButton
-                    variant="ghost"
-                    label={showPanelPass ? t("hideSecret") : t("showSecret")}
-                    icon={showPanelPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                    onClick={() => setShowPanelPass(!showPanelPass)}
-                  />
-                </div>
+              <Field
+                label={t("newPassword")}
+                description={t("passwordMinLength")}
+                htmlFor="new-password"
+              >
+                <PasswordInput
+                  id="new-password"
+                  required
+                  minLength={8}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
               </Field>
 
-              <Field label={t("confirmPassword")}>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type={showPanelPass ? "text" : "password"}
-                    className="min-w-0 flex-1"
-                    required
-                    minLength={8}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                  />
-                  <IconButton
-                    variant="ghost"
-                    label={showPanelPass ? t("hideSecret") : t("showSecret")}
-                    icon={showPanelPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                    onClick={() => setShowPanelPass(!showPanelPass)}
-                  />
-                </div>
+              <Field label={t("confirmPassword")} htmlFor="confirm-password">
+                <PasswordInput
+                  id="confirm-password"
+                  required
+                  minLength={8}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
               </Field>
 
               <Button

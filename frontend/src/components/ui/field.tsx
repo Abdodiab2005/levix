@@ -44,11 +44,23 @@ export function Field({
   );
 }
 
-export const Input = forwardRef<HTMLInputElement, ComponentPropsWithoutRef<"input">>(function Input(
-  { className, ...props },
+export interface InputProps extends ComponentPropsWithoutRef<"input"> {
+  /** Force Latin technical tokens to read LTR inside an RTL form. */
+  technical?: boolean;
+}
+
+export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
+  { className, technical = false, dir, ...props },
   ref,
 ) {
-  return <input ref={ref} className={cn(inputClass, className)} {...props} />;
+  return (
+    <input
+      ref={ref}
+      dir={dir ?? (technical ? "ltr" : undefined)}
+      className={cn(inputClass, technical && "text-start", className)}
+      {...props}
+    />
+  );
 });
 
 export const Textarea = forwardRef<HTMLTextAreaElement, ComponentPropsWithoutRef<"textarea">>(
@@ -200,17 +212,20 @@ export const Toggle = forwardRef<HTMLButtonElement, ToggleProps>(function Toggle
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative inline-flex h-10 w-16 shrink-0 items-center rounded-full border transition-colors",
+          "relative inline-flex h-11 w-[52px] shrink-0 items-center rounded-full transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/50",
           "disabled:cursor-not-allowed disabled:opacity-50",
-          checked ? "border-brand-blue bg-brand-blue" : "border-line bg-panel-hover",
+          "before:absolute before:inset-x-0 before:top-1.5 before:h-8 before:rounded-full before:border before:transition-colors",
+          checked
+            ? "before:border-brand-blue before:bg-brand-blue"
+            : "before:border-line before:bg-panel-hover",
         )}
       >
         <span
           aria-hidden
           className={cn(
-            "pointer-events-none absolute top-1 size-7 rounded-full bg-white shadow transition-[inset-inline-start] duration-200",
-            checked ? "start-8" : "start-1",
+            "pointer-events-none absolute top-2.5 size-6 rounded-full bg-white shadow transition-[inset-inline-start] duration-200",
+            checked ? "start-[26px]" : "start-[2px]",
           )}
         />
       </button>

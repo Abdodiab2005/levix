@@ -18,7 +18,7 @@ export {
   type ChipRejectReason,
 } from "./chip";
 export { ConfirmDialog, type ConfirmDialogProps, Dialog, type DialogProps } from "./dialog";
-export { EmptyState, LoadingState, Skeleton, Spinner } from "./feedback";
+export { EmptyState, type EmptyStateProps, LoadingState, Skeleton, Spinner } from "./feedback";
 export {
   Checkbox,
   type CheckboxProps,
@@ -26,6 +26,7 @@ export {
   FieldLabel,
   fieldClass,
   Input,
+  type InputProps,
   inputClass,
   RadioGroup,
   type RadioOption,
@@ -35,6 +36,7 @@ export {
   type ToggleProps,
 } from "./field";
 export { FilterButton, type FilterButtonProps } from "./filter";
+export { InfoTip, type InfoTipProps } from "./info-tip";
 export {
   Menu,
   MenuItem,
@@ -45,6 +47,8 @@ export {
   OverflowMenu,
   type OverflowMenuProps,
 } from "./menu";
+export { Pagination, type PaginationProps, usePagination } from "./pagination";
+export { PasswordInput, type PasswordInputProps } from "./password-input";
 export { Popover, type PopoverProps } from "./popover";
 export { RelativeTime, type RelativeTimeProps } from "./relative-time";
 export {
