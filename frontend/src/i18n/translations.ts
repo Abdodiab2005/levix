@@ -186,6 +186,12 @@ export const translations = {
     sourceLive: "حسابك",
     sourceSeed: "مقترح",
     sourceUnknown: "غير معروف",
+    retry: "إعادة المحاولة",
+    noModelsFound: "لم يتم العثور على نماذج لهذا المزود",
+    noMemoryFiles: "لا توجد ملفات ذاكرة محفوظة",
+    capSupportedDesc: "النموذج يدعم هذه الميزة",
+    capUnsupportedDesc: "النموذج لا يدعم هذه الميزة",
+    capUnknownDesc: "حالة الدعم غير محددة لهذا النموذج",
     visionUnsupportedNotice:
       "النموذج المختار لا يدعم معالجة الصور والرؤية (Vision)، تم تعطيل الميزة تلقائياً.",
     sttUnsupportedNotice:
@@ -1036,6 +1042,12 @@ export const translations = {
     sourceLive: "Your account",
     sourceSeed: "Catalog",
     sourceUnknown: "Unknown",
+    retry: "Retry",
+    noModelsFound: "No models found for this provider",
+    noMemoryFiles: "No memory files found",
+    capSupportedDesc: "Supported by this model",
+    capUnsupportedDesc: "Not supported by this model",
+    capUnknownDesc: "Support status unknown for this model",
     visionUnsupportedNotice:
       "The selected model does not support Vision (image understanding). Feature disabled automatically.",
     sttUnsupportedNotice:
