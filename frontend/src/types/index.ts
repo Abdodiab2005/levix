@@ -280,3 +280,97 @@ export interface Capabilities {
     packsMax: number;
   };
 }
+
+export interface ClientDiagnostics {
+  schema?: number;
+  nativeApp?: string;
+  android?: string;
+  device?: string;
+  abi?: string;
+  webview?: string;
+  screen?: string;
+  language?: "ar" | "en";
+  theme?: "light" | "dark";
+  connectivity?: "wifi" | "cellular" | "ethernet" | "vpn" | "none" | "unknown";
+  memory?: "ok" | "low" | "unknown";
+  storage?: "ok" | "low" | "unknown";
+  [key: string]: any;
+}
+
+export interface DiagnosticsObject {
+  schema: number;
+  levix?: string;
+  node?: string;
+  platform?: string;
+  nativeApp?: string;
+  android?: string;
+  device?: string;
+  abi?: string;
+  webview?: string;
+  screen?: string;
+  language?: "ar" | "en";
+  theme?: "light" | "dark";
+  connectivity?: "wifi" | "cellular" | "ethernet" | "vpn" | "none" | "unknown";
+  memory?: "ok" | "low" | "unknown";
+  storage?: "ok" | "low" | "unknown";
+  [key: string]: any;
+}
+
+export type CrashReportCategory =
+  | "android-crash"
+  | "android-anr"
+  | "android-native"
+  | "web-error"
+  | "web-rejection"
+  | "react-render"
+  | "node-uncaught"
+  | "node-rejection";
+
+export interface Breadcrumb {
+  at: string;
+  kind: "nav" | "lifecycle" | "action";
+  name: string;
+}
+
+export interface CrashReportInput {
+  category: CrashReportCategory;
+  error: {
+    type: string;
+    message: string;
+    stack: string[] | string;
+  };
+  screen: string;
+  breadcrumbs: Breadcrumb[];
+  device: Record<string, any>;
+}
+
+export interface CrashReportItem {
+  schema: 1;
+  id: string;
+  fingerprint: string;
+  createdAt: string;
+  category: CrashReportCategory;
+  error: {
+    type: string;
+    message: string;
+    stack: string[];
+  };
+  screen: string;
+  app?: {
+    levix?: string;
+    nativeApp?: string;
+    node?: string;
+    platform?: string;
+  };
+  device?: Record<string, any>;
+  breadcrumbs: Breadcrumb[];
+  status?: "pending" | "failed";
+  lastError?: string | null;
+}
+
+export interface SentCrashReportItem {
+  id: string;
+  sentAt: string;
+  category: string;
+  type: string;
+}

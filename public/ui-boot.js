@@ -48,6 +48,18 @@
       } catch (_) {}
     }
   });
+  window.addEventListener("storage", function (event) {
+    var next = {};
+    if (event.key === "levix_theme" && (event.newValue === "dark" || event.newValue === "light")) {
+      next.theme = event.newValue;
+    }
+    if (event.key === "levix_lang" && (event.newValue === "ar" || event.newValue === "en")) {
+      next.language = event.newValue;
+    }
+    if (next.theme || next.language) {
+      apply(next);
+    }
+  });
   if (!host && savedTheme !== "dark" && savedTheme !== "light" && dark) {
     dark.addEventListener("change", function (event) {
       try { if (localStorage.getItem("levix_theme")) return; } catch (_) {}

@@ -17,10 +17,22 @@ import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { api, type FeedbackMeta, type FeedbackTopic } from "../api/client";
 import { useI18n } from "../context/I18nContext";
+import { getClientDiagnostics } from "../utils/diagnostics";
 import type { HostSource } from "../utils/hostBridge";
 import { canHostUploadForm, pickHostFile, uploadHostForm } from "../utils/hostBridge";
 import { useToast } from "./Toasts";
-import { Button, Card, Chip, Field, IconButton, Input, Tabs, Textarea } from "./ui";
+import {
+  Button,
+  Card,
+  Checkbox,
+  Chip,
+  Field,
+  IconButton,
+  Input,
+  Spinner,
+  Tabs,
+  Textarea,
+} from "./ui";
 
 /**
  * The panel's line to the developer, and the app's answer to Google Play's
@@ -61,7 +73,7 @@ const TOPIC_META: Record<
 const TOPIC_ORDER: FeedbackTopic[] = ["bug", "idea", "question", "praise", "other"];
 
 export const FeedbackForm: React.FC = () => {
-  const { t } = useI18n();
+  const { t, language, theme } = useI18n();
   const { toast } = useToast();
 
   const [meta, setMeta] = useState<FeedbackMeta | null>(null);
@@ -71,6 +83,10 @@ export const FeedbackForm: React.FC = () => {
   const [contact, setContact] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const [hostFile, setHostFile] = useState<HostSource | null>(null);
+  const [attachDiagnostics, setAttachDiagnostics] = useState(false);
+  const [previewData, setPreviewData] = useState<Record<string, any> | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -84,6 +100,30 @@ export const FeedbackForm: React.FC = () => {
       .then(setMeta)
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!attachDiagnostics) {
+      setPreviewData(null);
+      return;
+    }
+    const clientDiag = getClientDiagnostics(language, theme);
+    setPreviewLoading(true);
+    api
+      .getFeedbackDiagnosticsPreview(clientDiag)
+      .then((res) => {
+        if (res?.diagnostics) {
+          setPreviewData(res.diagnostics);
+        } else {
+          setPreviewData(clientDiag);
+        }
+      })
+      .catch(() => {
+        setPreviewData(clientDiag);
+      })
+      .finally(() => {
+        setPreviewLoading(false);
+      });
+  }, [attachDiagnostics, language, theme]);
 
   const messageMin = meta?.messageMin ?? FALLBACK.messageMin;
   const messageMax = meta?.messageMax ?? FALLBACK.messageMax;
@@ -127,11 +167,13 @@ export const FeedbackForm: React.FC = () => {
 
     setSending(true);
     setProgress(hostFile ? 0 : null);
+    const clientDiag = attachDiagnostics ? getClientDiagnostics(language, theme) : undefined;
     const payload = {
       message: trimmed,
       topic,
       rating: rating || null,
       contact: contact.trim() || null,
+      ...(clientDiag ? { diagnostics: clientDiag } : {}),
     };
     try {
       if (hostFile) {
@@ -142,6 +184,7 @@ export const FeedbackForm: React.FC = () => {
             topic: payload.topic,
             ...(payload.rating ? { rating: String(payload.rating) } : {}),
             ...(payload.contact ? { contact: payload.contact } : {}),
+            ...(clientDiag ? { diagnostics: JSON.stringify(clientDiag) } : {}),
           },
           hostFile.token,
           attachmentMax + 1024 * 1024,
@@ -168,6 +211,9 @@ export const FeedbackForm: React.FC = () => {
     setTopic("bug");
     setAttachment(null);
     setHostFile(null);
+    setAttachDiagnostics(false);
+    setPreviewData(null);
+    setPreviewOpen(false);
     setSent(false);
   };
 
@@ -327,6 +373,50 @@ export const FeedbackForm: React.FC = () => {
               placeholder={t("feedbackContactPlaceholder")}
             />
           </Field>
+
+          {/* diagnostics consent */}
+          <div className="flex flex-col gap-2">
+            <Checkbox
+              id="feedback-diagnostics-consent"
+              checked={attachDiagnostics}
+              onChange={(e) => setAttachDiagnostics(e.target.checked)}
+              label={t("feedbackAttachDiagnostics")}
+            />
+            {attachDiagnostics && (
+              <details
+                open={previewOpen}
+                onToggle={(e) => setPreviewOpen(e.currentTarget.open)}
+                className="group rounded-xl border border-line bg-panel-raised"
+              >
+                <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs font-semibold text-muted select-none hover:text-text-main [&::-webkit-details-marker]:hidden">
+                  <span className="flex-1">{t("feedbackDiagnosticsPreview")}</span>
+                  {previewLoading ? (
+                    <Spinner className="size-3.5 shrink-0 text-muted" />
+                  ) : (
+                    <ChevronDown
+                      size={14}
+                      aria-hidden
+                      className="shrink-0 transition-transform group-open:rotate-180"
+                    />
+                  )}
+                </summary>
+                <div className="border-t border-line px-3 py-2 text-xs">
+                  {previewLoading && !previewData ? (
+                    <p className="text-muted">{t("feedbackDiagnosticsLoading")}</p>
+                  ) : previewData ? (
+                    <pre
+                      dir="ltr"
+                      className="overflow-x-auto rounded-lg bg-panel p-2 font-mono text-[11px] leading-relaxed text-text-main border border-line select-text"
+                    >
+                      {JSON.stringify(previewData, null, 2)}
+                    </pre>
+                  ) : (
+                    <p className="text-muted">{t("feedbackDiagnosticsEmpty")}</p>
+                  )}
+                </div>
+              </details>
+            )}
+          </div>
 
           {/* upload progress: a real fraction in the browser, an indeterminate
             bar on the Android host where the native bridge streams the file */}

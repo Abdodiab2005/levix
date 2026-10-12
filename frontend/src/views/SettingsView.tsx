@@ -2,6 +2,7 @@
 
 import {
   Download,
+  FileText,
   Globe,
   HardDrive,
   Key,
@@ -40,8 +41,34 @@ import {
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 import type { Language } from "../i18n/translations";
+import { DiagnosticsView } from "./DiagnosticsView";
 
-type SettingsTab = "general" | "integrations" | "proxy" | "security" | "storage" | "feedback";
+type SettingsTab =
+  | "general"
+  | "integrations"
+  | "proxy"
+  | "security"
+  | "storage"
+  | "feedback"
+  | "diagnostics";
+
+const SETTINGS_TABS: SettingsTab[] = [
+  "general",
+  "integrations",
+  "proxy",
+  "security",
+  "storage",
+  "feedback",
+  "diagnostics",
+];
+
+function tabFromHash(): SettingsTab {
+  const parts = window.location.hash.replace(/^#\/?/, "").split("/");
+  if (parts[0] === "settings" && parts[1] && SETTINGS_TABS.includes(parts[1] as SettingsTab)) {
+    return parts[1] as SettingsTab;
+  }
+  return "general";
+}
 
 const PREFIX_PRESETS = ["!", "/", ".", "#", "$", "?"];
 
@@ -60,7 +87,21 @@ function toBase64(text: string): string {
 export const SettingsView: React.FC = () => {
   const { t, language, setLanguage } = useI18n();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+  const [activeTab, setActiveTab] = useState<SettingsTab>(tabFromHash);
+
+  useEffect(() => {
+    const handleHash = () => {
+      const tab = tabFromHash();
+      setActiveTab((prev) => (prev !== tab ? tab : prev));
+    };
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
+
+  const handleTabChange = (tab: SettingsTab) => {
+    setActiveTab(tab);
+    window.location.hash = `settings/${tab}`;
+  };
   const [settings, setSettings] = useState<Record<string, any>>({});
   const [configuredKeys, setConfiguredKeys] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
@@ -299,7 +340,7 @@ export const SettingsView: React.FC = () => {
     <div className="flex flex-col gap-5 sm:gap-6">
       <Tabs
         value={activeTab}
-        onChange={setActiveTab}
+        onChange={(v) => handleTabChange(v as SettingsTab)}
         aria-label={t("settings")}
         className="overflow-x-auto"
         options={[
@@ -309,6 +350,7 @@ export const SettingsView: React.FC = () => {
           { value: "security", label: t("tabSecurity"), icon: <Shield size={17} /> },
           { value: "storage", label: t("tabStorage"), icon: <HardDrive size={17} /> },
           { value: "feedback", label: t("tabFeedback"), icon: <MessageSquareHeart size={17} /> },
+          { value: "diagnostics", label: t("tabDiagnostics"), icon: <FileText size={17} /> },
         ]}
       />
 
@@ -890,6 +932,8 @@ export const SettingsView: React.FC = () => {
       )}
 
       {activeTab === "feedback" && <FeedbackForm />}
+
+      {activeTab === "diagnostics" && <DiagnosticsView />}
 
       {/* Import confirmation: the file is about to overwrite this install's
           settings, so the operator sees what is in it before it lands. */}

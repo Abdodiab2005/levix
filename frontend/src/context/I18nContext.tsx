@@ -3,7 +3,7 @@ import type React from "react";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { type Language, translations } from "../i18n/translations";
 
-interface I18nContextType {
+export interface I18nContextType {
   language: Language;
   theme: "light" | "dark";
   direction: "rtl" | "ltr";
@@ -12,7 +12,7 @@ interface I18nContextType {
   t: (key: keyof (typeof translations)["en"], fallback?: string) => string;
 }
 
-const I18nContext = createContext<I18nContextType | null>(null);
+export const I18nContext = createContext<I18nContextType | null>(null);
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() =>

@@ -197,13 +197,52 @@
           loginCard.hidden = false;
           document.getElementById("forgot-link").focus();
         }
-        function showError(text) {
-          errorBox.textContent = text;
+        var getT = function () {
+          return window.LevixGatewayI18n ? window.LevixGatewayI18n.t : function (k) { return k; };
+        };
+        var currentErrorState = null;
+
+        function renderCurrentError() {
+          if (!currentErrorState) return;
+          var t = getT();
+          if (currentErrorState.type === "simple") {
+            errorBox.textContent = t(currentErrorState.key, currentErrorState.vars);
+          } else if (currentErrorState.type === "wrong_code") {
+            var msg = t("resetErrWrongCode");
+            if (currentErrorState.attemptsLeft) {
+              msg += " " + t("resetErrAttemptsLeft", { n: currentErrorState.attemptsLeft });
+            }
+            errorBox.textContent = msg;
+          } else if (currentErrorState.type === "invalid_password") {
+            errorBox.textContent =
+              window.LevixGatewayI18n && window.LevixGatewayI18n.lang === "ar"
+                ? t("resetErrInvalidPassword")
+                : currentErrorState.message || t("resetErrInvalidPassword");
+          } else if (currentErrorState.type === "raw") {
+            errorBox.textContent = currentErrorState.text;
+          }
           errorBox.hidden = false;
         }
+
+        function showErrorKey(key, vars) {
+          currentErrorState = { type: "simple", key: key, vars: vars };
+          renderCurrentError();
+        }
+        function showError(text) {
+          currentErrorState = { type: "raw", text: text };
+          renderCurrentError();
+        }
         function hideError() {
+          currentErrorState = null;
           errorBox.hidden = true;
         }
+
+        window.addEventListener("levix-gateway-lang", renderCurrentError);
+        window.addEventListener("levix-ui-prefs", renderCurrentError);
+        window.addEventListener("storage", function (e) {
+          if (e.key === "levix_lang") renderCurrentError();
+        });
+
         async function postJson(url, body) {
           const response = await fetch(url, {
             method: "POST",
@@ -236,16 +275,16 @@
               form.hidden = false;
               document.getElementById("reset-code").focus();
             } else if (result.reason === "throttled") {
-              showError(t("resetErrThrottled").replace("{n}", String(result.retryAfter || 60)));
+              showErrorKey("resetErrThrottled", { n: String(result.retryAfter || 60) });
             } else if (result.reason === "no_session") {
-              showError(t("resetErrNoSession"));
+              showErrorKey("resetErrNoSession");
             } else if (result.reason === "send_failed") {
-              showError(t("resetErrSendFailed"));
+              showErrorKey("resetErrSendFailed");
             } else {
-              showError(t("resetErrStart"));
+              showErrorKey("resetErrStart");
             }
           } catch {
-            showError(t("resetErrServer"));
+            showErrorKey("resetErrServer");
           }
           sendBtn.disabled = false;
         });
@@ -262,40 +301,33 @@
             if (result.ok) {
               form.hidden = true;
               sendBtn.hidden = true;
-              showError(t("resetDone"));
+              showErrorKey("resetDone");
               setTimeout(function () {
                 window.location.href = "/";
               }, 900);
               return;
             }
             if (result.reason === "wrong_code") {
-              showError(
-                t("resetErrWrongCode") +
-                  (result.attemptsLeft
-                    ? " " + t("resetErrAttemptsLeft").replace("{n}", String(result.attemptsLeft))
-                    : "")
-              );
+              currentErrorState = { type: "wrong_code", attemptsLeft: result.attemptsLeft };
+              renderCurrentError();
             } else if (
               result.reason === "expired" ||
               result.reason === "no_pending" ||
               result.reason === "too_many_attempts"
             ) {
-              showError(t("resetErrExpired"));
+              showErrorKey("resetErrExpired");
               form.hidden = true;
               sendBtn.hidden = false;
             } else if (result.reason === "mismatch") {
-              showError(t("resetErrMismatch"));
+              showErrorKey("resetErrMismatch");
             } else if (result.reason === "invalid_password") {
-              showError(
-                window.LevixGatewayI18n.lang === "ar"
-                  ? t("resetErrInvalidPassword")
-                  : result.message || t("resetErrInvalidPassword")
-              );
+              currentErrorState = { type: "invalid_password", message: result.message };
+              renderCurrentError();
             } else {
-              showError(t("resetErrFailed"));
+              showErrorKey("resetErrFailed");
             }
           } catch {
-            showError(t("resetErrServer"));
+            showErrorKey("resetErrServer");
           }
         });
       })();

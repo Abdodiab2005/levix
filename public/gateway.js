@@ -4,14 +4,25 @@
 // itself fails to load: the page works without either one.
 
 (function () {
-  // The strings live in gateway-i18n.js, which has already run by the time
-  // this file loads; the literals are only a fallback if it did not.
-  var i18n = window.LevixGatewayI18n;
-  var showLabel = i18n ? i18n.t("showPassword") : "Show password";
-  var hideLabel = i18n ? i18n.t("hidePassword") : "Hide password";
+  function updateEyeLabels() {
+    var i18n = window.LevixGatewayI18n;
+    var showLabel = i18n ? i18n.t("showPassword") : "Show password";
+    var hideLabel = i18n ? i18n.t("hidePassword") : "Hide password";
+    document.querySelectorAll(".eye-btn").forEach(function (btn) {
+      var isPressed = btn.getAttribute("aria-pressed") === "true";
+      btn.setAttribute("aria-label", isPressed ? hideLabel : showLabel);
+    });
+  }
+
   document.querySelectorAll(".eye-btn").forEach(function (btn) {
-    btn.setAttribute("aria-label", showLabel);
     btn.setAttribute("aria-pressed", "false");
+  });
+  updateEyeLabels();
+
+  window.addEventListener("levix-gateway-lang", updateEyeLabels);
+  window.addEventListener("levix-ui-prefs", updateEyeLabels);
+  window.addEventListener("storage", function (e) {
+    if (e.key === "levix_lang") updateEyeLabels();
   });
 
   // Eye toggles. One delegated listener covers every password field on the
@@ -32,6 +43,9 @@
     var off = btn.querySelector(".eye-off");
     if (on) on.style.display = show ? "none" : "";
     if (off) off.style.display = show ? "" : "none";
+    var i18n = window.LevixGatewayI18n;
+    var showLabel = i18n ? i18n.t("showPassword") : "Show password";
+    var hideLabel = i18n ? i18n.t("hidePassword") : "Hide password";
     btn.setAttribute("aria-label", show ? hideLabel : showLabel);
     btn.setAttribute("aria-pressed", String(show));
   });
