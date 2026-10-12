@@ -351,6 +351,45 @@ Secrets, on the `installer-production` environment:
 else; the workflow never disables host-key checking and never runs `sudo` on
 the server.
 
+### 4b. Google Play
+
+The `play` job uploads the signed `levix-android.aab` from the same run to
+Google Play. It starts after the GitHub Release exists. It waits on the
+`google-play` environment until someone approves it in the run's
+**Review deployments** dialog. Prereleases (tags with a `-`) skip it.
+
+The comment written in that dialog becomes the release's "What's new" text.
+Plain text is the en-US notes. A line holding only a bracketed Play language
+code starts another language:
+
+```
+Faster Sticker Studio and Arabic sign-in screens.
+[ar]
+استوديو ملصقات أسرع وشاشات دخول بالعربية.
+```
+
+Each language takes 500 characters at most. `scripts/play-release-notes.mjs`
+turns the comment into the files the upload reads. An empty comment or an
+over-long section fails the job before anything reaches Google Play. Every
+language named must exist in the Play listing.
+
+Set up once:
+
+- In Settings → Environments → `google-play`, add a required reviewer.
+- Keep the `PLAY_SERVICE_ACCOUNT_JSON` secret (a service account with release
+  rights in the Play Console) on the repository or on that environment.
+- Set the `PLAY_TRACK` repository variable to the track to publish to. It
+  defaults to `production`. Use `alpha` or `beta` while the app is still in
+  testing.
+
+Google Play refuses a `versionCode` it has seen before. `verify-version` fails
+the release when `versionName` in `android/app/build.gradle.kts` differs from
+the tag. Bump `versionName` and `versionCode` together with `package.json`.
+
+To upload an older release, or to send one to a different track as a draft,
+run the manual **Upload release AAB to Google Play** workflow
+(`.github/workflows/play-store.yml`).
+
 Before tagging:
 
 - [ ] `npm start` on a clean `data/` — the setup page appears

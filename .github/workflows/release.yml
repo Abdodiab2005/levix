@@ -1,17 +1,31 @@
 # Everything a tagged release produces: an npm package, a container image, one
-# executable per platform, the public installer, and a checksum file covering
-# exactly those files.
+# executable per platform, the Android APKs and AAB, the public installer, a
+# checksum file covering exactly those files, and the Google Play release.
 #
-# Nothing is published unless the tag matches package.json and the full CI suite
-# passes first.
+# Nothing is published unless the tag matches package.json and the Android
+# versionName, and the full CI suite passes first.
 #
 #   tag pushed
 #     └─ verify-version ── ci ── npm ───────────────┐
 #                          ├── image ───────────────┤
-#                          └── binaries ────────────┴─ publish-release ── installer
+#                          ├── binaries ────────────┤
+#                          └── apk ─────────────────┴─ publish-release ─┬─ installer
+#                                                                       └─ play (approval)
 #
-# Secrets: NPM_TOKEN, and the LEVIX_DEPLOY_* set on the installer-production
-# environment. The container image uses the built-in GITHUB_TOKEN.
+# Google Play goes last and only by hand. The play job waits on the
+# google-play environment; give it a required reviewer (Settings ->
+# Environments -> google-play -> Required reviewers). The comment the reviewer
+# writes when approving becomes the release's "What's new" text: plain text
+# for en-US, or a line such as [ar] to start another language's notes
+# (scripts/play-release-notes.mjs, 500 characters per language). An empty
+# comment fails the job before anything is uploaded. Prereleases (tags with a
+# "-") skip Google Play. The track is the PLAY_TRACK repository variable,
+# production when unset.
+#
+# Secrets: NPM_TOKEN, the LEVIX_DEPLOY_* set on the installer-production
+# environment, the LEVIX_KEYSTORE_* set for signing, and
+# PLAY_SERVICE_ACCOUNT_JSON for Google Play. The container image uses the
+# built-in GITHUB_TOKEN.
 
 name: release
 
@@ -40,6 +54,14 @@ jobs:
 
           if [ "$package_name" != "levix-bot" ]; then
             echo "::error::Unexpected npm package name: ${package_name} (expected levix-bot)"
+            exit 1
+          fi
+
+          # Google Play shows versionName to users and refuses a versionCode it
+          # has seen before, so the Android build must be bumped with the tag.
+          android_version="$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' android/app/build.gradle.kts)"
+          if [ "$android_version" != "$package_version" ]; then
+            echo "::error::android/app/build.gradle.kts versionName ${android_version} does not match ${package_version}; bump versionName and versionCode"
             exit 1
           fi
 
@@ -389,3 +411,68 @@ jobs:
           else
             echo "- \`/install.sh\` left alone (prerelease)" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  play:
+    name: publish to Google Play
+    needs: publish-release
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    # The pause for manual approval. Without a required reviewer on this
+    # environment the job runs at once, finds no approval comment, and stops
+    # before uploading.
+    environment: google-play
+    concurrency:
+      group: google-play
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: levix-android.aab
+          path: dist
+
+      # The comment is written to a file and parsed by a script, never put
+      # into a shell line or $GITHUB_ENV, so its text cannot become a command.
+      - name: Read the approval comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/approvals" \
+            --jq '[.[] | select(.state == "approved" and any(.environments[]; .name == "google-play"))] | last | .comment // ""' \
+            > dist/approval-comment.txt
+
+      - name: Write the What's new text
+        run: node scripts/play-release-notes.mjs dist/approval-comment.txt dist/whatsnew
+
+      - name: Upload the AAB to Google Play
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: net.leviro.levix
+          releaseFiles: dist/levix-android.aab
+          tracks: ${{ vars.PLAY_TRACK || 'production' }}
+          status: completed
+          releaseName: ${{ github.ref_name }}
+          whatsNewDirectory: dist/whatsnew
+
+      - name: What was published
+        run: |
+          {
+            echo "### Google Play"
+            echo ""
+            echo "- \`${{ github.ref_name }}\` on the \`${{ vars.PLAY_TRACK || 'production' }}\` track"
+            echo "- What's new:"
+            for f in dist/whatsnew/whatsnew-*; do
+              echo ""
+              echo "  ${f##*/whatsnew-}:"
+              sed 's/^/  > /' "$f"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
