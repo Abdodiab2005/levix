@@ -19,6 +19,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.Lifecycle
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import net.leviro.levix.media.MediaHubActivity
 
 class MainActivity : AppCompatActivity() {
@@ -77,6 +79,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null && maybeShowOnboarding(intent)) return
         // Edge-to-edge on every Android version, not only the 15+ that force
         // it; the root pads itself from the insets below.
         enableEdgeToEdge(
@@ -135,6 +138,9 @@ class MainActivity : AppCompatActivity() {
             val next = if (UiPrefs.theme(this) == "dark") "light" else "dark"
             UiPrefs.set(this, UiPrefs.language(this), next, "theme")
         }
+        findViewById<View>(R.id.cardShowGuide).setOnClickListener {
+            OnboardingActivity.showAgain(this)
+        }
 
         heroSubtitleText = findViewById(R.id.heroSubtitleText)
         panelButton = findViewById(R.id.panelButton)
@@ -177,7 +183,18 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (maybeShowOnboarding(intent)) return
         maybeOpenPanel(intent)
+    }
+
+    private fun maybeShowOnboarding(intent: Intent?): Boolean {
+        if (!OnboardingGate.shouldShow(intent?.action,
+                intent?.hasCategory(Intent.CATEGORY_LAUNCHER) == true,
+                intent?.getBooleanExtra(EXTRA_OPEN_PANEL, false) == true,
+                OnboardingActivity.completed(this))) return false
+        startActivity(Intent(this, OnboardingActivity::class.java))
+        finish()
+        return true
     }
 
     // MainActivity must remain exported for the launcher. Never accept service
@@ -246,6 +263,25 @@ class MainActivity : AppCompatActivity() {
 
         // 5. Battery Protection Card
         renderBatteryCard()
+        maybePromptForCrash(snapshot)
+    }
+
+    private fun maybePromptForCrash(snapshot: HostState.Snapshot) {
+        if (crashPromptShown || !snapshot.running || !snapshot.levixReady ||
+            !lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) ||
+            !CrashReports.hasPending(this)) return
+        crashPromptShown = true
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.crash_prompt_title)
+            .setMessage(R.string.crash_prompt_body)
+            .setPositiveButton(R.string.crash_prompt_review) { _, _ ->
+                PanelActivity.open(this, "settings/diagnostics")
+            }
+            .setNegativeButton(R.string.crash_prompt_later, null)
+            .setNeutralButton(R.string.crash_prompt_delete) { _, _ ->
+                CrashReports.deleteAll(this)
+            }
+            .show()
     }
 
     private fun renderStatusPill(snapshot: HostState.Snapshot) {
@@ -368,5 +404,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_OPEN_PANEL = "openPanel"
+        private var crashPromptShown = false
     }
 }
