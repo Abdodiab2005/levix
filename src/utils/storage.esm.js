@@ -118,5 +118,6 @@ export const incrementAutoDeleteCounter = store.incrementAutoDeleteCounter;
 export const resetAutoDeleteCounter = store.resetAutoDeleteCounter;
 export const insertAutoDeleteLog = store.insertAutoDeleteLog;
 export const listAutoDeleteLog = store.listAutoDeleteLog;
+export const countAutoDeleteLog = store.countAutoDeleteLog;
 export const clearAutoDeleteLog = store.clearAutoDeleteLog;
 export const clearAutoDeleteOnUnlink = store.clearAutoDeleteOnUnlink;

@@ -1,4 +1,12 @@
-import { AlertTriangle, Sticker as StickerIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  Clock,
+  Images,
+  Package,
+  PlusCircle,
+  Star,
+  Sticker as StickerIcon,
+} from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
@@ -150,16 +158,16 @@ export const StickerStudioView: React.FC<StickerStudioViewProps> = ({ isConnecte
   );
 
   const encoderMissing = capabilities !== null && !capabilities.webp;
-  const tabs: { id: TabId; label: string }[] = [
-    { id: "library", label: t("library") },
-    { id: "packs", label: t("packs") },
-    { id: "favorites", label: t("favorites") },
-    { id: "create", label: t("create") },
-    { id: "recent", label: t("recent") },
+  const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
+    { id: "library", label: t("library"), icon: <Images size={16} /> },
+    { id: "packs", label: t("packs"), icon: <Package size={16} /> },
+    { id: "favorites", label: t("favorites"), icon: <Star size={16} /> },
+    { id: "create", label: t("create"), icon: <PlusCircle size={16} /> },
+    { id: "recent", label: t("recent"), icon: <Clock size={16} /> },
   ];
 
   return (
-    <div className="flex flex-col gap-5 sm:gap-6">
+    <div className="flex flex-col gap-5 sm:gap-6 min-w-0">
       <PageHeader
         icon={<StickerIcon size={24} />}
         title={t("stickers")}
@@ -179,7 +187,7 @@ export const StickerStudioView: React.FC<StickerStudioViewProps> = ({ isConnecte
           className="min-w-max"
           value={activeTab}
           onChange={changeTab}
-          options={tabs.map((tab) => ({ value: tab.id, label: tab.label }))}
+          options={tabs.map((tab) => ({ value: tab.id, label: tab.label, icon: tab.icon }))}
         />
       </div>
 
@@ -190,6 +198,7 @@ export const StickerStudioView: React.FC<StickerStudioViewProps> = ({ isConnecte
           gifEnabled={capabilities?.gif === true}
           refreshKey={revision}
           onOpenInCreate={(sticker) => void openInCreate(sticker)}
+          onGoCreate={() => changeTab("create")}
         />
       )}
       {activeTab === "favorites" && (
@@ -199,6 +208,7 @@ export const StickerStudioView: React.FC<StickerStudioViewProps> = ({ isConnecte
           gifEnabled={capabilities?.gif === true}
           refreshKey={revision}
           onOpenInCreate={(sticker) => void openInCreate(sticker)}
+          onGoCreate={() => changeTab("create")}
         />
       )}
       {activeTab === "recent" && (
@@ -208,6 +218,7 @@ export const StickerStudioView: React.FC<StickerStudioViewProps> = ({ isConnecte
           gifEnabled={capabilities?.gif === true}
           refreshKey={revision}
           onOpenInCreate={(sticker) => void openInCreate(sticker)}
+          onGoCreate={() => changeTab("create")}
         />
       )}
       {activeTab === "packs" && (

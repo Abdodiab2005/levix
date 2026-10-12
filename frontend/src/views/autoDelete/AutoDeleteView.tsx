@@ -15,6 +15,7 @@ import {
   MenuItem,
   OverflowMenu,
   PageHeader,
+  Pagination,
   RadioGroup,
   RelativeTime,
   Skeleton,
@@ -22,6 +23,7 @@ import {
   Tabs,
   Toggle,
   Toolbar,
+  usePagination,
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { AutoDeleteMatch, AutoDeleteRule } from "../../types";
@@ -178,6 +180,14 @@ export const AutoDeleteView: React.FC = () => {
     [rules, query, filters, sort, language],
   );
 
+  const resetKey = `${query}|${sort}|${filters.enabled}|${filters.chatScope}|${filters.senders}`;
+  const { page, pageCount, pageItems, setPage, total } = usePagination(visible, 20, resetKey);
+
+  const clearFilters = () => {
+    setQuery("");
+    setFilters(EMPTY_RULE_FILTERS);
+  };
+
   const editorRule = editing ? (rules.find((rule) => rule.id === editing.id) ?? editing) : null;
 
   const openCreate = () => {
@@ -282,7 +292,7 @@ export const AutoDeleteView: React.FC = () => {
 
       {tab === "rules" && (
         <div className="flex flex-col gap-3">
-          {!loading && rules.length > 0 && (
+          {!loading && !error && rules.length > 0 && (
             <Toolbar>
               <Input
                 type="search"
@@ -362,16 +372,25 @@ export const AutoDeleteView: React.FC = () => {
           )}
 
           {!loading && error && rules.length === 0 && (
-            <div className="flex flex-col items-center gap-3 py-10">
-              <p role="alert" className="text-sm text-danger">
-                {error}
-              </p>
-              <Button onClick={() => setReloadToken((value) => value + 1)}>{t("retryLoad")}</Button>
-            </div>
+            <EmptyState
+              kind="error"
+              icon={<MessageSquareX size={28} />}
+              description={error}
+              action={
+                <Button
+                  variant="secondary"
+                  icon={<RotateCcw size={16} />}
+                  onClick={() => setReloadToken((value) => value + 1)}
+                >
+                  {t("retryLoad")}
+                </Button>
+              }
+            />
           )}
 
           {!loading && !error && rules.length === 0 && (
             <EmptyState
+              kind="empty"
               icon={<MessageSquareX size={28} />}
               title={t("noRulesTitle")}
               description={t("noRulesBody")}
@@ -383,95 +402,105 @@ export const AutoDeleteView: React.FC = () => {
             />
           )}
 
-          {!loading && rules.length > 0 && visible.length === 0 && (
-            <EmptyState title={t("noRulesMatch")} />
+          {!loading && !error && rules.length > 0 && visible.length === 0 && (
+            <EmptyState
+              kind="no-results"
+              action={
+                <Button variant="secondary" onClick={clearFilters}>
+                  {t("clearFilters")}
+                </Button>
+              }
+            />
           )}
 
-          {!loading && visible.length > 0 && (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {visible.map((rule) => {
-                const label = ruleLabel(rule);
-                const extra = Math.max(0, rule.keywords.length - PREVIEW);
-                return (
-                  <Card key={rule.id} className="flex flex-col gap-3">
-                    <div className="flex items-start gap-2">
-                      <h3 dir="auto" className="min-w-0 flex-1 truncate text-sm font-bold">
-                        {label || "—"}
-                      </h3>
-                      <Toggle
-                        checked={rule.enabled}
-                        aria-label={t("ruleEnabled")}
-                        onChange={(enabled) => void toggleRule(rule, enabled)}
-                      />
-                      <OverflowMenu label={t("more")}>
-                        <MenuItem
-                          icon={<Pencil size={16} />}
-                          onSelect={() => {
-                            setEditing(rule);
-                            setEditorOpen(true);
-                          }}
-                        >
-                          {t("edit")}
-                        </MenuItem>
-                        <MenuItem
-                          icon={<RotateCcw size={16} />}
-                          onSelect={() => void resetCounter(rule)}
-                        >
-                          {t("resetCounter")}
-                        </MenuItem>
-                        {rule.keepCopy && (
+          {!loading && !error && visible.length > 0 && (
+            <>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {pageItems.map((rule) => {
+                  const label = ruleLabel(rule);
+                  const extra = Math.max(0, rule.keywords.length - PREVIEW);
+                  return (
+                    <Card key={rule.id} className="flex flex-col gap-3">
+                      <div className="flex items-start gap-2">
+                        <h3 dir="auto" className="min-w-0 flex-1 truncate text-sm font-bold">
+                          {label || "—"}
+                        </h3>
+                        <Toggle
+                          checked={rule.enabled}
+                          aria-label={t("ruleEnabled")}
+                          onChange={(enabled) => void toggleRule(rule, enabled)}
+                        />
+                        <OverflowMenu label={t("more")}>
                           <MenuItem
-                            icon={<Eye size={16} />}
+                            icon={<Pencil size={16} />}
                             onSelect={() => {
-                              setCopyRuleId(String(rule.id));
-                              setTab("copies");
+                              setEditing(rule);
+                              setEditorOpen(true);
                             }}
                           >
-                            {t("viewCopies")}
+                            {t("edit")}
                           </MenuItem>
-                        )}
-                        <MenuItem
-                          danger
-                          icon={<Trash2 size={16} />}
-                          onSelect={() => setPendingDelete(rule)}
-                        >
-                          {t("delete")}
-                        </MenuItem>
-                      </OverflowMenu>
-                    </div>
+                          <MenuItem
+                            icon={<RotateCcw size={16} />}
+                            onSelect={() => void resetCounter(rule)}
+                          >
+                            {t("resetCounter")}
+                          </MenuItem>
+                          {rule.keepCopy && (
+                            <MenuItem
+                              icon={<Eye size={16} />}
+                              onSelect={() => {
+                                setCopyRuleId(String(rule.id));
+                                setTab("copies");
+                              }}
+                            >
+                              {t("viewCopies")}
+                            </MenuItem>
+                          )}
+                          <MenuItem
+                            danger
+                            icon={<Trash2 size={16} />}
+                            onSelect={() => setPendingDelete(rule)}
+                          >
+                            {t("delete")}
+                          </MenuItem>
+                        </OverflowMenu>
+                      </div>
 
-                    <div className="flex flex-wrap gap-1.5">
-                      {rule.keywords.slice(0, PREVIEW).map((word) => (
-                        <Chip key={word}>{word}</Chip>
-                      ))}
-                      {extra > 0 && <Badge>{fill(t("moreKeywords"), { n: extra })}</Badge>}
-                    </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {rule.keywords.slice(0, PREVIEW).map((word) => (
+                          <Chip key={word}>{word}</Chip>
+                        ))}
+                        {extra > 0 && <Badge>{fill(t("moreKeywords"), { n: extra })}</Badge>}
+                      </div>
 
-                    <div className="flex flex-wrap gap-1.5">
-                      <Badge>{t(MATCH_LABEL[rule.match])}</Badge>
-                      <Badge>{scopeLabel(rule)}</Badge>
-                      <Badge>{sendersLabel(rule)}</Badge>
-                    </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <Badge>{t(MATCH_LABEL[rule.match])}</Badge>
+                        <Badge>{scopeLabel(rule)}</Badge>
+                        <Badge>{sendersLabel(rule)}</Badge>
+                      </div>
 
-                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                      <span className="text-2xl font-bold tabular-nums text-text-main">
-                        {countFormat.format(rule.deletedCount)}
-                      </span>
-                      <span className="text-xs text-muted">{t("deletedLabel")}</span>
-                      <span className="ms-auto text-xs text-muted">
-                        {rule.lastDeletedAt ? (
-                          <>
-                            {t("lastDeleted")} <RelativeTime value={rule.lastDeletedAt} />
-                          </>
-                        ) : (
-                          t("neverDeleted")
-                        )}
-                      </span>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span className="text-2xl font-bold tabular-nums text-text-main">
+                          {countFormat.format(rule.deletedCount)}
+                        </span>
+                        <span className="text-xs text-muted">{t("deletedLabel")}</span>
+                        <span className="ms-auto text-xs text-muted">
+                          {rule.lastDeletedAt ? (
+                            <>
+                              {t("lastDeleted")} <RelativeTime value={rule.lastDeletedAt} />
+                            </>
+                          ) : (
+                            t("neverDeleted")
+                          )}
+                        </span>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+              <Pagination page={page} pageCount={pageCount} total={total} onPageChange={setPage} />
+            </>
           )}
         </div>
       )}

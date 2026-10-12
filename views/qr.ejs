@@ -1,25 +1,26 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html data-brand="<%= brand.name %>">
   <head>
+    <script src="/ui-boot.js"></script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title><%= brand.name %> · Link WhatsApp</title>
+    <title data-i18n="titleQr"><%= brand.name %> · Link WhatsApp</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/brand/icon-32.png" />
     <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/dashboard.css" />
   </head>
   <body class="gateway-page">
     <main class="gateway-shell">
-      <section class="gateway-story" aria-label="About <%= brand.name %>">
+      <section class="gateway-story" aria-label="About <%= brand.name %>" data-i18n-aria-label="storyAbout">
         <div class="brand-lockup" aria-label="<%= brand.name %>">
           <img src="/brand/mark.svg" alt="" />
-          <span><strong><%= brand.name %></strong><small><%= brand.tagline %></small></span>
+          <span><strong><%= brand.name %></strong><small data-i18n="tagline"><%= brand.tagline %></small></span>
         </div>
 
         <div class="gateway-copy">
-          <span class="eyebrow">A direct line</span>
-          <h2>Bring your assistant online.</h2>
-          <p>One scan securely links Levix to the WhatsApp account you choose.</p>
+          <span class="eyebrow" data-i18n="directLine">A direct line</span>
+          <h2 data-i18n="qrHeadline">Bring your assistant online.</h2>
+          <p data-i18n="qrLede">One scan securely links Levix to the WhatsApp account you choose.</p>
         </div>
 
         <div class="gateway-mark" aria-hidden="true">
@@ -27,7 +28,7 @@
           <img src="/brand/mark.svg" alt="" />
         </div>
 
-        <p class="gateway-trust"><span></span> Live pairing status</p>
+        <p class="gateway-trust" data-i18n-html="qrTrust"><span></span> Live pairing status</p>
       </section>
 
       <section class="gateway-panel">
@@ -35,46 +36,53 @@
           <div class="card auth-card qr-card">
             <div class="card-head qr-card-head">
               <div>
-                <span class="eyebrow">Link device</span>
-                <h1>Scan with WhatsApp</h1>
+                <span class="eyebrow" data-i18n="linkDevice">Link device</span>
+                <h1 data-i18n="qrScanTitle">Scan with WhatsApp</h1>
               </div>
-              <span class="pill" id="state"><span class="dot"></span>Waiting…</span>
+              <span class="pill" id="state"><span class="dot"></span><span data-i18n="qrWaiting">Waiting…</span></span>
             </div>
 
             <div class="qr-box">
               <div class="qr-frame" id="frame"></div>
               <ol class="steps">
-                <li><span>Open</span> WhatsApp on the phone the bot should use.</li>
-                <li><span>Choose</span> Settings → Linked devices → Link a device.</li>
-                <li><span>Scan</span> the code shown above.</li>
+                <li data-i18n-html="qrStep1"><span>Open</span> WhatsApp on the phone the bot should use.</li>
+                <li data-i18n-html="qrStep2"><span>Choose</span> Settings → Linked devices → Link a device.</li>
+                <li data-i18n-html="qrStep3"><span>Scan</span> the code shown above.</li>
               </ol>
               <div class="callout compact-callout">
                 <span class="callout-icon" aria-hidden="true">i</span>
-                <p>No code yet? Press <strong>Start session</strong> on the dashboard's Connection screen.</p>
+                <p data-i18n-html="qrCallout">No code yet? Press <strong>Start session</strong> on the dashboard's Connection screen.</p>
               </div>
             </div>
 
             <a class="btn qr-back" href="/">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
-              Back to dashboard
+              <span data-i18n="backToDashboard">Back to dashboard</span>
             </a>
           </div>
 
-          <div class="foot"><%= brand.name %> by <%= brand.developer %> · <%= brand.studio %></div>
+          <div class="foot"><%= brand.name %> <span data-i18n="by">by</span> <%= brand.developer %> · <%= brand.studio %></div>
         </div>
       </section>
     </main>
 
+    <script src="/gateway-i18n.js"></script>
     <script src="/socket.io.min.js"></script>
     <script src="/qrcode.min.js"></script>
     <script>
       (() => {
+        const getT = () => (window.LevixGatewayI18n ? window.LevixGatewayI18n.t : (k) => k);
         const frame = document.getElementById("frame");
         const state = document.getElementById("state");
         let painted = null;
+        let currentStatusKey = "qrWaiting";
+        let currentStatusKind = "";
+        let isLinked = false;
 
-        function setState(text, kind) {
-          state.className = `pill ${kind || ""}`;
+        function setState(text, kind, key) {
+          if (key) currentStatusKey = key;
+          currentStatusKind = kind || "";
+          state.className = `pill ${currentStatusKind}`;
           state.innerHTML = `<span class="dot"></span>${text}`;
         }
 
@@ -88,19 +96,34 @@
             height: 250,
             correctLevel: QRCode.CorrectLevel.H,
           });
-          setState("Scan me", "");
+          setState(getT()("qrScanMe"), "", "qrScanMe");
         }
 
         // The QR the server already had when this page was rendered.
         const initial = <%- JSON.stringify(qr || "") %>;
         if (initial) render(initial);
-        else setState("Waiting for a code…", "");
+        else setState(getT()("qrWaitingCode"), "", "qrWaitingCode");
 
-        function clear(text, kind) {
+        function clear(text, kind, key) {
           painted = null;
           frame.innerHTML = "";
-          setState(text, kind || "");
+          setState(text, kind || "", key);
         }
+
+        function repaint() {
+          if (currentStatusKey) {
+            setState(getT()(currentStatusKey), currentStatusKind, currentStatusKey);
+          }
+          if (isLinked) {
+            frame.innerHTML = `<div class="qr-success">${getT()("qrLinked")}</div>`;
+          }
+        }
+
+        window.addEventListener("levix-gateway-lang", repaint);
+        window.addEventListener("levix-ui-prefs", repaint);
+        window.addEventListener("storage", (e) => {
+          if (e.key === "levix_lang") repaint();
+        });
 
         const socket = io();
         socket.on("qr", render);
@@ -108,17 +131,23 @@
         // The backend drops a code the moment it stops being scannable. Without
         // this the page sat on an expired QR forever, and somebody would keep
         // pointing a phone at it.
-        socket.on("qr_cleared", () => clear("Waiting for a code…", ""));
+        socket.on("qr_cleared", () => {
+          isLinked = false;
+          clear(getT()("qrWaitingCode"), "", "qrWaitingCode");
+        });
 
-        socket.on("session", (state) => {
-          if (state.state === "connected") {
-            frame.innerHTML = '<div class="qr-success">Linked ✓</div>';
+        socket.on("session", (s) => {
+          if (s.state === "connected") {
+            isLinked = true;
+            frame.innerHTML = `<div class="qr-success">${getT()("qrLinked")}</div>`;
             painted = null;
-            setState("Connected", "on");
+            setState(getT()("qrConnected"), "on", "qrConnected");
             return;
           }
-          if (state.state === "waiting_for_qr") return; // the qr event paints it
-          clear(state.canStart ? "Not started — start it from the dashboard" : "Connecting…", "");
+          isLinked = false;
+          if (s.state === "waiting_for_qr") return; // the qr event paints it
+          const key = s.canStart ? "qrNotStarted" : "qrConnecting";
+          clear(getT()(key), "", key);
         });
       })();
     </script>

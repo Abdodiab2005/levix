@@ -3,9 +3,18 @@ import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
 import { useToast } from "../../components/Toasts";
-import { Button, EmptyState, IconButton, LoadingState, UserText } from "../../components/ui";
+import {
+  Button,
+  EmptyState,
+  IconButton,
+  LoadingState,
+  Pagination,
+  UserText,
+  usePagination,
+} from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { Pack, Sticker } from "../../types";
+import { cn } from "../../utils/cn";
 import { fill } from "../../utils/fill";
 import { explainError } from "../../utils/stickerErrors";
 import { BulkBar } from "./BulkBar";
@@ -38,8 +47,9 @@ export const PackDetail: React.FC<PackDetailProps> = ({
   const [tick, setTick] = useState(0);
   const [orderBusy, setOrderBusy] = useState(false);
   const dragId = useRef("");
-  const ids = items.map((item) => item.id);
-  const selection = useSelection(ids);
+  const { page, pageCount, pageItems, setPage, total } = usePagination(items, 48, packId);
+  const ids = pageItems.map((item) => item.id);
+  const selection = useSelection(ids, packId);
   const selectedIds = [...selection.selected];
 
   useEffect(() => {
@@ -125,7 +135,7 @@ export const PackDetail: React.FC<PackDetailProps> = ({
   const animatedSelected = items.some((item) => selection.selected.has(item.id) && item.animated);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className={cn("flex flex-col gap-3 min-w-0", selectedIds.length > 0 && "pb-16 sm:pb-0")}>
       <div className="flex flex-wrap items-center gap-2">
         <Button onClick={onBack}>
           <ChevronLeft size={16} className="rtl:-scale-x-100" />
@@ -143,15 +153,17 @@ export const PackDetail: React.FC<PackDetailProps> = ({
 
       {loading && items.length === 0 && <LoadingState text={t("loading")} />}
       {error && items.length === 0 && (
-        <div className="flex flex-col items-center gap-3 py-16">
-          <p className="text-sm text-danger">{error}</p>
-          <Button onClick={reload}>{t("retryLoad")}</Button>
-        </div>
+        <EmptyState
+          kind="error"
+          description={error}
+          action={<Button onClick={reload}>{t("retryLoad")}</Button>}
+        />
       )}
       {!loading && !error && items.length === 0 && (
         <EmptyState
+          kind="empty"
           icon={<GripVertical size={28} className="text-muted" />}
-          text={t("packEmpty")}
+          description={t("packEmpty")}
         />
       )}
 
@@ -160,7 +172,7 @@ export const PackDetail: React.FC<PackDetailProps> = ({
           {selectedIds.length === 0 && (
             <div>
               <Button variant="ghost" size="sm" onClick={selection.selectAll}>
-                {t("selectAll")}
+                {t(pageCount > 1 ? "selectCurrentPage" : "selectAll")}
               </Button>
             </div>
           )}
@@ -171,6 +183,7 @@ export const PackDetail: React.FC<PackDetailProps> = ({
             sendReason={selectedIds.length ? commands.sendReason : null}
             exportReason={selectedIds.length ? commands.exportReason : null}
             onSelectAll={selection.selectAll}
+            selectAllLabel={t(pageCount > 1 ? "selectCurrentPage" : "selectAll")}
             onClear={selection.clear}
             onFavorite={commands.favorite}
             onUnfavorite={commands.unfavorite}
@@ -184,57 +197,61 @@ export const PackDetail: React.FC<PackDetailProps> = ({
             onDelete={commands.askDelete}
           />
           <ul className="flex flex-col gap-2">
-            {items.map((item, index) => (
-              <li
-                key={item.id}
-                className="flex items-center gap-2 rounded-xl border border-line bg-panel p-2"
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  dropOn(item.id);
-                }}
-              >
-                <div className="w-16 shrink-0">
-                  <StickerTile
-                    sticker={item}
-                    selected={selection.selected.has(item.id)}
-                    onToggle={(shiftKey) => selection.toggle(index, shiftKey)}
-                    onOpen={() => commands.openDetail(item)}
-                    onFavorite={() => commands.toggleFavorite(item)}
-                  />
-                </div>
-                <p className="flex-1 min-w-0 text-sm font-semibold">
-                  <UserText>{item.name || t("stickerPreview")}</UserText>
-                </p>
-                <IconButton
-                  label={t("reorderUp")}
-                  disabled={orderBusy || index === 0}
-                  onClick={() => shift(index, -1)}
-                >
-                  <ChevronUp size={14} />
-                </IconButton>
-                <IconButton
-                  label={t("reorderDown")}
-                  disabled={orderBusy || index === items.length - 1}
-                  onClick={() => shift(index, 1)}
-                >
-                  <ChevronDown size={14} />
-                </IconButton>
-                <IconButton
-                  label={t("reorderDragHint")}
-                  variant="ghost"
-                  className="cursor-grab"
-                  draggable={!orderBusy}
-                  onDragStart={(event) => {
-                    dragId.current = item.id;
-                    event.dataTransfer.effectAllowed = "move";
-                    event.dataTransfer.setData("text/plain", item.id);
+            {pageItems.map((item, index) => {
+              const globalIndex = (page - 1) * 48 + index;
+              return (
+                <li
+                  key={item.id}
+                  className="flex items-center gap-2 rounded-xl border border-line bg-panel p-2"
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    dropOn(item.id);
                   }}
-                  icon={<GripVertical size={16} />}
-                />
-              </li>
-            ))}
+                >
+                  <div className="w-16 shrink-0">
+                    <StickerTile
+                      sticker={item}
+                      selected={selection.selected.has(item.id)}
+                      onToggle={(shiftKey) => selection.toggle(index, shiftKey)}
+                      onOpen={() => commands.openDetail(item)}
+                      onFavorite={() => commands.toggleFavorite(item)}
+                    />
+                  </div>
+                  <p className="flex-1 min-w-0 text-sm font-semibold">
+                    <UserText>{item.name || t("stickerPreview")}</UserText>
+                  </p>
+                  <IconButton
+                    label={t("reorderUp")}
+                    disabled={orderBusy || globalIndex === 0}
+                    onClick={() => shift(globalIndex, -1)}
+                  >
+                    <ChevronUp size={14} />
+                  </IconButton>
+                  <IconButton
+                    label={t("reorderDown")}
+                    disabled={orderBusy || globalIndex === items.length - 1}
+                    onClick={() => shift(globalIndex, 1)}
+                  >
+                    <ChevronDown size={14} />
+                  </IconButton>
+                  <IconButton
+                    label={t("reorderDragHint")}
+                    variant="ghost"
+                    className="cursor-grab"
+                    draggable={!orderBusy}
+                    onDragStart={(event) => {
+                      dragId.current = item.id;
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", item.id);
+                    }}
+                    icon={<GripVertical size={16} />}
+                  />
+                </li>
+              );
+            })}
           </ul>
+          <Pagination page={page} pageCount={pageCount} total={total} onPageChange={setPage} />
         </>
       )}
       {commands.dialogs}

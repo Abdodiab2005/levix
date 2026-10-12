@@ -1,6 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Levix</string>
+    <string name="guide_step">Step %1$d of 3</string>
+    <string name="guide_what_title">Your bot, on this phone</string>
+    <string name="guide_what_body">Levix runs your own WhatsApp bot on this phone. Use the control panel to manage it.</string>
+    <string name="guide_connect_title">Connect WhatsApp</string>
+    <string name="guide_connect_body">Tap Start, open the panel, then scan its QR code in WhatsApp &gt; Linked devices.</string>
+    <string name="guide_privacy_title">Privacy and diagnostics</string>
+    <string name="guide_privacy_body">Nothing leaves this phone unless you send it. If Levix crashes, a report stays here until you review and send it or delete it.</string>
+    <string name="guide_skip">Skip</string>
+    <string name="guide_next">Next</string>
+    <string name="guide_done">Done</string>
+    <string name="guide_again_title">Show guide again</string>
+    <string name="guide_again_sub">Review setup and privacy steps</string>
+    <string name="crash_prompt_title">Levix stopped unexpectedly</string>
+    <string name="crash_prompt_body">A crash report is saved on this phone. You can review it before choosing whether to send it.</string>
+    <string name="crash_prompt_review">Review &amp; send</string>
+    <string name="crash_prompt_later">Not now</string>
+    <string name="crash_prompt_delete">Delete</string>
     <string name="brand_tagline">Control Room</string>
     <string name="host_shell_note">Autonomous background companion. Open Panel to manage settings.</string>
 
@@ -16,6 +33,11 @@
     <string name="btn_stop_host">Stop Assistant</string>
 
     <!-- Sections -->
+    <string name="pref_theme_title">App Theme</string>
+    <string name="pref_theme_sub">Choose light or dark appearance</string>
+    <string name="dialog_choose_theme">Choose Theme</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
     <string name="pref_language_title">App Language</string>
     <string name="pref_language_sub">Switch between Arabic (RTL) &amp; English (LTR)</string>
     <string name="pref_language_btn">العربية</string>

@@ -1,25 +1,26 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html data-brand="<%= brand.name %>">
   <head>
+    <script src="/ui-boot.js"></script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title><%= brand.name %> · First run</title>
+    <title data-i18n="titleSetup"><%= brand.name %> · First run</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/brand/icon-32.png" />
     <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/dashboard.css" />
   </head>
   <body class="gateway-page">
     <main class="gateway-shell">
-      <section class="gateway-story" aria-label="About <%= brand.name %>">
+      <section class="gateway-story" aria-label="About <%= brand.name %>" data-i18n-aria-label="storyAbout">
         <div class="brand-lockup" aria-label="<%= brand.name %>">
           <img src="/brand/mark.svg" alt="" />
-          <span><strong><%= brand.name %></strong><small><%= brand.tagline %></small></span>
+          <span><strong><%= brand.name %></strong><small data-i18n="tagline"><%= brand.tagline %></small></span>
         </div>
 
         <div class="gateway-copy">
-          <span class="eyebrow">Your first minute</span>
-          <h2>Make the workspace yours.</h2>
-          <p>Choose one strong password, then manage the assistant from a single private control room.</p>
+          <span class="eyebrow" data-i18n="firstMinute">Your first minute</span>
+          <h2 data-i18n="setupHeadline">Make the workspace yours.</h2>
+          <p data-i18n="setupLede">Choose one strong password, then manage the assistant from a single private control room.</p>
         </div>
 
         <div class="gateway-mark" aria-hidden="true">
@@ -27,7 +28,7 @@
           <img src="/brand/mark.svg" alt="" />
         </div>
 
-        <p class="gateway-trust"><span></span> One setup · no configuration files</p>
+        <p class="gateway-trust" data-i18n-html="setupTrust"><span></span> One setup · no configuration files</p>
       </section>
 
       <section class="gateway-panel">
@@ -35,30 +36,33 @@
           <form class="card auth-card setup-card" action="/setup" method="post">
             <button type="button" class="gateway-back-btn" id="setup-back-app" hidden>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-              <span>Back to app</span>
+              <span data-i18n="backToApp">Back to app</span>
             </button>
             <div class="auth-head">
-              <span class="eyebrow">Create your workspace</span>
-              <h1>Welcome to <%= brand.name %></h1>
-              <p class="sub">Protect the linked WhatsApp account with at least <%= minLength %> characters.</p>
+              <span class="eyebrow" data-i18n="createWorkspace">Create your workspace</span>
+              <h1 data-i18n="setupWelcome">Welcome to <%= brand.name %></h1>
+              <p class="sub" data-i18n="setupSub">Protect the linked WhatsApp account with at least <%= minLength %> characters.</p>
             </div>
 
             <% if (needsCode) { %>
             <label class="field">
-              <span>Setup code</span>
+              <span data-i18n="setupCodeLabel">Setup code</span>
               <input type="text" name="code" autocomplete="off" autofocus required
-                     placeholder="Printed in the bot's terminal" />
-              <small>Confirms you can access the server running Levix.</small>
+                     placeholder="Printed in the bot's terminal"
+                     data-i18n-placeholder="setupCodePlaceholder" />
+              <small data-i18n="setupCodeHint">Confirms you can access the server running Levix.</small>
             </label>
             <% } %>
 
             <label class="field">
-              <span>Password</span>
+              <span data-i18n="setupPasswordLabel">Password</span>
               <div class="input-wrap">
-                <input type="password" name="password" autocomplete="new-password"
+                <input type="password" dir="ltr" spellcheck="false" autocapitalize="off" autocorrect="off" name="password" autocomplete="new-password"
                        placeholder="At least <%= minLength %> characters"
+                       data-i18n-placeholder="minLengthPlaceholder"
+                       data-i18n-n="<%= minLength %>"
                        minlength="<%= minLength %>" <%= needsCode ? "" : "autofocus" %> required />
-                <button type="button" class="eye-btn" aria-label="Show password">
+                <button type="button" class="eye-btn" aria-label="Show password" data-i18n-aria-label="showPassword" aria-pressed="false">
                   <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                   <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
                 </button>
@@ -66,11 +70,13 @@
             </label>
 
             <label class="field">
-              <span>Repeat password</span>
+              <span data-i18n="repeatPassword">Repeat password</span>
               <div class="input-wrap">
-                <input type="password" name="confirm" autocomplete="new-password"
-                       placeholder="Type it again" minlength="<%= minLength %>" required />
-                <button type="button" class="eye-btn" aria-label="Show password">
+                <input type="password" dir="ltr" spellcheck="false" autocapitalize="off" autocorrect="off" name="confirm" autocomplete="new-password"
+                       placeholder="Type it again"
+                       data-i18n-placeholder="repeatPlaceholder"
+                       minlength="<%= minLength %>" required />
+                <button type="button" class="eye-btn" aria-label="Show password" data-i18n-aria-label="showPassword" aria-pressed="false">
                   <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                   <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
                 </button>
@@ -78,33 +84,31 @@
             </label>
 
             <button type="submit" class="btn btn-primary auth-submit">
-              Create workspace
+              <span data-i18n="createWorkspaceBtn">Create workspace</span>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
             </button>
 
             <% if (error) { %>
-            <div class="error" role="alert"><%= error %></div>
+            <div class="error" role="alert" data-i18n-error="<%= errorCode %>" data-i18n-n="<%= minLength %>"><%= error %></div>
             <% } %>
           </form>
 
-          <div class="foot"><%= brand.name %> by <%= brand.developer %> · <%= brand.studio %></div>
+          <div class="foot"><%= brand.name %> <span data-i18n="by">by</span> <%= brand.developer %> · <%= brand.studio %></div>
         </div>
       </section>
     </main>
 
+    <script src="/gateway-i18n.js"></script>
     <script src="/gateway.js"></script>
     <script>
       (function () {
+        // Android app: show the back-to-app button. Its label is already in
+        // whichever language the page loaded in.
         var inApp = typeof window.LevixHost !== "undefined" && typeof window.LevixHost.closePanel === "function";
         if (inApp) {
-          var isAr = false;
-          try { isAr = localStorage.getItem("levix_lang") === "ar"; } catch(e) {}
-          var backLabel = isAr ? "العودة للتطبيق" : "Back to app";
           var btn = document.getElementById("setup-back-app");
           if (btn) {
             btn.hidden = false;
-            btn.querySelector("span").textContent = backLabel;
-            if (isAr) { btn.dir = "rtl"; btn.style.direction = "rtl"; }
             btn.addEventListener("click", function() { window.LevixHost.closePanel(); });
           }
         }

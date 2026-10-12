@@ -5,9 +5,14 @@ import type {
   AutoDeleteRule,
   AutoDeleteRuleInput,
   Capabilities,
+  ClientDiagnostics,
+  CrashReportInput,
+  CrashReportItem,
+  DiagnosticsObject,
   EditOptions,
   Job,
   Pack,
+  SentCrashReportItem,
   Sticker,
   StickerBulkResult,
   StickerFile,
@@ -133,6 +138,7 @@ export interface FeedbackPayload {
   topic: FeedbackTopic;
   rating?: number | null;
   contact?: string | null;
+  diagnostics?: ClientDiagnostics;
 }
 
 export interface FetchAiModelsResponse {
@@ -304,6 +310,11 @@ export const api = {
     api.post("/security/password", { current, next }),
   // The bot forwards this to the developer; nothing about it is stored locally.
   getFeedbackMeta: () => api.get<FeedbackMeta>("/feedback/meta"),
+  getFeedbackDiagnosticsPreview: (client: ClientDiagnostics) =>
+    api.post<{ success: boolean; diagnostics: DiagnosticsObject }>(
+      "/feedback/diagnostics-preview",
+      { client },
+    ),
   sendFeedback: (payload: FeedbackPayload) => api.post<{ success: boolean }>("/feedback", payload),
   /**
    * The same feedback with one file, as multipart/form-data. XHR rather than
@@ -321,6 +332,7 @@ export const api = {
       form.set("topic", payload.topic);
       if (payload.rating) form.set("rating", String(payload.rating));
       if (payload.contact) form.set("contact", payload.contact);
+      if (payload.diagnostics) form.set("diagnostics", JSON.stringify(payload.diagnostics));
       form.set("file", attachment, attachment.name);
       const xhr = new XMLHttpRequest();
       xhr.open("POST", "/dashboard/api/feedback");
@@ -351,6 +363,17 @@ export const api = {
       xhr.onerror = () => reject(new ApiError(0, "Network error"));
       xhr.send(form);
     }),
+  getCrashReports: () =>
+    api.get<{ success: boolean; reports: CrashReportItem[]; sent: SentCrashReportItem[] }>(
+      "/crash-reports",
+    ),
+  submitCrashReport: (body: CrashReportInput) =>
+    api.post<{ success: boolean; id: string }>("/crash-reports", body),
+  sendCrashReport: (id: string) =>
+    api.post<{ success: boolean }>(`/crash-reports/${encodeURIComponent(id)}/send`),
+  deleteCrashReport: (id: string) =>
+    api.delete<{ success: boolean }>(`/crash-reports/${encodeURIComponent(id)}`),
+  deleteAllCrashReports: () => api.delete<{ success: boolean }>("/crash-reports"),
   getLogs: () => api.get<{ logs: any[] }>("/logs"),
   // Sticker Studio
   getStickerCapabilities: () => api.get<Capabilities>("/stickers/capabilities"),
@@ -455,7 +478,7 @@ export const api = {
     if (query.limit !== undefined) params.set("limit", String(query.limit));
     if (query.offset !== undefined) params.set("offset", String(query.offset));
     const qs = params.toString();
-    return api.get<{ success: boolean; log: AutoDeleteLogEntry[] }>(
+    return api.get<{ success: boolean; log: AutoDeleteLogEntry[]; total: number }>(
       `/auto-delete/log${qs ? `?${qs}` : ""}`,
     );
   },

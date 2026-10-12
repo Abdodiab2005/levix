@@ -4,7 +4,7 @@
 @theme {
   --color-brand-blue: #176bfa;
   --color-brand-blue-deep: #0b50d0;
-  --color-brand-cyan: #21cef3;
+  --color-brand-cyan: var(--brand-cyan);
   --color-brand-purple: #a855f7;
   --color-bg: var(--bg);
   --color-bg-soft: var(--bg-soft);
@@ -38,7 +38,8 @@
   --line-soft: rgba(70, 105, 155, 0.15);
   --text: #f3f7fd;
   --muted: #9ab0ce;
-  --faint: #627b9f;
+  --faint: #8297b5;
+  --brand-cyan: #21cef3;
   --grad-primary: linear-gradient(135deg, #176bfa 0%, #087ff2 50%, #21cef3 100%);
   --grad-glow: radial-gradient(circle at 50% 0%, rgba(33, 206, 243, 0.09) 0%, transparent 70%);
 }
@@ -54,8 +55,9 @@
   --line: #e2e8f0;
   --line-soft: #edf2f7;
   --text: #0f172a;
-  --muted: #64748b;
-  --faint: #94a3b8;
+  --muted: #526176;
+  --faint: #5b697d;
+  --brand-cyan: #007b91;
   --grad-primary: linear-gradient(135deg, #176bfa 0%, #087ff2 50%, #21cef3 100%);
   --grad-glow: radial-gradient(circle at 50% 0%, rgba(23, 107, 250, 0.07) 0%, transparent 70%);
 }

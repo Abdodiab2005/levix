@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
@@ -34,6 +35,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -48,6 +50,9 @@ import org.json.JSONObject
  */
 class PanelActivity : AppCompatActivity() {
     private lateinit var web: WebView
+    private lateinit var container: FrameLayout
+    private lateinit var loadingScreen: FrameLayout
+    private lateinit var loadingText: TextView
     private lateinit var sock: File
     private lateinit var bridgeJs: String
     private lateinit var stickerHost: StickerHost
@@ -84,11 +89,7 @@ class PanelActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Same as MainActivity: edge-to-edge everywhere, light bar icons.
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
-        )
+        applySystemBars()
         sock = File(HostState.dataDir(this), "panel.sock")
         bridgeJs = try {
             assets.open("panel-bridge.js").use { it.readBytes().toString(StandardCharsets.UTF_8) }
@@ -97,8 +98,8 @@ class PanelActivity : AppCompatActivity() {
             ""
         }
         web = WebView(this)
-        val container = FrameLayout(this).apply {
-            setBackgroundColor(Color.parseColor("#07101f"))
+        container = FrameLayout(this).apply {
+            setBackgroundColor(ContextCompat.getColor(this@PanelActivity, R.color.levix_bg))
             addView(
                 web,
                 FrameLayout.LayoutParams(
@@ -112,8 +113,8 @@ class PanelActivity : AppCompatActivity() {
         // The WebView shows nothing until the panel socket answers, which can
         // take a while when the host is still booting. A small loading screen
         // covers that window so the deep-link never opens on an empty page.
-        val loadingScreen = FrameLayout(this).apply {
-            setBackgroundColor(Color.parseColor("#07101f"))
+        loadingScreen = FrameLayout(this).apply {
+            setBackgroundColor(ContextCompat.getColor(this@PanelActivity, R.color.levix_bg))
             isClickable = true
         }
         val loadingBox = LinearLayout(this).apply {
@@ -121,13 +122,14 @@ class PanelActivity : AppCompatActivity() {
             gravity = Gravity.CENTER
         }
         loadingBox.addView(ProgressBar(this))
-        loadingBox.addView(TextView(this).apply {
+        loadingText = TextView(this).apply {
             text = getString(R.string.panel_starting)
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#A4B5CF"))
+            setTextColor(ContextCompat.getColor(this@PanelActivity, R.color.levix_text_muted))
             textSize = 14f
             setPadding(0, dp(14), 0, 0)
-        })
+        }
+        loadingBox.addView(loadingText)
         loadingScreen.addView(
             loadingBox,
             FrameLayout.LayoutParams(
@@ -171,7 +173,7 @@ class PanelActivity : AppCompatActivity() {
         web.settings.displayZoomControls = false
         web.settings.builtInZoomControls = false
         web.settings.setSupportZoom(false)
-        web.setBackgroundColor(Color.parseColor("#07101f"))
+        web.setBackgroundColor(ContextCompat.getColor(this, R.color.levix_bg))
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             @Suppress("DEPRECATION")
@@ -217,6 +219,7 @@ class PanelActivity : AppCompatActivity() {
                 { runOnUiThread { HostLogShare.share(this) } },
                 { runOnUiThread { finish() } },
                 stickerHost,
+                { runOnUiThread { pushUiPrefs() } },
             ),
             "LevixHost",
         )
@@ -288,6 +291,7 @@ class PanelActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 loadingScreen.visibility = View.GONE
+                pushUiPrefs()
             }
 
             override fun onReceivedError(
@@ -407,6 +411,43 @@ class PanelActivity : AppCompatActivity() {
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun applySystemBars() {
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
+        )
+    }
+
+    private fun repaintNative() {
+        val bg = ContextCompat.getColor(this, R.color.levix_bg)
+        container.setBackgroundColor(bg)
+        loadingScreen.setBackgroundColor(bg)
+        loadingText.setTextColor(ContextCompat.getColor(this, R.color.levix_text_muted))
+        loadingText.setText(R.string.panel_starting)
+        web.setBackgroundColor(bg)
+        applySystemBars()
+    }
+
+    private fun pushUiPrefs() {
+        if (::web.isInitialized) {
+            web.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('levix-ui-prefs',{detail:${UiPrefs.json(this)}}))",
+                null,
+            )
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        pushUiPrefs()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        repaintNative()
+        pushUiPrefs()
+    }
 
     override fun onDestroy() {
         stickerHost.destroy()

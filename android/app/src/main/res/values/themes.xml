@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Levix" parent="Theme.Material3.Dark.NoActionBar">
+    <style name="Theme.Levix" parent="Theme.Material3.DayNight.NoActionBar">
         <!-- Brand Colors -->
         <item name="colorPrimary">@color/levix_blue</item>
         <item name="colorPrimaryContainer">@color/levix_panel_raised</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorSecondary">@color/levix_cyan</item>
-        <item name="colorOnSecondary">#07101F</item>
+        <item name="colorOnSecondary">@color/levix_bg</item>
 
         <!-- System & Surfaces -->
         <item name="android:windowBackground">@color/levix_bg</item>
@@ -15,10 +15,5 @@
         <item name="colorOnSurface">@color/levix_text</item>
         <item name="colorOnSurfaceVariant">@color/levix_text_muted</item>
 
-        <!-- System bars: transparent, drawn over by the activities
-             (enableEdgeToEdge). statusBarColor / navigationBarColor are
-             deprecated since Android 15 and ignored there. -->
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>

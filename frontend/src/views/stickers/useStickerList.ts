@@ -4,7 +4,8 @@ import { useToast } from "../../components/Toasts";
 import { useI18n } from "../../context/I18nContext";
 import type { Pack, Sticker } from "../../types";
 import { explainError } from "../../utils/stickerErrors";
-import { PAGE_SIZE } from "../../utils/stickerLimits";
+
+export const STUDIO_PAGE_SIZE = 24;
 
 export type StickerSort = "newest" | "oldest" | "name" | "recent";
 export type StickerFilter = "all" | "favorites" | "recent" | "animated" | "static";
@@ -17,13 +18,24 @@ export function useStickerList(preset: StickerFilter) {
   const [sort, setSort] = useState<StickerSort>(preset === "recent" ? "recent" : "newest");
   const [filter, setFilter] = useState<StickerFilter>(preset);
   const [pack, setPack] = useState("");
-  const [items, setItems] = useState<Sticker[]>([]);
+  const [page, setPageState] = useState(1);
+  const [loaded, setLoaded] = useState<{
+    page: number;
+    filterKey: string;
+    items: Sticker[];
+  } | null>(null);
   const [total, setTotal] = useState(0);
   const [packs, setPacks] = useState<Pack[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState<{ page: number; filterKey: string; message: string } | null>(
+    null,
+  );
   const seq = useRef(0);
+  const filterKey = `${debounced}|${filter}|${sort}|${pack}`;
+
+  useEffect(() => {
+    setFilter(preset);
+  }, [preset]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(q), 300);
@@ -42,11 +54,11 @@ export function useStickerList(preset: StickerFilter) {
   }, [loadPacks]);
 
   const load = useCallback(
-    async (offset: number, append: boolean) => {
+    async (targetPage: number) => {
       const ticket = ++seq.current;
-      if (append) setLoadingMore(true);
-      else setLoading(true);
-      setError(null);
+      setLoading(true);
+      setFailed(null);
+      const offset = Math.max(0, (targetPage - 1) * STUDIO_PAGE_SIZE);
       try {
         const res = await api.getStickers({
           q: debounced || undefined,
@@ -54,39 +66,55 @@ export function useStickerList(preset: StickerFilter) {
           filter,
           pack: pack || undefined,
           offset,
-          limit: PAGE_SIZE,
+          limit: STUDIO_PAGE_SIZE,
         });
         if (ticket !== seq.current) return;
-        setItems((prev) => (append ? [...prev, ...res.items] : res.items));
-        setTotal(res.total);
+        const newTotal = res.total;
+        const newPageCount = Math.max(1, Math.ceil(newTotal / STUDIO_PAGE_SIZE));
+        if (targetPage > newPageCount) {
+          setPageState(newPageCount);
+          return;
+        }
+        setLoaded({ page: targetPage, filterKey, items: res.items });
+        setTotal(newTotal);
       } catch (err) {
         if (ticket !== seq.current) return;
         const message = explainError(t, err);
-        setError(message);
+        setFailed({ page: targetPage, filterKey, message });
         toast(message, "error");
       } finally {
         if (ticket === seq.current) {
           setLoading(false);
-          setLoadingMore(false);
         }
       }
     },
-    [debounced, sort, filter, pack, t, toast],
+    [debounced, sort, filter, pack, filterKey, t, toast],
   );
 
+  const prevFilterKey = useRef(filterKey);
+
   useEffect(() => {
-    void load(0, false);
-  }, [load]);
+    if (prevFilterKey.current !== filterKey) {
+      prevFilterKey.current = filterKey;
+      if (page !== 1) {
+        setPageState(1);
+        return;
+      }
+    }
+    void load(page);
+  }, [filterKey, page, load]);
 
   const reload = useCallback(() => {
     loadPacks();
-    void load(0, false);
-  }, [load, loadPacks]);
+    void load(page);
+  }, [load, loadPacks, page]);
 
-  const loadMore = useCallback(() => {
-    if (loadingMore || items.length >= total) return;
-    void load(items.length, true);
-  }, [items.length, load, loadingMore, total]);
+  const setPage = useCallback((nextPage: number) => {
+    setPageState(Math.max(1, Math.floor(nextPage) || 1));
+  }, []);
+
+  const current = loaded?.page === page && loaded.filterKey === filterKey;
+  const error = failed?.page === page && failed.filterKey === filterKey ? failed.message : null;
 
   return {
     q,
@@ -97,15 +125,17 @@ export function useStickerList(preset: StickerFilter) {
     setFilter,
     pack,
     setPack,
-    items,
+    page,
+    setPage,
+    pageCount: Math.max(1, Math.ceil(total / STUDIO_PAGE_SIZE)),
+    pageSize: STUDIO_PAGE_SIZE,
+    items: current ? loaded.items : [],
+    loadedItems: loaded?.items ?? null,
     total,
     packs,
-    loading,
-    loadingMore,
+    loading: loading || (!current && !error),
     error,
-    hasMore: items.length < total,
     reload,
-    loadMore,
     loadPacks,
     lockedFilter: preset !== "all",
   };

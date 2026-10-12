@@ -4,6 +4,27 @@
 // itself fails to load: the page works without either one.
 
 (function () {
+  function updateEyeLabels() {
+    var i18n = window.LevixGatewayI18n;
+    var showLabel = i18n ? i18n.t("showPassword") : "Show password";
+    var hideLabel = i18n ? i18n.t("hidePassword") : "Hide password";
+    document.querySelectorAll(".eye-btn").forEach(function (btn) {
+      var isPressed = btn.getAttribute("aria-pressed") === "true";
+      btn.setAttribute("aria-label", isPressed ? hideLabel : showLabel);
+    });
+  }
+
+  document.querySelectorAll(".eye-btn").forEach(function (btn) {
+    btn.setAttribute("aria-pressed", "false");
+  });
+  updateEyeLabels();
+
+  window.addEventListener("levix-gateway-lang", updateEyeLabels);
+  window.addEventListener("levix-ui-prefs", updateEyeLabels);
+  window.addEventListener("storage", function (e) {
+    if (e.key === "levix_lang") updateEyeLabels();
+  });
+
   // Eye toggles. One delegated listener covers every password field on the
   // page — the button carries two icons and swaps which one is visible.
   document.addEventListener("click", function (event) {
@@ -13,12 +34,20 @@
     var input = btn.parentElement ? btn.parentElement.querySelector("input") : null;
     if (!input) return;
     var show = input.type === "password";
+    var start = input.selectionStart;
+    var end = input.selectionEnd;
     input.type = show ? "text" : "password";
+    input.focus({ preventScroll: true });
+    if (start !== null && end !== null) input.setSelectionRange(start, end);
     var on = btn.querySelector(".eye-on");
     var off = btn.querySelector(".eye-off");
     if (on) on.style.display = show ? "none" : "";
     if (off) off.style.display = show ? "" : "none";
-    btn.setAttribute("aria-label", show ? "Hide password" : "Show password");
+    var i18n = window.LevixGatewayI18n;
+    var showLabel = i18n ? i18n.t("showPassword") : "Show password";
+    var hideLabel = i18n ? i18n.t("hidePassword") : "Hide password";
+    btn.setAttribute("aria-label", show ? hideLabel : showLabel);
+    btn.setAttribute("aria-pressed", String(show));
   });
 
   // Blur the password screens whenever the page can't be watched: another

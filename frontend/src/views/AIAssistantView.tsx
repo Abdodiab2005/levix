@@ -14,7 +14,6 @@ import {
   RefreshCw,
   Save,
   Sparkles,
-  Volume2,
 } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
@@ -33,7 +32,9 @@ import {
   Input,
   LoadingState,
   PageHeader,
+  PasswordInput,
   SaveField,
+  SegmentedControl,
   Select,
   Spinner,
   Textarea,
@@ -42,11 +43,13 @@ import {
   useSavedValue,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
+import type { translations } from "../i18n/translations";
+import { ModelCapabilityIndicators } from "./ai/ModelCapabilityIndicators";
 
 interface ProviderPreset {
   id: string;
   name: string;
-  descKey: string;
+  descKey: keyof (typeof translations)["en"];
   provider: "gemini" | "openai" | "anthropic";
   defaultModel: string;
   defaultBaseUrl: string;
@@ -158,6 +161,7 @@ export const AIAssistantView: React.FC = () => {
 
   const [personaModalOpen, setPersonaModalOpen] = useState(false);
   const [personaText, setPersonaText] = useState("");
+  const [personaLoading, setPersonaLoading] = useState(false);
   const [memoryScopes, setMemoryScopes] = useState<
     Array<{ scope: string; label: string; entries: number }>
   >([]);
@@ -354,13 +358,9 @@ export const AIAssistantView: React.FC = () => {
   const currentModelObj = modelForCaps(currentModelVal);
   const savedModelObj = modelForCaps(savedModelVal);
 
-  const supportsVision = Boolean(currentModelObj.capabilities.vision);
-  const supportsStt = Boolean(currentModelObj.capabilities.stt);
   const savedSupportsVision = Boolean(savedModelObj.capabilities.vision);
   const savedSupportsStt = Boolean(savedModelObj.capabilities.stt);
 
-  const capsKnown =
-    currentModelObj.capabilitySource === "provider" || currentModelObj.capabilitySource === "seed";
   const savedCapsKnown =
     savedModelObj.capabilitySource === "provider" || savedModelObj.capabilitySource === "seed";
   const autoDetect = settings["ai_auto_detect_capabilities"] !== false;
@@ -380,13 +380,16 @@ export const AIAssistantView: React.FC = () => {
   }, [savedModelVal, visionLocked, sttLocked, loading]);
 
   const openPersonaEditor = async () => {
+    setPersonaModalOpen(true);
+    setPersonaLoading(true);
     try {
       const res = await api.getPersona();
       const persona = res?.persona;
       setPersonaText(typeof persona === "string" ? persona : persona?.body || "");
-      setPersonaModalOpen(true);
     } catch (err: any) {
       toast(err.message, "error");
+    } finally {
+      setPersonaLoading(false);
     }
   };
 
@@ -510,33 +513,6 @@ export const AIAssistantView: React.FC = () => {
     savedLabel: t("saved"),
   };
 
-  const capabilityBadges = [
-    { icon: Eye, label: t("capVision"), on: supportsVision },
-    { icon: Mic, label: t("capStt"), on: supportsStt },
-    {
-      icon: Volume2,
-      label: t("capAudio"),
-      on: Boolean(currentModelObj.capabilities.audioInput),
-    },
-    {
-      icon: FileText,
-      label: t("capText"),
-      on: Boolean(
-        currentModelObj.capabilities.textInput && currentModelObj.capabilities.textOutput,
-      ),
-    },
-    {
-      icon: FileText,
-      label: t("capPdf"),
-      on: Boolean(currentModelObj.capabilities.pdfInput),
-    },
-    {
-      icon: Eye,
-      label: t("capVideo"),
-      on: Boolean(currentModelObj.capabilities.videoInput),
-    },
-  ];
-
   if (loading) {
     return <LoadingState text={t("starting")} />;
   }
@@ -566,39 +542,19 @@ export const AIAssistantView: React.FC = () => {
       <Card className="flex flex-col gap-3">
         <CardHeader icon={<Sparkles size={18} />} title={t("aiProvider")} />
 
-        <div className="flex flex-wrap items-center gap-2">
-          <Select
-            aria-label={t("aiProvider")}
-            className="min-w-0 flex-1 sm:max-w-xs"
-            value={providerForm.draft.presetId}
-            onChange={(e) => applyPreset(e.target.value)}
-          >
-            {PRESETS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </Select>
-          <span className="font-mono text-xs text-muted">{currentModelVal}</span>
-        </div>
+        <SegmentedControl
+          aria-label={t("aiProvider")}
+          value={providerForm.draft.presetId}
+          onChange={(val) => applyPreset(val)}
+          options={PRESETS.map((p) => ({
+            value: p.id,
+            label: p.name,
+          }))}
+          className="flex w-full flex-wrap gap-1 p-1 [&>*]:min-w-[110px] [&>*]:flex-1"
+        />
+        <p className="text-xs text-muted">{t(selectedPreset.descKey)}</p>
 
         {requiresApiKey && <p className="text-xs text-warn">{t("connectKeyFirstPrompt")}</p>}
-
-        {discoveryState[selectedPreset.id]?.error && (
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2 text-xs font-semibold text-danger">
-              <AlertCircle size={16} className="shrink-0" />
-              <span className="min-w-0">{discoveryState[selectedPreset.id]?.error}</span>
-            </div>
-            <IconButton
-              variant="ghost"
-              label={t("refreshModels")}
-              icon={<RefreshCw size={16} />}
-              onClick={() => handleFetchModels(true)}
-              loading={fetchingModels}
-            />
-          </div>
-        )}
 
         <form
           className="flex flex-col gap-3"
@@ -637,9 +593,8 @@ export const AIAssistantView: React.FC = () => {
                 </span>
               }
             >
-              <Input
+              <PasswordInput
                 id="input-api-key"
-                type="password"
                 className="font-mono"
                 value={providerForm.draft.apiKey}
                 onChange={(e) => providerForm.setField("apiKey", e.target.value)}
@@ -653,7 +608,7 @@ export const AIAssistantView: React.FC = () => {
               <Field className="min-w-0" label={t("baseUrl")} htmlFor="input-base-url">
                 <Input
                   id="input-base-url"
-                  type="text"
+                  technical
                   className="font-mono"
                   value={providerForm.draft.baseUrl}
                   onChange={(e) => providerForm.setField("baseUrl", e.target.value)}
@@ -663,7 +618,7 @@ export const AIAssistantView: React.FC = () => {
             )}
 
             <div className="flex min-w-0 flex-col gap-1.5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
                 <div className="flex items-center gap-1.5">
                   <label htmlFor="input-model-name" className="text-xs font-bold text-text-main">
                     {t("modelName")}
@@ -692,19 +647,59 @@ export const AIAssistantView: React.FC = () => {
                 </div>
               </div>
 
-              {isCustomModel ? (
+              {discoveryState[selectedPreset.id]?.error && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-danger/30 bg-danger/10 p-2 text-xs text-danger">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <AlertCircle size={15} className="shrink-0" />
+                    <span className="min-w-0 break-words">
+                      {discoveryState[selectedPreset.id]?.error}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    icon={<RefreshCw size={14} />}
+                    onClick={() => handleFetchModels(true)}
+                    loading={fetchingModels}
+                  >
+                    {t("retry")}
+                  </Button>
+                </div>
+              )}
+
+              {fetchingModels ? (
+                <div className="flex min-h-10 items-center gap-2 rounded-xl border border-line bg-panel-raised px-3">
+                  <Spinner label={t("fetchingModels")} />
+                </div>
+              ) : isCustomModel ? (
                 <Input
                   id="input-model-name"
-                  type="text"
+                  technical
                   className="font-mono"
                   value={providerForm.draft.model}
                   onChange={(e) => providerForm.setField("model", e.target.value)}
                   placeholder={selectedPreset.defaultModel}
                 />
+              ) : currentModelList.length === 0 ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-panel-raised p-2 text-xs text-muted">
+                  <span>{requiresApiKey ? t("connectKeyFirstPrompt") : t("noModelsFound")}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    icon={<RefreshCw size={14} />}
+                    onClick={() => handleFetchModels(true)}
+                    loading={fetchingModels}
+                  >
+                    {t("retry")}
+                  </Button>
+                </div>
               ) : (
                 <Select
                   id="input-model-name"
-                  className="font-mono"
+                  dir="ltr"
+                  className="font-mono text-start"
                   value={currentModelVal}
                   onChange={(e) => providerForm.setField("model", e.target.value)}
                 >
@@ -712,19 +707,30 @@ export const AIAssistantView: React.FC = () => {
                     label={isLiveVerified ? t("modelsAvailableLive") : t("modelsRecommendedSeed")}
                   >
                     {currentModelList.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.displayName && m.displayName !== m.id
-                          ? `${m.displayName} (${m.id})`
-                          : m.id}
+                      <option key={m.id} value={m.id} dir="ltr">
+                        {m.displayName && m.displayName !== m.id ? m.displayName : m.id}
                         {m.recommended ? " ★" : ""}
                       </option>
                     ))}
                   </optgroup>
                   {!currentModelList.some(
                     (m) => m.id.toLowerCase() === currentModelVal.toLowerCase(),
-                  ) && <option value={currentModelVal}>{currentModelVal} (current)</option>}
+                  ) && (
+                    <option value={currentModelVal} dir="ltr">
+                      {currentModelVal}
+                    </option>
+                  )}
                 </Select>
               )}
+
+              <div
+                className="flex min-w-0 items-center gap-1 text-xs text-muted"
+                dir="ltr"
+                title={currentModelVal}
+              >
+                <span className="shrink-0 text-faint">ID:</span>
+                <span className="truncate font-mono">{currentModelVal}</span>
+              </div>
             </div>
           </div>
           <FormActions
@@ -737,30 +743,10 @@ export const AIAssistantView: React.FC = () => {
           />
         </form>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          {capabilityBadges.map(({ icon: Icon, label, on }) => (
-            <Badge key={label} tone={capsKnown && on ? "ok" : "neutral"}>
-              <Icon size={12} />
-              {label}
-              {capsKnown ? (on ? ` · ${t("supported")}` : ` · ${t("unsupported")}`) : ""}
-            </Badge>
-          ))}
-          <Badge
-            tone={
-              currentModelObj.capabilitySource === "provider"
-                ? "ok"
-                : currentModelObj.capabilitySource === "seed"
-                  ? "info"
-                  : "neutral"
-            }
-          >
-            {currentModelObj.capabilitySource === "provider"
-              ? t("sourceLive")
-              : currentModelObj.capabilitySource === "seed"
-                ? t("sourceSeed")
-                : t("sourceUnknown")}
-          </Badge>
-        </div>
+        <ModelCapabilityIndicators
+          capabilities={currentModelObj.capabilities}
+          capabilitySource={currentModelObj.capabilitySource}
+        />
       </Card>
 
       <Card className="flex flex-col gap-3">
@@ -910,18 +896,29 @@ export const AIAssistantView: React.FC = () => {
             <Button variant="secondary" onClick={() => setPersonaModalOpen(false)}>
               {t("cancel")}
             </Button>
-            <Button variant="primary" icon={<Save size={16} />} onClick={savePersona}>
+            <Button
+              variant="primary"
+              icon={<Save size={16} />}
+              onClick={savePersona}
+              disabled={personaLoading}
+            >
               {t("save")}
             </Button>
           </>
         }
       >
-        <Textarea
-          className="font-mono"
-          rows={12}
-          value={personaText}
-          onChange={(e) => setPersonaText(e.target.value)}
-        />
+        {personaLoading ? (
+          <div className="flex min-h-[280px] items-center justify-center">
+            <Spinner className="size-6" label={t("starting")} />
+          </div>
+        ) : (
+          <Textarea
+            className="font-mono"
+            rows={12}
+            value={personaText}
+            onChange={(e) => setPersonaText(e.target.value)}
+          />
+        )}
       </Dialog>
 
       <Dialog
@@ -947,33 +944,39 @@ export const AIAssistantView: React.FC = () => {
       >
         <div className="flex flex-col gap-4 md:flex-row">
           <div className="flex shrink-0 flex-col gap-1.5 md:max-h-[420px] md:w-60 md:overflow-y-auto">
-            {memoryScopes.map((s) => {
-              const isGlobal = s.scope === "global";
-              const active = selectedMemoryFile === s.scope;
-              return (
-                <Button
-                  key={s.scope}
-                  variant={active ? "primary" : "secondary"}
-                  aria-pressed={active}
-                  onClick={() => openMemoryScope(s.scope)}
-                  className="h-auto w-full flex-col items-stretch gap-1 px-2.5 py-2.5"
-                >
-                  <span className="flex min-w-0 items-center gap-2 text-xs font-bold">
-                    {isGlobal ? (
-                      <Globe size={14} className="shrink-0" />
-                    ) : (
-                      <MessageSquare size={14} className="shrink-0" />
-                    )}
-                    <span className="truncate">{isGlobal ? t("memoryGlobalScope") : s.scope}</span>
-                  </span>
-                  <span className="block text-start text-[10px] opacity-80">
-                    {isGlobal ? t("memoryGlobalScopeHint") : t("memoryChatScopeHint")}
-                    {" · "}
-                    {t("memoryEntriesCount").replace("{n}", String(s.entries))}
-                  </span>
-                </Button>
-              );
-            })}
+            {memoryScopes.length === 0 ? (
+              <EmptyState kind="empty" text={t("noMemoryFiles")} className="py-6" />
+            ) : (
+              memoryScopes.map((s) => {
+                const isGlobal = s.scope === "global";
+                const active = selectedMemoryFile === s.scope;
+                return (
+                  <Button
+                    key={s.scope}
+                    variant={active ? "primary" : "secondary"}
+                    aria-pressed={active}
+                    onClick={() => openMemoryScope(s.scope)}
+                    className="h-auto w-full flex-col items-stretch gap-1 px-2.5 py-2.5"
+                  >
+                    <span className="flex min-w-0 items-center gap-2 text-xs font-bold">
+                      {isGlobal ? (
+                        <Globe size={14} className="shrink-0" />
+                      ) : (
+                        <MessageSquare size={14} className="shrink-0" />
+                      )}
+                      <span className="truncate">
+                        {isGlobal ? t("memoryGlobalScope") : s.scope}
+                      </span>
+                    </span>
+                    <span className="block text-start text-[10px] opacity-80">
+                      {isGlobal ? t("memoryGlobalScopeHint") : t("memoryChatScopeHint")}
+                      {" · "}
+                      {t("memoryEntriesCount").replace("{n}", String(s.entries))}
+                    </span>
+                  </Button>
+                );
+              })
+            )}
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-2">
             <p className="text-[11px] leading-relaxed text-muted">{t("memoryProseHint")}</p>
@@ -1012,6 +1015,7 @@ export const AIAssistantView: React.FC = () => {
         ) : !selectedConversation ? (
           conversations.length === 0 ? (
             <EmptyState
+              kind="empty"
               icon={<MessageSquare size={20} />}
               text={t("noConversations")}
               className="py-8"
@@ -1027,7 +1031,9 @@ export const AIAssistantView: React.FC = () => {
                 >
                   <span className="flex items-center gap-2 text-xs font-bold">
                     <MessageSquare size={14} className="shrink-0 text-brand-blue" />
-                    <span className="truncate font-mono">{row.chatId}</span>
+                    <span className="truncate font-mono" dir="ltr">
+                      {row.chatId}
+                    </span>
                   </span>
                   <span className="block text-start text-[10px] text-muted">
                     {t("convTurns").replace("{n}", String(row.turns))} ·{" "}
@@ -1048,7 +1054,7 @@ export const AIAssistantView: React.FC = () => {
               >
                 {t("backToList")}
               </Button>
-              <span className="truncate font-mono text-[10px] text-muted">
+              <span className="truncate font-mono text-[10px] text-muted" dir="ltr">
                 {selectedConversation}
               </span>
             </div>
@@ -1057,7 +1063,7 @@ export const AIAssistantView: React.FC = () => {
             )}
             <div className="flex max-h-[420px] flex-col gap-1.5 overflow-y-auto">
               {conversation?.messages.length === 0 && (
-                <EmptyState text={t("noConversations")} className="py-6" />
+                <EmptyState kind="empty" text={t("noConversations")} className="py-6" />
               )}
               {conversation?.messages.map((m, i) => (
                 <div

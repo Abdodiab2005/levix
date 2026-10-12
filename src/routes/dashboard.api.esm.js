@@ -18,6 +18,8 @@ import { Router } from "express";
 import { createRequire } from "module";
 import { groupMetadataCache } from "../core/socket.js";
 import { getCommandCatalog, rebuildCommandIndex } from "../handlers/command.handler.js";
+import { fileToBuffer, MultipartError, readMultipartForm } from "../utils/multipart.esm.js";
+import normalizeJid, { isLidJid } from "../utils/normalizeJid.esm.js";
 import { grantRole, listRoles, revokeRole } from "../utils/permissions.esm.js";
 import {
   countDebts,
@@ -41,8 +43,6 @@ import {
   resolveUserPhone,
   saveGroupSettings,
 } from "../utils/storage.esm.js";
-import normalizeJid, { isLidJid } from "../utils/normalizeJid.esm.js";
-import { fileToBuffer, MultipartError, readMultipartForm } from "../utils/multipart.esm.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -64,6 +64,8 @@ const {
 } = require("../panel/feedback.cjs");
 const { stampPanelSession } = require("../panel/session-auth.cjs");
 const { DATA_DIR } = require("../config/paths.cjs");
+const { buildDiagnostics } = require("../diagnostics/device.cjs");
+const crashReports = require("../diagnostics/crashReports.cjs");
 const { PERSONA_FILE, activeProviderKeySetting } = require("../services/aiAgent.cjs");
 const {
   SCHEDULE_MEDIA_MAX_BYTES,
@@ -150,6 +152,28 @@ function asyncRoute(handler) {
       fail(res, error, `${req.method} ${req.path} failed`),
     );
   };
+}
+
+/**
+ * The feedback `diagnostics` field arrives as a JSON object (JSON body) or as a
+ * JSON string (a multipart field). Both are normalized here; a present but
+ * broken value is a caller mistake, not something to silently drop.
+ *
+ * @returns {{ present: boolean, value: object|null, error?: string }}
+ */
+function parseDiagnosticsInput(raw) {
+  if (raw === undefined || raw === null) return { present: false, value: null };
+  if (typeof raw === "string") {
+    const text = raw.trim();
+    if (!text) return { present: false, value: null };
+    try {
+      return { present: true, value: JSON.parse(text) };
+    } catch {
+      return { present: false, value: null, error: "diagnostics is not valid JSON" };
+    }
+  }
+  if (typeof raw === "object" && !Array.isArray(raw)) return { present: true, value: raw };
+  return { present: false, value: null, error: "diagnostics must be an object" };
 }
 
 // ===========================================================================
@@ -1309,10 +1333,22 @@ router.get("/feedback/meta", (req, res) => {
   });
 });
 
+// The exact object the server would forward as `diagnostics`, so the operator
+// can see what they are about to share before they send it. This is the same
+// builder submitFeedback() uses, so the preview cannot lie.
+router.post("/feedback/diagnostics-preview", (req, res) => {
+  const parsed = parseDiagnosticsInput(req.body?.client);
+  if (parsed.error) return badRequest(res, parsed.error);
+  res.json({ success: true, diagnostics: buildDiagnostics(parsed.present ? parsed.value : {}) });
+});
+
 // Leaves this machine only when the operator presses Send, and carries nothing
 // but the form's own fields plus the version and platform — see feedback.cjs.
 // An optional attachment (a screenshot, a log) rides along as multipart and is
-// forwarded to the same endpoint, which delivers it to Telegram as a file.
+// forwarded to the same endpoint, which delivers it to Telegram as a file. An
+// optional `diagnostics` object (the preview's client object) is rebuilt by the
+// same sanitizer and attached to the envelope; without it there is no
+// `diagnostics` key on the wire.
 router.post(
   "/feedback",
   asyncRoute(async (req, res) => {
@@ -1343,6 +1379,9 @@ router.post(
     const parsed = validateFeedback(body);
     if (!parsed.ok) return badRequest(res, parsed.error);
 
+    const diagnostics = parseDiagnosticsInput(body.diagnostics);
+    if (diagnostics.error) return badRequest(res, diagnostics.error);
+
     const retryAfter = feedbackRetryAfter();
     if (retryAfter) {
       res.set("Retry-After", String(retryAfter));
@@ -1352,7 +1391,11 @@ router.post(
       });
     }
 
-    const result = await submitFeedback(parsed.value, attachment);
+    const result = await submitFeedback(
+      parsed.value,
+      attachment,
+      diagnostics.present ? diagnostics.value : undefined,
+    );
     if (!result.ok) {
       return res.status(result.status).json({ success: false, error: result.error });
     }
@@ -1600,12 +1643,12 @@ router.post("/auto-delete/rules/:id/reset", (req, res) => {
 
 router.get("/auto-delete/log", (req, res) => {
   try {
-    const log = autoDelete.listLog({
+    const { log, total } = autoDelete.listLog({
       ruleId: req.query.ruleId,
       limit: req.query.limit,
       offset: req.query.offset,
     });
-    res.json({ success: true, log });
+    res.json({ success: true, log, total });
   } catch (error) {
     autoDeleteFail(res, error, "Error listing auto-delete copies");
   }
@@ -1617,6 +1660,69 @@ router.delete("/auto-delete/log", (req, res) => {
     res.json({ success: true, cleared });
   } catch (error) {
     autoDeleteFail(res, error, "Error clearing auto-delete copies");
+  }
+});
+
+// ===========================================================================
+// Crash reports — local, and sent only when the operator presses Send
+// ===========================================================================
+
+// Every pending report, as the exact upload object (plus the local status), and
+// the last 20 ids that went out. Listing sweeps expired reports first.
+router.get("/crash-reports", (_req, res) => {
+  try {
+    const { reports, sent } = crashReports.list();
+    res.json({ success: true, reports, sent });
+  } catch (error) {
+    fail(res, error, "Error listing crash reports");
+  }
+});
+
+// The panel's own error hooks post here. Rate-limited because a render loop can
+// fire many times a second; the report itself is stored, nothing is sent.
+router.post("/crash-reports", (req, res) => {
+  const retryAfter = crashReports.crashReportRetryAfter();
+  if (retryAfter) {
+    res.set("Retry-After", String(retryAfter));
+    return res.status(429).json({
+      success: false,
+      error: "Too many crash reports for now. Try again in a little while.",
+    });
+  }
+  crashReports.recordCrashReportAttempt();
+  try {
+    const report = crashReports.createReport(req.body || {});
+    res.json({ success: true, id: report.id });
+  } catch (error) {
+    if (error?.status === 400) return badRequest(res, error.message);
+    fail(res, error, "Error storing a crash report");
+  }
+});
+
+// One report out, by an explicit operator action. It never retries by itself.
+router.post(
+  "/crash-reports/:id/send",
+  asyncRoute(async (req, res) => {
+    const result = await crashReports.sendReport(req.params.id);
+    if (!result.ok) {
+      return res.status(result.status || 502).json({ success: false, error: result.error });
+    }
+    res.json({ success: true });
+  }),
+);
+
+router.delete("/crash-reports/:id", (req, res) => {
+  if (!crashReports.deleteReport(req.params.id)) {
+    return res.status(404).json({ success: false, error: "Crash report not found" });
+  }
+  res.json({ success: true });
+});
+
+router.delete("/crash-reports", (_req, res) => {
+  try {
+    res.json({ success: true, removed: crashReports.deleteAllReports() });
+  } catch (error) {
+    fail(res, error, "Error deleting crash reports");
   }
 });
 

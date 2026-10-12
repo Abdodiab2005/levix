@@ -44,6 +44,34 @@
   --display:
     ui-rounded, "SF Pro Rounded", "Segoe UI Variable Display", "Avenir Next",
     var(--body);
+
+  /* Gateway tokens */
+  --gateway-story-bg:
+    linear-gradient(145deg, rgba(10, 33, 72, 0.96), rgba(5, 20, 44, 0.98)),
+    #07162f;
+  --gateway-story-border: #203a60;
+  --gateway-story-grid: rgba(94, 155, 232, 0.075);
+  --gateway-story-ring: rgba(60, 179, 255, 0.18);
+  --gateway-panel-bg:
+    radial-gradient(circle at 95% 4%,
+      rgba(23, 107, 250, 0.1),
+      transparent 24rem),
+    #091222;
+  --gateway-card-bg: #0d1a30;
+  --gateway-card-border: #243857;
+  --gateway-card-shadow: 0 28px 80px rgba(0, 4, 14, 0.34);
+  --gateway-input-bg: #091529;
+  --gateway-input-border: #263d61;
+  --gateway-input-text: #f2f6ff;
+  --gateway-ring-border: rgba(72, 192, 255, 0.44);
+  --gateway-ring-dot: var(--cyan);
+  --gateway-ring-glow: rgba(33, 206, 243, 0.8);
+  --gateway-eyebrow: var(--cyan-soft);
+  --gateway-auth-eyebrow: #70a3ff;
+  --gateway-text-sub: #94a8c4;
+  --gateway-link: #70a3ff;
+  --gateway-error-text: #ff9ca5;
+  --gateway-qr-frame-border: #ffffff;
 }
 
 :root[data-theme="light"] {
@@ -63,6 +91,34 @@
   --blue-bright: #155fdc;
   --shadow: 0 22px 65px rgba(38, 71, 117, 0.13);
   --shadow-soft: 0 10px 30px rgba(38, 71, 117, 0.09);
+
+  /* Gateway tokens */
+  --gateway-story-bg:
+    linear-gradient(145deg, rgba(230, 240, 255, 0.96), rgba(240, 246, 255, 0.98)),
+    #eaf2fd;
+  --gateway-story-border: #cfdced;
+  --gateway-story-grid: rgba(23, 107, 250, 0.07);
+  --gateway-story-ring: rgba(23, 107, 250, 0.16);
+  --gateway-panel-bg:
+    radial-gradient(circle at 95% 4%,
+      rgba(23, 107, 250, 0.06),
+      transparent 24rem),
+    #f3f7fd;
+  --gateway-card-bg: #ffffff;
+  --gateway-card-border: #cfdced;
+  --gateway-card-shadow: 0 22px 65px rgba(38, 71, 117, 0.13);
+  --gateway-input-bg: #ffffff;
+  --gateway-input-border: #cfdced;
+  --gateway-input-text: #10203a;
+  --gateway-ring-border: rgba(23, 107, 250, 0.35);
+  --gateway-ring-dot: var(--blue);
+  --gateway-ring-glow: rgba(23, 107, 250, 0.4);
+  --gateway-eyebrow: var(--blue-bright);
+  --gateway-auth-eyebrow: var(--blue-bright);
+  --gateway-text-sub: var(--muted);
+  --gateway-link: var(--blue-bright);
+  --gateway-error-text: #c0262d;
+  --gateway-qr-frame-border: #cfdced;
 }
 
 * {
@@ -1807,12 +1863,13 @@ td.wrap {
   margin: 0 auto;
   color: var(--muted);
   font-size: 0.83rem;
-  text-align: left;
+  text-align: start;
 }
 
 .steps li {
-  margin: 8px 0 8px 21px;
-  padding-left: 4px;
+  margin: 8px 0;
+  margin-inline-start: 21px;
+  padding-inline-start: 4px;
 }
 
 .steps li::marker {
@@ -1917,8 +1974,8 @@ td.wrap {
 .gateway-page {
   min-width: 320px;
   min-height: 100vh;
-  background: #07101f;
-  color: #f2f6ff;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .gateway-shell {
@@ -1934,10 +1991,8 @@ td.wrap {
   min-height: 100%;
   padding: clamp(32px, 5vw, 72px);
   overflow: hidden;
-  border-right: 1px solid #203a60;
-  background:
-    linear-gradient(145deg, rgba(10, 33, 72, 0.96), rgba(5, 20, 44, 0.98)),
-    #07162f;
+  border-inline-end: 1px solid var(--gateway-story-border);
+  background: var(--gateway-story-bg);
   isolation: isolate;
 }
 
@@ -1946,8 +2001,8 @@ td.wrap {
   inset: 0;
   z-index: -2;
   background-image:
-    linear-gradient(rgba(94, 155, 232, 0.075) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(94, 155, 232, 0.075) 1px, transparent 1px);
+    linear-gradient(var(--gateway-story-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--gateway-story-grid) 1px, transparent 1px);
   background-size: 48px 48px;
   content: "";
   mask-image: linear-gradient(140deg, black, transparent 78%);
@@ -1955,12 +2010,12 @@ td.wrap {
 
 .gateway-story::after {
   position: absolute;
-  right: -220px;
+  inset-inline-end: -220px;
   bottom: -240px;
   z-index: -1;
   width: 520px;
   height: 520px;
-  border: 1px solid rgba(60, 179, 255, 0.18);
+  border: 1px solid var(--gateway-story-ring);
   border-radius: 50% 50% 50% 20%;
   content: "";
   transform: rotate(17deg);
@@ -1971,7 +2026,7 @@ td.wrap {
   align-items: center;
   width: fit-content;
   gap: 12px;
-  color: #f5f8ff;
+  color: var(--text);
 }
 
 .brand-lockup img {
@@ -1994,7 +2049,7 @@ td.wrap {
 
 .brand-lockup small {
   margin-top: 3px;
-  color: #7690b7;
+  color: var(--faint);
   font-size: 0.61rem;
   font-weight: 700;
   letter-spacing: 0.11em;
@@ -2010,7 +2065,7 @@ td.wrap {
 }
 
 .gateway-copy .eyebrow {
-  color: var(--cyan-soft);
+  color: var(--gateway-eyebrow);
 }
 
 .gateway-copy h2 {
@@ -2024,14 +2079,14 @@ td.wrap {
 .gateway-copy p {
   max-width: 480px;
   margin-top: 22px;
-  color: #9db2cf;
+  color: var(--muted);
   font-size: 0.98rem;
   line-height: 1.75;
 }
 
 .gateway-mark {
   position: absolute;
-  right: clamp(-72px, -4vw, -28px);
+  inset-inline-end: clamp(-72px, -4vw, -28px);
   bottom: clamp(88px, 14vh, 150px);
   z-index: 0;
   display: grid;
@@ -2049,7 +2104,7 @@ td.wrap {
 .gateway-ring {
   position: absolute;
   inset: 2px;
-  border: 1px dashed rgba(72, 192, 255, 0.44);
+  border: 1px dashed var(--gateway-ring-border);
   border-radius: 50%;
   animation: orbit 28s linear infinite;
 }
@@ -2061,8 +2116,8 @@ td.wrap {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: var(--cyan);
-  box-shadow: 0 0 15px rgba(33, 206, 243, 0.8);
+  background: var(--gateway-ring-dot);
+  box-shadow: 0 0 15px var(--gateway-ring-glow);
   content: "";
 }
 
@@ -2072,7 +2127,7 @@ td.wrap {
   display: flex;
   align-items: center;
   gap: 9px;
-  color: #7892b8;
+  color: var(--faint);
   font-size: 0.7rem;
   font-weight: 650;
   letter-spacing: 0.06em;
@@ -2094,11 +2149,7 @@ td.wrap {
   min-width: 0;
   place-items: center;
   padding: clamp(26px, 5vw, 72px);
-  background:
-    radial-gradient(circle at 95% 4%,
-      rgba(23, 107, 250, 0.1),
-      transparent 24rem),
-    #091222;
+  background: var(--gateway-panel-bg);
 }
 
 .gateway-panel-inner {
@@ -2107,10 +2158,10 @@ td.wrap {
 
 .auth-card {
   padding: clamp(25px, 4vw, 38px);
-  border-color: #243857;
-  background: #0d1a30;
-  box-shadow: 0 28px 80px rgba(0, 4, 14, 0.34);
-  text-align: left;
+  border-color: var(--gateway-card-border);
+  background: var(--gateway-card-bg);
+  box-shadow: var(--gateway-card-shadow);
+  text-align: start;
 }
 
 .auth-head {
@@ -2119,7 +2170,7 @@ td.wrap {
 
 .auth-head .eyebrow,
 .qr-card-head .eyebrow {
-  color: #70a3ff;
+  color: var(--gateway-auth-eyebrow);
 }
 
 .auth-card h1,
@@ -2133,18 +2184,18 @@ td.wrap {
 
 .auth-card .sub {
   margin-top: 8px;
-  color: #94a8c4;
+  color: var(--gateway-text-sub);
   font-size: 0.86rem;
 }
 
 .auth-card label.field>span {
-  color: #dce6f6;
+  color: var(--text);
 }
 
 .auth-card input {
-  border-color: #263d61;
-  background: #091529;
-  color: #f2f6ff;
+  border-color: var(--gateway-input-border);
+  background: var(--gateway-input-bg);
+  color: var(--gateway-input-text);
 }
 
 .auth-submit {
@@ -2161,14 +2212,14 @@ td.wrap {
   border: 1px solid color-mix(in srgb, var(--danger) 42%, transparent);
   border-radius: 11px 11px 11px 5px;
   background: color-mix(in srgb, var(--danger) 10%, transparent);
-  color: #ff9ca5;
+  color: var(--gateway-error-text);
   font-size: 0.8rem;
-  text-align: left;
+  text-align: start;
 }
 
 .foot {
   margin-top: 20px;
-  color: #627795;
+  color: var(--faint);
   font-size: 0.7rem;
   text-align: center;
 }
@@ -2188,12 +2239,14 @@ td.wrap {
 .qr-card .qr-frame {
   min-width: 286px;
   min-height: 286px;
+  border: 8px solid var(--gateway-qr-frame-border);
+  box-shadow: var(--shadow-soft);
 }
 
 .compact-callout {
   max-width: 430px;
   margin-top: 2px;
-  text-align: left;
+  text-align: start;
 }
 
 .qr-back {
@@ -2202,7 +2255,7 @@ td.wrap {
 
 .qr-success {
   padding: 58px 28px;
-  color: #10203a;
+  color: var(--text);
   font-family: var(--display);
   font-weight: 700;
   line-height: 1.2;
@@ -2346,8 +2399,8 @@ td.wrap {
   .gateway-story {
     min-height: 255px;
     padding: 25px;
-    border-right: 0;
-    border-bottom: 1px solid #203a60;
+    border-inline-end: 0;
+    border-bottom: 1px solid var(--gateway-story-border);
   }
 
   .gateway-copy {
@@ -2366,7 +2419,7 @@ td.wrap {
   }
 
   .gateway-mark {
-    right: -35px;
+    inset-inline-end: -35px;
     bottom: -62px;
     width: 220px;
   }
@@ -2907,21 +2960,25 @@ html[dir="rtl"] .logout-btn svg {
 
 .input-wrap {
   position: relative;
+  /* The field is a password / Latin value, so keep it LTR even when the page
+     is Arabic: the input's own padding and the eye button's `inset-inline-end`
+     then resolve to the same physical end. */
+  direction: ltr;
 }
 
 .input-wrap input {
-  padding-inline-end: 44px;
+  padding-inline-end: 52px;
 }
 
 .eye-btn {
   position: absolute;
-  inset-inline-end: 6px;
+  inset-inline-end: 2px;
   top: 50%;
   transform: translateY(-50%);
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -2932,6 +2989,11 @@ html[dir="rtl"] .logout-btn svg {
 .eye-btn:hover {
   color: var(--text);
   background: color-mix(in srgb, var(--line) 55%, transparent);
+}
+
+.eye-btn:focus-visible {
+  outline: 2px solid var(--blue-bright);
+  outline-offset: -2px;
 }
 
 .eye-btn svg {
@@ -2948,7 +3010,7 @@ html[dir="rtl"] .logout-btn svg {
   padding: 0;
   border: none;
   background: none;
-  color: #70a3ff;
+  color: var(--gateway-link);
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
@@ -2983,7 +3045,7 @@ html.screen-guard .gateway-panel {
   border-radius: 0.625rem;
   border: 1px solid var(--line);
   background: var(--panel-raised);
-  color: var(--text-main);
+  color: var(--text);
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
@@ -2995,13 +3057,21 @@ html.screen-guard .gateway-panel {
 }
 .gateway-back-btn:hover {
   background: var(--panel-hover);
-  color: var(--brand-cyan);
+  color: var(--blue-bright);
 }
 .gateway-back-btn svg {
   width: 1rem;
   height: 1rem;
   flex-shrink: 0;
 }
-.gateway-back-btn[dir="rtl"] svg {
+/* Directional icons point the way the language reads: a right arrow in an
+   English submit button, a left arrow on a back control. Arabic flips both. */
+html[dir="rtl"] .gateway-back-btn svg,
+html[dir="rtl"] .qr-back svg,
+html[dir="rtl"] .auth-submit svg {
   transform: scaleX(-1);
+}
+
+html[dir="rtl"] .auth-submit:hover svg {
+  transform: scaleX(-1) translateX(3px);
 }

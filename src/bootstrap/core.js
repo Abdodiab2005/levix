@@ -45,6 +45,15 @@ export async function bootstrapCore({ autoStart = false } = {}) {
   // bot's state, not next to the code.
   ensureDataDir("media");
 
+  // Crash reports are local until the operator sends one. Sweep expired and
+  // over-cap files on boot so a device that crashed repeatedly does not keep
+  // them forever.
+  try {
+    require("../diagnostics/crashReports.cjs").sweep();
+  } catch (error) {
+    logger.warn({ err: error }, "[crash-reports] boot sweep failed");
+  }
+
   // A `creds` row alone is not enough: Baileys creates one before pairing.
   // `me.id` is the durable proof that this install was actually linked.
   const wasPaired = hasPairedCredentials(store.authRead("creds"));

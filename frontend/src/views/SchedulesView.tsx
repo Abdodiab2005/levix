@@ -5,9 +5,11 @@ import {
   BookUser,
   Calendar,
   CheckCircle2,
+  Eye,
   Paperclip,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   Trash2,
   User,
@@ -26,15 +28,23 @@ import {
   Dialog,
   EmptyState,
   Field,
+  FilterButton,
   IconButton,
   Input,
   MenuItem,
   OverflowMenu,
   PageHeader,
+  Pagination,
+  RadioGroup,
   Select,
+  Skeleton,
+  SortMenu,
   Spinner,
   StatusPill,
   Textarea,
+  Toolbar,
+  UserText,
+  usePagination,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 import type { ScheduleItem } from "../types";
@@ -205,6 +215,75 @@ function previewRecurrence(
   return null;
 }
 
+type ScheduleSort = "newest" | "oldest" | "target" | "status";
+type DeliveryFilter = "any" | "active" | "failed";
+type MediaFilter = "any" | "with" | "without";
+
+interface ScheduleFilters {
+  type: "any" | "recurring" | "once";
+  delivery: DeliveryFilter;
+  media: MediaFilter;
+}
+
+const EMPTY_SCHEDULE_FILTERS: ScheduleFilters = { type: "any", delivery: "any", media: "any" };
+
+/** The name a target is best known by, or its phone/JID when there is none. */
+function scheduleTarget(s: ScheduleItem): string {
+  return (
+    personName(s.savedName) ||
+    personName(s.pushName) ||
+    personName(s.targetLabel) ||
+    s.targetPhone ||
+    s.phone ||
+    s.targetJid
+  );
+}
+
+function matchesSchedule(s: ScheduleItem, query: string, filters: ScheduleFilters): boolean {
+  const needle = query.trim().toLowerCase();
+  if (needle) {
+    const haystack = [
+      s.message,
+      s.targetLabel,
+      s.savedName,
+      s.pushName,
+      s.phone,
+      s.targetPhone,
+      s.when,
+      s.whenAr,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (!haystack.includes(needle)) return false;
+  }
+  if (filters.type !== "any" && s.type !== filters.type) return false;
+  if (filters.delivery === "failed" && s.lastDeliveryStatus !== "failed") return false;
+  if (filters.delivery === "active" && s.lastDeliveryStatus === "failed") return false;
+  if (filters.media === "with" && !s.media) return false;
+  if (filters.media === "without" && s.media) return false;
+  return true;
+}
+
+function sortSchedules(list: ScheduleItem[], sort: ScheduleSort, language: string): ScheduleItem[] {
+  const items = [...list];
+  const byTarget = (a: ScheduleItem, b: ScheduleItem) =>
+    scheduleTarget(a).localeCompare(scheduleTarget(b), language, { sensitivity: "base" });
+  if (sort === "oldest") {
+    items.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0) || byTarget(a, b));
+  } else if (sort === "target") {
+    items.sort(byTarget);
+  } else if (sort === "status") {
+    const rank = (s: ScheduleItem) => (s.lastDeliveryStatus === "failed" ? 0 : 1);
+    items.sort(
+      (a, b) => rank(a) - rank(b) || (b.createdAt ?? 0) - (a.createdAt ?? 0) || byTarget(a, b),
+    );
+  } else {
+    items.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0) || byTarget(a, b));
+  }
+  return items;
+}
+
 interface SchedulesViewProps {
   isConnected?: boolean;
   onNavigate?: (view: ViewTab) => void;
@@ -219,6 +298,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   const [timezone, setTimezone] = useState("UTC");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<ScheduleSort>("newest");
+  const [filters, setFilters] = useState<ScheduleFilters>(EMPTY_SCHEDULE_FILTERS);
 
   // Recipients state
   const [recipients, setRecipients] = useState<RecipientItem[]>([]);
@@ -269,13 +353,16 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   );
 
   const loadSchedules = async () => {
+    setLoading(true);
     try {
       const res = await api.getSchedules();
       if (res?.schedules) {
         setSchedules(res.schedules);
         if (res.timezone) setTimezone(res.timezone);
       }
+      setError(null);
     } catch (err: any) {
+      setError(err.message);
       toast(err.message, "error");
     } finally {
       setLoading(false);
@@ -301,7 +388,30 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     if (isConnected) {
       loadRecipients();
     }
-  }, [isConnected]);
+  }, [isConnected, reloadToken]);
+
+  const visible = useMemo(
+    () =>
+      sortSchedules(
+        schedules.filter((s) => matchesSchedule(s, query, filters)),
+        sort,
+        language,
+      ),
+    [schedules, query, filters, sort, language],
+  );
+
+  const resetKey = `${query}|${sort}|${filters.type}|${filters.delivery}|${filters.media}`;
+  const { page, pageCount, pageItems, setPage, total } = usePagination(visible, 20, resetKey);
+
+  const activeFilters =
+    (filters.type !== "any" ? 1 : 0) +
+    (filters.delivery !== "any" ? 1 : 0) +
+    (filters.media !== "any" ? 1 : 0);
+
+  const clearFilters = () => {
+    setQuery("");
+    setFilters(EMPTY_SCHEDULE_FILTERS);
+  };
 
   const handleDelete = async (id: string) => {
     try {
@@ -664,123 +774,356 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         }
       />
 
-      <Card padded={false} className="overflow-x-auto">
-        <table className="w-full min-w-[680px] border-collapse text-start text-sm">
-          <thead>
-            <tr className="bg-panel-raised border-b border-line text-xs font-bold text-muted uppercase tracking-wider">
-              <th className="px-5 py-4 text-start">{t("thTarget")}</th>
-              <th className="px-5 py-4 text-start">{t("thMessage")}</th>
-              <th className="px-5 py-4 text-start">{t("thSchedule")}</th>
-              <th className="px-5 py-4 text-start">{t("thType")}</th>
-              <th className="px-5 py-4 text-start">{t("thDelivery")}</th>
-              <th className="px-5 py-4 text-center">{t("thActions")}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line/40">
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="py-16 text-center">
-                  <Spinner className="size-6" label={t("loading")} />
-                </td>
-              </tr>
-            ) : schedules.length === 0 ? (
-              <tr>
-                <td colSpan={6}>
-                  <EmptyState icon={<Calendar size={28} />} text={t("noSchedules")} />
-                </td>
-              </tr>
-            ) : (
-              schedules.map((s) => (
-                <tr
-                  key={s.id}
-                  onClick={() => setDetailSchedule(s)}
-                  className="cursor-pointer hover:bg-panel-hover/50 transition-colors"
-                >
-                  <td className="px-5 py-4 text-xs text-text-main">
-                    <bdi>
-                      {renderContactLines(
-                        {
-                          targetJid: s.targetJid,
-                          targetKind: s.targetKind,
-                          targetLabel: s.targetLabel,
-                          targetPhone: s.targetPhone,
-                          savedName: s.savedName,
-                          pushName: s.pushName,
-                          phone: s.phone,
-                        },
-                        "font-semibold max-w-[12rem]",
-                      )}
-                    </bdi>
-                  </td>
-                  <td className="px-5 py-4 max-w-xs text-text-main truncate text-xs sm:text-sm">
-                    {s.media && <Paperclip size={12} className="inline me-1 text-brand-cyan" />}
-                    {s.message || (s.media?.fileName ? s.media.fileName : "—")}
-                  </td>
-                  <td className="px-5 py-4 text-xs text-muted">
-                    {ar ? s.whenAr || s.when : s.when || s.cronString || "—"}
-                  </td>
-                  <td className="px-5 py-4">
-                    <Badge tone={s.type === "recurring" ? "info" : "neutral"}>
-                      {s.type === "recurring" ? t("typeRecurring") : t("typeOnce")}
-                    </Badge>
-                  </td>
-                  <td className="px-5 py-4">
-                    <StatusPill
-                      tone={
-                        s.lastDeliveryStatus === "failed"
-                          ? "danger"
-                          : s.status === "active"
-                            ? "ok"
-                            : "neutral"
-                      }
-                    >
-                      {s.lastDeliveryStatus === "failed" ? (
-                        <AlertCircle size={13} />
+      {!loading && !error && schedules.length > 0 && (
+        <Toolbar>
+          <Input
+            type="search"
+            name="schedule-search"
+            autoComplete="off"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("searchSchedules")}
+            aria-label={t("searchSchedules")}
+            className="min-w-48 flex-1"
+          />
+          <SortMenu
+            label={t("sort")}
+            value={sort}
+            onChange={setSort}
+            options={[
+              { value: "newest", label: t("sortNewest") },
+              { value: "oldest", label: t("sortOldest") },
+              { value: "target", label: t("thTarget") },
+              { value: "status", label: t("thDelivery") },
+            ]}
+          />
+          <FilterButton
+            label={t("filter")}
+            resetLabel={t("reset")}
+            activeCount={activeFilters}
+            onReset={() => setFilters(EMPTY_SCHEDULE_FILTERS)}
+          >
+            <RadioGroup
+              label={t("thType")}
+              name="schedule-type-filter"
+              value={filters.type}
+              onChange={(type) => setFilters((prev) => ({ ...prev, type }))}
+              options={[
+                { value: "any", label: t("statusAny") },
+                { value: "recurring", label: t("typeRecurring") },
+                { value: "once", label: t("typeOnce") },
+              ]}
+            />
+            <RadioGroup
+              label={t("thDelivery")}
+              name="schedule-delivery-filter"
+              value={filters.delivery}
+              onChange={(delivery) => setFilters((prev) => ({ ...prev, delivery }))}
+              options={[
+                { value: "any", label: t("statusAny") },
+                { value: "active", label: t("deliveryActive") },
+                { value: "failed", label: t("deliveryFailed") },
+              ]}
+            />
+            <RadioGroup
+              label={t("thMedia")}
+              name="schedule-media-filter"
+              value={filters.media}
+              onChange={(media) => setFilters((prev) => ({ ...prev, media }))}
+              options={[
+                { value: "any", label: t("statusAny") },
+                { value: "with", label: t("mediaWith") },
+                { value: "without", label: t("mediaWithout") },
+              ]}
+            />
+          </FilterButton>
+        </Toolbar>
+      )}
+
+      {loading && (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2" aria-busy="true">
+          {["s1", "s2", "s3", "s4"].map((id) => (
+            <Card key={id} className="flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                <Skeleton className="size-10 rounded-xl" />
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+              </div>
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-6 w-28" />
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {!loading && error && (
+        <EmptyState
+          kind="error"
+          icon={<AlertCircle size={28} />}
+          description={error}
+          action={
+            <Button
+              variant="secondary"
+              icon={<RotateCcw size={16} />}
+              onClick={() => setReloadToken((value) => value + 1)}
+            >
+              {t("retryLoad")}
+            </Button>
+          }
+        />
+      )}
+
+      {!loading && !error && schedules.length === 0 && (
+        <EmptyState
+          kind="empty"
+          icon={<Calendar size={28} />}
+          text={t("noSchedules")}
+          action={
+            <Button
+              variant="primary"
+              icon={<Plus size={16} />}
+              onClick={handleOpenAddModal}
+              disabled={!isConnected || isLimitReached}
+            >
+              {t("scheduleNewMsg")}
+            </Button>
+          }
+        />
+      )}
+
+      {!loading && !error && schedules.length > 0 && visible.length === 0 && (
+        <EmptyState
+          kind="no-results"
+          action={
+            <Button variant="secondary" onClick={clearFilters}>
+              {t("clearFilters")}
+            </Button>
+          }
+        />
+      )}
+
+      {!loading && !error && visible.length > 0 && (
+        <>
+          <div className="grid grid-cols-1 gap-3 md:hidden">
+            {pageItems.map((s) => (
+              <Card key={s.id} className="flex flex-col gap-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-cyan">
+                      {s.targetKind === "group" || s.targetJid.includes("@g.us") ? (
+                        <Users size={18} />
                       ) : (
-                        <CheckCircle2 size={13} />
+                        <User size={18} />
                       )}
-                      <span>
-                        {s.lastDeliveryStatus === "failed"
-                          ? t("deliveryFailed")
-                          : s.status === "active"
-                            ? t("deliveryActive")
-                            : s.status}
-                      </span>
-                    </StatusPill>
-                  </td>
-                  <td className="px-5 py-4 text-center">
-                    <div
-                      className="flex items-center justify-center gap-2"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {s.lastDeliveryStatus === "failed" && (
-                        <IconButton
-                          label={t("retryDelivery")}
-                          icon={<RefreshCw size={16} />}
-                          onClick={() => {
-                            void handleRetry(s.id);
-                          }}
-                        />
-                      )}
-                      <OverflowMenu label={t("moreActions")}>
-                        <MenuItem
-                          danger
-                          icon={<Trash2 size={16} />}
-                          onSelect={() => {
-                            void handleDelete(s.id);
-                          }}
-                        >
-                          {t("delete")}
-                        </MenuItem>
-                      </OverflowMenu>
                     </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </Card>
+                    <div className="min-w-0">
+                      <bdi>
+                        {renderContactLines(
+                          {
+                            targetJid: s.targetJid,
+                            targetKind: s.targetKind,
+                            targetLabel: s.targetLabel,
+                            targetPhone: s.targetPhone,
+                            savedName: s.savedName,
+                            pushName: s.pushName,
+                            phone: s.phone,
+                          },
+                          "text-sm font-bold text-text-main",
+                          false,
+                        )}
+                      </bdi>
+                      <p className="mt-0.5 truncate text-xs text-muted" dir="auto">
+                        {ar ? s.whenAr || s.when : s.when || s.cronString || "—"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {s.lastDeliveryStatus === "failed" && (
+                      <IconButton
+                        label={t("retryDelivery")}
+                        icon={<RefreshCw size={16} />}
+                        onClick={() => {
+                          void handleRetry(s.id);
+                        }}
+                      />
+                    )}
+                    <IconButton
+                      label={t("scheduleDetails")}
+                      variant="ghost"
+                      icon={<Eye size={16} />}
+                      onClick={() => setDetailSchedule(s)}
+                    />
+                    <OverflowMenu label={t("moreActions")}>
+                      <MenuItem
+                        danger
+                        icon={<Trash2 size={16} />}
+                        onSelect={() => {
+                          void handleDelete(s.id);
+                        }}
+                      >
+                        {t("delete")}
+                      </MenuItem>
+                    </OverflowMenu>
+                  </div>
+                </div>
+
+                <UserText lines={2} className="text-sm text-text-main">
+                  {s.media ? `${s.media.fileName || ""} ${s.message}`.trim() : s.message || "—"}
+                </UserText>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {s.media && (
+                    <Badge tone="info">
+                      <Paperclip size={12} />
+                      {mediaKindLabel(t, s.media.kind)}
+                    </Badge>
+                  )}
+                  <Badge tone={s.type === "recurring" ? "info" : "neutral"}>
+                    {s.type === "recurring" ? t("typeRecurring") : t("typeOnce")}
+                  </Badge>
+                  <StatusPill
+                    tone={
+                      s.lastDeliveryStatus === "failed"
+                        ? "danger"
+                        : s.status === "active"
+                          ? "ok"
+                          : "neutral"
+                    }
+                  >
+                    {s.lastDeliveryStatus === "failed" ? (
+                      <AlertCircle size={13} />
+                    ) : (
+                      <CheckCircle2 size={13} />
+                    )}
+                    <span>
+                      {s.lastDeliveryStatus === "failed"
+                        ? t("deliveryFailed")
+                        : s.status === "active"
+                          ? t("deliveryActive")
+                          : s.status}
+                    </span>
+                  </StatusPill>
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          <Card padded={false} className="hidden overflow-hidden md:block">
+            <div className="overflow-x-auto">
+              <table className="w-full table-fixed border-collapse text-start text-sm">
+                <thead>
+                  <tr className="bg-panel-raised border-b border-line text-xs font-bold text-muted uppercase tracking-wider">
+                    <th className="w-[22%] px-4 py-4 text-start">{t("thTarget")}</th>
+                    <th className="w-[30%] px-4 py-4 text-start">{t("thMessage")}</th>
+                    <th className="w-[16%] px-4 py-4 text-start">{t("thSchedule")}</th>
+                    <th className="w-[9%] px-4 py-4 text-start">{t("thType")}</th>
+                    <th className="w-[13%] px-4 py-4 text-start">{t("thDelivery")}</th>
+                    <th className="w-[10%] px-4 py-4 text-center">{t("thActions")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line/40">
+                  {pageItems.map((s) => (
+                    <tr
+                      key={s.id}
+                      onClick={() => setDetailSchedule(s)}
+                      className="cursor-pointer transition-colors hover:bg-panel-hover/50"
+                    >
+                      <td className="px-4 py-4 text-xs text-text-main">
+                        <bdi>
+                          {renderContactLines(
+                            {
+                              targetJid: s.targetJid,
+                              targetKind: s.targetKind,
+                              targetLabel: s.targetLabel,
+                              targetPhone: s.targetPhone,
+                              savedName: s.savedName,
+                              pushName: s.pushName,
+                              phone: s.phone,
+                            },
+                            "font-semibold",
+                          )}
+                        </bdi>
+                      </td>
+                      <td className="px-4 py-4 text-xs text-text-main sm:text-sm">
+                        <UserText lines={2}>
+                          {s.media
+                            ? `${s.media.fileName || ""} ${s.message}`.trim()
+                            : s.message || "—"}
+                        </UserText>
+                      </td>
+                      <td className="px-4 py-4 text-xs text-muted">
+                        <span dir="auto">
+                          {ar ? s.whenAr || s.when : s.when || s.cronString || "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-4">
+                        <Badge tone={s.type === "recurring" ? "info" : "neutral"}>
+                          {s.type === "recurring" ? t("typeRecurring") : t("typeOnce")}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-4">
+                        <StatusPill
+                          tone={
+                            s.lastDeliveryStatus === "failed"
+                              ? "danger"
+                              : s.status === "active"
+                                ? "ok"
+                                : "neutral"
+                          }
+                        >
+                          {s.lastDeliveryStatus === "failed" ? (
+                            <AlertCircle size={13} />
+                          ) : (
+                            <CheckCircle2 size={13} />
+                          )}
+                          <span>
+                            {s.lastDeliveryStatus === "failed"
+                              ? t("deliveryFailed")
+                              : s.status === "active"
+                                ? t("deliveryActive")
+                                : s.status}
+                          </span>
+                        </StatusPill>
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <div
+                          className="flex items-center justify-center gap-1"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {s.lastDeliveryStatus === "failed" && (
+                            <IconButton
+                              label={t("retryDelivery")}
+                              icon={<RefreshCw size={16} />}
+                              onClick={() => {
+                                void handleRetry(s.id);
+                              }}
+                            />
+                          )}
+                          <OverflowMenu label={t("moreActions")}>
+                            <MenuItem
+                              danger
+                              icon={<Trash2 size={16} />}
+                              onSelect={() => {
+                                void handleDelete(s.id);
+                              }}
+                            >
+                              {t("delete")}
+                            </MenuItem>
+                          </OverflowMenu>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <Pagination page={page} pageCount={pageCount} total={total} onPageChange={setPage} />
+        </>
+      )}
 
       <Dialog
         isOpen={showAddModal}

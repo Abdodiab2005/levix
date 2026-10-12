@@ -115,8 +115,8 @@ android {
         applicationId = "net.leviro.levix"
         minSdk = 29
         targetSdk = 36
-        versionCode = 64
-        versionName = "4.6.0"
+        versionCode = 65
+        versionName = "4.7.0"
     }
 
     // One APK per ABI — each carries only its own Node runtime, so both
@@ -287,5 +287,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }

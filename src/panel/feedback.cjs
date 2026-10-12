@@ -20,6 +20,7 @@
 const fs = require("node:fs");
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
+const { buildDiagnostics } = require("../diagnostics/device.cjs");
 
 const DEFAULT_ENDPOINT = "https://levix.leviro.net/api/feedback";
 
@@ -158,11 +159,18 @@ function safeRemoteError(value) {
  * "payload" part and the file as "file", and the endpoint delivers it to
  * Telegram as a document instead of a message.
  *
+ * `diagnosticsClient` is the raw section 1 client object, present only when the
+ * operator ticked the diagnostics box. When present the server rebuilds it with
+ * the same builder the preview route uses (so preview and send cannot diverge)
+ * and adds it to the envelope as `diagnostics`. When it is undefined the
+ * envelope has no `diagnostics` key at all.
+ *
  * @param {{ message: string, topic: string, rating: number|null, contact: string|null }} feedback
  * @param {{ buffer: Buffer, name: string, type: string, size: number } | null} attachment
+ * @param {object} [diagnosticsClient]
  * @returns {Promise<{ ok: true } | { ok: false, status: number, error: string }>}
  */
-async function submitFeedback(feedback, attachment = null) {
+async function submitFeedback(feedback, attachment = null, diagnosticsClient = undefined) {
   const endpoint = process.env.LEVIX_FEEDBACK_URL || DEFAULT_ENDPOINT;
   const runtime = describeRuntime();
 
@@ -173,6 +181,10 @@ async function submitFeedback(feedback, attachment = null) {
     source: "panel",
     app: { version: runtime.version, platform: runtime.platform, locale: runtime.locale },
   };
+
+  if (diagnosticsClient !== undefined && diagnosticsClient !== null) {
+    envelope.diagnostics = buildDiagnostics(diagnosticsClient);
+  }
 
   let response;
   let data = null;

@@ -71,30 +71,22 @@ export const StickerDetail: React.FC<StickerDetailProps> = ({
       isOpen={!!sticker}
       onClose={onClose}
       title={<UserText>{sticker.name || t("stickerPreview")}</UserText>}
-      maxWidth="42.5rem"
+      maxWidth="38rem"
       footer={
         <div className="flex w-full justify-end gap-2">
           <Button onClick={onClose}>{t("close")}</Button>
         </div>
       }
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 min-w-0">
         <div
-          className={`relative mx-auto aspect-square w-full max-w-[280px] overflow-hidden rounded-2xl border border-line ${checker}`}
+          className={`relative mx-auto aspect-square w-full max-w-[240px] sm:max-w-[280px] max-h-[min(40vh,280px)] overflow-hidden rounded-2xl border border-line ${checker}`}
         >
           <img
             src={sticker.url}
             alt={sticker.name || t("stickerPreview")}
             className="h-full w-full object-contain"
           />
-          <div className="absolute top-2 end-2 flex flex-col gap-1.5">
-            <IconButton
-              label={primaryFormat === "gif" ? t("downloadGif") : t("downloadWebp")}
-              icon={<Download size={16} />}
-              onClick={() => onDownload(primaryFormat)}
-            />
-            <IconButton label={t("shareSticker")} icon={<Share2 size={16} />} onClick={onShare} />
-          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -115,6 +107,12 @@ export const StickerDetail: React.FC<StickerDetailProps> = ({
               <Star size={16} className={sticker.favorite ? "fill-warn text-warn" : undefined} />
             }
           />
+          <IconButton
+            label={primaryFormat === "gif" ? t("downloadGif") : t("downloadWebp")}
+            icon={<Download size={16} />}
+            onClick={() => onDownload(primaryFormat)}
+          />
+          <IconButton label={t("shareSticker")} icon={<Share2 size={16} />} onClick={onShare} />
           <span className="ms-auto">
             <OverflowMenu label={t("moreActions")} align="end">
               <MenuItem onSelect={() => onDownload("webp")}>{t("downloadWebp")}</MenuItem>
@@ -144,7 +142,7 @@ export const StickerDetail: React.FC<StickerDetailProps> = ({
         {sticker.animated && <p className="text-xs text-muted">{t("firstFrameHint")}</p>}
         {!isConnected && <p className="text-xs text-muted">{t("notConnectedHint")}</p>}
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 min-w-0">
           <Input
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -152,8 +150,9 @@ export const StickerDetail: React.FC<StickerDetailProps> = ({
             dir="auto"
             aria-label={t("stickerName")}
             placeholder={t("stickerNamePlaceholder")}
+            className="min-w-0 flex-1"
           />
-          <Button variant="primary" onClick={() => onRename(name.trim())}>
+          <Button variant="secondary" onClick={() => onRename(name.trim())}>
             {t("rename")}
           </Button>
         </div>

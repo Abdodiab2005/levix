@@ -1,6 +1,6 @@
 # Levix Privacy Policy & Google Play Data Safety
 
-> **Effective date:** 2026-09-22
+> **Effective date:** 2026-10-12
 > **Applies to:** the Levix Android app (`net.leviro.levix`) and the Levix
 > self-hosted server distributed from this repository.
 > **Product:** Levix, built by Abdelrhman Diab, Leviro.
@@ -12,9 +12,11 @@
 Levix is a **self-hosted** personal WhatsApp bot. The Android app runs the
 entire bot **on your device** — there is no Levix cloud, no Levix account, and
 no Levix server. The developer does **not** receive any data from your
-installation on its own: no analytics, no telemetry, no crash reports, no ads.
-The only thing that ever reaches the developer is a message **you** write in
-**Settings → Feedback** and press Send on.
+installation on its own: no analytics, no telemetry, no ads, and no automatic
+crash reporting. The only things that ever reach the developer are the ones
+**you** choose to send: a message in **Settings → Feedback** (and the optional
+diagnostics block you can tick on that form), and a crash report you press Send
+on in the panel. Nothing is transmitted until you do.
 
 Data only leaves your device as a direct result of features you use:
 
@@ -37,12 +39,21 @@ Data only leaves your device as a direct result of features you use:
 4. **The developer, if you send feedback** — the panel's **Settings → Feedback**
    form sends what you typed (your message, the topic, an optional 1–5 rating,
    an optional contact), one optional file you pick yourself (a screenshot or a
-   log, up to 20 MB), plus the Levix version and the platform it runs on. It
-   travels through `levix.leviro.net/api/feedback` and is delivered to the
-   developer as a Telegram message, or as a Telegram document when a file is
-   attached. Nothing is attached from WhatsApp — no message, chat, contact,
-   credential or key — and nothing is sent unless you press Send.
-5. **Your own Levix instance, for a sticker** — when you tap **Make sticker** or
+   log, up to 20 MB), plus the Levix version and the platform it runs on. If —
+   and only if — you also tick **Attach device & technical diagnostics**, it
+   additionally sends the diagnostics listed in section 2a. It travels through
+   `levix.leviro.net/api/feedback` and is delivered to the developer as a
+   Telegram message, or as a Telegram document when a file is attached. Nothing
+   is attached from WhatsApp — no message, chat, contact, credential or key —
+   and nothing is sent unless you press Send.
+5. **The developer, if you send a crash report** — a crash or a web error is
+   written to a report file inside the app's own data directory, where it stays
+   until **you** open the panel and press Send on that one report. Nothing is
+   sent automatically and nothing is retried on its own. A report holds the
+   error type, a sanitized message and stack, an optional screen id, the app and
+   device fields listed in section 2a, and a few navigation breadcrumbs. It goes
+   to the developer through `levix.leviro.net/api/crash-reports`.
+6. **Your own Levix instance, for a sticker** — when you tap **Make sticker** or
    **Add to stickers** on a file in Media Hub, that one file is uploaded to the
    Levix server running on this phone, because that is what does the conversion.
    It goes nowhere else. Browsing Media Hub uploads nothing.
@@ -66,6 +77,7 @@ control panel — stays in the app's private storage on the device.
 | Auto-delete rules | Local DB (`auto_delete_rules`) | Keyword auto-delete configuration |
 | Opt-in copies of auto-deleted messages (text/caption only) | Local DB (`auto_delete_log`, auto-expiring) | Only when a rule with keep-copy on actually deletes a message |
 | Forward counters and sender last-seen metadata | Local DB (auto-expiring) | The anti-forward feature |
+| Crash reports (not yet sent) | App-private `crash-reports/*.json` (auto-expiring) | Optional diagnostics you can review and send; nothing leaves until you press Send |
 | Logs | App-private `logs/` + Android Logcat | Debugging |
 
 Notes:
@@ -95,12 +107,73 @@ Notes:
 | **DuckDuckGo** or **Google Programmable Search** (if you configured it) | The search query | Only when an AI answer uses the web-search tool | Web-grounded answers |
 | **Web pages the AI opens** | HTTPS requests to the page's server | Only when an AI answer uses the fetch-page tool | Reading a page you asked about |
 | **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |
-| **The developer** (via `levix.leviro.net/api/feedback`, delivered as a Telegram message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact, an optional file you attach yourself — plus the Levix version, the platform, and the sending app's user-agent | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
+| **The developer** (via `levix.leviro.net/api/feedback`, delivered as a Telegram message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact, an optional file you attach yourself — plus the Levix version, the platform, and the sending app's user-agent. If you tick the diagnostics box, the section 2a diagnostics object as well | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
+| **The developer** (via `levix.leviro.net/api/crash-reports`) | One crash report: category, sanitized error type/message/stack, an optional screen id, the app + section 2a device fields, and a few navigation breadcrumbs. Never a phone number, JID, chat/message body, file or log | Only when **you** open the panel and press Send on one report; never automatically | Support: so a crash can be grouped and fixed |
 | **Your own Levix server** (the instance running on this phone, reached at `http://127.0.0.1:3001` — never the developer, never an AI provider) | The one image, GIF or video you picked in Sticker Studio or the Media Hub, as a single upload | Only when you choose it in Sticker Studio or tap **Make sticker** / **Add to stickers** | Sticker Studio works server-side, so it has to receive the file you chose |
 
 Apart from feedback you deliberately send, the developer of Levix is **not** a
 recipient of any of the above. The AI provider's use of the content you send it
 is governed by that provider's own privacy policy.
+
+### 2a. Optional feedback diagnostics and crash reports
+
+Neither of these carries an identifier that follows your device. Report ids are
+random, generated per report, and mean nothing outside that one report.
+
+**Feedback diagnostics** — optional, with its own checkbox on the feedback
+form. When you tick **Attach device & technical diagnostics**, the panel sends
+exactly the object below, after the server has validated and trimmed it. The
+panel shows this same list — field and value — under **See exactly what is
+sent** before you press Send, so what you see is what is sent.
+
+| Field | Example | Source |
+| --- | --- | --- |
+| `schema` | `1` | the server, always |
+| `levix` | `4.7.0` | the server, always |
+| `node` | `v24.19.0` | the server, always |
+| `platform` | `android` / `docker` / `node-linux` / `sea-linux` | the server, always |
+| `nativeApp` | `4.7.0 (65)` | the Android app |
+| `android` | `15 (API 35)` | the Android app |
+| `device` | `samsung SM-A556E` | the Android app |
+| `abi` | `arm64-v8a` | the Android app |
+| `webview` | `131.0.6778.135` | the Android app |
+| `screen` | `412x915@2.63` | the panel page |
+| `language` | `ar` / `en` | the panel page |
+| `theme` | `light` / `dark` | the panel page |
+| `connectivity` | `wifi` / `cellular` / `ethernet` / `vpn` / `none` / `unknown` | the Android app |
+| `memory` | `ok` / `low` / `unknown` | the Android app |
+| `storage` | `ok` / `low` / `unknown` | the Android app |
+
+Unknown values are the string `unknown`. A standalone browser has no Android
+fields at all; they are simply not sent. Unticking the box means the request
+carries no diagnostics key. It never contains your phone number, IMEI, Android
+ID, advertising ID, IP address, location, Wi-Fi SSID, contacts, chat or message
+text, JIDs, API keys, tokens, passwords or logs.
+
+**Crash reports** — optional, one Send per report. A crash report is written
+locally when the Node server dies on a fatal error, when the Android app
+crashes, or when the panel hits a web error, and it holds:
+
+- the schema version, a random per-report id, and a fingerprint used only to
+  group reports that share a cause (not to identify a device);
+- the timestamp and category (`node-uncaught`, `node-rejection`,
+  `android-crash`, `android-anr`, `android-native`, `web-error`,
+  `web-rejection`, `react-render`);
+- the error type, a sanitized message, and up to 20 sanitized stack frames;
+- an optional screen id — a route name only, never a URL or a query;
+- the app fields (`levix`, `node`, `platform`, and `nativeApp` when known) and
+  the same device fields as the diagnostics table above;
+- up to 20 navigation breadcrumbs, each a kind, a time and an identifier.
+
+A report's message, every stack frame and every breadcrumb name is scrubbed the
+same way when the report is written and again before it is sent: WhatsApp JIDs
+become `<jid>`, e-mail addresses `<email>`, runs of 7 or more digits `<number>`,
+a URL keeps only its scheme and host, a 24+ character key-like run becomes
+`<secret>`, and absolute paths under the data directory or your home become
+`<data>` / `~`.
+No phone number, IMEI, Android ID, advertising ID, IP address, location,
+Wi-Fi SSID, contacts, chat or message bodies, JIDs, screenshots, API keys,
+tokens, passwords or full logs are ever included.
 
 ## 3. Permissions the Android app requests
 
@@ -162,6 +235,12 @@ requested. The in-app WebView loads only the local control panel
 - **Feedback you chose to send** — it is a message in the developer's inbox, not
   a record in a database, and the app has no copy of it. Ask the developer to
   delete it (section 9) and it will be deleted.
+- **Crash reports** — an unsent report stays on your device and is deleted
+  automatically seven days after it is created (at most the 20 newest are kept);
+  you can also delete any report, or all of them, from the panel at any time.
+  A report you send is kept on the developer's server for at most 30 days and
+  then deleted; ask the developer to delete a sent one by its report id
+  (section 9) and it will be deleted.
 - **A file picked for a sticker** — the handover is in-memory and one-shot, so
   nothing to delete: once the panel reads it, the app has no copy left. It lives
   on afterwards only inside your own Levix server's data directory, alongside
@@ -212,8 +291,9 @@ Google Play.
 → **No**. Levix has no developer-operated account or cloud copy to delete.
 Users can still delete locally stored data with the in-app controls described
 in section 4, unlink WhatsApp, or uninstall the app. Feedback a user chose to
-send is the one thing the developer holds; it is deleted on request through the
-contact in section 9.
+send is the one thing the developer holds; crash reports a user chose to send
+are held for at most 30 days and then deleted. Both are deleted on request
+through the contact in section 9.
 
 Declare these data types:
 
@@ -233,6 +313,8 @@ Declare these data types:
 | App activity → **In-app search history** | Yes | No | Optional | App functionality |
 | App activity → **Other user-generated content** | Yes | No | Optional | App functionality |
 | Web browsing → **Web browsing history** | Yes | No | Optional | App functionality |
+| App info and performance → **Crash logs** | Yes | No | Optional | App functionality, Analytics |
+| App info and performance → **Diagnostics** | Yes | No | Optional | App functionality, Analytics |
 
 For every data type above:
 
@@ -242,10 +324,14 @@ For every data type above:
   messages), the contact you may optionally leave (Personal info → Email
   address), and the one file you may optionally attach (Photos, Videos, Other
   audio files, Files and docs). The contact and the file are optional, and
-  nothing is sent until you press Send.
-- **Sharing purpose:** none, because the form is declared as collected rather
-  than shared under Google Play's applicable user-initiated/service-provider
-  handling rules.
+  nothing is sent until you press Send. The **Crash logs** and **Diagnostics**
+  rows are likewise optional and user-initiated: a crash report leaves only when
+  you press Send on it, and the feedback diagnostics leave only when you tick
+  their checkbox. Their purpose is **Analytics** in Google Play's sense —
+  grouping and fixing crashes and faults.
+- **Sharing purpose:** none, because the form and the crash report are declared
+  as collected rather than shared under Google Play's applicable
+  user-initiated/service-provider handling rules.
 
 The **Email address** declaration covers only the optional contact field in the
 feedback form — it is never read from the device, and the field can be left
@@ -255,9 +341,12 @@ The **Contacts** declaration does not mean Levix requests Android's Contacts
 permission. It covers WhatsApp participant identifiers (for example mentioned
 or quoted participants) that can be included in an AI request.
 
-Do **not** declare location, financial info, health/fitness, calendar, app
-performance/diagnostics, installed apps, or device/other identifiers. Levix
-contains no analytics, advertising, or crash-reporting SDK.
+Do **not** declare location, financial info, health/fitness, calendar, installed
+apps, or device/other identifiers. Levix contains no analytics, advertising, or
+crash-reporting SDK: the **Crash logs** and **Diagnostics** rows above are the
+user-initiated reports described in sections 2a and 4, which the app writes
+locally and sends only when the user presses Send. There is no device-following
+identifier anywhere in them.
 
 ### Other Play Console declarations
 
