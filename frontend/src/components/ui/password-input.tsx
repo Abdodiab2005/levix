@@ -35,7 +35,9 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
     });
 
     return (
-      <span dir={dir} className="relative block min-w-0 w-full">
+      // A grid overlay, not absolute insets: the legacy-WebView build turns
+      // `end-*` into :lang() selectors, which ignore this wrapper's dir.
+      <span dir={dir} className="grid w-full min-w-0 items-center">
         <Input
           {...props}
           ref={(node) => {
@@ -49,7 +51,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
           autoCapitalize={autoCapitalize}
           autoCorrect={autoCorrect}
           disabled={disabled}
-          className={cn("pe-12 text-start", className)}
+          className={cn("col-start-1 row-start-1 pe-12 text-start", className)}
         />
         <IconButton
           label={visible ? t("hideSecret") : t("showSecret")}
@@ -57,7 +59,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
           pressed={visible}
           variant="ghost"
           disabled={disabled}
-          className="absolute end-0.5 top-1/2 -translate-y-1/2"
+          className="col-start-1 row-start-1 me-0.5 justify-self-end"
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => {
             const input = inputRef.current;
