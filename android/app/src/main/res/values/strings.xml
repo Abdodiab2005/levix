@@ -16,6 +16,11 @@
     <string name="btn_stop_host">Stop Assistant</string>
 
     <!-- Sections -->
+    <string name="pref_theme_title">App Theme</string>
+    <string name="pref_theme_sub">Choose light or dark appearance</string>
+    <string name="dialog_choose_theme">Choose Theme</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
     <string name="pref_language_title">App Language</string>
     <string name="pref_language_sub">Switch between Arabic (RTL) &amp; English (LTR)</string>
     <string name="pref_language_btn">العربية</string>

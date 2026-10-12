@@ -47,10 +47,10 @@ class StatusViewer(
         val window = Dialog(activity, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(ContextCompat.getColor(activity, R.color.levix_bg))
+            setBackgroundColor(ContextCompat.getColor(activity, R.color.viewer_bg))
         }
         val title = TextView(activity).apply {
-            setTextColor(ContextCompat.getColor(activity, R.color.levix_text))
+            setTextColor(ContextCompat.getColor(activity, R.color.viewer_text))
             setPadding(dp(18), dp(18), dp(18), dp(8))
         }
         val pager = ViewPager2(activity)
@@ -71,7 +71,7 @@ class StatusViewer(
                 minHeight = dp(48)
                 textSize = 14f
                 setPadding(dp(12), dp(4), dp(12), dp(4))
-                setTextColor(ContextCompat.getColor(activity, R.color.levix_cyan))
+                setTextColor(ContextCompat.getColor(activity, R.color.viewer_cyan))
                 setOnClickListener {
                     val target = pages.getOrNull(pager.currentItem) ?: return@setOnClickListener
                     onClick(target)
@@ -89,7 +89,7 @@ class StatusViewer(
             minHeight = dp(48)
             textSize = 22f
             contentDescription = activity.getString(R.string.media_more)
-            setTextColor(ContextCompat.getColor(activity, R.color.levix_text))
+            setTextColor(ContextCompat.getColor(activity, R.color.viewer_text))
             setOnClickListener { anchor ->
                 val current = pages.getOrNull(pager.currentItem) ?: return@setOnClickListener
                 val menu = PopupMenu(activity, anchor)
@@ -269,7 +269,7 @@ class StatusViewer(
 
     private fun placeholder(): TextView = TextView(activity).apply {
         setText(R.string.media_unavailable)
-        setTextColor(ContextCompat.getColor(activity, R.color.levix_text))
+        setTextColor(ContextCompat.getColor(activity, R.color.viewer_text))
     }
 
     private fun decodePreview(uri: String): Bitmap? = try {

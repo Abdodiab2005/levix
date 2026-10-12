@@ -1,7 +1,7 @@
 // file: frontend/src/components/Header.tsx
 
 import { Globe, Menu as MenuIcon, Moon, Sun } from "lucide-react";
-import { type FC, useState } from "react";
+import type { FC } from "react";
 import { useI18n } from "../context/I18nContext";
 import type { SessionStatus } from "../types";
 import { IconButton, Menu, MenuItem, MenuLabel } from "./ui";
@@ -13,21 +13,10 @@ interface HeaderProps {
 }
 
 export const Header: FC<HeaderProps> = ({ onToggleMobileMenu, title, status: _status }) => {
-  const { language, setLanguage, t } = useI18n();
-  const [theme, setTheme] = useState<"dark" | "light">(() => {
-    const saved = localStorage.getItem("levix_theme") as "dark" | "light" | null;
-    if (saved) {
-      document.documentElement.setAttribute("data-theme", saved);
-      return saved;
-    }
-    return (document.documentElement.getAttribute("data-theme") as "dark" | "light") || "dark";
-  });
+  const { language, setLanguage, theme, setTheme, t } = useI18n();
 
   const handleThemeToggle = () => {
-    const nextTheme = theme === "dark" ? "light" : "dark";
-    setTheme(nextTheme);
-    document.documentElement.setAttribute("data-theme", nextTheme);
-    localStorage.setItem("levix_theme", nextTheme);
+    setTheme(theme === "dark" ? "light" : "dark");
   };
 
   return (

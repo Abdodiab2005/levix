@@ -5,7 +5,7 @@
 
 (function () {
   var isAr = false;
-  try { isAr = localStorage.getItem("levix_lang") === "ar"; } catch (e) {}
+  try { isAr = document.documentElement.lang === "ar"; } catch (e) {}
   var showLabel = isAr ? "إظهار كلمة المرور" : "Show password";
   var hideLabel = isAr ? "إخفاء كلمة المرور" : "Hide password";
   document.querySelectorAll(".eye-btn").forEach(function (btn) {

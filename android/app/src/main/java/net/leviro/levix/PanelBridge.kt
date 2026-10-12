@@ -24,7 +24,18 @@ class PanelBridge(
     private val onShareLogs: (() -> Unit)? = null,
     private val onClosePanel: (() -> Unit)? = null,
     private val stickerHost: StickerHost? = null,
+    private val onUiPrefsChanged: (() -> Unit)? = null,
 ) {
+    @JavascriptInterface
+    fun getUiPrefs(): String = appContext?.let(UiPrefs::json) ?: "{}"
+
+    @JavascriptInterface
+    fun setUiPrefs(language: String, theme: String, field: String) {
+        val context = appContext ?: return
+        if (!UiPrefs.validLanguage(language) || !UiPrefs.validTheme(theme)) return
+        if (UiPrefs.set(context, language, theme, field)) onUiPrefsChanged?.invoke()
+    }
+
     @JavascriptInterface
     fun pickContact() {
         onPickContact?.invoke()
