@@ -102,6 +102,7 @@ module.exports = {
   resetAutoDeleteCounter: store.resetAutoDeleteCounter,
   insertAutoDeleteLog: store.insertAutoDeleteLog,
   listAutoDeleteLog: store.listAutoDeleteLog,
+  countAutoDeleteLog: store.countAutoDeleteLog,
   clearAutoDeleteLog: store.clearAutoDeleteLog,
   clearAutoDeleteOnUnlink: store.clearAutoDeleteOnUnlink,
 };

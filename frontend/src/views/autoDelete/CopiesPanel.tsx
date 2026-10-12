@@ -1,4 +1,4 @@
-import { Trash2 } from "lucide-react";
+import { RotateCcw, Trash2 } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../../api/client";
@@ -13,6 +13,7 @@ import {
   FilterButton,
   MenuItem,
   OverflowMenu,
+  Pagination,
   RelativeTime,
   Select,
   Skeleton,
@@ -23,7 +24,7 @@ import type { AutoDeleteLogEntry, AutoDeleteRule } from "../../types";
 import { peerDir, peerLabel, ruleLabel } from "../../utils/autoDelete";
 import { fill } from "../../utils/fill";
 
-const PAGE = 50;
+const PAGE = 20;
 
 interface CopiesPanelProps {
   rules: AutoDeleteRule[];
@@ -45,27 +46,34 @@ export const CopiesPanel: React.FC<CopiesPanelProps> = ({
   const { t } = useI18n();
   const { toast } = useToast();
   const [entries, setEntries] = useState<AutoDeleteLogEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [confirm, setConfirm] = useState<"all" | "rule" | null>(null);
   const [clearing, setClearing] = useState(false);
   const seq = useRef(0);
 
+  // A changed rule or a cleared list returns to the first page before the
+  // fetch effect below runs, so there is no wasted page for the old offset.
+  const resetKey = `${ruleId}|${reloadToken}`;
+  const [activeKey, setActiveKey] = useState(resetKey);
+  if (activeKey !== resetKey) {
+    setActiveKey(resetKey);
+    setPage(1);
+  }
+
   useEffect(() => {
     const token = ++seq.current;
-    // Read so clearing copies (reloadToken) retriggers this effect.
-    void reloadToken;
     setLoading(true);
     setError(null);
     api
-      .listAutoDeleteLog({ ruleId: ruleId || undefined, limit: PAGE, offset: 0 })
+      .listAutoDeleteLog({ ruleId: ruleId || undefined, limit: PAGE, offset: (page - 1) * PAGE })
       .then((res) => {
         if (seq.current !== token) return;
         setEntries(res.log);
-        setHasMore(res.log.length === PAGE);
+        setTotal(res.total);
       })
       .catch((err) => {
         if (seq.current !== token) return;
@@ -76,27 +84,7 @@ export const CopiesPanel: React.FC<CopiesPanelProps> = ({
       .finally(() => {
         if (seq.current === token) setLoading(false);
       });
-  }, [ruleId, reloadToken, t, toast]);
-
-  const loadMore = async () => {
-    const token = seq.current;
-    setLoadingMore(true);
-    try {
-      const res = await api.listAutoDeleteLog({
-        ruleId: ruleId || undefined,
-        limit: PAGE,
-        offset: entries.length,
-      });
-      if (seq.current !== token) return;
-      setEntries((prev) => [...prev, ...res.log]);
-      setHasMore(res.log.length === PAGE);
-    } catch (err) {
-      if (seq.current !== token) return;
-      toast(failureMessage(err, t("copiesLoadFailed")), "error");
-    } finally {
-      if (seq.current === token) setLoadingMore(false);
-    }
-  };
+  }, [ruleId, reloadToken, page, t, toast]);
 
   const clear = async () => {
     setClearing(true);
@@ -132,6 +120,8 @@ export const CopiesPanel: React.FC<CopiesPanelProps> = ({
   );
 
   const selected = rules.find((rule) => String(rule.id) === ruleId);
+  const pageCount = Math.max(1, Math.ceil(total / PAGE));
+  const safePage = Math.min(page, pageCount);
 
   return (
     <div className="flex flex-col gap-3">
@@ -184,73 +174,83 @@ export const CopiesPanel: React.FC<CopiesPanelProps> = ({
       )}
 
       {!loading && error && (
-        <div className="flex flex-col items-center gap-3 py-10">
-          <p role="alert" className="text-sm text-danger">
-            {error}
-          </p>
-          <Button onClick={() => setReloadToken((value) => value + 1)}>{t("retryLoad")}</Button>
-        </div>
-      )}
-
-      {!loading && !error && entries.length === 0 && (
         <EmptyState
-          title={ruleId ? t("noCopiesForRule") : t("noCopiesTitle")}
-          description={t("noCopiesBody")}
+          kind="error"
+          icon={<RotateCcw size={28} />}
+          description={error}
+          action={
+            <Button
+              variant="secondary"
+              icon={<RotateCcw size={16} />}
+              onClick={() => setReloadToken((value) => value + 1)}
+            >
+              {t("retryLoad")}
+            </Button>
+          }
         />
       )}
 
-      {!loading && !error && entries.length > 0 && (
-        <div className="flex flex-col gap-3">
-          {entries.map((entry) => {
-            const chat = peerLabel(entry.chatJid, names) || "—";
-            const sender = peerLabel(entry.sender, names) || "—";
-            const modeLabel =
-              entry.mode === "revoke"
-                ? t("modeRevoke")
-                : entry.mode === "deleteForMe"
-                  ? t("modeForMe")
-                  : entry.mode;
-            return (
-              <Card key={entry.id} className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-bold text-faint">{t("copyChat")}</p>
-                    <p
-                      dir={peerDir(entry.chatJid, names)}
-                      className="truncate text-sm font-semibold"
-                    >
-                      {chat}
-                    </p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-bold text-faint">{t("copySender")}</p>
-                    <p dir={peerDir(entry.sender, names)} className="truncate text-sm">
-                      {sender}
-                    </p>
-                  </div>
-                  <RelativeTime value={entry.createdAt} className="ms-auto text-xs text-muted" />
-                </div>
-                <p dir="auto" className="whitespace-pre-wrap break-words text-sm text-text-main">
-                  {entry.text || "—"}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  <Badge>{mediaLabel(entry.mediaType)}</Badge>
-                  <Badge tone={entry.mode === "revoke" ? "info" : "neutral"}>{modeLabel}</Badge>
-                </div>
-              </Card>
-            );
-          })}
-          {hasMore && (
-            <Button
-              variant="secondary"
-              className="self-center"
-              loading={loadingMore}
-              onClick={() => void loadMore()}
-            >
-              {t("loadMore")}
+      {!loading && !error && entries.length === 0 && ruleId && (
+        <EmptyState
+          kind="no-results"
+          description={t("noCopiesForRule")}
+          action={
+            <Button variant="secondary" onClick={() => onRuleIdChange("")}>
+              {t("clearFilters")}
             </Button>
-          )}
-        </div>
+          }
+        />
+      )}
+
+      {!loading && !error && entries.length === 0 && !ruleId && (
+        <EmptyState kind="empty" title={t("noCopiesTitle")} description={t("noCopiesBody")} />
+      )}
+
+      {!loading && !error && entries.length > 0 && (
+        <>
+          <div className="flex flex-col gap-3">
+            {entries.map((entry) => {
+              const chat = peerLabel(entry.chatJid, names) || "—";
+              const sender = peerLabel(entry.sender, names) || "—";
+              const modeLabel =
+                entry.mode === "revoke"
+                  ? t("modeRevoke")
+                  : entry.mode === "deleteForMe"
+                    ? t("modeForMe")
+                    : entry.mode;
+              return (
+                <Card key={entry.id} className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-bold text-faint">{t("copyChat")}</p>
+                      <p
+                        dir={peerDir(entry.chatJid, names)}
+                        className="truncate text-sm font-semibold"
+                      >
+                        {chat}
+                      </p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-bold text-faint">{t("copySender")}</p>
+                      <p dir={peerDir(entry.sender, names)} className="truncate text-sm">
+                        {sender}
+                      </p>
+                    </div>
+                    <RelativeTime value={entry.createdAt} className="ms-auto text-xs text-muted" />
+                  </div>
+                  <p dir="auto" className="whitespace-pre-wrap break-words text-sm text-text-main">
+                    {entry.text || "—"}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Badge>{mediaLabel(entry.mediaType)}</Badge>
+                    <Badge tone={entry.mode === "revoke" ? "info" : "neutral"}>{modeLabel}</Badge>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+          <Pagination page={safePage} pageCount={pageCount} total={total} onPageChange={setPage} />
+        </>
       )}
 
       <ConfirmDialog

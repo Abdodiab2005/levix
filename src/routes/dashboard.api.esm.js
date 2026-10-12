@@ -18,6 +18,8 @@ import { Router } from "express";
 import { createRequire } from "module";
 import { groupMetadataCache } from "../core/socket.js";
 import { getCommandCatalog, rebuildCommandIndex } from "../handlers/command.handler.js";
+import { fileToBuffer, MultipartError, readMultipartForm } from "../utils/multipart.esm.js";
+import normalizeJid, { isLidJid } from "../utils/normalizeJid.esm.js";
 import { grantRole, listRoles, revokeRole } from "../utils/permissions.esm.js";
 import {
   countDebts,
@@ -41,8 +43,6 @@ import {
   resolveUserPhone,
   saveGroupSettings,
 } from "../utils/storage.esm.js";
-import normalizeJid, { isLidJid } from "../utils/normalizeJid.esm.js";
-import { fileToBuffer, MultipartError, readMultipartForm } from "../utils/multipart.esm.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -1600,12 +1600,12 @@ router.post("/auto-delete/rules/:id/reset", (req, res) => {
 
 router.get("/auto-delete/log", (req, res) => {
   try {
-    const log = autoDelete.listLog({
+    const { log, total } = autoDelete.listLog({
       ruleId: req.query.ruleId,
       limit: req.query.limit,
       offset: req.query.offset,
     });
-    res.json({ success: true, log });
+    res.json({ success: true, log, total });
   } catch (error) {
     autoDeleteFail(res, error, "Error listing auto-delete copies");
   }
