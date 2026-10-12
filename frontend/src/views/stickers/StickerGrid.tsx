@@ -45,74 +45,71 @@ export const StickerGrid: React.FC<StickerGridProps> = ({
 }) => {
   const { t } = useI18n();
 
-  if (loading && items.length === 0) return <LoadingState text={t("loading")} />;
-  if (error && items.length === 0) {
-    return (
-      <EmptyState
-        kind="error"
-        description={error}
-        action={<Button onClick={onRetry}>{t("retryLoad")}</Button>}
-      />
-    );
-  }
-  if (items.length === 0) {
-    if (isFiltered) {
-      return (
-        <EmptyState
-          kind="no-results"
-          description={emptyText}
-          action={
-            onClearFilters ? (
-              <Button variant="secondary" onClick={onClearFilters}>
-                {t("reset")}
-              </Button>
-            ) : undefined
-          }
-        />
-      );
-    }
-    return (
-      <EmptyState
-        kind="empty"
-        icon={<StickerIcon size={28} className="text-muted" />}
-        description={emptyText}
-        action={
-          onGoCreate ? (
-            <Button variant="primary" onClick={onGoCreate}>
-              {t("createBtn")}
-            </Button>
-          ) : undefined
-        }
-      />
-    );
-  }
-
   return (
     <div className="flex min-w-0 flex-col gap-4">
-      <div
-        className={cn(
-          "grid grid-cols-3 min-[390px]:grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2 sm:gap-3 transition-opacity",
-          loading && "opacity-60 pointer-events-none",
-        )}
-      >
-        {items.map((sticker, index) => (
-          <StickerTile
-            key={sticker.id}
-            sticker={sticker}
-            selected={selected.has(sticker.id)}
-            onToggle={(shift) => onToggle(index, shift)}
-            onOpen={() => onOpen(sticker)}
-            onFavorite={() => onFavorite(sticker)}
+      {loading && items.length === 0 ? (
+        <LoadingState text={t("loading")} />
+      ) : error ? (
+        <EmptyState
+          kind="error"
+          description={error}
+          action={<Button onClick={onRetry}>{t("retryLoad")}</Button>}
+        />
+      ) : items.length === 0 ? (
+        isFiltered ? (
+          <EmptyState
+            kind="no-results"
+            description={emptyText}
+            action={
+              onClearFilters ? (
+                <Button variant="secondary" onClick={onClearFilters}>
+                  {t("reset")}
+                </Button>
+              ) : undefined
+            }
           />
-        ))}
-      </div>
-      <Pagination
-        page={page}
-        pageCount={pageCount}
-        total={total}
-        onPageChange={onPageChange}
-        className="pt-1"
-      />
+        ) : (
+          <EmptyState
+            kind="empty"
+            icon={<StickerIcon size={28} className="text-muted" />}
+            description={emptyText}
+            action={
+              onGoCreate ? (
+                <Button variant="primary" onClick={onGoCreate}>
+                  {t("createBtn")}
+                </Button>
+              ) : undefined
+            }
+          />
+        )
+      ) : (
+        <div
+          className={cn(
+            "grid grid-cols-3 min-[390px]:grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2 sm:gap-3 transition-opacity",
+            loading && "opacity-60 pointer-events-none",
+          )}
+        >
+          {items.map((sticker, index) => (
+            <StickerTile
+              key={sticker.id}
+              sticker={sticker}
+              selected={selected.has(sticker.id)}
+              onToggle={(shift) => onToggle(index, shift)}
+              onOpen={() => onOpen(sticker)}
+              onFavorite={() => onFavorite(sticker)}
+            />
+          ))}
+        </div>
+      )}
+      {total > 0 && (
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          total={total}
+          onPageChange={onPageChange}
+          className="pt-1"
+        />
+      )}
     </div>
   );
 };

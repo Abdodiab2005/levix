@@ -11,6 +11,7 @@ interface BulkBarProps {
   sendReason: string | null;
   exportReason: string | null;
   onSelectAll: () => void;
+  selectAllLabel: string;
   onClear: () => void;
   onFavorite: () => void;
   onUnfavorite: () => void;
@@ -31,6 +32,7 @@ export const BulkBar: React.FC<BulkBarProps> = ({
   sendReason,
   exportReason,
   onSelectAll,
+  selectAllLabel,
   onClear,
   onFavorite,
   onUnfavorite,
@@ -67,7 +69,7 @@ export const BulkBar: React.FC<BulkBarProps> = ({
           />
           <IconButton label={t("shareSticker")} icon={<Share2 size={16} />} onClick={onShare} />
           <OverflowMenu label={t("moreActions")}>
-            <MenuItem onSelect={onSelectAll}>{t("selectCurrentPage")}</MenuItem>
+            <MenuItem onSelect={onSelectAll}>{selectAllLabel}</MenuItem>
             <MenuItem onSelect={onClear}>{t("clearSelection")}</MenuItem>
             <MenuSeparator />
             <MenuItem onSelect={onFavorite}>{t("favorite")}</MenuItem>
