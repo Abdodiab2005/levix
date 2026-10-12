@@ -265,12 +265,20 @@ async function startWithPanel({ open }) {
 // living and dying
 // ---------------------------------------------------------------------------
 
-function installShutdownHandlers() {
+export function installShutdownHandlers() {
   // After an uncaughtException the process state is unknown (a half-held lock,
   // a half-written auth row). Log and exit rather than keep working on top of
   // it. Run the bot under a supervisor (systemd / pm2 / docker restart) so it
   // comes back on its own — without one, this exit means the bot is down.
   const fatal = (error, label) => {
+    // One last local crash report, written synchronously before we die. It is
+    // never sent from here — the operator sends it from the panel later. The
+    // write is wrapped again here so a store failure cannot turn one fatal
+    // error into two.
+    try {
+      const category = label.startsWith("Unhandled Rejection") ? "node-rejection" : "node-uncaught";
+      require("./diagnostics/crashReports.cjs").captureNodeFatal(category, error);
+    } catch {}
     logger.error(error, `${label} exiting — restart is up to the supervisor`);
     console.error(label, error);
     // Half a second so pino can drain its worker before we die.
