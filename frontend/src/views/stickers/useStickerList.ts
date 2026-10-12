@@ -19,12 +19,19 @@ export function useStickerList(preset: StickerFilter) {
   const [filter, setFilter] = useState<StickerFilter>(preset);
   const [pack, setPack] = useState("");
   const [page, setPageState] = useState(1);
-  const [items, setItems] = useState<Sticker[]>([]);
+  const [loaded, setLoaded] = useState<{
+    page: number;
+    filterKey: string;
+    items: Sticker[];
+  } | null>(null);
   const [total, setTotal] = useState(0);
   const [packs, setPacks] = useState<Pack[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState<{ page: number; filterKey: string; message: string } | null>(
+    null,
+  );
   const seq = useRef(0);
+  const filterKey = `${debounced}|${filter}|${sort}|${pack}`;
 
   useEffect(() => {
     setFilter(preset);
@@ -50,7 +57,7 @@ export function useStickerList(preset: StickerFilter) {
     async (targetPage: number) => {
       const ticket = ++seq.current;
       setLoading(true);
-      setError(null);
+      setFailed(null);
       const offset = Math.max(0, (targetPage - 1) * STUDIO_PAGE_SIZE);
       try {
         const res = await api.getStickers({
@@ -68,12 +75,12 @@ export function useStickerList(preset: StickerFilter) {
           setPageState(newPageCount);
           return;
         }
-        setItems(res.items);
+        setLoaded({ page: targetPage, filterKey, items: res.items });
         setTotal(newTotal);
       } catch (err) {
         if (ticket !== seq.current) return;
         const message = explainError(t, err);
-        setError(message);
+        setFailed({ page: targetPage, filterKey, message });
         toast(message, "error");
       } finally {
         if (ticket === seq.current) {
@@ -81,10 +88,9 @@ export function useStickerList(preset: StickerFilter) {
         }
       }
     },
-    [debounced, sort, filter, pack, t, toast],
+    [debounced, sort, filter, pack, filterKey, t, toast],
   );
 
-  const filterKey = `${debounced}|${filter}|${sort}|${pack}`;
   const prevFilterKey = useRef(filterKey);
 
   useEffect(() => {
@@ -107,6 +113,9 @@ export function useStickerList(preset: StickerFilter) {
     setPageState(Math.max(1, Math.floor(nextPage) || 1));
   }, []);
 
+  const current = loaded?.page === page && loaded.filterKey === filterKey;
+  const error = failed?.page === page && failed.filterKey === filterKey ? failed.message : null;
+
   return {
     q,
     setQ,
@@ -120,10 +129,11 @@ export function useStickerList(preset: StickerFilter) {
     setPage,
     pageCount: Math.max(1, Math.ceil(total / STUDIO_PAGE_SIZE)),
     pageSize: STUDIO_PAGE_SIZE,
-    items,
+    items: current ? loaded.items : [],
+    loadedItems: loaded?.items ?? null,
     total,
     packs,
-    loading,
+    loading: loading || (!current && !error),
     error,
     reload,
     loadPacks,

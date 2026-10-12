@@ -33,6 +33,27 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const resetKey = `${list.q}|${list.filter}|${list.sort}|${list.pack}`;
   const selection = useSelection(ids, resetKey);
   const selectedIds = [...selection.selected];
+  const seen = useRef({
+    key: resetKey,
+    loadedItems: null as Sticker[] | null,
+    stickers: new Map<string, Sticker>(),
+  });
+  if (seen.current.key !== resetKey) {
+    seen.current = {
+      key: resetKey,
+      loadedItems: list.loadedItems,
+      stickers: new Map<string, Sticker>(),
+    };
+  }
+  if (list.loadedItems && seen.current.loadedItems !== list.loadedItems) {
+    for (const item of list.loadedItems) seen.current.stickers.set(item.id, item);
+    seen.current.loadedItems = list.loadedItems;
+  }
+  const commandItems = new Map(list.items.map((item) => [item.id, item]));
+  for (const id of selectedIds) {
+    const sticker = seen.current.stickers.get(id);
+    if (sticker && !commandItems.has(id)) commandItems.set(id, sticker);
+  }
   const fromPackId = list.pack && list.pack !== "none" ? list.pack : undefined;
   const reloadRef = useRef(list.reload);
   reloadRef.current = list.reload;
@@ -43,7 +64,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   }, [refreshKey]);
 
   const commands = useStickerCommands({
-    items: list.items,
+    items: [...commandItems.values()],
     packs: list.packs,
     selectedIds,
     clearSelection: selection.clear,
@@ -65,7 +86,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         ? t("recentEmpty")
         : t("emptyLibrary");
 
-  const animatedSelected = list.items.some(
+  const animatedSelected = [...commandItems.values()].some(
     (item) => selection.selected.has(item.id) && item.animated,
   );
 
@@ -141,7 +162,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         <span>{t("resultCount").replace("{n}", String(list.total))}</span>
         {list.items.length > 0 && (
           <Button variant="ghost" size="sm" onClick={selection.selectAll}>
-            {t("selectCurrentPage")}
+            {t(list.pageCount > 1 ? "selectCurrentPage" : "selectAll")}
           </Button>
         )}
       </div>
@@ -153,6 +174,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         sendReason={selectedIds.length ? commands.sendReason : null}
         exportReason={selectedIds.length ? commands.exportReason : null}
         onSelectAll={selection.selectAll}
+        selectAllLabel={t(list.pageCount > 1 ? "selectCurrentPage" : "selectAll")}
         onClear={selection.clear}
         onFavorite={commands.favorite}
         onUnfavorite={commands.unfavorite}
