@@ -218,7 +218,7 @@ export const Toggle = forwardRef<HTMLButtonElement, ToggleProps>(function Toggle
           "before:absolute before:inset-x-0 before:top-1.5 before:h-8 before:rounded-full before:border before:transition-colors",
           checked
             ? "before:border-brand-blue before:bg-brand-blue"
-            : "before:border-line before:bg-panel-hover",
+            : "before:border-faint/70 before:bg-panel-hover",
         )}
       >
         <span

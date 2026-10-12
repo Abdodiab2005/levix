@@ -35,7 +35,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
     });
 
     return (
-      <span className="relative block min-w-0 w-full">
+      <span dir={dir} className="relative block min-w-0 w-full">
         <Input
           {...props}
           ref={(node) => {
