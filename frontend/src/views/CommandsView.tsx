@@ -56,7 +56,8 @@ export const CommandsView: React.FC = () => {
   const [sort, setSort] = useState<CommandSort>("name");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  // One open row at a time keeps the catalog compact: opening a command closes the last one.
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [editingAliasesCmd, setEditingAliasesCmd] = useState<CommandItem | null>(null);
 
   const loadCommands = useCallback(async () => {
@@ -134,12 +135,7 @@ export const CommandsView: React.FC = () => {
   };
 
   const toggleDetails = (id: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setExpanded((prev) => (prev === id ? null : id));
   };
 
   const handleAliasesSaved = (command: CommandItem, aliases: string[]) => {

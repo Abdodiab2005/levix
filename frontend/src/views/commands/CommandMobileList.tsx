@@ -23,7 +23,7 @@ export function CommandMobileList({
   commands: CommandItem[];
   prefix: string;
   levels: string[];
-  expanded: ReadonlySet<string>;
+  expanded: string | null;
   onToggleDetails: (id: string) => void;
   actions: CommandActions;
 }) {
@@ -32,7 +32,7 @@ export function CommandMobileList({
     <ul className="divide-y divide-line/50">
       {commands.map((command) => {
         const id = commandId(command);
-        const open = expanded.has(id);
+        const open = expanded === id;
         const panelId = commandDomId(command);
         return (
           <li key={id}>
