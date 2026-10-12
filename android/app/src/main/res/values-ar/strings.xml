@@ -1,6 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Levix</string>
+    <string name="guide_step">الخطوة %1$d من 3</string>
+    <string name="guide_what_title">بوتك على هذا الهاتف</string>
+    <string name="guide_what_body">يشغّل Levix بوت واتساب الخاص بك على هذا الهاتف. استخدم لوحة التحكم لإدارته.</string>
+    <string name="guide_connect_title">ربط واتساب</string>
+    <string name="guide_connect_body">اضغط تشغيل، وافتح لوحة التحكم، ثم امسح رمز QR من واتساب &gt; الأجهزة المرتبطة.</string>
+    <string name="guide_privacy_title">الخصوصية والتشخيصات</string>
+    <string name="guide_privacy_body">لا يغادر شيء هاتفك إلا إذا أرسلته بنفسك. إذا تعطل Levix، يبقى التقرير هنا حتى تراجعه وترسله أو تحذفه.</string>
+    <string name="guide_skip">تخطي</string>
+    <string name="guide_next">التالي</string>
+    <string name="guide_done">تم</string>
+    <string name="guide_again_title">عرض الدليل مرة أخرى</string>
+    <string name="guide_again_sub">راجع خطوات الإعداد والخصوصية</string>
+    <string name="crash_prompt_title">توقف Levix بشكل غير متوقع</string>
+    <string name="crash_prompt_body">حُفظ تقرير تعطل على هذا الهاتف. يمكنك مراجعته قبل اختيار إرساله.</string>
+    <string name="crash_prompt_review">مراجعة وإرسال</string>
+    <string name="crash_prompt_later">ليس الآن</string>
+    <string name="crash_prompt_delete">حذف</string>
     <string name="brand_tagline">غرفة التحكم</string>
     <string name="host_shell_note">المساعد الذكي المستقل في الخلفية. افتح لوحة التحكم لإدارة الإعدادات.</string>
 

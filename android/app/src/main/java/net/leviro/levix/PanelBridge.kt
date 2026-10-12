@@ -30,6 +30,10 @@ class PanelBridge(
     fun getUiPrefs(): String = appContext?.let(UiPrefs::json) ?: "{}"
 
     @JavascriptInterface
+    fun getDiagnostics(): String = appContext?.let(DeviceDiagnostics::json)
+        ?: DeviceDiagnostics.UNKNOWN_JSON
+
+    @JavascriptInterface
     fun setUiPrefs(language: String, theme: String, field: String) {
         val context = appContext ?: return
         if (!UiPrefs.validLanguage(language) || !UiPrefs.validTheme(theme)) return
