@@ -218,9 +218,14 @@ function isLocalRequest(req) {
   return isDirectLocalRequest(req, { proxyConfigured: PROXY_CONFIGURED });
 }
 
+// `error` is { code, message } or null: `message` is the English the page
+// renders by default, `code` is the stable key public/gateway-i18n.js turns
+// into the reader's language. A string is still accepted for callers that
+// have no code to offer.
 function renderSetup(req, res, error, status = 200) {
   res.status(status).render("setup", {
-    error,
+    error: error ? error.message || error : null,
+    errorCode: error?.code ?? null,
     needsCode: !isLocalRequest(req),
     minLength: secrets.MIN_PASSWORD_LENGTH,
   });
@@ -238,7 +243,12 @@ app.post("/setup", (req, res, next) => {
   const retryAfter = blockedFor(peer);
   if (retryAfter) {
     res.set("Retry-After", String(retryAfter));
-    return renderSetup(req, res, "Too many attempts. Try again later.", 429);
+    return renderSetup(
+      req,
+      res,
+      { code: "tooManyAttempts", message: "Too many attempts. Try again later." },
+      429,
+    );
   }
 
   const { password, confirm, code } = req.body || {};
@@ -246,17 +256,22 @@ app.post("/setup", (req, res, next) => {
   if (!isLocalRequest(req) && !secrets.setupCodeMatches(code)) {
     recordFailure(peer);
     logger.warn({ ip: peer }, "[dashboard] Setup attempted with a wrong code");
-    return renderSetup(req, res, "Wrong setup code.", 401);
+    return renderSetup(req, res, { code: "wrongSetupCode", message: "Wrong setup code." }, 401);
   }
 
   if (password !== confirm) {
-    return renderSetup(req, res, "The two passwords don't match.", 400);
+    return renderSetup(
+      req,
+      res,
+      { code: "passwordMismatch", message: "The two passwords don't match." },
+      400,
+    );
   }
 
   try {
     secrets.setDashboardPassword(password);
   } catch (error) {
-    return renderSetup(req, res, error.message, 400);
+    return renderSetup(req, res, { code: "invalidPassword", message: error.message }, 400);
   }
 
   clearAttempts(peer);
@@ -291,13 +306,21 @@ app.get("/", noStore, (req, res) => {
     }
     return res.render("dashboard");
   }
-  return res.render("login", { error: null, minLength: secrets.MIN_PASSWORD_LENGTH });
+  return res.render("login", {
+    error: null,
+    errorCode: null,
+    minLength: secrets.MIN_PASSWORD_LENGTH,
+  });
 });
 
 app.get("/login", noStore, (req, res) => {
   if (!secrets.hasDashboardPassword()) return res.redirect("/setup");
   if (isPanelSessionValid(req.session)) return res.redirect("/");
-  return res.render("login", { error: null, minLength: secrets.MIN_PASSWORD_LENGTH });
+  return res.render("login", {
+    error: null,
+    errorCode: null,
+    minLength: secrets.MIN_PASSWORD_LENGTH,
+  });
 });
 
 app.post("/login", (req, res, next) => {
@@ -309,6 +332,7 @@ app.post("/login", (req, res, next) => {
     res.set("Retry-After", String(retryAfter));
     return res.status(429).render("login", {
       error: "Too many attempts. Try again later.",
+      errorCode: "tooManyAttempts",
       minLength: secrets.MIN_PASSWORD_LENGTH,
     });
   }
@@ -318,6 +342,7 @@ app.post("/login", (req, res, next) => {
     logger.warn({ ip: peer }, "[dashboard] Failed login attempt");
     return res.status(401).render("login", {
       error: "Incorrect Password",
+      errorCode: "incorrectPassword",
       minLength: secrets.MIN_PASSWORD_LENGTH,
     });
   }

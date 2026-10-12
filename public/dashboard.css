@@ -1807,12 +1807,13 @@ td.wrap {
   margin: 0 auto;
   color: var(--muted);
   font-size: 0.83rem;
-  text-align: left;
+  text-align: start;
 }
 
 .steps li {
-  margin: 8px 0 8px 21px;
-  padding-left: 4px;
+  margin: 8px 0;
+  margin-inline-start: 21px;
+  padding-inline-start: 4px;
 }
 
 .steps li::marker {
@@ -1921,6 +1922,26 @@ td.wrap {
   color: #f2f6ff;
 }
 
+/* The sign-in, setup and QR screens are a dark brand design in both themes.
+   Their parts read the shared tokens, so a light page would leak white cards
+   and dark text onto the dark backdrop; pin the dark values here. */
+:root[data-theme="light"] .gateway-page {
+  color-scheme: dark;
+  --bg: #07101f;
+  --bg-soft: #0a1629;
+  --panel: #0d1a30;
+  --panel-raised: #11213b;
+  --panel-hover: #142845;
+  --line: #223657;
+  --line-soft: #192b48;
+  --text: #f2f6ff;
+  --muted: #a4b5cf;
+  --faint: #7086a8;
+  --blue-bright: #5a94ff;
+  --shadow: 0 22px 70px rgba(0, 5, 18, 0.3);
+  --shadow-soft: 0 12px 34px rgba(0, 5, 18, 0.16);
+}
+
 .gateway-shell {
   display: grid;
   grid-template-columns: minmax(350px, 0.82fr) minmax(480px, 1.18fr);
@@ -1934,7 +1955,7 @@ td.wrap {
   min-height: 100%;
   padding: clamp(32px, 5vw, 72px);
   overflow: hidden;
-  border-right: 1px solid #203a60;
+  border-inline-end: 1px solid #203a60;
   background:
     linear-gradient(145deg, rgba(10, 33, 72, 0.96), rgba(5, 20, 44, 0.98)),
     #07162f;
@@ -1955,7 +1976,7 @@ td.wrap {
 
 .gateway-story::after {
   position: absolute;
-  right: -220px;
+  inset-inline-end: -220px;
   bottom: -240px;
   z-index: -1;
   width: 520px;
@@ -2031,7 +2052,7 @@ td.wrap {
 
 .gateway-mark {
   position: absolute;
-  right: clamp(-72px, -4vw, -28px);
+  inset-inline-end: clamp(-72px, -4vw, -28px);
   bottom: clamp(88px, 14vh, 150px);
   z-index: 0;
   display: grid;
@@ -2110,7 +2131,7 @@ td.wrap {
   border-color: #243857;
   background: #0d1a30;
   box-shadow: 0 28px 80px rgba(0, 4, 14, 0.34);
-  text-align: left;
+  text-align: start;
 }
 
 .auth-head {
@@ -2163,7 +2184,7 @@ td.wrap {
   background: color-mix(in srgb, var(--danger) 10%, transparent);
   color: #ff9ca5;
   font-size: 0.8rem;
-  text-align: left;
+  text-align: start;
 }
 
 .foot {
@@ -2193,7 +2214,7 @@ td.wrap {
 .compact-callout {
   max-width: 430px;
   margin-top: 2px;
-  text-align: left;
+  text-align: start;
 }
 
 .qr-back {
@@ -2346,7 +2367,7 @@ td.wrap {
   .gateway-story {
     min-height: 255px;
     padding: 25px;
-    border-right: 0;
+    border-inline-end: 0;
     border-bottom: 1px solid #203a60;
   }
 
@@ -2366,7 +2387,7 @@ td.wrap {
   }
 
   .gateway-mark {
-    right: -35px;
+    inset-inline-end: -35px;
     bottom: -62px;
     width: 220px;
   }
@@ -2907,6 +2928,10 @@ html[dir="rtl"] .logout-btn svg {
 
 .input-wrap {
   position: relative;
+  /* The field is a password / Latin value, so keep it LTR even when the page
+     is Arabic: the input's own padding and the eye button's `inset-inline-end`
+     then resolve to the same physical end. */
+  direction: ltr;
 }
 
 .input-wrap input {
@@ -3007,6 +3032,14 @@ html.screen-guard .gateway-panel {
   height: 1rem;
   flex-shrink: 0;
 }
-.gateway-back-btn[dir="rtl"] svg {
+/* Directional icons point the way the language reads: a right arrow in an
+   English submit button, a left arrow on a back control. Arabic flips both. */
+html[dir="rtl"] .gateway-back-btn svg,
+html[dir="rtl"] .qr-back svg,
+html[dir="rtl"] .auth-submit svg {
   transform: scaleX(-1);
+}
+
+html[dir="rtl"] .auth-submit:hover svg {
+  transform: scaleX(-1) translateX(3px);
 }

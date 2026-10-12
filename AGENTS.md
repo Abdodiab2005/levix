@@ -1084,8 +1084,12 @@ calls `LevixHost.setUiPrefs(language, theme, field)`, which accepts only
 event and never call the setter again. Android keeps the language in
 AppCompat's application locales and the theme in `UiPrefs`; `PanelActivity`
 handles locale, layoutDirection and uiMode itself so the WebView never
-reloads. Login, setup and QR are English only, so their boot tag carries
-`data-page-lang="en"` and they follow the theme alone.
+reloads. The gateway pages are bilingual like the SPA: English is the default
+markup, `data-i18n*` attributes carry the keys, and `public/gateway-i18n.js`
+applies the dictionary for the language `ui-boot.js` resolved (server-rendered
+errors travel as a stable code the script translates). They follow the shared
+language, RTL included. Their look stays dark in both themes: `public/dashboard.css`
+pins the dark tokens under `:root[data-theme="light"] .gateway-page`.
 
 Every authenticated panel session carries the current password epoch. Changing
 or resetting the password invalidates older HTTP and Socket.IO sessions before

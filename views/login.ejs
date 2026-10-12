@@ -1,26 +1,26 @@
 <!DOCTYPE html>
-<html>
+<html data-brand="<%= brand.name %>">
   <head>
-    <script src="/ui-boot.js" data-page-lang="en"></script>
+    <script src="/ui-boot.js"></script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title><%= brand.name %> · Sign in</title>
+    <title data-i18n="titleLogin"><%= brand.name %> · Sign in</title>
     <link rel="icon" type="image/png" sizes="32x32" href="/brand/icon-32.png" />
     <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
     <link rel="stylesheet" href="/dashboard.css" />
   </head>
   <body class="gateway-page">
     <main class="gateway-shell">
-      <section class="gateway-story" aria-label="About <%= brand.name %>">
+      <section class="gateway-story" aria-label="About <%= brand.name %>" data-i18n-aria-label="storyAbout">
         <div class="brand-lockup" aria-label="<%= brand.name %>">
           <img src="/brand/mark.svg" alt="" />
-          <span><strong><%= brand.name %></strong><small><%= brand.tagline %></small></span>
+          <span><strong><%= brand.name %></strong><small data-i18n="tagline"><%= brand.tagline %></small></span>
         </div>
 
         <div class="gateway-copy">
-          <span class="eyebrow">Self-hosted by design</span>
-          <h2>The quiet control room behind every chat.</h2>
-          <p>Connection, commands, memory, and moderation stay together—on your server and within reach.</p>
+          <span class="eyebrow" data-i18n="selfHosted">Self-hosted by design</span>
+          <h2 data-i18n="loginHeadline">The quiet control room behind every chat.</h2>
+          <p data-i18n="loginLede">Connection, commands, memory, and moderation stay together—on your server and within reach.</p>
         </div>
 
         <div class="gateway-mark" aria-hidden="true">
@@ -28,7 +28,7 @@
           <img src="/brand/mark.svg" alt="" />
         </div>
 
-        <p class="gateway-trust"><span></span> Private workspace · direct control</p>
+        <p class="gateway-trust" data-i18n-html="loginTrust"><span></span> Private workspace · direct control</p>
       </section>
 
       <section class="gateway-panel">
@@ -36,26 +36,27 @@
           <form class="card auth-card" id="login-card" action="/login" method="post">
             <button type="button" class="gateway-back-btn" id="login-back-app" hidden>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-              <span>Back to app</span>
+              <span data-i18n="backToApp">Back to app</span>
             </button>
             <div class="auth-head">
-              <span class="eyebrow">Secure access</span>
-              <h1>Welcome back</h1>
-              <p class="sub">Sign in to manage your Levix workspace.</p>
+              <span class="eyebrow" data-i18n="secureAccess">Secure access</span>
+              <h1 data-i18n="welcomeBack">Welcome back</h1>
+              <p class="sub" data-i18n="loginSub">Sign in to manage your Levix workspace.</p>
             </div>
 
             <label class="field">
-              <span>Control panel password</span>
+              <span data-i18n="passwordLabel">Control panel password</span>
               <div class="input-wrap">
                 <input
                   type="password" dir="ltr" spellcheck="false" autocapitalize="off" autocorrect="off"
                   name="password"
                   autocomplete="current-password"
                   placeholder="Enter your password"
+                  data-i18n-placeholder="passwordPlaceholder"
                   autofocus
                   required
                 />
-                <button type="button" class="eye-btn" aria-label="Show password" aria-pressed="false">
+                <button type="button" class="eye-btn" aria-label="Show password" data-i18n-aria-label="showPassword" aria-pressed="false">
                   <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                   <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
                 </button>
@@ -63,41 +64,41 @@
             </label>
 
             <button type="submit" class="btn btn-primary auth-submit">
-              Open workspace
+              <span data-i18n="openWorkspace">Open workspace</span>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
             </button>
 
             <% if (error) { %>
-            <div class="error" role="alert"><%= error %></div>
+            <div class="error" role="alert" data-i18n-error="<%= errorCode %>" data-i18n-n="<%= minLength %>"><%= error %></div>
             <% } %>
 
             <div class="auth-alt">
-              <button type="button" class="link-btn" id="forgot-link">Forgot password?</button>
+              <button type="button" class="link-btn" id="forgot-link" data-i18n="forgotPassword">Forgot password?</button>
             </div>
           </form>
 
           <div class="card auth-card" id="reset-card" hidden>
             <button type="button" class="gateway-back-btn" id="reset-back">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-              <span>Back to sign in</span>
+              <span data-i18n="backToSignIn">Back to sign in</span>
             </button>
             <div class="auth-head">
-              <span class="eyebrow">Password reset</span>
-              <h1>Reset your password</h1>
-              <p class="sub">
+              <span class="eyebrow" data-i18n="resetEyebrow">Password reset</span>
+              <h1 data-i18n="resetTitle">Reset your password</h1>
+              <p class="sub" data-i18n="resetSubtitle">
                 Levix sends a one-time code to your WhatsApp — the linked account's own chat.
                 The code works for 10 minutes.
               </p>
             </div>
 
             <button type="button" class="btn btn-primary auth-submit" id="reset-send">
-              Send code to WhatsApp
+              <span data-i18n="resetSend">Send code to WhatsApp</span>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
             </button>
 
             <form id="reset-form" hidden>
               <label class="field">
-                <span>Reset code</span>
+                <span data-i18n="resetCodeLabel">Reset code</span>
                 <input
                   type="text"
                   id="reset-code"
@@ -105,22 +106,25 @@
                   autocomplete="one-time-code"
                   maxlength="6"
                   placeholder="6 digits"
+                  data-i18n-placeholder="resetCodePlaceholder"
                   required
                 />
               </label>
 
               <label class="field">
-                <span>New password</span>
+                <span data-i18n="newPassword">New password</span>
                 <div class="input-wrap">
                   <input
                     type="password" dir="ltr" spellcheck="false" autocapitalize="off" autocorrect="off"
                     id="reset-pass"
                     autocomplete="new-password"
                     placeholder="At least <%= minLength %> characters"
+                    data-i18n-placeholder="minLengthPlaceholder"
+                    data-i18n-n="<%= minLength %>"
                     minlength="<%= minLength %>"
                     required
                   />
-                  <button type="button" class="eye-btn" aria-label="Show password" aria-pressed="false">
+                  <button type="button" class="eye-btn" aria-label="Show password" data-i18n-aria-label="showPassword" aria-pressed="false">
                     <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                     <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
                   </button>
@@ -128,17 +132,18 @@
               </label>
 
               <label class="field">
-                <span>Repeat password</span>
+                <span data-i18n="repeatPassword">Repeat password</span>
                 <div class="input-wrap">
                   <input
                     type="password" dir="ltr" spellcheck="false" autocapitalize="off" autocorrect="off"
                     id="reset-confirm"
                     autocomplete="new-password"
                     placeholder="Type it again"
+                    data-i18n-placeholder="repeatPlaceholder"
                     minlength="<%= minLength %>"
                     required
                   />
-                  <button type="button" class="eye-btn" aria-label="Show password" aria-pressed="false">
+                  <button type="button" class="eye-btn" aria-label="Show password" data-i18n-aria-label="showPassword" aria-pressed="false">
                     <svg class="eye-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
                     <svg class="eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c6.5 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3.5 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
                   </button>
@@ -146,7 +151,7 @@
               </label>
 
               <button type="submit" class="btn btn-primary auth-submit">
-                Set new password
+                <span data-i18n="resetSubmit">Set new password</span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
               </button>
             </form>
@@ -155,35 +160,25 @@
 
           </div>
 
-          <div class="foot"><%= brand.name %> by <%= brand.developer %> · <%= brand.studio %></div>
+          <div class="foot"><%= brand.name %> <span data-i18n="by">by</span> <%= brand.developer %> · <%= brand.studio %></div>
         </div>
       </section>
     </main>
 
+    <script src="/gateway-i18n.js"></script>
     <script src="/gateway.js"></script>
     <script>
       (function () {
-        // Android app: show back-to-app buttons, localize labels
+        var t = window.LevixGatewayI18n.t;
+
+        // Android app: show the back-to-app button. Its label is already in
+        // whichever language the page loaded in.
         var inApp = typeof window.LevixHost !== "undefined" && typeof window.LevixHost.closePanel === "function";
         if (inApp) {
-          var isAr = false;
-          try { isAr = document.documentElement.lang === "ar"; } catch(e) {}
-          var backLabel = isAr ? "العودة للتطبيق" : "Back to app";
-          var resetBackLabel = isAr ? "العودة لتسجيل الدخول" : "Back to sign in";
-          ["login-back-app"].forEach(function(id) {
-            var btn = document.getElementById(id);
-            if (btn) {
-              btn.hidden = false;
-              btn.querySelector("span").textContent = backLabel;
-              if (isAr) { btn.dir = "rtl"; btn.style.direction = "rtl"; }
-              btn.addEventListener("click", function() { window.LevixHost.closePanel(); });
-            }
-          });
-          var resetBackBtn = document.getElementById("reset-back");
-          if (resetBackBtn && isAr) {
-            resetBackBtn.querySelector("span").textContent = resetBackLabel;
-            resetBackBtn.dir = "rtl";
-            resetBackBtn.style.direction = "rtl";
+          var backBtn = document.getElementById("login-back-app");
+          if (backBtn) {
+            backBtn.hidden = false;
+            backBtn.addEventListener("click", function() { window.LevixHost.closePanel(); });
           }
         }
 
@@ -241,19 +236,16 @@
               form.hidden = false;
               document.getElementById("reset-code").focus();
             } else if (result.reason === "throttled") {
-              showError("Too many requests. Try again in " + (result.retryAfter || 60) + " seconds.");
+              showError(t("resetErrThrottled").replace("{n}", String(result.retryAfter || 60)));
             } else if (result.reason === "no_session") {
-              showError(
-                "WhatsApp isn't connected, so the code can't be sent. " +
-                  "Sign in on the server and run `levix reset-password`, or start the WhatsApp session first."
-              );
+              showError(t("resetErrNoSession"));
             } else if (result.reason === "send_failed") {
-              showError("Couldn't send the WhatsApp message. Try again in a minute.");
+              showError(t("resetErrSendFailed"));
             } else {
-              showError("Couldn't start the reset. Try again.");
+              showError(t("resetErrStart"));
             }
           } catch {
-            showError("Couldn't reach the server. Try again.");
+            showError(t("resetErrServer"));
           }
           sendBtn.disabled = false;
         });
@@ -270,7 +262,7 @@
             if (result.ok) {
               form.hidden = true;
               sendBtn.hidden = true;
-              showError("Password updated. Taking you to sign in…");
+              showError(t("resetDone"));
               setTimeout(function () {
                 window.location.href = "/";
               }, 900);
@@ -278,26 +270,32 @@
             }
             if (result.reason === "wrong_code") {
               showError(
-                "Wrong code." +
-                  (result.attemptsLeft ? " " + result.attemptsLeft + " attempts left." : "")
+                t("resetErrWrongCode") +
+                  (result.attemptsLeft
+                    ? " " + t("resetErrAttemptsLeft").replace("{n}", String(result.attemptsLeft))
+                    : "")
               );
             } else if (
               result.reason === "expired" ||
               result.reason === "no_pending" ||
               result.reason === "too_many_attempts"
             ) {
-              showError("That code is no longer valid. Send a new one.");
+              showError(t("resetErrExpired"));
               form.hidden = true;
               sendBtn.hidden = false;
             } else if (result.reason === "mismatch") {
-              showError("The two passwords don't match.");
+              showError(t("resetErrMismatch"));
             } else if (result.reason === "invalid_password") {
-              showError(result.message || "That password isn't allowed.");
+              showError(
+                window.LevixGatewayI18n.lang === "ar"
+                  ? t("resetErrInvalidPassword")
+                  : result.message || t("resetErrInvalidPassword")
+              );
             } else {
-              showError("Couldn't reset the password. Try again.");
+              showError(t("resetErrFailed"));
             }
           } catch {
-            showError("Couldn't reach the server. Try again.");
+            showError(t("resetErrServer"));
           }
         });
       })();

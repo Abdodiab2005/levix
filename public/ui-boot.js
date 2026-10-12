@@ -1,7 +1,8 @@
 // Decides lang, dir and data-theme before first paint, for the panel and
 // every gateway page. Order: the Android host's preference, then what this
-// browser saved, then the OS. A page whose text exists in one language only
-// pins it with data-page-lang on the script tag; the theme still follows.
+// browser saved, then the OS. Every gateway page is bilingual now, so none
+// passes data-page-lang; the attribute remains an escape hatch for a future
+// page whose text exists in one language only.
 (function () {
   var root = document.documentElement;
   var host = window.LevixHost;
