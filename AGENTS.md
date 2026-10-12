@@ -161,6 +161,10 @@ src/
 │   └── stickers.api.esm.js  # Sticker Studio library, packs, upload, and jobs
 ├── panel/            # login throttling, session epochs, bounded session store
 │   └── feedback.cjs  # validates + forwards Settings → Feedback to the developer
+├── diagnostics/      # opt-in feedback diagnostics + local crash reports
+│   ├── sanitize.cjs  # the one redaction pass (JIDs, numbers, tokens, paths)
+│   ├── device.cjs    # the diagnostics allowlist the preview and the send share
+│   └── crashReports.cjs # <data>/crash-reports: store, preview, send, delete
 ├── services/         # External services
 │   ├── autoDelete.cjs # Keyword auto-delete: match, revoke / delete-for-me, keepCopy
 │   ├── aiAgent.cjs   # The Gemini agent loop + provider dispatch (tools, memory, live status)
@@ -1088,8 +1092,38 @@ reloads. The gateway pages are bilingual like the SPA: English is the default
 markup, `data-i18n*` attributes carry the keys, and `public/gateway-i18n.js`
 applies the dictionary for the language `ui-boot.js` resolved (server-rendered
 errors travel as a stable code the script translates). They follow the shared
-language, RTL included. Their look stays dark in both themes: `public/dashboard.css`
-pins the dark tokens under `:root[data-theme="light"] .gateway-page`.
+language and theme, RTL included: the gateway CSS reads `--gateway-*` tokens
+defined for both themes, and a `levix-ui-prefs` event or a `storage` change from
+another tab repaints them, JavaScript-built text included, without a reload.
+
+**Diagnostics and crash reports.** Nothing leaves the device without a distinct
+action, and the two consents are separate.
+
+- Feedback carries device diagnostics only when the operator ticks "Attach
+  device & technical diagnostics". `POST /dashboard/api/feedback/diagnostics-preview`
+  returns the exact object the send forwards. `src/diagnostics/device.cjs` is
+  the one allowlist (the server's own version, Node and platform, plus the
+  Android fields from `LevixHost.getDiagnostics()` and the page's screen,
+  language and theme), 2 KB at most. Unticked, the envelope has no
+  `diagnostics` key.
+- Crash reports are schema-1 JSON files in `<data>/crash-reports/`: at most 20,
+  expiring after 7 days, written atomically. Android writes them from the
+  uncaught handler and from `ApplicationExitInfo` (`CrashReports.kt`), Node from
+  the fatal handler in `src/index.js` (before its unchanged exit), and the panel
+  through an `ErrorBoundary` and window hooks (`POST /dashboard/api/crash-reports`,
+  10 per 10 minutes). `src/diagnostics/sanitize.cjs` and `CrashSanitizer.kt` strip
+  JIDs, e-mails, long numbers, URL paths, tokens and local paths.
+- Settings > Diagnostics (`#settings/diagnostics`) shows each report's exact
+  upload JSON and sends one to `levix.leviro.net/api/crash-reports` only on
+  Send. A failure keeps it as `failed` and is never retried by itself. Android
+  asks once per process after Levix is running again (Review & send, Not now,
+  Delete); a standalone browser shows the same choice as a banner.
+- The receiving side (levix-ui) validates and re-sanitizes, stores reports in
+  SQLite for 30 days without IP addresses, groups them by fingerprint, and
+  keeps the admin list behind `CRASH_ADMIN_TOKEN`.
+- No identifier follows a device: report ids are random per report. Never add
+  a field to either path without updating the allowlists on both servers,
+  PRIVACY.md and the Play Data safety rows.
 
 Every authenticated panel session carries the current password epoch. Changing
 or resetting the password invalidates older HTTP and Socket.IO sessions before
