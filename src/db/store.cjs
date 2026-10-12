@@ -1811,6 +1811,13 @@ function listAutoDeleteLog({ ruleId, limit = 50, offset = 0 } = {}) {
     .map(autoDeleteLogRow);
 }
 
+function countAutoDeleteLog({ ruleId } = {}) {
+  if (ruleId != null) {
+    return q("SELECT COUNT(*) AS n FROM auto_delete_log WHERE rule_id = ?").get(Number(ruleId)).n;
+  }
+  return q("SELECT COUNT(*) AS n FROM auto_delete_log").get().n;
+}
+
 function clearAutoDeleteLog(ruleId) {
   if (ruleId != null) {
     const { changes } = q("DELETE FROM auto_delete_log WHERE rule_id = ?").run(Number(ruleId));
@@ -1972,6 +1979,7 @@ module.exports = {
   resetAutoDeleteCounter,
   insertAutoDeleteLog,
   listAutoDeleteLog,
+  countAutoDeleteLog,
   clearAutoDeleteLog,
   capAutoDeleteLog,
   clearAutoDeleteOnUnlink,

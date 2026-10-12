@@ -408,11 +408,13 @@ function listLog({ ruleId, limit, offset } = {}) {
       throw new AutoDeleteError("offset must be a non-negative integer");
     }
   }
-  return store.listAutoDeleteLog({
+  const log = store.listAutoDeleteLog({
     ruleId: parsedRuleId,
     limit: parsedLimit,
     offset: parsedOffset,
   });
+  const total = store.countAutoDeleteLog({ ruleId: parsedRuleId });
+  return { log, total };
 }
 
 function clearLog(ruleId) {

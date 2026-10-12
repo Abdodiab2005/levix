@@ -455,7 +455,7 @@ export const api = {
     if (query.limit !== undefined) params.set("limit", String(query.limit));
     if (query.offset !== undefined) params.set("offset", String(query.offset));
     const qs = params.toString();
-    return api.get<{ success: boolean; log: AutoDeleteLogEntry[] }>(
+    return api.get<{ success: boolean; log: AutoDeleteLogEntry[]; total: number }>(
       `/auto-delete/log${qs ? `?${qs}` : ""}`,
     );
   },

@@ -492,6 +492,49 @@ section("retention sweep, cap, unlink");
   ok("session unlink keeps rules", Boolean(autoDelete.getRule(rule.id)));
 }
 
+section("kept copies total");
+
+{
+  wipeRules();
+  store.clearAutoDeleteLog();
+  const ruleA = autoDelete.createRule({ keywords: ["one"], keepCopy: true });
+  const ruleB = autoDelete.createRule({ keywords: ["two"], keepCopy: true });
+  for (let i = 0; i < 3; i += 1) {
+    store.insertAutoDeleteLog({
+      ruleId: ruleA.id,
+      chatJid: DM,
+      sender: DM,
+      text: `a${i}`,
+      mediaType: "",
+      mode: "revoke",
+    });
+  }
+  for (let i = 0; i < 2; i += 1) {
+    store.insertAutoDeleteLog({
+      ruleId: ruleB.id,
+      chatJid: DM,
+      sender: DM,
+      text: `b${i}`,
+      mediaType: "",
+      mode: "revoke",
+    });
+  }
+  equal("counts every kept copy", store.countAutoDeleteLog(), 5);
+  equal("counts kept copies for one rule", store.countAutoDeleteLog({ ruleId: ruleA.id }), 3);
+  const all = autoDelete.listLog({ limit: 2, offset: 0 });
+  equal("listLog returns a server page", all.log.length, 2);
+  equal("listLog returns the unfiltered total", all.total, 5);
+  const filtered = autoDelete.listLog({ ruleId: ruleB.id, limit: 2, offset: 0 });
+  equal(
+    "filtered page holds only that rule",
+    filtered.log.every((row) => row.ruleId === ruleB.id),
+    true,
+  );
+  equal("filtered total follows ruleId", filtered.total, 2);
+  wipeRules();
+  store.clearAutoDeleteLog();
+}
+
 section("command replies in both languages");
 
 {
@@ -725,6 +768,19 @@ section("API validation");
 
     res = await http.call("/dashboard/api/auto-delete/log?limit=10");
     equal("log lists", res.status, 200);
+    {
+      const body = await res.json();
+      equal("log returns a numeric total", typeof body.total, "number");
+      ok("log response keeps the entries field", Array.isArray(body.log));
+    }
+
+    res = await http.call(`/dashboard/api/auto-delete/log?ruleId=${id}&limit=10`);
+    equal("log filtered by rule lists", res.status, 200);
+    {
+      const body = await res.json();
+      equal("filtered log total follows ruleId", body.total, 0);
+      ok("filtered log stays an array", Array.isArray(body.log));
+    }
 
     res = await http.call("/dashboard/api/auto-delete/log", { method: "DELETE" });
     equal("clear log", res.status, 200);
