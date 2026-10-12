@@ -4,10 +4,11 @@
 // itself fails to load: the page works without either one.
 
 (function () {
-  var isAr = false;
-  try { isAr = document.documentElement.lang === "ar"; } catch (e) {}
-  var showLabel = isAr ? "إظهار كلمة المرور" : "Show password";
-  var hideLabel = isAr ? "إخفاء كلمة المرور" : "Hide password";
+  // The strings live in gateway-i18n.js, which has already run by the time
+  // this file loads; the literals are only a fallback if it did not.
+  var i18n = window.LevixGatewayI18n;
+  var showLabel = i18n ? i18n.t("showPassword") : "Show password";
+  var hideLabel = i18n ? i18n.t("hidePassword") : "Hide password";
   document.querySelectorAll(".eye-btn").forEach(function (btn) {
     btn.setAttribute("aria-label", showLabel);
     btn.setAttribute("aria-pressed", "false");
