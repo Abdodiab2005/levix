@@ -390,7 +390,6 @@ export const translations = {
     scopeGroupSub: "أوامر المجموعات الفرعية",
     scopeGeneral: "الأوامر العامة",
     sortStatus: "الحالة",
-    clearFilters: "مسح التصفية",
     resultCountOf: "{n} من {total}",
 
     // Recipient selector & Schedules
@@ -1241,7 +1240,6 @@ export const translations = {
     scopeGroupSub: "Group sub-commands",
     scopeGeneral: "General commands",
     sortStatus: "Status",
-    clearFilters: "Clear filters",
     resultCountOf: "{n} of {total}",
 
     // Recipient selector & Schedules
