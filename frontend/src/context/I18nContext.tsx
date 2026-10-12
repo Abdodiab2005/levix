@@ -5,30 +5,63 @@ import { type Language, translations } from "../i18n/translations";
 
 interface I18nContextType {
   language: Language;
+  theme: "light" | "dark";
   direction: "rtl" | "ltr";
   setLanguage: (lang: Language) => void;
+  setTheme: (theme: "light" | "dark") => void;
   t: (key: keyof (typeof translations)["en"], fallback?: string) => string;
 }
 
 const I18nContext = createContext<I18nContextType | null>(null);
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<Language>(() => {
-    const saved = localStorage.getItem("levix_lang");
-    if (saved === "ar" || saved === "en") return saved;
-    return navigator.language.startsWith("ar") ? "ar" : "en";
-  });
+  const [language, setLanguageState] = useState<Language>(() =>
+    document.documentElement.lang === "ar" ? "ar" : "en",
+  );
+  const [theme, setThemeState] = useState<"light" | "dark">(() =>
+    document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark",
+  );
 
   const direction = language === "ar" ? "rtl" : "ltr";
 
   useEffect(() => {
-    localStorage.setItem("levix_lang", language);
-    document.documentElement.lang = language;
-    document.documentElement.dir = direction;
-  }, [language, direction]);
+    const onHostPrefs = (event: Event) => {
+      const next = (event as CustomEvent<{ language?: Language; theme?: "light" | "dark" }>).detail;
+      if (next?.language === "ar" || next?.language === "en") setLanguageState(next.language);
+      if (next?.theme === "light" || next?.theme === "dark") setThemeState(next.theme);
+    };
+    window.addEventListener("levix-ui-prefs", onHostPrefs);
+    return () => window.removeEventListener("levix-ui-prefs", onHostPrefs);
+  }, []);
+
+  const notifyHost = (
+    nextLanguage: Language,
+    nextTheme: "light" | "dark",
+    field: "language" | "theme",
+  ) => {
+    const host = (
+      window as Window & {
+        LevixHost?: { setUiPrefs?: (language: string, theme: string, field: string) => void };
+      }
+    ).LevixHost;
+    host?.setUiPrefs?.(nextLanguage, nextTheme, field);
+  };
 
   const setLanguage = (lang: Language) => {
+    if (lang === language) return;
     setLanguageState(lang);
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+    localStorage.setItem("levix_lang", lang);
+    notifyHost(lang, theme, "language");
+  };
+
+  const setTheme = (next: "light" | "dark") => {
+    if (next === theme) return;
+    setThemeState(next);
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("levix_theme", next);
+    notifyHost(language, next, "theme");
   };
 
   const t = useMemo(() => {
@@ -39,7 +72,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [language]);
 
   return (
-    <I18nContext.Provider value={{ language, direction, setLanguage, t }}>
+    <I18nContext.Provider value={{ language, theme, direction, setLanguage, setTheme, t }}>
       {children}
     </I18nContext.Provider>
   );

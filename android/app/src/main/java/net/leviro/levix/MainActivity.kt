@@ -16,9 +16,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
-import androidx.core.os.LocaleListCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import net.leviro.levix.media.MediaHubActivity
@@ -80,11 +78,10 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Edge-to-edge on every Android version, not only the 15+ that force
-        // it; the root pads itself from the insets below. Levix is dark in
-        // either system theme, so the bar icons stay light.
+        // it; the root pads itself from the insets below.
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
         )
         setContentView(R.layout.activity_main)
 
@@ -103,12 +100,7 @@ class MainActivity : AppCompatActivity() {
         statusPillText = findViewById(R.id.statusPillText)
         btnLanguage = findViewById(R.id.btnLanguage)
 
-        val currentLocales = AppCompatDelegate.getApplicationLocales()
-        val isArabic = if (!currentLocales.isEmpty) {
-            currentLocales[0]?.language?.startsWith("ar") == true
-        } else {
-            resources.configuration.locales[0]?.language?.startsWith("ar") == true
-        }
+        val isArabic = UiPrefs.language(this) == "ar"
         
         val cardLanguageSwitch = findViewById<View?>(R.id.cardLanguageSwitch)
         val btnLanguageToggleCard = findViewById<TextView?>(R.id.btnLanguageToggleCard)
@@ -117,12 +109,7 @@ class MainActivity : AppCompatActivity() {
         val showLanguageDialog = {
             val languages = arrayOf(getString(R.string.lang_arabic), getString(R.string.lang_english))
             val languageTags = arrayOf("ar", "en")
-            val locales = AppCompatDelegate.getApplicationLocales()
-            val isCurrentAr = if (!locales.isEmpty) {
-                locales[0]?.language?.startsWith("ar") == true
-            } else {
-                resources.configuration.locales[0]?.language?.startsWith("ar") == true
-            }
+            val isCurrentAr = UiPrefs.language(this) == "ar"
             val currentIndex = if (isCurrentAr) 0 else 1
 
             com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
@@ -131,7 +118,7 @@ class MainActivity : AppCompatActivity() {
                     dialog.dismiss()
                     if (which != currentIndex) {
                         val targetTag = languageTags[which]
-                        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(targetTag))
+                        UiPrefs.set(this, targetTag, UiPrefs.theme(this), "language")
                     }
                 }
                 .setNegativeButton(android.R.string.cancel, null)
@@ -141,6 +128,13 @@ class MainActivity : AppCompatActivity() {
         btnLanguage.setOnClickListener { showLanguageDialog() }
         cardLanguageSwitch?.setOnClickListener { showLanguageDialog() }
         btnLanguageToggleCard?.setOnClickListener { showLanguageDialog() }
+
+        val themeButton = findViewById<TextView>(R.id.btnThemeToggleCard)
+        themeButton.text = getString(if (UiPrefs.theme(this) == "dark") R.string.theme_dark else R.string.theme_light)
+        findViewById<View>(R.id.cardThemeSwitch).setOnClickListener {
+            val next = if (UiPrefs.theme(this) == "dark") "light" else "dark"
+            UiPrefs.set(this, UiPrefs.language(this), next, "theme")
+        }
 
         heroSubtitleText = findViewById(R.id.heroSubtitleText)
         panelButton = findViewById(R.id.panelButton)

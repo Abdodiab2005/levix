@@ -16,6 +16,11 @@
     <string name="btn_stop_host">إيقاف المساعد</string>
 
     <!-- Sections -->
+    <string name="pref_theme_title">مظهر التطبيق</string>
+    <string name="pref_theme_sub">اختر المظهر الفاتح أو الداكن</string>
+    <string name="dialog_choose_theme">اختر المظهر</string>
+    <string name="theme_light">فاتح</string>
+    <string name="theme_dark">داكن</string>
     <string name="pref_language_title">لغة التطبيق</string>
     <string name="pref_language_sub">التبديل بين العربية والإنجليزية مع دعم كامل لاتجاه RTL</string>
     <string name="pref_language_btn">English</string>

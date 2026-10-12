@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ripple xmlns:android="http://schemas.android.com/apk/res/android"
-    android:color="#30FF6B78">
+    android:color="@color/levix_ripple_danger">
     <item>
         <shape android:shape="rectangle">
             <solid android:color="@color/levix_danger_soft" />

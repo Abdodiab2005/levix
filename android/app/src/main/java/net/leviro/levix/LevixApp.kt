@@ -5,6 +5,7 @@ import android.app.Application
 class LevixApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        UiPrefs.restore(this)
         HostLog.init(this)
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
