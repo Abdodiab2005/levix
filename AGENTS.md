@@ -1072,6 +1072,21 @@ public IP can't be claimed by whoever finds the port first. See "Configuration"
 for how a value resolves. Browser mutations must be same-origin; an opaque
 `Origin: null` request cannot use the localhost shortcut to claim first run.
 
+**Language and theme.** `public/ui-boot.js` is the first element in the
+`<head>` of the SPA and every gateway page. It sets `lang`, `dir` and
+`data-theme` before CSS paints, from the Android host
+(`LevixHost.getUiPrefs()`), then `levix_lang` / `levix_theme` in
+localStorage, then the OS (`navigator.language`, `prefers-color-scheme`,
+followed live until the user picks). React reads the result off `<html>`
+(`I18nContext` owns both language and theme). Inside the app a user change
+calls `LevixHost.setUiPrefs(language, theme, field)`, which accepts only
+`ar|en` and `light|dark`; native changes come back as a `levix-ui-prefs`
+event and never call the setter again. Android keeps the language in
+AppCompat's application locales and the theme in `UiPrefs`; `PanelActivity`
+handles locale, layoutDirection and uiMode itself so the WebView never
+reloads. Login, setup and QR are English only, so their boot tag carries
+`data-page-lang="en"` and they follow the theme alone.
+
 Every authenticated panel session carries the current password epoch. Changing
 or resetting the password invalidates older HTTP and Socket.IO sessions before
 more QR or account data can be pushed.
