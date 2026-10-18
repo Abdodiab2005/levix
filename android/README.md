@@ -83,3 +83,29 @@ Build a single ABI locally with `LEVIX_ANDROID_ABIS=arm64-v8a ./gradlew ...`.
   - `LEVIX_OPEN_BROWSER=0`
   - `PORT=3001`
 - Host logs: Logcat tag `LevixHost`, and `/data/data/net.leviro.levix/files/host.log`.
+
+## Isolated device QA
+
+To test without replacing an installed Levix or touching its WhatsApp account:
+
+```bash
+LEVIX_ANDROID_ABIS=arm64-v8a ./gradlew :app:testDebugUnitTest :app:assembleDebug -PlevixIsolatedDebug=true
+adb -s <device-serial> install -r app/build/outputs/apk/debug/levix-android-arm64.apk
+adb -s <device-serial> shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n net.leviro.levix.dev/net.leviro.levix.MainActivity
+```
+
+This opt-in debug build is labeled **Levix QA**, uses `net.leviro.levix.dev`,
+and has separate private data, credentials and panel storage. It cannot verify
+an existing production WhatsApp connection. Do not pair an account just to
+force a connected UI test; `HomePresentationTest` covers those states without
+changing a live account. Omit the property for the normal package identity.
+
+The home screen projects `HostState.Snapshot` through `HomePresentation`.
+Process startup, engine readiness and WhatsApp connectivity are separate facts.
+The service remains the lifecycle owner; pairing stays in the panel's
+`#connection` route. The Android bridge reports the initial session snapshot
+as well as subsequent transitions, including a fresh account's idle state.
+
+Arabic UI typography uses bundled IBM Plex Sans Arabic (OFL-1.1); the license
+is included in `app/src/main/assets/IBM-Plex-OFL.txt`. See
+[ADAPTIVE_HOME_QA.md](ADAPTIVE_HOME_QA.md) for implementation and device evidence.

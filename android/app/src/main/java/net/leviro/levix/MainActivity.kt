@@ -1,5 +1,6 @@
 package net.leviro.levix
 
+import android.animation.ValueAnimator
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -17,6 +18,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.view.AccessibilityDelegateCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.Lifecycle
@@ -26,17 +29,16 @@ import net.leviro.levix.media.MediaHubActivity
 class MainActivity : AppCompatActivity() {
     private val uiHandler = Handler(Looper.getMainLooper())
 
-    // Top Status Pill
-    private lateinit var statusPill: View
-    private lateinit var statusDot: View
-    private lateinit var statusPillText: TextView
-    private lateinit var btnLanguage: View
+    // Header preferences share the app theme and locale.
+    private lateinit var headerThemeControl: ImageView
 
-    // Hero Section
+    // Adaptive activation card: start circle, progress, next action, separate stop.
     private lateinit var heroSubtitleText: TextView
+    private lateinit var primaryAction: View
+    private lateinit var primaryActionIcon: ImageView
+    private lateinit var primaryActionLabel: TextView
+    private lateinit var stopCorner: View
     private lateinit var panelButton: Button
-    private lateinit var startButton: Button
-    private lateinit var stopButton: Button
     private lateinit var statusHint: TextView
 
     // Status Overview Tiles
@@ -48,7 +50,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var engineBadge: TextView
     private lateinit var engineDetailText: TextView
 
-    // Battery Guard
+    // Battery Guard — the one card that can grow into a warning banner.
     private lateinit var cardBattery: View
     private lateinit var batteryIcon: ImageView
     private lateinit var batteryHint: TextView
@@ -56,22 +58,23 @@ class MainActivity : AppCompatActivity() {
     private lateinit var batteryButton: Button
 
     // Diagnostics & Logs
-    private lateinit var btnShareLogs: Button
+    private lateinit var cardDiagnostics: View
 
-    private val refresh = object : Runnable {
-        override fun run() {
-            render(HostState.snapshot)
-            uiHandler.postDelayed(this, 1_000L)
-        }
-    }
+    private var batteryRestricted: Boolean? = null
+    private var requestedAt = 0L
+    private var renderedState: HomePresentation.State? = null
+    private var unsubscribe: (() -> Unit)? = null
+    private val timeout = Runnable { render(HostState.snapshot) }
 
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) {
             statusHint.visibility = View.GONE
-            LevixHostService.start(this)
+            startHost()
         } else {
+            requestedAt = 0L
+            render(HostState.snapshot)
             statusHint.text = getString(R.string.notifications_required)
             statusHint.visibility = View.VISIBLE
         }
@@ -97,44 +100,20 @@ class MainActivity : AppCompatActivity() {
             windowInsets
         }
 
+        requestedAt = savedInstanceState?.getLong("requestedAt") ?: 0L
+
         // Bind views
-        statusPill = findViewById(R.id.statusPill)
-        statusDot = findViewById(R.id.statusDot)
-        statusPillText = findViewById(R.id.statusPillText)
-        btnLanguage = findViewById(R.id.btnLanguage)
 
-        val isArabic = UiPrefs.language(this) == "ar"
-        
-        val cardLanguageSwitch = findViewById<View?>(R.id.cardLanguageSwitch)
-        val btnLanguageToggleCard = findViewById<TextView?>(R.id.btnLanguageToggleCard)
-        btnLanguageToggleCard?.text = if (isArabic) "العربية" else "English"
-
-        val showLanguageDialog = {
-            val languages = arrayOf(getString(R.string.lang_arabic), getString(R.string.lang_english))
-            val languageTags = arrayOf("ar", "en")
-            val isCurrentAr = UiPrefs.language(this) == "ar"
-            val currentIndex = if (isCurrentAr) 0 else 1
-
-            com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.dialog_choose_language)
-                .setSingleChoiceItems(languages, currentIndex) { dialog, which ->
-                    dialog.dismiss()
-                    if (which != currentIndex) {
-                        val targetTag = languageTags[which]
-                        UiPrefs.set(this, targetTag, UiPrefs.theme(this), "language")
-                    }
-                }
-                .setNegativeButton(android.R.string.cancel, null)
-                .show()
+        // Language and appearance live in the header and nowhere else, as icons
+        // only: the strip has no room for a label beside the brand, and each one
+        // flips on tap rather than asking a question with two answers.
+        headerThemeControl = findViewById(R.id.headerThemeControl)
+        paintThemeIcon()
+        findViewById<View>(R.id.headerLanguageControl).setOnClickListener {
+            val next = if (UiPrefs.language(this) == "ar") "en" else "ar"
+            UiPrefs.set(this, next, UiPrefs.theme(this), "language")
         }
-
-        btnLanguage.setOnClickListener { showLanguageDialog() }
-        cardLanguageSwitch?.setOnClickListener { showLanguageDialog() }
-        btnLanguageToggleCard?.setOnClickListener { showLanguageDialog() }
-
-        val themeButton = findViewById<TextView>(R.id.btnThemeToggleCard)
-        themeButton.text = getString(if (UiPrefs.theme(this) == "dark") R.string.theme_dark else R.string.theme_light)
-        findViewById<View>(R.id.cardThemeSwitch).setOnClickListener {
+        headerThemeControl.setOnClickListener {
             val next = if (UiPrefs.theme(this) == "dark") "light" else "dark"
             UiPrefs.set(this, UiPrefs.language(this), next, "theme")
         }
@@ -143,9 +122,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         heroSubtitleText = findViewById(R.id.heroSubtitleText)
+        primaryAction = findViewById(R.id.btnPrimaryAction)
+        primaryActionIcon = findViewById(R.id.primaryActionIcon)
+        primaryActionLabel = findViewById(R.id.primaryActionLabel)
+        stopCorner = findViewById(R.id.btnStopCorner)
         panelButton = findViewById(R.id.panelButton)
-        startButton = findViewById(R.id.startButton)
-        stopButton = findViewById(R.id.stopButton)
         statusHint = findViewById(R.id.statusHint)
 
         cardWhatsApp = findViewById(R.id.cardWhatsApp)
@@ -163,18 +144,25 @@ class MainActivity : AppCompatActivity() {
         batteryBadge = findViewById(R.id.batteryBadge)
         batteryButton = findViewById(R.id.batteryButton)
 
-        btnShareLogs = findViewById(R.id.btnShareLogs)
+        cardDiagnostics = findViewById(R.id.cardDiagnostics)
 
-        // Listeners
-        startButton.setOnClickListener { requestStart() }
-        stopButton.setOnClickListener { LevixHostService.stop(this) }
-        panelButton.setOnClickListener { openPanel() }
-        findViewById<View>(R.id.cardMediaHub).setOnClickListener { startActivity(Intent(this, MediaHubActivity::class.java)) }
-        batteryButton.setOnClickListener { HostBattery.requestUnrestricted(this) }
-
-        btnShareLogs.setOnClickListener {
-            HostLogShare.share(this)
+        ViewCompat.setAccessibilityDelegate(primaryAction, object : AccessibilityDelegateCompat() {
+            override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfoCompat) {
+                super.onInitializeAccessibilityNodeInfo(host, info)
+                info.className = Button::class.java.name
+            }
+        })
+        primaryAction.setOnClickListener { performPrimaryAction() }
+        stopCorner.setOnClickListener {
+            stopCorner.isEnabled = false
+            LevixHostService.stop(this)
         }
+        panelButton.setOnClickListener { performPrimaryAction() }
+        findViewById<View>(R.id.cardMediaHub).setOnClickListener {
+            startActivity(Intent(this, MediaHubActivity::class.java))
+        }
+        batteryButton.setOnClickListener { HostBattery.requestUnrestricted(this) }
+        cardDiagnostics.setOnClickListener { LogsActionsSheet.show(this) }
 
         render(HostState.snapshot)
         maybeOpenPanel(intent)
@@ -207,6 +195,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * The appearance control shows the theme that is on, not the one it would
+     * switch to: a sun while the phone is in light, a moon while it is dark.
+     */
+    private fun paintThemeIcon() {
+        headerThemeControl.setImageResource(
+            if (UiPrefs.theme(this) == "dark") R.drawable.ic_moon else R.drawable.ic_sun,
+        )
+    }
+
     private fun openPanel() {
         val url = HostState.snapshot.panelUrl ?: "http://127.0.0.1:3001/"
         startActivity(
@@ -223,15 +221,49 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
-        uiHandler.post(refresh)
+        unsubscribe = HostState.listen {
+            uiHandler.post {
+                if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) render(HostState.snapshot)
+            }
+        }
     }
 
     override fun onStop() {
         super.onStop()
-        uiHandler.removeCallbacks(refresh)
+        unsubscribe?.invoke()
+        unsubscribe = null
+        uiHandler.removeCallbacks(timeout)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putLong("requestedAt", requestedAt)
+        super.onSaveInstanceState(outState)
+    }
+
+    private fun performPrimaryAction() {
+        when (HomePresentation.from(HostState.snapshot, System.currentTimeMillis(), requestedAt).action) {
+            HomePresentation.Action.START -> requestStart()
+            HomePresentation.Action.CONNECTION -> PanelActivity.open(this, "connection")
+            HomePresentation.Action.PANEL -> openPanel()
+            HomePresentation.Action.DIAGNOSTICS -> LogsActionsSheet.show(this)
+            HomePresentation.Action.NONE -> Unit
+        }
+    }
+
+    private fun startHost() {
+        try {
+            LevixHostService.start(this)
+        } catch (error: RuntimeException) {
+            requestedAt = 0L
+            render(HostState.snapshot)
+            statusHint.setText(R.string.home_start_rejected)
+            statusHint.visibility = View.VISIBLE
+        }
     }
 
     private fun requestStart() {
+        requestedAt = System.currentTimeMillis()
+        render(HostState.snapshot)
         if (Build.VERSION.SDK_INT >= 33) {
             val granted = ContextCompat.checkSelfPermission(
                 this,
@@ -243,17 +275,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
         statusHint.visibility = View.GONE
-        LevixHostService.start(this)
+        startHost()
     }
 
-
-
     private fun render(snapshot: HostState.Snapshot) {
-        // 1. Top Status Pill
-        renderStatusPill(snapshot)
-
-        // 2. Hero Section
-        renderHeroSection(snapshot)
+        if (snapshot.running) requestedAt = 0L
+        renderHome(snapshot)
 
         // 3. WhatsApp Tile
         renderWhatsAppTile(snapshot)
@@ -261,7 +288,7 @@ class MainActivity : AppCompatActivity() {
         // 4. Bot Engine Tile
         renderEngineTile(snapshot)
 
-        // 5. Battery Protection Card
+        // 5. Battery Guard
         renderBatteryCard()
         maybePromptForCrash(snapshot)
     }
@@ -284,85 +311,81 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun renderStatusPill(snapshot: HostState.Snapshot) {
-        when {
-            snapshot.whatsAppState == "connected" -> {
-                statusDot.setBackgroundResource(R.drawable.ic_dot_green)
-                statusPillText.text = getString(R.string.status_connected)
-                statusPillText.setTextColor(ContextCompat.getColor(this, R.color.levix_ok))
-            }
-            snapshot.running -> {
-                statusDot.setBackgroundResource(R.drawable.ic_dot_blue)
-                statusPillText.text = getString(R.string.status_running)
-                statusPillText.setTextColor(ContextCompat.getColor(this, R.color.levix_cyan))
-            }
-            else -> {
-                statusDot.setBackgroundResource(R.drawable.ic_dot_red)
-                statusPillText.text = getString(R.string.status_stopped)
-                statusPillText.setTextColor(ContextCompat.getColor(this, R.color.levix_text_muted))
+    private fun renderHome(snapshot: HostState.Snapshot) {
+        val now = System.currentTimeMillis()
+        val home = HomePresentation.from(snapshot, now, requestedAt)
+        val stopped = home.action == HomePresentation.Action.START
+        val good = home.state == HomePresentation.State.READY
+        val bad = home.state in listOf(HomePresentation.State.FAILED, HomePresentation.State.EXPIRED)
+        val changed = renderedState != home.state
+        renderedState = home.state
+        val color = ContextCompat.getColor(this, when {
+            good -> R.color.levix_ok
+            bad -> R.color.levix_danger
+            else -> R.color.levix_cyan
+        })
+        // The hero is the single summary. Detailed engine/session facts stay in their tiles.
+        findViewById<TextView>(R.id.homeTitle).apply {
+            setText(home.title)
+            setTextColor(color)
+            if (changed && isLaidOut && ValueAnimator.areAnimatorsEnabled()) {
+                alpha = 0.5f
+                animate().alpha(1f).setDuration(180L).start()
             }
         }
-    }
-
-    private fun renderHeroSection(snapshot: HostState.Snapshot) {
-        if (snapshot.running) {
-            heroSubtitleText.text = getString(R.string.hero_subtitle_running)
-            startButton.isEnabled = false
-            stopButton.isEnabled = true
-            panelButton.isEnabled = snapshot.levixReady || snapshot.panelUrl != null
-        } else {
-            heroSubtitleText.text = getString(R.string.hero_subtitle_stopped)
-            startButton.isEnabled = true
-            stopButton.isEnabled = false
-            panelButton.isEnabled = false
+        heroSubtitleText.setText(home.body)
+        findViewById<TextView>(R.id.activationSteps).apply {
+            visibility = if (good) View.GONE else View.VISIBLE
+            text = getString(when (home.step) {
+                1 -> R.string.home_step_start
+                else -> R.string.home_step_connect
+            })
+        }
+        findViewById<View>(R.id.startCircleContainer).visibility = if (stopped) View.VISIBLE else View.GONE
+        primaryAction.isEnabled = stopped
+        val density = resources.displayMetrics.density
+        val available = resources.displayMetrics.widthPixels - (80 * density).toInt()
+        val diameter = ((192 * resources.configuration.fontScale.coerceIn(1f, 1.4f)) * density).toInt().coerceAtMost(available)
+        if (primaryAction.layoutParams.width != diameter) {
+            primaryAction.layoutParams = primaryAction.layoutParams.apply { width = diameter; height = diameter }
+        }
+        primaryAction.contentDescription = getString(R.string.btn_start_host)
+        primaryActionIcon.setColorFilter(ContextCompat.getColor(this, R.color.levix_on_gradient))
+        primaryActionLabel.setText(R.string.btn_start_host)
+        findViewById<View>(R.id.homeProgress).visibility = if (home.busy) View.VISIBLE else View.GONE
+        panelButton.visibility = if (stopped) View.GONE else View.VISIBLE
+        panelButton.setText(home.actionLabel)
+        panelButton.isEnabled = home.action != HomePresentation.Action.NONE
+        stopCorner.visibility = if (snapshot.running) View.VISIBLE else View.GONE
+        stopCorner.isEnabled = snapshot.running
+        // A one-shot deadline replaces the unconditional one-second redraw loop.
+        uiHandler.removeCallbacks(timeout)
+        if (home.busy) {
+            val since = if (!snapshot.running) requestedAt else if (home.step == 1) snapshot.startedAtMs else snapshot.whatsAppSinceMs
+            uiHandler.postDelayed(timeout, (since + HomePresentation.WAIT_MS - now).coerceAtLeast(1L))
         }
     }
 
     private fun renderWhatsAppTile(snapshot: HostState.Snapshot) {
-        if (!snapshot.running) {
-            whatsAppBadge.text = getString(R.string.status_offline).uppercase()
-            whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_text_muted))
-            whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_offline)
-            return
+        val home = HomePresentation.from(snapshot, System.currentTimeMillis(), requestedAt)
+        val label = when {
+            !snapshot.running -> R.string.status_offline
+            home.step == 1 -> R.string.status_unknown_short
+            home.state == HomePresentation.State.READY -> R.string.status_connected
+            home.state == HomePresentation.State.PAIRING -> R.string.status_pairing_short
+            home.state == HomePresentation.State.EXPIRED -> R.string.status_expired_short
+            home.state == HomePresentation.State.FAILED -> R.string.status_failed
+            home.state == HomePresentation.State.RECONNECTING -> R.string.status_reconnecting
+            home.state == HomePresentation.State.PAUSED -> R.string.status_paused
+            home.busy -> R.string.status_starting
+            else -> R.string.status_unknown_short
         }
-
-        when (snapshot.whatsAppState) {
-            "connected" -> {
-                whatsAppBadge.text = getString(R.string.status_connected).uppercase()
-                whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_ok))
-                whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_connected_short)
-            }
-            "waiting_for_qr" -> {
-                whatsAppBadge.text = getString(R.string.status_pairing).uppercase()
-                whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_warn))
-                whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_pairing_short)
-            }
-            "paused" -> {
-                whatsAppBadge.text = getString(R.string.status_paused).uppercase()
-                whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_warn))
-                whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_paused_short)
-            }
-            "reconnecting" -> {
-                whatsAppBadge.text = getString(R.string.status_reconnecting).uppercase()
-                whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_warn))
-                whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_reconnecting_short)
-            }
-            "retry_exhausted" -> {
-                whatsAppBadge.text = getString(R.string.status_failed).uppercase()
-                whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_danger))
-                whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_failed)
-            }
-            "logged_out" -> {
-                whatsAppBadge.text = getString(R.string.status_expired).uppercase()
-                whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_danger))
-                whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_expired)
-            }
-            else -> {
-                whatsAppBadge.text = getString(R.string.status_starting).uppercase()
-                whatsAppBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_cyan))
-                whatsAppDetailText.text = getString(R.string.card_whatsapp_desc_connecting)
-            }
-        }
+        whatsAppBadge.setText(label)
+        whatsAppBadge.setTextColor(ContextCompat.getColor(this,
+            if (home.state == HomePresentation.State.READY) R.color.levix_ok else R.color.levix_text_muted))
+        whatsAppDetailText.setText(if (!snapshot.running || home.step == 1) R.string.card_whatsapp_desc_offline
+            else if (home.state == HomePresentation.State.READY) R.string.card_whatsapp_desc_connected_short
+            else R.string.home_connection_details)
     }
 
     private fun renderEngineTile(snapshot: HostState.Snapshot) {
@@ -373,37 +396,49 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        if (snapshot.levixReady) {
+        if (snapshot.levixReady && snapshot.nodeAlive && snapshot.nodeError == null) {
             engineBadge.text = getString(R.string.status_operational).uppercase()
             engineBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_ok))
             engineDetailText.text = getString(R.string.card_engine_desc_running_short)
+        } else if (snapshot.nodeError != null) {
+            engineBadge.setText(R.string.status_failed)
+            engineBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_danger))
+            engineDetailText.setText(R.string.home_engine_error_body)
         } else {
-            engineBadge.text = getString(R.string.status_starting).uppercase()
+            val home = HomePresentation.from(snapshot, System.currentTimeMillis(), requestedAt)
+            engineBadge.setText(if (home.busy) R.string.status_starting else R.string.status_unknown_short)
             engineBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_cyan))
-            engineDetailText.text = getString(R.string.card_engine_desc_starting_short)
+            engineDetailText.setText(if (home.busy) R.string.card_engine_desc_starting_short else R.string.home_start_timeout)
         }
     }
 
+    /** A restriction gets a fix action; an exemption stays a quiet health fact. */
     private fun renderBatteryCard() {
-        val unrestricted = HostBattery.isUnrestricted(this)
-        if (unrestricted) {
+        val restricted = !HostBattery.isUnrestricted(this)
+        if (batteryRestricted == restricted) return
+        batteryRestricted = restricted
+
+        if (restricted) {
+            cardBattery.setBackgroundResource(R.drawable.bg_banner_warn)
+            batteryBadge.text = getString(R.string.status_restricted).uppercase()
+            batteryBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_warn))
+            batteryIcon.setColorFilter(ContextCompat.getColor(this, R.color.levix_warn))
+            batteryHint.text = getString(R.string.battery_hint)
+            batteryButton.visibility = View.VISIBLE
+            batteryButton.text = getString(R.string.btn_battery)
+        } else {
+            cardBattery.setBackgroundResource(R.drawable.bg_card_panel)
             batteryBadge.text = getString(R.string.status_protected).uppercase()
             batteryBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_ok))
             batteryIcon.setColorFilter(ContextCompat.getColor(this, R.color.levix_ok))
             batteryHint.text = getString(R.string.battery_ok_short)
             batteryButton.visibility = View.GONE
-        } else {
-            batteryBadge.text = getString(R.string.status_restricted).uppercase()
-            batteryBadge.setTextColor(ContextCompat.getColor(this, R.color.levix_warn))
-            batteryIcon.setColorFilter(ContextCompat.getColor(this, R.color.levix_warn))
-            batteryHint.text = getString(R.string.battery_restricted_hint)
-            batteryButton.visibility = View.VISIBLE
-            batteryButton.text = getString(R.string.btn_battery)
         }
     }
 
     companion object {
         const val EXTRA_OPEN_PANEL = "openPanel"
+
         private var crashPromptShown = false
     }
 }

@@ -4,20 +4,16 @@ import { equal, finish, ok, section, useTempDataDir } from "./harness.mjs";
 useTempDataDir("new-features");
 
 const require = createRequire(import.meta.url);
-const {
-  formatMarkdownForWhatsApp,
-  convertMarkdownTables,
-  parseMarkdownTable,
-} = require("../src/utils/markdownParser.cjs");
+const { formatMarkdownForWhatsApp } = require("../src/utils/markdownParser.cjs");
 
 section("Markdown to WhatsApp formatting");
 
-const input = "This is **bold**, this is __italic__, this is ~~strikethrough~~, and # Title";
+const input = "This is **bold**, this is __italic__, this is ~~strikethrough~~, and\n# Title";
 const output = formatMarkdownForWhatsApp(input);
 equal(
   "formats bold, italic, strike and headings",
   output,
-  "This is *bold*, this is _italic_, this is ~strikethrough~, and *Title*",
+  "This is *bold*, this is _italic_, this is ~strikethrough~, and\n*Title*",
 );
 
 const codeInput = "Here is `**not bold**` and ```\n**not bold either**\n``` but **this is**";

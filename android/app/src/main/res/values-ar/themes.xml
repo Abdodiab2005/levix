@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Levix" parent="Theme.Levix.Base">
+        <item name="fontFamily">@font/levix_arabic</item>
+        <item name="android:fontFamily">@font/levix_arabic</item>
+    </style>
+</resources>

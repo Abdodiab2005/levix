@@ -87,17 +87,27 @@ export const StickerDetail: React.FC<StickerDetailProps> = ({
             alt={sticker.name || t("stickerPreview")}
             className="h-full w-full object-contain"
           />
+          <div className="absolute end-2 top-2 flex gap-1">
+            <IconButton
+              label={primaryFormat === "gif" ? t("downloadGif") : t("downloadWebp")}
+              icon={<Download size={16} />}
+              onClick={() => onDownload(primaryFormat)}
+            />
+            <IconButton label={t("shareSticker")} icon={<Share2 size={16} />} onClick={onShare} />
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <Button
             variant="primary"
+            size="sm"
+            className="h-auto min-w-0 flex-1 py-2"
             onClick={onSend}
             disabled={!isConnected}
             title={isConnected ? undefined : t("notConnectedHint")}
             icon={<Send size={16} className="rtl:-scale-x-100" />}
           >
-            {t("sendViaWhatsapp")}
+            <span className="min-w-0 break-words">{t("sendViaWhatsapp")}</span>
           </Button>
           <IconButton
             label={sticker.favorite ? t("unfavorite") : t("favorite")}
@@ -107,13 +117,7 @@ export const StickerDetail: React.FC<StickerDetailProps> = ({
               <Star size={16} className={sticker.favorite ? "fill-warn text-warn" : undefined} />
             }
           />
-          <IconButton
-            label={primaryFormat === "gif" ? t("downloadGif") : t("downloadWebp")}
-            icon={<Download size={16} />}
-            onClick={() => onDownload(primaryFormat)}
-          />
-          <IconButton label={t("shareSticker")} icon={<Share2 size={16} />} onClick={onShare} />
-          <span className="ms-auto">
+          <span className="shrink-0">
             <OverflowMenu label={t("moreActions")} align="end">
               <MenuItem onSelect={() => onDownload("webp")}>{t("downloadWebp")}</MenuItem>
               <MenuItem

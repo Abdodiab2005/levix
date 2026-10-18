@@ -117,15 +117,19 @@ export interface ScheduleItem {
 }
 
 export interface GroupItem {
-  id?: string;
+  id: string;
   jid: string;
-  subject: string;
-  memberCount: number;
-  participants?: number | null;
-  antilink?: boolean | { enabled?: boolean };
-  antilinkEnabled?: boolean;
-  mediaRestriction?: string;
-  welcomeEnabled?: boolean;
+  subject: string | null;
+  memberCount: number | null;
+  antilink: { enabled: boolean; mode: string; allowed_domains: string[] };
+  antispam: { enabled: boolean; time_window: number; message_count: number; action: string };
+  media_control: { enabled: boolean; blocked_types: string[] };
+  welcome_system: { enabled: boolean; messages: string[] };
+  warn_system: { max_warnings: number; action: string };
+  join_requests: { auto_approve_enabled: boolean };
+  rules: string;
+  mediaRestriction: string;
+  welcomeEnabled: boolean;
 }
 
 export interface LogItem {

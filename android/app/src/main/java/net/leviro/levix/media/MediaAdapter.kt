@@ -72,6 +72,10 @@ class MediaAdapter(
         val root = LinearLayout(parent.context).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundResource(R.drawable.bg_card_panel)
+            // Keep the thumbnail inside the card's widest (selected) stroke.
+            // Without this inset it paints over the border around the image.
+            setPadding(dp(2), dp(2), dp(2), dp(2))
+            clipToOutline = true
             isClickable = true
             isFocusable = true
         }

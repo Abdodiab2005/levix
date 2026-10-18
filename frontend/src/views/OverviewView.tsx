@@ -1,10 +1,11 @@
 // file: frontend/src/views/OverviewView.tsx
 
 import {
-  Activity,
   Bot,
   ChevronRight,
   Clock,
+  Eye,
+  EyeOff,
   Folder,
   MessageSquare,
   Play,
@@ -19,13 +20,13 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { ViewTab } from "../components/Sidebar";
 import { useToast } from "../components/Toasts";
-import { Button, Card, StatusPill } from "../components/ui";
+import { Button, Card, IconButton, StatusDot } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 import type { DashboardStats, SessionStatus } from "../types";
 
 /** `201012345678:5@s.whatsapp.net` -> `+20 100 772 9621`, device suffix dropped. */
 const formatLinkedNumber = (id?: string | null): string | null => {
-  if (!id) return null;
+  if (!id || id.endsWith("@lid")) return null;
   const digits = id.split("@")[0].split(":")[0].replace(/\D/g, "");
   if (!digits) return null;
   if (digits.length === 12) {
@@ -47,6 +48,11 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
   const { toast } = useToast();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [revealedAccount, setRevealedAccount] = useState<string | null>(null);
+  const numberVisible = Boolean(status?.user?.id && revealedAccount === status.user.id);
+  useEffect(() => {
+    if (status?.state !== "connected") setRevealedAccount(null);
+  }, [status?.state]);
 
   useEffect(() => {
     let mounted = true;
@@ -162,38 +168,41 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Hero connection card: status, title, linked number, then one action row */}
+      {/* Hero connection card: heading, linked number, then one action row */}
       <Card className="flex flex-col gap-4">
-        <div className="flex items-start gap-3">
-          <div
-            className={`flex size-11 shrink-0 items-center justify-center rounded-xl border ${
-              isConnected ? "border-ok/30 bg-ok/10 text-ok" : "border-warn/30 bg-warn/10 text-warn"
-            }`}
-          >
-            <Activity size={22} />
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <h2 className="text-base font-extrabold tracking-tight text-text-main sm:text-lg">
-                {isConnected ? t("connected") : t(status?.state as any, "disconnected")}
-              </h2>
-              <StatusPill tone={isConnected ? "ok" : "warn"} dot pulse>
-                {isConnected ? t("online") : t("offline")}
-              </StatusPill>
-            </div>
-            <p className="text-sm text-muted">
-              {isConnected ? (
-                linkedNumber ? (
-                  <bdi dir="ltr">{linkedNumber}</bdi>
-                ) : (
-                  t("activeListening")
-                )
-              ) : (
-                t("pausedOrLinking")
-              )}
+        <div className="relative">
+          <div className="min-w-0 pe-6 rtl:ps-6 rtl:pe-0">
+            <h2 className="text-base font-extrabold tracking-tight text-text-main sm:text-lg">
+              {isConnected ? t("connected") : t(status?.state as any, "disconnected")}
+            </h2>
+            {linkedNumber && isConnected ? (
+              <div className="mt-1 flex min-h-10 items-center gap-2">
+                <bdi dir="ltr" className="text-base font-bold text-text-main">
+                  {numberVisible ? linkedNumber : "••• ••• ••••"}
+                </bdi>
+                <IconButton
+                  label={numberVisible ? t("hideNumber") : t("showNumber")}
+                  pressed={numberVisible}
+                  variant="ghost"
+                  icon={numberVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                  onClick={() =>
+                    setRevealedAccount(numberVisible ? null : status?.user?.id || null)
+                  }
+                />
+              </div>
+            ) : null}
+            <p className="mt-1 text-sm text-muted">
+              {isConnected ? t("activeListening") : t("pausedOrLinking")}
             </p>
           </div>
+          <div className="absolute end-0 top-1 rtl:start-0 rtl:end-auto">
+            <StatusDot
+              tone={isConnected ? "ok" : "warn"}
+              label={isConnected ? t("online") : t("offline")}
+            />
+          </div>
         </div>
+
         <div className="flex items-center gap-2.5">
           {isConnected ? (
             <Button

@@ -183,7 +183,7 @@ const MainLayout: React.FC = () => {
             {currentView === "autodelete" && <AutoDeleteView />}
             {currentView === "settings" && <SettingsView />}
             {currentView === "stickers" && <StickerStudioView isConnected={isConnected} />}
-            {currentView === "logs" && <LogsView socket={socket} />}
+            {currentView === "logs" && <LogsView />}
           </ErrorBoundary>
         </main>
       </div>

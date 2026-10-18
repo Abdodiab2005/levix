@@ -1,161 +1,233 @@
+// Markdown from any provider -> WhatsApp text. This is a display boundary:
+// stored AI history, code contents, identifiers and URLs remain untouched.
 const { tr } = require("./i18n.cjs");
 
-// file: src/utils/markdownParser.cjs
-//
-// Converts standard Markdown output (especially from LLMs) into human-readable
-// WhatsApp formatting:
-//   - **bold** -> *bold*
-//   - ~~strike~~ -> ~strike~
-//   - __italic__ -> _italic_
-//   - # Headings -> *Headings*
-//   - Markdown tables (| col1 | col2 |) -> clean, itemized WhatsApp cards
-
-/**
- * Parses markdown table text into structured data:
- * { headers: string[], rows: string[][] }
- */
-function parseMarkdownTable(tableLines) {
-  const cleanCells = (line) => {
-    return line
-      .trim()
-      .replace(/^\|/, "")
-      .replace(/\|$/, "")
-      .split("|")
-      .map((c) => c.trim());
-  };
-
-  if (tableLines.length < 2) return null;
-
-  const headers = cleanCells(tableLines[0]);
-  // Line 1 is usually the separator: |---|---|
-  const separatorLine = tableLines[1];
-  if (!/^[\s|:-]+$/.test(separatorLine)) return null;
-
-  const rows = [];
-  for (let i = 2; i < tableLines.length; i++) {
-    const line = tableLines[i].trim();
-    if (!line) continue;
-    rows.push(cleanCells(line));
+/** Split table cells without splitting escaped pipes or pipes inside code. */
+function tableCells(line) {
+  const cells = [];
+  let cell = "";
+  let ticks = 0;
+  const text = line.trim();
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "\\" && text[i + 1] === "|") {
+      cell += "|";
+      i++;
+    } else if (text[i] === "`") {
+      let end = i + 1;
+      while (text[end] === "`") end++;
+      const run = end - i;
+      if (!ticks) ticks = run;
+      else if (ticks === run) ticks = 0;
+      cell += text.slice(i, end);
+      i = end - 1;
+    } else if (text[i] === "|" && !ticks) {
+      cells.push(cell.trim());
+      cell = "";
+    } else cell += text[i];
   }
-
-  return { headers, rows };
+  cells.push(cell.trim());
+  if (text.startsWith("|")) cells.shift();
+  if (text.endsWith("|") && !text.endsWith("\\|")) cells.pop();
+  return cells;
 }
 
-/**
- * Formats parsed table data into a clean WhatsApp-friendly list of cards.
- */
-function formatTableForWhatsApp({ headers, rows }) {
-  if (!headers.length || !rows.length) return "";
+function parseMarkdownTable(lines) {
+  if (lines.length < 2 || !lines[0].includes("|")) return null;
+  const headers = tableCells(lines[0]);
+  const separators = tableCells(lines[1]);
+  if (
+    !headers.length ||
+    headers.length !== separators.length ||
+    !separators.every((cell) => /^:?-{3,}:?$/.test(cell))
+  )
+    return null;
+  return { headers, rows: lines.slice(2).map(tableCells) };
+}
 
-  const cards = [];
+function bold(value) {
+  // The whole heading/label is bold; flatten inner bold spans before wrapping.
+  const text = value.trim().replace(/\*([^*\n]+)\*/g, "$1");
+  return `*${text}*`;
+}
 
-  rows.forEach((row, rowIndex) => {
-    const primaryLabel = row[0] || tr(`Item ${rowIndex + 1}`, `عنصر ${rowIndex + 1}`);
-    const fields = [];
-
-    // If there's more than 1 column, list the remaining fields with bullet points
-    if (headers.length > 1) {
-      for (let c = 0; c < headers.length; c++) {
-        const headerName = headers[c] || tr(`Column ${c + 1}`, `عمود ${c + 1}`);
-        const cellValue = row[c] || "—";
-        fields.push(`  • *${headerName}:* ${cellValue}`);
+function tableText({ headers, rows }) {
+  if (!rows.length) return headers.map(bold).join(" · ");
+  if (headers.length === 1 && rows.every((row) => row.length <= 1)) {
+    return `${bold(headers[0])}\n${rows.map((row) => `• ${row[0] || "—"}`).join("\n")}`;
+  }
+  return rows
+    .map((row, index) => {
+      const title = row[0] || tr(`Item ${index + 1}`, `عنصر ${index + 1}`);
+      const fields = [];
+      for (let c = 1; c < Math.max(headers.length, row.length); c++) {
+        const header = headers[c] || tr(`Column ${c + 1}`, `عمود ${c + 1}`);
+        const label = header.replace(/^\*([^*]+)\*$/, "$1");
+        const value = (row[c] || "—").replace(/<br\s*\/?>/gi, "\n");
+        fields.push(`  • ${bold(`${label}:`)} ${value.replace(/\n/g, "\n    ")}`);
       }
-    } else {
-      fields.push(`  • ${primaryLabel}`);
-    }
-
-    cards.push(`📋 *${primaryLabel}*\n${fields.join("\n")}`);
-  });
-
-  return cards.join("\n\n");
+      return `📋 ${bold(title)}\n${fields.join("\n")}`;
+    })
+    .join("\n\n");
 }
 
-/**
- * Replaces markdown table blocks with WhatsApp-friendly formatted cards.
- */
+/** Only a header followed by a real delimiter row starts a table. */
 function convertMarkdownTables(text) {
   const lines = text.split("\n");
   const output = [];
-  let currentTable = [];
-
-  const flushTable = () => {
-    if (currentTable.length >= 2) {
-      const parsed = parseMarkdownTable(currentTable);
-      if (parsed) {
-        output.push(formatTableForWhatsApp(parsed));
-      } else {
-        output.push(...currentTable);
-      }
-    } else {
-      output.push(...currentTable);
+  for (let i = 0; i < lines.length; i++) {
+    const parsed = parseMarkdownTable(lines.slice(i, i + 2));
+    if (!parsed) {
+      output.push(lines[i]);
+      continue;
     }
-    currentTable = [];
-  };
-
-  for (const line of lines) {
-    if (line.trim().startsWith("|") && line.trim().endsWith("|")) {
-      currentTable.push(line);
-    } else {
-      flushTable();
-      output.push(line);
+    i += 2;
+    while (i < lines.length && lines[i].trim() && lines[i].includes("|")) {
+      // A second header/delimiter pair belongs to a separate table.
+      if (parseMarkdownTable(lines.slice(i, i + 2))) break;
+      parsed.rows.push(tableCells(lines[i++]));
     }
+    i--;
+    output.push(tableText(parsed));
   }
-  flushTable();
-
   return output.join("\n");
 }
 
-/**
- * Main parser: converts standard Markdown to WhatsApp formatting.
- */
-function formatMarkdownForWhatsApp(content) {
-  if (!content || typeof content !== "string") return content;
-
-  // 1. Protect code blocks and inline code using null-byte tokens
-  const codeBlocks = [];
-  let masked = content.replace(/```([\s\S]*?)```/g, (_, code) => {
-    const placeholder = `\x00CODEBLOCK${codeBlocks.length}\x00`;
-    codeBlocks.push(`\`\`\`${code}\`\`\``);
-    return placeholder;
-  });
-
-  const inlineCodes = [];
-  masked = masked.replace(/`([^`]+)`/g, (_, code) => {
-    const placeholder = `\x00INLINECODE${inlineCodes.length}\x00`;
-    inlineCodes.push(`\`${code}\``);
-    return placeholder;
-  });
-
-  // 2. Convert markdown tables into WhatsApp cards
-  masked = convertMarkdownTables(masked);
-
-  // 3. Convert Headings: # Heading -> *Heading*
-  masked = masked.replace(/(^|\n|\s)(#{1,6})\s+([^\n]+)/g, (match, lead, hashes, title) => {
-    return `${lead}*${title.trim()}*`;
-  });
-
-  // 4. Convert Strikethrough: ~~text~~ -> ~text~
-  masked = masked.replace(/~~([^~\n]+)~~/g, "~$1~");
-
-  // 5. Convert Bold: **text** -> *text*
-  masked = masked.replace(/\*\*([^*\n]+)\*\*/g, "*$1*");
-
-  // 6. Convert Italic: __text__ -> _text_
-  masked = masked.replace(/__([^_\n]+)__/g, "_$1_");
-
-  // 7. Restore inline code and code blocks safely
-  inlineCodes.forEach((code, idx) => {
-    masked = masked.split(`\x00INLINECODE${idx}\x00`).join(code);
-  });
-  codeBlocks.forEach((block, idx) => {
-    masked = masked.split(`\x00CODEBLOCK${idx}\x00`).join(block);
-  });
-
-  return masked;
+function shieldCode(text, store) {
+  const runs = /`+|~{3,}/g;
+  let output = "";
+  let cursor = 0;
+  for (let match = runs.exec(text); match; match = runs.exec(text)) {
+    const marker = match[0];
+    const start = match.index;
+    const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+    const lineEnd = text.indexOf("\n", runs.lastIndex);
+    const info = lineEnd < 0 ? "" : text.slice(runs.lastIndex, lineEnd);
+    const fenced =
+      marker.length >= 3 &&
+      lineEnd >= 0 &&
+      /^ {0,3}$/.test(text.slice(lineStart, start)) &&
+      !info.includes(marker[0]);
+    let rendered;
+    let end;
+    if (fenced) {
+      const close = new RegExp(`^ {0,3}${marker[0]}{${marker.length},}[ \\t]*$`, "gm");
+      close.lastIndex = lineEnd + 1;
+      const ending = close.exec(text);
+      let body = text.slice(lineEnd + 1, ending ? ending.index : text.length);
+      if (ending && body.endsWith("\n")) body = body.slice(0, -1);
+      rendered = `\`\`\`\n${body}\n\`\`\``;
+      end = ending ? ending.index + ending[0].length : text.length;
+    } else {
+      if (marker[0] !== "`") continue;
+      const close = new RegExp(`(?<!\`)\`{${marker.length}}(?!\`)`, "g");
+      close.lastIndex = runs.lastIndex;
+      const ending = close.exec(text);
+      if (!ending) continue;
+      end = ending.index + marker.length;
+      rendered =
+        marker.length === 2
+          ? `\`\`\`${text.slice(runs.lastIndex, ending.index)}\`\`\``
+          : text.slice(start, end);
+    }
+    output += text.slice(cursor, start) + store(rendered);
+    cursor = end;
+    runs.lastIndex = end;
+  }
+  return output + text.slice(cursor);
 }
 
-module.exports = {
-  formatMarkdownForWhatsApp,
-  convertMarkdownTables,
-  parseMarkdownTable,
-};
+function links(text, store) {
+  let output = "";
+  let cursor = 0;
+  let skipUntil = 0;
+  for (const match of text.matchAll(/!?\[([^[\]\n]*)\]\(/g)) {
+    if (match.index < cursor || match.index < skipUntil) continue;
+    const start = match.index + match[0].length;
+    let depth = 1;
+    let end = start;
+    for (; end < text.length && text[end] !== "\n"; end++) {
+      if (text[end] === "\\") {
+        end++;
+        continue;
+      }
+      if (text[end] === "(") depth++;
+      if (text[end] === ")" && --depth === 0) break;
+    }
+    if (depth) {
+      skipUntil = end;
+      continue;
+    }
+    const destination = text.slice(start, end).match(/^<?(\S+?)>?(?:[ \t]+["'][\s\S]*["'])?$/)?.[1];
+    if (!destination) continue;
+    const name = match[1].trim();
+    output +=
+      text.slice(cursor, match.index) +
+      (name && name !== destination ? `${name}: ` : "") +
+      store(destination);
+    cursor = end + 1;
+  }
+  return output + text.slice(cursor);
+}
+
+function formatMarkdownForWhatsApp(content) {
+  if (typeof content !== "string" || !content) return content;
+  // Pick an unused namespace: user text resembling a placeholder is not lost.
+  let prefix = "\x00WA";
+  while (content.includes(prefix)) prefix += "X";
+  const saved = [];
+  const store = (text) => `${prefix}${saved.push(text) - 1}\x00`;
+  let text = shieldCode(content.replace(/\r\n?/g, "\n"), store);
+  text = links(text, store);
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: Stop URLs before internal shielding tokens.
+  text = text.replace(/(?:https?:\/\/|www\.)[^\s<>\x00]+/gi, (url, offset, source) => {
+    for (const marker of ["***", "**", "__", "~~", "*", "_"]) {
+      if (source.slice(0, offset).endsWith(marker) && url.endsWith(marker)) {
+        return store(url.slice(0, -marker.length)) + marker;
+      }
+    }
+    return store(url);
+  });
+  text = text.replace(/\\([\\`*{}[\]()#+.!_>~|-])/g, (_, literal) => store(literal));
+  text = text
+    .replace(/\*\*\*([^*\n]+)\*\*\*/g, "*_$1_*")
+    .replace(/(?<![\p{L}\p{N}_])___([^_\n]+)___(?![\p{L}\p{N}_])/gu, "*_$1_*")
+    .replace(/\*\*([^*\n]+)\*\*/g, "*$1*")
+    .replace(/(?<![\p{L}\p{N}_])__([^_\n]+)__(?![\p{L}\p{N}_])/gu, "_$1_")
+    .replace(/~~([^~\n]+)~~/g, "~$1~");
+  text = convertMarkdownTables(text);
+  const lines = text.split("\n");
+  const output = [];
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    const heading = line.match(/^ {0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/);
+    if (heading) line = bold(heading[1]);
+    else if (
+      line.trim() &&
+      !line.includes(prefix) &&
+      /^ {0,3}(?:={3,}|-{3,})[ \t]*$/.test(lines[i + 1] || "")
+    ) {
+      line = bold(line);
+      i++;
+    } else if (/^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/.test(line)) {
+      line = "──────────";
+    } else {
+      line = line
+        .replace(
+          /^(\s*)[-+*][ \t]+\[([ xX])\][ \t]+/,
+          (_, indent, check) => `${indent}${check === " " ? "☐" : "☑"} `,
+        )
+        .replace(/^(\s*)[-+*][ \t]+/, "$1• ")
+        .replace(/^(\s*)(\d+)\)[ \t]+/, "$1$2. ")
+        .replace(/^ {0,3}(?:>[ \t]*)+/, "> ");
+    }
+    output.push(line.replace(/[ \t]+$/, ""));
+  }
+  text = output.join("\n");
+  // A link can contain an already-protected code label, so restore inside out.
+  const token = new RegExp(`${prefix}(\\d+)\x00`, "g");
+  const restore = (whole, id) => saved[id]?.replace(token, restore) ?? whole;
+  text = text.replace(token, restore);
+  return text;
+}
+
+module.exports = { formatMarkdownForWhatsApp, convertMarkdownTables, parseMarkdownTable };

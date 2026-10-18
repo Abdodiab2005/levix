@@ -10,7 +10,9 @@ import type {
   CrashReportItem,
   DiagnosticsObject,
   EditOptions,
+  GroupItem,
   Job,
+  LogItem,
   Pack,
   SentCrashReportItem,
   Sticker,
@@ -251,7 +253,7 @@ export const api = {
   createSchedule: (payload: any) => api.post("/schedules", payload),
   deleteSchedule: (id: string) => api.delete(`/schedules/${encodeURIComponent(id)}`),
   retrySchedule: (id: string) => api.post(`/schedules/${encodeURIComponent(id)}/retry`),
-  getGroups: () => api.get<{ groups: any[] }>("/groups"),
+  getGroups: () => api.get<{ groups: GroupItem[] }>("/groups"),
   updateGroup: (jid: string, payload: any) =>
     api.patch(`/groups/${encodeURIComponent(jid)}`, payload),
   getPersona: () =>
@@ -274,12 +276,20 @@ export const api = {
     api.put(`/ai/memory/${encodeURIComponent(name)}`, { content }),
   deleteMemoryFile: (name: string) => api.delete(`/ai/memory/${encodeURIComponent(name)}`),
   getAiConversations: () =>
-    api.get<{ conversations: Array<{ chatId: string; turns: number; updatedAt: number | null }> }>(
-      "/ai/conversations",
-    ),
+    api.get<{
+      conversations: Array<{
+        chatId: string;
+        name: string | null;
+        kind: string;
+        turns: number;
+        updatedAt: number | null;
+      }>;
+    }>("/ai/conversations"),
   getAiConversation: (chatId: string) =>
     api.get<{
       chatId: string;
+      name: string | null;
+      kind: string;
       updatedAt: number | null;
       truncated: boolean;
       messages: Array<{
@@ -374,7 +384,8 @@ export const api = {
   deleteCrashReport: (id: string) =>
     api.delete<{ success: boolean }>(`/crash-reports/${encodeURIComponent(id)}`),
   deleteAllCrashReports: () => api.delete<{ success: boolean }>("/crash-reports"),
-  getLogs: () => api.get<{ logs: any[] }>("/logs"),
+  clearLogs: () => api.delete("/logs"),
+  getLogs: () => api.get<{ logs: LogItem[] }>("/logs"),
   // Sticker Studio
   getStickerCapabilities: () => api.get<Capabilities>("/stickers/capabilities"),
   getStickers: (query: {

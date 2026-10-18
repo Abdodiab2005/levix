@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.ConnectivityManager
@@ -20,6 +21,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -68,11 +70,26 @@ class LevixHostService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        ensureChannel()
+        checkStateAndNotify()
+    }
+
+    // AppCompat's app language can differ from a Service's resources on API 29–32.
+    // Resolve strings at notification time so the heartbeat also refreshes an
+    // already-running notification after an in-app language change.
+    private fun localizedString(@StringRes id: Int, vararg args: Any): String {
+        val config = Configuration(resources.configuration)
+        config.setLocale(Locale.forLanguageTag(UiPrefs.language(this)))
+        return createConfigurationContext(config).getString(id, *args)
+    }
+
     override fun onCreate() {
         super.onCreate()
         ensureChannel()
         // Promote immediately so a fast STOP still satisfies the FGS contract.
-        startAsForeground(buildNotification(getString(R.string.notif_starting)))
+        startAsForeground(buildNotification(localizedString(R.string.notif_starting)))
         NodeRuntime.unexpectedExitListener = { code ->
             handler.post { scheduleNodeRetry(code) }
         }
@@ -142,7 +159,7 @@ class LevixHostService : Service() {
         registerPowerReceiver()
         registerNetworkCallback()
         HostState.markStarted()
-        startAsForeground(buildNotification(getString(R.string.notif_starting)))
+        startAsForeground(buildNotification(localizedString(R.string.notif_starting)))
         handler.removeCallbacks(heartbeat)
         handler.postDelayed(heartbeat, HEARTBEAT_MS)
         unlisten?.invoke()
@@ -348,7 +365,7 @@ class LevixHostService : Service() {
             .setColor(ContextCompat.getColor(this, R.color.levix_warn))
             .setAutoCancel(true)
             .setContentIntent(openIntent)
-            .addAction(0, getString(R.string.notif_open), openIntent)
+            .addAction(0, localizedString(R.string.notif_open), openIntent)
 
         if (largeIcon != null) {
             builder.setLargeIcon(largeIcon)
@@ -371,21 +388,21 @@ class LevixHostService : Service() {
 
         if (!isNetworkOnline || snap.whatsAppState == "paused") {
             postOfflineAlert(
-                getString(R.string.notif_offline_title),
-                getString(R.string.notif_offline_network),
+                localizedString(R.string.notif_offline_title),
+                localizedString(R.string.notif_offline_network),
             )
         } else if (snap.whatsAppState in listOf("retry_exhausted", "error", "logged_out")) {
             val detail = when (snap.whatsAppState) {
-                "logged_out" -> "Logged out. Tap to scan QR code."
+                "logged_out" -> localizedString(R.string.card_whatsapp_desc_expired_long)
                 else -> {
                     val codeStr = snap.whatsAppCode?.let { "$it: " } ?: ""
-                    val reasonStr = snap.whatsAppReason ?: "Connection failed"
+                    val reasonStr = snap.whatsAppReason ?: localizedString(R.string.card_whatsapp_desc_failed)
                     "$codeStr$reasonStr"
                 }
             }
             postOfflineAlert(
-                getString(R.string.notif_offline_title),
-                getString(R.string.notif_offline_wa, detail),
+                localizedString(R.string.notif_offline_title),
+                localizedString(R.string.notif_offline_wa, detail),
             )
         } else if (snap.whatsAppState == "connected") {
             cancelOfflineAlert()
@@ -397,20 +414,23 @@ class LevixHostService : Service() {
     private fun updateNotification() {
         val snap = HostState.snapshot
 
-        val statusText = when {
-            !isNetworkOnline || snap.whatsAppState == "paused" -> "Paused"
-            snap.whatsAppState == "connected" -> "Connected"
-            snap.whatsAppState == "waiting_for_qr" -> "Scan QR"
-            snap.whatsAppState == "reconnecting" -> "Reconnecting…"
-            snap.whatsAppState == "retry_exhausted" -> "Disconnected"
-            snap.whatsAppState == "logged_out" -> "Logged out"
-            snap.whatsAppState == "starting" -> "Connecting…"
-            snap.running -> "Connecting…"
-            else -> "Stopped"
+        val statusLabel = when {
+            !isNetworkOnline || snap.whatsAppState == "paused" -> R.string.status_paused
+            snap.whatsAppState == "connected" -> R.string.status_connected
+            snap.whatsAppState == "waiting_for_qr" -> R.string.status_pairing
+            snap.whatsAppState == "reconnecting" -> R.string.status_reconnecting
+            snap.whatsAppState == "retry_exhausted" -> R.string.status_failed
+            snap.whatsAppState == "logged_out" -> R.string.status_expired
+            snap.whatsAppState == "error" -> R.string.wa_detail_error
+            snap.whatsAppState == "disconnected" -> R.string.status_offline
+            snap.whatsAppState == "idle" -> R.string.status_stopped
+            snap.whatsAppState in listOf("starting", "linking") -> R.string.notif_starting
+            snap.running -> R.string.notif_starting
+            else -> R.string.status_stopped
         }
 
         val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(NOTIFICATION_ID, buildNotification(statusText))
+        manager.notify(NOTIFICATION_ID, buildNotification(localizedString(statusLabel)))
     }
 
     private fun buildNotification(statusText: String): Notification {
@@ -450,8 +470,8 @@ class LevixHostService : Service() {
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(openIntent)
-            .addAction(0, "Open Panel", panelIntent)
-            .addAction(0, getString(R.string.notif_stop), stopIntent)
+            .addAction(0, localizedString(R.string.btn_open_panel), panelIntent)
+            .addAction(0, localizedString(R.string.notif_stop), stopIntent)
 
         if (largeIcon != null) {
             builder.setLargeIcon(largeIcon)
@@ -476,10 +496,10 @@ class LevixHostService : Service() {
         if (manager.getNotificationChannel(CHANNEL_ID) == null) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                getString(R.string.notif_channel_name),
+                localizedString(R.string.notif_channel_name),
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = getString(R.string.notif_channel_description)
+                description = localizedString(R.string.notif_channel_description)
                 setShowBadge(false)
                 setSound(null, null)
                 enableVibration(false)
@@ -489,10 +509,10 @@ class LevixHostService : Service() {
         if (manager.getNotificationChannel(CHANNEL_ALERT_ID) == null) {
             val alertChannel = NotificationChannel(
                 CHANNEL_ALERT_ID,
-                getString(R.string.notif_alerts_channel_name),
+                localizedString(R.string.notif_alerts_channel_name),
                 NotificationManager.IMPORTANCE_LOW,
             ).apply {
-                description = getString(R.string.notif_alerts_channel_description)
+                description = localizedString(R.string.notif_alerts_channel_description)
                 setShowBadge(false)
                 setSound(null, null)
                 enableVibration(false)

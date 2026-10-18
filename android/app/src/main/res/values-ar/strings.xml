@@ -1,14 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Levix</string>
-    <string name="guide_step">الخطوة %1$d من 3</string>
-    <string name="guide_what_title">بوتك على هذا الهاتف</string>
-    <string name="guide_what_body">يشغّل Levix بوت واتساب الخاص بك على هذا الهاتف. استخدم لوحة التحكم لإدارته.</string>
-    <string name="guide_connect_title">ربط واتساب</string>
-    <string name="guide_connect_body">اضغط تشغيل، وافتح لوحة التحكم، ثم امسح رمز QR من واتساب &gt; الأجهزة المرتبطة.</string>
+
+    <!-- First-run guide: one step per screen, in the order the operator does them. -->
+    <string name="guide_step">الخطوة %1$d من 5</string>
+    <string name="guide_start_title">شغّل المساعد</string>
+    <string name="guide_start_body">اضغط تشغيل المساعد في الشاشة الرئيسية واسمح بالإشعارات. عندما يصبح المحرك جاهزًا، سترشدك الشاشة لربط واتساب.</string>
+    <string name="guide_battery_title">أبقِه يعمل</string>
+    <string name="guide_battery_body">إذا ظهرت بطاقة «حماية البطارية»، اضغط «تفعيل حماية البطارية» واختر «غير مقيّد». بدون ذلك قد يوقف أندرويد Levix أثناء قفل الشاشة.</string>
+    <string name="guide_panel_title">افتح لوحة التحكم</string>
+    <string name="guide_panel_body">اضغط ربط واتساب لفتح الاتصال، أو فتح لوحة التحكم عندما يصبح المساعد جاهزًا. اختر كلمة مرور لحماية اللوحة عند أول استخدام. أدر الأوامر والذكاء الاصطناعي والمجموعات من هناك.</string>
+    <string name="guide_link_title">اربط واتساب</string>
+    <string name="guide_link_body">من اللوحة افتح «الاتصال» واطلب كود الربط أو أظهر رمز QR. ثم في واتساب: الإعدادات ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، وأدخل الكود المكوّن من 8 أحرف.</string>
     <string name="guide_privacy_title">الخصوصية والتشخيصات</string>
-    <string name="guide_privacy_body">لا يغادر شيء هاتفك إلا إذا أرسلته بنفسك. إذا تعطل Levix، يبقى التقرير هنا حتى تراجعه وترسله أو تحذفه.</string>
+    <string name="guide_privacy_body">يعمل Levix على هذا الهاتف ويتصل بواتساب والخدمات التي تفعّلها. تبقى تقارير الأعطال هنا حتى تراجعها وترسلها أو تحذفها.</string>
     <string name="guide_skip">تخطي</string>
+    <string name="guide_back">رجوع</string>
     <string name="guide_next">التالي</string>
     <string name="guide_done">تم</string>
     <string name="guide_again_title">عرض الدليل مرة أخرى</string>
@@ -24,8 +31,8 @@
     <!-- Hero Section -->
     <string name="hero_eyebrow">المساعد الشخصي</string>
     <string name="hero_title">مساعد واتساب الذكي الخاص بك،\nدائماً إلى جانبك.</string>
-    <string name="hero_subtitle_running">ليفيكس يعمل في الخلفية ومستعد لمساعدتك فوراً.</string>
-    <string name="hero_subtitle_stopped">ليفيكس متوقف حالياً. اضغط على تشغيل لتفعيل المساعد.</string>
+    <string name="hero_subtitle_running">Levix يعمل في الخلفية. اضغط الدائرة لفتح لوحة التحكم.</string>
+    <string name="hero_subtitle_stopped">Levix متوقف. اضغط الدائرة لتشغيل المساعد.</string>
     <string name="btn_open_panel">فتح لوحة التحكم</string>
     <string name="panel_share_file">مشاركة الملف</string>
     <string name="panel_starting">جارٍ تشغيل Levix…</string>
@@ -33,17 +40,8 @@
     <string name="btn_stop_host">إيقاف المساعد</string>
 
     <!-- Sections -->
-    <string name="pref_theme_title">مظهر التطبيق</string>
-    <string name="pref_theme_sub">اختر المظهر الفاتح أو الداكن</string>
-    <string name="dialog_choose_theme">اختر المظهر</string>
-    <string name="theme_light">فاتح</string>
-    <string name="theme_dark">داكن</string>
-    <string name="pref_language_title">لغة التطبيق</string>
-    <string name="pref_language_sub">التبديل بين العربية والإنجليزية مع دعم كامل لاتجاه RTL</string>
-    <string name="pref_language_btn">English</string>
-    <string name="lang_arabic">العربية</string>
-    <string name="lang_english">English</string>
-    <string name="dialog_choose_language">اختر اللغة</string>
+    <string name="action_switch_language">تبديل اللغة (العربية / English)</string>
+    <string name="action_switch_theme">تبديل المظهر الفاتح والداكن</string>
     <string name="section_overview">نظرة عامة على الحالة</string>
     <string name="section_overview_sub">مؤشرات النظام والخدمات الأساسية في لمحة</string>
 
@@ -61,14 +59,23 @@
     <string name="card_engine_desc_stopped">المحرك غير نشط. جميع الإعدادات والبيانات محفوظة بأمان.</string>
 
     <string name="card_battery_title">حماية البطارية</string>
-    <string name="battery_ok">تم تعطيل تحسينات استهلاك البطارية. سيظل ليفيكس نشطاً أثناء قفل الشاشة.</string>
-    <string name="battery_hint">قد يقوم أندرويد بإيقاف ليفيكس في الخلفية. امنح إذناً غير مقيد للبطارية لضمان العمل طوال الوقت.</string>
+    <string name="battery_ok">تحسينات البطارية معطّلة. قد تظل قيود أندرويد والجهاز مؤثرة على العمل في الخلفية.</string>
+    <string name="battery_hint">قد يقيّد أندرويد العمل في الخلفية. اسمح باستخدام البطارية دون قيود لتقليل الانقطاعات.</string>
     <string name="btn_battery">تفعيل حماية البطارية</string>
 
     <!-- Diagnostics / Beta Logs -->
     <string name="diagnostics_sub">سجلات تتبع الأخطاء البرمجية أثناء الإصدار التجريبي</string>
     <string name="btn_share_logs">مشاركة السجلات</string>
     <string name="no_logs">لا توجد سجلات مسجلة بعد.</string>
+    <string name="logs_actions_eyebrow">التشخيص</string>
+    <string name="logs_actions_title">السجلات</string>
+    <string name="logs_actions_body">يبقى سجل التشغيل على هذا الهاتف حتى تحفظه أو ترسله.</string>
+    <string name="logs_action_save_open">حفظ وفتح</string>
+    <string name="logs_action_save_open_sub">انسخه إلى Downloads/Levix وافتحه بأي عارض</string>
+    <string name="logs_action_share">مشاركة السجلات</string>
+    <string name="logs_action_share_sub">أرسل ملف السجل إلى تطبيق آخر</string>
+    <string name="logs_saved_message">تم الحفظ في Downloads/Levix باسم %1$s</string>
+    <string name="logs_open_missing">تم الحفظ في Downloads/Levix. لا يوجد تطبيق على هذا الهاتف يستطيع فتح ملف السجل.</string>
 
     <!-- Status Badges -->
     <string name="status_connected">متصل</string>
@@ -82,21 +89,22 @@
     <string name="status_protected">محمي</string>
     <string name="status_restricted">مقيد</string>
     <string name="status_offline">غير متصل</string>
+    <string name="status_checking">جارٍ التحقق…</string>
 
     <!-- Notifications & System -->
     <string name="notifications_required">إذن الإشعارات مطلوب لضمان استمرار عمل المساعد في الخلفية دون انقطاع.</string>
-    <string name="notif_title">ليفيكس</string>
+    <string name="notif_title">Levix</string>
     <string name="notif_starting">جاري الاتصال…</string>
     <string name="notif_node_starting">جاري تشغيل المساعد…</string>
     <string name="notif_node_error">خطأ: %1$s</string>
     <string name="notif_node_ok">نود %1$s %2$s</string>
-    <string name="notif_levix_ready">ليفيكس جاهز</string>
+    <string name="notif_levix_ready">Levix جاهز</string>
     <string name="notif_heartbeat">نبض التشغيل: %1$s</string>
-    <string name="notif_channel_name">ليفيكس</string>
+    <string name="notif_channel_name">Levix</string>
     <string name="notif_channel_description">إشعار حالة التشغيل المستمر</string>
-    <string name="notif_alerts_channel_name">تنبيهات ليفيكس</string>
+    <string name="notif_alerts_channel_name">تنبيهات Levix</string>
     <string name="notif_alerts_channel_description">تنبيهات عند انقطاع الاتصال</string>
-    <string name="notif_offline_title">ليفيكس غير متصل</string>
+    <string name="notif_offline_title">Levix غير متصل</string>
     <string name="notif_offline_network">لا يوجد اتصال بالإنترنت. بوت واتساب متوقف مؤقتاً.</string>
     <string name="notif_offline_wa">تعذر اتصال واتساب: %1$s</string>
     <string name="notif_wa_connected">واتساب: متصل</string>
@@ -106,7 +114,7 @@
     <string name="notif_stop">إيقاف</string>
     <!-- Compact tile strings -->
     <string name="section_diagnostics_short">التشخيص</string>
-    <string name="diagnostics_panel_hint">السجلات الكاملة في تبويب السجلات في لوحة التحكم. شاركها لتقارير الأخطاء.</string>
+    <string name="diagnostics_panel_hint">اضغط لحفظ السجل أو فتحه أو مشاركته.</string>
     <string name="card_whatsapp_desc_connected_short">متصل ونشط</string>
     <string name="card_whatsapp_desc_pairing_short">في انتظار ربط الجهاز</string>
     <string name="card_whatsapp_desc_paused_short">الشبكة متوقفة مؤقتاً</string>
@@ -167,7 +175,7 @@
     <string name="media_favorites">المفضلة</string>
     <string name="media_allow">السماح بالوصول للوسائط</string>
     <string name="media_settings">إعدادات التطبيق</string>
-    <string name="media_rationale">يحتاج ليفيكس إلى إذن الوسائط لعرض صور واتساب ومقاطع الفيديو والصوت المخزنة على جهازك. تبقى الملفات على جهازك ولا تُرفع.</string>
+    <string name="media_rationale">يحتاج Levix إلى إذن الوسائط لعرض صور واتساب ومقاطع الفيديو والصوت المخزنة على جهازك. تبقى الملفات على جهازك ولا تُرفع.</string>
     <string name="media_partial">تظهر الصور والفيديوهات المحددة فقط. حدّد المزيد أو اسمح بالكل من الإعدادات.</string>
     <string name="media_audio_permission">اسمح بالوصول إلى الصوت لعرض الرسائل الصوتية وصوتيات واتساب.</string>
     <string name="media_select_more">تحديد المزيد</string>
@@ -203,7 +211,7 @@
     <string name="media_share_failed">لا يوجد تطبيق على هذا الجهاز يستطيع فتح هذا الملف.</string>
     <string name="media_unavailable">هذا الملف لم يعد متاحاً.</string>
     <string name="media_unsupported">لا يوجد تطبيق لفتح هذا التنسيق.</string>
-    <string name="media_delete_saved_only">يمكن حذف النسخ المحفوظة بواسطة ليفيكس فقط.</string>
+    <string name="media_delete_saved_only">يمكن حذف النسخ المحفوظة بواسطة Levix فقط.</string>
     <string name="media_delete_progress">جارٍ حذف %1$d من %2$d…</string>
     <string name="media_delete_failed">تعذر حذف بعض النسخ المحفوظة.</string>
     <string name="media_largest">أكبر الملفات</string>
@@ -237,12 +245,12 @@
         <item quantity="other">تم تحديد %1$d</item>
     </plurals>
     <plurals name="media_delete_confirm">
-        <item quantity="zero">هل تريد حذف %1$d نسخة محفوظة بواسطة ليفيكس؟</item>
-        <item quantity="one">هل تريد حذف %1$d نسخة محفوظة بواسطة ليفيكس؟</item>
-        <item quantity="two">هل تريد حذف %1$d نسختين محفوظتين بواسطة ليفيكس؟</item>
-        <item quantity="few">هل تريد حذف %1$d نسخ محفوظة بواسطة ليفيكس؟</item>
-        <item quantity="many">هل تريد حذف %1$d نسخة محفوظة بواسطة ليفيكس؟</item>
-        <item quantity="other">هل تريد حذف %1$d نسخة محفوظة بواسطة ليفيكس؟</item>
+        <item quantity="zero">هل تريد حذف %1$d نسخة محفوظة بواسطة Levix؟</item>
+        <item quantity="one">هل تريد حذف %1$d نسخة محفوظة بواسطة Levix؟</item>
+        <item quantity="two">هل تريد حذف %1$d نسختين محفوظتين بواسطة Levix؟</item>
+        <item quantity="few">هل تريد حذف %1$d نسخ محفوظة بواسطة Levix؟</item>
+        <item quantity="many">هل تريد حذف %1$d نسخة محفوظة بواسطة Levix؟</item>
+        <item quantity="other">هل تريد حذف %1$d نسخة محفوظة بواسطة Levix؟</item>
     </plurals>
     <plurals name="media_saved_count">
         <item quantity="zero">تم الحفظ: %1$d</item>
@@ -284,4 +292,35 @@
         <item quantity="many">%1$d ث</item>
         <item quantity="other">%1$d ث</item>
     </plurals>
+    <string name="media_source">مصدر الوسائط</string>
+    <string name="media_category">نوع الوسائط</string>
+    <string name="media_filter">تصفية</string>
+    <string name="home_stopped">شغّل مساعدك</string>
+    <string name="home_stopped_body">شغّل المحرك على هذا الهاتف، ثم اربط واتساب بأمان من لوحة التحكم.</string>
+    <string name="home_starting">جارٍ تشغيل Levix…</string>
+    <string name="home_starting_body">جارٍ تجهيز المحرك المحلي ولوحة التحكم. قد يستغرق ذلك لحظات.</string>
+    <string name="home_engine_failed">المحرك يحتاج إلى تدخل</string>
+    <string name="home_engine_error_body">تعذّر استمرار تشغيل المحرك. راجع التشخيصات. يمكنك إيقاف المساعد ثم تشغيله مجددًا.</string>
+    <string name="home_start_timeout">استغرق التشغيل وقتًا أطول من المتوقع. راجع التشخيصات قبل المحاولة مجددًا.</string>
+    <string name="home_pairing">المحرك جاهز · اربط واتساب</string>
+    <string name="home_pairing_body">افتح الاتصال في لوحة التحكم. ابدأ جلسة واتساب واختر رمز ربط لهذا الهاتف، أو امسح رمز QR من شاشة أخرى.</string>
+    <string name="home_connect">ربط واتساب</string>
+    <string name="home_ready">مساعدك جاهز</string>
+    <string name="home_ready_body">المحرك جاهز وواتساب متصل. أدر الأوامر والذكاء الاصطناعي والمجموعات من لوحة التحكم.</string>
+    <string name="home_connection_details">فتح الاتصال</string>
+    <string name="home_reconnecting_body">المحرك جاهز. يعيد واتساب الاتصال تلقائيًا، ولا يلزم إعادة تشغيل المحرك.</string>
+    <string name="home_paused_body">المحرك جاهز لكن الشبكة غير متاحة. سيعيد واتساب الاتصال تلقائيًا عند عودة الإنترنت.</string>
+    <string name="home_expired_body">تم تسجيل الخروج من واتساب. افتح الاتصال لربط حسابك مجددًا. المحرك لا يزال جاهزًا.</string>
+    <string name="home_connection_failed">اتصال واتساب يحتاج إلى تدخل</string>
+    <string name="home_connection_error_body">المحرك جاهز لكن واتساب غير متصل. افتح الاتصال لمراجعة المشكلة واستئناف الجلسة.</string>
+    <string name="home_unknown">التحقق من حالة المساعد</string>
+    <string name="home_unknown_body">المحرك جاهز لكن حالة واتساب غير مؤكدة. افتح الاتصال للتحقق منها.</string>
+    <string name="home_linking">جارٍ الاتصال بواتساب…</string>
+    <string name="home_linking_body">المحرك جاهز. ننتظر تأكيد الاتصال من واتساب.</string>
+    <string name="home_step_start">الخطوة ١ من ٣ · تشغيل Levix</string>
+    <string name="home_step_connect">الخطوة ٢ من ٣ · ربط واتساب · المحرك جاهز</string>
+    <string name="home_start_rejected">تعذّر على أندرويد تشغيل الخدمة. حاول مجددًا والتطبيق مفتوح، أو راجع التشخيصات.</string>
+    <string name="status_unknown_short">غير معروف</string>
+    <string name="status_pairing_short">يلزم ربط</string>
+    <string name="status_expired_short">منتهٍ</string>
 </resources>

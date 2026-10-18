@@ -102,9 +102,31 @@ object HostLog {
         }
     }
 
-    fun readRecentLines(maxLines: Int = 5): String {
-        val target = externalFile?.takeIf { it.exists() } ?: internalFile?.takeIf { it.exists() } ?: return ""
-        return try {
+    /** Clear only the live host log and its mirror; exported copies stay with their owner. */
+    fun clear(context: Context) {
+        synchronized(lock) {
+            val app = context.applicationContext
+            val internal = internalFile ?: File(app.filesDir, FILE_NAME)
+            val external = externalFile
+                ?: app.getExternalFilesDir("logs")?.let { File(it, FILE_NAME) }
+            var failure: Exception? = null
+            for (target in listOfNotNull(internal, external).distinctBy { it.absolutePath }) {
+                try {
+                    if (target.exists()) FileOutputStream(target, false).use { }
+                } catch (error: Exception) {
+                    // Still clear the other mirror, but never report partial success.
+                    if (failure == null) failure = error
+                }
+            }
+            failure?.let { throw it }
+        }
+    }
+
+    fun readRecentLines(maxLines: Int = 5): String = synchronized(lock) {
+        val target = externalFile?.takeIf { it.exists() }
+            ?: internalFile?.takeIf { it.exists() }
+            ?: return@synchronized ""
+        try {
             target.readLines(StandardCharsets.UTF_8).takeLast(maxLines).joinToString("\n")
         } catch (_: Exception) {
             ""

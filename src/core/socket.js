@@ -8,6 +8,28 @@ const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
 const { withMediaThumbnail } = require("../utils/thumbnail.cjs");
 const settings = require("../config/settings.cjs");
+const socketDispatchers = new WeakMap();
+
+/** Fetch a WhatsApp image through the transport owned by this live socket. */
+export async function fetchWhatsAppImage(sock, rawUrl, init = {}) {
+  const url = new URL(rawUrl);
+  if (
+    url.protocol !== "https:" ||
+    !/(^|\.)(whatsapp\.net|whatsapp\.com|fbcdn\.net)$/.test(url.hostname)
+  ) {
+    throw new Error("Invalid WhatsApp image destination");
+  }
+  const { assertProviderRequestUrl, safeProviderFetch } = require("../utils/providerUrl.cjs");
+  const dispatcher = socketDispatchers.get(sock);
+  if (!dispatcher) {
+    return safeProviderFetch(url.href, init, { allowLoopback: false });
+  }
+  // Validate before handing the URL to the session's proxy. Never replace or
+  // close its dispatcher here: media downloads share the same live transport.
+  await assertProviderRequestUrl(url.href, { allowLoopback: false });
+  const { fetch } = require("undici");
+  return fetch(url.href, { ...init, dispatcher, redirect: "manual" });
+}
 
 // The group-metadata cache lives in one shared CJS module so the CJS command
 // files and these ESM core files see the SAME instance (see
@@ -113,6 +135,7 @@ export async function createWhatsAppSocket({ proxy = null, pairingCode = false }
       ...config,
     }),
   );
+  socketDispatchers.set(sock, config.options?.dispatcher ?? null);
 
   return { sock, saveCreds, clearAll, isPaired };
 }

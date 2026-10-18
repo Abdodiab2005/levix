@@ -39,6 +39,7 @@ import {
   Spinner,
   Textarea,
   Toggle,
+  UserText,
   useDirtyForm,
   useSavedValue,
 } from "../components/ui";
@@ -171,11 +172,13 @@ export const AIAssistantView: React.FC = () => {
 
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [conversations, setConversations] = useState<
-    Array<{ chatId: string; turns: number; updatedAt: number | null }>
+    Awaited<ReturnType<typeof api.getAiConversations>>["conversations"]
   >([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [conversation, setConversation] = useState<{
     chatId: string;
+    name: string | null;
+    kind: string;
     updatedAt: number | null;
     truncated: boolean;
     messages: Array<{
@@ -550,7 +553,7 @@ export const AIAssistantView: React.FC = () => {
             value: p.id,
             label: p.name,
           }))}
-          className="flex w-full flex-wrap gap-1 p-1 [&>*]:min-w-[110px] [&>*]:flex-1"
+          className="w-full"
         />
         <p className="text-xs text-muted">{t(selectedPreset.descKey)}</p>
 
@@ -859,7 +862,7 @@ export const AIAssistantView: React.FC = () => {
         </div>
       </Card>
 
-      <Card className="flex flex-wrap gap-2">
+      <Card className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <Button
           variant="secondary"
           icon={<FileText size={16} />}
@@ -965,7 +968,10 @@ export const AIAssistantView: React.FC = () => {
                         <MessageSquare size={14} className="shrink-0" />
                       )}
                       <span className="truncate">
-                        {isGlobal ? t("memoryGlobalScope") : s.scope}
+                        {isGlobal
+                          ? t("memoryGlobalScope")
+                          : s.label ||
+                            t(s.scope.endsWith("@g.us") ? "unnamedGroup" : "unknownContact")}
                       </span>
                     </span>
                     <span className="block text-start text-[10px] opacity-80">
@@ -1031,9 +1037,9 @@ export const AIAssistantView: React.FC = () => {
                 >
                   <span className="flex items-center gap-2 text-xs font-bold">
                     <MessageSquare size={14} className="shrink-0 text-brand-blue" />
-                    <span className="truncate font-mono" dir="ltr">
-                      {row.chatId}
-                    </span>
+                    <UserText lines={2}>
+                      {row.name || t(row.kind === "group" ? "unnamedGroup" : "unknownContact")}
+                    </UserText>
                   </span>
                   <span className="block text-start text-[10px] text-muted">
                     {t("convTurns").replace("{n}", String(row.turns))} ·{" "}
@@ -1054,9 +1060,11 @@ export const AIAssistantView: React.FC = () => {
               >
                 {t("backToList")}
               </Button>
-              <span className="truncate font-mono text-[10px] text-muted" dir="ltr">
-                {selectedConversation}
-              </span>
+              <UserText lines={2} className="text-xs text-muted">
+                {conversation?.name ||
+                  conversations.find((row) => row.chatId === selectedConversation)?.name ||
+                  t(conversation?.kind === "group" ? "unnamedGroup" : "unknownContact")}
+              </UserText>
             </div>
             {conversation?.truncated && (
               <p className="text-[11px] font-semibold text-warn">{t("convTruncated")}</p>

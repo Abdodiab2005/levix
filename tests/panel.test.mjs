@@ -37,6 +37,16 @@ try {
 
   res = await http.call("/dashboard/api/stats");
   equal("the API is locked before there is a password", res.status, 401);
+  equal(
+    "operational log reads require login",
+    (await http.call("/dashboard/api/logs")).status,
+    401,
+  );
+  equal(
+    "operational log clearing requires login",
+    (await http.call("/dashboard/api/logs", { method: "DELETE" })).status,
+    401,
+  );
 
   section("browser origin boundary");
 
@@ -90,6 +100,60 @@ try {
   ok("counters are numbers", typeof stats.totalGroups === "number");
   ok("every command is loaded", stats.commandCount > 30);
   ok("the data directory is reported", typeof stats.dataDir === "string");
+
+  section("operational log read and persistent clear API");
+  const logFs = await import("node:fs");
+  const logPath = await import("node:path");
+  const combinedLog = logPath.join(dataDir, "logs", "combined.log");
+  const errorLog = logPath.join(dataDir, "logs", "error.log");
+  const otherLog = logPath.join(dataDir, "logs", "keep.log");
+  logFs.appendFileSync(
+    combinedLog,
+    `${JSON.stringify({ time: Date.now(), level: 40, msg: "route log marker" })}\n`,
+  );
+  logFs.writeFileSync(errorLog, "old error marker\n");
+  logFs.writeFileSync(otherLog, "unrelated diagnostic");
+  res = await http.call("/dashboard/api/logs");
+  equal("authenticated log read exists", res.status, 200);
+  equal("log response is not cached", res.headers.get("cache-control"), "no-store");
+  ok(
+    "real stored log reaches the dashboard",
+    (await res.json()).logs.some(
+      (entry) => entry.msg === "route log marker" && entry.level === "warn",
+    ),
+  );
+  res = await http.call("/dashboard/api/logs", {
+    method: "DELETE",
+    headers: { origin: "https://foreign.invalid", "sec-fetch-site": "cross-site" },
+  });
+  equal("foreign origin cannot clear authenticated logs", res.status, 403);
+  ok(
+    "rejected clear preserves entries",
+    logFs.readFileSync(combinedLog, "utf8").includes("route log marker"),
+  );
+  res = await http.call("/dashboard/api/logs", { method: "DELETE" });
+  equal("authenticated clear succeeds", res.status, 200);
+  equal("combined log is cleared on disk", logFs.statSync(combinedLog).size, 0);
+  equal("error log is cleared on disk", logFs.statSync(errorLog).size, 0);
+  equal(
+    "unrelated log file stays intact",
+    logFs.readFileSync(otherLog, "utf8"),
+    "unrelated diagnostic",
+  );
+  equal(
+    "refresh cannot restore cleared logs",
+    (await (await http.call("/dashboard/api/logs")).json()).logs.length,
+    0,
+  );
+  logFs.appendFileSync(
+    combinedLog,
+    `${JSON.stringify({ time: Date.now(), level: 30, msg: "fresh after clear" })}\n`,
+  );
+  equal(
+    "later log entries remain visible",
+    (await (await http.call("/dashboard/api/logs")).json()).logs[0]?.msg,
+    "fresh after clear",
+  );
 
   const { commands } = await (await http.call("/dashboard/api/commands")).json();
   ok("the command catalog is served", commands.length > 30);

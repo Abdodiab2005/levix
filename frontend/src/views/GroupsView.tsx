@@ -2,32 +2,38 @@
 
 import { RotateCcw, ShieldAlert, Users } from "lucide-react";
 import type React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import { useToast } from "../components/Toasts";
 import {
+  Avatar,
   Badge,
   Button,
   Card,
+  Disclosure,
   EmptyState,
+  Field,
   FilterButton,
+  FormActions,
   Input,
   PageHeader,
   Pagination,
   RadioGroup,
-  SaveField,
+  Section,
   Select,
   Skeleton,
   SortMenu,
+  Textarea,
   Toggle,
   Toolbar,
   UserText,
+  useDirtyForm,
   usePagination,
-  useSavedValue,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
-import type { GroupItem } from "../types";
+import type { CommandItem, GroupItem } from "../types";
 import { fill } from "../utils/fill";
+import { useCommandLabels } from "./commands/shared";
 
 type Tri = "any" | "on" | "off";
 type MediaFilter = "any" | "none" | "block_all" | "custom";
@@ -48,7 +54,7 @@ function matchesGroup(group: GroupItem, query: string, filters: GroupFilters): b
     const haystack = `${group.subject || ""} ${group.jid}`.toLowerCase();
     if (!haystack.includes(needle)) return false;
   }
-  const antilink = Boolean(group.antilink);
+  const antilink = Boolean(group.antilink.enabled);
   if (filters.antilink === "on" && !antilink) return false;
   if (filters.antilink === "off" && antilink) return false;
   const welcome = Boolean(group.welcomeEnabled);
@@ -70,29 +76,16 @@ export const GroupsView: React.FC = () => {
   const [sort, setSort] = useState<GroupSort>("name");
   const [filters, setFilters] = useState<GroupFilters>(EMPTY_GROUP_FILTERS);
 
-  const normalizeGroup = (g: any): GroupItem => {
-    const jid = g.jid || g.id || "";
-    const antilinkEnabled =
-      typeof g.antilink === "boolean"
-        ? g.antilink
-        : Boolean(g.antilinkEnabled ?? g.antilink?.enabled);
-    return {
-      ...g,
-      jid,
-      subject: g.subject || "",
-      memberCount: g.memberCount ?? g.participants ?? 0,
-      antilink: antilinkEnabled,
-      antilinkEnabled,
-      welcomeEnabled: Boolean(g.welcomeEnabled ?? g.welcome_system?.enabled),
-      mediaRestriction: g.mediaRestriction || "none",
-    };
-  };
+  const [commands, setCommands] = useState<CommandItem[]>([]);
+  const [prefix, setPrefix] = useState("!");
+  const inflight = useRef(new Set<string>());
+  const [pending, setPending] = useState<Set<string>>(new Set());
 
-  const loadGroups = async () => {
+  const loadGroups = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.getGroups();
-      if (res?.groups) setGroups(res.groups.map(normalizeGroup));
+      if (res?.groups) setGroups(res.groups);
       setError(null);
     } catch (err: any) {
       setError(err.message);
@@ -100,27 +93,43 @@ export const GroupsView: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     void reloadToken;
     void loadGroups();
-  }, [reloadToken]);
+  }, [reloadToken, loadGroups]);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .getCommands()
+      .then((res) => {
+        if (!active) return;
+        setCommands(res.commands.filter((cmd: CommandItem) => cmd.chat === "group"));
+        setPrefix(res.prefix || "!");
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleUpdate = async (jid: string, updates: Partial<GroupItem>) => {
-    setGroups((prev) => prev.map((g) => (g.jid === jid ? { ...g, ...updates } : g)));
+    if (inflight.current.has(jid)) throw new Error(t("saving"));
+    inflight.current.add(jid);
+    setPending(new Set(inflight.current));
     try {
-      await api.updateGroup(jid, updates);
+      const res = await api.updateGroup(jid, updates);
+      setGroups((prev) => prev.map((g) => (g.jid === jid ? res.group : g)));
       toast(t("savedSuccessfully"), "success");
     } catch (err: any) {
       toast(err.message, "error");
-      void loadGroups();
+      throw err;
+    } finally {
+      inflight.current.delete(jid);
+      setPending(new Set(inflight.current));
     }
-  };
-
-  const persistMedia = async (jid: string, mediaRestriction: string) => {
-    await api.updateGroup(jid, { mediaRestriction });
-    setGroups((prev) => prev.map((g) => (g.jid === jid ? { ...g, mediaRestriction } : g)));
   };
 
   const visible = useMemo(() => {
@@ -147,19 +156,6 @@ export const GroupsView: React.FC = () => {
     setQuery("");
     setFilters(EMPTY_GROUP_FILTERS);
   };
-
-  const renderMedia = (jid: string, value: string) => (
-    <GroupMediaField
-      jid={jid}
-      value={value}
-      noneLabel={t("mediaNone")}
-      blockLabel={t("mediaBlockAll")}
-      ariaLabel={t("thMedia")}
-      saveLabel={t("save")}
-      savedLabel={t("saved")}
-      onSave={persistMedia}
-    />
-  );
 
   const showToolbar = !loading && !error && groups.length > 0;
 
@@ -298,108 +294,41 @@ export const GroupsView: React.FC = () => {
 
       {!loading && !error && visible.length > 0 && (
         <>
-          <div className="grid grid-cols-1 gap-3 md:hidden">
-            {pageItems.map((g) => (
-              <Card key={g.jid} className="flex flex-col gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-sm font-bold text-brand-cyan">
-                    {(g.subject || "G").charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <UserText lines={2} className="font-bold text-text-main">
-                      {g.subject || t("unnamedGroup")}
-                    </UserText>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <bdi
-                        dir="ltr"
-                        className="select-all rounded border border-line bg-panel-raised px-1.5 py-0.5 font-mono text-[11px] text-muted"
-                      >
-                        {g.jid?.split("@")[0] || g.jid}
-                      </bdi>
-                      <Badge tone="neutral">{g.memberCount || "—"}</Badge>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-3 border-t border-line/50 pt-3">
-                  <Toggle
-                    label={t("thAntiLink")}
-                    checked={Boolean(g.antilink)}
-                    onChange={(val) => handleUpdate(g.jid, { antilink: val })}
-                  />
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-sm font-semibold text-text-main">{t("thMedia")}</span>
-                    {renderMedia(g.jid, g.mediaRestriction || "none")}
-                  </div>
-                  <Toggle
-                    label={t("thWelcome")}
-                    checked={Boolean(g.welcomeEnabled)}
-                    onChange={(val) => handleUpdate(g.jid, { welcomeEnabled: val })}
-                  />
-                </div>
-              </Card>
+          <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
+            {pageItems.map((group) => (
+              <Disclosure
+                key={group.jid}
+                summary={
+                  <span className="flex items-center gap-3">
+                    <Avatar
+                      src={`/dashboard/api/groups/${encodeURIComponent(group.jid)}/photo`}
+                      name={group.subject || t("unnamedGroup")}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <UserText lines={2} className="block font-bold text-text-main">
+                        {group.subject || t("unnamedGroup")}
+                      </UserText>
+                      <span className="mt-1 flex flex-wrap gap-1.5">
+                        <Badge>
+                          {group.memberCount ?? "—"} {t("thMembers")}
+                        </Badge>
+                        {group.antilink.enabled && <Badge tone="info">{t("thAntiLink")}</Badge>}
+                        {group.antispam.enabled && <Badge tone="ok">{t("antiSpam")}</Badge>}
+                      </span>
+                    </span>
+                  </span>
+                }
+              >
+                <GroupSettings
+                  group={group}
+                  pending={pending.has(group.jid)}
+                  onSave={(patch) => handleUpdate(group.jid, patch)}
+                  commands={commands}
+                  prefix={prefix}
+                />
+              </Disclosure>
             ))}
           </div>
-
-          <Card padded={false} className="hidden overflow-hidden md:block">
-            <div className="overflow-x-auto">
-              <table className="w-full table-fixed border-collapse text-start text-sm">
-                <thead>
-                  <tr className="border-b border-line bg-panel-raised text-xs font-bold uppercase tracking-wider text-muted">
-                    <th className="w-[26%] px-4 py-4 text-start">{t("thGroupName")}</th>
-                    <th className="w-[22%] px-4 py-4 text-start">{t("thGroupJid")}</th>
-                    <th className="w-[8%] px-4 py-4 text-start">{t("thMembers")}</th>
-                    <th className="w-[13%] px-4 py-4 text-center">{t("thAntiLink")}</th>
-                    <th className="w-[18%] px-4 py-4 text-start">{t("thMedia")}</th>
-                    <th className="w-[13%] px-4 py-4 text-center">{t("thWelcome")}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line/40">
-                  {pageItems.map((g) => (
-                    <tr key={g.jid} className="transition-colors hover:bg-panel-hover/50">
-                      <td className="px-4 py-4">
-                        <div className="flex min-w-0 items-center gap-3">
-                          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-sm font-bold text-brand-cyan">
-                            {(g.subject || "G").charAt(0).toUpperCase()}
-                          </div>
-                          <UserText lines={1} className="font-bold text-text-main">
-                            {g.subject || t("unnamedGroup")}
-                          </UserText>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4">
-                        <bdi
-                          dir="ltr"
-                          className="block select-all truncate rounded border border-line bg-panel-raised px-2 py-1 font-mono text-xs text-muted"
-                        >
-                          {g.jid?.split("@")[0] || g.jid}
-                        </bdi>
-                      </td>
-                      <td className="px-4 py-4">
-                        <Badge tone="neutral">{g.memberCount || "—"}</Badge>
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <Toggle
-                          aria-label={t("thAntiLink")}
-                          checked={Boolean(g.antilink)}
-                          onChange={(val) => handleUpdate(g.jid, { antilink: val })}
-                        />
-                      </td>
-                      <td className="px-4 py-4">
-                        {renderMedia(g.jid, g.mediaRestriction || "none")}
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <Toggle
-                          aria-label={t("thWelcome")}
-                          checked={Boolean(g.welcomeEnabled)}
-                          onChange={(val) => handleUpdate(g.jid, { welcomeEnabled: val })}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
 
           <Pagination page={page} pageCount={pageCount} total={total} onPageChange={setPage} />
         </>
@@ -408,45 +337,257 @@ export const GroupsView: React.FC = () => {
   );
 };
 
-function GroupMediaField({
-  jid,
-  value,
-  noneLabel,
-  blockLabel,
-  ariaLabel,
-  saveLabel,
-  savedLabel,
+function GroupSettings({
+  group,
+  pending,
   onSave,
+  commands,
+  prefix,
 }: {
-  jid: string;
-  value: string;
-  noneLabel: string;
-  blockLabel: string;
-  ariaLabel: string;
-  saveLabel: string;
-  savedLabel: string;
-  onSave: (jid: string, mediaRestriction: string) => Promise<void>;
+  group: GroupItem;
+  pending: boolean;
+  onSave: (patch: Partial<GroupItem>) => Promise<void>;
+  commands: CommandItem[];
+  prefix: string;
 }) {
-  const field = useSavedValue(value);
+  const { t, language } = useI18n();
+  const { permissionLabel } = useCommandLabels();
+  const form = useDirtyForm({
+    linkMode: group.antilink.mode,
+    domains: group.antilink.allowed_domains.join("\n"),
+    spamWindow: group.antispam.time_window,
+    spamLimit: group.antispam.message_count,
+    spamAction: group.antispam.action,
+    warningLimit: group.warn_system.max_warnings,
+    warningAction: group.warn_system.action,
+    rules: group.rules,
+    welcome: group.welcome_system.messages.join("\n"),
+  });
+  const toggle = (patch: Partial<GroupItem>) => {
+    void onSave(patch).catch(() => {});
+  };
+  const onOff = (
+    label: string,
+    checked: boolean,
+    patch: (value: boolean) => Partial<GroupItem>,
+  ) => (
+    <Toggle
+      label={label}
+      checked={checked}
+      disabled={pending}
+      onChange={(value) => toggle(patch(value))}
+    />
+  );
   return (
-    <SaveField
-      dirty={field.dirty}
-      saving={field.status === "saving"}
-      justSaved={field.status === "saved"}
-      error={field.error}
-      onSave={() => field.save((next) => onSave(jid, next))}
-      onRevert={field.revert}
-      saveLabel={saveLabel}
-      savedLabel={savedLabel}
-    >
-      <Select
-        aria-label={ariaLabel}
-        value={field.value}
-        onChange={(event) => field.setValue(event.target.value)}
+    <div className="flex flex-col gap-5">
+      <p className="text-xs text-muted">{t("botAdminHint")}</p>
+      {onOff(t("thAntiLink"), group.antilink.enabled, (enabled) => ({
+        antilink: { ...group.antilink, enabled },
+      }))}
+      {onOff(t("antiSpam"), group.antispam.enabled, (enabled) => ({
+        antispam: { ...group.antispam, enabled },
+      }))}
+      {onOff(t("thWelcome"), group.welcome_system.enabled, (enabled) => ({
+        welcome_system: { ...group.welcome_system, enabled },
+      }))}
+      {onOff(
+        t("autoApprove"),
+        group.join_requests.auto_approve_enabled,
+        (auto_approve_enabled) => ({ join_requests: { auto_approve_enabled } }),
+      )}
+      <Section title={t("thMedia")}>
+        <div className="grid grid-cols-1 gap-x-5 sm:grid-cols-2">
+          {(
+            [
+              ["image", "blockImages"],
+              ["video", "blockVideos"],
+              ["audio", "blockAudio"],
+              ["sticker", "blockStickers"],
+            ] as const
+          ).map(([type, label]) => (
+            <Toggle
+              key={type}
+              label={t(label)}
+              disabled={pending}
+              checked={
+                group.media_control.enabled && group.media_control.blocked_types.includes(type)
+              }
+              onChange={(blocked) => {
+                const types = group.media_control.enabled ? group.media_control.blocked_types : [];
+                const blocked_types = blocked
+                  ? [...new Set([...types, type])]
+                  : types.filter((value) => value !== type);
+                toggle({ media_control: { enabled: blocked_types.length > 0, blocked_types } });
+              }}
+            />
+          ))}
+        </div>
+      </Section>
+      <form
+        className="flex flex-col gap-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void form.save(async (draft) => {
+            await onSave({
+              antilink: {
+                ...group.antilink,
+                mode: draft.linkMode,
+                allowed_domains: draft.domains
+                  .split("\n")
+                  .map((s) => s.trim())
+                  .filter(Boolean),
+              },
+              antispam: {
+                ...group.antispam,
+                time_window: draft.spamWindow,
+                message_count: draft.spamLimit,
+                action: draft.spamAction,
+              },
+              warn_system: { max_warnings: draft.warningLimit, action: draft.warningAction },
+              welcome_system: {
+                ...group.welcome_system,
+                messages:
+                  draft.welcome === group.welcome_system.messages.join("\n")
+                    ? group.welcome_system.messages
+                    : draft.welcome.split("\n").filter(Boolean),
+              },
+              rules: draft.rules,
+            });
+          });
+        }}
       >
-        <option value="none">{noneLabel}</option>
-        <option value="block_all">{blockLabel}</option>
-      </Select>
-    </SaveField>
+        <fieldset disabled={pending} className="flex min-w-0 flex-col gap-5">
+          <Section title={t("groupModeration")}>
+            <Field label={t("linkMode")}>
+              <Select
+                aria-label={t("linkMode")}
+                value={form.draft.linkMode}
+                onChange={(e) => form.setField("linkMode", e.target.value)}
+              >
+                <option value="ALL">{t("linkAll")}</option>
+                <option value="WHITELIST">{t("linkWhitelist")}</option>
+                <option value="BLACKLIST">{t("linkBlacklist")}</option>
+              </Select>
+            </Field>
+            <Field label={t("allowedDomains")}>
+              <Textarea
+                aria-label={t("allowedDomains")}
+                dir="ltr"
+                value={form.draft.domains}
+                onChange={(e) => form.setField("domains", e.target.value)}
+              />
+            </Field>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={t("spamWindow")}>
+                <Input
+                  aria-label={t("spamWindow")}
+                  type="number"
+                  min={1}
+                  max={600}
+                  required
+                  value={form.draft.spamWindow}
+                  onChange={(e) => form.setField("spamWindow", Number(e.target.value))}
+                />
+              </Field>
+              <Field label={t("spamLimit")}>
+                <Input
+                  aria-label={t("spamLimit")}
+                  type="number"
+                  min={2}
+                  max={100}
+                  required
+                  value={form.draft.spamLimit}
+                  onChange={(e) => form.setField("spamLimit", Number(e.target.value))}
+                />
+              </Field>
+            </div>
+            <Field label={t("spamAction")}>
+              <Select
+                aria-label={t("spamAction")}
+                value={form.draft.spamAction}
+                onChange={(e) => form.setField("spamAction", e.target.value)}
+              >
+                <option value="WARN">{t("actionWarn")}</option>
+                <option value="KICK">{t("actionKick")}</option>
+              </Select>
+            </Field>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={t("warningLimit")}>
+                <Input
+                  aria-label={t("warningLimit")}
+                  type="number"
+                  min={1}
+                  max={50}
+                  required
+                  value={form.draft.warningLimit}
+                  onChange={(e) => form.setField("warningLimit", Number(e.target.value))}
+                />
+              </Field>
+              <Field label={t("warningAction")}>
+                <Select
+                  aria-label={t("warningAction")}
+                  value={form.draft.warningAction}
+                  onChange={(e) => form.setField("warningAction", e.target.value)}
+                >
+                  <option value="NONE">{t("actionNone")}</option>
+                  <option value="KICK">{t("actionKick")}</option>
+                </Select>
+              </Field>
+            </div>
+          </Section>
+          <Field label={t("groupRules")}>
+            <Textarea
+              aria-label={t("groupRules")}
+              dir="auto"
+              maxLength={4000}
+              value={form.draft.rules}
+              onChange={(e) => form.setField("rules", e.target.value)}
+            />
+          </Field>
+          <Field label={t("welcomeMessages")}>
+            <Textarea
+              aria-label={t("welcomeMessages")}
+              dir="auto"
+              value={form.draft.welcome}
+              onChange={(e) => form.setField("welcome", e.target.value)}
+            />
+          </Field>
+          <FormActions
+            dirty={form.dirty}
+            saving={pending}
+            justSaved={form.status === "saved"}
+            error={form.error}
+            onDiscard={form.revert}
+            saveLabel={t("save")}
+            discardLabel={t("discard")}
+            unsavedLabel={t("unsavedChanges")}
+            savedLabel={t("saved")}
+          />
+        </fieldset>
+      </form>
+      {commands.length > 0 && (
+        <Disclosure summary={t("groupCommands")}>
+          <ul className="flex list-none flex-col gap-3 p-0">
+            {commands.map((command) => (
+              <li key={command.key || command.name} className="flex flex-col gap-1">
+                <span className="flex flex-wrap items-center gap-2">
+                  <code dir="ltr" className="font-mono text-sm font-bold text-brand-cyan">
+                    {prefix}
+                    {command.name}
+                  </code>
+                  <Badge>{permissionLabel(command.permission)}</Badge>
+                  <Badge tone={command.enabled ? "ok" : "neutral"}>
+                    {command.enabled ? t("statusEnabled") : t("statusDisabled")}
+                  </Badge>
+                </span>
+                <p dir="auto" className="text-xs text-muted">
+                  {command.descriptions?.[language] || command.description}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </Disclosure>
+      )}
+    </div>
   );
 }

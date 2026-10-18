@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Guide art, step 5: nothing leaves the phone until you send it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="125dp"
+    android:viewportWidth="240"
+    android:viewportHeight="150">
+
+    <!-- Shield, scaled from ic_card_battery. -->
+    <group
+        android:scaleX="3.4"
+        android:scaleY="3.4"
+        android:translateX="79.2"
+        android:translateY="23.7">
+        <path
+            android:fillColor="@color/levix_ok_soft"
+            android:pathData="M12,2L4,5V11C4,16.52 7.41,21.62 12,22.88C16.59,21.62 20,16.52 20,11V5L12,2Z"
+            android:strokeColor="@color/levix_ok"
+            android:strokeLineJoin="round"
+            android:strokeWidth="1.8" />
+    </group>
+
+    <!-- The tick: what is checked stays here. -->
+    <path
+        android:pathData="M106,66L117,77L136,54"
+        android:strokeColor="@color/levix_ok"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="6" />
+
+    <!-- The phone holding it. -->
+    <path
+        android:fillColor="@color/levix_bg_soft"
+        android:pathData="M98,114H142A10,10 0 0,1 152,124V124A10,10 0 0,1 142,134H98A10,10 0 0,1 88,124V124A10,10 0 0,1 98,114Z"
+        android:strokeColor="@color/levix_border"
+        android:strokeWidth="2" />
+    <path
+        android:fillColor="@color/levix_text_muted"
+        android:pathData="M109,124A2.5,2.5 0 1,0 114,124A2.5,2.5 0 1,0 109,124Z" />
+    <path
+        android:fillColor="@color/levix_text_muted"
+        android:pathData="M117,124A2.5,2.5 0 1,0 122,124A2.5,2.5 0 1,0 117,124Z" />
+    <path
+        android:fillColor="@color/levix_text_muted"
+        android:pathData="M125,124A2.5,2.5 0 1,0 130,124A2.5,2.5 0 1,0 125,124Z" />
+</vector>
