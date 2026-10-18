@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ring colour for a session that needs the operator: retries exhausted or
+     the WhatsApp pairing is gone. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@color/levix_danger_soft" />
+    <stroke
+        android:width="3dp"
+        android:color="@color/levix_danger" />
+</shape>

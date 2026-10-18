@@ -46,3 +46,25 @@ export function StatusPill({
     </Badge>
   );
 }
+
+/** A compact status indicator with the state available to assistive technology. */
+export function StatusDot({ tone = "neutral", label }: { tone?: BadgeTone; label: string }) {
+  return (
+    <span
+      role="status"
+      className={cn(
+        "inline-flex size-4 items-center justify-center",
+        {
+          ok: "text-ok",
+          warn: "text-warn",
+          danger: "text-danger",
+          info: "text-info",
+          neutral: "text-muted",
+        }[tone],
+      )}
+    >
+      <span aria-hidden className="size-2.5 rounded-full bg-current" />
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}

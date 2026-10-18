@@ -10,94 +10,71 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:baselineAligned="false"
         android:gravity="center_vertical"
         android:orientation="horizontal">
-        <TextView
+        <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/mediaBack"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="@string/media_back"
-            android:gravity="center"
-            android:text="@string/media_back_glyph"
-            android:textColor="@color/levix_text"
-            android:textSize="32sp" />
+            style="@style/Widget.Levix.MediaIconButton"
+            android:src="@drawable/ic_media_back"
+            android:contentDescription="@string/media_back" />
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:text="@string/media_hub_title"
             android:textColor="@color/levix_text"
-            android:textSize="22sp"
+            android:textSize="20sp"
             android:textStyle="bold" />
-        <TextView
-            android:id="@+id/mediaInsights"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="@string/media_insights"
-            android:gravity="center"
-            android:text="@string/media_insights_glyph"
-            android:textColor="@color/levix_cyan"
-            android:textSize="24sp" />
-        <TextView
+        <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/mediaSort"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="@string/media_sort"
-            android:gravity="center"
-            android:text="@string/media_sort_glyph"
-            android:textColor="@color/levix_cyan"
-            android:textSize="24sp" />
+            style="@style/Widget.Levix.MediaIconButton"
+            android:src="@drawable/ic_media_sort"
+            android:contentDescription="@string/media_sort" />
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/mediaInsights"
+            style="@style/Widget.Levix.MediaIconButton"
+            android:src="@drawable/ic_media_insights"
+            android:contentDescription="@string/media_insights" />
     </LinearLayout>
 
-    <EditText
-        android:id="@+id/mediaSearch"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
-        android:background="@drawable/bg_card_raised"
-        android:hint="@string/media_search"
-        android:importantForAutofill="no"
-        android:inputType="text"
-        android:maxLines="1"
-        android:paddingStart="14dp"
-        android:paddingEnd="14dp"
-        android:textColor="@color/levix_text"
-        android:textColorHint="@color/levix_text_muted" />
-
-    <HorizontalScrollView
-        android:id="@+id/mediaSourcesScroll"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="56dp"
-        android:scrollbars="none">
-        <LinearLayout
-            android:id="@+id/mediaSources"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center_vertical"
-            android:orientation="horizontal" />
-    </HorizontalScrollView>
-    <HorizontalScrollView
-        android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:scrollbars="none">
-        <LinearLayout
-            android:id="@+id/mediaCategories"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center_vertical"
-            android:orientation="horizontal" />
-    </HorizontalScrollView>
-    <HorizontalScrollView
-        android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:scrollbars="none">
-        <LinearLayout
-            android:id="@+id/mediaFilters"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:gravity="center_vertical"
-            android:orientation="horizontal" />
-    </HorizontalScrollView>
+        android:layout_marginBottom="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+        <EditText
+            android:id="@+id/mediaSearch"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_card_raised"
+            android:hint="@string/media_search"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:maxLines="1"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:textColor="@color/levix_text"
+            android:textColorHint="@color/levix_text_muted" />
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/mediaSource"
+            style="@style/Widget.Levix.MediaIconButton"
+            android:src="@drawable/ic_media_source"
+            android:contentDescription="@string/media_source" />
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/mediaKind"
+            style="@style/Widget.Levix.MediaIconButton"
+            android:src="@drawable/ic_card_media"
+            android:contentDescription="@string/media_category" />
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/mediaFilter"
+            style="@style/Widget.Levix.MediaIconButton"
+            android:src="@drawable/ic_media_filter"
+            android:contentDescription="@string/media_filter" />
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/mediaBanner"
@@ -172,32 +149,25 @@
             android:layout_weight="1"
             android:textColor="@color/levix_text"
             android:textSize="14sp" />
-        <Button
+        <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/mediaSave"
-            style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:text="@string/media_save" />
-        <Button
+            style="@style/Widget.Levix.MediaIconButton"
+            android:src="@drawable/ic_save"
+            android:contentDescription="@string/media_save" />
+        <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/mediaShare"
-            style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:text="@string/media_share" />
-        <Button
+            style="@style/Widget.Levix.MediaIconButton"
+            android:src="@drawable/ic_share"
+            android:contentDescription="@string/media_share" />
+        <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/mediaDelete"
-            style="?android:attr/buttonBarButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:text="@string/media_delete" />
-        <TextView
+            style="@style/Widget.Levix.MediaIconButton"
+            android:src="@drawable/ic_media_delete"
+            android:contentDescription="@string/media_delete" />
+        <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/mediaMore"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="@string/media_more"
-            android:gravity="center"
-            android:text="@string/media_more_glyph"
-            android:textColor="@color/levix_text"
-            android:textSize="22sp" />
+            style="@style/Widget.Levix.MediaIconButton"
+            android:src="@drawable/ic_media_more"
+            android:contentDescription="@string/media_more" />
     </LinearLayout>
 </LinearLayout>

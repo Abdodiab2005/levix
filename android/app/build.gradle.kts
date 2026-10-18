@@ -162,6 +162,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Opt-in, data-isolated device QA; release identity is unchanged.
+            if (providers.gradleProperty("levixIsolatedDebug").orNull == "true") {
+                applicationIdSuffix = ".dev"
+                resValue("string", "app_name", "Levix QA")
+            }
+        }
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("levixRelease")

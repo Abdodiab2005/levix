@@ -181,6 +181,8 @@ export const Toggle = forwardRef<HTMLButtonElement, ToggleProps>(function Toggle
 ) {
   const autoId = useId();
   const toggleId = id || autoId;
+  const labelId = `${toggleId}-label`;
+  const descriptionId = `${toggleId}-description`;
   const labelled = Boolean(label || description);
   return (
     <div
@@ -193,29 +195,42 @@ export const Toggle = forwardRef<HTMLButtonElement, ToggleProps>(function Toggle
         <div className="min-w-0 flex-1">
           {label && (
             <label
+              id={labelId}
               htmlFor={toggleId}
               className="block cursor-pointer text-sm font-semibold text-text-main"
             >
               {label}
             </label>
           )}
-          {description && <p className="mt-0.5 text-xs text-muted">{description}</p>}
+          {description && (
+            <p id={descriptionId} className="mt-0.5 text-xs text-muted">
+              {description}
+            </p>
+          )}
         </div>
       )}
       <button
         ref={ref}
         type="button"
+        {...props}
         role="switch"
         aria-checked={checked}
+        aria-labelledby={
+          props["aria-labelledby"] ?? (label && !props["aria-label"] ? labelId : undefined)
+        }
+        aria-describedby={
+          [props["aria-describedby"], description ? descriptionId : undefined]
+            .filter(Boolean)
+            .join(" ") || undefined
+        }
         id={toggleId}
-        {...props}
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative inline-flex h-11 w-[52px] shrink-0 items-center rounded-full transition-colors",
+          "relative inline-flex size-11 shrink-0 items-center rounded-full transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/50",
           "disabled:cursor-not-allowed disabled:opacity-50",
-          "before:absolute before:inset-x-0 before:top-1.5 before:h-8 before:rounded-full before:border before:transition-colors",
+          "before:absolute before:inset-x-0 before:top-[9px] before:h-[26px] before:rounded-full before:border before:transition-colors",
           checked
             ? "before:border-brand-blue before:bg-brand-blue"
             : "before:border-faint/70 before:bg-panel-hover",
@@ -224,8 +239,8 @@ export const Toggle = forwardRef<HTMLButtonElement, ToggleProps>(function Toggle
         <span
           aria-hidden
           className={cn(
-            "pointer-events-none absolute top-2.5 size-6 rounded-full bg-white shadow transition-[inset-inline-start] duration-200",
-            checked ? "start-[26px]" : "start-[2px]",
+            "pointer-events-none absolute top-3 size-5 rounded-full bg-white shadow transition-[inset-inline-start] duration-200 motion-reduce:transition-none",
+            checked ? "start-[21px]" : "start-[3px]",
           )}
         />
       </button>

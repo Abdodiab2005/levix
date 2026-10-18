@@ -16,13 +16,10 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.Settings
 import android.text.format.Formatter
-import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
-import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
@@ -31,6 +28,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.AppCompatImageButton
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
@@ -62,9 +60,6 @@ class MediaHubActivity : AppCompatActivity() {
     private lateinit var bannerText: TextView
     private lateinit var bannerAction: Button
     private lateinit var bannerOther: Button
-    private lateinit var sources: LinearLayout
-    private lateinit var categories: LinearLayout
-    private lateinit var filters: LinearLayout
 
     private var source: MediaSource? = null
     private var category = "Statuses"
@@ -145,9 +140,6 @@ class MediaHubActivity : AppCompatActivity() {
         bannerText = findViewById(R.id.mediaBannerText)
         bannerAction = findViewById(R.id.mediaBannerAction)
         bannerOther = findViewById(R.id.mediaBannerOther)
-        sources = findViewById(R.id.mediaSources)
-        categories = findViewById(R.id.mediaCategories)
-        filters = findViewById(R.id.mediaFilters)
         adapter = MediaAdapter(
             context = this,
             resolver = contentResolver,
@@ -166,6 +158,41 @@ class MediaHubActivity : AppCompatActivity() {
     private fun bindControls() {
         findViewById<View>(R.id.mediaBack).setOnClickListener { finish() }
         findViewById<View>(R.id.mediaInsights).setOnClickListener { showInsights() }
+        findViewById<View>(R.id.mediaSource).setOnClickListener {
+            val labels = sourceLabels()
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.media_source)
+                .setSingleChoiceItems(labels.toTypedArray(), sourceIndex()) { dialog, index ->
+                    source = when (index) {
+                        1 -> MediaSource.WHATSAPP
+                        2 -> MediaSource.WHATSAPP_BUSINESS
+                        else -> null
+                    }
+                    dialog.dismiss()
+                    render()
+                }.show()
+        }
+        findViewById<View>(R.id.mediaKind).setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.media_category)
+                .setSingleChoiceItems(
+                    CATEGORY_LABELS.map(::getString).toTypedArray(), CATEGORY_KEYS.indexOf(category),
+                ) { dialog, index ->
+                    category = CATEGORY_KEYS[index]
+                    dialog.dismiss()
+                    render()
+                }.show()
+        }
+        findViewById<View>(R.id.mediaFilter).setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.media_filter)
+                .setSingleChoiceItems(FILTER_LABELS.map(::getString).toTypedArray(), filter.ordinal) {
+                    dialog, index ->
+                    filter = MediaFilter.entries[index]
+                    dialog.dismiss()
+                    render()
+                }.show()
+        }
         findViewById<View>(R.id.mediaSort).setOnClickListener { view ->
             PopupMenu(this, view).apply {
                 MediaSort.entries.forEach { option ->
@@ -357,46 +384,17 @@ class MediaHubActivity : AppCompatActivity() {
         val both = installed("com.whatsapp") && installed("com.whatsapp.w4b") ||
             all.any { it.source == MediaSource.WHATSAPP } &&
             all.any { it.source == MediaSource.WHATSAPP_BUSINESS }
-        findViewById<View>(R.id.mediaSourcesScroll).visibility = if (both) View.VISIBLE else View.GONE
-        if (both) {
-            val names = listOf(
-                getString(R.string.media_all),
-                getString(R.string.media_whatsapp),
-                getString(R.string.media_business),
-            )
-            val selectedSource = when (source) {
-                MediaSource.WHATSAPP -> 1
-                MediaSource.WHATSAPP_BUSINESS -> 2
-                else -> 0
-            }
-            chips(sources, names, selectedSource) { index ->
-                source = when (index) {
-                    1 -> MediaSource.WHATSAPP
-                    2 -> MediaSource.WHATSAPP_BUSINESS
-                    else -> null
-                }
-                render()
-            }
-        }
-        val categoryKeys = listOf(
-            "Statuses", "Images", "Videos", "Voice notes", "Audio", "Documents", "Stickers", "Saved",
+        findViewById<View>(R.id.mediaSource).visibility = if (both) View.VISIBLE else View.GONE
+        describeChoice(R.id.mediaSource, R.string.media_source, sourceLabels()[sourceIndex()], source != null)
+        describeChoice(
+            R.id.mediaKind, R.string.media_category,
+            getString(CATEGORY_LABELS[CATEGORY_KEYS.indexOf(category)]), true,
         )
-        val categoryLabels = listOf(
-            R.string.media_statuses, R.string.media_images, R.string.media_videos, R.string.media_voice,
-            R.string.media_audio, R.string.media_documents, R.string.media_stickers, R.string.media_saved,
+        describeChoice(
+            R.id.mediaFilter, R.string.media_filter,
+            getString(FILTER_LABELS[filter.ordinal]), filter != MediaFilter.ALL,
         )
-        chips(categories, categoryLabels.map(::getString), categoryKeys.indexOf(category)) { index ->
-            category = categoryKeys[index]
-            render()
-        }
-        val filterLabels = listOf(
-            R.string.media_all, R.string.media_today, R.string.media_yesterday, R.string.media_week,
-            R.string.media_large, R.string.media_saved, R.string.media_favorites,
-        )
-        chips(filters, filterLabels.map(::getString), filter.ordinal) { index ->
-            filter = MediaFilter.entries[index]
-            render()
-        }
+        describeChoice(R.id.mediaSort, R.string.media_sort, sortTitle(sort), sort != MediaSort.NEWEST)
         shown = MediaLogic.visible(
             all, category, source, filter, sort, query, Instant.now(), ZoneId.systemDefault(),
         )
@@ -496,42 +494,25 @@ class MediaHubActivity : AppCompatActivity() {
         bannerAction.setOnClickListener { tree() }
     }
 
-    private fun chips(
-        parent: LinearLayout,
-        labels: List<String>,
-        selected: Int,
-        click: (Int) -> Unit,
-    ) {
-        val unchanged = parent.childCount == labels.size && (0 until labels.size).all { index ->
-            val chip = parent.getChildAt(index) as TextView
-            chip.text == labels[index] && chip.isSelected == (index == selected)
-        }
-        if (unchanged) return
+    private fun sourceLabels(): List<String> = listOf(
+        getString(R.string.media_all), getString(R.string.media_whatsapp), getString(R.string.media_business),
+    )
 
-        parent.removeAllViews()
-        labels.forEachIndexed { index, label ->
-            val chip = TextView(this).apply {
-                text = label
-                gravity = Gravity.CENTER
-                minHeight = dp(48)
-                setPadding(dp(14), 0, dp(14), 0)
-                setTextColor(ContextCompat.getColor(
-                    this@MediaHubActivity,
-                    if (index == selected) R.color.levix_cyan else R.color.levix_text_muted,
-                ))
-                setBackgroundResource(
-                    if (index == selected) R.drawable.bg_card_raised else R.drawable.bg_card_panel,
-                )
-                isSelected = index == selected
-                setOnClickListener { click(index) }
-            }
-            parent.addView(
-                chip,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                ).apply { marginEnd = dp(6) },
-            )
+    private fun sourceIndex(): Int = when (source) {
+        MediaSource.WHATSAPP -> 1
+        MediaSource.WHATSAPP_BUSINESS -> 2
+        else -> 0
+    }
+
+    private fun describeChoice(id: Int, title: Int, value: String, active: Boolean) {
+        findViewById<AppCompatImageButton>(id).apply {
+            val label = "${getString(title)}: $value"
+            contentDescription = label
+            tooltipText = label
+            setColorFilter(ContextCompat.getColor(
+                this@MediaHubActivity,
+                if (active) R.color.levix_cyan else R.color.levix_text_muted,
+            ))
         }
     }
 
@@ -813,6 +794,17 @@ class MediaHubActivity : AppCompatActivity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private companion object {
+        val CATEGORY_KEYS = listOf(
+            "Statuses", "Images", "Videos", "Voice notes", "Audio", "Documents", "Stickers", "Saved",
+        )
+        val CATEGORY_LABELS = listOf(
+            R.string.media_statuses, R.string.media_images, R.string.media_videos, R.string.media_voice,
+            R.string.media_audio, R.string.media_documents, R.string.media_stickers, R.string.media_saved,
+        )
+        val FILTER_LABELS = listOf(
+            R.string.media_all, R.string.media_today, R.string.media_yesterday, R.string.media_week,
+            R.string.media_large, R.string.media_saved, R.string.media_favorites,
+        )
         const val MENU_SELECT_ALL = 1
         const val MENU_FAVORITE = 2
         const val MENU_STICKER = 3

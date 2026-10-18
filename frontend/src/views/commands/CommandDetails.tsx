@@ -2,7 +2,7 @@
 
 import { Copy, Edit3, Lock } from "lucide-react";
 import type { ReactNode } from "react";
-import { Badge, IconButton, SaveField, Select, useSavedValue } from "../../components/ui";
+import { Badge, IconButton, Panel, SaveField, Select, useSavedValue } from "../../components/ui";
 import type { CommandItem, PermissionLevel } from "../../types";
 import { AliasToken } from "./AliasToken";
 import { type CommandActions, useCommandLabels } from "./shared";
@@ -10,7 +10,7 @@ import { type CommandActions, useCommandLabels } from "./shared";
 /**
  * Editable permission for one command. A locked command (`userAdminRequired`)
  * performs a real WhatsApp admin action, so the level is fixed and shown as a
- * badge with the reason instead of a control the server would refuse anyway.
+ * read-only field with the reason instead of a control the server would refuse.
  */
 export function CommandPermissionControl({
   command,
@@ -26,10 +26,17 @@ export function CommandPermissionControl({
 
   if (command.permissionLocked) {
     return (
-      <Badge tone="neutral">
-        <Lock size={12} aria-hidden />
-        {permissionLabel(command.permission)}
-      </Badge>
+      <Panel
+        padded={false}
+        role="group"
+        aria-label={`${t("thRequiredRole")}: ${command.name}`}
+        className="flex min-h-11 items-center gap-2.5 px-3 py-3"
+      >
+        <Lock size={16} className="shrink-0 text-muted" aria-hidden />
+        <span className="min-w-0 break-words text-sm text-text-main">
+          {permissionLabel(command.permission)}
+        </span>
+      </Panel>
     );
   }
 
@@ -61,7 +68,7 @@ export function CommandPermissionControl({
 
 function DetailSection({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <section className="flex min-w-0 flex-col gap-1.5">
+    <section className="flex min-w-0 flex-col gap-2.5">
       <p className="text-xs font-bold text-muted">{label}</p>
       {children}
     </section>
@@ -89,14 +96,14 @@ export function CommandDetails({
   const usages = usageLines(command, prefix);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       {description && (
-        <p dir="auto" className="min-w-0 break-words text-sm text-muted">
+        <p dir="auto" className="min-w-0 break-words text-sm leading-relaxed text-muted">
           {description}
         </p>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2">
         <DetailSection label={t("thAliases")}>
           <div className="flex flex-wrap items-center gap-1.5">
             {command.aliases?.length ? (
@@ -142,21 +149,24 @@ export function CommandDetails({
 
       {usages.length > 0 && (
         <DetailSection label={t("usage")}>
-          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {usages.map((line) => (
-              <li key={line} className="flex items-center gap-1.5">
-                <code
-                  dir="ltr"
-                  title={line}
-                  className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded border border-line bg-panel-raised px-1.5 py-0.5 font-mono text-[11px] text-muted"
-                >
-                  {line}
-                </code>
-                <IconButton
-                  label={t("copyCommand")}
-                  icon={<Copy size={16} />}
-                  onClick={() => actions.onCopy(line)}
-                />
+              <li key={line}>
+                <Panel padded={false} className="flex min-h-11 items-center gap-2 px-3 py-2">
+                  <code
+                    dir="ltr"
+                    title={line}
+                    className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-muted"
+                  >
+                    {line}
+                  </code>
+                  <IconButton
+                    label={t("copyCommand")}
+                    variant="ghost"
+                    icon={<Copy size={16} />}
+                    onClick={() => actions.onCopy(line)}
+                  />
+                </Panel>
               </li>
             ))}
           </ul>

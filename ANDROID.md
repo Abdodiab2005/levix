@@ -40,15 +40,15 @@ Levix for Android packages the complete Levix stack into a standalone Android AP
 ## First-Time Setup & WhatsApp Pairing
 
 ### Step 1: Grant Permissions & Start the Host
-1. Launch **Levix Host**.
-2. Tap **Start Host**.
+1. Launch **Levix Host**. The first launch opens a short guide — five steps, each with a picture of the screen it is describing — and **Skip** leaves it at any point. **Show guide again** on the home screen brings it back.
+2. Tap the big circle (**Start Assistant**).
 3. When prompted, grant **Notification** permissions so the host can maintain an ongoing foreground service and keep the bot running while the screen is off.
 4. When prompted, tap **Allow** to disable battery optimization for Levix.
 
-The status will change from `Host: Stopped` to `Node: running (PID ...)`, and the ongoing notification will appear in your notification shade.
+The circle becomes a progress state while the engine starts. Once ready, **Connect WhatsApp** opens the secure Connection workflow. Engine readiness and WhatsApp connectivity are shown separately, and the ongoing notification reports the session state.
 
 ### Step 2: Set Admin Password
-1. Tap **Open Panel** in the app (or open `http://127.0.0.1:3001` in Google Chrome).
+1. Tap **Connect WhatsApp** in the app to open the panel on Connection. Once fully connected, the home action becomes **Open Control Panel**.
 2. The initial setup screen will appear (`/setup`). Choose a secure master password for your web control panel and submit.
 
 ### Step 3: Link WhatsApp via Pairing Code (Recommended)
@@ -65,6 +65,16 @@ Because you are running the bot on a phone, scanning a QR code on the same scree
    - Tap **Link with phone number instead** at the bottom of the screen.
    - Enter the 8-character code displayed in your Levix panel.
 7. WhatsApp will complete the handshake. Within a few seconds, the connection status will turn green: **Connected**.
+
+### The home screen
+
+- **Header** — the Levix mark and app name stay on the left; the language and appearance controls stay on the right in both languages. Tap the globe to switch **العربية** / **English**, and the sun/moon to switch Light / Dark.
+- **Start Assistant** — the large power circle is the primary action while stopped. Startup shows progress, pairing offers **Connect WhatsApp**, and a connected assistant shows a compact ready card with **Open Control Panel**. **Stop Assistant** is a separate action. Contextual guidance also explains reconnecting, offline pauses, expired sessions, and engine errors.
+- **Battery Guard** — appears below activation guidance. Restrictions show a warning and **Enable Battery Guard**; an exemption shows a compact healthy card. Android or device restrictions can still interrupt background operation.
+- **WhatsApp & Bot Engine tiles** — tap the WhatsApp tile for the read-only connection sheet: state, since when, error, network and engine.
+- **Media Hub** — browses the statuses and WhatsApp media stored on this phone.
+- **Show guide again** — reopens the five-step guide, with the same pictures and steps as the first launch.
+- **Diagnostics** — tap the card for **Save & open** (writes `Downloads/Levix/levix-host-<timestamp>.log` and opens it in your viewer) or **Share logs** (Android's share sheet). Nothing leaves the phone until you pick one.
 
 ---
 
@@ -118,6 +128,8 @@ Levix includes intelligent network and connection lifecycle handling:
 
 Open **Media Hub** from the native host screen to browse WhatsApp and WhatsApp Business statuses, photos, videos, voice notes, audio, documents, and stickers. Search, filter, favorite, share, and save copies to user-visible Levix folders. Storage Insights shows local totals and large files. Only copies saved by Levix can be deleted in the hub.
 
+The header has compact source, media-type, filter, sort, and Storage Insights icons. Tap a choice icon to see its options. Long-press a card to select it; its border covers the whole preview. The selection bar keeps Save, Share, and Delete as icons, with Select all, Favorite, sticker actions, and Clear selection in the three-dot menu.
+
 The hub asks for media permission when you open it, after an explanation. Android 14's selected-media permission shows only the items you selected; you can select more or allow full access in system settings. Hidden `.Statuses` folders and some documents may not appear in MediaStore. In that case, use **Enable status access** to grant read-only access to the WhatsApp Media folder through Android's folder picker. Levix remembers the grant and asks again only if access is removed. Media Hub never uploads files, names, thumbnails, or folder details.
 
 Levix bundles a native build of **FFmpeg** (`libffmpeg.so` — ARM64 or ARMv7, matching the APK) inside the APK, compiled from source with NDK r29 so it is safe on 16 KB-page devices.
@@ -137,7 +149,7 @@ Sticker Studio is the panel's sticker screen. It is reached from the native side
 Any single item in **Media Hub** can be turned into a sticker, in two places:
 
 - the **viewer**, on the action row under the picture — hidden for items with no sticker form;
-- the **selection bar**, on **Make sticker** — visible only when exactly one stickerable file is selected, since Sticker Studio takes one file at a time.
+- the **selection bar’s three-dot menu**, on **Make sticker** — offered only when exactly one stickerable file is selected, since Sticker Studio takes one file at a time.
 
 The label follows the file:
 
@@ -288,7 +300,7 @@ not start at all.
 Leave the contact field empty and nothing you send names you; fill it in if you
 want an answer. For a bug you would rather see tracked in public with logs
 attached, open a [GitHub issue](https://github.com/Abdodiab2005/levix/issues)
-and use **Share Logs** in the app to attach the host log.
+and use **Diagnostics → Share logs** in the app to attach the host log.
 
 ---
 
@@ -298,7 +310,7 @@ and use **Share Logs** in the app to attach the host log.
 Make sure you enter your phone number with the international country code and without leading zeroes or symbols (e.g. `2010XXXXXXXX` for Egypt, `1XXXXXXXXXX` for USA). Do **not** enter `010...` or `+20...`.
 
 #### Why does the Web Control Panel say "Connection Refused"?
-Make sure the host service is running. Open the Levix Host app and verify the state shows `Node: running`. If it is stopped, tap **Start Host**.
+Make sure the host service is running. Open the Levix Host app and verify the Bot Engine card shows that the engine is operational. If it is stopped, tap the big circle (**Start Assistant**).
 
 #### Can I access the Web Control Panel from my PC on the same Wi-Fi?
 By default, the web panel is bound strictly to `127.0.0.1` (localhost) for mobile security. To access it from a computer on the same network, use ADB port forwarding:

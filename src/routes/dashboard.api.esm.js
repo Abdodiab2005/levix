@@ -16,14 +16,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { Router } from "express";
 import { createRequire } from "module";
-import { groupMetadataCache } from "../core/socket.js";
+import { fetchWhatsAppImage, groupMetadataCache } from "../core/socket.js";
 import { getCommandCatalog, rebuildCommandIndex } from "../handlers/command.handler.js";
 import { fileToBuffer, MultipartError, readMultipartForm } from "../utils/multipart.esm.js";
 import normalizeJid, { isLidJid } from "../utils/normalizeJid.esm.js";
 import { grantRole, listRoles, revokeRole } from "../utils/permissions.esm.js";
 import {
   countDebts,
-  countGroups,
   countNotes,
   countSchedules,
   countTodos,
@@ -188,7 +187,7 @@ router.get("/stats", (req, res) => {
       success: true,
       stats: {
         connection,
-        totalGroups: countGroups(),
+        totalGroups: knownGroupIds().size,
         totalWarnings: countWarnings(),
         totalTodos: countTodos(),
         totalNotes: countNotes(),
@@ -215,6 +214,23 @@ router.get("/stats", (req, res) => {
     });
   } catch (error) {
     fail(res, error, "Error fetching stats");
+  }
+});
+
+router.get("/logs", (_req, res) => {
+  try {
+    res.json({ success: true, logs: logger.readLogs() });
+  } catch (error) {
+    fail(res, error, "Error reading logs");
+  }
+});
+
+router.delete("/logs", (_req, res) => {
+  try {
+    logger.clearLogs();
+    res.json({ success: true });
+  } catch (error) {
+    fail(res, error, "Error clearing logs");
   }
 });
 
@@ -541,7 +557,7 @@ router.get("/ai/memory", (req, res) => {
         const stat = fs.statSync(path.join(memory.CHATS_DIR, file));
         scopes.push({
           scope: chatId,
-          label: chatId,
+          label: chatIdentity(chatId).name || "",
           entries: memory.listMemory({ scope: "chat", chatId }).length,
           bytes: stat.size,
           updatedAt: stat.mtimeMs,
@@ -618,11 +634,22 @@ router.get("/ai/conversations/:chatId", (req, res) => {
     .catch((error) => fail(res, error, "Error reading conversation"));
 });
 
+// Human-readable identity only; the JID remains the request key, never the label.
+function chatIdentity(jid) {
+  const peer = describePeer(jid);
+  const name =
+    peer.kind === "group"
+      ? groupMetadataCache.get(jid)?.subject || getGroupDirectory(jid)?.subject || null
+      : peer.savedName || peer.pushName || peer.phone || null;
+  return { name, kind: peer.kind };
+}
+
 async function getChatHistoryListAsync() {
   const { listChatHistoriesAsync } = require("../utils/storage-hub.cjs");
   const rows = await listChatHistoriesAsync();
   return (rows || []).map((row) => ({
     chatId: row.chatId,
+    ...chatIdentity(row.chatId),
     turns: row.turns ?? 0,
     updatedAt: row.updatedAt ?? null,
   }));
@@ -668,6 +695,7 @@ async function getChatConversationAsync(chatId) {
 
   return {
     chatId,
+    ...chatIdentity(chatId),
     updatedAt: meta.updatedAt ?? null,
     truncated: messages.length >= MAX_INSPECTOR_MESSAGES,
     messages,
@@ -677,6 +705,13 @@ async function getChatConversationAsync(chatId) {
 // ===========================================================================
 // Groups
 // ===========================================================================
+
+function knownGroupIds() {
+  const ids = new Set(getAllGroupSettings().map((row) => row.group_id));
+  for (const jid of groupMetadataCache.keys()) ids.add(jid);
+  for (const row of getAllGroupDirectory()) ids.add(row.group_id);
+  return ids;
+}
 
 function groupView(groupId, stored) {
   const live = groupMetadataCache.get(groupId) || null;
@@ -734,11 +769,7 @@ router.get("/groups", (req, res) => {
 
     // Groups the bot is in but that have no settings row yet still belong in
     // the list — that's exactly where the operator goes to configure them.
-    const ids = new Set(stored.keys());
-    for (const jid of groupMetadataCache.keys()) ids.add(jid);
-    for (const row of getAllGroupDirectory()) ids.add(row.group_id);
-
-    const groups = [...ids]
+    const groups = [...knownGroupIds()]
       .map((id) => groupView(id, stored.get(id)))
       .sort((a, b) => (a.subject || a.id).localeCompare(b.subject || b.id));
 
@@ -747,6 +778,40 @@ router.get("/groups", (req, res) => {
     fail(res, error, "Error fetching groups");
   }
 });
+
+// Keep expiring WhatsApp photo URLs inside the authenticated panel. Images are
+// fetched only for visible cards, never as part of a stats poll or group sync.
+router.get(
+  "/groups/:id/photo",
+  asyncRoute(async (req, res) => {
+    const id = req.params.id;
+    if (!id.endsWith("@g.us") || !knownGroupIds().has(id)) return res.sendStatus(404);
+    const sock = currentSocket();
+    if (!sock) return res.sendStatus(404);
+    let response;
+    try {
+      const url = await sock.profilePictureUrl(id, "image", 8000);
+      response = await fetchWhatsAppImage(sock, url, { signal: AbortSignal.timeout(8000) });
+      const mime = response.headers.get("content-type")?.split(";")[0];
+      if (!response.ok || !["image/jpeg", "image/png", "image/webp"].includes(mime)) {
+        return res.sendStatus(404);
+      }
+      const chunks = [];
+      let bytes = 0;
+      for await (const chunk of response.body) {
+        bytes += chunk.length;
+        if (bytes > 1024 * 1024) throw new Error("Group photo exceeds size limit");
+        chunks.push(chunk);
+      }
+      res.type(mime).send(Buffer.concat(chunks));
+    } catch {
+      // No photo, expired URL or private group: the card uses its local fallback.
+      res.sendStatus(404);
+    } finally {
+      if (response?.body && !response.body.locked) await response.body.cancel().catch(() => {});
+    }
+  }),
+);
 
 const MEDIA_TYPES = ["image", "video", "sticker", "audio"];
 const ANTILINK_MODES = ["ALL", "WHITELIST", "BLACKLIST"];

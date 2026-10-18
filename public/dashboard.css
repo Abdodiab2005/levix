@@ -3075,3 +3075,32 @@ html[dir="rtl"] .auth-submit svg {
 html[dir="rtl"] .auth-submit:hover svg {
   transform: scaleX(-1) translateX(3px);
 }
+
+/* Arabic password gateways need room for joined glyphs and diacritics. */
+html[dir="rtl"] .gateway-page .gateway-copy h2 {
+  font-size: clamp(1.5rem, 5.6vw, 2.5rem);
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+
+html[dir="rtl"] .gateway-page .auth-card h1 {
+  font-size: clamp(1.45rem, 2.5vw, 1.85rem);
+  line-height: 1.55;
+  letter-spacing: 0;
+}
+
+html[dir="rtl"] .gateway-page .auth-card .sub {
+  font-size: 0.82rem;
+  line-height: 1.9;
+}
+
+html[dir="rtl"] .gateway-page .auth-card label.field > span {
+  font-size: 0.82rem;
+  line-height: 1.8;
+}
+
+html[dir="rtl"] .gateway-page .auth-card .btn {
+  font-size: 0.88rem;
+  line-height: 1.6;
+  min-height: 48px;
+}

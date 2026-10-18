@@ -75,7 +75,7 @@ Icon only. `label` is required. Same variants and sizes. `pressed` sets `aria-pr
 
 `Field` wraps a control with `label`, `description`, and `error`. `Input`, `Textarea`, and `Select` are the native controls with the shared field style. `Checkbox` and `RadioGroup` are labelled choices. `Toggle` is the switch (`checked`, `onChange(checked)`, optional `label` and `description`).
 
-`Toggle` keeps a 44px-high hit target around its 52×32px visible track. Its button ref, `id`, `disabled`, `role="switch"`, and `aria-checked` work as native controls do.
+`Toggle` keeps a 44px-high hit target around its 44×26px visible track (20px thumb, equal 3px insets). Its button ref, `id`, `disabled`, `role="switch"`, and `aria-checked` work as native controls do.
 
 For technical tokens (keys, URLs, emails, model IDs, JIDs, command names), pass `technical` to `Input`. It sets `dir="ltr"` and start alignment inside an RTL form. An explicit `dir` overrides it.
 
@@ -195,7 +195,7 @@ One `ArrowUpDown` button. `options` is `{ value, label }[]`. The current value g
 
 ### Tabs / SegmentedControl
 
-Both take `value`, `onChange`, `options` (`{ value, label, icon? }`), and `aria-label`. `SegmentedControl` is one enclosed group (source switch, short modes). `Tabs` is a row of pills for a scrolling section switch.
+Both take `value`, `onChange`, `options` (`{ value, label, icon? }`), and `aria-label`. `SegmentedControl` is one enclosed, horizontally scrolling single row (source switch, short modes). Both controls support Arrow Left/Right (following RTL), Home/End and roving keyboard focus. `Tabs` is a row of pills for a scrolling section switch.
 
 ### Chip / ChipInput
 
@@ -250,3 +250,13 @@ Set `kind="empty"` for no records, `kind="no-results"` for an empty search/filte
 ### Toolbar
 
 A wrapping row. Put the search `Input` first (`className="min-w-48 flex-1"`), then `FilterButton`, `SortMenu`, and `OverflowMenu`.
+
+### StatusDot / Avatar / Disclosure
+
+`StatusDot` takes a `tone` and accessible `label`; it displays only a dot.
+`Avatar` takes a `src` and `name`, loads its picture lazily and falls back to the
+name initial on missing/failed images. Give it a new key when its source changes.
+`Disclosure` takes `summary` and children, composing Card and Button into an
+animated expandable region. Closed content is inert and hidden from assistive
+technology; reduced-motion preferences disable the transition. Put only
+noninteractive content in its summary.

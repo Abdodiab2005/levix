@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Guide art, step 4: the pairing code the Connection screen shows, next to
+     the QR it can show instead. Drawn on a 7-unit module so the finder squares
+     keep their gap and read as a QR code, not as one dark block. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="125dp"
+    android:viewportWidth="240"
+    android:viewportHeight="150">
+
+    <!-- Phone frame. -->
+    <path
+        android:fillColor="@color/levix_panel"
+        android:pathData="M96,6H144A16,16 0 0,1 160,22V128A16,16 0 0,1 144,144H96A16,16 0 0,1 80,128V22A16,16 0 0,1 96,6Z"
+        android:strokeColor="@color/levix_border"
+        android:strokeWidth="2" />
+
+    <!-- QR: the three finder squares, each held off its neighbours. -->
+    <path
+        android:fillColor="@color/levix_text"
+        android:pathData="M96,26H114V44H96Z" />
+    <path
+        android:fillColor="@color/levix_panel"
+        android:pathData="M102,32H108V38H102Z" />
+    <path
+        android:fillColor="@color/levix_text"
+        android:pathData="M126,26H144V44H126Z" />
+    <path
+        android:fillColor="@color/levix_panel"
+        android:pathData="M132,32H138V38H132Z" />
+    <path
+        android:fillColor="@color/levix_text"
+        android:pathData="M96,56H114V74H96Z" />
+    <path
+        android:fillColor="@color/levix_panel"
+        android:pathData="M102,62H108V68H102Z" />
+
+    <!-- QR: the modules between and beside them. -->
+    <path
+        android:fillColor="@color/levix_text"
+        android:pathData="M120,26H126V32H120Z" />
+    <path
+        android:fillColor="@color/levix_text"
+        android:pathData="M120,38H126V44H120Z" />
+    <path
+        android:fillColor="@color/levix_text"
+        android:pathData="M120,50H126V56H120Z" />
+    <path
+        android:fillColor="@color/levix_text"
+        android:pathData="M120,62H126V68H120Z" />
+    <path
+        android:fillColor="@color/levix_text"
+        android:pathData="M132,50H138V56H132Z" />
+    <path
+        android:fillColor="@color/levix_text"
+        android:pathData="M132,62H138V68H132Z" />
+    <path
+        android:fillColor="@color/levix_text"
+        android:pathData="M126,74H132V80H126Z" />
+    <path
+        android:fillColor="@color/levix_text"
+        android:pathData="M138,74H144V80H138Z" />
+
+    <!-- The 8-character code the panel hands out. -->
+    <path
+        android:fillColor="@color/levix_cyan"
+        android:pathData="M100,88H140A6,6 0 0,1 146,94V94A6,6 0 0,1 140,100H100A6,6 0 0,1 94,94V94A6,6 0 0,1 100,88Z" />
+    <path
+        android:fillAlpha="0.7"
+        android:fillColor="@color/levix_border_bright"
+        android:pathData="M106,110H134A4,4 0 0,1 138,114V114A4,4 0 0,1 134,118H106A4,4 0 0,1 102,114V114A4,4 0 0,1 106,110Z" />
+
+    <!-- WhatsApp's side: the account that links. -->
+    <path
+        android:fillColor="@color/levix_panel"
+        android:pathData="M26,54H62A12,12 0 0,1 74,66V78A12,12 0 0,1 62,90H26A12,12 0 0,1 14,78V66A12,12 0 0,1 26,54Z"
+        android:strokeColor="@color/levix_border"
+        android:strokeWidth="2" />
+    <path
+        android:pathData="M30,72H44M30,72L36,66M30,72L36,78"
+        android:strokeColor="@color/levix_ok"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3" />
+    <path
+        android:fillColor="@color/levix_ok"
+        android:pathData="M52,62A8,8 0 1,0 52,78A8,8 0 1,0 52,62Z" />
+    <path
+        android:pathData="M49,70L51,73L56,66"
+        android:strokeColor="@color/levix_panel"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.5" />
+</vector>

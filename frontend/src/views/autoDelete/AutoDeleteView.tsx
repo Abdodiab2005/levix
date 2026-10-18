@@ -273,9 +273,11 @@ export const AutoDeleteView: React.FC = () => {
         title={t("autoDelete")}
         description={t("autoDeleteSubtitle")}
         actions={
-          <Button variant="primary" icon={<Plus size={16} />} onClick={openCreate}>
-            {t("newRule")}
-          </Button>
+          rules.length > 0 || tab === "copies" ? (
+            <Button variant="primary" icon={<Plus size={16} />} onClick={openCreate}>
+              {t("newRule")}
+            </Button>
+          ) : undefined
         }
       />
 

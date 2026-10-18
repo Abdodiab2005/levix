@@ -59,6 +59,24 @@ class PanelBridge(
         }
     }
 
+    /** A bridge is also present on the login page, so verify the panel session first. */
+    @JavascriptInterface
+    fun clearHostLogs(): String {
+        return try {
+            val context = requireNotNull(appContext)
+            val healthUrl = "${PanelHttp.ORIGIN}/dashboard/api/health"
+            val health = PanelHttp.exchange(sock, "GET", healthUrl, emptyMap(), ByteArray(0))
+            check(health.status == 200 && health.url == healthUrl)
+            check(health.header("Content-Type")?.substringBefore(';')?.trim()
+                .equals("application/json", ignoreCase = true))
+            check(JSONObject(String(health.body, Charsets.UTF_8)).optBoolean("success"))
+            HostLog.clear(context)
+            JSONObject().put("ok", true).toString()
+        } catch (_: Exception) {
+            JSONObject().put("ok", false).put("error", "Could not clear host logs").toString()
+        }
+    }
+
     /**
      * Triggers the native share-logs flow (same as the Share button
      * on the native dashboard) from inside the WebView panel.

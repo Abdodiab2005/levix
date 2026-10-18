@@ -72,8 +72,8 @@ docker compose logs levix
 Run Levix directly on an Android device (Android 10+, ARM64 or ARMv7) as a self-contained background companion:
 
 1. Download **`levix-android-arm64.apk`** (64-bit phones) or **`levix-android-armv7.apk`** (32-bit phones) from [Releases](https://github.com/Abdodiab2005/levix/releases).
-2. Install the APK and tap **Start Host**.
-3. Tap **Open Panel** to set your master password and link WhatsApp via 8-digit Pairing Code.
+2. Install the APK and tap **Start Assistant** — the big circle on the home screen.
+3. Tap **Connect WhatsApp** to set your panel password and link WhatsApp via an 8-character pairing code.
 
 See [ANDROID.md](ANDROID.md) for full instructions, OEM battery optimizations (Xiaomi, Samsung, OnePlus), and offline handling.
 
@@ -117,6 +117,16 @@ The `!gemini` command is an agent rather than a plain chat box. It can run
 several tool rounds, search the web, read a page, save long-term memories, and
 manage bot roles. It narrates progress by editing one WhatsApp message and lists
 sources when it uses web search.
+
+AI answers are formatted for WhatsApp automatically: `**bold**` becomes `*bold*`,
+`__italic__` becomes `_italic_`, and tables become named entries with labeled
+bullet points. Headings, lists, checkboxes, strikethrough and links are converted;
+code contents and URLs are preserved.
+
+Use `!md` (or `!markdown`) to convert text from any other AI or message, without
+an AI key. Reply to that message with `!md`, or paste Markdown after the command,
+including multiline tables and code. For example: `!md **Bold** and __italic__`.
+Existing WhatsApp `*bold*` and `_italic_` text keeps its formatting.
 
 AI is optional. The rest of Levix works without an AI key.
 

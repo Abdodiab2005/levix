@@ -3,11 +3,12 @@
 import { ArrowDown, Share2, Smartphone, Terminal, Trash2 } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Socket } from "socket.io-client";
 import { api } from "../api/client";
+import { useToast } from "../components/Toasts";
 import {
   Badge,
   Card,
+  ConfirmDialog,
   EmptyState,
   FilterButton,
   IconButton,
@@ -19,16 +20,18 @@ import {
 import { useI18n } from "../context/I18nContext";
 import type { LogItem } from "../types";
 
-interface LogsViewProps {
-  socket: Socket | null;
-}
-
 type LogSource = "bot" | "host";
 
 const hasHostLog = typeof (window as any).LevixHost?.hostLog === "function";
 
-export const LogsView: React.FC<LogsViewProps> = ({ socket }) => {
+export const LogsView: React.FC = () => {
   const { t } = useI18n();
+  const { toast } = useToast();
+  const [error, setError] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const clearingRef = useRef(false);
+  const generation = useRef(0);
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [filter, setFilter] = useState<string>("all");
   const [autoScroll, setAutoScroll] = useState(true);
@@ -37,42 +40,64 @@ export const LogsView: React.FC<LogsViewProps> = ({ socket }) => {
   const [source, setSource] = useState<LogSource>("bot");
   const [hostLines, setHostLines] = useState<string[]>([]);
 
-  useEffect(() => {
-    if (source !== "bot") return;
-    api
-      .getLogs()
-      .then((res) => {
-        if (res?.logs) setLogs(res.logs);
-      })
-      .catch(() => {});
+  // Both sources are persisted. Polling also works in Android's unix-socket
+  // WebView bridge, where Socket.IO is not available.
+  const refresh = useCallback(async () => {
+    if (clearingRef.current) return;
+    const version = generation.current;
+    try {
+      if (source === "bot") {
+        const res = await api.getLogs();
+        if (version !== generation.current) return;
+        setLogs(res.logs || []);
+      } else {
+        const text = (window as any).LevixHost?.hostLog(500) ?? "";
+        if (version !== generation.current) return;
+        setHostLines(text.split("\n").filter(Boolean));
+      }
+      setError(false);
+    } catch {
+      if (version === generation.current) setError(true);
+    }
   }, [source]);
 
   useEffect(() => {
-    if (source !== "bot" || !socket) return;
-    const handleLog = (entry: LogItem) => {
-      setLogs((prev) => [...prev.slice(-400), entry]);
+    generation.current += 1;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      await refresh();
+      if (!stopped) timer = setTimeout(poll, 3000);
     };
-    socket.on("log", handleLog);
+    void poll();
     return () => {
-      socket.off("log", handleLog);
+      stopped = true;
+      clearTimeout(timer);
+      generation.current += 1;
     };
-  }, [socket, source]);
+  }, [refresh]);
 
-  const fetchHostLog = useCallback(() => {
+  const clearStoredLogs = async () => {
+    if (clearingRef.current) return;
+    clearingRef.current = true;
+    setClearing(true);
+    generation.current += 1; // Ignore a read started before this deletion.
     try {
-      const text = (window as any).LevixHost?.hostLog(500) ?? "";
-      setHostLines(text ? text.split("\n").filter(Boolean) : []);
+      if (source === "bot") await api.clearLogs();
+      else {
+        const result = JSON.parse((window as any).LevixHost?.clearHostLogs() || "{}");
+        if (!result.ok) throw new Error("clear failed");
+      }
+      setConfirmClear(false);
+      toast(t("logsCleared"), "success");
     } catch {
-      setHostLines([]);
+      toast(t("logsClearFailed"), "error");
+    } finally {
+      clearingRef.current = false;
+      setClearing(false);
+      await refresh();
     }
-  }, []);
-
-  useEffect(() => {
-    if (source !== "host" || !hasHostLog) return;
-    fetchHostLog();
-    const timer = setInterval(fetchHostLog, 3000);
-    return () => clearInterval(timer);
-  }, [source, fetchHostLog]);
+  };
 
   useEffect(() => {
     if (autoScroll && logEndRef.current) {
@@ -109,7 +134,9 @@ export const LogsView: React.FC<LogsViewProps> = ({ socket }) => {
               <SegmentedControl
                 aria-label={t("logs")}
                 value={source}
-                onChange={setSource}
+                onChange={(next) => {
+                  if (!clearingRef.current) setSource(next);
+                }}
                 options={[
                   { value: "bot", label: t("logSourceBot") },
                   { value: "host", label: t("logSourceHost"), icon: <Smartphone size={14} /> },
@@ -160,15 +187,31 @@ export const LogsView: React.FC<LogsViewProps> = ({ socket }) => {
               label={t("clearLogs")}
               variant="ghost"
               icon={<Trash2 size={18} />}
-              onClick={() => {
-                if (source === "bot") setLogs([]);
-                else setHostLines([]);
-              }}
+              disabled={clearing}
+              onClick={() => setConfirmClear(true)}
             />
           </Toolbar>
         }
       />
 
+      <ConfirmDialog
+        isOpen={confirmClear}
+        onClose={() => {
+          if (!clearing) setConfirmClear(false);
+        }}
+        onConfirm={clearStoredLogs}
+        title={t("clearLogsConfirm")}
+        confirmLabel={t("clearLogs")}
+        cancelLabel={t("cancel")}
+        loading={clearing}
+      >
+        {t("clearLogsBody")} · {source === "host" ? t("logSourceHost") : t("logSourceBot")}
+      </ConfirmDialog>
+      {error && (
+        <p role="alert" className="text-sm text-danger">
+          {t("logsLoadFailed")}
+        </p>
+      )}
       <Card
         padded={false}
         className="h-[65vh] overflow-y-auto bg-bg p-4 font-mono text-xs leading-relaxed text-muted shadow-2xl md:p-5"

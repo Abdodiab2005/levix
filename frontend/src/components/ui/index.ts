@@ -1,5 +1,7 @@
 // file: frontend/src/components/ui/index.ts
-export { Badge, type BadgeProps, type BadgeTone, StatusPill } from "./badge";
+
+export { Avatar } from "./avatar";
+export { Badge, type BadgeProps, type BadgeTone, StatusDot, StatusPill } from "./badge";
 export {
   Button,
   type ButtonProps,
@@ -18,6 +20,7 @@ export {
   type ChipRejectReason,
 } from "./chip";
 export { ConfirmDialog, type ConfirmDialogProps, Dialog, type DialogProps } from "./dialog";
+export { Disclosure } from "./disclosure";
 export { EmptyState, type EmptyStateProps, LoadingState, Skeleton, Spinner } from "./feedback";
 export {
   Checkbox,

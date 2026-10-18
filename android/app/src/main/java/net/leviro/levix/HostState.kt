@@ -78,19 +78,34 @@ object HostState {
 
     @Synchronized
     fun markNodeStarting() {
-        publish(snapshot.copy(nodeAlive = false, nodeError = null, nodeLine = "starting"))
+        if (!snapshot.running) return
+        publish(
+            snapshot.copy(
+                nodeAlive = false, nodeError = null, nodeLine = "starting",
+                levixReady = false, panelUrl = null,
+                whatsAppState = null, whatsAppCode = null, whatsAppReason = null, whatsAppSinceMs = 0L,
+            ),
+        )
     }
 
     @Synchronized
     fun markNodeAlive() {
+        if (!snapshot.running) return
         publish(snapshot.copy(nodeAlive = true, nodeError = null))
     }
 
     @Synchronized
     fun markNodeStopped() {
+        if (!snapshot.running) return
         publish(
             snapshot.copy(
                 nodeAlive = false,
+                levixReady = false,
+                panelUrl = null,
+                whatsAppState = null,
+                whatsAppCode = null,
+                whatsAppReason = null,
+                whatsAppSinceMs = 0L,
                 nodeLine = null,
                 nodeError = null,
             ),
@@ -99,56 +114,72 @@ object HostState {
 
     @Synchronized
     fun markNodeError(message: String) {
-        publish(snapshot.copy(nodeAlive = false, nodeError = message))
+        if (!snapshot.running) return
+        publish(
+            snapshot.copy(
+                nodeAlive = false, nodeError = message, levixReady = false, panelUrl = null,
+                whatsAppState = null, whatsAppCode = null, whatsAppReason = null, whatsAppSinceMs = 0L,
+            ),
+        )
     }
 
     @Synchronized
     fun setNodeVersion(version: String) {
+        if (!snapshot.running) return
         publish(snapshot.copy(nodeVersion = version, nodeAlive = true, nodeError = null))
     }
 
     @Synchronized
     fun setNodePlatform(platform: String) {
+        if (!snapshot.running) return
         publish(snapshot.copy(nodePlatform = platform))
     }
 
     @Synchronized
     fun setNodeArch(arch: String) {
+        if (!snapshot.running) return
         publish(snapshot.copy(nodeArch = arch))
     }
 
     @Synchronized
     fun setNodeLine(line: String) {
+        if (!snapshot.running) return
         publish(snapshot.copy(nodeLine = line.take(200)))
     }
 
     @Synchronized
     fun markSqliteOk() {
+        if (!snapshot.running) return
         publish(snapshot.copy(sqliteOk = true, nodeAlive = true, nodeError = null))
     }
 
     @Synchronized
     fun markTlsOk() {
+        if (!snapshot.running) return
         publish(snapshot.copy(tlsOk = true, nodeAlive = true))
     }
 
     @Synchronized
     fun markDatabaseReady() {
+        if (!snapshot.running) return
         publish(snapshot.copy(databaseReady = true, nodeAlive = true))
     }
 
     @Synchronized
     fun markCommandsLoaded(count: Int?) {
+        if (!snapshot.running) return
         publish(snapshot.copy(commandsLoaded = count, nodeAlive = true))
     }
 
     @Synchronized
     fun markPanelListening(url: String) {
+        if (!snapshot.running) return
         publish(snapshot.copy(panelUrl = url, nodeAlive = true))
     }
 
     @Synchronized
     fun markLevixReady() {
+        if (!snapshot.running) return
         publish(snapshot.copy(levixReady = true, nodeAlive = true, nodeError = null))
     }
 

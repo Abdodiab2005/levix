@@ -1,18 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Levix</string>
-    <string name="guide_step">Step %1$d of 3</string>
-    <string name="guide_what_title">Your bot, on this phone</string>
-    <string name="guide_what_body">Levix runs your own WhatsApp bot on this phone. Use the control panel to manage it.</string>
-    <string name="guide_connect_title">Connect WhatsApp</string>
-    <string name="guide_connect_body">Tap Start, open the panel, then scan its QR code in WhatsApp &gt; Linked devices.</string>
+
+    <!-- First-run guide: one step per screen, in the order the operator does them. -->
+    <string name="guide_step">Step %1$d of 5</string>
+    <string name="guide_start_title">Start your assistant</string>
+    <string name="guide_start_body">On the home screen, tap Start Assistant and allow notifications. When the engine is ready, the screen guides you to connect WhatsApp.</string>
+    <string name="guide_battery_title">Keep it running</string>
+    <string name="guide_battery_body">If the Battery Guard card appears, tap Enable Battery Guard and choose Unrestricted. Without it, Android may stop Levix while the screen is off.</string>
+    <string name="guide_panel_title">Open the control panel</string>
+    <string name="guide_panel_body">Tap Connect WhatsApp to open Connection, or Open Control Panel once ready. On first use, choose a password to protect the panel. Manage commands, AI and groups there.</string>
+    <string name="guide_link_title">Link WhatsApp</string>
+    <string name="guide_link_body">In the panel, open Connection and request a pairing code, or show the QR. Then in WhatsApp: Settings → Linked devices → Link a device → Link with phone number instead, and enter the 8-character code.</string>
     <string name="guide_privacy_title">Privacy and diagnostics</string>
-    <string name="guide_privacy_body">Nothing leaves this phone unless you send it. If Levix crashes, a report stays here until you review and send it or delete it.</string>
+    <string name="guide_privacy_body">Levix runs on this phone and connects to WhatsApp and the services you enable. Crash reports stay here until you review and send them or delete them.</string>
     <string name="guide_skip">Skip</string>
+    <string name="guide_back">Back</string>
     <string name="guide_next">Next</string>
     <string name="guide_done">Done</string>
     <string name="guide_again_title">Show guide again</string>
-    <string name="guide_again_sub">Review setup and privacy steps</string>
+    <string name="guide_again_sub">Review the setup steps and privacy</string>
     <string name="crash_prompt_title">Levix stopped unexpectedly</string>
     <string name="crash_prompt_body">A crash report is saved on this phone. You can review it before choosing whether to send it.</string>
     <string name="crash_prompt_review">Review &amp; send</string>
@@ -24,8 +31,8 @@
     <!-- Hero Section -->
     <string name="hero_eyebrow">PERSONAL COMPANION</string>
     <string name="hero_title">Your WhatsApp assistant,\nalways by your side.</string>
-    <string name="hero_subtitle_running">Levix is running in the background and ready to assist you.</string>
-    <string name="hero_subtitle_stopped">Levix is currently stopped. Tap Start to activate your assistant.</string>
+    <string name="hero_subtitle_running">Levix is running in the background. Tap the circle to open the control panel.</string>
+    <string name="hero_subtitle_stopped">Levix is stopped. Tap the circle to start your assistant.</string>
     <string name="btn_open_panel">Open Control Panel</string>
     <string name="panel_share_file">Share file</string>
     <string name="panel_starting">Starting Levix…</string>
@@ -33,17 +40,8 @@
     <string name="btn_stop_host">Stop Assistant</string>
 
     <!-- Sections -->
-    <string name="pref_theme_title">App Theme</string>
-    <string name="pref_theme_sub">Choose light or dark appearance</string>
-    <string name="dialog_choose_theme">Choose Theme</string>
-    <string name="theme_light">Light</string>
-    <string name="theme_dark">Dark</string>
-    <string name="pref_language_title">App Language</string>
-    <string name="pref_language_sub">Switch between Arabic (RTL) &amp; English (LTR)</string>
-    <string name="pref_language_btn">العربية</string>
-    <string name="lang_arabic">العربية</string>
-    <string name="lang_english">English</string>
-    <string name="dialog_choose_language">Choose Language</string>
+    <string name="action_switch_language">Switch language (Arabic / English)</string>
+    <string name="action_switch_theme">Switch light and dark</string>
     <string name="section_overview">Status Overview</string>
     <string name="section_overview_sub">Core system health at a glance</string>
 
@@ -61,14 +59,23 @@
     <string name="card_engine_desc_stopped">Engine is inactive. All settings and data are preserved.</string>
 
     <string name="card_battery_title">Battery Guard</string>
-    <string name="battery_ok">Battery optimizations disabled. Levix will stay alive with the screen locked.</string>
-    <string name="battery_hint">Android may stop Levix in the background. Allow unrestricted battery to ensure 24/7 uptime.</string>
+    <string name="battery_ok">Battery optimizations are disabled. Android and device restrictions may still affect background operation.</string>
+    <string name="battery_hint">Android may restrict background operation. Allow unrestricted battery to reduce interruptions.</string>
     <string name="btn_battery">Enable Battery Guard</string>
 
     <!-- Diagnostics / Beta Logs -->
     <string name="diagnostics_sub">Accessible logs for debugging during Beta / RC</string>
     <string name="btn_share_logs">Share Logs</string>
     <string name="no_logs">No log entries available yet.</string>
+    <string name="logs_actions_eyebrow">Diagnostics</string>
+    <string name="logs_actions_title">Logs</string>
+    <string name="logs_actions_body">The host log stays on this phone until you save or send it.</string>
+    <string name="logs_action_save_open">Save &amp; open</string>
+    <string name="logs_action_save_open_sub">Copy to Downloads/Levix and open it with a viewer</string>
+    <string name="logs_action_share">Share logs</string>
+    <string name="logs_action_share_sub">Send the log file to another app</string>
+    <string name="logs_saved_message">Saved to Downloads/Levix as %1$s</string>
+    <string name="logs_open_missing">Saved to Downloads/Levix. No app on this phone can open a .log file.</string>
 
     <!-- Status Badges -->
     <string name="status_connected">Connected</string>
@@ -82,6 +89,7 @@
     <string name="status_protected">Protected</string>
     <string name="status_restricted">Restricted</string>
     <string name="status_offline">Offline</string>
+    <string name="status_checking">Checking…</string>
 
     <!-- Notifications & System -->
     <string name="notifications_required">Notification permission is required so the assistant can stay alive.</string>
@@ -106,7 +114,7 @@
     <string name="notif_stop">Stop</string>
     <!-- Compact tile strings -->
     <string name="section_diagnostics_short">Diagnostics</string>
-    <string name="diagnostics_panel_hint">Full logs in the panel\'s Logs tab. Share for bug reports.</string>
+    <string name="diagnostics_panel_hint">Tap to save, open or share the log file.</string>
     <string name="card_whatsapp_desc_connected_short">Connected &amp; active</string>
     <string name="card_whatsapp_desc_pairing_short">Waiting for device pairing</string>
     <string name="card_whatsapp_desc_paused_short">Network paused</string>
@@ -252,4 +260,35 @@
         <item quantity="one">%1$d s</item>
         <item quantity="other">%1$d s</item>
     </plurals>
+    <string name="media_source">Media source</string>
+    <string name="media_category">Media type</string>
+    <string name="media_filter">Filter</string>
+    <string name="home_stopped">Start your assistant</string>
+    <string name="home_stopped_body">Start the engine on this phone. Then connect WhatsApp securely in the control panel.</string>
+    <string name="home_starting">Starting Levix…</string>
+    <string name="home_starting_body">Preparing the local engine and control panel. This may take a moment.</string>
+    <string name="home_engine_failed">Engine needs attention</string>
+    <string name="home_engine_error_body">The engine could not stay running. Review diagnostics. You can stop the assistant, then start it again.</string>
+    <string name="home_start_timeout">Startup is taking longer than expected. Review diagnostics before trying again.</string>
+    <string name="home_pairing">Engine ready · Connect WhatsApp</string>
+    <string name="home_pairing_body">Next, open Connection in the control panel. Start the WhatsApp session and choose a pairing code for this phone, or scan a QR from another screen.</string>
+    <string name="home_connect">Connect WhatsApp</string>
+    <string name="home_ready">Your assistant is ready</string>
+    <string name="home_ready_body">The engine is ready and WhatsApp is connected. Manage commands, AI and groups in the control panel.</string>
+    <string name="home_connection_details">Open Connection</string>
+    <string name="home_reconnecting_body">The engine is ready. WhatsApp is reconnecting automatically. No engine restart is needed.</string>
+    <string name="home_paused_body">The engine is ready, but the network is unavailable. WhatsApp will reconnect automatically when internet access returns.</string>
+    <string name="home_expired_body">WhatsApp logged out. Open Connection to link your account again. The engine is still ready.</string>
+    <string name="home_connection_failed">WhatsApp needs attention</string>
+    <string name="home_connection_error_body">The engine is ready, but WhatsApp is offline. Open Connection to review the issue and resume the session.</string>
+    <string name="home_unknown">Checking assistant status</string>
+    <string name="home_unknown_body">The engine is ready, but WhatsApp status is not confirmed. Open Connection to check it.</string>
+    <string name="home_linking">Connecting WhatsApp…</string>
+    <string name="home_linking_body">The engine is ready. Waiting for WhatsApp to confirm the connection.</string>
+    <string name="home_step_start">Step 1 of 3 · Start Levix</string>
+    <string name="home_step_connect">Step 2 of 3 · Connect WhatsApp · Engine ready</string>
+    <string name="home_start_rejected">Android could not start the service. Try again with the app open, or review diagnostics.</string>
+    <string name="status_unknown_short">Unknown</string>
+    <string name="status_pairing_short">Pairing</string>
+    <string name="status_expired_short">Expired</string>
 </resources>

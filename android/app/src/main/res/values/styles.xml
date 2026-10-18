@@ -4,7 +4,7 @@
          so another screen can inherit from them instead of copying attributes. -->
 
     <style name="Widget.Levix.SheetEyebrow" parent="Widget.AppCompat.TextView">
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">?attr/fontFamily</item>
         <item name="android:textAllCaps">true</item>
         <item name="android:textColor">@color/levix_cyan</item>
         <item name="android:textSize">11sp</item>
@@ -13,15 +13,15 @@
     </style>
 
     <style name="Widget.Levix.SheetTitle" parent="Widget.AppCompat.TextView">
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">?attr/fontFamily</item>
         <item name="android:textColor">@color/levix_text</item>
-        <item name="android:textSize">20sp</item>
+        <item name="android:textSize">@dimen/sheet_title_size</item>
         <item name="android:textStyle">bold</item>
     </style>
 
     <style name="Widget.Levix.SheetBody" parent="Widget.AppCompat.TextView">
         <item name="android:textColor">@color/levix_text_muted</item>
-        <item name="android:textSize">13sp</item>
+        <item name="android:textSize">@dimen/sheet_body_size</item>
         <item name="android:lineSpacingMultiplier">1.25</item>
     </style>
 
@@ -31,7 +31,7 @@
     </style>
 
     <style name="Widget.Levix.DetailValue" parent="Widget.AppCompat.TextView">
-        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">?attr/fontFamily</item>
         <item name="android:textColor">@color/levix_text</item>
         <item name="android:textSize">12sp</item>
         <item name="android:textStyle">bold</item>
@@ -39,5 +39,25 @@
 
     <style name="Widget.Levix.DetailValue.Danger" parent="Widget.Levix.DetailValue">
         <item name="android:textColor">@color/levix_danger</item>
+    </style>
+    <style name="Widget.Levix.MediaIconButton" parent="Widget.AppCompat.ImageButton">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:padding">13dp</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:tint">@color/btn_panel_color</item>
+        <item name="android:scaleType">fitCenter</item>
+    </style>
+
+    <!-- The header's language and appearance controls: icon only, because a
+         label does not fit beside the brand and the status pill on a narrow
+         phone. Shaped like the status pill so the header reads as one row. -->
+    <style name="Widget.Levix.HeaderIconButton" parent="Widget.AppCompat.ImageButton">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:padding">12dp</item>
+        <item name="android:background">@drawable/bg_status_pill</item>
+        <item name="android:foreground">?attr/selectableItemBackground</item>
+        <item name="android:scaleType">fitCenter</item>
     </style>
 </resources>

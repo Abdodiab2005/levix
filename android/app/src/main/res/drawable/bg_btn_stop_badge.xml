@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The stop control, riding the primary circle's top-right corner. The thick
+     ring is the card's own colour, so the badge reads as lifted off the circle
+     instead of hanging inside it. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/levix_ripple_on_solid">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/levix_danger" />
+            <stroke
+                android:width="3dp"
+                android:color="@color/levix_panel_raised" />
+        </shape>
+    </item>
+</ripple>

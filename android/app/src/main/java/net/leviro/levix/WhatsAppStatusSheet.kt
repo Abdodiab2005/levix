@@ -89,7 +89,23 @@ object WhatsAppStatusSheet {
             context.getString(visual.title),
         )
 
-        views.state.text = snapshot.whatsAppState ?: context.getString(R.string.wa_detail_unknown)
+        val stateLabel = when (snapshot.whatsAppState) {
+            "idle" -> R.string.status_stopped
+            "starting" -> R.string.status_starting
+            "waiting_for_qr" -> R.string.status_pairing
+            "linking" -> R.string.notif_starting
+            "connected" -> R.string.status_connected
+            "reconnecting" -> R.string.status_reconnecting
+            "disconnected" -> R.string.status_offline
+            "retry_exhausted" -> R.string.status_failed
+            "logged_out" -> R.string.status_expired
+            "error" -> R.string.wa_detail_error
+            "paused" -> R.string.status_paused
+            else -> null
+        }
+        views.state.text = stateLabel?.let(context::getString)
+            ?: snapshot.whatsAppState
+            ?: context.getString(R.string.wa_detail_unknown)
         views.state.setTextColor(ContextCompat.getColor(context, visual.color))
 
         views.since.text = formatSince(context, snapshot.whatsAppSinceMs)
@@ -102,9 +118,12 @@ object WhatsAppStatusSheet {
             ContextCompat.getColor(context, if (online) R.color.levix_ok else R.color.levix_danger),
         )
 
-        val engineRunning = snapshot.running
+        val engineRunning = snapshot.running && snapshot.nodeAlive && snapshot.levixReady && snapshot.nodeError == null
         views.engine.setText(
-            if (engineRunning) R.string.wa_engine_running else R.string.wa_engine_stopped,
+            if (engineRunning) R.string.wa_engine_running
+            else if (snapshot.nodeError != null) R.string.status_failed
+            else if (snapshot.running) R.string.home_unknown
+            else R.string.wa_engine_stopped,
         )
         views.engine.setTextColor(
             ContextCompat.getColor(
@@ -142,57 +161,18 @@ object WhatsAppStatusSheet {
     }
 
     private fun visual(snapshot: HostState.Snapshot): StatusVisual {
-        if (!snapshot.running) {
-            return StatusVisual(
-                title = R.string.status_offline,
-                dot = R.drawable.ic_dot_red,
-                color = R.color.levix_text_muted,
-                description = R.string.card_whatsapp_desc_offline_long,
-            )
-        }
-        return when (snapshot.whatsAppState) {
-            "connected" -> StatusVisual(
-                title = R.string.status_connected,
-                dot = R.drawable.ic_dot_green,
-                color = R.color.levix_ok,
-                description = R.string.card_whatsapp_desc_connected,
-            )
-            "waiting_for_qr" -> StatusVisual(
-                title = R.string.status_pairing,
-                dot = R.drawable.ic_dot_amber,
-                color = R.color.levix_warn,
-                description = R.string.card_whatsapp_desc_pairing,
-            )
-            "paused" -> StatusVisual(
-                title = R.string.status_paused,
-                dot = R.drawable.ic_dot_amber,
-                color = R.color.levix_warn,
-                description = R.string.card_whatsapp_desc_paused,
-            )
-            "reconnecting" -> StatusVisual(
-                title = R.string.status_reconnecting,
-                dot = R.drawable.ic_dot_amber,
-                color = R.color.levix_warn,
-                description = R.string.card_whatsapp_desc_reconnecting,
-            )
-            "retry_exhausted" -> StatusVisual(
-                title = R.string.status_failed,
-                dot = R.drawable.ic_dot_red,
-                color = R.color.levix_danger,
-                description = R.string.card_whatsapp_desc_failed_long,
-            )
-            "logged_out" -> StatusVisual(
-                title = R.string.status_expired,
-                dot = R.drawable.ic_dot_red,
-                color = R.color.levix_danger,
-                description = R.string.card_whatsapp_desc_expired_long,
-            )
-            else -> StatusVisual(
-                title = R.string.status_starting,
-                dot = R.drawable.ic_dot_blue,
-                color = R.color.levix_cyan,
-                description = R.string.card_whatsapp_desc_connecting_long,
-            )
-        }
+        if (!snapshot.running) return StatusVisual(
+            R.string.status_offline, R.drawable.ic_dot_red,
+            R.color.levix_text_muted, R.string.card_whatsapp_desc_offline_long,
+        )
+        val home = HomePresentation.from(snapshot, System.currentTimeMillis())
+        val good = home.state == HomePresentation.State.READY
+        val error = home.state in listOf(HomePresentation.State.FAILED, HomePresentation.State.EXPIRED)
+        return StatusVisual(
+            title = home.title,
+            dot = if (good) R.drawable.ic_dot_green else if (error) R.drawable.ic_dot_red else R.drawable.ic_dot_amber,
+            color = if (good) R.color.levix_ok else if (error) R.color.levix_danger else R.color.levix_warn,
+            description = home.body,
+        )
     }
 }

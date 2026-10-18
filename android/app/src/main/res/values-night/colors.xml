@@ -4,6 +4,10 @@
     <color name="levix_ripple">#30FFFFFF</color>
     <color name="levix_ripple_blue">#255A94FF</color>
     <color name="levix_ripple_danger">#35FF6B78</color>
+    <!-- Ripple for the filled danger / warning buttons, whose surface is dark
+         enough in one theme and bright enough in the other to need the same
+         translucent white in both. -->
+    <color name="levix_ripple_on_solid">#33FFFFFF</color>
     <color name="viewer_bg">#07101F</color>
     <color name="viewer_text">#F2F6FF</color>
     <color name="viewer_cyan">#8BE8FB</color>

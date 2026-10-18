@@ -29,6 +29,7 @@ const commandList = new Map(); // canonicalName -> command module
 // instead of posting a second message).
 const EDIT_IN_PLACE_EXCLUDE = new Set([
   "gemini",
+  "md",
   "prayer",
   "tts",
   "stt",
@@ -284,7 +285,7 @@ export async function handleCommand(sock, msg, body) {
   const prefix = runtimeConfig.getPrefix();
   if (!body.startsWith(prefix)) return false;
 
-  const args = body.slice(prefix.length).trim().split(/ +/);
+  const args = body.slice(prefix.length).trim().split(/\s+/);
   const invokedName = args.shift().toLowerCase();
   const command = commands.get(invokedName);
   if (!command) return false;

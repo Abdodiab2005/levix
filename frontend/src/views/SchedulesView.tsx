@@ -755,22 +755,24 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           </>
         }
         actions={
-          <Button
-            variant="primary"
-            size="lg"
-            className="w-full sm:w-auto"
-            icon={<Plus size={18} />}
-            onClick={handleOpenAddModal}
-            disabled={isLimitReached || !isConnected}
-          >
-            {!isConnected
-              ? language === "ar"
-                ? "يلزم اتصال واتساب"
-                : "Connection Required"
-              : isLimitReached
-                ? t("limitReached")
-                : t("scheduleNewMsg")}
-          </Button>
+          schedules.length > 0 ? (
+            <Button
+              variant="primary"
+              size="lg"
+              className="w-full sm:w-auto"
+              icon={<Plus size={18} />}
+              onClick={handleOpenAddModal}
+              disabled={isLimitReached || !isConnected}
+            >
+              {!isConnected
+                ? language === "ar"
+                  ? "يلزم اتصال واتساب"
+                  : "Connection Required"
+                : isLimitReached
+                  ? t("limitReached")
+                  : t("scheduleNewMsg")}
+            </Button>
+          ) : undefined
         }
       />
 

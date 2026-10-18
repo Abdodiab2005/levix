@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Levix" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.Levix.Base" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="fontFamily">sans-serif</item>
+        <item name="android:fontFamily">sans-serif</item>
         <!-- Brand Colors -->
         <item name="colorPrimary">@color/levix_blue</item>
         <item name="colorPrimaryContainer">@color/levix_panel_raised</item>
@@ -16,4 +18,5 @@
         <item name="colorOnSurfaceVariant">@color/levix_text_muted</item>
 
     </style>
+    <style name="Theme.Levix" parent="Theme.Levix.Base" />
 </resources>

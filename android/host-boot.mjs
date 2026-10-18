@@ -42,14 +42,19 @@ rl.on("line", async (line) => {
 });
 
 const { attach } = await import("./src/bootstrap/events.cjs");
+function reportSession(payload) {
+  const code = payload.lastDisconnect?.statusCode ?? "";
+  const reason = payload.lastDisconnect?.reason ?? "";
+  console.log(`whatsapp session ${payload.state}|${code}|${reason}`);
+}
+
 attach((event, payload) => {
-  if (event === "session" && payload) {
-    const code = payload.lastDisconnect?.statusCode ?? "";
-    const reason = payload.lastDisconnect?.reason ?? "";
-    console.log(`whatsapp session ${payload.state}|${code}|${reason}`);
-  }
+  if (event === "session" && payload) reportSession(payload);
 });
 
 const { start, getLiveSession } = await import("./src/index.js");
 const app = await start({ headless: false, open: false });
 session = app?.session || getLiveSession();
+// An unpaired session begins idle and emits no transition. Send the actual
+// initial snapshot too, so Android can guide pairing without guessing.
+if (session) reportSession(session.getState());
