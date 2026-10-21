@@ -119,7 +119,7 @@ bot has never been paired it prints the QR straight into the terminal:
   ✓ WhatsApp connected
   ✓ Levix is ready
 
-  55 commands loaded
+  [command count] commands loaded
 ```
 
 You can switch modes freely: the data directory is the same either way.
