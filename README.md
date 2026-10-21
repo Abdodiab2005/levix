@@ -16,11 +16,12 @@
 <p align="center">
   <a href="https://levix.leviro.net">Website</a> ·
   <a href="SETUP.md">Setup guide</a> ·
+  <a href="https://levix.leviro.net/docs/contributing">Contribute</a> ·
   <a href="https://github.com/Abdodiab2005/levix/releases/latest">Downloads</a> ·
   <a href="https://github.com/Abdodiab2005/levix/issues">Issues</a>
 </p>
 
-Levix is a personal WhatsApp bot with 55 commands, group moderation, scheduled
+Levix is a personal WhatsApp bot with a growing command catalog, group moderation, scheduled
 messages, an AI agent, media tools, and a web control panel. You run it on your
 own computer or server, keep its database and session files yourself, and can
 change almost everything while it is running.
@@ -98,7 +99,7 @@ proxies, headless mode, backups, and troubleshooting.
 
 | Area | What Levix provides |
 | --- | --- |
-| Commands | 55 commands for utilities, notes, reminders, polls, media, speech, weather, prayer times, and more |
+| Commands | Utilities, notes, reminders, polls, media, speech, weather, prayer times, and more — configurable from the panel |
 | Group moderation | Welcome messages, anti-link, anti-spam, media rules, warnings, auto-kick, roles, rules, and notes |
 | AI agent | Pick Google Gemini, OpenAI / any OpenAI-compatible server, or Anthropic from the panel; each provider has its own endpoint, API key, and model, with tools for web search, page reading, memory, and role management |
 | Scheduling | One-off, daily, and weekly messages with durable jobs, delivery status, and manual retry |
@@ -209,8 +210,7 @@ npm test             # runs the full test suite
 npm start            # starts Levix
 ```
 
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing a substantial
-change. Bug reports and focused pull requests are welcome.
+Read the [contributor walkthrough](https://levix.leviro.net/docs/contributing) for the fork-to-pull-request workflow, then check [CONTRIBUTING.md](CONTRIBUTING.md) for the official repository rules. Bug reports and focused pull requests are welcome.
 
 For security issues, follow [SECURITY.md](SECURITY.md) and report them
 privately rather than opening a public issue.

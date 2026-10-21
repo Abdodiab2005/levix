@@ -3,6 +3,10 @@
 Thanks for helping improve Levix. Bug reports, documentation fixes, focused
 features, and tests are welcome.
 
+New here? The [step-by-step contributor walkthrough](https://levix.leviro.net/docs/contributing)
+explains how to fork, set up your environment, verify changes and open a PR.
+This file remains the authoritative repository contribution policy.
+
 ## Before you start
 
 - Search the existing issues and pull requests to avoid duplicate work.
