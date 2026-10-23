@@ -96,7 +96,7 @@ const SETTINGS = [
     default: "",
     group: "ai",
     label: "Gemini API key",
-    hint: "Free key from aistudio.google.com/apikey. Needed when the provider is gemini, and by !stt / !generate in every case.",
+    hint: "Free key from aistudio.google.com/apikey. Needed when chat uses Gemini, and always for !generate. !stt uses it unless speech-to-text is set to the OpenAI-compatible Whisper path.",
   },
   {
     key: "gemini_base_url",

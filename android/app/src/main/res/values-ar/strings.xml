@@ -63,8 +63,8 @@
     <string name="battery_hint">قد يقيّد أندرويد العمل في الخلفية. اسمح باستخدام البطارية دون قيود لتقليل الانقطاعات.</string>
     <string name="btn_battery">تفعيل حماية البطارية</string>
 
-    <!-- Diagnostics / Beta Logs -->
-    <string name="diagnostics_sub">سجلات تتبع الأخطاء البرمجية أثناء الإصدار التجريبي</string>
+    <!-- Diagnostics -->
+    <string name="diagnostics_sub">سجلات تتبع الأخطاء البرمجية</string>
     <string name="btn_share_logs">مشاركة السجلات</string>
     <string name="no_logs">لا توجد سجلات مسجلة بعد.</string>
     <string name="logs_actions_eyebrow">التشخيص</string>

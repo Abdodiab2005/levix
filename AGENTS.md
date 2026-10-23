@@ -6,7 +6,7 @@ working with code in this repository.
 ## Project Overview
 
 **Levix** — a self-hosted personal WhatsApp bot built with Node.js and
-**Baileys v7**: a 59-command system, group moderation, an AI agent whose
+**Baileys v7**: a 65-command system, group moderation, an AI agent whose
 provider (Google Gemini / OpenAI-compatible / Anthropic) is selected in the
 panel with its own endpoint, API key and model, scheduled messages, and a web
 control panel that changes almost all of it live. The database is the source of
@@ -372,8 +372,8 @@ session records the proxy the live socket was built with and reports
    - Match command name or alias
    - Execute command with context
 6. **Group Moderation** (if in group):
-   - Anti-link → `src/commands/group/antilink.js`
-   - Media control → `src/commands/group/media.js`
+   - Anti-link → `src/commands/group/antilink.cjs`
+   - Media control → `src/commands/group/media.cjs`
    - Forbidden words → `src/commands/mod.cjs` (unchanged; separate from auto-delete)
 
 ### Command System
