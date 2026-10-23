@@ -63,8 +63,8 @@
     <string name="battery_hint">Android may restrict background operation. Allow unrestricted battery to reduce interruptions.</string>
     <string name="btn_battery">Enable Battery Guard</string>
 
-    <!-- Diagnostics / Beta Logs -->
-    <string name="diagnostics_sub">Accessible logs for debugging during Beta / RC</string>
+    <!-- Diagnostics -->
+    <string name="diagnostics_sub">Accessible logs for debugging</string>
     <string name="btn_share_logs">Share Logs</string>
     <string name="no_logs">No log entries available yet.</string>
     <string name="logs_actions_eyebrow">Diagnostics</string>
