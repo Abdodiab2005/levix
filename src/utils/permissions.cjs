@@ -12,6 +12,7 @@
 // permission we can't verify.
 
 const logger = require("./logger.cjs");
+const normalizeJidCjs = require("./normalizeJid.cjs");
 
 let mod = null;
 
@@ -89,6 +90,72 @@ function sameUserSync(a, b) {
   }
 }
 
+function collectNormalized(values) {
+  const seen = new Set();
+  const out = [];
+  for (const value of values || []) {
+    const norm = normalizeJidCjs(value);
+    if (norm && !seen.has(norm)) {
+      seen.add(norm);
+      out.push(norm);
+    }
+  }
+  return out;
+}
+
+function getSenderCandidatesSync(msg, sock) {
+  if (mod?.getSenderCandidates) {
+    try {
+      return mod.getSenderCandidates(msg, sock);
+    } catch (err) {
+      logger.error({ err }, "[permissions.cjs] getSenderCandidatesSync failed");
+    }
+  }
+  if (!msg) return [];
+  const key = msg.key || {};
+  let raw;
+  if (key.fromMe) raw = [sock?.user?.id, sock?.user?.lid];
+  else if (key.remoteJid?.endsWith("@g.us")) {
+    raw = [key.participant, key.participantAlt, key.participantPn, key.senderPn];
+  } else {
+    raw = [key.remoteJid, key.remoteJidAlt, key.senderPn];
+  }
+  return collectNormalized(raw);
+}
+
+function findGroupParticipantSync(groupMetadata, jidOrList) {
+  if (mod?.findGroupParticipant) {
+    try {
+      return mod.findGroupParticipant(groupMetadata, jidOrList);
+    } catch (err) {
+      logger.error({ err }, "[permissions.cjs] findGroupParticipantSync failed");
+    }
+  }
+  const targets = collectNormalized(Array.isArray(jidOrList) ? jidOrList : [jidOrList]);
+  if (!groupMetadata?.participants || !targets.length) return null;
+  return (
+    groupMetadata.participants.find((p) =>
+      [p.id, p.lid, p.phoneNumber, p.jid]
+        .filter(Boolean)
+        .some((pid) => targets.includes(normalizeJidCjs(pid))),
+    ) || null
+  );
+}
+
+function rosterJidForSync(groupMetadata, jidOrList) {
+  if (mod?.rosterJidFor) {
+    try {
+      return mod.rosterJidFor(groupMetadata, jidOrList);
+    } catch (err) {
+      logger.error({ err }, "[permissions.cjs] rosterJidForSync failed");
+    }
+  }
+  const found = findGroupParticipantSync(groupMetadata, jidOrList);
+  if (found?.id) return found.id;
+  const list = Array.isArray(jidOrList) ? jidOrList : [jidOrList];
+  return collectNormalized(list)[0] || list.find(Boolean) || null;
+}
+
 async function isOwnerJid(jid) {
   const m = await getMod();
   return m.isOwnerJid(jid);
@@ -151,4 +218,7 @@ module.exports = {
   isAdminInGroupSync,
   isBotAdminInGroupSync,
   sameUserSync,
+  getSenderCandidatesSync,
+  findGroupParticipantSync,
+  rosterJidForSync,
 };

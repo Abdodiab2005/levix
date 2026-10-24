@@ -1,5 +1,6 @@
 // file: /commands/group/setwarn.js
 const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs");
+const { normalizeWarnAction } = require("../../utils/moderationSummary.cjs");
 const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
@@ -9,8 +10,8 @@ module.exports = {
     ar: "يضبط نظام التحذيرات التلقائي.",
   },
   usage: {
-    en: "setwarn max <count>\nsetwarn action <KICK|NONE>",
-    ar: "setwarn max <عدد>\nsetwarn action <KICK|NONE>",
+    en: "setwarn max <count>\nsetwarn action <KICK|FLAG>",
+    ar: "setwarn max <عدد>\nsetwarn action <KICK|FLAG>",
   },
   chat: "group",
   userAdminRequired: true,
@@ -20,9 +21,9 @@ module.exports = {
     const subCommand = args[0]?.toLowerCase();
     const value = args[1];
 
-    const settings = getGroupSettings(groupId);
-    if (!settings.warn_system) {
-      settings.warn_system = { max_warnings: 3, action: "NONE" };
+    const settings = getGroupSettings(groupId) || {};
+    if (!settings.warn_system || typeof settings.warn_system !== "object") {
+      settings.warn_system = {};
     }
 
     const warnConfig = settings.warn_system;
@@ -46,12 +47,12 @@ module.exports = {
       }
 
       case "action": {
-        const action = value?.toUpperCase();
-        if (action !== "KICK" && action !== "NONE") {
+        const action = normalizeWarnAction(value);
+        if (!action) {
           return await sock.sendMessage(groupId, {
             text: tr(
-              "Invalid action. Available: `KICK`, `NONE`",
-              "الإجراء غير صالح. الإجراءات المتاحة: `KICK`, `NONE`",
+              "Invalid action. Available: `KICK`, `FLAG`",
+              "الإجراء غير صالح. الإجراءات المتاحة: `KICK`, `FLAG`",
             ),
           });
         }
@@ -65,8 +66,8 @@ module.exports = {
       default:
         return await sock.sendMessage(groupId, {
           text: tr(
-            "Wrong format. Use:\n`!setwarn max <number>`\n`!setwarn action <KICK|NONE>`",
-            "صيغة غير صحيحة. استخدم:\n`!setwarn max <number>`\n`!setwarn action <KICK|NONE>`",
+            "Wrong format. Use:\n`!setwarn max <number>`\n`!setwarn action <KICK|FLAG>`",
+            "صيغة غير صحيحة. استخدم:\n`!setwarn max <number>`\n`!setwarn action <KICK|FLAG>`",
           ),
         });
     }

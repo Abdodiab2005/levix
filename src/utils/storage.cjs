@@ -29,6 +29,10 @@ module.exports = {
   saveUserWarnings: store.saveUserWarnings,
   clearUserWarnings: store.clearUserWarnings,
   getAllWarnings: store.getAllWarnings,
+  getModerationFlag: store.getModerationFlag,
+  upsertModerationFlag: store.upsertModerationFlag,
+  clearModerationFlag: store.clearModerationFlag,
+  listModerationFlags: store.listModerationFlags,
   // Todos
   getUserTodos: store.getUserTodos,
   saveUserTodos: store.saveUserTodos,

@@ -33,6 +33,7 @@ const EXPECTED_TABLES = [
   "sticker_pack_items",
   "auto_delete_rules",
   "auto_delete_log",
+  "moderation_flags",
 ];
 
 const tablesOf = (database) =>
@@ -162,6 +163,48 @@ section("an existing v7 database gains auto-delete tables");
   equal("the upgrade reaches the latest version", versionOf(database), MIGRATIONS.length);
   ok("auto_delete_rules exists after upgrade", tablesOf(database).includes("auto_delete_rules"));
   ok("auto_delete_log exists after upgrade", tablesOf(database).includes("auto_delete_log"));
+  database.close();
+}
+
+section("an existing v8 database gains moderation_flags and rewrites NONE to FLAG");
+
+{
+  const database = scratchDatabase();
+  // v1–v8. Pinned, not "everything but the last": appending v10 must not make
+  // this migration include v9, or moderation_flags would already be there.
+  migrate(database, MIGRATIONS.slice(0, 8));
+  ok("moderation_flags is not there yet", !tablesOf(database).includes("moderation_flags"));
+  const insert = database.prepare("INSERT INTO group_settings (group_id, settings) VALUES (?, ?)");
+  insert.run(
+    "120363-none@g.us",
+    JSON.stringify({ warn_system: { max_warnings: 3, action: "NONE" } }),
+  );
+  insert.run(
+    "120363-none-lc@g.us",
+    JSON.stringify({ warn_system: { max_warnings: 3, action: "none" } }),
+  );
+  insert.run("120363-unset@g.us", JSON.stringify({ warn_system: { max_warnings: 3 } }));
+  insert.run(
+    "120363-kick@g.us",
+    JSON.stringify({ warn_system: { max_warnings: 2, action: "KICK" } }),
+  );
+
+  migrate(database);
+  equal("the upgrade reaches the latest version", versionOf(database), MIGRATIONS.length);
+  ok("moderation_flags exists after upgrade", tablesOf(database).includes("moderation_flags"));
+  const flagColumns = columnsOf(database, "moderation_flags");
+  for (const column of ["group_id", "user_id", "warn_count", "last_rule", "flagged_at", "reasons"]) {
+    ok(`moderation_flags has ${column}`, flagColumns.includes(column));
+  }
+  const settingsOf = (groupId) =>
+    JSON.parse(
+      database.prepare("SELECT settings FROM group_settings WHERE group_id = ?").get(groupId)
+        .settings,
+    );
+  equal("stored NONE becomes FLAG", settingsOf("120363-none@g.us").warn_system.action, "FLAG");
+  equal("lowercase none becomes FLAG", settingsOf("120363-none-lc@g.us").warn_system.action, "FLAG");
+  equal("missing action stays missing", settingsOf("120363-unset@g.us").warn_system.action, undefined);
+  equal("stored KICK is kept", settingsOf("120363-kick@g.us").warn_system.action, "KICK");
   database.close();
 }
 

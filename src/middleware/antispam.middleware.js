@@ -11,7 +11,8 @@ import { resolveGroupMetadata } from "../utils/groupMetadataCache.cjs";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { enforceGroupRule } = require("../utils/moderationAction.cjs");
+const { featureActionOf } = require("../utils/moderationSummary.cjs");
 
 const userMessageTimestamps = new Map();
 
@@ -25,6 +26,37 @@ function stableSenderId(candidates) {
     } catch {}
   }
   return candidates[0] || null;
+}
+
+function identityKeys(groupId, candidates) {
+  const ids = new Set();
+  const stable = stableSenderId(candidates);
+  if (stable) ids.add(stable);
+  for (const candidate of candidates) {
+    if (candidate) ids.add(candidate);
+    try {
+      const mapped = getPnForLid(candidate);
+      if (mapped) ids.add(mapped);
+    } catch {}
+  }
+  return [...ids].map((id) => `${groupId}::${id}`);
+}
+
+function mergeSpamBucket(groupId, candidates, now, timeWindow) {
+  const keys = identityKeys(groupId, candidates);
+  const timestamps = [];
+  for (const key of keys) {
+    const bucket = userMessageTimestamps.get(key);
+    if (bucket?.timestamps) timestamps.push(...bucket.timestamps);
+  }
+  timestamps.push(now);
+  const recent = timestamps.filter((ts) => now - ts < timeWindow);
+  const canonical = `${groupId}::${stableSenderId(candidates) || candidates[0]}`;
+  for (const key of keys) {
+    if (key !== canonical) userMessageTimestamps.delete(key);
+  }
+  userMessageTimestamps.set(canonical, { timestamps: recent, lastSeen: now });
+  return { recent, canonical };
 }
 
 // Handle anti-spam detection and action
@@ -62,40 +94,29 @@ export async function handleAntiSpam(sock, msg) {
   for (const [key, entry] of userMessageTimestamps) {
     if (now - entry.lastSeen > timeWindow) userMessageTimestamps.delete(key);
   }
-  const identity = stableSenderId(senderCandidates);
-  const bucketKey = `${groupId}::${identity}`;
-  const bucket = userMessageTimestamps.get(bucketKey) || { timestamps: [], lastSeen: now };
-  const userTimestamps = bucket.timestamps;
-  userTimestamps.push(now);
-
-  // Filter timestamps within time window
-  const recentTimestamps = userTimestamps.filter((ts) => now - ts < timeWindow);
-  userMessageTimestamps.set(bucketKey, { timestamps: recentTimestamps, lastSeen: now });
+  const { recent: recentTimestamps, canonical } = mergeSpamBucket(
+    groupId,
+    senderCandidates,
+    now,
+    timeWindow,
+  );
 
   // Check if user exceeded message count
   if (recentTimestamps.length > (spamConfig.message_count || 5)) {
     logger.warn({ user: senderId, group: groupId }, "Spam detected, taking action.");
 
-    // Take action based on config
-    if (spamConfig.action === "KICK") {
-      await sock.sendMessage(groupId, {
-        text: tr(
-          `🚫 @${senderId.split("@")[0]} was removed for spamming.`,
-          `🚫 تم حذف @${senderId.split("@")[0]} بسبب الإزعاج (Spam).`,
-        ),
-        mentions: [senderId],
-      });
-      await sock.groupParticipantsUpdate(groupId, [senderId], "remove");
-    } else {
-      await sock.sendMessage(groupId, {
-        text: tr(
-          `⚠️ Warning, @${senderId.split("@")[0]}! Please don't spam.`,
-          `⚠️ تحذير لـ @${senderId.split("@")[0]}! الرجاء عدم إرسال رسائل مزعجة.`,
-        ),
-        mentions: [senderId],
-      });
-    }
+    const kickNow = featureActionOf(settings, "antispam") === "KICK";
+    await enforceGroupRule(sock, {
+      msg,
+      groupMetadata,
+      rule: "spam",
+      warningReason: "antispam",
+      deleteMessage: false,
+      recordWarning: true,
+      kickImmediately: kickNow,
+      targetCandidates: senderCandidates,
+    });
 
-    userMessageTimestamps.delete(bucketKey);
+    userMessageTimestamps.delete(canonical);
   }
 }

@@ -130,11 +130,12 @@ try {
   res = await http.json(
     `/dashboard/api/groups/${encodeURIComponent(settingsId)}`,
     {
-      antilink: { enabled: true, mode: "WHITELIST", allowed_domains: ["EXAMPLE.COM"] },
+      antilink: { enabled: true, mode: "WHITELIST", allowed_domains: ["EXAMPLE.COM"], action: "KICK" },
       antispam: { enabled: true, time_window: 15, message_count: 6, action: "WARN" },
-      media_control: { enabled: true, blocked_types: ["image", "audio"] },
+      media_control: { enabled: true, blocked_types: ["image", "audio"], action: "DELETE" },
       welcome_system: { enabled: true, messages: ["أهلاً", "Welcome"] },
       warn_system: { max_warnings: 4, action: "NONE" },
+      forbidden_words: { enabled: true, action: "WARN" },
       join_requests: { auto_approve_enabled: true },
     },
     "PATCH",
@@ -156,7 +157,143 @@ try {
   );
   equal("antispam count is saved", config.antispam.message_count, 6);
   equal("warning limit is saved", config.warn_system.max_warnings, 4);
+  equal("explicit NONE is stored as FLAG", config.warn_system.action, "FLAG");
+  equal("antilink action is saved", config.antilink.action, "KICK");
+  equal("media action is saved", config.media_control.action, "DELETE");
+  equal("forbidden-words action is saved", config.moderation.forbiddenWords.action, "WARN");
   equal("join requests are saved", config.join_requests.auto_approve_enabled, true);
+  groups = (await (await http.call("/dashboard/api/groups")).json()).groups;
+  const panelGroup = groups.find((group) => group.id === settingsId);
+  ok("GET groups includes the English summary", panelGroup.moderation_summary.en.includes("Anti-link"));
+  ok("GET groups includes the Arabic summary", panelGroup.moderation_summary.ar.includes("منع الروابط"));
+  equal("forbidden-word count is exposed", panelGroup.forbidden_words.count, 0);
+  equal("explicit NONE becomes FLAG on the panel", panelGroup.warn_system.action, "FLAG");
+  equal("GET antilink action is the stored value", panelGroup.antilink.action, "KICK");
+  equal("GET media action is the stored value", panelGroup.media_control.action, "DELETE");
+  ok(
+    "GET summary for FLAG names admin review",
+    panelGroup.moderation_summary.en.includes("flag for admin review"),
+  );
+  equal(
+    "unset warn action is shown as KICK",
+    groups.find((group) => group.id === liveId).warn_system.action,
+    "KICK",
+  );
+  ok(
+    "GET summary for an unset action names kick",
+    groups.find((group) => group.id === liveId).moderation_summary.en.includes("remove the member"),
+  );
+
+  section("flagged members list and clear from the API");
+  const flaggedId = "201555555555@s.whatsapp.net";
+  store.saveUserWarnings(settingsId, flaggedId, [
+    { reason: "link", by: "bot", date: new Date().toISOString() },
+  ]);
+  store.upsertModerationFlag(settingsId, flaggedId, {
+    warnCount: 3,
+    lastRule: "link",
+    reasons: ["link"],
+    flaggedAt: 1_700_000_000_000,
+  });
+  groups = (await (await http.call("/dashboard/api/groups")).json()).groups;
+  const flaggedGroup = groups.find((group) => group.id === settingsId);
+  equal("GET lists the flagged member", flaggedGroup.flagged_members.length, 1);
+  equal("flagged member id is canonical", flaggedGroup.flagged_members[0].user_id, flaggedId);
+  equal("flagged warn count is exposed", flaggedGroup.flagged_members[0].warn_count, 3);
+
+  res = await http.json(
+    `/dashboard/api/groups/${encodeURIComponent(settingsId)}/flagged/dismiss`,
+    { user_id: flaggedId },
+  );
+  equal("dismiss flag succeeds", res.status, 200);
+  equal("dismiss drops the flag", store.getModerationFlag(settingsId, flaggedId), null);
+  equal("dismiss keeps warnings", store.getUserWarnings(settingsId, flaggedId).length, 1);
+
+  store.upsertModerationFlag(settingsId, flaggedId, {
+    warnCount: 3,
+    lastRule: "link",
+    reasons: ["link"],
+  });
+  res = await http.json(
+    `/dashboard/api/groups/${encodeURIComponent(settingsId)}/flagged/clear`,
+    { user_id: flaggedId },
+  );
+  equal("clear succeeds", res.status, 200);
+  equal("clear drops the flag", store.getModerationFlag(settingsId, flaggedId), null);
+  equal("clear drops warnings", store.getUserWarnings(settingsId, flaggedId).length, 0);
+
+  res = await http.json(
+    `/dashboard/api/groups/${encodeURIComponent(settingsId)}/flagged/clear`,
+    {},
+  );
+  equal("clear without user_id is 400", res.status, 400);
+
+  store.upsertModerationFlag(settingsId, flaggedId, {
+    warnCount: 3,
+    lastRule: "spam",
+    reasons: ["spam"],
+  });
+  setSession(null);
+  res = await http.json(
+    `/dashboard/api/groups/${encodeURIComponent(settingsId)}/flagged/kick`,
+    { user_id: flaggedId },
+  );
+  equal("kick without a socket is 503", res.status, 503);
+
+  const flaggedKicks = [];
+  groupMetadataCache.set(settingsId, {
+    subject: "Stored rule group",
+    participants: [
+      { id: flaggedId, admin: null },
+      { id: "209999999999@s.whatsapp.net", admin: "admin" },
+    ],
+  });
+  setSession({
+    socket: {
+      user: { id: "209999999999@s.whatsapp.net" },
+      async groupParticipantsUpdate(_jid, users, action) {
+        flaggedKicks.push({ users: [...users], action });
+      },
+    },
+    getState: () => ({ state: "connected", connected: true }),
+  });
+  res = await http.json(
+    `/dashboard/api/groups/${encodeURIComponent(settingsId)}/flagged/kick`,
+    { user_id: flaggedId },
+  );
+  equal("kick flagged succeeds", res.status, 200);
+  equal("kick was sent", flaggedKicks.length, 1);
+  equal("kick uses the member id", flaggedKicks[0].users[0], flaggedId);
+  equal("kick clears the flag", store.getModerationFlag(settingsId, flaggedId), null);
+  const kickedView = await res.json();
+  equal("kick response has no flagged members", kickedView.group.flagged_members.length, 0);
+  setSession(null);
+  res = await http.json("/dashboard/api/groups/moderation-preview", {
+    antilink: { enabled: true, mode: "ALL" },
+    warn_system: { max_warnings: 5, action: "KICK" },
+  });
+  equal("preview route succeeds", res.status, 200);
+  const preview = await res.json();
+  ok("preview English reflects the draft warn limit", preview.en.includes("Warn limit: 5"));
+  ok("preview English says kick at the limit", preview.en.includes("remove the member"));
+  ok("preview Arabic is Arabic", preview.ar.includes("حد الإنذارات"));
+  res = await http.json("/dashboard/api/groups/moderation-preview", {
+    antilink: { enabled: true, mode: "ALL", action: "DELETE" },
+    warn_system: { max_warnings: 5, action: "FLAG" },
+  });
+  equal("FLAG preview route succeeds", res.status, 200);
+  const flagPreview = await res.json();
+  ok("FLAG preview names admin review", flagPreview.en.includes("flag for admin review"));
+  ok("DELETE preview names delete only", flagPreview.en.includes("delete only"));
+  res = await http.json("/dashboard/api/groups/moderation-preview", {
+    antilink: { enabled: true, mode: "ALL" },
+  });
+  equal("unset preview route succeeds", res.status, 200);
+  const unsetPreview = await res.json();
+  ok(
+    "unset preview kicks at the default limit",
+    unsetPreview.en.includes("Warn limit: 3") && unsetPreview.en.includes("remove the member"),
+  );
   res = await http.json(
     `/dashboard/api/groups/${encodeURIComponent(settingsId)}`,
     { media_control: { blocked_types: ["unknown"] } },

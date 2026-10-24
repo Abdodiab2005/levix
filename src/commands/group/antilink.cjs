@@ -4,6 +4,12 @@ const logger = require("../../utils/logger.cjs");
 const { isOwnerJidSync, isAdminInGroupSync } = require("../../utils/permissions.cjs");
 const { visibleText } = require("../../utils/messageContent.cjs");
 const { resolveGroupMetadata } = require("../../utils/groupMetadataCache.cjs");
+const { enforceGroupRule, senderCandidates } = require("../../utils/moderationAction.cjs");
+const {
+  featureActionOf,
+  normalizeFeatureAction,
+  policyFromFeatureAction,
+} = require("../../utils/moderationSummary.cjs");
 const { tr } = require("../../utils/i18n.cjs");
 
 // --- The Main Command Logic ---
@@ -14,8 +20,8 @@ const command = {
     ar: "تحكم متقدم في ميزة منع الروابط.",
   },
   usage: {
-    en: "antilink [status]\nantilink <on|off>\nantilink mode <ALL|WHITELIST|BLACKLIST>\nantilink <allow|disallow> <domain>",
-    ar: "antilink [status]\nantilink <on|off>\nantilink mode <ALL|WHITELIST|BLACKLIST>\nantilink <allow|disallow> <النطاق>",
+    en: "antilink [status]\nantilink <on|off>\nantilink mode <ALL|WHITELIST|BLACKLIST>\nantilink action <DELETE|WARN|KICK>\nantilink <allow|disallow> <domain>",
+    ar: "antilink [status]\nantilink <on|off>\nantilink mode <ALL|WHITELIST|BLACKLIST>\nantilink action <DELETE|WARN|KICK>\nantilink <allow|disallow> <النطاق>",
   },
   chat: "group",
   userAdminRequired: true,
@@ -83,6 +89,22 @@ const command = {
         });
         break;
       }
+      case "action": {
+        const action = normalizeFeatureAction(args[1]);
+        if (!action) {
+          return await sock.sendMessage(groupId, {
+            text: tr(
+              "Invalid action. Available: `DELETE`, `WARN`, `KICK`",
+              "الإجراء غير صالح. الإجراءات المتاحة: `DELETE`, `WARN`, `KICK`",
+            ),
+          });
+        }
+        antilinkConfig.action = action;
+        await sock.sendMessage(groupId, {
+          text: tr(`✅ Anti-link action is now ${action}.`, `✅ تم تعيين إجراء منع الروابط إلى ${action}.`),
+        });
+        break;
+      }
       case "disallow": {
         const domainToDisallow = args[1] ? args[1].toLowerCase() : "";
         if (!domainToDisallow)
@@ -104,9 +126,10 @@ const command = {
         // Display current status
         const state = antilinkConfig.enabled ? tr("on ✅", "مفعل ✅") : tr("off ☑️", "معطل ☑️");
         const allowed = antilinkConfig.allowed_domains.join(", ") || tr("none", "لا يوجد");
+        const action = featureActionOf(settings, "antilink");
         const statusReply = tr(
-          `*Anti-link:*\n\nState: ${state}\nMode: ${antilinkConfig.mode}\nAllowed domains: ${allowed}\n`,
-          `*حالة نظام منع الروابط:*\n\nالحالة: ${state}\nالوضع: ${antilinkConfig.mode}\nالدومينات المسموح بها: ${allowed}\n`,
+          `*Anti-link:*\n\nState: ${state}\nMode: ${antilinkConfig.mode}\nAction: ${action}\nAllowed domains: ${allowed}\n`,
+          `*حالة نظام منع الروابط:*\n\nالحالة: ${state}\nالوضع: ${antilinkConfig.mode}\nالإجراء: ${action}\nالدومينات المسموح بها: ${allowed}\n`,
         );
         await sock.sendMessage(groupId, { text: statusReply });
       }
@@ -136,7 +159,7 @@ async function handleAntiLink(sock, msg, _legacyConfig, _normalizeJid) {
   // Cache-first: this runs on every group message while antilink is enabled.
   const groupMetadata = await resolveGroupMetadata(sock, groupId);
   // Centralized checks — handle LID/PN cross-format and bootstrap roster.
-  const senderIds = [senderId, msg.key.participantAlt, msg.key.participantPn].filter(Boolean);
+  const senderIds = senderCandidates(msg, sock);
   const isOwner = msg.key.fromMe || senderIds.some(isOwnerJidSync);
   const isSenderAdmin = senderIds.some((id) => isAdminInGroupSync(groupMetadata, id));
 
@@ -176,15 +199,16 @@ async function handleAntiLink(sock, msg, _legacyConfig, _normalizeJid) {
 
   if (shouldDelete) {
     logger.info(`[Anti-Link] Deleting link from ${senderId} in ${groupId}. Domain: ${domain}`);
-    await sock.sendMessage(groupId, { delete: msg.key });
-    await sock.sendMessage(groupId, {
-      text: tr(
-        `No links here, @${senderId.split("@")[0]}!`,
-        `ممنوع إرسال الروابط هنا يا @${senderId.split("@")[0]}!`,
-      ),
-      mentions: [senderId],
+    const policy = policyFromFeatureAction(featureActionOf(settings, "antilink"));
+    const result = await enforceGroupRule(sock, {
+      msg,
+      groupMetadata,
+      rule: "link",
+      warningReason: `antilink:${domain}`,
+      ...policy,
+      targetCandidates: senderIds,
     });
-    return true;
+    return result.acted;
   }
   return false;
 }

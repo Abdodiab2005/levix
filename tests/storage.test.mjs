@@ -45,6 +45,40 @@ ok("warn all", store.getAllWarnings()[0].user_id === "u1@s.whatsapp.net");
 store.clearUserWarnings("g1@g.us", "u1@s.whatsapp.net");
 ok("warn cleared", store.getUserWarnings("g1@g.us", "u1@s.whatsapp.net").length === 0);
 
+section("warnings LID/PN aliases");
+store.storeLidPnMapping("555@lid", "201555555555@s.whatsapp.net");
+store.saveUserWarnings("g2@g.us", "555@lid", [
+  { reason: "link", date: "2020-01-01T00:00:00.000Z", by: "admin" },
+]);
+equal(
+  "read via phone JID finds the LID warning",
+  store.getUserWarnings("g2@g.us", "201555555555@s.whatsapp.net").length,
+  1,
+);
+store.saveUserWarnings("g2@g.us", "201555555555@s.whatsapp.net", [
+  { reason: "link", date: "2020-01-01T00:00:00.000Z", by: "admin" },
+  { reason: "spam", date: "2020-01-02T00:00:00.000Z", by: "admin" },
+]);
+equal(
+  "canonical row is the phone JID",
+  store.getAllWarnings().find((row) => row.group_id === "g2@g.us")?.user_id,
+  "201555555555@s.whatsapp.net",
+);
+equal(
+  "LID row is collapsed on save",
+  store.getAllWarnings().filter((row) => row.user_id === "555@lid").length,
+  0,
+);
+store.saveUserWarnings("g3@g.us", "201555555555@s.whatsapp.net", [{ reason: "other" }]);
+equal("warnings stay per group", store.getUserWarnings("g2@g.us", "555@lid").length, 2);
+equal("the other group is separate", store.getUserWarnings("g3@g.us", "555@lid").length, 1);
+store.clearUserWarnings("g2@g.us", "555@lid");
+equal(
+  "clear via LID wipes the phone-JID row",
+  store.getUserWarnings("g2@g.us", "201555555555@s.whatsapp.net").length,
+  0,
+);
+
 section("todos / notes");
 store.saveUserTodos("u1", [{ text: "buy milk" }]);
 ok("todo", store.getUserTodos("u1")[0].text === "buy milk");
@@ -66,6 +100,9 @@ store.deleteQrCode();
 ok("qr gone", store.getQrCode() === null);
 
 section("lid mapping");
+// The LID/PN warnings fixture above stores one mapping. This section's
+// original "lid all" check is the whole table after the two rows below.
+store.clearLidMappings();
 store.storeLidPnMappings([
   { lid: "111@lid", pn: "201111111111@s.whatsapp.net", deviceIndex: 0 },
   { lid: "222@lid", pn: "202222222222@s.whatsapp.net" },

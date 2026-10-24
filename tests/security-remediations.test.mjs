@@ -182,6 +182,9 @@ store.saveGroupSettings("120363-mod@g.us", {
   media_control: { enabled: true, blocked_types: ["image"] },
   moderation: { forbiddenWords: { enabled: true, list: ["forbidden"] } },
   antispam: { enabled: true, message_count: 1, time_window: 10, action: "KICK" },
+  // Explicit FLAG: this file pins wrapped-content detection and admin
+  // exemption, not the warn-limit default (see tests/moderation.test.mjs).
+  warn_system: { max_warnings: 3, action: "FLAG" },
 });
 store.storeLidPnMapping("333@lid", "201333333333@s.whatsapp.net");
 

@@ -256,6 +256,23 @@ export const api = {
   getGroups: () => api.get<{ groups: GroupItem[] }>("/groups"),
   updateGroup: (jid: string, payload: any) =>
     api.patch(`/groups/${encodeURIComponent(jid)}`, payload),
+  previewModeration: (settings: unknown) =>
+    api.post<{ success: boolean; en: string; ar: string }>("/groups/moderation-preview", settings),
+  kickFlagged: (jid: string, userId: string) =>
+    api.post<{ success: boolean; group: GroupItem }>(
+      `/groups/${encodeURIComponent(jid)}/flagged/kick`,
+      { user_id: userId },
+    ),
+  clearFlagged: (jid: string, userId: string) =>
+    api.post<{ success: boolean; group: GroupItem }>(
+      `/groups/${encodeURIComponent(jid)}/flagged/clear`,
+      { user_id: userId },
+    ),
+  dismissFlagged: (jid: string, userId: string) =>
+    api.post<{ success: boolean; group: GroupItem }>(
+      `/groups/${encodeURIComponent(jid)}/flagged/dismiss`,
+      { user_id: userId },
+    ),
   getPersona: () =>
     api.get<{ persona: { header?: string; body?: string } | string }>("/ai/persona"),
   updatePersona: (persona: string) => api.put("/ai/persona", { body: persona }),
