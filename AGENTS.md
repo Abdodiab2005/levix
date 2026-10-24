@@ -484,6 +484,7 @@ and blacklist middleware, the prefix lookup, every permission check) with no
 | `sticker_pack_items` | pack membership and order | cascade with the sticker or the pack; wiped on unlink |
 | `auto_delete_rules` | keyword auto-delete rules (keywords, match mode, chat/sender scope, counters) | — (operator config; counters reset on unlink) |
 | `auto_delete_log` | opt-in text/caption copies of messages an auto-delete rule actually deleted (never media bytes) | `auto_delete_keep_days` (30), also capped at 5000 newest; wiped on unlink |
+| `moderation_flags` | members waiting for admin review after warn-limit FLAG (or a KICK the bot could not perform): canonical id, warn count, last rule, time, reasons | wiped on unlink |
 
 `forward_scores` gains a row per forwarded message, so it expires; the sweep
 runs at boot and every six hours (`sweepExpired()` in `db.cjs`). Sticker files
@@ -769,15 +770,21 @@ sent twice after the first reconnect.
 
 ### 3. Group Moderation
 
-**Features**:
-- Welcome messages (`src/commands/group/welcome.cjs`)
-- Anti-link protection (`src/commands/group/antilink.cjs`)
-- Media restrictions (`src/commands/group/media.cjs`)
-- Anti-spam (`src/middleware/antispam.middleware.js`)
-- Warning system (`src/commands/group/warn.cjs`)
-- Auto-kick after N warnings (configurable per group)
+One pipeline (`src/utils/moderationAction.cjs` `enforceGroupRule`) runs anti-link, media, forbidden words, anti-spam, and `!warn`. Feature actions and the warn-limit action are set from the panel (GroupsView → Rules & moderation) and from commands.
 
-**Admin Commands**: kick, promote, demote, add, removeall, setname, setpp, etc.
+**Warn limit** (`warn_system`, `!setwarn`): unset defaults to **KICK**. Stored values are **KICK** or **FLAG** (legacy `NONE` migrates to FLAG). At the limit, KICK removes the member when the bot is a group admin; if it is not, the member is FLAG'd and the group is told an admin must act. FLAG never kicks: it writes `moderation_flags` (canonical member id, warn count, last rule, time, reasons) and mentions the group's admins.
+
+**Feature actions** (each feeds the same pipeline; `warn` increments the shared warning counter and then the warn-limit action):
+- Anti-link (`src/commands/group/antilink.cjs`): `DELETE` / `WARN` / `KICK` now. `!group antilink action …`
+- Media (`src/commands/group/media.cjs`): same three. `!group media action …`
+- Forbidden words (`src/commands/mod.cjs`): same three. `!mod action forbiddenWords …`
+- Anti-spam (`src/middleware/antispam.middleware.js`, `src/commands/group/antispam.cjs`): `WARN` / `KICK` now. `!group antispam action …`
+
+**Flagged members**: panel list with Kick / Clear warnings / Dismiss flag (same functions as the commands). `!group flagged` lists them. `!group clearwarns @member` clears warnings and the flag. `!kick` of a flagged member clears the flag.
+
+**Active moderation** summary (`src/utils/moderationSummary.cjs`) is the one builder for `!rules`, welcome, and the panel preview. It states each feature's effective action and the warn-limit action (kick, or flag for admin review).
+
+**Other admin commands**: kick, promote, demote, add, removeall, setname, setpp, etc.
 
 ### 4. (removed) REST API
 

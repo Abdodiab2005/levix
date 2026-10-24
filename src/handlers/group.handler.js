@@ -5,6 +5,7 @@ import { getGroupSettings } from "../utils/storage.esm.js";
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
 const { tr } = require("../utils/i18n.cjs");
+const { buildModerationSummary } = require("../utils/moderationSummary.cjs");
 
 // Handle group participant updates (join/leave)
 export async function handleGroupParticipantsUpdate(sock, update) {
@@ -30,7 +31,9 @@ export async function handleGroupParticipantsUpdate(sock, update) {
       const randomIndex = Math.floor(Math.random() * welcomeConfig.messages.length);
       const welcomeMessage = welcomeConfig.messages[randomIndex];
 
-      const finalMessage = welcomeMessage.replace(/\${user}/g, `@${participant.split("@")[0]}`);
+      const welcomeText = welcomeMessage.replace(/\${user}/g, `@${participant.split("@")[0]}`);
+      const summary = buildModerationSummary(settings);
+      const finalMessage = summary ? `${welcomeText}\n\n${summary}` : welcomeText;
 
       await delay(1000);
       await sock.sendMessage(id, {

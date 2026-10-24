@@ -120,15 +120,28 @@ export interface GroupItem {
   jid: string;
   subject: string | null;
   memberCount: number | null;
-  antilink: { enabled: boolean; mode: string; allowed_domains: string[] };
+  antilink: { enabled: boolean; mode: string; allowed_domains: string[]; action?: string };
   antispam: { enabled: boolean; time_window: number; message_count: number; action: string };
-  media_control: { enabled: boolean; blocked_types: string[] };
+  media_control: { enabled: boolean; blocked_types: string[]; action?: string };
   welcome_system: { enabled: boolean; messages: string[] };
   warn_system: { max_warnings: number; action: string };
   join_requests: { auto_approve_enabled: boolean };
   rules: string;
   mediaRestriction: string;
   welcomeEnabled: boolean;
+  forbidden_words?: { enabled: boolean; count: number; action?: string };
+  moderation_summary?: { en: string; ar: string };
+  flagged_members?: FlaggedMember[];
+}
+
+export interface FlaggedMember {
+  user_id: string;
+  name: string;
+  phone: string | null;
+  warn_count: number;
+  last_rule: string;
+  flagged_at: number;
+  reasons: string[];
 }
 
 export interface LogItem {

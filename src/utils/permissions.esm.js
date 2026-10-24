@@ -299,27 +299,67 @@ export function sameUser(a, b) {
  * match `jid` against ALL of them so admin detection works whether the caller
  * hands us a LID or a PN, even before the lid_mapping table is populated.
  */
+export function participantIds(participant) {
+  if (!participant) return [];
+  return [participant.id, participant.lid, participant.phoneNumber, participant.jid].filter(
+    Boolean,
+  );
+}
+
 export function isAdminInGroup(groupMetadata, jid) {
   if (!groupMetadata?.participants || !jid) return false;
   const target = normalizeJid(jid);
   return groupMetadata.participants.some((p) => {
     if (!["admin", "superadmin"].includes(p.admin)) return false;
-    const participantIds = [p.id, p.lid, p.phoneNumber, p.jid].filter(Boolean);
-    return participantIds.some((pid) => normalizeJid(pid) === target || sameUser(pid, jid));
+    return participantIds(p).some((pid) => normalizeJid(pid) === target || sameUser(pid, jid));
   });
 }
 
 /**
+ * The group-roster row for this person, matching LID / PN / phone across
+ * `id`, `lid`, `phoneNumber` and `jid`.
+ */
+export function findGroupParticipant(groupMetadata, jidOrList) {
+  const targets = (Array.isArray(jidOrList) ? jidOrList : [jidOrList]).filter(Boolean);
+  if (!groupMetadata?.participants || !targets.length) return null;
+  return (
+    groupMetadata.participants.find((p) =>
+      participantIds(p).some((pid) => targets.some((target) => sameUser(pid, target))),
+    ) || null
+  );
+}
+
+/**
+ * The JID WhatsApp expects in `groupParticipantsUpdate` — the roster `id`,
+ * not the mention / sender form which may be the other of LID vs PN.
+ */
+export function rosterJidFor(groupMetadata, jidOrList) {
+  const found = findGroupParticipant(groupMetadata, jidOrList);
+  if (found?.id) return found.id;
+  const targets = (Array.isArray(jidOrList) ? jidOrList : [jidOrList]).filter(Boolean);
+  return normalizeJid(targets[0]) || targets[0] || null;
+}
+
+/** Every identifier we know for the linked WhatsApp account. */
+export function botIdentityCandidates(sock) {
+  const raw = [sock?.user?.id, sock?.user?.lid].filter(Boolean);
+  const out = [];
+  for (const value of raw) {
+    for (const form of identityForms(value)) {
+      if (!out.includes(form)) out.push(form);
+    }
+  }
+  return out;
+}
+
+/**
  * Check whether the bot itself is admin in the group. We check both the
- * bot's PN and its LID since either form may be stored on the participant.
+ * bot's PN and its LID (and lid_mapping aliases) since either form may be
+ * stored on the participant.
  */
 export function isBotAdminInGroup(groupMetadata, sock) {
   if (!groupMetadata?.participants || !sock) return false;
-  const candidates = [sock.user?.id, sock.user?.lid].filter(Boolean);
-  for (const candidate of candidates) {
-    if (isAdminInGroup(groupMetadata, candidate)) return true;
-  }
-  return false;
+  return botIdentityCandidates(sock).some((candidate) => isAdminInGroup(groupMetadata, candidate));
 }
 
 /**

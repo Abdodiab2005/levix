@@ -4,6 +4,12 @@ const logger = require("../../utils/logger.cjs");
 const { isOwnerJidSync, isAdminInGroupSync } = require("../../utils/permissions.cjs");
 const { mediaType } = require("../../utils/messageContent.cjs");
 const { resolveGroupMetadata } = require("../../utils/groupMetadataCache.cjs");
+const { enforceGroupRule, senderCandidates } = require("../../utils/moderationAction.cjs");
+const {
+  featureActionOf,
+  normalizeFeatureAction,
+  policyFromFeatureAction,
+} = require("../../utils/moderationSummary.cjs");
 const { tr } = require("../../utils/i18n.cjs");
 
 const VALID_TYPES = ["image", "video", "sticker", "audio"];
@@ -16,8 +22,8 @@ const command = {
     ar: "يتحكم في أنواع الرسائل المسموح بها في المجموعة.",
   },
   usage: {
-    en: "media [status]\nmedia <on|off>\nmedia <block|unblock> <image|video|sticker|audio>",
-    ar: "media [status]\nmedia <on|off>\nmedia <block|unblock> <image|video|sticker|audio>",
+    en: "media [status]\nmedia <on|off>\nmedia action <DELETE|WARN|KICK>\nmedia <block|unblock> <image|video|sticker|audio>",
+    ar: "media [status]\nmedia <on|off>\nmedia action <DELETE|WARN|KICK>\nmedia <block|unblock> <image|video|sticker|audio>",
   },
   chat: "group",
   userAdminRequired: true,
@@ -45,6 +51,22 @@ const command = {
           text: tr("☑️ Media control is off.", "☑️ تم تعطيل نظام مراقبة الوسائط."),
         });
         break;
+      case "action": {
+        const action = normalizeFeatureAction(args[1]);
+        if (!action) {
+          return await sock.sendMessage(groupId, {
+            text: tr(
+              "Invalid action. Available: `DELETE`, `WARN`, `KICK`",
+              "الإجراء غير صالح. الإجراءات المتاحة: `DELETE`, `WARN`, `KICK`",
+            ),
+          });
+        }
+        mediaConfig.action = action;
+        await sock.sendMessage(groupId, {
+          text: tr(`✅ Media action is now ${action}.`, `✅ تم تعيين إجراء الوسائط إلى ${action}.`),
+        });
+        break;
+      }
       case "block": {
         const typeToBlock = args[1] ? args[1].toLowerCase() : "";
         if (!VALID_TYPES.includes(typeToBlock))
@@ -81,9 +103,10 @@ const command = {
         // 'status'
         const state = mediaConfig.enabled ? tr("on ✅", "مفعل ✅") : tr("off ☑️", "معطل ☑️");
         const blocked = mediaConfig.blocked_types.join(", ") || tr("none", "لا يوجد");
+        const action = featureActionOf(settings, "media");
         const statusReply = tr(
-          `*Media control:*\n\nState: ${state}\nBlocked types: ${blocked}`,
-          `*حالة نظام مراقبة الوسائط:*\n\nالحالة: ${state}\nالأنواع الممنوعة: ${blocked}`,
+          `*Media control:*\n\nState: ${state}\nAction: ${action}\nBlocked types: ${blocked}`,
+          `*حالة نظام مراقبة الوسائط:*\n\nالحالة: ${state}\nالإجراء: ${action}\nالأنواع الممنوعة: ${blocked}`,
         );
         await sock.sendMessage(groupId, { text: statusReply });
       }
@@ -107,7 +130,7 @@ async function handleMediaControl(sock, msg, _legacyConfig, _normalizeJid) {
 
   // Cache-first: this runs on every group message while media control is on.
   const groupMetadata = await resolveGroupMetadata(sock, groupId);
-  const senderIds = [senderId, msg.key.participantAlt, msg.key.participantPn].filter(Boolean);
+  const senderIds = senderCandidates(msg, sock);
   const isOwner = msg.key.fromMe || senderIds.some(isOwnerJidSync);
   const isSenderAdmin = senderIds.some((id) => isAdminInGroupSync(groupMetadata, id));
 
@@ -117,15 +140,17 @@ async function handleMediaControl(sock, msg, _legacyConfig, _normalizeJid) {
 
   if (mediaConfig.blocked_types.includes(messageType)) {
     logger.info(`[Media Control] Deleting ${messageType} from ${senderId} in ${groupId}.`);
-    await sock.sendMessage(groupId, { delete: msg.key });
-    await sock.sendMessage(groupId, {
-      text: tr(
-        `@${senderId.split("@")[0]}, *${messageType}* isn't allowed here.`,
-        `يا @${senderId.split("@")[0]}، إرسال *${messageType}* ممنوع هنا.`,
-      ),
-      mentions: [senderId],
+    const policy = policyFromFeatureAction(featureActionOf(settings, "media"));
+    const result = await enforceGroupRule(sock, {
+      msg,
+      groupMetadata,
+      rule: "media",
+      detail: messageType,
+      warningReason: `media:${messageType}`,
+      ...policy,
+      targetCandidates: senderIds,
     });
-    return true; // Action was taken
+    return result.acted;
   }
   return false; // No action was taken
 }

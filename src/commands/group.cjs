@@ -13,6 +13,7 @@ const {
   isOwnerJidSync,
   isAdminInGroupSync,
   isBotAdminInGroupSync,
+  getSenderCandidatesSync,
 } = require("../utils/permissions.cjs");
 const normalizeJid = require("../utils/normalizeJid.cjs");
 const { langForCommand, withLang, tr } = require("../utils/i18n.cjs");
@@ -113,10 +114,12 @@ async function runSubCommand(sock, msg, args, body, groupMetadata, subCommand) {
   }
 
   const senderId = normalizeJid(msg.key.participant || msg.key.remoteJid);
+  const senderIds = getSenderCandidatesSync(msg, sock);
+  const senderCandidates = senderIds.length ? senderIds : [senderId].filter(Boolean);
   // Centralized owner check — covers the bot itself, LID<->PN,
   // and the user_metadata table.
-  const isOwner = msg.key.fromMe || isOwnerJidSync(senderId);
-  const isSenderAdmin = isAdminInGroupSync(groupMetadata, senderId);
+  const isOwner = msg.key.fromMe || senderCandidates.some(isOwnerJidSync);
+  const isSenderAdmin = senderCandidates.some((id) => isAdminInGroupSync(groupMetadata, id));
 
   // "group:kick" — the flat key runtime-config uses for sub-commands, so a
   // level changed from the dashboard applies here too.

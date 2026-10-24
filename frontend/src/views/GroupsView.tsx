@@ -1,6 +1,6 @@
 // file: frontend/src/views/GroupsView.tsx
 
-import { RotateCcw, ShieldAlert, Users } from "lucide-react";
+import { Eraser, RotateCcw, ShieldAlert, UserX, Users } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
@@ -15,10 +15,14 @@ import {
   Field,
   FilterButton,
   FormActions,
+  IconButton,
   Input,
+  MenuItem,
+  OverflowMenu,
   PageHeader,
   Pagination,
   RadioGroup,
+  RelativeTime,
   Section,
   Select,
   Skeleton,
@@ -31,7 +35,7 @@ import {
   usePagination,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
-import type { CommandItem, GroupItem } from "../types";
+import type { CommandItem, FlaggedMember, GroupItem } from "../types";
 import { fill } from "../utils/fill";
 import { useCommandLabels } from "./commands/shared";
 
@@ -115,13 +119,43 @@ export const GroupsView: React.FC = () => {
     };
   }, []);
 
+  const applyGroup = (group: GroupItem) => {
+    setGroups((prev) => prev.map((item) => (item.jid === group.jid ? group : item)));
+  };
+
+  const handleFlagged = async (
+    jid: string,
+    userId: string,
+    action: "kick" | "clear" | "dismiss",
+  ) => {
+    if (inflight.current.has(jid)) throw new Error(t("saving"));
+    inflight.current.add(jid);
+    setPending(new Set(inflight.current));
+    try {
+      const res =
+        action === "kick"
+          ? await api.kickFlagged(jid, userId)
+          : action === "clear"
+            ? await api.clearFlagged(jid, userId)
+            : await api.dismissFlagged(jid, userId);
+      if (res?.group) applyGroup(res.group);
+      toast(t("savedSuccessfully"), "success");
+    } catch (err: any) {
+      toast(err.message, "error");
+      throw err;
+    } finally {
+      inflight.current.delete(jid);
+      setPending(new Set(inflight.current));
+    }
+  };
+
   const handleUpdate = async (jid: string, updates: Partial<GroupItem>) => {
     if (inflight.current.has(jid)) throw new Error(t("saving"));
     inflight.current.add(jid);
     setPending(new Set(inflight.current));
     try {
       const res = await api.updateGroup(jid, updates);
-      setGroups((prev) => prev.map((g) => (g.jid === jid ? res.group : g)));
+      if (res?.group) applyGroup(res.group);
       toast(t("savedSuccessfully"), "success");
     } catch (err: any) {
       toast(err.message, "error");
@@ -323,6 +357,7 @@ export const GroupsView: React.FC = () => {
                   group={group}
                   pending={pending.has(group.jid)}
                   onSave={(patch) => handleUpdate(group.jid, patch)}
+                  onFlagged={(userId, action) => handleFlagged(group.jid, userId, action)}
                   commands={commands}
                   prefix={prefix}
                 />
@@ -341,12 +376,14 @@ function GroupSettings({
   group,
   pending,
   onSave,
+  onFlagged,
   commands,
   prefix,
 }: {
   group: GroupItem;
   pending: boolean;
   onSave: (patch: Partial<GroupItem>) => Promise<void>;
+  onFlagged: (userId: string, action: "kick" | "clear" | "dismiss") => Promise<void>;
   commands: CommandItem[];
   prefix: string;
 }) {
@@ -360,6 +397,9 @@ function GroupSettings({
     spamAction: group.antispam.action,
     warningLimit: group.warn_system.max_warnings,
     warningAction: group.warn_system.action,
+    linkAction: group.antilink.action || "WARN",
+    mediaAction: group.media_control.action || "WARN",
+    wordsAction: group.forbidden_words?.action || "WARN",
     rules: group.rules,
     welcome: group.welcome_system.messages.join("\n"),
   });
@@ -378,51 +418,88 @@ function GroupSettings({
       onChange={(value) => toggle(patch(value))}
     />
   );
+
+  const previewSettings = useMemo(
+    () => ({
+      antilink: {
+        enabled: group.antilink.enabled,
+        mode: form.draft.linkMode,
+        allowed_domains: form.draft.domains
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean),
+        action: form.draft.linkAction,
+      },
+      antispam: {
+        enabled: group.antispam.enabled,
+        time_window: form.draft.spamWindow,
+        message_count: form.draft.spamLimit,
+        action: form.draft.spamAction,
+      },
+      media_control: { ...group.media_control, action: form.draft.mediaAction },
+      warn_system: {
+        max_warnings: form.draft.warningLimit,
+        action: form.draft.warningAction,
+      },
+      forbidden_words: {
+        enabled: Boolean(group.forbidden_words?.enabled),
+        count: group.forbidden_words?.count || 0,
+        action: form.draft.wordsAction,
+      },
+      moderation: {
+        forbiddenWords: {
+          enabled: Boolean(group.forbidden_words?.enabled),
+          list: Array.from({ length: group.forbidden_words?.count || 0 }),
+          action: form.draft.wordsAction,
+        },
+      },
+    }),
+    [
+      form.draft.linkMode,
+      form.draft.domains,
+      form.draft.spamWindow,
+      form.draft.spamLimit,
+      form.draft.spamAction,
+      form.draft.warningLimit,
+      form.draft.warningAction,
+      form.draft.linkAction,
+      form.draft.mediaAction,
+      form.draft.wordsAction,
+      group.antilink.enabled,
+      group.antispam.enabled,
+      group.media_control,
+      group.forbidden_words,
+    ],
+  );
+
+  const savedPreview =
+    language === "en" ? group.moderation_summary?.en : group.moderation_summary?.ar;
+  const [livePreview, setLivePreview] = useState(savedPreview || "");
+  const previewKey = JSON.stringify(previewSettings);
+
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      api
+        .previewModeration(previewSettings)
+        .then((res) => {
+          if (!cancelled) setLivePreview(language === "en" ? res.en : res.ar);
+        })
+        .catch(() => {
+          if (!cancelled && savedPreview) setLivePreview(savedPreview);
+        });
+    }, 200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [previewKey, language, savedPreview, previewSettings]);
+
+  const previewText = livePreview || savedPreview || "";
+
   return (
     <div className="flex flex-col gap-5">
       <p className="text-xs text-muted">{t("botAdminHint")}</p>
-      {onOff(t("thAntiLink"), group.antilink.enabled, (enabled) => ({
-        antilink: { ...group.antilink, enabled },
-      }))}
-      {onOff(t("antiSpam"), group.antispam.enabled, (enabled) => ({
-        antispam: { ...group.antispam, enabled },
-      }))}
-      {onOff(t("thWelcome"), group.welcome_system.enabled, (enabled) => ({
-        welcome_system: { ...group.welcome_system, enabled },
-      }))}
-      {onOff(
-        t("autoApprove"),
-        group.join_requests.auto_approve_enabled,
-        (auto_approve_enabled) => ({ join_requests: { auto_approve_enabled } }),
-      )}
-      <Section title={t("thMedia")}>
-        <div className="grid grid-cols-1 gap-x-5 sm:grid-cols-2">
-          {(
-            [
-              ["image", "blockImages"],
-              ["video", "blockVideos"],
-              ["audio", "blockAudio"],
-              ["sticker", "blockStickers"],
-            ] as const
-          ).map(([type, label]) => (
-            <Toggle
-              key={type}
-              label={t(label)}
-              disabled={pending}
-              checked={
-                group.media_control.enabled && group.media_control.blocked_types.includes(type)
-              }
-              onChange={(blocked) => {
-                const types = group.media_control.enabled ? group.media_control.blocked_types : [];
-                const blocked_types = blocked
-                  ? [...new Set([...types, type])]
-                  : types.filter((value) => value !== type);
-                toggle({ media_control: { enabled: blocked_types.length > 0, blocked_types } });
-              }}
-            />
-          ))}
-        </div>
-      </Section>
       <form
         className="flex flex-col gap-5"
         onSubmit={(event) => {
@@ -436,6 +513,7 @@ function GroupSettings({
                   .split("\n")
                   .map((s) => s.trim())
                   .filter(Boolean),
+                action: draft.linkAction,
               },
               antispam: {
                 ...group.antispam,
@@ -443,7 +521,13 @@ function GroupSettings({
                 message_count: draft.spamLimit,
                 action: draft.spamAction,
               },
+              media_control: { ...group.media_control, action: draft.mediaAction },
               warn_system: { max_warnings: draft.warningLimit, action: draft.warningAction },
+              forbidden_words: {
+                enabled: Boolean(group.forbidden_words?.enabled),
+                count: group.forbidden_words?.count || 0,
+                action: draft.wordsAction,
+              },
               welcome_system: {
                 ...group.welcome_system,
                 messages:
@@ -457,7 +541,44 @@ function GroupSettings({
         }}
       >
         <fieldset disabled={pending} className="flex min-w-0 flex-col gap-5">
-          <Section title={t("groupModeration")}>
+          <Section title={t("rulesAndModeration")}>
+            {onOff(t("thAntiLink"), group.antilink.enabled, (enabled) => ({
+              antilink: { ...group.antilink, enabled },
+            }))}
+            {onOff(t("antiSpam"), group.antispam.enabled, (enabled) => ({
+              antispam: { ...group.antispam, enabled },
+            }))}
+            {onOff(t("forbiddenWords"), Boolean(group.forbidden_words?.enabled), (enabled) => ({
+              forbidden_words: { ...group.forbidden_words, enabled, count: group.forbidden_words?.count || 0 },
+            }))}
+            <div className="grid grid-cols-1 gap-x-5 sm:grid-cols-2">
+              {(
+                [
+                  ["image", "blockImages"],
+                  ["video", "blockVideos"],
+                  ["audio", "blockAudio"],
+                  ["sticker", "blockStickers"],
+                ] as const
+              ).map(([type, label]) => (
+                <Toggle
+                  key={type}
+                  label={t(label)}
+                  disabled={pending}
+                  checked={
+                    group.media_control.enabled && group.media_control.blocked_types.includes(type)
+                  }
+                  onChange={(blocked) => {
+                    const types = group.media_control.enabled
+                      ? group.media_control.blocked_types
+                      : [];
+                    const blocked_types = blocked
+                      ? [...new Set([...types, type])]
+                      : types.filter((value) => value !== type);
+                    toggle({ media_control: { enabled: blocked_types.length > 0, blocked_types } });
+                  }}
+                />
+              ))}
+            </div>
             <Field label={t("linkMode")}>
               <Select
                 aria-label={t("linkMode")}
@@ -467,6 +588,39 @@ function GroupSettings({
                 <option value="ALL">{t("linkAll")}</option>
                 <option value="WHITELIST">{t("linkWhitelist")}</option>
                 <option value="BLACKLIST">{t("linkBlacklist")}</option>
+              </Select>
+            </Field>
+            <Field label={t("linkAction")}>
+              <Select
+                aria-label={t("linkAction")}
+                value={form.draft.linkAction}
+                onChange={(e) => form.setField("linkAction", e.target.value)}
+              >
+                <option value="DELETE">{t("actionDelete")}</option>
+                <option value="WARN">{t("actionDeleteWarn")}</option>
+                <option value="KICK">{t("actionDeleteKick")}</option>
+              </Select>
+            </Field>
+            <Field label={t("mediaAction")}>
+              <Select
+                aria-label={t("mediaAction")}
+                value={form.draft.mediaAction}
+                onChange={(e) => form.setField("mediaAction", e.target.value)}
+              >
+                <option value="DELETE">{t("actionDelete")}</option>
+                <option value="WARN">{t("actionDeleteWarn")}</option>
+                <option value="KICK">{t("actionDeleteKick")}</option>
+              </Select>
+            </Field>
+            <Field label={t("wordsAction")}>
+              <Select
+                aria-label={t("wordsAction")}
+                value={form.draft.wordsAction}
+                onChange={(e) => form.setField("wordsAction", e.target.value)}
+              >
+                <option value="DELETE">{t("actionDelete")}</option>
+                <option value="WARN">{t("actionDeleteWarn")}</option>
+                <option value="KICK">{t("actionDeleteKick")}</option>
               </Select>
             </Field>
             <Field label={t("allowedDomains")}>
@@ -529,29 +683,104 @@ function GroupSettings({
                   value={form.draft.warningAction}
                   onChange={(e) => form.setField("warningAction", e.target.value)}
                 >
-                  <option value="NONE">{t("actionNone")}</option>
+                  <option value="FLAG">{t("actionFlag")}</option>
                   <option value="KICK">{t("actionKick")}</option>
                 </Select>
               </Field>
             </div>
+            <Field label={t("groupRules")}>
+              <Textarea
+                aria-label={t("groupRules")}
+                dir="auto"
+                maxLength={4000}
+                value={form.draft.rules}
+                onChange={(e) => form.setField("rules", e.target.value)}
+              />
+            </Field>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm font-bold text-text-main">{t("flaggedMembers")}</p>
+              {(group.flagged_members || []).length === 0 ? (
+                <p className="text-sm text-muted">{t("flaggedEmpty")}</p>
+              ) : (
+                <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                  {(group.flagged_members || []).map((member: FlaggedMember) => (
+                    <li
+                      key={member.user_id}
+                      className="flex min-w-0 items-center gap-2 rounded-xl border border-line bg-bg px-3 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <UserText className="block text-sm font-bold text-text-main">
+                          {member.name}
+                        </UserText>
+                        <p className="mt-0.5 truncate text-xs text-muted" dir="ltr">
+                          {member.warn_count} · {member.last_rule || "—"}
+                          {member.flagged_at ? (
+                            <>
+                              {" · "}
+                              <RelativeTime value={member.flagged_at} />
+                            </>
+                          ) : null}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <IconButton
+                          label={t("kickFlagged")}
+                          icon={<UserX size={16} />}
+                          disabled={pending}
+                          onClick={() => {
+                            void onFlagged(member.user_id, "kick");
+                          }}
+                        />
+                        <OverflowMenu label={t("moreActions")}>
+                          <MenuItem
+                            icon={<Eraser size={16} />}
+                            onSelect={() => {
+                              void onFlagged(member.user_id, "clear");
+                            }}
+                          >
+                            {t("clearWarnings")}
+                          </MenuItem>
+                          <MenuItem
+                            onSelect={() => {
+                              void onFlagged(member.user_id, "dismiss");
+                            }}
+                          >
+                            {t("dismissFlag")}
+                          </MenuItem>
+                        </OverflowMenu>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <Field label={t("moderationPreview")} description={t("moderationPreviewHint")}>
+              <div
+                dir="auto"
+                className="min-h-10 whitespace-pre-wrap rounded-xl border border-line bg-bg p-3 text-sm text-text-main"
+              >
+                {previewText}
+              </div>
+            </Field>
           </Section>
-          <Field label={t("groupRules")}>
-            <Textarea
-              aria-label={t("groupRules")}
-              dir="auto"
-              maxLength={4000}
-              value={form.draft.rules}
-              onChange={(e) => form.setField("rules", e.target.value)}
-            />
-          </Field>
-          <Field label={t("welcomeMessages")}>
-            <Textarea
-              aria-label={t("welcomeMessages")}
-              dir="auto"
-              value={form.draft.welcome}
-              onChange={(e) => form.setField("welcome", e.target.value)}
-            />
-          </Field>
+          <Section title={t("thWelcome")}>
+            {onOff(t("thWelcome"), group.welcome_system.enabled, (enabled) => ({
+              welcome_system: { ...group.welcome_system, enabled },
+            }))}
+            {onOff(
+              t("autoApprove"),
+              group.join_requests.auto_approve_enabled,
+              (auto_approve_enabled) => ({ join_requests: { auto_approve_enabled } }),
+            )}
+            <Field label={t("welcomeMessages")}>
+              <Textarea
+                aria-label={t("welcomeMessages")}
+                dir="auto"
+                value={form.draft.welcome}
+                onChange={(e) => form.setField("welcome", e.target.value)}
+              />
+            </Field>
+          </Section>
           <FormActions
             dirty={form.dirty}
             saving={pending}

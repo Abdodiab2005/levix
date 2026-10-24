@@ -38,6 +38,7 @@ import {
   getGroupSettings,
   getRecentDebts,
   getSchedules,
+  listModerationFlags,
   rememberSavedName,
   resolveUserPhone,
   saveGroupSettings,
@@ -45,6 +46,18 @@ import {
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
+const {
+  buildModerationSummaryBoth,
+  featureActionOf,
+  warnConfigOf,
+  normalizeWarnAction,
+  normalizeFeatureAction,
+} = require("../utils/moderationSummary.cjs");
+const {
+  kickGroupMember,
+  clearMemberModeration,
+  dismissMemberFlag,
+} = require("../utils/moderationAction.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
 const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
@@ -789,25 +802,24 @@ function groupView(groupId, stored) {
       enabled: !!config.antilink?.enabled,
       mode: config.antilink?.mode || "ALL",
       allowed_domains: config.antilink?.allowed_domains || [],
+      action: featureActionOf(config, "antilink"),
     },
     antispam: {
       enabled: !!config.antispam?.enabled,
       time_window: config.antispam?.time_window ?? 10,
       message_count: config.antispam?.message_count ?? 5,
-      action: config.antispam?.action || "WARN",
+      action: featureActionOf(config, "antispam"),
     },
     media_control: {
       enabled: !!config.media_control?.enabled,
       blocked_types: config.media_control?.blocked_types || [],
+      action: featureActionOf(config, "media"),
     },
     welcome_system: {
       enabled: !!config.welcome_system?.enabled,
       messages: config.welcome_system?.messages || [],
     },
-    warn_system: {
-      max_warnings: config.warn_system?.max_warnings ?? 3,
-      action: config.warn_system?.action || "NONE",
-    },
+    warn_system: warnConfigOf(config),
     join_requests: {
       auto_approve_enabled: !!config.join_requests?.auto_approve_enabled,
     },
@@ -816,8 +828,37 @@ function groupView(groupId, stored) {
     antilinkEnabled: !!config.antilink?.enabled,
     welcomeEnabled: !!config.welcome_system?.enabled,
     mediaRestriction,
+    forbidden_words: {
+      enabled: !!config.moderation?.forbiddenWords?.enabled,
+      count: Array.isArray(config.moderation?.forbiddenWords?.list)
+        ? config.moderation.forbiddenWords.list.length
+        : 0,
+      action: featureActionOf(config, "forbidden"),
+    },
+    moderation_summary: buildModerationSummaryBoth(config),
+    flagged_members: listModerationFlags(groupId).map((row) => {
+      const peer = describePeer(row.user_id);
+      return {
+        user_id: row.user_id,
+        name: peer.label || row.user_id,
+        phone: peer.phone,
+        warn_count: row.warn_count,
+        last_rule: row.last_rule,
+        flagged_at: row.flagged_at,
+        reasons: row.reasons,
+      };
+    }),
   };
 }
+
+router.post("/groups/moderation-preview", (req, res) => {
+  try {
+    const summary = buildModerationSummaryBoth(req.body || {});
+    res.json({ success: true, en: summary.en, ar: summary.ar });
+  } catch (error) {
+    fail(res, error, "Error building moderation preview");
+  }
+});
 
 router.get("/groups", (req, res) => {
   try {
@@ -901,6 +942,11 @@ router.patch("/groups/:id", (req, res) => {
         if (!ANTILINK_MODES.includes(mode)) throw new Error("Unknown antilink mode");
         next.mode = mode;
       }
+      if (patch.antilink.action !== undefined) {
+        const action = normalizeFeatureAction(patch.antilink.action);
+        if (!action) throw new Error("Unknown antilink action");
+        next.action = action;
+      }
       if (patch.antilink.allowed_domains !== undefined) {
         if (!Array.isArray(patch.antilink.allowed_domains)) {
           throw new Error("allowed_domains must be a list");
@@ -960,10 +1006,18 @@ router.patch("/groups/:id", (req, res) => {
         }
         next.blocked_types = [...new Set(types)];
       }
+      if (patch.media_control.action !== undefined) {
+        const action = normalizeFeatureAction(patch.media_control.action);
+        if (!action) throw new Error("Unknown media action");
+        next.action = action;
+      }
       current.media_control = {
         enabled: !!next.enabled,
         blocked_types: next.blocked_types || [],
       };
+      if (next.action === "DELETE" || next.action === "WARN" || next.action === "KICK") {
+        current.media_control.action = next.action;
+      }
     }
 
     if (patch.welcome_system) {
@@ -996,14 +1050,30 @@ router.patch("/groups/:id", (req, res) => {
         next.max_warnings = Math.trunc(max);
       }
       if (patch.warn_system.action !== undefined) {
-        const action = String(patch.warn_system.action).toUpperCase();
-        if (!["KICK", "NONE"].includes(action)) throw new Error("Unknown warn action");
+        const action = normalizeWarnAction(patch.warn_system.action);
+        if (!action) throw new Error("Unknown warn action");
         next.action = action;
       }
-      current.warn_system = {
+      const stored = {
         max_warnings: next.max_warnings ?? 3,
-        action: next.action || "NONE",
       };
+      const existingAction = normalizeWarnAction(next.action);
+      if (existingAction) stored.action = existingAction;
+      current.warn_system = stored;
+    }
+
+    if (patch.forbidden_words) {
+      current.moderation ||= {};
+      current.moderation.forbiddenWords ||= { enabled: false, list: [] };
+      const words = current.moderation.forbiddenWords;
+      if (patch.forbidden_words.enabled !== undefined) {
+        words.enabled = !!patch.forbidden_words.enabled;
+      }
+      if (patch.forbidden_words.action !== undefined) {
+        const action = normalizeFeatureAction(patch.forbidden_words.action);
+        if (!action) throw new Error("Unknown forbidden-words action");
+        words.action = action;
+      }
     }
 
     if (patch.join_requests) {
@@ -1025,6 +1095,77 @@ router.patch("/groups/:id", (req, res) => {
     res.json({ success: true, group: groupView(groupId, current) });
   } catch (error) {
     fail(res, error, "Error saving group settings");
+  }
+});
+
+function flaggedUserId(req) {
+  return String(req.body?.user_id || "").trim();
+}
+
+router.post(
+  "/groups/:id/flagged/kick",
+  asyncRoute(async (req, res) => {
+    const groupId = req.params.id;
+    if (!groupId?.endsWith("@g.us")) return badRequest(res, "Not a group id");
+    const userId = flaggedUserId(req);
+    if (!userId) return badRequest(res, "user_id is required");
+    const sock = currentSocket();
+    if (!sock) {
+      return res.status(503).json({ success: false, error: "WhatsApp is disconnected" });
+    }
+    let meta = groupMetadataCache.get(groupId);
+    if (!meta) {
+      try {
+        meta = await sock.groupMetadata(groupId);
+      } catch (error) {
+        return fail(res, error, "Could not load group roster", 503);
+      }
+    }
+    try {
+      const result = await kickGroupMember(sock, {
+        groupId,
+        groupMetadata: meta,
+        targetCandidates: [userId],
+      });
+      if (!result.kicked) {
+        const message =
+          result.error === "protected"
+            ? "That member can't be kicked"
+            : result.error === "bot-not-admin"
+              ? "The bot must be a group admin to kick"
+              : "Could not kick that member";
+        return badRequest(res, message);
+      }
+      res.json({ success: true, group: groupView(groupId, getGroupSettings(groupId)) });
+    } catch (error) {
+      fail(res, error, "Error kicking flagged member");
+    }
+  }),
+);
+
+router.post("/groups/:id/flagged/clear", (req, res) => {
+  const groupId = req.params.id;
+  if (!groupId?.endsWith("@g.us")) return badRequest(res, "Not a group id");
+  const userId = flaggedUserId(req);
+  if (!userId) return badRequest(res, "user_id is required");
+  try {
+    clearMemberModeration(groupId, userId);
+    res.json({ success: true, group: groupView(groupId, getGroupSettings(groupId)) });
+  } catch (error) {
+    fail(res, error, "Error clearing flagged member");
+  }
+});
+
+router.post("/groups/:id/flagged/dismiss", (req, res) => {
+  const groupId = req.params.id;
+  if (!groupId?.endsWith("@g.us")) return badRequest(res, "Not a group id");
+  const userId = flaggedUserId(req);
+  if (!userId) return badRequest(res, "user_id is required");
+  try {
+    dismissMemberFlag(groupId, userId);
+    res.json({ success: true, group: groupView(groupId, getGroupSettings(groupId)) });
+  } catch (error) {
+    fail(res, error, "Error dismissing flag");
   }
 });
 

@@ -619,6 +619,38 @@ const MIGRATIONS = [
       CREATE INDEX idx_auto_delete_log_rule ON auto_delete_log (rule_id, created_at);
     `);
   },
+  // v9 — members who hit the warn limit under FLAG (or KICK when the bot
+  // is not a group admin). Explicit stored NONE becomes FLAG; a missing
+  // warn_system.action stays missing (default KICK).
+  (database) => {
+    database.exec(`
+      CREATE TABLE moderation_flags (
+        group_id   TEXT NOT NULL,
+        user_id    TEXT NOT NULL,
+        warn_count INTEGER NOT NULL DEFAULT 0,
+        last_rule  TEXT,
+        flagged_at INTEGER NOT NULL,
+        reasons    TEXT NOT NULL DEFAULT '[]',
+        PRIMARY KEY (group_id, user_id)
+      );
+      CREATE INDEX idx_moderation_flags_group ON moderation_flags (group_id, flagged_at);
+    `);
+    const rows = database.prepare("SELECT group_id, settings FROM group_settings").all();
+    const update = database.prepare("UPDATE group_settings SET settings = ? WHERE group_id = ?");
+    for (const row of rows) {
+      let settings;
+      try {
+        settings = JSON.parse(row.settings);
+      } catch {
+        continue;
+      }
+      if (!settings || typeof settings !== "object") continue;
+      const action = String(settings.warn_system?.action || "").trim().toUpperCase();
+      if (action !== "NONE") continue;
+      settings.warn_system.action = "FLAG";
+      update.run(JSON.stringify(settings), row.group_id);
+    }
+  },
 ];
 
 function migrate(database, migrations = MIGRATIONS) {

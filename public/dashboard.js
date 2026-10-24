@@ -1027,6 +1027,17 @@
                      value="${esc(group.antilink.allowed_domains.join(", "))}"
                      placeholder="youtube.com, github.com" />
             </label>
+            <label class="field">
+              <span>Then</span>
+              <select data-group="${id}" data-field="antilink.action">
+                ${["DELETE", "WARN", "KICK"]
+                  .map(
+                    (action) =>
+                      `<option value="${action}"${action === (group.antilink.action || "WARN") ? " selected" : ""}>${action.toLowerCase()}</option>`
+                  )
+                  .join("")}
+              </select>
+            </label>
           </div>
 
           <div>
@@ -1071,6 +1082,17 @@
                 )
                 .join("")}
             </div>
+            <label class="field">
+              <span>Then</span>
+              <select data-group="${id}" data-field="media_control.action">
+                ${["DELETE", "WARN", "KICK"]
+                  .map(
+                    (action) =>
+                      `<option value="${action}"${action === (group.media_control.action || "WARN") ? " selected" : ""}>${action.toLowerCase()}</option>`
+                  )
+                  .join("")}
+              </select>
+            </label>
 
             <h3>Joining</h3>
             ${toggle(
@@ -1090,7 +1112,7 @@
             <label class="field">
               <span>Then</span>
               <select data-group="${id}" data-field="warn_system.action">
-                ${["NONE", "KICK"]
+                ${["FLAG", "KICK"]
                   .map(
                     (action) =>
                       `<option value="${action}"${action === group.warn_system.action ? " selected" : ""}>${action.toLowerCase()}</option>`
@@ -1135,6 +1157,7 @@
           .value.split(",")
           .map((domain) => domain.trim())
           .filter(Boolean),
+        action: read("antilink.action").value,
       },
       antispam: {
         enabled: read("antispam.enabled").checked,
@@ -1145,6 +1168,7 @@
       media_control: {
         enabled: read("media_control.enabled").checked,
         blocked_types: blocked,
+        action: read("media_control.action").value,
       },
       welcome_system: { enabled: read("welcome_system.enabled").checked },
       warn_system: {
@@ -1717,7 +1741,6 @@
             toast(`Prefix updated to "${val}"`, "ok");
           }));
         }
-      }
       } else if (activeSettingsTab === "security") {
         const serverKeys = ["port", "bind_address", "trust_proxy", "public_domain", "dashboard_origin"];
         const items = serverKeys.map((k) => byKey.get(k)).filter(Boolean);

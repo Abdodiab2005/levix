@@ -226,29 +226,89 @@ function clearWhatsAppDirectory() {
   clearGroupSettings();
   clearUserMetadata();
   clearLidMappings();
+  clearAllModerationFlags();
 }
 
 // ===================================================================
 // --- Warnings ---
 // ===================================================================
+//
+// Rows are keyed by (group_id, user_id). Baileys v7 names the same person as a
+// LID on one message and a phone JID on the next, so every read/write walks
+// the known aliases (the stored id plus lid_mapping) and collapses them onto
+// one canonical row — the phone JID when we have it, otherwise the LID.
+
+function warningUserIds(userId) {
+  const ids = [];
+  const add = (value) => {
+    const norm = normalizeJid(value);
+    if (norm && !ids.includes(norm)) ids.push(norm);
+  };
+  add(userId);
+  const norm = normalizeJid(userId);
+  if (!norm) return ids;
+  if (isLidJid(norm)) {
+    add(getPnForLid(norm));
+    if (norm !== userId) add(getPnForLid(userId));
+  } else {
+    add(getLidForPn(norm));
+    for (const lid of getLidsForPn(norm)) add(lid);
+    if (norm !== userId) {
+      add(getLidForPn(userId));
+      for (const lid of getLidsForPn(userId)) add(lid);
+    }
+  }
+  return ids;
+}
+
+function canonicalWarningUserId(userId) {
+  const ids = warningUserIds(userId);
+  const pn = ids.find((id) => String(id).includes("@s.whatsapp.net"));
+  return pn || ids[0] || userId;
+}
+
+function readWarningRows(groupId, userIds) {
+  const merged = [];
+  const seen = new Set();
+  for (const id of userIds) {
+    const row = q("SELECT warnings FROM warnings WHERE group_id = ? AND user_id = ?").get(
+      groupId,
+      id,
+    );
+    const list = row ? parseJson(row.warnings, []) : [];
+    for (const warning of list) {
+      const key = `${warning?.date || ""}|${warning?.reason || ""}|${warning?.by || ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(warning);
+    }
+  }
+  merged.sort((a, b) => String(a?.date || "").localeCompare(String(b?.date || "")));
+  return merged;
+}
 
 function getUserWarnings(groupId, userId) {
-  const row = q("SELECT warnings FROM warnings WHERE group_id = ? AND user_id = ?").get(
-    groupId,
-    userId,
-  );
-  return row ? parseJson(row.warnings, []) : [];
+  return readWarningRows(groupId, warningUserIds(userId));
 }
 
 function saveUserWarnings(groupId, userId, warningsArray) {
+  const canonical = canonicalWarningUserId(userId);
+  const aliases = warningUserIds(userId);
   q(
     `INSERT INTO warnings (group_id, user_id, warnings) VALUES (?, ?, ?)
      ON CONFLICT(group_id, user_id) DO UPDATE SET warnings = excluded.warnings`,
-  ).run(groupId, userId, JSON.stringify(warningsArray || []));
+  ).run(groupId, canonical, JSON.stringify(warningsArray || []));
+  for (const id of aliases) {
+    if (id !== canonical) {
+      q("DELETE FROM warnings WHERE group_id = ? AND user_id = ?").run(groupId, id);
+    }
+  }
 }
 
 function clearUserWarnings(groupId, userId) {
-  q("DELETE FROM warnings WHERE group_id = ? AND user_id = ?").run(groupId, userId);
+  for (const id of warningUserIds(userId)) {
+    q("DELETE FROM warnings WHERE group_id = ? AND user_id = ?").run(groupId, id);
+  }
 }
 
 function getAllWarnings() {
@@ -263,6 +323,90 @@ function getAllWarnings() {
 
 function countWarnings() {
   return q("SELECT COUNT(*) AS n FROM warnings").get().n;
+}
+
+// ===================================================================
+// --- Moderation flags ---
+// ===================================================================
+//
+// One row per (group, canonical member). Same LID/PN alias collapse as
+// warnings: the phone JID when we have it, otherwise the LID.
+
+function parseFlagRow(row) {
+  if (!row) return null;
+  return {
+    group_id: row.group_id,
+    user_id: row.user_id,
+    warn_count: Number(row.warn_count) || 0,
+    last_rule: row.last_rule || "",
+    flagged_at: Number(row.flagged_at) || 0,
+    reasons: parseJson(row.reasons, []),
+  };
+}
+
+function getModerationFlag(groupId, userId) {
+  for (const id of warningUserIds(userId)) {
+    const row = q(
+      `SELECT group_id, user_id, warn_count, last_rule, flagged_at, reasons
+       FROM moderation_flags WHERE group_id = ? AND user_id = ?`,
+    ).get(groupId, id);
+    if (row) return parseFlagRow(row);
+  }
+  return null;
+}
+
+function upsertModerationFlag(groupId, userId, payload = {}) {
+  const canonical = canonicalWarningUserId(userId);
+  const existing = getModerationFlag(groupId, userId);
+  const incoming = Array.isArray(payload.reasons) ? payload.reasons : [];
+  const reasons = [];
+  const seen = new Set();
+  for (const item of [...(existing?.reasons || []), ...incoming]) {
+    const text = String(item || "").slice(0, 200);
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    reasons.push(text);
+    if (reasons.length >= 20) break;
+  }
+  const warnCount =
+    payload.warnCount != null ? Number(payload.warnCount) : existing?.warn_count || 0;
+  const lastRule =
+    payload.lastRule != null ? String(payload.lastRule).slice(0, 80) : existing?.last_rule || "";
+  const flaggedAt = Number(payload.flaggedAt) || Date.now();
+  q(
+    `INSERT INTO moderation_flags (group_id, user_id, warn_count, last_rule, flagged_at, reasons)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(group_id, user_id) DO UPDATE SET
+       warn_count = excluded.warn_count,
+       last_rule = excluded.last_rule,
+       flagged_at = excluded.flagged_at,
+       reasons = excluded.reasons`,
+  ).run(groupId, canonical, warnCount, lastRule, flaggedAt, JSON.stringify(reasons));
+  for (const id of warningUserIds(userId)) {
+    if (id !== canonical) {
+      q("DELETE FROM moderation_flags WHERE group_id = ? AND user_id = ?").run(groupId, id);
+    }
+  }
+  return getModerationFlag(groupId, canonical);
+}
+
+function clearModerationFlag(groupId, userId) {
+  for (const id of warningUserIds(userId)) {
+    q("DELETE FROM moderation_flags WHERE group_id = ? AND user_id = ?").run(groupId, id);
+  }
+}
+
+function listModerationFlags(groupId) {
+  return q(
+    `SELECT group_id, user_id, warn_count, last_rule, flagged_at, reasons
+     FROM moderation_flags WHERE group_id = ? ORDER BY flagged_at DESC`,
+  )
+    .all(groupId)
+    .map(parseFlagRow);
+}
+
+function clearAllModerationFlags() {
+  q("DELETE FROM moderation_flags").run();
 }
 
 // ===================================================================
@@ -1862,6 +2006,11 @@ module.exports = {
   clearUserWarnings,
   getAllWarnings,
   countWarnings,
+  getModerationFlag,
+  upsertModerationFlag,
+  clearModerationFlag,
+  listModerationFlags,
+  clearAllModerationFlags,
   // Todos
   getUserTodos,
   saveUserTodos,
