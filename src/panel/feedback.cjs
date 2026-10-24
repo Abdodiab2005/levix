@@ -21,7 +21,7 @@ const fs = require("node:fs");
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
 const { buildDiagnostics } = require("../diagnostics/device.cjs");
-const { readDebugTail } = require("../diagnostics/debugLog.cjs");
+const { readDebugTail, readDebugSnapshot, storeDebugSnapshot } = require("../diagnostics/debugLog.cjs");
 
 const DEFAULT_ENDPOINT = "https://levix.leviro.net/api/feedback";
 
@@ -155,11 +155,11 @@ function safeRemoteError(value) {
 }
 
 /**
- * The two fields a ticked diagnostics box adds to the envelope, built once for
- * both the preview route and the send so they cannot drift.
+ * The preview's diagnostics object plus the debug tail it is showing, frozen
+ * under `debugLogId`. Send does not call this: it redeems that id.
  *
  * @param {unknown} diagnosticsClient
- * @returns {{ diagnostics: Record<string, unknown>, debugLog: string }}
+ * @returns {{ diagnostics: Record<string, unknown>, debugLog: string, debugLogId: string }}
  */
 function buildDiagnosticsAttachment(diagnosticsClient) {
   let debugLog = "";
@@ -168,7 +168,11 @@ function buildDiagnosticsAttachment(diagnosticsClient) {
   } catch {
     debugLog = "";
   }
-  return { diagnostics: buildDiagnostics(diagnosticsClient), debugLog };
+  return {
+    diagnostics: buildDiagnostics(diagnosticsClient),
+    debugLog,
+    debugLogId: storeDebugSnapshot(debugLog),
+  };
 }
 
 /**
@@ -178,17 +182,19 @@ function buildDiagnosticsAttachment(diagnosticsClient) {
  * Telegram as a document instead of a message.
  *
  * `diagnosticsClient` is the raw section 1 client object, present only when the
- * operator ticked the diagnostics box. When present `buildDiagnosticsAttachment`
- * adds `diagnostics` and `debugLog` to the envelope — the same two fields the
- * preview route returns, and the same values the panel shows. When it is
- * undefined the envelope has neither key at all.
+ * operator ticked the diagnostics box. When present the envelope gets
+ * `diagnostics`. `debugLog` is added only when `debugLogId` still names the
+ * snapshot the preview stored — a missing or expired id attaches no debug log,
+ * never a fresh unread one. When diagnostics were not requested the envelope
+ * has neither key.
  *
  * @param {{ message: string, topic: string, rating: number|null, contact: string|null }} feedback
  * @param {{ buffer: Buffer, name: string, type: string, size: number } | null} attachment
  * @param {object} [diagnosticsClient]
+ * @param {unknown} [debugLogId]
  * @returns {Promise<{ ok: true } | { ok: false, status: number, error: string }>}
  */
-async function submitFeedback(feedback, attachment = null, diagnosticsClient = undefined) {
+async function submitFeedback(feedback, attachment = null, diagnosticsClient = undefined, debugLogId = undefined) {
   const endpoint = process.env.LEVIX_FEEDBACK_URL || DEFAULT_ENDPOINT;
   const runtime = describeRuntime();
 
@@ -201,7 +207,9 @@ async function submitFeedback(feedback, attachment = null, diagnosticsClient = u
   };
 
   if (diagnosticsClient !== undefined && diagnosticsClient !== null) {
-    Object.assign(envelope, buildDiagnosticsAttachment(diagnosticsClient));
+    envelope.diagnostics = buildDiagnostics(diagnosticsClient);
+    const debugLog = readDebugSnapshot(debugLogId);
+    if (typeof debugLog === "string") envelope.debugLog = debugLog;
   }
 
   let response;

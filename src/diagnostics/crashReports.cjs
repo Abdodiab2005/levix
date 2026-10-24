@@ -16,7 +16,7 @@ const path = require("node:path");
 const { dataPath } = require("../config/paths.cjs");
 const { sanitizeText } = require("./sanitize.cjs");
 const { sanitizeClientFields } = require("./device.cjs");
-const { readDebugTail } = require("./debugLog.cjs");
+const { readDebugTail, readDebugSnapshot, storeDebugSnapshot } = require("./debugLog.cjs");
 
 const CRASH_DIR = dataPath("crash-reports");
 const SENT_FILE = path.join(CRASH_DIR, "sent.json");
@@ -387,20 +387,21 @@ function safeDebugLog() {
 }
 
 /**
- * One builder for both the preview and the send: the upload object plus the
- * technical debug log. `list()` reads the tail once and passes it to every
- * report; `forwardReport()` reads it at send time.
+ * The upload object plus a debug log only when the caller already has the
+ * exact string. A missing string omits the key — send must not invent one.
  */
-function uploadWithDebugLog(report, debugLog = safeDebugLog()) {
+function uploadWithDebugLog(report, debugLog) {
+  if (typeof debugLog !== "string") return uploadObject(report);
   return { ...uploadObject(report), debugLog };
 }
 
 /**
- * Forward one report. Never retried here; the caller decides. Resolves with
- * `{ ok: true }` or `{ ok: false, status, error }`.
+ * Forward one report. Never retried here; the caller decides. `debugLogId` is
+ * the snapshot `list()` returned. Missing or expired attaches no debug log.
+ * Resolves with `{ ok: true }` or `{ ok: false, status, error }`.
  */
-async function forwardReport(report) {
-  const payload = uploadWithDebugLog(report);
+async function forwardReport(report, debugLogId) {
+  const payload = uploadWithDebugLog(report, readDebugSnapshot(debugLogId));
   const runtime = runtimeFacts();
   let response;
   let data = null;
@@ -435,11 +436,11 @@ async function forwardReport(report) {
 }
 
 /** Send one stored report. Success deletes it and records the send. */
-async function sendReport(id) {
+async function sendReport(id, debugLogId) {
   const report = readReport(id);
   if (!report) return { ok: false, status: 404, error: "Crash report not found" };
 
-  const result = await forwardReport(report);
+  const result = await forwardReport(report, debugLogId);
   if (result.ok) {
     deleteReport(report.id);
     recordSent({
@@ -461,10 +462,12 @@ async function sendReport(id) {
 
 /** What GET /crash-reports returns: previews plus the send history. */
 function list() {
-  // Read once so every report in this response shows the same tail.
+  // One frozen tail for every report in this response. Send redeems the id.
   const debugLog = safeDebugLog();
+  const debugLogId = storeDebugSnapshot(debugLog);
   const reports = listReports().map((report) => ({
     ...uploadWithDebugLog(report, debugLog),
+    debugLogId,
     status: report.status || "pending",
     lastError: report.lastError ?? null,
   }));

@@ -28,6 +28,9 @@ const verifyThrottle = createThrottle();
 
 /** @type {{ salt: string, hash: string, expiresAt: number, attempts: number, email: string } | null} */
 let pendingVerify = null;
+// Same rule as the reset slot: the commit after `await` runs only for the
+// latest request. `remove` bumps this so a send still in flight cannot land.
+let verifyGeneration = 0;
 
 const EMAIL_RE =
   /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
@@ -159,22 +162,28 @@ async function startVerification(email, lang, peer) {
 
   const now = Date.now();
   const key = String(peer ?? "");
-  const gate = verifyThrottle.check(key, now);
+  const gate = verifyThrottle.reserve(key, now);
   if (!gate.ok) return { ok: false, reason: gate.reason, retryAfter: gate.retryAfter };
 
   const generated = generateCode(now);
+  const generation = ++verifyGeneration;
   const sent = await deliver({
     kind: "verify",
     to: normalized.email,
     code: generated.code,
     lang,
   });
-  if (!sent.ok) return sent;
+  if (!sent.ok) {
+    verifyThrottle.release(gate.reservation);
+    return sent;
+  }
 
-  // Stored only after the relay accepts it, so a code that was never delivered
-  // cannot be confirmed, and a failed send does not discard a live one.
+  // Stored only after the relay accepts it, and only if this request is still
+  // the latest one. A code that was never delivered cannot be confirmed, a
+  // failed send does not discard a live one, and two overlapping sends cannot
+  // both become the pending code.
+  if (generation !== verifyGeneration) return { ok: false, reason: "throttled" };
   pendingVerify = { ...generated.pending, email: normalized.email };
-  verifyThrottle.record(key, gate.entry, now);
   logger.info("[recovery-email] Verification code sent");
   return { ok: true, expiresInMinutes: Math.round(CODE_TTL_MS / 60000) };
 }
@@ -201,12 +210,17 @@ function confirmVerification(code) {
   }
 
   pendingVerify = null;
+  // The saved address just changed. An email reset bound to the previous one
+  // must not still redeem.
+  require("./password-reset.cjs").noteRecoveryAddress(email);
   return { ok: true, verified: true, masked: maskEmail(email) };
 }
 
 function remove() {
   pendingVerify = null;
+  verifyGeneration += 1;
   secrets.clearRecoveryEmail();
+  require("./password-reset.cjs").noteRecoveryAddress(null);
 }
 
 function _resetForTests() {

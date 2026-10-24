@@ -143,6 +143,8 @@ export interface FeedbackPayload {
   rating?: number | null;
   contact?: string | null;
   diagnostics?: ClientDiagnostics;
+  /** Id of the debug-log snapshot the preview froze. Missing means send no log. */
+  debugLogId?: string;
 }
 
 export interface FetchAiModelsResponse {
@@ -362,10 +364,12 @@ export const api = {
   // The bot forwards this to the developer; nothing about it is stored locally.
   getFeedbackMeta: () => api.get<FeedbackMeta>("/feedback/meta"),
   getFeedbackDiagnosticsPreview: (client: ClientDiagnostics) =>
-    api.post<{ success: boolean; diagnostics: DiagnosticsObject; debugLog: string }>(
-      "/feedback/diagnostics-preview",
-      { client },
-    ),
+    api.post<{
+      success: boolean;
+      diagnostics: DiagnosticsObject;
+      debugLog: string;
+      debugLogId: string;
+    }>("/feedback/diagnostics-preview", { client }),
   sendFeedback: (payload: FeedbackPayload) => api.post<{ success: boolean }>("/feedback", payload),
   /**
    * The same feedback with one file, as multipart/form-data. XHR rather than
@@ -384,6 +388,7 @@ export const api = {
       if (payload.rating) form.set("rating", String(payload.rating));
       if (payload.contact) form.set("contact", payload.contact);
       if (payload.diagnostics) form.set("diagnostics", JSON.stringify(payload.diagnostics));
+      if (payload.debugLogId) form.set("debugLogId", payload.debugLogId);
       form.set("file", attachment, attachment.name);
       const xhr = new XMLHttpRequest();
       xhr.open("POST", "/dashboard/api/feedback");
@@ -420,8 +425,10 @@ export const api = {
     ),
   submitCrashReport: (body: CrashReportInput) =>
     api.post<{ success: boolean; id: string }>("/crash-reports", body),
-  sendCrashReport: (id: string) =>
-    api.post<{ success: boolean }>(`/crash-reports/${encodeURIComponent(id)}/send`),
+  sendCrashReport: (id: string, debugLogId?: string) =>
+    api.post<{ success: boolean }>(`/crash-reports/${encodeURIComponent(id)}/send`, {
+      ...(debugLogId ? { debugLogId } : {}),
+    }),
   deleteCrashReport: (id: string) =>
     api.delete<{ success: boolean }>(`/crash-reports/${encodeURIComponent(id)}`),
   deleteAllCrashReports: () => api.delete<{ success: boolean }>("/crash-reports"),

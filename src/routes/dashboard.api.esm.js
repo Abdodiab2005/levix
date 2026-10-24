@@ -1678,9 +1678,8 @@ router.get("/feedback/meta", (req, res) => {
   });
 });
 
-// The exact object the send forwards as diagnostics: the section 1 object and
-// the technical debug log, from the one builder submitFeedback() uses, so the
-// preview cannot lie.
+// Preview of the diagnostics object plus a frozen debug-log snapshot. Send
+// redeems `debugLogId`; it does not rebuild the tail.
 router.post("/feedback/diagnostics-preview", (req, res) => {
   const parsed = parseDiagnosticsInput(req.body?.client);
   if (parsed.error) return badRequest(res, parsed.error);
@@ -1743,6 +1742,7 @@ router.post(
       parsed.value,
       attachment,
       diagnostics.present ? diagnostics.value : undefined,
+      typeof body.debugLogId === "string" ? body.debugLogId : undefined,
     );
     if (!result.ok) {
       return res.status(result.status).json({ success: false, error: result.error });
@@ -2051,7 +2051,7 @@ router.post("/crash-reports", (req, res) => {
 router.post(
   "/crash-reports/:id/send",
   asyncRoute(async (req, res) => {
-    const result = await crashReports.sendReport(req.params.id);
+    const result = await crashReports.sendReport(req.params.id, req.body?.debugLogId);
     if (!result.ok) {
       return res.status(result.status || 502).json({ success: false, error: result.error });
     }

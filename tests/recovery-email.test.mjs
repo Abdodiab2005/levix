@@ -26,6 +26,7 @@ const NEXT_PASSWORD = "replacement-password";
 const dataDir = useTempDataDir("levix-recovery");
 
 const received = [];
+const held = [];
 let relayMode = "ok";
 const stub = createServer((req, res) => {
   let raw = "";
@@ -38,12 +39,19 @@ const stub = createServer((req, res) => {
       body = JSON.parse(raw);
     } catch {}
     received.push(body);
-    const status = relayMode === "invalid" ? 400 : relayMode === "rate" ? 429 : relayMode === "down" ? 503 : 200;
-    const error =
-      relayMode === "invalid" ? "invalid" : relayMode === "rate" ? "rate_limited" : "unavailable";
-    const payload = relayMode === "ok" ? { ok: true } : { ok: false, error };
-    res.writeHead(status, { "content-type": "application/json" });
-    res.end(JSON.stringify(payload));
+    const finish = () => {
+      const status = relayMode === "invalid" ? 400 : relayMode === "rate" ? 429 : relayMode === "down" ? 503 : 200;
+      const error =
+        relayMode === "invalid" ? "invalid" : relayMode === "rate" ? "rate_limited" : "unavailable";
+      const payload = relayMode === "hold" || relayMode === "ok" ? { ok: true } : { ok: false, error };
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(payload));
+    };
+    if (relayMode === "hold") {
+      held.push(finish);
+      return;
+    }
+    finish();
   });
 });
 await new Promise((resolve) => stub.listen(0, "127.0.0.1", resolve));
@@ -286,24 +294,131 @@ equal("the reset code is not the verify code", recovery.confirmVerification(cros
 equal("the verify code still verifies", recovery.confirmVerification(crossVerify).ok, true);
 equal("verification replaced the address", secrets.getRecoveryEmail(), ADDRESS);
 const epochBeforeCross = secrets.getPasswordUpdatedAt();
-equal("the reset code still resets", reset.completeReset(crossReset, "cross-password-1", "cross-password-1").ok, true);
-ok("that reset bumped the epoch too", secrets.getPasswordUpdatedAt() > epochBeforeCross);
+const replaced = reset.completeReset(crossReset, "cross-password-1", "cross-password-1");
+equal("replacing the address kills the email reset code", replaced.ok, false);
+equal("the dead email code is no longer pending", replaced.reason, "no_pending");
+equal(
+  "the password stayed the WhatsApp reset",
+  secrets.verifyDashboardPassword("wa-reset-password"),
+  true,
+);
+ok("a dead email code does not move the epoch", secrets.getPasswordUpdatedAt() === epochBeforeCross);
 
-section("removing the address does not cancel a code already sent");
+section("removing the address cancels an email code and leaves a WhatsApp code");
 
 reset._resetForTests();
+const epochBeforeRemove = secrets.getPasswordUpdatedAt();
 await reset.requestResetCode("10.5.0.1", { channel: "email" });
 const orphan = lastRelay().code;
 recovery.remove();
 equal("remove clears the address", secrets.getRecoveryEmail(), null);
 equal("remove clears the public status", recovery.publicStatus().verified, false);
-equal("the reset code still works", reset.completeReset(orphan, "after-remove-1", "after-remove-1").ok, true);
+equal(
+  "remove drops the email reset code",
+  reset.completeReset(orphan, "after-remove-1", "after-remove-1").reason,
+  "no_pending",
+);
+equal("remove did not change the password", secrets.verifyDashboardPassword("wa-reset-password"), true);
+ok("remove did not move the epoch", secrets.getPasswordUpdatedAt() === epochBeforeRemove);
 
 recovery._resetForTests();
 await recovery.startVerification(ADDRESS, "en", "10.5.0.2");
 recovery.remove();
 equal("remove drops a verify code", recovery.confirmVerification(lastRelay().code).reason, "no_pending");
 equal("the address stays gone", secrets.getRecoveryEmail(), null);
+
+secrets.setRecoveryEmail(ADDRESS);
+reset._resetForTests();
+await reset.requestResetCode("10.5.0.3", { channel: "email" });
+const rebound = lastRelay().code;
+secrets.setRecoveryEmail("replaced.byhand@example.com");
+equal(
+  "redeem refuses when the saved address differs",
+  reset.completeReset(rebound, "after-swap-1", "after-swap-1").reason,
+  "address_changed",
+);
+equal("the swap did not change the password", secrets.verifyDashboardPassword("wa-reset-password"), true);
+equal(
+  "the refused code cannot be retried",
+  reset.completeReset(rebound, "after-swap-1", "after-swap-1").reason,
+  "no_pending",
+);
+
+reset._resetForTests();
+sent.length = 0;
+await reset.requestResetCode("10.5.0.4");
+const waKept = /\b(\d{6})\b/.exec(sent.at(-1).content.text)?.[1];
+recovery.remove();
+equal(
+  "a WhatsApp code survives removing the address",
+  reset.completeReset(waKept, "wa-after-remove", "wa-after-remove").ok,
+  true,
+);
+
+section("concurrent sends reserve one slot before the relay answers");
+
+async function waitFor(predicate, ms = 2000) {
+  const start = Date.now();
+  while (Date.now() - start < ms) {
+    if (predicate()) return true;
+    await sleep(10);
+  }
+  return false;
+}
+
+recovery._resetForTests();
+relayMode = "hold";
+const beforeVerifyBurst = received.length;
+const verifyBurst = Promise.all(
+  Array.from({ length: 8 }, () => recovery.startVerification(ADDRESS, "en", "10.9.0.1")),
+);
+ok(
+  "the first verify reached the relay",
+  await waitFor(() => received.length >= beforeVerifyBurst + 1),
+);
+await sleep(100);
+equal("seven other verifies did not reach the relay", received.length, beforeVerifyBurst + 1);
+for (const release of held.splice(0, held.length)) release();
+relayMode = "ok";
+const verifyResults = await verifyBurst;
+equal("one verify was accepted", verifyResults.filter((row) => row.ok).length, 1);
+equal(
+  "seven verifies were throttled",
+  verifyResults.filter((row) => row.reason === "throttled").length,
+  7,
+);
+equal("the accepted verify code works", recovery.confirmVerification(received[beforeVerifyBurst].code).ok, true);
+
+secrets.setRecoveryEmail(ADDRESS);
+reset._resetForTests();
+relayMode = "hold";
+const beforeResetBurst = received.length;
+const resetBurst = Promise.all(
+  Array.from({ length: 8 }, () =>
+    reset.requestResetCode("10.9.0.2", { channel: "email", lang: "en" }),
+  ),
+);
+ok(
+  "the first email reset reached the relay",
+  await waitFor(() => received.length >= beforeResetBurst + 1),
+);
+await sleep(100);
+equal("seven other email resets did not reach the relay", received.length, beforeResetBurst + 1);
+for (const release of held.splice(0, held.length)) release();
+relayMode = "ok";
+const resetResults = await resetBurst;
+equal("one email reset was accepted", resetResults.filter((row) => row.ok).length, 1);
+equal(
+  "seven email resets were throttled",
+  resetResults.filter((row) => row.reason === "throttled").length,
+  7,
+);
+const burstResetCode = received[beforeResetBurst].code;
+equal(
+  "only the accepted email code resets",
+  reset.completeReset(burstResetCode, "burst-password-1", "burst-password-1").ok,
+  true,
+);
 
 section("the panel routes and the login page");
 

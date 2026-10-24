@@ -104,12 +104,43 @@ function createThrottle() {
     else requests.set(peer, { count: 1, firstAt: now });
   }
 
+  /**
+   * Take one slot before any await. Concurrent callers then see the cooldown
+   * instead of all passing `check` while the first delivery is still running.
+   * `release` gives the slot back when delivery fails — a failed send must not
+   * spend the cooldown.
+   */
+  function reserve(peer, now = Date.now()) {
+    const gate = check(peer, now);
+    if (!gate.ok) return gate;
+    const reservation = {
+      peer,
+      previousLast: lastRequestAt,
+      entry: gate.entry,
+      previousCount: gate.entry ? gate.entry.count : 0,
+      previousFirstAt: gate.entry ? gate.entry.firstAt : 0,
+    };
+    record(peer, gate.entry, now);
+    return { ok: true, reservation };
+  }
+
+  function release(reservation) {
+    if (!reservation) return;
+    lastRequestAt = reservation.previousLast;
+    if (!reservation.entry) {
+      requests.delete(reservation.peer);
+      return;
+    }
+    reservation.entry.count = reservation.previousCount;
+    reservation.entry.firstAt = reservation.previousFirstAt;
+  }
+
   function reset() {
     lastRequestAt = 0;
     requests.clear();
   }
 
-  return { check, record, reset };
+  return { check, record, reserve, release, reset };
 }
 
 module.exports = {

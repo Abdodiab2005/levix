@@ -20,6 +20,7 @@
 // Files older than 14 days are deleted at boot and on the six-hour sweep in
 // src/db/db.cjs. Clearing the logs deletes this directory too.
 
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -32,6 +33,8 @@ const MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 const FIELD_MAX = 2000;
 const DEFAULT_TAIL_BYTES = 256 * 1024;
 const MAX_DEPTH = 8;
+const SNAPSHOT_TTL_MS = 15 * 60 * 1000;
+const SNAPSHOT_MAX = 32;
 
 const FILE_PATTERN = /^debug-\d{4}-\d{2}-\d{2}\.log$/;
 
@@ -330,6 +333,43 @@ function sweepDebugLogs() {
   }
 }
 
+// The preview freezes the tail it showed. Send attaches that string and never
+// a newer read. Missing and expired ids resolve to null, which means "attach
+// nothing".
+const snapshots = new Map();
+
+function sweepSnapshots(now) {
+  for (const [id, row] of snapshots) {
+    if (now >= row.expiresAt) snapshots.delete(id);
+  }
+}
+
+function storeDebugSnapshot(text) {
+  const now = Date.now();
+  sweepSnapshots(now);
+  const id = crypto.randomBytes(16).toString("hex");
+  snapshots.set(id, { text: String(text ?? ""), expiresAt: now + SNAPSHOT_TTL_MS });
+  while (snapshots.size > SNAPSHOT_MAX) {
+    const oldest = snapshots.keys().next().value;
+    snapshots.delete(oldest);
+  }
+  return id;
+}
+
+function readDebugSnapshot(id) {
+  if (typeof id !== "string" || !id) return null;
+  const now = Date.now();
+  sweepSnapshots(now);
+  const row = snapshots.get(id);
+  if (!row) return null;
+  return row.text;
+}
+
+function expireDebugSnapshot(id) {
+  const row = snapshots.get(id);
+  if (row) row.expiresAt = 0;
+}
+
 /** Delete every file in logs/debug. Called by logger.clearLogs(). */
 function clearDebugLogs() {
   resetDebugLogState();
@@ -355,6 +395,10 @@ module.exports = {
   sanitizeRecord,
   writeRecord,
   readDebugTail,
+  storeDebugSnapshot,
+  readDebugSnapshot,
+  expireDebugSnapshot,
+  SNAPSHOT_TTL_MS,
   sweepDebugLogs,
   clearDebugLogs,
   resetDebugLogState,

@@ -85,6 +85,42 @@ logger.debug({ code: "ERR_SOCKET" }, "code keep probe");
 codeRecord = lastRecord();
 equal("a non-digit bare code is kept for diagnosis", codeRecord.code, "ERR_SOCKET");
 
+section("a handled command never writes its arguments");
+
+{
+  const { loadCommands } = await import("../src/handlers/command.handler.js");
+  const { handleIncomingMessage } = await import("../src/handlers/message.handler.js");
+  await loadCommands();
+  const secretArg = "hunter2-phrase";
+  const shortSecret = "482913";
+  const commandText = `!ping ${secretArg} ${shortSecret}`;
+  await handleIncomingMessage(
+    { sendMessage: async () => ({ key: { id: "m-sent" } }) },
+    {
+      type: "notify",
+      messages: [
+        {
+          key: { remoteJid: "201111111111@s.whatsapp.net", fromMe: false, id: "m-cmd-1" },
+          message: { conversation: commandText },
+          messageTimestamp: Math.floor(Date.now() / 1000),
+        },
+      ],
+    },
+  );
+  const commandLog = readToday();
+  ok("command arguments are not in the debug file", !commandLog.includes(secretArg));
+  ok("a short argument is not in the debug file", !commandLog.includes(shortSecret));
+  const handled = commandLog
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line))
+    .filter((row) => String(row.msg || "").includes("Handled as command"));
+  equal("the command was logged", handled.length, 1);
+  equal("the log names the command token", handled[0].command, "!ping");
+  equal("the log names the chat type", handled[0].chat, "private");
+  equal("the log keeps the text length", handled[0].bodyLength, commandText.length);
+}
+
 section("message content keeps only a length");
 
 logger.debug(
@@ -219,10 +255,12 @@ try {
   ok("the diagnostics preview has the diagnostics", !!preview.diagnostics);
   equal("the preview has a debugLog string", typeof preview.debugLog, "string");
 
+  ok("the preview returns a snapshot id", typeof preview.debugLogId === "string" && preview.debugLogId.length > 0);
   res = await http.json("/dashboard/api/feedback", {
     message: "A report with the diagnostics box ticked.",
     topic: "bug",
     diagnostics: diagnosticsClient,
+    debugLogId: preview.debugLogId,
   });
   equal("the diagnostics report is accepted", res.status, 200);
   const withDiag = feedback.at(-1);
@@ -233,6 +271,26 @@ try {
     JSON.stringify(preview.diagnostics),
   );
   equal("the preview and the send carry the same debug log", withDiag.debugLog, preview.debugLog);
+
+  const unseen = "after-preview-unseen-marker";
+  debugLog.writeRecord({ time: Date.now(), level: 20, msg: unseen });
+  res = await http.json("/dashboard/api/feedback", {
+    message: "A second report still using the previewed snapshot.",
+    topic: "bug",
+    diagnostics: diagnosticsClient,
+    debugLogId: preview.debugLogId,
+  });
+  equal("the snapshotted report is accepted", res.status, 200);
+  const frozen = feedback.at(-1);
+  equal("the send keeps the previewed debug log", frozen.debugLog, preview.debugLog);
+  ok("records written after the preview are not uploaded", !frozen.debugLog.includes(unseen));
+  res = await http.json("/dashboard/api/feedback", {
+    message: "A report whose snapshot id is missing.",
+    topic: "bug",
+    diagnostics: diagnosticsClient,
+  });
+  equal("the report without a snapshot is accepted", res.status, 200);
+  ok("a missing snapshot id uploads no debug log", !("debugLog" in feedback.at(-1)));
 
   section("a crash-report send carries it, the preview does too");
 
@@ -249,7 +307,8 @@ try {
   ok("the preview has the stored report", !!listed);
   equal("the crash preview carries a debugLog string", typeof listed.debugLog, "string");
 
-  res = await http.json(`/dashboard/api/crash-reports/${id}/send`, {});
+  ok("the crash preview returns a snapshot id", typeof listed.debugLogId === "string" && listed.debugLogId.length > 0);
+  res = await http.json(`/dashboard/api/crash-reports/${id}/send`, { debugLogId: listed.debugLogId });
   equal("the send succeeds", res.status, 200);
   const wire = crashes.at(-1);
   equal("the crash upload carries debugLog", typeof wire.debugLog, "string");
@@ -259,6 +318,78 @@ try {
     listed.debugLog,
   );
   ok("the crash upload is still a report", wire.id === id && wire.schema === 1);
+
+  section("an expired snapshot uploads no debug log");
+
+  const feedbackMod = require("./src/panel/feedback.cjs");
+  const crashMod = require("./src/diagnostics/crashReports.cjs");
+  const expiredPreview = feedbackMod.buildDiagnosticsAttachment({ language: "en" });
+  debugLog.expireDebugSnapshot(expiredPreview.debugLogId);
+  await feedbackMod.submitFeedback(
+    {
+      message: "Expired snapshot must not upload a fresh tail.",
+      topic: "bug",
+      rating: null,
+      contact: null,
+    },
+    null,
+    { language: "en" },
+    expiredPreview.debugLogId,
+  );
+  ok("an expired feedback id uploads no debug log", !("debugLog" in feedback.at(-1)));
+  ok("diagnostics are still attached", !!feedback.at(-1).diagnostics);
+  await feedbackMod.submitFeedback(
+    {
+      message: "A missing snapshot id must not upload a fresh tail.",
+      topic: "bug",
+      rating: null,
+      contact: null,
+    },
+    null,
+    { language: "en" },
+  );
+  ok("an in-process missing id uploads no debug log", !("debugLog" in feedback.at(-1)));
+
+  const expiredReport = crashMod.createReport({
+    category: "web-error",
+    error: { type: "Error", message: "expired snapshot", stack: "a\nb" },
+  });
+  const crashSnap = debugLog.storeDebugSnapshot("frozen-preview-bytes");
+  debugLog.expireDebugSnapshot(crashSnap);
+  await crashMod.sendReport(expiredReport.id, crashSnap);
+  ok("an expired crash id uploads no debug log", !("debugLog" in crashes.at(-1)));
+  const bareReport = crashMod.createReport({
+    category: "web-error",
+    error: { type: "Error", message: "missing snapshot", stack: "c\nd" },
+  });
+  await crashMod.sendReport(bareReport.id);
+  ok("an in-process missing crash id uploads no debug log", !("debugLog" in crashes.at(-1)));
+
+  const crashUnseen = "crash-after-preview-unseen-marker";
+  debugLog.writeRecord({ time: Date.now(), level: 20, msg: crashUnseen });
+  res = await http.json("/dashboard/api/crash-reports", {
+    category: "web-error",
+    error: { type: "TypeError", message: "later render", stack: "f3\nf4" },
+    screen: "stickers",
+  });
+  equal("a second report is stored", res.status, 200);
+  const laterId = (await res.json()).id;
+  res = await http.json(`/dashboard/api/crash-reports/${laterId}/send`, {
+    debugLogId: listed.debugLogId,
+  });
+  equal("the snapshotted crash send succeeds", res.status, 200);
+  equal("the crash send keeps the previewed debug log", crashes.at(-1).debugLog, listed.debugLog);
+  ok("a newer debug record is not in the crash upload", !crashes.at(-1).debugLog.includes(crashUnseen));
+
+  res = await http.json("/dashboard/api/crash-reports", {
+    category: "web-error",
+    error: { type: "TypeError", message: "no snapshot", stack: "f5\nf6" },
+    screen: "stickers",
+  });
+  const bareId = (await res.json()).id;
+  res = await http.json(`/dashboard/api/crash-reports/${bareId}/send`, {});
+  equal("a crash send without a snapshot succeeds", res.status, 200);
+  ok("a missing crash snapshot uploads no debug log", !("debugLog" in crashes.at(-1)));
 } finally {
   await server.stop();
   await new Promise((resolve) => feedbackStub.close(resolve));

@@ -163,7 +163,8 @@ fields at all; they are simply not sent. Unticking the box means the request
 carries no diagnostics key. It never contains your phone number, IMEI, Android
 ID, advertising ID, IP address, location, Wi-Fi SSID, contacts, chat or message
 text, JIDs, API keys, tokens or passwords. The one extra thing that accompanies
-a ticked box is the sanitized technical debug log described in section 2b.
+a ticked box is the sanitized technical debug log described in section 2b,
+when the preview that froze it is still valid.
 
 **Crash reports** — optional, one Send per report. A crash report is written
 locally when the Node server dies on a fatal error, when the Android app
@@ -188,9 +189,10 @@ a URL keeps only its scheme and host, a 24+ character key-like run becomes
 `<data>` / `~`.
 No phone number, IMEI, Android ID, advertising ID, IP address, location,
 Wi-Fi SSID, contacts, chat or message bodies, JIDs, screenshots, API keys,
-tokens or passwords are ever included. A Send also carries the sanitized
-technical debug log described in section 2b, and the report's preview shows
-that exact upload — log included — before you press Send.
+tokens or passwords are ever included. A Send carries the sanitized
+technical debug log the preview froze (section 2b). The report's preview shows
+that exact upload — log included — before you press Send. A missing or expired
+preview sends the report with no debug log.
 
 ### 2b. Technical debug log
 
@@ -216,8 +218,9 @@ the normal logs.
 
 **When it leaves the device:** only in the two situations you start — feedback
 sent with **Attach device & technical diagnostics** ticked, or a crash report
-you press Send on. It is never sent on its own, and each preview shows the
-exact string that goes with the send.
+you press Send on. It is never sent on its own. The preview freezes the exact
+string for 15 minutes. Send attaches that frozen copy. A missing or expired
+preview attaches no debug log, never a newer one written after the preview.
 
 ## 3. Permissions the Android app requests
 

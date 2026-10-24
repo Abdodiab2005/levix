@@ -88,6 +88,7 @@ export const FeedbackForm: React.FC = () => {
   const [attachDiagnostics, setAttachDiagnostics] = useState(false);
   const [previewData, setPreviewData] = useState<Record<string, any> | null>(null);
   const [previewDebugLog, setPreviewDebugLog] = useState("");
+  const [previewDebugLogId, setPreviewDebugLogId] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
@@ -108,6 +109,7 @@ export const FeedbackForm: React.FC = () => {
     if (!attachDiagnostics) {
       setPreviewData(null);
       setPreviewDebugLog("");
+      setPreviewDebugLogId("");
       return;
     }
     const clientDiag = getClientDiagnostics(language, theme);
@@ -118,14 +120,17 @@ export const FeedbackForm: React.FC = () => {
         if (res?.diagnostics) {
           setPreviewData(res.diagnostics);
           setPreviewDebugLog(res.debugLog || "");
+          setPreviewDebugLogId(typeof res.debugLogId === "string" ? res.debugLogId : "");
         } else {
           setPreviewData(clientDiag);
           setPreviewDebugLog("");
+          setPreviewDebugLogId("");
         }
       })
       .catch(() => {
         setPreviewData(clientDiag);
         setPreviewDebugLog("");
+        setPreviewDebugLogId("");
       })
       .finally(() => {
         setPreviewLoading(false);
@@ -176,6 +181,7 @@ export const FeedbackForm: React.FC = () => {
       rating: rating || null,
       contact: contact.trim() || null,
       ...(clientDiag ? { diagnostics: clientDiag } : {}),
+      ...(clientDiag && previewDebugLogId ? { debugLogId: previewDebugLogId } : {}),
     };
     try {
       if (hostFile) {
@@ -187,6 +193,7 @@ export const FeedbackForm: React.FC = () => {
             ...(payload.rating ? { rating: String(payload.rating) } : {}),
             ...(payload.contact ? { contact: payload.contact } : {}),
             ...(clientDiag ? { diagnostics: JSON.stringify(clientDiag) } : {}),
+            ...(clientDiag && previewDebugLogId ? { debugLogId: previewDebugLogId } : {}),
           },
           hostFile.token,
           attachmentMax + 1024 * 1024,
