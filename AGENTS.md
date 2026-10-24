@@ -139,8 +139,6 @@ src/
 │   │                 # not a setting, not reachable from any route or view)
 │   ├── ai-persona.md # the editable AI system prompt (a TEMPLATE — the live
 │   │                 # copy lives in the data directory)
-│   ├── translate-prompt.md # the editable !translate AI prompt (a TEMPLATE —
-│   │                 # the live copy lives in the data directory)
 │   ├── constants.js  # build-time constants (retries, cache TTLs)
 │   └── baileys.config.js # Baileys socket configuration (ESM)
 ├── db/               # The database
@@ -527,14 +525,14 @@ there is no cache and no write-behind queue to reason about.
 ### The data directory
 
 `src/config/paths.cjs` resolves the one directory the bot writes to: database,
-`memory/`, the editable `ai-persona.md` and `translate-prompt.md`, `logs/`,
+`memory/`, the editable `ai-persona.md`, `logs/`,
 temp `media/`. Order:
 `--data <dir>`, then `LEVIX_DATA_DIR` (the only environment variable the code
 reads — Docker has no other way to point at its volume), then `<repo>/data`
 when running from a clone, then `~/.levix`.
 
 `assetPath()` is the read-only counterpart: `views/`, `public/`, the persona
-and translation-prompt templates. A packaged build unpacks those and calls
+template. A packaged build unpacks those and calls
 `setAssetRoot()`.
 
 ## Key Features Implementation
@@ -580,14 +578,22 @@ the setting per message.
   the same tool loop, and returns history in the CANONICAL Gemini parts format,
   so a conversation survives a provider switch mid-flight.
 - `src/services/aiTools.cjs` — the tools themselves.
-- `src/config/ai-persona.md` — **the operator's behaviour prompt**, in English.
+- `src/config/ai-persona.md` — **the operator's persona**, in English.
   Hot-reloaded (everything above the first `---` is a note to the human and is
-  stripped), and editable from the dashboard. It holds behaviour and personality
-  only: no product metadata, and no explanation of what else is in the prompt.
+  stripped), and editable from the dashboard. It holds style and personality
+  only (how to reply, being right): no product metadata, no tool, memory,
+  group or boundary rules, and no explanation of what else is in the prompt.
+  `loadPersona()` drops any `Tools`, `Memory`, `Chats and groups` or
+  `Boundaries` section (`stripSealedSections()`), so an older live copy or a
+  typed-in section cannot repeat or weaken the sealed rules; the panel's
+  persona API applies the same strip on read and write.
 - `src/config/ai-identity.cjs` — the part that is NOT editable: the product
-  identity block (what Levix is, who built it, and how to talk about that) is
+  identity block (what Levix is, who built it, and how to talk about that),
+  the official links (website and docs `https://levix.leviro.net`, Google Play,
+  GitHub — shared only when someone asks where to get or read about Levix), and
+  the operating rules (tools, memory, chats and groups, boundaries) are
   prepended above the persona on every request, so a rewritten persona or a
-  crafted message can't change it. It is imported by the agent and by nothing
+  crafted message can't change them. It is imported by the agent and by nothing
   else — deliberately not on `brand.cjs`, which every EJS template can render.
 
 The final system instruction is, in order:
@@ -850,9 +856,10 @@ account".
   — Arabic ↔ English by default, or into a chosen language. AI (default, the
   active provider) or Google Translate (`!translate google`). Options:
   `summary` / `ملخص`, `explain` / `اشرح`, `detect` / `اكتشف`, `formal` /
-  `رسمي`, `casual` / `عامي`. The AI prompt is `src/config/translate-prompt.md`
-  (live copy `<data>/translate-prompt.md`). Settings: `translate_engine`,
-  `google_translate_api_key`.
+  `رسمي`, `casual` / `عامي`. The AI prompt is the `TRANSLATE_PROMPT` constant
+  in the command: code, not a setting and not a file, because it also keeps a
+  message to translate from being read as an order to the model. Settings:
+  `translate_engine`, `google_translate_api_key`.
 
 ### 5b. Domain setup (`levix domain`, `src/domain/`)
 
@@ -1078,7 +1085,7 @@ the bot does can be changed from it, live:
 | Overview | — (counters, uptime, connection) | — |
 | Connection | **start / stop** the session, QR pairing, **unlink**, restart | `src/core/session.js` |
 | Commands | prefix · aliases · permission · on/off | `bot_settings` via `runtime-config.cjs` |
-| AI & memory | the system prompt · the translation prompt · the `memory/*.md` files | `<data>/ai-persona.md`, `<data>/translate-prompt.md`, `<data>/memory/` |
+| AI & memory | the persona (style and personality) · the `memory/*.md` files | `<data>/ai-persona.md`, `<data>/memory/` |
 | Groups | antilink · antispam · media · welcome · warnings · rules | `group_settings` |
 | Roles | bot owner / admin | `user_metadata` (same path as `!perm`) |
 | Tables | debts · warnings · notes · todos · users · schedules | read-only (schedules can be deleted) |
@@ -1575,8 +1582,3 @@ owner sets the `PLAY_TRACK` repository variable to `production`.
   (English). The live copy is `<data>/ai-persona.md`, hot-reloaded and editable
   from the panel. Everything above the `---` is a note to the human and is not
   sent to the model
-- `src/config/translate-prompt.md` - the `!translate` AI prompt template
-  (English, `{{double_braces}}` variables). The live copy is
-  `<data>/translate-prompt.md`, hot-reloaded and editable from the panel AI
-  screen. Everything above the `---` is a note to the human and is not sent to
-  the model. It is not a chat turn: `ai-identity.cjs` is not prepended.

@@ -48,7 +48,6 @@ for (const required of [
   "src/config/secrets.cjs",
   "src/config/defaults.cjs",
   "src/config/ai-persona.md",
-  "src/config/translate-prompt.md",
   "src/db/db.cjs",
   "src/db/store.cjs",
   "views/setup.ejs",

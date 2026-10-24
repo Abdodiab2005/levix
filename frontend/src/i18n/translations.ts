@@ -246,12 +246,6 @@ export const translations = {
     googleTranslateApiKey: "مفتاح Google Translate API",
     googleTranslateApiKeyDesc:
       "اختياري لواجهة Cloud Translation v2. بدون المفتاح يستخدم الأمر نقطة الترجمة العامة.",
-    translatePrompt: "توجيه الترجمة",
-    translatePromptDesc: "تعديل توجيه نظام الترجمة الذي يستخدمه محرك الذكاء الاصطناعي في !translate.",
-    editTranslatePrompt: "تعديل توجيه الترجمة",
-    resetToDefault: "استعادة الافتراضي",
-    translatePromptSaved: "تم تحديث توجيه الترجمة بنجاح!",
-    translatePromptReset: "تمت استعادة توجيه الترجمة الافتراضي.",
     memoryFiles: "الذاكرة طويلة المدى",
     memoryDesc:
       "ذاكرة البوت الدائمة: تشترك جميع المحادثات في الذاكرة العامة، ولكل محادثة ملف خاص. يقرأ البوت المعلومات المحفوظة وأي نص حر تكتبه.",
@@ -1336,12 +1330,6 @@ export const translations = {
     googleTranslateApiKey: "Google Translate API key",
     googleTranslateApiKeyDesc:
       "Optional Cloud Translation API v2 key. Without it, !translate google uses the public endpoint.",
-    translatePrompt: "Translation prompt",
-    translatePromptDesc: "Edit the system prompt the AI engine uses for !translate.",
-    editTranslatePrompt: "Edit Translation Prompt",
-    resetToDefault: "Reset to default",
-    translatePromptSaved: "Translation prompt updated successfully!",
-    translatePromptReset: "Translation prompt restored to the default.",
     memoryFiles: "Long-term Memory",
     memoryDesc:
       "The bot's durable memory. Global memory is shared by every chat; each chat also has its own file. The bot reads saved entries and any free-form text you write.",

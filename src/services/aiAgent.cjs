@@ -95,6 +95,23 @@ const DEFAULT_PERSONA = `You are a capable personal WhatsApp assistant.
 Be concise and direct by default, reply in the language the user writes in, and
 use your tools instead of guessing when something needs to be looked up.`;
 
+// Sections the code owns now (OPERATING_RULES in src/config/ai-identity.cjs).
+// A copy of ai-persona.md from before that split still carries them, and an
+// operator can type one back in: both are dropped here, so the rules are stated
+// once, from code, and no edit of the persona can weaken them.
+const SEALED_HEADINGS = new Set(["tools", "memory", "chats and groups", "boundaries"]);
+
+function stripSealedSections(text) {
+  const kept = [];
+  let sealed = false;
+  for (const line of String(text).split("\n")) {
+    const heading = /^#{1,3}\s+(.+?)\s*$/.exec(line);
+    if (heading) sealed = SEALED_HEADINGS.has(heading[1].toLowerCase());
+    if (!sealed) kept.push(line);
+  }
+  return kept.join("\n").trim();
+}
+
 let personaCache = { text: null, stamp: null };
 
 /**
@@ -121,7 +138,7 @@ function loadPersona() {
           .slice(1)
           .join("\n---\n")
       : raw;
-    personaCache = { text: body.trim() || DEFAULT_PERSONA, stamp };
+    personaCache = { text: stripSealedSections(body) || DEFAULT_PERSONA, stamp };
     return personaCache.text;
   } catch {
     return DEFAULT_PERSONA;
@@ -662,6 +679,7 @@ module.exports = {
   GOOGLE_SEARCH_TOOL,
   buildSystemInstruction,
   loadPersona,
+  stripSealedSections,
   isAgentEnabled,
   activeProviderKeySetting,
   isFileReferenceError,

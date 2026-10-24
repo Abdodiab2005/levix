@@ -85,12 +85,11 @@ const { stampPanelSession } = require("../panel/session-auth.cjs");
 const recoveryEmail = require("../panel/recovery-email.cjs");
 const { DATA_DIR } = require("../config/paths.cjs");
 const crashReports = require("../diagnostics/crashReports.cjs");
-const { PERSONA_FILE, activeProviderKeySetting } = require("../services/aiAgent.cjs");
 const {
-  TRANSLATE_PROMPT_FILE,
-  ensureTranslatePrompt,
-  resetTranslatePrompt,
-} = require("../commands/translate.cjs");
+  PERSONA_FILE,
+  activeProviderKeySetting,
+  stripSealedSections,
+} = require("../services/aiAgent.cjs");
 const {
   SCHEDULE_MEDIA_MAX_BYTES,
   deleteScheduledJob,
@@ -452,7 +451,7 @@ router.get("/ai/persona", (req, res) => {
     const { header, body } = splitPersona(raw);
     res.json({
       success: true,
-      persona: { header, body, file: path.basename(PERSONA_FILE) },
+      persona: { header, body: stripSealedSections(body), file: path.basename(PERSONA_FILE) },
     });
   } catch (error) {
     fail(res, error, "Error reading persona");
@@ -467,62 +466,13 @@ router.put("/ai/persona", (req, res) => {
   try {
     const raw = fs.existsSync(PERSONA_FILE) ? fs.readFileSync(PERSONA_FILE, "utf8") : "";
     const { header } = splitPersona(raw);
-    const next = `${header}\n${PERSONA_SEPARATOR}\n${body.trim()}\n`;
+    const clean = stripSealedSections(body);
+    const next = `${header}\n${PERSONA_SEPARATOR}\n${clean}\n`;
     fs.writeFileSync(PERSONA_FILE, next, "utf8");
     logger.info("[Dashboard] AI persona updated");
-    res.json({ success: true, persona: { header, body: body.trim() } });
+    res.json({ success: true, persona: { header, body: clean } });
   } catch (error) {
     fail(res, error, "Error writing persona");
-  }
-});
-
-router.get("/ai/translate-prompt", (req, res) => {
-  try {
-    ensureTranslatePrompt();
-    const raw = fs.existsSync(TRANSLATE_PROMPT_FILE)
-      ? fs.readFileSync(TRANSLATE_PROMPT_FILE, "utf8")
-      : "";
-    const { header, body } = splitPersona(raw);
-    res.json({
-      success: true,
-      prompt: { header, body, file: path.basename(TRANSLATE_PROMPT_FILE) },
-    });
-  } catch (error) {
-    fail(res, error, "Error reading translation prompt");
-  }
-});
-
-router.put("/ai/translate-prompt", (req, res) => {
-  const body = req.body?.body;
-  if (typeof body !== "string") return badRequest(res, "body must be text");
-  if (body.length > 20000) return badRequest(res, "Translation prompt is too long (20k max)");
-
-  try {
-    ensureTranslatePrompt();
-    const raw = fs.existsSync(TRANSLATE_PROMPT_FILE)
-      ? fs.readFileSync(TRANSLATE_PROMPT_FILE, "utf8")
-      : "";
-    const { header } = splitPersona(raw);
-    const next = `${header}\n${PERSONA_SEPARATOR}\n${body.trim()}\n`;
-    fs.writeFileSync(TRANSLATE_PROMPT_FILE, next, "utf8");
-    logger.info("[Dashboard] translation prompt updated");
-    res.json({ success: true, prompt: { header, body: body.trim() } });
-  } catch (error) {
-    fail(res, error, "Error writing translation prompt");
-  }
-});
-
-router.post("/ai/translate-prompt/reset", (req, res) => {
-  try {
-    resetTranslatePrompt();
-    const raw = fs.existsSync(TRANSLATE_PROMPT_FILE)
-      ? fs.readFileSync(TRANSLATE_PROMPT_FILE, "utf8")
-      : "";
-    const { header, body } = splitPersona(raw);
-    logger.info("[Dashboard] translation prompt reset to default");
-    res.json({ success: true, prompt: { header, body } });
-  } catch (error) {
-    fail(res, error, "Error resetting translation prompt");
   }
 });
 
