@@ -76,6 +76,7 @@ const COMMAND_PERMISSIONS = Object.freeze({
       antilink: "ADMINS_ONLY",
       media: "ADMINS_ONLY",
       setwarn: "ADMINS_ONLY",
+      policy: "ADMINS_ONLY",
       warn: "ADMINS_ONLY",
       warns: "ADMINS_OWNER",
       clearwarns: "ADMINS_ONLY",

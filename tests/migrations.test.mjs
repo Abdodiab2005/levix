@@ -34,6 +34,7 @@ const EXPECTED_TABLES = [
   "auto_delete_rules",
   "auto_delete_log",
   "moderation_flags",
+  "moderation_applied",
 ];
 
 const tablesOf = (database) =>
@@ -205,6 +206,48 @@ section("an existing v8 database gains moderation_flags and rewrites NONE to FLA
   equal("lowercase none becomes FLAG", settingsOf("120363-none-lc@g.us").warn_system.action, "FLAG");
   equal("missing action stays missing", settingsOf("120363-unset@g.us").warn_system.action, undefined);
   equal("stored KICK is kept", settingsOf("120363-kick@g.us").warn_system.action, "KICK");
+  database.close();
+}
+
+section("an existing v9 database gains moderation_applied without rewriting groups");
+
+{
+  const database = scratchDatabase();
+  migrate(database, MIGRATIONS.slice(0, 9));
+  ok("moderation_applied is not there yet", !tablesOf(database).includes("moderation_applied"));
+  const settings = JSON.stringify({
+    warn_system: { max_warnings: 3, action: "KICK" },
+    antilink: { enabled: true, mode: "ALL" },
+  });
+  database
+    .prepare("INSERT INTO group_settings (group_id, settings) VALUES (?, ?)")
+    .run("120363-v10@g.us", settings);
+  database
+    .prepare(
+      `INSERT INTO moderation_flags
+        (group_id, user_id, warn_count, last_rule, flagged_at, reasons)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .run("120363-v10@g.us", "201333333333@s.whatsapp.net", 2, "link", 12345, "[]");
+  const before = database
+    .prepare("SELECT settings FROM group_settings WHERE group_id = ?")
+    .get("120363-v10@g.us").settings;
+
+  migrate(database);
+  equal("the upgrade reaches the latest version", versionOf(database), MIGRATIONS.length);
+  ok("moderation_applied exists after upgrade", tablesOf(database).includes("moderation_applied"));
+  const flagColumns = columnsOf(database, "moderation_flags");
+  ok("moderation_flags has last_notified_at", flagColumns.includes("last_notified_at"));
+  ok("moderation_flags has repeat_points", flagColumns.includes("repeat_points"));
+  const flag = database
+    .prepare("SELECT last_notified_at, repeat_points FROM moderation_flags WHERE group_id = ?")
+    .get("120363-v10@g.us");
+  equal("last_notified_at is backfilled from flagged_at", flag.last_notified_at, 12345);
+  equal("repeat_points defaults to 0", flag.repeat_points, 0);
+  const after = database
+    .prepare("SELECT settings FROM group_settings WHERE group_id = ?")
+    .get("120363-v10@g.us").settings;
+  equal("group JSON is unchanged", after, before);
   database.close();
 }
 

@@ -11,6 +11,7 @@ const {
   policyFromFeatureAction,
 } = require("../../utils/moderationSummary.cjs");
 const { tr } = require("../../utils/i18n.cjs");
+const { applyModerationPolicy } = require("../../services/moderationPolicy.cjs");
 
 // --- The Main Command Logic ---
 const command = {
@@ -99,11 +100,20 @@ const command = {
             ),
           });
         }
-        antilinkConfig.action = action;
+        try {
+          applyModerationPolicy(groupId, { features: { antilink: action } });
+        } catch (error) {
+          return await sock.sendMessage(groupId, {
+            text: tr(
+              error.errors?.[0]?.message || "That action is not allowed.",
+              "هذا الإجراء غير مسموح.",
+            ),
+          });
+        }
         await sock.sendMessage(groupId, {
           text: tr(`✅ Anti-link action is now ${action}.`, `✅ تم تعيين إجراء منع الروابط إلى ${action}.`),
         });
-        break;
+        return;
       }
       case "disallow": {
         const domainToDisallow = args[1] ? args[1].toLowerCase() : "";
@@ -144,31 +154,14 @@ const linkRegex = new RegExp(
   /(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/[a-zA-Z0-9]+\.[^\s]{2,}|[a-zA-Z0-9]+\.[^\s]{2,})/i,
 );
 
-async function handleAntiLink(sock, msg, _legacyConfig, _normalizeJid) {
-  const isGroup = msg.key.remoteJid.endsWith("@g.us");
-  if (!isGroup) return false;
-
-  const groupId = msg.key.remoteJid;
-  const settings = getGroupSettings(groupId);
-  const antilinkConfig = settings.antilink;
-
-  if (!antilinkConfig || !antilinkConfig.enabled) return false;
-
-  const senderId = msg.key.participant || msg.key.remoteJid;
-
-  // Cache-first: this runs on every group message while antilink is enabled.
-  const groupMetadata = await resolveGroupMetadata(sock, groupId);
-  // Centralized checks — handle LID/PN cross-format and bootstrap roster.
-  const senderIds = senderCandidates(msg, sock);
-  const isOwner = msg.key.fromMe || senderIds.some(isOwnerJidSync);
-  const isSenderAdmin = senderIds.some((id) => isAdminInGroupSync(groupMetadata, id));
-
-  if (isOwner || isSenderAdmin) return false;
+function detectAntiLink(msg, settings) {
+  const groupId = msg?.key?.remoteJid;
+  if (!groupId?.endsWith("@g.us")) return null;
+  const antilinkConfig = settings?.antilink;
+  if (!antilinkConfig?.enabled) return null;
 
   const body = visibleText(msg.message);
-  if (!linkRegex.test(body)) return false; // No link found
-
-  // --- Link Found, Apply Rules ---
+  if (!linkRegex.test(body)) return null;
   const foundLinks = body.match(linkRegex);
   let domain;
   try {
@@ -176,42 +169,48 @@ async function handleAntiLink(sock, msg, _legacyConfig, _normalizeJid) {
       foundLinks[0].startsWith("http") ? foundLinks[0] : `http://${foundLinks[0]}`,
     ).hostname.replace("www.", "");
   } catch {
-    return false;
+    return null;
   }
 
-  let shouldDelete = false;
-
-  switch (antilinkConfig.mode) {
-    case "ALL":
-      shouldDelete = true;
-      break;
-    case "WHITELIST":
-      if (!antilinkConfig.allowed_domains.includes(domain)) {
-        shouldDelete = true;
-      }
-      break;
-    case "BLACKLIST":
-      if (antilinkConfig.blocked_domains.includes(domain)) {
-        shouldDelete = true;
-      }
-      break;
-  }
-
-  if (shouldDelete) {
-    logger.info(`[Anti-Link] Deleting link from ${senderId} in ${groupId}. Domain: ${domain}`);
-    const policy = policyFromFeatureAction(featureActionOf(settings, "antilink"));
-    const result = await enforceGroupRule(sock, {
-      msg,
-      groupMetadata,
-      rule: "link",
-      warningReason: `antilink:${domain}`,
-      ...policy,
-      targetCandidates: senderIds,
-    });
-    return result.acted;
-  }
-  return false;
+  const allowed = Array.isArray(antilinkConfig.allowed_domains) ? antilinkConfig.allowed_domains : [];
+  const blocked = Array.isArray(antilinkConfig.blocked_domains) ? antilinkConfig.blocked_domains : [];
+  const mode = String(antilinkConfig.mode || "ALL").toUpperCase();
+  let shouldDelete = mode === "ALL";
+  if (mode === "WHITELIST") shouldDelete = !allowed.includes(domain);
+  else if (mode === "BLACKLIST") shouldDelete = blocked.includes(domain);
+  if (!shouldDelete) return null;
+  return { rule: "link", reason: `antilink:${domain}`, detail: domain };
 }
 
-// Export both the command and the handler
-module.exports = { ...command, handleAntiLink };
+async function handleAntiLink(sock, msg, _legacyConfig, _normalizeJid) {
+  const isGroup = msg.key.remoteJid.endsWith("@g.us");
+  if (!isGroup) return false;
+
+  const groupId = msg.key.remoteJid;
+  const settings = getGroupSettings(groupId) || {};
+  const senderId = msg.key.participant || msg.key.remoteJid;
+
+  // Cache-first: this runs on every group message while antilink is enabled.
+  const groupMetadata = await resolveGroupMetadata(sock, groupId);
+  const senderIds = senderCandidates(msg, sock);
+  const isOwner = msg.key.fromMe || senderIds.some(isOwnerJidSync);
+  const isSenderAdmin = senderIds.some((id) => isAdminInGroupSync(groupMetadata, id));
+  if (isOwner || isSenderAdmin) return false;
+
+  const hit = detectAntiLink(msg, settings);
+  if (!hit) return false;
+  logger.info(`[Anti-Link] Deleting link from ${senderId} in ${groupId}. Domain: ${hit.detail}`);
+  const policy = policyFromFeatureAction(featureActionOf(settings, "antilink"));
+  const result = await enforceGroupRule(sock, {
+    msg,
+    groupMetadata,
+    rule: "link",
+    warningReason: hit.reason,
+    detail: hit.detail,
+    ...policy,
+    targetCandidates: senderIds,
+  });
+  return Boolean(result.acted);
+}
+
+module.exports = { ...command, handleAntiLink, detectAntiLink };

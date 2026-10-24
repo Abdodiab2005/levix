@@ -1,7 +1,7 @@
 // file: /commands/group/setwarn.js
-const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs");
 const { normalizeWarnAction } = require("../../utils/moderationSummary.cjs");
 const { tr } = require("../../utils/i18n.cjs");
+const { applyModerationPolicy } = require("../../services/moderationPolicy.cjs");
 
 module.exports = {
   name: "setwarn",
@@ -21,29 +21,21 @@ module.exports = {
     const subCommand = args[0]?.toLowerCase();
     const value = args[1];
 
-    const settings = getGroupSettings(groupId) || {};
-    if (!settings.warn_system || typeof settings.warn_system !== "object") {
-      settings.warn_system = {};
-    }
-
-    const warnConfig = settings.warn_system;
-
     switch (subCommand) {
       case "max": {
         const max = parseInt(value, 10);
-        if (isNaN(max) || max < 1) {
+        if (!Number.isInteger(max) || max < 1 || max > 50) {
           return await sock.sendMessage(groupId, {
             text: tr(
-              "Give a valid whole number for the warning limit.",
-              "يرجى تحديد عدد صحيح وصالح للحد الأقصى للتحذيرات.",
+              "Give a whole number from 1 to 50 for the warning limit.",
+              "يرجى تحديد عدد صحيح من 1 إلى 50 للحد الأقصى للتحذيرات.",
             ),
           });
         }
-        warnConfig.max_warnings = max;
-        await sock.sendMessage(groupId, {
+        applyModerationPolicy(groupId, { limit: max });
+        return await sock.sendMessage(groupId, {
           text: tr(`✅ The warning limit is now ${max}.`, `✅ تم تعيين الحد الأقصى للتحذيرات إلى ${max}.`),
         });
-        break;
       }
 
       case "action": {
@@ -56,11 +48,10 @@ module.exports = {
             ),
           });
         }
-        warnConfig.action = action;
-        await sock.sendMessage(groupId, {
+        applyModerationPolicy(groupId, { limitAction: action });
+        return await sock.sendMessage(groupId, {
           text: tr(`✅ The automatic action is now ${action}.`, `✅ تم تعيين الإجراء التلقائي إلى ${action}.`),
         });
-        break;
       }
 
       default:
@@ -71,7 +62,5 @@ module.exports = {
           ),
         });
     }
-
-    saveGroupSettings(groupId, settings);
   },
 };

@@ -33,6 +33,10 @@ module.exports = {
   upsertModerationFlag: store.upsertModerationFlag,
   clearModerationFlag: store.clearModerationFlag,
   listModerationFlags: store.listModerationFlags,
+  getModerationApplied: store.getModerationApplied,
+  commitModerationDecision: store.commitModerationDecision,
+  markModerationNotice: store.markModerationNotice,
+  markModerationKicked: store.markModerationKicked,
   // Todos
   getUserTodos: store.getUserTodos,
   saveUserTodos: store.saveUserTodos,

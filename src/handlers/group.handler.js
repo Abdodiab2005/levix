@@ -6,11 +6,26 @@ const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
 const { tr } = require("../utils/i18n.cjs");
 const { buildModerationSummary } = require("../utils/moderationSummary.cjs");
+const { resolveModerationPolicy } = require("../services/moderationPolicy.cjs");
+const { clearMemberModeration } = require("../utils/moderationAction.cjs");
 
 // Handle group participant updates (join/leave)
 export async function handleGroupParticipantsUpdate(sock, update) {
   const { id, participants, action } = update;
   logger.info({ update }, "Received group participants update");
+
+  if (action === "remove" || action === "leave") {
+    try {
+      const settings = getGroupSettings(id) || {};
+      if (resolveModerationPolicy(settings).membership === "clear") {
+        for (const participant of participants || []) {
+          clearMemberModeration(id, participant);
+        }
+      }
+    } catch (error) {
+      logger.error({ err: error, update }, "Error clearing moderation on leave");
+    }
+  }
 
   if (action !== "add") {
     logger.info(`[Group] ${action} action for ${id}`);

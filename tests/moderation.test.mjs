@@ -143,6 +143,15 @@ section("summary builder");
     "unset warn action is shown as kick at the default limit",
     unset.includes("Warn limit: 3") && unset.includes("remove the member"),
   );
+  ok(
+    "unset membership says leaving clears warnings",
+    unset.includes("Leaving or being removed clears warnings."),
+  );
+  const keptSummary = buildModerationSummary({ moderationPolicy: { membership: "keep" } }, "en");
+  ok(
+    "explicit keep says leaving keeps warnings",
+    keptSummary.includes("Leaving or being removed keeps warnings."),
+  );
   equal("unset warnConfigOf action is KICK", warnConfigOf({}).action, "KICK");
   equal("unset warnConfigOf max stays 3", warnConfigOf({}).max_warnings, 3);
   const noneSummary = buildModerationSummary({ warn_system: { max_warnings: 4, action: "NONE" } }, "en");
@@ -713,6 +722,510 @@ section("flagged list and clear paths from commands");
   equal("kick of a flagged member is sent", kicks.length, 1);
   equal("kick of a flagged member clears the flag", store.listModerationFlags(groupId).length, 0);
   equal("kick of a flagged member clears warnings", store.getUserWarnings(groupId, USER_PN).length, 0);
+}
+
+function withId(groupId, id, options = {}) {
+  const msg = groupMsg(groupId, options);
+  msg.key.id = id;
+  return msg;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const policyService = require("./src/services/moderationPolicy.cjs");
+const { enforceHits, clearMemberModeration, dismissMemberFlag } = require("./src/utils/moderationAction.cjs");
+const defaults = require("./src/config/defaults.cjs");
+const policyCommand = require("./src/commands/group/policy.cjs");
+const { handleGroupModeration } = await import("../src/handlers/message.handler.js");
+
+section("moderation policy resolve, validate, presets, and points");
+{
+  equal(
+    "policy command is admins only",
+    defaults.command_permissions.group.sub_commands.policy,
+    "ADMINS_ONLY",
+  );
+  const legacy = policyService.resolveModerationPolicy({
+    warn_system: { action: "FLAG", max_warnings: 4 },
+    antilink: { action: "DELETE" },
+  });
+  equal("legacy FLAG is the effective limit action", legacy.limitAction, "FLAG");
+  equal("legacy max is the effective limit", legacy.limit, 4);
+  equal("legacy antilink DELETE is the effective feature action", legacy.features.antilink, "DELETE");
+  const override = policyService.resolveModerationPolicy({
+    warn_system: { action: "FLAG", max_warnings: 4 },
+    antilink: { action: "DELETE" },
+    moderationPolicy: { limitAction: "KICK", features: { antilink: null } },
+  });
+  equal("a policy field overrides the legacy action", override.limitAction, "KICK");
+  equal("explicit null overrides a legacy feature action", override.features.antilink, null);
+
+  const unknown = policyService.validateModerationPolicy({ nope: true }, {});
+  ok("unknown key is rejected", unknown.errors.some((item) => item.code === "unknown"));
+  const spamDelete = policyService.validateModerationPolicy({ features: { antispam: "DELETE" } }, {});
+  ok("antispam DELETE is an enum error", spamDelete.errors.some((item) => item.field === "features.antispam" && item.code === "enum"));
+  const order = policyService.validateModerationPolicy({ mode: "severity", kickAt: 3, flagAt: 3 }, {});
+  ok("kickAt <= flagAt is a conflict", order.errors.some((item) => item.code === "conflict"));
+  const escalate = policyService.validateModerationPolicy(
+    { mode: "severity", flag: { whileFlagged: "escalate" }, kickAt: 5, flagAt: 3 },
+    {},
+  );
+  ok("escalate in severity is a conflict", escalate.errors.some((item) => item.field === "flag.whileFlagged" && item.code === "conflict"));
+  const silentKick = policyService.validateModerationPolicy({ flag: { notify: "silent" } }, {});
+  ok("flag.notify on simple KICK is a conflict", silentKick.errors.some((item) => item.code === "conflict"));
+  ok("limit 0 is a range error", policyService.validateModerationPolicy({ limit: 0 }, {}).errors.some((item) => item.field === "limit" && item.code === "range"));
+  ok("limit 51 is a range error", policyService.validateModerationPolicy({ limit: 51 }, {}).errors.some((item) => item.field === "limit" && item.code === "range"));
+  ok("limit 1.5 is a type error", policyService.validateModerationPolicy({ limit: 1.5 }, {}).errors.some((item) => item.field === "limit" && item.code === "type"));
+  ok("limit string is a type error", policyService.validateModerationPolicy({ limit: "3" }, {}).errors.some((item) => item.field === "limit" && item.code === "type"));
+
+  const presetId = "120363-preset-standard@g.us";
+  store.saveGroupSettings(presetId, {
+    warn_system: { max_warnings: 9, action: "FLAG" },
+    antilink: { enabled: true, mode: "ALL", action: "DELETE", allowed_domains: [], blocked_domains: [] },
+  });
+  policyService.applyModerationPreset(presetId, "standard");
+  const standard = store.getGroupSettings(presetId);
+  equal("standard preset removes the stored action", standard.warn_system.action, undefined);
+  equal("standard preset removes the stored limit", standard.warn_system.max_warnings, undefined);
+  equal("standard preset removes a legacy feature action", standard.antilink.action, undefined);
+  equal("standard preset removes moderationPolicy", standard.moderationPolicy, undefined);
+  equal("standard preset reads as KICK", warnConfigOf(standard).action, "KICK");
+  equal("standard preset reads as limit 3", warnConfigOf(standard).max_warnings, 3);
+  equal("standard preset keeps the antilink toggle", standard.antilink.enabled, true);
+  equal(
+    "standard preset membership is clear",
+    policyService.resolveModerationPolicy(standard).membership,
+    "clear",
+  );
+
+  for (const name of ["relaxed", "strict"]) {
+    const presetGroup = `120363-preset-${name}@g.us`;
+    store.saveGroupSettings(presetGroup, {
+      moderationPolicy: { membership: "keep", limit: 9 },
+      antilink: { enabled: true, action: "DELETE" },
+    });
+    policyService.applyModerationPreset(presetGroup, name);
+    const applied = store.getGroupSettings(presetGroup);
+    equal(`${name} does not store membership`, applied.moderationPolicy.membership, undefined);
+    equal(
+      `${name} inherits clear`,
+      policyService.resolveModerationPolicy(applied).membership,
+      "clear",
+    );
+  }
+
+  const now = Date.parse("2026-10-24T00:00:00.000Z");
+  const expire = policyService.resolveModerationPolicy({
+    moderationPolicy: { decay: { mode: "expire", days: 30 } },
+  });
+  const at = (days) => new Date(now - days * DAY_MS).toISOString();
+  equal("a 31-day-old event expires", policyService.effectivePoints([{ points: 1, date: at(31) }], expire, now), 0);
+  equal("a 29-day-old event still counts", policyService.effectivePoints([{ points: 1, date: at(29) }], expire, now), 1);
+  const step = policyService.resolveModerationPolicy({
+    moderationPolicy: { decay: { mode: "step", days: 7 } },
+  });
+  const stepped = (days) =>
+    policyService.effectivePoints([{ points: 3, date: at(days) }], step, now);
+  equal("step day 0 keeps 3", stepped(0), 3);
+  equal("step day 7 keeps 2", stepped(7), 2);
+  equal("step day 14 keeps 1", stepped(14), 1);
+  equal("step day 21 keeps 0", stepped(21), 0);
+  equal("a dateless event does not decay", policyService.effectivePoints([{ reason: "legacy" }], step, now), 1);
+}
+
+section("one message with two hits is one ledger event");
+{
+  const groupId = "120363-combo-hit@g.us";
+  const { sock, meta, sent, kicks } = makeSock();
+  cache(groupId, meta);
+  store.saveGroupSettings(groupId, {
+    antilink: { enabled: true, mode: "ALL", action: "KICK", allowed_domains: [], blocked_domains: [] },
+    moderation: { forbiddenWords: { enabled: true, list: ["secret"] } },
+  });
+  let during = null;
+  sock.groupParticipantsUpdate = async (_jid, users, action) => {
+    during = store.getUserWarnings(groupId, USER_PN).map((event) => ({
+      ...event,
+      rules: Array.isArray(event.rules) ? event.rules.slice() : event.rules,
+    }));
+    kicks.push({ users: [...users], action });
+  };
+  const result = await withLang("en", () =>
+    handleGroupModeration(sock, withId(groupId, "combo-1", { text: "secret https://bad.example/x" })),
+  );
+  equal("combined hit last rule is the link", result.lastRule, "link");
+  equal("the ledger has one event during the kick", during.length, 1);
+  ok("the event reason is the link", String(during[0].reason).startsWith("antilink:"));
+  ok("the event lists both rules", during[0].rules.includes("forbidden") && during[0].rules.includes("link"));
+  equal("simple mode stores one point", during[0].points, 1);
+  equal("a successful kick clears the ledger", store.getUserWarnings(groupId, USER_PN).length, 0);
+  equal("one kick is sent", kicks.length, 1);
+  equal("the message is deleted once", sent.filter((payload) => payload.delete).length, 1);
+}
+
+section("the same message id is applied once");
+{
+  const groupId = "120363-dedup-id@g.us";
+  const { sock, meta, sent } = makeSock();
+  cache(groupId, meta);
+  store.saveGroupSettings(groupId, {
+    antilink: { enabled: true, mode: "ALL", allowed_domains: [], blocked_domains: [] },
+  });
+  const msg = withId(groupId, "same-id", { text: "https://spam.example/once" });
+  await withLang("en", () => handleGroupModeration(sock, msg));
+  await withLang("en", () => handleGroupModeration(sock, msg));
+  equal("a redelivery adds one warning", store.getUserWarnings(groupId, USER_PN).length, 1);
+  equal(
+    "a redelivery sends one notice",
+    texts(sent).filter((text) => text.includes("Warnings:")).length,
+    1,
+  );
+  equal("the claim row exists", store.getModerationApplied(groupId, "same-id").outcome, "warn");
+}
+
+section("two message ids reach two points");
+{
+  const groupId = "120363-two-ids@g.us";
+  const { sock, meta } = makeSock();
+  cache(groupId, meta);
+  store.saveGroupSettings(groupId, {
+    antilink: { enabled: true, mode: "ALL", allowed_domains: [], blocked_domains: [] },
+  });
+  await withLang("en", () =>
+    handleGroupModeration(sock, withId(groupId, "id-a", { text: "https://spam.example/a" })),
+  );
+  await withLang("en", () =>
+    handleGroupModeration(sock, withId(groupId, "id-b", { text: "https://spam.example/b" })),
+  );
+  const rows = store.getUserWarnings(groupId, USER_PN);
+  equal("two commits store two events", rows.length, 2);
+  equal("two commits store two points", rows.reduce((sum, event) => sum + event.points, 0), 2);
+}
+
+section("severity weights cap the points added by one message");
+{
+  const maxId = "120363-weight-max@g.us";
+  const { sock, meta } = makeSock();
+  cache(maxId, meta);
+  store.saveGroupSettings(maxId, {
+    moderationPolicy: {
+      mode: "severity",
+      hitMerge: "max",
+      weights: { forbidden: 2, antilink: 3 },
+      flagAt: 40,
+      kickAt: 50,
+    },
+  });
+  await enforceHits(sock, {
+    msg: withId(maxId, "max-1"),
+    groupMetadata: meta,
+    hits: [
+      { rule: "forbidden", reason: "forbidden-word" },
+      { rule: "link", reason: "antilink:a.example" },
+    ],
+  });
+  equal("hitMerge max stores the larger weight", store.getUserWarnings(maxId, USER_PN)[0].points, 3);
+
+  const sumId = "120363-weight-sum@g.us";
+  store.saveGroupSettings(sumId, {
+    moderationPolicy: {
+      mode: "severity",
+      hitMerge: "sum",
+      weights: { forbidden: 2, antilink: 3 },
+      flagAt: 40,
+      kickAt: 50,
+    },
+  });
+  await enforceHits(sock, {
+    msg: withId(sumId, "sum-1"),
+    groupMetadata: meta,
+    hits: [
+      { rule: "forbidden", reason: "forbidden-word" },
+      { rule: "link", reason: "antilink:a.example" },
+    ],
+  });
+  equal("hitMerge sum stores both weights", store.getUserWarnings(sumId, USER_PN)[0].points, 5);
+
+  const capId = "120363-weight-cap@g.us";
+  const capped = makeSock({ botAdmin: false });
+  cache(capId, capped.meta);
+  store.saveGroupSettings(capId, {
+    moderationPolicy: {
+      mode: "severity",
+      hitMerge: "sum",
+      weights: { antispam: 10 },
+      flagAt: 49,
+      kickAt: 50,
+    },
+  });
+  await enforceHits(capped.sock, {
+    msg: withId(capId, "cap-1"),
+    groupMetadata: capped.meta,
+    hits: Array.from({ length: 6 }, () => ({ rule: "spam", reason: "antispam" })),
+  });
+  equal("sum past 50 stores 50", store.getUserWarnings(capId, USER_PN)[0].points, 50);
+}
+
+section("membership defaults to clear; keep is explicit");
+{
+  const clearId = "120363-member-clear@g.us";
+  const keepId = "120363-member-keep@g.us";
+  const addId = "120363-member-add@g.us";
+  const leaveId = "120363-member-leave@g.us";
+  const seed = (groupId) => {
+    store.saveUserWarnings(groupId, USER_PN, [
+      { reason: "antilink:x", by: "system", date: new Date().toISOString() },
+    ]);
+    store.upsertModerationFlag(groupId, USER_PN, {
+      warnCount: 1,
+      lastRule: "link",
+      reasons: ["antilink:x"],
+    });
+  };
+  store.saveGroupSettings(clearId, {});
+  store.saveGroupSettings(keepId, { moderationPolicy: { membership: "keep" } });
+  store.saveGroupSettings(addId, {});
+  store.saveGroupSettings(leaveId, {});
+  for (const groupId of [clearId, keepId, addId, leaveId]) seed(groupId);
+  equal("unset membership resolves to clear", policyService.resolveModerationPolicy({}).membership, "clear");
+
+  await handleGroupParticipantsUpdate({}, { id: clearId, participants: [USER_LID], action: "remove" });
+  equal("leaving the group clears the count", store.getUserWarnings(clearId, USER_PN).length, 0);
+  equal("leaving the group clears the flag", store.getModerationFlag(clearId, USER_PN), null);
+  await handleGroupParticipantsUpdate({}, { id: clearId, participants: [USER_LID], action: "remove" });
+  equal("a second clear is a no-op", store.getUserWarnings(clearId, USER_PN).length, 0);
+  await handleGroupParticipantsUpdate({}, { id: clearId, participants: [USER_LID], action: "add" });
+  equal("rejoin starts at 0", store.getUserWarnings(clearId, USER_PN).length, 0);
+
+  await handleGroupParticipantsUpdate({}, { id: keepId, participants: [USER_LID], action: "remove" });
+  equal("leaving the group keeps the count", store.getUserWarnings(keepId, USER_PN).length, 1);
+  equal("explicit keep leaves the flag", store.getModerationFlag(keepId, USER_PN).last_rule, "link");
+
+  await handleGroupParticipantsUpdate({}, { id: addId, participants: [USER_LID], action: "add" });
+  equal("add does not clear warnings", store.getUserWarnings(addId, USER_PN).length, 1);
+  equal("add does not clear the flag", store.getModerationFlag(addId, USER_PN).warn_count, 1);
+
+  await handleGroupParticipantsUpdate({}, { id: leaveId, participants: [USER_PN], action: "leave" });
+  equal("a leave event clears warnings", store.getUserWarnings(leaveId, USER_PN).length, 0);
+  equal("a leave event clears the flag", store.getModerationFlag(leaveId, USER_PN), null);
+}
+
+section("clear drops the ledger and dismiss drops only the flag");
+{
+  const groupId = "120363-clear-dismiss@g.us";
+  const { sock, meta } = makeSock();
+  cache(groupId, meta);
+  store.saveGroupSettings(groupId, {
+    antilink: { enabled: true, mode: "ALL", allowed_domains: [], blocked_domains: [] },
+    warn_system: { max_warnings: 1, action: "FLAG" },
+  });
+  await withLang("en", () => handleAntiLink(sock, groupMsg(groupId, { text: "https://spam.example/flag" })));
+  equal("the limit flags the member", store.listModerationFlags(groupId).length, 1);
+  dismissMemberFlag(groupId, USER_PN);
+  equal("dismiss removes the flag", store.listModerationFlags(groupId).length, 0);
+  equal("dismiss keeps warnings", store.getUserWarnings(groupId, USER_PN).length, 1);
+  equal("dismiss does not flag on its own", store.listModerationFlags(groupId).length, 0);
+  await withLang("en", () => handleAntiLink(sock, groupMsg(groupId, { text: "https://spam.example/again" })));
+  equal("the next hit at the limit flags again", store.listModerationFlags(groupId).length, 1);
+  clearMemberModeration(groupId, USER_PN);
+  equal("clear removes the flag", store.listModerationFlags(groupId).length, 0);
+  equal("clear removes warnings", store.getUserWarnings(groupId, USER_PN).length, 0);
+}
+
+section("hold leaves points unchanged and escalate kicks on the extra points");
+{
+  const holdId = "120363-flag-hold@g.us";
+  const { sock, meta, sent } = makeSock();
+  cache(holdId, meta);
+  store.saveGroupSettings(holdId, {
+    antilink: { enabled: true, mode: "ALL", allowed_domains: [], blocked_domains: [] },
+  });
+  policyService.applyModerationPolicy(holdId, {
+    limit: 1,
+    limitAction: "FLAG",
+    flag: { whileFlagged: "hold" },
+  });
+  await withLang("en", () =>
+    handleGroupModeration(sock, withId(holdId, "hold-1", { text: "https://spam.example/hold" })),
+  );
+  equal("the opening hit stores one warning", store.getUserWarnings(holdId, USER_PN).length, 1);
+  sent.length = 0;
+  await withLang("en", () =>
+    handleGroupModeration(sock, withId(holdId, "hold-2", { text: "https://spam.example/hold2" })),
+  );
+  equal("hold does not append a point", store.getUserWarnings(holdId, USER_PN).length, 1);
+  equal("hold still deletes the message", sent.filter((payload) => payload.delete).length, 1);
+
+  const escId = "120363-flag-escalate@g.us";
+  const esc = makeSock();
+  cache(escId, esc.meta);
+  store.saveGroupSettings(escId, {
+    antilink: { enabled: true, mode: "ALL", allowed_domains: [], blocked_domains: [] },
+  });
+  policyService.applyModerationPolicy(escId, {
+    limit: 1,
+    limitAction: "FLAG",
+    flag: { whileFlagged: "escalate", escalateAfter: 2 },
+  });
+  await withLang("en", () =>
+    handleGroupModeration(esc.sock, withId(escId, "esc-1", { text: "https://spam.example/e1" })),
+  );
+  equal("the opening flag stores zero repeat points", store.getModerationFlag(escId, USER_PN).repeat_points, 0);
+  equal("the opening flag does not kick", esc.kicks.length, 0);
+  await withLang("en", () =>
+    handleGroupModeration(esc.sock, withId(escId, "esc-2", { text: "https://spam.example/e2" })),
+  );
+  equal("the first extra point does not kick", esc.kicks.length, 0);
+  equal("repeat points follow the extra point", store.getModerationFlag(escId, USER_PN).repeat_points, 1);
+  await withLang("en", () =>
+    handleGroupModeration(esc.sock, withId(escId, "esc-3", { text: "https://spam.example/e3" })),
+  );
+  equal("escalateAfter kicks on the next extra point", esc.kicks.length, 1);
+}
+
+section("silent flag notices and flag cooldown");
+{
+  const silentId = "120363-flag-silent@g.us";
+  const silent = makeSock({ botAdmin: false });
+  cache(silentId, silent.meta);
+  store.saveGroupSettings(silentId, {
+    antilink: { enabled: true, mode: "ALL", allowed_domains: [], blocked_domains: [] },
+  });
+  policyService.applyModerationPolicy(silentId, {
+    limitAction: "FLAG",
+    flag: { notify: "silent" },
+  });
+  policyService.applyModerationPolicy(silentId, { limitAction: "KICK", limit: 1 });
+  await withLang("en", () =>
+    handleGroupModeration(silent.sock, withId(silentId, "silent-1", { text: "https://spam.example/silent" })),
+  );
+  const silentText = texts(silent.sent).join("\n");
+  ok("a blocked kick still says an admin must act", silentText.includes("an admin must act"));
+  ok("silent notify skips the flag notice", !silentText.includes("Admins have been notified"));
+  ok("the blocked kick still mentions an admin", mentionsOf(silent.sent).includes(ADMIN_LID));
+  equal("the blocked kick writes a flag", store.listModerationFlags(silentId).length, 1);
+
+  const coolId = "120363-flag-cool@g.us";
+  const cool = makeSock();
+  cache(coolId, cool.meta);
+  store.saveGroupSettings(coolId, {
+    antilink: { enabled: true, mode: "ALL", allowed_domains: [], blocked_domains: [] },
+  });
+  policyService.applyModerationPolicy(coolId, {
+    limit: 1,
+    limitAction: "FLAG",
+    flag: { notify: "group", cooldownMinutes: 60 },
+  });
+  await withLang("en", () =>
+    handleGroupModeration(cool.sock, withId(coolId, "cool-1", { text: "https://spam.example/c1" })),
+  );
+  ok(
+    "the first flag notice is sent",
+    texts(cool.sent).some((text) => text.includes("Admins have been notified")),
+  );
+  cool.sent.length = 0;
+  await withLang("en", () =>
+    handleGroupModeration(cool.sock, withId(coolId, "cool-2", { text: "https://spam.example/c2" })),
+  );
+  ok(
+    "cooldown suppresses the second flag notice",
+    !texts(cool.sent).some((text) => text.includes("Admins have been notified")),
+  );
+  equal("cooldown still updates the flag", store.getModerationFlag(coolId, USER_PN).warn_count, 2);
+}
+
+section("a protected sender is not claimed");
+{
+  const groupId = "120363-protected-claim@g.us";
+  const { sock, meta } = makeSock();
+  cache(groupId, meta);
+  store.saveGroupSettings(groupId, {
+    antilink: { enabled: true, mode: "ALL", allowed_domains: [], blocked_domains: [] },
+  });
+  await handleGroupModeration(
+    sock,
+    withId(groupId, "admin-1", {
+      text: "https://spam.example/admin",
+      participant: ADMIN_LID,
+      participantAlt: ADMIN_PN,
+    }),
+  );
+  equal("a group admin is not claimed", store.getModerationApplied(groupId, "admin-1"), null);
+  equal("a group admin gains no warning", store.getUserWarnings(groupId, ADMIN_PN).length, 0);
+  await handleGroupModeration(sock, groupMsg(groupId, { text: "https://spam.example/noid" }));
+  equal("a message without an id is not enforced", store.getUserWarnings(groupId, USER_PN).length, 0);
+}
+
+section("the command and the panel persist the same limit");
+{
+  const express = (await import("express")).default;
+  const { default: routes } = await import("../src/routes/dashboard.api.esm.js");
+  const app = express();
+  app.use(express.json());
+  app.use(routes);
+  const server = await new Promise((resolve) => {
+    const listening = app.listen(0, "127.0.0.1", () => resolve(listening));
+  });
+  const port = server.address().port;
+  async function call(method, path, body) {
+    const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return { status: response.status, json: await response.json() };
+  }
+  try {
+    const cmdGroup = "120363-policy-cmd@g.us";
+    const apiGroup = "120363-policy-api@g.us";
+    const badGroup = "120363-policy-bad@g.us";
+    const starting = { warn_system: { max_warnings: 3, action: "KICK" } };
+    store.saveGroupSettings(cmdGroup, JSON.parse(JSON.stringify(starting)));
+    store.saveGroupSettings(apiGroup, JSON.parse(JSON.stringify(starting)));
+    store.saveGroupSettings(badGroup, { ...starting, rules: "keep-me" });
+    const { sock } = makeSock();
+    await withLang("en", () => policyCommand.execute(sock, commandMsg(cmdGroup), ["set", "limit", "4"]));
+    const patched = await call("PATCH", `/groups/${encodeURIComponent(apiGroup)}`, {
+      moderation_policy: { limit: 4 },
+    });
+    equal("panel limit patch succeeds", patched.status, 200);
+    equal("panel response includes the effective limit", patched.json.group.moderation_policy.limit, 4);
+    equal("panel response includes visibility", patched.json.group.moderation_policy_visibility.limit, true);
+    const commandSettings = store.getGroupSettings(cmdGroup);
+    const panelSettings = store.getGroupSettings(apiGroup);
+    equal("command and panel store the same max_warnings", commandSettings.warn_system.max_warnings, panelSettings.warn_system.max_warnings);
+    equal("both limits are 4", commandSettings.warn_system.max_warnings, 4);
+    equal(
+      "command and panel store the same moderationPolicy",
+      JSON.stringify(commandSettings.moderationPolicy),
+      JSON.stringify(panelSettings.moderationPolicy),
+    );
+    equal("setting the limit does not change the stored action", commandSettings.warn_system.action, "KICK");
+
+    const rejected = await call("PATCH", `/groups/${encodeURIComponent(badGroup)}`, {
+      moderation_policy: { limit: 0 },
+      rules: "changed",
+    });
+    equal("an invalid policy is HTTP 400", rejected.status, 400);
+    equal("an invalid policy reports failure", rejected.json.success, false);
+    ok("an invalid policy returns errors", rejected.json.errors.some((item) => item.code === "range"));
+    equal("an invalid policy writes nothing", store.getGroupSettings(badGroup).rules, "keep-me");
+    equal("an invalid policy does not store moderationPolicy", store.getGroupSettings(badGroup).moderationPolicy, undefined);
+
+    const preview = await call("POST", "/groups/moderation-preview", {
+      moderation_policy: { mode: "severity", flagAt: 4, kickAt: 4 },
+    });
+    equal("preview stays HTTP 200", preview.status, 200);
+    equal("preview success stays true", preview.json.success, true);
+    equal("severity hides the limit", preview.json.visibility.limit, false);
+    ok("preview returns English", typeof preview.json.en === "string" && preview.json.en.includes("Warn limit"));
+    ok("preview returns Arabic", typeof preview.json.ar === "string" && preview.json.ar.includes("حد الإنذارات"));
+    ok(
+      "preview reports the kickAt conflict",
+      preview.json.errors.some((item) => item.code === "conflict" && item.field === "kickAt"),
+    );
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 }
 
 finish();

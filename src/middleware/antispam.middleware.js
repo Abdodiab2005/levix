@@ -15,6 +15,18 @@ const { enforceGroupRule } = require("../utils/moderationAction.cjs");
 const { featureActionOf } = require("../utils/moderationSummary.cjs");
 
 const userMessageTimestamps = new Map();
+const seenMessageIds = [];
+const spamHitIds = [];
+
+function rememberCapped(list, id) {
+  if (!id || list.includes(id)) return;
+  list.push(id);
+  if (list.length > 200) list.shift();
+}
+
+function spamHit(rule = "spam") {
+  return { rule, reason: "antispam" };
+}
 
 function stableSenderId(candidates) {
   const phoneJid = candidates.find((jid) => jid.endsWith("@s.whatsapp.net"));
@@ -59,6 +71,39 @@ function mergeSpamBucket(groupId, candidates, now, timeWindow) {
   return { recent, canonical };
 }
 
+// Record one message and return a spam hit when the window is exceeded.
+// Disabled anti-spam does not record. A message id is observed once; a hit id
+// still reports a hit after the bucket is cleared so a redelivery can retry.
+// Callers with no id (older tests) record on every call.
+export async function observeAntiSpam(sock, msg, settings) {
+  const groupId = msg?.key?.remoteJid;
+  if (!groupId?.endsWith("@g.us")) return null;
+  const spamConfig = settings?.antispam ?? getGroupSettings(groupId)?.antispam;
+  if (!spamConfig?.enabled) return null;
+
+  const messageId = msg.key?.id || null;
+  const stamp = messageId ? `${groupId}:${messageId}` : null;
+  if (stamp && spamHitIds.includes(stamp)) return spamHit();
+  if (stamp && seenMessageIds.includes(stamp)) return null;
+
+  const senderCandidates = getSenderCandidates(msg, sock);
+  if (!senderCandidates.length) return null;
+
+  const now = Date.now();
+  const timeWindow = (spamConfig.time_window || 10) * 1000;
+  for (const [key, entry] of userMessageTimestamps) {
+    if (now - entry.lastSeen > timeWindow) userMessageTimestamps.delete(key);
+  }
+  const { recent, canonical } = mergeSpamBucket(groupId, senderCandidates, now, timeWindow);
+  if (stamp) rememberCapped(seenMessageIds, stamp);
+  if (recent.length > (spamConfig.message_count || 5)) {
+    userMessageTimestamps.delete(canonical);
+    if (stamp) rememberCapped(spamHitIds, stamp);
+    return spamHit();
+  }
+  return null;
+}
+
 // Handle anti-spam detection and action
 export async function handleAntiSpam(sock, msg) {
   const groupId = msg.key.remoteJid;
@@ -72,11 +117,8 @@ export async function handleAntiSpam(sock, msg) {
 
   if (!spamConfig || !spamConfig.enabled) return;
 
-  // Owners and admins are immune. The legacy owner mirror it used to import was
-  // only ever populated with the bot's own JID, so real operators were
-  // counted as spammers — the centralized check fixes that.
-  // Cache-first: antispam runs on EVERY group message, so this read must not
-  // be a live query (see utils/groupMetadataCache.cjs).
+  // Owners and admins are immune. Checked before observe so a protected
+  // sender is not recorded. Cache-first: antispam runs on every group message.
   const groupMetadata = await resolveGroupMetadata(sock, groupId);
   const protectedSender = senderCandidates.some(
     (candidate) =>
@@ -88,35 +130,19 @@ export async function handleAntiSpam(sock, msg) {
 
   if (protectedSender) return;
 
-  // Track message timestamps
-  const now = Date.now();
-  const timeWindow = (spamConfig.time_window || 10) * 1000;
-  for (const [key, entry] of userMessageTimestamps) {
-    if (now - entry.lastSeen > timeWindow) userMessageTimestamps.delete(key);
-  }
-  const { recent: recentTimestamps, canonical } = mergeSpamBucket(
-    groupId,
-    senderCandidates,
-    now,
-    timeWindow,
-  );
+  const hit = await observeAntiSpam(sock, msg, settings);
+  if (!hit) return;
 
-  // Check if user exceeded message count
-  if (recentTimestamps.length > (spamConfig.message_count || 5)) {
-    logger.warn({ user: senderId, group: groupId }, "Spam detected, taking action.");
-
-    const kickNow = featureActionOf(settings, "antispam") === "KICK";
-    await enforceGroupRule(sock, {
-      msg,
-      groupMetadata,
-      rule: "spam",
-      warningReason: "antispam",
-      deleteMessage: false,
-      recordWarning: true,
-      kickImmediately: kickNow,
-      targetCandidates: senderCandidates,
-    });
-
-    userMessageTimestamps.delete(canonical);
-  }
+  logger.warn({ user: senderId, group: groupId }, "Spam detected, taking action.");
+  const kickNow = featureActionOf(settings, "antispam") === "KICK";
+  await enforceGroupRule(sock, {
+    msg,
+    groupMetadata,
+    rule: "spam",
+    warningReason: "antispam",
+    deleteMessage: false,
+    recordWarning: true,
+    kickImmediately: kickNow,
+    targetCandidates: senderCandidates,
+  });
 }

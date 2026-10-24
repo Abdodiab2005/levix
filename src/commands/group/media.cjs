@@ -11,6 +11,7 @@ const {
   policyFromFeatureAction,
 } = require("../../utils/moderationSummary.cjs");
 const { tr } = require("../../utils/i18n.cjs");
+const { applyModerationPolicy } = require("../../services/moderationPolicy.cjs");
 
 const VALID_TYPES = ["image", "video", "sticker", "audio"];
 
@@ -61,11 +62,20 @@ const command = {
             ),
           });
         }
-        mediaConfig.action = action;
+        try {
+          applyModerationPolicy(groupId, { features: { media: action } });
+        } catch (error) {
+          return await sock.sendMessage(groupId, {
+            text: tr(
+              error.errors?.[0]?.message || "That action is not allowed.",
+              "هذا الإجراء غير مسموح.",
+            ),
+          });
+        }
         await sock.sendMessage(groupId, {
           text: tr(`✅ Media action is now ${action}.`, `✅ تم تعيين إجراء الوسائط إلى ${action}.`),
         });
-        break;
+        return;
       }
       case "block": {
         const typeToBlock = args[1] ? args[1].toLowerCase() : "";
@@ -116,44 +126,45 @@ const command = {
 };
 
 // --- The Message Handler Logic ---
+function detectMedia(msg, settings) {
+  const groupId = msg?.key?.remoteJid;
+  if (!groupId?.endsWith("@g.us")) return null;
+  const mediaConfig = settings?.media_control;
+  if (!mediaConfig?.enabled) return null;
+  const blocked = Array.isArray(mediaConfig.blocked_types) ? mediaConfig.blocked_types : [];
+  const messageType = mediaType(msg.message);
+  if (!messageType || !blocked.includes(messageType)) return null;
+  return { rule: "media", reason: `media:${messageType}`, detail: messageType };
+}
+
 async function handleMediaControl(sock, msg, _legacyConfig, _normalizeJid) {
   const isGroup = msg.key.remoteJid.endsWith("@g.us");
   if (!isGroup) return false;
 
   const groupId = msg.key.remoteJid;
-  const settings = getGroupSettings(groupId);
-  const mediaConfig = settings.media_control;
-
-  if (!mediaConfig || !mediaConfig.enabled) return false;
-
+  const settings = getGroupSettings(groupId) || {};
   const senderId = msg.key.participant || msg.key.remoteJid;
 
-  // Cache-first: this runs on every group message while media control is on.
   const groupMetadata = await resolveGroupMetadata(sock, groupId);
   const senderIds = senderCandidates(msg, sock);
   const isOwner = msg.key.fromMe || senderIds.some(isOwnerJidSync);
   const isSenderAdmin = senderIds.some((id) => isAdminInGroupSync(groupMetadata, id));
-
   if (isOwner || isSenderAdmin) return false;
 
-  const messageType = mediaType(msg.message);
-
-  if (mediaConfig.blocked_types.includes(messageType)) {
-    logger.info(`[Media Control] Deleting ${messageType} from ${senderId} in ${groupId}.`);
-    const policy = policyFromFeatureAction(featureActionOf(settings, "media"));
-    const result = await enforceGroupRule(sock, {
-      msg,
-      groupMetadata,
-      rule: "media",
-      detail: messageType,
-      warningReason: `media:${messageType}`,
-      ...policy,
-      targetCandidates: senderIds,
-    });
-    return result.acted;
-  }
-  return false; // No action was taken
+  const hit = detectMedia(msg, settings);
+  if (!hit) return false;
+  logger.info(`[Media Control] Deleting ${hit.detail} from ${senderId} in ${groupId}.`);
+  const policy = policyFromFeatureAction(featureActionOf(settings, "media"));
+  const result = await enforceGroupRule(sock, {
+    msg,
+    groupMetadata,
+    rule: "media",
+    detail: hit.detail,
+    warningReason: hit.reason,
+    ...policy,
+    targetCandidates: senderIds,
+  });
+  return Boolean(result.acted);
 }
 
-// Export both the command and the handler
-module.exports = { ...command, handleMediaControl };
+module.exports = { ...command, handleMediaControl, detectMedia };
