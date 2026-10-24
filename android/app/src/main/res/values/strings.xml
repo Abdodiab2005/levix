@@ -2,24 +2,32 @@
 <resources>
     <string name="app_name">Levix</string>
 
-    <!-- First-run guide: one step per screen, in the order the operator does them. -->
-    <string name="guide_step">Step %1$d of 5</string>
+    <!-- Home tour: every stop spotlights the real control it describes, in the
+         order an operator meets them. A hidden control is skipped, so bodies
+         must read as sentences about the highlighted button, not about order. -->
+    <string name="guide_step">Step %1$d of %2$d</string>
     <string name="guide_start_title">Start your assistant</string>
-    <string name="guide_start_body">On the home screen, tap Start Assistant and allow notifications. When the engine is ready, the screen guides you to connect WhatsApp.</string>
+    <string name="guide_start_body">This circle starts Levix. Allow notifications when asked so the assistant can keep running while the screen is off.</string>
     <string name="guide_battery_title">Keep it running</string>
-    <string name="guide_battery_body">If the Battery Guard card appears, tap Enable Battery Guard and choose Unrestricted. Without it, Android may stop Levix while the screen is off.</string>
+    <string name="guide_battery_body">When this card shows a restriction, tap Enable Battery Guard and choose Unrestricted. Without it, Android may stop Levix while the screen is locked.</string>
     <string name="guide_panel_title">Open the control panel</string>
-    <string name="guide_panel_body">Tap Connect WhatsApp to open Connection, or Open Control Panel once ready. On first use, choose a password to protect the panel. Manage commands, AI and groups there.</string>
-    <string name="guide_link_title">Link WhatsApp</string>
-    <string name="guide_link_body">In the panel, open Connection and request a pairing code, or show the QR. Then in WhatsApp: Settings → Linked devices → Link a device → Link with phone number instead, and enter the 8-character code.</string>
+    <string name="guide_panel_body">This button connects WhatsApp and later opens the panel. Choose a password on first use; commands, the AI and group settings all live there.</string>
+    <string name="guide_link_title">Check WhatsApp</string>
+    <string name="guide_link_body">This card shows whether WhatsApp is linked. Tap it for the full status; to link your phone, open the panel, go to Connection and request a pairing code.</string>
+    <string name="guide_media_title">Media Hub</string>
+    <string name="guide_media_body">Media Hub browses the WhatsApp statuses, photos, videos and voice notes stored on this phone. Nothing leaves the phone, and you choose what to save.</string>
     <string name="guide_privacy_title">Privacy and diagnostics</string>
-    <string name="guide_privacy_body">Levix runs on this phone and connects to WhatsApp and the services you enable. Crash reports stay here until you review and send them or delete them.</string>
+    <string name="guide_privacy_body">Levix runs on this phone and talks only to WhatsApp and the services you enable. Logs and crash reports wait here until you save, share or delete them.</string>
+    <string name="guide_header_title">Language and appearance</string>
+    <string name="guide_header_body">These two icons switch between Arabic and English, and between light and dark. Levix remembers your choice.</string>
     <string name="guide_skip">Skip</string>
     <string name="guide_back">Back</string>
     <string name="guide_next">Next</string>
     <string name="guide_done">Done</string>
     <string name="guide_again_title">Show guide again</string>
-    <string name="guide_again_sub">Review the setup steps and privacy</string>
+    <string name="guide_again_sub">Replay this tour of the home screen</string>
+    <!-- Spoken by TalkBack when a stop appears: title, body, then the count. -->
+    <string name="guide_announce">%1$s. %2$s. %3$s</string>
     <string name="crash_prompt_title">Levix stopped unexpectedly</string>
     <string name="crash_prompt_body">A crash report is saved on this phone. You can review it before choosing whether to send it.</string>
     <string name="crash_prompt_review">Review &amp; send</string>
@@ -157,6 +165,9 @@
     <string name="media_insights">Storage insights</string>
     <string name="media_sort">Sort</string>
     <string name="media_search">Search files, type or date</string>
+    <string name="media_scope">Choose statuses or all media</string>
+    <string name="media_scope_statuses">Statuses</string>
+    <string name="media_scope_all">All media</string>
     <string name="media_all">All</string>
     <string name="media_whatsapp">WhatsApp</string>
     <string name="media_business">WhatsApp Business</string>

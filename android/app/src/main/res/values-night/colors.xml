@@ -20,6 +20,8 @@
     <!-- Surfaces & Backgrounds (Matched from dashboard.css) -->
     <color name="levix_bg">#07101F</color>
     <color name="levix_bg_soft">#0A1629</color>
+    <!-- Dim behind a coach mark. -->
+    <color name="coach_scrim">#B8000000</color>
     <color name="levix_panel">#0D1A30</color>
     <color name="levix_panel_raised">#11213B</color>
     <color name="levix_panel_hover">#142845</color>

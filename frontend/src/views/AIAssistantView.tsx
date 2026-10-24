@@ -9,6 +9,7 @@ import {
   FileText,
   Globe,
   History,
+  Languages,
   MessageSquare,
   Mic,
   RefreshCw,
@@ -163,6 +164,9 @@ export const AIAssistantView: React.FC = () => {
   const [personaModalOpen, setPersonaModalOpen] = useState(false);
   const [personaText, setPersonaText] = useState("");
   const [personaLoading, setPersonaLoading] = useState(false);
+  const [translatePromptOpen, setTranslatePromptOpen] = useState(false);
+  const [translatePromptText, setTranslatePromptText] = useState("");
+  const [translatePromptLoading, setTranslatePromptLoading] = useState(false);
   const [memoryScopes, setMemoryScopes] = useState<
     Array<{ scope: string; label: string; entries: number }>
   >([]);
@@ -202,6 +206,8 @@ export const AIAssistantView: React.FC = () => {
   });
   const sttProvider = useSavedValue(String(settings["ai_stt_provider"] || "auto"));
   const botLang = useSavedValue(String(settings["bot_language"] || "auto"));
+  const translateEngine = useSavedValue(String(settings["translate_engine"] || "ai"));
+  const googleTranslateKey = useSavedValue(String(settings["google_translate_api_key"] || ""));
 
   const selectedPreset = PRESETS.find((p) => p.id === providerForm.draft.presetId) || savedPreset;
 
@@ -409,6 +415,44 @@ export const AIAssistantView: React.FC = () => {
     }
   };
 
+  const openTranslatePromptEditor = async () => {
+    setTranslatePromptOpen(true);
+    setTranslatePromptLoading(true);
+    try {
+      const res = await api.getTranslatePrompt();
+      const prompt = res?.prompt;
+      setTranslatePromptText(typeof prompt === "string" ? prompt : prompt?.body || "");
+    } catch (err: any) {
+      toast(err.message, "error");
+    } finally {
+      setTranslatePromptLoading(false);
+    }
+  };
+
+  const saveTranslatePrompt = async () => {
+    try {
+      await api.updateTranslatePrompt(translatePromptText);
+      toast(t("translatePromptSaved"), "success");
+      setTranslatePromptOpen(false);
+    } catch (err: any) {
+      toast(err.message, "error");
+    }
+  };
+
+  const resetTranslatePrompt = async () => {
+    setTranslatePromptLoading(true);
+    try {
+      const res = await api.resetTranslatePrompt();
+      const prompt = res?.prompt;
+      setTranslatePromptText(typeof prompt === "string" ? prompt : prompt?.body || "");
+      toast(t("translatePromptReset"), "success");
+    } catch (err: any) {
+      toast(err.message, "error");
+    } finally {
+      setTranslatePromptLoading(false);
+    }
+  };
+
   const loadMemoryFiles = async () => {
     try {
       const res = await api.getMemoryFiles();
@@ -526,7 +570,7 @@ export const AIAssistantView: React.FC = () => {
     <div className="flex flex-col gap-3 sm:gap-4">
       <PageHeader icon={<Bot size={20} />} title={t("aiTitle")} description={t("aiSubtitle")} />
 
-      <Card>
+      <Card data-tour="ai-agent">
         <div className="flex min-h-10 items-center justify-between gap-4">
           <span className="text-sm font-semibold text-text-main">{t("aiAgentEnabled")}</span>
           <div className="flex items-center gap-3">
@@ -542,7 +586,7 @@ export const AIAssistantView: React.FC = () => {
         </div>
       </Card>
 
-      <Card className="flex flex-col gap-3">
+      <Card className="flex flex-col gap-3" data-tour="ai-provider">
         <CardHeader icon={<Sparkles size={18} />} title={t("aiProvider")} />
 
         <SegmentedControl
@@ -859,10 +903,69 @@ export const AIAssistantView: React.FC = () => {
               </Select>
             </SaveField>
           </div>
+
+          <div className="py-2">
+            <SaveField
+              label={t("translateEngine")}
+              description={t("translateEngineDesc")}
+              htmlFor="ai-translate-engine"
+              dirty={translateEngine.dirty}
+              saving={translateEngine.status === "saving"}
+              justSaved={translateEngine.status === "saved"}
+              error={translateEngine.error}
+              onSave={() =>
+                translateEngine.save((next) => persistSetting("translate_engine", next))
+              }
+              onRevert={translateEngine.revert}
+              {...saveLabels}
+            >
+              <Select
+                id="ai-translate-engine"
+                aria-label={t("translateEngine")}
+                value={translateEngine.value}
+                onChange={(e) => translateEngine.setValue(e.target.value)}
+              >
+                <option value="ai">{t("translateEngineAi")}</option>
+                <option value="google">{t("translateEngineGoogle")}</option>
+              </Select>
+            </SaveField>
+          </div>
+
+          <div className="py-2">
+            <SaveField
+              label={t("googleTranslateApiKey")}
+              description={t("googleTranslateApiKeyDesc")}
+              htmlFor="ai-google-translate-key"
+              dirty={googleTranslateKey.dirty}
+              saving={googleTranslateKey.status === "saving"}
+              justSaved={googleTranslateKey.status === "saved"}
+              error={googleTranslateKey.error}
+              onSave={() =>
+                googleTranslateKey.save(async (next) => {
+                  await persistSetting("google_translate_api_key", next);
+                  googleTranslateKey.setValue("");
+                })
+              }
+              onRevert={googleTranslateKey.revert}
+              {...saveLabels}
+            >
+              <PasswordInput
+                id="ai-google-translate-key"
+                className="font-mono"
+                placeholder={
+                  configuredKeys.google_translate_api_key
+                    ? "••••••••••••"
+                    : t("enterApiKey")
+                }
+                value={googleTranslateKey.value}
+                onChange={(e) => googleTranslateKey.setValue(e.target.value)}
+              />
+            </SaveField>
+          </div>
         </div>
       </Card>
 
-      <Card className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <Card className="grid grid-cols-1 gap-2 sm:grid-cols-2" data-tour="ai-memory">
         <Button
           variant="secondary"
           icon={<FileText size={16} />}
@@ -870,6 +973,14 @@ export const AIAssistantView: React.FC = () => {
           title={t("personaDesc")}
         >
           {t("editPersona")}
+        </Button>
+        <Button
+          variant="secondary"
+          icon={<Languages size={16} />}
+          onClick={openTranslatePromptEditor}
+          title={t("translatePromptDesc")}
+        >
+          {t("editTranslatePrompt")}
         </Button>
         <Button
           variant="secondary"
@@ -920,6 +1031,49 @@ export const AIAssistantView: React.FC = () => {
             rows={12}
             value={personaText}
             onChange={(e) => setPersonaText(e.target.value)}
+          />
+        )}
+      </Dialog>
+
+      <Dialog
+        isOpen={translatePromptOpen}
+        onClose={() => setTranslatePromptOpen(false)}
+        title={t("translatePrompt")}
+        maxWidth="750px"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              className="me-auto"
+              onClick={resetTranslatePrompt}
+              disabled={translatePromptLoading}
+            >
+              {t("resetToDefault")}
+            </Button>
+            <Button variant="secondary" onClick={() => setTranslatePromptOpen(false)}>
+              {t("cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              icon={<Save size={16} />}
+              onClick={saveTranslatePrompt}
+              disabled={translatePromptLoading}
+            >
+              {t("save")}
+            </Button>
+          </>
+        }
+      >
+        {translatePromptLoading ? (
+          <div className="flex min-h-[280px] items-center justify-center">
+            <Spinner className="size-6" label={t("starting")} />
+          </div>
+        ) : (
+          <Textarea
+            className="font-mono"
+            rows={12}
+            value={translatePromptText}
+            onChange={(e) => setTranslatePromptText(e.target.value)}
           />
         )}
       </Dialog>

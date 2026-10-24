@@ -85,16 +85,34 @@
             <div class="auth-head">
               <span class="eyebrow" data-i18n="resetEyebrow">Password reset</span>
               <h1 data-i18n="resetTitle">Reset your password</h1>
+              <% if (recoveryEmail) { %>
+              <p class="sub" data-i18n="resetSubtitleChannels">
+                Levix can send a one-time code to WhatsApp, or to your recovery email. The code works for 10 minutes.
+              </p>
+              <% } else { %>
               <p class="sub" data-i18n="resetSubtitle">
                 Levix sends a one-time code to your WhatsApp — the linked account's own chat.
                 The code works for 10 minutes.
               </p>
+              <% } %>
             </div>
 
-            <button type="button" class="btn btn-primary auth-submit" id="reset-send">
-              <span data-i18n="resetSend">Send code to WhatsApp</span>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-            </button>
+            <div id="reset-channels" class="reset-channels">
+              <button type="button" class="btn btn-primary auth-submit" id="reset-send" data-channel="whatsapp">
+                <span data-i18n="resetSend">Send code to WhatsApp</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </button>
+              <% if (recoveryEmail) { %>
+              <button type="button" class="btn auth-submit" id="reset-send-email" data-channel="email">
+                <span data-i18n="resetSendEmail">Send code to email</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </button>
+              <p class="sub reset-email-hint">
+                <span data-i18n="resetEmailHint">The code goes to</span>
+                <strong dir="ltr"><%= recoveryEmail %></strong>
+              </p>
+              <% } %>
+            </div>
 
             <form id="reset-form" hidden>
               <label class="field">
@@ -184,7 +202,7 @@
 
         var loginCard = document.getElementById("login-card");
         var resetCard = document.getElementById("reset-card");
-        var sendBtn = document.getElementById("reset-send");
+        var channels = document.getElementById("reset-channels");
         var form = document.getElementById("reset-form");
         var errorBox = document.getElementById("reset-error");
 
@@ -265,28 +283,51 @@
           }
         });
 
-        sendBtn.addEventListener("click", async function () {
-          sendBtn.disabled = true;
+        function setChannelBusy(busy) {
+          var buttons = channels.querySelectorAll("[data-channel]");
+          for (var i = 0; i < buttons.length; i += 1) buttons[i].disabled = busy;
+        }
+
+        function showSendError(result) {
+          if (result.reason === "throttled") {
+            showErrorKey("resetErrThrottled", { n: String(result.retryAfter || 60) });
+          } else if (result.reason === "no_session") {
+            showErrorKey("resetErrNoSession");
+          } else if (result.reason === "send_failed") {
+            showErrorKey("resetErrSendFailed");
+          } else if (result.reason === "no_email") {
+            showErrorKey("resetErrNoEmail");
+          } else if (result.reason === "rate_limited") {
+            showErrorKey("resetErrRateLimited");
+          } else if (result.reason === "unavailable") {
+            showErrorKey("resetErrUnavailable");
+          } else if (result.reason === "invalid") {
+            showErrorKey("resetErrInvalid");
+          } else {
+            showErrorKey("resetErrStart");
+          }
+        }
+
+        channels.addEventListener("click", async function (event) {
+          var button = event.target.closest("[data-channel]");
+          if (!button || button.disabled) return;
+          var channel = button.getAttribute("data-channel");
+          var lang = window.LevixGatewayI18n && window.LevixGatewayI18n.lang === "ar" ? "ar" : "en";
+          setChannelBusy(true);
           hideError();
           try {
-            const result = await postJson("/reset/request");
+            const result = await postJson("/reset/request", { channel: channel, lang: lang });
             if (result.ok) {
-              sendBtn.hidden = true;
+              channels.hidden = true;
               form.hidden = false;
               document.getElementById("reset-code").focus();
-            } else if (result.reason === "throttled") {
-              showErrorKey("resetErrThrottled", { n: String(result.retryAfter || 60) });
-            } else if (result.reason === "no_session") {
-              showErrorKey("resetErrNoSession");
-            } else if (result.reason === "send_failed") {
-              showErrorKey("resetErrSendFailed");
             } else {
-              showErrorKey("resetErrStart");
+              showSendError(result);
             }
           } catch {
             showErrorKey("resetErrServer");
           }
-          sendBtn.disabled = false;
+          setChannelBusy(false);
         });
 
         form.addEventListener("submit", async function (event) {
@@ -300,7 +341,7 @@
             });
             if (result.ok) {
               form.hidden = true;
-              sendBtn.hidden = true;
+              channels.hidden = true;
               showErrorKey("resetDone");
               setTimeout(function () {
                 window.location.href = "/";
@@ -317,7 +358,7 @@
             ) {
               showErrorKey("resetErrExpired");
               form.hidden = true;
-              sendBtn.hidden = false;
+              channels.hidden = false;
             } else if (result.reason === "mismatch") {
               showErrorKey("resetErrMismatch");
             } else if (result.reason === "invalid_password") {

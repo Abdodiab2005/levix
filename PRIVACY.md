@@ -1,6 +1,6 @@
 # Levix Privacy Policy & Google Play Data Safety
 
-> **Effective date:** 2026-10-12
+> **Effective date:** 2026-10-24
 > **Applies to:** the Levix Android app (`net.leviro.levix`) and the Levix
 > self-hosted server distributed from this repository.
 > **Product:** Levix, built by Abdelrhman Diab, Leviro.
@@ -16,7 +16,10 @@ installation on its own: no analytics, no telemetry, no ads, and no automatic
 crash reporting. The only things that ever reach the developer are the ones
 **you** choose to send: a message in **Settings → Feedback** (and the optional
 diagnostics block you can tick on that form), and a crash report you press Send
-on in the panel. Nothing is transmitted until you do.
+on in the panel. Nothing is transmitted until you do. A Levix-operated mail
+relay delivers a recovery code only when you ask for one; it does not keep the
+address beyond rate limiting, and it does not send that address to the
+developer.
 
 Data only leaves your device as a direct result of features you use:
 
@@ -53,7 +56,13 @@ Data only leaves your device as a direct result of features you use:
    error type, a sanitized message and stack, an optional screen id, the app and
    device fields listed in section 2a, and a few navigation breadcrumbs. It goes
    to the developer through `levix.leviro.net/api/crash-reports`.
-6. **Your own Levix instance, for a sticker** — when you tap **Make sticker** or
+6. **The Levix mail relay, if you set a recovery email** — verifying the address
+   in **Settings**, or choosing **Email** on **Forgot password**, posts the
+   address, the one-time code, and the UI language (`en` or `ar`) to
+   `levix.leviro.net/api/recovery-email`. The relay sends a fixed message that
+   contains only the code. It does not store the address beyond rate limiting,
+   and it does not deliver the address to the developer.
+7. **Your own Levix instance, for a sticker** — when you tap **Make sticker** or
    **Add to stickers** on a file in Media Hub, that one file is uploaded to the
    Levix server running on this phone, because that is what does the conversion.
    It goes nowhere else. Browsing Media Hub uploads nothing.
@@ -69,6 +78,7 @@ control panel — stays in the app's private storage on the device.
 | --- | --- | --- |
 | WhatsApp pairing credentials | App-private SQLite DB + files | Linking to your WhatsApp account |
 | Control-panel password | scrypt hash in the local DB | Logging into the local panel |
+| Recovery email | Sealed with AES-256-GCM in the local DB (`auth:recovery-email`) | A verified address for the panel's forgot-password email code. The panel shows a mask. Settings export does not include it. Unlink does not remove it |
 | AI provider API keys & endpoints | Local DB, sealed with AES-256-GCM | Calling the provider you chose |
 | Bot configuration (prefix, permissions, group settings) | Local DB | Running the bot |
 | AI conversation history | Local DB (`ai_history`) | Conversational context; wiped with `!del` / `!delall` |
@@ -78,7 +88,7 @@ control panel — stays in the app's private storage on the device.
 | Opt-in copies of auto-deleted messages (text/caption only) | Local DB (`auto_delete_log`, auto-expiring) | Only when a rule with keep-copy on actually deletes a message |
 | Forward counters and sender last-seen metadata | Local DB (auto-expiring) | The anti-forward feature |
 | Crash reports (not yet sent) | App-private `crash-reports/*.json` (auto-expiring) | Optional diagnostics you can review and send; nothing leaves until you press Send |
-| Logs | App-private `logs/` + Android Logcat | Debugging |
+| Logs (including the 14-day technical debug log) | App-private `logs/` + Android Logcat | Debugging |
 
 Notes:
 
@@ -107,13 +117,16 @@ Notes:
 | **DuckDuckGo** or **Google Programmable Search** (if you configured it) | The search query | Only when an AI answer uses the web-search tool | Web-grounded answers |
 | **Web pages the AI opens** | HTTPS requests to the page's server | Only when an AI answer uses the fetch-page tool | Reading a page you asked about |
 | **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |
-| **The developer** (via `levix.leviro.net/api/feedback`, delivered as a Telegram message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact, an optional file you attach yourself — plus the Levix version, the platform, and the sending app's user-agent. If you tick the diagnostics box, the section 2a diagnostics object as well | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
-| **The developer** (via `levix.leviro.net/api/crash-reports`) | One crash report: category, sanitized error type/message/stack, an optional screen id, the app + section 2a device fields, and a few navigation breadcrumbs. Never a phone number, JID, chat/message body, file or log | Only when **you** open the panel and press Send on one report; never automatically | Support: so a crash can be grouped and fixed |
+| **The developer** (via `levix.leviro.net/api/feedback`, delivered as a Telegram message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact, an optional file you attach yourself — plus the Levix version, the platform, and the sending app's user-agent. If you tick the diagnostics box, the section 2a diagnostics object and the sanitized technical debug log in section 2b as well | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
+| **The developer** (via `levix.leviro.net/api/crash-reports`) | One crash report: category, sanitized error type/message/stack, an optional screen id, the app + section 2a device fields, the sanitized technical debug log in section 2b, and a few navigation breadcrumbs. Never a phone number, JID, chat/message body or media file | Only when **you** open the panel and press Send on one report; never automatically | Support: so a crash can be grouped and fixed |
+| **Levix mail relay** (`levix.leviro.net/api/recovery-email`) | The recovery email address, the one-time code, and the UI language (`en` or `ar`). No other text | When you verify an address in **Settings**, or when you choose **Email** on **Forgot password** | To deliver the code. The relay does not store the address beyond rate limiting, and it does not pass the address to the developer |
 | **Your own Levix server** (the instance running on this phone, reached at `http://127.0.0.1:3001` — never the developer, never an AI provider) | The one image, GIF or video you picked in Sticker Studio or the Media Hub, as a single upload | Only when you choose it in Sticker Studio or tap **Make sticker** / **Add to stickers** | Sticker Studio works server-side, so it has to receive the file you chose |
 
-Apart from feedback you deliberately send, the developer of Levix is **not** a
-recipient of any of the above. The AI provider's use of the content you send it
-is governed by that provider's own privacy policy.
+Apart from feedback and crash reports you deliberately send, the developer of
+Levix is **not** a recipient of any of the above. The recovery-email relay
+receives only the address, the code, and the language, and it does not store
+the address beyond rate limiting. The AI provider's use of the content you send
+it is governed by that provider's own privacy policy.
 
 ### 2a. Optional feedback diagnostics and crash reports
 
@@ -122,17 +135,18 @@ random, generated per report, and mean nothing outside that one report.
 
 **Feedback diagnostics** — optional, with its own checkbox on the feedback
 form. When you tick **Attach device & technical diagnostics**, the panel sends
-exactly the object below, after the server has validated and trimmed it. The
-panel shows this same list — field and value — under **See exactly what is
-sent** before you press Send, so what you see is what is sent.
+exactly the object below, after the server has validated and trimmed it, plus
+the technical debug log in section 2b. The panel shows this same list — field
+and value — and the log under **See exactly what is sent** before you press
+Send, so what you see is what is sent.
 
 | Field | Example | Source |
 | --- | --- | --- |
 | `schema` | `1` | the server, always |
-| `levix` | `4.8.0` | the server, always |
+| `levix` | `4.9.0` | the server, always |
 | `node` | `v24.19.0` | the server, always |
 | `platform` | `android` / `docker` / `node-linux` / `sea-linux` | the server, always |
-| `nativeApp` | `4.8.0 (66)` | the Android app |
+| `nativeApp` | `4.9.0 (67)` | the Android app |
 | `android` | `15 (API 35)` | the Android app |
 | `device` | `samsung SM-A556E` | the Android app |
 | `abi` | `arm64-v8a` | the Android app |
@@ -148,7 +162,9 @@ Unknown values are the string `unknown`. A standalone browser has no Android
 fields at all; they are simply not sent. Unticking the box means the request
 carries no diagnostics key. It never contains your phone number, IMEI, Android
 ID, advertising ID, IP address, location, Wi-Fi SSID, contacts, chat or message
-text, JIDs, API keys, tokens, passwords or logs.
+text, JIDs, API keys, tokens or passwords. The one extra thing that accompanies
+a ticked box is the sanitized technical debug log described in section 2b,
+when the preview that froze it is still valid.
 
 **Crash reports** — optional, one Send per report. A crash report is written
 locally when the Node server dies on a fatal error, when the Android app
@@ -173,7 +189,38 @@ a URL keeps only its scheme and host, a 24+ character key-like run becomes
 `<data>` / `~`.
 No phone number, IMEI, Android ID, advertising ID, IP address, location,
 Wi-Fi SSID, contacts, chat or message bodies, JIDs, screenshots, API keys,
-tokens, passwords or full logs are ever included.
+tokens or passwords are ever included. A Send carries the sanitized
+technical debug log the preview froze (section 2b). The report's preview shows
+that exact upload — log included — before you press Send. A missing or expired
+preview sends the report with no debug log.
+
+### 2b. Technical debug log
+
+Levix keeps an internal, detailed debug log on the device to make a problem
+diagnosable. It is one JSON-lines file per day in the app's private storage
+(`logs/debug/`). Both previews in the panel show it under its own collapsed
+heading before anything is sent.
+
+**What it records:** the application's own operational events — connection and
+session transitions, scheduled work, HTTP route activity, errors and stack
+frames, with timestamps and levels. **What it never records:** message content,
+media, WhatsApp JIDs, phone numbers, e-mail addresses, API keys, tokens,
+passwords, cookies, session values or paths that name your install or home
+directory. Every record is rebuilt before it is written: a secret-shaped field
+name keeps only `[redacted]`, a message-content field keeps only its length (for
+example `[redacted 42 chars]`), and every other string is scrubbed with the same
+rules as a crash report (`<jid>`, `<email>`, `<number>`, `<secret>`, `<data>`,
+`~`) and capped at 2000 characters. A day's file stops at 5 MB.
+
+**Retention and deletion:** the device keeps 14 days, then the file is deleted
+automatically. **Clear logs** in the panel deletes the debug log together with
+the normal logs.
+
+**When it leaves the device:** only in the two situations you start — feedback
+sent with **Attach device & technical diagnostics** ticked, or a crash report
+you press Send on. It is never sent on its own. The preview freezes the exact
+string for 15 minutes. Send attaches that frozen copy. A missing or expired
+preview attaches no debug log, never a newer one written after the preview.
 
 ## 3. Permissions the Android app requests
 
@@ -229,7 +276,11 @@ requested. The in-app WebView loads only the local control panel
 - **Long-term memory** — `!memory forget` / `!memory clear`, or from the panel.
 - **Unlink WhatsApp** (Connection → Unlink) — clears the WhatsApp credentials,
   roles, AI history, long-term memory and buffered context, and pauses the old
-  account's schedules.
+  account's schedules. The panel password and the recovery email are panel
+  security, not WhatsApp data, and stay in place.
+- **Recovery email** — removed from the device with **Remove** in **Settings**.
+  It is sealed locally. The mail relay does not keep the address beyond rate
+  limiting. `levix reset-password` does not remove it either.
 - **Uninstall the app** — removes everything; there is no server-side copy of
   any of your data to survive deletion.
 - **Feedback you chose to send** — it is a message in the developer's inbox, not
@@ -254,6 +305,8 @@ requested. The in-app WebView loads only the local control panel
   install-local key; the panel only ever reports whether a key is configured,
   never its value.
 - The panel password is stored as a scrypt hash; login is throttled.
+- The recovery email is sealed at rest with the same install key. The panel
+  and the login page show only a mask, never the address.
 - Provider base URLs are validated on save and on use: public endpoints must
   be HTTPS, and private/reserved/metadata addresses are rejected (explicit
   loopback is allowed for local Ollama/LM Studio servers).
@@ -290,7 +343,9 @@ Google Play.
 **Q: Do you provide a way for users to request that their data is deleted?**
 → **No**. Levix has no developer-operated account or cloud copy to delete.
 Users can still delete locally stored data with the in-app controls described
-in section 4, unlink WhatsApp, or uninstall the app. Feedback a user chose to
+in section 4, unlink WhatsApp, or uninstall the app. Remove in Settings deletes
+the recovery email from the device; the relay does not keep the address beyond
+rate limiting. Feedback a user chose to
 send is the one thing the developer holds; crash reports a user chose to send
 are held for at most 30 days and then deleted. Both are deleted on request
 through the contact in section 9.
@@ -303,7 +358,7 @@ Declare these data types:
 | Personal info → **User IDs / personal identifiers** | Yes | No | Required | App functionality |
 | Personal info → **Phone number** | Yes | No | Required | App functionality |
 | Messages → **Other in-app messages** | Yes | No | Optional | App functionality, Customer support |
-| Personal info → **Email address** | Yes | No | Optional | Customer support |
+| Personal info → **Email address** | Yes | No | Optional | App functionality, Customer support |
 | Photos and videos → **Photos** | Yes | No | Optional | App functionality, Customer support |
 | Photos and videos → **Videos** | Yes | No | Optional | App functionality, Customer support |
 | Audio files → **Voice or sound recordings** | Yes | No | Optional | App functionality |
@@ -324,18 +379,24 @@ For every data type above:
   messages), the contact you may optionally leave (Personal info → Email
   address), and the one file you may optionally attach (Photos, Videos, Other
   audio files, Files and docs). The contact and the file are optional, and
-  nothing is sent until you press Send. The **Crash logs** and **Diagnostics**
+  nothing is sent until you press Send. The same Email address row also covers
+  the recovery address, which is **App functionality**: it leaves the device
+  only when you verify it or request a reset code. The **Crash logs** and **Diagnostics**
   rows are likewise optional and user-initiated: a crash report leaves only when
   you press Send on it, and the feedback diagnostics leave only when you tick
   their checkbox. Their purpose is **Analytics** in Google Play's sense —
   grouping and fixing crashes and faults.
-- **Sharing purpose:** none, because the form and the crash report are declared
-  as collected rather than shared under Google Play's applicable
-  user-initiated/service-provider handling rules.
+- **Sharing purpose:** none, because the form, the crash report, and the
+  recovery-email relay are declared as collected rather than shared under
+  Google Play's applicable user-initiated/service-provider handling rules.
 
-The **Email address** declaration covers only the optional contact field in the
-feedback form — it is never read from the device, and the field can be left
-empty.
+The **Email address** declaration covers the optional contact field in the
+feedback form and, when you choose it, the recovery address you type in
+Settings for panel-password reset. Neither is read from the device. The
+feedback contact can be left empty. The recovery address is stored sealed on
+the device and is sent to the Levix mail relay only when you verify it or
+request a reset code. The relay does not store it beyond rate limiting. Under
+Google Play's user-initiated handling this stays **collected**, not shared.
 
 The **Contacts** declaration does not mean Levix requests Android's Contacts
 permission. It covers WhatsApp participant identifiers (for example mentioned

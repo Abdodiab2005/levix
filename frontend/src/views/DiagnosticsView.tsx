@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, ChevronDown, FileText, Send, Trash2 } from
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
+import { DebugLogPreview } from "../components/DebugLogPreview";
 import { useToast } from "../components/Toasts";
 import {
   Badge,
@@ -52,10 +53,10 @@ export const DiagnosticsView: React.FC = () => {
     loadReports();
   }, [loadReports]);
 
-  const handleSend = async (id: string) => {
+  const handleSend = async (id: string, debugLogId?: string) => {
     setSendingId(id);
     try {
-      await api.sendCrashReport(id);
+      await api.sendCrashReport(id, debugLogId);
       toast(t("reportSentSuccess"), "success");
       await loadReports();
     } catch (err: any) {
@@ -143,7 +144,13 @@ export const DiagnosticsView: React.FC = () => {
           ) : (
             <div className="flex flex-col gap-3">
               {reports.map((report) => {
-                const { status: _status, lastError: _lastError, ...previewObj } = report;
+                const {
+                  status: _status,
+                  lastError: _lastError,
+                  debugLog,
+                  debugLogId,
+                  ...previewObj
+                } = report;
                 return (
                   <div
                     key={report.id}
@@ -163,7 +170,7 @@ export const DiagnosticsView: React.FC = () => {
                           size="sm"
                           loading={sendingId === report.id}
                           disabled={sendingId !== null}
-                          onClick={() => handleSend(report.id)}
+                          onClick={() => handleSend(report.id, debugLogId)}
                           icon={<Send size={14} />}
                         >
                           {sendingId === report.id ? t("sendingReport") : t("sendReport")}
@@ -207,6 +214,9 @@ export const DiagnosticsView: React.FC = () => {
                         >
                           {JSON.stringify(previewObj, null, 2)}
                         </pre>
+                        <div className="mt-2">
+                          <DebugLogPreview debugLog={debugLog} />
+                        </div>
                       </div>
                     </details>
                   </div>

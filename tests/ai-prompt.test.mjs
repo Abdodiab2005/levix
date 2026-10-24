@@ -57,7 +57,6 @@ for (const [what, pattern] of [
   ["concise by default", /concise/i],
   ["expanding when asked", /expand/i],
   ["matching the user's language", /language the (person|user) writes in/i],
-  ["Egyptian Arabic specifically", /Egyptian Arabic/],
   [
     "WhatsApp formatting, not web Markdown",
     /WhatsApp[\s\S]{0,200}Markdown|Markdown[\s\S]{0,200}WhatsApp/,
@@ -79,6 +78,14 @@ for (const [what, pattern] of [
 ]) {
   ok(`it covers ${what}`, pattern.test(templateBody), pattern.source.slice(0, 60));
 }
+
+// The dialect and language rules are code-owned (botLangDirective()) so a
+// persona edit cannot change them; the template therefore stays neutral about
+// languages and dialects entirely.
+ok(
+  "the persona template stays language-neutral",
+  !/Egyptian|Arabic/.test(template),
+);
 
 section("…and it carries none of the developer metadata");
 
@@ -153,6 +160,34 @@ for (const [what, pattern] of [
   ],
 ]) {
   ok(`the identity block covers ${what}`, pattern.test(instruction));
+}
+
+// The dialect rules are hard-coded in botLangDirective(), never in the
+// persona: auto and ar both pin Egyptian-in/Egyptian-out, and no edit of the
+// operator's file can drop them.
+ok(
+  "auto mode keeps Egyptian dialect replies in the code-owned block",
+  /Egyptian Arabic gets natural Egyptian Arabic back/.test(instruction),
+);
+{
+  const settings = require("./src/config/settings.cjs");
+  const previous = settings.get("bot_language");
+  try {
+    settings.set("bot_language", "ar");
+    const arInstruction = aiAgent.buildSystemInstruction({ chatId: "1@s.whatsapp.net" });
+    ok("ar mode always answers in Arabic", arInstruction.includes("Always reply in Arabic"));
+    ok(
+      "ar mode keeps Egyptian dialect replies in the code-owned block",
+      /Egyptian Arabic gets natural Egyptian Arabic back/.test(arInstruction),
+    );
+    ok(
+      "the dialect rules are never forced back to Modern Standard Arabic",
+      !instruction.includes("Modern Standard Arabic") &&
+        !arInstruction.includes("Modern Standard Arabic"),
+    );
+  } finally {
+    settings.set("bot_language", previous || "auto");
+  }
 }
 
 section("the operator cannot edit the identity away");

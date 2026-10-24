@@ -16,6 +16,7 @@ const path = require("node:path");
 const { dataPath } = require("../config/paths.cjs");
 const { sanitizeText } = require("./sanitize.cjs");
 const { sanitizeClientFields } = require("./device.cjs");
+const { readDebugTail, readDebugSnapshot, storeDebugSnapshot } = require("./debugLog.cjs");
 
 const CRASH_DIR = dataPath("crash-reports");
 const SENT_FILE = path.join(CRASH_DIR, "sent.json");
@@ -346,8 +347,10 @@ function createReport(input = {}) {
 }
 
 /**
- * The exact object that would be sent: no local-only keys, re-sanitized. This
- * is also what GET /crash-reports previews (with status/lastError added back).
+ * The report part of the object that would be sent: no local-only keys,
+ * re-sanitized. `forwardReport()` adds the technical debug log beside it.
+ * This is also what GET /crash-reports previews (with status/lastError added
+ * back).
  */
 function uploadObject(report) {
   const errorInput = report?.error && typeof report.error === "object" ? report.error : {};
@@ -374,12 +377,31 @@ function endpoint() {
   return process.env.LEVIX_CRASH_REPORT_URL || DEFAULT_ENDPOINT;
 }
 
+/** The debug tail, or "" when it cannot be read. Never fails a send. */
+function safeDebugLog() {
+  try {
+    return readDebugTail();
+  } catch {
+    return "";
+  }
+}
+
 /**
- * Forward one report. Never retried here; the caller decides. Resolves with
- * `{ ok: true }` or `{ ok: false, status, error }`.
+ * The upload object plus a debug log only when the caller already has the
+ * exact string. A missing string omits the key — send must not invent one.
  */
-async function forwardReport(report) {
-  const payload = uploadObject(report);
+function uploadWithDebugLog(report, debugLog) {
+  if (typeof debugLog !== "string") return uploadObject(report);
+  return { ...uploadObject(report), debugLog };
+}
+
+/**
+ * Forward one report. Never retried here; the caller decides. `debugLogId` is
+ * the snapshot `list()` returned. Missing or expired attaches no debug log.
+ * Resolves with `{ ok: true }` or `{ ok: false, status, error }`.
+ */
+async function forwardReport(report, debugLogId) {
+  const payload = uploadWithDebugLog(report, readDebugSnapshot(debugLogId));
   const runtime = runtimeFacts();
   let response;
   let data = null;
@@ -414,11 +436,11 @@ async function forwardReport(report) {
 }
 
 /** Send one stored report. Success deletes it and records the send. */
-async function sendReport(id) {
+async function sendReport(id, debugLogId) {
   const report = readReport(id);
   if (!report) return { ok: false, status: 404, error: "Crash report not found" };
 
-  const result = await forwardReport(report);
+  const result = await forwardReport(report, debugLogId);
   if (result.ok) {
     deleteReport(report.id);
     recordSent({
@@ -440,8 +462,12 @@ async function sendReport(id) {
 
 /** What GET /crash-reports returns: previews plus the send history. */
 function list() {
+  // One frozen tail for every report in this response. Send redeems the id.
+  const debugLog = safeDebugLog();
+  const debugLogId = storeDebugSnapshot(debugLog);
   const reports = listReports().map((report) => ({
-    ...uploadObject(report),
+    ...uploadWithDebugLog(report, debugLog),
+    debugLogId,
     status: report.status || "pending",
     lastError: report.lastError ?? null,
   }));

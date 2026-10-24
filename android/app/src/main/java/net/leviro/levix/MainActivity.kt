@@ -10,9 +10,12 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.ScrollView
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -26,7 +29,7 @@ import androidx.lifecycle.Lifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import net.leviro.levix.media.MediaHubActivity
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), CoachMarkOverlay.Host {
     private val uiHandler = Handler(Looper.getMainLooper())
 
     // Header preferences share the app theme and locale.
@@ -66,6 +69,16 @@ class MainActivity : AppCompatActivity() {
     private var unsubscribe: (() -> Unit)? = null
     private val timeout = Runnable { render(HostState.snapshot) }
 
+    // The home tour. Null means it is not on screen; the step it is on is
+    // carried in saved state so a rotation or a theme change does not restart
+    // the tour from the first stop.
+    private var coachMarks: CoachMarkOverlay? = null
+    private val coachBack = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            coachMarks?.goBack()
+        }
+    }
+
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -82,7 +95,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (savedInstanceState == null && maybeShowOnboarding(intent)) return
         // Edge-to-edge on every Android version, not only the 15+ that force
         // it; the root pads itself from the insets below.
         enableEdgeToEdge(
@@ -90,6 +102,7 @@ class MainActivity : AppCompatActivity() {
             navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
         )
         setContentView(R.layout.activity_main)
+        onBackPressedDispatcher.addCallback(this, coachBack)
 
         val root = findViewById<View>(R.id.rootScrollView)
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, windowInsets ->
@@ -118,7 +131,7 @@ class MainActivity : AppCompatActivity() {
             UiPrefs.set(this, UiPrefs.language(this), next, "theme")
         }
         findViewById<View>(R.id.cardShowGuide).setOnClickListener {
-            OnboardingActivity.showAgain(this)
+            startCoachMarks(0)
         }
 
         heroSubtitleText = findViewById(R.id.heroSubtitleText)
@@ -166,6 +179,7 @@ class MainActivity : AppCompatActivity() {
 
         render(HostState.snapshot)
         maybeOpenPanel(intent)
+        restoreCoachMarks(savedInstanceState)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -175,13 +189,26 @@ class MainActivity : AppCompatActivity() {
         maybeOpenPanel(intent)
     }
 
+    /**
+     * First launch opens the tour over the real home screen. A rotation or a
+     * theme change restores the stop it was on instead of starting over.
+     */
+    private fun restoreCoachMarks(savedState: Bundle?) {
+        if (savedState != null) {
+            if (savedState.getBoolean(STATE_COACH_ACTIVE, false)) {
+                startCoachMarks(savedState.getInt(STATE_COACH_TARGET, 0))
+            }
+            return
+        }
+        maybeShowOnboarding(intent)
+    }
+
     private fun maybeShowOnboarding(intent: Intent?): Boolean {
         if (!OnboardingGate.shouldShow(intent?.action,
                 intent?.hasCategory(Intent.CATEGORY_LAUNCHER) == true,
                 intent?.getBooleanExtra(EXTRA_OPEN_PANEL, false) == true,
-                OnboardingActivity.completed(this))) return false
-        startActivity(Intent(this, OnboardingActivity::class.java))
-        finish()
+                OnboardingGate.completed(this))) return false
+        startCoachMarks(0)
         return true
     }
 
@@ -214,8 +241,79 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    // ---- Home tour ---------------------------------------------------------
+
+    /**
+     * Puts the coach-mark overlay on top of the content view. Everything it
+     * describes is the real control, so it is added after the screen is bound
+     * and laid out; [target] is the stop to resume on, 0 to start at the top.
+     */
+    private fun startCoachMarks(target: Int) {
+        if (isFinishing || isDestroyed || coachMarks != null) return
+        val content = findViewById<ViewGroup>(android.R.id.content) ?: return
+        val overlay = CoachMarkOverlay(this)
+        coachMarks = overlay
+        coachBack.isEnabled = true
+        // The tour is modal: assistive technology should read the card, not the
+        // page sitting under the scrim.
+        ViewCompat.setImportantForAccessibility(
+            findViewById(R.id.rootScrollView),
+            View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS,
+        )
+        content.addView(
+            overlay,
+            ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
+        overlay.start(this, target)
+    }
+
+    override fun coachTarget(targetId: Int): View? = findViewById<View>(targetId)
+
+    /** Scrolls the home screen so the ring sits just below the status bar. */
+    override fun coachReveal(target: View) {
+        val scroll = findViewById<ScrollView>(R.id.rootScrollView)
+        if (target !== scroll && !isDescendantOf(target, scroll)) return
+        // Work from window positions rather than the scroll offset alone, so a
+        // target inside nested padding still lands where it is measured.
+        val targetLocation = IntArray(2)
+        target.getLocationInWindow(targetLocation)
+        val scrollLocation = IntArray(2)
+        scroll.getLocationInWindow(scrollLocation)
+        val contentTop = targetLocation[1] - scrollLocation[1] + scroll.scrollY
+        val breathing = (16 * resources.displayMetrics.density).toInt()
+        val max = ((scroll.getChildAt(0)?.height ?: 0) +
+            scroll.paddingTop + scroll.paddingBottom - scroll.height).coerceAtLeast(0)
+        scroll.scrollTo(0, (contentTop - scroll.paddingTop - breathing).coerceIn(0, max))
+    }
+
+    override fun coachFinished(completed: Boolean) {
+        val overlay = coachMarks ?: return
+        coachMarks = null
+        coachBack.isEnabled = false
+        (overlay.parent as? ViewGroup)?.removeView(overlay)
+        ViewCompat.setImportantForAccessibility(
+            findViewById(R.id.rootScrollView),
+            View.IMPORTANT_FOR_ACCESSIBILITY_AUTO,
+        )
+        if (completed) OnboardingGate.markCompleted(this)
+    }
+
+    private fun isDescendantOf(target: View, container: View): Boolean {
+        var parent = target.parent
+        while (parent != null) {
+            if (parent === container) return true
+            parent = (parent as? View)?.parent
+        }
+        return false
+    }
+
     override fun onResume() {
         super.onResume()
+        // render() also re-locates an active coach mark, because the host may
+        // have changed which controls are on screen while it was paused.
         render(HostState.snapshot)
     }
 
@@ -237,6 +335,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putLong("requestedAt", requestedAt)
+        outState.putBoolean(STATE_COACH_ACTIVE, coachMarks != null)
+        outState.putInt(STATE_COACH_TARGET, coachMarks?.currentTarget() ?: 0)
         super.onSaveInstanceState(outState)
     }
 
@@ -291,6 +391,7 @@ class MainActivity : AppCompatActivity() {
         // 5. Battery Guard
         renderBatteryCard()
         maybePromptForCrash(snapshot)
+        coachMarks?.refresh()
     }
 
     private fun maybePromptForCrash(snapshot: HostState.Snapshot) {
@@ -438,6 +539,9 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_OPEN_PANEL = "openPanel"
+
+        private const val STATE_COACH_ACTIVE = "coachActive"
+        private const val STATE_COACH_TARGET = "coachTarget"
 
         private var crashPromptShown = false
     }

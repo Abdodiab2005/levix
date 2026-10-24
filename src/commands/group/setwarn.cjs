@@ -1,6 +1,7 @@
 // file: /commands/group/setwarn.js
-const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs");
+const { normalizeWarnAction } = require("../../utils/moderationSummary.cjs");
 const { tr } = require("../../utils/i18n.cjs");
+const { applyModerationPolicy } = require("../../services/moderationPolicy.cjs");
 
 module.exports = {
   name: "setwarn",
@@ -9,8 +10,8 @@ module.exports = {
     ar: "يضبط نظام التحذيرات التلقائي.",
   },
   usage: {
-    en: "setwarn max <count>\nsetwarn action <KICK|NONE>",
-    ar: "setwarn max <عدد>\nsetwarn action <KICK|NONE>",
+    en: "setwarn max <count>\nsetwarn action <KICK|FLAG>",
+    ar: "setwarn max <عدد>\nsetwarn action <KICK|FLAG>",
   },
   chat: "group",
   userAdminRequired: true,
@@ -20,57 +21,46 @@ module.exports = {
     const subCommand = args[0]?.toLowerCase();
     const value = args[1];
 
-    const settings = getGroupSettings(groupId);
-    if (!settings.warn_system) {
-      settings.warn_system = { max_warnings: 3, action: "NONE" };
-    }
-
-    const warnConfig = settings.warn_system;
-
     switch (subCommand) {
       case "max": {
         const max = parseInt(value, 10);
-        if (isNaN(max) || max < 1) {
+        if (!Number.isInteger(max) || max < 1 || max > 50) {
           return await sock.sendMessage(groupId, {
             text: tr(
-              "Give a valid whole number for the warning limit.",
-              "يرجى تحديد عدد صحيح وصالح للحد الأقصى للتحذيرات.",
+              "Give a whole number from 1 to 50 for the warning limit.",
+              "يرجى تحديد عدد صحيح من 1 إلى 50 للحد الأقصى للتحذيرات.",
             ),
           });
         }
-        warnConfig.max_warnings = max;
-        await sock.sendMessage(groupId, {
+        applyModerationPolicy(groupId, { limit: max });
+        return await sock.sendMessage(groupId, {
           text: tr(`✅ The warning limit is now ${max}.`, `✅ تم تعيين الحد الأقصى للتحذيرات إلى ${max}.`),
         });
-        break;
       }
 
       case "action": {
-        const action = value?.toUpperCase();
-        if (action !== "KICK" && action !== "NONE") {
+        const action = normalizeWarnAction(value);
+        if (!action) {
           return await sock.sendMessage(groupId, {
             text: tr(
-              "Invalid action. Available: `KICK`, `NONE`",
-              "الإجراء غير صالح. الإجراءات المتاحة: `KICK`, `NONE`",
+              "Invalid action. Available: `KICK`, `FLAG`",
+              "الإجراء غير صالح. الإجراءات المتاحة: `KICK`, `FLAG`",
             ),
           });
         }
-        warnConfig.action = action;
-        await sock.sendMessage(groupId, {
+        applyModerationPolicy(groupId, { limitAction: action });
+        return await sock.sendMessage(groupId, {
           text: tr(`✅ The automatic action is now ${action}.`, `✅ تم تعيين الإجراء التلقائي إلى ${action}.`),
         });
-        break;
       }
 
       default:
         return await sock.sendMessage(groupId, {
           text: tr(
-            "Wrong format. Use:\n`!setwarn max <number>`\n`!setwarn action <KICK|NONE>`",
-            "صيغة غير صحيحة. استخدم:\n`!setwarn max <number>`\n`!setwarn action <KICK|NONE>`",
+            "Wrong format. Use:\n`!setwarn max <number>`\n`!setwarn action <KICK|FLAG>`",
+            "صيغة غير صحيحة. استخدم:\n`!setwarn max <number>`\n`!setwarn action <KICK|FLAG>`",
           ),
         });
     }
-
-    saveGroupSettings(groupId, settings);
   },
 };

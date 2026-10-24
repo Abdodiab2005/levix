@@ -1,19 +1,24 @@
 // file: frontend/src/components/Header.tsx
 
-import { Globe, Menu as MenuIcon, Moon, Sun } from "lucide-react";
+import { CircleHelp, Globe, Menu as MenuIcon, Moon, Sun } from "lucide-react";
 import type { FC } from "react";
 import { useI18n } from "../context/I18nContext";
 import type { SessionStatus } from "../types";
+import { useGuidedTour } from "./GuidedTour";
+import type { ViewTab } from "./Sidebar";
 import { IconButton, Menu, MenuItem, MenuLabel } from "./ui";
 
 interface HeaderProps {
   onToggleMobileMenu: () => void;
   title: string;
+  /** The active screen, for the "guide for this screen" action. */
+  view: ViewTab;
   status: SessionStatus | null;
 }
 
-export const Header: FC<HeaderProps> = ({ onToggleMobileMenu, title, status: _status }) => {
+export const Header: FC<HeaderProps> = ({ onToggleMobileMenu, title, view, status: _status }) => {
   const { language, setLanguage, theme, setTheme, t } = useI18n();
+  const guided = useGuidedTour();
 
   const handleThemeToggle = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -38,6 +43,14 @@ export const Header: FC<HeaderProps> = ({ onToggleMobileMenu, title, status: _st
       </div>
 
       <div className="flex items-center gap-2 md:gap-3">
+        {guided?.hasScreenSteps(view) && (
+          <IconButton
+            id="btn-header-guide"
+            label={t("tourScreenHelp")}
+            icon={<CircleHelp size={18} className="text-brand-cyan" />}
+            onClick={() => guided.startScreenTour(view)}
+          />
+        )}
         <Menu
           label={t("chooseLanguage")}
           trigger={

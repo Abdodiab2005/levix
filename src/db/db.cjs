@@ -619,6 +619,59 @@ const MIGRATIONS = [
       CREATE INDEX idx_auto_delete_log_rule ON auto_delete_log (rule_id, created_at);
     `);
   },
+  // v9 — members who hit the warn limit under FLAG (or KICK when the bot
+  // is not a group admin). Explicit stored NONE becomes FLAG; a missing
+  // warn_system.action stays missing (default KICK).
+  (database) => {
+    database.exec(`
+      CREATE TABLE moderation_flags (
+        group_id   TEXT NOT NULL,
+        user_id    TEXT NOT NULL,
+        warn_count INTEGER NOT NULL DEFAULT 0,
+        last_rule  TEXT,
+        flagged_at INTEGER NOT NULL,
+        reasons    TEXT NOT NULL DEFAULT '[]',
+        PRIMARY KEY (group_id, user_id)
+      );
+      CREATE INDEX idx_moderation_flags_group ON moderation_flags (group_id, flagged_at);
+    `);
+    const rows = database.prepare("SELECT group_id, settings FROM group_settings").all();
+    const update = database.prepare("UPDATE group_settings SET settings = ? WHERE group_id = ?");
+    for (const row of rows) {
+      let settings;
+      try {
+        settings = JSON.parse(row.settings);
+      } catch {
+        continue;
+      }
+      if (!settings || typeof settings !== "object") continue;
+      const action = String(settings.warn_system?.action || "").trim().toUpperCase();
+      if (action !== "NONE") continue;
+      settings.warn_system.action = "FLAG";
+      update.run(JSON.stringify(settings), row.group_id);
+    }
+  },
+  // v10 — one applied row per moderated message, plus flag cooldown and
+  // repeat-point columns. Group JSON is not rewritten; old warn limits keep
+  // working through resolveModerationPolicy.
+  (database) => {
+    database.exec(`
+      CREATE TABLE moderation_applied (
+        group_id    TEXT NOT NULL,
+        message_id  TEXT NOT NULL,
+        outcome     TEXT NOT NULL,
+        kicked      INTEGER NOT NULL DEFAULT 0,
+        notified    INTEGER NOT NULL DEFAULT 0,
+        applied_at  INTEGER NOT NULL,
+        PRIMARY KEY (group_id, message_id)
+      );
+      CREATE INDEX idx_moderation_applied_at ON moderation_applied (applied_at);
+
+      ALTER TABLE moderation_flags ADD COLUMN last_notified_at INTEGER;
+      ALTER TABLE moderation_flags ADD COLUMN repeat_points INTEGER NOT NULL DEFAULT 0;
+      UPDATE moderation_flags SET last_notified_at = flagged_at WHERE last_notified_at IS NULL;
+    `);
+  },
 ];
 
 function migrate(database, migrations = MIGRATIONS) {
@@ -705,6 +758,19 @@ function sweepExpired() {
     ).run();
   } catch (err) {
     logger.error({ err }, "[DB] auto-delete log sweep failed");
+  }
+  try {
+    // The sanitized technical debug log keeps 14 days on the device.
+    require("../diagnostics/debugLog.cjs").sweepDebugLogs();
+  } catch (err) {
+    logger.error({ err }, "[DB] debug log sweep failed");
+  }
+  try {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const { changes } = q("DELETE FROM moderation_applied WHERE applied_at < ?").run(cutoff);
+    if (changes) logger.debug(`[DB] Swept ${changes} expired moderation claim(s)`);
+  } catch (err) {
+    logger.error({ err }, "[DB] moderation claim sweep failed");
   }
 }
 

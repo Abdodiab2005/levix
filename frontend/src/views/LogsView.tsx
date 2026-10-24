@@ -108,12 +108,8 @@ export const LogsView: React.FC = () => {
   const filtered = logs.filter((l) => (filter === "all" ? true : l.level === filter));
   const displayCount = source === "bot" ? filtered.length : hostLines.length;
 
-  const levelClass = (level: string) =>
-    level === "error"
-      ? "border-danger/30 bg-danger/10 text-danger"
-      : level === "warn"
-        ? "border-warn/30 bg-warn/10 text-warn"
-        : "border-info/30 bg-info/10 text-info";
+  const levelTone = (level: string) =>
+    level === "error" ? "danger" : level === "warn" ? "warn" : "info";
 
   return (
     <div className="flex flex-col gap-5">
@@ -216,6 +212,7 @@ export const LogsView: React.FC = () => {
         padded={false}
         className="h-[65vh] overflow-y-auto bg-bg p-4 font-mono text-xs leading-relaxed text-muted shadow-2xl md:p-5"
         dir="ltr"
+        data-tour="logs-stream"
       >
         {source === "bot" ? (
           filtered.length === 0 ? (
@@ -223,19 +220,21 @@ export const LogsView: React.FC = () => {
           ) : (
             <div className="flex flex-col gap-1.5">
               {filtered.map((l, i) => (
-                <div
-                  key={i}
-                  className="flex items-baseline gap-2.5 rounded px-1 py-0.5 hover:bg-panel-hover/40"
-                >
-                  <span className="shrink-0 select-none text-[11px] text-faint">
-                    {l.time || new Date().toLocaleTimeString()}
+                <div key={i} className="rounded px-1 py-0.5 hover:bg-panel-hover/40">
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 select-none text-[11px] text-faint">
+                      {l.time || new Date().toLocaleTimeString()}
+                    </span>
+                    <Badge
+                      tone={levelTone(l.level || "info")}
+                      className="px-1.5 py-px font-mono text-[10px]"
+                    >
+                      {(l.level || "info").toUpperCase()}
+                    </Badge>
+                  </div>
+                  <span className="whitespace-pre-wrap break-words font-mono text-text-main [overflow-wrap:anywhere]">
+                    {l.msg}
                   </span>
-                  <span
-                    className={`inline-flex shrink-0 items-center rounded border px-1.5 font-mono text-[10px] font-bold ${levelClass(l.level || "info")}`}
-                  >
-                    {(l.level || "info").toUpperCase()}
-                  </span>
-                  <span className="break-all font-mono text-text-main">{l.msg}</span>
                 </div>
               ))}
             </div>

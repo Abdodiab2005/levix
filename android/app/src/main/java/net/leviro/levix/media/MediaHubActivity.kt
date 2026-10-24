@@ -41,6 +41,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.tabs.TabLayout
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -62,6 +63,7 @@ class MediaHubActivity : AppCompatActivity() {
     private lateinit var bannerOther: Button
 
     private var source: MediaSource? = null
+    private var scope = MediaScope.STATUSES
     private var category = "Statuses"
     private var filter = MediaFilter.ALL
     private var sort = MediaSort.NEWEST
@@ -134,6 +136,8 @@ class MediaHubActivity : AppCompatActivity() {
             insets
         }
         repo = MediaRepository(this)
+        scope = repo.scope()
+        normalizeCategory()
         model = ViewModelProvider(this)[MediaHubViewModel::class.java]
         gallery = findViewById(R.id.mediaList)
         banner = findViewById(R.id.mediaBanner)
@@ -158,6 +162,27 @@ class MediaHubActivity : AppCompatActivity() {
     private fun bindControls() {
         findViewById<View>(R.id.mediaBack).setOnClickListener { finish() }
         findViewById<View>(R.id.mediaInsights).setOnClickListener { showInsights() }
+        val scopes = findViewById<TabLayout>(R.id.mediaScope)
+        scopes.addTab(scopes.newTab().setText(R.string.media_scope_statuses))
+        scopes.addTab(scopes.newTab().setText(R.string.media_scope_all))
+        scopes.getTabAt(if (scope == MediaScope.ALL) 1 else 0)?.select()
+        scopes.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                val next = if (tab.position == 1) MediaScope.ALL else MediaScope.STATUSES
+                if (next == scope) return
+                scope = next
+                // "Statuses" and "All" only mean something inside their own
+                // segment, so the type filter moves with the segment instead
+                // of leaving an empty grid behind.
+                normalizeCategory()
+                repo.rememberScope(scope)
+                render()
+            }
+
+            override fun onTabUnselected(tab: TabLayout.Tab) = Unit
+
+            override fun onTabReselected(tab: TabLayout.Tab) = Unit
+        })
         findViewById<View>(R.id.mediaSource).setOnClickListener {
             val labels = sourceLabels()
             MaterialAlertDialogBuilder(this)
@@ -378,6 +403,15 @@ class MediaHubActivity : AppCompatActivity() {
         false
     }
 
+    /** A category that names a segment ("Statuses", "All") follows the segment. */
+    private fun normalizeCategory() {
+        category = when {
+            scope == MediaScope.ALL && category == "Statuses" -> "All"
+            scope == MediaScope.STATUSES && category == "All" -> "Statuses"
+            else -> category
+        }
+    }
+
     private fun render() {
         if (!::model.isInitialized) return
         val all = model.items.value
@@ -396,12 +430,11 @@ class MediaHubActivity : AppCompatActivity() {
         )
         describeChoice(R.id.mediaSort, R.string.media_sort, sortTitle(sort), sort != MediaSort.NEWEST)
         shown = MediaLogic.visible(
-            all, category, source, filter, sort, query, Instant.now(), ZoneId.systemDefault(),
+            all, category, scope, source, filter, sort, query, Instant.now(), ZoneId.systemDefault(),
         )
+        val visualOnly = shown.all { it.mediaType in setOf(MediaType.IMAGE, MediaType.VIDEO, MediaType.STICKER) }
         val grid = category in setOf("Statuses", "Images", "Videos", "Stickers") ||
-            category == "Saved" && shown.all {
-                it.mediaType in setOf(MediaType.IMAGE, MediaType.VIDEO, MediaType.STICKER)
-            }
+            category in setOf("All", "Saved") && visualOnly
         val span = if (grid) 3 else 1
         if ((gallery.layoutManager as? GridLayoutManager)?.spanCount != span) {
             gallery.layoutManager = GridLayoutManager(this, span)
@@ -452,7 +485,8 @@ class MediaHubActivity : AppCompatActivity() {
                 bannerOther.setText(R.string.media_settings)
                 bannerOther.setOnClickListener { settings() }
             }
-            category == "Statuses" || category == "Documents" -> showStatusBanner(all)
+            category == "Statuses" || category == "Documents" || scope == MediaScope.STATUSES ->
+                showStatusBanner(all)
             shown.isEmpty() && !model.loading.value -> {
                 bannerText.setText(
                     if (all.isEmpty() && !installed("com.whatsapp") && !installed("com.whatsapp.w4b")) {
@@ -475,9 +509,10 @@ class MediaHubActivity : AppCompatActivity() {
             listOf(source!!)
         }
         val revoked = targetSources.any { it in repo.brokenTrees }
+        val wantsStatuses = category == "Statuses" || scope == MediaScope.STATUSES
         val missing = !model.loading.value && all.none { item ->
             (source == null || item.source == source) &&
-                if (category == "Statuses") item.isStatus else item.mediaType == MediaType.DOCUMENT
+                if (wantsStatuses) item.isStatus else item.mediaType == MediaType.DOCUMENT
         }
         when {
             revoked -> bannerText.setText(R.string.media_access_removed)
@@ -795,11 +830,12 @@ class MediaHubActivity : AppCompatActivity() {
 
     private companion object {
         val CATEGORY_KEYS = listOf(
-            "Statuses", "Images", "Videos", "Voice notes", "Audio", "Documents", "Stickers", "Saved",
+            "All", "Statuses", "Images", "Videos", "Voice notes", "Audio", "Documents", "Stickers", "Saved",
         )
         val CATEGORY_LABELS = listOf(
-            R.string.media_statuses, R.string.media_images, R.string.media_videos, R.string.media_voice,
-            R.string.media_audio, R.string.media_documents, R.string.media_stickers, R.string.media_saved,
+            R.string.media_all, R.string.media_statuses, R.string.media_images, R.string.media_videos,
+            R.string.media_voice, R.string.media_audio, R.string.media_documents, R.string.media_stickers,
+            R.string.media_saved,
         )
         val FILTER_LABELS = listOf(
             R.string.media_all, R.string.media_today, R.string.media_yesterday, R.string.media_week,

@@ -1,13 +1,13 @@
 // file: /commands/clearwarns.js
-const { clearUserWarnings } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
+const { clearMemberModeration, targetFromCommand } = require("../../utils/moderationAction.cjs");
 const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "clearwarns",
   description: {
-    en: "Clears all of a member's warnings.",
-    ar: "يمسح كل تحذيرات عضو معيّن.",
+    en: "Clears all of a member's warnings and dismisses their flag.",
+    ar: "يمسح كل تحذيرات عضو معيّن ويلغي تعليمه للمراجعة.",
   },
   usage: {
     en: "clearwarns @member",
@@ -19,7 +19,8 @@ module.exports = {
   async execute(sock, msg) {
     try {
       const groupId = msg.key.remoteJid;
-      const mentionedJid = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
+      const target = targetFromCommand(msg);
+      const mentionedJid = target?.jid;
 
       if (!mentionedJid) {
         return await sock.sendMessage(groupId, {
@@ -30,8 +31,7 @@ module.exports = {
         });
       }
 
-      // Call the new function from storage.js to delete the record from the database
-      clearUserWarnings(groupId, mentionedJid);
+      clearMemberModeration(groupId, mentionedJid);
 
       const replyText = tr(
         `✅ Cleared every warning for @${mentionedJid.split("@")[0]}.`,

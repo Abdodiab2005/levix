@@ -9,6 +9,7 @@
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorSecondary">@color/levix_cyan</item>
         <item name="colorOnSecondary">@color/levix_bg</item>
+        <item name="coachMarkAccent">@color/levix_blue</item>
 
         <!-- System & Surfaces -->
         <item name="android:windowBackground">@color/levix_bg</item>

@@ -18,7 +18,8 @@ and include:
 - Clear reproduction steps or a proof of concept.
 - The security impact and the boundary you expected.
 - Relevant logs with passwords, setup codes, API keys, WhatsApp credentials,
-  phone numbers, and personal data removed.
+  phone numbers, recovery email addresses, one-time password-reset codes, and
+  personal data removed.
 
 Please allow time to reproduce and fix the issue before public disclosure. A
 report may be closed as not applicable when it only describes the known risks of
@@ -27,8 +28,8 @@ using an unofficial WhatsApp client.
 ## Sensitive data
 
 Never attach a Levix data directory, SQLite database, WhatsApp session, setup
-code, panel cookie, API key, private memory file, or unredacted log to a public
-issue.
+code, panel cookie, API key, recovery email address, one-time password-reset
+code, private memory file, or unredacted log to a public issue.
 
 ## WhatsApp protocol risk
 

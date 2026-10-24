@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "./api/client";
 import { CrashBanner } from "./components/CrashBanner";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { GuidedTourProvider } from "./components/GuidedTour";
 import { Header } from "./components/Header";
 import { Sidebar, type ViewTab } from "./components/Sidebar";
 import { ToastProvider, useToast } from "./components/Toasts";
@@ -158,6 +159,7 @@ const MainLayout: React.FC = () => {
         <Header
           onToggleMobileMenu={() => setMobileMenuOpen((prev) => !prev)}
           title={viewTitles[currentView] || "Dashboard"}
+          view={currentView}
           status={activeStatus}
         />
 
@@ -195,7 +197,9 @@ export const App: React.FC = () => {
   return (
     <I18nProvider>
       <ToastProvider>
-        <MainLayout />
+        <GuidedTourProvider>
+          <MainLayout />
+        </GuidedTourProvider>
       </ToastProvider>
     </I18nProvider>
   );

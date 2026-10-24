@@ -27,6 +27,7 @@ const { clientAddress, isDirectLocalRequest } = require("./src/utils/requestOrig
 const { blockedFor, recordFailure, clearAttempts } = require("./src/panel/login-throttle.cjs");
 const { isPanelSessionValid, stampPanelSession } = require("./src/panel/session-auth.cjs");
 const { requestResetCode, completeReset } = require("./src/panel/password-reset.cjs");
+const recoveryEmail = require("./src/panel/recovery-email.cjs");
 
 const SESSION_COOKIE_NAME = "wa.sid";
 const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000;
@@ -289,6 +290,24 @@ app.post("/setup", (req, res, next) => {
 
 // --- Routes ---------------------------------------------------------------
 
+// The login page lists reset channels. The email channel is the masked address
+// or nothing — never the address itself. A read failure still renders login.
+function loginPageLocals(error, errorCode) {
+  let masked = null;
+  try {
+    const status = recoveryEmail.publicStatus();
+    if (status.verified && status.masked) masked = status.masked;
+  } catch (readError) {
+    logger.warn({ err: readError }, "[recovery-email] Could not read the recovery address");
+  }
+  return {
+    error,
+    errorCode,
+    minLength: secrets.MIN_PASSWORD_LENGTH,
+    recoveryEmail: masked,
+  };
+}
+
 app.get("/", noStore, (req, res) => {
   if (!secrets.hasDashboardPassword()) return res.redirect("/setup");
   if (isPanelSessionValid(req.session)) {
@@ -306,21 +325,13 @@ app.get("/", noStore, (req, res) => {
     }
     return res.render("dashboard");
   }
-  return res.render("login", {
-    error: null,
-    errorCode: null,
-    minLength: secrets.MIN_PASSWORD_LENGTH,
-  });
+  return res.render("login", loginPageLocals(null, null));
 });
 
 app.get("/login", noStore, (req, res) => {
   if (!secrets.hasDashboardPassword()) return res.redirect("/setup");
   if (isPanelSessionValid(req.session)) return res.redirect("/");
-  return res.render("login", {
-    error: null,
-    errorCode: null,
-    minLength: secrets.MIN_PASSWORD_LENGTH,
-  });
+  return res.render("login", loginPageLocals(null, null));
 });
 
 app.post("/login", (req, res, next) => {
@@ -330,20 +341,19 @@ app.post("/login", (req, res, next) => {
   const retryAfter = blockedFor(peer);
   if (retryAfter) {
     res.set("Retry-After", String(retryAfter));
-    return res.status(429).render("login", {
-      error: "Too many attempts. Try again later.",
-      errorCode: "tooManyAttempts",
-      minLength: secrets.MIN_PASSWORD_LENGTH,
-    });
+    return res.status(429).render(
+      "login",
+      loginPageLocals("Too many attempts. Try again later.", "tooManyAttempts"),
+    );
   }
 
   if (!secrets.verifyDashboardPassword(req.body?.password)) {
     recordFailure(peer);
     logger.warn({ ip: peer }, "[dashboard] Failed login attempt");
     return res.status(401).render("login", {
+      ...loginPageLocals(null, null),
       error: "Incorrect Password",
       errorCode: "incorrectPassword",
-      minLength: secrets.MIN_PASSWORD_LENGTH,
     });
   }
 
@@ -360,20 +370,38 @@ app.post("/login", (req, res, next) => {
   });
 });
 
-// --- Password reset over WhatsApp -----------------------------------------
+// --- Password reset -------------------------------------------------------
 //
 // For the operator who forgot the panel password. The code goes to the linked
-// account's own WhatsApp chat; see src/panel/password-reset.cjs for why this
-// is the recovery path that fits Levix. The offline fallback is still
+// account's own WhatsApp chat, or to the verified recovery email through the
+// Levix relay. See src/panel/password-reset.cjs. The offline fallback is still
 // `levix reset-password` on the server.
+//
+// `channel` defaults to WhatsApp so an empty body keeps the original door.
+// The response never includes the address; the login page already showed the
+// mask to anyone who can see the channel list.
 
 app.post("/reset/request", async (req, res) => {
   if (!secrets.hasDashboardPassword()) {
     return res.status(400).json({ ok: false, reason: "no_password" });
   }
-  const result = await requestResetCode(clientAddress(req));
-  const status = { throttled: 429, no_session: 409, send_failed: 502 }[result.reason] ?? 200;
-  if (result.ok) res.set("Cache-Control", "no-store");
+  const body = req.body || {};
+  const result = await requestResetCode(clientAddress(req), {
+    channel: body.channel,
+    lang: body.lang,
+  });
+  const status = result.ok
+    ? 200
+    : {
+        throttled: 429,
+        no_session: 409,
+        send_failed: 502,
+        no_email: 409,
+        rate_limited: 429,
+        invalid: 400,
+        unavailable: 502,
+      }[result.reason] ?? 400;
+  res.set("Cache-Control", "no-store");
   return res.status(status).json(result);
 });
 

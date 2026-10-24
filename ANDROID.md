@@ -7,7 +7,7 @@ Levix for Android packages the complete Levix stack into a standalone Android AP
 - **SQLite** datastore powered by Node's built-in `node:sqlite`
 - **Baileys v7** WhatsApp protocol engine with local LID mapping
 - **AI Agent** with multi-provider support (Gemini, OpenAI, Anthropic)
-- **All 65 commands** & group moderation tools
+- **All 69 commands** & group moderation tools
 - **Embedded FFmpeg** for native WhatsApp voice notes (`!tts`) and video/image preview thumbnails
 - **Local Web Control Panel** accessible directly from the app's built-in WebView or your mobile browser (`http://127.0.0.1:3001`)
 
@@ -40,7 +40,7 @@ Levix for Android packages the complete Levix stack into a standalone Android AP
 ## First-Time Setup & WhatsApp Pairing
 
 ### Step 1: Grant Permissions & Start the Host
-1. Launch **Levix Host**. The first launch opens a short guide — five steps, each with a picture of the screen it is describing — and **Skip** leaves it at any point. **Show guide again** on the home screen brings it back.
+1. Launch **Levix Host**. The first launch runs a short guided tour over the home screen: it dims the page, highlights one real button at a time and explains it in a card. **Back**, **Next**, **Done** and **Skip** are on the card, so the tour never leaves you stuck. **Show guide again** on the home screen replays it.
 2. Tap the big circle (**Start Assistant**).
 3. When prompted, grant **Notification** permissions so the host can maintain an ongoing foreground service and keep the bot running while the screen is off.
 4. When prompted, tap **Allow** to disable battery optimization for Levix.
@@ -73,7 +73,7 @@ Because you are running the bot on a phone, scanning a QR code on the same scree
 - **Battery Guard** — appears below activation guidance. Restrictions show a warning and **Enable Battery Guard**; an exemption shows a compact healthy card. Android or device restrictions can still interrupt background operation.
 - **WhatsApp & Bot Engine tiles** — tap the WhatsApp tile for the read-only connection sheet: state, since when, error, network and engine.
 - **Media Hub** — browses the statuses and WhatsApp media stored on this phone.
-- **Show guide again** — reopens the five-step guide, with the same pictures and steps as the first launch.
+- **Show guide again** — replays the guided tour, highlighting each control on the home screen in turn. Controls that are hidden in the current state are skipped.
 - **Diagnostics** — tap the card for **Save & open** (writes `Downloads/Levix/levix-host-<timestamp>.log` and opens it in your viewer) or **Share logs** (Android's share sheet). Nothing leaves the phone until you pick one.
 
 ---

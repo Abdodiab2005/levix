@@ -38,6 +38,7 @@ import {
   getGroupSettings,
   getRecentDebts,
   getSchedules,
+  listModerationFlags,
   rememberSavedName,
   resolveUserPhone,
   saveGroupSettings,
@@ -45,6 +46,24 @@ import {
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
+const {
+  buildModerationSummaryBoth,
+  featureActionOf,
+  warnConfigOf,
+  normalizeWarnAction,
+  normalizeFeatureAction,
+} = require("../utils/moderationSummary.cjs");
+const {
+  describeModerationPolicy,
+  prepareGroupModeration,
+  commitPreparedModeration,
+  evaluateModerationDraft,
+} = require("../services/moderationPolicy.cjs");
+const {
+  kickGroupMember,
+  clearMemberModeration,
+  dismissMemberFlag,
+} = require("../utils/moderationAction.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
 const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
@@ -56,16 +75,22 @@ const {
   TOPICS: FEEDBACK_TOPICS,
   MESSAGE_MAX: FEEDBACK_MESSAGE_MAX,
   MESSAGE_MIN: FEEDBACK_MESSAGE_MIN,
+  buildDiagnosticsAttachment,
   describeRuntime,
   feedbackRetryAfter,
   submitFeedback,
   validateFeedback,
 } = require("../panel/feedback.cjs");
 const { stampPanelSession } = require("../panel/session-auth.cjs");
+const recoveryEmail = require("../panel/recovery-email.cjs");
 const { DATA_DIR } = require("../config/paths.cjs");
-const { buildDiagnostics } = require("../diagnostics/device.cjs");
 const crashReports = require("../diagnostics/crashReports.cjs");
 const { PERSONA_FILE, activeProviderKeySetting } = require("../services/aiAgent.cjs");
+const {
+  TRANSLATE_PROMPT_FILE,
+  ensureTranslatePrompt,
+  resetTranslatePrompt,
+} = require("../commands/translate.cjs");
 const {
   SCHEDULE_MEDIA_MAX_BYTES,
   deleteScheduledJob,
@@ -451,6 +476,56 @@ router.put("/ai/persona", (req, res) => {
   }
 });
 
+router.get("/ai/translate-prompt", (req, res) => {
+  try {
+    ensureTranslatePrompt();
+    const raw = fs.existsSync(TRANSLATE_PROMPT_FILE)
+      ? fs.readFileSync(TRANSLATE_PROMPT_FILE, "utf8")
+      : "";
+    const { header, body } = splitPersona(raw);
+    res.json({
+      success: true,
+      prompt: { header, body, file: path.basename(TRANSLATE_PROMPT_FILE) },
+    });
+  } catch (error) {
+    fail(res, error, "Error reading translation prompt");
+  }
+});
+
+router.put("/ai/translate-prompt", (req, res) => {
+  const body = req.body?.body;
+  if (typeof body !== "string") return badRequest(res, "body must be text");
+  if (body.length > 20000) return badRequest(res, "Translation prompt is too long (20k max)");
+
+  try {
+    ensureTranslatePrompt();
+    const raw = fs.existsSync(TRANSLATE_PROMPT_FILE)
+      ? fs.readFileSync(TRANSLATE_PROMPT_FILE, "utf8")
+      : "";
+    const { header } = splitPersona(raw);
+    const next = `${header}\n${PERSONA_SEPARATOR}\n${body.trim()}\n`;
+    fs.writeFileSync(TRANSLATE_PROMPT_FILE, next, "utf8");
+    logger.info("[Dashboard] translation prompt updated");
+    res.json({ success: true, prompt: { header, body: body.trim() } });
+  } catch (error) {
+    fail(res, error, "Error writing translation prompt");
+  }
+});
+
+router.post("/ai/translate-prompt/reset", (req, res) => {
+  try {
+    resetTranslatePrompt();
+    const raw = fs.existsSync(TRANSLATE_PROMPT_FILE)
+      ? fs.readFileSync(TRANSLATE_PROMPT_FILE, "utf8")
+      : "";
+    const { header, body } = splitPersona(raw);
+    logger.info("[Dashboard] translation prompt reset to default");
+    res.json({ success: true, prompt: { header, body } });
+  } catch (error) {
+    fail(res, error, "Error resetting translation prompt");
+  }
+});
+
 router.post(
   "/ai/models",
   asyncRoute(async (req, res) => {
@@ -717,6 +792,7 @@ function groupView(groupId, stored) {
   const live = groupMetadataCache.get(groupId) || null;
   const directory = getGroupDirectory(groupId) || null;
   const config = stored || {};
+  const described = describeModerationPolicy(config);
   const subject = live?.subject || directory?.subject || null;
   const memberCount = live?.participants?.length ?? directory?.participant_count ?? null;
   const mediaEnabled = !!config.media_control?.enabled;
@@ -733,25 +809,24 @@ function groupView(groupId, stored) {
       enabled: !!config.antilink?.enabled,
       mode: config.antilink?.mode || "ALL",
       allowed_domains: config.antilink?.allowed_domains || [],
+      action: featureActionOf(config, "antilink"),
     },
     antispam: {
       enabled: !!config.antispam?.enabled,
       time_window: config.antispam?.time_window ?? 10,
       message_count: config.antispam?.message_count ?? 5,
-      action: config.antispam?.action || "WARN",
+      action: featureActionOf(config, "antispam"),
     },
     media_control: {
       enabled: !!config.media_control?.enabled,
       blocked_types: config.media_control?.blocked_types || [],
+      action: featureActionOf(config, "media"),
     },
     welcome_system: {
       enabled: !!config.welcome_system?.enabled,
       messages: config.welcome_system?.messages || [],
     },
-    warn_system: {
-      max_warnings: config.warn_system?.max_warnings ?? 3,
-      action: config.warn_system?.action || "NONE",
-    },
+    warn_system: warnConfigOf(config),
     join_requests: {
       auto_approve_enabled: !!config.join_requests?.auto_approve_enabled,
     },
@@ -760,8 +835,46 @@ function groupView(groupId, stored) {
     antilinkEnabled: !!config.antilink?.enabled,
     welcomeEnabled: !!config.welcome_system?.enabled,
     mediaRestriction,
+    forbidden_words: {
+      enabled: !!config.moderation?.forbiddenWords?.enabled,
+      count: Array.isArray(config.moderation?.forbiddenWords?.list)
+        ? config.moderation.forbiddenWords.list.length
+        : 0,
+      action: featureActionOf(config, "forbidden"),
+    },
+    moderation_summary: buildModerationSummaryBoth(config),
+    flagged_members: listModerationFlags(groupId).map((row) => {
+      const peer = describePeer(row.user_id);
+      return {
+        user_id: row.user_id,
+        name: peer.label || row.user_id,
+        phone: peer.phone,
+        warn_count: row.warn_count,
+        last_rule: row.last_rule,
+        flagged_at: row.flagged_at,
+        reasons: row.reasons,
+      };
+    }),
+    moderation_policy: described.effective,
+    moderation_policy_visibility: described.visibility,
   };
 }
+
+router.post("/groups/moderation-preview", (req, res) => {
+  try {
+    const draft = evaluateModerationDraft(req.body || {});
+    const summary = buildModerationSummaryBoth(draft.settings);
+    res.json({
+      success: true,
+      en: summary.en,
+      ar: summary.ar,
+      visibility: draft.visibility,
+      errors: draft.errors || [],
+    });
+  } catch (error) {
+    fail(res, error, "Error building moderation preview");
+  }
+});
 
 router.get("/groups", (req, res) => {
   try {
@@ -835,6 +948,11 @@ router.patch("/groups/:id", (req, res) => {
     }
   }
   const current = getGroupSettings(groupId) || {};
+  const prepared = prepareGroupModeration(current, patch);
+  if (!prepared.ok) {
+    const message = prepared.errors[0]?.message || "Invalid moderation policy";
+    return res.status(400).json({ success: false, error: message, errors: prepared.errors });
+  }
 
   try {
     if (patch.antilink) {
@@ -844,6 +962,11 @@ router.patch("/groups/:id", (req, res) => {
         const mode = String(patch.antilink.mode).toUpperCase();
         if (!ANTILINK_MODES.includes(mode)) throw new Error("Unknown antilink mode");
         next.mode = mode;
+      }
+      if (patch.antilink.action !== undefined) {
+        const action = normalizeFeatureAction(patch.antilink.action);
+        if (!action) throw new Error("Unknown antilink action");
+        next.action = action;
       }
       if (patch.antilink.allowed_domains !== undefined) {
         if (!Array.isArray(patch.antilink.allowed_domains)) {
@@ -885,8 +1008,8 @@ router.patch("/groups/:id", (req, res) => {
         enabled: !!next.enabled,
         time_window: next.time_window ?? 10,
         message_count: next.message_count ?? 5,
-        action: next.action || "WARN",
       };
+      if (next.action === "WARN" || next.action === "KICK") current.antispam.action = next.action;
     }
 
     if (patch.media_control) {
@@ -904,10 +1027,18 @@ router.patch("/groups/:id", (req, res) => {
         }
         next.blocked_types = [...new Set(types)];
       }
+      if (patch.media_control.action !== undefined) {
+        const action = normalizeFeatureAction(patch.media_control.action);
+        if (!action) throw new Error("Unknown media action");
+        next.action = action;
+      }
       current.media_control = {
         enabled: !!next.enabled,
         blocked_types: next.blocked_types || [],
       };
+      if (next.action === "DELETE" || next.action === "WARN" || next.action === "KICK") {
+        current.media_control.action = next.action;
+      }
     }
 
     if (patch.welcome_system) {
@@ -940,14 +1071,30 @@ router.patch("/groups/:id", (req, res) => {
         next.max_warnings = Math.trunc(max);
       }
       if (patch.warn_system.action !== undefined) {
-        const action = String(patch.warn_system.action).toUpperCase();
-        if (!["KICK", "NONE"].includes(action)) throw new Error("Unknown warn action");
+        const action = normalizeWarnAction(patch.warn_system.action);
+        if (!action) throw new Error("Unknown warn action");
         next.action = action;
       }
-      current.warn_system = {
+      const stored = {
         max_warnings: next.max_warnings ?? 3,
-        action: next.action || "NONE",
       };
+      const existingAction = normalizeWarnAction(next.action);
+      if (existingAction) stored.action = existingAction;
+      current.warn_system = stored;
+    }
+
+    if (patch.forbidden_words) {
+      current.moderation ||= {};
+      current.moderation.forbiddenWords ||= { enabled: false, list: [] };
+      const words = current.moderation.forbiddenWords;
+      if (patch.forbidden_words.enabled !== undefined) {
+        words.enabled = !!patch.forbidden_words.enabled;
+      }
+      if (patch.forbidden_words.action !== undefined) {
+        const action = normalizeFeatureAction(patch.forbidden_words.action);
+        if (!action) throw new Error("Unknown forbidden-words action");
+        words.action = action;
+      }
     }
 
     if (patch.join_requests) {
@@ -959,6 +1106,7 @@ router.patch("/groups/:id", (req, res) => {
     if (patch.rules !== undefined) {
       current.rules = String(patch.rules).slice(0, 4000);
     }
+    commitPreparedModeration(current, prepared);
   } catch (error) {
     return badRequest(res, error.message);
   }
@@ -969,6 +1117,77 @@ router.patch("/groups/:id", (req, res) => {
     res.json({ success: true, group: groupView(groupId, current) });
   } catch (error) {
     fail(res, error, "Error saving group settings");
+  }
+});
+
+function flaggedUserId(req) {
+  return String(req.body?.user_id || "").trim();
+}
+
+router.post(
+  "/groups/:id/flagged/kick",
+  asyncRoute(async (req, res) => {
+    const groupId = req.params.id;
+    if (!groupId?.endsWith("@g.us")) return badRequest(res, "Not a group id");
+    const userId = flaggedUserId(req);
+    if (!userId) return badRequest(res, "user_id is required");
+    const sock = currentSocket();
+    if (!sock) {
+      return res.status(503).json({ success: false, error: "WhatsApp is disconnected" });
+    }
+    let meta = groupMetadataCache.get(groupId);
+    if (!meta) {
+      try {
+        meta = await sock.groupMetadata(groupId);
+      } catch (error) {
+        return fail(res, error, "Could not load group roster", 503);
+      }
+    }
+    try {
+      const result = await kickGroupMember(sock, {
+        groupId,
+        groupMetadata: meta,
+        targetCandidates: [userId],
+      });
+      if (!result.kicked) {
+        const message =
+          result.error === "protected"
+            ? "That member can't be kicked"
+            : result.error === "bot-not-admin"
+              ? "The bot must be a group admin to kick"
+              : "Could not kick that member";
+        return badRequest(res, message);
+      }
+      res.json({ success: true, group: groupView(groupId, getGroupSettings(groupId)) });
+    } catch (error) {
+      fail(res, error, "Error kicking flagged member");
+    }
+  }),
+);
+
+router.post("/groups/:id/flagged/clear", (req, res) => {
+  const groupId = req.params.id;
+  if (!groupId?.endsWith("@g.us")) return badRequest(res, "Not a group id");
+  const userId = flaggedUserId(req);
+  if (!userId) return badRequest(res, "user_id is required");
+  try {
+    clearMemberModeration(groupId, userId);
+    res.json({ success: true, group: groupView(groupId, getGroupSettings(groupId)) });
+  } catch (error) {
+    fail(res, error, "Error clearing flagged member");
+  }
+});
+
+router.post("/groups/:id/flagged/dismiss", (req, res) => {
+  const groupId = req.params.id;
+  if (!groupId?.endsWith("@g.us")) return badRequest(res, "Not a group id");
+  const userId = flaggedUserId(req);
+  if (!userId) return badRequest(res, "user_id is required");
+  try {
+    dismissMemberFlag(groupId, userId);
+    res.json({ success: true, group: groupView(groupId, getGroupSettings(groupId)) });
+  } catch (error) {
+    fail(res, error, "Error dismissing flag");
   }
 });
 
@@ -1380,6 +1599,67 @@ router.post("/security/password", (req, res) => {
 });
 
 // ===========================================================================
+// Recovery email — sealed account security, not a setting
+// ===========================================================================
+//
+// The address is never returned. `publicStatus()` is a mask plus `verified`.
+// A new address does not replace the saved one until its code is verified.
+// Same-origin and the panel session come from the /dashboard/api mount.
+
+// Wrong codes are 400, not 401. The panel client treats every 401 as a dead
+// session and sends the operator to /login. Login-page reset confirm stays
+// 401; that page does not use this client. A wrong verify code does not count
+// toward the login lockout — the operator is already signed in.
+const RECOVERY_HTTP = {
+  throttled: 429,
+  rate_limited: 429,
+  invalid_email: 400,
+  invalid: 400,
+  unavailable: 502,
+  wrong_code: 400,
+  expired: 400,
+  too_many_attempts: 400,
+  no_pending: 400,
+};
+
+function recoveryFailure(res, result) {
+  const status = RECOVERY_HTTP[result.reason] ?? 400;
+  if (result.retryAfter) res.set("Retry-After", String(result.retryAfter));
+  const body = { success: false, error: result.reason || "unavailable" };
+  if (result.retryAfter) body.retryAfter = result.retryAfter;
+  if (result.attemptsLeft != null) body.attemptsLeft = result.attemptsLeft;
+  return res.status(status).json(body);
+}
+
+router.get("/recovery-email", (req, res) => {
+  res.json({ success: true, ...recoveryEmail.publicStatus() });
+});
+
+router.post(
+  "/recovery-email/start",
+  asyncRoute(async (req, res) => {
+    const result = await recoveryEmail.startVerification(
+      req.body?.email,
+      req.body?.lang,
+      clientAddress(req),
+    );
+    if (!result.ok) return recoveryFailure(res, result);
+    res.json({ success: true });
+  }),
+);
+
+router.post("/recovery-email/verify", (req, res) => {
+  const result = recoveryEmail.confirmVerification(req.body?.code);
+  if (!result.ok) return recoveryFailure(res, result);
+  res.json({ success: true, verified: true, masked: result.masked });
+});
+
+router.delete("/recovery-email", (req, res) => {
+  recoveryEmail.remove();
+  res.json({ success: true, verified: false });
+});
+
+// ===========================================================================
 // Feedback — the operator's line to the developer
 // ===========================================================================
 
@@ -1398,13 +1678,15 @@ router.get("/feedback/meta", (req, res) => {
   });
 });
 
-// The exact object the server would forward as `diagnostics`, so the operator
-// can see what they are about to share before they send it. This is the same
-// builder submitFeedback() uses, so the preview cannot lie.
+// Preview of the diagnostics object plus a frozen debug-log snapshot. Send
+// redeems `debugLogId`; it does not rebuild the tail.
 router.post("/feedback/diagnostics-preview", (req, res) => {
   const parsed = parseDiagnosticsInput(req.body?.client);
   if (parsed.error) return badRequest(res, parsed.error);
-  res.json({ success: true, diagnostics: buildDiagnostics(parsed.present ? parsed.value : {}) });
+  res.json({
+    success: true,
+    ...buildDiagnosticsAttachment(parsed.present ? parsed.value : {}),
+  });
 });
 
 // Leaves this machine only when the operator presses Send, and carries nothing
@@ -1460,6 +1742,7 @@ router.post(
       parsed.value,
       attachment,
       diagnostics.present ? diagnostics.value : undefined,
+      typeof body.debugLogId === "string" ? body.debugLogId : undefined,
     );
     if (!result.ok) {
       return res.status(result.status).json({ success: false, error: result.error });
@@ -1768,7 +2051,7 @@ router.post("/crash-reports", (req, res) => {
 router.post(
   "/crash-reports/:id/send",
   asyncRoute(async (req, res) => {
-    const result = await crashReports.sendReport(req.params.id);
+    const result = await crashReports.sendReport(req.params.id, req.body?.debugLogId);
     if (!result.ok) {
       return res.status(result.status || 502).json({ success: false, error: result.error });
     }

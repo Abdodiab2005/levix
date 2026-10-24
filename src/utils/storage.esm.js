@@ -29,6 +29,10 @@ export const getUserWarnings = store.getUserWarnings;
 export const saveUserWarnings = store.saveUserWarnings;
 export const clearUserWarnings = store.clearUserWarnings;
 export const getAllWarnings = store.getAllWarnings;
+export const getModerationFlag = store.getModerationFlag;
+export const upsertModerationFlag = store.upsertModerationFlag;
+export const clearModerationFlag = store.clearModerationFlag;
+export const listModerationFlags = store.listModerationFlags;
 
 // ===== Todos =====
 export const getUserTodos = store.getUserTodos;

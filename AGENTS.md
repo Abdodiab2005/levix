@@ -6,7 +6,7 @@ working with code in this repository.
 ## Project Overview
 
 **Levix** — a self-hosted personal WhatsApp bot built with Node.js and
-**Baileys v7**: a 65-command system, group moderation, an AI agent whose
+**Baileys v7**: a 69-command system, group moderation, an AI agent whose
 provider (Google Gemini / OpenAI-compatible / Anthropic) is selected in the
 panel with its own endpoint, API key and model, scheduled messages, and a web
 control panel that changes almost all of it live. The database is the source of
@@ -64,7 +64,7 @@ npm test               # the whole suite (tests/run.mjs)
 
 node bin/levix.js headless         # the bot with no panel and no open port
 node bin/levix.js where            # print the data directory
-node bin/levix.js reset-password   # forget the panel password (WhatsApp link untouched)
+node bin/levix.js reset-password   # forget the panel password (WhatsApp link and recovery email untouched)
 sudo node bin/levix.js domain bot.example.com   # reverse proxy + HTTPS
 ```
 
@@ -105,9 +105,13 @@ The control panel is the only surface and it is always on.
 - QR pairing: `/qr`, behind the login, same for the socket.io channel that
   pushes QR refreshes
 - Dashboard API: `http://localhost:3001/dashboard/api/*` — behind the session
-- Feedback: `POST /dashboard/api/feedback` — the only route that talks to a
-  Levix-operated server, and only when the operator presses Send. Point
-  `LEVIX_FEEDBACK_URL` elsewhere to test it without reaching production.
+- Feedback: `POST /dashboard/api/feedback` — talks to a Levix-operated server
+  only when the operator presses Send. Point `LEVIX_FEEDBACK_URL` elsewhere to
+  test it without reaching production.
+- Recovery email: verifying an address, or emailing a password-reset code,
+  posts `{ kind, to, code, lang }` to `https://levix.leviro.net/api/recovery-email`
+  (`src/panel/recovery-email.cjs`). `LEVIX_RECOVERY_URL` overrides that URL in
+  tests. The relay does not store the address beyond rate limiting.
 
 ## Architecture
 
@@ -122,7 +126,7 @@ src/
 │   └── group/        # Group sub-commands (kick, promote, etc.)
 ├── config/           # Configuration
 │   ├── paths.cjs     # THE data directory + the read-only asset root
-│   ├── secrets.cjs   # generated session key · password hash · setup code
+│   ├── secrets.cjs   # generated session key · password hash · sealed recovery email · setup code
 │   ├── settings.cjs  # every operator-changeable value: database -> default
 │   ├── vault.cjs     # AES-256-GCM sealing for API keys and auth blobs
 │   ├── defaults.cjs  # shipped command permissions + prefix (was config.json)
@@ -135,6 +139,8 @@ src/
 │   │                 # not a setting, not reachable from any route or view)
 │   ├── ai-persona.md # the editable AI system prompt (a TEMPLATE — the live
 │   │                 # copy lives in the data directory)
+│   ├── translate-prompt.md # the editable !translate AI prompt (a TEMPLATE —
+│   │                 # the live copy lives in the data directory)
 │   ├── constants.js  # build-time constants (retries, cache TTLs)
 │   └── baileys.config.js # Baileys socket configuration (ESM)
 ├── db/               # The database
@@ -160,7 +166,10 @@ src/
 │   ├── dashboard.api.esm.js # everything the control panel reads/writes
 │   └── stickers.api.esm.js  # Sticker Studio library, packs, upload, and jobs
 ├── panel/            # login throttling, session epochs, bounded session store
-│   └── feedback.cjs  # validates + forwards Settings → Feedback to the developer
+│   ├── feedback.cjs  # validates + forwards Settings → Feedback to the developer
+│   ├── one-time-code.cjs # hashed 6-digit code, attempts, and the send throttle
+│   ├── password-reset.cjs # WhatsApp and email reset; one pending code for both
+│   └── recovery-email.cjs # sealed recovery address and the mail relay
 ├── diagnostics/      # opt-in feedback diagnostics + local crash reports
 │   ├── sanitize.cjs  # the one redaction pass (JIDs, numbers, tokens, paths)
 │   ├── device.cjs    # the diagnostics allowlist the preview and the send share
@@ -372,9 +381,8 @@ session records the proxy the live socket was built with and reports
    - Match command name or alias
    - Execute command with context
 6. **Group Moderation** (if in group):
-   - Anti-link → `src/commands/group/antilink.cjs`
-   - Media control → `src/commands/group/media.cjs`
-   - Forbidden words → `src/commands/mod.cjs` (unchanged; separate from auto-delete)
+   - `handleGroupModeration` collects forbidden-word, anti-link, media, and anti-spam hits, then `enforceHits` applies them in one transaction. A message with no id is skipped.
+   - Detectors stay separate from auto-delete: `src/commands/mod.cjs`, `src/commands/group/antilink.cjs`, `src/commands/group/media.cjs`, `src/middleware/antispam.middleware.js`.
 
 ### Command System
 
@@ -456,7 +464,7 @@ and blacklist middleware, the prefix lookup, every permission check) with no
 
 | table | what it holds | expiry |
 | --- | --- | --- |
-| `bot_settings` | prefix, dashboard settings (`setting:*`), command permission / alias / disabled overrides, the generated session key, the password hash | — |
+| `bot_settings` | prefix, dashboard settings (`setting:*`), command permission / alias / disabled overrides, the generated session key, the password hash, the sealed recovery email (`auth:recovery-email`) | — |
 | `group_settings` | per-group config (welcome, rules, warn limits) | — |
 | `warnings` | user warnings per group | — |
 | `todos` | `!todo` lists | — |
@@ -475,6 +483,8 @@ and blacklist middleware, the prefix lookup, every permission check) with no
 | `sticker_pack_items` | pack membership and order | cascade with the sticker or the pack; wiped on unlink |
 | `auto_delete_rules` | keyword auto-delete rules (keywords, match mode, chat/sender scope, counters) | — (operator config; counters reset on unlink) |
 | `auto_delete_log` | opt-in text/caption copies of messages an auto-delete rule actually deleted (never media bytes) | `auto_delete_keep_days` (30), also capped at 5000 newest; wiped on unlink |
+| `moderation_flags` | members waiting for admin review after warn-limit FLAG (or a KICK the bot could not perform): canonical id, effective points (`warn_count`), last rule, time, reasons, `last_notified_at`, `repeat_points` | wiped on unlink |
+| `moderation_applied` | one row per moderated message id (`outcome`, `kicked`, `notified`) so a WhatsApp redelivery is applied once. Rows older than 7 days are swept | wiped on unlink |
 
 `forward_scores` gains a row per forwarded message, so it expires; the sweep
 runs at boot and every six hours (`sweepExpired()` in `db.cjs`). Sticker files
@@ -510,13 +520,15 @@ there is no cache and no write-behind queue to reason about.
 ### The data directory
 
 `src/config/paths.cjs` resolves the one directory the bot writes to: database,
-`memory/`, the editable `ai-persona.md`, `logs/`, temp `media/`. Order:
+`memory/`, the editable `ai-persona.md` and `translate-prompt.md`, `logs/`,
+temp `media/`. Order:
 `--data <dir>`, then `LEVIX_DATA_DIR` (the only environment variable the code
 reads — Docker has no other way to point at its volume), then `<repo>/data`
 when running from a clone, then `~/.levix`.
 
 `assetPath()` is the read-only counterpart: `views/`, `public/`, the persona
-template. A packaged build unpacks those and calls `setAssetRoot()`.
+and translation-prompt templates. A packaged build unpacks those and calls
+`setAssetRoot()`.
 
 ## Key Features Implementation
 
@@ -758,15 +770,28 @@ sent twice after the first reconnect.
 
 ### 3. Group Moderation
 
-**Features**:
-- Welcome messages (`src/commands/group/welcome.cjs`)
-- Anti-link protection (`src/commands/group/antilink.cjs`)
-- Media restrictions (`src/commands/group/media.cjs`)
-- Anti-spam (`src/middleware/antispam.middleware.js`)
-- Warning system (`src/commands/group/warn.cjs`)
-- Auto-kick after N warnings (configurable per group)
+One policy object, `settings.moderationPolicy`, is resolved by `src/services/moderationPolicy.cjs`. Absent keys keep the defaults: simple mode, limit **3**, limit action **KICK**, feature actions **WARN** (anti-spam cannot be DELETE). Legacy `warn_system`, `antilink.action`, `media_control.action`, `antispam.action`, and `moderation.forbiddenWords.action` still apply when the policy field is absent. A write through `applyModerationPolicy` mirrors those legacy keys in the same `saveGroupSettings` call. `!setwarn max` writes the limit only and does not stamp an action.
 
-**Admin Commands**: kick, promote, demote, add, removeall, setname, setpp, etc.
+`handleGroupModeration` (`src/handlers/message.handler.js`) ignores a protected sender before any write, collects hits (forbidden, link, media, spam), and calls `enforceHits` once. That opens one `BEGIN IMMEDIATE` transaction: decay the ledger, decide warn / flag / kick, append at most one warning event, upsert or skip the flag, and claim `moderation_applied`. Delete, the notice, and the kick run after commit. A redelivery of the same message id does not add a second point. `enforceGroupRule` is the one-hit wrapper `!warn` and the single-detector handlers still use.
+
+**Warn limit**: KICK removes the member when the bot is a group admin. If it is not, the member is flagged and the group is told an admin must act. FLAG writes `moderation_flags` (`warn_count` is effective points) and mentions admins when `flag.notify` is `group`. `flag.whileFlagged` is `record`, `hold`, or `escalate`.
+
+**Feature actions** (each feeds the same ledger; weights apply only in severity mode):
+- Anti-link (`src/commands/group/antilink.cjs`): `DELETE` / `WARN` / `KICK`. `!group antilink action …`
+- Media (`src/commands/group/media.cjs`): same three. `!group media action …`
+- Forbidden words (`src/commands/mod.cjs`): same three. `!mod action forbiddenWords …`
+- Anti-spam (`src/middleware/antispam.middleware.js`, `src/commands/group/antispam.cjs`): `WARN` / `KICK`. `!group antispam action …`
+- `!warn` uses `weights.manual` and never deletes the command message.
+
+**Commands and panel**: `!group policy` shows the summary. `!group policy set <field> <value>` and `!group policy reset` (the standard preset) call the same apply path as `PATCH /groups/:id` (`moderation_policy`, `moderation_preset`). The gate is `ADMINS_ONLY`. `GET /groups` adds `moderation_policy` (effective) and `moderation_policy_visibility`. `POST /groups/moderation-preview` returns `{ success, en, ar, visibility, errors }` and does not write.
+
+**Membership**: the default is `clear`. A member who leaves, or is removed by anyone, loses warnings and any flag, and a later `add` starts at 0. `add` itself does not clear. `membership: "keep"` is the explicit choice that leaves the ledger in place. Relaxed and strict presets do not set membership, so they inherit `clear`. The standard preset strips the stored policy and therefore also means `clear`.
+
+**Flagged members**: panel list with Kick / Clear warnings / Dismiss flag (same functions as the commands). `!group flagged` lists them. `!group clearwarns @member` clears warnings and the flag. `!kick` of a flagged member clears the flag. Dismiss removes only the flag.
+
+**Active moderation** summary (`src/utils/moderationSummary.cjs`) is the one builder for `!rules`, welcome, `!group policy`, and the panel preview. It states each feature's effective action and the warn-limit action. A decay line and a flag line appear only when those fields are in effect.
+
+**Other admin commands**: kick, promote, demote, add, removeall, setname, setpp, etc.
 
 ### 4. (removed) REST API
 
@@ -814,6 +839,13 @@ account".
   JSON API: `GET/POST /dashboard/api/auto-delete/rules`,
   `PATCH/DELETE /dashboard/api/auto-delete/rules/:id`,
   `POST .../rules/:id/reset`, `GET/DELETE /dashboard/api/auto-delete/log`.
+- **`!translate`** (`src/commands/translate.cjs`, aliases `tr`, `ترجم`, `ترجمة`)
+  — Arabic ↔ English by default, or into a chosen language. AI (default, the
+  active provider) or Google Translate (`!translate google`). Options:
+  `summary` / `ملخص`, `explain` / `اشرح`, `detect` / `اكتشف`, `formal` /
+  `رسمي`, `casual` / `عامي`. The AI prompt is `src/config/translate-prompt.md`
+  (live copy `<data>/translate-prompt.md`). Settings: `translate_engine`,
+  `google_translate_api_key`.
 
 ### 5b. Domain setup (`levix domain`, `src/domain/`)
 
@@ -868,7 +900,7 @@ await status.remove();                        // delete it (when media IS the an
 Everything is best-effort: if the edit is rejected (message too old, not ours)
 it falls back to a normal send.
 
-Already wired: `!gemini`, `!weather`, `!shortlink`, `!stt`, `!tts`.
+Already wired: `!gemini`, `!weather`, `!shortlink`, `!stt`, `!tts`, `!translate`.
 
 ### 7. Text decoding (`src/utils/textDecode.cjs`)
 
@@ -1039,21 +1071,24 @@ the bot does can be changed from it, live:
 | Overview | — (counters, uptime, connection) | — |
 | Connection | **start / stop** the session, QR pairing, **unlink**, restart | `src/core/session.js` |
 | Commands | prefix · aliases · permission · on/off | `bot_settings` via `runtime-config.cjs` |
-| AI & memory | the system prompt · the `memory/*.md` files | `<data>/ai-persona.md`, `<data>/memory/` |
+| AI & memory | the system prompt · the translation prompt · the `memory/*.md` files | `<data>/ai-persona.md`, `<data>/translate-prompt.md`, `<data>/memory/` |
 | Groups | antilink · antispam · media · welcome · warnings · rules | `group_settings` |
 | Roles | bot owner / admin | `user_metadata` (same path as `!perm`) |
 | Tables | debts · warnings · notes · todos · users · schedules | read-only (schedules can be deleted) |
 | Auto-delete (JSON API; UI later) | keyword rules, counters, opt-in kept copies | `auto_delete_rules` / `auto_delete_log` via `/dashboard/api/auto-delete/*` |
 | Settings | API keys, model, timezone, delays, thumbnails, port, proxy | `bot_settings` (`setting:*`) |
 | Settings → password | the panel's own password | `bot_settings` (scrypt hash) |
+| Settings → recovery email | verified address for the forgot-password email code | `bot_settings` key `auth:recovery-email`, sealed with `vault.cjs`; masked in the API; never in settings export |
 | Settings → Feedback | nothing local — one message to the developer | forwarded server-side to `levix.leviro.net/api/feedback` (`src/panel/feedback.cjs`) |
 
 **Sharing settings.** The General tab exports every non-secret override to a
 JSON file (`GET /dashboard/api/settings/export`, `src/services/
 settingsTransfer.cjs`) and imports a friend's file back
-(`POST .../settings/import`). Two rules the module enforces: secrets never
+(`POST .../settings/import`). The module enforces this: secrets never
 leave and an import can never plant one (API keys, the proxy password — every
-`type: "secret"` setting is skipped on both sides), and only settings whose
+`type: "secret"` setting is skipped on both sides). The recovery email is
+account security (`auth:recovery-email`), sealed outside this file, so export
+omits it and import cannot plant it. Only settings whose
 source is the dashboard are exported, so untouched keys keep following the
 importer's own shipped defaults. The command table (prefix, permission /
 alias overrides, disabled commands) rides along; per-group config and the
@@ -1105,7 +1140,34 @@ action, and the two consents are separate.
   the one allowlist (the server's own version, Node and platform, plus the
   Android fields from `LevixHost.getDiagnostics()` and the page's screen,
   language and theme), 2 KB at most. Unticked, the envelope has no
-  `diagnostics` key.
+  `diagnostics` key and no `debugLog` key.
+- The technical debug log is `<data>/logs/debug/debug-YYYY-MM-DD.log`, one
+  sanitized JSON-lines file per UTC day, written by a `debug`-level stream in
+  `src/utils/logger.cjs` through `src/diagnostics/debugLog.cjs`. Every record
+  is rebuilt before it is written: a secret-shaped key name
+  (`pass|secret|token|api_key|authorization|cookie|session|creds|private|noise|signed|identity`,
+  case-insensitive, any depth), a key named exactly `otp`, `pairingCode`,
+  `resetCode`, `verificationCode` or `setupCode`, and a bare `code` holding a
+  4–10 digit string become `[redacted]`; `err.code`/`statusCode` and other
+  diagnostic codes are kept. A message-content key (`text`, `body`, `caption`,
+  `conversation`, `message`, `quoted`, `content`, `prompt`, `reply`) keeps only
+  `[redacted N chars]`; every remaining string runs through `sanitizeText` and
+  is capped at 2000 characters (error stacks keep their frames, paths
+  sanitized). A day's file stops at 5 MB with one warning record. A write
+  failure is swallowed and never touches the other streams. Files expire after
+  14 days (`sweepExpired()` in `src/db/db.cjs`, boot + every six hours) and
+  `logger.clearLogs()` deletes the directory.
+- That log leaves the device in exactly two places, both operator-started:
+  feedback sent with the diagnostics box ticked gets a top-level `debugLog`
+  string, and a crash report send adds `debugLog` to its upload body. Each
+  preview freezes the tail in memory (`storeDebugSnapshot()` in
+  `src/diagnostics/debugLog.cjs`, 15 minutes, at most 32) and returns
+  `debugLogId`. Send attaches that snapshot when the panel passes the id, and
+  attaches no `debugLog` when the id is missing or expired — never a fresh
+  unread tail. The panel renders the previewed string in a collapsed
+  `Disclosure` labelled "Technical debug log (sanitized)". The levix-ui
+  allowlists must accept `debugLog` on both endpoints, re-sanitize it, and
+  never render it.
 - Crash reports are schema-1 JSON files in `<data>/crash-reports/`: at most 20,
   expiring after 7 days, written atomically. Android writes them from the
   uncaught handler and from `ApplicationExitInfo` (`CrashReports.kt`), Node from
@@ -1129,16 +1191,25 @@ Every authenticated panel session carries the current password epoch. Changing
 or resetting the password invalidates older HTTP and Socket.IO sessions before
 more QR or account data can be pushed.
 
-**Forgot password.** The login page's reset asks the bot to WhatsApp a one-time
-code to the linked account's own chat (`src/panel/password-reset.cjs`; the code
-is hashed, 10 minutes, five attempts, requests throttled per peer and globally,
-wrong guesses count toward the login lockout). It needs the WhatsApp session up
-— that is why it exists: WebAuthn/passkeys require HTTPS or localhost, and the
-panel is very often opened at plain `http://<lan-ip>:3001`. `levix
-reset-password` stays the offline fallback. The gateway password screens also
-blur themselves when the page loses focus, print to nothing, and — in the
-Android app (`PanelActivity`) — set `FLAG_SECURE` while `/login` or `/setup` is
-on screen, which is the only real screenshot block available on each platform.
+**Forgot password.** The login page offers the channels that can take a one-time
+code: WhatsApp (the linked account's own chat, which needs the session up) and
+email (only when a verified recovery email is saved; the page shows the masked
+address). Both channels share one code path (`src/panel/one-time-code.cjs`,
+used by `src/panel/password-reset.cjs`): the code is hashed, lives 10 minutes,
+allows five attempts, and requests are throttled per peer and globally across
+the two channels. An email code is bound to the address it was sent to;
+removing or replacing that address cancels it, and redeem refuses when the
+saved address differs. A WhatsApp code is not bound to the email. Wrong guesses count toward the login lockout, and a successful
+reset bumps the password epoch so older panel sessions die. The email channel
+posts `{ kind: "reset", to, code, lang }` to
+`https://levix.leviro.net/api/recovery-email` (`src/panel/recovery-email.cjs`;
+`LEVIX_RECOVERY_URL` overrides the URL in tests). WhatsApp exists because
+WebAuthn/passkeys require HTTPS or localhost, and the panel is very often
+opened at plain `http://<lan-ip>:3001`. `levix reset-password` stays the offline
+fallback. The gateway password screens also blur themselves when the page loses
+focus, print to nothing, and — in the Android app (`PanelActivity`) — set
+`FLAG_SECURE` while `/login` or `/setup` is on screen, which is the only real
+screenshot block available on each platform.
 
 **What the dashboard deliberately can't do:** change the bot's name or its
 author (`brand.cjs`), or lower the permission of a command that declares
@@ -1210,17 +1281,21 @@ Which means a fresh install runs correctly against an empty database, and
 
 - `src/config/settings.cjs` — timezone, reply delays, AI keys and model, tool
   limits, memory size, thumbnails, ffmpeg path, port, proxy hops, extra origin,
-  forward-score retention. **Consumers must call `settings.get(key)` at call
-  time**, never once at import, or a change wouldn't apply until a restart.
-  Settings that genuinely can't apply live are marked `restart: true` and the
-  panel says so next to the field.
+  forward-score retention, `translate_engine`, `google_translate_api_key`.
+  **Consumers must call `settings.get(key)` at call time**, never once at
+  import, or a change wouldn't apply until a restart. Settings that genuinely
+  can't apply live are marked `restart: true` and the panel says so next to
+  the field.
 - `src/config/runtime-config.cjs` — prefix, command permissions, alias
   overrides, disabled commands. Group sub-commands are keyed `group:<name>`.
 - Secrets are **generated, never configured** (`src/config/secrets.cjs`): the
   session signing key on first start, the password as an scrypt hash chosen in
-  the browser. Third-party API keys and Baileys auth blobs are sealed at rest
-  with the install-local AES-256-GCM key in `src/config/vault.cjs`; the API only
-  reports whether a key is configured and never returns its value.
+  the browser, and the recovery email sealed with `vault.cjs` after the operator
+  verifies it. The API returns a mask, never the address. Unlink and
+  `levix reset-password` leave the recovery email in place. Third-party API keys
+  and Baileys auth blobs are sealed at rest with the same install-local
+  AES-256-GCM key; the API only reports whether a key is configured and never
+  returns its value.
 
 Provider base URLs are validated both when saved and when used. Public
 endpoints require HTTPS; private, link-local, metadata, multicast and reserved
@@ -1228,9 +1303,11 @@ destinations are rejected. Explicit loopback URLs remain supported for local
 Ollama/LM Studio servers. Levix-owned fetch clients pin the validated DNS answer
 to the socket and handle redirects manually so secrets cannot cross hosts.
 
-The one environment variable read anywhere in the code is `LEVIX_DATA_DIR`,
+The one environment variable an operator or Docker sets is `LEVIX_DATA_DIR`,
 because a Docker volume has no other way to say where it is. `--data <dir>`
-does the same thing on the command line.
+does the same thing on the command line. `LEVIX_FEEDBACK_URL` and
+`LEVIX_RECOVERY_URL` are test-only overrides for the two Levix relays, read at
+call time. They are not operator settings.
 
 ### Who is the owner
 
@@ -1382,9 +1459,10 @@ logger.debug('Debug info');
     (every sticker, pack, and file), auto-delete kept copies and counters
     (the rules themselves stay — they are operator configuration), and pauses
     schedules created for the old account. Do not leave account-derived state
-    active for the next phone that pairs. Sticker unlink deletes the
-    `sticker_owners` rows as well as the stickers, packs and files, so the next
-    pairing starts a new `self` library.
+    active for the next phone that pairs. The panel password and the recovery
+    email are not WhatsApp state, and unlink does not clear them. Sticker unlink
+    deletes the `sticker_owners` rows as well as the stickers, packs and files,
+    so the next pairing starts a new `self` library.
 27. **Compare WhatsApp identities with the shared helpers.** LIDs, phone-number
     JIDs and device suffixes can name the same user. Moderation and role gates
     must use `sameUser()`, `getSenderCandidates()` and `isAdminInGroup()` rather
@@ -1490,3 +1568,8 @@ owner sets the `PLAY_TRACK` repository variable to `production`.
   (English). The live copy is `<data>/ai-persona.md`, hot-reloaded and editable
   from the panel. Everything above the `---` is a note to the human and is not
   sent to the model
+- `src/config/translate-prompt.md` - the `!translate` AI prompt template
+  (English, `{{double_braces}}` variables). The live copy is
+  `<data>/translate-prompt.md`, hot-reloaded and editable from the panel AI
+  screen. Everything above the `---` is a note to the human and is not sent to
+  the model. It is not a chat turn: `ai-identity.cjs` is not prepended.

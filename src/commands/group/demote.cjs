@@ -1,5 +1,10 @@
 // file: /commands/demote.js
 const logger = require("../../utils/logger.cjs");
+const {
+  findGroupParticipantSync,
+  rosterJidForSync,
+} = require("../../utils/permissions.cjs");
+const { targetFromCommand } = require("../../utils/moderationAction.cjs");
 const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
@@ -18,11 +23,8 @@ module.exports = {
 
   async execute(sock, msg, args, body, groupMetadata) {
     const groupId = msg.key.remoteJid;
-
-    // Logic to identify the target user from mention or reply
-    const targetJid =
-      msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0] ||
-      msg.message?.extendedTextMessage?.contextInfo?.participant;
+    const target = targetFromCommand(msg);
+    const targetJid = target?.jid;
 
     if (!targetJid) {
       return await sock.sendMessage(groupId, {
@@ -33,8 +35,9 @@ module.exports = {
       });
     }
 
-    // Safety check: Is the target user NOT an admin?
-    const targetUser = groupMetadata.participants.find((p) => p.id === targetJid);
+    const targetUser = findGroupParticipantSync(groupMetadata, target.candidates);
+    const rosterJid = rosterJidForSync(groupMetadata, target.candidates) || targetJid;
+
     if (!targetUser || !targetUser.admin) {
       return await sock.sendMessage(groupId, {
         text: tr(
@@ -45,7 +48,6 @@ module.exports = {
       });
     }
 
-    // Safety check: Cannot demote the group creator
     if (targetUser.admin === "superadmin") {
       return await sock.sendMessage(groupId, {
         text: tr("The group's creator can't be demoted.", "لا يمكن عزل منشئ المجموعة."),
@@ -53,11 +55,7 @@ module.exports = {
     }
 
     try {
-      await sock.groupParticipantsUpdate(
-        groupId,
-        [targetJid],
-        "demote", // The action is 'demote'
-      );
+      await sock.groupParticipantsUpdate(groupId, [rosterJid], "demote");
       await sock.sendMessage(groupId, {
         text: tr(
           `👤 @${targetJid.split("@")[0]} is no longer an admin.`,

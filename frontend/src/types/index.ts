@@ -49,7 +49,6 @@ export interface DashboardStats {
   totalUsers: number;
   commandCount: number;
   uptime: number;
-  dataDir: string;
   activeSchedules: number;
   version: string;
 }
@@ -116,20 +115,74 @@ export interface ScheduleItem {
   media?: ScheduleMedia;
 }
 
+/** The effective per-group moderation policy (POLICY-DESIGN section 1). */
+export interface ModerationPolicy {
+  mode: "simple" | "severity";
+  limit: number;
+  limitAction: "KICK" | "FLAG";
+  features: {
+    antilink: "DELETE" | "WARN" | "KICK" | null;
+    media: "DELETE" | "WARN" | "KICK" | null;
+    forbidden: "DELETE" | "WARN" | "KICK" | null;
+    antispam: "WARN" | "KICK" | null;
+  };
+  hitMerge: "max" | "sum";
+  weights: { antilink: number; media: number; forbidden: number; antispam: number; manual: number };
+  flagAt: number;
+  kickAt: number;
+  decay: { mode: "off" | "expire" | "step"; days: number };
+  membership: "keep" | "clear";
+  flag: {
+    notify: "group" | "silent";
+    mentionAdmins: boolean;
+    cooldownMinutes: number;
+    whileFlagged: "record" | "hold" | "escalate";
+    escalateAfter: number;
+  };
+}
+
+/** Dotted field name -> visible. A missing key is visible. */
+export type ModerationPolicyVisibility = Record<string, boolean>;
+
+export interface ModerationPolicyFieldError {
+  field: string;
+  code: "unknown" | "type" | "enum" | "range" | "conflict" | string;
+  message: string;
+}
+
 export interface GroupItem {
   id: string;
   jid: string;
   subject: string | null;
   memberCount: number | null;
-  antilink: { enabled: boolean; mode: string; allowed_domains: string[] };
-  antispam: { enabled: boolean; time_window: number; message_count: number; action: string };
-  media_control: { enabled: boolean; blocked_types: string[] };
+  /**
+   * The effective policy from the GET. The panel may also send a sparse patch
+   * (Partial) — PATCH /groups/:id accepts both shapes.
+   */
+  moderation_policy?: Partial<ModerationPolicy>;
+  moderation_policy_visibility?: ModerationPolicyVisibility;
+  antilink: { enabled: boolean; mode: string; allowed_domains: string[]; action?: string };
+  antispam: { enabled: boolean; time_window: number; message_count: number; action?: string };
+  media_control: { enabled: boolean; blocked_types: string[]; action?: string };
   welcome_system: { enabled: boolean; messages: string[] };
   warn_system: { max_warnings: number; action: string };
   join_requests: { auto_approve_enabled: boolean };
   rules: string;
   mediaRestriction: string;
   welcomeEnabled: boolean;
+  forbidden_words?: { enabled: boolean; count: number; action?: string };
+  moderation_summary?: { en: string; ar: string };
+  flagged_members?: FlaggedMember[];
+}
+
+export interface FlaggedMember {
+  user_id: string;
+  name: string;
+  phone: string | null;
+  warn_count: number;
+  last_rule: string;
+  flagged_at: number;
+  reasons: string[];
 }
 
 export interface LogItem {
@@ -368,6 +421,10 @@ export interface CrashReportItem {
   };
   device?: Record<string, any>;
   breadcrumbs: Breadcrumb[];
+  /** The sanitized technical log tail that the send uploads. */
+  debugLog?: string;
+  /** Server id of that frozen tail. Send passes it back; the panel does not show it. */
+  debugLogId?: string;
   status?: "pending" | "failed";
   lastError?: string | null;
 }

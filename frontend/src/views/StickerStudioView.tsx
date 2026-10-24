@@ -181,7 +181,7 @@ export const StickerStudioView: React.FC<StickerStudioViewProps> = ({ isConnecte
         </div>
       )}
 
-      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+      <div className="-mx-4 overflow-x-auto no-scrollbar px-4 sm:mx-0 sm:px-0" data-tour="stickers-tabs">
         <Tabs
           aria-label={t("stickers")}
           className="min-w-max"

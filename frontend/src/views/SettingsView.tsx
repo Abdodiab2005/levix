@@ -1,30 +1,36 @@
 // file: frontend/src/views/SettingsView.tsx
 
 import {
+  CirclePlay,
+  Compass,
   Download,
   FileText,
   Globe,
   HardDrive,
   Key,
   Lock,
+  Mail,
   MessageSquareHeart,
   Save,
   Share2,
   Shield,
   Sliders,
   Terminal,
+  Trash2,
   Upload,
 } from "lucide-react";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
-import { api } from "../api/client";
+import { ApiError, api } from "../api/client";
 import { FeedbackForm } from "../components/FeedbackForm";
+import { useGuidedTour } from "../components/GuidedTour";
 import { useToast } from "../components/Toasts";
 import {
   Badge,
   Button,
   Card,
   CardHeader,
+  ConfirmDialog,
   Dialog,
   Field,
   FormActions,
@@ -36,11 +42,13 @@ import {
   Spinner,
   Tabs,
   Toggle,
+  UserText,
   useDirtyForm,
   useSavedValue,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
-import type { Language } from "../i18n/translations";
+import { type Language, translations } from "../i18n/translations";
+import { fill } from "../utils/fill";
 import { DiagnosticsView } from "./DiagnosticsView";
 
 type SettingsTab =
@@ -84,9 +92,298 @@ function toBase64(text: string): string {
   return btoa(binary);
 }
 
+type RecoveryPhase = "email" | "code";
+type TranslationKey = keyof (typeof translations)["en"];
+
+/** Stable relay/route codes become sentences. `backToEmail` means the code is dead. */
+function recoveryMessage(
+  t: (key: TranslationKey, fallback?: string) => string,
+  err: unknown,
+): { text: string; backToEmail: boolean } {
+  const data = err instanceof ApiError ? err.data : null;
+  const code = typeof data?.error === "string" ? data.error : "";
+  const backToEmail = code === "expired" || code === "no_pending" || code === "too_many_attempts";
+  switch (code) {
+    case "invalid_email":
+      return { text: t("recoveryErrInvalidEmail"), backToEmail };
+    case "throttled":
+      return {
+        text: fill(t("recoveryErrThrottled"), { n: Number(data?.retryAfter) || 60 }),
+        backToEmail,
+      };
+    case "rate_limited":
+      return { text: t("recoveryErrRateLimited"), backToEmail };
+    case "unavailable":
+      return { text: t("recoveryErrUnavailable"), backToEmail };
+    case "invalid":
+      return { text: t("recoveryErrInvalid"), backToEmail };
+    case "wrong_code": {
+      const left =
+        data?.attemptsLeft == null
+          ? ""
+          : ` ${fill(t("recoveryErrAttemptsLeft"), { n: data.attemptsLeft })}`;
+      return { text: `${t("recoveryErrWrongCode")}${left}`, backToEmail };
+    }
+    case "expired":
+    case "no_pending":
+    case "too_many_attempts":
+      return { text: t("recoveryErrExpired"), backToEmail };
+    default:
+      return { text: t("recoveryErrFailed"), backToEmail: false };
+  }
+}
+
+/**
+ * Recovery email lives on the security tab, beside the password. The address
+ * is verified with its own code and is never shown in full — the API returns
+ * a mask. A replacement stays pending until that code is verified.
+ */
+function RecoveryEmailCard() {
+  const { t, language } = useI18n();
+  const { toast } = useToast();
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [masked, setMasked] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [phase, setPhase] = useState<RecoveryPhase>("email");
+  const [draft, setDraft] = useState("");
+  const [code, setCode] = useState("");
+  const [sending, setSending] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getRecoveryEmail()
+      .then((res) => {
+        if (cancelled) return;
+        setVerified(Boolean(res.verified));
+        setMasked(typeof res.masked === "string" ? res.masked : null);
+        setLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoadError(true);
+        setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function resetDraft() {
+    setPhase("email");
+    setDraft("");
+    setCode("");
+    setEmailError(null);
+    setCodeError(null);
+  }
+
+  function startChange() {
+    setEditing(true);
+    resetDraft();
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+    resetDraft();
+  }
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setSending(true);
+    if (phase === "email") {
+      setEmailError(null);
+      try {
+        await api.startRecoveryEmail(draft.trim(), language === "ar" ? "ar" : "en");
+        setPhase("code");
+        setCode("");
+        setCodeError(null);
+      } catch (err) {
+        setEmailError(recoveryMessage(t, err).text);
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+
+    setCodeError(null);
+    try {
+      const res = await api.verifyRecoveryEmail(code.trim());
+      setVerified(true);
+      setMasked(res.masked);
+      setEditing(false);
+      resetDraft();
+      toast(t("recoveryEmailVerified"), "success");
+    } catch (err) {
+      const mapped = recoveryMessage(t, err);
+      if (mapped.backToEmail) {
+        setPhase("email");
+        setCode("");
+        setCodeError(null);
+        setEmailError(mapped.text);
+      } else {
+        setCodeError(mapped.text);
+      }
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function onRemove() {
+    setRemoving(true);
+    try {
+      await api.deleteRecoveryEmail();
+      setVerified(false);
+      setMasked(null);
+      setEditing(false);
+      resetDraft();
+      setConfirmRemove(false);
+      toast(t("recoveryEmailRemoved"), "success");
+    } catch (err) {
+      toast(recoveryMessage(t, err).text, "error");
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  const showForm = !loadError && loaded && (!verified || editing || phase === "code");
+
+  return (
+    <Card className="flex max-w-xl flex-col gap-4">
+      <CardHeader
+        icon={<Mail size={20} />}
+        title={t("recoveryEmailTitle")}
+        description={t("recoveryEmailDesc")}
+      />
+
+      {loadError ? (
+        <p className="text-sm text-danger">{t("recoveryErrFailed")}</p>
+      ) : !loaded ? (
+        <Spinner className="size-5" label={t("loading")} />
+      ) : verified && masked && !showForm ? (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-text-main">{t("recoveryEmailCurrent")}</p>
+            <UserText dir="ltr" className="font-mono text-sm text-text-main">
+              {masked}
+            </UserText>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={startChange}>
+              {t("recoveryEmailChange")}
+            </Button>
+            <IconButton
+              label={t("recoveryEmailRemove")}
+              variant="danger"
+              icon={<Trash2 size={16} />}
+              onClick={() => setConfirmRemove(true)}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {showForm && (
+        <form onSubmit={onSubmit} className="flex flex-col gap-3.5">
+          {verified && masked && (
+            <div className="flex flex-col gap-1">
+              <p className="text-xs text-muted">{t("recoveryEmailStays")}</p>
+              <UserText dir="ltr" className="font-mono text-sm text-text-main">
+                {masked}
+              </UserText>
+            </div>
+          )}
+
+          {phase === "email" ? (
+            <Field label={t("recoveryEmailLabel")} htmlFor="recovery-email" error={emailError}>
+              <Input
+                id="recovery-email"
+                type="text"
+                inputMode="email"
+                autoComplete="email"
+                technical
+                spellCheck={false}
+                autoCapitalize="off"
+                autoCorrect="off"
+                required
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+              />
+            </Field>
+          ) : (
+            <Field
+              label={t("recoveryEmailCode")}
+              description={t("recoveryEmailCodeSent")}
+              htmlFor="recovery-code"
+              error={codeError}
+            >
+              <Input
+                id="recovery-code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                technical
+                className="font-mono"
+                maxLength={6}
+                required
+                value={code}
+                onChange={(event) => setCode(event.target.value)}
+              />
+            </Field>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="submit" variant="primary" loading={sending}>
+              {phase === "email" ? t("recoveryEmailSendCode") : t("recoveryEmailVerify")}
+            </Button>
+            {phase === "code" ? (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setPhase("email");
+                  setCode("");
+                  setCodeError(null);
+                }}
+                disabled={sending}
+              >
+                {t("cancel")}
+              </Button>
+            ) : (
+              editing && (
+                <Button variant="ghost" onClick={cancelEdit} disabled={sending}>
+                  {t("cancel")}
+                </Button>
+              )
+            )}
+          </div>
+        </form>
+      )}
+
+      <ConfirmDialog
+        isOpen={confirmRemove}
+        onClose={() => {
+          if (!removing) setConfirmRemove(false);
+        }}
+        onConfirm={onRemove}
+        title={t("recoveryEmailRemoveTitle")}
+        description={t("recoveryEmailRemoveDesc")}
+        confirmLabel={t("delete")}
+        cancelLabel={t("cancel")}
+        variant="danger"
+        loading={removing}
+      />
+    </Card>
+  );
+}
+
 export const SettingsView: React.FC = () => {
   const { t, language, setLanguage } = useI18n();
   const { toast } = useToast();
+  const guided = useGuidedTour();
   const [activeTab, setActiveTab] = useState<SettingsTab>(tabFromHash);
 
   useEffect(() => {
@@ -342,7 +639,7 @@ export const SettingsView: React.FC = () => {
         value={activeTab}
         onChange={(v) => handleTabChange(v as SettingsTab)}
         aria-label={t("settings")}
-        className="overflow-x-auto"
+        className="overflow-x-auto no-scrollbar"
         options={[
           { value: "general", label: t("tabGeneral"), icon: <Sliders size={17} /> },
           { value: "integrations", label: t("tabIntegrations"), icon: <Key size={17} /> },
@@ -356,7 +653,7 @@ export const SettingsView: React.FC = () => {
 
       {activeTab === "general" && (
         <div className="flex flex-col gap-5">
-          <Card className="flex flex-col gap-4 sm:gap-5">
+          <Card className="flex flex-col gap-4 sm:gap-5" data-tour="settings-general">
             <CardHeader
               icon={<Terminal size={22} />}
               title={t("prefixTitle")}
@@ -374,7 +671,7 @@ export const SettingsView: React.FC = () => {
             <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
               <div className="flex min-w-0 flex-col gap-1.5 sm:max-w-72">
                 <span className="text-xs font-semibold text-muted">{t("prefixPresets")}</span>
-                <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1">
+                <div className="flex max-w-full items-center gap-2 overflow-x-auto no-scrollbar pb-1">
                   {PREFIX_PRESETS.map((p) => {
                     const isCurrent = prefix === p;
                     return (
@@ -594,6 +891,23 @@ export const SettingsView: React.FC = () => {
               onChange={handleImportFile}
             />
           </Card>
+
+          <Card className="flex flex-col gap-4">
+            <CardHeader
+              icon={<Compass size={20} />}
+              title={t("tourReplayTitle")}
+              description={t("tourReplayDesc")}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                icon={<CirclePlay size={16} />}
+                onClick={() => guided?.startMainTour()}
+              >
+                {t("tourReplayAction")}
+              </Button>
+            </div>
+          </Card>
         </div>
       )}
 
@@ -777,7 +1091,7 @@ export const SettingsView: React.FC = () => {
 
       {activeTab === "security" && (
         <div className="flex flex-col gap-5">
-          <Card className="flex max-w-xl flex-col gap-4">
+          <Card className="flex max-w-xl flex-col gap-4" data-tour="settings-password">
             <CardHeader icon={<Lock size={20} />} title={t("changePassword")} />
 
             <form onSubmit={handlePasswordChange} className="flex flex-col gap-3.5">
@@ -826,6 +1140,8 @@ export const SettingsView: React.FC = () => {
               </Button>
             </form>
           </Card>
+
+          <RecoveryEmailCard />
         </div>
       )}
 
@@ -931,9 +1247,17 @@ export const SettingsView: React.FC = () => {
         </Card>
       )}
 
-      {activeTab === "feedback" && <FeedbackForm />}
+      {activeTab === "feedback" && (
+        <div data-tour="settings-feedback">
+          <FeedbackForm />
+        </div>
+      )}
 
-      {activeTab === "diagnostics" && <DiagnosticsView />}
+      {activeTab === "diagnostics" && (
+        <div data-tour="settings-diagnostics">
+          <DiagnosticsView />
+        </div>
+      )}
 
       {/* Import confirmation: the file is about to overwrite this install's
           settings, so the operator sees what is in it before it lands. */}

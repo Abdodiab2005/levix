@@ -13,6 +13,8 @@ import type {
   GroupItem,
   Job,
   LogItem,
+  ModerationPolicyFieldError,
+  ModerationPolicyVisibility,
   Pack,
   SentCrashReportItem,
   Sticker,
@@ -141,6 +143,8 @@ export interface FeedbackPayload {
   rating?: number | null;
   contact?: string | null;
   diagnostics?: ClientDiagnostics;
+  /** Id of the debug-log snapshot the preview froze. Missing means send no log. */
+  debugLogId?: string;
 }
 
 export interface FetchAiModelsResponse {
@@ -256,9 +260,37 @@ export const api = {
   getGroups: () => api.get<{ groups: GroupItem[] }>("/groups"),
   updateGroup: (jid: string, payload: any) =>
     api.patch(`/groups/${encodeURIComponent(jid)}`, payload),
+  previewModeration: (settings: unknown) =>
+    api.post<{
+      success: boolean;
+      en: string;
+      ar: string;
+      visibility?: ModerationPolicyVisibility;
+      errors?: ModerationPolicyFieldError[];
+    }>("/groups/moderation-preview", settings),
+  kickFlagged: (jid: string, userId: string) =>
+    api.post<{ success: boolean; group: GroupItem }>(
+      `/groups/${encodeURIComponent(jid)}/flagged/kick`,
+      { user_id: userId },
+    ),
+  clearFlagged: (jid: string, userId: string) =>
+    api.post<{ success: boolean; group: GroupItem }>(
+      `/groups/${encodeURIComponent(jid)}/flagged/clear`,
+      { user_id: userId },
+    ),
+  dismissFlagged: (jid: string, userId: string) =>
+    api.post<{ success: boolean; group: GroupItem }>(
+      `/groups/${encodeURIComponent(jid)}/flagged/dismiss`,
+      { user_id: userId },
+    ),
   getPersona: () =>
     api.get<{ persona: { header?: string; body?: string } | string }>("/ai/persona"),
   updatePersona: (persona: string) => api.put("/ai/persona", { body: persona }),
+  getTranslatePrompt: () =>
+    api.get<{ prompt: { header?: string; body?: string } | string }>("/ai/translate-prompt"),
+  updateTranslatePrompt: (body: string) => api.put("/ai/translate-prompt", { body }),
+  resetTranslatePrompt: () =>
+    api.post<{ prompt: { header?: string; body?: string } }>("/ai/translate-prompt/reset"),
   getMemoryFiles: () =>
     api.get<{
       files?: string[];
@@ -318,13 +350,26 @@ export const api = {
   }) => api.post<FetchAiModelsResponse>("/ai/models", payload || {}),
   changePassword: (current: string, next: string) =>
     api.post("/security/password", { current, next }),
+  /** Mask plus verified. The address itself is never in this response. */
+  getRecoveryEmail: () =>
+    api.get<{ success: boolean; verified: boolean; masked?: string }>("/recovery-email"),
+  startRecoveryEmail: (email: string, lang: "en" | "ar") =>
+    api.post<{ success: boolean }>("/recovery-email/start", { email, lang }),
+  verifyRecoveryEmail: (code: string) =>
+    api.post<{ success: boolean; verified: true; masked: string }>("/recovery-email/verify", {
+      code,
+    }),
+  deleteRecoveryEmail: () =>
+    api.delete<{ success: boolean; verified: false }>("/recovery-email"),
   // The bot forwards this to the developer; nothing about it is stored locally.
   getFeedbackMeta: () => api.get<FeedbackMeta>("/feedback/meta"),
   getFeedbackDiagnosticsPreview: (client: ClientDiagnostics) =>
-    api.post<{ success: boolean; diagnostics: DiagnosticsObject }>(
-      "/feedback/diagnostics-preview",
-      { client },
-    ),
+    api.post<{
+      success: boolean;
+      diagnostics: DiagnosticsObject;
+      debugLog: string;
+      debugLogId: string;
+    }>("/feedback/diagnostics-preview", { client }),
   sendFeedback: (payload: FeedbackPayload) => api.post<{ success: boolean }>("/feedback", payload),
   /**
    * The same feedback with one file, as multipart/form-data. XHR rather than
@@ -343,6 +388,7 @@ export const api = {
       if (payload.rating) form.set("rating", String(payload.rating));
       if (payload.contact) form.set("contact", payload.contact);
       if (payload.diagnostics) form.set("diagnostics", JSON.stringify(payload.diagnostics));
+      if (payload.debugLogId) form.set("debugLogId", payload.debugLogId);
       form.set("file", attachment, attachment.name);
       const xhr = new XMLHttpRequest();
       xhr.open("POST", "/dashboard/api/feedback");
@@ -379,8 +425,10 @@ export const api = {
     ),
   submitCrashReport: (body: CrashReportInput) =>
     api.post<{ success: boolean; id: string }>("/crash-reports", body),
-  sendCrashReport: (id: string) =>
-    api.post<{ success: boolean }>(`/crash-reports/${encodeURIComponent(id)}/send`),
+  sendCrashReport: (id: string, debugLogId?: string) =>
+    api.post<{ success: boolean }>(`/crash-reports/${encodeURIComponent(id)}/send`, {
+      ...(debugLogId ? { debugLogId } : {}),
+    }),
   deleteCrashReport: (id: string) =>
     api.delete<{ success: boolean }>(`/crash-reports/${encodeURIComponent(id)}`),
   deleteAllCrashReports: () => api.delete<{ success: boolean }>("/crash-reports"),

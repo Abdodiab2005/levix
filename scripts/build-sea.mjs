@@ -131,6 +131,9 @@ collect(path.join(ROOT, "public"), "public", assets);
 assets["src/config/ai-persona.md"] = fs
   .readFileSync(path.join(ROOT, "src", "config", "ai-persona.md"))
   .toString("base64");
+assets["src/config/translate-prompt.md"] = fs
+  .readFileSync(path.join(ROOT, "src", "config", "translate-prompt.md"))
+  .toString("base64");
 
 const assetBytes = Object.values(assets).reduce(
   (total, base64) => total + Math.floor((base64.length * 3) / 4),

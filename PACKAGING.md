@@ -152,7 +152,7 @@ npm run build:sea             # -> build/levix  (~134 MB, linux-x64)
 ```
 
 One file. It carries its own Node, its own SQLite, the control panel, and all
-65 commands. Copy it to a machine with nothing installed and run it.
+69 commands. Copy it to a machine with nothing installed and run it.
 
 `scripts/build-sea.mjs` does four things, because Node's SEA takes exactly one
 CommonJS file and this app is neither:

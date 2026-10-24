@@ -6,7 +6,6 @@ import {
   Clock,
   Eye,
   EyeOff,
-  Folder,
   MessageSquare,
   Play,
   Radio,
@@ -234,7 +233,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4" data-tour="overview-stats">
         {statsCards.map((card) => {
           const Icon = card.icon;
           return (
@@ -294,16 +293,6 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
           );
         })}
       </div>
-
-      <Card className="flex items-center gap-3.5">
-        <Folder size={20} className="shrink-0 text-faint" />
-        <div className="min-w-0 flex-1">
-          <div className="text-xs font-semibold text-muted">{t("dataDir")}</div>
-          <div className="truncate text-start font-mono text-xs text-text-main" dir="ltr">
-            {stats?.dataDir || "..."}
-          </div>
-        </div>
-      </Card>
     </div>
   );
 };

@@ -100,7 +100,8 @@ proxies, headless mode, backups, and troubleshooting.
 | Area | What Levix provides |
 | --- | --- |
 | Commands | Utilities, notes, reminders, polls, media, speech, weather, prayer times, and more — configurable from the panel |
-| Group moderation | Welcome messages, anti-link, anti-spam, media rules, warnings, auto-kick, roles, rules, and notes |
+| Translation | `!translate` between Arabic and English, or into a language you name — with an AI engine (your active AI provider, with its own editable prompt) or Google's translation engine, plus summary, tone, explain, and detect options |
+| Group moderation | Welcome messages, anti-link, anti-spam, media rules, and forbidden words in one linked pipeline with a shared warning counter per member — at the limit the group removes the member automatically or flags them for admin review, guided by a per-group policy (Relaxed / Standard / Strict presets, warning limit, per-feature actions, warning expiry); warnings, roles, rules, and notes too |
 | AI agent | Pick Google Gemini, OpenAI / any OpenAI-compatible server, or Anthropic from the panel; each provider has its own endpoint, API key, and model, with tools for web search, page reading, memory, and role management |
 | Scheduling | One-off, daily, and weekly messages with durable jobs, delivery status, and manual retry |
 | Control panel | Live connection state, command settings, roles, permissions, keys, memory, schedules, and logs |
@@ -123,6 +124,9 @@ AI answers are formatted for WhatsApp automatically: `**bold**` becomes `*bold*`
 `__italic__` becomes `_italic_`, and tables become named entries with labeled
 bullet points. Headings, lists, checkboxes, strikethrough and links are converted;
 code contents and URLs are preserved.
+
+Replies follow the language and dialect you write in — Egyptian Arabic in,
+Egyptian Arabic out.
 
 Use `!md` (or `!markdown`) to convert text from any other AI or message, without
 an AI key. Reply to that message with `!md`, or paste Markdown after the command,

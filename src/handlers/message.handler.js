@@ -1,5 +1,5 @@
 import { createRequire } from "module";
-import { handleAntiSpam } from "../middleware/antispam.middleware.js";
+import { observeAntiSpam } from "../middleware/antispam.middleware.js";
 import { checkBlacklist } from "../middleware/blacklist.middleware.js";
 import { trackForwardedMessage } from "../middleware/forward-tracking.middleware.js";
 import normalizeJid from "../utils/normalizeJid.esm.js";
@@ -127,7 +127,12 @@ async function processMessage(sock, msg, body) {
   try {
     const wasCommand = await handleCommand(sock, msg, body);
     if (wasCommand) {
-      logger.info(`[Message] Handled as command: "${body}"`);
+      const text = typeof body === "string" ? body : "";
+      const command = text.trim().split(/\s+/, 1)[0] || "";
+      logger.info(
+        { command, chat: isGroup ? "group" : "private", bodyLength: text.length },
+        "[Message] Handled as command",
+      );
       return;
     }
   } catch (error) {
@@ -140,23 +145,54 @@ async function processMessage(sock, msg, body) {
   }
 }
 
-// Handle group moderation
-async function handleGroupModeration(sock, msg) {
+// One message, one decision. Detectors only report hits; enforceHits applies
+// them. A missing id is refused here so a live redelivery cannot be guessed.
+// Direct detector calls used by older tests still enforce without an id.
+export async function handleGroupModeration(sock, msg) {
   try {
-    const { handleAntiLink } = require("../commands/group/antilink.cjs");
-    const { handleMediaControl } = require("../commands/group/media.cjs");
-    const { handleForbiddenWords } = require("../commands/mod.cjs");
+    if (!msg?.key?.id) {
+      logger.warn(
+        { group: msg?.key?.remoteJid },
+        "Skipping group moderation: message has no id",
+      );
+      return;
+    }
 
-    const wordActionTaken = await handleForbiddenWords(sock, msg);
-    if (wordActionTaken) return;
+    const { detectAntiLink } = require("../commands/group/antilink.cjs");
+    const { detectMedia } = require("../commands/group/media.cjs");
+    const { detectForbiddenWords } = require("../commands/mod.cjs");
+    const { enforceHits, isProtectedMember, senderCandidates } = require("../utils/moderationAction.cjs");
+    const { getGroupSettings } = require("../utils/storage.cjs");
+    const { resolveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
+    const { resolveModerationPolicy } = require("../services/moderationPolicy.cjs");
 
-    const linkActionTaken = await handleAntiLink(sock, msg, {}, normalizeJid);
-    if (linkActionTaken) return;
+    const groupId = msg.key.remoteJid;
+    const settings = getGroupSettings(groupId) || {};
+    resolveModerationPolicy(settings);
+    const groupMetadata = await resolveGroupMetadata(sock, groupId);
+    const candidates = senderCandidates(msg, sock);
+    if (msg.key.fromMe || isProtectedMember(sock, groupMetadata, candidates)) return;
 
-    const mediaActionTaken = await handleMediaControl(sock, msg, {}, normalizeJid);
-    if (mediaActionTaken) return;
-
-    await handleAntiSpam(sock, msg);
+    const hits = [];
+    const collect = (name, fn) => {
+      try {
+        const hit = fn();
+        if (hit) hits.push(hit);
+      } catch (error) {
+        logger.error({ err: error, detector: name }, "moderation detector failed");
+      }
+    };
+    collect("forbidden", () => detectForbiddenWords(msg, settings));
+    collect("link", () => detectAntiLink(msg, settings));
+    collect("media", () => detectMedia(msg, settings));
+    try {
+      const spam = await observeAntiSpam(sock, msg, settings);
+      if (spam) hits.push(spam);
+    } catch (error) {
+      logger.error({ err: error, detector: "spam" }, "moderation detector failed");
+    }
+    if (!hits.length) return;
+    return await enforceHits(sock, { msg, groupMetadata, hits });
   } catch (error) {
     logger.error({ err: error }, "Error in group moderation");
   }

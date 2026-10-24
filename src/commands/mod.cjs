@@ -4,7 +4,14 @@ const { getGroupSettings, saveGroupSettings } = require("../utils/storage.cjs");
 const { isOwnerJidSync, isAdminInGroupSync } = require("../utils/permissions.cjs");
 const { visibleText } = require("../utils/messageContent.cjs");
 const { resolveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
+const { enforceGroupRule, senderCandidates } = require("../utils/moderationAction.cjs");
+const {
+  featureActionOf,
+  normalizeFeatureAction,
+  policyFromFeatureAction,
+} = require("../utils/moderationSummary.cjs");
 const { tr } = require("../utils/i18n.cjs");
+const { applyModerationPolicy } = require("../services/moderationPolicy.cjs");
 
 // الهيكل الافتراضي لإعدادات المراقبة
 const defaultModSettings = {
@@ -55,21 +62,21 @@ module.exports = {
     ar: "يتحكم في إعدادات الإشراف على المجموعة.",
   },
   usage: {
-    en: "mod status\nmod <enable|disable> <antiLink|antiSpam|forbiddenWords>\nmod words <add|remove> <word>\nmod words list",
-    ar: "mod status\nmod <enable|disable> <antiLink|antiSpam|forbiddenWords>\nmod words <add|remove> <الكلمة>\nmod words list",
+    en: "mod status\nmod <enable|disable> <antiLink|antiSpam|forbiddenWords>\nmod action <antiLink|forbiddenWords> <DELETE|WARN|KICK>\nmod action antiSpam <WARN|KICK>\nmod words <add|remove> <word>\nmod words list",
+    ar: "mod status\nmod <enable|disable> <antiLink|antiSpam|forbiddenWords>\nmod action <antiLink|forbiddenWords> <DELETE|WARN|KICK>\nmod action antiSpam <WARN|KICK>\nmod words <add|remove> <الكلمة>\nmod words list",
   },
   chat: "group", // يعمل في الجروبات فقط
   botAdminRequired: false, // لا يتطلب أن يكون البوت مشرفًا لتغيير الإعدادات
 
   async execute(sock, msg, args) {
     const groupId = msg.key.remoteJid;
-    const senderId = msg.key.participant;
+    const senderIds = senderCandidates(msg, sock);
 
     // التحقق من صلاحيات المشرف (LID-aware via central module). Owners can
     // also drive moderation settings.
-    const groupMetadata = await sock.groupMetadata(groupId);
-    const senderIsAdmin = isAdminInGroupSync(groupMetadata, senderId);
-    const isOwner = msg.key.fromMe || isOwnerJidSync(senderId);
+    const groupMetadata = await resolveGroupMetadata(sock, groupId);
+    const senderIsAdmin = senderIds.some((id) => isAdminInGroupSync(groupMetadata, id));
+    const isOwner = msg.key.fromMe || senderIds.some(isOwnerJidSync);
     if (!senderIsAdmin && !isOwner) {
       return sock.sendMessage(
         groupId,
@@ -130,13 +137,73 @@ module.exports = {
         );
         break;
 
+      case "action": {
+        if (!feature) {
+          return sock.sendMessage(
+            groupId,
+            {
+              text: tr(
+                `⚠️ There is no feature called "${args[1] || ""}".`,
+                `⚠️ الميزة "${args[1] || ""}" غير موجودة.`,
+              ),
+            },
+            { quoted: msg },
+          );
+        }
+        const allowDelete = feature !== "antiSpam";
+        const action = normalizeFeatureAction(args[2], { allowDelete });
+        if (!action) {
+          return sock.sendMessage(
+            groupId,
+            {
+              text: tr(
+                allowDelete
+                  ? "Invalid action. Available: `DELETE`, `WARN`, `KICK`"
+                  : "Invalid action. Available: `WARN`, `KICK`",
+                allowDelete
+                  ? "الإجراء غير صالح. الإجراءات المتاحة: `DELETE`, `WARN`, `KICK`"
+                  : "الإجراء غير صالح. الإجراءات المتاحة: `WARN`, `KICK`",
+              ),
+            },
+            { quoted: msg },
+          );
+        }
+        const featureName =
+          feature === "antiLink" ? "antilink" : feature === "antiSpam" ? "antispam" : "forbidden";
+        try {
+          applyModerationPolicy(groupId, { features: { [featureName]: action } });
+        } catch (error) {
+          return sock.sendMessage(
+            groupId,
+            {
+              text: tr(
+                error.errors?.[0]?.message || "That action is not allowed.",
+                "هذا الإجراء غير مسموح.",
+              ),
+            },
+            { quoted: msg },
+          );
+        }
+        await sock.sendMessage(
+          groupId,
+          { text: tr(`✅ *${feature}* action is now ${action}.`, `✅ تم تعيين إجراء *${feature}* إلى ${action}.`) },
+          { quoted: msg },
+        );
+        break;
+      }
+
       case "status": {
         let statusText = tr("📊 *Moderation settings* 📊\n\n", "📊 *حالة إعدادات المراقبة* 📊\n\n");
+        const actionOf = {
+          antiLink: featureActionOf(settings, "antilink"),
+          antiSpam: featureActionOf(settings, "antispam"),
+          forbiddenWords: featureActionOf(settings, "forbidden"),
+        };
         for (const key of Object.values(FEATURE_KEYS)) {
           const status = featureEnabled(settings, key)
             ? tr("✅ on", "✅ مفعل")
             : tr("❌ off", "❌ معطل");
-          statusText += `› *${key}*: ${status}\n`;
+          statusText += `› *${key}*: ${status} · ${actionOf[key]}\n`;
         }
         statusText += tr(
           `\n- To see the forbidden words, type: \`!mod words list\``,
@@ -203,6 +270,7 @@ module.exports = {
           "🤖 *Moderation commands*\n\n" +
             "• `!mod enable <feature>`\nTurn a feature on (antilink, antispam, forbiddenwords)\n\n" +
             "• `!mod disable <feature>`\nTurn a feature off.\n\n" +
+            "• `!mod action <feature> <DELETE|WARN|KICK>`\nSet the feature action (antiSpam: WARN|KICK).\n\n" +
             "• `!mod status`\nShow which features are on.\n\n" +
             "• `!mod words add <word>`\nAdd a forbidden word.\n\n" +
             "• `!mod words remove <word>`\nRemove a forbidden word.\n\n" +
@@ -210,6 +278,7 @@ module.exports = {
           "🤖 *أوامر التحكم في المراقبة*\n\n" +
             "• `!mod enable <feature>`\nلتفعيل ميزة (antilink, antispam, forbiddenwords)\n\n" +
             "• `!mod disable <feature>`\nلتعطيل ميزة.\n\n" +
+            "• `!mod action <feature> <DELETE|WARN|KICK>`\nتعيين إجراء الميزة (antiSpam: WARN|KICK).\n\n" +
             "• `!mod status`\nلعرض حالة الميزات الحالية.\n\n" +
             "• `!mod words add <word>`\nلإضافة كلمة ممنوعة.\n\n" +
             "• `!mod words remove <word>`\nلإزالة كلمة ممنوعة.\n\n" +
@@ -222,22 +291,24 @@ module.exports = {
   },
 };
 
+function detectForbiddenWords(msg, settings) {
+  const groupId = msg?.key?.remoteJid;
+  if (!groupId?.endsWith("@g.us")) return null;
+  const config = settings?.moderation?.forbiddenWords;
+  if (!config?.enabled || !Array.isArray(config.list) || !config.list.length) return null;
+  const body = visibleText(msg.message).toLowerCase();
+  if (!body || !config.list.some((word) => word && body.includes(String(word).toLowerCase()))) {
+    return null;
+  }
+  return { rule: "forbidden", reason: "forbidden-word" };
+}
+
 async function handleForbiddenWords(sock, msg) {
   const groupId = msg.key.remoteJid;
   if (!groupId?.endsWith("@g.us")) return false;
 
   const settings = getGroupSettings(groupId) || {};
-  const config = settings.moderation?.forbiddenWords;
-  if (!config?.enabled || !Array.isArray(config.list) || !config.list.length) return false;
-
-  const body = visibleText(msg.message).toLowerCase();
-  if (!body || !config.list.some((word) => word && body.includes(String(word).toLowerCase()))) {
-    return false;
-  }
-
-  const senderId = msg.key.participant || msg.key.remoteJid;
-  const senderIds = [senderId, msg.key.participantAlt, msg.key.participantPn].filter(Boolean);
-  // Cache-first: this runs on every group message while forbidden words are on.
+  const senderIds = senderCandidates(msg, sock);
   const groupMetadata = await resolveGroupMetadata(sock, groupId);
   if (
     msg.key.fromMe ||
@@ -247,15 +318,19 @@ async function handleForbiddenWords(sock, msg) {
     return false;
   }
 
-  await sock.sendMessage(groupId, { delete: msg.key });
-  await sock.sendMessage(groupId, {
-    text: tr(
-      `🚫 @${senderId.split("@")[0]}, that message had a forbidden word in it.`,
-      `🚫 يا @${senderId.split("@")[0]}، الرسالة فيها كلمة ممنوعة.`,
-    ),
-    mentions: [senderId],
+  const hit = detectForbiddenWords(msg, settings);
+  if (!hit) return false;
+  const policy = policyFromFeatureAction(featureActionOf(settings, "forbidden"));
+  const result = await enforceGroupRule(sock, {
+    msg,
+    groupMetadata,
+    rule: "forbidden",
+    warningReason: hit.reason,
+    ...policy,
+    targetCandidates: senderIds,
   });
-  return true;
+  return Boolean(result.acted);
 }
 
 module.exports.handleForbiddenWords = handleForbiddenWords;
+module.exports.detectForbiddenWords = detectForbiddenWords;

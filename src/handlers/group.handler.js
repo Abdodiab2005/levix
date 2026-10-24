@@ -5,11 +5,40 @@ import { getGroupSettings } from "../utils/storage.esm.js";
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
 const { tr } = require("../utils/i18n.cjs");
+const { buildModerationSummary } = require("../utils/moderationSummary.cjs");
+const { resolveModerationPolicy } = require("../services/moderationPolicy.cjs");
+const { clearMemberModeration } = require("../utils/moderationAction.cjs");
+
+function participantIdentities(participant) {
+  if (typeof participant === "string") return [participant];
+  if (!participant || typeof participant !== "object") return [];
+  const ids = [];
+  for (const field of ["id", "lid", "phoneNumber", "jid", "pn"]) {
+    const value = participant[field];
+    if (typeof value === "string" && value && !ids.includes(value)) ids.push(value);
+  }
+  return ids;
+}
 
 // Handle group participant updates (join/leave)
 export async function handleGroupParticipantsUpdate(sock, update) {
   const { id, participants, action } = update;
   logger.info({ update }, "Received group participants update");
+
+  if (action === "remove" || action === "leave") {
+    try {
+      const settings = getGroupSettings(id) || {};
+      if (resolveModerationPolicy(settings).membership === "clear") {
+        for (const participant of participants || []) {
+          for (const identity of participantIdentities(participant)) {
+            clearMemberModeration(id, identity);
+          }
+        }
+      }
+    } catch (error) {
+      logger.error({ err: error, update }, "Error clearing moderation on leave");
+    }
+  }
 
   if (action !== "add") {
     logger.info(`[Group] ${action} action for ${id}`);
@@ -30,7 +59,9 @@ export async function handleGroupParticipantsUpdate(sock, update) {
       const randomIndex = Math.floor(Math.random() * welcomeConfig.messages.length);
       const welcomeMessage = welcomeConfig.messages[randomIndex];
 
-      const finalMessage = welcomeMessage.replace(/\${user}/g, `@${participant.split("@")[0]}`);
+      const welcomeText = welcomeMessage.replace(/\${user}/g, `@${participant.split("@")[0]}`);
+      const summary = buildModerationSummary(settings);
+      const finalMessage = summary ? `${welcomeText}\n\n${summary}` : welcomeText;
 
       await delay(1000);
       await sock.sendMessage(id, {
