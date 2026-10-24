@@ -16,7 +16,12 @@ const {
   commitModerationDecision,
   markModerationNotice,
   markModerationKicked,
+  getPnForLid,
+  getLidForPn,
+  getLidsForPn,
 } = require("./storage.cjs");
+const normalizeJid = require("./normalizeJid.cjs");
+const { isLidJid } = normalizeJid;
 const {
   getSenderCandidatesSync,
   hasBotPrivilegesSync,
@@ -56,15 +61,51 @@ function commandContextInfo(msg) {
   );
 }
 
+function identityAliases(jid) {
+  const ids = [];
+  const add = (value) => {
+    const norm = normalizeJid(value);
+    if (norm && !ids.includes(norm)) ids.push(norm);
+  };
+  add(jid);
+  const norm = ids[0];
+  if (!norm) return ids;
+  const phones = [];
+  const addPhone = (value) => {
+    const phone = normalizeJid(value);
+    if (!phone || isLidJid(phone) || phones.includes(phone)) return;
+    phones.push(phone);
+  };
+  if (isLidJid(norm)) addPhone(getPnForLid(norm));
+  else addPhone(norm);
+  for (const phone of phones) {
+    add(phone);
+    add(getLidForPn(phone));
+    for (const lid of getLidsForPn(phone) || []) add(lid);
+  }
+  return ids;
+}
+
 function targetFromCommand(msg) {
   const ctx = commandContextInfo(msg);
-  const mentioned = (ctx.mentionedJid || []).filter(Boolean);
+  const mentioned = (ctx.mentionedJid || []).filter((jid) => typeof jid === "string" && jid);
   if (mentioned.length) {
-    return { jid: mentioned[0], candidates: mentioned };
+    const jid = mentioned[0];
+    return { jid, candidates: identityAliases(jid) };
   }
-  const quoted = [ctx.participant, ctx.participantAlt, ctx.participantPn].filter(Boolean);
+  const quoted = [ctx.participant, ctx.participantAlt, ctx.participantPn].filter(
+    (jid) => typeof jid === "string" && jid,
+  );
   if (ctx.quotedMessage || quoted.length) {
-    return { jid: quoted[0], candidates: quoted };
+    const jid = quoted[0];
+    if (!jid) return null;
+    const candidates = [];
+    for (const value of quoted) {
+      for (const alias of identityAliases(value)) {
+        if (!candidates.includes(alias)) candidates.push(alias);
+      }
+    }
+    return { jid, candidates };
   }
   return null;
 }
@@ -205,10 +246,18 @@ async function kickGroupMember(sock, opts) {
   if (isProtectedMember(sock, meta, candidates)) return { kicked: false, error: "protected" };
   if (!isBotAdminInGroupSync(meta, sock)) return { kicked: false, error: "bot-not-admin" };
   const kickJid = rosterJidForSync(meta, candidates) || candidates[0];
-  await sock.groupParticipantsUpdate(groupId, [kickJid], "remove");
+  const updated = await sock.groupParticipantsUpdate(groupId, [kickJid], "remove");
+  if (!removalSucceeded(updated)) return { kicked: false, error: "rejected", kickJid };
   clearMemberModeration(groupId, candidates[0]);
   logger.info({ group: groupId, user: kickJid }, "moderation kicked member");
   return { kicked: true, kickJid };
+}
+
+function removalSucceeded(result) {
+  if (result == null) return true;
+  const items = Array.isArray(result) ? result : [result];
+  if (!items.length) return false;
+  return items.every((item) => item && typeof item === "object" && String(item.status) === "200");
 }
 
 function idleResult() {
@@ -343,7 +392,10 @@ async function enforceHits(sock, opts) {
     : senderCandidates(msg, sock)
   ).filter(Boolean);
   if (!candidates.length) return idleResult();
-  if (msg?.key?.fromMe || isProtectedMember(sock, meta, candidates)) return idleResult();
+  // Detectors skip the linked account. A manual warn is an admin action, so
+  // immunity is the target's (bot, owners, bot admins, group admins).
+  const manualWarn = incoming.every((hit) => hit.rule === "warn");
+  if ((!manualWarn && msg?.key?.fromMe) || isProtectedMember(sock, meta, candidates)) return idleResult();
 
   const settings = getGroupSettings(groupId) || {};
   const policy = resolveModerationPolicy(settings);

@@ -247,16 +247,25 @@ function warningUserIds(userId) {
   add(userId);
   const norm = normalizeJid(userId);
   if (!norm) return ids;
+  // A LID resolves to a phone, then that phone expands to every LID stored
+  // for it. Otherwise a second LID of the same number misses the first ledger.
+  const phones = [];
+  const addPhone = (value) => {
+    const phone = normalizeJid(value);
+    if (!phone || isLidJid(phone) || phones.includes(phone)) return;
+    phones.push(phone);
+  };
   if (isLidJid(norm)) {
-    add(getPnForLid(norm));
-    if (norm !== userId) add(getPnForLid(userId));
+    addPhone(getPnForLid(norm));
+    if (norm !== userId) addPhone(getPnForLid(userId));
   } else {
-    add(getLidForPn(norm));
-    for (const lid of getLidsForPn(norm)) add(lid);
-    if (norm !== userId) {
-      add(getLidForPn(userId));
-      for (const lid of getLidsForPn(userId)) add(lid);
-    }
+    addPhone(norm);
+    if (norm !== userId) addPhone(userId);
+  }
+  for (const phone of phones) {
+    add(phone);
+    add(getLidForPn(phone));
+    for (const lid of getLidsForPn(phone)) add(lid);
   }
   return ids;
 }
@@ -282,6 +291,8 @@ function readWarningRows(groupId, userIds) {
       if (messageId) {
         if (seenIds.has(messageId)) continue;
         seenIds.add(messageId);
+        merged.push(warning);
+        continue;
       }
       const key = `${warning?.date || ""}|${warning?.reason || ""}|${warning?.by || ""}`;
       if (seen.has(key)) continue;

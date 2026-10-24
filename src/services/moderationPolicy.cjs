@@ -90,7 +90,9 @@ function warnSkip(field) {
 
 function legacyLimit(settings) {
   const max = settings?.warn_system?.max_warnings;
-  return isInteger(max) && max >= 1 && max <= 50 ? max : 3;
+  // Old installs stored limits above 50. Keep any positive integer already
+  // saved. New writes are rejected outside 1–50 by validateModerationPolicy.
+  return isInteger(max) && max >= 1 ? max : 3;
 }
 
 function legacyLimitAction(settings) {

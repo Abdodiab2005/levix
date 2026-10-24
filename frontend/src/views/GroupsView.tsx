@@ -62,7 +62,7 @@ const DEFAULT_POLICY: ModerationPolicy = {
   flagAt: 3,
   kickAt: 5,
   decay: { mode: "off", days: 30 },
-  membership: "keep",
+  membership: "clear",
   flag: {
     notify: "group",
     mentionAdmins: true,

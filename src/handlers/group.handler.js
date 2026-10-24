@@ -9,6 +9,17 @@ const { buildModerationSummary } = require("../utils/moderationSummary.cjs");
 const { resolveModerationPolicy } = require("../services/moderationPolicy.cjs");
 const { clearMemberModeration } = require("../utils/moderationAction.cjs");
 
+function participantIdentities(participant) {
+  if (typeof participant === "string") return [participant];
+  if (!participant || typeof participant !== "object") return [];
+  const ids = [];
+  for (const field of ["id", "lid", "phoneNumber", "jid", "pn"]) {
+    const value = participant[field];
+    if (typeof value === "string" && value && !ids.includes(value)) ids.push(value);
+  }
+  return ids;
+}
+
 // Handle group participant updates (join/leave)
 export async function handleGroupParticipantsUpdate(sock, update) {
   const { id, participants, action } = update;
@@ -19,7 +30,9 @@ export async function handleGroupParticipantsUpdate(sock, update) {
       const settings = getGroupSettings(id) || {};
       if (resolveModerationPolicy(settings).membership === "clear") {
         for (const participant of participants || []) {
-          clearMemberModeration(id, participant);
+          for (const identity of participantIdentities(participant)) {
+            clearMemberModeration(id, identity);
+          }
         }
       }
     } catch (error) {

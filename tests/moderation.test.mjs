@@ -1,6 +1,7 @@
 // Group moderation pipeline: identity-stable warnings, roster kicks, bot-admin
 // gating, rule notices, and the shared Active-moderation summary.
 
+import { readFileSync } from "node:fs";
 import { equal, finish, ok, require, section, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("levix-moderation");
@@ -42,10 +43,13 @@ const USER_PN = "201333333333@s.whatsapp.net";
 const USER_LID = "333@lid";
 const ADMIN_PN = "201111111111@s.whatsapp.net";
 const ADMIN_LID = "111@lid";
+const OTHER_PN = "201222222222@s.whatsapp.net";
+const OTHER_LID = "222@lid";
 
 store.storeLidPnMapping(USER_LID, USER_PN);
 store.storeLidPnMapping(BOT_LID, BOT_PN);
 store.storeLidPnMapping(ADMIN_LID, ADMIN_PN);
+store.storeLidPnMapping(OTHER_LID, OTHER_PN);
 
 function memberRoster(botAdmin = true) {
   return {
@@ -1225,6 +1229,282 @@ section("the command and the panel persist the same limit");
     );
   } finally {
     await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+section("the first mention is the only kick, promote, and demote target");
+{
+  const groupId = "120363-two-mentions@g.us";
+  const metadata = {
+    subject: "Moderation group",
+    participants: [
+      { id: OTHER_LID, phoneNumber: OTHER_PN, admin: null },
+      { id: USER_LID, phoneNumber: USER_PN, admin: null },
+      { id: ADMIN_LID, phoneNumber: ADMIN_PN, admin: "admin" },
+      { id: BOT_LID, phoneNumber: BOT_PN, admin: "admin" },
+    ],
+  };
+  const { sock, kicks } = makeSock({ metadata });
+  cache(groupId, metadata);
+  const mention = {
+    key: { remoteJid: groupId, participant: ADMIN_PN },
+    message: {
+      extendedTextMessage: { contextInfo: { mentionedJid: [USER_PN, OTHER_PN] } },
+    },
+    pushName: "Admin",
+  };
+  await kickCommand.execute(sock, mention, ["@member", "@other", "spam"], "", metadata);
+  equal("two mentions kick once", kicks.length, 1);
+  equal("kick uses the first mention", kicks[0].users[0], USER_LID);
+
+  kicks.length = 0;
+  await promoteCommand.execute(sock, mention, ["@member", "@other"], "", metadata);
+  equal("two mentions promote once", kicks.length, 1);
+  equal("promote uses the first mention", kicks[0].users[0], USER_LID);
+  equal("promote action is promote", kicks[0].action, "promote");
+
+  kicks.length = 0;
+  const demoteMeta = {
+    ...metadata,
+    participants: metadata.participants.map((participant) =>
+      participant.id === USER_LID || participant.id === OTHER_LID
+        ? { ...participant, admin: "admin" }
+        : participant,
+    ),
+  };
+  cache(groupId, demoteMeta);
+  await demoteCommand.execute(sock, mention, ["@member", "@other"], "", demoteMeta);
+  equal("two mentions demote once", kicks.length, 1);
+  equal("demote uses the first mention", kicks[0].users[0], USER_LID);
+
+  kicks.length = 0;
+  const aliasMeta = {
+    subject: "Moderation group",
+    participants: [
+      { id: OTHER_LID, admin: null },
+      { id: USER_LID, admin: null },
+      { id: ADMIN_LID, admin: "admin" },
+      { id: BOT_LID, admin: "admin" },
+    ],
+  };
+  cache(groupId, aliasMeta);
+  await kickCommand.execute(
+    sock,
+    {
+      key: { remoteJid: groupId, participant: ADMIN_PN },
+      message: { extendedTextMessage: { contextInfo: { mentionedJid: [USER_PN] } } },
+      pushName: "Admin",
+    },
+    ["@member"],
+    "",
+    aliasMeta,
+  );
+  equal("a phone mention kicks the mapped roster lid", kicks.length, 1);
+  equal("mapped kick jid is the roster lid", kicks[0].users[0], USER_LID);
+}
+
+section("a legacy warn limit above 50 is kept; new writes stay 1-50");
+{
+  equal(
+    "legacy max 100 resolves to 100",
+    policyService.resolveModerationPolicy({ warn_system: { max_warnings: 100, action: "KICK" } }).limit,
+    100,
+  );
+  equal(
+    "legacy max 0 stays the default",
+    policyService.resolveModerationPolicy({ warn_system: { max_warnings: 0 } }).limit,
+    3,
+  );
+  ok(
+    "a new limit of 100 is rejected",
+    policyService
+      .validateModerationPolicy({ limit: 100 }, {})
+      .errors.some((item) => item.field === "limit" && item.code === "range"),
+  );
+  const groupId = "120363-legacy-100@g.us";
+  const { sock, meta, kicks } = makeSock();
+  cache(groupId, meta);
+  store.saveGroupSettings(groupId, { warn_system: { max_warnings: 100, action: "KICK" } });
+  for (const [index, reason] of ["one", "two", "three"].entries()) {
+    await withLang("en", () =>
+      warnCommand.execute(
+        sock,
+        {
+          key: { remoteJid: groupId, participant: ADMIN_PN, id: `legacy-100-${index}` },
+          message: { extendedTextMessage: { contextInfo: { mentionedJid: [USER_LID] } } },
+        },
+        ["@u", reason],
+        "",
+        meta,
+      ),
+    );
+  }
+  equal("three warnings do not kick at a legacy limit of 100", kicks.length, 0);
+  equal("all three warnings stay on the ledger", store.getUserWarnings(groupId, USER_PN).length, 3);
+}
+
+section("a leave participant object clears every identity it carries");
+{
+  const groupId = "120363-leave-object@g.us";
+  store.saveGroupSettings(groupId, {});
+  store.saveUserWarnings(groupId, USER_LID, [
+    { reason: "antilink:x", by: "system", date: new Date().toISOString() },
+  ]);
+  store.upsertModerationFlag(groupId, USER_LID, {
+    warnCount: 1,
+    lastRule: "link",
+    reasons: ["antilink:x"],
+  });
+  await handleGroupParticipantsUpdate(
+    {},
+    {
+      id: groupId,
+      participants: [
+        { id: USER_LID, lid: USER_LID, phoneNumber: USER_PN, admin: null },
+      ],
+      action: "remove",
+    },
+  );
+  equal("an object leave clears warnings", store.getUserWarnings(groupId, USER_PN).length, 0);
+  equal("an object leave clears the flag", store.getModerationFlag(groupId, USER_PN), null);
+
+  const lidOnly = "120363-leave-lid-field@g.us";
+  store.saveGroupSettings(lidOnly, {});
+  store.saveUserWarnings(lidOnly, USER_PN, [
+    { reason: "antilink:y", by: "system", date: new Date().toISOString() },
+  ]);
+  await handleGroupParticipantsUpdate(
+    {},
+    { id: lidOnly, participants: [{ lid: USER_LID }], action: "leave" },
+  );
+  equal("a lid field clears the phone ledger", store.getUserWarnings(lidOnly, USER_PN).length, 0);
+}
+
+section("a refused participant update is not a kick");
+{
+  const groupId = "120363-kick-403@g.us";
+  const { sock, meta, kicks } = makeSock();
+  cache(groupId, meta);
+  store.saveGroupSettings(groupId, {
+    antilink: { enabled: true, mode: "ALL", action: "KICK", allowed_domains: [], blocked_domains: [] },
+  });
+  sock.groupParticipantsUpdate = async (_jid, users, action) => {
+    kicks.push({ users: [...users], action });
+    return [{ status: "403", jid: users[0] }];
+  };
+  const result = await withLang("en", () =>
+    handleGroupModeration(sock, withId(groupId, "deny-1", { text: "https://spam.example/deny" })),
+  );
+  equal("the removal was attempted", kicks.length, 1);
+  equal("status 403 is not a kick", result.kicked, false);
+  equal("status 403 keeps the warning", store.getUserWarnings(groupId, USER_PN).length, 1);
+  equal("status 403 records a flag", store.listModerationFlags(groupId).length, 1);
+  equal("status 403 does not mark kicked", store.getModerationApplied(groupId, "deny-1").kicked, false);
+
+  const okId = "120363-kick-200@g.us";
+  const okSock = makeSock();
+  cache(okId, okSock.meta);
+  store.saveGroupSettings(okId, {
+    antilink: { enabled: true, mode: "ALL", action: "KICK", allowed_domains: [], blocked_domains: [] },
+  });
+  okSock.sock.groupParticipantsUpdate = async (_jid, users, action) => {
+    okSock.kicks.push({ users: [...users], action });
+    return [{ status: "200", jid: users[0] }];
+  };
+  const removed = await withLang("en", () =>
+    handleGroupModeration(okSock.sock, withId(okId, "ok-1", { text: "https://spam.example/ok" })),
+  );
+  equal("status 200 kicks", removed.kicked, true);
+  equal("status 200 clears warnings", store.getUserWarnings(okId, USER_PN).length, 0);
+  equal("status 200 marks kicked", store.getModerationApplied(okId, "ok-1").kicked, true);
+
+  const commandId = "120363-kick-cmd-403@g.us";
+  store.saveUserWarnings(commandId, USER_PN, [
+    { reason: "keep", by: "admin", date: new Date().toISOString() },
+  ]);
+  const commandSock = makeSock();
+  cache(commandId, commandSock.meta);
+  commandSock.sock.groupParticipantsUpdate = async () => ({ status: "403" });
+  await kickCommand.execute(
+    commandSock.sock,
+    {
+      key: { remoteJid: commandId, participant: ADMIN_PN },
+      message: { extendedTextMessage: { contextInfo: { mentionedJid: [USER_PN] } } },
+      pushName: "Admin",
+    },
+    ["@member", "spam"],
+    "",
+    commandSock.meta,
+  );
+  equal("!kick status 403 keeps warnings", store.getUserWarnings(commandId, USER_PN).length, 1);
+}
+
+section("a linked-account warn checks the target, not the sender");
+{
+  const groupId = "120363-warn-fromme@g.us";
+  const { sock, meta, kicks } = makeSock();
+  cache(groupId, meta);
+  store.saveGroupSettings(groupId, { warn_system: { max_warnings: 2, action: "KICK" } });
+  await withLang("en", () =>
+    warnCommand.execute(
+      sock,
+      {
+        key: { remoteJid: groupId, fromMe: true, id: "warn-fromme", participant: BOT_PN },
+        message: { extendedTextMessage: { contextInfo: { mentionedJid: [USER_LID] } } },
+      },
+      ["@u", "manual"],
+      "",
+      meta,
+    ),
+  );
+  equal("fromMe warn stores a warning", store.getUserWarnings(groupId, USER_PN).length, 1);
+  equal("fromMe warn does not kick under the limit", kicks.length, 0);
+
+  const blocked = await enforceHits(sock, {
+    msg: { key: { remoteJid: groupId, fromMe: true, id: "warn-admin" } },
+    groupId,
+    groupMetadata: meta,
+    hits: [{ rule: "warn", reason: "nope", detail: "nope" }],
+    targetCandidates: [ADMIN_PN],
+  });
+  equal("fromMe warn of an admin does not act", blocked.acted, false);
+  equal("fromMe warn of an admin stores nothing", store.getUserWarnings(groupId, ADMIN_PN).length, 0);
+
+  const botTarget = await enforceHits(sock, {
+    msg: { key: { remoteJid: groupId, fromMe: true, id: "warn-bot" } },
+    groupId,
+    groupMetadata: meta,
+    hits: [{ rule: "warn", reason: "nope", detail: "nope" }],
+    targetCandidates: [BOT_PN],
+  });
+  equal("fromMe warn of the bot does not act", botTarget.acted, false);
+
+  const automatic = await enforceHits(sock, {
+    msg: { key: { remoteJid: groupId, fromMe: true, id: "self-link" } },
+    groupId,
+    groupMetadata: meta,
+    hits: [{ rule: "link", reason: "antilink:self", detail: "https://spam.example/self" }],
+    targetCandidates: [USER_PN],
+  });
+  equal("fromMe automatic moderation does not act", automatic.acted, false);
+  equal("fromMe automatic moderation does not add a warning", store.getUserWarnings(groupId, USER_PN).length, 1);
+}
+
+section("panel presets use the backend membership default");
+{
+  const source = readFileSync(new URL("../frontend/src/views/GroupsView.tsx", import.meta.url), "utf8");
+  const defaults = source.slice(source.indexOf("const DEFAULT_POLICY"), source.indexOf("type PresetKey"));
+  const presets = source.slice(source.indexOf("const PRESET_POLICIES"), source.indexOf("interface PolicyDraft"));
+  equal("panel default membership is clear", defaults.match(/membership:\s*"([^"]+)"/)?.[1], "clear");
+  ok("presets do not set membership themselves", !/membership\s*:/.test(presets));
+  for (const name of ["standard", "relaxed", "strict"]) {
+    equal(
+      `${name} preset membership is clear`,
+      policyService.resolveModerationPolicy(
+        name === "standard" ? {} : policyService.applyModerationPreset(`120363-panel-${name}@g.us`, name).settings,
+      ).membership,
+      "clear",
+    );
   }
 }
 

@@ -79,6 +79,64 @@ equal(
   0,
 );
 
+section("two lids of one phone share one warning ledger");
+{
+  const phone = "201777777777@s.whatsapp.net";
+  const lidA = "7771@lid";
+  const lidB = "7772@lid";
+  const groupId = "g-two-lids@g.us";
+  store.saveUserWarnings(groupId, lidA, [
+    { reason: "first", date: "2020-01-01T00:00:00.000Z", by: "admin", messageId: "lid-a-1" },
+  ]);
+  store.storeLidPnMapping(lidA, phone);
+  store.storeLidPnMapping(lidB, phone);
+  equal(
+    "the second lid reads the first lid's warning",
+    store.getUserWarnings(groupId, lidB).length,
+    1,
+  );
+  const merged = store.getUserWarnings(groupId, lidB);
+  store.saveUserWarnings(groupId, lidB, [
+    ...merged,
+    { reason: "second", date: "2020-01-02T00:00:00.000Z", by: "admin", messageId: "lid-b-2" },
+  ]);
+  const rows = store.getAllWarnings().filter((row) => row.group_id === groupId);
+  equal("a later save keeps one ledger", rows.length, 1);
+  equal("the ledger is the phone number", rows[0].user_id, phone);
+  equal("both warnings are visible from the first lid", store.getUserWarnings(groupId, lidA).length, 2);
+  store.clearUserWarnings(groupId, lidB);
+  equal("clear through the second lid removes the first", store.getUserWarnings(groupId, lidA).length, 0);
+  equal("clear through the second lid removes the phone row", store.getUserWarnings(groupId, phone).length, 0);
+}
+
+section("warning dedup uses the message id");
+{
+  const groupId = "g-warn-dedup@g.us";
+  const userId = "201888888888@s.whatsapp.net";
+  const same = { reason: "spam", by: "admin", date: "2020-01-01T00:00:00.000Z" };
+  store.saveUserWarnings(groupId, userId, [
+    { ...same, messageId: "m-a" },
+    { ...same, messageId: "m-b" },
+    { ...same },
+  ]);
+  equal(
+    "different message ids with the same tuple stay separate",
+    store.getUserWarnings(groupId, userId).length,
+    3,
+  );
+  store.saveUserWarnings(groupId, userId, [
+    { ...same, messageId: "m-a", reason: "spam" },
+    { ...same, messageId: "m-a", reason: "other" },
+  ]);
+  equal("the same message id collapses to one warning", store.getUserWarnings(groupId, userId).length, 1);
+  store.saveUserWarnings(groupId, userId, [{ ...same }, { ...same }]);
+  equal(
+    "events without an id still collapse on the legacy tuple",
+    store.getUserWarnings(groupId, userId).length,
+    1,
+  );
+}
+
 section("todos / notes");
 store.saveUserTodos("u1", [{ text: "buy milk" }]);
 ok("todo", store.getUserTodos("u1")[0].text === "buy milk");
