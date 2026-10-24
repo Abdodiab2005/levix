@@ -342,9 +342,10 @@ class MediaRepository(context: Context) {
                         val document = DocumentsContract.buildDocumentUriUsingTree(tree, id)
                         if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
                             // Every WhatsApp media folder, plus whatever is
-                            // nested under one ("Sent", month folders). The
-                            // old walk only entered .Statuses and Documents.
-                            if (MediaLogic.mediaFolder("$path/$name")) folders.add(document to "$path/$name")
+                            // nested under one ("Sent", month folders), and the
+                            // "Media" folder when the grant was made at the
+                            // WhatsApp folder itself.
+                            if (MediaLogic.walkable("$path/$name")) folders.add(document to "$path/$name")
                         } else {
                             MediaQuery.mapDocument(
                                 id = id,
