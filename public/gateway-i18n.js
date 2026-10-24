@@ -52,7 +52,11 @@
       resetTitle: "Reset your password",
       resetSubtitle:
         "{brand} sends a one-time code to your WhatsApp — the linked account's own chat. The code works for 10 minutes.",
+      resetSubtitleChannels:
+        "{brand} can send a one-time code to WhatsApp, or to your recovery email. The code works for 10 minutes.",
       resetSend: "Send code to WhatsApp",
+      resetSendEmail: "Send code to email",
+      resetEmailHint: "The code goes to",
       resetCodeLabel: "Reset code",
       resetCodePlaceholder: "6 digits",
       newPassword: "New password",
@@ -64,6 +68,10 @@
       resetErrNoSession:
         "WhatsApp isn't connected, so the code can't be sent. Sign in on the server and run `levix reset-password`, or start the WhatsApp session first.",
       resetErrSendFailed: "Couldn't send the WhatsApp message. Try again in a minute.",
+      resetErrNoEmail: "Email recovery isn't set up.",
+      resetErrRateLimited: "The mail service is busy. Try again in a little while.",
+      resetErrUnavailable: "Couldn't reach the mail service. Try again.",
+      resetErrInvalid: "The mail service rejected the request.",
       resetErrStart: "Couldn't start the reset. Try again.",
       resetErrServer: "Couldn't reach the server. Try again.",
       resetDone: "Password updated. Taking you to sign in…",
@@ -150,7 +158,11 @@
       resetTitle: "أعِد تعيين كلمة المرور",
       resetSubtitle:
         "يرسل {brand} كوداً لمرة واحدة إلى واتساب الخاص بك — محادثة الحساب المرتبط نفسه. يصلح الكود لمدة 10 دقائق.",
+      resetSubtitleChannels:
+        "يستطيع {brand} إرسال كود لمرة واحدة إلى واتساب، أو إلى بريد الاسترداد. يصلح الكود لمدة 10 دقائق.",
       resetSend: "أرسل الكود إلى واتساب",
+      resetSendEmail: "أرسل الكود إلى البريد",
+      resetEmailHint: "يصل الكود إلى",
       resetCodeLabel: "كود إعادة التعيين",
       resetCodePlaceholder: "6 أرقام",
       newPassword: "كلمة المرور الجديدة",
@@ -162,6 +174,10 @@
       resetErrNoSession:
         "واتساب غير متصل، لذا لا يمكن إرسال الكود. سجّل الدخول على الخادم ونفّذ `levix reset-password`، أو ابدأ جلسة واتساب أولاً.",
       resetErrSendFailed: "تعذّر إرسال رسالة واتساب. حاول مرة أخرى خلال دقيقة.",
+      resetErrNoEmail: "استرداد البريد غير مُعد.",
+      resetErrRateLimited: "خدمة البريد مشغولة. حاول مرة أخرى بعد قليل.",
+      resetErrUnavailable: "تعذّر الوصول إلى خدمة البريد. حاول مرة أخرى.",
+      resetErrInvalid: "رفضت خدمة البريد الطلب.",
       resetErrStart: "تعذّر بدء إعادة التعيين. حاول مرة أخرى.",
       resetErrServer: "تعذّر الوصول إلى الخادم. حاول مرة أخرى.",
       resetDone: "تم تحديث كلمة المرور. جارٍ تحويلك لتسجيل الدخول…",

@@ -323,6 +323,17 @@ export const api = {
   }) => api.post<FetchAiModelsResponse>("/ai/models", payload || {}),
   changePassword: (current: string, next: string) =>
     api.post("/security/password", { current, next }),
+  /** Mask plus verified. The address itself is never in this response. */
+  getRecoveryEmail: () =>
+    api.get<{ success: boolean; verified: boolean; masked?: string }>("/recovery-email"),
+  startRecoveryEmail: (email: string, lang: "en" | "ar") =>
+    api.post<{ success: boolean }>("/recovery-email/start", { email, lang }),
+  verifyRecoveryEmail: (code: string) =>
+    api.post<{ success: boolean; verified: true; masked: string }>("/recovery-email/verify", {
+      code,
+    }),
+  deleteRecoveryEmail: () =>
+    api.delete<{ success: boolean; verified: false }>("/recovery-email"),
   // The bot forwards this to the developer; nothing about it is stored locally.
   getFeedbackMeta: () => api.get<FeedbackMeta>("/feedback/meta"),
   getFeedbackDiagnosticsPreview: (client: ClientDiagnostics) =>

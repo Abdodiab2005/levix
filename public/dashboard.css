@@ -2206,6 +2206,27 @@ td.wrap {
   padding-inline: 17px;
 }
 
+.reset-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reset-channels[hidden] {
+  display: none;
+}
+
+.reset-email-hint {
+  margin: 0;
+  color: var(--gateway-text-sub);
+  font-size: 0.86rem;
+}
+
+.reset-email-hint strong {
+  font-weight: 700;
+  unicode-bidi: isolate;
+}
+
 .error {
   margin-top: 14px;
   padding: 11px 13px;

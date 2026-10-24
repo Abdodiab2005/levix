@@ -8,9 +8,14 @@
 //
 //   secret:session   the express-session signing key. 48 random bytes, made on
 //                    first start and reused forever after. Nobody ever sees it.
-//   auth:password    the dashboard password as an scrypt hash + salt. The
-//                    password itself is never written anywhere (not encrypted
-//                    for recovery — it is a one-way hash).
+//   auth:password         the dashboard password as an scrypt hash + salt. The
+//                         password itself is never written anywhere (not
+//                         encrypted for recovery — it is a one-way hash).
+//   auth:recovery-email   the verified recovery address, sealed with
+//                         src/config/vault.cjs. It is not a setting: export
+//                         and import never carry it, and no API returns it
+//                         except as a mask. Absent until the operator verifies
+//                         a code.
 //
 // WhatsApp session blobs and third-party API keys are sealed separately by
 // src/config/vault.cjs (AES-256-GCM, key in levix.key next to the database).
@@ -22,9 +27,11 @@ const crypto = require("node:crypto");
 
 const store = require("../db/store.cjs");
 const logger = require("../utils/logger.cjs");
+const vault = require("./vault.cjs");
 
 const SESSION_KEY = "secret:session";
 const PASSWORD_KEY = "auth:password";
+const RECOVERY_EMAIL_KEY = "auth:recovery-email";
 
 const MIN_PASSWORD_LENGTH = 8;
 const SCRYPT_KEYLEN = 64;
@@ -83,6 +90,35 @@ function setDashboardPassword(plain) {
   const updatedAt = Math.max(Date.now(), previousEpoch + 1);
   store.saveBotSetting(PASSWORD_KEY, { alg: "scrypt", salt, hash, updatedAt });
   logger.info("[secrets] Dashboard password updated");
+}
+
+/**
+ * The verified recovery address, or null. The stored value is a sealed JSON
+ * string; a corrupt row is treated as "not set" so login can still render.
+ */
+function getRecoveryEmail() {
+  const sealed = store.getBotSetting(RECOVERY_EMAIL_KEY, null);
+  if (typeof sealed !== "string" || !sealed) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(vault.open(sealed));
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed.email !== "string" || !parsed.email) return null;
+  return parsed.email;
+}
+
+/** Seal and store an address that has already been verified. */
+function setRecoveryEmail(email) {
+  const sealed = vault.seal(JSON.stringify({ email: String(email), verifiedAt: Date.now() }));
+  store.saveBotSetting(RECOVERY_EMAIL_KEY, sealed);
+  logger.info("[secrets] Recovery email updated");
+}
+
+function clearRecoveryEmail() {
+  store.deleteBotSetting(RECOVERY_EMAIL_KEY);
+  logger.info("[secrets] Recovery email removed");
 }
 
 /** Constant-time check. False (never a throw) when no password is set yet. */
@@ -145,10 +181,14 @@ function setupCodeMatches(candidate) {
 
 module.exports = {
   MIN_PASSWORD_LENGTH,
+  RECOVERY_EMAIL_KEY,
   getSessionSecret,
   hasDashboardPassword,
   getPasswordUpdatedAt,
   setDashboardPassword,
+  getRecoveryEmail,
+  setRecoveryEmail,
+  clearRecoveryEmail,
   verifyDashboardPassword,
   getSetupCode,
   setupCodeMatches,

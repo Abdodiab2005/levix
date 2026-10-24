@@ -64,7 +64,7 @@ npm test               # the whole suite (tests/run.mjs)
 
 node bin/levix.js headless         # the bot with no panel and no open port
 node bin/levix.js where            # print the data directory
-node bin/levix.js reset-password   # forget the panel password (WhatsApp link untouched)
+node bin/levix.js reset-password   # forget the panel password (WhatsApp link and recovery email untouched)
 sudo node bin/levix.js domain bot.example.com   # reverse proxy + HTTPS
 ```
 
@@ -105,9 +105,13 @@ The control panel is the only surface and it is always on.
 - QR pairing: `/qr`, behind the login, same for the socket.io channel that
   pushes QR refreshes
 - Dashboard API: `http://localhost:3001/dashboard/api/*` — behind the session
-- Feedback: `POST /dashboard/api/feedback` — the only route that talks to a
-  Levix-operated server, and only when the operator presses Send. Point
-  `LEVIX_FEEDBACK_URL` elsewhere to test it without reaching production.
+- Feedback: `POST /dashboard/api/feedback` — talks to a Levix-operated server
+  only when the operator presses Send. Point `LEVIX_FEEDBACK_URL` elsewhere to
+  test it without reaching production.
+- Recovery email: verifying an address, or emailing a password-reset code,
+  posts `{ kind, to, code, lang }` to `https://levix.leviro.net/api/recovery-email`
+  (`src/panel/recovery-email.cjs`). `LEVIX_RECOVERY_URL` overrides that URL in
+  tests. The relay does not store the address beyond rate limiting.
 
 ## Architecture
 
@@ -122,7 +126,7 @@ src/
 │   └── group/        # Group sub-commands (kick, promote, etc.)
 ├── config/           # Configuration
 │   ├── paths.cjs     # THE data directory + the read-only asset root
-│   ├── secrets.cjs   # generated session key · password hash · setup code
+│   ├── secrets.cjs   # generated session key · password hash · sealed recovery email · setup code
 │   ├── settings.cjs  # every operator-changeable value: database -> default
 │   ├── vault.cjs     # AES-256-GCM sealing for API keys and auth blobs
 │   ├── defaults.cjs  # shipped command permissions + prefix (was config.json)
@@ -162,7 +166,10 @@ src/
 │   ├── dashboard.api.esm.js # everything the control panel reads/writes
 │   └── stickers.api.esm.js  # Sticker Studio library, packs, upload, and jobs
 ├── panel/            # login throttling, session epochs, bounded session store
-│   └── feedback.cjs  # validates + forwards Settings → Feedback to the developer
+│   ├── feedback.cjs  # validates + forwards Settings → Feedback to the developer
+│   ├── one-time-code.cjs # hashed 6-digit code, attempts, and the send throttle
+│   ├── password-reset.cjs # WhatsApp and email reset; one pending code for both
+│   └── recovery-email.cjs # sealed recovery address and the mail relay
 ├── diagnostics/      # opt-in feedback diagnostics + local crash reports
 │   ├── sanitize.cjs  # the one redaction pass (JIDs, numbers, tokens, paths)
 │   ├── device.cjs    # the diagnostics allowlist the preview and the send share
@@ -458,7 +465,7 @@ and blacklist middleware, the prefix lookup, every permission check) with no
 
 | table | what it holds | expiry |
 | --- | --- | --- |
-| `bot_settings` | prefix, dashboard settings (`setting:*`), command permission / alias / disabled overrides, the generated session key, the password hash | — |
+| `bot_settings` | prefix, dashboard settings (`setting:*`), command permission / alias / disabled overrides, the generated session key, the password hash, the sealed recovery email (`auth:recovery-email`) | — |
 | `group_settings` | per-group config (welcome, rules, warn limits) | — |
 | `warnings` | user warnings per group | — |
 | `todos` | `!todo` lists | — |
@@ -1057,14 +1064,17 @@ the bot does can be changed from it, live:
 | Auto-delete (JSON API; UI later) | keyword rules, counters, opt-in kept copies | `auto_delete_rules` / `auto_delete_log` via `/dashboard/api/auto-delete/*` |
 | Settings | API keys, model, timezone, delays, thumbnails, port, proxy | `bot_settings` (`setting:*`) |
 | Settings → password | the panel's own password | `bot_settings` (scrypt hash) |
+| Settings → recovery email | verified address for the forgot-password email code | `bot_settings` key `auth:recovery-email`, sealed with `vault.cjs`; masked in the API; never in settings export |
 | Settings → Feedback | nothing local — one message to the developer | forwarded server-side to `levix.leviro.net/api/feedback` (`src/panel/feedback.cjs`) |
 
 **Sharing settings.** The General tab exports every non-secret override to a
 JSON file (`GET /dashboard/api/settings/export`, `src/services/
 settingsTransfer.cjs`) and imports a friend's file back
-(`POST .../settings/import`). Two rules the module enforces: secrets never
+(`POST .../settings/import`). The module enforces this: secrets never
 leave and an import can never plant one (API keys, the proxy password — every
-`type: "secret"` setting is skipped on both sides), and only settings whose
+`type: "secret"` setting is skipped on both sides). The recovery email is
+account security (`auth:recovery-email`), sealed outside this file, so export
+omits it and import cannot plant it. Only settings whose
 source is the dashboard are exported, so untouched keys keep following the
 importer's own shipped defaults. The command table (prefix, permission /
 alias overrides, disabled commands) rides along; per-group config and the
@@ -1140,16 +1150,23 @@ Every authenticated panel session carries the current password epoch. Changing
 or resetting the password invalidates older HTTP and Socket.IO sessions before
 more QR or account data can be pushed.
 
-**Forgot password.** The login page's reset asks the bot to WhatsApp a one-time
-code to the linked account's own chat (`src/panel/password-reset.cjs`; the code
-is hashed, 10 minutes, five attempts, requests throttled per peer and globally,
-wrong guesses count toward the login lockout). It needs the WhatsApp session up
-— that is why it exists: WebAuthn/passkeys require HTTPS or localhost, and the
-panel is very often opened at plain `http://<lan-ip>:3001`. `levix
-reset-password` stays the offline fallback. The gateway password screens also
-blur themselves when the page loses focus, print to nothing, and — in the
-Android app (`PanelActivity`) — set `FLAG_SECURE` while `/login` or `/setup` is
-on screen, which is the only real screenshot block available on each platform.
+**Forgot password.** The login page offers the channels that can take a one-time
+code: WhatsApp (the linked account's own chat, which needs the session up) and
+email (only when a verified recovery email is saved; the page shows the masked
+address). Both channels share one code path (`src/panel/one-time-code.cjs`,
+used by `src/panel/password-reset.cjs`): the code is hashed, lives 10 minutes,
+allows five attempts, and requests are throttled per peer and globally across
+the two channels. Wrong guesses count toward the login lockout, and a successful
+reset bumps the password epoch so older panel sessions die. The email channel
+posts `{ kind: "reset", to, code, lang }` to
+`https://levix.leviro.net/api/recovery-email` (`src/panel/recovery-email.cjs`;
+`LEVIX_RECOVERY_URL` overrides the URL in tests). WhatsApp exists because
+WebAuthn/passkeys require HTTPS or localhost, and the panel is very often
+opened at plain `http://<lan-ip>:3001`. `levix reset-password` stays the offline
+fallback. The gateway password screens also blur themselves when the page loses
+focus, print to nothing, and — in the Android app (`PanelActivity`) — set
+`FLAG_SECURE` while `/login` or `/setup` is on screen, which is the only real
+screenshot block available on each platform.
 
 **What the dashboard deliberately can't do:** change the bot's name or its
 author (`brand.cjs`), or lower the permission of a command that declares
@@ -1230,9 +1247,12 @@ Which means a fresh install runs correctly against an empty database, and
   overrides, disabled commands. Group sub-commands are keyed `group:<name>`.
 - Secrets are **generated, never configured** (`src/config/secrets.cjs`): the
   session signing key on first start, the password as an scrypt hash chosen in
-  the browser. Third-party API keys and Baileys auth blobs are sealed at rest
-  with the install-local AES-256-GCM key in `src/config/vault.cjs`; the API only
-  reports whether a key is configured and never returns its value.
+  the browser, and the recovery email sealed with `vault.cjs` after the operator
+  verifies it. The API returns a mask, never the address. Unlink and
+  `levix reset-password` leave the recovery email in place. Third-party API keys
+  and Baileys auth blobs are sealed at rest with the same install-local
+  AES-256-GCM key; the API only reports whether a key is configured and never
+  returns its value.
 
 Provider base URLs are validated both when saved and when used. Public
 endpoints require HTTPS; private, link-local, metadata, multicast and reserved
@@ -1240,9 +1260,11 @@ destinations are rejected. Explicit loopback URLs remain supported for local
 Ollama/LM Studio servers. Levix-owned fetch clients pin the validated DNS answer
 to the socket and handle redirects manually so secrets cannot cross hosts.
 
-The one environment variable read anywhere in the code is `LEVIX_DATA_DIR`,
+The one environment variable an operator or Docker sets is `LEVIX_DATA_DIR`,
 because a Docker volume has no other way to say where it is. `--data <dir>`
-does the same thing on the command line.
+does the same thing on the command line. `LEVIX_FEEDBACK_URL` and
+`LEVIX_RECOVERY_URL` are test-only overrides for the two Levix relays, read at
+call time. They are not operator settings.
 
 ### Who is the owner
 
@@ -1394,9 +1416,10 @@ logger.debug('Debug info');
     (every sticker, pack, and file), auto-delete kept copies and counters
     (the rules themselves stay — they are operator configuration), and pauses
     schedules created for the old account. Do not leave account-derived state
-    active for the next phone that pairs. Sticker unlink deletes the
-    `sticker_owners` rows as well as the stickers, packs and files, so the next
-    pairing starts a new `self` library.
+    active for the next phone that pairs. The panel password and the recovery
+    email are not WhatsApp state, and unlink does not clear them. Sticker unlink
+    deletes the `sticker_owners` rows as well as the stickers, packs and files,
+    so the next pairing starts a new `self` library.
 27. **Compare WhatsApp identities with the shared helpers.** LIDs, phone-number
     JIDs and device suffixes can name the same user. Moderation and role gates
     must use `sameUser()`, `getSenderCandidates()` and `isAdminInGroup()` rather

@@ -1,26 +1,24 @@
-// Password reset over WhatsApp.
+// Password reset over WhatsApp or a verified recovery email.
 //
 // The panel password is a one-way hash (src/config/secrets.cjs) — there is
-// nothing to "recover". This is the recovery path that matches the product:
-// the bot itself messages the operator's WhatsApp with a one-time code. It
-// works because the paired account IS the operator's account, so "send the
-// code over WhatsApp" means "drop it in your own chat" — reachable whenever
-// the session is up, with no email server and nothing to configure.
+// nothing to "recover" from the hash. The operator proves they still hold a
+// channel they set up: the linked WhatsApp account's own chat, or the recovery
+// email saved in Settings. Both channels share one pending code, one throttle,
+// and one `completeReset` (src/panel/one-time-code.cjs). A second request
+// before the cooldown replaces nothing — it is refused, and the live code
+// stays valid.
 //
-// Why a WhatsApp code rather than passkeys / biometrics (WebAuthn)? WebAuthn
-// only exists in a secure context: HTTPS or localhost. A Levix panel is very
-// often opened at plain http://<lan-ip>:3001, where no browser will offer a
-// passkey at all. The code works on every shape of install, and
-// `levix reset-password` on the server stays the offline fallback for when
-// WhatsApp itself is down.
+// Why a code rather than passkeys / biometrics (WebAuthn)? WebAuthn only
+// exists in a secure context: HTTPS or localhost. A Levix panel is very often
+// opened at plain http://<lan-ip>:3001, where no browser will offer a passkey
+// at all. The code works on every shape of install, and `levix reset-password`
+// on the server stays the offline fallback for when both channels are down.
 //
 // The code lives only in this process's memory — hashed, 10 minutes, five
 // verification attempts, single use. A restart clears it, which is fine:
-// requesting a new one costs nothing. Requests are throttled per TCP peer
-// (never `req.ip`, same discipline as login-throttle) and globally, because
-// every accepted request costs the operator one WhatsApp message.
-
-const crypto = require("node:crypto");
+// requesting a new one costs one message. Requests are throttled per TCP peer
+// (never `req.ip`, same discipline as login-throttle) and globally, and the
+// throttle is the same whether the message goes to WhatsApp or to the relay.
 
 const logger = require("../utils/logger.cjs");
 const secrets = require("../config/secrets.cjs");
@@ -28,36 +26,34 @@ const brand = require("../config/brand.cjs");
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 const { withLang, detectLang, tr } = require("../utils/i18n.cjs");
 const normalizeJid = require("../utils/normalizeJid.esm.js").default;
-
-const CODE_TTL_MS = 10 * 60 * 1000;
-const MAX_CODE_ATTEMPTS = 5;
-const REQUEST_WINDOW_MS = 15 * 60 * 1000;
-const MAX_REQUESTS_PER_WINDOW = 3;
-// Any peer may not trigger two sends closer than this — the code goes to the
-// operator's own WhatsApp, and nobody should be able to machine-gun it.
-const GLOBAL_COOLDOWN_MS = 60 * 1000;
+const recoveryEmail = require("./recovery-email.cjs");
+const {
+  CODE_TTL_MS,
+  MAX_CODE_ATTEMPTS,
+  generateCode,
+  checkAttempt,
+  createThrottle,
+} = require("./one-time-code.cjs");
 
 // The backend's WhatsApp session manager, handed over by bootstrapPanel()
 // next to the dashboard API's setSession(). Re-read the socket every time —
 // a reconnect replaces it.
 let session = null;
 let pending = null; // { salt, hash, expiresAt, attempts }
-let lastRequestAt = 0;
-const requests = new Map(); // peer -> { count, firstAt }
+const throttle = createThrottle();
 
 function setSession(manager) {
   session = manager;
 }
 
-/** Tests: drop the in-memory code and throttle state. */
+/** Tests: drop the in-memory reset code and the shared reset throttle. */
 function _resetForTests() {
   pending = null;
-  lastRequestAt = 0;
-  requests.clear();
+  throttle.reset();
 }
 
-function hashCode(code, salt) {
-  return crypto.createHash("sha256").update(`${salt}:${code}`).digest("hex");
+function _expireForTests() {
+  if (pending) pending.expiresAt = Date.now() - 1;
 }
 
 function codeMessage(code) {
@@ -73,65 +69,78 @@ function codeMessage(code) {
   );
 }
 
+function resolveChannel(channel) {
+  if (channel == null || channel === "" || channel === "whatsapp") return "whatsapp";
+  if (channel === "email") return "email";
+  return null;
+}
+
 /**
- * Generate a reset code and WhatsApp it to the linked account's own chat.
+ * Generate a reset code and deliver it.
  *
+ * `options.channel` is `"whatsapp"` (the default, including a missing value)
+ * or `"email"`. `options.lang` is `"en"` or `"ar"` and is sent to the relay;
+ * anything else is English. The WhatsApp text keeps the bot's reply language.
+ *
+ * @param {string} peer TCP peer, from clientAddress() — never req.ip
+ * @param {{ channel?: string, lang?: string }} [options]
  * @returns {Promise<object>} { ok: true } or { ok: false, reason, ... }
  */
-async function requestResetCode(peer) {
+async function requestResetCode(peer, options = {}) {
+  const opts = options && typeof options === "object" ? options : {};
+  const channel = resolveChannel(opts.channel);
+  if (!channel) return { ok: false, reason: "invalid" };
+
   const now = Date.now();
+  const key = String(peer ?? "");
+  const gate = throttle.check(key, now);
+  if (!gate.ok) return { ok: false, reason: gate.reason, retryAfter: gate.retryAfter };
 
-  for (const [key, entry] of requests) {
-    if (now - entry.firstAt > REQUEST_WINDOW_MS) requests.delete(key);
-  }
-  const entry = requests.get(peer);
-  if (entry && entry.count >= MAX_REQUESTS_PER_WINDOW) {
-    return {
-      ok: false,
-      reason: "throttled",
-      retryAfter: Math.ceil((REQUEST_WINDOW_MS - (now - entry.firstAt)) / 1000),
-    };
-  }
-  const sinceLast = now - lastRequestAt;
-  if (lastRequestAt && sinceLast < GLOBAL_COOLDOWN_MS) {
-    return {
-      ok: false,
-      reason: "throttled",
-      retryAfter: Math.ceil((GLOBAL_COOLDOWN_MS - sinceLast) / 1000),
-    };
+  const lang = opts.lang === "ar" ? "ar" : "en";
+
+  // Preconditions before a code exists, so a missing channel does not replace
+  // a live code and does not spend the cooldown.
+  let address = null;
+  let sock = null;
+  if (channel === "email") {
+    address = recoveryEmail.getAddress();
+    if (!address) return { ok: false, reason: "no_email" };
+  } else {
+    sock = session?.socket ?? null;
+    if (!sock?.user?.id) return { ok: false, reason: "no_session" };
   }
 
-  const sock = session?.socket ?? null;
-  if (!sock?.user?.id) {
-    return { ok: false, reason: "no_session" };
+  const generated = generateCode(now);
+
+  if (channel === "email") {
+    const sent = await recoveryEmail.deliver({
+      kind: "reset",
+      to: address,
+      code: generated.code,
+      lang,
+    });
+    if (!sent.ok) return sent;
+    logger.info({ channel }, "[reset] Reset code sent by email");
+  } else {
+    try {
+      await sendBotMessage(
+        sock,
+        normalizeJid(sock.user.id),
+        { text: codeMessage(generated.code) },
+        { typing: false, delayMs: 0 },
+      );
+    } catch (error) {
+      logger.error({ err: error }, "[reset] failed to send the reset code over WhatsApp");
+      return { ok: false, reason: "send_failed" };
+    }
+    logger.info({ ip: peer }, "[reset] Reset code sent over WhatsApp");
   }
 
-  const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
-  const salt = crypto.randomBytes(16).toString("hex");
-  pending = { salt, hash: hashCode(code, salt), expiresAt: now + CODE_TTL_MS, attempts: 0 };
-
-  try {
-    await sendBotMessage(
-      sock,
-      normalizeJid(sock.user.id),
-      { text: codeMessage(code) },
-      {
-        typing: false,
-        delayMs: 0,
-      },
-    );
-  } catch (error) {
-    pending = null;
-    logger.error({ err: error }, "[reset] failed to send the reset code over WhatsApp");
-    return { ok: false, reason: "send_failed" };
-  }
-
-  lastRequestAt = now;
-  if (entry) entry.count += 1;
-  else requests.set(peer, { count: 1, firstAt: now });
-
-  logger.info({ ip: peer }, "[reset] Reset code sent over WhatsApp");
-  return { ok: true, expiresInMinutes: Math.round(CODE_TTL_MS / 60000) };
+  // Only a code the operator can actually have is stored. A failed send leaves
+  // any previous code in place.
+  pending = generated.pending;
+  throttle.record(key, gate.entry, now);
+  return { ok: true, channel, expiresInMinutes: Math.round(CODE_TTL_MS / 60000) };
 }
 
 /**
@@ -151,16 +160,12 @@ function completeReset(code, password, confirm) {
     return { ok: false, reason: "mismatch" };
   }
 
-  pending.attempts += 1;
-  const expected = Buffer.from(pending.hash, "hex");
-  const actual = Buffer.from(hashCode(String(code ?? "").trim(), pending.salt), "hex");
-  if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
-    const attemptsLeft = MAX_CODE_ATTEMPTS - pending.attempts;
-    if (attemptsLeft <= 0) {
-      pending = null;
-      return { ok: false, reason: "too_many_attempts" };
-    }
-    return { ok: false, reason: "wrong_code", attemptsLeft };
+  const result = checkAttempt(pending, code);
+  if (!result.ok) {
+    if (result.clear) pending = null;
+    const failure = { ok: false, reason: result.reason };
+    if (result.attemptsLeft != null) failure.attemptsLeft = result.attemptsLeft;
+    return failure;
   }
 
   try {
@@ -168,12 +173,15 @@ function completeReset(code, password, confirm) {
     // moment — including any an attacker might hold — stops being valid.
     secrets.setDashboardPassword(password);
   } catch (error) {
-    // The code is still good; the operator may fix the password and retry.
+    // The code matched, so checkAttempt already counted this guess. A rejected
+    // new password is the operator's typo, not a failed proof — give the
+    // attempt back. The code stays pending.
+    pending.attempts = Math.max(0, pending.attempts - 1);
     return { ok: false, reason: "invalid_password", message: error.message };
   }
 
   pending = null;
-  logger.info("[reset] Panel password reset via WhatsApp code");
+  logger.info("[reset] Panel password reset via one-time code");
   return { ok: true };
 }
 
@@ -184,4 +192,5 @@ module.exports = {
   requestResetCode,
   completeReset,
   _resetForTests,
+  _expireForTests,
 };
