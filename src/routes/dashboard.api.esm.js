@@ -62,6 +62,7 @@ const {
   validateFeedback,
 } = require("../panel/feedback.cjs");
 const { stampPanelSession } = require("../panel/session-auth.cjs");
+const recoveryEmail = require("../panel/recovery-email.cjs");
 const { DATA_DIR } = require("../config/paths.cjs");
 const { buildDiagnostics } = require("../diagnostics/device.cjs");
 const crashReports = require("../diagnostics/crashReports.cjs");
@@ -1377,6 +1378,67 @@ router.post("/security/password", (req, res) => {
     } catch {}
     res.json({ success: true });
   });
+});
+
+// ===========================================================================
+// Recovery email — sealed account security, not a setting
+// ===========================================================================
+//
+// The address is never returned. `publicStatus()` is a mask plus `verified`.
+// A new address does not replace the saved one until its code is verified.
+// Same-origin and the panel session come from the /dashboard/api mount.
+
+// Wrong codes are 400, not 401. The panel client treats every 401 as a dead
+// session and sends the operator to /login. Login-page reset confirm stays
+// 401; that page does not use this client. A wrong verify code does not count
+// toward the login lockout — the operator is already signed in.
+const RECOVERY_HTTP = {
+  throttled: 429,
+  rate_limited: 429,
+  invalid_email: 400,
+  invalid: 400,
+  unavailable: 502,
+  wrong_code: 400,
+  expired: 400,
+  too_many_attempts: 400,
+  no_pending: 400,
+};
+
+function recoveryFailure(res, result) {
+  const status = RECOVERY_HTTP[result.reason] ?? 400;
+  if (result.retryAfter) res.set("Retry-After", String(result.retryAfter));
+  const body = { success: false, error: result.reason || "unavailable" };
+  if (result.retryAfter) body.retryAfter = result.retryAfter;
+  if (result.attemptsLeft != null) body.attemptsLeft = result.attemptsLeft;
+  return res.status(status).json(body);
+}
+
+router.get("/recovery-email", (req, res) => {
+  res.json({ success: true, ...recoveryEmail.publicStatus() });
+});
+
+router.post(
+  "/recovery-email/start",
+  asyncRoute(async (req, res) => {
+    const result = await recoveryEmail.startVerification(
+      req.body?.email,
+      req.body?.lang,
+      clientAddress(req),
+    );
+    if (!result.ok) return recoveryFailure(res, result);
+    res.json({ success: true });
+  }),
+);
+
+router.post("/recovery-email/verify", (req, res) => {
+  const result = recoveryEmail.confirmVerification(req.body?.code);
+  if (!result.ok) return recoveryFailure(res, result);
+  res.json({ success: true, verified: true, masked: result.masked });
+});
+
+router.delete("/recovery-email", (req, res) => {
+  recoveryEmail.remove();
+  res.json({ success: true, verified: false });
 });
 
 // ===========================================================================

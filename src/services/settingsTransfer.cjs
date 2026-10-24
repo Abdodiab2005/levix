@@ -15,8 +15,10 @@
 // language, delays, thumbnails, port and proxy shape, …) plus the command
 // table — prefix, permission overrides, alias overrides, disabled commands.
 // Not covered on purpose: per-group config and the memory files (they are
-// personal data, not settings) and the AI persona (a behaviour file the
-// operator authors, shared by copy-paste if wanted).
+// personal data, not settings), the AI persona (a behaviour file the
+// operator authors, shared by copy-paste if wanted), and account security
+// (`auth:password`, `auth:recovery-email`). The recovery address is sealed
+// outside the settings list and must never be added to this file.
 
 const settings = require("../config/settings.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
