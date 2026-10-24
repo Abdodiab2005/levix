@@ -296,6 +296,51 @@ class MediaLogicTest {
     }
 
     @Test
+    fun walkStartsOneLevelHighAndStaysBounded() {
+        val whatsapp = "primary:Android/media/com.whatsapp/WhatsApp"
+        // A grant at the WhatsApp folder itself: the first step in is its
+        // "Media" child, which the walk used to skip.
+        assertTrue(MediaLogic.walkable("$whatsapp/Media"))
+        assertTrue(MediaLogic.walkable("$whatsapp/media"))
+        // From there the walk keeps going, including "Sent".
+        assertTrue(MediaLogic.walkable("$whatsapp/Media/WhatsApp Images"))
+        assertTrue(MediaLogic.walkable("$whatsapp/Media/WhatsApp Images/Sent"))
+
+        // A grant at Media/ behaves exactly as before.
+        val media = "$whatsapp/Media"
+        assertTrue(MediaLogic.walkable(media))
+        assertTrue(MediaLogic.walkable("$media/WhatsApp Video"))
+        assertEquals(
+            MediaType.IMAGE,
+            MediaQuery.mapDocument(
+                "doc-1", "one.jpg", "image/jpeg", 10, 0L,
+                "$media/WhatsApp Images", MediaSource.WHATSAPP, "content://tree/doc-1",
+            )?.mediaType,
+        )
+
+        // Everything else under WhatsApp stays out of the walk.
+        assertFalse(MediaLogic.walkable("$whatsapp/Databases"))
+        assertFalse(MediaLogic.walkable("$whatsapp/Backups"))
+        assertNull(
+            MediaQuery.mapDocument(
+                "doc-1", "msgstore.db", "application/octet-stream", 10, 0L,
+                "$whatsapp/Databases", MediaSource.WHATSAPP, "content://tree/doc-1",
+            ),
+        )
+
+        // WhatsApp Business has the same shape.
+        val business = "primary:Android/media/com.whatsapp.w4b/WhatsApp Business"
+        assertTrue(MediaLogic.walkable("$business/Media"))
+        assertTrue(MediaLogic.walkable("$business/Media/WhatsApp Business Images"))
+        assertFalse(MediaLogic.walkable("$business/Databases"))
+
+        // A "Media" folder that is not directly inside WhatsApp is not a root.
+        assertFalse(MediaLogic.walkable("primary:DCIM/Media"))
+        assertFalse(MediaLogic.walkable("primary:Android/media/com.whatsapp/Media"))
+        assertFalse(MediaLogic.walkable("$media/Media"))
+    }
+
+    @Test
     fun scopeChoosesStatusesOrEverything() {
         val status = item("status", type = MediaType.VIDEO, name = "status.mp4").copy(isStatus = true)
         val photo = item("photo")

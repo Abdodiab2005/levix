@@ -69,6 +69,22 @@ object MediaLogic {
             segment.isNotBlank() && (segment == ".statuses" || FOLDERS.any { segment.contains(it) })
         }
 
+    /**
+     * True for the "Media" folder that sits directly inside the WhatsApp or
+     * WhatsApp Business folder. A grant made one level too high lands there,
+     * and the walk used to stop before it — so nothing was found at all.
+     */
+    fun mediaRootChild(path: String): Boolean {
+        val normalized = path.lowercase(Locale.ROOT).replace('\\', '/').trimEnd('/')
+        if (normalized.substringAfterLast('/') != "media") return false
+        val parent = normalized.substringBeforeLast('/', "")
+        return parent.substringAfterLast('/') == "whatsapp" ||
+            parent.substringAfterLast('/') == "whatsapp business"
+    }
+
+    /** What the SAF walk may enter: a media folder, or WhatsApp's own "Media". */
+    fun walkable(path: String): Boolean = mediaFolder(path) || mediaRootChild(path)
+
     /** The saved duration choice, or [MediaScope.STATUSES] when unset or unknown. */
     fun parseScope(raw: String?): MediaScope =
         if (raw.equals(MediaScope.ALL.name, ignoreCase = true)) MediaScope.ALL else MediaScope.STATUSES
