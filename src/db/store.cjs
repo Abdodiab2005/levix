@@ -270,6 +270,7 @@ function canonicalWarningUserId(userId) {
 function readWarningRows(groupId, userIds) {
   const merged = [];
   const seen = new Set();
+  const seenIds = new Set();
   for (const id of userIds) {
     const row = q("SELECT warnings FROM warnings WHERE group_id = ? AND user_id = ?").get(
       groupId,
@@ -277,6 +278,11 @@ function readWarningRows(groupId, userIds) {
     );
     const list = row ? parseJson(row.warnings, []) : [];
     for (const warning of list) {
+      const messageId = warning?.messageId;
+      if (messageId) {
+        if (seenIds.has(messageId)) continue;
+        seenIds.add(messageId);
+      }
       const key = `${warning?.date || ""}|${warning?.reason || ""}|${warning?.by || ""}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -332,6 +338,9 @@ function countWarnings() {
 // One row per (group, canonical member). Same LID/PN alias collapse as
 // warnings: the phone JID when we have it, otherwise the LID.
 
+const FLAG_COLUMNS =
+  "group_id, user_id, warn_count, last_rule, flagged_at, reasons, last_notified_at, repeat_points";
+
 function parseFlagRow(row) {
   if (!row) return null;
   return {
@@ -341,13 +350,15 @@ function parseFlagRow(row) {
     last_rule: row.last_rule || "",
     flagged_at: Number(row.flagged_at) || 0,
     reasons: parseJson(row.reasons, []),
+    last_notified_at: row.last_notified_at == null ? null : Number(row.last_notified_at),
+    repeat_points: Number(row.repeat_points) || 0,
   };
 }
 
 function getModerationFlag(groupId, userId) {
   for (const id of warningUserIds(userId)) {
     const row = q(
-      `SELECT group_id, user_id, warn_count, last_rule, flagged_at, reasons
+      `SELECT ${FLAG_COLUMNS}
        FROM moderation_flags WHERE group_id = ? AND user_id = ?`,
     ).get(groupId, id);
     if (row) return parseFlagRow(row);
@@ -373,15 +384,32 @@ function upsertModerationFlag(groupId, userId, payload = {}) {
   const lastRule =
     payload.lastRule != null ? String(payload.lastRule).slice(0, 80) : existing?.last_rule || "";
   const flaggedAt = Number(payload.flaggedAt) || Date.now();
+  const repeatPoints =
+    payload.repeatPoints != null ? Number(payload.repeatPoints) : existing?.repeat_points || 0;
+  const lastNotifiedAt =
+    "lastNotifiedAt" in payload ? payload.lastNotifiedAt : (existing?.last_notified_at ?? null);
   q(
-    `INSERT INTO moderation_flags (group_id, user_id, warn_count, last_rule, flagged_at, reasons)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO moderation_flags (
+       group_id, user_id, warn_count, last_rule, flagged_at, reasons, last_notified_at, repeat_points
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(group_id, user_id) DO UPDATE SET
        warn_count = excluded.warn_count,
        last_rule = excluded.last_rule,
        flagged_at = excluded.flagged_at,
-       reasons = excluded.reasons`,
-  ).run(groupId, canonical, warnCount, lastRule, flaggedAt, JSON.stringify(reasons));
+       reasons = excluded.reasons,
+       last_notified_at = excluded.last_notified_at,
+       repeat_points = excluded.repeat_points`,
+  ).run(
+    groupId,
+    canonical,
+    warnCount,
+    lastRule,
+    flaggedAt,
+    JSON.stringify(reasons),
+    lastNotifiedAt == null ? null : Number(lastNotifiedAt),
+    Number.isFinite(repeatPoints) ? repeatPoints : 0,
+  );
   for (const id of warningUserIds(userId)) {
     if (id !== canonical) {
       q("DELETE FROM moderation_flags WHERE group_id = ? AND user_id = ?").run(groupId, id);
@@ -398,7 +426,7 @@ function clearModerationFlag(groupId, userId) {
 
 function listModerationFlags(groupId) {
   return q(
-    `SELECT group_id, user_id, warn_count, last_rule, flagged_at, reasons
+    `SELECT ${FLAG_COLUMNS}
      FROM moderation_flags WHERE group_id = ? ORDER BY flagged_at DESC`,
   )
     .all(groupId)
@@ -407,6 +435,64 @@ function listModerationFlags(groupId) {
 
 function clearAllModerationFlags() {
   q("DELETE FROM moderation_flags").run();
+  q("DELETE FROM moderation_applied").run();
+}
+
+function getModerationApplied(groupId, messageId) {
+  if (!groupId || !messageId) return null;
+  const row = q(
+    `SELECT outcome, kicked, notified FROM moderation_applied
+     WHERE group_id = ? AND message_id = ?`,
+  ).get(groupId, messageId);
+  if (!row) return null;
+  return { outcome: row.outcome, kicked: row.kicked === 1, notified: row.notified === 1 };
+}
+
+// One moderated message is claimed once. The callback reads and writes the
+// ledger; side effects (delete, notice, kick) happen after this commits.
+function commitModerationDecision(groupId, messageId, fn) {
+  return withImmediateTransaction(() => {
+    if (messageId) {
+      const existing = getModerationApplied(groupId, messageId);
+      if (existing) return { duplicate: true, ...existing };
+    }
+    const result = fn();
+    if (messageId && result && !result.duplicate) {
+      q(
+        `INSERT INTO moderation_applied
+           (group_id, message_id, outcome, kicked, notified, applied_at)
+         VALUES (?, ?, ?, 0, 0, ?)`,
+      ).run(groupId, messageId, result.outcome || "none", Date.now());
+    }
+    return result;
+  });
+}
+
+function markModerationNotice(groupId, messageId, userId, { flagNotice = false, at = Date.now() } = {}) {
+  if (!messageId) return;
+  withImmediateTransaction(() => {
+    q(`UPDATE moderation_applied SET notified = 1 WHERE group_id = ? AND message_id = ?`).run(
+      groupId,
+      messageId,
+    );
+    if (flagNotice && userId) {
+      q(`UPDATE moderation_flags SET last_notified_at = ? WHERE group_id = ? AND user_id = ?`).run(
+        at,
+        groupId,
+        canonicalWarningUserId(userId),
+      );
+    }
+  });
+}
+
+function markModerationKicked(groupId, messageId) {
+  if (!messageId) return;
+  withImmediateTransaction(() => {
+    q(`UPDATE moderation_applied SET kicked = 1 WHERE group_id = ? AND message_id = ?`).run(
+      groupId,
+      messageId,
+    );
+  });
 }
 
 // ===================================================================
@@ -2011,6 +2097,10 @@ module.exports = {
   clearModerationFlag,
   listModerationFlags,
   clearAllModerationFlags,
+  getModerationApplied,
+  commitModerationDecision,
+  markModerationNotice,
+  markModerationKicked,
   // Todos
   getUserTodos,
   saveUserTodos,

@@ -2,6 +2,7 @@
 // panel preview all call this so the wording cannot drift.
 
 const { tr, withLang } = require("./i18n.cjs");
+const { resolveModerationPolicy, policyFieldVisibility } = require("../services/moderationPolicy.cjs");
 
 const MEDIA_TYPES = ["image", "video", "sticker", "audio"];
 const DELETE_WARN_KICK = ["DELETE", "WARN", "KICK"];
@@ -46,14 +47,14 @@ function forbiddenInfo(settings) {
   return { enabled, count };
 }
 
-// Single reader for warn_system. Missing / empty / unknown → KICK.
-// Stored "NONE" (pre-v9) and "FLAG" → FLAG. Default max_warnings stays 3.
+// Effective warn limit. A stored moderationPolicy field wins; otherwise the
+// legacy warn_system values apply. Missing / empty / unknown → KICK at 3.
+// Stored "NONE" (pre-v9) and "FLAG" → FLAG.
 function warnConfigOf(settings) {
-  const warn = settings?.warn_system || {};
-  const action = String(warn.action || "").trim().toUpperCase();
+  const policy = resolveModerationPolicy(settings);
   return {
-    max_warnings: warn.max_warnings ?? 3,
-    action: action === "FLAG" || action === "NONE" ? "FLAG" : "KICK",
+    max_warnings: policy.limit,
+    action: policy.limitAction === "FLAG" ? "FLAG" : "KICK",
   };
 }
 
@@ -65,12 +66,7 @@ function normalizeWarnAction(raw) {
 }
 
 function featureActionOf(settings, feature) {
-  let raw = "";
-  if (feature === "antilink") raw = settings?.antilink?.action;
-  else if (feature === "media") raw = settings?.media_control?.action;
-  else if (feature === "forbidden") raw = settings?.moderation?.forbiddenWords?.action ?? settings?.forbidden_words?.action;
-  else if (feature === "antispam") raw = settings?.antispam?.action;
-  const action = String(raw || "").trim().toUpperCase();
+  const action = resolveModerationPolicy(settings).features?.[feature];
   if (feature === "antispam") return action === "KICK" ? "KICK" : "WARN";
   if (DELETE_WARN_KICK.includes(action)) return action;
   return "WARN";
@@ -161,6 +157,44 @@ function renderModerationSummary(settings = {}) {
       `• Warn limit: ${warn.max_warnings}. At the limit: ${atLimit}.`,
       `• حد الإنذارات: ${warn.max_warnings}. عند بلوغ الحد: ${atLimit}.`,
     ),
+  );
+
+  const policy = resolveModerationPolicy(settings);
+  const visibility = policyFieldVisibility(policy);
+  if (policy.decay.mode === "expire") {
+    lines.push(
+      tr(
+        `• Warnings drop after ${policy.decay.days} days.`,
+        `• تسقط الإنذارات بعد ${policy.decay.days} يومًا.`,
+      ),
+    );
+  } else if (policy.decay.mode === "step") {
+    lines.push(
+      tr(
+        `• Warnings lose one point every ${policy.decay.days} days.`,
+        `• تفقد الإنذارات نقطة كل ${policy.decay.days} يومًا.`,
+      ),
+    );
+  }
+  if (visibility["flag.notify"]) {
+    const notify =
+      policy.flag.notify === "silent"
+        ? tr("silent", "بصمت")
+        : tr("in the group", "في المجموعة");
+    lines.push(
+      tr(`• Flag notice: ${notify}.`, `• إشعار الإبلاغ: ${notify}.`),
+    );
+  }
+  lines.push(
+    policy.membership === "keep"
+      ? tr(
+          "• Leaving or being removed keeps warnings.",
+          "• المغادرة أو الإزالة تبقي الإنذارات.",
+        )
+      : tr(
+          "• Leaving or being removed clears warnings.",
+          "• المغادرة أو الإزالة تمسح الإنذارات.",
+        ),
   );
 
   return lines.join("\n");

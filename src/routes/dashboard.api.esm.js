@@ -54,6 +54,12 @@ const {
   normalizeFeatureAction,
 } = require("../utils/moderationSummary.cjs");
 const {
+  describeModerationPolicy,
+  prepareGroupModeration,
+  commitPreparedModeration,
+  evaluateModerationDraft,
+} = require("../services/moderationPolicy.cjs");
+const {
   kickGroupMember,
   clearMemberModeration,
   dismissMemberFlag,
@@ -786,6 +792,7 @@ function groupView(groupId, stored) {
   const live = groupMetadataCache.get(groupId) || null;
   const directory = getGroupDirectory(groupId) || null;
   const config = stored || {};
+  const described = describeModerationPolicy(config);
   const subject = live?.subject || directory?.subject || null;
   const memberCount = live?.participants?.length ?? directory?.participant_count ?? null;
   const mediaEnabled = !!config.media_control?.enabled;
@@ -848,13 +855,22 @@ function groupView(groupId, stored) {
         reasons: row.reasons,
       };
     }),
+    moderation_policy: described.effective,
+    moderation_policy_visibility: described.visibility,
   };
 }
 
 router.post("/groups/moderation-preview", (req, res) => {
   try {
-    const summary = buildModerationSummaryBoth(req.body || {});
-    res.json({ success: true, en: summary.en, ar: summary.ar });
+    const draft = evaluateModerationDraft(req.body || {});
+    const summary = buildModerationSummaryBoth(draft.settings);
+    res.json({
+      success: true,
+      en: summary.en,
+      ar: summary.ar,
+      visibility: draft.visibility,
+      errors: draft.errors || [],
+    });
   } catch (error) {
     fail(res, error, "Error building moderation preview");
   }
@@ -932,6 +948,11 @@ router.patch("/groups/:id", (req, res) => {
     }
   }
   const current = getGroupSettings(groupId) || {};
+  const prepared = prepareGroupModeration(current, patch);
+  if (!prepared.ok) {
+    const message = prepared.errors[0]?.message || "Invalid moderation policy";
+    return res.status(400).json({ success: false, error: message, errors: prepared.errors });
+  }
 
   try {
     if (patch.antilink) {
@@ -987,8 +1008,8 @@ router.patch("/groups/:id", (req, res) => {
         enabled: !!next.enabled,
         time_window: next.time_window ?? 10,
         message_count: next.message_count ?? 5,
-        action: next.action || "WARN",
       };
+      if (next.action === "WARN" || next.action === "KICK") current.antispam.action = next.action;
     }
 
     if (patch.media_control) {
@@ -1085,6 +1106,7 @@ router.patch("/groups/:id", (req, res) => {
     if (patch.rules !== undefined) {
       current.rules = String(patch.rules).slice(0, 4000);
     }
+    commitPreparedModeration(current, prepared);
   } catch (error) {
     return badRequest(res, error.message);
   }

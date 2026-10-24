@@ -11,6 +11,7 @@ const {
   policyFromFeatureAction,
 } = require("../utils/moderationSummary.cjs");
 const { tr } = require("../utils/i18n.cjs");
+const { applyModerationPolicy } = require("../services/moderationPolicy.cjs");
 
 // الهيكل الافتراضي لإعدادات المراقبة
 const defaultModSettings = {
@@ -167,16 +168,22 @@ module.exports = {
             { quoted: msg },
           );
         }
-        if (feature === "antiLink") {
-          settings.antilink ||= { enabled: false, mode: "ALL", allowed_domains: [], blocked_domains: [] };
-          settings.antilink.action = action;
-        } else if (feature === "antiSpam") {
-          settings.antispam ||= { enabled: false, message_count: 5, time_window: 10, action: "WARN" };
-          settings.antispam.action = action;
-        } else {
-          ensureModeration(settings).forbiddenWords.action = action;
+        const featureName =
+          feature === "antiLink" ? "antilink" : feature === "antiSpam" ? "antispam" : "forbidden";
+        try {
+          applyModerationPolicy(groupId, { features: { [featureName]: action } });
+        } catch (error) {
+          return sock.sendMessage(
+            groupId,
+            {
+              text: tr(
+                error.errors?.[0]?.message || "That action is not allowed.",
+                "هذا الإجراء غير مسموح.",
+              ),
+            },
+            { quoted: msg },
+          );
         }
-        saveGroupSettings(groupId, settings);
         await sock.sendMessage(
           groupId,
           { text: tr(`✅ *${feature}* action is now ${action}.`, `✅ تم تعيين إجراء *${feature}* إلى ${action}.`) },
@@ -284,21 +291,24 @@ module.exports = {
   },
 };
 
+function detectForbiddenWords(msg, settings) {
+  const groupId = msg?.key?.remoteJid;
+  if (!groupId?.endsWith("@g.us")) return null;
+  const config = settings?.moderation?.forbiddenWords;
+  if (!config?.enabled || !Array.isArray(config.list) || !config.list.length) return null;
+  const body = visibleText(msg.message).toLowerCase();
+  if (!body || !config.list.some((word) => word && body.includes(String(word).toLowerCase()))) {
+    return null;
+  }
+  return { rule: "forbidden", reason: "forbidden-word" };
+}
+
 async function handleForbiddenWords(sock, msg) {
   const groupId = msg.key.remoteJid;
   if (!groupId?.endsWith("@g.us")) return false;
 
   const settings = getGroupSettings(groupId) || {};
-  const config = settings.moderation?.forbiddenWords;
-  if (!config?.enabled || !Array.isArray(config.list) || !config.list.length) return false;
-
-  const body = visibleText(msg.message).toLowerCase();
-  if (!body || !config.list.some((word) => word && body.includes(String(word).toLowerCase()))) {
-    return false;
-  }
-
   const senderIds = senderCandidates(msg, sock);
-  // Cache-first: this runs on every group message while forbidden words are on.
   const groupMetadata = await resolveGroupMetadata(sock, groupId);
   if (
     msg.key.fromMe ||
@@ -308,16 +318,19 @@ async function handleForbiddenWords(sock, msg) {
     return false;
   }
 
+  const hit = detectForbiddenWords(msg, settings);
+  if (!hit) return false;
   const policy = policyFromFeatureAction(featureActionOf(settings, "forbidden"));
   const result = await enforceGroupRule(sock, {
     msg,
     groupMetadata,
     rule: "forbidden",
-    warningReason: "forbidden-word",
+    warningReason: hit.reason,
     ...policy,
     targetCandidates: senderIds,
   });
-  return result.acted;
+  return Boolean(result.acted);
 }
 
 module.exports.handleForbiddenWords = handleForbiddenWords;
+module.exports.detectForbiddenWords = detectForbiddenWords;

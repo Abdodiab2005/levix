@@ -1,6 +1,7 @@
 const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs");
 const { featureActionOf, normalizeFeatureAction } = require("../../utils/moderationSummary.cjs");
 const { tr } = require("../../utils/i18n.cjs");
+const { applyModerationPolicy } = require("../../services/moderationPolicy.cjs");
 
 module.exports = {
   name: "antispam",
@@ -47,11 +48,20 @@ module.exports = {
             ),
           });
         }
-        spam.action = action;
+        try {
+          applyModerationPolicy(groupId, { features: { antispam: action } });
+        } catch (error) {
+          return await sock.sendMessage(groupId, {
+            text: tr(
+              error.errors?.[0]?.message || "That action is not allowed.",
+              "هذا الإجراء غير مسموح.",
+            ),
+          });
+        }
         await sock.sendMessage(groupId, {
           text: tr(`✅ Anti-spam action is now ${action}.`, `✅ تم تعيين إجراء مكافحة الإزعاج إلى ${action}.`),
         });
-        break;
+        return;
       }
       case "window": {
         const seconds = parseInt(args[1], 10);

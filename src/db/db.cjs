@@ -651,6 +651,27 @@ const MIGRATIONS = [
       update.run(JSON.stringify(settings), row.group_id);
     }
   },
+  // v10 — one applied row per moderated message, plus flag cooldown and
+  // repeat-point columns. Group JSON is not rewritten; old warn limits keep
+  // working through resolveModerationPolicy.
+  (database) => {
+    database.exec(`
+      CREATE TABLE moderation_applied (
+        group_id    TEXT NOT NULL,
+        message_id  TEXT NOT NULL,
+        outcome     TEXT NOT NULL,
+        kicked      INTEGER NOT NULL DEFAULT 0,
+        notified    INTEGER NOT NULL DEFAULT 0,
+        applied_at  INTEGER NOT NULL,
+        PRIMARY KEY (group_id, message_id)
+      );
+      CREATE INDEX idx_moderation_applied_at ON moderation_applied (applied_at);
+
+      ALTER TABLE moderation_flags ADD COLUMN last_notified_at INTEGER;
+      ALTER TABLE moderation_flags ADD COLUMN repeat_points INTEGER NOT NULL DEFAULT 0;
+      UPDATE moderation_flags SET last_notified_at = flagged_at WHERE last_notified_at IS NULL;
+    `);
+  },
 ];
 
 function migrate(database, migrations = MIGRATIONS) {
@@ -743,6 +764,13 @@ function sweepExpired() {
     require("../diagnostics/debugLog.cjs").sweepDebugLogs();
   } catch (err) {
     logger.error({ err }, "[DB] debug log sweep failed");
+  }
+  try {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const { changes } = q("DELETE FROM moderation_applied WHERE applied_at < ?").run(cutoff);
+    if (changes) logger.debug(`[DB] Swept ${changes} expired moderation claim(s)`);
+  } catch (err) {
+    logger.error({ err }, "[DB] moderation claim sweep failed");
   }
 }
 

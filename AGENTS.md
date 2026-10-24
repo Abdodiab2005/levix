@@ -381,9 +381,8 @@ session records the proxy the live socket was built with and reports
    - Match command name or alias
    - Execute command with context
 6. **Group Moderation** (if in group):
-   - Anti-link → `src/commands/group/antilink.cjs`
-   - Media control → `src/commands/group/media.cjs`
-   - Forbidden words → `src/commands/mod.cjs` (unchanged; separate from auto-delete)
+   - `handleGroupModeration` collects forbidden-word, anti-link, media, and anti-spam hits, then `enforceHits` applies them in one transaction. A message with no id is skipped.
+   - Detectors stay separate from auto-delete: `src/commands/mod.cjs`, `src/commands/group/antilink.cjs`, `src/commands/group/media.cjs`, `src/middleware/antispam.middleware.js`.
 
 ### Command System
 
@@ -484,7 +483,8 @@ and blacklist middleware, the prefix lookup, every permission check) with no
 | `sticker_pack_items` | pack membership and order | cascade with the sticker or the pack; wiped on unlink |
 | `auto_delete_rules` | keyword auto-delete rules (keywords, match mode, chat/sender scope, counters) | — (operator config; counters reset on unlink) |
 | `auto_delete_log` | opt-in text/caption copies of messages an auto-delete rule actually deleted (never media bytes) | `auto_delete_keep_days` (30), also capped at 5000 newest; wiped on unlink |
-| `moderation_flags` | members waiting for admin review after warn-limit FLAG (or a KICK the bot could not perform): canonical id, warn count, last rule, time, reasons | wiped on unlink |
+| `moderation_flags` | members waiting for admin review after warn-limit FLAG (or a KICK the bot could not perform): canonical id, effective points (`warn_count`), last rule, time, reasons, `last_notified_at`, `repeat_points` | wiped on unlink |
+| `moderation_applied` | one row per moderated message id (`outcome`, `kicked`, `notified`) so a WhatsApp redelivery is applied once. Rows older than 7 days are swept | wiped on unlink |
 
 `forward_scores` gains a row per forwarded message, so it expires; the sweep
 runs at boot and every six hours (`sweepExpired()` in `db.cjs`). Sticker files
@@ -770,19 +770,26 @@ sent twice after the first reconnect.
 
 ### 3. Group Moderation
 
-One pipeline (`src/utils/moderationAction.cjs` `enforceGroupRule`) runs anti-link, media, forbidden words, anti-spam, and `!warn`. Feature actions and the warn-limit action are set from the panel (GroupsView → Rules & moderation) and from commands.
+One policy object, `settings.moderationPolicy`, is resolved by `src/services/moderationPolicy.cjs`. Absent keys keep the defaults: simple mode, limit **3**, limit action **KICK**, feature actions **WARN** (anti-spam cannot be DELETE). Legacy `warn_system`, `antilink.action`, `media_control.action`, `antispam.action`, and `moderation.forbiddenWords.action` still apply when the policy field is absent. A write through `applyModerationPolicy` mirrors those legacy keys in the same `saveGroupSettings` call. `!setwarn max` writes the limit only and does not stamp an action.
 
-**Warn limit** (`warn_system`, `!setwarn`): unset defaults to **KICK**. Stored values are **KICK** or **FLAG** (legacy `NONE` migrates to FLAG). At the limit, KICK removes the member when the bot is a group admin; if it is not, the member is FLAG'd and the group is told an admin must act. FLAG never kicks: it writes `moderation_flags` (canonical member id, warn count, last rule, time, reasons) and mentions the group's admins.
+`handleGroupModeration` (`src/handlers/message.handler.js`) ignores a protected sender before any write, collects hits (forbidden, link, media, spam), and calls `enforceHits` once. That opens one `BEGIN IMMEDIATE` transaction: decay the ledger, decide warn / flag / kick, append at most one warning event, upsert or skip the flag, and claim `moderation_applied`. Delete, the notice, and the kick run after commit. A redelivery of the same message id does not add a second point. `enforceGroupRule` is the one-hit wrapper `!warn` and the single-detector handlers still use.
 
-**Feature actions** (each feeds the same pipeline; `warn` increments the shared warning counter and then the warn-limit action):
-- Anti-link (`src/commands/group/antilink.cjs`): `DELETE` / `WARN` / `KICK` now. `!group antilink action …`
+**Warn limit**: KICK removes the member when the bot is a group admin. If it is not, the member is flagged and the group is told an admin must act. FLAG writes `moderation_flags` (`warn_count` is effective points) and mentions admins when `flag.notify` is `group`. `flag.whileFlagged` is `record`, `hold`, or `escalate`.
+
+**Feature actions** (each feeds the same ledger; weights apply only in severity mode):
+- Anti-link (`src/commands/group/antilink.cjs`): `DELETE` / `WARN` / `KICK`. `!group antilink action …`
 - Media (`src/commands/group/media.cjs`): same three. `!group media action …`
 - Forbidden words (`src/commands/mod.cjs`): same three. `!mod action forbiddenWords …`
-- Anti-spam (`src/middleware/antispam.middleware.js`, `src/commands/group/antispam.cjs`): `WARN` / `KICK` now. `!group antispam action …`
+- Anti-spam (`src/middleware/antispam.middleware.js`, `src/commands/group/antispam.cjs`): `WARN` / `KICK`. `!group antispam action …`
+- `!warn` uses `weights.manual` and never deletes the command message.
 
-**Flagged members**: panel list with Kick / Clear warnings / Dismiss flag (same functions as the commands). `!group flagged` lists them. `!group clearwarns @member` clears warnings and the flag. `!kick` of a flagged member clears the flag.
+**Commands and panel**: `!group policy` shows the summary. `!group policy set <field> <value>` and `!group policy reset` (the standard preset) call the same apply path as `PATCH /groups/:id` (`moderation_policy`, `moderation_preset`). The gate is `ADMINS_ONLY`. `GET /groups` adds `moderation_policy` (effective) and `moderation_policy_visibility`. `POST /groups/moderation-preview` returns `{ success, en, ar, visibility, errors }` and does not write.
 
-**Active moderation** summary (`src/utils/moderationSummary.cjs`) is the one builder for `!rules`, welcome, and the panel preview. It states each feature's effective action and the warn-limit action (kick, or flag for admin review).
+**Membership**: the default is `clear`. A member who leaves, or is removed by anyone, loses warnings and any flag, and a later `add` starts at 0. `add` itself does not clear. `membership: "keep"` is the explicit choice that leaves the ledger in place. Relaxed and strict presets do not set membership, so they inherit `clear`. The standard preset strips the stored policy and therefore also means `clear`.
+
+**Flagged members**: panel list with Kick / Clear warnings / Dismiss flag (same functions as the commands). `!group flagged` lists them. `!group clearwarns @member` clears warnings and the flag. `!kick` of a flagged member clears the flag. Dismiss removes only the flag.
+
+**Active moderation** summary (`src/utils/moderationSummary.cjs`) is the one builder for `!rules`, welcome, `!group policy`, and the panel preview. It states each feature's effective action and the warn-limit action. A decay line and a flag line appear only when those fields are in effect.
 
 **Other admin commands**: kick, promote, demote, add, removeall, setname, setpp, etc.
 
