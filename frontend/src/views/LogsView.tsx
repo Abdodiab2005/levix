@@ -212,6 +212,7 @@ export const LogsView: React.FC = () => {
         padded={false}
         className="h-[65vh] overflow-y-auto bg-bg p-4 font-mono text-xs leading-relaxed text-muted shadow-2xl md:p-5"
         dir="ltr"
+        data-tour="logs-stream"
       >
         {source === "bot" ? (
           filtered.length === 0 ? (

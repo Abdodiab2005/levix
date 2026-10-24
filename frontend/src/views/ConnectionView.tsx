@@ -407,6 +407,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                   onClick={() => handleAction(api.startSession, resumeLabel)}
                   disabled={acting}
                   className="flex-1 sm:flex-none"
+                  data-tour="connection-start"
                 >
                   {resumeLabel}
                 </Button>
@@ -417,7 +418,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
 
           {/* 3b. No saved session / logged out: QR or pairing code */}
           {!isConnected && !isStarting && !isWaitingQr && !isReconnecting && needsPairing && (
-            <div className="flex flex-col gap-4 w-full">
+            <div className="flex flex-col gap-4 w-full" data-tour="connection-pairing">
               <SegmentedControl
                 aria-label={t("connection")}
                 value={pairingMethod}
@@ -463,6 +464,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                       icon={<Key size={16} />}
                       disabled={acting}
                       className="flex-1 whitespace-nowrap sm:flex-none"
+                      data-tour="connection-start"
                     >
                       {language === "ar" ? "الحصول على كود الربط" : "Get Pairing Code"}
                     </Button>
@@ -486,6 +488,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                       onClick={handleStartQr}
                       disabled={acting}
                       className="flex-1 whitespace-nowrap sm:flex-none"
+                      data-tour="connection-start"
                     >
                       {language === "ar" ? "بدء الربط عبر رمز QR" : "Start QR Linking"}
                     </Button>

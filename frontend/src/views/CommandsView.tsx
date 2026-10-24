@@ -220,7 +220,7 @@ export const CommandsView: React.FC = () => {
         }
       />
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3" data-tour="commands-list">
         <Toolbar>
           <div className="relative min-w-48 flex-1">
             <Search size={18} className="pointer-events-none absolute start-3.5 top-3 text-muted" />

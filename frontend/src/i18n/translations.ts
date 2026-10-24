@@ -972,6 +972,64 @@ export const translations = {
     contactAdded: "مضافة",
     saveRule: "حفظ القاعدة",
     recipientsLoadFailed: "تعذر تحميل المحادثات.",
+
+    // Tour guide
+    tourBack: "رجوع",
+    tourNext: "التالي",
+    tourDone: "تم",
+    tourSkip: "تخطي الجولة",
+    tourStepOf: "خطوة {n} من {total}",
+    tourScreenHelp: "دليل هذه الشاشة",
+    tourReplayTitle: "جولة إرشادية",
+    tourReplayDesc: "إعادة عرض شرح اللوحة خطوة بخطوة فوق العناصر الحقيقية.",
+    tourReplayAction: "إعادة العرض",
+    tourSidebarTitle: "هذه غرفة التحكم الخاصة بك",
+    tourSidebarBody:
+      "القائمة الجانبية تفتح كل شاشات البوت: نظرة عامة، الاتصال، الأوامر، الذكاء الاصطناعي، المجموعات والمزيد. اضغط أي عنصر للانتقال إليه.",
+    tourConnectionStartTitle: "ربط واتساب",
+    tourConnectionStartBody:
+      "اضغط هذا الزر لربط حساب واتساب أو استئناف جلستك المحفوظة. البوت يرد من هذا الحساب.",
+    tourConnectionPairingTitle: "خطوات الربط",
+    tourConnectionPairingBody:
+      "اختر ما يناسبك: كود رقمي تدخله في واتساب، أو مسح رمز QR. الطريقتان تؤديان إلى النتيجة نفسها، والربط لا يتجاوز دقيقة.",
+    tourOverviewStatsTitle: "بوتك في نظرة واحدة",
+    tourOverviewStatsBody:
+      "هذه البطاقات تعرض أرقاماً حية: مجموعات واتساب لديك، عدد الأوامر، مدة تشغيل البوت، ورسائله المجدولة.",
+    tourCommandsTitle: "كتالوج الأوامر",
+    tourCommandsBody:
+      "كل أمر يستجيب له البوت. افتح أي صف لتشغيله أو إيقافه، أو تغيير من يمكن استخدامه، أو إدارة اختصاراته. استخدم البحث والتصفية في الأعلى للوصول بسرعة.",
+    tourAiAgentTitle: "تشغيل المساعد الذكي",
+    tourAiAgentBody:
+      "هذا المفتاح يشغّل المساعد الذكي. عندما يعمل، يستطيع الأشخاص سؤاله بأمر !ai داخل محادثاتك.",
+    tourAiProviderTitle: "اختر عقل الذكاء الاصطناعي",
+    tourAiProviderBody:
+      "اختر المزوّد — Google Gemini أو خادم متوافق مع OpenAI أو Anthropic — ثم الصق مفتاح API الخاص به واسم الموديل. مفتاحك يبقى على هذا الجهاز.",
+    tourAiMemoryTitle: "علّمه بطريقتك",
+    tourAiMemoryBody:
+      "اكتب شخصية المساعد في «الشخصية» واحفظ الحقائق التي يجب أن يتذكرها في «الذاكرة» — يقرأ الاثنين عند كل رد.",
+    tourGroupsTitle: "إشراف المجموعات",
+    tourGroupsBody:
+      "كل مجموعة أنت فيها معروضة هنا. افتح أي مجموعة لضبط منع الروابط، ورسالة الترحيب، وقيود الوسائط والقوانين — وتُطبَّق فوراً.",
+    tourStickersTitle: "استوديو الملصقات",
+    tourStickersBody:
+      "أنشئ ملصقات من الصور والفيديوهات، واحفظها هنا، واجمعها في حزم. كل ما يرسله البوت أو ترفعه من اللوحة يذهب إلى مكتبة واحدة مشتركة.",
+    tourSchedulesTitle: "الرسائل المجدولة",
+    tourSchedulesBody:
+      "جدولة رسالة مرة واحدة في وقت محدد، أو تكرارها بشكل دوري. تحفظ القائمة كل الوظائف، وتُوسم الرسائل التي فشل إرسالها للمراجعة.",
+    tourLogsTitle: "السجلات المباشرة",
+    tourLogsBody: "كل ما يفعله البوت يظهر هنا مباشرة، لتتابع الردود وتكتشف الأخطاء فور حدوثها.",
+    tourSettingsTitle: "أول محطة في الإعدادات",
+    tourSettingsBody:
+      "اضبط بادئة الأوامر ولغة الواجهة ولغة البوت والمنطقة الزمنية من هنا. تبويب «عام» يُصدِّر إعداداتك أيضاً لربطها بجهاز آخر.",
+    tourSettingsPasswordTitle: "احمِ لوحة التحكم",
+    tourSettingsPasswordBody:
+      "من هذا التبويب تغيّر كلمة السر التي تفتح اللوحة. كلمة سر طويلة هنا تحمي جلسة واتساب وإعداداتك.",
+    tourSettingsFeedbackTitle: "أخبر المطوّر",
+    tourSettingsFeedbackBody:
+      "اللوحة تعمل على بيانتك فقط. إن أعجبك شيء أو واجهتك مشكلة، استخدم هذا التبويب لإرسال ملاحظة — لا شيء يخرج من جهازك إلا بضغطتك.",
+    tourSettingsDiagnosticsTitle: "تقارير الأعطال",
+    tourSettingsDiagnosticsBody:
+      "إذا تعطّل التطبيق أو اللوحة، يُجمع هنا تقرير مختصّ لا يحمل أي بيانات تعريفية. تعاينه كاملاً وترسله عند تقرر ذلك.",
   },
   en: {
     unknownContact: "Unknown contact",
@@ -1955,5 +2013,65 @@ export const translations = {
     contactAdded: "Added",
     saveRule: "Save rule",
     recipientsLoadFailed: "Could not load chats.",
+
+    // Tour guide
+    tourBack: "Back",
+    tourNext: "Next",
+    tourDone: "Done",
+    tourSkip: "Skip tour",
+    tourStepOf: "Step {n} of {total}",
+    tourScreenHelp: "Guide for this screen",
+    tourReplayTitle: "Guided tour",
+    tourReplayDesc:
+      "Replay a step-by-step walkthrough of the panel, highlighted on the real controls.",
+    tourReplayAction: "Replay guide",
+    tourSidebarTitle: "This is your control room",
+    tourSidebarBody:
+      "The menu on the side opens every screen of your bot: overview, connection, commands, AI, groups and more. Tap any item to jump there.",
+    tourConnectionStartTitle: "Connecting WhatsApp",
+    tourConnectionStartBody:
+      "Tap this button to link a WhatsApp account or to resume your saved session. The bot replies from this account.",
+    tourConnectionPairingTitle: "Pairing steps",
+    tourConnectionPairingBody:
+      "Choose whatever suits you: a numeric code you type into WhatsApp, or scanning a QR code. Both reach the same result, and pairing takes under a minute.",
+    tourOverviewStatsTitle: "Your bot at a glance",
+    tourOverviewStatsBody:
+      "These cards show live numbers: your WhatsApp groups, the number of commands, how long the bot has been running, and its scheduled messages.",
+    tourCommandsTitle: "The command catalog",
+    tourCommandsBody:
+      "Every command the bot answers to. Open a row to turn it on or off, change who may use it, or manage its aliases. Use search and filters above to find a command fast.",
+    tourAiAgentTitle: "Turn the assistant on",
+    tourAiAgentBody:
+      "This switch arms the AI assistant. When it is on, people can ask it questions with the !ai command inside your chats.",
+    tourAiProviderTitle: "Choose the AI brain",
+    tourAiProviderBody:
+      "Pick a provider — Google Gemini, an OpenAI-compatible server or Anthropic — then paste its API key and model name. Your key stays on this device.",
+    tourAiMemoryTitle: "Teach it your way",
+    tourAiMemoryBody:
+      "Write the assistant's personality in the persona, and save facts it should remember in memory — it reads both before every reply.",
+    tourGroupsTitle: "Group moderation",
+    tourGroupsBody:
+      "Every group you are in is listed here. Open a group to set its anti-link, welcome message, media limits and rules — all applied live.",
+    tourStickersTitle: "Sticker Studio",
+    tourStickersBody:
+      "Create stickers from photos and videos, keep them here, and collect them into packs. Everything the bot sends or you upload in the panel lands in one shared library.",
+    tourSchedulesTitle: "Scheduled messages",
+    tourSchedulesBody:
+      "Schedule a message once at a chosen time, or repeat it on a schedule. The list keeps every job, and failed deliveries stay marked for review.",
+    tourLogsTitle: "Live logs",
+    tourLogsBody:
+      "Everything the bot does streams here as it happens, so you can follow replies and spot errors early.",
+    tourSettingsTitle: "First stop in Settings",
+    tourSettingsBody:
+      "Set the command prefix, the interface and bot languages, and the timezone from here. The General tab also exports your settings so another Levix can import them.",
+    tourSettingsPasswordTitle: "Protect your panel",
+    tourSettingsPasswordBody:
+      "This tab is where you change the password that opens this panel. A strong password here protects the WhatsApp session and your settings.",
+    tourSettingsFeedbackTitle: "Tell the developer",
+    tourSettingsFeedbackBody:
+      "The panel works on your device only. If you like something or something breaks, use this tab to send a note — nothing leaves your device unless you tap Send.",
+    tourSettingsDiagnosticsTitle: "Crash reports",
+    tourSettingsDiagnosticsBody:
+      "If the app or the panel crashes, a stripped-down report collects here with no identifying data. You preview it in full and send it only when you decide to.",
   },
 };

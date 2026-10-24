@@ -173,7 +173,7 @@ export const GroupsView: React.FC = () => {
       />
 
       {showToolbar && (
-        <Toolbar>
+        <Toolbar data-tour="groups-list">
           <Input
             type="search"
             name="group-search"

@@ -1,6 +1,8 @@
 // file: frontend/src/views/SettingsView.tsx
 
 import {
+  CirclePlay,
+  Compass,
   Download,
   FileText,
   Globe,
@@ -21,6 +23,7 @@ import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../api/client";
 import { FeedbackForm } from "../components/FeedbackForm";
+import { useGuidedTour } from "../components/GuidedTour";
 import { useToast } from "../components/Toasts";
 import {
   Badge,
@@ -380,6 +383,7 @@ function RecoveryEmailCard() {
 export const SettingsView: React.FC = () => {
   const { t, language, setLanguage } = useI18n();
   const { toast } = useToast();
+  const guided = useGuidedTour();
   const [activeTab, setActiveTab] = useState<SettingsTab>(tabFromHash);
 
   useEffect(() => {
@@ -649,7 +653,7 @@ export const SettingsView: React.FC = () => {
 
       {activeTab === "general" && (
         <div className="flex flex-col gap-5">
-          <Card className="flex flex-col gap-4 sm:gap-5">
+          <Card className="flex flex-col gap-4 sm:gap-5" data-tour="settings-general">
             <CardHeader
               icon={<Terminal size={22} />}
               title={t("prefixTitle")}
@@ -887,6 +891,23 @@ export const SettingsView: React.FC = () => {
               onChange={handleImportFile}
             />
           </Card>
+
+          <Card className="flex flex-col gap-4">
+            <CardHeader
+              icon={<Compass size={20} />}
+              title={t("tourReplayTitle")}
+              description={t("tourReplayDesc")}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                icon={<CirclePlay size={16} />}
+                onClick={() => guided?.startMainTour()}
+              >
+                {t("tourReplayAction")}
+              </Button>
+            </div>
+          </Card>
         </div>
       )}
 
@@ -1070,7 +1091,7 @@ export const SettingsView: React.FC = () => {
 
       {activeTab === "security" && (
         <div className="flex flex-col gap-5">
-          <Card className="flex max-w-xl flex-col gap-4">
+          <Card className="flex max-w-xl flex-col gap-4" data-tour="settings-password">
             <CardHeader icon={<Lock size={20} />} title={t("changePassword")} />
 
             <form onSubmit={handlePasswordChange} className="flex flex-col gap-3.5">
@@ -1226,9 +1247,17 @@ export const SettingsView: React.FC = () => {
         </Card>
       )}
 
-      {activeTab === "feedback" && <FeedbackForm />}
+      {activeTab === "feedback" && (
+        <div data-tour="settings-feedback">
+          <FeedbackForm />
+        </div>
+      )}
 
-      {activeTab === "diagnostics" && <DiagnosticsView />}
+      {activeTab === "diagnostics" && (
+        <div data-tour="settings-diagnostics">
+          <DiagnosticsView />
+        </div>
+      )}
 
       {/* Import confirmation: the file is about to overwrite this install's
           settings, so the operator sees what is in it before it lands. */}

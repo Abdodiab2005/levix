@@ -161,6 +161,34 @@ Anchored to `trigger`. Click-outside and Escape close it. It flips to stay on sc
 
 Build menus and filters on this. Do not position a dropdown by hand.
 
+### Tour / Spotlight
+
+The guided tour. `Tour` renders a fixed overlay (via portal): the page dimmed to
+token colours with a rounded cut-out around the current target, a soft
+brand-token glow ring pulsing around it (disabled under
+`prefers-reduced-motion`), and the explanation card anchored beside the target.
+Under 640px the card docks to the bottom like a sheet.
+
+Steps point at real elements by their `data-tour` attribute values. The target
+is scrolled into view when a step starts; if it never appears within ~1.5 s
+(feature hidden, empty state) the step is skipped silently — the host receives
+`onAdvance` for that. `index`, `onAdvance`, `onBack` and `onClose` are owned by
+the host so it can switch hash routes between steps; the card, keyboard
+support (Escape closes, arrow keys advance in reading direction, initial focus
+on Next), focus trap and repositioning live here.
+
+```tsx
+<Tour
+  open
+  index={2}
+  steps={[{ target: "connection-start", title, body }, ...]}
+  labels={{ back, next, done, skip, stepOf: "Step 3 of 10" }}
+  onAdvance={next}
+  onBack={back}
+  onClose={finish}
+/>
+```
+
 ### Menu / MenuItem / OverflowMenu
 
 `Menu` is a popover with `role="menu"`. `MenuItem` is `role="menuitem"` (`danger` uses the danger tone, `checked` draws a check, arrow keys move, Enter and Space activate). `OverflowMenu` is the 3-dots `MoreVertical` button on `IconButton`.

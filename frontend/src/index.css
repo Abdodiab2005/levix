@@ -123,6 +123,25 @@ html {
   background-attachment: fixed;
 }
 
+/* Guided-tour spotlight glow — gentle pulse, off under reduced motion */
+.tour-glow {
+  animation: tour-glow 2.4s ease-in-out infinite;
+}
+@keyframes tour-glow {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-glow {
+    animation: none;
+  }
+}
+
 /* Subtle Pulse Dot Animation */
 .pulse-dot {
   width: 8px;
