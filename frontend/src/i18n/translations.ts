@@ -574,11 +574,15 @@ export const translations = {
     fileSizeKb: "{size} ك.ب",
     fileSizeMb: "{size} م.ب",
     feedbackFileTooLarge: "الملف كبير جداً — الحد الأقصى {max} م.ب",
-    feedbackAttachDiagnostics: "إرفاق بيانات تشخيص الجهاز والبيئة التقنية",
+    feedbackAttachDiagnostics:
+      "إرفاق بيانات تشخيص الجهاز والبيئة التقنية وسجل التصحيح التقني",
     feedbackDiagnosticsPreview: "عرض ما سيتم إرساله بالضبط",
     feedbackDiagnosticsLoading: "جارٍ تحميل معاينة التشخيص...",
     feedbackDiagnosticsError: "تعذّر تحميل معاينة التشخيص",
     feedbackDiagnosticsEmpty: "لا توجد بيانات تشخيص متاحة",
+    debugLogSectionLabel: "سجل التصحيح التقني (منقّح)",
+    debugLogHint:
+      "سجل تقني منقّح من آخر 14 يوماً. لا يحتوي كلمات مرور أو مفاتيح أو أرقام هواتف أو محتوى رسائل.",
     tabDiagnostics: "التشخيص والأعطال",
     diagnosticsTitle: "تقارير الأعطال والتشخيص",
     diagnosticsDesc:
@@ -1549,11 +1553,15 @@ export const translations = {
     fileSizeKb: "{size} KB",
     fileSizeMb: "{size} MB",
     feedbackFileTooLarge: "The file is too large — the limit is {max} MB",
-    feedbackAttachDiagnostics: "Attach device & technical diagnostics",
+    feedbackAttachDiagnostics:
+      "Attach device & technical diagnostics and the technical debug log",
     feedbackDiagnosticsPreview: "See exactly what is sent",
     feedbackDiagnosticsLoading: "Loading diagnostics preview...",
     feedbackDiagnosticsError: "Could not load diagnostics preview",
     feedbackDiagnosticsEmpty: "No diagnostics available",
+    debugLogSectionLabel: "Technical debug log (sanitized)",
+    debugLogHint:
+      "Sanitized technical log from the last 14 days. No passwords, keys, phone numbers or message content.",
     tabDiagnostics: "Diagnostics",
     diagnosticsTitle: "Crash Reports & Diagnostics",
     diagnosticsDesc:

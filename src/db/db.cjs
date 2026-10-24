@@ -706,6 +706,12 @@ function sweepExpired() {
   } catch (err) {
     logger.error({ err }, "[DB] auto-delete log sweep failed");
   }
+  try {
+    // The sanitized technical debug log keeps 14 days on the device.
+    require("../diagnostics/debugLog.cjs").sweepDebugLogs();
+  } catch (err) {
+    logger.error({ err }, "[DB] debug log sweep failed");
+  }
 }
 
 /** Flush the WAL into the main file — called on shutdown and after a backup. */

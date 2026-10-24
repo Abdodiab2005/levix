@@ -17,9 +17,11 @@ import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { api, type FeedbackMeta, type FeedbackTopic } from "../api/client";
 import { useI18n } from "../context/I18nContext";
+import { formatByteSize } from "../utils/byteSize";
 import { getClientDiagnostics } from "../utils/diagnostics";
 import type { HostSource } from "../utils/hostBridge";
 import { canHostUploadForm, pickHostFile, uploadHostForm } from "../utils/hostBridge";
+import { DebugLogPreview } from "./DebugLogPreview";
 import { useToast } from "./Toasts";
 import {
   Button,
@@ -85,6 +87,7 @@ export const FeedbackForm: React.FC = () => {
   const [hostFile, setHostFile] = useState<HostSource | null>(null);
   const [attachDiagnostics, setAttachDiagnostics] = useState(false);
   const [previewData, setPreviewData] = useState<Record<string, any> | null>(null);
+  const [previewDebugLog, setPreviewDebugLog] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
@@ -104,6 +107,7 @@ export const FeedbackForm: React.FC = () => {
   useEffect(() => {
     if (!attachDiagnostics) {
       setPreviewData(null);
+      setPreviewDebugLog("");
       return;
     }
     const clientDiag = getClientDiagnostics(language, theme);
@@ -113,12 +117,15 @@ export const FeedbackForm: React.FC = () => {
       .then((res) => {
         if (res?.diagnostics) {
           setPreviewData(res.diagnostics);
+          setPreviewDebugLog(res.debugLog || "");
         } else {
           setPreviewData(clientDiag);
+          setPreviewDebugLog("");
         }
       })
       .catch(() => {
         setPreviewData(clientDiag);
+        setPreviewDebugLog("");
       })
       .finally(() => {
         setPreviewLoading(false);
@@ -133,12 +140,7 @@ export const FeedbackForm: React.FC = () => {
   const missing = Math.max(0, messageMin - trimmed.length);
 
   /** Chip caption for the chosen file: `screenshot.png · 1.2 MB`. */
-  const formatFileSize = (bytes: number): string => {
-    if (bytes >= 1024 * 1024) {
-      return t("fileSizeMb").replace("{size}", (bytes / (1024 * 1024)).toFixed(1));
-    }
-    return t("fileSizeKb").replace("{size}", String(Math.max(1, Math.round(bytes / 1024))));
-  };
+  const formatFileSize = (bytes: number): string => formatByteSize(bytes, t);
 
   const topics = (meta?.topics?.length ? meta.topics : TOPIC_ORDER).filter(
     (id) => id in TOPIC_META,
@@ -404,12 +406,15 @@ export const FeedbackForm: React.FC = () => {
                   {previewLoading && !previewData ? (
                     <p className="text-muted">{t("feedbackDiagnosticsLoading")}</p>
                   ) : previewData ? (
-                    <pre
-                      dir="ltr"
-                      className="overflow-x-auto rounded-lg bg-panel p-2 font-mono text-[11px] leading-relaxed text-text-main border border-line select-text"
-                    >
-                      {JSON.stringify(previewData, null, 2)}
-                    </pre>
+                    <div className="flex flex-col gap-2">
+                      <pre
+                        dir="ltr"
+                        className="overflow-x-auto rounded-lg bg-panel p-2 font-mono text-[11px] leading-relaxed text-text-main border border-line select-text"
+                      >
+                        {JSON.stringify(previewData, null, 2)}
+                      </pre>
+                      <DebugLogPreview debugLog={previewDebugLog} />
+                    </div>
                   ) : (
                     <p className="text-muted">{t("feedbackDiagnosticsEmpty")}</p>
                   )}

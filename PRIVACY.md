@@ -88,7 +88,7 @@ control panel — stays in the app's private storage on the device.
 | Opt-in copies of auto-deleted messages (text/caption only) | Local DB (`auto_delete_log`, auto-expiring) | Only when a rule with keep-copy on actually deletes a message |
 | Forward counters and sender last-seen metadata | Local DB (auto-expiring) | The anti-forward feature |
 | Crash reports (not yet sent) | App-private `crash-reports/*.json` (auto-expiring) | Optional diagnostics you can review and send; nothing leaves until you press Send |
-| Logs | App-private `logs/` + Android Logcat | Debugging |
+| Logs (including the 14-day technical debug log) | App-private `logs/` + Android Logcat | Debugging |
 
 Notes:
 
@@ -117,8 +117,8 @@ Notes:
 | **DuckDuckGo** or **Google Programmable Search** (if you configured it) | The search query | Only when an AI answer uses the web-search tool | Web-grounded answers |
 | **Web pages the AI opens** | HTTPS requests to the page's server | Only when an AI answer uses the fetch-page tool | Reading a page you asked about |
 | **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |
-| **The developer** (via `levix.leviro.net/api/feedback`, delivered as a Telegram message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact, an optional file you attach yourself — plus the Levix version, the platform, and the sending app's user-agent. If you tick the diagnostics box, the section 2a diagnostics object as well | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
-| **The developer** (via `levix.leviro.net/api/crash-reports`) | One crash report: category, sanitized error type/message/stack, an optional screen id, the app + section 2a device fields, and a few navigation breadcrumbs. Never a phone number, JID, chat/message body, file or log | Only when **you** open the panel and press Send on one report; never automatically | Support: so a crash can be grouped and fixed |
+| **The developer** (via `levix.leviro.net/api/feedback`, delivered as a Telegram message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact, an optional file you attach yourself — plus the Levix version, the platform, and the sending app's user-agent. If you tick the diagnostics box, the section 2a diagnostics object and the sanitized technical debug log in section 2b as well | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
+| **The developer** (via `levix.leviro.net/api/crash-reports`) | One crash report: category, sanitized error type/message/stack, an optional screen id, the app + section 2a device fields, the sanitized technical debug log in section 2b, and a few navigation breadcrumbs. Never a phone number, JID, chat/message body or media file | Only when **you** open the panel and press Send on one report; never automatically | Support: so a crash can be grouped and fixed |
 | **Levix mail relay** (`levix.leviro.net/api/recovery-email`) | The recovery email address, the one-time code, and the UI language (`en` or `ar`). No other text | When you verify an address in **Settings**, or when you choose **Email** on **Forgot password** | To deliver the code. The relay does not store the address beyond rate limiting, and it does not pass the address to the developer |
 | **Your own Levix server** (the instance running on this phone, reached at `http://127.0.0.1:3001` — never the developer, never an AI provider) | The one image, GIF or video you picked in Sticker Studio or the Media Hub, as a single upload | Only when you choose it in Sticker Studio or tap **Make sticker** / **Add to stickers** | Sticker Studio works server-side, so it has to receive the file you chose |
 
@@ -135,9 +135,10 @@ random, generated per report, and mean nothing outside that one report.
 
 **Feedback diagnostics** — optional, with its own checkbox on the feedback
 form. When you tick **Attach device & technical diagnostics**, the panel sends
-exactly the object below, after the server has validated and trimmed it. The
-panel shows this same list — field and value — under **See exactly what is
-sent** before you press Send, so what you see is what is sent.
+exactly the object below, after the server has validated and trimmed it, plus
+the technical debug log in section 2b. The panel shows this same list — field
+and value — and the log under **See exactly what is sent** before you press
+Send, so what you see is what is sent.
 
 | Field | Example | Source |
 | --- | --- | --- |
@@ -161,7 +162,8 @@ Unknown values are the string `unknown`. A standalone browser has no Android
 fields at all; they are simply not sent. Unticking the box means the request
 carries no diagnostics key. It never contains your phone number, IMEI, Android
 ID, advertising ID, IP address, location, Wi-Fi SSID, contacts, chat or message
-text, JIDs, API keys, tokens, passwords or logs.
+text, JIDs, API keys, tokens or passwords. The one extra thing that accompanies
+a ticked box is the sanitized technical debug log described in section 2b.
 
 **Crash reports** — optional, one Send per report. A crash report is written
 locally when the Node server dies on a fatal error, when the Android app
@@ -186,7 +188,36 @@ a URL keeps only its scheme and host, a 24+ character key-like run becomes
 `<data>` / `~`.
 No phone number, IMEI, Android ID, advertising ID, IP address, location,
 Wi-Fi SSID, contacts, chat or message bodies, JIDs, screenshots, API keys,
-tokens, passwords or full logs are ever included.
+tokens or passwords are ever included. A Send also carries the sanitized
+technical debug log described in section 2b, and the report's preview shows
+that exact upload — log included — before you press Send.
+
+### 2b. Technical debug log
+
+Levix keeps an internal, detailed debug log on the device to make a problem
+diagnosable. It is one JSON-lines file per day in the app's private storage
+(`logs/debug/`). Both previews in the panel show it under its own collapsed
+heading before anything is sent.
+
+**What it records:** the application's own operational events — connection and
+session transitions, scheduled work, HTTP route activity, errors and stack
+frames, with timestamps and levels. **What it never records:** message content,
+media, WhatsApp JIDs, phone numbers, e-mail addresses, API keys, tokens,
+passwords, cookies, session values or paths that name your install or home
+directory. Every record is rebuilt before it is written: a secret-shaped field
+name keeps only `[redacted]`, a message-content field keeps only its length (for
+example `[redacted 42 chars]`), and every other string is scrubbed with the same
+rules as a crash report (`<jid>`, `<email>`, `<number>`, `<secret>`, `<data>`,
+`~`) and capped at 2000 characters. A day's file stops at 5 MB.
+
+**Retention and deletion:** the device keeps 14 days, then the file is deleted
+automatically. **Clear logs** in the panel deletes the debug log together with
+the normal logs.
+
+**When it leaves the device:** only in the two situations you start — feedback
+sent with **Attach device & technical diagnostics** ticked, or a crash report
+you press Send on. It is never sent on its own, and each preview shows the
+exact string that goes with the send.
 
 ## 3. Permissions the Android app requests
 

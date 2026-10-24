@@ -367,6 +367,8 @@ export interface CrashReportItem {
   };
   device?: Record<string, any>;
   breadcrumbs: Breadcrumb[];
+  /** The sanitized technical log tail that the send uploads. */
+  debugLog?: string;
   status?: "pending" | "failed";
   lastError?: string | null;
 }

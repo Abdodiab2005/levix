@@ -56,6 +56,7 @@ const {
   TOPICS: FEEDBACK_TOPICS,
   MESSAGE_MAX: FEEDBACK_MESSAGE_MAX,
   MESSAGE_MIN: FEEDBACK_MESSAGE_MIN,
+  buildDiagnosticsAttachment,
   describeRuntime,
   feedbackRetryAfter,
   submitFeedback,
@@ -64,7 +65,6 @@ const {
 const { stampPanelSession } = require("../panel/session-auth.cjs");
 const recoveryEmail = require("../panel/recovery-email.cjs");
 const { DATA_DIR } = require("../config/paths.cjs");
-const { buildDiagnostics } = require("../diagnostics/device.cjs");
 const crashReports = require("../diagnostics/crashReports.cjs");
 const { PERSONA_FILE, activeProviderKeySetting } = require("../services/aiAgent.cjs");
 const {
@@ -1515,13 +1515,16 @@ router.get("/feedback/meta", (req, res) => {
   });
 });
 
-// The exact object the server would forward as `diagnostics`, so the operator
-// can see what they are about to share before they send it. This is the same
-// builder submitFeedback() uses, so the preview cannot lie.
+// The exact object the send forwards as diagnostics: the section 1 object and
+// the technical debug log, from the one builder submitFeedback() uses, so the
+// preview cannot lie.
 router.post("/feedback/diagnostics-preview", (req, res) => {
   const parsed = parseDiagnosticsInput(req.body?.client);
   if (parsed.error) return badRequest(res, parsed.error);
-  res.json({ success: true, diagnostics: buildDiagnostics(parsed.present ? parsed.value : {}) });
+  res.json({
+    success: true,
+    ...buildDiagnosticsAttachment(parsed.present ? parsed.value : {}),
+  });
 });
 
 // Leaves this machine only when the operator presses Send, and carries nothing

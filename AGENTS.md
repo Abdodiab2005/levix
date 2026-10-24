@@ -1126,7 +1126,32 @@ action, and the two consents are separate.
   the one allowlist (the server's own version, Node and platform, plus the
   Android fields from `LevixHost.getDiagnostics()` and the page's screen,
   language and theme), 2 KB at most. Unticked, the envelope has no
-  `diagnostics` key.
+  `diagnostics` key and no `debugLog` key.
+- The technical debug log is `<data>/logs/debug/debug-YYYY-MM-DD.log`, one
+  sanitized JSON-lines file per UTC day, written by a `debug`-level stream in
+  `src/utils/logger.cjs` through `src/diagnostics/debugLog.cjs`. Every record
+  is rebuilt before it is written: a secret-shaped key name
+  (`pass|secret|token|api_key|authorization|cookie|session|creds|private|noise|signed|identity`,
+  case-insensitive, any depth), a key named exactly `otp`, `pairingCode`,
+  `resetCode`, `verificationCode` or `setupCode`, and a bare `code` holding a
+  4–10 digit string become `[redacted]`; `err.code`/`statusCode` and other
+  diagnostic codes are kept. A message-content key (`text`, `body`, `caption`,
+  `conversation`, `message`, `quoted`, `content`, `prompt`, `reply`) keeps only
+  `[redacted N chars]`; every remaining string runs through `sanitizeText` and
+  is capped at 2000 characters (error stacks keep their frames, paths
+  sanitized). A day's file stops at 5 MB with one warning record. A write
+  failure is swallowed and never touches the other streams. Files expire after
+  14 days (`sweepExpired()` in `src/db/db.cjs`, boot + every six hours) and
+  `logger.clearLogs()` deletes the directory.
+- That log leaves the device in exactly two places, both operator-started:
+  feedback sent with the diagnostics box ticked gets a top-level `debugLog`
+  string, and a crash report send adds `debugLog` to its upload body. The two
+  preview endpoints return the same field (`buildDiagnosticsAttachment()` in
+  feedback, `uploadWithDebugLog()` in crash reports — one builder each, so
+  preview and send cannot drift) and the panel renders it in a collapsed
+  `Disclosure` labelled "Technical debug log (sanitized)". The levix-ui
+  allowlists must accept `debugLog` on both endpoints, re-sanitize it, and
+  never render it.
 - Crash reports are schema-1 JSON files in `<data>/crash-reports/`: at most 20,
   expiring after 7 days, written atomically. Android writes them from the
   uncaught handler and from `ApplicationExitInfo` (`CrashReports.kt`), Node from
