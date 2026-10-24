@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The coach-mark glow. A theme attribute rather than a colour constant so
+         the tour follows the active light or dark palette, like every other
+         surface in the app. -->
+    <attr name="coachMarkAccent" format="color" />
+</resources>

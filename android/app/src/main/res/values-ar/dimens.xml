@@ -8,8 +8,6 @@
     <dimen name="home_card_title">18sp</dimen>
     <dimen name="home_section_title">19sp</dimen>
     <dimen name="home_title">23sp</dimen>
-    <dimen name="guide_body_size">18sp</dimen>
-    <dimen name="guide_title_size">25sp</dimen>
     <dimen name="sheet_body_size">16sp</dimen>
     <dimen name="sheet_title_size">23sp</dimen>
 </resources>

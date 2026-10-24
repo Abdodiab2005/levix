@@ -20,6 +20,9 @@
     <!-- Surfaces & Backgrounds (Matched from dashboard.css) -->
     <color name="levix_bg">#f8fafc</color>
     <color name="levix_bg_soft">#f1f5f9</color>
+    <!-- Dim behind a coach mark. Lighter in light mode, where the panels below
+         are already bright, and deeper in dark mode so the hole still reads. -->
+    <color name="coach_scrim">#99000000</color>
     <color name="levix_panel">#ffffff</color>
     <color name="levix_panel_raised">#f8fafc</color>
     <color name="levix_panel_hover">#f1f5f9</color>

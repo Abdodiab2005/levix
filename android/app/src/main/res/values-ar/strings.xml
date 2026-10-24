@@ -2,24 +2,30 @@
 <resources>
     <string name="app_name">Levix</string>
 
-    <!-- First-run guide: one step per screen, in the order the operator does them. -->
-    <string name="guide_step">الخطوة %1$d من 5</string>
+    <!-- جولة الشاشة الرئيسية: كل خطوة تبرز الزر الحقيقي الذي تتحدث عنه. -->
+    <string name="guide_step">الخطوة %1$d من %2$d</string>
     <string name="guide_start_title">شغّل المساعد</string>
-    <string name="guide_start_body">اضغط تشغيل المساعد في الشاشة الرئيسية واسمح بالإشعارات. عندما يصبح المحرك جاهزًا، سترشدك الشاشة لربط واتساب.</string>
+    <string name="guide_start_body">هذه الدائرة تشغّل Levix. اسمح بالإشعارات عند الطلب ليبقى المساعد يعمل والشاشة مغلقة.</string>
     <string name="guide_battery_title">أبقِه يعمل</string>
-    <string name="guide_battery_body">إذا ظهرت بطاقة «حماية البطارية»، اضغط «تفعيل حماية البطارية» واختر «غير مقيّد». بدون ذلك قد يوقف أندرويد Levix أثناء قفل الشاشة.</string>
+    <string name="guide_battery_body">عندما تُظهر هذه البطاقة قيودًا، اضغط «تفعيل حماية البطارية» واختر «غير مقيّد». بدون ذلك قد يوقف أندرويد Levix أثناء قفل الشاشة.</string>
     <string name="guide_panel_title">افتح لوحة التحكم</string>
-    <string name="guide_panel_body">اضغط ربط واتساب لفتح الاتصال، أو فتح لوحة التحكم عندما يصبح المساعد جاهزًا. اختر كلمة مرور لحماية اللوحة عند أول استخدام. أدر الأوامر والذكاء الاصطناعي والمجموعات من هناك.</string>
-    <string name="guide_link_title">اربط واتساب</string>
-    <string name="guide_link_body">من اللوحة افتح «الاتصال» واطلب كود الربط أو أظهر رمز QR. ثم في واتساب: الإعدادات ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، وأدخل الكود المكوّن من 8 أحرف.</string>
+    <string name="guide_panel_body">هذا الزر يربط واتساب ثم يفتح اللوحة. اختر كلمة مرور عند أول استخدام؛ الأوامر والذكاء الاصطناعي وإعدادات المجموعات كلها هناك.</string>
+    <string name="guide_link_title">تابع واتساب</string>
+    <string name="guide_link_body">هذه البطاقة توضح هل واتساب مرتبط. اضغطها لرؤية الحالة كاملة؛ ولربط هاتفك افتح اللوحة ثم «الاتصال» واطلب كود الربط.</string>
+    <string name="guide_media_title">مركز الوسائط</string>
+    <string name="guide_media_body">يعرض مركز الوسائط حالات واتساب والصور والفيديوهات والرسائل الصوتية المحفوظة على هذا الهاتف. لا شيء يغادره، وأنت تختار ما تحفظه.</string>
     <string name="guide_privacy_title">الخصوصية والتشخيصات</string>
-    <string name="guide_privacy_body">يعمل Levix على هذا الهاتف ويتصل بواتساب والخدمات التي تفعّلها. تبقى تقارير الأعطال هنا حتى تراجعها وترسلها أو تحذفها.</string>
+    <string name="guide_privacy_body">يعمل Levix على هذا الهاتف ولا يتصل إلا بواتساب والخدمات التي تفعّلها. تبقى السجلات وتقارير الأعطال هنا حتى تحفظها أو تشاركها أو تحذفها.</string>
+    <string name="guide_header_title">اللغة والمظهر</string>
+    <string name="guide_header_body">هذان الزران يبدّلان بين العربية والإنجليزية، وبين الوضع الفاتح والداكن. يحتفظ Levix باختيارك.</string>
     <string name="guide_skip">تخطي</string>
     <string name="guide_back">رجوع</string>
     <string name="guide_next">التالي</string>
     <string name="guide_done">تم</string>
     <string name="guide_again_title">عرض الدليل مرة أخرى</string>
-    <string name="guide_again_sub">راجع خطوات الإعداد والخصوصية</string>
+    <string name="guide_again_sub">أعد تشغيل هذه الجولة على الشاشة الرئيسية</string>
+    <!-- يقرأها TalkBack عند ظهور كل خطوة: العنوان ثم الشرح ثم العدّ. -->
+    <string name="guide_announce">%1$s. %2$s. %3$s</string>
     <string name="crash_prompt_title">توقف Levix بشكل غير متوقع</string>
     <string name="crash_prompt_body">حُفظ تقرير تعطل على هذا الهاتف. يمكنك مراجعته قبل اختيار إرساله.</string>
     <string name="crash_prompt_review">مراجعة وإرسال</string>
