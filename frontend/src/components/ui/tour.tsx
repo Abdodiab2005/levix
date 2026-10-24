@@ -177,6 +177,21 @@ export function Tour({ open, steps, index, onAdvance, onBack, onClose, labels }:
     return () => window.cancelAnimationFrame(raf);
   }, [open, targetEl]);
 
+  // The docked sheet covers the lower part of the screen, so a target that is
+  // centred in the full viewport (as above) can sit behind it. Re-place it in
+  // the band between the sticky header and the sheet; a target taller than the
+  // band lines up with the band's top so its start stays visible.
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!open || !targetEl || !sheetUi || !card) return;
+    const bandTop =
+      (document.querySelector("header")?.getBoundingClientRect().bottom ?? 0) + CARD_GAP_PX;
+    const bandHeight = window.innerHeight - card.offsetHeight - CARD_GAP_PX - bandTop;
+    const box = targetEl.getBoundingClientRect();
+    const wantedTop = box.height >= bandHeight ? bandTop : bandTop + (bandHeight - box.height) / 2;
+    window.scrollBy({ top: box.top - wantedTop });
+  }, [open, targetEl, sheetUi]);
+
   useFocusTrap(cardRef, open && Boolean(targetEl), onClose);
 
   // The explanation card carries focus; Enter then means Next everywhere.

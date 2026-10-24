@@ -289,6 +289,10 @@ class MainActivity : AppCompatActivity(), CoachMarkOverlay.Host {
         scroll.scrollTo(0, (contentTop - scroll.paddingTop - breathing).coerceIn(0, max))
     }
 
+    override fun coachShift(dy: Int) {
+        findViewById<ScrollView>(R.id.rootScrollView).scrollBy(0, -dy)
+    }
+
     override fun coachFinished(completed: Boolean) {
         val overlay = coachMarks ?: return
         coachMarks = null
