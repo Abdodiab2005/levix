@@ -102,7 +102,8 @@ class MediaLogicTest {
     fun sorts() {
         val input = listOf(item("a", 1, 30), item("b", 3, 10), item("c", 2, 20))
         fun ids(sort: MediaSort) = MediaLogic.visible(
-            input, "Images", null, MediaFilter.ALL, sort, "", Instant.ofEpochSecond(4), ZoneId.of("UTC"),
+            input, "Images", MediaScope.ALL, null, MediaFilter.ALL, sort, "",
+            Instant.ofEpochSecond(4), ZoneId.of("UTC"),
         ).map { it.id }
         assertEquals(listOf("b", "c", "a"), ids(MediaSort.NEWEST))
         assertEquals(listOf("a", "c", "b"), ids(MediaSort.OLDEST))
@@ -121,7 +122,7 @@ class MediaLogicTest {
             item("lastWeek", at(3, 23)),
         )
         fun ids(filter: MediaFilter) = MediaLogic.visible(
-            input, "Images", null, filter, MediaSort.NEWEST, "", now, zone,
+            input, "Images", MediaScope.ALL, null, filter, MediaSort.NEWEST, "", now, zone,
         ).map { it.id }
         assertEquals(listOf("today"), ids(MediaFilter.TODAY))
         assertEquals(listOf("yesterday"), ids(MediaFilter.YESTERDAY))
@@ -130,7 +131,8 @@ class MediaLogicTest {
         assertEquals(
             listOf("today", "yesterday"),
             MediaLogic.visible(
-                input, "Images", null, MediaFilter.TODAY, MediaSort.NEWEST, "", now, ZoneId.of("UTC"),
+                input, "Images", MediaScope.ALL, null, MediaFilter.TODAY, MediaSort.NEWEST, "",
+                now, ZoneId.of("UTC"),
             ).map { it.id },
         )
     }
@@ -143,7 +145,7 @@ class MediaLogicTest {
             item("fav", 3, 3, favorite = true),
         )
         fun ids(filter: MediaFilter, query: String = "") = MediaLogic.visible(
-            input, "Images", null, filter, MediaSort.NEWEST, query,
+            input, "Images", MediaScope.ALL, null, filter, MediaSort.NEWEST, query,
             Instant.ofEpochSecond(4), ZoneId.of("UTC"),
         ).map { it.id }
         assertEquals(listOf("large"), ids(MediaFilter.LARGE))
@@ -256,7 +258,86 @@ class MediaLogicTest {
         assertFalse(document.isStatus)
         assertEquals(MediaType.DOCUMENT, document.mediaType)
         assertEquals(1_700_000_000L, document.dateAdded)
-        assertNull(map("other.jpg", "image/jpeg", "WhatsApp/Media/WhatsApp Images"))
+        assertNull(map("other.jpg", "image/jpeg", "primary:Android/media/com.whatsapp/WhatsApp/Media/Databases"))
+    }
+
+    @Test
+    fun documentMappingAcceptsEveryWhatsAppMediaFolder() {
+        val root = "primary:Android/media/com.whatsapp/WhatsApp/Media"
+        fun map(name: String, mime: String, folder: String) = MediaQuery.mapDocument(
+            "doc-1", name, mime, 123, 1_700_000_000_000L,
+            "$root/$folder", MediaSource.WHATSAPP, "content://tree/doc-1",
+        )
+        // The SAF walk used to keep only .Statuses and Documents, which is why
+        // Android 11+ installs showed statuses and nothing else.
+        assertEquals(MediaType.IMAGE, map("one.jpg", "image/jpeg", "WhatsApp Images")?.mediaType)
+        assertEquals(MediaType.VIDEO, map("one.mp4", "video/mp4", "WhatsApp Video")?.mediaType)
+        assertEquals(MediaType.VOICE, map("one.opus", "audio/ogg", "WhatsApp Voice Notes")?.mediaType)
+        assertEquals(MediaType.AUDIO, map("one.mp3", "audio/mpeg", "WhatsApp Audio")?.mediaType)
+        assertEquals(MediaType.VIDEO, map("one.gif", "image/gif", "WhatsApp Animated Gifs")?.mediaType)
+        assertEquals(MediaType.STICKER, map("one.webp", "image/webp", "WhatsApp Stickers")?.mediaType)
+        assertEquals(MediaType.DOCUMENT, map("one.pdf", "application/pdf", "WhatsApp Documents")?.mediaType)
+        // "Sent" is a normal subfolder of a media folder, not a special case.
+        assertEquals(
+            MediaType.VIDEO,
+            map("one.mp4", "video/mp4", "WhatsApp Video/Sent")?.mediaType,
+        )
+        assertNull(map("one.db", "application/octet-stream", "Databases"))
+    }
+
+    @Test
+    fun mediaFoldersBoundTheWalk() {
+        assertTrue(MediaLogic.mediaFolder("primary:Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images"))
+        assertTrue(MediaLogic.mediaFolder("primary:Android/media/com.whatsapp/WhatsApp/Media/.Statuses"))
+        assertTrue(MediaLogic.mediaFolder("primary:Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video/Sent"))
+        assertFalse(MediaLogic.mediaFolder("primary:Android/media/com.whatsapp/WhatsApp/Media"))
+        assertFalse(MediaLogic.mediaFolder("primary:Android/media/com.whatsapp/WhatsApp/Media/Databases"))
+        assertFalse(MediaLogic.mediaFolder("primary:Android/media/com.whatsapp/WhatsApp/Backups"))
+    }
+
+    @Test
+    fun scopeChoosesStatusesOrEverything() {
+        val status = item("status", type = MediaType.VIDEO, name = "status.mp4").copy(isStatus = true)
+        val photo = item("photo")
+        val voice = item("voice", type = MediaType.VOICE, name = "voice.opus")
+        val input = listOf(status, photo, voice)
+        fun ids(scope: MediaScope, category: String) = MediaLogic.visible(
+            input, category, scope, null, MediaFilter.ALL, MediaSort.NEWEST, "",
+            Instant.ofEpochSecond(4), ZoneId.of("UTC"),
+        ).map { it.id }
+        // The default segment is exactly what the hub showed before.
+        assertEquals(listOf("status"), ids(MediaScope.STATUSES, "Statuses"))
+        assertEquals(listOf("status"), ids(MediaScope.STATUSES, "Videos"))
+        // All media adds every WhatsApp folder and keeps the type filters.
+        // Same-date items fall back to id order.
+        assertEquals(listOf("photo", "status", "voice"), ids(MediaScope.ALL, "All"))
+        assertEquals(listOf("photo"), ids(MediaScope.ALL, "Images"))
+        assertEquals(listOf("voice"), ids(MediaScope.ALL, "Voice notes"))
+        assertEquals(listOf("status"), ids(MediaScope.ALL, "Statuses"))
+    }
+
+    @Test
+    fun savedScopeIsRememberedByValue() {
+        assertEquals(MediaScope.STATUSES, MediaLogic.parseScope(null))
+        assertEquals(MediaScope.STATUSES, MediaLogic.parseScope(""))
+        assertEquals(MediaScope.STATUSES, MediaLogic.parseScope("STATUSES"))
+        assertEquals(MediaScope.ALL, MediaLogic.parseScope("ALL"))
+        assertEquals(MediaScope.ALL, MediaLogic.parseScope("all"))
+        assertEquals(MediaScope.STATUSES, MediaLogic.parseScope("nonsense"))
+    }
+
+    @Test
+    fun durationCacheKeyFollowsUriSizeAndModification() {
+        val original = item("clip", 1_700_000_000, 4_096, MediaType.VIDEO, name = "clip.mp4")
+        assertEquals(
+            "content://media/clip|4096|1700000000",
+            MediaLogic.durationKey(original),
+        )
+        // A rescan builds a new MediaItem; the key must not change with it.
+        assertEquals(MediaLogic.durationKey(original), MediaLogic.durationKey(original.copy(id = "other")))
+        assertNotEquals(MediaLogic.durationKey(original), MediaLogic.durationKey(original.copy(size = 4_097)))
+        assertNotEquals(MediaLogic.durationKey(original), MediaLogic.durationKey(original.copy(dateModified = 1)))
+        assertNotEquals(MediaLogic.durationKey(original), MediaLogic.durationKey(original.copy(uri = "content://media/two")))
     }
 
     @Test

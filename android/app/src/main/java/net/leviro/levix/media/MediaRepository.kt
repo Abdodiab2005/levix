@@ -76,7 +76,7 @@ object MediaQuery {
         uri: String,
     ): MediaItem? {
         if (name.startsWith(".")) return null
-        if (!MediaLogic.isStatus(parentPath) && !parentPath.contains("Documents", true)) return null
+        if (!MediaLogic.mediaFolder(parentPath)) return null
 
         val path = "$parentPath/$name"
         val modifiedSeconds = lastModifiedMs / 1000
@@ -138,6 +138,13 @@ class MediaRepository(context: Context) {
     )
 
     fun favorites(): Set<String> = favoriteIds.toSet()
+
+    /** The segment last picked at the top of Media Hub. Statuses is the default. */
+    fun scope(): MediaScope = MediaLogic.parseScope(prefs.getString("scope", null))
+
+    fun rememberScope(scope: MediaScope) {
+        prefs.edit { putString("scope", scope.name) }
+    }
 
     fun toggleFavorite(id: String) {
         val next = favoriteIds.toMutableSet()
@@ -201,6 +208,10 @@ class MediaRepository(context: Context) {
         }
 
         val broken = mutableSetOf<MediaSource>()
+        // The tree now returns every WhatsApp folder, not only statuses, so a
+        // set keyed on what makes an item a duplicate replaces the scan of
+        // the whole index per file.
+        val indexed = result.values.mapTo(hashSetOf()) { duplicateKey(it) }
         for (source in listOf(MediaSource.WHATSAPP, MediaSource.WHATSAPP_BUSINESS)) {
             val tree = savedTree(source)
             if (tree == null) {
@@ -209,11 +220,7 @@ class MediaRepository(context: Context) {
             }
             try {
                 scanTree(tree, source).forEach { saf ->
-                    val alreadyIndexed = result.values.any {
-                        it.source == saf.source && it.displayName == saf.displayName &&
-                            it.size == saf.size && it.isStatus == saf.isStatus
-                    }
-                    if (!alreadyIndexed) result[saf.id] = saf
+                    if (indexed.add(duplicateKey(saf))) result[saf.id] = saf
                 }
             } catch (_: Exception) {
                 broken.add(source)
@@ -222,6 +229,10 @@ class MediaRepository(context: Context) {
         brokenTrees = broken
         return result.values.map { it.copy(isFavorite = favoriteIds.contains(it.id)) }
     }
+
+    /** What makes two rows the same file across MediaStore and the SAF tree. */
+    private fun duplicateKey(item: MediaItem): String =
+        "${item.source.name}|${item.displayName}|${item.size}|${item.isStatus}"
 
     private fun queryPaged(
         uri: Uri,
@@ -330,9 +341,10 @@ class MediaRepository(context: Context) {
                         val mime = rows.getString(2).orEmpty()
                         val document = DocumentsContract.buildDocumentUriUsingTree(tree, id)
                         if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
-                            val relevant = name.equals(".Statuses", true) ||
-                                name.contains("Documents", true) || path.contains(".Statuses", true)
-                            if (relevant) folders.add(document to "$path/$name")
+                            // Every WhatsApp media folder, plus whatever is
+                            // nested under one ("Sent", month folders). The
+                            // old walk only entered .Statuses and Documents.
+                            if (MediaLogic.mediaFolder("$path/$name")) folders.add(document to "$path/$name")
                         } else {
                             MediaQuery.mapDocument(
                                 id = id,

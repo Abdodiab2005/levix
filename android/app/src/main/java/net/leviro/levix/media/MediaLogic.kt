@@ -6,6 +6,9 @@ import java.util.Locale
 
 enum class MediaType { IMAGE, VIDEO, VOICE, AUDIO, DOCUMENT, STICKER }
 enum class MediaSource { WHATSAPP, WHATSAPP_BUSINESS, LEVIX_SAVED }
+
+/** The two-option segment at the top of Media Hub: statuses only, or every WhatsApp file. */
+enum class MediaScope { STATUSES, ALL }
 enum class MediaFilter { ALL, TODAY, YESTERDAY, THIS_WEEK, LARGE, SAVED, FAVORITES }
 enum class MediaSort { NEWEST, OLDEST, LARGEST, SMALLEST }
 
@@ -28,6 +31,11 @@ data class MediaItem(
 
 /** Paths are MediaStore relative paths or SAF document IDs, never raw file paths. */
 object MediaLogic {
+    /** WhatsApp's media folder names, lower case, matched as substrings. */
+    private val FOLDERS = listOf(
+        "images", "video", "audio", "voice notes", "animated gifs", "stickers", "documents",
+    )
+
     fun source(path: String): MediaSource? {
         val normalized = path.lowercase(Locale.ROOT).replace('\\', '/')
         if (normalized.contains("levix/whatsapp")) return MediaSource.LEVIX_SAVED
@@ -47,6 +55,30 @@ object MediaLogic {
         .replace('\\', '/')
         .split('/')
         .any { it == ".statuses" }
+
+    /**
+     * True for one of WhatsApp's own media folders, and for anything inside
+     * one. The SAF walk uses it both to decide what to descend into and to
+     * decide what a file belongs to, so "WhatsApp Images/Sent/x.jpg" is media
+     * while "Databases" and "Backups" are not.
+     */
+    fun mediaFolder(path: String): Boolean = path.lowercase(Locale.ROOT)
+        .replace('\\', '/')
+        .split('/')
+        .any { segment ->
+            segment.isNotBlank() && (segment == ".statuses" || FOLDERS.any { segment.contains(it) })
+        }
+
+    /** The saved duration choice, or [MediaScope.STATUSES] when unset or unknown. */
+    fun parseScope(raw: String?): MediaScope =
+        if (raw.equals(MediaScope.ALL.name, ignoreCase = true)) MediaScope.ALL else MediaScope.STATUSES
+
+    /**
+     * What one measured duration belongs to: a file at one size and one
+     * modification time. Rescans reuse it instead of reopening the file.
+     */
+    fun durationKey(item: MediaItem): String =
+        "${item.uri}|${item.size}|${item.dateModified}"
 
     /**
      * What Sticker Studio can be asked to do with an item, or NONE when the
@@ -110,6 +142,7 @@ object MediaLogic {
     fun visible(
         items: List<MediaItem>,
         category: String,
+        scope: MediaScope,
         source: MediaSource?,
         filter: MediaFilter,
         sort: MediaSort,
@@ -123,11 +156,12 @@ object MediaLogic {
 
         return items.asSequence()
             .filter { source == null || it.source == source || category == "Saved" && it.isSaved }
+            .filter { scope == MediaScope.ALL || it.isStatus }
             .filter { item ->
                 when (category) {
                     "Statuses" -> item.isStatus
-                    "Images" -> item.mediaType == MediaType.IMAGE && !item.isStatus
-                    "Videos" -> item.mediaType == MediaType.VIDEO && !item.isStatus
+                    "Images" -> item.mediaType == MediaType.IMAGE
+                    "Videos" -> item.mediaType == MediaType.VIDEO
                     "Voice notes" -> item.mediaType == MediaType.VOICE
                     "Audio" -> item.mediaType == MediaType.AUDIO
                     "Documents" -> item.mediaType == MediaType.DOCUMENT

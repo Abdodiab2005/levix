@@ -157,6 +157,9 @@
     <string name="media_insights">Storage insights</string>
     <string name="media_sort">Sort</string>
     <string name="media_search">Search files, type or date</string>
+    <string name="media_scope">Choose statuses or all media</string>
+    <string name="media_scope_statuses">Statuses</string>
+    <string name="media_scope_all">All media</string>
     <string name="media_all">All</string>
     <string name="media_whatsapp">WhatsApp</string>
     <string name="media_business">WhatsApp Business</string>

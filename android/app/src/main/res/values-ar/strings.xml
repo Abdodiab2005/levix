@@ -157,6 +157,9 @@
     <string name="media_insights">إحصاءات التخزين</string>
     <string name="media_sort">ترتيب</string>
     <string name="media_search">ابحث بالاسم أو النوع أو التاريخ</string>
+    <string name="media_scope">اختر الحالات أو كل الوسائط</string>
+    <string name="media_scope_statuses">الحالات</string>
+    <string name="media_scope_all">كل الوسائط</string>
     <string name="media_all">الكل</string>
     <string name="media_whatsapp">واتساب</string>
     <string name="media_business">واتساب للأعمال</string>

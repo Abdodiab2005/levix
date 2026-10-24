@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/mediaRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -38,6 +39,23 @@
             android:src="@drawable/ic_media_insights"
             android:contentDescription="@string/media_insights" />
     </LinearLayout>
+
+    <!-- Statuses | All media. One choice, kept between visits: the hub opened
+         on statuses only, and everything WhatsApp stores needed three taps. -->
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/mediaScope"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/bg_card_panel"
+        android:contentDescription="@string/media_scope"
+        android:minHeight="48dp"
+        app:tabGravity="fill"
+        app:tabIndicatorColor="@color/levix_cyan"
+        app:tabMode="fixed"
+        app:tabRippleColor="@color/levix_cyan_soft"
+        app:tabSelectedTextColor="@color/levix_text"
+        app:tabTextColor="@color/levix_text_muted" />
 
     <LinearLayout
         android:layout_width="match_parent"

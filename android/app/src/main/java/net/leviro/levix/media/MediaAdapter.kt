@@ -2,11 +2,8 @@ package net.leviro.levix.media
 
 import android.content.ContentResolver
 import android.content.Context
-import android.graphics.Bitmap
 import android.os.Build
 import android.text.format.DateFormat
-import android.util.LruCache
-import android.util.Size
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -15,7 +12,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
@@ -28,18 +24,14 @@ import net.leviro.levix.R
 
 class MediaAdapter(
     private val context: Context,
-    private val resolver: ContentResolver,
+    resolver: ContentResolver,
     private val scope: CoroutineScope,
     private val selection: SelectionState,
     private val spanCount: () -> Int,
     private val onTap: (MediaItem) -> Unit,
     private val onLongPress: (MediaItem) -> Unit,
 ) : ListAdapter<MediaItem, MediaAdapter.Holder>(DIFF) {
-    private val thumbs = object : LruCache<String, Bitmap>(
-        (Runtime.getRuntime().maxMemory() / 16).coerceAtMost(24L * 1024 * 1024).toInt(),
-    ) {
-        override fun sizeOf(key: String, value: Bitmap) = value.byteCount
-    }
+    private val loader = MediaThumbnails(context, resolver)
 
     init {
         setHasStableIds(true)
@@ -127,15 +119,8 @@ class MediaAdapter(
         holder.job?.cancel()
         holder.picture.setImageDrawable(null)
         holder.picture.tag = item.id
-        holder.label.text = buildString {
-            append(typeLabel(item.mediaType))
-            if (item.mediaType == MediaType.VIDEO) {
-                val seconds = (item.duration / 1000).toInt()
-                append(" · ${context.resources.getQuantityString(R.plurals.media_seconds, seconds, seconds)}")
-            }
-            append(" · ")
-            append(item.displayName)
-        }
+        val known = loader.duration(item)
+        applyText(holder, item, known)
         holder.root.setOnClickListener { onTap(item) }
         holder.root.setOnLongClickListener {
             onLongPress(item)
@@ -143,35 +128,53 @@ class MediaAdapter(
         }
         bindSelection(holder, item)
 
-        if (item.mediaType in VISUAL_TYPES) {
-            val cached = thumbs.get(item.id)
-            if (cached != null) {
-                holder.picture.setImageBitmap(cached)
-                return
-            }
-            holder.job = scope.launch {
-                val bitmap = withContext(Dispatchers.IO) {
-                    try {
-                        resolver.loadThumbnail(item.uri.toUri(), Size(256, 256), null)
-                    } catch (_: Exception) {
-                        null
-                    }
-                }
-                if (holder.picture.tag == item.id) {
-                    if (bitmap == null) {
-                        holder.picture.setImageResource(android.R.drawable.ic_dialog_alert)
-                    } else {
-                        thumbs.put(item.id, bitmap)
-                        holder.picture.setImageBitmap(bitmap)
-                    }
-                }
-            }
-        } else {
+        val visual = item.mediaType in VISUAL_TYPES
+        val cached = if (visual) loader.thumbnail(item.id) else null
+        if (cached != null) holder.picture.setImageBitmap(cached)
+        if (!visual) {
             holder.picture.setImageResource(when (item.mediaType) {
                 MediaType.VOICE -> R.drawable.ic_media_voice
                 MediaType.AUDIO -> R.drawable.ic_media_audio
                 else -> R.drawable.ic_media_document
             })
+        }
+        // A SAF documents provider has no thumbnail and no duration, and a
+        // video's frame and length come from one reader of the file itself.
+        val needsThumbnail = visual && cached == null
+        val needsDuration = item.mediaType in DURATION_TYPES && known <= 0
+        if (!needsThumbnail && !needsDuration) return
+
+        holder.job = scope.launch {
+            val loaded = withContext(Dispatchers.IO) { loader.load(item) }
+            if (holder.picture.tag != item.id) return@launch
+            if (visual) {
+                val bitmap = loaded.thumbnail
+                if (bitmap != null) {
+                    holder.picture.setImageBitmap(bitmap)
+                } else {
+                    holder.picture.setImageResource(android.R.drawable.ic_dialog_alert)
+                }
+            }
+            if (loaded.durationMs > 0 && loaded.durationMs != item.duration) {
+                applyText(holder, item, loaded.durationMs)
+                bindSelection(holder, item)
+            }
+        }
+    }
+
+    /** Type, the duration once it is known, then the file name. */
+    private fun applyText(holder: Holder, item: MediaItem, durationMs: Long) {
+        holder.label.text = buildString {
+            append(typeLabel(item.mediaType))
+            if (item.mediaType in DURATION_TYPES) {
+                val seconds = (durationMs / 1000).toInt()
+                if (seconds > 0) {
+                    append(" · ")
+                    append(context.resources.getQuantityString(R.plurals.media_seconds, seconds, seconds))
+                }
+            }
+            append(" · ")
+            append(item.displayName)
         }
     }
 
@@ -222,6 +225,7 @@ class MediaAdapter(
     companion object {
         private const val SELECTION_PAYLOAD = "selection"
         private val VISUAL_TYPES = setOf(MediaType.IMAGE, MediaType.VIDEO, MediaType.STICKER)
+        private val DURATION_TYPES = setOf(MediaType.VIDEO, MediaType.VOICE, MediaType.AUDIO)
         private val DIFF = object : DiffUtil.ItemCallback<MediaItem>() {
             override fun areItemsTheSame(oldItem: MediaItem, newItem: MediaItem): Boolean = oldItem.id == newItem.id
             override fun areContentsTheSame(oldItem: MediaItem, newItem: MediaItem): Boolean = oldItem == newItem
