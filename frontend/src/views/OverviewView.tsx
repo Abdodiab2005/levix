@@ -234,7 +234,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4" data-tour="overview-stats">
         {statsCards.map((card) => {
           const Icon = card.icon;
           return (

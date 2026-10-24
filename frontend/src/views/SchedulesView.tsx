@@ -777,7 +777,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       />
 
       {!loading && !error && schedules.length > 0 && (
-        <Toolbar>
+        <Toolbar data-tour="schedules-list">
           <Input
             type="search"
             name="schedule-search"

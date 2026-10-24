@@ -526,7 +526,7 @@ export const AIAssistantView: React.FC = () => {
     <div className="flex flex-col gap-3 sm:gap-4">
       <PageHeader icon={<Bot size={20} />} title={t("aiTitle")} description={t("aiSubtitle")} />
 
-      <Card>
+      <Card data-tour="ai-agent">
         <div className="flex min-h-10 items-center justify-between gap-4">
           <span className="text-sm font-semibold text-text-main">{t("aiAgentEnabled")}</span>
           <div className="flex items-center gap-3">
@@ -542,7 +542,7 @@ export const AIAssistantView: React.FC = () => {
         </div>
       </Card>
 
-      <Card className="flex flex-col gap-3">
+      <Card className="flex flex-col gap-3" data-tour="ai-provider">
         <CardHeader icon={<Sparkles size={18} />} title={t("aiProvider")} />
 
         <SegmentedControl
@@ -862,7 +862,7 @@ export const AIAssistantView: React.FC = () => {
         </div>
       </Card>
 
-      <Card className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <Card className="grid grid-cols-1 gap-2 sm:grid-cols-3" data-tour="ai-memory">
         <Button
           variant="secondary"
           icon={<FileText size={16} />}
