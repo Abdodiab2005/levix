@@ -191,7 +191,7 @@ That always installs the newest stable Levix. To stay on this release — the
 same script, pinned — use its own URL:
 
 ```bash
-curl -fsSL https://levix.leviro.net/install/v2.2.1.sh | bash
+curl -fsSL https://levix.leviro.net/install/v4.9.0.sh | bash
 ```
 
 **Behind a proxy** — if this server reaches the internet through a proxy, the
@@ -237,6 +237,18 @@ holds that port. Open <http://localhost:3001> and see. To move it: Settings →
 Server → Control panel port, then restart.
 
 **Forgot the panel password**
+
+Two ways to get a one-time reset code without touching the terminal:
+
+- **WhatsApp code** — on the login screen, choose **WhatsApp**; the code arrives
+  in your own chat with the bot. Needs the WhatsApp session up.
+- **Recovery email** — if you added and verified an address under **Settings**,
+  the same screen offers **Email**, and the code goes to that address. It is
+  delivered by a Levix mail relay, which emails the code and keeps neither the
+  address nor the code.
+
+If the session is down and neither can arrive, `levix reset-password` still
+works from the terminal:
 
 ```bash
 levix reset-password
