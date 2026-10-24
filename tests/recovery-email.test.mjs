@@ -1,10 +1,12 @@
 // Recovery email: mask, sealed storage, the settings routes, and the login-page
-// reset channel. The relay is a local stub. LEVIX_RECOVERY_URL is read at call
-// time, the same way LEVIX_FEEDBACK_URL is.
+// reset channel. The relay is a local stub that speaks contract v2: it makes
+// the verify code, checks the guesses, and refuses a reset without the token.
+// LEVIX_RECOVERY_URL is read at call time, the same way LEVIX_FEEDBACK_URL is.
 //
 // In-process checks use the first temp directory. The HTTP child gets its own
 // --data directory, because paths.cjs freezes DATA_DIR on first require.
 
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import { createServer } from "node:http";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -21,13 +23,61 @@ import {
 
 const ADDRESS = "recover.me@example.com";
 const OTHER = "other.box@gmail.com";
+const PASSWORD = "a-good-password";
 const NEXT_PASSWORD = "replacement-password";
 
 const dataDir = useTempDataDir("levix-recovery");
 
-const received = [];
+// --- the relay stub -------------------------------------------------------
+
+/** What the stub answers as the token for an address. */
+function stubToken(to) {
+  return `v1.${createHash("sha256").update(`stub:${to}`).digest("base64url")}`;
+}
+
+const received = []; // every body, in order
+const mailed = []; // per body: the code that would reach an inbox, or null
+const verifications = new Map(); // id -> { to, code, attempts }
 const held = [];
 let relayMode = "ok";
+
+function relayAnswer(body) {
+  if (relayMode === "invalid") return [400, { ok: false, error: "invalid" }];
+  if (relayMode === "rate") return [429, { ok: false, error: "rate_limited" }];
+  if (relayMode === "down") return [503, { ok: false, error: "unavailable" }];
+  if (body?.kind === "verify") {
+    const id = randomBytes(16).toString("hex");
+    const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+    verifications.set(id, { to: body.to, code, attempts: 0 });
+    mailed.push(code);
+    return [200, { ok: true, verification: id }];
+  }
+  if (body?.kind === "confirm") {
+    mailed.push(null);
+    const row = verifications.get(body.verification);
+    if (!row) return [400, { ok: false, error: "no_pending" }];
+    if (row.code === body.code) {
+      verifications.delete(body.verification);
+      return [200, { ok: true, token: stubToken(row.to) }];
+    }
+    row.attempts += 1;
+    if (row.attempts >= 5) {
+      verifications.delete(body.verification);
+      return [400, { ok: false, error: "too_many_attempts" }];
+    }
+    return [400, { ok: false, error: "wrong_code", attemptsLeft: 5 - row.attempts }];
+  }
+  if (body?.kind === "reset") {
+    if (body.token !== stubToken(body.to)) {
+      mailed.push(null);
+      return [403, { ok: false, error: "unverified" }];
+    }
+    mailed.push(body.code);
+    return [200, { ok: true }];
+  }
+  return [400, { ok: false, error: "invalid" }];
+}
+
 const stub = createServer((req, res) => {
   let raw = "";
   req.on("data", (chunk) => {
@@ -39,19 +89,17 @@ const stub = createServer((req, res) => {
       body = JSON.parse(raw);
     } catch {}
     received.push(body);
-    const finish = () => {
-      const status = relayMode === "invalid" ? 400 : relayMode === "rate" ? 429 : relayMode === "down" ? 503 : 200;
-      const error =
-        relayMode === "invalid" ? "invalid" : relayMode === "rate" ? "rate_limited" : "unavailable";
-      const payload = relayMode === "hold" || relayMode === "ok" ? { ok: true } : { ok: false, error };
+    const answer = () => {
+      const [status, payload] = relayAnswer(body);
       res.writeHead(status, { "content-type": "application/json" });
       res.end(JSON.stringify(payload));
     };
     if (relayMode === "hold") {
-      held.push(finish);
+      held.push(answer);
       return;
     }
-    finish();
+    if (relayMode === "invalid" || relayMode === "rate" || relayMode === "down") mailed.push(null);
+    answer();
   });
 });
 await new Promise((resolve) => stub.listen(0, "127.0.0.1", resolve));
@@ -60,18 +108,24 @@ process.env.LEVIX_RECOVERY_URL = `http://127.0.0.1:${stub.address().port}/api/re
 const recovery = require("./src/panel/recovery-email.cjs");
 const reset = require("./src/panel/password-reset.cjs");
 const secrets = require("./src/config/secrets.cjs");
+const vault = require("./src/config/vault.cjs");
 const transfer = require("./src/services/settingsTransfer.cjs");
 const store = require("./src/db/store.cjs");
 
-secrets.setDashboardPassword("a-good-password");
+secrets.setDashboardPassword(PASSWORD);
 
 function lastRelay() {
   return received[received.length - 1];
 }
 
-function wrongCodes(real) {
+/** The code the last relay request would have put in an inbox. */
+function lastCode() {
+  return mailed[mailed.length - 1];
+}
+
+function wrongCodes(real, count = 5) {
   const codes = [];
-  for (let i = 0; codes.length < 5 && i < 20; i += 1) {
+  for (let i = 0; codes.length < count && i < 40; i += 1) {
     const candidate = String(i).padStart(6, "0");
     if (candidate !== real) codes.push(candidate);
   }
@@ -87,6 +141,23 @@ function diskHas(dir, needle) {
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitFor(predicate, ms = 2000) {
+  const start = Date.now();
+  while (Date.now() - start < ms) {
+    if (predicate()) return true;
+    await sleep(10);
+  }
+  return false;
+}
+
+/** Verify `email` through the stub, as Settings would. */
+async function verifyAddress(email, peer) {
+  recovery._resetForTests();
+  const started = await recovery.startVerification(email, "en", peer);
+  if (!started.ok) return started;
+  return recovery.confirmVerification(lastCode());
+}
 
 section("masking");
 
@@ -132,7 +203,7 @@ equal("none of those called the relay", received.length, 0);
 result = await reset.requestResetCode("10.0.0.1", { channel: "email" });
 equal("the unknown channel did not spend the cooldown", result.reason, "no_email");
 
-section("relay errors become stable codes and leave no code behind");
+section("relay errors become stable codes and leave nothing pending");
 
 for (const [mode, reason] of [
   ["invalid", "invalid"],
@@ -143,59 +214,73 @@ for (const [mode, reason] of [
   const before = received.length;
   result = await recovery.startVerification(ADDRESS, "en", "10.0.0.2");
   equal(`${mode} -> ${reason}`, result.reason, reason);
-  equal(`${mode} did not store a code`, recovery.confirmVerification("000000").reason, "no_pending");
-  equal(`${mode} did reach the stub`, received.length, before + 1);
+  equal(`${mode} left nothing to confirm`, (await recovery.confirmVerification("000000")).reason, "no_pending");
+  equal(`${mode} reached the stub once`, received.length, before + 1);
 }
 relayMode = "ok";
-equal("a failed send did not spend the cooldown", (await recovery.startVerification(ADDRESS, "ar", "10.0.0.2")).ok, true);
+equal(
+  "a failed send did not spend the cooldown",
+  (await recovery.startVerification(ADDRESS, "ar", "10.0.0.2")).ok,
+  true,
+);
 
-section("the verify code is hashed, timed, and limited");
+section("verify: the relay makes and checks the code");
 
-let relayBody = lastRelay();
+const relayBody = lastRelay();
 equal("kind is verify", relayBody.kind, "verify");
 equal("the address is normalized", relayBody.to, ADDRESS);
 equal("lang follows the panel", relayBody.lang, "ar");
-equal("the body is exactly the contract", Object.keys(relayBody).sort().join(","), "code,kind,lang,to");
-ok("the code is 6 digits", /^\d{6}$/.test(relayBody.code));
+equal("the body is exactly the contract", Object.keys(relayBody).sort().join(","), "kind,lang,to");
 equal("nothing is saved before verify", recovery.publicStatus().verified, false);
 equal("the vault row is still empty", secrets.getRecoveryEmail(), null);
 
+const relayBefore = received.length;
+equal("a malformed guess is refused locally", (await recovery.confirmVerification("12ab56")).reason, "wrong_code");
+equal("the malformed guess never reached the relay", received.length, relayBefore);
+
 recovery._expireForTests();
-equal("an expired code is refused", recovery.confirmVerification(relayBody.code).reason, "expired");
+equal("an expired verification is refused", (await recovery.confirmVerification(lastCode())).reason, "expired");
+equal("the expired one never reached the relay", received.length, relayBefore);
 equal("expiry did not save the address", secrets.getRecoveryEmail(), null);
 
 recovery._resetForTests();
 result = await recovery.startVerification(`  ${ADDRESS.toUpperCase()}  `, undefined, "10.0.0.3");
 equal("a fresh start defaults lang to en", lastRelay().lang, "en");
-const verifyCode = lastRelay().code;
+const verifyCode = lastCode();
+const verifyId = [...verifications.keys()].at(-1);
 const guesses = wrongCodes(verifyCode);
-equal("first wrong guess", recovery.confirmVerification(guesses[0]).attemptsLeft, 4);
-equal("second wrong guess", recovery.confirmVerification(guesses[1]).attemptsLeft, 3);
-equal("third wrong guess", recovery.confirmVerification(guesses[2]).attemptsLeft, 2);
-equal("fourth wrong guess", recovery.confirmVerification(guesses[3]).attemptsLeft, 1);
-equal("fifth wrong guess kills it", recovery.confirmVerification(guesses[4]).reason, "too_many_attempts");
-equal("the real code is dead too", recovery.confirmVerification(verifyCode).reason, "no_pending");
+equal("first wrong guess", (await recovery.confirmVerification(guesses[0])).attemptsLeft, 4);
+equal("the guess went to the relay", lastRelay().kind, "confirm");
+equal("with the verification id", lastRelay().verification, verifyId);
+equal("confirm body is exactly the contract", Object.keys(lastRelay()).sort().join(","), "code,kind,verification");
+equal("second wrong guess", (await recovery.confirmVerification(guesses[1])).attemptsLeft, 3);
+equal("third wrong guess", (await recovery.confirmVerification(guesses[2])).attemptsLeft, 2);
+equal("fourth wrong guess", (await recovery.confirmVerification(guesses[3])).attemptsLeft, 1);
+equal("fifth wrong guess kills it", (await recovery.confirmVerification(guesses[4])).reason, "too_many_attempts");
+const deadBefore = received.length;
+equal("the real code is dead too", (await recovery.confirmVerification(verifyCode)).reason, "no_pending");
+equal("a dead verification is not sent again", received.length, deadBefore);
 equal("a burned code saved nothing", secrets.getRecoveryEmail(), null);
 
-section("verify seals the address and export cannot see it");
+section("verify seals the address with the token and export cannot see it");
 
-recovery._resetForTests();
-await recovery.startVerification(ADDRESS, "en", "10.0.0.4");
-const savedCode = lastRelay().code;
-result = recovery.confirmVerification(savedCode);
+result = await verifyAddress(ADDRESS, "10.0.0.4");
 equal("verify succeeds", result.ok, true);
 equal("the API mask", result.masked, "re***@e***.com");
 equal("status is the mask", recovery.publicStatus().masked, "re***@e***.com");
 equal("status has no address field", Object.hasOwn(recovery.publicStatus(), "email"), false);
 equal("delivery can still read it", recovery.getAddress(), ADDRESS);
+equal("the token is kept with it", recovery.getRecord().token, stubToken(ADDRESS));
 
 const sealed = store.getBotSetting("auth:recovery-email");
 ok("the row is sealed", typeof sealed === "string" && sealed.startsWith("enc:v1:"));
 ok("the database does not contain the address", !diskHas(dataDir, ADDRESS));
+ok("the database does not contain the token", !diskHas(dataDir, stubToken(ADDRESS)));
 
 const exported = transfer.exportSettings();
 const dumped = JSON.stringify(exported);
 ok("export omits the address", !dumped.includes(ADDRESS));
+ok("export omits the token", !dumped.includes(stubToken(ADDRESS)));
 ok("export omits the key", !dumped.includes("auth:recovery-email"));
 exported.settings["auth:recovery-email"] = "planted@evil.test";
 const imported = transfer.applyImport(exported);
@@ -205,20 +290,46 @@ ok(
 );
 equal("the planted value did not stick", secrets.getRecoveryEmail(), ADDRESS);
 
+section("a record from before the token reads as not set");
+
+const currentRow = store.getBotSetting("auth:recovery-email");
+store.saveBotSetting(
+  "auth:recovery-email",
+  vault.seal(JSON.stringify({ email: ADDRESS, verifiedAt: Date.now() })),
+);
+equal("no token, no address", recovery.getAddress(), null);
+equal("no token, not verified", recovery.publicStatus().verified, false);
+result = await reset.requestResetCode("10.0.0.9", { channel: "email" });
+equal("no token, no email reset", result.reason, "no_email");
+let threw = false;
+try {
+  secrets.setRecoveryEmail(ADDRESS);
+} catch {
+  threw = true;
+}
+ok("an address cannot be saved without a token", threw);
+store.saveBotSetting("auth:recovery-email", currentRow);
+equal("the real record is back", recovery.getAddress(), ADDRESS);
+
 section("the previous address stays until the new one is verified");
 
 recovery._resetForTests();
 await recovery.startVerification(OTHER, "en", "10.0.0.5");
-const otherCode = lastRelay().code;
+const otherCode = lastCode();
 equal("still the first address", secrets.getRecoveryEmail(), ADDRESS);
 equal("the mask is still the first", recovery.publicStatus().masked, "re***@e***.com");
-equal("a wrong code does not swap it", recovery.confirmVerification(wrongCodes(otherCode)[0]).reason, "wrong_code");
+equal(
+  "a wrong code does not swap it",
+  (await recovery.confirmVerification(wrongCodes(otherCode)[0])).reason,
+  "wrong_code",
+);
 equal("still the first after the wrong code", secrets.getRecoveryEmail(), ADDRESS);
-result = recovery.confirmVerification(otherCode);
+result = await recovery.confirmVerification(otherCode);
 equal("the new mask", result.masked, "ot***@g***.com");
 equal("now the second address", secrets.getRecoveryEmail(), OTHER);
+equal("with the second address's token", recovery.getRecord().token, stubToken(OTHER));
 
-section("email reset shares the WhatsApp throttle and bumps the epoch");
+section("email reset sends the token, shares the WhatsApp throttle, and bumps the epoch");
 
 const sent = [];
 reset.setSession({
@@ -238,7 +349,13 @@ equal("email reset sends", result.ok, true);
 equal("reset kind", lastRelay().kind, "reset");
 equal("reset lang", lastRelay().lang, "ar");
 equal("reset goes to the verified address", lastRelay().to, OTHER);
-const resetCode = lastRelay().code;
+equal("reset carries the address's token", lastRelay().token, stubToken(OTHER));
+equal(
+  "reset body is exactly the contract",
+  Object.keys(lastRelay()).sort().join(","),
+  "code,kind,lang,to,token",
+);
+const resetCode = lastCode();
 const sentBefore = sent.length;
 result = await reset.requestResetCode("10.4.0.2");
 equal("WhatsApp is throttled by the email send", result.reason, "throttled");
@@ -265,6 +382,18 @@ ok("the epoch moved", secrets.getPasswordUpdatedAt() > beforeEpoch);
 equal("the new password works", secrets.verifyDashboardPassword("email-reset-password"), true);
 equal("the code is single use", reset.completeReset(resetCode, "email-reset-password", "email-reset-password").reason, "no_pending");
 
+section("a token the relay refuses is unverified and leaves no code");
+
+reset._resetForTests();
+const realRecord = store.getBotSetting("auth:recovery-email");
+secrets.setRecoveryEmail(OTHER, stubToken("someone.else@example.com"));
+result = await reset.requestResetCode("10.4.0.9", { channel: "email" });
+equal("the relay answer is unverified", result.reason, "unverified");
+equal("nothing is pending", reset.completeReset("000000", "x-password", "x-password").reason, "no_pending");
+result = await reset.requestResetCode("10.4.0.9");
+equal("the refused send did not spend the cooldown", result.ok, true);
+store.saveBotSetting("auth:recovery-email", realRecord);
+
 section("a WhatsApp send throttles the email channel, not verification");
 
 reset._resetForTests();
@@ -273,25 +402,25 @@ result = await reset.requestResetCode("10.4.0.3");
 equal("WhatsApp send works", result.ok, true);
 const waCode = /\b(\d{6})\b/.exec(sent[0].content.text)?.[1];
 ok("the WhatsApp text still carries the code", Boolean(waCode));
-const relayBefore = received.length;
+const relayCount = received.length;
 result = await reset.requestResetCode("10.4.0.4", { channel: "email", lang: "en" });
 equal("email is throttled by the WhatsApp send", result.reason, "throttled");
-equal("the throttled email did not call the relay", received.length, relayBefore);
+equal("the throttled email did not call the relay", received.length, relayCount);
 equal("the WhatsApp code is still the live one", reset.completeReset(waCode, "wa-reset-password", "wa-reset-password").ok, true);
 
 recovery._resetForTests();
 result = await recovery.startVerification(ADDRESS, "en", "10.4.0.5");
 equal("verification has its own throttle", result.ok, true);
-const crossVerify = lastRelay().code;
+const crossVerify = lastCode();
 equal("the saved address is unchanged until verify", secrets.getRecoveryEmail(), OTHER);
 
 reset._resetForTests();
 result = await reset.requestResetCode("10.4.0.6", { channel: "email", lang: "en" });
 equal("a new email reset sends", result.ok, true);
-const crossReset = lastRelay().code;
+const crossReset = lastCode();
 equal("the verify code is not the reset code", reset.completeReset(crossVerify, "cross-password-1", "cross-password-1").reason, "wrong_code");
-equal("the reset code is not the verify code", recovery.confirmVerification(crossReset).reason, "wrong_code");
-equal("the verify code still verifies", recovery.confirmVerification(crossVerify).ok, true);
+equal("the reset code is not the verify code", (await recovery.confirmVerification(crossReset)).reason, "wrong_code");
+equal("the verify code still verifies", (await recovery.confirmVerification(crossVerify)).ok, true);
 equal("verification replaced the address", secrets.getRecoveryEmail(), ADDRESS);
 const epochBeforeCross = secrets.getPasswordUpdatedAt();
 const replaced = reset.completeReset(crossReset, "cross-password-1", "cross-password-1");
@@ -309,7 +438,7 @@ section("removing the address cancels an email code and leaves a WhatsApp code")
 reset._resetForTests();
 const epochBeforeRemove = secrets.getPasswordUpdatedAt();
 await reset.requestResetCode("10.5.0.1", { channel: "email" });
-const orphan = lastRelay().code;
+const orphan = lastCode();
 recovery.remove();
 equal("remove clears the address", secrets.getRecoveryEmail(), null);
 equal("remove clears the public status", recovery.publicStatus().verified, false);
@@ -323,15 +452,16 @@ ok("remove did not move the epoch", secrets.getPasswordUpdatedAt() === epochBefo
 
 recovery._resetForTests();
 await recovery.startVerification(ADDRESS, "en", "10.5.0.2");
+const removedCode = lastCode();
 recovery.remove();
-equal("remove drops a verify code", recovery.confirmVerification(lastRelay().code).reason, "no_pending");
+equal("remove drops a verification", (await recovery.confirmVerification(removedCode)).reason, "no_pending");
 equal("the address stays gone", secrets.getRecoveryEmail(), null);
 
-secrets.setRecoveryEmail(ADDRESS);
+secrets.setRecoveryEmail(ADDRESS, stubToken(ADDRESS));
 reset._resetForTests();
 await reset.requestResetCode("10.5.0.3", { channel: "email" });
-const rebound = lastRelay().code;
-secrets.setRecoveryEmail("replaced.byhand@example.com");
+const rebound = lastCode();
+secrets.setRecoveryEmail("replaced.byhand@example.com", stubToken("replaced.byhand@example.com"));
 equal(
   "redeem refuses when the saved address differs",
   reset.completeReset(rebound, "after-swap-1", "after-swap-1").reason,
@@ -355,16 +485,43 @@ equal(
   true,
 );
 
-section("concurrent sends reserve one slot before the relay answers");
+section("wrong reset codes across many codes lock reset for the day");
 
-async function waitFor(predicate, ms = 2000) {
-  const start = Date.now();
-  while (Date.now() - start < ms) {
-    if (predicate()) return true;
-    await sleep(10);
+reset._resetForTests();
+sent.length = 0;
+let lockedResult = null;
+let issued = 0;
+for (let round = 0; round < 4 && !lockedResult; round += 1) {
+  // Each round is a new code from a new peer once the cooldown is gone, the
+  // most an attacker rotating addresses could get.
+  reset._resetThrottleForTests();
+  result = await reset.requestResetCode(`10.6.0.${round}`);
+  if (!result.ok) {
+    lockedResult = result;
+    break;
   }
-  return false;
+  issued += 1;
+  const live = /\b(\d{6})\b/.exec(sent.at(-1).content.text)?.[1];
+  for (const guess of wrongCodes(live)) {
+    const answer = reset.completeReset(guess, "lock-password-1", "lock-password-1");
+    if (answer.reason === "locked") {
+      lockedResult = answer;
+      break;
+    }
+  }
 }
+equal("two codes of five wrong guesses each reach the cap", issued, reset.MAX_FAILED_CODES_PER_DAY / 5);
+equal("the next request is locked", lockedResult?.reason, "locked");
+ok("locked carries a retryAfter of up to a day", lockedResult?.retryAfter > 0 && lockedResult?.retryAfter <= 86_400);
+reset._resetThrottleForTests();
+const sentBeforeLock = sent.length;
+result = await reset.requestResetCode("10.6.0.99");
+equal("a fresh peer is locked too", result.reason, "locked");
+equal("the locked request sent nothing", sent.length, sentBeforeLock);
+equal("the password did not change", secrets.verifyDashboardPassword("wa-after-remove"), true);
+reset._resetForTests();
+
+section("concurrent sends reserve one slot before the relay answers");
 
 recovery._resetForTests();
 relayMode = "hold";
@@ -387,9 +544,32 @@ equal(
   verifyResults.filter((row) => row.reason === "throttled").length,
   7,
 );
-equal("the accepted verify code works", recovery.confirmVerification(received[beforeVerifyBurst].code).ok, true);
+const burstVerifyCode = lastCode();
 
-secrets.setRecoveryEmail(ADDRESS);
+section("concurrent guesses: one at a time, and a removal mid-flight stores nothing");
+
+const beforeGuesses = received.length;
+const confirms = await Promise.all(
+  Array.from({ length: 4 }, () => recovery.confirmVerification(burstVerifyCode)),
+);
+equal("one guess verified", confirms.filter((row) => row.ok).length, 1);
+equal("the others waited their turn", confirms.filter((row) => row.reason === "throttled").length, 3);
+equal("only one guess reached the relay", received.length, beforeGuesses + 1);
+equal("the address is stored", secrets.getRecoveryEmail(), ADDRESS);
+
+recovery._resetForTests();
+await recovery.startVerification(OTHER, "en", "10.9.0.3");
+const inFlightCode = lastCode();
+relayMode = "hold";
+const inFlight = recovery.confirmVerification(inFlightCode);
+ok("the guess reached the relay", await waitFor(() => held.length === 1));
+recovery.remove();
+for (const release of held.splice(0, held.length)) release();
+relayMode = "ok";
+equal("a guess that lands after remove is dropped", (await inFlight).reason, "no_pending");
+equal("remove won: no address", secrets.getRecoveryEmail(), null);
+
+secrets.setRecoveryEmail(ADDRESS, stubToken(ADDRESS));
 reset._resetForTests();
 relayMode = "hold";
 const beforeResetBurst = received.length;
@@ -423,6 +603,7 @@ equal(
 section("the panel routes and the login page");
 
 received.length = 0;
+mailed.length = 0;
 const webDir = useTempDataDir("levix-recovery-http");
 let server;
 let server2;
@@ -431,7 +612,7 @@ try {
   const http = httpClient(server.base);
   const anon = httpClient(server.base);
 
-  let res = await http.form("/setup", { password: "a-good-password", confirm: "a-good-password" });
+  let res = await http.form("/setup", { password: PASSWORD, confirm: PASSWORD });
   equal("setup signs in", res.status, 303);
 
   res = await anon.call("/login");
@@ -453,22 +634,42 @@ try {
       "sec-fetch-site": "cross-site",
       "content-type": "application/json",
     },
-    body: JSON.stringify({ email: ADDRESS, lang: "en" }),
+    body: JSON.stringify({ email: ADDRESS, current: PASSWORD, lang: "en" }),
   });
   equal("a cross-site start is rejected", res.status, 403);
   equal("the cross-site start did not call the relay", received.length, beforeCross);
 
-  res = await http.json("/dashboard/api/recovery-email/start", { email: "not-an-email", lang: "en" });
+  res = await http.json("/dashboard/api/recovery-email/start", { email: ADDRESS, lang: "en" });
+  equal("a session alone cannot bind an address", res.status, 400);
+  equal("the stable code is wrong_password", (await res.json()).error, "wrong_password");
+  res = await http.json("/dashboard/api/recovery-email/start", {
+    email: ADDRESS,
+    current: "not-the-password",
+    lang: "en",
+  });
+  equal("a wrong password is 400, not a logged-out 401", res.status, 400);
+  equal("a wrong password did not call the relay", received.length, beforeCross);
+
+  res = await http.json("/dashboard/api/recovery-email/start", {
+    email: "not-an-email",
+    current: PASSWORD,
+    lang: "en",
+  });
   equal("the route rejects a bad address", res.status, 400);
   equal("the stable code is invalid_email", (await res.json()).error, "invalid_email");
   equal("a bad address still did not call the relay", received.length, beforeCross);
 
-  res = await http.json("/dashboard/api/recovery-email/start", { email: ADDRESS, lang: "en" });
+  res = await http.json("/dashboard/api/recovery-email/start", {
+    email: ADDRESS,
+    current: PASSWORD,
+    lang: "en",
+  });
   equal("start is 200", res.status, 200);
   let body = await res.json();
   ok("start does not echo the address", !JSON.stringify(body).includes(ADDRESS));
-  const code = lastRelay().code;
-  equal("the route sent a verify code", lastRelay().kind, "verify");
+  ok("start does not return the verification id", !JSON.stringify(body).includes("verification"));
+  const code = lastCode();
+  equal("the route asked the relay for a verify code", lastRelay().kind, "verify");
 
   res = await http.json("/dashboard/api/recovery-email/verify", { code: wrongCodes(code)[0] });
   equal("a wrong code is 400, not a logged-out 401", res.status, 400);
@@ -481,6 +682,7 @@ try {
   body = await res.json();
   equal("verify returns the mask", body.masked, "re***@e***.com");
   ok("verify does not return the address", !JSON.stringify(body).includes(ADDRESS));
+  ok("verify does not return the token", !JSON.stringify(body).includes(stubToken(ADDRESS)));
 
   res = await http.call("/dashboard/api/recovery-email");
   body = await res.json();
@@ -522,10 +724,12 @@ try {
   body = await res.json();
   equal("email reset ok", body.ok, true);
   equal("email reset channel", body.channel, "email");
+  ok("the reset answer has no token", !JSON.stringify(body).includes("v1."));
   equal("HTTP reset kind", lastRelay().kind, "reset");
   equal("HTTP reset lang", lastRelay().lang, "ar");
   equal("HTTP reset recipient", lastRelay().to, ADDRESS);
-  const httpResetCode = lastRelay().code;
+  equal("HTTP reset token", lastRelay().token, stubToken(ADDRESS));
+  const httpResetCode = lastCode();
 
   res = await anon.json("/reset/request", {});
   equal("the shared throttle is 429", res.status, 429);
@@ -543,7 +747,7 @@ try {
   res = await http.call("/dashboard/api/stats");
   equal("the old session died with the epoch", res.status, 401);
 
-  res = await anon.form("/login", { password: "a-good-password" });
+  res = await anon.form("/login", { password: PASSWORD });
   equal("the old password is refused", res.status, 401);
   res = await anon.form("/login", { password: NEXT_PASSWORD });
   equal("the new password signs in", res.status, 303);
@@ -559,7 +763,7 @@ try {
 
   res = await again.json("/reset/request", { channel: "email", lang: "en" });
   equal("a restarted process can still email a code", res.status, 200);
-  const live = lastRelay().code;
+  const live = lastCode();
   const liveGuesses = wrongCodes(live);
   let lastReason = "";
   for (const guess of liveGuesses) {
@@ -576,6 +780,22 @@ try {
   const locked = httpClient(server2.base);
   res = await locked.form("/login", { password: NEXT_PASSWORD });
   equal("those guesses locked login", res.status, 429);
+
+  res = await locked.json("/reset/confirm", {
+    code: live,
+    password: "another-good-1",
+    confirm: "another-good-1",
+  });
+  equal("and they lock /reset/confirm for the same peer", res.status, 429);
+  equal("the reason is throttled", (await res.json()).reason, "throttled");
+  ok("with Retry-After", Number(res.headers.get("retry-after")) > 0);
+
+  res = await again.json("/dashboard/api/recovery-email/start", {
+    email: OTHER,
+    current: NEXT_PASSWORD,
+    lang: "en",
+  });
+  equal("a locked-out peer cannot bind an address either", res.status, 429);
 
   res = await again.call("/dashboard/api/recovery-email", { method: "DELETE" });
   equal("delete is 200", res.status, 200);

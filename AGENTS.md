@@ -108,10 +108,15 @@ The control panel is the only surface and it is always on.
 - Feedback: `POST /dashboard/api/feedback` — talks to a Levix-operated server
   only when the operator presses Send. Point `LEVIX_FEEDBACK_URL` elsewhere to
   test it without reaching production.
-- Recovery email: verifying an address, or emailing a password-reset code,
-  posts `{ kind, to, code, lang }` to `https://levix.leviro.net/api/recovery-email`
-  (`src/panel/recovery-email.cjs`). `LEVIX_RECOVERY_URL` overrides that URL in
-  tests. The relay does not store the address beyond rate limiting.
+- Recovery email: contract v2 with `https://levix.leviro.net/api/recovery-email`
+  (`src/panel/recovery-email.cjs`). `{ kind: "verify", to, lang }` makes the
+  relay create and email a code and answer a verification id; `{ kind:
+  "confirm", verification, code }` checks the operator's guess there (five per
+  code) and answers a token bound to the address, sealed with it in
+  `auth:recovery-email`; `{ kind: "reset", to, code, token, lang }` is refused
+  without that token. Binding an address asks for the panel password.
+  `LEVIX_RECOVERY_URL` overrides the URL in tests. The relay keeps only keyed
+  hashes, never the address or a code in readable form.
 
 ## Architecture
 
@@ -1199,9 +1204,11 @@ used by `src/panel/password-reset.cjs`): the code is hashed, lives 10 minutes,
 allows five attempts, and requests are throttled per peer and globally across
 the two channels. An email code is bound to the address it was sent to;
 removing or replacing that address cancels it, and redeem refuses when the
-saved address differs. A WhatsApp code is not bound to the email. Wrong guesses count toward the login lockout, and a successful
+saved address differs. A WhatsApp code is not bound to the email. Wrong guesses count toward the login lockout, a peer that is locked out cannot
+keep guessing at `/reset/confirm`, and ten wrong codes in 24 hours lock reset
+for the whole process until the oldest ages out (`locked`). A successful
 reset bumps the password epoch so older panel sessions die. The email channel
-posts `{ kind: "reset", to, code, lang }` to
+posts `{ kind: "reset", to, code, token, lang }` to
 `https://levix.leviro.net/api/recovery-email` (`src/panel/recovery-email.cjs`;
 `LEVIX_RECOVERY_URL` overrides the URL in tests). WhatsApp exists because
 WebAuthn/passkeys require HTTPS or localhost, and the panel is very often

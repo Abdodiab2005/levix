@@ -1606,13 +1606,15 @@ router.post("/security/password", (req, res) => {
 // A new address does not replace the saved one until its code is verified.
 // Same-origin and the panel session come from the /dashboard/api mount.
 
-// Wrong codes are 400, not 401. The panel client treats every 401 as a dead
-// session and sends the operator to /login. Login-page reset confirm stays
-// 401; that page does not use this client. A wrong verify code does not count
-// toward the login lockout — the operator is already signed in.
+// Wrong codes and a wrong password are 400, not 401. The panel client treats
+// every 401 as a dead session and sends the operator to /login. Login-page
+// reset confirm stays 401; that page does not use this client. A wrong verify
+// code does not count toward the login lockout (the relay limits guesses); a
+// wrong password does.
 const RECOVERY_HTTP = {
   throttled: 429,
   rate_limited: 429,
+  wrong_password: 400,
   invalid_email: 400,
   invalid: 400,
   unavailable: 502,
@@ -1635,24 +1637,36 @@ router.get("/recovery-email", (req, res) => {
   res.json({ success: true, ...recoveryEmail.publicStatus() });
 });
 
+// A recovery address can reset the password, so binding one asks for the
+// password again, like changing it does. Otherwise a stolen session or an
+// unattended browser could add its own address and keep the panel after the
+// operator signs it out or changes the password.
 router.post(
   "/recovery-email/start",
   asyncRoute(async (req, res) => {
-    const result = await recoveryEmail.startVerification(
-      req.body?.email,
-      req.body?.lang,
-      clientAddress(req),
-    );
+    const peer = clientAddress(req);
+    const retryAfter = blockedFor(peer);
+    if (retryAfter) return recoveryFailure(res, { reason: "throttled", retryAfter });
+    if (!secrets.verifyDashboardPassword(req.body?.current)) {
+      recordFailure(peer);
+      return recoveryFailure(res, { reason: "wrong_password" });
+    }
+    clearAttempts(peer);
+
+    const result = await recoveryEmail.startVerification(req.body?.email, req.body?.lang, peer);
     if (!result.ok) return recoveryFailure(res, result);
     res.json({ success: true });
   }),
 );
 
-router.post("/recovery-email/verify", (req, res) => {
-  const result = recoveryEmail.confirmVerification(req.body?.code);
-  if (!result.ok) return recoveryFailure(res, result);
-  res.json({ success: true, verified: true, masked: result.masked });
-});
+router.post(
+  "/recovery-email/verify",
+  asyncRoute(async (req, res) => {
+    const result = await recoveryEmail.confirmVerification(req.body?.code);
+    if (!result.ok) return recoveryFailure(res, result);
+    res.json({ success: true, verified: true, masked: result.masked });
+  }),
+);
 
 router.delete("/recovery-email", (req, res) => {
   recoveryEmail.remove();
