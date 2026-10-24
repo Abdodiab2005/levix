@@ -7,7 +7,7 @@ Levix for Android packages the complete Levix stack into a standalone Android AP
 - **SQLite** datastore powered by Node's built-in `node:sqlite`
 - **Baileys v7** WhatsApp protocol engine with local LID mapping
 - **AI Agent** with multi-provider support (Gemini, OpenAI, Anthropic)
-- **All 65 commands** & group moderation tools
+- **All 69 commands** & group moderation tools
 - **Embedded FFmpeg** for native WhatsApp voice notes (`!tts`) and video/image preview thumbnails
 - **Local Web Control Panel** accessible directly from the app's built-in WebView or your mobile browser (`http://127.0.0.1:3001`)
 

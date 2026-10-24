@@ -6,7 +6,7 @@ working with code in this repository.
 ## Project Overview
 
 **Levix** — a self-hosted personal WhatsApp bot built with Node.js and
-**Baileys v7**: a 65-command system, group moderation, an AI agent whose
+**Baileys v7**: a 69-command system, group moderation, an AI agent whose
 provider (Google Gemini / OpenAI-compatible / Anthropic) is selected in the
 panel with its own endpoint, API key and model, scheduled messages, and a web
 control panel that changes almost all of it live. The database is the source of

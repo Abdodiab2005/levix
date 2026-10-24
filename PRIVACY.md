@@ -143,10 +143,10 @@ Send, so what you see is what is sent.
 | Field | Example | Source |
 | --- | --- | --- |
 | `schema` | `1` | the server, always |
-| `levix` | `4.8.0` | the server, always |
+| `levix` | `4.9.0` | the server, always |
 | `node` | `v24.19.0` | the server, always |
 | `platform` | `android` / `docker` / `node-linux` / `sea-linux` | the server, always |
-| `nativeApp` | `4.8.0 (66)` | the Android app |
+| `nativeApp` | `4.9.0 (67)` | the Android app |
 | `android` | `15 (API 35)` | the Android app |
 | `device` | `samsung SM-A556E` | the Android app |
 | `abi` | `arm64-v8a` | the Android app |
