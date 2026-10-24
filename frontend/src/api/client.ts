@@ -13,6 +13,8 @@ import type {
   GroupItem,
   Job,
   LogItem,
+  ModerationPolicyFieldError,
+  ModerationPolicyVisibility,
   Pack,
   SentCrashReportItem,
   Sticker,
@@ -257,7 +259,13 @@ export const api = {
   updateGroup: (jid: string, payload: any) =>
     api.patch(`/groups/${encodeURIComponent(jid)}`, payload),
   previewModeration: (settings: unknown) =>
-    api.post<{ success: boolean; en: string; ar: string }>("/groups/moderation-preview", settings),
+    api.post<{
+      success: boolean;
+      en: string;
+      ar: string;
+      visibility?: ModerationPolicyVisibility;
+      errors?: ModerationPolicyFieldError[];
+    }>("/groups/moderation-preview", settings),
   kickFlagged: (jid: string, userId: string) =>
     api.post<{ success: boolean; group: GroupItem }>(
       `/groups/${encodeURIComponent(jid)}/flagged/kick`,
