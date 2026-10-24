@@ -291,6 +291,27 @@ const SETTINGS = [
     group: "ai",
     label: "Google Search engine ID (cx)",
   },
+  {
+    key: "translate_engine",
+    type: "string",
+    default: "ai",
+    choices: ["ai", "google"],
+    choiceLabels: {
+      ai: "AI (active provider)",
+      google: "Google Translate",
+    },
+    group: "ai",
+    label: "Translate engine",
+    hint: "Default engine for !translate. Override a call with !translate ai or !translate google.",
+  },
+  {
+    key: "google_translate_api_key",
+    type: "secret",
+    default: "",
+    group: "ai",
+    label: "Google Translate API key",
+    hint: "Optional Cloud Translation API v2 key. Without it, !translate google uses the public endpoint.",
+  },
 
   // --- Integrations ------------------------------------------------------
   {

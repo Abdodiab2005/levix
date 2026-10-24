@@ -135,6 +135,8 @@ src/
 │   │                 # not a setting, not reachable from any route or view)
 │   ├── ai-persona.md # the editable AI system prompt (a TEMPLATE — the live
 │   │                 # copy lives in the data directory)
+│   ├── translate-prompt.md # the editable !translate AI prompt (a TEMPLATE —
+│   │                 # the live copy lives in the data directory)
 │   ├── constants.js  # build-time constants (retries, cache TTLs)
 │   └── baileys.config.js # Baileys socket configuration (ESM)
 ├── db/               # The database
@@ -510,13 +512,15 @@ there is no cache and no write-behind queue to reason about.
 ### The data directory
 
 `src/config/paths.cjs` resolves the one directory the bot writes to: database,
-`memory/`, the editable `ai-persona.md`, `logs/`, temp `media/`. Order:
+`memory/`, the editable `ai-persona.md` and `translate-prompt.md`, `logs/`,
+temp `media/`. Order:
 `--data <dir>`, then `LEVIX_DATA_DIR` (the only environment variable the code
 reads — Docker has no other way to point at its volume), then `<repo>/data`
 when running from a clone, then `~/.levix`.
 
 `assetPath()` is the read-only counterpart: `views/`, `public/`, the persona
-template. A packaged build unpacks those and calls `setAssetRoot()`.
+and translation-prompt templates. A packaged build unpacks those and calls
+`setAssetRoot()`.
 
 ## Key Features Implementation
 
@@ -814,6 +818,13 @@ account".
   JSON API: `GET/POST /dashboard/api/auto-delete/rules`,
   `PATCH/DELETE /dashboard/api/auto-delete/rules/:id`,
   `POST .../rules/:id/reset`, `GET/DELETE /dashboard/api/auto-delete/log`.
+- **`!translate`** (`src/commands/translate.cjs`, aliases `tr`, `ترجم`, `ترجمة`)
+  — Arabic ↔ English by default, or into a chosen language. AI (default, the
+  active provider) or Google Translate (`!translate google`). Options:
+  `summary` / `ملخص`, `explain` / `اشرح`, `detect` / `اكتشف`, `formal` /
+  `رسمي`, `casual` / `عامي`. The AI prompt is `src/config/translate-prompt.md`
+  (live copy `<data>/translate-prompt.md`). Settings: `translate_engine`,
+  `google_translate_api_key`.
 
 ### 5b. Domain setup (`levix domain`, `src/domain/`)
 
@@ -868,7 +879,7 @@ await status.remove();                        // delete it (when media IS the an
 Everything is best-effort: if the edit is rejected (message too old, not ours)
 it falls back to a normal send.
 
-Already wired: `!gemini`, `!weather`, `!shortlink`, `!stt`, `!tts`.
+Already wired: `!gemini`, `!weather`, `!shortlink`, `!stt`, `!tts`, `!translate`.
 
 ### 7. Text decoding (`src/utils/textDecode.cjs`)
 
@@ -1039,7 +1050,7 @@ the bot does can be changed from it, live:
 | Overview | — (counters, uptime, connection) | — |
 | Connection | **start / stop** the session, QR pairing, **unlink**, restart | `src/core/session.js` |
 | Commands | prefix · aliases · permission · on/off | `bot_settings` via `runtime-config.cjs` |
-| AI & memory | the system prompt · the `memory/*.md` files | `<data>/ai-persona.md`, `<data>/memory/` |
+| AI & memory | the system prompt · the translation prompt · the `memory/*.md` files | `<data>/ai-persona.md`, `<data>/translate-prompt.md`, `<data>/memory/` |
 | Groups | antilink · antispam · media · welcome · warnings · rules | `group_settings` |
 | Roles | bot owner / admin | `user_metadata` (same path as `!perm`) |
 | Tables | debts · warnings · notes · todos · users · schedules | read-only (schedules can be deleted) |
@@ -1210,10 +1221,11 @@ Which means a fresh install runs correctly against an empty database, and
 
 - `src/config/settings.cjs` — timezone, reply delays, AI keys and model, tool
   limits, memory size, thumbnails, ffmpeg path, port, proxy hops, extra origin,
-  forward-score retention. **Consumers must call `settings.get(key)` at call
-  time**, never once at import, or a change wouldn't apply until a restart.
-  Settings that genuinely can't apply live are marked `restart: true` and the
-  panel says so next to the field.
+  forward-score retention, `translate_engine`, `google_translate_api_key`.
+  **Consumers must call `settings.get(key)` at call time**, never once at
+  import, or a change wouldn't apply until a restart. Settings that genuinely
+  can't apply live are marked `restart: true` and the panel says so next to
+  the field.
 - `src/config/runtime-config.cjs` — prefix, command permissions, alias
   overrides, disabled commands. Group sub-commands are keyed `group:<name>`.
 - Secrets are **generated, never configured** (`src/config/secrets.cjs`): the
@@ -1490,3 +1502,8 @@ owner sets the `PLAY_TRACK` repository variable to `production`.
   (English). The live copy is `<data>/ai-persona.md`, hot-reloaded and editable
   from the panel. Everything above the `---` is a note to the human and is not
   sent to the model
+- `src/config/translate-prompt.md` - the `!translate` AI prompt template
+  (English, `{{double_braces}}` variables). The live copy is
+  `<data>/translate-prompt.md`, hot-reloaded and editable from the panel AI
+  screen. Everything above the `---` is a note to the human and is not sent to
+  the model. It is not a chat turn: `ai-identity.cjs` is not prepended.

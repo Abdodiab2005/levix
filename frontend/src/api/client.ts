@@ -259,6 +259,11 @@ export const api = {
   getPersona: () =>
     api.get<{ persona: { header?: string; body?: string } | string }>("/ai/persona"),
   updatePersona: (persona: string) => api.put("/ai/persona", { body: persona }),
+  getTranslatePrompt: () =>
+    api.get<{ prompt: { header?: string; body?: string } | string }>("/ai/translate-prompt"),
+  updateTranslatePrompt: (body: string) => api.put("/ai/translate-prompt", { body }),
+  resetTranslatePrompt: () =>
+    api.post<{ prompt: { header?: string; body?: string } }>("/ai/translate-prompt/reset"),
   getMemoryFiles: () =>
     api.get<{
       files?: string[];
