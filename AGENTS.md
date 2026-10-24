@@ -1159,10 +1159,12 @@ action, and the two consents are separate.
   `logger.clearLogs()` deletes the directory.
 - That log leaves the device in exactly two places, both operator-started:
   feedback sent with the diagnostics box ticked gets a top-level `debugLog`
-  string, and a crash report send adds `debugLog` to its upload body. The two
-  preview endpoints return the same field (`buildDiagnosticsAttachment()` in
-  feedback, `uploadWithDebugLog()` in crash reports — one builder each, so
-  preview and send cannot drift) and the panel renders it in a collapsed
+  string, and a crash report send adds `debugLog` to its upload body. Each
+  preview freezes the tail in memory (`storeDebugSnapshot()` in
+  `src/diagnostics/debugLog.cjs`, 15 minutes, at most 32) and returns
+  `debugLogId`. Send attaches that snapshot when the panel passes the id, and
+  attaches no `debugLog` when the id is missing or expired — never a fresh
+  unread tail. The panel renders the previewed string in a collapsed
   `Disclosure` labelled "Technical debug log (sanitized)". The levix-ui
   allowlists must accept `debugLog` on both endpoints, re-sanitize it, and
   never render it.
@@ -1195,7 +1197,9 @@ email (only when a verified recovery email is saved; the page shows the masked
 address). Both channels share one code path (`src/panel/one-time-code.cjs`,
 used by `src/panel/password-reset.cjs`): the code is hashed, lives 10 minutes,
 allows five attempts, and requests are throttled per peer and globally across
-the two channels. Wrong guesses count toward the login lockout, and a successful
+the two channels. An email code is bound to the address it was sent to;
+removing or replacing that address cancels it, and redeem refuses when the
+saved address differs. A WhatsApp code is not bound to the email. Wrong guesses count toward the login lockout, and a successful
 reset bumps the password epoch so older panel sessions die. The email channel
 posts `{ kind: "reset", to, code, lang }` to
 `https://levix.leviro.net/api/recovery-email` (`src/panel/recovery-email.cjs`;

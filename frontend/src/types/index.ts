@@ -423,6 +423,8 @@ export interface CrashReportItem {
   breadcrumbs: Breadcrumb[];
   /** The sanitized technical log tail that the send uploads. */
   debugLog?: string;
+  /** Server id of that frozen tail. Send passes it back; the panel does not show it. */
+  debugLogId?: string;
   status?: "pending" | "failed";
   lastError?: string | null;
 }

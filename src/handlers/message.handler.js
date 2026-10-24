@@ -127,7 +127,12 @@ async function processMessage(sock, msg, body) {
   try {
     const wasCommand = await handleCommand(sock, msg, body);
     if (wasCommand) {
-      logger.info(`[Message] Handled as command: "${body}"`);
+      const text = typeof body === "string" ? body : "";
+      const command = text.trim().split(/\s+/, 1)[0] || "";
+      logger.info(
+        { command, chat: isGroup ? "group" : "private", bodyLength: text.length },
+        "[Message] Handled as command",
+      );
       return;
     }
   } catch (error) {

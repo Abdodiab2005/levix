@@ -91,6 +91,38 @@ equal(
   "no_pending",
 );
 
+section("concurrent WhatsApp requests reserve one send");
+
+reset._resetForTests();
+const releases = [];
+let sentDuringBurst = 0;
+reset.setSession({
+  socket: {
+    user: { id: "201234567890@s.whatsapp.net" },
+    sendMessage() {
+      sentDuringBurst += 1;
+      return new Promise((resolve) => {
+        releases.push(() => resolve({ key: { id: "fake" } }));
+      });
+    },
+  },
+});
+const burst = Promise.all(Array.from({ length: 8 }, (_, i) => reset.requestResetCode(`10.9.0.${i}`)));
+const burstStart = Date.now();
+while (sentDuringBurst < 1 && Date.now() - burstStart < 2000) {
+  await new Promise((resolve) => setTimeout(resolve, 10));
+}
+await new Promise((resolve) => setTimeout(resolve, 100));
+equal("one WhatsApp send is in flight", sentDuringBurst, 1);
+for (const release of releases.splice(0, releases.length)) release();
+const burstResults = await burst;
+equal("one WhatsApp request is accepted", burstResults.filter((row) => row.ok).length, 1);
+equal(
+  "seven WhatsApp requests are throttled",
+  burstResults.filter((row) => row.reason === "throttled").length,
+  7,
+);
+
 section("the HTTP surface");
 
 const webDir = useTempDataDir("levix-password-reset-http");

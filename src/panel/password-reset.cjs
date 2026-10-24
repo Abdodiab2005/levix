@@ -6,7 +6,9 @@
 // email saved in Settings. Both channels share one pending code, one throttle,
 // and one `completeReset` (src/panel/one-time-code.cjs). A second request
 // before the cooldown replaces nothing — it is refused, and the live code
-// stays valid.
+// stays valid. An email code is bound to the address it was sent to. Removing
+// or replacing that address drops it, and redeeming it is refused when the
+// saved address is no longer that one. A WhatsApp code is not.
 //
 // Why a code rather than passkeys / biometrics (WebAuthn)? WebAuthn only
 // exists in a secure context: HTTPS or localhost. A Levix panel is very often
@@ -39,8 +41,13 @@ const {
 // next to the dashboard API's setSession(). Re-read the socket every time —
 // a reconnect replaces it.
 let session = null;
-let pending = null; // { salt, hash, expiresAt, attempts }
+let pending = null; // { salt, hash, expiresAt, attempts, channel, email }
 const throttle = createThrottle();
+// Bumped by every reset request and by an address change. The commit after
+// `await` stores a code only when it still owns this number, so a later
+// request (or a removed address) cannot lose to an older in-flight send.
+let resetGeneration = 0;
+let emailGeneration = 0;
 
 function setSession(manager) {
   session = manager;
@@ -54,6 +61,18 @@ function _resetForTests() {
 
 function _expireForTests() {
   if (pending) pending.expiresAt = Date.now() - 1;
+}
+
+/**
+ * The verified recovery address changed. Drop an email reset bound to the
+ * previous one. A WhatsApp code is left alone. An email send still in flight
+ * sees `emailGeneration` move and does not become the pending code.
+ *
+ * @param {string | null} address the address now on file, or null
+ */
+function noteRecoveryAddress(address) {
+  if (pending?.channel === "email" && pending.email !== address) pending = null;
+  emailGeneration += 1;
 }
 
 function codeMessage(code) {
@@ -91,12 +110,14 @@ async function requestResetCode(peer, options = {}) {
   const channel = resolveChannel(opts.channel);
   if (!channel) return { ok: false, reason: "invalid" };
 
+  const lang = opts.lang === "ar" ? "ar" : "en";
+
   const now = Date.now();
   const key = String(peer ?? "");
-  const gate = throttle.check(key, now);
-  if (!gate.ok) return { ok: false, reason: gate.reason, retryAfter: gate.retryAfter };
-
-  const lang = opts.lang === "ar" ? "ar" : "en";
+  // An open cooldown answers first, including when the session or address is
+  // already gone. The check does not take a slot.
+  const early = throttle.check(key, now);
+  if (!early.ok) return { ok: false, reason: early.reason, retryAfter: early.retryAfter };
 
   // Preconditions before a code exists, so a missing channel does not replace
   // a live code and does not spend the cooldown.
@@ -110,7 +131,12 @@ async function requestResetCode(peer, options = {}) {
     if (!sock?.user?.id) return { ok: false, reason: "no_session" };
   }
 
+  const gate = throttle.reserve(key, now);
+  if (!gate.ok) return { ok: false, reason: gate.reason, retryAfter: gate.retryAfter };
+
   const generated = generateCode(now);
+  const generation = ++resetGeneration;
+  const emailGen = channel === "email" ? ++emailGeneration : 0;
 
   if (channel === "email") {
     const sent = await recoveryEmail.deliver({
@@ -119,7 +145,10 @@ async function requestResetCode(peer, options = {}) {
       code: generated.code,
       lang,
     });
-    if (!sent.ok) return sent;
+    if (!sent.ok) {
+      throttle.release(gate.reservation);
+      return sent;
+    }
     logger.info({ channel }, "[reset] Reset code sent by email");
   } else {
     try {
@@ -130,6 +159,7 @@ async function requestResetCode(peer, options = {}) {
         { typing: false, delayMs: 0 },
       );
     } catch (error) {
+      throttle.release(gate.reservation);
       logger.error({ err: error }, "[reset] failed to send the reset code over WhatsApp");
       return { ok: false, reason: "send_failed" };
     }
@@ -137,9 +167,17 @@ async function requestResetCode(peer, options = {}) {
   }
 
   // Only a code the operator can actually have is stored. A failed send leaves
-  // any previous code in place.
-  pending = generated.pending;
-  throttle.record(key, gate.entry, now);
+  // any previous code in place. A newer request, or an address change while
+  // this send was in flight, owns the slot instead.
+  if (generation !== resetGeneration) return { ok: false, reason: "throttled" };
+  if (channel === "email" && (emailGen !== emailGeneration || recoveryEmail.getAddress() !== address)) {
+    return { ok: false, reason: "no_email" };
+  }
+  pending = {
+    ...generated.pending,
+    channel,
+    email: channel === "email" ? address : null,
+  };
   return { ok: true, channel, expiresInMinutes: Math.round(CODE_TTL_MS / 60000) };
 }
 
@@ -155,6 +193,10 @@ function completeReset(code, password, confirm) {
   if (Date.now() > pending.expiresAt) {
     pending = null;
     return { ok: false, reason: "expired" };
+  }
+  if (pending.channel === "email" && recoveryEmail.getAddress() !== pending.email) {
+    pending = null;
+    return { ok: false, reason: "address_changed" };
   }
   if (String(password ?? "") !== String(confirm ?? "")) {
     return { ok: false, reason: "mismatch" };
@@ -191,6 +233,7 @@ module.exports = {
   setSession,
   requestResetCode,
   completeReset,
+  noteRecoveryAddress,
   _resetForTests,
   _expireForTests,
 };

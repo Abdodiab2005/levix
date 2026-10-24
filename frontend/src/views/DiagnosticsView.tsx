@@ -53,10 +53,10 @@ export const DiagnosticsView: React.FC = () => {
     loadReports();
   }, [loadReports]);
 
-  const handleSend = async (id: string) => {
+  const handleSend = async (id: string, debugLogId?: string) => {
     setSendingId(id);
     try {
-      await api.sendCrashReport(id);
+      await api.sendCrashReport(id, debugLogId);
       toast(t("reportSentSuccess"), "success");
       await loadReports();
     } catch (err: any) {
@@ -148,6 +148,7 @@ export const DiagnosticsView: React.FC = () => {
                   status: _status,
                   lastError: _lastError,
                   debugLog,
+                  debugLogId,
                   ...previewObj
                 } = report;
                 return (
@@ -169,7 +170,7 @@ export const DiagnosticsView: React.FC = () => {
                           size="sm"
                           loading={sendingId === report.id}
                           disabled={sendingId !== null}
-                          onClick={() => handleSend(report.id)}
+                          onClick={() => handleSend(report.id, debugLogId)}
                           icon={<Send size={14} />}
                         >
                           {sendingId === report.id ? t("sendingReport") : t("sendReport")}
