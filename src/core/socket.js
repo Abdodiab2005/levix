@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
 const { withMediaThumbnail } = require("../utils/thumbnail.cjs");
 const settings = require("../config/settings.cjs");
+const { isLinkedCreds } = require("../utils/linkedCreds.cjs");
 const socketDispatchers = new WeakMap();
 
 /** Fetch a WhatsApp image through the transport owned by this live socket. */
@@ -107,11 +108,9 @@ export async function createWhatsAppSocket({ proxy = null, pairingCode = false }
   const { state, saveCreds, clearAll } = await useDatabaseAuthState();
 
   // Whether this install is already paired. NOT `store.hasCredentials()`: the
-  // auth state writes a `creds` row on its very first call, paired or not.
-  // `requestPairingCode` also writes `creds.me.id` *before* the phone accepts
-  // the code, so `me.id` alone is not proof. `registered === false` means the
-  // handshake never finished.
-  const isPaired = !!state?.creds?.me?.id && state?.creds?.registered !== false;
+  // auth state writes a `creds` row on its very first call, paired or not. See
+  // linkedCreds.cjs for what counts as a finished link.
+  const isPaired = isLinkedCreds(state?.creds);
 
   const cachedGroupMetadata = (jid) => groupMetadataCache.get(jid);
 

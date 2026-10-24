@@ -226,10 +226,17 @@ levix                                levix headless
   maybe open a browser
 ```
 
-**Starting the process does not start WhatsApp.** In panel mode the session
-sits `idle` until somebody presses Start on the Connection screen. Headless has
-no screen and nobody to press anything, so it asks for `autoStart`. That one
-option is the entire difference — there is no `if (headless)` in `src/core/`.
+**Starting the process does not start WhatsApp on a new install.** In panel
+mode an unlinked session sits `idle` until somebody presses Start on the
+Connection screen; an install that finished linking resumes its saved session on
+boot (`sessionStartupPolicy`, reason `resume-paired`). Headless has no screen
+and nobody to press anything, so it asks for `autoStart`. That one option is the
+entire difference — there is no `if (headless)` in `src/core/`.
+
+"Finished linking" is decided in one place, `src/utils/linkedCreds.cjs`: a
+`me.id` plus either `registered !== false` or the `account` identity. Never test
+`registered` alone: Baileys sets it only in the pairing-code flow, so a QR-linked
+install keeps `registered: false` for good.
 
 - `src/cli.js` — the command line. Every branch imports only what it needs, so
   `where` never opens a database and `reset-password` never starts WhatsApp.
