@@ -69,7 +69,7 @@ export function SegmentedControl<T extends string>({
       aria-label={ariaLabel}
       onKeyDown={navigateTabs}
       className={cn(
-        "inline-flex max-w-full flex-nowrap overflow-x-auto rounded-xl border border-line bg-panel-raised p-1",
+        "inline-flex max-w-full flex-nowrap overflow-x-auto no-scrollbar rounded-xl border border-line bg-panel-raised p-1",
         className,
       )}
     >

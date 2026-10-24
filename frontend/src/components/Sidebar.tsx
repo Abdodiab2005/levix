@@ -15,7 +15,6 @@ import {
   Terminal,
   Users,
   X,
-  Zap,
 } from "lucide-react";
 import type React from "react";
 import { useI18n } from "../context/I18nContext";
@@ -95,8 +94,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         <div className="flex items-center justify-between border-b border-line p-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-brand-blue via-brand-blue to-brand-cyan text-white shadow-md shadow-brand-blue/20">
-              <Zap size={20} />
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-line bg-panel-raised shadow-md">
+              <img src="/brand/mark.svg" alt={brand.name} className="size-6" />
             </div>
             <div className="min-w-0">
               <div className="truncate text-base font-extrabold leading-tight tracking-tight text-text-main">
