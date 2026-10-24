@@ -283,7 +283,7 @@ export const AutoDeleteView: React.FC = () => {
 
       <Tabs
         aria-label={t("autoDelete")}
-        className="overflow-x-auto"
+        className="overflow-x-auto no-scrollbar"
         value={tab}
         onChange={setTab}
         options={[

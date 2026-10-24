@@ -342,7 +342,7 @@ export const SettingsView: React.FC = () => {
         value={activeTab}
         onChange={(v) => handleTabChange(v as SettingsTab)}
         aria-label={t("settings")}
-        className="overflow-x-auto"
+        className="overflow-x-auto no-scrollbar"
         options={[
           { value: "general", label: t("tabGeneral"), icon: <Sliders size={17} /> },
           { value: "integrations", label: t("tabIntegrations"), icon: <Key size={17} /> },
@@ -374,7 +374,7 @@ export const SettingsView: React.FC = () => {
             <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
               <div className="flex min-w-0 flex-col gap-1.5 sm:max-w-72">
                 <span className="text-xs font-semibold text-muted">{t("prefixPresets")}</span>
-                <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1">
+                <div className="flex max-w-full items-center gap-2 overflow-x-auto no-scrollbar pb-1">
                   {PREFIX_PRESETS.map((p) => {
                     const isCurrent = prefix === p;
                     return (

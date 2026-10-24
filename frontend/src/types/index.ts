@@ -49,7 +49,6 @@ export interface DashboardStats {
   totalUsers: number;
   commandCount: number;
   uptime: number;
-  dataDir: string;
   activeSchedules: number;
   version: string;
 }
