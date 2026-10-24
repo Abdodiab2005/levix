@@ -25,6 +25,7 @@ const COMMAND_PERMISSIONS = Object.freeze({
   shortlink: "MEMBERS",
   schedule: "ADMINS_OWNER",
   weather: "MEMBERS",
+  translate: "MEMBERS",
   prayer: "MEMBERS",
   tagadmins: "MEMBERS",
   help: "MEMBERS",

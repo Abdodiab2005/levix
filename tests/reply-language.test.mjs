@@ -243,6 +243,8 @@ const SWEEP_DM = [
   "!shortlink",
   "!shortlink notalink",
   "!weather",
+  "!translate",
+  "!translate hello",
   "!prayer",
   "!schedule",
   '!schedule "bad" "x"',

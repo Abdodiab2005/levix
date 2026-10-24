@@ -35,6 +35,7 @@ const EDIT_IN_PLACE_EXCLUDE = new Set([
   "stt",
   "send",
   "weather",
+  "translate",
   "qr",
   "status",
   "help",

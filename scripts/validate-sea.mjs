@@ -172,6 +172,10 @@ let panelUrl = null;
 
   ok("assets were extracted into the data directory", existsSync(join(dataDir, "assets")));
   ok("the persona template was extracted", existsSync(join(dataDir, "ai-persona.md")));
+  ok(
+    "the translation prompt template was extracted",
+    existsSync(join(dataDir, "translate-prompt.md")),
+  );
 
   console.log("\n· the database and the commands");
 
