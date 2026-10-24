@@ -297,6 +297,10 @@
             showErrorKey("resetErrSendFailed");
           } else if (result.reason === "no_email") {
             showErrorKey("resetErrNoEmail");
+          } else if (result.reason === "unverified") {
+            showErrorKey("resetErrUnverified");
+          } else if (result.reason === "locked") {
+            showErrorKey("resetErrLocked");
           } else if (result.reason === "rate_limited") {
             showErrorKey("resetErrRateLimited");
           } else if (result.reason === "unavailable") {
@@ -359,6 +363,12 @@
               showErrorKey("resetErrExpired");
               form.hidden = true;
               channels.hidden = false;
+            } else if (result.reason === "locked") {
+              showErrorKey("resetErrLocked");
+              form.hidden = true;
+              channels.hidden = false;
+            } else if (result.reason === "throttled") {
+              showErrorKey("resetErrThrottled", { n: String(result.retryAfter || 60) });
             } else if (result.reason === "mismatch") {
               showErrorKey("resetErrMismatch");
             } else if (result.reason === "invalid_password") {

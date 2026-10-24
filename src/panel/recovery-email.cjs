@@ -4,20 +4,26 @@
 // sealed with the install key (src/config/vault.cjs), never a `setting:*`
 // value, so settings export/import cannot see it. The row exists only after
 // the operator verifies a code. Until then the candidate address lives in
-// this process next to its hashed code, and a restart drops it.
+// this process next to the relay's verification id, and a restart drops it.
 //
-// Delivery is a Levix-operated relay. The body is exactly the address, the
-// code, the purpose, and the UI language — no free text. `LEVIX_RECOVERY_URL`
-// points the request at a local server in tests; operators do not set it.
+// Delivery is a Levix-operated relay (levix-ui, src/lib/recovery-relay.ts).
+// Contract v2, so the relay cannot be used to mail strangers:
+//
+//   verify  { kind, to, lang }               the relay makes the code and
+//                                            emails it; the answer is an id
+//   confirm { kind, verification, code }     the operator's guess; a match
+//                                            answers a token for the address
+//   reset   { kind, to, code, token, lang }  refused without that token
+//
+// This process never sees a verify code, so the relay checks it: five
+// guesses per code, single use. The token is sealed with the address and is
+// the only thing that lets this install ask for a reset email. No free text
+// goes to the relay. `LEVIX_RECOVERY_URL` points the requests at a local
+// server in tests; operators do not set it.
 
 const logger = require("../utils/logger.cjs");
 const secrets = require("../config/secrets.cjs");
-const {
-  CODE_TTL_MS,
-  generateCode,
-  checkAttempt,
-  createThrottle,
-} = require("./one-time-code.cjs");
+const { CODE_TTL_MS, createThrottle } = require("./one-time-code.cjs");
 
 const DEFAULT_ENDPOINT = "https://levix.leviro.net/api/recovery-email";
 const RELAY_TIMEOUT_MS = 15_000;
@@ -26,7 +32,7 @@ const RELAY_TIMEOUT_MS = 15_000;
 // inside password-reset.cjs, across WhatsApp and email.
 const verifyThrottle = createThrottle();
 
-/** @type {{ salt: string, hash: string, expiresAt: number, attempts: number, email: string } | null} */
+/** @type {{ verification: string, expiresAt: number, email: string, inFlight?: boolean } | null} */
 let pendingVerify = null;
 // Same rule as the reset slot: the commit after `await` runs only for the
 // latest request. `remove` bumps this so a send still in flight cannot land.
@@ -34,6 +40,21 @@ let verifyGeneration = 0;
 
 const EMAIL_RE =
   /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+const VERIFICATION_RE = /^[0-9a-f]{32}$/;
+const TOKEN_RE = /^v1\.[A-Za-z0-9_-]{43}$/;
+
+// Relay error codes passed through unchanged. Anything else is `unavailable`.
+const RELAY_REASONS = new Set([
+  "invalid",
+  "rate_limited",
+  "unverified",
+  "wrong_code",
+  "expired",
+  "too_many_attempts",
+  "no_pending",
+]);
+// Relay answers that end a verification: the next guess cannot succeed.
+const VERIFY_DEAD = new Set(["expired", "too_many_attempts", "no_pending"]);
 
 function normalizeLang(lang) {
   return lang === "ar" ? "ar" : "en";
@@ -85,9 +106,10 @@ function maskEmail(email) {
   return `${localShown}***@${domainShown}***${tld}`;
 }
 
-function readAddress() {
+/** The verified address and its relay token, or null. For delivery only. */
+function getRecord() {
   try {
-    return secrets.getRecoveryEmail();
+    return secrets.getRecoveryRecord();
   } catch (error) {
     logger.warn({ err: error }, "[recovery-email] Could not read the recovery address");
     return null;
@@ -96,35 +118,25 @@ function readAddress() {
 
 /** The verified address, or null. For delivery — never for an API response. */
 function getAddress() {
-  return readAddress();
+  return getRecord()?.email ?? null;
 }
 
 /** What an API may return. Never the address itself. */
 function publicStatus() {
-  const email = readAddress();
-  if (!email) return { verified: false };
-  return { verified: true, masked: maskEmail(email) };
+  const record = getRecord();
+  if (!record) return { verified: false };
+  return { verified: true, masked: maskEmail(record.email) };
 }
 
 /**
- * POST the relay contract. Network failures, timeouts, and 5xx are
- * `unavailable`. The address and the code are not logged.
+ * POST one relay request. Network failures, timeouts, 5xx and unknown answers
+ * are `unavailable`. The address, the code and the token are not logged.
  *
- * @param {{ kind: "verify" | "reset", to: string, code: string, lang: string }} message
- * @returns {Promise<{ ok: true } | { ok: false, reason: string }>}
+ * @param {object} body exactly one v2 contract body
+ * @returns {Promise<{ ok: true, data: object } | { ok: false, reason: string, attemptsLeft?: number }>}
  */
-async function deliver({ kind, to, code, lang }) {
-  if (kind !== "verify" && kind !== "reset") return { ok: false, reason: "invalid" };
-  if (!to || !code) return { ok: false, reason: "invalid" };
-
+async function callRelay(body) {
   const endpoint = process.env.LEVIX_RECOVERY_URL || DEFAULT_ENDPOINT;
-  const body = {
-    kind,
-    to,
-    code: String(code),
-    lang: normalizeLang(lang),
-  };
-
   let response;
   let data = null;
   try {
@@ -136,23 +148,50 @@ async function deliver({ kind, to, code, lang }) {
     });
     data = await response.json().catch(() => null);
   } catch (error) {
-    logger.warn({ err: error, kind }, "[recovery-email] Could not reach the relay");
+    logger.warn({ err: error, kind: body.kind }, "[recovery-email] Could not reach the relay");
     return { ok: false, reason: "unavailable" };
   }
 
-  if (response.ok && data?.ok === true) return { ok: true };
+  if (response.ok && data?.ok === true) return { ok: true, data };
 
   let reason = "unavailable";
-  if (response.status === 400 || data?.error === "invalid") reason = "invalid";
-  else if (response.status === 429 || data?.error === "rate_limited") reason = "rate_limited";
+  if (RELAY_REASONS.has(data?.error)) reason = data.error;
+  else if (response.status === 400) reason = "invalid";
+  else if (response.status === 429) reason = "rate_limited";
+  const failure = { ok: false, reason };
+  if (reason === "wrong_code" && Number.isInteger(data?.attemptsLeft)) {
+    failure.attemptsLeft = data.attemptsLeft;
+  }
 
-  logger.warn({ kind, status: response.status, reason }, "[recovery-email] The relay refused the code");
-  return { ok: false, reason };
+  logger.warn(
+    { kind: body.kind, status: response.status, reason },
+    "[recovery-email] The relay refused the request",
+  );
+  return failure;
+}
+
+/**
+ * Ask the relay to email a reset code to the verified address.
+ *
+ * @param {{ to: string, token: string, code: string, lang?: string }} message
+ * @returns {Promise<{ ok: true } | { ok: false, reason: string }>}
+ */
+async function sendResetCode({ to, token, code, lang }) {
+  if (!to || !token || !code) return { ok: false, reason: "invalid" };
+  const sent = await callRelay({
+    kind: "reset",
+    to,
+    code: String(code),
+    token,
+    lang: normalizeLang(lang),
+  });
+  return sent.ok ? { ok: true } : sent;
 }
 
 /**
  * Start verification of a new address. The previously verified address stays
- * in the database until `confirmVerification` succeeds.
+ * in the database until `confirmVerification` succeeds. The route has already
+ * checked the panel password.
  *
  * @returns {Promise<{ ok: true } | { ok: false, reason: string, retryAfter?: number }>}
  */
@@ -165,45 +204,64 @@ async function startVerification(email, lang, peer) {
   const gate = verifyThrottle.reserve(key, now);
   if (!gate.ok) return { ok: false, reason: gate.reason, retryAfter: gate.retryAfter };
 
-  const generated = generateCode(now);
   const generation = ++verifyGeneration;
-  const sent = await deliver({
-    kind: "verify",
-    to: normalized.email,
-    code: generated.code,
-    lang,
-  });
-  if (!sent.ok) {
+  const sent = await callRelay({ kind: "verify", to: normalized.email, lang: normalizeLang(lang) });
+  const verification = sent.ok ? sent.data.verification : null;
+  if (!sent.ok || typeof verification !== "string" || !VERIFICATION_RE.test(verification)) {
     verifyThrottle.release(gate.reservation);
-    return sent;
+    return sent.ok ? { ok: false, reason: "unavailable" } : sent;
   }
 
-  // Stored only after the relay accepts it, and only if this request is still
-  // the latest one. A code that was never delivered cannot be confirmed, a
-  // failed send does not discard a live one, and two overlapping sends cannot
-  // both become the pending code.
+  // Kept only after the relay accepts it, and only if this request is still
+  // the latest one. A failed send does not discard a live verification, and
+  // two overlapping sends cannot both become the pending one.
   if (generation !== verifyGeneration) return { ok: false, reason: "throttled" };
-  pendingVerify = { ...generated.pending, email: normalized.email };
+  pendingVerify = { verification, expiresAt: now + CODE_TTL_MS, email: normalized.email };
   logger.info("[recovery-email] Verification code sent");
   return { ok: true, expiresInMinutes: Math.round(CODE_TTL_MS / 60000) };
 }
 
 /**
+ * Send the operator's guess to the relay. A match stores the address with the
+ * relay's token.
+ *
  * @param {unknown} code
- * @returns {{ ok: true, verified: true, masked: string } | { ok: false, reason: string, attemptsLeft?: number }}
+ * @returns {Promise<{ ok: true, verified: true, masked: string } | { ok: false, reason: string, attemptsLeft?: number }>}
  */
-function confirmVerification(code) {
-  const result = checkAttempt(pendingVerify, code);
-  if (!result.ok) {
-    if (result.clear) pendingVerify = null;
-    const failure = { ok: false, reason: result.reason };
-    if (result.attemptsLeft != null) failure.attemptsLeft = result.attemptsLeft;
-    return failure;
+async function confirmVerification(code) {
+  const pending = pendingVerify;
+  if (!pending) return { ok: false, reason: "no_pending" };
+  if (Date.now() > pending.expiresAt) {
+    pendingVerify = null;
+    return { ok: false, reason: "expired" };
+  }
+  // Not a guess the relay would accept: nothing sent, no attempt spent.
+  const guess = String(code ?? "").trim();
+  if (!/^\d{6}$/.test(guess)) return { ok: false, reason: "wrong_code" };
+  // One guess at a time. Otherwise a second guess answered "no_pending" after
+  // the first one matched could drop the token the first one earned.
+  if (pending.inFlight) return { ok: false, reason: "throttled", retryAfter: 1 };
+
+  pending.inFlight = true;
+  let result;
+  try {
+    result = await callRelay({ kind: "confirm", verification: pending.verification, code: guess });
+  } finally {
+    pending.inFlight = false;
   }
 
-  const email = pendingVerify.email;
+  // Removed, replaced or already confirmed while this guess was in flight.
+  if (pendingVerify !== pending) return { ok: false, reason: "no_pending" };
+
+  if (!result.ok) {
+    if (VERIFY_DEAD.has(result.reason)) pendingVerify = null;
+    return result;
+  }
+  const token = result.data.token;
+  if (typeof token !== "string" || !TOKEN_RE.test(token)) return { ok: false, reason: "unavailable" };
+
   try {
-    secrets.setRecoveryEmail(email);
+    secrets.setRecoveryEmail(pending.email, token);
   } catch (error) {
     logger.error({ err: error }, "[recovery-email] Could not store the verified address");
     return { ok: false, reason: "unavailable" };
@@ -212,8 +270,8 @@ function confirmVerification(code) {
   pendingVerify = null;
   // The saved address just changed. An email reset bound to the previous one
   // must not still redeem.
-  require("./password-reset.cjs").noteRecoveryAddress(email);
-  return { ok: true, verified: true, masked: maskEmail(email) };
+  require("./password-reset.cjs").noteRecoveryAddress(pending.email);
+  return { ok: true, verified: true, masked: maskEmail(pending.email) };
 }
 
 function remove() {
@@ -237,9 +295,10 @@ module.exports = {
   RELAY_TIMEOUT_MS,
   normalizeEmail,
   maskEmail,
+  getRecord,
   getAddress,
   publicStatus,
-  deliver,
+  sendResetCode,
   startVerification,
   confirmVerification,
   remove,
