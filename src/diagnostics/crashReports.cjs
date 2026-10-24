@@ -16,6 +16,7 @@ const path = require("node:path");
 const { dataPath } = require("../config/paths.cjs");
 const { sanitizeText } = require("./sanitize.cjs");
 const { sanitizeClientFields } = require("./device.cjs");
+const { readDebugTail } = require("./debugLog.cjs");
 
 const CRASH_DIR = dataPath("crash-reports");
 const SENT_FILE = path.join(CRASH_DIR, "sent.json");
@@ -346,8 +347,10 @@ function createReport(input = {}) {
 }
 
 /**
- * The exact object that would be sent: no local-only keys, re-sanitized. This
- * is also what GET /crash-reports previews (with status/lastError added back).
+ * The report part of the object that would be sent: no local-only keys,
+ * re-sanitized. `forwardReport()` adds the technical debug log beside it.
+ * This is also what GET /crash-reports previews (with status/lastError added
+ * back).
  */
 function uploadObject(report) {
   const errorInput = report?.error && typeof report.error === "object" ? report.error : {};
@@ -374,12 +377,30 @@ function endpoint() {
   return process.env.LEVIX_CRASH_REPORT_URL || DEFAULT_ENDPOINT;
 }
 
+/** The debug tail, or "" when it cannot be read. Never fails a send. */
+function safeDebugLog() {
+  try {
+    return readDebugTail();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * One builder for both the preview and the send: the upload object plus the
+ * technical debug log. `list()` reads the tail once and passes it to every
+ * report; `forwardReport()` reads it at send time.
+ */
+function uploadWithDebugLog(report, debugLog = safeDebugLog()) {
+  return { ...uploadObject(report), debugLog };
+}
+
 /**
  * Forward one report. Never retried here; the caller decides. Resolves with
  * `{ ok: true }` or `{ ok: false, status, error }`.
  */
 async function forwardReport(report) {
-  const payload = uploadObject(report);
+  const payload = uploadWithDebugLog(report);
   const runtime = runtimeFacts();
   let response;
   let data = null;
@@ -440,8 +461,10 @@ async function sendReport(id) {
 
 /** What GET /crash-reports returns: previews plus the send history. */
 function list() {
+  // Read once so every report in this response shows the same tail.
+  const debugLog = safeDebugLog();
   const reports = listReports().map((report) => ({
-    ...uploadObject(report),
+    ...uploadWithDebugLog(report, debugLog),
     status: report.status || "pending",
     lastError: report.lastError ?? null,
   }));

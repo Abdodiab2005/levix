@@ -321,7 +321,7 @@ export const api = {
   // The bot forwards this to the developer; nothing about it is stored locally.
   getFeedbackMeta: () => api.get<FeedbackMeta>("/feedback/meta"),
   getFeedbackDiagnosticsPreview: (client: ClientDiagnostics) =>
-    api.post<{ success: boolean; diagnostics: DiagnosticsObject }>(
+    api.post<{ success: boolean; diagnostics: DiagnosticsObject; debugLog: string }>(
       "/feedback/diagnostics-preview",
       { client },
     ),

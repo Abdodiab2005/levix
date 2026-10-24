@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const pino = require("pino");
 
 const { ensureDataDir } = require("../config/paths.cjs");
+const debugLog = require("../diagnostics/debugLog.cjs");
 
 // Logs go in the data directory with everything else the bot writes, so a
 // global install never tries to write next to its own code.
@@ -52,6 +53,8 @@ const logger = pino(
   base,
   pino.multistream([
     { level: "trace", stream: combinedStream },
+    // Detailed, sanitized, local only. See src/diagnostics/debugLog.cjs.
+    { level: "debug", stream: debugLog.stream },
     { level: "error", stream: errorStream },
     {
       level: "trace",
@@ -127,6 +130,8 @@ logger.clearLogs = function clearLogs() {
   errorStream.flushSync();
   fs.ftruncateSync(combinedStream.fd, 0);
   fs.ftruncateSync(errorStream.fd, 0);
+  // The debug log is part of "the logs": one Clear removes it too.
+  debugLog.clearDebugLogs();
 };
 
 module.exports = logger;

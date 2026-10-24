@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, ChevronDown, FileText, Send, Trash2 } from
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api/client";
+import { DebugLogPreview } from "../components/DebugLogPreview";
 import { useToast } from "../components/Toasts";
 import {
   Badge,
@@ -143,7 +144,12 @@ export const DiagnosticsView: React.FC = () => {
           ) : (
             <div className="flex flex-col gap-3">
               {reports.map((report) => {
-                const { status: _status, lastError: _lastError, ...previewObj } = report;
+                const {
+                  status: _status,
+                  lastError: _lastError,
+                  debugLog,
+                  ...previewObj
+                } = report;
                 return (
                   <div
                     key={report.id}
@@ -207,6 +213,9 @@ export const DiagnosticsView: React.FC = () => {
                         >
                           {JSON.stringify(previewObj, null, 2)}
                         </pre>
+                        <div className="mt-2">
+                          <DebugLogPreview debugLog={debugLog} />
+                        </div>
                       </div>
                     </details>
                   </div>
