@@ -10,6 +10,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   Disclosure,
   EmptyState,
   Field,
@@ -24,6 +25,7 @@ import {
   RadioGroup,
   RelativeTime,
   Section,
+  SegmentedControl,
   Select,
   Skeleton,
   SortMenu,
@@ -35,12 +37,227 @@ import {
   usePagination,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
-import type { CommandItem, FlaggedMember, GroupItem } from "../types";
+import type {
+  CommandItem,
+  FlaggedMember,
+  GroupItem,
+  ModerationPolicy,
+  ModerationPolicyFieldError,
+  ModerationPolicyVisibility,
+} from "../types";
 import { fill } from "../utils/fill";
 import { useCommandLabels } from "./commands/shared";
 
 type Tri = "any" | "on" | "off";
 type MediaFilter = "any" | "none" | "block_all" | "custom";
+
+/** Every schema default; a group with no policy behaves exactly like this. */
+const DEFAULT_POLICY: ModerationPolicy = {
+  mode: "simple",
+  limit: 3,
+  limitAction: "KICK",
+  features: { antilink: null, media: null, forbidden: null, antispam: null },
+  hitMerge: "max",
+  weights: { antilink: 1, media: 1, forbidden: 1, antispam: 1, manual: 1 },
+  flagAt: 3,
+  kickAt: 5,
+  decay: { mode: "off", days: 30 },
+  membership: "keep",
+  flag: {
+    notify: "group",
+    mentionAdmins: true,
+    cooldownMinutes: 0,
+    whileFlagged: "record",
+    escalateAfter: 3,
+  },
+};
+
+type PresetKey = "relaxed" | "standard" | "strict";
+
+/** Section 6: presets replace the enforcement policy, detector config stays alone. */
+const PRESET_POLICIES: Record<PresetKey, ModerationPolicy> = {
+  relaxed: {
+    ...DEFAULT_POLICY,
+    limit: 5,
+    limitAction: "FLAG",
+    decay: { mode: "expire", days: 14 },
+    flag: { ...DEFAULT_POLICY.flag, cooldownMinutes: 60, whileFlagged: "hold" },
+  },
+  standard: DEFAULT_POLICY,
+  strict: {
+    ...DEFAULT_POLICY,
+    limit: 2,
+    features: { antilink: "KICK", media: "WARN", forbidden: "WARN", antispam: "KICK" },
+  },
+};
+
+/** The policy keys as flat dirty-form fields (the form saves them together). */
+interface PolicyDraft {
+  policyMode: ModerationPolicy["mode"];
+  policyLimit: number;
+  policyLimitAction: ModerationPolicy["limitAction"];
+  policyLinkAction: ModerationPolicy["features"]["antilink"];
+  policyMediaAction: ModerationPolicy["features"]["media"];
+  policyForbiddenAction: ModerationPolicy["features"]["forbidden"];
+  policySpamAction: ModerationPolicy["features"]["antispam"];
+  policyHitMerge: ModerationPolicy["hitMerge"];
+  policyWeightLink: number;
+  policyWeightMedia: number;
+  policyWeightForbidden: number;
+  policyWeightSpam: number;
+  policyWeightManual: number;
+  policyFlagAt: number;
+  policyKickAt: number;
+  policyDecayMode: ModerationPolicy["decay"]["mode"];
+  policyDecayDays: number;
+  policyMembership: ModerationPolicy["membership"];
+  policyNotify: ModerationPolicy["flag"]["notify"];
+  policyMentionAdmins: boolean;
+  policyCooldown: number;
+  policyWhileFlagged: ModerationPolicy["flag"]["whileFlagged"];
+  policyEscalateAfter: number;
+}
+
+function draftFromPolicy(policy: ModerationPolicy): PolicyDraft {
+  return {
+    policyMode: policy.mode,
+    policyLimit: policy.limit,
+    policyLimitAction: policy.limitAction,
+    policyLinkAction: policy.features.antilink,
+    policyMediaAction: policy.features.media,
+    policyForbiddenAction: policy.features.forbidden,
+    policySpamAction: policy.features.antispam,
+    policyHitMerge: policy.hitMerge,
+    policyWeightLink: policy.weights.antilink,
+    policyWeightMedia: policy.weights.media,
+    policyWeightForbidden: policy.weights.forbidden,
+    policyWeightSpam: policy.weights.antispam,
+    policyWeightManual: policy.weights.manual,
+    policyFlagAt: policy.flagAt,
+    policyKickAt: policy.kickAt,
+    policyDecayMode: policy.decay.mode,
+    policyDecayDays: policy.decay.days,
+    policyMembership: policy.membership,
+    policyNotify: policy.flag.notify,
+    policyMentionAdmins: policy.flag.mentionAdmins,
+    policyCooldown: policy.flag.cooldownMinutes,
+    policyWhileFlagged: policy.flag.whileFlagged,
+    policyEscalateAfter: policy.flag.escalateAfter,
+  };
+}
+
+function policyFromDraft(draft: PolicyDraft): ModerationPolicy {
+  return {
+    mode: draft.policyMode,
+    limit: draft.policyLimit,
+    limitAction: draft.policyLimitAction,
+    features: {
+      antilink: draft.policyLinkAction,
+      media: draft.policyMediaAction,
+      forbidden: draft.policyForbiddenAction,
+      antispam: draft.policySpamAction,
+    },
+    hitMerge: draft.policyHitMerge,
+    weights: {
+      antilink: draft.policyWeightLink,
+      media: draft.policyWeightMedia,
+      forbidden: draft.policyWeightForbidden,
+      antispam: draft.policyWeightSpam,
+      manual: draft.policyWeightManual,
+    },
+    flagAt: draft.policyFlagAt,
+    kickAt: draft.policyKickAt,
+    decay: { mode: draft.policyDecayMode, days: draft.policyDecayDays },
+    membership: draft.policyMembership,
+    flag: {
+      notify: draft.policyNotify,
+      mentionAdmins: draft.policyMentionAdmins,
+      cooldownMinutes: draft.policyCooldown,
+      whileFlagged: draft.policyWhileFlagged,
+      escalateAfter: draft.policyEscalateAfter,
+    },
+  };
+}
+
+/** Canonical objects are built by these two functions, so JSON order is stable. */
+function samePolicy(a: ModerationPolicy, b: ModerationPolicy): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function presetOf(policy: ModerationPolicy): PresetKey | "custom" {
+  if (samePolicy(policy, PRESET_POLICIES.relaxed)) return "relaxed";
+  if (samePolicy(policy, PRESET_POLICIES.standard)) return "standard";
+  if (samePolicy(policy, PRESET_POLICIES.strict)) return "strict";
+  return "custom";
+}
+
+type PolicyPatch = Record<string, unknown> & {
+  features?: Record<string, unknown>;
+  weights?: Record<string, unknown>;
+  decay?: Record<string, unknown>;
+  flag?: Record<string, unknown>;
+};
+
+/**
+ * The save body: every field the current visibility allows, nested back into
+ * the sparse shape the PATCH route accepts. Hidden fields are never sent, so a
+ * simple+KICK draft never touches `flag.*` and a simple draft never sends
+ * weights.
+ */
+function policyPatchForSave(
+  draft: PolicyDraft,
+  visibility: ModerationPolicyVisibility,
+): PolicyPatch | undefined {
+  const policy = policyFromDraft(draft);
+  const entries: Array<[string, unknown]> = [
+    ["mode", policy.mode],
+    ["limit", policy.limit],
+    ["limitAction", policy.limitAction],
+    ["features.antilink", policy.features.antilink],
+    ["features.media", policy.features.media],
+    ["features.forbidden", policy.features.forbidden],
+    ["features.antispam", policy.features.antispam],
+    ["hitMerge", policy.hitMerge],
+    ["weights.antilink", policy.weights.antilink],
+    ["weights.media", policy.weights.media],
+    ["weights.forbidden", policy.weights.forbidden],
+    ["weights.antispam", policy.weights.antispam],
+    ["weights.manual", policy.weights.manual],
+    ["flagAt", policy.flagAt],
+    ["kickAt", policy.kickAt],
+    ["decay.mode", policy.decay.mode],
+    ["decay.days", policy.decay.days],
+    ["membership", policy.membership],
+    ["flag.notify", policy.flag.notify],
+    ["flag.mentionAdmins", policy.flag.mentionAdmins],
+    ["flag.cooldownMinutes", policy.flag.cooldownMinutes],
+    ["flag.whileFlagged", policy.flag.whileFlagged],
+    ["flag.escalateAfter", policy.flag.escalateAfter],
+  ];
+  const patch: PolicyPatch = {};
+  let touched = false;
+  for (const [field, value] of entries) {
+    if (visibility[field] === false) continue;
+    touched = true;
+    const parts = field.split(".");
+    let node = patch as Record<string, unknown>;
+    for (let i = 0; i < parts.length - 1; i += 1) {
+      const next = node[parts[i]];
+      if (typeof next !== "object" || next === null) node[parts[i]] = {};
+      node = node[parts[i]] as Record<string, unknown>;
+    }
+    node[parts.at(-1) as string] = value;
+  }
+  return touched ? patch : undefined;
+}
+
+function errorsByKey(errors: ModerationPolicyFieldError[] | undefined): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const item of errors || []) {
+    if (item?.field && item.message && !(item.field in map)) map[item.field] = item.message;
+  }
+  return map;
+}
 
 interface GroupFilters {
   antilink: Tri;
@@ -389,20 +606,38 @@ function GroupSettings({
 }) {
   const { t, language } = useI18n();
   const { permissionLabel } = useCommandLabels();
+  const savedPolicy = { ...DEFAULT_POLICY, ...group.moderation_policy } as ModerationPolicy;
   const form = useDirtyForm({
     linkMode: group.antilink.mode,
     domains: group.antilink.allowed_domains.join("\n"),
     spamWindow: group.antispam.time_window,
     spamLimit: group.antispam.message_count,
-    spamAction: group.antispam.action,
-    warningLimit: group.warn_system.max_warnings,
-    warningAction: group.warn_system.action,
-    linkAction: group.antilink.action || "WARN",
-    mediaAction: group.media_control.action || "WARN",
-    wordsAction: group.forbidden_words?.action || "WARN",
     rules: group.rules,
     welcome: group.welcome_system.messages.join("\n"),
+    ...draftFromPolicy(savedPolicy),
   });
+
+  // Progressive disclosure follows the preview's visibility for the draft,
+  // falling back to the saved policy's visibility until the preview answers.
+  const [policyVisibility, setPolicyVisibility] = useState<ModerationPolicyVisibility>(
+    group.moderation_policy_visibility ?? {},
+  );
+  const [policyErrors, setPolicyErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setPolicyVisibility(group.moderation_policy_visibility ?? {});
+    setPolicyErrors({});
+  }, [group.moderation_policy_visibility]);
+
+  const fieldVisible = (field: string) => policyVisibility[field] !== false;
+  const policyError = (field: string) => policyErrors[field];
+
+  const presetValue = presetOf(policyFromDraft(form.draft));
+  const applyPreset = (value: PresetKey | "custom") => {
+    // Choosing a preset fills the form and waits for Save; it does not send.
+    if (value === "custom") return;
+    form.setDraft((prev) => ({ ...prev, ...draftFromPolicy(PRESET_POLICIES[value]) }));
+  };
   const toggle = (patch: Partial<GroupItem>) => {
     void onSave(patch).catch(() => {});
   };
@@ -428,43 +663,24 @@ function GroupSettings({
           .split("\n")
           .map((line) => line.trim())
           .filter(Boolean),
-        action: form.draft.linkAction,
       },
       antispam: {
         enabled: group.antispam.enabled,
         time_window: form.draft.spamWindow,
         message_count: form.draft.spamLimit,
-        action: form.draft.spamAction,
       },
-      media_control: { ...group.media_control, action: form.draft.mediaAction },
-      warn_system: {
-        max_warnings: form.draft.warningLimit,
-        action: form.draft.warningAction,
+      media_control: {
+        enabled: group.media_control.enabled,
+        blocked_types: group.media_control.blocked_types,
       },
       forbidden_words: {
         enabled: Boolean(group.forbidden_words?.enabled),
         count: group.forbidden_words?.count || 0,
-        action: form.draft.wordsAction,
       },
-      moderation: {
-        forbiddenWords: {
-          enabled: Boolean(group.forbidden_words?.enabled),
-          list: Array.from({ length: group.forbidden_words?.count || 0 }),
-          action: form.draft.wordsAction,
-        },
-      },
+      moderation_policy: policyFromDraft(form.draft),
     }),
     [
-      form.draft.linkMode,
-      form.draft.domains,
-      form.draft.spamWindow,
-      form.draft.spamLimit,
-      form.draft.spamAction,
-      form.draft.warningLimit,
-      form.draft.warningAction,
-      form.draft.linkAction,
-      form.draft.mediaAction,
-      form.draft.wordsAction,
+      form.draft,
       group.antilink.enabled,
       group.antispam.enabled,
       group.media_control,
@@ -483,10 +699,15 @@ function GroupSettings({
       api
         .previewModeration(previewSettings)
         .then((res) => {
-          if (!cancelled) setLivePreview(language === "en" ? res.en : res.ar);
+          if (cancelled) return;
+          setLivePreview(language === "en" ? res.en : res.ar);
+          if (res.visibility) setPolicyVisibility(res.visibility);
+          setPolicyErrors(errorsByKey(res.errors));
         })
-        .catch(() => {
-          if (!cancelled && savedPreview) setLivePreview(savedPreview);
+        .catch((err: any) => {
+          if (cancelled) return;
+          if (Array.isArray(err?.data?.errors)) setPolicyErrors(errorsByKey(err.data.errors));
+          else if (savedPreview) setLivePreview(savedPreview);
         });
     }, 200);
     return () => {
@@ -505,38 +726,48 @@ function GroupSettings({
         onSubmit={(event) => {
           event.preventDefault();
           void form.save(async (draft) => {
-            await onSave({
-              antilink: {
-                ...group.antilink,
-                mode: draft.linkMode,
-                allowed_domains: draft.domains
-                  .split("\n")
-                  .map((s) => s.trim())
-                  .filter(Boolean),
-                action: draft.linkAction,
-              },
-              antispam: {
-                ...group.antispam,
-                time_window: draft.spamWindow,
-                message_count: draft.spamLimit,
-                action: draft.spamAction,
-              },
-              media_control: { ...group.media_control, action: draft.mediaAction },
-              warn_system: { max_warnings: draft.warningLimit, action: draft.warningAction },
-              forbidden_words: {
-                enabled: Boolean(group.forbidden_words?.enabled),
-                count: group.forbidden_words?.count || 0,
-                action: draft.wordsAction,
-              },
-              welcome_system: {
-                ...group.welcome_system,
-                messages:
-                  draft.welcome === group.welcome_system.messages.join("\n")
-                    ? group.welcome_system.messages
-                    : draft.welcome.split("\n").filter(Boolean),
-              },
-              rules: draft.rules,
-            });
+            try {
+              const policyPatch = policyPatchForSave(draft, policyVisibility);
+              await onSave({
+                antilink: {
+                  enabled: group.antilink.enabled,
+                  mode: draft.linkMode,
+                  allowed_domains: draft.domains
+                    .split("\n")
+                    .map((s) => s.trim())
+                    .filter(Boolean),
+                },
+                antispam: {
+                  enabled: group.antispam.enabled,
+                  time_window: draft.spamWindow,
+                  message_count: draft.spamLimit,
+                },
+                media_control: {
+                  enabled: group.media_control.enabled,
+                  blocked_types: group.media_control.blocked_types,
+                },
+                forbidden_words: {
+                  enabled: Boolean(group.forbidden_words?.enabled),
+                  count: group.forbidden_words?.count || 0,
+                },
+                welcome_system: {
+                  ...group.welcome_system,
+                  messages:
+                    draft.welcome === group.welcome_system.messages.join("\n")
+                      ? group.welcome_system.messages
+                      : draft.welcome.split("\n").filter(Boolean),
+                },
+                rules: draft.rules,
+                // Feature actions and the warn limit ride inside the policy;
+                // legacy `action` keys are no longer sent (they would
+                // contradict it).
+                moderation_policy: policyPatch as unknown as Partial<ModerationPolicy>,
+              });
+              setPolicyErrors({});
+            } catch (err: any) {
+              if (Array.isArray(err?.data?.errors)) setPolicyErrors(errorsByKey(err.data.errors));
+              throw err;
+            }
           });
         }}
       >
@@ -549,7 +780,11 @@ function GroupSettings({
               antispam: { ...group.antispam, enabled },
             }))}
             {onOff(t("forbiddenWords"), Boolean(group.forbidden_words?.enabled), (enabled) => ({
-              forbidden_words: { ...group.forbidden_words, enabled, count: group.forbidden_words?.count || 0 },
+              forbidden_words: {
+                ...group.forbidden_words,
+                enabled,
+                count: group.forbidden_words?.count || 0,
+              },
             }))}
             <div className="grid grid-cols-1 gap-x-5 sm:grid-cols-2">
               {(
@@ -590,39 +825,6 @@ function GroupSettings({
                 <option value="BLACKLIST">{t("linkBlacklist")}</option>
               </Select>
             </Field>
-            <Field label={t("linkAction")}>
-              <Select
-                aria-label={t("linkAction")}
-                value={form.draft.linkAction}
-                onChange={(e) => form.setField("linkAction", e.target.value)}
-              >
-                <option value="DELETE">{t("actionDelete")}</option>
-                <option value="WARN">{t("actionDeleteWarn")}</option>
-                <option value="KICK">{t("actionDeleteKick")}</option>
-              </Select>
-            </Field>
-            <Field label={t("mediaAction")}>
-              <Select
-                aria-label={t("mediaAction")}
-                value={form.draft.mediaAction}
-                onChange={(e) => form.setField("mediaAction", e.target.value)}
-              >
-                <option value="DELETE">{t("actionDelete")}</option>
-                <option value="WARN">{t("actionDeleteWarn")}</option>
-                <option value="KICK">{t("actionDeleteKick")}</option>
-              </Select>
-            </Field>
-            <Field label={t("wordsAction")}>
-              <Select
-                aria-label={t("wordsAction")}
-                value={form.draft.wordsAction}
-                onChange={(e) => form.setField("wordsAction", e.target.value)}
-              >
-                <option value="DELETE">{t("actionDelete")}</option>
-                <option value="WARN">{t("actionDeleteWarn")}</option>
-                <option value="KICK">{t("actionDeleteKick")}</option>
-              </Select>
-            </Field>
             <Field label={t("allowedDomains")}>
               <Textarea
                 aria-label={t("allowedDomains")}
@@ -655,39 +857,367 @@ function GroupSettings({
                 />
               </Field>
             </div>
-            <Field label={t("spamAction")}>
+            <p className="text-sm font-bold text-text-main">{t("policyBlockTitle")}</p>
+            <Field label={t("policyPreset")}>
+              <SegmentedControl
+                aria-label={t("policyPreset")}
+                value={presetValue}
+                onChange={applyPreset}
+                options={[
+                  { value: "relaxed", label: t("presetRelaxed") },
+                  { value: "standard", label: t("presetStandard") },
+                  { value: "strict", label: t("presetStrict") },
+                  { value: "custom", label: t("presetCustom") },
+                ]}
+              />
+            </Field>
+            <Field label={t("policyMode")} error={policyError("mode")}>
               <Select
-                aria-label={t("spamAction")}
-                value={form.draft.spamAction}
-                onChange={(e) => form.setField("spamAction", e.target.value)}
+                aria-label={t("policyMode")}
+                value={form.draft.policyMode}
+                onChange={(e) => {
+                  const mode: ModerationPolicy["mode"] =
+                    e.target.value === "severity" ? "severity" : "simple";
+                  form.setField("policyMode", mode);
+                  if (mode === "severity" && form.draft.policyWhileFlagged === "escalate") {
+                    form.setField("policyWhileFlagged", "record");
+                  }
+                }}
               >
-                <option value="WARN">{t("actionWarn")}</option>
-                <option value="KICK">{t("actionKick")}</option>
+                <option value="simple">{t("policyModeSimple")}</option>
+                <option value="severity">{t("policyModeSeverity")}</option>
               </Select>
             </Field>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label={t("warningLimit")}>
+            {fieldVisible("limit") && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label={t("warningLimit")} error={policyError("limit")}>
+                  <Input
+                    aria-label={t("warningLimit")}
+                    type="number"
+                    min={1}
+                    max={50}
+                    required
+                    value={form.draft.policyLimit}
+                    onChange={(e) => form.setField("policyLimit", Number(e.target.value))}
+                  />
+                </Field>
+                <Field label={t("warningAction")} error={policyError("limitAction")}>
+                  <Select
+                    aria-label={t("warningAction")}
+                    value={form.draft.policyLimitAction}
+                    onChange={(e) =>
+                      form.setField(
+                        "policyLimitAction",
+                        e.target.value === "FLAG" ? "FLAG" : "KICK",
+                      )
+                    }
+                  >
+                    <option value="KICK">{t("actionKick")}</option>
+                    <option value="FLAG">{t("actionFlag")}</option>
+                  </Select>
+                </Field>
+              </div>
+            )}
+            {fieldVisible("flagAt") && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label={t("policyFlagAt")} error={policyError("flagAt")}>
+                  <Input
+                    aria-label={t("policyFlagAt")}
+                    type="number"
+                    min={1}
+                    max={49}
+                    required
+                    value={form.draft.policyFlagAt}
+                    onChange={(e) => form.setField("policyFlagAt", Number(e.target.value))}
+                  />
+                </Field>
+                <Field label={t("policyKickAt")} error={policyError("kickAt")}>
+                  <Input
+                    aria-label={t("policyKickAt")}
+                    type="number"
+                    min={2}
+                    max={50}
+                    required
+                    value={form.draft.policyKickAt}
+                    onChange={(e) => form.setField("policyKickAt", Number(e.target.value))}
+                  />
+                </Field>
+              </div>
+            )}
+            {fieldVisible("hitMerge") && (
+              <Field label={t("policyHitMerge")} error={policyError("hitMerge")}>
+                <Select
+                  aria-label={t("policyHitMerge")}
+                  value={form.draft.policyHitMerge}
+                  onChange={(e) =>
+                    form.setField("policyHitMerge", e.target.value === "sum" ? "sum" : "max")
+                  }
+                >
+                  <option value="max">{t("policyHitMergeMax")}</option>
+                  <option value="sum">{t("policyHitMergeSum")}</option>
+                </Select>
+              </Field>
+            )}
+            {fieldVisible("weights.antilink") && (
+              <div className="grid grid-cols-1 gap-x-5 gap-y-3 sm:grid-cols-2">
+                <Field label={t("policyWeightLink")} error={policyError("weights.antilink")}>
+                  <Input
+                    aria-label={t("policyWeightLink")}
+                    type="number"
+                    min={1}
+                    max={10}
+                    required
+                    value={form.draft.policyWeightLink}
+                    onChange={(e) => form.setField("policyWeightLink", Number(e.target.value))}
+                  />
+                </Field>
+                <Field label={t("policyWeightMedia")} error={policyError("weights.media")}>
+                  <Input
+                    aria-label={t("policyWeightMedia")}
+                    type="number"
+                    min={1}
+                    max={10}
+                    required
+                    value={form.draft.policyWeightMedia}
+                    onChange={(e) => form.setField("policyWeightMedia", Number(e.target.value))}
+                  />
+                </Field>
+                <Field label={t("policyWeightForbidden")} error={policyError("weights.forbidden")}>
+                  <Input
+                    aria-label={t("policyWeightForbidden")}
+                    type="number"
+                    min={1}
+                    max={10}
+                    required
+                    value={form.draft.policyWeightForbidden}
+                    onChange={(e) => form.setField("policyWeightForbidden", Number(e.target.value))}
+                  />
+                </Field>
+                <Field label={t("policyWeightSpam")} error={policyError("weights.antispam")}>
+                  <Input
+                    aria-label={t("policyWeightSpam")}
+                    type="number"
+                    min={1}
+                    max={10}
+                    required
+                    value={form.draft.policyWeightSpam}
+                    onChange={(e) => form.setField("policyWeightSpam", Number(e.target.value))}
+                  />
+                </Field>
+                <Field label={t("policyWeightManual")} error={policyError("weights.manual")}>
+                  <Input
+                    aria-label={t("policyWeightManual")}
+                    type="number"
+                    min={1}
+                    max={10}
+                    required
+                    value={form.draft.policyWeightManual}
+                    onChange={(e) => form.setField("policyWeightManual", Number(e.target.value))}
+                  />
+                </Field>
+              </div>
+            )}
+            {fieldVisible("features.antilink") && (
+              <Field label={t("policyLinkLabel")} error={policyError("features.antilink")}>
+                <Select
+                  aria-label={t("policyLinkLabel")}
+                  value={form.draft.policyLinkAction ?? "DEFAULT"}
+                  onChange={(e) =>
+                    form.setField(
+                      "policyLinkAction",
+                      e.target.value === "DEFAULT"
+                        ? null
+                        : (e.target.value as "DELETE" | "WARN" | "KICK"),
+                    )
+                  }
+                >
+                  <option value="DEFAULT">{t("policyActionDefault")}</option>
+                  <option value="DELETE">{t("actionDelete")}</option>
+                  <option value="WARN">{t("actionDeleteWarn")}</option>
+                  <option value="KICK">{t("actionDeleteKick")}</option>
+                </Select>
+              </Field>
+            )}
+            {fieldVisible("features.media") && (
+              <Field label={t("policyMediaLabel")} error={policyError("features.media")}>
+                <Select
+                  aria-label={t("policyMediaLabel")}
+                  value={form.draft.policyMediaAction ?? "DEFAULT"}
+                  onChange={(e) =>
+                    form.setField(
+                      "policyMediaAction",
+                      e.target.value === "DEFAULT"
+                        ? null
+                        : (e.target.value as "DELETE" | "WARN" | "KICK"),
+                    )
+                  }
+                >
+                  <option value="DEFAULT">{t("policyActionDefault")}</option>
+                  <option value="DELETE">{t("actionDelete")}</option>
+                  <option value="WARN">{t("actionDeleteWarn")}</option>
+                  <option value="KICK">{t("actionDeleteKick")}</option>
+                </Select>
+              </Field>
+            )}
+            {fieldVisible("features.forbidden") && (
+              <Field label={t("policyForbiddenLabel")} error={policyError("features.forbidden")}>
+                <Select
+                  aria-label={t("policyForbiddenLabel")}
+                  value={form.draft.policyForbiddenAction ?? "DEFAULT"}
+                  onChange={(e) =>
+                    form.setField(
+                      "policyForbiddenAction",
+                      e.target.value === "DEFAULT"
+                        ? null
+                        : (e.target.value as "DELETE" | "WARN" | "KICK"),
+                    )
+                  }
+                >
+                  <option value="DEFAULT">{t("policyActionDefault")}</option>
+                  <option value="DELETE">{t("actionDelete")}</option>
+                  <option value="WARN">{t("actionDeleteWarn")}</option>
+                  <option value="KICK">{t("actionDeleteKick")}</option>
+                </Select>
+              </Field>
+            )}
+            {fieldVisible("features.antispam") && (
+              <Field label={t("policySpamLabel")} error={policyError("features.antispam")}>
+                <Select
+                  aria-label={t("policySpamLabel")}
+                  value={form.draft.policySpamAction ?? "DEFAULT"}
+                  onChange={(e) =>
+                    form.setField(
+                      "policySpamAction",
+                      e.target.value === "DEFAULT" ? null : (e.target.value as "WARN" | "KICK"),
+                    )
+                  }
+                >
+                  <option value="DEFAULT">{t("policyActionDefault")}</option>
+                  <option value="WARN">{t("actionWarn")}</option>
+                  <option value="KICK">{t("actionKick")}</option>
+                </Select>
+              </Field>
+            )}
+            <Field label={t("policyDecay")} error={policyError("decay.mode")}>
+              <Select
+                aria-label={t("policyDecay")}
+                value={form.draft.policyDecayMode}
+                onChange={(e) =>
+                  form.setField(
+                    "policyDecayMode",
+                    e.target.value === "expire"
+                      ? "expire"
+                      : e.target.value === "step"
+                        ? "step"
+                        : "off",
+                  )
+                }
+              >
+                <option value="off">{t("policyDecayOff")}</option>
+                <option value="expire">{t("policyDecayExpire")}</option>
+                <option value="step">{t("policyDecayStep")}</option>
+              </Select>
+            </Field>
+            {fieldVisible("decay.days") && (
+              <Field label={t("policyDecayDays")} error={policyError("decay.days")}>
                 <Input
-                  aria-label={t("warningLimit")}
+                  aria-label={t("policyDecayDays")}
+                  type="number"
+                  min={1}
+                  max={365}
+                  required
+                  value={form.draft.policyDecayDays}
+                  onChange={(e) => form.setField("policyDecayDays", Number(e.target.value))}
+                />
+              </Field>
+            )}
+            <Field label={t("policyMembership")} error={policyError("membership")}>
+              <Select
+                aria-label={t("policyMembership")}
+                value={form.draft.policyMembership}
+                onChange={(e) =>
+                  form.setField("policyMembership", e.target.value === "clear" ? "clear" : "keep")
+                }
+              >
+                <option value="keep">{t("policyMembershipKeep")}</option>
+                <option value="clear">{t("policyMembershipClear")}</option>
+              </Select>
+            </Field>
+            {fieldVisible("flag.notify") && (
+              <Field label={t("policyFlagNotify")} error={policyError("flag.notify")}>
+                <Select
+                  aria-label={t("policyFlagNotify")}
+                  value={form.draft.policyNotify}
+                  onChange={(e) =>
+                    form.setField("policyNotify", e.target.value === "silent" ? "silent" : "group")
+                  }
+                >
+                  <option value="group">{t("policyNotifyGroup")}</option>
+                  <option value="silent">{t("policyNotifySilent")}</option>
+                </Select>
+              </Field>
+            )}
+            {fieldVisible("flag.mentionAdmins") && (
+              <Checkbox
+                label={t("policyMentionAdmins")}
+                checked={form.draft.policyMentionAdmins}
+                disabled={pending}
+                onChange={(event) => form.setField("policyMentionAdmins", event.target.checked)}
+              />
+            )}
+            {fieldVisible("flag.cooldownMinutes") && (
+              <Field
+                label={t("policyCooldown")}
+                description={t("policyCooldownHint")}
+                error={policyError("flag.cooldownMinutes")}
+              >
+                <Input
+                  aria-label={t("policyCooldown")}
+                  type="number"
+                  min={0}
+                  max={10080}
+                  required
+                  value={form.draft.policyCooldown}
+                  onChange={(e) => form.setField("policyCooldown", Number(e.target.value))}
+                />
+              </Field>
+            )}
+            {fieldVisible("flag.whileFlagged") && (
+              <Field label={t("policyWhileFlagged")} error={policyError("flag.whileFlagged")}>
+                <Select
+                  aria-label={t("policyWhileFlagged")}
+                  value={form.draft.policyWhileFlagged}
+                  onChange={(e) => {
+                    const value =
+                      e.target.value === "hold"
+                        ? "hold"
+                        : e.target.value === "escalate"
+                          ? "escalate"
+                          : "record";
+                    form.setField("policyWhileFlagged", value);
+                  }}
+                >
+                  <option value="record">{t("policyWhileFlaggedRecord")}</option>
+                  <option value="hold">{t("policyWhileFlaggedHold")}</option>
+                  {form.draft.policyMode === "simple" && (
+                    <option value="escalate">{t("policyWhileFlaggedEscalate")}</option>
+                  )}
+                </Select>
+              </Field>
+            )}
+            {fieldVisible("flag.escalateAfter") && form.draft.policyWhileFlagged === "escalate" && (
+              <Field label={t("policyEscalateAfter")} error={policyError("flag.escalateAfter")}>
+                <Input
+                  aria-label={t("policyEscalateAfter")}
                   type="number"
                   min={1}
                   max={50}
                   required
-                  value={form.draft.warningLimit}
-                  onChange={(e) => form.setField("warningLimit", Number(e.target.value))}
+                  value={form.draft.policyEscalateAfter}
+                  onChange={(e) => form.setField("policyEscalateAfter", Number(e.target.value))}
                 />
               </Field>
-              <Field label={t("warningAction")}>
-                <Select
-                  aria-label={t("warningAction")}
-                  value={form.draft.warningAction}
-                  onChange={(e) => form.setField("warningAction", e.target.value)}
-                >
-                  <option value="FLAG">{t("actionFlag")}</option>
-                  <option value="KICK">{t("actionKick")}</option>
-                </Select>
-              </Field>
-            </div>
+            )}
             <Field label={t("groupRules")}>
               <Textarea
                 aria-label={t("groupRules")}

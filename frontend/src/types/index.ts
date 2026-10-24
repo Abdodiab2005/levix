@@ -116,13 +116,54 @@ export interface ScheduleItem {
   media?: ScheduleMedia;
 }
 
+/** The effective per-group moderation policy (POLICY-DESIGN section 1). */
+export interface ModerationPolicy {
+  mode: "simple" | "severity";
+  limit: number;
+  limitAction: "KICK" | "FLAG";
+  features: {
+    antilink: "DELETE" | "WARN" | "KICK" | null;
+    media: "DELETE" | "WARN" | "KICK" | null;
+    forbidden: "DELETE" | "WARN" | "KICK" | null;
+    antispam: "WARN" | "KICK" | null;
+  };
+  hitMerge: "max" | "sum";
+  weights: { antilink: number; media: number; forbidden: number; antispam: number; manual: number };
+  flagAt: number;
+  kickAt: number;
+  decay: { mode: "off" | "expire" | "step"; days: number };
+  membership: "keep" | "clear";
+  flag: {
+    notify: "group" | "silent";
+    mentionAdmins: boolean;
+    cooldownMinutes: number;
+    whileFlagged: "record" | "hold" | "escalate";
+    escalateAfter: number;
+  };
+}
+
+/** Dotted field name -> visible. A missing key is visible. */
+export type ModerationPolicyVisibility = Record<string, boolean>;
+
+export interface ModerationPolicyFieldError {
+  field: string;
+  code: "unknown" | "type" | "enum" | "range" | "conflict" | string;
+  message: string;
+}
+
 export interface GroupItem {
   id: string;
   jid: string;
   subject: string | null;
   memberCount: number | null;
+  /**
+   * The effective policy from the GET. The panel may also send a sparse patch
+   * (Partial) — PATCH /groups/:id accepts both shapes.
+   */
+  moderation_policy?: Partial<ModerationPolicy>;
+  moderation_policy_visibility?: ModerationPolicyVisibility;
   antilink: { enabled: boolean; mode: string; allowed_domains: string[]; action?: string };
-  antispam: { enabled: boolean; time_window: number; message_count: number; action: string };
+  antispam: { enabled: boolean; time_window: number; message_count: number; action?: string };
   media_control: { enabled: boolean; blocked_types: string[]; action?: string };
   welcome_system: { enabled: boolean; messages: string[] };
   warn_system: { max_warnings: number; action: string };
