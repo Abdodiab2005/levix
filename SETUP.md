@@ -245,7 +245,8 @@ Two ways to get a one-time reset code without touching the terminal:
 - **Recovery email** — if you added and verified an address under **Settings**,
   the same screen offers **Email**, and the code goes to that address. It is
   delivered by a Levix mail relay, which emails the code and keeps neither the
-  address nor the code.
+  address nor the code in readable form. Adding the address in Settings asks
+  for the panel password. Ten wrong codes in a day pause reset for a day.
 
 If the session is down and neither can arrive, `levix reset-password` still
 works from the terminal:

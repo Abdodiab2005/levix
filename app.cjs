@@ -397,10 +397,13 @@ app.post("/reset/request", async (req, res) => {
         no_session: 409,
         send_failed: 502,
         no_email: 409,
+        unverified: 409,
         rate_limited: 429,
+        locked: 429,
         invalid: 400,
         unavailable: 502,
       }[result.reason] ?? 400;
+  if (result.retryAfter) res.set("Retry-After", String(result.retryAfter));
   res.set("Cache-Control", "no-store");
   return res.status(status).json(result);
 });
@@ -409,13 +412,26 @@ app.post("/reset/confirm", (req, res) => {
   if (!secrets.hasDashboardPassword()) {
     return res.status(400).json({ ok: false, reason: "no_password" });
   }
+  // The lockout works both ways: a peer locked out of /login by wrong
+  // passwords or wrong codes cannot keep guessing codes here either.
+  const peer = clientAddress(req);
+  const blocked = blockedFor(peer);
+  if (blocked) {
+    res.set("Retry-After", String(blocked));
+    return res.status(429).json({ ok: false, reason: "throttled", retryAfter: blocked });
+  }
+
   const { code, password, confirm } = req.body || {};
   const result = completeReset(code, password, confirm);
   if (!result.ok) {
     // A wrong code counts toward the login lockout, so spraying guesses at
     // this door locks the same peer out of /login too.
     if (result.reason === "wrong_code" || result.reason === "too_many_attempts") {
-      recordFailure(clientAddress(req));
+      recordFailure(peer);
+    }
+    if (result.reason === "locked") {
+      res.set("Retry-After", String(result.retryAfter));
+      return res.status(429).json(result);
     }
     return res.status(result.reason === "invalid_password" ? 400 : 401).json(result);
   }

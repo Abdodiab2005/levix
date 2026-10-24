@@ -21,6 +21,13 @@
 // requesting a new one costs one message. Requests are throttled per TCP peer
 // (never `req.ip`, same discipline as login-throttle) and globally, and the
 // throttle is the same whether the message goes to WhatsApp or to the relay.
+//
+// Five guesses per code and one code a minute still add up to 7,200 guesses
+// a day against a 6-digit code. So wrong codes also count against one budget
+// for the whole process: after MAX_FAILED_CODES_PER_DAY of them in 24 hours,
+// reset is locked (requests and redemptions) until the oldest one ages out.
+// That caps an attacker at about 1 in 100,000 per day. `levix reset-password`
+// on the server is not affected.
 
 const logger = require("../utils/logger.cjs");
 const secrets = require("../config/secrets.cjs");
@@ -49,6 +56,18 @@ const throttle = createThrottle();
 let resetGeneration = 0;
 let emailGeneration = 0;
 
+const FAILURE_WINDOW_MS = 24 * 60 * 60 * 1000;
+const MAX_FAILED_CODES_PER_DAY = 10;
+/** Times of the wrong codes inside the window, oldest first. */
+let failures = [];
+
+/** Seconds until reset unlocks, or 0. */
+function lockedFor(now = Date.now()) {
+  failures = failures.filter((at) => now - at < FAILURE_WINDOW_MS);
+  if (failures.length < MAX_FAILED_CODES_PER_DAY) return 0;
+  return Math.max(1, Math.ceil((failures[0] + FAILURE_WINDOW_MS - now) / 1000));
+}
+
 function setSession(manager) {
   session = manager;
 }
@@ -56,6 +75,12 @@ function setSession(manager) {
 /** Tests: drop the in-memory reset code and the shared reset throttle. */
 function _resetForTests() {
   pending = null;
+  failures = [];
+  throttle.reset();
+}
+
+/** Tests: drop only the send throttle, keeping codes and the failure budget. */
+function _resetThrottleForTests() {
   throttle.reset();
 }
 
@@ -113,6 +138,9 @@ async function requestResetCode(peer, options = {}) {
   const lang = opts.lang === "ar" ? "ar" : "en";
 
   const now = Date.now();
+  const locked = lockedFor(now);
+  if (locked) return { ok: false, reason: "locked", retryAfter: locked };
+
   const key = String(peer ?? "");
   // An open cooldown answers first, including when the session or address is
   // already gone. The check does not take a slot.
@@ -121,15 +149,16 @@ async function requestResetCode(peer, options = {}) {
 
   // Preconditions before a code exists, so a missing channel does not replace
   // a live code and does not spend the cooldown.
-  let address = null;
+  let record = null;
   let sock = null;
   if (channel === "email") {
-    address = recoveryEmail.getAddress();
-    if (!address) return { ok: false, reason: "no_email" };
+    record = recoveryEmail.getRecord();
+    if (!record) return { ok: false, reason: "no_email" };
   } else {
     sock = session?.socket ?? null;
     if (!sock?.user?.id) return { ok: false, reason: "no_session" };
   }
+  const address = record?.email ?? null;
 
   const gate = throttle.reserve(key, now);
   if (!gate.ok) return { ok: false, reason: gate.reason, retryAfter: gate.retryAfter };
@@ -139,9 +168,9 @@ async function requestResetCode(peer, options = {}) {
   const emailGen = channel === "email" ? ++emailGeneration : 0;
 
   if (channel === "email") {
-    const sent = await recoveryEmail.deliver({
-      kind: "reset",
-      to: address,
+    const sent = await recoveryEmail.sendResetCode({
+      to: record.email,
+      token: record.token,
       code: generated.code,
       lang,
     });
@@ -190,6 +219,11 @@ async function requestResetCode(peer, options = {}) {
  */
 function completeReset(code, password, confirm) {
   if (!pending) return { ok: false, reason: "no_pending" };
+  const locked = lockedFor();
+  if (locked) {
+    pending = null;
+    return { ok: false, reason: "locked", retryAfter: locked };
+  }
   if (Date.now() > pending.expiresAt) {
     pending = null;
     return { ok: false, reason: "expired" };
@@ -204,6 +238,9 @@ function completeReset(code, password, confirm) {
 
   const result = checkAttempt(pending, code);
   if (!result.ok) {
+    if (result.reason === "wrong_code" || result.reason === "too_many_attempts") {
+      failures.push(Date.now());
+    }
     if (result.clear) pending = null;
     const failure = { ok: false, reason: result.reason };
     if (result.attemptsLeft != null) failure.attemptsLeft = result.attemptsLeft;
@@ -230,10 +267,12 @@ function completeReset(code, password, confirm) {
 module.exports = {
   CODE_TTL_MS,
   MAX_CODE_ATTEMPTS,
+  MAX_FAILED_CODES_PER_DAY,
   setSession,
   requestResetCode,
   completeReset,
   noteRecoveryAddress,
   _resetForTests,
+  _resetThrottleForTests,
   _expireForTests,
 };

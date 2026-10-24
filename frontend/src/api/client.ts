@@ -348,8 +348,9 @@ export const api = {
   /** Mask plus verified. The address itself is never in this response. */
   getRecoveryEmail: () =>
     api.get<{ success: boolean; verified: boolean; masked?: string }>("/recovery-email"),
-  startRecoveryEmail: (email: string, lang: "en" | "ar") =>
-    api.post<{ success: boolean }>("/recovery-email/start", { email, lang }),
+  /** `current` is the panel password: binding an address can reset it. */
+  startRecoveryEmail: (email: string, current: string, lang: "en" | "ar") =>
+    api.post<{ success: boolean }>("/recovery-email/start", { email, current, lang }),
   verifyRecoveryEmail: (code: string) =>
     api.post<{ success: boolean; verified: true; masked: string }>("/recovery-email/verify", {
       code,

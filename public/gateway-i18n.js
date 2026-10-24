@@ -69,6 +69,10 @@
         "WhatsApp isn't connected, so the code can't be sent. Sign in on the server and run `levix reset-password`, or start the WhatsApp session first.",
       resetErrSendFailed: "Couldn't send the WhatsApp message. Try again in a minute.",
       resetErrNoEmail: "Email recovery isn't set up.",
+      resetErrUnverified:
+        "The recovery email has to be verified again in Settings. Use WhatsApp or run `levix reset-password` on the server.",
+      resetErrLocked:
+        "Too many wrong codes today, so reset is paused. Try again later, or run `levix reset-password` on the server.",
       resetErrRateLimited: "The mail service is busy. Try again in a little while.",
       resetErrUnavailable: "Couldn't reach the mail service. Try again.",
       resetErrInvalid: "The mail service rejected the request.",
@@ -175,6 +179,10 @@
         "واتساب غير متصل، لذا لا يمكن إرسال الكود. سجّل الدخول على الخادم ونفّذ `levix reset-password`، أو ابدأ جلسة واتساب أولاً.",
       resetErrSendFailed: "تعذّر إرسال رسالة واتساب. حاول مرة أخرى خلال دقيقة.",
       resetErrNoEmail: "استرداد البريد غير مُعد.",
+      resetErrUnverified:
+        "يجب التحقق من بريد الاسترداد مرة أخرى من الإعدادات. استخدم واتساب أو نفّذ `levix reset-password` على الخادم.",
+      resetErrLocked:
+        "أُدخلت أكواد خاطئة كثيرة اليوم، لذا أُوقفت إعادة التعيين مؤقتاً. حاول لاحقاً أو نفّذ `levix reset-password` على الخادم.",
       resetErrRateLimited: "خدمة البريد مشغولة. حاول مرة أخرى بعد قليل.",
       resetErrUnavailable: "تعذّر الوصول إلى خدمة البريد. حاول مرة أخرى.",
       resetErrInvalid: "رفضت خدمة البريد الطلب.",

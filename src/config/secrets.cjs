@@ -11,11 +11,11 @@
 //   auth:password         the dashboard password as an scrypt hash + salt. The
 //                         password itself is never written anywhere (not
 //                         encrypted for recovery — it is a one-way hash).
-//   auth:recovery-email   the verified recovery address, sealed with
-//                         src/config/vault.cjs. It is not a setting: export
-//                         and import never carry it, and no API returns it
-//                         except as a mask. Absent until the operator verifies
-//                         a code.
+//   auth:recovery-email   the verified recovery address and the relay's token
+//                         for it, sealed with src/config/vault.cjs. It is not
+//                         a setting: export and import never carry it, and no
+//                         API returns it except as a mask. Absent until the
+//                         operator verifies a code.
 //
 // WhatsApp session blobs and third-party API keys are sealed separately by
 // src/config/vault.cjs (AES-256-GCM, key in levix.key next to the database).
@@ -93,10 +93,13 @@ function setDashboardPassword(plain) {
 }
 
 /**
- * The verified recovery address, or null. The stored value is a sealed JSON
- * string; a corrupt row is treated as "not set" so login can still render.
+ * The verified recovery address and its relay token, or null. The stored
+ * value is a sealed JSON string; a corrupt row is treated as "not set" so
+ * login can still render. A row without a token predates the relay's v2
+ * contract (unreleased 4.9.0 builds); the relay would refuse it, so it reads
+ * as "not set" and the operator verifies the address again.
  */
-function getRecoveryEmail() {
+function getRecoveryRecord() {
   const sealed = store.getBotSetting(RECOVERY_EMAIL_KEY, null);
   if (typeof sealed !== "string" || !sealed) return null;
   let parsed;
@@ -106,12 +109,21 @@ function getRecoveryEmail() {
     return null;
   }
   if (!parsed || typeof parsed.email !== "string" || !parsed.email) return null;
-  return parsed.email;
+  if (typeof parsed.token !== "string" || !parsed.token) return null;
+  return { email: parsed.email, token: parsed.token };
 }
 
-/** Seal and store an address that has already been verified. */
-function setRecoveryEmail(email) {
-  const sealed = vault.seal(JSON.stringify({ email: String(email), verifiedAt: Date.now() }));
+/** The verified recovery address, or null. */
+function getRecoveryEmail() {
+  return getRecoveryRecord()?.email ?? null;
+}
+
+/** Seal and store an address the relay verified, with the token it returned. */
+function setRecoveryEmail(email, token) {
+  if (typeof token !== "string" || !token) throw new Error("A recovery token is required");
+  const sealed = vault.seal(
+    JSON.stringify({ email: String(email), token, verifiedAt: Date.now() }),
+  );
   store.saveBotSetting(RECOVERY_EMAIL_KEY, sealed);
   logger.info("[secrets] Recovery email updated");
 }
@@ -186,6 +198,7 @@ module.exports = {
   hasDashboardPassword,
   getPasswordUpdatedAt,
   setDashboardPassword,
+  getRecoveryRecord,
   getRecoveryEmail,
   setRecoveryEmail,
   clearRecoveryEmail,

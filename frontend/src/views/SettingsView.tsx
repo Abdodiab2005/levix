@@ -106,6 +106,8 @@ function recoveryMessage(
   switch (code) {
     case "invalid_email":
       return { text: t("recoveryErrInvalidEmail"), backToEmail };
+    case "wrong_password":
+      return { text: t("recoveryErrWrongPassword"), backToEmail };
     case "throttled":
       return {
         text: fill(t("recoveryErrThrottled"), { n: Number(data?.retryAfter) || 60 }),
@@ -148,6 +150,7 @@ function RecoveryEmailCard() {
   const [editing, setEditing] = useState(false);
   const [phase, setPhase] = useState<RecoveryPhase>("email");
   const [draft, setDraft] = useState("");
+  const [current, setCurrent] = useState("");
   const [code, setCode] = useState("");
   const [sending, setSending] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -178,6 +181,7 @@ function RecoveryEmailCard() {
   function resetDraft() {
     setPhase("email");
     setDraft("");
+    setCurrent("");
     setCode("");
     setEmailError(null);
     setCodeError(null);
@@ -199,8 +203,9 @@ function RecoveryEmailCard() {
     if (phase === "email") {
       setEmailError(null);
       try {
-        await api.startRecoveryEmail(draft.trim(), language === "ar" ? "ar" : "en");
+        await api.startRecoveryEmail(draft.trim(), current, language === "ar" ? "ar" : "en");
         setPhase("code");
+        setCurrent("");
         setCode("");
         setCodeError(null);
       } catch (err) {
@@ -299,21 +304,36 @@ function RecoveryEmailCard() {
           )}
 
           {phase === "email" ? (
-            <Field label={t("recoveryEmailLabel")} htmlFor="recovery-email" error={emailError}>
-              <Input
-                id="recovery-email"
-                type="text"
-                inputMode="email"
-                autoComplete="email"
-                technical
-                spellCheck={false}
-                autoCapitalize="off"
-                autoCorrect="off"
-                required
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-              />
-            </Field>
+            <>
+              <Field label={t("recoveryEmailLabel")} htmlFor="recovery-email" error={emailError}>
+                <Input
+                  id="recovery-email"
+                  type="text"
+                  inputMode="email"
+                  autoComplete="email"
+                  technical
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  required
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                />
+              </Field>
+              <Field
+                label={t("currentPassword")}
+                description={t("recoveryEmailPasswordHint")}
+                htmlFor="recovery-current-password"
+              >
+                <PasswordInput
+                  id="recovery-current-password"
+                  autoComplete="current-password"
+                  required
+                  value={current}
+                  onChange={(event) => setCurrent(event.target.value)}
+                />
+              </Field>
+            </>
           ) : (
             <Field
               label={t("recoveryEmailCode")}
