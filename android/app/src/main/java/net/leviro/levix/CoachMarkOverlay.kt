@@ -39,6 +39,13 @@ class CoachMarkOverlay @JvmOverloads constructor(
     interface Host {
         fun coachTarget(targetId: Int): View?
         fun coachReveal(target: View)
+
+        /**
+         * Moves the content under the guide by [dy] pixels on screen (positive
+         * is down), as far as it can scroll. Used when the step card has no
+         * room beside the target.
+         */
+        fun coachShift(dy: Int)
         fun coachFinished(completed: Boolean)
     }
 
@@ -184,6 +191,7 @@ class CoachMarkOverlay @JvmOverloads constructor(
         host.coachReveal(target)
         renderCard(index, step)
         locate(target)
+        if (makeRoomForCard(host)) locate(target)
         card.post { if (!finished) card.announceForAccessibility(announcement(index, step)) }
     }
 
@@ -233,6 +241,31 @@ class CoachMarkOverlay @JvmOverloads constructor(
         )
         invalidate()
         requestLayout()
+    }
+
+    /**
+     * [coachReveal] puts the target at the top, which leaves the card room
+     * below it, unless the screen is already scrolled to its end. Then a tall
+     * card fits neither below nor above and would dock over the target. Shift
+     * the content by whichever distance opens room on one side. Returns
+     * whether it moved anything.
+     */
+    private fun makeRoomForCard(host: Host): Boolean {
+        if (width <= 0 || height <= 0 || hole.isEmpty) return false
+        insets(safeArea)
+        val margin = cardMargin.toInt()
+        card.measure(
+            View.MeasureSpec.makeMeasureSpec((width - margin * 2).coerceAtLeast(0), MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST),
+        )
+        val cardHeight = card.measuredHeight
+        val roomAbove = hole.top - cardGap - (safeArea.top + margin)
+        val roomBelow = (height - safeArea.bottom - margin) - (hole.bottom + cardGap)
+        if (roomAbove >= cardHeight || roomBelow >= cardHeight) return false
+        val down = cardHeight - roomAbove
+        val up = cardHeight - roomBelow
+        host.coachShift((if (down <= up) down else -up).toInt())
+        return true
     }
 
     private fun startPulse() {

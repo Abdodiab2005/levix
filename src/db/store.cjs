@@ -479,7 +479,12 @@ function commitModerationDecision(groupId, messageId, fn) {
   });
 }
 
-function markModerationNotice(groupId, messageId, userId, { flagNotice = false, at = Date.now() } = {}) {
+function markModerationNotice(
+  groupId,
+  messageId,
+  userId,
+  { flagNotice = false, at = Date.now() } = {},
+) {
   if (!messageId) return;
   withImmediateTransaction(() => {
     q(`UPDATE moderation_applied SET notified = 1 WHERE group_id = ? AND message_id = ?`).run(
@@ -1293,19 +1298,12 @@ function hasCredentials() {
   return !!q("SELECT 1 AS x FROM baileys_auth WHERE key = 'creds'").get();
 }
 
-/**
- * A finished pairing — not merely that a creds row exists. Baileys writes
- * creds on the first socket, and requestPairingCode fills me.id before the
- * phone accepts, so only `registered !== false` plus a me.id is proof.
- */
+/** A finished pairing, not merely that a creds row exists. See linkedCreds.cjs. */
 function isPairedSession() {
   const text = authRead("creds");
   if (!text) return false;
   try {
-    const creds = JSON.parse(text);
-    const meId = creds?.me?.id;
-    if (!meId) return false;
-    return creds.registered !== false;
+    return require("../utils/linkedCreds.cjs").isLinkedCreds(JSON.parse(text));
   } catch {
     return false;
   }

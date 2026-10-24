@@ -341,6 +341,11 @@ store.authWrite("creds", JSON.stringify({ me: { id: "2010@s.whatsapp.net" }, reg
 ok("paired session is recognized", store.isPairedSession() === true);
 store.authWrite("creds", JSON.stringify({ me: { id: "2010@s.whatsapp.net" }, registered: false }));
 ok("unfinished pairing is not a linked session", store.isPairedSession() === false);
+store.authWrite(
+  "creds",
+  JSON.stringify({ me: { id: "2010@s.whatsapp.net" }, account: { details: "x" }, registered: false }),
+);
+ok("a QR-linked session (registered false, account set) is a linked session", store.isPairedSession() === true);
 store.authClearAll();
 
 store.saveUserMetadata({ jid: "123@lid", phone: "201012345678", displayName: "Ali" });

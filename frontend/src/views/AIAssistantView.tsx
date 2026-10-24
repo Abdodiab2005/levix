@@ -9,7 +9,6 @@ import {
   FileText,
   Globe,
   History,
-  Languages,
   MessageSquare,
   Mic,
   RefreshCw,
@@ -164,9 +163,6 @@ export const AIAssistantView: React.FC = () => {
   const [personaModalOpen, setPersonaModalOpen] = useState(false);
   const [personaText, setPersonaText] = useState("");
   const [personaLoading, setPersonaLoading] = useState(false);
-  const [translatePromptOpen, setTranslatePromptOpen] = useState(false);
-  const [translatePromptText, setTranslatePromptText] = useState("");
-  const [translatePromptLoading, setTranslatePromptLoading] = useState(false);
   const [memoryScopes, setMemoryScopes] = useState<
     Array<{ scope: string; label: string; entries: number }>
   >([]);
@@ -412,44 +408,6 @@ export const AIAssistantView: React.FC = () => {
       setPersonaModalOpen(false);
     } catch (err: any) {
       toast(err.message, "error");
-    }
-  };
-
-  const openTranslatePromptEditor = async () => {
-    setTranslatePromptOpen(true);
-    setTranslatePromptLoading(true);
-    try {
-      const res = await api.getTranslatePrompt();
-      const prompt = res?.prompt;
-      setTranslatePromptText(typeof prompt === "string" ? prompt : prompt?.body || "");
-    } catch (err: any) {
-      toast(err.message, "error");
-    } finally {
-      setTranslatePromptLoading(false);
-    }
-  };
-
-  const saveTranslatePrompt = async () => {
-    try {
-      await api.updateTranslatePrompt(translatePromptText);
-      toast(t("translatePromptSaved"), "success");
-      setTranslatePromptOpen(false);
-    } catch (err: any) {
-      toast(err.message, "error");
-    }
-  };
-
-  const resetTranslatePrompt = async () => {
-    setTranslatePromptLoading(true);
-    try {
-      const res = await api.resetTranslatePrompt();
-      const prompt = res?.prompt;
-      setTranslatePromptText(typeof prompt === "string" ? prompt : prompt?.body || "");
-      toast(t("translatePromptReset"), "success");
-    } catch (err: any) {
-      toast(err.message, "error");
-    } finally {
-      setTranslatePromptLoading(false);
     }
   };
 
@@ -976,14 +934,6 @@ export const AIAssistantView: React.FC = () => {
         </Button>
         <Button
           variant="secondary"
-          icon={<Languages size={16} />}
-          onClick={openTranslatePromptEditor}
-          title={t("translatePromptDesc")}
-        >
-          {t("editTranslatePrompt")}
-        </Button>
-        <Button
-          variant="secondary"
           icon={<Database size={16} />}
           onClick={openMemoryManager}
           title={t("memoryDesc")}
@@ -1031,49 +981,6 @@ export const AIAssistantView: React.FC = () => {
             rows={12}
             value={personaText}
             onChange={(e) => setPersonaText(e.target.value)}
-          />
-        )}
-      </Dialog>
-
-      <Dialog
-        isOpen={translatePromptOpen}
-        onClose={() => setTranslatePromptOpen(false)}
-        title={t("translatePrompt")}
-        maxWidth="750px"
-        footer={
-          <>
-            <Button
-              variant="secondary"
-              className="me-auto"
-              onClick={resetTranslatePrompt}
-              disabled={translatePromptLoading}
-            >
-              {t("resetToDefault")}
-            </Button>
-            <Button variant="secondary" onClick={() => setTranslatePromptOpen(false)}>
-              {t("cancel")}
-            </Button>
-            <Button
-              variant="primary"
-              icon={<Save size={16} />}
-              onClick={saveTranslatePrompt}
-              disabled={translatePromptLoading}
-            >
-              {t("save")}
-            </Button>
-          </>
-        }
-      >
-        {translatePromptLoading ? (
-          <div className="flex min-h-[280px] items-center justify-center">
-            <Spinner className="size-6" label={t("starting")} />
-          </div>
-        ) : (
-          <Textarea
-            className="font-mono"
-            rows={12}
-            value={translatePromptText}
-            onChange={(e) => setTranslatePromptText(e.target.value)}
           />
         )}
       </Dialog>

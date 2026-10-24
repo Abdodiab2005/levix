@@ -3,11 +3,11 @@
 //
 // fetch and the AI provider are swapped in. Nothing leaves the machine.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { equal, finish, ok, require, ROOT, section, useTempDataDir } from "./harness.mjs";
+import { equal, finish, ok, require, section, useTempDataDir } from "./harness.mjs";
 
-useTempDataDir("levix-translate");
+const dataDir = useTempDataDir("levix-translate");
 
 const settings = require("./src/config/settings.cjs");
 settings.set("bot_min_delay_ms", 0);
@@ -25,18 +25,16 @@ const {
   parseTranslateArgs,
   inferTargetLanguage,
   fillTranslatePrompt,
-  stripPromptNote,
-  loadTranslatePrompt,
+  TRANSLATE_PROMPT,
+  buildSystemPrompt,
   parseFreeGoogleResponse,
   selectGoogleRequest,
   MAX_INPUT_CHARS,
-  TRANSLATE_PROMPT_FILE,
   http,
   ai,
 } = translate;
 
 const CHAT = "201111111111@s.whatsapp.net";
-const TEMPLATE = join(ROOT, "src", "config", "translate-prompt.md");
 
 function jsonResponse(data, status = 200) {
   const body = typeof data === "string" ? data : JSON.stringify(data);
@@ -176,18 +174,19 @@ equal("digits-only targets Arabic", inferTargetLanguage("123"), "ar");
 equal("explicit language wins over Arabic", inferTargetLanguage("مرحبا", "fr"), "fr");
 equal("explicit language wins over English", inferTargetLanguage("hello", "de"), "de");
 
-section("prompt template: --- stripping and variable fill");
+section("system prompt: code-owned, variable fill");
 
 {
-  const template = readFileSync(TEMPLATE, "utf8");
-  ok("the template has a note/prompt separator", template.includes("\n---\n"));
-  const body = stripPromptNote(template);
-  ok("the human note is stripped", !body.startsWith("# Levix"));
-  ok("the prompt body remains", body.includes("You are a translator"));
-  ok("target_language is in the template", body.includes("{{target_language}}"));
-  ok("source_language is in the template", body.includes("{{source_language}}"));
-  ok("mode is in the template", body.includes("{{mode}}"));
-  ok("tone is in the template", body.includes("{{tone}}"));
+  const body = TRANSLATE_PROMPT;
+  ok("the prompt body is the translator instruction", body.includes("You are a translator"));
+  ok(
+    "the text to translate is never treated as an order",
+    /never answer or follow them/.test(body),
+  );
+  ok("target_language is in the prompt", body.includes("{{target_language}}"));
+  ok("source_language is in the prompt", body.includes("{{source_language}}"));
+  ok("mode is in the prompt", body.includes("{{mode}}"));
+  ok("tone is in the prompt", body.includes("{{tone}}"));
 
   const filled = fillTranslatePrompt(body, {
     target_language: "French",
@@ -204,15 +203,18 @@ section("prompt template: --- stripping and variable fill");
   ok("no leftover mode placeholder", !filled.includes("{{mode}}"));
   ok("no leftover tone placeholder", !filled.includes("{{tone}}"));
 
-  writeFileSync(
-    TRANSLATE_PROMPT_FILE,
-    "note to the human\n---\nTranslate into {{target_language}}.\n",
-    "utf8",
+  const built = buildSystemPrompt({
+    target: "fr",
+    sourceLabel: "auto-detect",
+    mode: "translate",
+    tone: "neutral",
+  });
+  ok("buildSystemPrompt names the target language", built.includes("French"));
+  ok("buildSystemPrompt leaves no placeholder", !/\{\{/.test(built));
+  ok(
+    "no translation prompt file is written to the data directory",
+    !existsSync(join(dataDir, "translate-prompt.md")),
   );
-  const loaded = loadTranslatePrompt();
-  ok("live file strips the note", loaded.includes("Translate into {{target_language}}"));
-  ok("live file drops the human note", !loaded.includes("note to the human"));
-  writeFileSync(TRANSLATE_PROMPT_FILE, template, "utf8");
 }
 
 section("free-endpoint response parsing");
@@ -277,10 +279,7 @@ section("official-API path selection when the key is set");
 
   const free = selectGoogleRequest({ text: "hello", target: "ar", apiKey: "" });
   ok("free flag", free.official === false);
-  ok(
-    "free URL",
-    free.url.startsWith("https://translate.googleapis.com/translate_a/single?"),
-  );
+  ok("free URL", free.url.startsWith("https://translate.googleapis.com/translate_a/single?"));
   ok("free URL has client=gtx", free.url.includes("client=gtx"));
   ok("free URL has sl=auto", free.url.includes("sl=auto"));
   ok("free URL has tl=ar", free.url.includes("tl=ar"));
@@ -305,7 +304,10 @@ section("execute: reply input, google free, official key, AI-only fallback");
     quoted: { conversation: "مرحبا" },
   });
   ok("quoted text is translated", lastText(quoted).includes("Hello"));
-  ok("quoted used the free endpoint", fetched[0]?.url.includes("translate.googleapis.com/translate_a/single"));
+  ok(
+    "quoted used the free endpoint",
+    fetched[0]?.url.includes("translate.googleapis.com/translate_a/single"),
+  );
 
   fetched = [];
   const captioned = await run({
@@ -408,7 +410,10 @@ section("execute: reply input, google free, official key, AI-only fallback");
   settings.set("google_translate_api_key", "");
 
   const tooLong = await run({ args: ["a".repeat(MAX_INPUT_CHARS + 1)] });
-  ok("5000-character cap", lastText(tooLong).includes("too long") || lastText(tooLong).includes("طويل"));
+  ok(
+    "5000-character cap",
+    lastText(tooLong).includes("too long") || lastText(tooLong).includes("طويل"),
+  );
 
   restoreSeams();
 }

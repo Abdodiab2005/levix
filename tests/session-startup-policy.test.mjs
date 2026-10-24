@@ -32,6 +32,29 @@ equal(
   }),
   false,
 );
+equal(
+  "a QR link stays registered:false but carries the account identity, so it is paired",
+  hasPairedCredentials({
+    me: { id: "201234567890:1@s.whatsapp.net", lid: "1234567890123:1@lid" },
+    account: { details: "signed" },
+    registered: false,
+  }),
+  true,
+);
+equal(
+  "a finished pairing-code link (registered:true) is paired",
+  hasPairedCredentials({ me: { id: "201234567890:1@s.whatsapp.net" }, registered: true }),
+  true,
+);
+equal(
+  "the pairing-code placeholder identity (name ~, no account) is unpaired",
+  hasPairedCredentials({
+    me: { id: "201234567890@s.whatsapp.net", name: "~" },
+    pairingCode: "ABCD1234",
+    registered: false,
+  }),
+  false,
+);
 
 section("session startup policy");
 
