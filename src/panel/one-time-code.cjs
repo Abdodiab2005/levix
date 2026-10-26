@@ -1,9 +1,9 @@
 // One in-memory code, shared by every channel that proves the operator.
 //
-// WhatsApp reset, email reset, and recovery-email verification all need the
-// same thing: a 6-digit code, hashed at rest in this process, dead after 10
-// minutes or five wrong guesses, and a send throttle so a loop cannot turn
-// into a stream of messages. The channel decides how the code is delivered.
+// WhatsApp and email password resets use a local 6-digit code, hashed in
+// memory, dead after 10 minutes or five wrong guesses. Recovery-email
+// verification uses the relay's own code and attempts. Both reuse the send
+// throttle here so a loop cannot turn into a stream of messages.
 // This file does not know about WhatsApp, email, or the password.
 
 const crypto = require("node:crypto");

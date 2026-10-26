@@ -247,6 +247,12 @@ Two ways to get a one-time reset code without touching the terminal:
   delivered by a Levix mail relay, which emails the code and keeps neither the
   address nor the code in readable form. Adding the address in Settings asks
   for the panel password. Ten wrong codes in a day pause reset for a day.
+  If email recovery needs verification again, sign in using WhatsApp recovery or
+  the CLI alternative below, then verify the address in Settings. Older saved
+  addresses also need this one-time verification after upgrading. Verifying an
+  address again disables email recovery on other installations using that address.
+  Authorization expires after 365 days without an accepted email-reset request;
+  network and mail-service outages do not remove your saved recovery settings.
 
 If the session is down and neither can arrive, `levix reset-password` still
 works from the terminal:

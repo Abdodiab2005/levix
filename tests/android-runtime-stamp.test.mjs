@@ -15,6 +15,38 @@ const FETCH = join(SCRIPTS, "fetch-node-android.sh");
 const fetchSrc = readFileSync(FETCH, "utf8");
 const gradleSrc = readFileSync(join(ROOT, "android", "app", "build.gradle.kts"), "utf8");
 
+section("the application archive cannot reuse stale recovery code or dashboard assets");
+
+const stageTask = /tasks\.register<Exec>\("stageLevixApp"\) \{([\s\S]*?)\n\}/.exec(gradleSrc)?.[1] ?? "";
+const stageSrc = readFileSync(join(SCRIPTS, "stage-levix-app.sh"), "utf8");
+const tracked = [...stageTask.matchAll(/inputs\.(?:dir|file)\(File\(repoRoot, "([^"]+)"\)\)/g)].map(
+  (match) => match[1],
+);
+for (const [, source] of stageSrc.matchAll(/copy_tree "\$ROOT\/([^"]+)"/g)) {
+  ok(`Gradle tracks the packaged ${source} tree`, tracked.includes(source));
+}
+for (const source of [
+  "node_modules",
+  "app.cjs",
+  "scheduler.cjs",
+  "package.json",
+  "package-lock.json",
+  "LICENSE",
+  "android/host-boot.mjs",
+  "android/scripts/stage-levix-app.sh",
+  "scripts/build-frontend.mjs",
+]) {
+  ok(`Gradle tracks archive input ${source}`, tracked.includes(source));
+}
+ok(
+  "Gradle tracks the complete frontend, including build configuration and lockfile",
+  /inputs\.files\(fileTree\(File\(repoRoot, "frontend"\)\)/.test(stageTask),
+);
+ok(
+  "frontend input tracking excludes installed dependencies and generated TypeScript state",
+  /exclude\("node_modules\/\*\*", "\*\.tsbuildinfo"\)/.test(stageTask),
+);
+
 section("the script and Gradle name the same stamp");
 
 const scriptFile = /^RUNTIME_STAMP_FILE="([^"]+)"$/m.exec(fetchSrc)?.[1];

@@ -12,6 +12,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRecoveryArtifactProbe } from "./recovery-artifact-probe.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PACKAGE_NAME = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).name;
@@ -81,8 +82,10 @@ ok("…and the licence", existsSync(join(packageDir, "LICENSE")));
 
 // --- run it ---------------------------------------------------------------
 
+const recoveryProbe = await createRecoveryArtifactProbe();
 const env = {
   ...process.env,
+  LEVIX_RECOVERY_URL: recoveryProbe.endpoint,
   LEVIX_DATA_DIR: dataDir,
   LEVIX_OPEN_BROWSER: "0",
   // Nothing from this repo may be visible to the installed copy.
@@ -208,6 +211,19 @@ console.log("\n· headless");
   ok("…and loads the commands", /\d+ commands loaded/.test(levixProcess.output));
   ok("…with no panel", !/Panel:/.test(levixProcess.output));
   await levixProcess.stop();
+}
+
+console.log("\n· recovery email from the installed artifact");
+
+{
+  const levixProcess = start([]);
+  try {
+    await levixProcess.seen;
+    await recoveryProbe.verify(base, ok);
+  } finally {
+    await levixProcess.stop();
+    await recoveryProbe.close();
+  }
 }
 
 console.log("\n· recovery");

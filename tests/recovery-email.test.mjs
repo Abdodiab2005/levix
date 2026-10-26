@@ -7,6 +7,7 @@
 // --data directory, because paths.cjs freezes DATA_DIR on first require.
 
 import { createHash, randomBytes, randomInt } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -15,6 +16,7 @@ import {
   finish,
   httpClient,
   ok,
+  ROOT,
   require,
   section,
   startServer,
@@ -45,6 +47,9 @@ function relayAnswer(body) {
   if (relayMode === "invalid") return [400, { ok: false, error: "invalid" }];
   if (relayMode === "rate") return [429, { ok: false, error: "rate_limited" }];
   if (relayMode === "down") return [503, { ok: false, error: "unavailable" }];
+  if (relayMode === "smtp_wrong_reason") return [503, { ok: false, error: "unverified" }];
+  if (relayMode === "expired") return [400, { ok: false, error: "expired" }];
+  if (relayMode === "bad_success") return [200, { ok: true }];
   if (body?.kind === "verify") {
     const id = randomBytes(16).toString("hex");
     const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
@@ -91,7 +96,10 @@ const stub = createServer((req, res) => {
     received.push(body);
     const answer = () => {
       const [status, payload] = relayAnswer(body);
-      res.writeHead(status, { "content-type": "application/json" });
+      res.writeHead(status, {
+        "content-type": "application/json",
+        ...(status === 429 ? { "Retry-After": "173" } : {}),
+      });
       res.end(JSON.stringify(payload));
     };
     if (relayMode === "hold") {
@@ -161,9 +169,17 @@ async function verifyAddress(email, peer) {
 
 section("masking");
 
-equal("two local characters and the tld", recovery.maskEmail("abdelrhman@gmail.com"), "ab***@g***.com");
+equal(
+  "two local characters and the tld",
+  recovery.maskEmail("abdelrhman@gmail.com"),
+  "ab***@g***.com",
+);
 equal("a one-character local part", recovery.maskEmail("a@x.io"), "a***@x***.io");
-equal("the last label only", recovery.maskEmail("user.name+tag@mail.example.co.uk"), "us***@m***.uk");
+equal(
+  "the last label only",
+  recovery.maskEmail("user.name+tag@mail.example.co.uk"),
+  "us***@m***.uk",
+);
 equal("the settings address", recovery.maskEmail(ADDRESS), "re***@e***.com");
 equal("the replacement address", recovery.maskEmail(OTHER), "ot***@g***.com");
 equal("no at-sign", recovery.maskEmail("not-an-email"), "***");
@@ -176,6 +192,8 @@ const rejected = [
   "not-an-email",
   "a@b",
   "a@b.c",
+  "a@example.123",
+  "a@example.c0m",
   "user@localhost",
   "مستخدم@example.com",
   "a b@example.com",
@@ -214,7 +232,12 @@ for (const [mode, reason] of [
   const before = received.length;
   result = await recovery.startVerification(ADDRESS, "en", "10.0.0.2");
   equal(`${mode} -> ${reason}`, result.reason, reason);
-  equal(`${mode} left nothing to confirm`, (await recovery.confirmVerification("000000")).reason, "no_pending");
+  if (mode === "rate") equal("relay retry delay is preserved", result.retryAfter, 173);
+  equal(
+    `${mode} left nothing to confirm`,
+    (await recovery.confirmVerification("000000")).reason,
+    "no_pending",
+  );
   equal(`${mode} reached the stub once`, received.length, before + 1);
 }
 relayMode = "ok";
@@ -235,11 +258,19 @@ equal("nothing is saved before verify", recovery.publicStatus().verified, false)
 equal("the vault row is still empty", secrets.getRecoveryEmail(), null);
 
 const relayBefore = received.length;
-equal("a malformed guess is refused locally", (await recovery.confirmVerification("12ab56")).reason, "wrong_code");
+equal(
+  "a malformed guess is refused locally",
+  (await recovery.confirmVerification("12ab56")).reason,
+  "wrong_code",
+);
 equal("the malformed guess never reached the relay", received.length, relayBefore);
 
 recovery._expireForTests();
-equal("an expired verification is refused", (await recovery.confirmVerification(lastCode())).reason, "expired");
+equal(
+  "an expired verification is refused",
+  (await recovery.confirmVerification(lastCode())).reason,
+  "expired",
+);
 equal("the expired one never reached the relay", received.length, relayBefore);
 equal("expiry did not save the address", secrets.getRecoveryEmail(), null);
 
@@ -252,13 +283,25 @@ const guesses = wrongCodes(verifyCode);
 equal("first wrong guess", (await recovery.confirmVerification(guesses[0])).attemptsLeft, 4);
 equal("the guess went to the relay", lastRelay().kind, "confirm");
 equal("with the verification id", lastRelay().verification, verifyId);
-equal("confirm body is exactly the contract", Object.keys(lastRelay()).sort().join(","), "code,kind,verification");
+equal(
+  "confirm body is exactly the contract",
+  Object.keys(lastRelay()).sort().join(","),
+  "code,kind,verification",
+);
 equal("second wrong guess", (await recovery.confirmVerification(guesses[1])).attemptsLeft, 3);
 equal("third wrong guess", (await recovery.confirmVerification(guesses[2])).attemptsLeft, 2);
 equal("fourth wrong guess", (await recovery.confirmVerification(guesses[3])).attemptsLeft, 1);
-equal("fifth wrong guess kills it", (await recovery.confirmVerification(guesses[4])).reason, "too_many_attempts");
+equal(
+  "fifth wrong guess kills it",
+  (await recovery.confirmVerification(guesses[4])).reason,
+  "too_many_attempts",
+);
 const deadBefore = received.length;
-equal("the real code is dead too", (await recovery.confirmVerification(verifyCode)).reason, "no_pending");
+equal(
+  "the real code is dead too",
+  (await recovery.confirmVerification(verifyCode)).reason,
+  "no_pending",
+);
 equal("a dead verification is not sent again", received.length, deadBefore);
 equal("a burned code saved nothing", secrets.getRecoveryEmail(), null);
 
@@ -300,7 +343,9 @@ store.saveBotSetting(
 equal("no token, no address", recovery.getAddress(), null);
 equal("no token, not verified", recovery.publicStatus().verified, false);
 result = await reset.requestResetCode("10.0.0.9", { channel: "email" });
-equal("no token, no email reset", result.reason, "no_email");
+equal("no token, email needs verification", result.reason, "unverified");
+equal("legacy status explains verification", recovery.publicStatus().needsVerification, true);
+equal("legacy address mask survives", recovery.publicStatus().masked, "re***@e***.com");
 let threw = false;
 try {
   secrets.setRecoveryEmail(ADDRESS);
@@ -310,6 +355,108 @@ try {
 ok("an address cannot be saved without a token", threw);
 store.saveBotSetting("auth:recovery-email", currentRow);
 equal("the real record is back", recovery.getAddress(), ADDRESS);
+equal(
+  "stale authorization refusal cannot flag a newer token",
+  secrets.markRecoveryUnverified(ADDRESS, "old-token"),
+  false,
+);
+equal("newer authorization stays usable", recovery.publicStatus().verified, true);
+
+section("relay failures preserve saved credentials and pending verification");
+
+recovery._resetForTests();
+await recovery.startVerification(OTHER, "en", "failure-proof");
+const validPendingCode = lastCode();
+const savedBeforeFailure = store.getBotSetting("auth:recovery-email");
+for (const mode of ["down", "smtp_wrong_reason", "bad_success", "rate"]) {
+  relayMode = mode;
+  const outcome = await recovery.confirmVerification(validPendingCode);
+  equal(`${mode} does not confirm`, outcome.ok, false);
+  equal(
+    `${mode} preserves sealed settings`,
+    store.getBotSetting("auth:recovery-email"),
+    savedBeforeFailure,
+  );
+}
+relayMode = "ok";
+equal(
+  "retry succeeds with the original code",
+  (await recovery.confirmVerification(validPendingCode)).ok,
+  true,
+);
+await verifyAddress(ADDRESS, "restore-after-failures");
+
+recovery._resetForTests();
+await recovery.startVerification(OTHER, "en", "server-expiry");
+relayMode = "expired";
+equal(
+  "server expiry is understood",
+  (await recovery.confirmVerification(lastCode())).reason,
+  "expired",
+);
+equal(
+  "server expiry clears only pending state",
+  (await recovery.confirmVerification("000000")).reason,
+  "no_pending",
+);
+equal("server expiry preserves verified address", recovery.getAddress(), ADDRESS);
+relayMode = "ok";
+
+section("timeouts and offline requests preserve authorization without logging secrets");
+
+const realFetch = globalThis.fetch;
+const realTimeout = AbortSignal.timeout;
+const logger = require("./src/utils/logger.cjs");
+const realWarn = logger.warn;
+const warnings = [];
+logger.warn = (...args) => warnings.push(args);
+try {
+  const currentToken = recovery.getRecord().token;
+  for (const mode of ["offline", "timeout"]) {
+    let requestedTimeout;
+    AbortSignal.timeout = (ms) => {
+      requestedTimeout = ms;
+      return realTimeout(5);
+    };
+    globalThis.fetch = async (_url, options) => {
+      if (mode === "offline") throw new Error(`${ADDRESS} ${currentToken} 123456`);
+      await new Promise((resolve, reject) =>
+        options.signal.addEventListener("abort", () => reject(options.signal.reason), {
+          once: true,
+        }),
+      );
+    };
+    // Keep the test alive while AbortSignal.timeout's unref'ed timer fires.
+    const keepAlive = setInterval(() => {}, 100);
+    reset._resetForTests();
+    try {
+      equal(
+        `${mode} is unavailable`,
+        (await reset.requestResetCode("failure", { channel: "email" })).reason,
+        "unavailable",
+      );
+    } finally {
+      clearInterval(keepAlive);
+    }
+    equal(`${mode} uses the bounded relay timeout`, requestedTimeout, 15000);
+    equal(`${mode} preserves the saved token`, recovery.getRecord().token, currentToken);
+    equal(
+      `${mode} creates no local code`,
+      reset.completeReset("123456", PASSWORD, PASSWORD).reason,
+      "no_pending",
+    );
+  }
+  ok(
+    "relay exception text never enters logs",
+    !JSON.stringify(warnings).includes(currentToken) &&
+      !JSON.stringify(warnings).includes(ADDRESS) &&
+      !JSON.stringify(warnings).includes("123456"),
+  );
+} finally {
+  globalThis.fetch = realFetch;
+  AbortSignal.timeout = realTimeout;
+  logger.warn = realWarn;
+}
 
 section("the previous address stays until the new one is verified");
 
@@ -362,10 +509,26 @@ equal("WhatsApp is throttled by the email send", result.reason, "throttled");
 equal("the throttled request sent nothing", sent.length, sentBefore);
 
 const resetGuesses = wrongCodes(resetCode);
-equal("mismatch does not burn it", reset.completeReset(resetCode, "one-pass", "other-pass").reason, "mismatch");
-equal("first reset wrong guess", reset.completeReset(resetGuesses[0], "good-password", "good-password").attemptsLeft, 4);
-equal("second reset wrong guess", reset.completeReset(resetGuesses[1], "good-password", "good-password").attemptsLeft, 3);
-equal("third reset wrong guess", reset.completeReset(resetGuesses[2], "good-password", "good-password").attemptsLeft, 2);
+equal(
+  "mismatch does not burn it",
+  reset.completeReset(resetCode, "one-pass", "other-pass").reason,
+  "mismatch",
+);
+equal(
+  "first reset wrong guess",
+  reset.completeReset(resetGuesses[0], "good-password", "good-password").attemptsLeft,
+  4,
+);
+equal(
+  "second reset wrong guess",
+  reset.completeReset(resetGuesses[1], "good-password", "good-password").attemptsLeft,
+  3,
+);
+equal(
+  "third reset wrong guess",
+  reset.completeReset(resetGuesses[2], "good-password", "good-password").attemptsLeft,
+  2,
+);
 equal(
   "a short password does not burn the matching code",
   reset.completeReset(resetCode, "short", "short").reason,
@@ -380,7 +543,11 @@ result = reset.completeReset(resetCode, "email-reset-password", "email-reset-pas
 equal("the email code still resets", result.ok, true);
 ok("the epoch moved", secrets.getPasswordUpdatedAt() > beforeEpoch);
 equal("the new password works", secrets.verifyDashboardPassword("email-reset-password"), true);
-equal("the code is single use", reset.completeReset(resetCode, "email-reset-password", "email-reset-password").reason, "no_pending");
+equal(
+  "the code is single use",
+  reset.completeReset(resetCode, "email-reset-password", "email-reset-password").reason,
+  "no_pending",
+);
 
 section("a token the relay refuses is unverified and leaves no code");
 
@@ -389,7 +556,33 @@ const realRecord = store.getBotSetting("auth:recovery-email");
 secrets.setRecoveryEmail(OTHER, stubToken("someone.else@example.com"));
 result = await reset.requestResetCode("10.4.0.9", { channel: "email" });
 equal("the relay answer is unverified", result.reason, "unverified");
-equal("nothing is pending", reset.completeReset("000000", "x-password", "x-password").reason, "no_pending");
+equal("rejected authorization is flagged", recovery.publicStatus().needsVerification, true);
+equal("rejected address is retained as a mask", recovery.publicStatus().masked, "ot***@g***.com");
+equal("flagged authorization cannot send", recovery.getRecord(), null);
+const restartedStatus = spawnSync(
+  process.execPath,
+  [
+    "-e",
+    `
+  const recovery = require(${JSON.stringify(join(ROOT, "src/panel/recovery-email.cjs"))});
+  if (recovery.publicStatus().needsVerification !== true || recovery.getRecord() !== null) process.exit(1);
+`,
+  ],
+  { env: { ...process.env, LEVIX_DATA_DIR: dataDir }, encoding: "utf8" },
+);
+equal("reverification requirement survives restart", restartedStatus.status, 0);
+const afterReject = received.length;
+equal(
+  "flagged reset explains verification",
+  (await reset.requestResetCode("10.4.0.9", { channel: "email" })).reason,
+  "unverified",
+);
+equal("flagged reset sends no request", received.length, afterReject);
+equal(
+  "nothing is pending",
+  reset.completeReset("000000", "x-password", "x-password").reason,
+  "no_pending",
+);
 result = await reset.requestResetCode("10.4.0.9");
 equal("the refused send did not spend the cooldown", result.ok, true);
 store.saveBotSetting("auth:recovery-email", realRecord);
@@ -406,7 +599,11 @@ const relayCount = received.length;
 result = await reset.requestResetCode("10.4.0.4", { channel: "email", lang: "en" });
 equal("email is throttled by the WhatsApp send", result.reason, "throttled");
 equal("the throttled email did not call the relay", received.length, relayCount);
-equal("the WhatsApp code is still the live one", reset.completeReset(waCode, "wa-reset-password", "wa-reset-password").ok, true);
+equal(
+  "the WhatsApp code is still the live one",
+  reset.completeReset(waCode, "wa-reset-password", "wa-reset-password").ok,
+  true,
+);
 
 recovery._resetForTests();
 result = await recovery.startVerification(ADDRESS, "en", "10.4.0.5");
@@ -418,8 +615,16 @@ reset._resetForTests();
 result = await reset.requestResetCode("10.4.0.6", { channel: "email", lang: "en" });
 equal("a new email reset sends", result.ok, true);
 const crossReset = lastCode();
-equal("the verify code is not the reset code", reset.completeReset(crossVerify, "cross-password-1", "cross-password-1").reason, "wrong_code");
-equal("the reset code is not the verify code", (await recovery.confirmVerification(crossReset)).reason, "wrong_code");
+equal(
+  "the verify code is not the reset code",
+  reset.completeReset(crossVerify, "cross-password-1", "cross-password-1").reason,
+  "wrong_code",
+);
+equal(
+  "the reset code is not the verify code",
+  (await recovery.confirmVerification(crossReset)).reason,
+  "wrong_code",
+);
 equal("the verify code still verifies", (await recovery.confirmVerification(crossVerify)).ok, true);
 equal("verification replaced the address", secrets.getRecoveryEmail(), ADDRESS);
 const epochBeforeCross = secrets.getPasswordUpdatedAt();
@@ -431,7 +636,10 @@ equal(
   secrets.verifyDashboardPassword("wa-reset-password"),
   true,
 );
-ok("a dead email code does not move the epoch", secrets.getPasswordUpdatedAt() === epochBeforeCross);
+ok(
+  "a dead email code does not move the epoch",
+  secrets.getPasswordUpdatedAt() === epochBeforeCross,
+);
 
 section("removing the address cancels an email code and leaves a WhatsApp code");
 
@@ -447,14 +655,22 @@ equal(
   reset.completeReset(orphan, "after-remove-1", "after-remove-1").reason,
   "no_pending",
 );
-equal("remove did not change the password", secrets.verifyDashboardPassword("wa-reset-password"), true);
+equal(
+  "remove did not change the password",
+  secrets.verifyDashboardPassword("wa-reset-password"),
+  true,
+);
 ok("remove did not move the epoch", secrets.getPasswordUpdatedAt() === epochBeforeRemove);
 
 recovery._resetForTests();
 await recovery.startVerification(ADDRESS, "en", "10.5.0.2");
 const removedCode = lastCode();
 recovery.remove();
-equal("remove drops a verification", (await recovery.confirmVerification(removedCode)).reason, "no_pending");
+equal(
+  "remove drops a verification",
+  (await recovery.confirmVerification(removedCode)).reason,
+  "no_pending",
+);
 equal("the address stays gone", secrets.getRecoveryEmail(), null);
 
 secrets.setRecoveryEmail(ADDRESS, stubToken(ADDRESS));
@@ -467,7 +683,11 @@ equal(
   reset.completeReset(rebound, "after-swap-1", "after-swap-1").reason,
   "address_changed",
 );
-equal("the swap did not change the password", secrets.verifyDashboardPassword("wa-reset-password"), true);
+equal(
+  "the swap did not change the password",
+  secrets.verifyDashboardPassword("wa-reset-password"),
+  true,
+);
 equal(
   "the refused code cannot be retried",
   reset.completeReset(rebound, "after-swap-1", "after-swap-1").reason,
@@ -510,9 +730,16 @@ for (let round = 0; round < 4 && !lockedResult; round += 1) {
     }
   }
 }
-equal("two codes of five wrong guesses each reach the cap", issued, reset.MAX_FAILED_CODES_PER_DAY / 5);
+equal(
+  "two codes of five wrong guesses each reach the cap",
+  issued,
+  reset.MAX_FAILED_CODES_PER_DAY / 5,
+);
 equal("the next request is locked", lockedResult?.reason, "locked");
-ok("locked carries a retryAfter of up to a day", lockedResult?.retryAfter > 0 && lockedResult?.retryAfter <= 86_400);
+ok(
+  "locked carries a retryAfter of up to a day",
+  lockedResult?.retryAfter > 0 && lockedResult?.retryAfter <= 86_400,
+);
 reset._resetThrottleForTests();
 const sentBeforeLock = sent.length;
 result = await reset.requestResetCode("10.6.0.99");
@@ -553,7 +780,11 @@ const confirms = await Promise.all(
   Array.from({ length: 4 }, () => recovery.confirmVerification(burstVerifyCode)),
 );
 equal("one guess verified", confirms.filter((row) => row.ok).length, 1);
-equal("the others waited their turn", confirms.filter((row) => row.reason === "throttled").length, 3);
+equal(
+  "the others waited their turn",
+  confirms.filter((row) => row.reason === "throttled").length,
+  3,
+);
 equal("only one guess reached the relay", received.length, beforeGuesses + 1);
 equal("the address is stored", secrets.getRecoveryEmail(), ADDRESS);
 
@@ -659,6 +890,16 @@ try {
   equal("the stable code is invalid_email", (await res.json()).error, "invalid_email");
   equal("a bad address still did not call the relay", received.length, beforeCross);
 
+  relayMode = "rate";
+  res = await http.json("/dashboard/api/recovery-email/start", {
+    email: ADDRESS,
+    current: PASSWORD,
+    lang: "en",
+  });
+  equal("relay rate limit remains HTTP 429", res.status, 429);
+  equal("relay Retry-After reaches the browser", res.headers.get("retry-after"), "173");
+  equal("relay retry delay is in JSON", (await res.json()).retryAfter, 173);
+  relayMode = "ok";
   res = await http.json("/dashboard/api/recovery-email/start", {
     email: ADDRESS,
     current: PASSWORD,
@@ -707,7 +948,10 @@ try {
   res = await http.json("/dashboard/api/settings/import", planted);
   equal("import accepts the file", res.status, 200);
   body = await res.json();
-  ok("import skipped the planted key", body.skipped.some((row) => row.key === "auth:recovery-email"));
+  ok(
+    "import skipped the planted key",
+    body.skipped.some((row) => row.key === "auth:recovery-email"),
+  );
   res = await http.call("/dashboard/api/recovery-email");
   body = await res.json();
   equal("the mask survived the import", body.masked, "re***@e***.com");

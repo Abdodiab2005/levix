@@ -114,7 +114,13 @@ function recoveryMessage(
         backToEmail,
       };
     case "rate_limited":
-      return { text: t("recoveryErrRateLimited"), backToEmail };
+      return {
+        text: data?.retryAfter
+          ? fill(t("recoveryErrThrottled"), { n: data.retryAfter })
+          : t("recoveryErrRateLimited"),
+        backToEmail,
+      };
+    case "":
     case "unavailable":
       return { text: t("recoveryErrUnavailable"), backToEmail };
     case "invalid":
@@ -146,6 +152,7 @@ function RecoveryEmailCard() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [verified, setVerified] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
   const [masked, setMasked] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [phase, setPhase] = useState<RecoveryPhase>("email");
@@ -165,6 +172,7 @@ function RecoveryEmailCard() {
       .then((res) => {
         if (cancelled) return;
         setVerified(Boolean(res.verified));
+        setNeedsVerification(Boolean(res.needsVerification));
         setMasked(typeof res.masked === "string" ? res.masked : null);
         setLoaded(true);
       })
@@ -199,6 +207,7 @@ function RecoveryEmailCard() {
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (sending) return;
     setSending(true);
     if (phase === "email") {
       setEmailError(null);
@@ -220,6 +229,7 @@ function RecoveryEmailCard() {
     try {
       const res = await api.verifyRecoveryEmail(code.trim());
       setVerified(true);
+      setNeedsVerification(false);
       setMasked(res.masked);
       setEditing(false);
       resetDraft();
@@ -244,6 +254,7 @@ function RecoveryEmailCard() {
     try {
       await api.deleteRecoveryEmail();
       setVerified(false);
+      setNeedsVerification(false);
       setMasked(null);
       setEditing(false);
       resetDraft();
@@ -266,11 +277,18 @@ function RecoveryEmailCard() {
         description={t("recoveryEmailDesc")}
       />
 
+      <p className="text-xs text-muted">{t("recoveryEmailTokenPolicy")}</p>
+      {needsVerification && (
+        <p role="status" className="text-sm text-warn">
+          {t("recoveryEmailReverify")}
+        </p>
+      )}
+
       {loadError ? (
         <p className="text-sm text-danger">{t("recoveryErrFailed")}</p>
       ) : !loaded ? (
         <Spinner className="size-5" label={t("loading")} />
-      ) : verified && masked && !showForm ? (
+      ) : masked && !editing && phase === "email" ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-bold text-text-main">{t("recoveryEmailCurrent")}</p>
@@ -279,9 +297,11 @@ function RecoveryEmailCard() {
             </UserText>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={startChange}>
-              {t("recoveryEmailChange")}
-            </Button>
+            {verified && (
+              <Button variant="secondary" onClick={startChange}>
+                {t("recoveryEmailChange")}
+              </Button>
+            )}
             <IconButton
               label={t("recoveryEmailRemove")}
               variant="danger"

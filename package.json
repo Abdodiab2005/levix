@@ -18,7 +18,8 @@
     "build:sea": "node scripts/build-sea.mjs",
     "validate:tarball": "node scripts/validate-tarball.mjs",
     "validate:sea": "node scripts/validate-sea.mjs",
-    "validate:docker": "bash scripts/validate-docker.sh"
+    "validate:docker": "bash scripts/validate-docker.sh",
+    "validate:recovery": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/validate-recovery-contract.mjs"
   },
   "keywords": [
     "whatsapp",

@@ -71,6 +71,7 @@ function normalizeLang(lang) {
  */
 function normalizeEmail(value) {
   const raw = String(value ?? "");
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: reject header controls before trimming an address.
   if (/[\u0000-\u001F\u007F\u2028\u2029]/.test(raw)) return { ok: false };
   const email = raw.trim().toLowerCase();
   if (email.length < 3 || email.length > 254) return { ok: false };
@@ -81,7 +82,7 @@ function normalizeEmail(value) {
   const domain = email.slice(at + 1);
   if (local.length > 64 || local.startsWith(".") || local.endsWith(".")) return { ok: false };
   const tld = domain.slice(domain.lastIndexOf(".") + 1);
-  if (tld.length < 2) return { ok: false };
+  if (!/^[a-z]{2,}$/.test(tld)) return { ok: false };
   if (!EMAIL_RE.test(email)) return { ok: false };
   return { ok: true, email };
 }
@@ -107,13 +108,19 @@ function maskEmail(email) {
 }
 
 /** The verified address and its relay token, or null. For delivery only. */
-function getRecord() {
+function readRecord() {
   try {
     return secrets.getRecoveryRecord();
   } catch (error) {
     logger.warn({ err: error }, "[recovery-email] Could not read the recovery address");
     return null;
   }
+}
+
+/** Only an authorized record may deliver reset mail. Legacy rows need verification. */
+function getRecord() {
+  const record = readRecord();
+  return record && !record.needsVerification ? record : null;
 }
 
 /** The verified address, or null. For delivery — never for an API response. */
@@ -123,9 +130,13 @@ function getAddress() {
 
 /** What an API may return. Never the address itself. */
 function publicStatus() {
-  const record = getRecord();
+  const record = readRecord();
   if (!record) return { verified: false };
-  return { verified: true, masked: maskEmail(record.email) };
+  return {
+    verified: !record.needsVerification,
+    needsVerification: record.needsVerification,
+    masked: maskEmail(record.email),
+  };
 }
 
 /**
@@ -145,20 +156,30 @@ async function callRelay(body) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
+      redirect: "error",
     });
     data = await response.json().catch(() => null);
-  } catch (error) {
-    logger.warn({ err: error, kind: body.kind }, "[recovery-email] Could not reach the relay");
+  } catch {
+    logger.warn({ kind: body.kind }, "[recovery-email] Could not reach the relay");
     return { ok: false, reason: "unavailable" };
   }
 
   if (response.ok && data?.ok === true) return { ok: true, data };
 
   let reason = "unavailable";
-  if (RELAY_REASONS.has(data?.error)) reason = data.error;
+  if (response.status >= 500) reason = "unavailable";
+  else if (data?.error === "unverified") {
+    if (response.status === 403) reason = "unverified";
+  } else if (RELAY_REASONS.has(data?.error)) reason = data.error;
   else if (response.status === 400) reason = "invalid";
   else if (response.status === 429) reason = "rate_limited";
   const failure = { ok: false, reason };
+  if (reason === "rate_limited") {
+    const retry = response.headers.get("retry-after");
+    if (retry && /^\d+$/.test(retry) && Number.isSafeInteger(Number(retry)) && Number(retry) > 0) {
+      failure.retryAfter = Number(retry);
+    }
+  }
   if (reason === "wrong_code" && Number.isInteger(data?.attemptsLeft)) {
     failure.attemptsLeft = data.attemptsLeft;
   }
@@ -185,6 +206,11 @@ async function sendResetCode({ to, token, code, lang }) {
     token,
     lang: normalizeLang(lang),
   });
+  if (!sent.ok && sent.reason === "unverified") {
+    if (secrets.markRecoveryUnverified(to, token)) {
+      require("./password-reset.cjs").noteRecoveryAddress(null);
+    }
+  }
   return sent.ok ? { ok: true } : sent;
 }
 

@@ -377,6 +377,10 @@ export const translations = {
     passwordMinLength: "يجب ألا تقل كلمة المرور عن 8 خانات",
     passwordChangedSuccess: "تم تغيير كلمة مرور لوحة التحكم بنجاح!",
     recoveryEmailTitle: "بريد الاسترداد",
+    recoveryEmailTokenPolicy:
+      "إعادة التحقق من هذا البريد توقف استرداد البريد على أي تثبيت آخر يستخدمه. يلزم التحقق مجدداً بعد 365 يوماً دون طلب استرداد مقبول.",
+    recoveryEmailReverify:
+      "يحتاج البريد المحفوظ إلى التحقق مجدداً. أدخل عنوانك وكلمة مرور اللوحة أدناه. يظل الاسترداد عبر واتساب أو الأمر levix reset-password متاحاً.",
     recoveryEmailDesc:
       "إذا نسيت كلمة مرور اللوحة، يرسل Levix كوداً لمرة واحدة إلى هذا العنوان. لا يُعتمد العنوان إلا بعد التحقق.",
     recoveryEmailLabel: "عنوان البريد",
@@ -1466,6 +1470,10 @@ export const translations = {
     passwordMinLength: "Password must be at least 8 characters long",
     passwordChangedSuccess: "Dashboard password changed successfully!",
     recoveryEmailTitle: "Recovery email",
+    recoveryEmailTokenPolicy:
+      "Verifying this address again disables email recovery on other installations using it. Verification is also required after 365 days without an accepted reset request.",
+    recoveryEmailReverify:
+      "Your saved email needs verification again. Enter your address and panel password below. WhatsApp and levix reset-password remain available.",
     recoveryEmailDesc:
       "If you forget the panel password, Levix sends a one-time code to this address. The address is only used after you verify it.",
     recoveryEmailLabel: "Email address",

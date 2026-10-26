@@ -93,11 +93,9 @@ function setDashboardPassword(plain) {
 }
 
 /**
- * The verified recovery address and its relay token, or null. The stored
- * value is a sealed JSON string; a corrupt row is treated as "not set" so
- * login can still render. A row without a token predates the relay's v2
- * contract (unreleased 4.9.0 builds); the relay would refuse it, so it reads
- * as "not set" and the operator verifies the address again.
+ * The saved address and its relay authorization, or null. A corrupt sealed
+ * row reads as "not set" so login still renders. Legacy rows without a token
+ * retain their address for masking/removal but require authenticated verification.
  */
 function getRecoveryRecord() {
   const sealed = store.getBotSetting(RECOVERY_EMAIL_KEY, null);
@@ -109,13 +107,18 @@ function getRecoveryRecord() {
     return null;
   }
   if (!parsed || typeof parsed.email !== "string" || !parsed.email) return null;
-  if (typeof parsed.token !== "string" || !parsed.token) return null;
-  return { email: parsed.email, token: parsed.token };
+  const token = typeof parsed.token === "string" && parsed.token ? parsed.token : null;
+  return {
+    email: parsed.email,
+    token,
+    needsVerification: !token || parsed.needsVerification === true,
+  };
 }
 
 /** The verified recovery address, or null. */
 function getRecoveryEmail() {
-  return getRecoveryRecord()?.email ?? null;
+  const record = getRecoveryRecord();
+  return record && !record.needsVerification ? record.email : null;
 }
 
 /** Seal and store an address the relay verified, with the token it returned. */
@@ -126,6 +129,17 @@ function setRecoveryEmail(email, token) {
   );
   store.saveBotSetting(RECOVERY_EMAIL_KEY, sealed);
   logger.info("[secrets] Recovery email updated");
+}
+
+/** Mark only the authorization the relay refused; a newer binding stays intact. */
+function markRecoveryUnverified(email, token) {
+  const record = getRecoveryRecord();
+  if (!record || record.email !== email || record.token !== token) return false;
+  store.saveBotSetting(
+    RECOVERY_EMAIL_KEY,
+    vault.seal(JSON.stringify({ ...record, needsVerification: true })),
+  );
+  return true;
 }
 
 function clearRecoveryEmail() {
@@ -202,6 +216,7 @@ module.exports = {
   getRecoveryEmail,
   setRecoveryEmail,
   clearRecoveryEmail,
+  markRecoveryUnverified,
   verifyDashboardPassword,
   getSetupCode,
   setupCodeMatches,

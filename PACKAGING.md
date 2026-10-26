@@ -251,8 +251,8 @@ thing you ship works:
 
 | Command | What it actually does |
 | --- | --- |
-| `npm run validate:tarball` | `npm pack`, install into an empty prefix, run the installed `levix`: first run, password, restart, headless, `reset-password` |
-| `npm run validate:sea` | copies the executable to a directory with no source tree, starts it, checks extracted assets, the rendered views, the vendored socket.io client, the command manifests, pino's transports, restart persistence, `ffmpeg` absent, recovery |
+| `npm run validate:tarball` | `npm pack`, install into an empty prefix, run the installed `levix`: first run, password, restart, headless, Recovery Email v2 binding/reset, `reset-password` |
+| `npm run validate:sea` | copies the executable to a directory with no source tree, starts it, checks extracted assets, the rendered views, the vendored socket.io client, the command manifests, pino's transports, restart persistence, `ffmpeg` absent, Recovery Email v2 binding/reset and CLI recovery |
 | `npm run validate:docker` | builds, starts, claims through the panel, then `restart` / `down`+`up` / rebuild-the-image, checking the password and database survive each; also that it runs as `node`, that `/data` is writable on a fresh volume, and that one process runs |
 
 `npm test` is the fast suite that runs constantly; these three take minutes and
@@ -261,6 +261,32 @@ run in CI and before a tag.
 `validate:docker` exits **2** when there is no Docker daemon, so "not tested
 here" is distinguishable from "broken" — CI treats a 2 on a runner as a
 failure.
+
+### Recovery Email v2 release gate
+
+`npm run validate:recovery` compares this client with the relay at production
+revision `5c77ee460750f65776172d582fd705612305038e` in a clean `../levix-ui`
+checkout (or pass its path after `--`). It uses temporary SQLite databases,
+fake SMTP and an in-memory request bridge: no live endpoint, credentials or
+emails. It proves verification, reset, sealed persistence after restart,
+365-day inactivity expiry/renewal and revocation when another installation
+verifies the same address. `npm test` additionally covers local and relay
+errors, retry delays, timeouts, legacy rows and bilingual login states.
+
+The tarball and SEA validators also exercise the actual packaged HTTP recovery
+flow against a strict loopback relay, including password reauthentication,
+sealed-token delivery, single-use reset and session invalidation.
+
+Android `stageLevixApp` rebuilds React before creating `levix-app.zip`. Its
+inputs include backend source, frontend source/config/lockfile, build and staging
+scripts, and installed dependencies so Gradle cannot reuse a ZIP after those
+change. APKs and AABs share this task. Application updates replace `files/app`,
+while the database and vault key remain in `files/data`; no separate native
+recovery implementation exists. Before releasing, build both ABI APKs and the
+AAB, verify the archive contains the current backend and hashed dashboard assets,
+and perform device WebView/offline/update QA. A local desktop test does not prove
+those device checks. Play upload still requires the owner's approved signing
+and deployment workflow.
 
 ## 4. Releasing
 

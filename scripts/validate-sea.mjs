@@ -12,6 +12,7 @@ import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRecoveryArtifactProbe } from "./recovery-artifact-probe.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BUILT = join(ROOT, "build", process.platform === "win32" ? "levix.exe" : "levix");
@@ -46,7 +47,13 @@ const dataDir = join(sandbox, "data");
 console.log(`\n▸ Validating ${BUILT}`);
 console.log(`  sandbox: ${sandbox}\n`);
 
-const env = { ...process.env, LEVIX_DATA_DIR: dataDir, LEVIX_OPEN_BROWSER: "0" };
+const recoveryProbe = await createRecoveryArtifactProbe();
+const env = {
+  ...process.env,
+  LEVIX_DATA_DIR: dataDir,
+  LEVIX_OPEN_BROWSER: "0",
+  LEVIX_RECOVERY_URL: recoveryProbe.endpoint,
+};
 
 function runBinary(args, extraEnv = {}) {
   return spawnSync(binary, args, {
@@ -294,6 +301,20 @@ console.log("\n· ffmpeg is absent, and that is fine");
   ok("Levix still starts with no ffmpeg on PATH", started, levix.output.slice(-300));
   ok("…and does not crash over it", !/Uncaught Exception/.test(levix.output));
   await levix.stop();
+}
+
+console.log("\n· recovery email from the executable");
+
+{
+  const levix = startBinary([], { waitFor: "Ctrl+C" });
+  try {
+    await levix.seen;
+    const base = /Panel: (\S+)/.exec(levix.output)?.[1];
+    await recoveryProbe.verify(base, ok);
+  } finally {
+    await levix.stop();
+    await recoveryProbe.close();
+  }
 }
 
 // --- recovery -------------------------------------------------------------

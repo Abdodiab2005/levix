@@ -153,7 +153,12 @@ async function requestResetCode(peer, options = {}) {
   let sock = null;
   if (channel === "email") {
     record = recoveryEmail.getRecord();
-    if (!record) return { ok: false, reason: "no_email" };
+    if (!record) {
+      return {
+        ok: false,
+        reason: recoveryEmail.publicStatus().needsVerification ? "unverified" : "no_email",
+      };
+    }
   } else {
     sock = session?.socket ?? null;
     if (!sock?.user?.id) return { ok: false, reason: "no_session" };
