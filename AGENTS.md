@@ -1212,8 +1212,8 @@ more QR or account data can be pushed.
 
 **Forgot password.** The login page offers the channels that can take a one-time
 code: WhatsApp (the linked account's own chat, which needs the session up) and
-email (when a recovery email is saved; the page shows only its mask). An old
-record without a token or a relay `403 unverified` response requires authenticated
+email (only when the saved recovery email is verified; the page shows only its
+mask). An old record without a token or a relay `403 unverified` response requires authenticated
 re-verification; the sealed record retains the mask and that state across restarts.
 Network failures and 5xx never invalidate authorization. Re-verifying the same
 address revokes other installations' tokens. Tokens expire after 365 days without

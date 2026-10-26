@@ -286,7 +286,11 @@ recovery implementation exists. Before releasing, build both ABI APKs and the
 AAB, verify the archive contains the current backend and hashed dashboard assets,
 and perform device WebView/offline/update QA. A local desktop test does not prove
 those device checks. Play upload still requires the owner's approved signing
-and deployment workflow.
+and deployment workflow. A passing debug APK build is not Play release approval:
+physical-device WebView recovery (Arabic/English), offline/reconnect and update
+persistence QA remain prerequisites. Build and inspect an upload-key-signed AAB
+through `:app:stageLevixBundle` before the owner-approved Play submission; a local
+`bundleRelease` using the debug key does not satisfy that check.
 
 ## 4. Releasing
 

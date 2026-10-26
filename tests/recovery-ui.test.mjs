@@ -3,11 +3,31 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
-import { equal, finish, ok, ROOT, section } from "./harness.mjs";
+import { equal, finish, ok, require, ROOT, section } from "./harness.mjs";
 
 const template = readFileSync(join(ROOT, "views/login.ejs"), "utf8");
 const script = [...template.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1];
 const dictionary = readFileSync(join(ROOT, "public/gateway-i18n.js"), "utf8");
+
+section("only a verified address is a login recovery option");
+const ejs = require("ejs");
+for (const verified of [false, true]) {
+  const html = ejs.render(template, {
+    brand: require("./src/config/brand.cjs"),
+    error: null,
+    minLength: 8,
+    recoveryEmail: "re***@e***.com",
+    recoveryEmailVerified: verified,
+  });
+  equal(`verified=${verified}: email option`, html.includes('data-channel="email"'), verified);
+  equal(
+    `verified=${verified}: email subtitle`,
+    html.includes('data-i18n="resetSubtitleChannels"'),
+    verified,
+  );
+  equal(`verified=${verified}: email mask`, html.includes("re***@e***.com"), verified);
+  ok(`verified=${verified}: WhatsApp remains`, html.includes('data-channel="whatsapp"'));
+}
 
 for (const language of ["en", "ar"]) {
   section(`${language} recovery UI`);

@@ -85,7 +85,7 @@
             <div class="auth-head">
               <span class="eyebrow" data-i18n="resetEyebrow">Password reset</span>
               <h1 data-i18n="resetTitle">Reset your password</h1>
-              <% if (recoveryEmail) { %>
+              <% if (recoveryEmailVerified && recoveryEmail) { %>
               <p class="sub" data-i18n="resetSubtitleChannels">
                 Levix can send a one-time code to WhatsApp, or to your recovery email. The code works for 10 minutes.
               </p>
@@ -102,7 +102,7 @@
                 <span data-i18n="resetSend">Send code to WhatsApp</span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
               </button>
-              <% if (recoveryEmail) { %>
+              <% if (recoveryEmailVerified && recoveryEmail) { %>
               <button type="button" class="btn auth-submit" id="reset-send-email" data-channel="email">
                 <span data-i18n="resetSendEmail">Send code to email</span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>

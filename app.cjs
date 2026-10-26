@@ -294,9 +294,11 @@ app.post("/setup", (req, res, next) => {
 // or nothing — never the address itself. A read failure still renders login.
 function loginPageLocals(error, errorCode) {
   let masked = null;
+  let verified = false;
   try {
     const status = recoveryEmail.publicStatus();
-    if (status.masked) masked = status.masked;
+    verified = status.verified === true;
+    if (verified && status.masked) masked = status.masked;
   } catch (readError) {
     logger.warn({ err: readError }, "[recovery-email] Could not read the recovery address");
   }
@@ -305,6 +307,7 @@ function loginPageLocals(error, errorCode) {
     errorCode,
     minLength: secrets.MIN_PASSWORD_LENGTH,
     recoveryEmail: masked,
+    recoveryEmailVerified: verified,
   };
 }
 

@@ -1058,7 +1058,68 @@ try {
 } finally {
   server?.stop();
   server2?.stop();
-  await new Promise((resolve) => stub.close(resolve));
 }
 
+section("legacy and revoked addresses stay in Settings, not login recovery choices");
+for (const state of ["legacy", "revoked"]) {
+  const dir = useTempDataDir(`levix-recovery-${state}-login`);
+  const seed = spawnSync(
+    process.execPath,
+    [
+      "-e",
+      `
+    const secrets = require(${JSON.stringify(join(ROOT, "src/config/secrets.cjs"))});
+    const store = require(${JSON.stringify(join(ROOT, "src/db/store.cjs"))});
+    const vault = require(${JSON.stringify(join(ROOT, "src/config/vault.cjs"))});
+    secrets.setDashboardPassword(${JSON.stringify(PASSWORD)});
+    if (${JSON.stringify(state)} === "legacy") {
+      store.saveBotSetting("auth:recovery-email", vault.seal(JSON.stringify({ email: ${JSON.stringify(ADDRESS)} })));
+    } else {
+      secrets.setRecoveryEmail(${JSON.stringify(ADDRESS)}, ${JSON.stringify(stubToken(ADDRESS))});
+      secrets.markRecoveryUnverified(${JSON.stringify(ADDRESS)}, ${JSON.stringify(stubToken(ADDRESS))});
+    }
+  `,
+    ],
+    { env: { ...process.env, LEVIX_DATA_DIR: dir }, encoding: "utf8" },
+  );
+  equal(`${state}: seed saved record`, seed.status, 0);
+  const fixture = await startServer({ dataDir: dir, trust: "", routes: true });
+  try {
+    const anon = httpClient(fixture.base);
+    const login = await (await anon.call("/login")).text();
+    ok(`${state}: login hides unusable email option`, !login.includes('data-channel="email"'));
+    ok(`${state}: login keeps WhatsApp`, login.includes('data-channel="whatsapp"'));
+    ok(`${state}: login hides saved mask`, !login.includes("re***@e***.com"));
+    const operator = httpClient(fixture.base);
+    equal(
+      `${state}: operator signs in`,
+      (await operator.form("/login", { password: PASSWORD })).status,
+      303,
+    );
+    const status = await (await operator.call("/dashboard/api/recovery-email")).json();
+    equal(`${state}: Settings retains mask`, status.masked, "re***@e***.com");
+    equal(`${state}: Settings requests re-verification`, status.needsVerification, true);
+    equal(`${state}: Settings does not claim verified`, status.verified, false);
+    const started = await operator.json("/dashboard/api/recovery-email/start", {
+      email: ADDRESS,
+      current: PASSWORD,
+      lang: "en",
+    });
+    equal(`${state}: authenticated re-verification starts`, started.status, 200);
+    equal(
+      `${state}: re-verification succeeds`,
+      (await operator.json("/dashboard/api/recovery-email/verify", { code: lastCode() })).status,
+      200,
+    );
+    const verifiedLogin = await (await anon.call("/login")).text();
+    ok(
+      `${state}: verified address restores Email option`,
+      verifiedLogin.includes('data-channel="email"'),
+    );
+  } finally {
+    fixture.stop();
+  }
+}
+
+await new Promise((resolve) => stub.close(resolve));
 finish();
