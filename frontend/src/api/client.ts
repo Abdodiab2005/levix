@@ -88,6 +88,21 @@ function fileNameFromDisposition(header: string | null): string | null {
   return plain?.[1] || null;
 }
 
+// AbortController also works in older Android WebViews without AbortSignal.timeout.
+async function recoveryRequest<T>(endpoint: string, method = "GET", body?: object): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    return await request<T>(endpoint, {
+      method,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function requestFile(endpoint: string, options: RequestInit = {}): Promise<StickerFile> {
   const response = await fetch(`/dashboard/api${endpoint}`, options);
   if (response.status === 401) {
@@ -347,16 +362,27 @@ export const api = {
     api.post("/security/password", { current, next }),
   /** Mask plus verified. The address itself is never in this response. */
   getRecoveryEmail: () =>
-    api.get<{ success: boolean; verified: boolean; masked?: string }>("/recovery-email"),
+    recoveryRequest<{
+      success: boolean;
+      verified: boolean;
+      needsVerification?: boolean;
+      masked?: string;
+    }>("/recovery-email"),
   /** `current` is the panel password: binding an address can reset it. */
   startRecoveryEmail: (email: string, current: string, lang: "en" | "ar") =>
-    api.post<{ success: boolean }>("/recovery-email/start", { email, current, lang }),
-  verifyRecoveryEmail: (code: string) =>
-    api.post<{ success: boolean; verified: true; masked: string }>("/recovery-email/verify", {
-      code,
+    recoveryRequest<{ success: boolean }>("/recovery-email/start", "POST", {
+      email,
+      current,
+      lang,
     }),
+  verifyRecoveryEmail: (code: string) =>
+    recoveryRequest<{ success: boolean; verified: true; masked: string }>(
+      "/recovery-email/verify",
+      "POST",
+      { code },
+    ),
   deleteRecoveryEmail: () =>
-    api.delete<{ success: boolean; verified: false }>("/recovery-email"),
+    recoveryRequest<{ success: boolean; verified: false }>("/recovery-email", "DELETE"),
   // The bot forwards this to the developer; nothing about it is stored locally.
   getFeedbackMeta: () => api.get<FeedbackMeta>("/feedback/meta"),
   getFeedbackDiagnosticsPreview: (client: ClientDiagnostics) =>

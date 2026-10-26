@@ -294,9 +294,11 @@ app.post("/setup", (req, res, next) => {
 // or nothing — never the address itself. A read failure still renders login.
 function loginPageLocals(error, errorCode) {
   let masked = null;
+  let verified = false;
   try {
     const status = recoveryEmail.publicStatus();
-    if (status.verified && status.masked) masked = status.masked;
+    verified = status.verified === true;
+    if (verified && status.masked) masked = status.masked;
   } catch (readError) {
     logger.warn({ err: readError }, "[recovery-email] Could not read the recovery address");
   }
@@ -305,6 +307,7 @@ function loginPageLocals(error, errorCode) {
     errorCode,
     minLength: secrets.MIN_PASSWORD_LENGTH,
     recoveryEmail: masked,
+    recoveryEmailVerified: verified,
   };
 }
 
@@ -341,10 +344,9 @@ app.post("/login", (req, res, next) => {
   const retryAfter = blockedFor(peer);
   if (retryAfter) {
     res.set("Retry-After", String(retryAfter));
-    return res.status(429).render(
-      "login",
-      loginPageLocals("Too many attempts. Try again later.", "tooManyAttempts"),
-    );
+    return res
+      .status(429)
+      .render("login", loginPageLocals("Too many attempts. Try again later.", "tooManyAttempts"));
   }
 
   if (!secrets.verifyDashboardPassword(req.body?.password)) {
@@ -392,7 +394,7 @@ app.post("/reset/request", async (req, res) => {
   });
   const status = result.ok
     ? 200
-    : {
+    : ({
         throttled: 429,
         no_session: 409,
         send_failed: 502,
@@ -402,7 +404,7 @@ app.post("/reset/request", async (req, res) => {
         locked: 429,
         invalid: 400,
         unavailable: 502,
-      }[result.reason] ?? 400;
+      }[result.reason] ?? 400);
   if (result.retryAfter) res.set("Retry-After", String(result.retryAfter));
   res.set("Cache-Control", "no-store");
   return res.status(status).json(result);

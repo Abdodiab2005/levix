@@ -1,6 +1,6 @@
 # Levix Privacy Policy & Google Play Data Safety
 
-> **Effective date:** 2026-10-24
+> **Effective date:** 2026-10-26
 > **Applies to:** the Levix Android app (`net.leviro.levix`) and the Levix
 > self-hosted server distributed from this repository.
 > **Product:** Levix, built by Abdelrhman Diab, Leviro.
@@ -17,9 +17,9 @@ crash reporting. The only things that ever reach the developer are the ones
 **you** choose to send: a message in **Settings → Feedback** (and the optional
 diagnostics block you can tick on that form), and a crash report you press Send
 on in the panel. Nothing is transmitted until you do. A Levix-operated mail
-relay delivers a recovery code only when you ask for one; it does not keep the
-address beyond rate limiting, and it does not send that address to the
-developer.
+relay delivers a recovery code only when you ask for one. It keeps keyed hashes
+for verification, authorization and rate limiting, never the readable address,
+code or token, and it does not send the address to the developer.
 
 Data only leaves your device as a direct result of features you use:
 
@@ -58,10 +58,14 @@ Data only leaves your device as a direct result of features you use:
    to the developer through `levix.leviro.net/api/crash-reports`.
 6. **The Levix mail relay, if you set a recovery email** — verifying the address
    in **Settings**, or choosing **Email** on **Forgot password**, posts the
-   address, the one-time code, and the UI language (`en` or `ar`) to
-   `levix.leviro.net/api/recovery-email`. The relay sends a fixed message that
-   contains only the code. It does not store the address beyond rate limiting,
-   and it does not deliver the address to the developer.
+   address and UI language (`en` or `ar`) to `levix.leviro.net/api/recovery-email`.
+   The relay generates the verification code; confirming it sends the verification
+   ID and your code and returns an address-bound recovery token. Password-reset
+   requests send the address, locally generated code, token and language. The relay
+   sends fixed code messages. It stores only keyed hashes and authorization state,
+   never readable addresses, codes or tokens, and does not forward the address to
+   the developer. Authorization expires after 365 days without an accepted reset;
+   re-verifying the address revokes its previous authorization.
 7. **Your own Levix instance, for a sticker** — when you tap **Make sticker** or
    **Add to stickers** on a file in Media Hub, that one file is uploaded to the
    Levix server running on this phone, because that is what does the conversion.
@@ -78,7 +82,7 @@ control panel — stays in the app's private storage on the device.
 | --- | --- | --- |
 | WhatsApp pairing credentials | App-private SQLite DB + files | Linking to your WhatsApp account |
 | Control-panel password | scrypt hash in the local DB | Logging into the local panel |
-| Recovery email | Sealed with AES-256-GCM in the local DB (`auth:recovery-email`) | A verified address for the panel's forgot-password email code. The panel shows a mask. Settings export does not include it. Unlink does not remove it |
+| Recovery email and authorization token | Sealed with AES-256-GCM in the local DB (`auth:recovery-email`) | A verified address for the panel's forgot-password email code. The panel shows a mask. Settings export does not include it. Unlink does not remove it |
 | AI provider API keys & endpoints | Local DB, sealed with AES-256-GCM | Calling the provider you chose |
 | Bot configuration (prefix, permissions, group settings) | Local DB | Running the bot |
 | AI conversation history | Local DB (`ai_history`) | Conversational context; wiped with `!del` / `!delall` |
@@ -119,13 +123,13 @@ Notes:
 | **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |
 | **The developer** (via `levix.leviro.net/api/feedback`, delivered as a Telegram message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact, an optional file you attach yourself — plus the Levix version, the platform, and the sending app's user-agent. If you tick the diagnostics box, the section 2a diagnostics object and the sanitized technical debug log in section 2b as well | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
 | **The developer** (via `levix.leviro.net/api/crash-reports`) | One crash report: category, sanitized error type/message/stack, an optional screen id, the app + section 2a device fields, the sanitized technical debug log in section 2b, and a few navigation breadcrumbs. Never a phone number, JID, chat/message body or media file | Only when **you** open the panel and press Send on one report; never automatically | Support: so a crash can be grouped and fixed |
-| **Levix mail relay** (`levix.leviro.net/api/recovery-email`) | The recovery email address, the one-time code, and the UI language (`en` or `ar`). No other text | When you verify an address in **Settings**, or when you choose **Email** on **Forgot password** | To deliver the code. The relay does not store the address beyond rate limiting, and it does not pass the address to the developer |
+| **Levix mail relay** (`levix.leviro.net/api/recovery-email`) | The recovery address and UI language; verification ID and entered verification code on confirmation; address, reset code, recovery token and language on reset. No free text | When you verify an address in **Settings**, or when you choose **Email** on **Forgot password** | To verify address ownership and authorize delivery. Only keyed hashes and authorization state persist, never readable addresses, codes or tokens; the address is not forwarded to the developer |
 | **Your own Levix server** (the instance running on this phone, reached at `http://127.0.0.1:3001` — never the developer, never an AI provider) | The one image, GIF or video you picked in Sticker Studio or the Media Hub, as a single upload | Only when you choose it in Sticker Studio or tap **Make sticker** / **Add to stickers** | Sticker Studio works server-side, so it has to receive the file you chose |
 
 Apart from feedback and crash reports you deliberately send, the developer of
 Levix is **not** a recipient of any of the above. The recovery-email relay
-receives only the address, the code, and the language, and it does not store
-the address beyond rate limiting. The AI provider's use of the content you send
+receives the fixed verification and reset fields described above. It stores only
+keyed hashes and authorization state, never readable addresses, codes or tokens. The AI provider's use of the content you send
 it is governed by that provider's own privacy policy.
 
 ### 2a. Optional feedback diagnostics and crash reports
@@ -305,8 +309,9 @@ requested. The in-app WebView loads only the local control panel
   install-local key; the panel only ever reports whether a key is configured,
   never its value.
 - The panel password is stored as a scrypt hash; login is throttled.
-- The recovery email is sealed at rest with the same install key. The panel
-  and the login page show only a mask, never the address.
+- The recovery email and its authorization token are sealed together with the
+  same install key. The panel and login page show only a mask, never the address
+  or token. Settings exports exclude both.
 - Provider base URLs are validated on save and on use: public endpoints must
   be HTTPS, and private/reserved/metadata addresses are rejected (explicit
   loopback is allowed for local Ollama/LM Studio servers).
@@ -344,8 +349,8 @@ Google Play.
 → **No**. Levix has no developer-operated account or cloud copy to delete.
 Users can still delete locally stored data with the in-app controls described
 in section 4, unlink WhatsApp, or uninstall the app. Remove in Settings deletes
-the recovery email from the device; the relay does not keep the address beyond
-rate limiting. Feedback a user chose to
+the recovery email and token from the device. The relay retains only keyed
+hashes and authorization state subject to expiry, never the readable address. Feedback a user chose to
 send is the one thing the developer holds; crash reports a user chose to send
 are held for at most 30 days and then deleted. Both are deleted on request
 through the contact in section 9.

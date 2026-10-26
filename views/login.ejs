@@ -85,7 +85,7 @@
             <div class="auth-head">
               <span class="eyebrow" data-i18n="resetEyebrow">Password reset</span>
               <h1 data-i18n="resetTitle">Reset your password</h1>
-              <% if (recoveryEmail) { %>
+              <% if (recoveryEmailVerified && recoveryEmail) { %>
               <p class="sub" data-i18n="resetSubtitleChannels">
                 Levix can send a one-time code to WhatsApp, or to your recovery email. The code works for 10 minutes.
               </p>
@@ -102,7 +102,7 @@
                 <span data-i18n="resetSend">Send code to WhatsApp</span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
               </button>
-              <% if (recoveryEmail) { %>
+              <% if (recoveryEmailVerified && recoveryEmail) { %>
               <button type="button" class="btn auth-submit" id="reset-send-email" data-channel="email">
                 <span data-i18n="resetSendEmail">Send code to email</span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
@@ -172,6 +172,7 @@
                 <span data-i18n="resetSubmit">Set new password</span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
               </button>
+              <button type="button" class="link-btn" id="reset-choose-channel" data-i18n="resetChooseChannel">Choose another recovery method</button>
             </form>
 
             <div class="error" id="reset-error" role="alert" hidden></div>
@@ -262,16 +263,19 @@
         });
 
         async function postJson(url, body) {
-          const response = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body || {}),
-          });
-          let data = {};
+          const controller = new AbortController();
+          const timer = setTimeout(function () { controller.abort(); }, 20000);
           try {
-            data = await response.json();
-          } catch {}
-          return data;
+            const response = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body || {}),
+              signal: controller.signal,
+            });
+            return await response.json();
+          } finally {
+            clearTimeout(timer);
+          }
         }
 
         document.getElementById("forgot-link").addEventListener("click", showReset);
@@ -302,7 +306,8 @@
           } else if (result.reason === "locked") {
             showErrorKey("resetErrLocked");
           } else if (result.reason === "rate_limited") {
-            showErrorKey("resetErrRateLimited");
+            if (result.retryAfter) showErrorKey("resetErrThrottled", { n: String(result.retryAfter) });
+            else showErrorKey("resetErrRateLimited");
           } else if (result.reason === "unavailable") {
             showErrorKey("resetErrUnavailable");
           } else if (result.reason === "invalid") {
@@ -334,8 +339,20 @@
           setChannelBusy(false);
         });
 
+        var confirming = false;
+        document.getElementById("reset-choose-channel").addEventListener("click", function () {
+          if (confirming) return;
+          form.hidden = true;
+          channels.hidden = false;
+          document.getElementById("reset-code").value = "";
+          hideError();
+        });
         form.addEventListener("submit", async function (event) {
           event.preventDefault();
+          if (confirming) return;
+          confirming = true;
+          var submit = form.querySelector('[type="submit"]');
+          submit.disabled = true;
           hideError();
           try {
             const result = await postJson("/reset/confirm", {
@@ -356,6 +373,7 @@
               currentErrorState = { type: "wrong_code", attemptsLeft: result.attemptsLeft };
               renderCurrentError();
             } else if (
+              result.reason === "address_changed" ||
               result.reason === "expired" ||
               result.reason === "no_pending" ||
               result.reason === "too_many_attempts"
@@ -379,6 +397,9 @@
             }
           } catch {
             showErrorKey("resetErrServer");
+          } finally {
+            confirming = false;
+            submit.disabled = false;
           }
         });
       })();

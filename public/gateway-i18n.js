@@ -64,6 +64,7 @@
       repeatPassword: "Repeat password",
       repeatPlaceholder: "Type it again",
       resetSubmit: "Set new password",
+      resetChooseChannel: "Choose another recovery method",
       resetErrThrottled: "Too many requests. Try again in {n} seconds.",
       resetErrNoSession:
         "WhatsApp isn't connected, so the code can't be sent. Sign in on the server and run `levix reset-password`, or start the WhatsApp session first.",
@@ -174,6 +175,7 @@
       repeatPassword: "أعِد كتابة كلمة المرور",
       repeatPlaceholder: "اكتبها مرة أخرى",
       resetSubmit: "تعيين كلمة المرور الجديدة",
+      resetChooseChannel: "اختر طريقة استرداد أخرى",
       resetErrThrottled: "طلبات كثيرة جداً. حاول مرة أخرى خلال {n} ثانية.",
       resetErrNoSession:
         "واتساب غير متصل، لذا لا يمكن إرسال الكود. سجّل الدخول على الخادم ونفّذ `levix reset-password`، أو ابدأ جلسة واتساب أولاً.",

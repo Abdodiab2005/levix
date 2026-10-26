@@ -211,12 +211,21 @@ tasks.register<Exec>("stageLevixApp") {
     inputs.dir(File(repoRoot, "src"))
     inputs.dir(File(repoRoot, "views"))
     inputs.dir(File(repoRoot, "public"))
-    inputs.dir(File(repoRoot, "frontend/src"))
-    inputs.file(File(repoRoot, "frontend/package.json"))
+    // Config, HTML, public assets and lockfile changes must invalidate the ZIP
+    // too: checking only frontend/src can ship an old dashboard from Gradle's
+    // up-to-date cache. The build writes public/dashboard outside this tree.
+    inputs.files(fileTree(File(repoRoot, "frontend")) {
+        exclude("node_modules/**", "*.tsbuildinfo")
+    })
+    inputs.dir(File(repoRoot, "node_modules"))
     inputs.dir(File(repoRoot, "bin"))
     inputs.file(File(repoRoot, "app.cjs"))
     inputs.file(File(repoRoot, "scheduler.cjs"))
     inputs.file(File(repoRoot, "package.json"))
+    inputs.file(File(repoRoot, "package-lock.json"))
+    inputs.file(File(repoRoot, "LICENSE"))
+    inputs.file(File(repoRoot, "scripts/build-frontend.mjs"))
+    inputs.file(File(repoRoot, "android/scripts/stage-levix-app.sh"))
     inputs.file(File(repoRoot, "android/host-boot.mjs"))
     outputs.file(file("src/main/assets/levix-app.zip"))
 }
