@@ -65,6 +65,12 @@ const logger = pino(
   ]),
 );
 
+// Writes only to the sanitized debug log: never combined.log, error.log or the
+// console. For detail that matters only when diagnosing (Baileys, Node's
+// network layer), and that leaves the device only inside an operator-sent
+// crash report or feedback with diagnostics ticked.
+logger.debugOnly = pino(base, debugLog.stream);
+
 const MAX_READ_BYTES = 256 * 1024;
 
 /** Read only the bounded tail of the operational log, never arbitrary files. */

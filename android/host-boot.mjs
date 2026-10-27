@@ -17,7 +17,40 @@ try {
   process.exit(1);
 }
 
+import fs from "node:fs";
 import readline from "node:readline";
+import tls from "node:tls";
+
+// Termux builds Node to trust OpenSSL's default store, which points at
+// /data/data/com.termux/files/usr/etc/tls. Levix has no such directory, so
+// every TLS handshake failed with UNABLE_TO_GET_ISSUER_CERT_LOCALLY, and
+// Baileys reported it as close 500. Trust Node's bundled roots plus Android's
+// own store (updated with the OS) instead.
+const ANDROID_CA_DIRS = ["/apex/com.android.conscrypt/cacerts", "/system/etc/security/cacerts"];
+try {
+  const certs = new Set(tls.getCACertificates("bundled"));
+  for (const dir of ANDROID_CA_DIRS) {
+    let files;
+    try {
+      files = fs.readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const file of files) {
+      try {
+        const pem = fs
+          .readFileSync(`${dir}/${file}`, "utf8")
+          .match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/);
+        if (pem) certs.add(`${pem[0]}\n`);
+      } catch {}
+    }
+    break;
+  }
+  tls.setDefaultCACertificates([...certs]);
+  console.log("ca ok " + certs.size);
+} catch (error) {
+  console.log("ca error " + (error && error.message ? error.message : error));
+}
 
 let session = null;
 

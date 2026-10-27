@@ -643,6 +643,15 @@ export const translations = {
     debugLogHint:
       "سجل تقني منقّح من آخر 14 يوماً. لا يحتوي كلمات مرور أو مفاتيح أو أرقام هواتف أو محتوى رسائل.",
     tabDiagnostics: "التشخيص والأعطال",
+    connectionLogLevel: "سجل تشخيص الاتصال",
+    connectionLogLevelDesc:
+      "كمية ما يكتبه Baileys وطبقة الشبكة في Node في سجل التشخيص المنقّح، الذي لا يغادر الجهاز إلا إذا أرفقته بتقرير عطل أو ملاحظات. يُطبَّق عند بدء الجلسة التالية. مستوى Trace يسجل كل إطار ويملأ الحد اليومي 5 ميجابايت بسرعة.",
+    connectionLogOff: "إيقاف",
+    connectionLogError: "الأخطاء",
+    connectionLogWarn: "التحذيرات",
+    connectionLogInfo: "معلومات",
+    connectionLogDebug: "Debug (مفصّل)",
+    connectionLogTrace: "Trace (كل إطار)",
     diagnosticsTitle: "تقارير الأعطال والتشخيص",
     diagnosticsDesc:
       "راجع تقارير الأعطال المحلية قبل إرسالها لمساعدتنا في تحسين النظام وحل المشاكل.",
@@ -1739,6 +1748,15 @@ export const translations = {
     debugLogHint:
       "Sanitized technical log from the last 14 days. No passwords, keys, phone numbers or message content.",
     tabDiagnostics: "Diagnostics",
+    connectionLogLevel: "Connection debug logging",
+    connectionLogLevelDesc:
+      "How much Baileys and Node's network layer write to the sanitized debug log, which leaves the device only when you attach it to a crash report or feedback. Applies on the next session start. Trace records every protocol frame and fills the 5 MB daily cap fast.",
+    connectionLogOff: "Off",
+    connectionLogError: "Errors",
+    connectionLogWarn: "Warnings",
+    connectionLogInfo: "Info",
+    connectionLogDebug: "Debug (detailed)",
+    connectionLogTrace: "Trace (every frame)",
     diagnosticsTitle: "Crash Reports & Diagnostics",
     diagnosticsDesc:
       "Review local crash reports before sending them to help diagnose and fix issues.",

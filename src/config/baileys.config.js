@@ -1,6 +1,19 @@
 import { Browsers } from "@whiskeysockets/baileys";
+import { createRequire } from "module";
 import NodeCache from "node-cache";
-import pino from "pino";
+
+const require = createRequire(import.meta.url);
+const settings = require("./settings.cjs");
+const { createBaileysLogger } = require("../diagnostics/baileysLog.cjs");
+
+/**
+ * Baileys writes into the sanitized debug log at the operator's chosen level,
+ * through the shaping in src/diagnostics/baileysLog.cjs. Read per socket, so a
+ * change applies on the next session start.
+ */
+export function baileysLogger() {
+  return createBaileysLogger(settings.get("connection_log_level") || "info");
+}
 
 // rc10 supports several pluggable caches; we keep them in-process so message
 // retries / device discovery don't keep slamming the network.
@@ -31,7 +44,7 @@ export const BAILEYS_BROWSER_PAIRING = Browsers.macOS("Chrome");
 export const getBaileysConfig = (cachedGroupMetadata, { pairingCode = false } = {}) => ({
   browser: pairingCode ? BAILEYS_BROWSER_PAIRING : BAILEYS_BROWSER_QR,
   markOnlineOnConnect: false,
-  logger: pino({ level: "silent" }),
+  logger: baileysLogger(),
   cachedGroupMetadata,
   version: [2, 3000, 1044062641],
 

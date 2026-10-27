@@ -106,6 +106,43 @@ export function classifyDisconnect(statusCode) {
 }
 
 /**
+ * The facts inside a close, for the log. Baileys wraps a WebSocket error in a
+ * Boom whose default status is 500 and whose payload says only "Internal
+ * Server Error"; the useful part (a TLS, DNS or socket error) rides in
+ * `error.data`. No message content is ever in here.
+ *
+ * @param {any} error - `lastDisconnect.error`
+ */
+export function describeCloseError(error) {
+  if (!error || typeof error !== "object") return { detail: String(error ?? "") };
+  const cause = (e) =>
+    e && typeof e === "object"
+      ? {
+          name: e.name,
+          detail: e.message,
+          code: e.code,
+          errno: e.errno,
+          syscall: e.syscall,
+          address: e.address,
+          port: e.port,
+          hostname: e.hostname,
+          reason: e.reason,
+          cause: e.cause?.message ?? e.cause?.code,
+        }
+      : e;
+  return {
+    name: error.name,
+    detail: error.message,
+    statusCode: error.output?.statusCode,
+    payload: error.output?.payload?.error,
+    data: cause(error.data),
+    cause: cause(error.cause),
+    stack:
+      typeof error.stack === "string" ? error.stack.split("\n").slice(0, 6).join("\n") : undefined,
+  };
+}
+
+/**
  * Everything that has to happen the moment a connection is open: record the
  * paired account as an owner, seed the permission rosters, (re)start the
  * scheduled jobs against the new socket, and cache the group metadata.
@@ -196,7 +233,9 @@ let lastFullGroupSyncAt = 0;
 
 export async function cacheAllGroups(sock, { force = false, now = Date.now() } = {}) {
   if (!force && lastFullGroupSyncAt && now - lastFullGroupSyncAt < GROUP_SYNC_TTL_MS) {
-    logger.info("[Cache] Recent full group sync is still fresh — skipping groupFetchAllParticipating");
+    logger.info(
+      "[Cache] Recent full group sync is still fresh — skipping groupFetchAllParticipating",
+    );
     return;
   }
 

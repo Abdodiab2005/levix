@@ -41,6 +41,10 @@ export async function bootstrapCore({ autoStart = false } = {}) {
   // the first one is using.
   acquireSingleInstanceLock();
 
+  // Runtime, CA store and (when connection debug logging is on) every
+  // outbound socket. See src/diagnostics/nodeRuntime.cjs.
+  require("../diagnostics/nodeRuntime.cjs").installNodeDiagnostics();
+
   // Temp media the commands write while answering lives with the rest of the
   // bot's state, not next to the code.
   ensureDataDir("media");

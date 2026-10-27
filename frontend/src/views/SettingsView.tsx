@@ -485,6 +485,7 @@ export const SettingsView: React.FC = () => {
   const panelLang = useSavedValue<Language>(language);
   const botLang = useSavedValue(String(settings["bot_language"] || "auto"));
   const timezone = useSavedValue(String(settings["bot_timezone"] || "Africa/Cairo"));
+  const connectionLogLevel = useSavedValue(String(settings["connection_log_level"] || "info"));
   const weatherKey = useSavedValue(String(settings["openweathermap_api_key"] || ""));
   const youtubeKey = useSavedValue(String(settings["youtube_api_key"] || ""));
   const forwardTtl = useSavedValue(Number(settings["forward_score_ttl_days"] || 30));
@@ -1294,7 +1295,36 @@ export const SettingsView: React.FC = () => {
       )}
 
       {activeTab === "diagnostics" && (
-        <div data-tour="settings-diagnostics">
+        <div data-tour="settings-diagnostics" className="flex flex-col gap-5">
+          <Card>
+            <SaveField
+              label={t("connectionLogLevel")}
+              description={t("connectionLogLevelDesc")}
+              htmlFor="connection-log-level"
+              dirty={connectionLogLevel.dirty}
+              saving={connectionLogLevel.status === "saving"}
+              justSaved={connectionLogLevel.status === "saved"}
+              error={connectionLogLevel.error}
+              onSave={() =>
+                connectionLogLevel.save((next) => persistSetting("connection_log_level", next))
+              }
+              onRevert={connectionLogLevel.revert}
+              {...saveLabels}
+            >
+              <Select
+                id="connection-log-level"
+                value={connectionLogLevel.value}
+                onChange={(e) => connectionLogLevel.setValue(e.target.value)}
+              >
+                <option value="silent">{t("connectionLogOff")}</option>
+                <option value="error">{t("connectionLogError")}</option>
+                <option value="warn">{t("connectionLogWarn")}</option>
+                <option value="info">{t("connectionLogInfo")}</option>
+                <option value="debug">{t("connectionLogDebug")}</option>
+                <option value="trace">{t("connectionLogTrace")}</option>
+              </Select>
+            </SaveField>
+          </Card>
           <DiagnosticsView />
         </div>
       )}

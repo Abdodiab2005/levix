@@ -435,6 +435,23 @@ const SETTINGS = [
     label: "Proxy password",
     hint: "Stored like an API key: never sent back to this page, never logged.",
   },
+  {
+    key: "connection_log_level",
+    type: "string",
+    default: "info",
+    choices: ["silent", "error", "warn", "info", "debug", "trace"],
+    choiceLabels: {
+      silent: "Off",
+      error: "Errors",
+      warn: "Warnings",
+      info: "Info",
+      debug: "Debug (detailed)",
+      trace: "Trace (every frame)",
+    },
+    group: "whatsapp",
+    label: "Connection debug logging",
+    hint: "How much Baileys and Node's network layer write to the sanitized debug log, which leaves the device only when you attach it to a crash report or feedback. Applies on the next session start. Trace records every protocol frame and fills the 5 MB daily cap fast.",
+  },
 
   // --- Server ------------------------------------------------------------
   {

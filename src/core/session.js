@@ -60,7 +60,7 @@ import {
   pauseAllSchedules,
   saveQrCode,
 } from "../utils/storage.esm.js";
-import { classifyDisconnect, handleConnectionOpen } from "./connection.js";
+import { classifyDisconnect, describeCloseError, handleConnectionOpen } from "./connection.js";
 import { setupEventListeners } from "./events.js";
 import {
   createProxyAgents,
@@ -265,6 +265,8 @@ export class WhatsAppSession {
     emit = () => {},
     retryDelaysMs = RETRY_SCHEDULE_MS,
     log = logger,
+    // Detail that belongs only in the sanitized debug log.
+    debugLog = logger.debugOnly,
     pairingCodeDelayMs = 1500,
     isLinked = isPairedSession,
     clearDirectory = clearAccountScopedState,
@@ -282,6 +284,7 @@ export class WhatsAppSession {
     this.clearCredentials = clearCredentials;
     this.retryDelaysMs = retryDelaysMs;
     this.log = log;
+    this.debugLog = debugLog;
     this.pairingCodeDelayMs = pairingCodeDelayMs;
   }
 
@@ -867,8 +870,10 @@ export class WhatsAppSession {
 
   async #onClose(lastDisconnect) {
     const statusCode = lastDisconnect?.error?.output?.statusCode;
+    // The message first: for a WebSocket error the payload is only the HTTP
+    // phrase for Boom's default 500, while the message names the real error.
     const reasonText =
-      lastDisconnect?.error?.output?.payload?.error || lastDisconnect?.error?.message || "Unknown";
+      lastDisconnect?.error?.message || lastDisconnect?.error?.output?.payload?.error || "Unknown";
 
     this.#lastDisconnect = { statusCode: statusCode ?? null, reason: reasonText, at: Date.now() };
     const closedSocket = this.#socket;
@@ -895,6 +900,10 @@ export class WhatsAppSession {
     this.log.warn(
       `[Session] Connection closed (${statusCode ?? "no status"}: ${reasonText}) — ${verdict.label}` +
         (this.#proxyLabel ? ` via ${this.#proxyLabel}` : ""),
+    );
+    this.debugLog.warn(
+      { close: describeCloseError(lastDisconnect?.error), verdict: verdict.reason },
+      "[Session] close detail",
     );
 
     if (this.#shuttingDown) return;

@@ -1176,6 +1176,24 @@ action, and the two consents are separate.
   failure is swallowed and never touches the other streams. Files expire after
   14 days (`sweepExpired()` in `src/db/db.cjs`, boot + every six hours) and
   `logger.clearLogs()` deletes the directory.
+- Baileys and Node's network layer write only to that debug log, through
+  `logger.debugOnly` (never `combined.log`, `error.log` or the console). The
+  `connection_log_level` setting (default `info`, Settings → Diagnostics) sets
+  how much; it applies on the next session start. Baileys records pass through
+  `src/diagnostics/baileysLog.cjs` first, which reduces protocol nodes, attrs,
+  `me`, pushName and app-state data to their structure, because a display name
+  or group subject is ordinary text to the sanitizer
+  (`tests/baileys-log.test.mjs`). `src/diagnostics/nodeRuntime.cjs` logs the
+  runtime and its CA store at boot and, at debug/trace, every outbound socket's
+  DNS, TCP and TLS result (hosts, never paths or bodies). A connection close
+  logs its full error there as well (`describeCloseError()`): Baileys reports
+  any WebSocket error without an `E…` code as 500, so the status alone says
+  nothing.
+- Android: the Termux-built Node trusts OpenSSL's default store under
+  `/data/data/com.termux`, which Levix does not have. `android/host-boot.mjs`
+  sets Node's default CA list to its bundled roots plus Android's system store
+  before Levix starts; without that every TLS handshake fails with
+  `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`.
 - That log leaves the device in exactly two places, both operator-started:
   feedback sent with the diagnostics box ticked gets a top-level `debugLog`
   string, and a crash report send adds `debugLog` to its upload body. Each
