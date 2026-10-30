@@ -127,16 +127,6 @@
           }
         },
         "packages": {
-          "14-files.js": {
-            "type": "unknown",
-            "compressed": 80,
-            "uncompressed": 90
-          },
-          "2-files.js": {
-            "type": "unknown",
-            "compressed": 82,
-            "uncompressed": 96
-          },
           "@biomejs/biome": {
             "type": "dev",
             "compressed": 137931,
@@ -259,8 +249,8 @@
           },
           "@types/node": {
             "type": "prod",
-            "compressed": 551181,
-            "uncompressed": 3011523
+            "compressed": 458885,
+            "uncompressed": 2379575
           },
           "@types/retry": {
             "type": "prod",
@@ -277,15 +267,25 @@
             "compressed": 881698,
             "uncompressed": 7259838
           },
+          "@whiskeysockets/baileys/node_modules/pino": {
+            "type": "prod",
+            "compressed": 272064,
+            "uncompressed": 777390
+          },
+          "@whiskeysockets/baileys/node_modules/thread-stream": {
+            "type": "prod",
+            "compressed": 27361,
+            "uncompressed": 74238
+          },
           "accepts": {
             "type": "prod",
-            "compressed": 16800,
-            "uncompressed": 50507
+            "compressed": 5622,
+            "uncompressed": 16917
           },
           "agent-base": {
             "type": "prod",
-            "compressed": 21208,
-            "uncompressed": 57902
+            "compressed": 5340,
+            "uncompressed": 13243
           },
           "ansi-regex": {
             "type": "prod",
@@ -317,6 +317,16 @@
             "compressed": 414238,
             "uncompressed": 1460146
           },
+          "axios/node_modules/agent-base": {
+            "type": "prod",
+            "compressed": 9568,
+            "uncompressed": 28259
+          },
+          "axios/node_modules/https-proxy-agent": {
+            "type": "prod",
+            "compressed": 7541,
+            "uncompressed": 19375
+          },
           "base64-js": {
             "type": "prod",
             "compressed": 4200,
@@ -336,6 +346,11 @@
             "type": "prod",
             "compressed": 13067,
             "uncompressed": 42536
+          },
+          "body-parser/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
           },
           "buffer": {
             "type": "prod",
@@ -422,6 +437,11 @@
             "compressed": 3738,
             "uncompressed": 9556
           },
+          "concat-stream/node_modules/readable-stream": {
+            "type": "prod",
+            "compressed": 41190,
+            "uncompressed": 123971
+          },
           "content-disposition": {
             "type": "prod",
             "compressed": 7900,
@@ -429,8 +449,8 @@
           },
           "content-type": {
             "type": "prod",
-            "compressed": 16834,
-            "uncompressed": 45355
+            "compressed": 3988,
+            "uncompressed": 10471
           },
           "cookie": {
             "type": "prod",
@@ -439,8 +459,8 @@
           },
           "cookie-signature": {
             "type": "prod",
-            "compressed": 4584,
-            "uncompressed": 9076
+            "compressed": 2529,
+            "uncompressed": 4993
           },
           "cors": {
             "type": "prod",
@@ -464,8 +484,8 @@
           },
           "debug": {
             "type": "prod",
-            "compressed": 33108,
-            "uncompressed": 94036
+            "compressed": 14582,
+            "uncompressed": 42793
           },
           "decamelize": {
             "type": "prod",
@@ -537,6 +557,26 @@
             "compressed": 15958,
             "uncompressed": 45773
           },
+          "engine.io/node_modules/accepts": {
+            "type": "prod",
+            "compressed": 5589,
+            "uncompressed": 16795
+          },
+          "engine.io/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "engine.io/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
+          },
+          "engine.io/node_modules/negotiator": {
+            "type": "prod",
+            "compressed": 9151,
+            "uncompressed": 27375
+          },
           "env-paths": {
             "type": "prod",
             "compressed": 3996,
@@ -572,11 +612,6 @@
             "compressed": 4403,
             "uncompressed": 10809
           },
-          "eventemitter3": {
-            "type": "unknown",
-            "compressed": 13376,
-            "uncompressed": 45088
-          },
           "express": {
             "type": "prod",
             "compressed": 25401,
@@ -586,6 +621,26 @@
             "type": "prod",
             "compressed": 21651,
             "uncompressed": 77151
+          },
+          "express-session/node_modules/cookie-signature": {
+            "type": "prod",
+            "compressed": 2055,
+            "uncompressed": 4083
+          },
+          "express-session/node_modules/debug": {
+            "type": "prod",
+            "compressed": 18526,
+            "uncompressed": 51243
+          },
+          "express-session/node_modules/ms": {
+            "type": "prod",
+            "compressed": 2736,
+            "uncompressed": 6266
+          },
+          "express/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
           },
           "extend": {
             "type": "prod",
@@ -612,85 +667,10 @@
             "compressed": 37947,
             "uncompressed": 139263
           },
-          "file1.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file10.js": {
-            "type": "unknown",
-            "compressed": 152,
-            "uncompressed": 170
-          },
-          "file11.js": {
-            "type": "unknown",
-            "compressed": 152,
-            "uncompressed": 170
-          },
-          "file12.js": {
-            "type": "unknown",
-            "compressed": 152,
-            "uncompressed": 170
-          },
-          "file13.js": {
-            "type": "unknown",
-            "compressed": 152,
-            "uncompressed": 170
-          },
-          "file14.js": {
-            "type": "unknown",
-            "compressed": 260,
-            "uncompressed": 392
-          },
-          "file2.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file3.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file4.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file5.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file6.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file7.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file8.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file9.js": {
-            "type": "unknown",
-            "compressed": 152,
-            "uncompressed": 170
-          },
           "finalhandler": {
             "type": "prod",
             "compressed": 6459,
             "uncompressed": 17525
-          },
-          "find-up": {
-            "type": "unknown",
-            "compressed": 4054,
-            "uncompressed": 11611
           },
           "follow-redirects": {
             "type": "prod",
@@ -701,6 +681,16 @@
             "type": "prod",
             "compressed": 24731,
             "uncompressed": 83901
+          },
+          "form-data/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "form-data/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
           },
           "formdata-polyfill": {
             "type": "prod",
@@ -726,6 +716,16 @@
             "type": "prod",
             "compressed": 116861,
             "uncompressed": 451269
+          },
+          "gaxios/node_modules/agent-base": {
+            "type": "prod",
+            "compressed": 6300,
+            "uncompressed": 16400
+          },
+          "gaxios/node_modules/https-proxy-agent": {
+            "type": "prod",
+            "compressed": 7087,
+            "uncompressed": 18328
           },
           "gcp-metadata": {
             "type": "prod",
@@ -797,10 +797,15 @@
             "compressed": 2978,
             "uncompressed": 6784
           },
+          "http-response-object/node_modules/@types/node": {
+            "type": "prod",
+            "compressed": 92296,
+            "uncompressed": 631948
+          },
           "https-proxy-agent": {
             "type": "prod",
-            "compressed": 21821,
-            "uncompressed": 58046
+            "compressed": 7193,
+            "uncompressed": 20343
           },
           "iconv-lite": {
             "type": "prod",
@@ -867,11 +872,6 @@
             "compressed": 30665,
             "uncompressed": 130229
           },
-          "locate-path": {
-            "type": "unknown",
-            "compressed": 2994,
-            "uncompressed": 6584
-          },
           "long": {
             "type": "prod",
             "compressed": 30074,
@@ -899,13 +899,13 @@
           },
           "mime-db": {
             "type": "prod",
-            "compressed": 114707,
-            "uncompressed": 842183
+            "compressed": 30758,
+            "uncompressed": 225566
           },
           "mime-types": {
             "type": "prod",
-            "compressed": 24747,
-            "uncompressed": 77157
+            "compressed": 7425,
+            "uncompressed": 22341
           },
           "minimist": {
             "type": "prod",
@@ -914,8 +914,8 @@
           },
           "ms": {
             "type": "prod",
-            "compressed": 5588,
-            "uncompressed": 12987
+            "compressed": 2852,
+            "uncompressed": 6721
           },
           "music-metadata": {
             "type": "prod",
@@ -924,8 +924,8 @@
           },
           "negotiator": {
             "type": "prod",
-            "compressed": 27798,
-            "uncompressed": 83460
+            "compressed": 9496,
+            "uncompressed": 28710
           },
           "node-cache": {
             "type": "prod",
@@ -977,20 +977,15 @@
             "compressed": 1841,
             "uncompressed": 4046
           },
-          "p-limit": {
-            "type": "unknown",
-            "compressed": 3506,
-            "uncompressed": 7390
-          },
-          "p-locate": {
-            "type": "unknown",
-            "compressed": 3515,
-            "uncompressed": 7285
-          },
           "p-queue": {
             "type": "prod",
             "compressed": 20693,
             "uncompressed": 68476
+          },
+          "p-queue/node_modules/eventemitter3": {
+            "type": "prod",
+            "compressed": 13376,
+            "uncompressed": 45088
           },
           "p-retry": {
             "type": "prod",
@@ -1029,23 +1024,48 @@
           },
           "pino": {
             "type": "prod",
-            "compressed": 457221,
-            "uncompressed": 1480361
+            "compressed": 187539,
+            "uncompressed": 705711
           },
           "pino-abstract-transport": {
             "type": "prod",
-            "compressed": 31957,
-            "uncompressed": 117636
+            "compressed": 10391,
+            "uncompressed": 38204
           },
           "pino-pretty": {
             "type": "prod",
             "compressed": 82020,
             "uncompressed": 274583
           },
+          "pino-pretty/node_modules/pino-abstract-transport": {
+            "type": "prod",
+            "compressed": 10783,
+            "uncompressed": 39716
+          },
+          "pino-pretty/node_modules/pump": {
+            "type": "prod",
+            "compressed": 4100,
+            "uncompressed": 8803
+          },
+          "pino-pretty/node_modules/sonic-boom": {
+            "type": "prod",
+            "compressed": 29290,
+            "uncompressed": 123700
+          },
           "pino-std-serializers": {
             "type": "prod",
             "compressed": 13546,
             "uncompressed": 54011
+          },
+          "pino/node_modules/pino-abstract-transport": {
+            "type": "prod",
+            "compressed": 10783,
+            "uncompressed": 39716
+          },
+          "pino/node_modules/real-require": {
+            "type": "prod",
+            "compressed": 2058,
+            "uncompressed": 3929
           },
           "pngjs": {
             "type": "prod",
@@ -1087,11 +1107,6 @@
             "compressed": 6627,
             "uncompressed": 15643
           },
-          "pump": {
-            "type": "unknown",
-            "compressed": 4100,
-            "uncompressed": 8803
-          },
           "qrcode": {
             "type": "prod",
             "compressed": 54465,
@@ -1127,15 +1142,10 @@
             "compressed": 6808,
             "uncompressed": 18495
           },
-          "readable-stream": {
-            "type": "unknown",
-            "compressed": 41190,
-            "uncompressed": 123971
-          },
           "real-require": {
             "type": "prod",
-            "compressed": 6497,
-            "uncompressed": 12685
+            "compressed": 2381,
+            "uncompressed": 4827
           },
           "require-directory": {
             "type": "prod",
@@ -1159,8 +1169,8 @@
           },
           "safe-buffer": {
             "type": "prod",
-            "compressed": 20466,
-            "uncompressed": 63787
+            "compressed": 10306,
+            "uncompressed": 32101
           },
           "safe-stable-stringify": {
             "type": "prod",
@@ -1242,6 +1252,26 @@
             "compressed": 19849,
             "uncompressed": 64127
           },
+          "socket.io/node_modules/accepts": {
+            "type": "prod",
+            "compressed": 5589,
+            "uncompressed": 16795
+          },
+          "socket.io/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "socket.io/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
+          },
+          "socket.io/node_modules/negotiator": {
+            "type": "prod",
+            "compressed": 9151,
+            "uncompressed": 27375
+          },
           "socks": {
             "type": "prod",
             "compressed": 30967,
@@ -1254,8 +1284,8 @@
           },
           "sonic-boom": {
             "type": "prod",
-            "compressed": 50090,
-            "uncompressed": 208900
+            "compressed": 20800,
+            "uncompressed": 85200
           },
           "split2": {
             "type": "prod",
@@ -1277,6 +1307,11 @@
             "compressed": 5286,
             "uncompressed": 15298
           },
+          "string_decoder/node_modules/safe-buffer": {
+            "type": "prod",
+            "compressed": 10160,
+            "uncompressed": 31686
+          },
           "strip-ansi": {
             "type": "prod",
             "compressed": 2090,
@@ -1294,8 +1329,13 @@
           },
           "thread-stream": {
             "type": "prod",
-            "compressed": 56976,
-            "uncompressed": 157551
+            "compressed": 29615,
+            "uncompressed": 83313
+          },
+          "thread-stream/node_modules/real-require": {
+            "type": "prod",
+            "compressed": 2058,
+            "uncompressed": 3929
           },
           "toidentifier": {
             "type": "prod",
@@ -1316,6 +1356,11 @@
             "type": "prod",
             "compressed": 7031,
             "uncompressed": 21269
+          },
+          "type-is/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
           },
           "typedarray": {
             "type": "prod",
@@ -1406,6 +1451,26 @@
             "type": "prod",
             "compressed": 19511,
             "uncompressed": 71482
+          },
+          "yargs/node_modules/find-up": {
+            "type": "prod",
+            "compressed": 4054,
+            "uncompressed": 11611
+          },
+          "yargs/node_modules/locate-path": {
+            "type": "prod",
+            "compressed": 2994,
+            "uncompressed": 6584
+          },
+          "yargs/node_modules/p-limit": {
+            "type": "prod",
+            "compressed": 3506,
+            "uncompressed": 7390
+          },
+          "yargs/node_modules/p-locate": {
+            "type": "prod",
+            "compressed": 3515,
+            "uncompressed": 7285
           }
         },
         "devCompressed": 32008227
@@ -1537,16 +1602,6 @@
           }
         },
         "packages": {
-          "14-files.js": {
-            "type": "unknown",
-            "compressed": 80,
-            "uncompressed": 90
-          },
-          "2-files.js": {
-            "type": "unknown",
-            "compressed": 82,
-            "uncompressed": 96
-          },
           "@biomejs/biome": {
             "type": "dev",
             "compressed": 137931,
@@ -1669,8 +1724,8 @@
           },
           "@types/node": {
             "type": "prod",
-            "compressed": 551181,
-            "uncompressed": 3011523
+            "compressed": 458885,
+            "uncompressed": 2379575
           },
           "@types/retry": {
             "type": "prod",
@@ -1687,15 +1742,25 @@
             "compressed": 881698,
             "uncompressed": 7259838
           },
+          "@whiskeysockets/baileys/node_modules/pino": {
+            "type": "prod",
+            "compressed": 272064,
+            "uncompressed": 777390
+          },
+          "@whiskeysockets/baileys/node_modules/thread-stream": {
+            "type": "prod",
+            "compressed": 27361,
+            "uncompressed": 74238
+          },
           "accepts": {
             "type": "prod",
-            "compressed": 16800,
-            "uncompressed": 50507
+            "compressed": 5622,
+            "uncompressed": 16917
           },
           "agent-base": {
             "type": "prod",
-            "compressed": 21208,
-            "uncompressed": 57902
+            "compressed": 5340,
+            "uncompressed": 13243
           },
           "ansi-regex": {
             "type": "prod",
@@ -1727,6 +1792,16 @@
             "compressed": 414238,
             "uncompressed": 1460146
           },
+          "axios/node_modules/agent-base": {
+            "type": "prod",
+            "compressed": 9568,
+            "uncompressed": 28259
+          },
+          "axios/node_modules/https-proxy-agent": {
+            "type": "prod",
+            "compressed": 7541,
+            "uncompressed": 19375
+          },
           "base64-js": {
             "type": "prod",
             "compressed": 4200,
@@ -1746,6 +1821,11 @@
             "type": "prod",
             "compressed": 13067,
             "uncompressed": 42536
+          },
+          "body-parser/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
           },
           "buffer": {
             "type": "prod",
@@ -1832,6 +1912,11 @@
             "compressed": 3738,
             "uncompressed": 9556
           },
+          "concat-stream/node_modules/readable-stream": {
+            "type": "prod",
+            "compressed": 41190,
+            "uncompressed": 123971
+          },
           "content-disposition": {
             "type": "prod",
             "compressed": 7900,
@@ -1839,8 +1924,8 @@
           },
           "content-type": {
             "type": "prod",
-            "compressed": 16834,
-            "uncompressed": 45355
+            "compressed": 3988,
+            "uncompressed": 10471
           },
           "cookie": {
             "type": "prod",
@@ -1849,8 +1934,8 @@
           },
           "cookie-signature": {
             "type": "prod",
-            "compressed": 4584,
-            "uncompressed": 9076
+            "compressed": 2529,
+            "uncompressed": 4993
           },
           "cors": {
             "type": "prod",
@@ -1874,8 +1959,8 @@
           },
           "debug": {
             "type": "prod",
-            "compressed": 33108,
-            "uncompressed": 94036
+            "compressed": 14582,
+            "uncompressed": 42793
           },
           "decamelize": {
             "type": "prod",
@@ -1947,6 +2032,26 @@
             "compressed": 15958,
             "uncompressed": 45773
           },
+          "engine.io/node_modules/accepts": {
+            "type": "prod",
+            "compressed": 5589,
+            "uncompressed": 16795
+          },
+          "engine.io/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "engine.io/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
+          },
+          "engine.io/node_modules/negotiator": {
+            "type": "prod",
+            "compressed": 9151,
+            "uncompressed": 27375
+          },
           "env-paths": {
             "type": "prod",
             "compressed": 3996,
@@ -1982,11 +2087,6 @@
             "compressed": 4403,
             "uncompressed": 10809
           },
-          "eventemitter3": {
-            "type": "unknown",
-            "compressed": 13376,
-            "uncompressed": 45088
-          },
           "express": {
             "type": "prod",
             "compressed": 25401,
@@ -1996,6 +2096,26 @@
             "type": "prod",
             "compressed": 21651,
             "uncompressed": 77151
+          },
+          "express-session/node_modules/cookie-signature": {
+            "type": "prod",
+            "compressed": 2055,
+            "uncompressed": 4083
+          },
+          "express-session/node_modules/debug": {
+            "type": "prod",
+            "compressed": 18526,
+            "uncompressed": 51243
+          },
+          "express-session/node_modules/ms": {
+            "type": "prod",
+            "compressed": 2736,
+            "uncompressed": 6266
+          },
+          "express/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
           },
           "extend": {
             "type": "prod",
@@ -2022,85 +2142,10 @@
             "compressed": 37947,
             "uncompressed": 139263
           },
-          "file1.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file10.js": {
-            "type": "unknown",
-            "compressed": 152,
-            "uncompressed": 170
-          },
-          "file11.js": {
-            "type": "unknown",
-            "compressed": 152,
-            "uncompressed": 170
-          },
-          "file12.js": {
-            "type": "unknown",
-            "compressed": 152,
-            "uncompressed": 170
-          },
-          "file13.js": {
-            "type": "unknown",
-            "compressed": 152,
-            "uncompressed": 170
-          },
-          "file14.js": {
-            "type": "unknown",
-            "compressed": 260,
-            "uncompressed": 392
-          },
-          "file2.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file3.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file4.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file5.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file6.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file7.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file8.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file9.js": {
-            "type": "unknown",
-            "compressed": 152,
-            "uncompressed": 170
-          },
           "finalhandler": {
             "type": "prod",
             "compressed": 6459,
             "uncompressed": 17525
-          },
-          "find-up": {
-            "type": "unknown",
-            "compressed": 4054,
-            "uncompressed": 11611
           },
           "follow-redirects": {
             "type": "prod",
@@ -2111,6 +2156,16 @@
             "type": "prod",
             "compressed": 24731,
             "uncompressed": 83901
+          },
+          "form-data/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "form-data/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
           },
           "formdata-polyfill": {
             "type": "prod",
@@ -2136,6 +2191,16 @@
             "type": "prod",
             "compressed": 116861,
             "uncompressed": 451269
+          },
+          "gaxios/node_modules/agent-base": {
+            "type": "prod",
+            "compressed": 6300,
+            "uncompressed": 16400
+          },
+          "gaxios/node_modules/https-proxy-agent": {
+            "type": "prod",
+            "compressed": 7087,
+            "uncompressed": 18328
           },
           "gcp-metadata": {
             "type": "prod",
@@ -2207,10 +2272,15 @@
             "compressed": 2978,
             "uncompressed": 6784
           },
+          "http-response-object/node_modules/@types/node": {
+            "type": "prod",
+            "compressed": 92296,
+            "uncompressed": 631948
+          },
           "https-proxy-agent": {
             "type": "prod",
-            "compressed": 21821,
-            "uncompressed": 58046
+            "compressed": 7193,
+            "uncompressed": 20343
           },
           "iconv-lite": {
             "type": "prod",
@@ -2277,11 +2347,6 @@
             "compressed": 30665,
             "uncompressed": 130229
           },
-          "locate-path": {
-            "type": "unknown",
-            "compressed": 2994,
-            "uncompressed": 6584
-          },
           "long": {
             "type": "prod",
             "compressed": 30074,
@@ -2309,13 +2374,13 @@
           },
           "mime-db": {
             "type": "prod",
-            "compressed": 114707,
-            "uncompressed": 842183
+            "compressed": 30758,
+            "uncompressed": 225566
           },
           "mime-types": {
             "type": "prod",
-            "compressed": 24747,
-            "uncompressed": 77157
+            "compressed": 7425,
+            "uncompressed": 22341
           },
           "minimist": {
             "type": "prod",
@@ -2324,8 +2389,8 @@
           },
           "ms": {
             "type": "prod",
-            "compressed": 5588,
-            "uncompressed": 12987
+            "compressed": 2852,
+            "uncompressed": 6721
           },
           "music-metadata": {
             "type": "prod",
@@ -2334,8 +2399,8 @@
           },
           "negotiator": {
             "type": "prod",
-            "compressed": 27798,
-            "uncompressed": 83460
+            "compressed": 9496,
+            "uncompressed": 28710
           },
           "node-cache": {
             "type": "prod",
@@ -2387,20 +2452,15 @@
             "compressed": 1841,
             "uncompressed": 4046
           },
-          "p-limit": {
-            "type": "unknown",
-            "compressed": 3506,
-            "uncompressed": 7390
-          },
-          "p-locate": {
-            "type": "unknown",
-            "compressed": 3515,
-            "uncompressed": 7285
-          },
           "p-queue": {
             "type": "prod",
             "compressed": 20693,
             "uncompressed": 68476
+          },
+          "p-queue/node_modules/eventemitter3": {
+            "type": "prod",
+            "compressed": 13376,
+            "uncompressed": 45088
           },
           "p-retry": {
             "type": "prod",
@@ -2439,23 +2499,48 @@
           },
           "pino": {
             "type": "prod",
-            "compressed": 457221,
-            "uncompressed": 1480361
+            "compressed": 187539,
+            "uncompressed": 705711
           },
           "pino-abstract-transport": {
             "type": "prod",
-            "compressed": 31957,
-            "uncompressed": 117636
+            "compressed": 10391,
+            "uncompressed": 38204
           },
           "pino-pretty": {
             "type": "prod",
             "compressed": 82020,
             "uncompressed": 274583
           },
+          "pino-pretty/node_modules/pino-abstract-transport": {
+            "type": "prod",
+            "compressed": 10783,
+            "uncompressed": 39716
+          },
+          "pino-pretty/node_modules/pump": {
+            "type": "prod",
+            "compressed": 4100,
+            "uncompressed": 8803
+          },
+          "pino-pretty/node_modules/sonic-boom": {
+            "type": "prod",
+            "compressed": 29290,
+            "uncompressed": 123700
+          },
           "pino-std-serializers": {
             "type": "prod",
             "compressed": 13546,
             "uncompressed": 54011
+          },
+          "pino/node_modules/pino-abstract-transport": {
+            "type": "prod",
+            "compressed": 10783,
+            "uncompressed": 39716
+          },
+          "pino/node_modules/real-require": {
+            "type": "prod",
+            "compressed": 2058,
+            "uncompressed": 3929
           },
           "pngjs": {
             "type": "prod",
@@ -2497,11 +2582,6 @@
             "compressed": 6627,
             "uncompressed": 15643
           },
-          "pump": {
-            "type": "unknown",
-            "compressed": 4100,
-            "uncompressed": 8803
-          },
           "qrcode": {
             "type": "prod",
             "compressed": 54465,
@@ -2537,15 +2617,10 @@
             "compressed": 6808,
             "uncompressed": 18495
           },
-          "readable-stream": {
-            "type": "unknown",
-            "compressed": 41190,
-            "uncompressed": 123971
-          },
           "real-require": {
             "type": "prod",
-            "compressed": 6497,
-            "uncompressed": 12685
+            "compressed": 2381,
+            "uncompressed": 4827
           },
           "require-directory": {
             "type": "prod",
@@ -2569,8 +2644,8 @@
           },
           "safe-buffer": {
             "type": "prod",
-            "compressed": 20466,
-            "uncompressed": 63787
+            "compressed": 10306,
+            "uncompressed": 32101
           },
           "safe-stable-stringify": {
             "type": "prod",
@@ -2652,6 +2727,26 @@
             "compressed": 19849,
             "uncompressed": 64127
           },
+          "socket.io/node_modules/accepts": {
+            "type": "prod",
+            "compressed": 5589,
+            "uncompressed": 16795
+          },
+          "socket.io/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "socket.io/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
+          },
+          "socket.io/node_modules/negotiator": {
+            "type": "prod",
+            "compressed": 9151,
+            "uncompressed": 27375
+          },
           "socks": {
             "type": "prod",
             "compressed": 30967,
@@ -2664,8 +2759,8 @@
           },
           "sonic-boom": {
             "type": "prod",
-            "compressed": 50090,
-            "uncompressed": 208900
+            "compressed": 20800,
+            "uncompressed": 85200
           },
           "split2": {
             "type": "prod",
@@ -2687,6 +2782,11 @@
             "compressed": 5286,
             "uncompressed": 15298
           },
+          "string_decoder/node_modules/safe-buffer": {
+            "type": "prod",
+            "compressed": 10160,
+            "uncompressed": 31686
+          },
           "strip-ansi": {
             "type": "prod",
             "compressed": 2090,
@@ -2704,8 +2804,13 @@
           },
           "thread-stream": {
             "type": "prod",
-            "compressed": 56976,
-            "uncompressed": 157551
+            "compressed": 29615,
+            "uncompressed": 83313
+          },
+          "thread-stream/node_modules/real-require": {
+            "type": "prod",
+            "compressed": 2058,
+            "uncompressed": 3929
           },
           "toidentifier": {
             "type": "prod",
@@ -2726,6 +2831,11 @@
             "type": "prod",
             "compressed": 7031,
             "uncompressed": 21269
+          },
+          "type-is/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
           },
           "typedarray": {
             "type": "prod",
@@ -2816,6 +2926,26 @@
             "type": "prod",
             "compressed": 19511,
             "uncompressed": 71482
+          },
+          "yargs/node_modules/find-up": {
+            "type": "prod",
+            "compressed": 4054,
+            "uncompressed": 11611
+          },
+          "yargs/node_modules/locate-path": {
+            "type": "prod",
+            "compressed": 2994,
+            "uncompressed": 6584
+          },
+          "yargs/node_modules/p-limit": {
+            "type": "prod",
+            "compressed": 3506,
+            "uncompressed": 7390
+          },
+          "yargs/node_modules/p-locate": {
+            "type": "prod",
+            "compressed": 3515,
+            "uncompressed": 7285
           }
         },
         "devCompressed": 32008227
@@ -3003,16 +3133,6 @@
           }
         },
         "packages": {
-          "14-files.js": {
-            "type": "unknown",
-            "compressed": 80,
-            "uncompressed": 90
-          },
-          "2-files.js": {
-            "type": "unknown",
-            "compressed": 82,
-            "uncompressed": 96
-          },
           "@biomejs/biome": {
             "type": "dev",
             "compressed": 137931,
@@ -3135,8 +3255,8 @@
           },
           "@types/node": {
             "type": "prod",
-            "compressed": 551181,
-            "uncompressed": 3011523
+            "compressed": 458885,
+            "uncompressed": 2379575
           },
           "@types/retry": {
             "type": "prod",
@@ -3153,15 +3273,25 @@
             "compressed": 881698,
             "uncompressed": 7259838
           },
+          "@whiskeysockets/baileys/node_modules/pino": {
+            "type": "prod",
+            "compressed": 272064,
+            "uncompressed": 777390
+          },
+          "@whiskeysockets/baileys/node_modules/thread-stream": {
+            "type": "prod",
+            "compressed": 27361,
+            "uncompressed": 74238
+          },
           "accepts": {
             "type": "prod",
-            "compressed": 16800,
-            "uncompressed": 50507
+            "compressed": 5622,
+            "uncompressed": 16917
           },
           "agent-base": {
             "type": "prod",
-            "compressed": 21208,
-            "uncompressed": 57902
+            "compressed": 5340,
+            "uncompressed": 13243
           },
           "ansi-regex": {
             "type": "prod",
@@ -3193,6 +3323,16 @@
             "compressed": 414238,
             "uncompressed": 1460146
           },
+          "axios/node_modules/agent-base": {
+            "type": "prod",
+            "compressed": 9568,
+            "uncompressed": 28259
+          },
+          "axios/node_modules/https-proxy-agent": {
+            "type": "prod",
+            "compressed": 7541,
+            "uncompressed": 19375
+          },
           "base64-js": {
             "type": "prod",
             "compressed": 4200,
@@ -3212,6 +3352,11 @@
             "type": "prod",
             "compressed": 13067,
             "uncompressed": 42536
+          },
+          "body-parser/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
           },
           "buffer": {
             "type": "prod",
@@ -3298,6 +3443,11 @@
             "compressed": 3738,
             "uncompressed": 9556
           },
+          "concat-stream/node_modules/readable-stream": {
+            "type": "prod",
+            "compressed": 41190,
+            "uncompressed": 123971
+          },
           "content-disposition": {
             "type": "prod",
             "compressed": 7900,
@@ -3305,8 +3455,8 @@
           },
           "content-type": {
             "type": "prod",
-            "compressed": 16834,
-            "uncompressed": 45355
+            "compressed": 3988,
+            "uncompressed": 10471
           },
           "cookie": {
             "type": "prod",
@@ -3315,8 +3465,8 @@
           },
           "cookie-signature": {
             "type": "prod",
-            "compressed": 4584,
-            "uncompressed": 9076
+            "compressed": 2529,
+            "uncompressed": 4993
           },
           "cors": {
             "type": "prod",
@@ -3340,8 +3490,8 @@
           },
           "debug": {
             "type": "prod",
-            "compressed": 33108,
-            "uncompressed": 94036
+            "compressed": 14582,
+            "uncompressed": 42793
           },
           "decamelize": {
             "type": "prod",
@@ -3413,6 +3563,26 @@
             "compressed": 15958,
             "uncompressed": 45773
           },
+          "engine.io/node_modules/accepts": {
+            "type": "prod",
+            "compressed": 5589,
+            "uncompressed": 16795
+          },
+          "engine.io/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "engine.io/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
+          },
+          "engine.io/node_modules/negotiator": {
+            "type": "prod",
+            "compressed": 9151,
+            "uncompressed": 27375
+          },
           "env-paths": {
             "type": "prod",
             "compressed": 3996,
@@ -3448,11 +3618,6 @@
             "compressed": 4403,
             "uncompressed": 10809
           },
-          "eventemitter3": {
-            "type": "unknown",
-            "compressed": 13376,
-            "uncompressed": 45088
-          },
           "express": {
             "type": "prod",
             "compressed": 25401,
@@ -3462,6 +3627,26 @@
             "type": "prod",
             "compressed": 21651,
             "uncompressed": 77151
+          },
+          "express-session/node_modules/cookie-signature": {
+            "type": "prod",
+            "compressed": 2055,
+            "uncompressed": 4083
+          },
+          "express-session/node_modules/debug": {
+            "type": "prod",
+            "compressed": 18526,
+            "uncompressed": 51243
+          },
+          "express-session/node_modules/ms": {
+            "type": "prod",
+            "compressed": 2736,
+            "uncompressed": 6266
+          },
+          "express/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
           },
           "extend": {
             "type": "prod",
@@ -3488,85 +3673,10 @@
             "compressed": 37947,
             "uncompressed": 139263
           },
-          "file1.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file10.js": {
-            "type": "unknown",
-            "compressed": 152,
-            "uncompressed": 170
-          },
-          "file11.js": {
-            "type": "unknown",
-            "compressed": 152,
-            "uncompressed": 170
-          },
-          "file12.js": {
-            "type": "unknown",
-            "compressed": 152,
-            "uncompressed": 170
-          },
-          "file13.js": {
-            "type": "unknown",
-            "compressed": 152,
-            "uncompressed": 170
-          },
-          "file14.js": {
-            "type": "unknown",
-            "compressed": 260,
-            "uncompressed": 392
-          },
-          "file2.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file3.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file4.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file5.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file6.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file7.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file8.js": {
-            "type": "unknown",
-            "compressed": 150,
-            "uncompressed": 164
-          },
-          "file9.js": {
-            "type": "unknown",
-            "compressed": 152,
-            "uncompressed": 170
-          },
           "finalhandler": {
             "type": "prod",
             "compressed": 6459,
             "uncompressed": 17525
-          },
-          "find-up": {
-            "type": "unknown",
-            "compressed": 4054,
-            "uncompressed": 11611
           },
           "follow-redirects": {
             "type": "prod",
@@ -3577,6 +3687,16 @@
             "type": "prod",
             "compressed": 24731,
             "uncompressed": 83901
+          },
+          "form-data/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "form-data/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
           },
           "formdata-polyfill": {
             "type": "prod",
@@ -3602,6 +3722,16 @@
             "type": "prod",
             "compressed": 116861,
             "uncompressed": 451269
+          },
+          "gaxios/node_modules/agent-base": {
+            "type": "prod",
+            "compressed": 6300,
+            "uncompressed": 16400
+          },
+          "gaxios/node_modules/https-proxy-agent": {
+            "type": "prod",
+            "compressed": 7087,
+            "uncompressed": 18328
           },
           "gcp-metadata": {
             "type": "prod",
@@ -3673,10 +3803,15 @@
             "compressed": 2978,
             "uncompressed": 6784
           },
+          "http-response-object/node_modules/@types/node": {
+            "type": "prod",
+            "compressed": 92296,
+            "uncompressed": 631948
+          },
           "https-proxy-agent": {
             "type": "prod",
-            "compressed": 21821,
-            "uncompressed": 58046
+            "compressed": 7193,
+            "uncompressed": 20343
           },
           "iconv-lite": {
             "type": "prod",
@@ -3743,11 +3878,6 @@
             "compressed": 30665,
             "uncompressed": 130229
           },
-          "locate-path": {
-            "type": "unknown",
-            "compressed": 2994,
-            "uncompressed": 6584
-          },
           "long": {
             "type": "prod",
             "compressed": 30074,
@@ -3775,13 +3905,13 @@
           },
           "mime-db": {
             "type": "prod",
-            "compressed": 114707,
-            "uncompressed": 842183
+            "compressed": 30758,
+            "uncompressed": 225566
           },
           "mime-types": {
             "type": "prod",
-            "compressed": 24747,
-            "uncompressed": 77157
+            "compressed": 7425,
+            "uncompressed": 22341
           },
           "minimist": {
             "type": "prod",
@@ -3790,8 +3920,8 @@
           },
           "ms": {
             "type": "prod",
-            "compressed": 5588,
-            "uncompressed": 12987
+            "compressed": 2852,
+            "uncompressed": 6721
           },
           "music-metadata": {
             "type": "prod",
@@ -3800,8 +3930,8 @@
           },
           "negotiator": {
             "type": "prod",
-            "compressed": 27798,
-            "uncompressed": 83460
+            "compressed": 9496,
+            "uncompressed": 28710
           },
           "node-cache": {
             "type": "prod",
@@ -3853,20 +3983,15 @@
             "compressed": 1841,
             "uncompressed": 4046
           },
-          "p-limit": {
-            "type": "unknown",
-            "compressed": 3506,
-            "uncompressed": 7390
-          },
-          "p-locate": {
-            "type": "unknown",
-            "compressed": 3515,
-            "uncompressed": 7285
-          },
           "p-queue": {
             "type": "prod",
             "compressed": 20693,
             "uncompressed": 68476
+          },
+          "p-queue/node_modules/eventemitter3": {
+            "type": "prod",
+            "compressed": 13376,
+            "uncompressed": 45088
           },
           "p-retry": {
             "type": "prod",
@@ -3905,23 +4030,48 @@
           },
           "pino": {
             "type": "prod",
-            "compressed": 457221,
-            "uncompressed": 1480361
+            "compressed": 187539,
+            "uncompressed": 705711
           },
           "pino-abstract-transport": {
             "type": "prod",
-            "compressed": 31957,
-            "uncompressed": 117636
+            "compressed": 10391,
+            "uncompressed": 38204
           },
           "pino-pretty": {
             "type": "prod",
             "compressed": 82020,
             "uncompressed": 274583
           },
+          "pino-pretty/node_modules/pino-abstract-transport": {
+            "type": "prod",
+            "compressed": 10783,
+            "uncompressed": 39716
+          },
+          "pino-pretty/node_modules/pump": {
+            "type": "prod",
+            "compressed": 4100,
+            "uncompressed": 8803
+          },
+          "pino-pretty/node_modules/sonic-boom": {
+            "type": "prod",
+            "compressed": 29290,
+            "uncompressed": 123700
+          },
           "pino-std-serializers": {
             "type": "prod",
             "compressed": 13546,
             "uncompressed": 54011
+          },
+          "pino/node_modules/pino-abstract-transport": {
+            "type": "prod",
+            "compressed": 10783,
+            "uncompressed": 39716
+          },
+          "pino/node_modules/real-require": {
+            "type": "prod",
+            "compressed": 2058,
+            "uncompressed": 3929
           },
           "pngjs": {
             "type": "prod",
@@ -3963,11 +4113,6 @@
             "compressed": 6627,
             "uncompressed": 15643
           },
-          "pump": {
-            "type": "unknown",
-            "compressed": 4100,
-            "uncompressed": 8803
-          },
           "qrcode": {
             "type": "prod",
             "compressed": 54465,
@@ -4003,15 +4148,10 @@
             "compressed": 6808,
             "uncompressed": 18495
           },
-          "readable-stream": {
-            "type": "unknown",
-            "compressed": 41190,
-            "uncompressed": 123971
-          },
           "real-require": {
             "type": "prod",
-            "compressed": 6497,
-            "uncompressed": 12685
+            "compressed": 2381,
+            "uncompressed": 4827
           },
           "require-directory": {
             "type": "prod",
@@ -4035,8 +4175,8 @@
           },
           "safe-buffer": {
             "type": "prod",
-            "compressed": 20466,
-            "uncompressed": 63787
+            "compressed": 10306,
+            "uncompressed": 32101
           },
           "safe-stable-stringify": {
             "type": "prod",
@@ -4118,6 +4258,26 @@
             "compressed": 19849,
             "uncompressed": 64127
           },
+          "socket.io/node_modules/accepts": {
+            "type": "prod",
+            "compressed": 5589,
+            "uncompressed": 16795
+          },
+          "socket.io/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "socket.io/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
+          },
+          "socket.io/node_modules/negotiator": {
+            "type": "prod",
+            "compressed": 9151,
+            "uncompressed": 27375
+          },
           "socks": {
             "type": "prod",
             "compressed": 30967,
@@ -4130,8 +4290,8 @@
           },
           "sonic-boom": {
             "type": "prod",
-            "compressed": 50090,
-            "uncompressed": 208900
+            "compressed": 20800,
+            "uncompressed": 85200
           },
           "split2": {
             "type": "prod",
@@ -4153,6 +4313,11 @@
             "compressed": 5286,
             "uncompressed": 15298
           },
+          "string_decoder/node_modules/safe-buffer": {
+            "type": "prod",
+            "compressed": 10160,
+            "uncompressed": 31686
+          },
           "strip-ansi": {
             "type": "prod",
             "compressed": 2090,
@@ -4170,8 +4335,13 @@
           },
           "thread-stream": {
             "type": "prod",
-            "compressed": 56976,
-            "uncompressed": 157551
+            "compressed": 29615,
+            "uncompressed": 83313
+          },
+          "thread-stream/node_modules/real-require": {
+            "type": "prod",
+            "compressed": 2058,
+            "uncompressed": 3929
           },
           "toidentifier": {
             "type": "prod",
@@ -4192,6 +4362,11 @@
             "type": "prod",
             "compressed": 7031,
             "uncompressed": 21269
+          },
+          "type-is/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
           },
           "typedarray": {
             "type": "prod",
@@ -4282,6 +4457,26 @@
             "type": "prod",
             "compressed": 19511,
             "uncompressed": 71482
+          },
+          "yargs/node_modules/find-up": {
+            "type": "prod",
+            "compressed": 4054,
+            "uncompressed": 11611
+          },
+          "yargs/node_modules/locate-path": {
+            "type": "prod",
+            "compressed": 2994,
+            "uncompressed": 6584
+          },
+          "yargs/node_modules/p-limit": {
+            "type": "prod",
+            "compressed": 3506,
+            "uncompressed": 7390
+          },
+          "yargs/node_modules/p-locate": {
+            "type": "prod",
+            "compressed": 3515,
+            "uncompressed": 7285
           }
         },
         "devCompressed": 32008227
