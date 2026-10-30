@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
-# Pack Levix source + production node_modules into assets/levix-app.zip.
-# ffmpeg-static / esbuild / sharp stay out — they are desktop/native extras.
+# Pack Levix source and production node_modules into assets/levix-app.zip.
+# Dependencies are installed from the lockfile into a separate directory.
+# The archive is byte-reproducible.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 ASSETS="$ROOT/android/app/src/main/assets"
 OUT="$ASSETS/levix-app.zip"
 STAGE="${LEVIX_NODE_CACHE:-$HOME/.cache/levix-android}/levix-app-stage"
-
-if [ ! -d "$ROOT/node_modules" ]; then
-  echo "missing $ROOT/node_modules — run npm ci in the repo first" >&2
-  exit 1
-fi
+PROD="${LEVIX_NODE_CACHE:-$HOME/.cache/levix-android}/levix-app-prod"
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE" "$ASSETS"
@@ -62,31 +59,39 @@ copy_tree "$ROOT/public" "$STAGE/public"
 cp -a "$ROOT/app.cjs" "$ROOT/scheduler.cjs" "$ROOT/package.json" "$ROOT/LICENSE" "$STAGE/"
 cp -a "$ROOT/android/host-boot.mjs" "$STAGE/boot.mjs"
 
+# Production dependencies from the lockfile, in a directory of their own.
+# The repository install tree is not an input of the archive.
+rm -rf "$PROD"
+mkdir -p "$PROD"
+cp -a "$ROOT/package.json" "$ROOT/package-lock.json" "$PROD/"
+(
+  cd "$PROD" || exit 1
+  # --omit=dev: dev tools never ship.
+  # --ignore-scripts: no install script is needed on Android.
+  # --no-bin-links: no .bin symlinks.
+  # --no-audit --no-fund: skip registry calls the install does not need.
+  # --prefer-offline: the npm cache that the repository's own npm ci filled is enough.
+  npm ci --omit=dev --ignore-scripts --no-bin-links --no-audit --no-fund --prefer-offline
+)
+
 mkdir -p "$STAGE/node_modules"
-if command -v rsync >/dev/null 2>&1; then
-  rsync -a \
-    --exclude ffmpeg-static \
-    --exclude esbuild \
-    --exclude '@esbuild' \
-    --exclude '@img' \
-    --exclude sharp \
-    --exclude '.cache' \
-    --exclude '*.map' \
-    "$ROOT/node_modules/" "$STAGE/node_modules/"
-else
-  cp -a "$ROOT/node_modules/." "$STAGE/node_modules/"
-  rm -rf "$STAGE/node_modules/ffmpeg-static" \
-    "$STAGE/node_modules/esbuild" \
-    "$STAGE/node_modules/@esbuild" \
-    "$STAGE/node_modules/@img" \
-    "$STAGE/node_modules/sharp"
-fi
-
-# Native addons cannot be dlopen'd from filesDir on Android 10+.
+cp -a "$PROD/node_modules/." "$STAGE/node_modules/"
+# Desktop FFmpeg; Android has libffmpeg.so and the loader tolerates its absence.
+rm -rf "$STAGE/node_modules/ffmpeg-static"
+# Baileys pulls sharp in as a peer dependency; its native parts are linux-x64 binaries that cannot load on Android, and v4.9.2 shipped without them (Baileys falls back when sharp is missing).
+rm -rf "$STAGE/node_modules/sharp" "$STAGE/node_modules/@img"
+# TypeScript declarations; Node never loads them.
+rm -rf "$STAGE/node_modules/@types"
+find "$STAGE/node_modules" \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' \) -delete
+# Native addons cannot be loaded from filesDir on Android 10+.
 find "$STAGE/node_modules" -name '*.node' -delete
+# Source maps were excluded before and are not runtime code.
+find "$STAGE/node_modules" -name '*.map' -delete
+# npm's own cache file.
+rm -f "$STAGE/node_modules/.package-lock.json"
 
-rm -f "$OUT"
-( cd "$STAGE" && zip -qr "$OUT" . )
+node "$ROOT/android/scripts/check-stage-deps.mjs" "$STAGE"
+node "$ROOT/android/scripts/zip-tree.mjs" "$STAGE" "$OUT"
 
 # The panel's HTML, JS and CSS have to be inside the archive the APK ships,
 # not merely in the staging tree next to it. `zip -sf` indents each entry, and

@@ -265,7 +265,6 @@ tasks.register<Exec>("stageLevixApp") {
     inputs.files(fileTree(File(repoRoot, "frontend")) {
         exclude("node_modules/**", "*.tsbuildinfo")
     })
-    inputs.dir(File(repoRoot, "node_modules"))
     inputs.dir(File(repoRoot, "bin"))
     inputs.file(File(repoRoot, "app.cjs"))
     inputs.file(File(repoRoot, "scheduler.cjs"))
@@ -274,6 +273,8 @@ tasks.register<Exec>("stageLevixApp") {
     inputs.file(File(repoRoot, "LICENSE"))
     inputs.file(File(repoRoot, "scripts/build-frontend.mjs"))
     inputs.file(File(repoRoot, "android/scripts/stage-levix-app.sh"))
+    inputs.file(File(repoRoot, "android/scripts/zip-tree.mjs"))
+    inputs.file(File(repoRoot, "android/scripts/check-stage-deps.mjs"))
     inputs.file(File(repoRoot, "android/host-boot.mjs"))
     outputs.file(file("src/main/assets/levix-app.zip"))
 }

@@ -158,6 +158,43 @@ silently, a SEA could build on another 24.x patch without notice, and `--update-
 regression test. The P1 is that Termux deletes old builds, so a cold cache cannot fetch the pins.
 That needs a durable source for the pinned files, which is owner question Q-23.
 
-### PR 01b to 01e
+### PR 01b: production-only Android archive, reproducible zip, size report
 
-NOT STARTED.
+Branch `build/01b-prod-staging`, stacked on 01a. Implemented by Grok (3 rounds), reviewed by Codex
+(read-only, 3 P2 findings, all fixed) and by the orchestrator.
+
+- `stage-levix-app.sh` installs production dependencies from `package-lock.json` into a separate
+  directory (`npm ci --omit=dev --ignore-scripts --no-bin-links --prefer-offline`). It no longer
+  reads the repository's `node_modules`.
+- Removed from the archive, each for a stated reason:
+  - `ffmpeg-static`: Android ships `libffmpeg.so`.
+  - `sharp` and `@img/*`: linux-x64 binaries pulled in as a Baileys peer dependency. Baileys loads `sharp` with `import('sharp').catch(() => {})`, and v4.9.2 also shipped without it.
+  - `@types/*` and `*.d.ts`: type declarations Node never loads.
+  - `*.node`, `*.map` and `.package-lock.json`.
+  - Markdown files stay, because some packages keep their license text only in `README.md`.
+- `check-stage-deps.mjs` fails the staging when app code loads a package that is missing from the
+  staged tree. Result: 19 packages loaded, all present.
+- `zip-tree.mjs` writes the archive with sorted entries and a fixed 1980-01-01 time. It uses no data
+  descriptors, deflate level 9, or stored entries when deflate does not shrink them.
+- `scripts/size-report.mjs` prints component sizes and deltas against
+  `docs/plans/v5/size-baseline-v4.9.2.json`. That baseline was generated from the v4.9.2 release
+  artifacts. Its numbers equal an independent Python count of the same files, byte for byte.
+- CI builds release APKs and the AAB with the debug key, adds the table to the job summary and keeps
+  `android-size.json` with the builds for 7 days.
+
+| `levix-app.zip` | v4.9.2 release | PR 01b (local staging) | Change |
+| --- | --- | --- | --- |
+| File size | 44,217,091 | 9,861,112 | -34,355,979 (-77.7%) |
+| Bytes stored in the arm64 APK | 43,078,460 | APK_STORED | APK_STORED_DELTA |
+| Entries | 5,393 | 4,482 | -911 |
+| Uncompressed bytes | 137,525,769 | 38,577,138 | -72.0% |
+| Dev-only packages | 32,008,227 bytes (74.4%) | 0 | -100% |
+
+Reproducibility: two local stagings produced byte-identical archives (sha256 `045337008006d4c5944e582dc83c58f04af7578d959c1e8e32491f458d8002df`).
+Cross-machine check (local staging against the archive inside the CI-built APK): PENDING.
+
+Release APK and AAB sizes from CI: PENDING.
+
+### PR 01c to 01e
+
+In progress; see their pull requests.

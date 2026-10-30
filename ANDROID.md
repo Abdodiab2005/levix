@@ -258,6 +258,8 @@ cd android
 ```
 > The Gradle `stageLevixApp` task automatically runs `npm run build:frontend` to compile the React dashboard into `public/dashboard`, stages the production server bundle into `levix-app.zip`, and embeds it inside the APK assets. Staging fails rather than packaging an APK whose panel would render unstyled: it checks that `public/dashboard/index.html` exists, links a stylesheet, and that every asset it references is present both on disk and inside `levix-app.zip`.
 
+The archive holds production dependencies only. They are installed from `package-lock.json` into a separate directory, checked by `check-stage-deps.mjs`, and written by `zip-tree.mjs` as a byte-reproducible zip. `node scripts/size-report.mjs <apk|aab>` prints the component sizes, and CI adds that table to each run's summary.
+
 > The panel's CSS is built for the system WebView, which on the 32-bit (`armeabi-v7a`) devices the APK supports is far behind current desktop browsers. `frontend/vite.config.ts` flattens Tailwind's `@layer` blocks — a WebView without cascade layers (pre-Chrome 99) drops them wholesale and renders the panel with no styling at all — and downlevels `oklch()` through Lightning CSS.
 
 > It also re-states Tailwind's `translate`/`rotate`/`scale` utilities as `transform` behind `@supports not (translate: 0px)`. Those standalone properties need Chrome 104, and a WebView that drops them leaves the mobile sidebar parked over the page (its `-translate-x-full` never moves it off-screen), the settings toggles stuck showing "off", and the RTL icon flips dead. The build fails rather than emit a transform it cannot downlevel, so a Tailwind upgrade that uses a new shape is caught here instead of on someone's phone.
