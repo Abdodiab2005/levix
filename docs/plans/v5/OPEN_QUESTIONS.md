@@ -7,7 +7,7 @@ Cloud as a separate product, offline-first, same-chat reply default, and one gen
 Each open question lists options and a recommendation. "Needed by" names the first phase that is
 blocked without an answer.
 
-## Decided by the owner on 2026-10-30
+## Decided by the owner (2026-10-30 unless the row says otherwise)
 
 | ID | Decision | Where it lands |
 | --- | --- | --- |
@@ -18,6 +18,7 @@ blocked without an answer.
 | Q-12 | Remove `youtube_api_key` from the settings definitions, the dashboard and the docs. Saved values are not deleted automatically. | PR #81, Phase 01 scope |
 | Q-13 | A separate bug-fix PR makes `!prayer` use the current date and the configured timezone, encodes the URL, and adds tests. | PR #83, Phase 01 scope |
 | Q-21 | Option (a). `!schedule` errors keep going to the creator's private chat; password-reset codes keep going to their current private destination. | ADR-007; Phase 05 |
+| Q-23 | 2026-10-31: no upload of the 14 `.deb` files. One deterministic archive with both ABIs (unmodified runtime files, upstream licence texts, a manifest with full provenance), published as the only asset of a dedicated GitHub prerelease, pinned by sha256, with a local backup, and a cold-cache CI build before merge. | ADR-018; R-33 |
 
 ## Still open
 
@@ -37,4 +38,3 @@ blocked without an answer.
 | Q-19 | Who reviews the `pt-BR` and `es-419` translations? | (a) native reviewers before release; (b) ship machine drafts labelled as drafts | (a) for the bot and the Terms text; (b) is acceptable only for low-risk UI strings, labelled. | 03 |
 | Q-20 | Should Plus entitlements work on desktop and self-hosted installs? | (a) Android Play only in v5; (b) a portable entitlement design now | (a). The phase prompt marks portability as an open design question. | 08 |
 | Q-22 | What does restoring a default backup (no secrets) do to the secrets of the install it lands on? | (a) keep the target install's current secrets (pairing, keys, password) and replace everything else; (b) clear them, so the operator re-pairs and re-enters keys; (c) ask in the restore preview | (c) with (a) preselected for a same-install restore. Moving to a new device always needs re-pairing. | 02 |
-| Q-23 | Where do the pinned Termux `.deb` files come from after Termux stops serving them (R-33)? | (a) the CI cache only, as in PR 01a; (b) a copy of the 14 pinned files as assets of a dedicated GitHub release in this repository, with the lock's URLs pointing there and the same sha256 checks (the APK already redistributes these libraries; creating the release needs the owner); (c) build Node 24 for Android from source with the NDK in CI | (b) now, because (a) breaks on the first cache miss after Termux updates any pinned package; (c) only if Termux stops building Node 24 before v5 ships. | 01 (the next Android release after Termux updates a pinned package) |

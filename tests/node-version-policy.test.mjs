@@ -165,4 +165,34 @@ ok(
     }),
 );
 
+section("android runtime archive");
+
+const runtimeRows = read("android/scripts/node-runtime.lock")
+  .split("\n")
+  .filter((line) => line && !line.startsWith("#"));
+equal("node-runtime.lock has exactly one data row", runtimeRows.length, 1);
+if (runtimeRows.length === 1) {
+  const runtimeFields = runtimeRows[0].split(/\s+/);
+  equal("node-runtime.lock row has 4 fields", runtimeFields.length, 4);
+  const runtimeFile = runtimeFields[0];
+  const runtimeSha = runtimeFields[1];
+  const runtimeSize = runtimeFields[2];
+  const runtimeUrl = runtimeFields[3];
+  ok("node-runtime.lock sha256 is 64 lowercase hex", /^[0-9a-f]{64}$/.test(runtimeSha ?? ""));
+  ok("node-runtime.lock size is numeric", /^[0-9]+$/.test(runtimeSize ?? ""));
+  ok(
+    "node-runtime.lock url is a Levix release asset",
+    (runtimeUrl ?? "").startsWith("https://github.com/Abdodiab2005/levix/releases/download/"),
+  );
+  if (nodeRows.length >= 1) {
+    const nodeVersion = nodeRows[0].split(/\s+/)[2].replace(/^\d+:/, "").replace(/-\d+$/, "");
+    equal(
+      "node-runtime.lock names the pinned nodejs-lts archive",
+      runtimeFile,
+      `levix-node-runtime-${nodeVersion}-android.tar.xz`,
+    );
+    ok("the archive node version is Node 24", nodeVersion.startsWith("24."));
+  }
+}
+
 finish();

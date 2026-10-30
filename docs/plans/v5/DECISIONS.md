@@ -233,3 +233,32 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
   exclusions for native packages that cannot load on Android stay (`sharp`, `@img`, `ffmpeg-static`,
   `*.node`). The lockfile marks `sharp` as a production package because `@whiskeysockets/baileys`
   depends on it (`npm ls sharp`), so `--omit=dev` alone does not drop it.
+
+## ADR-018: Android Node runtime from one pinned release archive
+
+- Status: ACCEPTED (owner, 2026-10-31, Q-23, with conditions).
+- Context: the Android build staged Node from 14 Termux `.deb` files pinned in
+  `android/scripts/termux-packages.lock`. Termux serves only the newest build of each package, so a
+  pinned file disappears when Termux updates it, and the GitHub Actions cache (11.6 GB in 44 entries
+  on 2026-10-30, above the 10 GB repository limit) is evicted. A cold build would then lose its Node
+  source (R-33).
+- Decision: one deterministic archive, `levix-node-runtime-<version>-android.tar.xz`, holds both
+  ABIs. It contains the unmodified files the staging uses (`node` and its libraries with their
+  symlinks), the upstream licence texts of every component, and `MANIFEST.json` with the deb url and
+  sha256 of every source package and the sha256 of every file. It is published once as the only
+  asset of a dedicated GitHub prerelease and pinned by sha256 and size in
+  `android/scripts/node-runtime.lock`. `fetch-node-android.sh` downloads only that asset, checks it
+  and every file, and runs the existing patchelf staging. It never contacts Termux and never falls
+  back to another Node. The 14 `.deb` files are not published.
+- Conditions from the owner: verified upstream licence texts only (no placeholder or mislabelled
+  file); verified sha256, manifest, provenance and binaries; a separate backup of the archive; a
+  real cold-cache CI build from the release URL before merge; Node stays 24.
+- Consequences: a new Node 24 patch needs Termux to publish it, then `--update-pins`,
+  `--build-archive`, a new release asset with the owner's approval, and a lock update. If Termux
+  stops shipping Node 24, building Node from source becomes the fallback (measured: the source
+  tarball alone is 57,669,336 bytes, and Termux's recipe applies 32 patches).
+- Verification: offline staging from the archive reproduces the CI-built libraries byte for byte on
+  both ABIs, and the archive rebuilds with the same sha256 (2026-10-31, local). A cold-cache CI
+  build from the release asset is required before merge; its result is recorded in the pull
+  request.
+

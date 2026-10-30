@@ -1,0 +1,8 @@
+# The Android Node runtime (ADR-001; owner decision Q-23): one archive with both
+# ABIs, built by node-runtime-archive.py from the Termux packages pinned in
+# termux-packages.lock and published once as a GitHub release asset.
+# fetch-node-android.sh downloads only this file, checks this sha256 and every
+# file in its MANIFEST.json, and never falls back to Termux or another Node.
+#
+# file sha256 size url
+levix-node-runtime-24.22.1-android.tar.xz 8b4f7f1fab23b7c697490390331623a1d96de84d2cdaa4746c1490c8f0683fbf 30847536 https://github.com/Abdodiab2005/levix/releases/download/android-runtime-node-24.22.1/levix-node-runtime-24.22.1-android.tar.xz
