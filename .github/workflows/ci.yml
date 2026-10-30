@@ -158,13 +158,16 @@ jobs:
         working-directory: android
         run: ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace
       - name: Size report
-        run: >-
-          node scripts/size-report.mjs --lock package-lock.json
-          --baseline docs/plans/v5/size-baseline-v4.9.2.json --json android-size.json
-          android/app/build/outputs/apk/release/levix-android-arm64.apk
-          android/app/build/outputs/apk/release/levix-android-armv7.apk
-          android/app/build/outputs/bundle/release/app-release.aab
-          >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          set -o pipefail
+          # The archive's sha256 lets anyone compare a local staging with this build.
+          sha256sum android/app/src/main/assets/levix-app.zip
+          node scripts/size-report.mjs --lock package-lock.json \
+            --baseline docs/plans/v5/size-baseline-v4.9.2.json --json android-size.json \
+            android/app/build/outputs/apk/release/levix-android-arm64.apk \
+            android/app/build/outputs/apk/release/levix-android-armv7.apk \
+            android/app/build/outputs/bundle/release/app-release.aab \
+            | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Upload size report and release builds
         uses: actions/upload-artifact@v7
         with:
