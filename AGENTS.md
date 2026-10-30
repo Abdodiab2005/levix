@@ -23,6 +23,60 @@ author. Nothing imports that module except the AI: no route, no template, no
 setting, and no dashboard field. It is not secret (this is an open-source
 project); it is simply not operator-configurable.
 
+## Levix v5 work (planning in progress)
+
+v5.0.0 is planned in `docs/plans/v5/`. Nothing in that folder is shipped
+behaviour; the rest of this file still describes v4.9.x as it runs today. Read
+`docs/plans/v5/README.md`, the current phase in `docs/plans/v5/PHASES.md`, and
+the ADRs in `docs/plans/v5/DECISIONS.md` before working on v5. These rules apply
+to all v5 work and add to the rules below; they remove none of them.
+
+- **One phase at a time.** Phases run in the order in `PHASES.md`. Each starts
+  with a short audit of the current tree and a written plan (files, migrations,
+  tests, threats, privacy impact, rollback) before any code. The next phase
+  waits for the owner's approval.
+- **Node.js 24.x only.** The shipped v4.9.x accepts Node 24 or newer
+  (`engines` `>=24`, see Technology Stack). For v5, every artifact Levix builds
+  (Android `libnode.so` for both ABIs, SEA binaries, the Docker image, CI) uses
+  the latest Node 24 patch that passes the gates. Never Node 26 in v5 (ADR-001). The Android runtime comes
+  from Termux `nodejs-lts`, which is not pinned yet; check the version it would
+  fetch before any Android build.
+- **Public core, private Plus.** This repository stays MIT, complete, and builds
+  and passes its tests with no private code or credential. `levix-plus` code,
+  keys and build output never enter this repository or its public artifacts
+  (ADR-002). No required Levix Cloud and no downloaded executable code (ADR-003).
+- **Languages.** Shipped today: `ar` and `en`. Planned: `ar`, `en`, `pt-BR`,
+  `es-419`, with UI, bot reply and AI reply language as three separate settings
+  (ADR-004). Until Phase 03 lands, bot strings still go through `tr(en, ar)`;
+  the AI follows `bot_language` and, in `auto`, answers in the user's language.
+- **Replies stay in the source chat by default.** No v5 feature may send a
+  group's or a private chat's content to another chat unless the backend has
+  checked that destination for the real sender (ADR-007). If that check fails,
+  fail closed; never fall back to a group.
+- **AI tools keep `aiToolAuth.cjs`.** Every new tool with a side effect or a
+  media upload declares `access` (gotcha 28). Retrieved docs, web pages and
+  messages are data, not instructions.
+- **Terms consent (planned).** The gate belongs inside `WhatsAppSession` before
+  `#open()` builds a socket, because the retry timer calls `#open()` directly
+  (ADR-006). A gate on a route or on `start()` alone is incomplete.
+- **Compatibility.** v4.9.x installs must upgrade in place: append-only
+  migrations, a backup before any v5 migration (Phase 02), pairing credentials
+  and `levix.key` untouched. Android ARM64 and ARMv7, desktop SEA, npm, Docker
+  and headless keep working.
+- **Evidence.** Test results are `PASS`, `FAIL`, `NOT RUN` or `BLOCKED`, each
+  with the command, platform, commit and date. Never report a test, a size or a
+  PR that did not happen. Google Play download or update sizes come only from
+  Play Console or `bundletool`.
+- **No live side effects.** Automated tests use no real WhatsApp number,
+  recovery email, purchase, feedback or crash upload, and call no production
+  endpoint. Use fakes and isolated data directories. Manual device QA may pair a
+  dedicated test account only with the owner's authorization.
+- **No automatic release.** Never push to `main`, merge, tag, publish a GitHub
+  release, or upload to Google Play without the owner's explicit approval.
+- **Delegated implementers** (AI coding agents working under an orchestrator)
+  change only the files their brief names and do not run tests or builds; the
+  orchestrator runs every gate and reviews every diff.
+
 ## Technology Stack
 
 - **Core**: Node.js 24+ with ES Modules (`"type": "module"`)
@@ -486,6 +540,7 @@ and blacklist middleware, the prefix lookup, every permission check) with no
 | `user_metadata` | per-user record; `is_owner` / `is_admin` carry the bot roles | — |
 | `debts` | `!debt` ledger | — |
 | `schedules` | `!schedule` / `!autoschedule` jobs | — |
+| `group_directory` | last known name and member count per group, so the panel can show them while WhatsApp is offline | wiped on unlink (`clearWhatsAppDirectory()`) |
 | `forward_scores` | forward counters per message | `forward_score_ttl_days` (30) |
 | `sticker_owners` | who a Sticker Studio library belongs to. `id` is an internal 16-hex key; `kind` is `self` (the panel and the linked account, at most one) or `user`. `account` is that person's normalized LID, or the linked phone JID only when the credentials carry no lid. Null means the row is unbound and no sender can open it | wiped on unlink |
 | `stickers` | Sticker Studio library, one row per sticker per `sticker_owners` id; the WebP is a file named by its sha256 | wiped on unlink |
@@ -614,6 +669,8 @@ memory/*.md                   (long-term memory, capped)
 | tool | what it does |
 | --- | --- |
 | `web_search` | DuckDuckGo, or Google Programmable Search when `GOOGLE_SEARCH_API_KEY` + `GOOGLE_SEARCH_CX` are set |
+| `search_news` | recent headlines through the same search path as `web_search` |
+| `search_wikipedia` | Wikipedia search and article summaries (Arabic or English Wikipedia) |
 | `fetch_url` | opens an **HTTPS-only** page and reads its text — the host is resolved and every redirect hop is re-checked against private/loopback/link-local ranges, and redirects cannot downgrade to HTTP |
 | `save_memory` | writes a fact to `memory/global.md` or `memory/chats/<chat>.md` — gated like `!memory add` (global: owner or bot admin) |
 | `search_memory` / `forget_memory` | read / delete memory entries — gated like `!memory search` / `!memory forget` |
@@ -1388,9 +1445,9 @@ configure.
 
 ## Logging
 
-**Logger**: Pino logger in `src/utils/logger.js`
+**Logger**: Pino logger in `src/utils/logger.cjs` (CommonJS; ESM files load it through `createRequire`)
 ```javascript
-import logger from './utils/logger.js';
+const logger = require("../utils/logger.cjs");
 logger.info('Message');
 logger.error({ err: error }, 'Error message');
 logger.debug('Debug info');
