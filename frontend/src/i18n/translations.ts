@@ -581,7 +581,6 @@ export const translations = {
     // Integrations
     tabIntegrations: "الربط والخدمات",
     integrationsDesc: "مفاتيح واجهات البرمجة (API) للخدمات الخارجية المرتبطة بالبوت",
-    youtubeApiKey: "مفتاح YouTube Data API (اختياري)",
 
     // Model fetching
     selectModel: "اختر نموذجاً من القائمة...",
@@ -1684,7 +1683,6 @@ export const translations = {
     // Integrations
     tabIntegrations: "Integrations",
     integrationsDesc: "API keys for external services connected to the bot",
-    youtubeApiKey: "YouTube Data API Key (Optional)",
 
     // Model fetching
     selectModel: "Select a model from list...",

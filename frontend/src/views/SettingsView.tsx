@@ -487,7 +487,6 @@ export const SettingsView: React.FC = () => {
   const timezone = useSavedValue(String(settings["bot_timezone"] || "Africa/Cairo"));
   const connectionLogLevel = useSavedValue(String(settings["connection_log_level"] || "info"));
   const weatherKey = useSavedValue(String(settings["openweathermap_api_key"] || ""));
-  const youtubeKey = useSavedValue(String(settings["youtube_api_key"] || ""));
   const forwardTtl = useSavedValue(Number(settings["forward_score_ttl_days"] || 30));
   const maxFetch = useSavedValue(Number(settings["max_fetch_bytes"] || 524288));
   const stickerLimit = useSavedValue(Number(settings["sticker_library_limit"] || 1000));
@@ -990,38 +989,6 @@ export const SettingsView: React.FC = () => {
                 }
                 value={weatherKey.value}
                 onChange={(e) => weatherKey.setValue(e.target.value)}
-              />
-            </SaveField>
-
-            <SaveField
-              label={t("youtubeApiKey")}
-              description={
-                language === "ar"
-                  ? "مطلوب لأدوات البحث ومعلومات الفيديوهات من يوتيوب"
-                  : "Required for YouTube search and video tools"
-              }
-              htmlFor="youtube-api-key"
-              dirty={youtubeKey.dirty}
-              saving={youtubeKey.status === "saving"}
-              justSaved={youtubeKey.status === "saved"}
-              error={youtubeKey.error}
-              onSave={() =>
-                youtubeKey.save(async (next) => {
-                  await persistSetting("youtube_api_key", next);
-                  youtubeKey.setValue("");
-                })
-              }
-              onRevert={youtubeKey.revert}
-              {...saveLabels}
-            >
-              <PasswordInput
-                id="youtube-api-key"
-                className="font-mono"
-                placeholder={
-                  configuredKeys.youtube_api_key ? "••••••••••••" : "YouTube Data API Key"
-                }
-                value={youtubeKey.value}
-                onChange={(e) => youtubeKey.setValue(e.target.value)}
               />
             </SaveField>
           </div>
