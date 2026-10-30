@@ -9,7 +9,39 @@ function formatTime12Hour(time24) {
 
 const axios = require("axios");
 const logger = require("../utils/logger.cjs");
+const settings = require("../config/settings.cjs");
 const { tr } = require("../utils/i18n.cjs");
+
+// The one HTTP GET the command performs. Exposed so tests can stub the network.
+const http = {
+  get: (url, options) => axios.get(url, options),
+};
+
+// AlAdhan's path date is DD-MM-YYYY. Parts are taken in `timeZone` so the
+// day is the local day, including just after midnight.
+function prayerDate(now, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(now);
+  const value = (type) => parts.find((part) => part.type === type).value;
+  return `${value("day")}-${value("month")}-${value("year")}`;
+}
+
+function buildPrayerUrl(city, { now = new Date(), timeZone = settings.get("bot_timezone") } = {}) {
+  const url = new URL(`https://api.aladhan.com/v1/timingsByCity/${prayerDate(now, timeZone)}`);
+  url.searchParams.set("city", city);
+  url.searchParams.set("country", "EG");
+  url.searchParams.set("state", "Egypt");
+  url.searchParams.set("method", "5");
+  url.searchParams.set("shafaq", "general");
+  url.searchParams.set("tune", "5");
+  url.searchParams.set("timezonestring", timeZone);
+  url.searchParams.set("calendarMethod", "UAQ");
+  return url.toString();
+}
 
 module.exports = {
   name: "prayer",
@@ -40,15 +72,15 @@ module.exports = {
     // 3. Join the arguments to form the city name (in case it's multi-word like "New York")
     const city = args.join(" ");
 
-    // 4. We will build the API URL here once you provide it
-    const API_URL = `https://api.aladhan.com/v1/timingsByCity/06-06-2025?city=${city}&country=EG&state=Egypt&method=5&shafaq=general&tune=5&timezonestring=Africa%2FCairo&calendarMethod=UAQ`;
+    // 4. Today's date in the bot timezone, with the city encoded as a query value.
+    const API_URL = buildPrayerUrl(city);
 
     try {
       await sock.sendMessage(msg.key.remoteJid, {
         text: tr("Fetching the times...", "يتم جلب البيانات..."),
       });
       // 5. We will make the API call using axios
-      const response = await axios.get(API_URL);
+      const response = await http.get(API_URL);
       // 6. We will parse the prayer timings from the response data
       const timings = response.data.data.timings;
 
@@ -77,4 +109,8 @@ module.exports = {
       });
     }
   },
+
+  // Pure helper and the HTTP seam, kept for tests.
+  http,
+  buildPrayerUrl,
 };
