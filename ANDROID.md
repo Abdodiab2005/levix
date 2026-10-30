@@ -9,7 +9,7 @@ Levix for Android packages the complete Levix stack into a standalone Android AP
 - **AI Agent** with multi-provider support (Gemini, OpenAI, Anthropic)
 - **All 69 commands** & group moderation tools
 - **Embedded FFmpeg** for native WhatsApp voice notes (`!tts`) and video/image preview thumbnails
-- **Local Web Control Panel** accessible directly from the app's built-in WebView or your mobile browser (`http://127.0.0.1:3001`)
+- **Local Web Control Panel** accessible only inside the app's built-in WebView; a phone browser cannot open it
 
 ---
 
@@ -204,18 +204,18 @@ All state is stored in your device's private app storage:
 ```text
 /data/data/net.leviro.levix/files/data/
 ├── levix.db           # SQLite database (settings, auth creds, notes, schedules)
+├── levix.key          # Key for sealed API keys and WhatsApp session data
 ├── logs/              # Bot activity logs
 └── memory/            # AI long-term memory markdown files
 ```
 
 ### Backing Up Your Data
 To back up your configuration and WhatsApp session:
-- **Via ADB (No Root Required)**:
-  ```bash
-  adb backup -f levix-backup.ab net.leviro.levix
-  ```
 - **Via Root / File Manager**:
-  Copy `/data/data/net.leviro.levix/files/data/levix.db` to your SD card or cloud storage.
+  Copy the whole `/data/data/net.leviro.levix/files/data/` folder to private storage.
+  `levix.db` alone cannot restore API keys or the WhatsApp session: both are
+  sealed with `levix.key` in the same folder. Anyone holding both files can
+  read those secrets, so keep the copy private.
 
 ---
 
@@ -313,11 +313,9 @@ Make sure you enter your phone number with the international country code and wi
 Make sure the host service is running. Open the Levix Host app and verify the Bot Engine card shows that the engine is operational. If it is stopped, tap the big circle (**Start Assistant**).
 
 #### Can I access the Web Control Panel from my PC on the same Wi-Fi?
-By default, the web panel is bound strictly to `127.0.0.1` (localhost) for mobile security. To access it from a computer on the same network, use ADB port forwarding:
-```bash
-adb forward tcp:3001 tcp:3001
-```
-Then navigate to `http://localhost:3001` in your computer's browser.
+No. The Android panel listens on a private socket file, not a TCP port. By
+design, it is reachable only inside the Levix app; other devices and other
+apps cannot reach it.
 
 #### Does Levix work on 32-bit (armv7) phones?
 Yes — install **`levix-android-armv7.apk`**. (Most phones from 2016 onward are 64-bit and should use `levix-android-arm64.apk` instead; the 64-bit build is the one Google Play serves by default.)

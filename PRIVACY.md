@@ -1,6 +1,6 @@
 # Levix Privacy Policy & Google Play Data Safety
 
-> **Effective date:** 2026-10-26
+> **Effective date:** 2026-10-30
 > **Applies to:** the Levix Android app (`net.leviro.levix`) and the Levix
 > self-hosted server distributed from this repository.
 > **Product:** Levix, built by Abdelrhman Diab, Leviro.
@@ -21,7 +21,10 @@ relay delivers a recovery code only when you ask for one. It keeps keyed hashes
 for verification, authorization and rate limiting, never the readable address,
 code or token, and it does not send the address to the developer.
 
-Data only leaves your device as a direct result of features you use:
+Data leaves your device while WhatsApp is linked, when a command or AI feature
+runs, or when you enable an optional setting or take a panel action. Gemini's
+Google Search grounding is enabled by default for Gemini AI requests; Gemini
+decides whether to search for each answer.
 
 1. **WhatsApp** — Levix is a WhatsApp client; your messages, pairing data and
    WhatsApp account credentials necessarily travel to WhatsApp (Meta) so the
@@ -36,9 +39,12 @@ Data only leaves your device as a direct result of features you use:
    OpenAI-compatible or Anthropic providers; Gemini can additionally receive
    supported video, audio and documents. Speech-to-text can send audio to
    Gemini or an OpenAI-compatible provider.
-3. **Search engines** — when an AI answer uses the web-search tool, the search
-   query goes to DuckDuckGo (or Google Programmable Search, if you configured
-   it).
+3. **Search and web pages:** Gemini can run Google Search grounding inside
+   its request when it decides current information is needed. The AI's
+   `web_search` and `search_news` tools send queries to `html.duckduckgo.com`,
+   or Google Programmable Search when configured. `search_wikipedia` sends a
+   query and matching page titles to `ar.wikipedia.org` or `en.wikipedia.org`.
+   `fetch_url` requests the HTTPS page the AI opens from that page's host.
 4. **The developer, if you send feedback** — the panel's **Settings → Feedback**
    form sends what you typed (your message, the topic, an optional 1–5 rating,
    an optional contact), one optional file you pick yourself (a screenshot or a
@@ -70,9 +76,28 @@ Data only leaves your device as a direct result of features you use:
    **Add to stickers** on a file in Media Hub, that one file is uploaded to the
    Levix server running on this phone, because that is what does the conversion.
    It goes nowhere else. Browsing Media Hub uploads nothing.
+8. **Translation and speech:** `!translate google` sends the text to
+   `translation.googleapis.com` with your Google Translation API key, or to
+   Google's public `translate.googleapis.com/translate_a/single` endpoint
+   without a key. `!tts` and the AI `speak` tool send text to
+   `translate.google.com` for speech generation.
+9. **Weather, prayer times and short links:** `!weather` sends the city name
+   to `api.openweathermap.org` when you configured its API key. `!prayer`
+   sends the city name to `api.aladhan.com`. `!shortlink` sends the URL to
+   `is.gd`, then to `v.gd` if the first service fails.
+10. **Optional page and media fetches:** enabling link previews lets Baileys
+    request the host of a URL in an outgoing message to build a preview.
+    Enabling remote thumbnails lets Levix download a remote media URL from its
+    host to build a thumbnail. Both settings are off by default.
+11. **Model discovery and domain setup:** when you request live model
+    discovery in the panel, the chosen provider's models endpoint receives
+    your API key. On a desktop or server, `levix domain` requests
+    `api.ipify.org` to check the server's public IP; this command is not part
+    of the Android app.
 
-Everything else — the database, your settings, API keys, memory files, the
-control panel — stays in the app's private storage on the device.
+The database, settings, API keys, memory files and control panel are stored in
+the app's private storage on Android. An API key also goes to its configured
+provider when you use that provider or request live model discovery.
 
 ---
 
@@ -107,10 +132,13 @@ Notes:
   not mean that this context can never leave the device.
 - Android backup of app data is **disabled** (`allowBackup="false"`), so none
   of this is copied to Google's device backup.
-- The embedded control panel binds to the loopback interface
-  (`127.0.0.1:3001`) only. Cleartext traffic is permitted only to
-  `localhost`/`127.0.0.1` (the built-in panel); all external endpoints are
-  required to use HTTPS.
+- On Android, the embedded panel listens on a private socket file in app
+  storage; only the app's WebView reaches it through the Android host. It does
+  not open a TCP port. On desktop, server and Docker installs, the panel
+  listens on every interface (`0.0.0.0`) by default unless `bind_address` is
+  set. `levix domain` sets that address to `127.0.0.1` behind its reverse
+  proxy. Android permits cleartext traffic only for the built-in panel origin;
+  external endpoints use HTTPS.
 
 ## 2. Data that leaves the device, and to whom
 
@@ -118,13 +146,25 @@ Notes:
 | --- | --- | --- | --- |
 | **WhatsApp (Meta)** | Your messages, media you send through the bot, your phone number / pairing credentials, group metadata | Continuously while the bot is linked | Levix is a WhatsApp client; this is the product's core function |
 | **Your configured AI provider** (Google, OpenAI-compatible server, or Anthropic — chosen by you, using your own API key) | The AI prompt and relevant context, which can include display name, WhatsApp user/phone identifiers, group name, messages, quoted/mentioned participant identifiers, AI history or memory, and supported media/files | Only when you invoke an AI feature (`!gemini`, `!ask`, `!ai`, `!generate`, `!stt`, …) | To generate or process the result you asked for |
-| **DuckDuckGo** or **Google Programmable Search** (if you configured it) | The search query | Only when an AI answer uses the web-search tool | Web-grounded answers |
-| **Web pages the AI opens** | HTTPS requests to the page's server | Only when an AI answer uses the fetch-page tool | Reading a page you asked about |
+| **Google Search grounding within Gemini** | A search Gemini chooses from the prompt already sent to Gemini | When Gemini decides to search during an AI request; `ai_google_search` is on by default for Gemini and can be turned off | Grounding an answer in current information |
+| **DuckDuckGo** (`html.duckduckgo.com`) or **Google Programmable Search** (if you configured it) | The search query | When an AI answer uses `web_search` or `search_news`; the latter uses the same search path | Web-grounded answers and news |
+| **Wikipedia** (`ar.wikipedia.org` or `en.wikipedia.org`) | The search query and matching page titles requested for summaries | When an AI answer uses `search_wikipedia` | Finding and reading articles |
+| **Web pages the AI opens** | HTTPS request for the page to its host | When an AI answer uses `fetch_url` | Reading a page you asked about |
+| **Google Cloud Translation** (`translation.googleapis.com`) | Text to translate and the configured Google Translation API key | When you use `!translate google` with a key | Translating text through the official API |
+| **Google's public Translate endpoint** (`translate.googleapis.com/translate_a/single`) | Text to translate | When you use `!translate google` without a key | Translating text without an API key |
+| **Google TTS** (`translate.google.com`) | Text to speak | When you use `!tts` or the AI uses `speak` | Generating speech |
+| **OpenWeatherMap** (`api.openweathermap.org`) | The city name and configured API key | When you use `!weather` with `openweathermap_api_key` set | Getting weather for the named city |
+| **Aladhan** (`api.aladhan.com`) | The city name | When you use `!prayer` | Getting prayer times for the named city |
+| **URL shorteners** (`is.gd`, then `v.gd` on fallback) | The URL to shorten | When you use `!shortlink` | Creating a short link |
+| **Host of a URL in an outgoing message** | Request for the linked page | When `link_previews_enabled` is on and an outgoing message contains a previewable link; off by default | Building a link preview |
+| **Host of a remote media URL** | Request to download the media | When `thumbnail_remote` is on and remote media is sent; off by default | Building a thumbnail |
+| **Configured AI provider's models endpoint** | The operator's API key | When the operator requests live model discovery in the panel | Listing available models |
+| **IP lookup service** (`api.ipify.org`) | An IP lookup request, exposing the server's source IP | When the operator runs `levix domain` on a desktop or server; not an Android flow | Checking the server's public IP |
 | **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |
 | **The developer** (via `levix.leviro.net/api/feedback`, delivered as a Telegram message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact, an optional file you attach yourself — plus the Levix version, the platform, and the sending app's user-agent. If you tick the diagnostics box, the section 2a diagnostics object and the sanitized technical debug log in section 2b as well | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
 | **The developer** (via `levix.leviro.net/api/crash-reports`) | One crash report: category, sanitized error type/message/stack, an optional screen id, the app + section 2a device fields, the sanitized technical debug log in section 2b, and a few navigation breadcrumbs. Never a phone number, JID, chat/message body or media file | Only when **you** open the panel and press Send on one report; never automatically | Support: so a crash can be grouped and fixed |
 | **Levix mail relay** (`levix.leviro.net/api/recovery-email`) | The recovery address and UI language; verification ID and entered verification code on confirmation; address, reset code, recovery token and language on reset. No free text | When you verify an address in **Settings**, or when you choose **Email** on **Forgot password** | To verify address ownership and authorize delivery. Only keyed hashes and authorization state persist, never readable addresses, codes or tokens; the address is not forwarded to the developer |
-| **Your own Levix server** (the instance running on this phone, reached at `http://127.0.0.1:3001` — never the developer, never an AI provider) | The one image, GIF or video you picked in Sticker Studio or the Media Hub, as a single upload | Only when you choose it in Sticker Studio or tap **Make sticker** / **Add to stickers** | Sticker Studio works server-side, so it has to receive the file you chose |
+| **Your own Levix instance** (on Android, reached inside the app through a private socket; never the developer or an AI provider) | The one image, GIF or video you picked in Sticker Studio or the Media Hub, as a single upload | Only when you choose it in Sticker Studio or tap **Make sticker** / **Add to stickers** | Sticker Studio works in the local host, so it has to receive the file you chose |
 
 Apart from feedback and crash reports you deliberately send, the developer of
 Levix is **not** a recipient of any of the above. The recovery-email relay
@@ -332,6 +372,8 @@ in their country or region.
 Fill the Play Console **App content → Data safety** form as follows. This
 mapping reflects the Android app's current behavior and the categories used by
 Google Play.
+This file is the answer map; it does not change the Play Console, and the owner
+updates the Console after review.
 
 **Q: Does your app collect or share any of the required user data types?**
 → **Yes**
@@ -376,7 +418,44 @@ Declare these data types:
 | App info and performance → **Crash logs** | Yes | No | Optional | App functionality, Analytics |
 | App info and performance → **Diagnostics** | Yes | No | Optional | App functionality, Analytics |
 
-For every data type above:
+### How each outbound flow maps to the Data safety definitions
+
+Google Play calls transmission off the device **collection**, including by a
+library or SDK and regardless of who receives it. Its end-to-end encryption
+exclusion applies only to content unreadable by anyone except sender and
+recipient, not automatically to metadata. Processing is **ephemeral** only if
+the recipient keeps the data in memory no longer than the real-time request;
+the code alone does not establish that. **Sharing** means transfer of collected
+user data to a third party, subject to the service-provider, legal,
+user-initiated action with reasonable expectation, prominent disclosure and
+consent, or full-anonymization exceptions. See [Google Play's definitions](https://support.google.com/googleplay/android-developer/answer/10787469).
+
+| Flow | Collected? (definition applied) | Shared? | Exception or reason | Status |
+| --- | --- | --- | --- | --- |
+| WhatsApp message and media content | No if end-to-end encrypted from sender to recipient | No if excluded from collection | End-to-end encryption exclusion applies only to content the intermediary cannot read | Owner review: verify content boundary |
+| WhatsApp pairing and message or group metadata | Yes, transmitted off device | Review | Encryption of content does not exclude identifiers and metadata; assess the WhatsApp recipient and the user-initiated exception | Owner review |
+| Configured AI provider, including prompts, context and supported media | Yes, transmitted off device | Review | The operator chooses the provider, but it is not automatically the developer's service provider; assess reasonable user expectation for each AI use | Owner review |
+| Gemini Google Search grounding | Yes, search derived from a collected Gemini prompt | Review | Gemini can decide to search; grounding is enabled by default for Gemini requests | Owner review |
+| `web_search` and `search_news` to DuckDuckGo or keyed Google Programmable Search | Yes, query transmitted off device | Review | An AI tool can choose the search; assess whether the specific user action makes this transfer reasonably expected | Owner review |
+| `search_wikipedia` to Arabic or English Wikipedia | Yes, query and page-title requests transmitted off device | Review | An AI tool chooses the lookup; assess the user-initiated exception | Owner review |
+| `fetch_url` to a page host | Yes, page request transmitted off device | Review | An AI tool chooses the page; assess whether the requested answer makes that host request reasonably expected | Owner review |
+| `!translate google` with an API key | Yes, text transmitted off device | No if the user-initiated exception applies | The named Google command requests translation through Google's official API; the key is an operator credential | Mapped; owner checks expectation |
+| `!translate google` without a key | Yes, text transmitted off device | Review | The named command uses Google's public endpoint; assess whether that endpoint is reasonably expected | Owner review |
+| `!tts` or AI `speak` through Google TTS | Yes, text transmitted off device | Review | Assess whether invoking speech makes Google TTS transfer reasonably expected, especially for an AI tool call | Owner review |
+| `!weather` to OpenWeatherMap | Yes, typed city transmitted off device | Review | Assess the user-initiated exception and whether a typed city falls under Approximate location | Owner review: location type |
+| `!prayer` to Aladhan | Yes, typed city transmitted off device | Review | Assess the user-initiated exception and whether a typed city falls under Approximate location | Owner review: location type |
+| `!shortlink` to `is.gd` or fallback `v.gd` | Yes, URL transmitted off device | Review | The command asks for a short link, but the destination can switch on failure; assess reasonable expectation | Owner review |
+| Optional outgoing link preview | Yes, page request transmitted off device when enabled | Review | The page host receives a request for a URL in an outgoing message; assess whether enabling previews establishes expectation | Owner review |
+| Optional remote thumbnail | Yes, remote media request transmitted off device when enabled | Review | The media host receives a download request; assess whether enabling thumbnails establishes expectation | Owner review |
+| Live model discovery | Yes, operator API key transmitted off device | No if the user-initiated exception applies | The operator requests the configured provider's model list with that provider's key | Mapped; owner checks credential type |
+| Optional WhatsApp outbound proxy | Yes, WhatsApp traffic is transmitted off device through the configured proxy | Review | The operator chooses the proxy, but its handling of content and metadata depends on the WhatsApp encryption boundary and the proxy operator | Owner review |
+| Feedback sent to Levix and delivered through Telegram | Yes, feedback and optional attachment transmitted off device | Review | Developer receives the chosen report; assess whether Telegram acts as a service provider under the developer's instructions | Owner review |
+| Crash report sent to Levix | Yes, the selected report transmitted off device | No for the developer-operated endpoint | The operator presses Send; no further third-party recipient is shown in this path | Mapped |
+| Recovery email relay | Yes, address and verification or reset fields transmitted off device | No for the developer-operated relay | The operator requests a code; the relay stores keyed hashes and authorization state | Mapped |
+| Sticker upload to the Android host | No, data stays on the device | No | The WebView reaches the app's private socket, so no off-device collection occurs | Mapped |
+| `levix domain` IP lookup | Not an Android app flow | Not an Android app flow | The CLI runs on a desktop or server and sends a request to `api.ipify.org` | Outside Play form |
+
+For every data type in the declaration table above:
 
 - **Processed ephemerally:** No.
 - **Collection purpose:** App functionality, plus **Customer support** for the
@@ -412,7 +491,8 @@ apps, or device/other identifiers. Levix contains no analytics, advertising, or
 crash-reporting SDK: the **Crash logs** and **Diagnostics** rows above are the
 user-initiated reports described in sections 2a and 4, which the app writes
 locally and sends only when the user presses Send. There is no device-following
-identifier anywhere in them.
+identifier anywhere in them. The location answer needs owner review for typed
+city names sent by `!weather` and `!prayer`, as flagged above.
 
 ### Other Play Console declarations
 
