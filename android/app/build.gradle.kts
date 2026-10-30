@@ -218,7 +218,10 @@ android {
             }
         }
         release {
-            isMinifyEnabled = false
+            // R8 removes unused code and resources from the release build.
+            // This is an experiment measured in Phase 01 PR 01d and needs device proof before release.
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = signingConfigs.getByName("levixRelease")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
