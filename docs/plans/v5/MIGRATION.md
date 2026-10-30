@@ -19,8 +19,9 @@ installs, SEA binaries, Docker volumes, headless servers and the Android app.
 ## 2. Rules for v5
 
 1. Migrations are appended, never edited after release.
-2. Phase 02 ships before the first v5 migration. From then on, the app writes a local backup before
-   it applies a pending migration. Phase 02 first changes the start order (open the database without
+2. Phase 02 ships before the first v5 migration. From then on, no migration runs until Levix holds
+   the single-instance lock and has written a backup that passes verification (owner rule, accepted
+   2026-10-30), with concurrency and failure tests. Phase 02 first changes the start order (open the database without
    migrating, take the instance lock, detect pending migrations, back up, migrate), because today
    importing the store migrates at once (`src/db/db.cjs:707`, AUDIT B-09).
 3. Every new migration has a test that runs it against v4.9.2 fixture databases built by the test

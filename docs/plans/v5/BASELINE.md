@@ -12,12 +12,12 @@ named artifact. Nothing here is an estimate unless a line says INFERENCE.
 | Working tree before Phase 00 | clean, branch `main` | `git status` |
 | Open pull requests | none | `gh pr list --state open` |
 | Last merged PR | #79 (dependabot npm minor/patch group, 2026-10-26) | `gh pr list --state all` |
-| Branches not merged into `main` | 1: `zcode/commands-panel-upgrades` (2 commits, 2026-09-30, settings export/import inside the Android WebView) | `git branch --no-merged main`, `git cherry main zcode/commands-panel-upgrades` |
+| Branches not merged into `main` | 1 by ref: `zcode/commands-panel-upgrades`, local only (2 commits, 2026-09-30). Both commits are patch-identical to `main` commits `ec1d762` and `cb9d09a`, so `main` already holds the changes | `git branch --no-merged main`, `git cherry main zcode/commands-panel-upgrades` (both `-`) |
 | CI on base commit | run 40467429633: 7 of 7 jobs `success` (tests, package, SEA on 3 OSes, Docker, Android APK build with `:app:testDebugUnitTest`) | `gh run view 40467429633` |
 | Release workflow on base commit | run 40467429376 (`v4.9.2`) `success` | `gh run list --workflow release.yml` |
 
-The unmerged branch touches the same settings export and import paths that Phase 02 (Backup and
-Restore) will touch. Phase 02 must decide whether its two commits are superseded before it starts.
+The branch touches the settings export and import paths that Phase 02 (Backup and Restore) will
+touch, but nothing on it is missing from `main` (Q-02).
 
 ## 2. Environment used for this baseline
 

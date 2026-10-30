@@ -27,4 +27,18 @@
   for pre-migration backups, no router bypass on rollback), the ADR-007 audience rule, risks R-31
   and R-32, and codex's positions on Q-04, Q-05, Q-09 and Q-17. Still disputed: Q-01 and Q-21.
 - Decisions: ADR-001 to ADR-017 (`DECISIONS.md`); 22 open questions (`OPEN_QUESTIONS.md`).
-- Next: owner review of this PR and answers to the questions marked "Needed by 01" before Phase 01.
+- Owner decisions, 2026-10-30: Q-01 option (b), Q-02 review first, Q-11 separate privacy PR now,
+  Q-12 remove `youtube_api_key` without deleting saved values, Q-13 separate `!prayer` fix now, Q-21
+  option (a). Process rules: permission fixes in Phase 05 never widen access without approval; no
+  migration before the instance lock and a verified backup. Recorded in `OPEN_QUESTIONS.md`,
+  `DECISIONS.md`, `PHASES.md`, `TEST_MATRIX.md`, `MIGRATION.md` and `AGENTS.md`.
+- Q-02 result: both commits on `zcode/commands-panel-upgrades` are patch-identical to `main`
+  (`ec1d762`, `cb9d09a`); nothing moves to Phase 02.
+- Separate PRs opened on the owner's request, counted in Phase 01 scope:
+  - #81 removes `youtube_api_key` (saved values kept). Local: `npm test` PASS (5038 checks), lint
+    PASS, frontend build PASS.
+  - #82 updates `PRIVACY.md`, `README.md` and `ANDROID.md` with every data destination and a Data
+    safety flow map. Documentation only.
+  - #83 fixes `!prayer` (today's date in `bot_timezone`, encoded URL, 39 new checks). Local:
+    `npm test` PASS (5078 checks), lint PASS, frontend build PASS; codex review findings handled.
+- Next: owner review and merge decision for this PR. Phase 01 starts only after explicit approval.

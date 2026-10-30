@@ -24,9 +24,17 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
   builds (Android `libnode.so` for `arm64-v8a` and `armeabi-v7a`, SEA binaries, Docker image, CI) to
   the latest 24.x patch that passes the full gate on both Android ABIs at that time. No component
   moves to Node 26.
+- Decision (ACCEPTED, owner, 2026-10-30, Q-01 option b): official builds use Node 24 only. A
+  self-hosted user who runs Node 26 or later can still start Levix, with a clear warning that the
+  version is not officially supported; support for it is best effort. Node below 24 is refused.
+  `package.json` declares the supported range as `engines` `>=24 <25`, so npm warns at install time,
+  and the CLI, `AGENTS.md`, `README.md`, `SETUP.md` and `PACKAGING.md` describe the same policy. The
+  latest verified 24.x patch on 2026-10-30 is v24.22.2.
 - Consequences: Phase 01 pins the Termux `.deb` version and sha256 per ABI and fails the fetch when
-  `libnode.so` reports a major other than 24. CI and release jobs pin `node-version` to 24. How the CLI
-  and `engines` treat a user who runs Levix on Node 26 is open question Q-01.
+  `libnode.so` reports a major other than 24. CI and release jobs pin `node-version` to 24. Phase 01 PR
+  01a changes `engines` and the CLI check (`src/cli.js:13`) together with their tests
+  (`tests/package.test.mjs:128`, `tests/cli.test.mjs:226`). Until then the CLI accepts any major from
+  24 up without a warning.
 - Verification: a test reads the staged runtime stamp and asserts major 24; CI prints `node -v` in
   every job; Phase 10 checks every artifact's embedded version.
 
@@ -117,8 +125,9 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
   can already read that source chat. The owner's own private chat qualifies for any chat the linked
   account is in. Any other destination may receive only content classes without third-party
   content, such as progress and system notices, unless the owner adds an explicit, narrow exception.
-- Consequences: Phase 05 classifies the two existing exceptions and keeps them unless the owner
-  changes them (Q-21).
+- Consequences: the two existing exceptions stay (Q-21, decided 2026-10-30): `!schedule` errors go
+  to the creator's private chat, and password-reset codes keep their private destination. Phase 05
+  records them as named exceptions in the router.
 
 ## ADR-008: One generic reaction rules engine
 
@@ -150,15 +159,16 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
 
 ## ADR-011: Command Engine v2 keeps the existing permission system
 
-- Status: ACCEPTED (Phase 05 prompt). Unification step PROPOSED.
+- Status: ACCEPTED (Phase 05 prompt; unification rule accepted by the owner on 2026-10-30).
 - Context: the dispatcher checks permissions through `evaluatePermissionLevel`
   (`src/middleware/permissions.middleware.js:78`). The group router skips the dispatcher's checks
   (`src/handlers/command.handler.js:321`) and runs its own switch (`src/commands/group.cjs:122`).
   So `!kick` and `!group kick` can decide differently for a bot admin. Newline already separates a
   sub-command today, because the dispatcher splits on `/\s+/` (`src/handlers/command.handler.js:289`).
-- Decision (PROPOSED): Phase 05 moves the group router onto `evaluatePermissionLevel`, after a
-  before-and-after permission matrix for every registered command. Each behaviour change the matrix
-  shows needs owner approval (Q-07).
+- Decision (ACCEPTED, owner, 2026-10-30): Phase 05 moves the group router onto
+  `evaluatePermissionLevel`, after a before-and-after permission matrix for every registered command.
+  No change may widen anyone's access without the owner's explicit approval; each widening case comes
+  back as its own question. Changes that narrow access are listed in the phase report.
 
 ## ADR-012: `Powered by Levix` watermark through the message engine
 
@@ -192,7 +202,11 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
 
 ## ADR-016: Local backups, secrets excluded or encrypted
 
-- Status: PROPOSED (Phase 02 finalizes the format).
+- Status: ordering rule ACCEPTED (owner, 2026-10-30); format PROPOSED (Phase 02 finalizes it).
+- Rule (ACCEPTED): no migration runs until Levix holds the single-instance lock and has written a
+  backup that passes verification. Phase 02 ships concurrency and failure tests for that rule: a
+  second process starting at the same time, a crash during the backup, a crash during the migration,
+  and a full disk.
 - Context: Node v24.19.0 exports `backup()` from `node:sqlite` and `DatabaseSync.prototype.serialize`
   (checked with `node -e` on 2026-10-30). The Android runtime is Node v24.22.1 linked against a
   system `libsqlite3.so`; the API there is NOT VERIFIED yet. Secret material and the vault key layout

@@ -52,18 +52,19 @@ replaces them in its own plan before writing code.
 | Tests | `npm test`, lint, frontend build, `validate:tarball`, `validate:sea`, `validate:docker` (CI), `:app:testDebugUnitTest`, debug and release builds for both ABIs, manual device smoke (start, pair a dedicated test account with the owner's authorization, sticker WebP, TLS roots, background service), size report against `BASELINE.md`. |
 | Gate | Before and after tables per ABI from artifacts; every artifact reports Node 24.x; no dev dependency in `levix-app.zip`; no regression. |
 | Rollback | Revert the staging or pin commit; previous release artifacts stay valid. |
-| PRs | 01a Node pin (Termux version and sha256, major check, `setup-node` in release jobs, Q-01 outcome). 01b production-only staging tree and the size report job. 01c `npm audit` fixes for runtime dependencies. 01d R8 and resource shrinking, only with device proof. 01e test runner per-file timing. |
+| PRs | Opened early on the owner's request (2026-10-30), counted in Phase 01 scope: the privacy and public-docs PR #82 (Q-11), the `!prayer` bug fix PR #83 (Q-13), and the `youtube_api_key` removal PR #81 (Q-12). Then: 01a Node 24 policy: Termux version and sha256 pin, major check, `setup-node` in release jobs, `engines` `>=24 <25`, CLI warning above 24 and refusal below 24, matching docs (Q-01). 01b production-only staging tree and the size report job. 01c `npm audit` fixes for runtime dependencies. 01d R8 and resource shrinking, only with device proof. 01e test runner per-file timing. |
 
 ### Phase 02: backup and restore
 
 | Item | Plan |
 | --- | --- |
+| Inputs | The old local branch `zcode/commands-panel-upgrades` adds nothing: both commits are patch-identical to `main` commits `ec1d762` and `cb9d09a` (Q-02, checked 2026-10-30). |
 | Goal | Local backup and restore of the data in `ARCHITECTURE.md` section 6, with a manifest, checksums, a filtered database copy without secrets by default, passphrase encryption when secrets are included, and a journaled restore that survives interruption (`ARCHITECTURE.md` section 10.2). |
 | Files | new `src/backup/` (manifest, create, verify, restore), `src/db/db.cjs` and `src/bootstrap/core.js` (start order: open, lock, detect pending migrations, back up, migrate; AUDIT B-09), `src/routes/dashboard.api.esm.js` (routes), `src/cli.js` (new `backup` and `restore` subcommands for headless use, Q-14), `frontend/src/views/SettingsView.tsx` (new section), `android/app/src/main/java/net/leviro/levix/PanelBridge.kt` and `PanelFiles.kt` (save and open through the Storage Access Framework), new `docs/plans/v5/BACKUP_FORMAT.md`. |
 | Migrations | No table change. The start order changes so a backup can run before pending migrations; each later phase that adds a migration relies on that hook. |
 | Compliance | Local only; nothing is uploaded; the operator sees the content list before creating or restoring. |
 | Tests | backup, mutate, restore, verify; corrupt backup rejected with old data intact; interrupted restore; wrong passphrase; newer schema refused; path traversal, symlink, bomb and KDF-cost fuzz; schedules, group settings, memory and secure settings covered; settings export unchanged. |
-| Gate | No data loss in any failure test; no secret in a default backup; content list shown before restore. |
+| Gate | No data loss in any failure test; no secret in a default backup; content list shown before restore; no migration runs before the instance lock is held and a verified backup exists (ADR-016 rule, accepted 2026-10-30), proven by concurrency and failure tests (two processes at once, crash during backup, crash during migration, full disk). |
 | Rollback | Feature routes disabled; restore never deletes current data before the atomic switch. |
 | PRs | 02a format ADR and a read-only preview of what a backup holds. 02b create. 02c restore. 02d UI, Android and CLI. |
 
@@ -102,7 +103,7 @@ replaces them in its own plan before writing code.
 | Migrations | Additive routing settings. |
 | Compliance | Privacy matrix for destinations; no new data leaves the device. |
 | Tests | parser matrix (newline, aliases, captions, quotes, unknown command and sub-command); permission matrix before and after for all 69 commands; routing tests with a fake socket; status edit-in-place and media flows; health states without network calls. |
-| Gate | Matrix identical except approved changes; default replies stay in the source chat; members never see internals. |
+| Gate | Matrix identical except approved changes; no change widens anyone's access without the owner's explicit approval (accepted 2026-10-30); default replies stay in the source chat; members never see internals. |
 | Rollback | Routing configuration resets to the source chat while the router and its destination guard stay in place; parser v1 kept behind a switch for one release. No rollback path may send around the router. |
 | PRs | 05a permission matrix test only. 05b group router on `evaluatePermissionLevel`. 05c parser v2. 05d message engine and the six progress-message commands. 05e Reply Router. 05f `!status` and health. |
 

@@ -35,12 +35,16 @@ to all v5 work and add to the rules below; they remove none of them.
   with a short audit of the current tree and a written plan (files, migrations,
   tests, threats, privacy impact, rollback) before any code. The next phase
   waits for the owner's approval.
-- **Node.js 24.x only.** The shipped v4.9.x accepts Node 24 or newer
-  (`engines` `>=24`, see Technology Stack). For v5, every artifact Levix builds
-  (Android `libnode.so` for both ABIs, SEA binaries, the Docker image, CI) uses
-  the latest Node 24 patch that passes the gates. Never Node 26 in v5 (ADR-001). The Android runtime comes
-  from Termux `nodejs-lts`, which is not pinned yet; check the version it would
-  fetch before any Android build.
+- **Node.js 24 for every official build.** Android `libnode.so` for both ABIs,
+  SEA binaries, the Docker image and CI use the latest Node 24 patch that passes
+  the gates (v24.22.2 on 2026-10-30). No component moves to Node 26 (ADR-001).
+  A self-hosted user may run Node 26 or later: Levix starts with a clear warning
+  that the version is not officially supported, and support is best effort.
+  Below 24 it refuses to start. `package.json` (`engines` `>=24 <25`), the CLI
+  and the docs state this one policy; Phase 01 PR 01a makes the code match.
+  Until then v4.9.x accepts any major from 24 up without a warning. The Android
+  runtime comes from Termux `nodejs-lts`, which is not pinned yet; check the
+  version it would fetch before any Android build.
 - **Public core, private Plus.** This repository stays MIT, complete, and builds
   and passes its tests with no private code or credential. `levix-plus` code,
   keys and build output never enter this repository or its public artifacts
@@ -60,9 +64,13 @@ to all v5 work and add to the rules below; they remove none of them.
   `#open()` builds a socket, because the retry timer calls `#open()` directly
   (ADR-006). A gate on a route or on `start()` alone is incomplete.
 - **Compatibility.** v4.9.x installs must upgrade in place: append-only
-  migrations, a backup before any v5 migration (Phase 02), pairing credentials
-  and `levix.key` untouched. Android ARM64 and ARMv7, desktop SEA, npm, Docker
-  and headless keep working.
+  migrations, pairing credentials and `levix.key` untouched. No v5 migration
+  runs until Levix holds the single-instance lock and has written a backup that
+  passes verification (Phase 02, with concurrency and failure tests). Android
+  ARM64 and ARMv7, desktop SEA, npm, Docker and headless keep working.
+- **Permissions never widen silently.** Command permission fixes (Phase 05) come
+  from a before-and-after matrix of every command. No change may widen anyone's
+  access without the owner's explicit approval.
 - **Evidence.** Test results are `PASS`, `FAIL`, `NOT RUN` or `BLOCKED`, each
   with the command, platform, commit and date. Never report a test, a size or a
   PR that did not happen. Google Play download or update sizes come only from

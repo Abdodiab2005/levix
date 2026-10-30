@@ -52,7 +52,7 @@ conclusions from the cited facts, not observed behaviour.
 | C-09 | The only message cache holds bot-sent messages for one hour, at most 500. | `src/utils/recentMessageCache.esm.js:13` | A reaction cannot be matched to the original user message today. | ADR-008 bounded lookup. |
 | C-10 | Replies go to the source chat, except `!schedule` errors (creator's private chat) and the password-reset code (linked account's own chat). | `src/handlers/command.handler.js:70`, `src/commands/schedule.cjs:22`, `src/panel/password-reset.cjs:189` | The Reply Router must keep or deliberately change these. | Phase 05 inventory. |
 | C-11 | `!status` is `OWNER_ONLY` and prints Node, Baileys and kernel versions and the FFmpeg path on failure. | `src/config/defaults.cjs:52`, `src/commands/status.cjs:41` | If an operator lowers the permission, members see internals. | Phase 05 short output plus owner-only debug (Q-06). |
-| C-12 | `!prayer` always requests the timings for the fixed date `06-06-2025`, with `country=EG` and the Cairo time zone, and puts the city into the URL without encoding. Unchanged since the first commit (`68be70d`). | `src/commands/prayer.cjs:44` | Every user gets wrong prayer times on every other day; a crafted city can add query parameters. | Separate bug-fix PR, outside the v5 phases (Q-13). |
+| C-12 | `!prayer` always requests the timings for the fixed date `06-06-2025`, with `country=EG` and the Cairo time zone, and puts the city into the URL without encoding. Unchanged since the first commit (`68be70d`). | `src/commands/prayer.cjs:44` | Every user gets wrong prayer times on every other day; a crafted city can add query parameters. | Fixed in PR #83 (Q-13). |
 
 ### Language and AI
 
@@ -76,7 +76,7 @@ conclusions from the cited facts, not observed behaviour.
 | E-03 | User data lives in the database plus `memory/`, `ai-persona.md`, `media/schedules/`, `stickers/`. | `ARCHITECTURE.md` section 6.1 | A database-only backup loses memory, persona, schedule media and stickers. | Phase 02 inclusion policy. |
 | E-04 | Android preferences (`levix_host`, `levix_onboarding`, `levix_crash_reports`, `media_hub`, `ui_prefs`) sit outside the Node data directory; `allowBackup="false"`. | `ARCHITECTURE.md` section 6.4 | A Node-side backup does not restore Android settings. | Q-10. |
 | E-05 | Settings export (`format: "levix-settings"`, `version: 1`) carries configuration only. | `src/services/settingsTransfer.cjs:32` | Operators may mistake it for a backup. | Phase 02 names the two clearly. |
-| E-06 | Unmerged branch `zcode/commands-panel-upgrades` changes settings export and import in the WebView. | `git cherry main zcode/commands-panel-upgrades` | Conflicts with Phase 02 work. | Owner decides: merge, rebase or close. |
+| E-06 | The local branch `zcode/commands-panel-upgrades` is not merged by ref, but both of its commits are patch-identical to `main` commits `ec1d762` and `cb9d09a`. The branch does not exist on GitHub. | `git cherry main zcode/commands-panel-upgrades` (both `-`); `git patch-id` | None: `main` already has the changes. | Resolved (Q-02); the owner may delete the local branch. |
 
 ## 2. Public document drift
 

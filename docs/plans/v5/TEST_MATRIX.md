@@ -2,7 +2,12 @@
 
 Result labels: `PASS`, `FAIL`, `NOT RUN`, `BLOCKED`. Every result records the command, the
 platform, the commit, the date and where the evidence lives. A result without that record does not
-count. Delegated implementers do not run these gates; the orchestrator runs them and reviews the
+count. Each result also names its evidence type, and the three types are never merged into one line:
+
+- local: run by the orchestrator on a named machine, with the log kept;
+- CI: a GitHub Actions run id and job name;
+- manual device smoke: device model, Android version, ABI, build tested and date, run by a person on
+  a dedicated test account with the owner's authorization. Delegated implementers do not run these gates; the orchestrator runs them and reviews the
 output.
 
 ## 1. Current suites (baseline 2026-10-30, commit `050d8b9`)
@@ -36,7 +41,7 @@ output.
 | Phase | Required gates | Phase-specific tests |
 | --- | --- | --- |
 | 01 | all of section 1, both ABI release builds, size report | staged tree contains no dev dependency; `libnode.so` major is 24; 16 KB alignment; FFmpeg `libwebp` encoders; TLS roots; boot smoke on device |
-| 02 | section 1 core gates | backup and restore end to end; corrupt and interrupted restore; path traversal, symlink, bomb and KDF fuzz; wrong passphrase; newer schema refused; settings export unchanged |
+| 02 | section 1 core gates | backup and restore end to end; corrupt and interrupted restore; path traversal, symlink, bomb and KDF fuzz; wrong passphrase; newer schema refused; settings export unchanged; no migration before the instance lock and a verified backup: two processes at once, crash during backup, crash during migration, full disk |
 | 03 | core gates, Android unit tests | locale matrix for help and replies; catalog validator; placeholder parity; RTL and LTR smoke; Android locale switch without network |
 | 04 | core gates, Docker, SEA, Android unit tests | auth negative paths; consent on every start path; offline first start; tampered Terms; old WebView |
 | 05 | core gates | parser matrix; permission matrix for 69 commands; routing privacy; status editing; health without network |

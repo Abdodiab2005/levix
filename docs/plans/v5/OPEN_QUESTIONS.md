@@ -1,27 +1,34 @@
 # Levix v5.0.0 open questions
 
-These need an owner decision. Already decided and not repeated here: Node 24 only, the four locales,
-USD 0.99 with 30% off in Egypt, Plus as a private repository, Cloud as a separate product,
-offline-first, same-chat reply default, and one generic reaction engine.
+The questions under "Still open" need an owner decision. Decided before Phase 00 and not repeated
+here: Node 24 only, the four locales, USD 0.99 with 30% off in Egypt, Plus as a private repository,
+Cloud as a separate product, offline-first, same-chat reply default, and one generic reaction engine.
 
-Each question lists options and a recommendation. "Needed by" names the first phase that is blocked
-without an answer.
+Each open question lists options and a recommendation. "Needed by" names the first phase that is
+blocked without an answer.
+
+## Decided by the owner on 2026-10-30
+
+| ID | Decision | Where it lands |
+| --- | --- | --- |
+| Q-01 | Option (b). Every official build (Android, Docker, SEA, CI) uses Node 24, at the latest verified 24.x patch at build time (v24.22.2 on 2026-10-30). A self-hosted user may run Node 26 or later: Levix starts with a clear warning that the version is not officially supported, and support is best effort. Below 24 it refuses to start. `package.json` (`engines` `>=24 <25`), the CLI and the docs must state this one policy. No move to Node 26. | ADR-001; Phase 01 PR 01a |
+| Q-02 | Review first. Result: both commits on the local branch `zcode/commands-panel-upgrades` are patch-identical to `main` commits `ec1d762` and `cb9d09a` (`git cherry` marks them `-`). Nothing is missing from `main`, so nothing moves to Phase 02. The branch exists only locally; it stays until the owner deletes it. | AUDIT E-06 |
+| Q-07 and Q-08 | Permission differences are fixed in Phase 05 from the before-and-after permission matrix. No change may widen anyone's access without the owner's explicit approval; each widening case comes back as its own question. | ADR-011; Phase 05 |
+| Q-11 | A separate PR now updates `PRIVACY.md` and the public docs with every real data destination, and reviews the Data safety answers against Google's official definitions without assuming that every external connection is "Shared". | PR #82, Phase 01 scope |
+| Q-12 | Remove `youtube_api_key` from the settings definitions, the dashboard and the docs. Saved values are not deleted automatically. | PR #81, Phase 01 scope |
+| Q-13 | A separate bug-fix PR makes `!prayer` use the current date and the configured timezone, encodes the URL, and adds tests. | PR #83, Phase 01 scope |
+| Q-21 | Option (a). `!schedule` errors keep going to the creator's private chat; password-reset codes keep going to their current private destination. | ADR-007; Phase 05 |
+
+## Still open
 
 | ID | Question | Options | Recommendation | Needed by |
 | --- | --- | --- | --- | --- |
-| Q-01 | What happens when a user runs Levix on Node 26 or later? | (a) refuse to start unless the major is 24, `engines` `>=24 <25`; (b) start with a warning above 24, refuse below 24, `engines` `>=24 <25` so npm warns at install; (c) keep today's `>=24` with no warning | DISPUTED. Orchestrator recommends (b): Node 26 is now LTS, so a new npm user often has it, and (a) would stop those installs and the Linux installer path, which accepts any major from 24 up (`deploy/install.sh:131`). Codex recommends (a): the locked Node 24 rule should hold at run time too (`src/cli.js:13`). Docker, SEA and Android bundle their own Node 24 either way. | 01 |
-| Q-02 | What happens to branch `zcode/commands-panel-upgrades` (2 commits, 2026-09-30, settings export and import in the WebView)? | (a) review and merge; (b) rebase into Phase 02; (c) close | (b) or (c), after checking whether `main` already covers it. | 02 |
 | Q-03 | How does the app prove that remote Terms are authentic? | (a) an Ed25519 signature checked with a public key bundled in the app; (b) a hash list bundled per app version; (c) HTTPS only | (a). It allows new Terms between app releases, and a hijacked server cannot sign. | 04 |
 | Q-04 | How does a headless install accept the Terms? | (a) an interactive CLI subcommand that prints the Terms and asks for confirmation; (b) a flag on the start command; (c) a separate provisioning command that takes the Terms version and sha256 and refuses on any mismatch | (a) for interactive shells and (c) for Docker and unattended installs. No start-command flag, because a flag can accept text nobody displayed. Both record version, hash and time. (Agreed with codex review.) | 04 |
 | Q-05 | When new Terms arrive while WhatsApp is connected, what happens? | (a) keep the socket and ask for acceptance before the next start; (b) disconnect at once | (a). Emergency disconnects need their own authenticated delivery and offline rules, which are out of scope until designed. (Agreed with codex review.) | 04 |
 | Q-06 | Who may run the short `!status` by default? | (a) keep `OWNER_ONLY` and make the output short; (b) `MEMBERS` for the short output, with `!status debug` owner only | (a). It keeps today's permission. Operators who want members to see it can lower it in the panel. | 05 |
-| Q-07 | The permission matrix will show cases where `!kick` and `!group kick` decide differently. Which result is correct? | (a) the dispatcher's result for both; (b) the group router's result for both; (c) decide per case | (a), because the dispatcher path is the one the panel and the AI tools already use. | 05 |
-| Q-08 | Should permission keys match the command files (`!note` is admin-only today because `group:note` has no key, while `group:notes` does)? | (a) align keys with files, keeping current effective permissions; (b) align keys and make `!note` `MEMBERS` as `group:notes` suggests; (c) leave as is | (a) first, then (b) only with explicit approval, since it widens access. | 05 |
 | Q-09 | Should `memory/global.md` stay in every agent prompt (today: groups and other people's private chats too)? | (a) keep; (b) the owner's own private chat only, other chats by explicit per-chat opt-in; (c) per-group opt-in only | (b), before AI Auto Reply ships, because Auto Reply answers contacts who should not see the owner's global facts. (Agreed with codex review.) | 07 |
 | Q-10 | Should Android preferences (host running flag, onboarding, Media Hub choices, theme) be part of a backup? | (a) no, Node data only; (b) yes, through a host bridge | (a) for v5; document the gap. | 02 |
-| Q-11 | May a separate docs PR fix the drift in `AUDIT.md` section 2, including `PRIVACY.md` rows for the undisclosed destinations and a review of the Play Data safety "Shared" answers? | (a) yes, before Phase 01; (b) fold into Phase 10 | (a). The current policy under-declares shipped behaviour (R-24). | before the next store submission |
-| Q-12 | `youtube_api_key` has no user in the code. Remove it or document it? | (a) remove the setting; (b) keep and document a planned use | (a), since no YouTube feature is planned and `AGENTS.md` forbids media downloaders. | 01 |
-| Q-13 | `!prayer` always asks for 2025-06-06 timings in Egypt (AUDIT C-12). Fix now? | (a) separate bug-fix PR now; (b) inside Phase 05 | (a). It is a correctness bug in a shipped command. | now |
 | Q-14 | Should backups be available from the CLI (`levix backup`, `levix restore`)? | (a) yes, for headless and Docker; (b) panel only | (a). Headless has no panel. | 02 |
 | Q-15 | The recovery mail relay accepts `ar` and `en`. What do `pt-BR` and `es-419` users get? | (a) English mail until the relay supports more; (b) relay update in `levix-ui` in step with Phase 03 | (a) in Phase 03, with (b) as separate work in the relay repository. | 03 |
 | Q-16 | Play in-app updates and in-app review need Google Play libraries. The GitHub APK is built from the same sources. | (a) one build with the libraries, which do nothing outside Play; (b) a build flavour per channel | (b) only if (a) adds Google Play services requirements to GitHub APK users; otherwise (a). Decide after measuring in Phase 09. | 09 |
@@ -29,5 +36,4 @@ without an answer.
 | Q-18 | Which documents feed the documentation-aware AI? | (a) public docs in this repository only; (b) plus the website docs from `levix-ui` | (a) first. Website docs need their own version tags before they can be cited. | 06 |
 | Q-19 | Who reviews the `pt-BR` and `es-419` translations? | (a) native reviewers before release; (b) ship machine drafts labelled as drafts | (a) for the bot and the Terms text; (b) is acceptable only for low-risk UI strings, labelled. | 03 |
 | Q-20 | Should Plus entitlements work on desktop and self-hosted installs? | (a) Android Play only in v5; (b) a portable entitlement design now | (a). The phase prompt marks portability as an open design question. | 08 |
-| Q-21 | Keep the existing exceptions to same-chat replies (`!schedule` errors to the creator's private chat; reset codes to the linked account's own chat)? | (a) keep both; (b) keep reset delivery, move schedule errors to the source chat | DISPUTED, low impact. Orchestrator recommends (a): the error text concerns the creator's own message, and group chats stay quiet as `AGENTS.md` intends for scheduling. Codex recommends (b): it follows the same-chat default without an exception. | 05 |
 | Q-22 | What does restoring a default backup (no secrets) do to the secrets of the install it lands on? | (a) keep the target install's current secrets (pairing, keys, password) and replace everything else; (b) clear them, so the operator re-pairs and re-enters keys; (c) ask in the restore preview | (c) with (a) preselected for a same-install restore. Moving to a new device always needs re-pairing. | 02 |
