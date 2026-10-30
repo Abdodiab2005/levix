@@ -3,6 +3,7 @@
 ## Phase 00: audit, rules and plan (2026-10-30)
 
 - Branch: `docs/v5-phase-00-plan`, from `main` at `050d8b9` (v4.9.2).
+- PR: https://github.com/Abdodiab2005/levix/pull/80 (draft, for owner review).
 - Product code changed: none. The PR adds `docs/plans/v5/` and focused `AGENTS.md` edits.
 - Audit: six read-only runs (startup and auth, commands and messaging, docs and data flows, Android
   and build, i18n and AI, data at rest), each checked against the source by the orchestrator.
