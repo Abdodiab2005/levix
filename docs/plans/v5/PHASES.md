@@ -59,6 +59,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
+| Status | PLAN since 2026-10-31: `PHASE-02-RESULTS.md` (re-audit, design, PRs 02a to 02e) and `BACKUP_FORMAT.md` (PROPOSED). Waiting for owner decisions Q-10, Q-14, Q-22, Q-24, Q-25 and Q-26. PR 02b (start order) needs only Q-26. |
 | Inputs | The old local branch `zcode/commands-panel-upgrades` adds nothing: both commits are patch-identical to `main` commits `ec1d762` and `cb9d09a` (Q-02, checked 2026-10-30). |
 | Goal | Local backup and restore of the data in `ARCHITECTURE.md` section 6, with a manifest, checksums, a filtered database copy without secrets by default, passphrase encryption when secrets are included, and a journaled restore that survives interruption (`ARCHITECTURE.md` section 10.2). |
 | Files | new `src/backup/` (manifest, create, verify, restore), `src/db/db.cjs` and `src/bootstrap/core.js` (start order: open, lock, detect pending migrations, back up, migrate; AUDIT B-09), `src/routes/dashboard.api.esm.js` (routes), `src/cli.js` (new `backup` and `restore` subcommands for headless use, Q-14), `frontend/src/views/SettingsView.tsx` (new section), `android/app/src/main/java/net/leviro/levix/PanelBridge.kt` and `PanelFiles.kt` (save and open through the Storage Access Framework), new `docs/plans/v5/BACKUP_FORMAT.md`. |
@@ -67,7 +68,7 @@ replaces them in its own plan before writing code.
 | Tests | backup, mutate, restore, verify; corrupt backup rejected with old data intact; interrupted restore; wrong passphrase; newer schema refused; path traversal, symlink, bomb and KDF-cost fuzz; schedules, group settings, memory and secure settings covered; settings export unchanged. |
 | Gate | No data loss in any failure test; no secret in a default backup; content list shown before restore; no migration runs before the instance lock is held and a verified backup exists (ADR-016 rule, accepted 2026-10-30), proven by concurrency and failure tests (two processes at once, crash during backup, crash during migration, full disk). |
 | Rollback | Feature routes disabled; restore never deletes current data before the atomic switch. |
-| PRs | 02a format ADR and a read-only preview of what a backup holds. 02b create. 02c restore. 02d UI, Android and CLI. |
+| PRs | Revised 2026-10-31 (`PHASE-02-RESULTS.md` section 4): 02a format, archive reader and writer, limits, read-only preview. 02b start order: lazy database open, lock first, newer-schema refusal, verified pre-migration backup. 02c create. 02d restore. 02e UI, CLI and Android. |
 
 ### Phase 03: unified i18n
 
