@@ -218,10 +218,10 @@ android {
             }
         }
         release {
-            // R8 removes unused code and resources from the release build.
-            // This is an experiment measured in Phase 01 PR 01d and needs device proof before release.
+            // R8 removes unused code from the release build.
+            // Resource shrinking is off because with the per-ABI splits it fails buildReleasePreBundle on AGP 8.10.1 ("Sequence contains more than one matching element").
+            // This is a Phase 01 PR 01d experiment that needs device proof before release.
             isMinifyEnabled = true
-            isShrinkResources = true
             signingConfig = signingConfigs.getByName("levixRelease")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
