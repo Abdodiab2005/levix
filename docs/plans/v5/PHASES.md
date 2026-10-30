@@ -45,6 +45,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
+| Status | IN PROGRESS since 2026-10-30. PR 01a open; results in `PHASE-01-RESULTS.md`. |
 | Goal | Smaller and reproducible Android artifacts, Node 24 pinned everywhere, runtime dependency advisories fixed, size reported in CI. No behaviour change. |
 | Files | `android/scripts/stage-levix-app.sh`, `android/scripts/fetch-node-android.sh`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `package.json`, `package-lock.json`, `src/cli.js` and `deploy/install.sh` (only if Q-01 says so), `tests/android-runtime-stamp.test.mjs`, `tests/package.test.mjs`, `tests/run.mjs` (per-file timing), new size-report script, `android/app/build.gradle.kts` (R8 experiment branch only), `docs/plans/v5/PHASE-01-RESULTS.md`. |
 | Migrations | None. |

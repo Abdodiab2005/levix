@@ -35,16 +35,18 @@ to all v5 work and add to the rules below; they remove none of them.
   with a short audit of the current tree and a written plan (files, migrations,
   tests, threats, privacy impact, rollback) before any code. The next phase
   waits for the owner's approval.
-- **Node.js 24 for every official build.** Android `libnode.so` for both ABIs,
-  SEA binaries, the Docker image and CI use the latest Node 24 patch that passes
-  the gates (v24.22.2 on 2026-10-30). No component moves to Node 26 (ADR-001).
-  A self-hosted user may run Node 26 or later: Levix starts with a clear warning
-  that the version is not officially supported, and support is best effort.
-  Below 24 it refuses to start. `package.json` (`engines` `>=24 <25`), the CLI
-  and the docs state this one policy; Phase 01 PR 01a makes the code match.
-  Until then v4.9.x accepts any major from 24 up without a warning. The Android
-  runtime comes from Termux `nodejs-lts`, which is not pinned yet; check the
-  version it would fetch before any Android build.
+- **Node.js 24 for every official build.** `.node-version` pins the desktop
+  patch (v24.22.2 on 2026-10-30) for CI, the release jobs, the SEA executables
+  (they embed the Node that builds them) and the Docker image (`ARG
+  NODE_VERSION`); `tests/node-version-policy.test.mjs` keeps them equal. Android
+  `libnode.so` is the Termux `nodejs-lts` build pinned with sha256 in
+  `android/scripts/termux-packages.lock` (24.22.1); `fetch-node-android.sh
+  --update-pins` refuses a `nodejs-lts` that is not Node 24, and Gradle refuses
+  a staged `libnode.so` that is not the pinned version. No component moves to
+  Node 26 (ADR-001). `package.json` declares `engines` `>=24 <25`. A self-hosted
+  user may run Node 25, 26 or later: the CLI and the installer print a warning
+  that the version is not officially supported and support is best effort, then
+  continue. Below 24 the CLI refuses to start.
 - **Public core, private Plus.** This repository stays MIT, complete, and builds
   and passes its tests with no private code or credential. `levix-plus` code,
   keys and build output never enter this repository or its public artifacts
@@ -87,7 +89,8 @@ to all v5 work and add to the rules below; they remove none of them.
 
 ## Technology Stack
 
-- **Core**: Node.js 24+ with ES Modules (`"type": "module"`)
+- **Core**: Node.js 24 with ES Modules (`"type": "module"`); a newer major
+  starts with an unsupported-version warning
 - **WhatsApp**: `@whiskeysockets/baileys@7.0.0-rc14` (ESM)
 - **Database**: SQLite through **`node:sqlite`** — Node's own module, so the
   datastore costs zero dependencies and there is no server to install

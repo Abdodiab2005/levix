@@ -12,8 +12,9 @@ guide anywhere tells you to create a `.env` file, it is out of date.
 ## What you need
 
 - A computer or a small server that stays on. A Raspberry Pi is enough.
-- **Node.js 24 or newer** — [nodejs.org](https://nodejs.org), pick the LTS
-  button. (Or skip Node entirely and use Docker, below.)
+- **Node.js 24** — [nodejs.org](https://nodejs.org), pick the Node 24 LTS
+  build. A newer Node also starts, with a warning that only Node 24 is
+  supported. (Or skip Node entirely and use Docker, below.)
 - A phone with WhatsApp, to scan the QR once.
 
 Levix stores everything in one file using SQLite, which Node 24 includes.
@@ -267,8 +268,12 @@ Then start it again and pick a new one. The WhatsApp link is untouched.
 phone was offline for a long time. Open the panel; if it asks for a QR, scan it
 again.
 
-**"Levix needs Node 24 or newer"** — your Node is older. Install the LTS build
-from [nodejs.org](https://nodejs.org) and try again.
+**"levix-bot needs Node 24"** — your Node is older. Install the Node 24 LTS
+build from [nodejs.org](https://nodejs.org) and try again.
+
+**"Warning: Node 26… is newer than Node 24"** — Levix still runs. Only Node 24
+is built and tested, so help with problems on a newer Node is best effort.
+Install Node 24 LTS for a supported setup.
 
 **Start over completely** — stop the bot, delete the data directory
 (`levix where` prints it), start it again. That wipes everything: settings,

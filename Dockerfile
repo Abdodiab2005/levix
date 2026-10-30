@@ -3,21 +3,25 @@
 # Debian slim rather than Alpine on purpose: ffmpeg-static ships a glibc binary
 # and would not run on musl, so the thumbnails would silently stop working.
 
-FROM node:24-slim AS deps
+# Official images run the Node patch pinned in .node-version (ADR-001);
+# tests/node-version-policy.test.mjs keeps the two equal.
+ARG NODE_VERSION=24.22.2
+
+FROM node:${NODE_VERSION}-slim AS deps
 WORKDIR /app
 
 # Only the manifests first, so a code change doesn't re-download the tree.
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-FROM node:24-slim AS frontend-builder
+FROM node:${NODE_VERSION}-slim AS frontend-builder
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./frontend/
 RUN cd frontend && npm ci
 COPY frontend ./frontend
 RUN cd frontend && npm run build
 
-FROM node:24-slim
+FROM node:${NODE_VERSION}-slim
 WORKDIR /app
 
 ENV NODE_ENV=production

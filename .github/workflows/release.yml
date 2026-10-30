@@ -39,6 +39,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
       - name: Verify release tag and npm package
         shell: bash
         run: |
@@ -83,7 +86,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:
-          node-version: 24
+          node-version-file: .node-version
           registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm --prefix frontend ci
@@ -161,7 +164,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:
-          node-version: 24
+          node-version-file: .node-version
       - run: npm ci
       - run: npm --prefix frontend ci
       - run: npm run build:sea
@@ -184,7 +187,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:
-          node-version: 24
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: |
             package-lock.json
@@ -203,7 +206,7 @@ jobs:
             ~/.cache/levix-android
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: android-${{ runner.os }}-${{ hashFiles('android/scripts/fetch-node-android.sh', 'android/scripts/build-ffmpeg-android.sh', 'android/gradle/wrapper/gradle-wrapper.properties', 'package-lock.json', 'frontend/package-lock.json') }}
+          key: android-${{ runner.os }}-${{ hashFiles('android/scripts/fetch-node-android.sh', 'android/scripts/build-ffmpeg-android.sh', 'android/scripts/termux-packages.lock', 'android/gradle/wrapper/gradle-wrapper.properties', 'package-lock.json', 'frontend/package-lock.json') }}
           restore-keys: |
             android-${{ runner.os }}-
       - name: Set up Android SDK (API 36) + NDK
@@ -278,7 +281,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - uses: actions/download-artifact@v8
         with:
@@ -368,6 +371,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+
       - uses: actions/download-artifact@v8
         with:
           name: installer
@@ -431,7 +438,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - uses: actions/download-artifact@v8
         with:

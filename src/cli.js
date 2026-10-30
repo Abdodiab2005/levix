@@ -10,22 +10,41 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
 
-const MIN_MAJOR = 24;
+// Official builds and tests use Node 24. Older majors lack what Levix needs
+// and are refused. Newer majors start with a warning: no official build or
+// test runs on them.
+const SUPPORTED_MAJOR = 24;
 
 function checkNode() {
-  const major = Number(process.versions.node.split(".")[0]);
-  if (major >= MIN_MAJOR) return;
+  const version = process.versions.node;
+  const major = Number(version.split(".")[0]);
+  if (major === SUPPORTED_MAJOR) return;
+
+  if (major > SUPPORTED_MAJOR) {
+    console.error(
+      [
+        "",
+        `  Warning: Node ${version} is newer than Node ${SUPPORTED_MAJOR}, ` +
+          `the version ${pkg.name} is built and`,
+        `  tested on. It will start, but Node ${version} is not officially supported, and`,
+        "  help with problems on it is best effort. For a supported setup, install",
+        `  Node ${SUPPORTED_MAJOR} LTS from https://nodejs.org.`,
+        "",
+      ].join("\n"),
+    );
+    return;
+  }
 
   console.error(
     [
       "",
-      `  ${pkg.name} needs Node ${MIN_MAJOR} or newer (you have ${process.versions.node}).`,
+      `  ${pkg.name} needs Node ${SUPPORTED_MAJOR} (you have ${version}).`,
       "",
       "  It stores everything in SQLite, which Node ships with itself from",
-      `  version ${MIN_MAJOR} on — that is what makes the install a single command`,
+      `  version ${SUPPORTED_MAJOR} on — that is what makes the install a single command`,
       "  with nothing to compile.",
       "",
-      "  Get it from https://nodejs.org (pick the LTS build).",
+      `  Get Node ${SUPPORTED_MAJOR} LTS from https://nodejs.org.`,
       "",
     ].join("\n"),
   );

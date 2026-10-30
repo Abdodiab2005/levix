@@ -48,10 +48,10 @@ npm install, and a read-only container image without a flag.
 
 | Channel | For | They need | Time to first message |
 | --- | --- | --- | --- |
-| npm global | anyone with Node | Node 24+ | ~2 min |
+| npm global | anyone with Node | Node 24 | ~2 min |
 | Docker | anyone with Docker | Docker | ~3 min (first build) |
 | Android APK | Android phone (no server) | Android 10+ ARM64/ARMv7 | ~1 min |
-| Install script | a Linux VPS | Node 24+, systemd, sudo | ~3 min, survives reboot |
+| Install script | a Linux VPS | Node 24, systemd, sudo | ~3 min, survives reboot |
 | Single binary | no Node at all | nothing | ~1 min |
 
 ### 2.1 npm — the default
@@ -320,6 +320,25 @@ people download.
 ```
 sha256sum -c SHA256SUMS.txt
 ```
+
+### Which Node a release runs
+
+Every official build uses Node 24 (ADR-001 in `docs/plans/v5/DECISIONS.md`).
+
+- `.node-version` holds the desktop patch (`24.22.2`). Every `actions/setup-node`
+  step in CI and in the release jobs reads it, so the executables, which copy
+  the Node that builds them, ship exactly that patch. `npm run build:sea`
+  refuses to run on any other major.
+- The Docker image takes the same patch as `ARG NODE_VERSION`.
+  `tests/node-version-policy.test.mjs` fails when the two differ.
+- The Android runtime is the Termux `nodejs-lts` build pinned, with its
+  libraries, in `android/scripts/termux-packages.lock` (see ANDROID.md).
+- To move to a newer Node 24 patch, change `.node-version` and the Dockerfile
+  `ARG` in one pull request; CI then runs every job on it.
+- People who install from npm get `engines` `>=24 <25`: npm warns about any
+  other major. The `levix` command refuses Node below 24, and on Node 25 or
+  newer it prints a warning that the version is not officially supported, then
+  starts. The install script prints the same warning.
 
 ### 4a. The public installer
 

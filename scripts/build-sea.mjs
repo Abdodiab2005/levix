@@ -36,6 +36,30 @@ const OUT_NAME = process.platform === "win32" ? "levix.exe" : "levix";
 const step = (message) => console.log(`\n▸ ${message}`);
 const rel = (file) => path.relative(ROOT, file);
 
+// The executable is a copy of process.execPath, so this Node is the one it ships.
+const SEA_NODE_MAJOR = 24;
+if (Number(process.versions.node.split(".")[0]) !== SEA_NODE_MAJOR) {
+  console.error(
+    `build:sea embeds the Node that runs it (v${process.versions.node}); ` +
+      `run it with Node ${SEA_NODE_MAJOR}, the version in .node-version.`,
+  );
+  process.exit(1);
+}
+
+// Same major, different patch: the binary still embeds this Node. Warn and build.
+let pinnedNode = "";
+try {
+  pinnedNode = fs.readFileSync(path.join(ROOT, ".node-version"), "utf8").trim();
+} catch {
+  pinnedNode = "";
+}
+if (pinnedNode && pinnedNode !== process.versions.node) {
+  console.error(
+    `Warning: this executable will embed Node ${process.versions.node}`,
+    `while official builds use Node ${pinnedNode} from .node-version.`,
+  );
+}
+
 fs.rmSync(BUILD, { recursive: true, force: true });
 fs.mkdirSync(BUILD, { recursive: true });
 
