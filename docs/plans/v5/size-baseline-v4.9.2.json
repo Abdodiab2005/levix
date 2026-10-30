@@ -1,0 +1,4486 @@
+{
+  "schema": 1,
+  "artifacts": {
+    "apk:arm64-v8a": {
+      "fileBytes": 94439912,
+      "entries": 952,
+      "components": {
+        "native arm64-v8a": {
+          "stored": 39816124,
+          "uncompressed": 118543483
+        },
+        "levix-app.zip": {
+          "stored": 43078460,
+          "uncompressed": 44217091
+        },
+        "dex": {
+          "stored": 9709524,
+          "uncompressed": 9709524
+        },
+        "resources": {
+          "stored": 1689848,
+          "uncompressed": 2302233
+        },
+        "other": {
+          "stored": 23447,
+          "uncompressed": 60515
+        }
+      },
+      "libraries": {
+        "lib/arm64-v8a/libc++_shared.so": {
+          "stored": 467256,
+          "uncompressed": 1621425
+        },
+        "lib/arm64-v8a/libcares.so": {
+          "stored": 111834,
+          "uncompressed": 263248
+        },
+        "lib/arm64-v8a/libcrypto_3.so": {
+          "stored": 2388909,
+          "uncompressed": 5369073
+        },
+        "lib/arm64-v8a/libffmpeg.so": {
+          "stored": 4425963,
+          "uncompressed": 8778208
+        },
+        "lib/arm64-v8a/libicudata_78.so": {
+          "stored": 12798498,
+          "uncompressed": 33161385
+        },
+        "lib/arm64-v8a/libicui18n_78.so": {
+          "stored": 1254774,
+          "uncompressed": 5061009
+        },
+        "lib/arm64-v8a/libicuuc_78.so": {
+          "stored": 802005,
+          "uncompressed": 2519649
+        },
+        "lib/arm64-v8a/libnode.so": {
+          "stored": 15116521,
+          "uncompressed": 56684969
+        },
+        "lib/arm64-v8a/libsqlite3.so": {
+          "stored": 676024,
+          "uncompressed": 1254249
+        },
+        "lib/arm64-v8a/libsqlite3_3.53.4.so": {
+          "stored": 671127,
+          "uncompressed": 1330537
+        },
+        "lib/arm64-v8a/libsqlite3_3.54.0.so": {
+          "stored": 677734,
+          "uncompressed": 1330625
+        },
+        "lib/arm64-v8a/libssl_3.so": {
+          "stored": 386088,
+          "uncompressed": 1036281
+        },
+        "lib/arm64-v8a/libz_1.so": {
+          "stored": 39391,
+          "uncompressed": 132825
+        }
+      },
+      "app": {
+        "entries": 5393,
+        "compressed": 43042233,
+        "uncompressed": 137525769,
+        "topLevel": {
+          "LICENSE": {
+            "compressed": 639,
+            "uncompressed": 1081
+          },
+          "app.cjs": {
+            "compressed": 6453,
+            "uncompressed": 18531
+          },
+          "bin": {
+            "compressed": 168,
+            "uncompressed": 221
+          },
+          "boot.mjs": {
+            "compressed": 1453,
+            "uncompressed": 3255
+          },
+          "node_modules": {
+            "compressed": 41971519,
+            "uncompressed": 134611583
+          },
+          "package.json": {
+            "compressed": 1038,
+            "uncompressed": 2604
+          },
+          "public": {
+            "compressed": 576034,
+            "uncompressed": 1374850
+          },
+          "scheduler.cjs": {
+            "compressed": 4329,
+            "uncompressed": 12019
+          },
+          "src": {
+            "compressed": 465775,
+            "uncompressed": 1434870
+          },
+          "views": {
+            "compressed": 14825,
+            "uncompressed": 66755
+          }
+        },
+        "packages": {
+          "@biomejs/biome": {
+            "type": "dev",
+            "compressed": 137931,
+            "uncompressed": 915615
+          },
+          "@biomejs/cli-linux-x64": {
+            "type": "dev",
+            "compressed": 30410076,
+            "uncompressed": 84146556
+          },
+          "@borewit/text-codec": {
+            "type": "prod",
+            "compressed": 5240,
+            "uncompressed": 17838
+          },
+          "@cacheable/node-cache": {
+            "type": "prod",
+            "compressed": 18143,
+            "uncompressed": 70865
+          },
+          "@derhuerst/http-basic": {
+            "type": "prod",
+            "compressed": 15001,
+            "uncompressed": 45279
+          },
+          "@google/genai": {
+            "type": "prod",
+            "compressed": 1455960,
+            "uncompressed": 9235595
+          },
+          "@hapi/boom": {
+            "type": "prod",
+            "compressed": 6753,
+            "uncompressed": 28311
+          },
+          "@hapi/hoek": {
+            "type": "prod",
+            "compressed": 16524,
+            "uncompressed": 51451
+          },
+          "@keyv/serialize": {
+            "type": "prod",
+            "compressed": 3536,
+            "uncompressed": 8540
+          },
+          "@pinojs/redact": {
+            "type": "prod",
+            "compressed": 22290,
+            "uncompressed": 97351
+          },
+          "@protobufjs/aspromise": {
+            "type": "prod",
+            "compressed": 2691,
+            "uncompressed": 9055
+          },
+          "@protobufjs/base64": {
+            "type": "prod",
+            "compressed": 3555,
+            "uncompressed": 9224
+          },
+          "@protobufjs/codegen": {
+            "type": "prod",
+            "compressed": 4060,
+            "uncompressed": 9749
+          },
+          "@protobufjs/eventemitter": {
+            "type": "prod",
+            "compressed": 3679,
+            "uncompressed": 10310
+          },
+          "@protobufjs/fetch": {
+            "type": "prod",
+            "compressed": 4998,
+            "uncompressed": 14872
+          },
+          "@protobufjs/float": {
+            "type": "prod",
+            "compressed": 6430,
+            "uncompressed": 26968
+          },
+          "@protobufjs/path": {
+            "type": "prod",
+            "compressed": 2938,
+            "uncompressed": 7770
+          },
+          "@protobufjs/pool": {
+            "type": "prod",
+            "compressed": 2728,
+            "uncompressed": 6249
+          },
+          "@protobufjs/utf8": {
+            "type": "prod",
+            "compressed": 9914,
+            "uncompressed": 41228
+          },
+          "@sefinek/google-tts-api": {
+            "type": "prod",
+            "compressed": 13040,
+            "uncompressed": 30905
+          },
+          "@socket.io/component-emitter": {
+            "type": "prod",
+            "compressed": 6381,
+            "uncompressed": 21216
+          },
+          "@tokenizer/inflate": {
+            "type": "prod",
+            "compressed": 9226,
+            "uncompressed": 28506
+          },
+          "@tokenizer/token": {
+            "type": "prod",
+            "compressed": 1470,
+            "uncompressed": 3037
+          },
+          "@types/cors": {
+            "type": "prod",
+            "compressed": 2547,
+            "uncompressed": 6148
+          },
+          "@types/node": {
+            "type": "prod",
+            "compressed": 458885,
+            "uncompressed": 2379575
+          },
+          "@types/retry": {
+            "type": "prod",
+            "compressed": 2920,
+            "uncompressed": 7654
+          },
+          "@types/ws": {
+            "type": "prod",
+            "compressed": 8706,
+            "uncompressed": 42347
+          },
+          "@whiskeysockets/baileys": {
+            "type": "prod",
+            "compressed": 881698,
+            "uncompressed": 7259838
+          },
+          "@whiskeysockets/baileys/node_modules/pino": {
+            "type": "prod",
+            "compressed": 272064,
+            "uncompressed": 777390
+          },
+          "@whiskeysockets/baileys/node_modules/thread-stream": {
+            "type": "prod",
+            "compressed": 27361,
+            "uncompressed": 74238
+          },
+          "accepts": {
+            "type": "prod",
+            "compressed": 5622,
+            "uncompressed": 16917
+          },
+          "agent-base": {
+            "type": "prod",
+            "compressed": 5340,
+            "uncompressed": 13243
+          },
+          "ansi-regex": {
+            "type": "prod",
+            "compressed": 2910,
+            "uncompressed": 5609
+          },
+          "ansi-styles": {
+            "type": "prod",
+            "compressed": 5952,
+            "uncompressed": 16978
+          },
+          "async-mutex": {
+            "type": "prod",
+            "compressed": 17054,
+            "uncompressed": 63046
+          },
+          "asynckit": {
+            "type": "prod",
+            "compressed": 10599,
+            "uncompressed": 27362
+          },
+          "atomic-sleep": {
+            "type": "prod",
+            "compressed": 2903,
+            "uncompressed": 6571
+          },
+          "axios": {
+            "type": "prod",
+            "compressed": 414238,
+            "uncompressed": 1460146
+          },
+          "axios/node_modules/agent-base": {
+            "type": "prod",
+            "compressed": 9568,
+            "uncompressed": 28259
+          },
+          "axios/node_modules/https-proxy-agent": {
+            "type": "prod",
+            "compressed": 7541,
+            "uncompressed": 19375
+          },
+          "base64-js": {
+            "type": "prod",
+            "compressed": 4200,
+            "uncompressed": 9624
+          },
+          "base64id": {
+            "type": "prod",
+            "compressed": 2284,
+            "uncompressed": 4692
+          },
+          "bignumber.js": {
+            "type": "prod",
+            "compressed": 82331,
+            "uncompressed": 351589
+          },
+          "body-parser": {
+            "type": "prod",
+            "compressed": 13067,
+            "uncompressed": 42536
+          },
+          "body-parser/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
+          },
+          "buffer": {
+            "type": "prod",
+            "compressed": 23179,
+            "uncompressed": 91279
+          },
+          "buffer-equal-constant-time": {
+            "type": "prod",
+            "compressed": 2368,
+            "uncompressed": 5232
+          },
+          "buffer-from": {
+            "type": "prod",
+            "compressed": 2219,
+            "uncompressed": 5047
+          },
+          "bytes": {
+            "type": "prod",
+            "compressed": 4683,
+            "uncompressed": 12270
+          },
+          "cacheable": {
+            "type": "prod",
+            "compressed": 40645,
+            "uncompressed": 200876
+          },
+          "call-bind-apply-helpers": {
+            "type": "prod",
+            "compressed": 6702,
+            "uncompressed": 15952
+          },
+          "call-bound": {
+            "type": "prod",
+            "compressed": 6599,
+            "uncompressed": 17106
+          },
+          "camelcase": {
+            "type": "prod",
+            "compressed": 3218,
+            "uncompressed": 7447
+          },
+          "caseless": {
+            "type": "prod",
+            "compressed": 5272,
+            "uncompressed": 14250
+          },
+          "cliui": {
+            "type": "prod",
+            "compressed": 5568,
+            "uncompressed": 14873
+          },
+          "clone": {
+            "type": "prod",
+            "compressed": 6445,
+            "uncompressed": 15879
+          },
+          "color-convert": {
+            "type": "prod",
+            "compressed": 9198,
+            "uncompressed": 27189
+          },
+          "color-name": {
+            "type": "prod",
+            "compressed": 2670,
+            "uncompressed": 6693
+          },
+          "colorette": {
+            "type": "prod",
+            "compressed": 6079,
+            "uncompressed": 17009
+          },
+          "combined-stream": {
+            "type": "prod",
+            "compressed": 4029,
+            "uncompressed": 11514
+          },
+          "commander": {
+            "type": "dev",
+            "compressed": 47426,
+            "uncompressed": 173252
+          },
+          "concat-stream": {
+            "type": "prod",
+            "compressed": 3738,
+            "uncompressed": 9556
+          },
+          "concat-stream/node_modules/readable-stream": {
+            "type": "prod",
+            "compressed": 41190,
+            "uncompressed": 123971
+          },
+          "content-disposition": {
+            "type": "prod",
+            "compressed": 7900,
+            "uncompressed": 24318
+          },
+          "content-type": {
+            "type": "prod",
+            "compressed": 3988,
+            "uncompressed": 10471
+          },
+          "cookie": {
+            "type": "prod",
+            "compressed": 8377,
+            "uncompressed": 23382
+          },
+          "cookie-signature": {
+            "type": "prod",
+            "compressed": 2529,
+            "uncompressed": 4993
+          },
+          "cors": {
+            "type": "prod",
+            "compressed": 6643,
+            "uncompressed": 19988
+          },
+          "curve25519-js": {
+            "type": "prod",
+            "compressed": 12858,
+            "uncompressed": 49956
+          },
+          "data-uri-to-buffer": {
+            "type": "prod",
+            "compressed": 3850,
+            "uncompressed": 8352
+          },
+          "dateformat": {
+            "type": "prod",
+            "compressed": 6307,
+            "uncompressed": 20727
+          },
+          "debug": {
+            "type": "prod",
+            "compressed": 14582,
+            "uncompressed": 42793
+          },
+          "decamelize": {
+            "type": "prod",
+            "compressed": 1600,
+            "uncompressed": 2940
+          },
+          "delayed-stream": {
+            "type": "prod",
+            "compressed": 3346,
+            "uncompressed": 8021
+          },
+          "depd": {
+            "type": "prod",
+            "compressed": 9047,
+            "uncompressed": 27117
+          },
+          "detect-libc": {
+            "type": "prod",
+            "compressed": 8762,
+            "uncompressed": 26437
+          },
+          "dijkstrajs": {
+            "type": "prod",
+            "compressed": 3933,
+            "uncompressed": 10798
+          },
+          "dunder-proto": {
+            "type": "prod",
+            "compressed": 5838,
+            "uncompressed": 13003
+          },
+          "ecdsa-sig-formatter": {
+            "type": "prod",
+            "compressed": 7315,
+            "uncompressed": 20588
+          },
+          "ee-first": {
+            "type": "prod",
+            "compressed": 2705,
+            "uncompressed": 6259
+          },
+          "ejs": {
+            "type": "prod",
+            "compressed": 66751,
+            "uncompressed": 218428
+          },
+          "emoji-regex": {
+            "type": "prod",
+            "compressed": 10505,
+            "uncompressed": 48255
+          },
+          "encodeurl": {
+            "type": "prod",
+            "compressed": 3222,
+            "uncompressed": 6980
+          },
+          "end-of-stream": {
+            "type": "prod",
+            "compressed": 2373,
+            "uncompressed": 6295
+          },
+          "engine.io": {
+            "type": "prod",
+            "compressed": 50645,
+            "uncompressed": 169919
+          },
+          "engine.io-parser": {
+            "type": "prod",
+            "compressed": 15958,
+            "uncompressed": 45773
+          },
+          "engine.io/node_modules/accepts": {
+            "type": "prod",
+            "compressed": 5589,
+            "uncompressed": 16795
+          },
+          "engine.io/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "engine.io/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
+          },
+          "engine.io/node_modules/negotiator": {
+            "type": "prod",
+            "compressed": 9151,
+            "uncompressed": 27375
+          },
+          "env-paths": {
+            "type": "prod",
+            "compressed": 3996,
+            "uncompressed": 10163
+          },
+          "es-define-property": {
+            "type": "prod",
+            "compressed": 4548,
+            "uncompressed": 10217
+          },
+          "es-errors": {
+            "type": "prod",
+            "compressed": 5682,
+            "uncompressed": 12324
+          },
+          "es-object-atoms": {
+            "type": "prod",
+            "compressed": 4995,
+            "uncompressed": 11442
+          },
+          "es-set-tostringtag": {
+            "type": "prod",
+            "compressed": 5827,
+            "uncompressed": 14544
+          },
+          "escape-html": {
+            "type": "prod",
+            "compressed": 1883,
+            "uncompressed": 3660
+          },
+          "etag": {
+            "type": "prod",
+            "compressed": 4403,
+            "uncompressed": 10809
+          },
+          "express": {
+            "type": "prod",
+            "compressed": 25401,
+            "uncompressed": 76638
+          },
+          "express-session": {
+            "type": "prod",
+            "compressed": 21651,
+            "uncompressed": 77151
+          },
+          "express-session/node_modules/cookie-signature": {
+            "type": "prod",
+            "compressed": 2055,
+            "uncompressed": 4083
+          },
+          "express-session/node_modules/debug": {
+            "type": "prod",
+            "compressed": 18526,
+            "uncompressed": 51243
+          },
+          "express-session/node_modules/ms": {
+            "type": "prod",
+            "compressed": 2736,
+            "uncompressed": 6266
+          },
+          "express/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
+          },
+          "extend": {
+            "type": "prod",
+            "compressed": 7643,
+            "uncompressed": 23461
+          },
+          "fast-copy": {
+            "type": "prod",
+            "compressed": 17089,
+            "uncompressed": 63509
+          },
+          "fast-safe-stringify": {
+            "type": "prod",
+            "compressed": 9727,
+            "uncompressed": 39702
+          },
+          "fetch-blob": {
+            "type": "prod",
+            "compressed": 8610,
+            "uncompressed": 21755
+          },
+          "file-type": {
+            "type": "prod",
+            "compressed": 37947,
+            "uncompressed": 139263
+          },
+          "finalhandler": {
+            "type": "prod",
+            "compressed": 6459,
+            "uncompressed": 17525
+          },
+          "follow-redirects": {
+            "type": "prod",
+            "compressed": 10271,
+            "uncompressed": 30614
+          },
+          "form-data": {
+            "type": "prod",
+            "compressed": 24731,
+            "uncompressed": 83901
+          },
+          "form-data/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "form-data/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
+          },
+          "formdata-polyfill": {
+            "type": "prod",
+            "compressed": 12490,
+            "uncompressed": 32220
+          },
+          "forwarded": {
+            "type": "prod",
+            "compressed": 2720,
+            "uncompressed": 5876
+          },
+          "fresh": {
+            "type": "prod",
+            "compressed": 4526,
+            "uncompressed": 10289
+          },
+          "function-bind": {
+            "type": "prod",
+            "compressed": 9880,
+            "uncompressed": 31427
+          },
+          "gaxios": {
+            "type": "prod",
+            "compressed": 116861,
+            "uncompressed": 451269
+          },
+          "gaxios/node_modules/agent-base": {
+            "type": "prod",
+            "compressed": 6300,
+            "uncompressed": 16400
+          },
+          "gaxios/node_modules/https-proxy-agent": {
+            "type": "prod",
+            "compressed": 7087,
+            "uncompressed": 18328
+          },
+          "gcp-metadata": {
+            "type": "prod",
+            "compressed": 16661,
+            "uncompressed": 47955
+          },
+          "get-caller-file": {
+            "type": "prod",
+            "compressed": 1991,
+            "uncompressed": 3946
+          },
+          "get-intrinsic": {
+            "type": "prod",
+            "compressed": 13901,
+            "uncompressed": 46542
+          },
+          "get-proto": {
+            "type": "prod",
+            "compressed": 4834,
+            "uncompressed": 10840
+          },
+          "google-auth-library": {
+            "type": "prod",
+            "compressed": 176399,
+            "uncompressed": 601779
+          },
+          "google-logging-utils": {
+            "type": "prod",
+            "compressed": 18662,
+            "uncompressed": 51149
+          },
+          "gopd": {
+            "type": "prod",
+            "compressed": 4745,
+            "uncompressed": 9869
+          },
+          "has-symbols": {
+            "type": "prod",
+            "compressed": 8987,
+            "uncompressed": 23409
+          },
+          "has-tostringtag": {
+            "type": "prod",
+            "compressed": 7204,
+            "uncompressed": 17603
+          },
+          "hasown": {
+            "type": "prod",
+            "compressed": 4584,
+            "uncompressed": 10332
+          },
+          "help-me": {
+            "type": "prod",
+            "compressed": 4640,
+            "uncompressed": 14574
+          },
+          "hookified": {
+            "type": "prod",
+            "compressed": 13704,
+            "uncompressed": 65400
+          },
+          "http-errors": {
+            "type": "prod",
+            "compressed": 6717,
+            "uncompressed": 19064
+          },
+          "http-response-object": {
+            "type": "prod",
+            "compressed": 2978,
+            "uncompressed": 6784
+          },
+          "http-response-object/node_modules/@types/node": {
+            "type": "prod",
+            "compressed": 92296,
+            "uncompressed": 631948
+          },
+          "https-proxy-agent": {
+            "type": "prod",
+            "compressed": 7193,
+            "uncompressed": 20343
+          },
+          "iconv-lite": {
+            "type": "prod",
+            "compressed": 187923,
+            "uncompressed": 344185
+          },
+          "ieee754": {
+            "type": "prod",
+            "compressed": 2910,
+            "uncompressed": 6796
+          },
+          "inherits": {
+            "type": "prod",
+            "compressed": 1989,
+            "uncompressed": 3958
+          },
+          "ip-address": {
+            "type": "prod",
+            "compressed": 55682,
+            "uncompressed": 202468
+          },
+          "ipaddr.js": {
+            "type": "prod",
+            "compressed": 12292,
+            "uncompressed": 42145
+          },
+          "is-fullwidth-code-point": {
+            "type": "prod",
+            "compressed": 2287,
+            "uncompressed": 4994
+          },
+          "is-promise": {
+            "type": "prod",
+            "compressed": 1611,
+            "uncompressed": 2958
+          },
+          "joycon": {
+            "type": "prod",
+            "compressed": 4569,
+            "uncompressed": 14010
+          },
+          "json-bigint": {
+            "type": "prod",
+            "compressed": 12395,
+            "uncompressed": 37345
+          },
+          "jwa": {
+            "type": "prod",
+            "compressed": 5209,
+            "uncompressed": 14052
+          },
+          "jws": {
+            "type": "prod",
+            "compressed": 7476,
+            "uncompressed": 18822
+          },
+          "keyv": {
+            "type": "prod",
+            "compressed": 22885,
+            "uncompressed": 93373
+          },
+          "libsignal": {
+            "type": "prod",
+            "compressed": 30665,
+            "uncompressed": 130229
+          },
+          "long": {
+            "type": "prod",
+            "compressed": 30074,
+            "uncompressed": 139458
+          },
+          "lru-cache": {
+            "type": "prod",
+            "compressed": 68300,
+            "uncompressed": 273718
+          },
+          "math-intrinsics": {
+            "type": "prod",
+            "compressed": 7289,
+            "uncompressed": 17323
+          },
+          "media-typer": {
+            "type": "prod",
+            "compressed": 3729,
+            "uncompressed": 9256
+          },
+          "merge-descriptors": {
+            "type": "prod",
+            "compressed": 2240,
+            "uncompressed": 4373
+          },
+          "mime-db": {
+            "type": "prod",
+            "compressed": 30758,
+            "uncompressed": 225566
+          },
+          "mime-types": {
+            "type": "prod",
+            "compressed": 7425,
+            "uncompressed": 22341
+          },
+          "minimist": {
+            "type": "prod",
+            "compressed": 17090,
+            "uncompressed": 54477
+          },
+          "ms": {
+            "type": "prod",
+            "compressed": 2852,
+            "uncompressed": 6721
+          },
+          "music-metadata": {
+            "type": "prod",
+            "compressed": 164474,
+            "uncompressed": 544476
+          },
+          "negotiator": {
+            "type": "prod",
+            "compressed": 9496,
+            "uncompressed": 28710
+          },
+          "node-cache": {
+            "type": "prod",
+            "compressed": 17040,
+            "uncompressed": 56567
+          },
+          "node-cron": {
+            "type": "prod",
+            "compressed": 43182,
+            "uncompressed": 174591
+          },
+          "node-domexception": {
+            "type": "prod",
+            "compressed": 15092,
+            "uncompressed": 29162
+          },
+          "node-fetch": {
+            "type": "prod",
+            "compressed": 35210,
+            "uncompressed": 107319
+          },
+          "object-assign": {
+            "type": "prod",
+            "compressed": 2608,
+            "uncompressed": 5493
+          },
+          "object-inspect": {
+            "type": "prod",
+            "compressed": 30866,
+            "uncompressed": 102920
+          },
+          "on-exit-leak-free": {
+            "type": "prod",
+            "compressed": 4385,
+            "uncompressed": 9246
+          },
+          "on-finished": {
+            "type": "prod",
+            "compressed": 5245,
+            "uncompressed": 13679
+          },
+          "on-headers": {
+            "type": "prod",
+            "compressed": 3673,
+            "uncompressed": 8850
+          },
+          "once": {
+            "type": "prod",
+            "compressed": 1841,
+            "uncompressed": 4046
+          },
+          "p-queue": {
+            "type": "prod",
+            "compressed": 20693,
+            "uncompressed": 68476
+          },
+          "p-queue/node_modules/eventemitter3": {
+            "type": "prod",
+            "compressed": 13376,
+            "uncompressed": 45088
+          },
+          "p-retry": {
+            "type": "prod",
+            "compressed": 4787,
+            "uncompressed": 11032
+          },
+          "p-timeout": {
+            "type": "prod",
+            "compressed": 5226,
+            "uncompressed": 12961
+          },
+          "p-try": {
+            "type": "prod",
+            "compressed": 2334,
+            "uncompressed": 4371
+          },
+          "parse-cache-control": {
+            "type": "prod",
+            "compressed": 1869,
+            "uncompressed": 4041
+          },
+          "parseurl": {
+            "type": "prod",
+            "compressed": 4042,
+            "uncompressed": 10299
+          },
+          "path-exists": {
+            "type": "prod",
+            "compressed": 2071,
+            "uncompressed": 3919
+          },
+          "path-to-regexp": {
+            "type": "prod",
+            "compressed": 8876,
+            "uncompressed": 28940
+          },
+          "pino": {
+            "type": "prod",
+            "compressed": 187539,
+            "uncompressed": 705711
+          },
+          "pino-abstract-transport": {
+            "type": "prod",
+            "compressed": 10391,
+            "uncompressed": 38204
+          },
+          "pino-pretty": {
+            "type": "prod",
+            "compressed": 82020,
+            "uncompressed": 274583
+          },
+          "pino-pretty/node_modules/pino-abstract-transport": {
+            "type": "prod",
+            "compressed": 10783,
+            "uncompressed": 39716
+          },
+          "pino-pretty/node_modules/pump": {
+            "type": "prod",
+            "compressed": 4100,
+            "uncompressed": 8803
+          },
+          "pino-pretty/node_modules/sonic-boom": {
+            "type": "prod",
+            "compressed": 29290,
+            "uncompressed": 123700
+          },
+          "pino-std-serializers": {
+            "type": "prod",
+            "compressed": 13546,
+            "uncompressed": 54011
+          },
+          "pino/node_modules/pino-abstract-transport": {
+            "type": "prod",
+            "compressed": 10783,
+            "uncompressed": 39716
+          },
+          "pino/node_modules/real-require": {
+            "type": "prod",
+            "compressed": 2058,
+            "uncompressed": 3929
+          },
+          "pngjs": {
+            "type": "prod",
+            "compressed": 229677,
+            "uncompressed": 1021215
+          },
+          "postject": {
+            "type": "dev",
+            "compressed": 1412794,
+            "uncompressed": 4868071
+          },
+          "process-warning": {
+            "type": "prod",
+            "compressed": 8872,
+            "uncompressed": 24591
+          },
+          "progress": {
+            "type": "prod",
+            "compressed": 6304,
+            "uncompressed": 15499
+          },
+          "protobufjs": {
+            "type": "prod",
+            "compressed": 315419,
+            "uncompressed": 1348798
+          },
+          "proxy-addr": {
+            "type": "prod",
+            "compressed": 5894,
+            "uncompressed": 16326
+          },
+          "proxy-agent-negotiate": {
+            "type": "prod",
+            "compressed": 1285,
+            "uncompressed": 2826
+          },
+          "proxy-from-env": {
+            "type": "prod",
+            "compressed": 6627,
+            "uncompressed": 15643
+          },
+          "qrcode": {
+            "type": "prod",
+            "compressed": 54465,
+            "uncompressed": 135364
+          },
+          "qrcode-terminal": {
+            "type": "prod",
+            "compressed": 51857,
+            "uncompressed": 96504
+          },
+          "qs": {
+            "type": "prod",
+            "compressed": 78579,
+            "uncompressed": 374851
+          },
+          "quick-format-unescaped": {
+            "type": "prod",
+            "compressed": 4033,
+            "uncompressed": 12829
+          },
+          "random-bytes": {
+            "type": "prod",
+            "compressed": 2679,
+            "uncompressed": 6235
+          },
+          "range-parser": {
+            "type": "prod",
+            "compressed": 3732,
+            "uncompressed": 8457
+          },
+          "raw-body": {
+            "type": "prod",
+            "compressed": 6808,
+            "uncompressed": 18495
+          },
+          "real-require": {
+            "type": "prod",
+            "compressed": 2381,
+            "uncompressed": 4827
+          },
+          "require-directory": {
+            "type": "prod",
+            "compressed": 4306,
+            "uncompressed": 12071
+          },
+          "require-main-filename": {
+            "type": "prod",
+            "compressed": 1906,
+            "uncompressed": 3928
+          },
+          "retry": {
+            "type": "prod",
+            "compressed": 7062,
+            "uncompressed": 18852
+          },
+          "router": {
+            "type": "prod",
+            "compressed": 16031,
+            "uncompressed": 46851
+          },
+          "safe-buffer": {
+            "type": "prod",
+            "compressed": 10306,
+            "uncompressed": 32101
+          },
+          "safe-stable-stringify": {
+            "type": "prod",
+            "compressed": 7400,
+            "uncompressed": 30687
+          },
+          "safer-buffer": {
+            "type": "prod",
+            "compressed": 12989,
+            "uncompressed": 42299
+          },
+          "secure-json-parse": {
+            "type": "prod",
+            "compressed": 12005,
+            "uncompressed": 50330
+          },
+          "semver": {
+            "type": "prod",
+            "compressed": 34003,
+            "uncompressed": 101065
+          },
+          "send": {
+            "type": "prod",
+            "compressed": 15296,
+            "uncompressed": 46921
+          },
+          "serve-static": {
+            "type": "prod",
+            "compressed": 8933,
+            "uncompressed": 25672
+          },
+          "set-blocking": {
+            "type": "prod",
+            "compressed": 2211,
+            "uncompressed": 4224
+          },
+          "setprototypeof": {
+            "type": "prod",
+            "compressed": 1984,
+            "uncompressed": 4025
+          },
+          "side-channel": {
+            "type": "prod",
+            "compressed": 8248,
+            "uncompressed": 22864
+          },
+          "side-channel-list": {
+            "type": "prod",
+            "compressed": 6393,
+            "uncompressed": 16973
+          },
+          "side-channel-map": {
+            "type": "prod",
+            "compressed": 5500,
+            "uncompressed": 13348
+          },
+          "side-channel-weakmap": {
+            "type": "prod",
+            "compressed": 5701,
+            "uncompressed": 14667
+          },
+          "smart-buffer": {
+            "type": "prod",
+            "compressed": 20350,
+            "uncompressed": 115025
+          },
+          "socket.io": {
+            "type": "prod",
+            "compressed": 134413,
+            "uncompressed": 513369
+          },
+          "socket.io-adapter": {
+            "type": "prod",
+            "compressed": 13659,
+            "uncompressed": 57728
+          },
+          "socket.io-parser": {
+            "type": "prod",
+            "compressed": 19849,
+            "uncompressed": 64127
+          },
+          "socket.io/node_modules/accepts": {
+            "type": "prod",
+            "compressed": 5589,
+            "uncompressed": 16795
+          },
+          "socket.io/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "socket.io/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
+          },
+          "socket.io/node_modules/negotiator": {
+            "type": "prod",
+            "compressed": 9151,
+            "uncompressed": 27375
+          },
+          "socks": {
+            "type": "prod",
+            "compressed": 30967,
+            "uncompressed": 122329
+          },
+          "socks-proxy-agent": {
+            "type": "prod",
+            "compressed": 4758,
+            "uncompressed": 12127
+          },
+          "sonic-boom": {
+            "type": "prod",
+            "compressed": 20800,
+            "uncompressed": 85200
+          },
+          "split2": {
+            "type": "prod",
+            "compressed": 5753,
+            "uncompressed": 17419
+          },
+          "statuses": {
+            "type": "prod",
+            "compressed": 4980,
+            "uncompressed": 12505
+          },
+          "string-width": {
+            "type": "prod",
+            "compressed": 2620,
+            "uncompressed": 5161
+          },
+          "string_decoder": {
+            "type": "prod",
+            "compressed": 5286,
+            "uncompressed": 15298
+          },
+          "string_decoder/node_modules/safe-buffer": {
+            "type": "prod",
+            "compressed": 10160,
+            "uncompressed": 31686
+          },
+          "strip-ansi": {
+            "type": "prod",
+            "compressed": 2090,
+            "uncompressed": 4029
+          },
+          "strip-json-comments": {
+            "type": "prod",
+            "compressed": 3302,
+            "uncompressed": 8200
+          },
+          "strtok3": {
+            "type": "prod",
+            "compressed": 22214,
+            "uncompressed": 73040
+          },
+          "thread-stream": {
+            "type": "prod",
+            "compressed": 29615,
+            "uncompressed": 83313
+          },
+          "thread-stream/node_modules/real-require": {
+            "type": "prod",
+            "compressed": 2058,
+            "uncompressed": 3929
+          },
+          "toidentifier": {
+            "type": "prod",
+            "compressed": 2372,
+            "uncompressed": 4685
+          },
+          "token-types": {
+            "type": "prod",
+            "compressed": 5448,
+            "uncompressed": 22231
+          },
+          "tslib": {
+            "type": "prod",
+            "compressed": 26067,
+            "uncompressed": 90359
+          },
+          "type-is": {
+            "type": "prod",
+            "compressed": 7031,
+            "uncompressed": 21269
+          },
+          "type-is/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
+          },
+          "typedarray": {
+            "type": "prod",
+            "compressed": 7570,
+            "uncompressed": 25955
+          },
+          "uid-safe": {
+            "type": "prod",
+            "compressed": 3238,
+            "uncompressed": 7467
+          },
+          "uint8array-extras": {
+            "type": "prod",
+            "compressed": 8380,
+            "uncompressed": 29604
+          },
+          "undici": {
+            "type": "prod",
+            "compressed": 609112,
+            "uncompressed": 2167341
+          },
+          "undici-types": {
+            "type": "prod",
+            "compressed": 31975,
+            "uncompressed": 103421
+          },
+          "unpipe": {
+            "type": "prod",
+            "compressed": 2098,
+            "uncompressed": 4311
+          },
+          "util-deprecate": {
+            "type": "prod",
+            "compressed": 2824,
+            "uncompressed": 5481
+          },
+          "vary": {
+            "type": "prod",
+            "compressed": 3772,
+            "uncompressed": 8747
+          },
+          "web-streams-polyfill": {
+            "type": "prod",
+            "compressed": 475517,
+            "uncompressed": 2809297
+          },
+          "whatsapp-rust-bridge": {
+            "type": "prod",
+            "compressed": 843619,
+            "uncompressed": 2040511
+          },
+          "which-module": {
+            "type": "prod",
+            "compressed": 1948,
+            "uncompressed": 4036
+          },
+          "win-guid": {
+            "type": "prod",
+            "compressed": 4329,
+            "uncompressed": 10721
+          },
+          "wrap-ansi": {
+            "type": "prod",
+            "compressed": 3975,
+            "uncompressed": 9500
+          },
+          "wrappy": {
+            "type": "prod",
+            "compressed": 1566,
+            "uncompressed": 2961
+          },
+          "ws": {
+            "type": "prod",
+            "compressed": 39890,
+            "uncompressed": 150929
+          },
+          "y18n": {
+            "type": "prod",
+            "compressed": 4315,
+            "uncompressed": 10991
+          },
+          "yargs": {
+            "type": "prod",
+            "compressed": 68040,
+            "uncompressed": 230562
+          },
+          "yargs-parser": {
+            "type": "prod",
+            "compressed": 19511,
+            "uncompressed": 71482
+          },
+          "yargs/node_modules/find-up": {
+            "type": "prod",
+            "compressed": 4054,
+            "uncompressed": 11611
+          },
+          "yargs/node_modules/locate-path": {
+            "type": "prod",
+            "compressed": 2994,
+            "uncompressed": 6584
+          },
+          "yargs/node_modules/p-limit": {
+            "type": "prod",
+            "compressed": 3506,
+            "uncompressed": 7390
+          },
+          "yargs/node_modules/p-locate": {
+            "type": "prod",
+            "compressed": 3515,
+            "uncompressed": 7285
+          }
+        },
+        "devCompressed": 32008227
+      }
+    },
+    "apk:armeabi-v7a": {
+      "fileBytes": 89781950,
+      "entries": 952,
+      "components": {
+        "native armeabi-v7a": {
+          "stored": 35158107,
+          "uncompressed": 97263663
+        },
+        "levix-app.zip": {
+          "stored": 43078460,
+          "uncompressed": 44217091
+        },
+        "dex": {
+          "stored": 9709524,
+          "uncompressed": 9709524
+        },
+        "resources": {
+          "stored": 1689848,
+          "uncompressed": 2302233
+        },
+        "other": {
+          "stored": 23447,
+          "uncompressed": 60515
+        }
+      },
+      "libraries": {
+        "lib/armeabi-v7a/libc++_shared.so": {
+          "stored": 414407,
+          "uncompressed": 1114645
+        },
+        "lib/armeabi-v7a/libcares.so": {
+          "stored": 90298,
+          "uncompressed": 161232
+        },
+        "lib/armeabi-v7a/libcrypto_3.so": {
+          "stored": 1535689,
+          "uncompressed": 2927829
+        },
+        "lib/armeabi-v7a/libffmpeg.so": {
+          "stored": 4246084,
+          "uncompressed": 8704148
+        },
+        "lib/armeabi-v7a/libicudata_78.so": {
+          "stored": 12798424,
+          "uncompressed": 33112209
+        },
+        "lib/armeabi-v7a/libicui18n_78.so": {
+          "stored": 1009059,
+          "uncompressed": 3602289
+        },
+        "lib/armeabi-v7a/libicuuc_78.so": {
+          "stored": 651963,
+          "uncompressed": 1794161
+        },
+        "lib/armeabi-v7a/libnode.so": {
+          "stored": 12365751,
+          "uncompressed": 42615057
+        },
+        "lib/armeabi-v7a/libsqlite3.so": {
+          "stored": 565243,
+          "uncompressed": 848781
+        },
+        "lib/armeabi-v7a/libsqlite3_3.53.4.so": {
+          "stored": 553369,
+          "uncompressed": 828129
+        },
+        "lib/armeabi-v7a/libsqlite3_3.54.0.so": {
+          "stored": 565209,
+          "uncompressed": 860937
+        },
+        "lib/armeabi-v7a/libssl_3.so": {
+          "stored": 326526,
+          "uncompressed": 635073
+        },
+        "lib/armeabi-v7a/libz_1.so": {
+          "stored": 36085,
+          "uncompressed": 59173
+        }
+      },
+      "app": {
+        "entries": 5393,
+        "compressed": 43042233,
+        "uncompressed": 137525769,
+        "topLevel": {
+          "LICENSE": {
+            "compressed": 639,
+            "uncompressed": 1081
+          },
+          "app.cjs": {
+            "compressed": 6453,
+            "uncompressed": 18531
+          },
+          "bin": {
+            "compressed": 168,
+            "uncompressed": 221
+          },
+          "boot.mjs": {
+            "compressed": 1453,
+            "uncompressed": 3255
+          },
+          "node_modules": {
+            "compressed": 41971519,
+            "uncompressed": 134611583
+          },
+          "package.json": {
+            "compressed": 1038,
+            "uncompressed": 2604
+          },
+          "public": {
+            "compressed": 576034,
+            "uncompressed": 1374850
+          },
+          "scheduler.cjs": {
+            "compressed": 4329,
+            "uncompressed": 12019
+          },
+          "src": {
+            "compressed": 465775,
+            "uncompressed": 1434870
+          },
+          "views": {
+            "compressed": 14825,
+            "uncompressed": 66755
+          }
+        },
+        "packages": {
+          "@biomejs/biome": {
+            "type": "dev",
+            "compressed": 137931,
+            "uncompressed": 915615
+          },
+          "@biomejs/cli-linux-x64": {
+            "type": "dev",
+            "compressed": 30410076,
+            "uncompressed": 84146556
+          },
+          "@borewit/text-codec": {
+            "type": "prod",
+            "compressed": 5240,
+            "uncompressed": 17838
+          },
+          "@cacheable/node-cache": {
+            "type": "prod",
+            "compressed": 18143,
+            "uncompressed": 70865
+          },
+          "@derhuerst/http-basic": {
+            "type": "prod",
+            "compressed": 15001,
+            "uncompressed": 45279
+          },
+          "@google/genai": {
+            "type": "prod",
+            "compressed": 1455960,
+            "uncompressed": 9235595
+          },
+          "@hapi/boom": {
+            "type": "prod",
+            "compressed": 6753,
+            "uncompressed": 28311
+          },
+          "@hapi/hoek": {
+            "type": "prod",
+            "compressed": 16524,
+            "uncompressed": 51451
+          },
+          "@keyv/serialize": {
+            "type": "prod",
+            "compressed": 3536,
+            "uncompressed": 8540
+          },
+          "@pinojs/redact": {
+            "type": "prod",
+            "compressed": 22290,
+            "uncompressed": 97351
+          },
+          "@protobufjs/aspromise": {
+            "type": "prod",
+            "compressed": 2691,
+            "uncompressed": 9055
+          },
+          "@protobufjs/base64": {
+            "type": "prod",
+            "compressed": 3555,
+            "uncompressed": 9224
+          },
+          "@protobufjs/codegen": {
+            "type": "prod",
+            "compressed": 4060,
+            "uncompressed": 9749
+          },
+          "@protobufjs/eventemitter": {
+            "type": "prod",
+            "compressed": 3679,
+            "uncompressed": 10310
+          },
+          "@protobufjs/fetch": {
+            "type": "prod",
+            "compressed": 4998,
+            "uncompressed": 14872
+          },
+          "@protobufjs/float": {
+            "type": "prod",
+            "compressed": 6430,
+            "uncompressed": 26968
+          },
+          "@protobufjs/path": {
+            "type": "prod",
+            "compressed": 2938,
+            "uncompressed": 7770
+          },
+          "@protobufjs/pool": {
+            "type": "prod",
+            "compressed": 2728,
+            "uncompressed": 6249
+          },
+          "@protobufjs/utf8": {
+            "type": "prod",
+            "compressed": 9914,
+            "uncompressed": 41228
+          },
+          "@sefinek/google-tts-api": {
+            "type": "prod",
+            "compressed": 13040,
+            "uncompressed": 30905
+          },
+          "@socket.io/component-emitter": {
+            "type": "prod",
+            "compressed": 6381,
+            "uncompressed": 21216
+          },
+          "@tokenizer/inflate": {
+            "type": "prod",
+            "compressed": 9226,
+            "uncompressed": 28506
+          },
+          "@tokenizer/token": {
+            "type": "prod",
+            "compressed": 1470,
+            "uncompressed": 3037
+          },
+          "@types/cors": {
+            "type": "prod",
+            "compressed": 2547,
+            "uncompressed": 6148
+          },
+          "@types/node": {
+            "type": "prod",
+            "compressed": 458885,
+            "uncompressed": 2379575
+          },
+          "@types/retry": {
+            "type": "prod",
+            "compressed": 2920,
+            "uncompressed": 7654
+          },
+          "@types/ws": {
+            "type": "prod",
+            "compressed": 8706,
+            "uncompressed": 42347
+          },
+          "@whiskeysockets/baileys": {
+            "type": "prod",
+            "compressed": 881698,
+            "uncompressed": 7259838
+          },
+          "@whiskeysockets/baileys/node_modules/pino": {
+            "type": "prod",
+            "compressed": 272064,
+            "uncompressed": 777390
+          },
+          "@whiskeysockets/baileys/node_modules/thread-stream": {
+            "type": "prod",
+            "compressed": 27361,
+            "uncompressed": 74238
+          },
+          "accepts": {
+            "type": "prod",
+            "compressed": 5622,
+            "uncompressed": 16917
+          },
+          "agent-base": {
+            "type": "prod",
+            "compressed": 5340,
+            "uncompressed": 13243
+          },
+          "ansi-regex": {
+            "type": "prod",
+            "compressed": 2910,
+            "uncompressed": 5609
+          },
+          "ansi-styles": {
+            "type": "prod",
+            "compressed": 5952,
+            "uncompressed": 16978
+          },
+          "async-mutex": {
+            "type": "prod",
+            "compressed": 17054,
+            "uncompressed": 63046
+          },
+          "asynckit": {
+            "type": "prod",
+            "compressed": 10599,
+            "uncompressed": 27362
+          },
+          "atomic-sleep": {
+            "type": "prod",
+            "compressed": 2903,
+            "uncompressed": 6571
+          },
+          "axios": {
+            "type": "prod",
+            "compressed": 414238,
+            "uncompressed": 1460146
+          },
+          "axios/node_modules/agent-base": {
+            "type": "prod",
+            "compressed": 9568,
+            "uncompressed": 28259
+          },
+          "axios/node_modules/https-proxy-agent": {
+            "type": "prod",
+            "compressed": 7541,
+            "uncompressed": 19375
+          },
+          "base64-js": {
+            "type": "prod",
+            "compressed": 4200,
+            "uncompressed": 9624
+          },
+          "base64id": {
+            "type": "prod",
+            "compressed": 2284,
+            "uncompressed": 4692
+          },
+          "bignumber.js": {
+            "type": "prod",
+            "compressed": 82331,
+            "uncompressed": 351589
+          },
+          "body-parser": {
+            "type": "prod",
+            "compressed": 13067,
+            "uncompressed": 42536
+          },
+          "body-parser/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
+          },
+          "buffer": {
+            "type": "prod",
+            "compressed": 23179,
+            "uncompressed": 91279
+          },
+          "buffer-equal-constant-time": {
+            "type": "prod",
+            "compressed": 2368,
+            "uncompressed": 5232
+          },
+          "buffer-from": {
+            "type": "prod",
+            "compressed": 2219,
+            "uncompressed": 5047
+          },
+          "bytes": {
+            "type": "prod",
+            "compressed": 4683,
+            "uncompressed": 12270
+          },
+          "cacheable": {
+            "type": "prod",
+            "compressed": 40645,
+            "uncompressed": 200876
+          },
+          "call-bind-apply-helpers": {
+            "type": "prod",
+            "compressed": 6702,
+            "uncompressed": 15952
+          },
+          "call-bound": {
+            "type": "prod",
+            "compressed": 6599,
+            "uncompressed": 17106
+          },
+          "camelcase": {
+            "type": "prod",
+            "compressed": 3218,
+            "uncompressed": 7447
+          },
+          "caseless": {
+            "type": "prod",
+            "compressed": 5272,
+            "uncompressed": 14250
+          },
+          "cliui": {
+            "type": "prod",
+            "compressed": 5568,
+            "uncompressed": 14873
+          },
+          "clone": {
+            "type": "prod",
+            "compressed": 6445,
+            "uncompressed": 15879
+          },
+          "color-convert": {
+            "type": "prod",
+            "compressed": 9198,
+            "uncompressed": 27189
+          },
+          "color-name": {
+            "type": "prod",
+            "compressed": 2670,
+            "uncompressed": 6693
+          },
+          "colorette": {
+            "type": "prod",
+            "compressed": 6079,
+            "uncompressed": 17009
+          },
+          "combined-stream": {
+            "type": "prod",
+            "compressed": 4029,
+            "uncompressed": 11514
+          },
+          "commander": {
+            "type": "dev",
+            "compressed": 47426,
+            "uncompressed": 173252
+          },
+          "concat-stream": {
+            "type": "prod",
+            "compressed": 3738,
+            "uncompressed": 9556
+          },
+          "concat-stream/node_modules/readable-stream": {
+            "type": "prod",
+            "compressed": 41190,
+            "uncompressed": 123971
+          },
+          "content-disposition": {
+            "type": "prod",
+            "compressed": 7900,
+            "uncompressed": 24318
+          },
+          "content-type": {
+            "type": "prod",
+            "compressed": 3988,
+            "uncompressed": 10471
+          },
+          "cookie": {
+            "type": "prod",
+            "compressed": 8377,
+            "uncompressed": 23382
+          },
+          "cookie-signature": {
+            "type": "prod",
+            "compressed": 2529,
+            "uncompressed": 4993
+          },
+          "cors": {
+            "type": "prod",
+            "compressed": 6643,
+            "uncompressed": 19988
+          },
+          "curve25519-js": {
+            "type": "prod",
+            "compressed": 12858,
+            "uncompressed": 49956
+          },
+          "data-uri-to-buffer": {
+            "type": "prod",
+            "compressed": 3850,
+            "uncompressed": 8352
+          },
+          "dateformat": {
+            "type": "prod",
+            "compressed": 6307,
+            "uncompressed": 20727
+          },
+          "debug": {
+            "type": "prod",
+            "compressed": 14582,
+            "uncompressed": 42793
+          },
+          "decamelize": {
+            "type": "prod",
+            "compressed": 1600,
+            "uncompressed": 2940
+          },
+          "delayed-stream": {
+            "type": "prod",
+            "compressed": 3346,
+            "uncompressed": 8021
+          },
+          "depd": {
+            "type": "prod",
+            "compressed": 9047,
+            "uncompressed": 27117
+          },
+          "detect-libc": {
+            "type": "prod",
+            "compressed": 8762,
+            "uncompressed": 26437
+          },
+          "dijkstrajs": {
+            "type": "prod",
+            "compressed": 3933,
+            "uncompressed": 10798
+          },
+          "dunder-proto": {
+            "type": "prod",
+            "compressed": 5838,
+            "uncompressed": 13003
+          },
+          "ecdsa-sig-formatter": {
+            "type": "prod",
+            "compressed": 7315,
+            "uncompressed": 20588
+          },
+          "ee-first": {
+            "type": "prod",
+            "compressed": 2705,
+            "uncompressed": 6259
+          },
+          "ejs": {
+            "type": "prod",
+            "compressed": 66751,
+            "uncompressed": 218428
+          },
+          "emoji-regex": {
+            "type": "prod",
+            "compressed": 10505,
+            "uncompressed": 48255
+          },
+          "encodeurl": {
+            "type": "prod",
+            "compressed": 3222,
+            "uncompressed": 6980
+          },
+          "end-of-stream": {
+            "type": "prod",
+            "compressed": 2373,
+            "uncompressed": 6295
+          },
+          "engine.io": {
+            "type": "prod",
+            "compressed": 50645,
+            "uncompressed": 169919
+          },
+          "engine.io-parser": {
+            "type": "prod",
+            "compressed": 15958,
+            "uncompressed": 45773
+          },
+          "engine.io/node_modules/accepts": {
+            "type": "prod",
+            "compressed": 5589,
+            "uncompressed": 16795
+          },
+          "engine.io/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "engine.io/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
+          },
+          "engine.io/node_modules/negotiator": {
+            "type": "prod",
+            "compressed": 9151,
+            "uncompressed": 27375
+          },
+          "env-paths": {
+            "type": "prod",
+            "compressed": 3996,
+            "uncompressed": 10163
+          },
+          "es-define-property": {
+            "type": "prod",
+            "compressed": 4548,
+            "uncompressed": 10217
+          },
+          "es-errors": {
+            "type": "prod",
+            "compressed": 5682,
+            "uncompressed": 12324
+          },
+          "es-object-atoms": {
+            "type": "prod",
+            "compressed": 4995,
+            "uncompressed": 11442
+          },
+          "es-set-tostringtag": {
+            "type": "prod",
+            "compressed": 5827,
+            "uncompressed": 14544
+          },
+          "escape-html": {
+            "type": "prod",
+            "compressed": 1883,
+            "uncompressed": 3660
+          },
+          "etag": {
+            "type": "prod",
+            "compressed": 4403,
+            "uncompressed": 10809
+          },
+          "express": {
+            "type": "prod",
+            "compressed": 25401,
+            "uncompressed": 76638
+          },
+          "express-session": {
+            "type": "prod",
+            "compressed": 21651,
+            "uncompressed": 77151
+          },
+          "express-session/node_modules/cookie-signature": {
+            "type": "prod",
+            "compressed": 2055,
+            "uncompressed": 4083
+          },
+          "express-session/node_modules/debug": {
+            "type": "prod",
+            "compressed": 18526,
+            "uncompressed": 51243
+          },
+          "express-session/node_modules/ms": {
+            "type": "prod",
+            "compressed": 2736,
+            "uncompressed": 6266
+          },
+          "express/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
+          },
+          "extend": {
+            "type": "prod",
+            "compressed": 7643,
+            "uncompressed": 23461
+          },
+          "fast-copy": {
+            "type": "prod",
+            "compressed": 17089,
+            "uncompressed": 63509
+          },
+          "fast-safe-stringify": {
+            "type": "prod",
+            "compressed": 9727,
+            "uncompressed": 39702
+          },
+          "fetch-blob": {
+            "type": "prod",
+            "compressed": 8610,
+            "uncompressed": 21755
+          },
+          "file-type": {
+            "type": "prod",
+            "compressed": 37947,
+            "uncompressed": 139263
+          },
+          "finalhandler": {
+            "type": "prod",
+            "compressed": 6459,
+            "uncompressed": 17525
+          },
+          "follow-redirects": {
+            "type": "prod",
+            "compressed": 10271,
+            "uncompressed": 30614
+          },
+          "form-data": {
+            "type": "prod",
+            "compressed": 24731,
+            "uncompressed": 83901
+          },
+          "form-data/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "form-data/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
+          },
+          "formdata-polyfill": {
+            "type": "prod",
+            "compressed": 12490,
+            "uncompressed": 32220
+          },
+          "forwarded": {
+            "type": "prod",
+            "compressed": 2720,
+            "uncompressed": 5876
+          },
+          "fresh": {
+            "type": "prod",
+            "compressed": 4526,
+            "uncompressed": 10289
+          },
+          "function-bind": {
+            "type": "prod",
+            "compressed": 9880,
+            "uncompressed": 31427
+          },
+          "gaxios": {
+            "type": "prod",
+            "compressed": 116861,
+            "uncompressed": 451269
+          },
+          "gaxios/node_modules/agent-base": {
+            "type": "prod",
+            "compressed": 6300,
+            "uncompressed": 16400
+          },
+          "gaxios/node_modules/https-proxy-agent": {
+            "type": "prod",
+            "compressed": 7087,
+            "uncompressed": 18328
+          },
+          "gcp-metadata": {
+            "type": "prod",
+            "compressed": 16661,
+            "uncompressed": 47955
+          },
+          "get-caller-file": {
+            "type": "prod",
+            "compressed": 1991,
+            "uncompressed": 3946
+          },
+          "get-intrinsic": {
+            "type": "prod",
+            "compressed": 13901,
+            "uncompressed": 46542
+          },
+          "get-proto": {
+            "type": "prod",
+            "compressed": 4834,
+            "uncompressed": 10840
+          },
+          "google-auth-library": {
+            "type": "prod",
+            "compressed": 176399,
+            "uncompressed": 601779
+          },
+          "google-logging-utils": {
+            "type": "prod",
+            "compressed": 18662,
+            "uncompressed": 51149
+          },
+          "gopd": {
+            "type": "prod",
+            "compressed": 4745,
+            "uncompressed": 9869
+          },
+          "has-symbols": {
+            "type": "prod",
+            "compressed": 8987,
+            "uncompressed": 23409
+          },
+          "has-tostringtag": {
+            "type": "prod",
+            "compressed": 7204,
+            "uncompressed": 17603
+          },
+          "hasown": {
+            "type": "prod",
+            "compressed": 4584,
+            "uncompressed": 10332
+          },
+          "help-me": {
+            "type": "prod",
+            "compressed": 4640,
+            "uncompressed": 14574
+          },
+          "hookified": {
+            "type": "prod",
+            "compressed": 13704,
+            "uncompressed": 65400
+          },
+          "http-errors": {
+            "type": "prod",
+            "compressed": 6717,
+            "uncompressed": 19064
+          },
+          "http-response-object": {
+            "type": "prod",
+            "compressed": 2978,
+            "uncompressed": 6784
+          },
+          "http-response-object/node_modules/@types/node": {
+            "type": "prod",
+            "compressed": 92296,
+            "uncompressed": 631948
+          },
+          "https-proxy-agent": {
+            "type": "prod",
+            "compressed": 7193,
+            "uncompressed": 20343
+          },
+          "iconv-lite": {
+            "type": "prod",
+            "compressed": 187923,
+            "uncompressed": 344185
+          },
+          "ieee754": {
+            "type": "prod",
+            "compressed": 2910,
+            "uncompressed": 6796
+          },
+          "inherits": {
+            "type": "prod",
+            "compressed": 1989,
+            "uncompressed": 3958
+          },
+          "ip-address": {
+            "type": "prod",
+            "compressed": 55682,
+            "uncompressed": 202468
+          },
+          "ipaddr.js": {
+            "type": "prod",
+            "compressed": 12292,
+            "uncompressed": 42145
+          },
+          "is-fullwidth-code-point": {
+            "type": "prod",
+            "compressed": 2287,
+            "uncompressed": 4994
+          },
+          "is-promise": {
+            "type": "prod",
+            "compressed": 1611,
+            "uncompressed": 2958
+          },
+          "joycon": {
+            "type": "prod",
+            "compressed": 4569,
+            "uncompressed": 14010
+          },
+          "json-bigint": {
+            "type": "prod",
+            "compressed": 12395,
+            "uncompressed": 37345
+          },
+          "jwa": {
+            "type": "prod",
+            "compressed": 5209,
+            "uncompressed": 14052
+          },
+          "jws": {
+            "type": "prod",
+            "compressed": 7476,
+            "uncompressed": 18822
+          },
+          "keyv": {
+            "type": "prod",
+            "compressed": 22885,
+            "uncompressed": 93373
+          },
+          "libsignal": {
+            "type": "prod",
+            "compressed": 30665,
+            "uncompressed": 130229
+          },
+          "long": {
+            "type": "prod",
+            "compressed": 30074,
+            "uncompressed": 139458
+          },
+          "lru-cache": {
+            "type": "prod",
+            "compressed": 68300,
+            "uncompressed": 273718
+          },
+          "math-intrinsics": {
+            "type": "prod",
+            "compressed": 7289,
+            "uncompressed": 17323
+          },
+          "media-typer": {
+            "type": "prod",
+            "compressed": 3729,
+            "uncompressed": 9256
+          },
+          "merge-descriptors": {
+            "type": "prod",
+            "compressed": 2240,
+            "uncompressed": 4373
+          },
+          "mime-db": {
+            "type": "prod",
+            "compressed": 30758,
+            "uncompressed": 225566
+          },
+          "mime-types": {
+            "type": "prod",
+            "compressed": 7425,
+            "uncompressed": 22341
+          },
+          "minimist": {
+            "type": "prod",
+            "compressed": 17090,
+            "uncompressed": 54477
+          },
+          "ms": {
+            "type": "prod",
+            "compressed": 2852,
+            "uncompressed": 6721
+          },
+          "music-metadata": {
+            "type": "prod",
+            "compressed": 164474,
+            "uncompressed": 544476
+          },
+          "negotiator": {
+            "type": "prod",
+            "compressed": 9496,
+            "uncompressed": 28710
+          },
+          "node-cache": {
+            "type": "prod",
+            "compressed": 17040,
+            "uncompressed": 56567
+          },
+          "node-cron": {
+            "type": "prod",
+            "compressed": 43182,
+            "uncompressed": 174591
+          },
+          "node-domexception": {
+            "type": "prod",
+            "compressed": 15092,
+            "uncompressed": 29162
+          },
+          "node-fetch": {
+            "type": "prod",
+            "compressed": 35210,
+            "uncompressed": 107319
+          },
+          "object-assign": {
+            "type": "prod",
+            "compressed": 2608,
+            "uncompressed": 5493
+          },
+          "object-inspect": {
+            "type": "prod",
+            "compressed": 30866,
+            "uncompressed": 102920
+          },
+          "on-exit-leak-free": {
+            "type": "prod",
+            "compressed": 4385,
+            "uncompressed": 9246
+          },
+          "on-finished": {
+            "type": "prod",
+            "compressed": 5245,
+            "uncompressed": 13679
+          },
+          "on-headers": {
+            "type": "prod",
+            "compressed": 3673,
+            "uncompressed": 8850
+          },
+          "once": {
+            "type": "prod",
+            "compressed": 1841,
+            "uncompressed": 4046
+          },
+          "p-queue": {
+            "type": "prod",
+            "compressed": 20693,
+            "uncompressed": 68476
+          },
+          "p-queue/node_modules/eventemitter3": {
+            "type": "prod",
+            "compressed": 13376,
+            "uncompressed": 45088
+          },
+          "p-retry": {
+            "type": "prod",
+            "compressed": 4787,
+            "uncompressed": 11032
+          },
+          "p-timeout": {
+            "type": "prod",
+            "compressed": 5226,
+            "uncompressed": 12961
+          },
+          "p-try": {
+            "type": "prod",
+            "compressed": 2334,
+            "uncompressed": 4371
+          },
+          "parse-cache-control": {
+            "type": "prod",
+            "compressed": 1869,
+            "uncompressed": 4041
+          },
+          "parseurl": {
+            "type": "prod",
+            "compressed": 4042,
+            "uncompressed": 10299
+          },
+          "path-exists": {
+            "type": "prod",
+            "compressed": 2071,
+            "uncompressed": 3919
+          },
+          "path-to-regexp": {
+            "type": "prod",
+            "compressed": 8876,
+            "uncompressed": 28940
+          },
+          "pino": {
+            "type": "prod",
+            "compressed": 187539,
+            "uncompressed": 705711
+          },
+          "pino-abstract-transport": {
+            "type": "prod",
+            "compressed": 10391,
+            "uncompressed": 38204
+          },
+          "pino-pretty": {
+            "type": "prod",
+            "compressed": 82020,
+            "uncompressed": 274583
+          },
+          "pino-pretty/node_modules/pino-abstract-transport": {
+            "type": "prod",
+            "compressed": 10783,
+            "uncompressed": 39716
+          },
+          "pino-pretty/node_modules/pump": {
+            "type": "prod",
+            "compressed": 4100,
+            "uncompressed": 8803
+          },
+          "pino-pretty/node_modules/sonic-boom": {
+            "type": "prod",
+            "compressed": 29290,
+            "uncompressed": 123700
+          },
+          "pino-std-serializers": {
+            "type": "prod",
+            "compressed": 13546,
+            "uncompressed": 54011
+          },
+          "pino/node_modules/pino-abstract-transport": {
+            "type": "prod",
+            "compressed": 10783,
+            "uncompressed": 39716
+          },
+          "pino/node_modules/real-require": {
+            "type": "prod",
+            "compressed": 2058,
+            "uncompressed": 3929
+          },
+          "pngjs": {
+            "type": "prod",
+            "compressed": 229677,
+            "uncompressed": 1021215
+          },
+          "postject": {
+            "type": "dev",
+            "compressed": 1412794,
+            "uncompressed": 4868071
+          },
+          "process-warning": {
+            "type": "prod",
+            "compressed": 8872,
+            "uncompressed": 24591
+          },
+          "progress": {
+            "type": "prod",
+            "compressed": 6304,
+            "uncompressed": 15499
+          },
+          "protobufjs": {
+            "type": "prod",
+            "compressed": 315419,
+            "uncompressed": 1348798
+          },
+          "proxy-addr": {
+            "type": "prod",
+            "compressed": 5894,
+            "uncompressed": 16326
+          },
+          "proxy-agent-negotiate": {
+            "type": "prod",
+            "compressed": 1285,
+            "uncompressed": 2826
+          },
+          "proxy-from-env": {
+            "type": "prod",
+            "compressed": 6627,
+            "uncompressed": 15643
+          },
+          "qrcode": {
+            "type": "prod",
+            "compressed": 54465,
+            "uncompressed": 135364
+          },
+          "qrcode-terminal": {
+            "type": "prod",
+            "compressed": 51857,
+            "uncompressed": 96504
+          },
+          "qs": {
+            "type": "prod",
+            "compressed": 78579,
+            "uncompressed": 374851
+          },
+          "quick-format-unescaped": {
+            "type": "prod",
+            "compressed": 4033,
+            "uncompressed": 12829
+          },
+          "random-bytes": {
+            "type": "prod",
+            "compressed": 2679,
+            "uncompressed": 6235
+          },
+          "range-parser": {
+            "type": "prod",
+            "compressed": 3732,
+            "uncompressed": 8457
+          },
+          "raw-body": {
+            "type": "prod",
+            "compressed": 6808,
+            "uncompressed": 18495
+          },
+          "real-require": {
+            "type": "prod",
+            "compressed": 2381,
+            "uncompressed": 4827
+          },
+          "require-directory": {
+            "type": "prod",
+            "compressed": 4306,
+            "uncompressed": 12071
+          },
+          "require-main-filename": {
+            "type": "prod",
+            "compressed": 1906,
+            "uncompressed": 3928
+          },
+          "retry": {
+            "type": "prod",
+            "compressed": 7062,
+            "uncompressed": 18852
+          },
+          "router": {
+            "type": "prod",
+            "compressed": 16031,
+            "uncompressed": 46851
+          },
+          "safe-buffer": {
+            "type": "prod",
+            "compressed": 10306,
+            "uncompressed": 32101
+          },
+          "safe-stable-stringify": {
+            "type": "prod",
+            "compressed": 7400,
+            "uncompressed": 30687
+          },
+          "safer-buffer": {
+            "type": "prod",
+            "compressed": 12989,
+            "uncompressed": 42299
+          },
+          "secure-json-parse": {
+            "type": "prod",
+            "compressed": 12005,
+            "uncompressed": 50330
+          },
+          "semver": {
+            "type": "prod",
+            "compressed": 34003,
+            "uncompressed": 101065
+          },
+          "send": {
+            "type": "prod",
+            "compressed": 15296,
+            "uncompressed": 46921
+          },
+          "serve-static": {
+            "type": "prod",
+            "compressed": 8933,
+            "uncompressed": 25672
+          },
+          "set-blocking": {
+            "type": "prod",
+            "compressed": 2211,
+            "uncompressed": 4224
+          },
+          "setprototypeof": {
+            "type": "prod",
+            "compressed": 1984,
+            "uncompressed": 4025
+          },
+          "side-channel": {
+            "type": "prod",
+            "compressed": 8248,
+            "uncompressed": 22864
+          },
+          "side-channel-list": {
+            "type": "prod",
+            "compressed": 6393,
+            "uncompressed": 16973
+          },
+          "side-channel-map": {
+            "type": "prod",
+            "compressed": 5500,
+            "uncompressed": 13348
+          },
+          "side-channel-weakmap": {
+            "type": "prod",
+            "compressed": 5701,
+            "uncompressed": 14667
+          },
+          "smart-buffer": {
+            "type": "prod",
+            "compressed": 20350,
+            "uncompressed": 115025
+          },
+          "socket.io": {
+            "type": "prod",
+            "compressed": 134413,
+            "uncompressed": 513369
+          },
+          "socket.io-adapter": {
+            "type": "prod",
+            "compressed": 13659,
+            "uncompressed": 57728
+          },
+          "socket.io-parser": {
+            "type": "prod",
+            "compressed": 19849,
+            "uncompressed": 64127
+          },
+          "socket.io/node_modules/accepts": {
+            "type": "prod",
+            "compressed": 5589,
+            "uncompressed": 16795
+          },
+          "socket.io/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "socket.io/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
+          },
+          "socket.io/node_modules/negotiator": {
+            "type": "prod",
+            "compressed": 9151,
+            "uncompressed": 27375
+          },
+          "socks": {
+            "type": "prod",
+            "compressed": 30967,
+            "uncompressed": 122329
+          },
+          "socks-proxy-agent": {
+            "type": "prod",
+            "compressed": 4758,
+            "uncompressed": 12127
+          },
+          "sonic-boom": {
+            "type": "prod",
+            "compressed": 20800,
+            "uncompressed": 85200
+          },
+          "split2": {
+            "type": "prod",
+            "compressed": 5753,
+            "uncompressed": 17419
+          },
+          "statuses": {
+            "type": "prod",
+            "compressed": 4980,
+            "uncompressed": 12505
+          },
+          "string-width": {
+            "type": "prod",
+            "compressed": 2620,
+            "uncompressed": 5161
+          },
+          "string_decoder": {
+            "type": "prod",
+            "compressed": 5286,
+            "uncompressed": 15298
+          },
+          "string_decoder/node_modules/safe-buffer": {
+            "type": "prod",
+            "compressed": 10160,
+            "uncompressed": 31686
+          },
+          "strip-ansi": {
+            "type": "prod",
+            "compressed": 2090,
+            "uncompressed": 4029
+          },
+          "strip-json-comments": {
+            "type": "prod",
+            "compressed": 3302,
+            "uncompressed": 8200
+          },
+          "strtok3": {
+            "type": "prod",
+            "compressed": 22214,
+            "uncompressed": 73040
+          },
+          "thread-stream": {
+            "type": "prod",
+            "compressed": 29615,
+            "uncompressed": 83313
+          },
+          "thread-stream/node_modules/real-require": {
+            "type": "prod",
+            "compressed": 2058,
+            "uncompressed": 3929
+          },
+          "toidentifier": {
+            "type": "prod",
+            "compressed": 2372,
+            "uncompressed": 4685
+          },
+          "token-types": {
+            "type": "prod",
+            "compressed": 5448,
+            "uncompressed": 22231
+          },
+          "tslib": {
+            "type": "prod",
+            "compressed": 26067,
+            "uncompressed": 90359
+          },
+          "type-is": {
+            "type": "prod",
+            "compressed": 7031,
+            "uncompressed": 21269
+          },
+          "type-is/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
+          },
+          "typedarray": {
+            "type": "prod",
+            "compressed": 7570,
+            "uncompressed": 25955
+          },
+          "uid-safe": {
+            "type": "prod",
+            "compressed": 3238,
+            "uncompressed": 7467
+          },
+          "uint8array-extras": {
+            "type": "prod",
+            "compressed": 8380,
+            "uncompressed": 29604
+          },
+          "undici": {
+            "type": "prod",
+            "compressed": 609112,
+            "uncompressed": 2167341
+          },
+          "undici-types": {
+            "type": "prod",
+            "compressed": 31975,
+            "uncompressed": 103421
+          },
+          "unpipe": {
+            "type": "prod",
+            "compressed": 2098,
+            "uncompressed": 4311
+          },
+          "util-deprecate": {
+            "type": "prod",
+            "compressed": 2824,
+            "uncompressed": 5481
+          },
+          "vary": {
+            "type": "prod",
+            "compressed": 3772,
+            "uncompressed": 8747
+          },
+          "web-streams-polyfill": {
+            "type": "prod",
+            "compressed": 475517,
+            "uncompressed": 2809297
+          },
+          "whatsapp-rust-bridge": {
+            "type": "prod",
+            "compressed": 843619,
+            "uncompressed": 2040511
+          },
+          "which-module": {
+            "type": "prod",
+            "compressed": 1948,
+            "uncompressed": 4036
+          },
+          "win-guid": {
+            "type": "prod",
+            "compressed": 4329,
+            "uncompressed": 10721
+          },
+          "wrap-ansi": {
+            "type": "prod",
+            "compressed": 3975,
+            "uncompressed": 9500
+          },
+          "wrappy": {
+            "type": "prod",
+            "compressed": 1566,
+            "uncompressed": 2961
+          },
+          "ws": {
+            "type": "prod",
+            "compressed": 39890,
+            "uncompressed": 150929
+          },
+          "y18n": {
+            "type": "prod",
+            "compressed": 4315,
+            "uncompressed": 10991
+          },
+          "yargs": {
+            "type": "prod",
+            "compressed": 68040,
+            "uncompressed": 230562
+          },
+          "yargs-parser": {
+            "type": "prod",
+            "compressed": 19511,
+            "uncompressed": 71482
+          },
+          "yargs/node_modules/find-up": {
+            "type": "prod",
+            "compressed": 4054,
+            "uncompressed": 11611
+          },
+          "yargs/node_modules/locate-path": {
+            "type": "prod",
+            "compressed": 2994,
+            "uncompressed": 6584
+          },
+          "yargs/node_modules/p-limit": {
+            "type": "prod",
+            "compressed": 3506,
+            "uncompressed": 7390
+          },
+          "yargs/node_modules/p-locate": {
+            "type": "prod",
+            "compressed": 3515,
+            "uncompressed": 7285
+          }
+        },
+        "devCompressed": 32008227
+      }
+    },
+    "aab": {
+      "fileBytes": 122807543,
+      "entries": 974,
+      "components": {
+        "native arm64-v8a": {
+          "stored": 39816124,
+          "uncompressed": 118543483
+        },
+        "native armeabi-v7a": {
+          "stored": 35158107,
+          "uncompressed": 97263663
+        },
+        "levix-app.zip": {
+          "stored": 43078460,
+          "uncompressed": 44217091
+        },
+        "dex": {
+          "stored": 3536572,
+          "uncompressed": 9709524
+        },
+        "resources": {
+          "stored": 925188,
+          "uncompressed": 2982769
+        },
+        "other": {
+          "stored": 118744,
+          "uncompressed": 311523
+        }
+      },
+      "libraries": {
+        "base/lib/arm64-v8a/libc++_shared.so": {
+          "stored": 467256,
+          "uncompressed": 1621425
+        },
+        "base/lib/arm64-v8a/libcares.so": {
+          "stored": 111834,
+          "uncompressed": 263248
+        },
+        "base/lib/arm64-v8a/libcrypto_3.so": {
+          "stored": 2388909,
+          "uncompressed": 5369073
+        },
+        "base/lib/arm64-v8a/libffmpeg.so": {
+          "stored": 4425963,
+          "uncompressed": 8778208
+        },
+        "base/lib/arm64-v8a/libicudata_78.so": {
+          "stored": 12798498,
+          "uncompressed": 33161385
+        },
+        "base/lib/arm64-v8a/libicui18n_78.so": {
+          "stored": 1254774,
+          "uncompressed": 5061009
+        },
+        "base/lib/arm64-v8a/libicuuc_78.so": {
+          "stored": 802005,
+          "uncompressed": 2519649
+        },
+        "base/lib/arm64-v8a/libnode.so": {
+          "stored": 15116521,
+          "uncompressed": 56684969
+        },
+        "base/lib/arm64-v8a/libsqlite3.so": {
+          "stored": 676024,
+          "uncompressed": 1254249
+        },
+        "base/lib/arm64-v8a/libsqlite3_3.53.4.so": {
+          "stored": 671127,
+          "uncompressed": 1330537
+        },
+        "base/lib/arm64-v8a/libsqlite3_3.54.0.so": {
+          "stored": 677734,
+          "uncompressed": 1330625
+        },
+        "base/lib/arm64-v8a/libssl_3.so": {
+          "stored": 386088,
+          "uncompressed": 1036281
+        },
+        "base/lib/arm64-v8a/libz_1.so": {
+          "stored": 39391,
+          "uncompressed": 132825
+        },
+        "base/lib/armeabi-v7a/libc++_shared.so": {
+          "stored": 414407,
+          "uncompressed": 1114645
+        },
+        "base/lib/armeabi-v7a/libcares.so": {
+          "stored": 90298,
+          "uncompressed": 161232
+        },
+        "base/lib/armeabi-v7a/libcrypto_3.so": {
+          "stored": 1535689,
+          "uncompressed": 2927829
+        },
+        "base/lib/armeabi-v7a/libffmpeg.so": {
+          "stored": 4246084,
+          "uncompressed": 8704148
+        },
+        "base/lib/armeabi-v7a/libicudata_78.so": {
+          "stored": 12798424,
+          "uncompressed": 33112209
+        },
+        "base/lib/armeabi-v7a/libicui18n_78.so": {
+          "stored": 1009059,
+          "uncompressed": 3602289
+        },
+        "base/lib/armeabi-v7a/libicuuc_78.so": {
+          "stored": 651963,
+          "uncompressed": 1794161
+        },
+        "base/lib/armeabi-v7a/libnode.so": {
+          "stored": 12365751,
+          "uncompressed": 42615057
+        },
+        "base/lib/armeabi-v7a/libsqlite3.so": {
+          "stored": 565243,
+          "uncompressed": 848781
+        },
+        "base/lib/armeabi-v7a/libsqlite3_3.53.4.so": {
+          "stored": 553369,
+          "uncompressed": 828129
+        },
+        "base/lib/armeabi-v7a/libsqlite3_3.54.0.so": {
+          "stored": 565209,
+          "uncompressed": 860937
+        },
+        "base/lib/armeabi-v7a/libssl_3.so": {
+          "stored": 326526,
+          "uncompressed": 635073
+        },
+        "base/lib/armeabi-v7a/libz_1.so": {
+          "stored": 36085,
+          "uncompressed": 59173
+        }
+      },
+      "app": {
+        "entries": 5393,
+        "compressed": 43042233,
+        "uncompressed": 137525769,
+        "topLevel": {
+          "LICENSE": {
+            "compressed": 639,
+            "uncompressed": 1081
+          },
+          "app.cjs": {
+            "compressed": 6453,
+            "uncompressed": 18531
+          },
+          "bin": {
+            "compressed": 168,
+            "uncompressed": 221
+          },
+          "boot.mjs": {
+            "compressed": 1453,
+            "uncompressed": 3255
+          },
+          "node_modules": {
+            "compressed": 41971519,
+            "uncompressed": 134611583
+          },
+          "package.json": {
+            "compressed": 1038,
+            "uncompressed": 2604
+          },
+          "public": {
+            "compressed": 576034,
+            "uncompressed": 1374850
+          },
+          "scheduler.cjs": {
+            "compressed": 4329,
+            "uncompressed": 12019
+          },
+          "src": {
+            "compressed": 465775,
+            "uncompressed": 1434870
+          },
+          "views": {
+            "compressed": 14825,
+            "uncompressed": 66755
+          }
+        },
+        "packages": {
+          "@biomejs/biome": {
+            "type": "dev",
+            "compressed": 137931,
+            "uncompressed": 915615
+          },
+          "@biomejs/cli-linux-x64": {
+            "type": "dev",
+            "compressed": 30410076,
+            "uncompressed": 84146556
+          },
+          "@borewit/text-codec": {
+            "type": "prod",
+            "compressed": 5240,
+            "uncompressed": 17838
+          },
+          "@cacheable/node-cache": {
+            "type": "prod",
+            "compressed": 18143,
+            "uncompressed": 70865
+          },
+          "@derhuerst/http-basic": {
+            "type": "prod",
+            "compressed": 15001,
+            "uncompressed": 45279
+          },
+          "@google/genai": {
+            "type": "prod",
+            "compressed": 1455960,
+            "uncompressed": 9235595
+          },
+          "@hapi/boom": {
+            "type": "prod",
+            "compressed": 6753,
+            "uncompressed": 28311
+          },
+          "@hapi/hoek": {
+            "type": "prod",
+            "compressed": 16524,
+            "uncompressed": 51451
+          },
+          "@keyv/serialize": {
+            "type": "prod",
+            "compressed": 3536,
+            "uncompressed": 8540
+          },
+          "@pinojs/redact": {
+            "type": "prod",
+            "compressed": 22290,
+            "uncompressed": 97351
+          },
+          "@protobufjs/aspromise": {
+            "type": "prod",
+            "compressed": 2691,
+            "uncompressed": 9055
+          },
+          "@protobufjs/base64": {
+            "type": "prod",
+            "compressed": 3555,
+            "uncompressed": 9224
+          },
+          "@protobufjs/codegen": {
+            "type": "prod",
+            "compressed": 4060,
+            "uncompressed": 9749
+          },
+          "@protobufjs/eventemitter": {
+            "type": "prod",
+            "compressed": 3679,
+            "uncompressed": 10310
+          },
+          "@protobufjs/fetch": {
+            "type": "prod",
+            "compressed": 4998,
+            "uncompressed": 14872
+          },
+          "@protobufjs/float": {
+            "type": "prod",
+            "compressed": 6430,
+            "uncompressed": 26968
+          },
+          "@protobufjs/path": {
+            "type": "prod",
+            "compressed": 2938,
+            "uncompressed": 7770
+          },
+          "@protobufjs/pool": {
+            "type": "prod",
+            "compressed": 2728,
+            "uncompressed": 6249
+          },
+          "@protobufjs/utf8": {
+            "type": "prod",
+            "compressed": 9914,
+            "uncompressed": 41228
+          },
+          "@sefinek/google-tts-api": {
+            "type": "prod",
+            "compressed": 13040,
+            "uncompressed": 30905
+          },
+          "@socket.io/component-emitter": {
+            "type": "prod",
+            "compressed": 6381,
+            "uncompressed": 21216
+          },
+          "@tokenizer/inflate": {
+            "type": "prod",
+            "compressed": 9226,
+            "uncompressed": 28506
+          },
+          "@tokenizer/token": {
+            "type": "prod",
+            "compressed": 1470,
+            "uncompressed": 3037
+          },
+          "@types/cors": {
+            "type": "prod",
+            "compressed": 2547,
+            "uncompressed": 6148
+          },
+          "@types/node": {
+            "type": "prod",
+            "compressed": 458885,
+            "uncompressed": 2379575
+          },
+          "@types/retry": {
+            "type": "prod",
+            "compressed": 2920,
+            "uncompressed": 7654
+          },
+          "@types/ws": {
+            "type": "prod",
+            "compressed": 8706,
+            "uncompressed": 42347
+          },
+          "@whiskeysockets/baileys": {
+            "type": "prod",
+            "compressed": 881698,
+            "uncompressed": 7259838
+          },
+          "@whiskeysockets/baileys/node_modules/pino": {
+            "type": "prod",
+            "compressed": 272064,
+            "uncompressed": 777390
+          },
+          "@whiskeysockets/baileys/node_modules/thread-stream": {
+            "type": "prod",
+            "compressed": 27361,
+            "uncompressed": 74238
+          },
+          "accepts": {
+            "type": "prod",
+            "compressed": 5622,
+            "uncompressed": 16917
+          },
+          "agent-base": {
+            "type": "prod",
+            "compressed": 5340,
+            "uncompressed": 13243
+          },
+          "ansi-regex": {
+            "type": "prod",
+            "compressed": 2910,
+            "uncompressed": 5609
+          },
+          "ansi-styles": {
+            "type": "prod",
+            "compressed": 5952,
+            "uncompressed": 16978
+          },
+          "async-mutex": {
+            "type": "prod",
+            "compressed": 17054,
+            "uncompressed": 63046
+          },
+          "asynckit": {
+            "type": "prod",
+            "compressed": 10599,
+            "uncompressed": 27362
+          },
+          "atomic-sleep": {
+            "type": "prod",
+            "compressed": 2903,
+            "uncompressed": 6571
+          },
+          "axios": {
+            "type": "prod",
+            "compressed": 414238,
+            "uncompressed": 1460146
+          },
+          "axios/node_modules/agent-base": {
+            "type": "prod",
+            "compressed": 9568,
+            "uncompressed": 28259
+          },
+          "axios/node_modules/https-proxy-agent": {
+            "type": "prod",
+            "compressed": 7541,
+            "uncompressed": 19375
+          },
+          "base64-js": {
+            "type": "prod",
+            "compressed": 4200,
+            "uncompressed": 9624
+          },
+          "base64id": {
+            "type": "prod",
+            "compressed": 2284,
+            "uncompressed": 4692
+          },
+          "bignumber.js": {
+            "type": "prod",
+            "compressed": 82331,
+            "uncompressed": 351589
+          },
+          "body-parser": {
+            "type": "prod",
+            "compressed": 13067,
+            "uncompressed": 42536
+          },
+          "body-parser/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
+          },
+          "buffer": {
+            "type": "prod",
+            "compressed": 23179,
+            "uncompressed": 91279
+          },
+          "buffer-equal-constant-time": {
+            "type": "prod",
+            "compressed": 2368,
+            "uncompressed": 5232
+          },
+          "buffer-from": {
+            "type": "prod",
+            "compressed": 2219,
+            "uncompressed": 5047
+          },
+          "bytes": {
+            "type": "prod",
+            "compressed": 4683,
+            "uncompressed": 12270
+          },
+          "cacheable": {
+            "type": "prod",
+            "compressed": 40645,
+            "uncompressed": 200876
+          },
+          "call-bind-apply-helpers": {
+            "type": "prod",
+            "compressed": 6702,
+            "uncompressed": 15952
+          },
+          "call-bound": {
+            "type": "prod",
+            "compressed": 6599,
+            "uncompressed": 17106
+          },
+          "camelcase": {
+            "type": "prod",
+            "compressed": 3218,
+            "uncompressed": 7447
+          },
+          "caseless": {
+            "type": "prod",
+            "compressed": 5272,
+            "uncompressed": 14250
+          },
+          "cliui": {
+            "type": "prod",
+            "compressed": 5568,
+            "uncompressed": 14873
+          },
+          "clone": {
+            "type": "prod",
+            "compressed": 6445,
+            "uncompressed": 15879
+          },
+          "color-convert": {
+            "type": "prod",
+            "compressed": 9198,
+            "uncompressed": 27189
+          },
+          "color-name": {
+            "type": "prod",
+            "compressed": 2670,
+            "uncompressed": 6693
+          },
+          "colorette": {
+            "type": "prod",
+            "compressed": 6079,
+            "uncompressed": 17009
+          },
+          "combined-stream": {
+            "type": "prod",
+            "compressed": 4029,
+            "uncompressed": 11514
+          },
+          "commander": {
+            "type": "dev",
+            "compressed": 47426,
+            "uncompressed": 173252
+          },
+          "concat-stream": {
+            "type": "prod",
+            "compressed": 3738,
+            "uncompressed": 9556
+          },
+          "concat-stream/node_modules/readable-stream": {
+            "type": "prod",
+            "compressed": 41190,
+            "uncompressed": 123971
+          },
+          "content-disposition": {
+            "type": "prod",
+            "compressed": 7900,
+            "uncompressed": 24318
+          },
+          "content-type": {
+            "type": "prod",
+            "compressed": 3988,
+            "uncompressed": 10471
+          },
+          "cookie": {
+            "type": "prod",
+            "compressed": 8377,
+            "uncompressed": 23382
+          },
+          "cookie-signature": {
+            "type": "prod",
+            "compressed": 2529,
+            "uncompressed": 4993
+          },
+          "cors": {
+            "type": "prod",
+            "compressed": 6643,
+            "uncompressed": 19988
+          },
+          "curve25519-js": {
+            "type": "prod",
+            "compressed": 12858,
+            "uncompressed": 49956
+          },
+          "data-uri-to-buffer": {
+            "type": "prod",
+            "compressed": 3850,
+            "uncompressed": 8352
+          },
+          "dateformat": {
+            "type": "prod",
+            "compressed": 6307,
+            "uncompressed": 20727
+          },
+          "debug": {
+            "type": "prod",
+            "compressed": 14582,
+            "uncompressed": 42793
+          },
+          "decamelize": {
+            "type": "prod",
+            "compressed": 1600,
+            "uncompressed": 2940
+          },
+          "delayed-stream": {
+            "type": "prod",
+            "compressed": 3346,
+            "uncompressed": 8021
+          },
+          "depd": {
+            "type": "prod",
+            "compressed": 9047,
+            "uncompressed": 27117
+          },
+          "detect-libc": {
+            "type": "prod",
+            "compressed": 8762,
+            "uncompressed": 26437
+          },
+          "dijkstrajs": {
+            "type": "prod",
+            "compressed": 3933,
+            "uncompressed": 10798
+          },
+          "dunder-proto": {
+            "type": "prod",
+            "compressed": 5838,
+            "uncompressed": 13003
+          },
+          "ecdsa-sig-formatter": {
+            "type": "prod",
+            "compressed": 7315,
+            "uncompressed": 20588
+          },
+          "ee-first": {
+            "type": "prod",
+            "compressed": 2705,
+            "uncompressed": 6259
+          },
+          "ejs": {
+            "type": "prod",
+            "compressed": 66751,
+            "uncompressed": 218428
+          },
+          "emoji-regex": {
+            "type": "prod",
+            "compressed": 10505,
+            "uncompressed": 48255
+          },
+          "encodeurl": {
+            "type": "prod",
+            "compressed": 3222,
+            "uncompressed": 6980
+          },
+          "end-of-stream": {
+            "type": "prod",
+            "compressed": 2373,
+            "uncompressed": 6295
+          },
+          "engine.io": {
+            "type": "prod",
+            "compressed": 50645,
+            "uncompressed": 169919
+          },
+          "engine.io-parser": {
+            "type": "prod",
+            "compressed": 15958,
+            "uncompressed": 45773
+          },
+          "engine.io/node_modules/accepts": {
+            "type": "prod",
+            "compressed": 5589,
+            "uncompressed": 16795
+          },
+          "engine.io/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "engine.io/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
+          },
+          "engine.io/node_modules/negotiator": {
+            "type": "prod",
+            "compressed": 9151,
+            "uncompressed": 27375
+          },
+          "env-paths": {
+            "type": "prod",
+            "compressed": 3996,
+            "uncompressed": 10163
+          },
+          "es-define-property": {
+            "type": "prod",
+            "compressed": 4548,
+            "uncompressed": 10217
+          },
+          "es-errors": {
+            "type": "prod",
+            "compressed": 5682,
+            "uncompressed": 12324
+          },
+          "es-object-atoms": {
+            "type": "prod",
+            "compressed": 4995,
+            "uncompressed": 11442
+          },
+          "es-set-tostringtag": {
+            "type": "prod",
+            "compressed": 5827,
+            "uncompressed": 14544
+          },
+          "escape-html": {
+            "type": "prod",
+            "compressed": 1883,
+            "uncompressed": 3660
+          },
+          "etag": {
+            "type": "prod",
+            "compressed": 4403,
+            "uncompressed": 10809
+          },
+          "express": {
+            "type": "prod",
+            "compressed": 25401,
+            "uncompressed": 76638
+          },
+          "express-session": {
+            "type": "prod",
+            "compressed": 21651,
+            "uncompressed": 77151
+          },
+          "express-session/node_modules/cookie-signature": {
+            "type": "prod",
+            "compressed": 2055,
+            "uncompressed": 4083
+          },
+          "express-session/node_modules/debug": {
+            "type": "prod",
+            "compressed": 18526,
+            "uncompressed": 51243
+          },
+          "express-session/node_modules/ms": {
+            "type": "prod",
+            "compressed": 2736,
+            "uncompressed": 6266
+          },
+          "express/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
+          },
+          "extend": {
+            "type": "prod",
+            "compressed": 7643,
+            "uncompressed": 23461
+          },
+          "fast-copy": {
+            "type": "prod",
+            "compressed": 17089,
+            "uncompressed": 63509
+          },
+          "fast-safe-stringify": {
+            "type": "prod",
+            "compressed": 9727,
+            "uncompressed": 39702
+          },
+          "fetch-blob": {
+            "type": "prod",
+            "compressed": 8610,
+            "uncompressed": 21755
+          },
+          "file-type": {
+            "type": "prod",
+            "compressed": 37947,
+            "uncompressed": 139263
+          },
+          "finalhandler": {
+            "type": "prod",
+            "compressed": 6459,
+            "uncompressed": 17525
+          },
+          "follow-redirects": {
+            "type": "prod",
+            "compressed": 10271,
+            "uncompressed": 30614
+          },
+          "form-data": {
+            "type": "prod",
+            "compressed": 24731,
+            "uncompressed": 83901
+          },
+          "form-data/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "form-data/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
+          },
+          "formdata-polyfill": {
+            "type": "prod",
+            "compressed": 12490,
+            "uncompressed": 32220
+          },
+          "forwarded": {
+            "type": "prod",
+            "compressed": 2720,
+            "uncompressed": 5876
+          },
+          "fresh": {
+            "type": "prod",
+            "compressed": 4526,
+            "uncompressed": 10289
+          },
+          "function-bind": {
+            "type": "prod",
+            "compressed": 9880,
+            "uncompressed": 31427
+          },
+          "gaxios": {
+            "type": "prod",
+            "compressed": 116861,
+            "uncompressed": 451269
+          },
+          "gaxios/node_modules/agent-base": {
+            "type": "prod",
+            "compressed": 6300,
+            "uncompressed": 16400
+          },
+          "gaxios/node_modules/https-proxy-agent": {
+            "type": "prod",
+            "compressed": 7087,
+            "uncompressed": 18328
+          },
+          "gcp-metadata": {
+            "type": "prod",
+            "compressed": 16661,
+            "uncompressed": 47955
+          },
+          "get-caller-file": {
+            "type": "prod",
+            "compressed": 1991,
+            "uncompressed": 3946
+          },
+          "get-intrinsic": {
+            "type": "prod",
+            "compressed": 13901,
+            "uncompressed": 46542
+          },
+          "get-proto": {
+            "type": "prod",
+            "compressed": 4834,
+            "uncompressed": 10840
+          },
+          "google-auth-library": {
+            "type": "prod",
+            "compressed": 176399,
+            "uncompressed": 601779
+          },
+          "google-logging-utils": {
+            "type": "prod",
+            "compressed": 18662,
+            "uncompressed": 51149
+          },
+          "gopd": {
+            "type": "prod",
+            "compressed": 4745,
+            "uncompressed": 9869
+          },
+          "has-symbols": {
+            "type": "prod",
+            "compressed": 8987,
+            "uncompressed": 23409
+          },
+          "has-tostringtag": {
+            "type": "prod",
+            "compressed": 7204,
+            "uncompressed": 17603
+          },
+          "hasown": {
+            "type": "prod",
+            "compressed": 4584,
+            "uncompressed": 10332
+          },
+          "help-me": {
+            "type": "prod",
+            "compressed": 4640,
+            "uncompressed": 14574
+          },
+          "hookified": {
+            "type": "prod",
+            "compressed": 13704,
+            "uncompressed": 65400
+          },
+          "http-errors": {
+            "type": "prod",
+            "compressed": 6717,
+            "uncompressed": 19064
+          },
+          "http-response-object": {
+            "type": "prod",
+            "compressed": 2978,
+            "uncompressed": 6784
+          },
+          "http-response-object/node_modules/@types/node": {
+            "type": "prod",
+            "compressed": 92296,
+            "uncompressed": 631948
+          },
+          "https-proxy-agent": {
+            "type": "prod",
+            "compressed": 7193,
+            "uncompressed": 20343
+          },
+          "iconv-lite": {
+            "type": "prod",
+            "compressed": 187923,
+            "uncompressed": 344185
+          },
+          "ieee754": {
+            "type": "prod",
+            "compressed": 2910,
+            "uncompressed": 6796
+          },
+          "inherits": {
+            "type": "prod",
+            "compressed": 1989,
+            "uncompressed": 3958
+          },
+          "ip-address": {
+            "type": "prod",
+            "compressed": 55682,
+            "uncompressed": 202468
+          },
+          "ipaddr.js": {
+            "type": "prod",
+            "compressed": 12292,
+            "uncompressed": 42145
+          },
+          "is-fullwidth-code-point": {
+            "type": "prod",
+            "compressed": 2287,
+            "uncompressed": 4994
+          },
+          "is-promise": {
+            "type": "prod",
+            "compressed": 1611,
+            "uncompressed": 2958
+          },
+          "joycon": {
+            "type": "prod",
+            "compressed": 4569,
+            "uncompressed": 14010
+          },
+          "json-bigint": {
+            "type": "prod",
+            "compressed": 12395,
+            "uncompressed": 37345
+          },
+          "jwa": {
+            "type": "prod",
+            "compressed": 5209,
+            "uncompressed": 14052
+          },
+          "jws": {
+            "type": "prod",
+            "compressed": 7476,
+            "uncompressed": 18822
+          },
+          "keyv": {
+            "type": "prod",
+            "compressed": 22885,
+            "uncompressed": 93373
+          },
+          "libsignal": {
+            "type": "prod",
+            "compressed": 30665,
+            "uncompressed": 130229
+          },
+          "long": {
+            "type": "prod",
+            "compressed": 30074,
+            "uncompressed": 139458
+          },
+          "lru-cache": {
+            "type": "prod",
+            "compressed": 68300,
+            "uncompressed": 273718
+          },
+          "math-intrinsics": {
+            "type": "prod",
+            "compressed": 7289,
+            "uncompressed": 17323
+          },
+          "media-typer": {
+            "type": "prod",
+            "compressed": 3729,
+            "uncompressed": 9256
+          },
+          "merge-descriptors": {
+            "type": "prod",
+            "compressed": 2240,
+            "uncompressed": 4373
+          },
+          "mime-db": {
+            "type": "prod",
+            "compressed": 30758,
+            "uncompressed": 225566
+          },
+          "mime-types": {
+            "type": "prod",
+            "compressed": 7425,
+            "uncompressed": 22341
+          },
+          "minimist": {
+            "type": "prod",
+            "compressed": 17090,
+            "uncompressed": 54477
+          },
+          "ms": {
+            "type": "prod",
+            "compressed": 2852,
+            "uncompressed": 6721
+          },
+          "music-metadata": {
+            "type": "prod",
+            "compressed": 164474,
+            "uncompressed": 544476
+          },
+          "negotiator": {
+            "type": "prod",
+            "compressed": 9496,
+            "uncompressed": 28710
+          },
+          "node-cache": {
+            "type": "prod",
+            "compressed": 17040,
+            "uncompressed": 56567
+          },
+          "node-cron": {
+            "type": "prod",
+            "compressed": 43182,
+            "uncompressed": 174591
+          },
+          "node-domexception": {
+            "type": "prod",
+            "compressed": 15092,
+            "uncompressed": 29162
+          },
+          "node-fetch": {
+            "type": "prod",
+            "compressed": 35210,
+            "uncompressed": 107319
+          },
+          "object-assign": {
+            "type": "prod",
+            "compressed": 2608,
+            "uncompressed": 5493
+          },
+          "object-inspect": {
+            "type": "prod",
+            "compressed": 30866,
+            "uncompressed": 102920
+          },
+          "on-exit-leak-free": {
+            "type": "prod",
+            "compressed": 4385,
+            "uncompressed": 9246
+          },
+          "on-finished": {
+            "type": "prod",
+            "compressed": 5245,
+            "uncompressed": 13679
+          },
+          "on-headers": {
+            "type": "prod",
+            "compressed": 3673,
+            "uncompressed": 8850
+          },
+          "once": {
+            "type": "prod",
+            "compressed": 1841,
+            "uncompressed": 4046
+          },
+          "p-queue": {
+            "type": "prod",
+            "compressed": 20693,
+            "uncompressed": 68476
+          },
+          "p-queue/node_modules/eventemitter3": {
+            "type": "prod",
+            "compressed": 13376,
+            "uncompressed": 45088
+          },
+          "p-retry": {
+            "type": "prod",
+            "compressed": 4787,
+            "uncompressed": 11032
+          },
+          "p-timeout": {
+            "type": "prod",
+            "compressed": 5226,
+            "uncompressed": 12961
+          },
+          "p-try": {
+            "type": "prod",
+            "compressed": 2334,
+            "uncompressed": 4371
+          },
+          "parse-cache-control": {
+            "type": "prod",
+            "compressed": 1869,
+            "uncompressed": 4041
+          },
+          "parseurl": {
+            "type": "prod",
+            "compressed": 4042,
+            "uncompressed": 10299
+          },
+          "path-exists": {
+            "type": "prod",
+            "compressed": 2071,
+            "uncompressed": 3919
+          },
+          "path-to-regexp": {
+            "type": "prod",
+            "compressed": 8876,
+            "uncompressed": 28940
+          },
+          "pino": {
+            "type": "prod",
+            "compressed": 187539,
+            "uncompressed": 705711
+          },
+          "pino-abstract-transport": {
+            "type": "prod",
+            "compressed": 10391,
+            "uncompressed": 38204
+          },
+          "pino-pretty": {
+            "type": "prod",
+            "compressed": 82020,
+            "uncompressed": 274583
+          },
+          "pino-pretty/node_modules/pino-abstract-transport": {
+            "type": "prod",
+            "compressed": 10783,
+            "uncompressed": 39716
+          },
+          "pino-pretty/node_modules/pump": {
+            "type": "prod",
+            "compressed": 4100,
+            "uncompressed": 8803
+          },
+          "pino-pretty/node_modules/sonic-boom": {
+            "type": "prod",
+            "compressed": 29290,
+            "uncompressed": 123700
+          },
+          "pino-std-serializers": {
+            "type": "prod",
+            "compressed": 13546,
+            "uncompressed": 54011
+          },
+          "pino/node_modules/pino-abstract-transport": {
+            "type": "prod",
+            "compressed": 10783,
+            "uncompressed": 39716
+          },
+          "pino/node_modules/real-require": {
+            "type": "prod",
+            "compressed": 2058,
+            "uncompressed": 3929
+          },
+          "pngjs": {
+            "type": "prod",
+            "compressed": 229677,
+            "uncompressed": 1021215
+          },
+          "postject": {
+            "type": "dev",
+            "compressed": 1412794,
+            "uncompressed": 4868071
+          },
+          "process-warning": {
+            "type": "prod",
+            "compressed": 8872,
+            "uncompressed": 24591
+          },
+          "progress": {
+            "type": "prod",
+            "compressed": 6304,
+            "uncompressed": 15499
+          },
+          "protobufjs": {
+            "type": "prod",
+            "compressed": 315419,
+            "uncompressed": 1348798
+          },
+          "proxy-addr": {
+            "type": "prod",
+            "compressed": 5894,
+            "uncompressed": 16326
+          },
+          "proxy-agent-negotiate": {
+            "type": "prod",
+            "compressed": 1285,
+            "uncompressed": 2826
+          },
+          "proxy-from-env": {
+            "type": "prod",
+            "compressed": 6627,
+            "uncompressed": 15643
+          },
+          "qrcode": {
+            "type": "prod",
+            "compressed": 54465,
+            "uncompressed": 135364
+          },
+          "qrcode-terminal": {
+            "type": "prod",
+            "compressed": 51857,
+            "uncompressed": 96504
+          },
+          "qs": {
+            "type": "prod",
+            "compressed": 78579,
+            "uncompressed": 374851
+          },
+          "quick-format-unescaped": {
+            "type": "prod",
+            "compressed": 4033,
+            "uncompressed": 12829
+          },
+          "random-bytes": {
+            "type": "prod",
+            "compressed": 2679,
+            "uncompressed": 6235
+          },
+          "range-parser": {
+            "type": "prod",
+            "compressed": 3732,
+            "uncompressed": 8457
+          },
+          "raw-body": {
+            "type": "prod",
+            "compressed": 6808,
+            "uncompressed": 18495
+          },
+          "real-require": {
+            "type": "prod",
+            "compressed": 2381,
+            "uncompressed": 4827
+          },
+          "require-directory": {
+            "type": "prod",
+            "compressed": 4306,
+            "uncompressed": 12071
+          },
+          "require-main-filename": {
+            "type": "prod",
+            "compressed": 1906,
+            "uncompressed": 3928
+          },
+          "retry": {
+            "type": "prod",
+            "compressed": 7062,
+            "uncompressed": 18852
+          },
+          "router": {
+            "type": "prod",
+            "compressed": 16031,
+            "uncompressed": 46851
+          },
+          "safe-buffer": {
+            "type": "prod",
+            "compressed": 10306,
+            "uncompressed": 32101
+          },
+          "safe-stable-stringify": {
+            "type": "prod",
+            "compressed": 7400,
+            "uncompressed": 30687
+          },
+          "safer-buffer": {
+            "type": "prod",
+            "compressed": 12989,
+            "uncompressed": 42299
+          },
+          "secure-json-parse": {
+            "type": "prod",
+            "compressed": 12005,
+            "uncompressed": 50330
+          },
+          "semver": {
+            "type": "prod",
+            "compressed": 34003,
+            "uncompressed": 101065
+          },
+          "send": {
+            "type": "prod",
+            "compressed": 15296,
+            "uncompressed": 46921
+          },
+          "serve-static": {
+            "type": "prod",
+            "compressed": 8933,
+            "uncompressed": 25672
+          },
+          "set-blocking": {
+            "type": "prod",
+            "compressed": 2211,
+            "uncompressed": 4224
+          },
+          "setprototypeof": {
+            "type": "prod",
+            "compressed": 1984,
+            "uncompressed": 4025
+          },
+          "side-channel": {
+            "type": "prod",
+            "compressed": 8248,
+            "uncompressed": 22864
+          },
+          "side-channel-list": {
+            "type": "prod",
+            "compressed": 6393,
+            "uncompressed": 16973
+          },
+          "side-channel-map": {
+            "type": "prod",
+            "compressed": 5500,
+            "uncompressed": 13348
+          },
+          "side-channel-weakmap": {
+            "type": "prod",
+            "compressed": 5701,
+            "uncompressed": 14667
+          },
+          "smart-buffer": {
+            "type": "prod",
+            "compressed": 20350,
+            "uncompressed": 115025
+          },
+          "socket.io": {
+            "type": "prod",
+            "compressed": 134413,
+            "uncompressed": 513369
+          },
+          "socket.io-adapter": {
+            "type": "prod",
+            "compressed": 13659,
+            "uncompressed": 57728
+          },
+          "socket.io-parser": {
+            "type": "prod",
+            "compressed": 19849,
+            "uncompressed": 64127
+          },
+          "socket.io/node_modules/accepts": {
+            "type": "prod",
+            "compressed": 5589,
+            "uncompressed": 16795
+          },
+          "socket.io/node_modules/mime-db": {
+            "type": "prod",
+            "compressed": 27983,
+            "uncompressed": 205539
+          },
+          "socket.io/node_modules/mime-types": {
+            "type": "prod",
+            "compressed": 5774,
+            "uncompressed": 18272
+          },
+          "socket.io/node_modules/negotiator": {
+            "type": "prod",
+            "compressed": 9151,
+            "uncompressed": 27375
+          },
+          "socks": {
+            "type": "prod",
+            "compressed": 30967,
+            "uncompressed": 122329
+          },
+          "socks-proxy-agent": {
+            "type": "prod",
+            "compressed": 4758,
+            "uncompressed": 12127
+          },
+          "sonic-boom": {
+            "type": "prod",
+            "compressed": 20800,
+            "uncompressed": 85200
+          },
+          "split2": {
+            "type": "prod",
+            "compressed": 5753,
+            "uncompressed": 17419
+          },
+          "statuses": {
+            "type": "prod",
+            "compressed": 4980,
+            "uncompressed": 12505
+          },
+          "string-width": {
+            "type": "prod",
+            "compressed": 2620,
+            "uncompressed": 5161
+          },
+          "string_decoder": {
+            "type": "prod",
+            "compressed": 5286,
+            "uncompressed": 15298
+          },
+          "string_decoder/node_modules/safe-buffer": {
+            "type": "prod",
+            "compressed": 10160,
+            "uncompressed": 31686
+          },
+          "strip-ansi": {
+            "type": "prod",
+            "compressed": 2090,
+            "uncompressed": 4029
+          },
+          "strip-json-comments": {
+            "type": "prod",
+            "compressed": 3302,
+            "uncompressed": 8200
+          },
+          "strtok3": {
+            "type": "prod",
+            "compressed": 22214,
+            "uncompressed": 73040
+          },
+          "thread-stream": {
+            "type": "prod",
+            "compressed": 29615,
+            "uncompressed": 83313
+          },
+          "thread-stream/node_modules/real-require": {
+            "type": "prod",
+            "compressed": 2058,
+            "uncompressed": 3929
+          },
+          "toidentifier": {
+            "type": "prod",
+            "compressed": 2372,
+            "uncompressed": 4685
+          },
+          "token-types": {
+            "type": "prod",
+            "compressed": 5448,
+            "uncompressed": 22231
+          },
+          "tslib": {
+            "type": "prod",
+            "compressed": 26067,
+            "uncompressed": 90359
+          },
+          "type-is": {
+            "type": "prod",
+            "compressed": 7031,
+            "uncompressed": 21269
+          },
+          "type-is/node_modules/content-type": {
+            "type": "prod",
+            "compressed": 4282,
+            "uncompressed": 11628
+          },
+          "typedarray": {
+            "type": "prod",
+            "compressed": 7570,
+            "uncompressed": 25955
+          },
+          "uid-safe": {
+            "type": "prod",
+            "compressed": 3238,
+            "uncompressed": 7467
+          },
+          "uint8array-extras": {
+            "type": "prod",
+            "compressed": 8380,
+            "uncompressed": 29604
+          },
+          "undici": {
+            "type": "prod",
+            "compressed": 609112,
+            "uncompressed": 2167341
+          },
+          "undici-types": {
+            "type": "prod",
+            "compressed": 31975,
+            "uncompressed": 103421
+          },
+          "unpipe": {
+            "type": "prod",
+            "compressed": 2098,
+            "uncompressed": 4311
+          },
+          "util-deprecate": {
+            "type": "prod",
+            "compressed": 2824,
+            "uncompressed": 5481
+          },
+          "vary": {
+            "type": "prod",
+            "compressed": 3772,
+            "uncompressed": 8747
+          },
+          "web-streams-polyfill": {
+            "type": "prod",
+            "compressed": 475517,
+            "uncompressed": 2809297
+          },
+          "whatsapp-rust-bridge": {
+            "type": "prod",
+            "compressed": 843619,
+            "uncompressed": 2040511
+          },
+          "which-module": {
+            "type": "prod",
+            "compressed": 1948,
+            "uncompressed": 4036
+          },
+          "win-guid": {
+            "type": "prod",
+            "compressed": 4329,
+            "uncompressed": 10721
+          },
+          "wrap-ansi": {
+            "type": "prod",
+            "compressed": 3975,
+            "uncompressed": 9500
+          },
+          "wrappy": {
+            "type": "prod",
+            "compressed": 1566,
+            "uncompressed": 2961
+          },
+          "ws": {
+            "type": "prod",
+            "compressed": 39890,
+            "uncompressed": 150929
+          },
+          "y18n": {
+            "type": "prod",
+            "compressed": 4315,
+            "uncompressed": 10991
+          },
+          "yargs": {
+            "type": "prod",
+            "compressed": 68040,
+            "uncompressed": 230562
+          },
+          "yargs-parser": {
+            "type": "prod",
+            "compressed": 19511,
+            "uncompressed": 71482
+          },
+          "yargs/node_modules/find-up": {
+            "type": "prod",
+            "compressed": 4054,
+            "uncompressed": 11611
+          },
+          "yargs/node_modules/locate-path": {
+            "type": "prod",
+            "compressed": 2994,
+            "uncompressed": 6584
+          },
+          "yargs/node_modules/p-limit": {
+            "type": "prod",
+            "compressed": 3506,
+            "uncompressed": 7390
+          },
+          "yargs/node_modules/p-locate": {
+            "type": "prod",
+            "compressed": 3515,
+            "uncompressed": 7285
+          }
+        },
+        "devCompressed": 32008227
+      }
+    }
+  }
+}
