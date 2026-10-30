@@ -6,7 +6,7 @@
   <a href="https://github.com/Abdodiab2005/levix/actions/workflows/ci.yml"><img src="https://github.com/Abdodiab2005/levix/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.npmjs.com/package/levix-bot"><img src="https://img.shields.io/npm/v/levix-bot?color=2563eb" alt="npm version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-10b981" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/Node.js-24%2B-339933?logo=nodedotjs&logoColor=white" alt="Node.js 24+">
+  <img src="https://img.shields.io/badge/Node.js-24-339933?logo=nodedotjs&logoColor=white" alt="Node.js 24">
 </p>
 
 <p align="center">
@@ -186,7 +186,8 @@ start.
 
 ## Architecture
 
-- **Node.js 24+** with ES modules and CommonJS where needed.
+- **Node.js 24** with ES modules and CommonJS where needed. A newer Node starts with a warning that it
+  is not officially supported.
 - **Baileys v7** for the WhatsApp protocol engine, LID support, and phone pairing codes.
 - **`node:sqlite`** for a zero-dependency, single-file datastore.
 - **React + Vite Control Panel** (`frontend/`) with TypeScript, native RTL Arabic / English internationalization, Lucide icons, responsive drawer, modal dialogs, and real-time Socket.IO synchronization.

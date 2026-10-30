@@ -12,6 +12,8 @@
 #   fetch-node-android.sh [abi ...]        # default: arm64-v8a armeabi-v7a
 #   LEVIX_ANDROID_ABIS="arm64-v8a" ...     # same list via env (what Gradle reads)
 #   fetch-node-android.sh --print-stamp <abi>   # print the stamp, stage nothing
+#   fetch-node-android.sh --check-pins [file]   # validate a pin file offline, stage nothing
+#   fetch-node-android.sh --update-pins         # refresh pins from Termux, stage nothing
 #
 # Each staged runtime gets a stamp (node-runtime/<abi>/.levix-stamp) naming
 # the recipes it was built from; Gradle recomputes it and refuses to package a
@@ -32,6 +34,8 @@ PATCH="$CACHE/bin/patchelf"
 # Everything Node links against; must cover every DT_NEEDED of the node
 # binary (verified below) apart from Bionic's own libc/libm/libdl.
 PACKAGES_NEED=(nodejs-lts libc++ openssl c-ares libicu libsqlite zlib)
+PIN_FILE="$SCRIPTS/termux-packages.lock"
+SUPPORTED_NODE_MAJOR=24
 
 # ABI -> Termux repository architecture
 termux_arch() {
@@ -52,8 +56,10 @@ termux_arch() {
 # when it is missing or different. RUNTIME_STAMP_FILE, RUNTIME_STAMP_INPUTS and
 # the line format must match runtimeStampFile / runtimeStampInputs there;
 # tests/android-runtime-stamp.test.mjs holds the two sides together.
+# termux-packages.lock is one of the inputs: a pin change has to restage,
+# or the runtime built from the previous pins stays in the APK.
 RUNTIME_STAMP_FILE=".levix-stamp"
-RUNTIME_STAMP_INPUTS=(build-ffmpeg-android.sh fetch-node-android.sh)
+RUNTIME_STAMP_INPUTS=(build-ffmpeg-android.sh fetch-node-android.sh termux-packages.lock)
 
 runtime_stamp() {
   local abi="$1" input
@@ -64,11 +70,344 @@ runtime_stamp() {
   done
 }
 
+# One checker for the lock: offline validation, the rows the stager
+# downloads, and the rewrite --update-pins does from the Termux indexes.
+# The heredoc is quoted, so the Termux base URL and the supported major
+# are passed in the environment rather than expanded into the program.
+pins() {
+  LEVIX_TERMUX_BASE="$BASE" LEVIX_NODE_MAJOR="$SUPPORTED_NODE_MAJOR" python3 - "$@" <<'PY'
+import os
+import re
+import sys
+import tempfile
+
+ARCHES = ("aarch64", "arm")
+SHA_RE = re.compile(r"^[0-9a-f]{64}$")
+NODE_MAJOR = os.environ["LEVIX_NODE_MAJOR"]
+HEADER = """# Termux packages the Android Node runtime is built from (ADR-001).
+# fetch-node-android.sh downloads exactly these files, checks each sha256 and
+# stages nothing else. Termux serves only the newest build of each package, so
+# a pinned file stops downloading once Termux updates that package. Refresh
+# the pins with
+#   bash android/scripts/fetch-node-android.sh --update-pins
+# which refuses a nodejs-lts that is not Node 24, then review the diff.
+#
+# arch package version sha256 url
+"""
+
+
+def upstream(version):
+    # Drop an N: epoch and a trailing -N Termux revision.
+    version = version.split(":", 1)[-1]
+    return re.sub(r"-\d+$", "", version)
+
+
+def parse_lock(path):
+    rows = []
+    problems = []
+    with open(path, encoding="utf-8") as fh:
+        for lineno, raw in enumerate(fh, 1):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            fields = line.split()
+            if len(fields) != 5:
+                problems.append(f"{path}:{lineno}: expected 5 fields, got {len(fields)}")
+                continue
+            arch, package, version, sha, url = fields
+            rows.append(
+                {
+                    "line": lineno,
+                    "arch": arch,
+                    "package": package,
+                    "version": version,
+                    "sha256": sha,
+                    "url": url,
+                }
+            )
+    return rows, problems
+
+
+def row_problems(rows, need, label):
+    """Rules for a list of pin rows. Returns problem lines and writes nothing."""
+    problems = []
+    need_list = list(need)
+    need_set = set(need_list)
+    by_arch = {arch: {} for arch in ARCHES}
+    for row in rows:
+        arch = row["arch"]
+        package = row["package"]
+        sha = row["sha256"]
+        url = row["url"]
+        line = row.get("line")
+        where = f"{label}:{line}" if line else f"{label}: {arch} {package}"
+        if arch not in ARCHES:
+            problems.append(f"{where}: arch {arch} is not aarch64 or arm")
+        if package not in need_set:
+            problems.append(f"{where}: package {package} is not in the need list")
+        if SHA_RE.fullmatch(sha) is None:
+            problems.append(f"{where}: sha256 is not 64 lowercase hex")
+        name = url.rsplit("/", 1)[-1]
+        if not url.startswith("https://") or not name.endswith(f"_{arch}.deb"):
+            problems.append(
+                f"{where}: url must start with https:// and end with _{arch}.deb"
+            )
+        if arch in ARCHES:
+            slot = by_arch[arch]
+            if package in slot:
+                problems.append(f"{where}: duplicate {package} for {arch}")
+            else:
+                slot[package] = row
+    for arch in ARCHES:
+        for package in need_list:
+            if package not in by_arch[arch]:
+                problems.append(f"{label}: missing {package} for {arch}")
+    node_versions = {}
+    for arch in ARCHES:
+        row = by_arch[arch].get("nodejs-lts")
+        if row is None:
+            continue
+        ver = upstream(row["version"])
+        if ver.split(".", 1)[0] != NODE_MAJOR:
+            problems.append(
+                f"{label}: nodejs-lts {ver} for {arch} is not Node {NODE_MAJOR}"
+            )
+        node_versions[arch] = ver
+    if (
+        "aarch64" in node_versions
+        and "arm" in node_versions
+        and node_versions["aarch64"] != node_versions["arm"]
+    ):
+        problems.append(
+            "{lock}: aarch64 and arm pin different nodejs-lts versions "
+            "({aarch} vs {arm})".format(
+                lock=label,
+                aarch=node_versions["aarch64"],
+                arm=node_versions["arm"],
+            )
+        )
+    return problems
+
+
+def cmd_check(lockfile, need):
+    rows, problems = parse_lock(lockfile)
+    problems.extend(row_problems(rows, need, lockfile))
+    if problems:
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        sys.exit(1)
+    ver = next(
+        upstream(row["version"])
+        for row in rows
+        if row["arch"] == "aarch64" and row["package"] == "nodejs-lts"
+    )
+    print(
+        "Pins OK: nodejs-lts {ver} for aarch64 and arm, {n} pinned files".format(
+            ver=ver, n=len(rows)
+        )
+    )
+
+
+def cmd_rows(lockfile, arch):
+    rows, problems = parse_lock(lockfile)
+    if problems:
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        sys.exit(1)
+    for row in rows:
+        if row["arch"] == arch:
+            print("{sha} {url}".format(sha=row["sha256"], url=row["url"]))
+
+
+def cmd_node_version(lockfile, arch):
+    rows, problems = parse_lock(lockfile)
+    if problems:
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        sys.exit(1)
+    for row in rows:
+        if row["arch"] == arch and row["package"] == "nodejs-lts":
+            print(upstream(row["version"]))
+            return
+    print("{path}: no nodejs-lts row for {arch}".format(path=lockfile, arch=arch), file=sys.stderr)
+    sys.exit(1)
+
+
+def parse_index(path):
+    """First record per package name, same walk as the old resolver."""
+    seen = {}
+    rec = {}
+
+    def flush():
+        name = rec.get("Package")
+        if name and name not in seen:
+            seen[name] = dict(rec)
+
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.rstrip("\n")
+            if not line:
+                flush()
+                rec = {}
+                continue
+            if ": " in line:
+                key, value = line.split(": ", 1)
+                rec.setdefault(key, value)
+        flush()
+    return seen
+
+
+def write_atomic(path, text):
+    directory = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(prefix=".termux-packages.lock.", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+
+
+def cmd_update(lockfile, index_aarch64, index_arm, need):
+    indexes = {
+        "aarch64": parse_index(index_aarch64),
+        "arm": parse_index(index_arm),
+    }
+    missing = []
+    for arch in ARCHES:
+        for package in need:
+            rec = indexes[arch].get(package)
+            if (
+                rec is None
+                or not rec.get("Filename")
+                or not rec.get("Version")
+                or not rec.get("SHA256")
+            ):
+                missing.append("{pkg} for {arch}".format(pkg=package, arch=arch))
+    if missing:
+        print("missing Termux packages: " + ", ".join(missing), file=sys.stderr)
+        sys.exit(1)
+    offered = {}
+    for arch in ARCHES:
+        ver = upstream(indexes[arch]["nodejs-lts"]["Version"])
+        offered[arch] = ver
+        if ver.split(".", 1)[0] != NODE_MAJOR:
+            print(
+                "Termux offers nodejs-lts {ver} for {arch}, which is not Node {major}. "
+                "The Android build stays on the current pins.".format(
+                    ver=ver, arch=arch, major=NODE_MAJOR
+                ),
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    if offered["aarch64"] != offered["arm"]:
+        print(
+            "Termux offers nodejs-lts {aarch} for aarch64 and {arm} for arm. "
+            "The Android build stays on the current pins.".format(
+                aarch=offered["aarch64"], arm=offered["arm"]
+            ),
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    base = os.environ["LEVIX_TERMUX_BASE"].rstrip("/")
+    new_rows = []
+    for arch in ARCHES:
+        for package in need:
+            rec = indexes[arch][package]
+            filename = rec["Filename"].lstrip("/")
+            new_rows.append(
+                {
+                    "arch": arch,
+                    "package": package,
+                    "version": rec["Version"],
+                    "sha256": rec["SHA256"].strip().lower(),
+                    "url": base + "/" + filename,
+                }
+            )
+    # Same rules as `check`. A bad index must not replace the lock on disk.
+    problems = row_problems(new_rows, need, lockfile)
+    if problems:
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        sys.exit(1)
+    old = {}
+    if os.path.exists(lockfile):
+        old_rows, _problems = parse_lock(lockfile)
+        for row in old_rows:
+            old[(row["arch"], row["package"])] = row
+    body = [HEADER.rstrip("\n")]
+    changes = []
+    for row in new_rows:
+        arch = row["arch"]
+        package = row["package"]
+        version = row["version"]
+        sha = row["sha256"]
+        url = row["url"]
+        body.append("{arch} {pkg} {ver} {sha} {url}".format(
+            arch=arch, pkg=package, ver=version, sha=sha, url=url
+        ))
+        prev = old.get((arch, package))
+        if prev is None:
+            changes.append("added {arch} {pkg} {ver}".format(arch=arch, pkg=package, ver=version))
+        elif prev["version"] != version:
+            changes.append(
+                "changed {arch} {pkg} {old} -> {new}".format(
+                    arch=arch, pkg=package, old=prev["version"], new=version
+                )
+            )
+        elif prev["sha256"] != sha or prev["url"] != url:
+            changes.append(
+                "changed {arch} {pkg} {ver} sha256 or url".format(
+                    arch=arch, pkg=package, ver=version
+                )
+            )
+    write_atomic(lockfile, "\n".join(body) + "\n")
+    if changes:
+        for line in changes:
+            print(line)
+    else:
+        print("pins unchanged")
+
+
+command = sys.argv[1]
+if command == "check":
+    cmd_check(sys.argv[2], sys.argv[3:])
+elif command == "rows":
+    cmd_rows(sys.argv[2], sys.argv[3])
+elif command == "node-version":
+    cmd_node_version(sys.argv[2], sys.argv[3])
+elif command == "update":
+    cmd_update(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5:])
+else:
+    print("unknown pins command: {cmd}".format(cmd=command), file=sys.stderr)
+    sys.exit(1)
+PY
+}
+
 if [ "${1:-}" = "--print-stamp" ]; then
   termux_arch "${2:?usage: fetch-node-android.sh --print-stamp <abi>}" > /dev/null
   runtime_stamp "$2"
   exit 0
 fi
+
+if [ "${1:-}" = "--check-pins" ]; then
+  pins check "${2:-$PIN_FILE}" "${PACKAGES_NEED[@]}"
+  exit 0
+fi
+
+if [ "${1:-}" = "--update-pins" ]; then
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' EXIT
+  curl -fsSL "$BASE/dists/stable/main/binary-aarch64/Packages" -o "$tmp/Packages-aarch64"
+  curl -fsSL "$BASE/dists/stable/main/binary-arm/Packages" -o "$tmp/Packages-arm"
+  pins update "$PIN_FILE" "$tmp/Packages-aarch64" "$tmp/Packages-arm" "${PACKAGES_NEED[@]}"
+  pins check "$PIN_FILE" "${PACKAGES_NEED[@]}"
+  exit 0
+fi
+
+pins check "$PIN_FILE" "${PACKAGES_NEED[@]}"
 
 if [ "$#" -gt 0 ]; then
   ABIS=("$@")
@@ -113,39 +452,6 @@ sanitize_name() {
   else
     echo "${base%%.so*}_${base##*.so.}.so"
   fi
-}
-
-resolve_packages() {
-  local arch="$1" workdir="$2"
-  curl -fsSL "$BASE/dists/stable/main/binary-$arch/Packages" -o "$workdir/Packages"
-  python3 - "$workdir/Packages" "$workdir/urls.txt" "${PACKAGES_NEED[@]}" <<'PY'
-import sys
-index, out_path, *need = sys.argv[1:]
-want = set(need)
-seen = set()
-rows = []
-rec = {}
-def flush():
-    name = rec.get("Package")
-    if name in want and name not in seen:
-        seen.add(name)
-        rows.append(rec["Filename"])
-with open(index) as fh:
-    for line in fh:
-        line = line.rstrip("\n")
-        if not line:
-            flush()
-            rec = {}
-            continue
-        if ": " in line:
-            k, v = line.split(": ", 1)
-            rec.setdefault(k, v)
-    flush()
-missing = want - seen
-if missing:
-    raise SystemExit("missing Termux packages: " + ", ".join(sorted(missing)))
-open(out_path, "w").write("\n".join(rows) + "\n")
-PY
 }
 
 verify_elfs() {
@@ -260,24 +566,69 @@ for ABI in "${ABIS[@]}"; do
   RUNTIME="$CACHE/node-runtime/$ABI"
   mkdir -p "$WORKDIR/debs" "$WORKDIR/root"
 
-  echo "==> [$ABI] resolving Termux $ARCH packages..."
-  resolve_packages "$ARCH" "$WORKDIR"
-
-  while read -r fn; do
-    [ -z "$fn" ] && continue
-    base="$(basename "$fn")"
-    dest="$WORKDIR/debs/$base"
-    if [ ! -f "$dest" ]; then
-      echo "GET $fn"
-      curl -fL --retry 3 -o "$dest" "$BASE/$fn"
+  echo "==> [$ABI] fetching pinned Termux $ARCH packages..."
+  # A process substitution would drop the exit status of `pins rows`.
+  # The assignment fails the script (set -e) before any download.
+  pinned_rows="$(pins rows "$PIN_FILE" "$ARCH")"
+  row_count=0
+  while read -r sha url; do
+    [ -z "${url:-}" ] && continue
+    row_count=$((row_count + 1))
+  done <<< "$pinned_rows"
+  if [ "$row_count" -ne "${#PACKAGES_NEED[@]}" ]; then
+    printf '%s\n' "$ARCH: $PIN_FILE has $row_count pinned files, expected ${#PACKAGES_NEED[@]}" >&2
+    exit 1
+  fi
+  pinned_debs=()
+  while read -r sha url; do
+    [ -z "${url:-}" ] && continue
+    dest="$WORKDIR/debs/$(basename "$url")"
+    pinned_debs+=("$dest")
+    if [ -f "$dest" ]; then
+      have="$(sha256sum "$dest" | cut -c1-64)"
+      if [ "$have" = "$sha" ]; then
+        echo "reuse $dest"
+        continue
+      fi
     fi
-  done < "$WORKDIR/urls.txt"
+    echo "GET $url"
+    if ! curl -fL --retry 3 -o "$dest.part" "$url"; then
+      rm -f "$dest.part"
+      printf '%s\n' "Download failed: $url" >&2
+      printf '%s\n' "Termux serves only the newest build of each package, so this pin must be refreshed with: bash android/scripts/fetch-node-android.sh --update-pins" >&2
+      printf '%s\n' "That refuses a nodejs-lts that is not Node ${SUPPORTED_NODE_MAJOR}. Review the lock diff." >&2
+      exit 1
+    fi
+    have="$(sha256sum "$dest.part" | cut -c1-64)"
+    if [ "$have" != "$sha" ]; then
+      rm -f "$dest.part"
+      printf '%s\n' "sha256 mismatch for $url" >&2
+      printf '%s\n' "expected $sha" >&2
+      printf '%s\n' "actual   $have" >&2
+      exit 1
+    fi
+    mv "$dest.part" "$dest"
+  done <<< "$pinned_rows"
 
-  echo "==> [$ABI] extracting debs..."
+  # Drop cached .debs this arch did not pin. The cache survives across runs,
+  # and extracting every .deb in it would stage stale libraries over the
+  # pinned ones (libsqlite has no SONAME, so an old file is an extra .so).
+  for deb in "$WORKDIR/debs"/*.deb; do
+    [ -f "$deb" ] || continue
+    keep=0
+    for pinned in "${pinned_debs[@]:-}"; do
+      [ "$deb" = "$pinned" ] && keep=1 && break
+    done
+    if [ "$keep" -eq 0 ]; then
+      rm -f "$deb"
+    fi
+  done
+
+  echo "==> [$ABI] extracting pinned debs..."
   rm -rf "$WORKDIR/root"
   mkdir -p "$WORKDIR/root"
-  for deb in "$WORKDIR/debs"/*.deb; do
-    dpkg-deb -x "$deb" "$WORKDIR/root"
+  for dest in "${pinned_debs[@]}"; do
+    dpkg-deb -x "$dest" "$WORKDIR/root"
   done
 
   PREFIX="$WORKDIR/root/data/data/com.termux/files/usr"
@@ -292,6 +643,18 @@ for ABI in "${ABIS[@]}"; do
   rm -rf "$RUNTIME"
   mkdir -p "$RUNTIME"
   copy_real "$PREFIX/bin/node" "$RUNTIME/libnode.so"
+
+  # process.version is stored as the C string "\0v<version>\0".
+  expected_node="$(pins node-version "$PIN_FILE" "$ARCH")"
+  python3 - "$RUNTIME/libnode.so" "$expected_node" "$SUPPORTED_NODE_MAJOR" <<'PY'
+import sys
+path, version, major = sys.argv[1:]
+data = open(path, "rb").read()
+needle = b"\0v" + version.encode("ascii") + b"\0"
+if version.split(".", 1)[0] != major or needle not in data:
+    print(f"{path}: expected Node {version} (major {major})", file=sys.stderr)
+    sys.exit(1)
+PY
 
   # Stage every dependency library, renaming versioned SONAMEs
   # (libcrypto.so.3 -> libcrypto_3.so) as we go. Renames are keyed by the
@@ -352,13 +715,18 @@ for ABI in "${ABIS[@]}"; do
   # file in the runtime directory, or the on-device linker will fail.
   missing=0
   for f in "$RUNTIME"/*.so; do
+    # Command substitution keeps patchelf's status. A process substitution
+    # would hide a failure and this runtime would still be stamped.
+    needed_list="$("$PATCH" --print-needed "$f")"
     while read -r need; do
+      # A here-string always yields one read, so an empty list is a blank line.
+      [ -z "$need" ] && continue
       case " libc.so libm.so libdl.so " in *" $need "*) continue ;; esac
       if [ ! -f "$RUNTIME/$need" ]; then
         echo "ERROR: $(basename "$f") needs $need but it was not staged" >&2
         missing=1
       fi
-    done < <("$PATCH" --print-needed "$f")
+    done <<< "$needed_list"
   done
   if [ "$missing" != "0" ]; then
     exit 1

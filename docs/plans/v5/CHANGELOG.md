@@ -42,3 +42,14 @@
   - #83 fixes `!prayer` (today's date in `bot_timezone`, encoded URL, 39 new checks). Local:
     `npm test` PASS (5078 checks), lint PASS, frontend build PASS; codex review findings handled.
 - Next: owner review and merge decision for this PR. Phase 01 starts only after explicit approval.
+
+## Phase 01: code, build and performance (started 2026-10-30)
+
+- Started after the owner merged PRs #80, #81 and #83. PR #82 is postponed by the owner.
+- Post-merge CI on `52d6949`: run 41083432588, 7 of 7 jobs `success`.
+- Plan, re-audit findings and results: `PHASE-01-RESULTS.md`.
+- PR 01a (branch `build/01a-node24-pin`): Node 24 pinned for every official build (`.node-version`
+  24.22.2; Termux `nodejs-lts` 24.22.1 pinned with sha256 per ABI); CLI and installer warn on Node 25
+  and newer; `engines` `>=24 <25`; the Android fetch stages only pinned files, which removes the two
+  unused `libsqlite3_*.so` from the APKs. New: R-33, Q-23.
+

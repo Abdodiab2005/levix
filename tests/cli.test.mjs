@@ -238,4 +238,43 @@ section("an unsupported Node version fails with a sentence, not a stack");
   ok("and prints no stack trace", !output.includes("    at "));
 }
 
+section("a newer Node warns and still runs");
+
+function withNode(version) {
+  const script = [
+    'Object.defineProperty(process.versions, "node", {',
+    `  value: ${JSON.stringify(version)},`,
+    "  configurable: true,",
+    "});",
+    'process.argv = [process.execPath, "levix", "where"];',
+    `import(${JSON.stringify(CLI)});`,
+  ].join("\n");
+  return spawnSync(process.execPath, ["-e", script], {
+    encoding: "utf8",
+    env: { ...process.env, LEVIX_DATA_DIR: dataDir },
+  });
+}
+
+for (const version of ["26.1.0", "25.0.0"]) {
+  const fake = withNode(version);
+  equal(`Node ${version} exits 0`, fake.status, 0);
+  equal(`Node ${version} prints only the data directory`, fake.stdout.trim(), dataDir);
+  ok(`Node ${version} stdout is that one line`, fake.stdout === `${dataDir}\n`);
+  ok(`Node ${version} names itself`, fake.stderr.includes(version));
+  ok(
+    `Node ${version} is not officially supported`,
+    fake.stderr.includes("not officially supported"),
+  );
+  ok(`Node ${version} names Node 24`, fake.stderr.includes("Node 24"));
+  ok(`Node ${version} points at nodejs.org`, fake.stderr.includes("nodejs.org"));
+}
+
+section("Node 24 starts with no warning");
+
+{
+  const current = withNode("24.22.2");
+  equal("Node 24.22.2 exits 0", current.status, 0);
+  ok("Node 24.22.2 prints no warning", !current.stderr.includes("Warning"));
+}
+
 finish();
