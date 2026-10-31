@@ -9,7 +9,40 @@ const logger = require("../utils/logger.cjs");
 const { withMediaThumbnail } = require("../utils/thumbnail.cjs");
 const settings = require("../config/settings.cjs");
 const { isLinkedCreds } = require("../utils/linkedCreds.cjs");
+const { fetchHttpsBuffer } = require("../utils/httpsFetch.cjs");
+const { getHttpsUrlInfo } = require("../utils/linkPreview.cjs");
+const { tr } = require("../utils/i18n.cjs");
 const socketDispatchers = new WeakMap();
+
+// Never leave a remote media URL for Baileys to fetch again without validation.
+// Local paths, buffers and streams keep their existing send path. Download once
+// for the actual send, then build any thumbnail from those same bytes.
+async function withHttpsMedia(sock, content) {
+  if (!content || typeof content !== "object") return content;
+  let payload = content;
+  for (const field of ["image", "video", "audio", "document", "sticker"]) {
+    const media = content[field];
+    const raw = typeof media === "string" ? media : media?.url;
+    if (!raw || !/^https?:/i.test(String(raw).trim())) continue;
+    try {
+      const { buffer } = await fetchHttpsBuffer(String(raw), {
+        maxBytes: settings.get("thumbnail_remote_max_mb") * 1024 * 1024,
+        timeoutMs: settings.get("thumbnail_remote_timeout_ms"),
+        dispatcher: socketDispatchers.get(sock),
+      });
+      payload = { ...payload, [field]: buffer };
+    } catch (cause) {
+      throw new Error(
+        tr(
+          "Could not fetch remote media securely. Use a public HTTPS URL within the remote media limits, or send a local file.",
+          "تعذّر تحميل الوسائط بأمان. استخدم رابط HTTPS عامًا ضمن حدود الوسائط البعيدة، أو أرسل ملفًا محليًا.",
+        ),
+        { cause },
+      );
+    }
+  }
+  return payload;
+}
 
 /** Fetch a WhatsApp image through the transport owned by this live socket. */
 export async function fetchWhatsAppImage(sock, rawUrl, init = {}) {
@@ -49,7 +82,8 @@ setRecentMessageGetter(getMessageFromRecent);
  * previews on it even uploads the page image. That made every AI answer with a
  * Sources block, every short link and every scheduled message with a URL cost
  * a silent page fetch. `linkPreview: null` skips it entirely; the operator
- * opts back in with the `link_previews_enabled` setting (default off).
+ * opts back in with the `link_previews_enabled` setting (default off). The
+ * per-send getUrlInfo hook below keeps that optional fetch HTTPS-only.
  *
  * This is the ONE choke point every outbound message passes through
  * (sendBotMessage, the scheduler, status edits, legacy sock.sendMessage), so
@@ -73,17 +107,19 @@ function withoutUnwantedLinkPreview(content) {
  */
 function withOutboundSavers(sock) {
   const original = sock.sendMessage.bind(sock);
+  const getUrlInfo = (text) => getHttpsUrlInfo(text, { dispatcher: socketDispatchers.get(sock) });
 
   sock.sendMessage = async function sendMessageWithOutboundSavers(jid, content, options) {
-    let payload = content;
+    let payload = await withHttpsMedia(sock, content);
     try {
-      payload = await withMediaThumbnail(content);
+      payload = await withMediaThumbnail(payload);
     } catch (err) {
       logger.debug({ err: err?.message }, "[Socket] thumbnail step skipped");
-      payload = content;
     }
     payload = withoutUnwantedLinkPreview(payload);
-    return original(jid, payload, options);
+    // Put the hook last so callers cannot accidentally restore Baileys's unsafe
+    // downloader. Explicit linkPreview objects/null are still handled by Baileys.
+    return original(jid, payload, { ...options, getUrlInfo });
   };
 
   return sock;

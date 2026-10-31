@@ -29,15 +29,7 @@ const { spawn } = require("child_process");
 
 const logger = require("./logger.cjs");
 
-// Only used for remote sources; required lazily so a missing axios can never
-// take the send path down.
-function getAxios() {
-  try {
-    return require("axios");
-  } catch {
-    return null;
-  }
-}
+const { fetchHttpsBuffer } = require("./httpsFetch.cjs");
 
 const ffmpegStatic = (() => {
   try {
@@ -424,18 +416,10 @@ function extensionFor(buffer, kind) {
 
 /** Fetch a remote asset to a temp file so we can build a preview from it. */
 async function downloadToTemp(url, kind) {
-  const axios = getAxios();
-  if (!axios) return null;
-
-  const response = await axios.get(url, {
-    responseType: "arraybuffer",
-    timeout: remoteTimeoutMs(),
-    maxRedirects: 4,
-    maxContentLength: remoteMaxBytes(),
-    headers: { Accept: "*/*" },
+  const { buffer } = await fetchHttpsBuffer(url, {
+    timeoutMs: remoteTimeoutMs(),
+    maxBytes: remoteMaxBytes(),
   });
-
-  const buffer = Buffer.from(response.data);
   if (!buffer.length) return null;
 
   const file = tmpPath(extensionFor(buffer, kind));
@@ -471,7 +455,7 @@ async function resolveSource(media, kind) {
       return await downloadToTemp(url, kind);
     } catch (err) {
       logger.debug(
-        { err: err?.message, url },
+        { err: err?.message },
         "[thumbnail] remote source could not be fetched for a preview",
       );
       return null;
