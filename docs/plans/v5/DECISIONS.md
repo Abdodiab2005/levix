@@ -265,7 +265,7 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
 
 ## ADR-017: Android ships production dependencies only
 
-- Status: PROPOSED (Phase 01).
+- Status: ACCEPTED (owner, merged in #87 on 2026-11-01). Decision text below unchanged.
 - Context: 25,870,866 of the 36,934,593 compressed bytes in the v4.9.1 `levix-app.zip` are dev
   dependencies (`@biomejs/cli-linux-x64`, `postject`, `@biomejs/biome`), because the staging script
   copies the full `node_modules/` (`android/scripts/stage-levix-app.sh:65`). The Docker image already

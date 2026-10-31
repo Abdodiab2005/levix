@@ -1,8 +1,9 @@
 # Levix v5.0.0 Phase 02: backup, restore and migration safety
 
-Status: decisions APPROVED by the owner on 2026-10-31 (section 5). PRs 02a to 02h merged on
-2026-10-31 (#91 to #99, `main` b14a3e6). PR 02i (restore safety, section 4) is open. Android device
-QA ran on 2026-10-31 (section 7.1); desktop manual QA is NOT RUN. Every claim below cites code at
+Status: COMPLETE on 2026-11-01 for every automated gate. Decisions APPROVED by the owner on
+2026-10-31 (section 5). PRs 02a to 02h merged on 2026-10-31 (#91 to #99, `main` b14a3e6); PR 02i
+(restore safety, section 4) merged on 2026-11-01 (#100). Android device QA ran on 2026-10-31
+(section 7.1); desktop manual QA and a device re-run after #100 are NOT RUN. Every claim below cites code at
 `main` 966cd2b or a command run on 2026-10-31.
 
 ## 1. Re-audit (2026-10-31)
