@@ -13,12 +13,14 @@
 // prefix lookup, every permission check) read inline with no `await`.
 //
 // The file lives in the data directory (src/config/paths.cjs), together with
-// everything else the bot writes. The schema is created on open and versioned
+// everything else the bot writes. The schema is created on first use and versioned
 // with `PRAGMA user_version`, so upgrading never asks the operator to run a
 // migration by hand.
 
 const path = require("node:path");
+const fs = require("node:fs");
 const { DatabaseSync } = require("node:sqlite");
+const { writeSecretFreeCopy, verifySecretFreeCopy } = require("./copy.cjs");
 
 const logger = require("../utils/logger.cjs");
 const { DATA_DIR, dataPath } = require("../config/paths.cjs");
@@ -29,17 +31,55 @@ const DB_PATH = path.join(DATA_DIR, "levix.db");
 // --- Open ---
 // ===================================================================
 
-const db = new DatabaseSync(DB_PATH);
+let connection = null;
+let startupGuard = false;
+let prepared = false;
+let configured = false;
 
-// WAL: a reader never blocks the writer. The bot is a single process, but the
-// scheduler and the HTTP handlers do interleave.
-db.exec("PRAGMA journal_mode = WAL");
-// NORMAL is the WAL-appropriate setting: a crash can lose the last commit or
-// two, never the file. FULL would fsync on every warning counter.
-db.exec("PRAGMA synchronous = NORMAL");
-db.exec("PRAGMA foreign_keys = ON");
-// Wait instead of throwing SQLITE_BUSY if the checkpointer holds the lock.
-db.exec("PRAGMA busy_timeout = 5000");
+function guardStartup() {
+  startupGuard = true;
+}
+
+function openRaw() {
+  if (!connection) connection = new DatabaseSync(DB_PATH);
+  return connection;
+}
+
+function configure(database) {
+  // Keep this after the newer-schema check: refusing a downgrade must not
+  // change even the database header or create a WAL file.
+  database.exec("PRAGMA journal_mode = WAL");
+  database.exec("PRAGMA synchronous = NORMAL");
+  database.exec("PRAGMA foreign_keys = ON");
+  database.exec("PRAGMA busy_timeout = 5000");
+  configured = true;
+}
+
+function activeDatabase() {
+  if (startupGuard && !prepared) {
+    const error = new Error("database used before startup prepared it");
+    error.code = "DATABASE_NOT_PREPARED";
+    throw error;
+  }
+  if (!configured) {
+    const database = openRaw();
+    const from = database.prepare("PRAGMA user_version").get().user_version;
+    if (from > MIGRATIONS.length) throw newerSchemaError(from);
+    configure(database);
+    migrate(database);
+  }
+  return connection;
+}
+
+// A stable facade lets old callers keep `const { db } = require(...)` without
+// opening the file when the store itself is imported.
+const db = new Proxy({}, {
+  get(_target, key) {
+    const database = activeDatabase();
+    const value = database[key];
+    return typeof value === "function" ? value.bind(database) : value;
+  },
+});
 
 // ===================================================================
 // --- Schema ---
@@ -676,35 +716,127 @@ const MIGRATIONS = [
 
 function migrate(database, migrations = MIGRATIONS) {
   const { user_version: current } = database.prepare("PRAGMA user_version").get();
-
+  if (current > migrations.length) throw newerSchemaError(current, migrations.length);
   if (current >= migrations.length) return;
-
-  for (let version = current; version < migrations.length; version += 1) {
-    // One transaction per migration, covering the version stamp as well.
-    // `user_version` lives in the database header and is written inside the
-    // transaction like anything else, so a crash or a power cut halfway
-    // through rolls the whole step back: the next start sees the old version
-    // and runs it again from a known state. Without this a half-applied
-    // migration would be recorded as complete.
-    database.exec("BEGIN IMMEDIATE");
-    try {
+  // One transaction covers every pending step and the final version stamp.
+  // A crash or a failed later step leaves the entire old schema intact.
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    for (let version = current; version < migrations.length; version += 1) {
+      logger.info(`[DB] Running schema step v${version + 1}`);
       migrations[version](database);
-      // PRAGMA takes no bound parameter; the value is a loop counter, not
-      // anything a user can reach.
-      database.exec(`PRAGMA user_version = ${version + 1}`);
-      database.exec("COMMIT");
-    } catch (err) {
-      try {
-        database.exec("ROLLBACK");
-      } catch {}
-      logger.error({ err }, `[DB] Migration to v${version + 1} failed and was rolled back`);
-      throw err;
     }
-    logger.info(`[DB] Migrated to schema v${version + 1}`);
+    database.exec(`PRAGMA user_version = ${migrations.length}`);
+    database.exec("COMMIT");
+  } catch (err) {
+    try { database.exec("ROLLBACK"); } catch {}
+    logger.error({ err }, "[DB] Migration rolled back");
+    throw err;
   }
 }
 
-migrate(db);
+function newerSchemaError(from, known = MIGRATIONS.length) {
+  const error = new Error(
+    `This data directory was written by a newer Levix (schema ${from}; this build knows ${known}). Install that version or newer.`,
+  );
+  error.code = "SCHEMA_NEWER";
+  return error;
+}
+
+function schemaVersion(database) {
+  return database.prepare("PRAGMA user_version").get().user_version;
+}
+
+function fsyncDirectory(folder, filesystem = fs) {
+  try {
+    const directory = filesystem.openSync(folder, "r");
+    try {
+      filesystem.fsyncSync(directory);
+    } finally {
+      filesystem.closeSync(directory);
+    }
+  } catch (error) {
+    // Windows does not support opening or syncing a directory handle.
+    if (!["EISDIR", "EPERM", "EINVAL", "ENOTSUP", "EBADF"].includes(error.code)) throw error;
+  }
+}
+
+let copyHookForTest = null;
+function setCopyHookForTest(fn) {
+  copyHookForTest = fn;
+}
+
+async function makePreMigrationCopy(database, from) {
+  const folder = dataPath("backups", "pre-migration");
+  let copyPath;
+  let partPath;
+  let renamed = false;
+  try {
+    fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
+    fs.chmodSync(folder, 0o700);
+    for (const name of fs.readdirSync(folder)) {
+      if (/^levix-v\d+-\d{8}T\d{6}Z\.db\.part(?:-journal|-wal|-shm)?$/.test(name)) {
+        fs.rmSync(path.join(folder, name));
+      }
+    }
+    const names = fs.readdirSync(folder).filter((name) => /^levix-v\d+-\d{8}T\d{6}Z\.db$/.test(name));
+    let instant = Date.now();
+    const latest = names.map((name) => name.match(/-(\d{8}T\d{6}Z)\.db$/)[1]).sort().at(-1);
+    if (latest) {
+      const parsed = Date.parse(`${latest.slice(0, 4)}-${latest.slice(4, 6)}-${latest.slice(6, 8)}T${latest.slice(9, 11)}:${latest.slice(11, 13)}:${latest.slice(13, 15)}Z`);
+      instant = Math.max(instant, parsed + 1000);
+    }
+    const stamp = new Date(instant).toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+    copyPath = path.join(folder, `levix-v${from}-${stamp}.db`);
+    partPath = `${copyPath}.part`;
+    writeSecretFreeCopy(DB_PATH, partPath, {
+      onAfterRows: () => copyHookForTest?.("after-rows"),
+    });
+    verifySecretFreeCopy(partPath, database, { expectedVersion: from });
+    copyHookForTest?.("before-rename");
+    fs.renameSync(partPath, copyPath);
+    renamed = true;
+    partPath = null;
+    fsyncDirectory(folder);
+    const copies = fs.readdirSync(folder).filter((name) => /^levix-v\d+-\d{8}T\d{6}Z\.db$/.test(name)).sort((a, b) => b.match(/-(\d{8}T\d{6}Z)/)[1].localeCompare(a.match(/-(\d{8}T\d{6}Z)/)[1]));
+    for (const old of copies.slice(2)) fs.rmSync(path.join(folder, old));
+    return copyPath;
+  } catch (cause) {
+    if (partPath) try { fs.rmSync(partPath, { force: true }); } catch {}
+    if (renamed) try { fs.rmSync(copyPath, { force: true }); } catch {}
+    const error = new Error(`Could not verify a pre-migration database copy: ${cause.message}`);
+    error.code = "BACKUP_FAILED";
+    error.cause = cause;
+    throw error;
+  }
+}
+
+async function prepareDatabase(migrations = MIGRATIONS) {
+  if (!require("../config/lock.cjs").isLockHeld()) {
+    throw new Error("database preparation requires the instance lock");
+  }
+  const database = openRaw();
+  const from = schemaVersion(database);
+  if (from > migrations.length) throw newerSchemaError(from, migrations.length);
+  let copyPath = null;
+  if (from > 0 && from < migrations.length) copyPath = await makePreMigrationCopy(database, from);
+  configure(database);
+  try {
+    migrate(database, migrations);
+  } catch (error) {
+    // SQLite errors already have a code; startup still needs one stable
+    // classification for every failed migration.
+    error.migrationCauseCode = error.code;
+    error.code = "MIGRATION_FAILED";
+    throw error;
+  }
+  prepared = true;
+  return { from, to: migrations.length, copyPath };
+}
+
+function openWithoutMigration() {
+  return openRaw();
+}
 
 // ===================================================================
 // --- Helpers shared by the store ---
@@ -715,9 +847,10 @@ migrate(db);
 const statementCache = new Map();
 
 function q(sql) {
+  const database = activeDatabase();
   let statement = statementCache.get(sql);
   if (!statement) {
-    statement = db.prepare(sql);
+    statement = database.prepare(sql);
     statementCache.set(sql, statement);
   }
   return statement;
@@ -777,7 +910,7 @@ function sweepExpired() {
 /** Flush the WAL into the main file — called on shutdown and after a backup. */
 function checkpoint() {
   try {
-    db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    if (connection && configured) connection.exec("PRAGMA wal_checkpoint(TRUNCATE)");
   } catch (err) {
     logger.error({ err }, "[DB] checkpoint failed");
   }
@@ -786,8 +919,12 @@ function checkpoint() {
 function close() {
   checkpoint();
   try {
-    db.close();
+    connection?.close();
   } catch {}
+  connection = null;
+  statementCache.clear();
+  prepared = false;
+  configured = false;
 }
 
 module.exports = {
@@ -798,6 +935,12 @@ module.exports = {
   // only way to prove the rollback works.
   migrate,
   MIGRATIONS,
+  guardStartup,
+  prepareDatabase,
+  openWithoutMigration,
+  schemaVersion,
+  fsyncDirectory,
+  setCopyHookForTest,
   parseJson,
   sweepExpired,
   checkpoint,

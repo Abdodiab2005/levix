@@ -27,9 +27,8 @@ const DEFAULT_FORWARD_TTL_DAYS = 30;
 // --- Lifecycle ---
 // ===================================================================
 //
-// The database is opened the moment db.cjs is required, so there is nothing
-// to await. These exist because the rest of the codebase calls them; they now
-// do the housekeeping the boot sequence needs: sweep, and report.
+// Database access is lazy; startup prepares it before calling initStore().
+// Direct store use outside startup opens it on the first query.
 
 let sweepTimer = null;
 
