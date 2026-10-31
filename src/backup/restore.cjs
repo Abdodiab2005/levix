@@ -176,7 +176,9 @@ function applySettings(id, secrets, { base, confirmDestructive = false } = {}) {
       replaceEntry("command_aliases", commandRows.get("command_aliases"), isMap, (map) => {
         for (const [name, list] of Object.entries(map)) runtime.setAliases(name, list);
       });
-      replaceEntry("disabled_commands", commandRows.get("disabled_commands"), Array.isArray, (list) => {
+      const names = (list) => Array.isArray(list) &&
+        list.every((name) => typeof name === "string" && /^[^\s]{1,64}$/.test(name));
+      replaceEntry("disabled_commands", commandRows.get("disabled_commands"), names, (list) => {
         for (const name of list) runtime.setEnabled(String(name), false);
       });
       // The decision uses what this transaction actually changed, side effects

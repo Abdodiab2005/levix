@@ -17,7 +17,7 @@ const restore = require("./src/backup/restore.cjs");
 const { openBackup, writeBackup, validateManifest } = require("./src/backup/format.cjs");
 const { buildPlan, publicPlan, currentDigests } = require("./src/backup/plan.cjs");
 const { runRestoreRecovery } = require("./src/backup/recovery.cjs");
-const { readJournal } = require("./src/backup/journal.cjs");
+const { readJournal, readOutcome } = require("./src/backup/journal.cjs");
 
 const password = "merge-test-backup-password";
 const panelPassword = "merge-panel-password";
@@ -302,10 +302,12 @@ section("side effects of a restore need confirmation");
   pair(accountA);
   settings.set("ai_provider", null);
   settings.set("openai_model", null);
-  settings.set("ai_stt_enabled", true);
+  // No stored row: speech is on through its default, which a stored-row
+  // comparison alone would miss.
+  settings.set("ai_stt_enabled", null);
+  equal("speech is on by default", settings.get("ai_stt_enabled"), true);
   const preview = publicPlan(await planOf(providerOnly.path));
   ok("preview adds the provider", preview.settings.added.includes("ai_provider"));
-  ok("preview keeps speech", preview.settings.kept.includes("ai_stt_enabled"));
   let refused;
   try { await restore.restoreUpload(upload(providerOnly.path), password); }
   catch (error) { refused = error; }
@@ -354,9 +356,10 @@ writeFileSync(personaFile, "persona before crash");
 restore.setCrashHookForTest((step) => { if (step === "persona") throw new Error("test crash"); });
 try { await restore.restoreUpload(upload(empty.path), password); } catch {}
 restore.setCrashHookForTest(null);
-ok("crash left a journal", readJournal() !== null);
+equal("crash left the persona step", readJournal()?.step, "persona");
 runRestoreRecovery();
 equal("recovery finished", readJournal(), null);
+equal("recovery completed the restore", readOutcome()?.outcome, "completed-after-restart");
 equal("recovery keeps the persona", readFileSync(personaFile, "utf8"), "persona before crash");
 
 section("an invalid command-table entry keeps the current one");
@@ -368,6 +371,28 @@ section("an invalid command-table entry keeps the current one");
   const result = await restore.restoreUpload(upload(badPermissions.path), password, undefined, CONFIRM);
   ok("entry reported as skipped", result.skipped.some((item) => item.key === "command_permissions"));
   equal("current permission kept", runtime.getPermission("ping"), "ADMINS_ONLY");
+}
+
+section("command permission and disabled-list guards");
+{
+  store.deleteBotSetting("command_permissions");
+  store.saveBotSetting("command_permissions", { "group:kick": "MEMBERS" });
+  const widened = await createBackup({ password, kdf });
+  store.deleteBotSetting("command_permissions");
+  const plan = publicPlan(await planOf(widened.path));
+  ok("permission overrides are added", plan.settings.added.includes("command_permissions"));
+  equal("adding permission overrides needs confirmation", plan.destructive, true);
+  equal("unconfirmed permission change refused",
+    await outcome(() => restore.restoreUpload(upload(widened.path), password)), "CONFIRM_REQUIRED");
+  equal("refusal keeps the shipped permission", store.getBotSetting("command_permissions", null), null);
+
+  store.saveBotSetting("disabled_commands", [null]);
+  const badDisabled = await createBackup({ password, kdf });
+  store.deleteBotSetting("disabled_commands");
+  runtime.setEnabled("qr", false);
+  const result = await restore.restoreUpload(upload(badDisabled.path), password, undefined, CONFIRM);
+  ok("invalid disabled list skipped", result.skipped.some((item) => item.key === "disabled_commands"));
+  ok("current disabled list kept", runtime.disabledCommands().includes("qr"));
 }
 
 finish();

@@ -12,7 +12,7 @@ const path = require("node:path");
 const { db } = require("../db/db.cjs");
 const settings = require("../config/settings.cjs");
 const { dataPath } = require("../config/paths.cjs");
-const { ACCOUNT_TABLES, RESTORABLE_BOT_KEYS } = require("./content.cjs");
+const { ACCOUNT_TABLES, RESTORABLE_BOT_KEYS, RESTORABLE_SETTING_KEYS } = require("./content.cjs");
 const { readPairedAccount, maskAccount, accountsMatch } = require("./account.cjs");
 
 const digest = (text) => crypto.createHash("sha256").update(String(text)).digest("hex");
@@ -43,8 +43,17 @@ function currentDigests() {
     const value = settings.get(name);
     if (value) apiKeys[name] = digest(value);
   }
-  return { settings: digestsFrom(restorableRows(db)).settings, apiKeys };
+  // Effective values include the defaults, so a side effect on a setting that
+  // has no stored row still shows up.
+  const effective = {};
+  for (const key of RESTORABLE_SETTING_KEYS) effective[`setting:${key}`] = digest(JSON.stringify(settings.get(key)));
+  return { settings: digestsFrom(restorableRows(db)).settings, apiKeys, effective };
 }
+
+// Command permissions decide who may run what, so even adding overrides to an
+// install that has none needs the operator's confirmation.
+const ACCESS_KEYS = Object.freeze(["command_permissions"]);
+const changesAccess = (part) => part.added.some((key) => ACCESS_KEYS.includes(key));
 
 function compare(source, target) {
   const result = { added: [], replaced: [], removed: [], unchanged: [], kept: [] };
@@ -117,7 +126,7 @@ function buildPlan({ digests, apiKeyNames = [], personaSha = null, account = nul
     };
   }
   const destructive = !exact || settingsPlan.replaced.length > 0 || apiKeys.replaced.length > 0 ||
-    settingsPlan.removed.length > 0 || apiKeys.removed.length > 0 ||
+    settingsPlan.removed.length > 0 || apiKeys.removed.length > 0 || changesAccess(settingsPlan) ||
     persona === "replaced" || Boolean(accountData?.replacesCurrent || accountData?.replacesWaiting);
   return { exact, destructive, settings: settingsPlan, apiKeys, persona, accountData };
 }
@@ -129,23 +138,32 @@ function buildPlan({ digests, apiKeyNames = [], personaSha = null, account = nul
  * speech or vision off) counts as replaced, so it needs confirmation too.
  */
 function appliedPlan({ before, after, source, base }) {
-  const section = (was, now, from) => {
+  const section = (was, now, from, effectiveWas = {}, effectiveNow = {}) => {
     const result = { added: [], replaced: [], removed: [], unchanged: [], kept: [] };
-    for (const key of new Set([...Object.keys(was), ...Object.keys(now)])) {
+    const keys = new Set([...Object.keys(was), ...Object.keys(now), ...Object.keys(effectiveWas)]);
+    for (const key of keys) {
       const had = Object.hasOwn(was, key);
       const has = Object.hasOwn(now, key);
+      if (!Object.hasOwn(from, key)) {
+        // Not in the backup: any change is a side effect and replaces a value.
+        const moved = had !== has || was[key] !== now[key] ||
+          (Object.hasOwn(effectiveWas, key) && effectiveWas[key] !== effectiveNow[key]);
+        if (moved) (has || !had ? result.replaced : result.removed).push(key);
+        else if (had) result.kept.push(key);
+        continue;
+      }
       if (!had) result.added.push(key);
       else if (!has) result.removed.push(key);
       else if (was[key] !== now[key]) result.replaced.push(key);
-      else if (Object.hasOwn(from, key)) result.unchanged.push(key);
-      else result.kept.push(key);
+      else result.unchanged.push(key);
     }
     for (const list of Object.values(result)) list.sort();
     return result;
   };
-  const settingsPlan = section(before.settings, after.settings, source.settings);
+  const settingsPlan = section(before.settings, after.settings, source.settings, before.effective, after.effective);
   const apiKeys = section(before.apiKeys, after.apiKeys, source.apiKeys);
   const destructive = [settingsPlan, apiKeys].some((part) => part.replaced.length + part.removed.length > 0) ||
+    changesAccess(settingsPlan) ||
     base.persona === "replaced" || Boolean(base.accountData?.replacesCurrent || base.accountData?.replacesWaiting);
   return { exact: true, destructive, settings: settingsPlan, apiKeys, persona: base.persona, accountData: base.accountData };
 }

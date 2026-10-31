@@ -239,11 +239,15 @@ cannot restore it from the UI.
    entry; one the backup lacks stays. The target keeps its device keys, panel authentication rows,
    session key and pairing. The API keys are sealed with the target's `levix.key` inside that
    transaction. Inside that transaction the job compares this install's settings and API keys
-   before and after the apply, side effects included (a provider or model change can turn speech
-   or vision off through the capability guards). When anything was replaced or removed, or the
+   before and after the apply, side effects included: a setting the backup does not hold counts
+   as replaced when its effective value changes, default included (a provider or model change can
+   turn speech or vision off through the capability guards). Adding `command_permissions`
+   overrides to an install that has none also needs confirmation, because it changes who may run
+   a command. When anything was replaced or removed, or the
    persona or account data would be replaced, and the request did not confirm it, the transaction
    rolls back and the job ends with `CONFIRM_REQUIRED` and that exact plan, so a forged manifest
-   cannot hide a change. A command-table entry is replaced all or nothing: one invalid item puts
+   cannot hide a change. A command-table entry is replaced all or nothing: one invalid item (an
+   unknown permission level, a bad alias, a disabled-command name that is not a plain string) puts
    the current entry back. `ai-persona.md` is replaced atomically only when the backup holds a
    persona; a backup without one leaves the current persona as it is, also after crash recovery. The new values take effect like a settings import. If
    Levix stops before that transaction commits, recovery discards the staged restore and the
