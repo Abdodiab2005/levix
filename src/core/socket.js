@@ -17,7 +17,7 @@ const socketDispatchers = new WeakMap();
 // Never leave a remote media URL for Baileys to fetch again without validation.
 // Local paths, buffers and streams keep their existing send path. Download once
 // for the actual send, then build any thumbnail from those same bytes.
-async function withHttpsMedia(content) {
+async function withHttpsMedia(sock, content) {
   if (!content || typeof content !== "object") return content;
   let payload = content;
   for (const field of ["image", "video", "audio", "document", "sticker"]) {
@@ -28,6 +28,7 @@ async function withHttpsMedia(content) {
       const { buffer } = await fetchHttpsBuffer(String(raw), {
         maxBytes: settings.get("thumbnail_remote_max_mb") * 1024 * 1024,
         timeoutMs: settings.get("thumbnail_remote_timeout_ms"),
+        dispatcher: socketDispatchers.get(sock),
       });
       payload = { ...payload, [field]: buffer };
     } catch (cause) {
@@ -106,9 +107,10 @@ function withoutUnwantedLinkPreview(content) {
  */
 function withOutboundSavers(sock) {
   const original = sock.sendMessage.bind(sock);
+  const getUrlInfo = (text) => getHttpsUrlInfo(text, { dispatcher: socketDispatchers.get(sock) });
 
   sock.sendMessage = async function sendMessageWithOutboundSavers(jid, content, options) {
-    let payload = await withHttpsMedia(content);
+    let payload = await withHttpsMedia(sock, content);
     try {
       payload = await withMediaThumbnail(payload);
     } catch (err) {
@@ -117,7 +119,7 @@ function withOutboundSavers(sock) {
     payload = withoutUnwantedLinkPreview(payload);
     // Put the hook last so callers cannot accidentally restore Baileys's unsafe
     // downloader. Explicit linkPreview objects/null are still handled by Baileys.
-    return original(jid, payload, { ...options, getUrlInfo: getHttpsUrlInfo });
+    return original(jid, payload, { ...options, getUrlInfo });
   };
 
   return sock;

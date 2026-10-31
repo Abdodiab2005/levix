@@ -49,6 +49,8 @@ const settings = require("./src/config/settings.cjs");
 const provider = require("./src/utils/providerUrl.cjs");
 const originalFetch = provider.safeProviderFetch;
 const originalLookup = dns.lookup;
+const undici = require("undici");
+const originalUndiciFetch = undici.fetch;
 const calls = [];
 let route;
 dns.lookup = async (host) => [
@@ -316,7 +318,10 @@ try {
   };
   await sock.sendMessage("chat", { text: "https://public.example/a" }, unsafeOptions);
   equal("failed preview still sends text", sent.at(-1).content.text, "https://public.example/a");
-  equal("safe per-send hook cannot be overridden", sent.at(-1).options.getUrlInfo, getHttpsUrlInfo);
+  ok(
+    "safe per-send hook cannot be overridden",
+    sent.at(-1).options.getUrlInfo !== unsafeOptions.getUrlInfo,
+  );
   equal("quoted options preserved", sent.at(-1).options.quoted, unsafeOptions.quoted);
   await sock.sendMessage("chat", { text: "http://public.example/a" });
   equal("HTTP text still sends", sent.at(-1).content.text, "http://public.example/a");
@@ -364,8 +369,67 @@ try {
   await sock.sendMessage("chat", local);
   equal("local media path preserved", sent.at(-1).content.audio, local.audio);
   equal("local media costs no fetch", calls.length, 0);
+
+  section("actual remote media keeps the live socket's proxy");
+  let proxyClosed = 0;
+  const dispatcher = {
+    close() {
+      proxyClosed += 1;
+    },
+    destroy() {
+      proxyClosed += 1;
+    },
+  };
+  const { sock: proxied } = await createWhatsAppSocket({
+    proxy: { dispatcher, agent: {}, fetchAgent: {}, label: "fake proxy" },
+  });
+  const proxyCalls = [];
+  let proxyRoute = () => new Response("audio");
+  undici.fetch = async (url, init) => {
+    proxyCalls.push({ url, init });
+    return proxyRoute(url);
+  };
+  reset(() => {
+    throw new Error("must not use direct transport");
+  });
+  await proxied.sendMessage("chat", { audio: { url: "https://public.example/audio" } });
+  equal("socket's captured dispatcher used", proxyCalls.at(-1).init.dispatcher, dispatcher);
+  equal(
+    "proxy requests also disable automatic redirects",
+    proxyCalls.at(-1).init.redirect,
+    "manual",
+  );
+  equal("proxy does not use direct fetch", calls.length, 0);
+  equal("reading media never closes shared dispatcher", proxyClosed, 0);
+  equal("proxy media reaches Baileys as bytes", sent.at(-1).content.audio.toString(), "audio");
+  proxyRoute = () => redirect("http://public.example/plain");
+  const proxyBefore = proxyCalls.length;
+  await rejects("proxy rejects a downgrade", () =>
+    proxied.sendMessage("chat", { audio: { url: "https://public.example/audio" } }),
+  );
+  equal("proxy downgrade never dispatched", proxyCalls.length, proxyBefore + 1);
+  const privateBefore = proxyCalls.length;
+  await rejects("proxy rejects private DNS before dispatch", () =>
+    proxied.sendMessage("chat", { audio: { url: "https://private.example/audio" } }),
+  );
+  equal("private destination never reaches proxy", proxyCalls.length, privateBefore);
+  proxyRoute = () => {
+    throw new Error("proxy unavailable");
+  };
+  await rejects("proxy failure refuses media send", () =>
+    proxied.sendMessage("chat", { audio: { url: "https://public.example/audio" } }),
+  );
+  equal("proxy failure never falls back to direct", calls.length, 0);
+  equal("proxy failure never closes shared dispatcher", proxyClosed, 0);
+  settings.set("link_previews_enabled", true);
+  proxyRoute = () => html("<title>Proxied page</title>");
+  await proxied.sendMessage("chat", { text: "https://public.example/page" });
+  equal("page preview retains the socket's proxy", proxyCalls.at(-1).init.dispatcher, dispatcher);
+  equal("proxied preview returned metadata", sent.at(-1).preview.title, "Proxied page");
+  equal("proxied preview never makes a direct request", calls.length, 0);
 } finally {
   provider.safeProviderFetch = originalFetch;
   dns.lookup = originalLookup;
+  undici.fetch = originalUndiciFetch;
 }
 finish();

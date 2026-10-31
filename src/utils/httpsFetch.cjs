@@ -70,21 +70,27 @@ async function readLimited(response, maxBytes) {
   }
 }
 
-async function fetchHttpsBuffer(raw, { maxBytes = 20 * 1024 * 1024, timeoutMs = 20_000 } = {}) {
+async function requestHttps(url, signal, dispatcher) {
+  const init = { signal, redirect: "manual", headers: { Accept: "*/*" } };
+  if (!dispatcher) return provider.safeProviderFetch(url.href, init, { allowLoopback: false });
+  // The dispatcher belongs to a live WhatsApp socket. Validate every hop, use
+  // that transport, and never close it or fall back to a direct connection.
+  await provider.assertProviderRequestUrl(url.href, { allowLoopback: false });
+  const { fetch } = require("undici");
+  return fetch(url.href, { ...init, dispatcher });
+}
+
+async function fetchHttpsBuffer(
+  raw,
+  { maxBytes = 20 * 1024 * 1024, timeoutMs = 20_000, dispatcher } = {},
+) {
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) throw new Error("Invalid byte limit");
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) throw new Error("Invalid timeout");
   let url = httpsUrl(raw);
   const signal = AbortSignal.timeout(timeoutMs);
   for (let hop = 0; ; hop += 1) {
     signal.throwIfAborted();
-    const response = await beforeDeadline(
-      provider.safeProviderFetch(
-        url.href,
-        { signal, redirect: "manual", headers: { Accept: "*/*" } },
-        { allowLoopback: false },
-      ),
-      signal,
-    );
+    const response = await beforeDeadline(requestHttps(url, signal, dispatcher), signal);
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       await cancelBody(response);
       const location = response.headers.get("location");

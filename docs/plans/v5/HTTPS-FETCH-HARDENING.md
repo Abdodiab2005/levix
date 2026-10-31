@@ -13,7 +13,9 @@ Baseline: `c5040a5`. Date: 2026-11-01.
   remote media URLs. A rejected optional thumbnail must not leave an unsafe URL
   for Baileys to download when sending the actual media.
 - Add a shared HTTPS-only, DNS-pinned, bounded download helper using the existing
-  `providerUrl.cjs` boundary with loopback disabled. Validate each redirect, cancel
+  `providerUrl.cjs` boundary with loopback disabled. Direct requests pin DNS;
+  proxied socket sends retain their live dispatcher and validate every hop,
+  without closing it or falling back to a direct connection. Validate each redirect, cancel
   unused bodies, keep one timeout across the chain, cap decoded bytes.
 - Route remote thumbnails and outbound media URL downloads through that helper.
   Give Baileys buffers, never unchecked remote media URLs. Keep local files,
@@ -52,7 +54,7 @@ commit containing this report.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| `node tests/run.mjs https-fetch` | PASS | 83 checks, 0 failures; fake transports only |
+| `node tests/run.mjs https-fetch` | PASS | 98 checks, 0 failures; fake transports only |
 | `node tests/run.mjs low-data` | PASS | 28 checks, 0 failures |
 | `node tests/run.mjs photo-proxy` | PASS | 28 checks, 0 failures |
 | `npm run lint` | PASS | Exit 0; existing warnings and Biome schema/deprecation notices remain |
@@ -76,3 +78,5 @@ network clients (including WhatsApp's incoming encrypted-media client, external
 service SDKs, local AI endpoints or the panel). The final release transit audit
 still needs to review those paths and the Google Play answer. Existing public
 provider HTTPS rules and explicitly supported local AI/panel connections remain.
+
+Final review added proxy preservation for both outbound remote media and page/image previews. Mocked checks verify the captured dispatcher, manual redirects, private DNS refusal, no direct fallback, and no shared-dispatcher close.

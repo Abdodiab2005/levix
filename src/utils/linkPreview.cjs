@@ -46,11 +46,15 @@ function pageMetadata(html) {
   };
 }
 
-async function getHttpsUrlInfo(text) {
+async function getHttpsUrlInfo(text, { dispatcher } = {}) {
   if (!settings.get("link_previews_enabled")) return undefined;
   try {
     const url = httpsUrl(/^[\w+.-]+:\/\//.test(text) ? text : `https://${text}`);
-    const page = await fetchHttpsBuffer(url.href, { maxBytes: 1024 * 1024, timeoutMs: 3000 });
+    const page = await fetchHttpsBuffer(url.href, {
+      maxBytes: 1024 * 1024,
+      timeoutMs: 3000,
+      dispatcher,
+    });
     if (!/^(text\/html|application\/xhtml\+xml)\b/i.test(page.contentType)) return undefined;
     const metadata = pageMetadata(decodeBuffer(page.buffer, page.contentType));
     if (!metadata.title) return undefined;
@@ -66,6 +70,7 @@ async function getHttpsUrlInfo(text) {
         const image = await fetchHttpsBuffer(imageUrl.href, {
           maxBytes: 2 * 1024 * 1024,
           timeoutMs: 3000,
+          dispatcher,
         });
         if (/^image\//i.test(image.contentType)) {
           const content = await withMediaThumbnail({ image: image.buffer });
