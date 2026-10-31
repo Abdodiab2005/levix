@@ -5,7 +5,9 @@ import {
   Button,
   Card,
   CardHeader,
+  Checkbox,
   ConfirmDialog,
+  Disclosure,
   Field,
   IconButton,
   PasswordInput,
@@ -32,6 +34,15 @@ type Contents = {
   paired: boolean;
   maskedAccount: string | null;
 };
+type PlanSection = { added: string[]; replaced: string[]; unchanged: number; kept: string[] };
+type Plan = {
+  exact: boolean;
+  destructive: boolean;
+  settings: PlanSection;
+  apiKeys: PlanSection;
+  persona: "added" | "replaced" | "unchanged" | "kept" | "none";
+  accountData: { replacesCurrent: boolean; replacesWaiting: string | null } | null;
+};
 type Preview = {
   created: string;
   app: string;
@@ -41,6 +52,7 @@ type Preview = {
   apiKeys: string[];
   account: { masked: string | null; status: "match" | "different" | "target-unpaired" | "none" };
   accountData: "waits" | "none";
+  plan: Plan;
 };
 type RestoreResult = {
   applied: string[];
@@ -98,6 +110,7 @@ const errors: Record<string, Key> = {
   UNCLASSIFIED_TABLE: "backupErrTable",
   SECRET_FOUND: "backupErrSecret",
   RESTORE_INCOMPLETE: "backupErrIncomplete",
+  CONFIRM_REQUIRED: "backupErrConfirmRequired",
   UNSUPPORTED_MEDIA_TYPE: "backupErrMedia",
   LENGTH_REQUIRED: "backupErrLength",
   BAD_LENGTH: "backupErrLength",
@@ -121,6 +134,7 @@ export function BackupView() {
   const [uploadPercent, setUploadPercent] = useState<number | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [restored, setRestored] = useState<RestoreResult | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const exportPass = useRef<HTMLInputElement>(null);
   const exportConfirm = useRef<HTMLInputElement>(null);
@@ -353,7 +367,10 @@ export function BackupView() {
       const next = await api.post<Preview>(`/backup/restore/uploads/${id}/preview`, {
         password: passwordInput?.value ?? "",
       });
-      if (alive.current && generation === uploadGeneration.current) setPreview(next);
+      if (alive.current && generation === uploadGeneration.current) {
+        setConfirmed(false);
+        setPreview(next);
+      }
     } catch (err) {
       if (alive.current && generation === uploadGeneration.current) setError(message(err));
     } finally {
@@ -377,6 +394,7 @@ export function BackupView() {
       const r = await api.post<{ jobId: string }>(`/backup/restore/uploads/${id}/restore`, {
         password: passwordInput?.value ?? "",
         current: currentInput?.value ?? "",
+        confirmDestructive: confirmed,
       });
       if (alive.current && generation === uploadGeneration.current)
         void poll(r.jobId, "restore", generation);
@@ -460,6 +478,44 @@ export function BackupView() {
           ))
         : t("backupNone")}
     </p>
+  );
+  const planNames = (label: Key, names: string[]) =>
+    names.length > 0 && (
+      <p className="text-sm">
+        <span className="font-semibold">{t(label)}:</span> {names.join(", ")}
+      </p>
+    );
+  const planSection = (title: Key, part: PlanSection) => (
+    <div className="flex flex-col gap-1">
+      <h4 className="text-sm font-semibold">{t(title)}</h4>
+      {planNames("backupPlanAdded", part.added)}
+      {planNames("backupPlanReplaced", part.replaced)}
+      {part.unchanged > 0 && (
+        <p className="text-sm text-muted">{fill(t("backupPlanUnchanged"), { n: part.unchanged })}</p>
+      )}
+      {part.kept.length > 0 && (
+        <Disclosure summary={fill(t("backupPlanKept"), { n: part.kept.length })}>
+          <p className="text-sm text-muted">{part.kept.join(", ")}</p>
+        </Disclosure>
+      )}
+    </div>
+  );
+  const planView = (plan: Plan) => (
+    <div className="flex flex-col gap-3">
+      <h3 className="font-semibold">{t("backupPlanTitle")}</h3>
+      {!plan.exact && <p className="text-sm text-warn">{t("backupPlanUnknown")}</p>}
+      {planSection("backupPlanSettings", plan.settings)}
+      {planSection("backupPlanApiKeys", plan.apiKeys)}
+      <p className="text-sm">{t(`backupPersona${plan.persona}` as Key)}</p>
+      {plan.accountData?.replacesCurrent && (
+        <p className="text-sm text-warn">{t("backupPlanReplacesCurrent")}</p>
+      )}
+      {plan.accountData?.replacesWaiting && (
+        <p className="text-sm text-warn">
+          {fill(t("backupPlanReplacesWaiting"), { account: plan.accountData.replacesWaiting })}
+        </p>
+      )}
+    </div>
   );
   return (
     <div className="flex flex-col gap-5">
@@ -631,15 +687,27 @@ export function BackupView() {
               )}{" "}
               {preview.account.masked && <UserText as="span">{preview.account.masked}</UserText>}
             </p>
+            {planView(preview.plan)}
             <p className="text-sm text-muted">{t("backupRestoreEffects")}</p>
             <form onSubmit={restore} className="flex flex-col gap-3">
+              {preview.plan.destructive && (
+                <Checkbox
+                  checked={confirmed}
+                  onChange={(event) => setConfirmed(event.target.checked)}
+                  label={t("backupConfirmDestructive")}
+                />
+              )}
               <Field label={t("backupPassword")} htmlFor="backup-restore-password">
                 <PasswordInput id="backup-restore-password" ref={restorePass} required />
               </Field>
               <Field label={t("backupPanelPassword")} htmlFor="backup-restore-current">
                 <PasswordInput id="backup-restore-current" ref={restoreCurrent} required />
               </Field>
-              <Button type="submit" variant="danger" disabled={busy}>
+              <Button
+                type="submit"
+                variant="danger"
+                disabled={busy || (preview.plan.destructive && !confirmed)}
+              >
                 {t("backupConfirmRestore")}
               </Button>
             </form>

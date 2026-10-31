@@ -14,6 +14,7 @@ const { classifyTables, RESTORABLE_SETTING_KEYS, COMMAND_TABLE_KEYS } = require(
 const { readPairedAccount, maskAccount, accountsMatch } = require("./account.cjs");
 const { writeJournal, readJournal, clearJournal, writeOutcome, readOutcome, atomicJson } = require("./journal.cjs");
 const uploads = require("./uploads.cjs");
+const { buildPlan, digestsFrom, restorableRows, publicPlan } = require("./plan.cjs");
 
 const root = () => {
   const folder = ensureDataDir("restore");
@@ -114,8 +115,8 @@ function applySettings(id, secrets) {
     db.exec("PRAGMA synchronous = FULL");
     db.exec("BEGIN IMMEDIATE");
     try {
-      for (const key of [...RESTORABLE_SETTING_KEYS, ...settings.SECRET_SETTING_KEYS]) settings.set(key, null);
-      for (const key of COMMAND_TABLE_KEYS) store.deleteBotSetting(key);
+      // Only what the backup contains is written. A setting, an API key or a
+      // command-table entry the backup lacks keeps its value on this install.
       const rows = source.prepare(`SELECT key,
         CASE WHEN length(CAST(value AS BLOB)) <= 1048576 THEN value ELSE NULL END AS value,
         length(CAST(value AS BLOB)) > 1048576 AS oversized
@@ -149,6 +150,13 @@ function applySettings(id, secrets) {
       for (const row of rows.filter((item) => COMMAND_TABLE_KEYS.includes(item.key) && item.oversized)) skip(row.key);
       const commandRows = new Map(rows.filter((row) => COMMAND_TABLE_KEYS.includes(row.key) && !row.oversized)
         .map((row) => [row.key, safeJson(row.value, null)]));
+      // A valid command-table key in the backup replaces this install's whole
+      // entry; a missing or unreadable one leaves the current entry alone.
+      const isMap = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+      const valid = { command_permissions: isMap, command_aliases: isMap, disabled_commands: Array.isArray };
+      for (const [key, check] of Object.entries(valid)) {
+        if (commandRows.has(key) && check(commandRows.get(key))) store.deleteBotSetting(key);
+      }
       if (commandRows.has("prefix")) {
         try { runtime.setPrefix(commandRows.get("prefix")); report.applied.push("prefix"); }
         catch { skip("prefix"); }
@@ -191,11 +199,8 @@ function installPersona(id) {
   if (typeof persona !== "boolean") throw new BackupError("DAMAGED", "Staged persona metadata missing");
   if (persona && !fs.existsSync(source))
     throw new BackupError("DAMAGED", "Staged persona missing");
-  if (!fs.existsSync(source)) {
-    fs.rmSync(target, { force: true });
-    fsyncDirectory(dataPath());
-    return;
-  }
+  // A backup without a persona leaves this install's persona as it is.
+  if (!persona) return;
   const temp = dataPath(`ai-persona.${id}.part`);
   fs.copyFileSync(source, temp);
   fs.chmodSync(temp, 0o600);
@@ -301,7 +306,8 @@ function finish(id, outcome = "restored") {
   const meta = metadata(id);
   const paired = readPairedAccount();
   const result = { applied: meta.report?.applied || [], skipped: meta.report?.skipped || [],
-    restartNeeded: meta.report?.restartNeeded || [], accountData: meta.account ? "waits" : "none",
+    restartNeeded: meta.report?.restartNeeded || [], plan: meta.report?.plan ?? null,
+    accountData: meta.account ? "waits" : "none",
     accountMatchesPaired: accountsMatch(meta.account, paired) };
   writeOutcome({ id, outcome, at: new Date().toISOString() });
   clearJournal();
@@ -310,7 +316,7 @@ function finish(id, outcome = "restored") {
   return result;
 }
 
-async function restorePinnedUpload(id, file, password, onProgress) {
+async function restorePinnedUpload(id, file, password, onProgress, { confirmDestructive = false } = {}) {
   if (readJournal()) throw new BackupError("BUSY", "A restore is awaiting recovery");
   const opened = await openBackup({ path: file, password });
   schemaCheck(opened.manifest);
@@ -330,6 +336,7 @@ async function restorePinnedUpload(id, file, password, onProgress) {
   crash("stage");
   let secretsBuffer = null;
   let secretsPayload = null;
+  let plan = null;
   try {
     onProgress?.({ phase: "stage", bytes: 0, totalBytes: total });
     const extracted = await opened.extract({ dest: staged(restoreId),
@@ -355,11 +362,20 @@ async function restorePinnedUpload(id, file, password, onProgress) {
         throw new BackupError("DAMAGED", "Backup database failed integrity check");
       classifyTables(copy);
       migrate(copy);
+      // The exact plan, from the staged rows, decides. The preview only showed
+      // what the manifest claimed.
+      plan = buildPlan({
+        digests: digestsFrom(restorableRows(copy), secretsPayload?.settings ?? {}),
+        personaSha: opened.manifest.entries.find((entry) => entry.kind === "persona")?.sha256 ?? null,
+        account: opened.manifest.account,
+      });
     } finally { copy.close(); }
+    if (plan.destructive && confirmDestructive !== true)
+      throw new BackupError("CONFIRM_REQUIRED", "Restore replaces existing values");
     fsyncStagedTree(staged(restoreId));
     writeJournal({ op: "restore", id: restoreId, step: "apply" });
     onProgress?.({ phase: "apply", bytes: total, totalBytes: total });
-    const report = applySettings(restoreId, secretsPayload);
+    const report = { ...applySettings(restoreId, secretsPayload), plan: publicPlan(plan) };
     atomicJson(path.join(dir, "metadata.json"), { ...metadata(restoreId), report });
     writeJournal({ op: "restore", id: restoreId, step: "persona" });
     validateBeforePersona(restoreId);
@@ -389,10 +405,10 @@ async function restorePinnedUpload(id, file, password, onProgress) {
   }
 }
 
-async function restoreUpload(id, password, onProgress) {
+async function restoreUpload(id, password, onProgress, options = {}) {
   const pin = uploads.pinUpload(id);
   if (!pin) throw new BackupError("NOT_FOUND", "Upload not found");
-  try { return await restorePinnedUpload(id, pin.path, password, onProgress); }
+  try { return await restorePinnedUpload(id, pin.path, password, onProgress, options); }
   finally { pin.release(); }
 }
 

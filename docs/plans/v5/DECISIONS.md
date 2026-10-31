@@ -222,6 +222,15 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
   with the target's `levix.key`, keeps the target's panel password, and holds the account data until
   a WhatsApp account that matches the backup is paired. A journal makes every step finish or undo
   after a crash. There is no CLI and no WhatsApp command for backups.
+- Decision (restore writes only what the backup holds, amended 2026-10-31 after device QA): a
+  setting, an API key, a command-table key or the persona that the backup does not hold keeps its
+  current value; a restore never resets them. The preview lists what is added, replaced, unchanged
+  or kept (`src/backup/plan.cjs`, from digests in the encrypted manifest). Any replacement or
+  removal, including account data that would replace this install's data for the same account or
+  a waiting restore, needs an explicit confirmation; the restore job rebuilds the plan from the
+  staged rows and refuses with `CONFIRM_REQUIRED` without it. Device QA found the earlier rule
+  (every restorable row replaced, persona removed when absent) erased the API key, language and
+  AI provider of an install restored from a backup that held none.
 - Decision (secret material): secret material means the WhatsApp pairing (`baileys_auth` and
   `qr_codes`), the panel password hash (`auth:password`), the recovery email record
   (`auth:recovery-email`), the panel session key (`secret:session`), and the API keys and the proxy

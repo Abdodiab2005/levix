@@ -13,6 +13,7 @@ const { BackupError, writeBackup, validatePassword } = require("./format.cjs");
 const logger = require("../utils/logger.cjs");
 const { readPairedAccount, maskAccount } = require("./account.cjs");
 const { ACCOUNT_TABLES, EXCLUDED_TABLES, RESTORABLE_BOT_KEYS, classifyTables } = require("./content.cjs");
+const { digestsFrom, restorableRows } = require("./plan.cjs");
 
 const EXCLUDED_CATEGORIES = Object.freeze([
   "WhatsApp credentials", "panel password and sessions", "recovery email", "device settings",
@@ -214,6 +215,7 @@ function capture(stage, statfs = fs.statfsSync) {
   const database = new DatabaseSync(filtered, { readOnly: true });
   try {
     return { paired, files, forbidden: rawForbiddenValues(), secrets, filtered,
+      digests: digestsFrom(restorableRows(database), secrets),
       schema: database.prepare("PRAGMA user_version").get().user_version,
       counts: countsOf(database, Boolean(paired), files.filter((f) => f.kind === "memory").length,
         Object.keys(secrets).length) };
@@ -260,7 +262,7 @@ async function createBackup({ password, onProgress, kdf, statfs } = {}) {
     const manifest = { format: "levix-backup-manifest", version: 1, created: now.toISOString(),
       app: require("../../package.json").version, schema: snapshot.schema,
       platform: `${process.platform}-${process.arch}`, account: snapshot.paired,
-      apiKeys, counts: snapshot.counts };
+      apiKeys, counts: snapshot.counts, digests: snapshot.digests };
     const written = await writeBackup({ outPath: out, password, manifest, entries: sources, kdf, onProgress });
     return { token, fileName, path: out, size: written.size };
   } catch (error) {

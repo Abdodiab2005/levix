@@ -63,7 +63,7 @@ function startExport(password) {
   return job.id;
 }
 
-function startRestore(uploadId, password) {
+function startRestore(uploadId, password, options = {}) {
   if (active || readJournal()) throw new BackupError("BUSY", "Backup job busy");
   const pin = uploads.pinUpload(uploadId);
   if (!pin) throw new BackupError("NOT_FOUND", "Upload not found");
@@ -73,7 +73,7 @@ function startRestore(uploadId, password) {
   active = job.id;
   setImmediate(async () => {
     try {
-      job.result = await restoreUpload(uploadId, password, (update) => Object.assign(job, update));
+      job.result = await restoreUpload(uploadId, password, (update) => Object.assign(job, update), options);
       job.phase = "done";
       void reconnectForMatchingResult(job.result);
     } catch (error) {
