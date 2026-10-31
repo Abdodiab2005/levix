@@ -1,7 +1,9 @@
 # Levix v5.0.0 Phase 01 results: code, build and performance
 
-Status: IN PROGRESS. PRs 01a to 01e are open for review; 01d is a draft experiment. Phase 01 started on 2026-10-30 after the owner approved and merged Phase 00
-(PRs #80, #81 and #83; PR #82 is postponed by the owner and is not part of this phase's work).
+Status: COMPLETE on 2026-11-01 for every automated gate. Merged: #84 (01a), #85 (01e), #86 (01c),
+#87 (01b), and the early PRs #81 and #83. PR #82 (privacy and public docs) merged on 2026-11-01
+after the owner's privacy decisions (Q-27). PR #88 (01d, R8) stays a draft and is not part of the
+result. Device smoke of the production-only build: NOT RUN (section "Final check").
 Every number in this file comes from a command or an artifact named next to it. A number that was
 not measured says NOT MEASURED.
 
@@ -213,6 +215,31 @@ against `docs/plans/v5/size-baseline-v4.9.2.json`.
 Google Play download and update sizes for the new build: NOT MEASURED. The v4.9.2 bundletool
 estimate is in section 2; the new AAB was not downloaded, because the artifact download ran at
 46 KB/s.
+
+Final check before merge, on `0b9f043` (PR 01b merged with `main` after Phase 02 and #82):
+
+| Check | Result | Where |
+| --- | --- | --- |
+| `npm test` | PASS, 6,381 checks, 0 failed (on `eff5961`) | local, Node 24.22.2, Linux x64 |
+| `npm run lint` | PASS, warnings and infos equal to `main` | local |
+| Two stagings of `levix-app.zip` | byte-identical, sha256 `ca7b6136…` (9,924,061 bytes) on `eff5961` | local |
+| Staging on another machine | local and CI both sha256 `ac357645035998ca7380290f0673a64c23959eed965782569b9de8a0c65ee3e9` (9,929,493 bytes) on `0b9f043` | local and CI run 41246538713 |
+| `check-stage-deps.mjs` | PASS, 19 packages loaded by the app code, all present | local |
+| `:app:assembleRelease` (arm64) and `:app:testDebugUnitTest` | PASS; arm64 release APK 59,384,164 bytes | local, debug key |
+| CI, 7 jobs | PASS | run 41246538713 |
+
+Release sizes from CI run 41246538713 (`0b9f043`, debug key) against v4.9.2:
+
+| Artifact | v4.9.2 file bytes | Phase 01 file bytes | Change |
+| --- | --- | --- | --- |
+| `levix-android-arm64.apk` | 94,439,912 | 59,389,704 | -35,050,208 (-37.1%) |
+| `levix-android-armv7.apk` | 89,781,950 | 54,962,014 | -34,819,936 (-38.8%) |
+| `levix-android.aab` | 122,807,543 | 86,625,304 | -36,182,239 (-29.5%) |
+| `levix-app.zip` stored in each APK | 43,078,460 | 9,358,767 | -33,719,693 (-78.3%) |
+
+Google Play download and update sizes: NOT MEASURED (only Play Console or `bundletool` can give
+them). Device smoke of this build (start, WhatsApp pairing, stickers, TLS, background service):
+NOT RUN. The Android device QA of 2026-10-31 ran `main` b14a3e6, before #87 merged.
 
 ### PR 01c: runtime dependency advisories (#86)
 

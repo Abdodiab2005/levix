@@ -45,7 +45,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
-| Status | IN PROGRESS since 2026-10-30. PR 01a open; results in `PHASE-01-RESULTS.md`. |
+| Status | COMPLETE on 2026-11-01 for every automated gate. Merged: #81 and #83 (early), #84 01a, #85 01e, #86 01c, #87 01b, and #82 privacy and public docs (Q-11, Q-27). #88 01d (R8) stays a draft outside the result until device proof (R-03). Device smoke of the production-only build: NOT RUN. Results in `PHASE-01-RESULTS.md`. |
 | Goal | Smaller and reproducible Android artifacts, Node 24 pinned everywhere, runtime dependency advisories fixed, size reported in CI. No behaviour change. |
 | Files | `android/scripts/stage-levix-app.sh`, `android/scripts/fetch-node-android.sh`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `package.json`, `package-lock.json`, `src/cli.js` and `deploy/install.sh` (only if Q-01 says so), `tests/android-runtime-stamp.test.mjs`, `tests/package.test.mjs`, `tests/run.mjs` (per-file timing), new size-report script, `android/app/build.gradle.kts` (R8 experiment branch only), `docs/plans/v5/PHASE-01-RESULTS.md`. |
 | Migrations | None. |
@@ -59,7 +59,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
-| Status | Decisions APPROVED by the owner on 2026-10-31 (Q-10, Q-14, Q-22, Q-24, Q-25, Q-26). PRs 02a to 02h merged on 2026-10-31; PR 02i (restore writes only what the backup holds, confirmation for destructive changes) open. Android device QA PASS on 2026-10-31 with one real test account and a simulated mismatched account; desktop manual QA NOT RUN (`PHASE-02-RESULTS.md` sections 4 and 7.1). `BACKUP_FORMAT.md` is ACCEPTED. |
+| Status | COMPLETE on 2026-11-01 for every automated gate. Decisions APPROVED on 2026-10-31 (Q-10, Q-14, Q-22, Q-24, Q-25, Q-26). PRs 02a to 02h (#91 to #99) and 02i (#100) merged. Android device QA PASS on 2026-10-31 with one real test account and a simulated mismatched account. NOT RUN: desktop manual QA and a device re-run after #100 (`PHASE-02-RESULTS.md` sections 4 and 7.1). `BACKUP_FORMAT.md` is ACCEPTED. Phase 03 waits for the owner's approval (ADR-015). |
 | Inputs | The old local branch `zcode/commands-panel-upgrades` adds nothing: both commits are patch-identical to `main` commits `ec1d762` and `cb9d09a` (Q-02, checked 2026-10-30). |
 | Goal | Local, always-encrypted backup and restore of the settings, API keys and bot data in `BACKUP_FORMAT.md` section 7, account data that activates only for the same WhatsApp account, a journaled restore that survives interruption, and a start order that never migrates without the instance lock and a verified pre-migration copy. |
 | Files | new `src/backup/` (format, create, restore, activation, journal), `src/db/db.cjs`, `src/config/lock.cjs`, `src/bootstrap/core.js` and `src/cli.js` (start order, AUDIT B-09), `src/utils/memory.cjs` (Q-25), `src/routes/` (backup routes), `frontend/src/views/` (Settings → Backup), `android/app/src/main/java/net/leviro/levix/` (`PanelBridge.kt`, `PanelFiles.kt`, Storage Access Framework save and open), `docs/plans/v5/BACKUP_FORMAT.md`. No CLI or WhatsApp command (Q-14). |
