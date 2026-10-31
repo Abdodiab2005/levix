@@ -100,7 +100,7 @@ proxies, headless mode, backups, and troubleshooting.
 | Area | What Levix provides |
 | --- | --- |
 | Commands | Utilities, notes, reminders, polls, media, speech, weather, prayer times, and more — configurable from the panel |
-| Translation | `!translate` between Arabic and English, or into a language you name — with an AI engine (your active AI provider, with its own editable prompt) or Google's translation engine, plus summary, tone, explain, and detect options |
+| Translation | `!translate` between Arabic and English, or into a language you name, with your active AI provider or Google translation (the official API with a key, or Google's public endpoint without one), plus summary, tone, explain, and detect options |
 | Group moderation | Welcome messages, anti-link, anti-spam, media rules, and forbidden words in one linked pipeline with a shared warning counter per member — at the limit the group removes the member automatically or flags them for admin review, guided by a per-group policy (Relaxed / Standard / Strict presets, warning limit, per-feature actions, warning expiry); warnings, roles, rules, and notes too |
 | AI agent | Pick Google Gemini, OpenAI / any OpenAI-compatible server, or Anthropic from the panel; each provider has its own endpoint, API key, and model, with tools for web search, page reading, memory, and role management |
 | Scheduling | One-off, daily, and weekly messages with durable jobs, delivery status, and manual retry |
