@@ -350,16 +350,14 @@ section("a forged manifest cannot skip confirmation");
 }
 
 section("crash recovery keeps a persona the backup lacks");
-{
-  writeFileSync(personaFile, "persona before crash");
-  restore.setCrashHookForTest((step) => { if (step === "persona") throw new Error("test crash"); });
-  try { await restore.restoreUpload(upload(empty.path), password); } catch {}
-  restore.setCrashHookForTest(null);
-  ok("crash left a journal", readJournal() !== null);
-  runRestoreRecovery();
-  equal("recovery finished", readJournal(), null);
-  equal("recovery keeps the persona", readFileSync(personaFile, "utf8"), "persona before crash");
-}
+writeFileSync(personaFile, "persona before crash");
+restore.setCrashHookForTest((step) => { if (step === "persona") throw new Error("test crash"); });
+try { await restore.restoreUpload(upload(empty.path), password); } catch {}
+restore.setCrashHookForTest(null);
+ok("crash left a journal", readJournal() !== null);
+runRestoreRecovery();
+equal("recovery finished", readJournal(), null);
+equal("recovery keeps the persona", readFileSync(personaFile, "utf8"), "persona before crash");
 
 section("an invalid command-table entry keeps the current one");
 {
