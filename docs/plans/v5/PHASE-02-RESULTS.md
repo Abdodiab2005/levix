@@ -53,11 +53,12 @@ Rules kept from the Codex plan review:
   chunk flag, header HMAC as additional data) of one gzip member that holds the manifest and the
   entry bytes. The password is always required. Node core only (`crypto.scrypt`,
   `crypto.createCipheriv`, `zlib`), no new dependency.
-- Creating (PR 02d): a short pause of the scheduler, sticker jobs and the panel's sticker and
-  schedule-media writes while the database snapshot is taken and the files are linked or copied
-  into a private staging folder (P2-08); then filtering, hashing, the manifest and the encrypted
-  file, written to `<data>/tmp/backup/` and served once to the signed-in operator. Creating needs
-  the backup password twice and the panel password.
+- Creating (PR 02d): one synchronous step, with no `await` inside, takes a `VACUUM INTO` snapshot
+  of the live database and hard-links the sticker and schedule-media files (written once, never
+  edited) and copies the memory files and persona into a private staging folder, so rows and files
+  match without pausing other code (P2-08). Then filtering, the secret scan, hashing, the manifest
+  and the encrypted file, written to `<data>/tmp/backup/exports/` and downloadable by the signed-in
+  operator for 30 minutes. Creating needs the backup password twice and the panel password.
 - Restoring (PR 02e): upload, preview with the backup password, confirm with the panel password,
   then a job that stages and verifies everything, migrates the staged database copy, applies the
   settings group in one transaction (API keys sealed with the target's `levix.key`) and moves the
