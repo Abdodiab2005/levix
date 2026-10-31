@@ -142,7 +142,7 @@ class LevixHostService : Service() {
             HostLog.event("node stopped: data directory needs attention (exit 78)")
             HostPrefs.setWantedRunning(this, false)
             handler.removeCallbacks(retryNode)
-            HostState.markNodeError("Data directory needs a compatible Levix version or backup repair (exit 78)")
+            HostState.markNodeError(localizedString(R.string.host_data_unavailable))
             return
         }
         if (nodeRetry >= NODE_RETRY_DELAYS_MS.size) {

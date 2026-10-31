@@ -215,6 +215,7 @@ object PanelHttp {
         headers: Map<String, String>,
         body: ByteArray,
         chunked: Boolean = false,
+        exactLength: Long? = null,
     ) {
         val host = if (uri.port > 0) "${uri.host}:${uri.port}" else (uri.host ?: "127.0.0.1:3001")
         val sent = linkedMapOf<String, String>()
@@ -241,7 +242,12 @@ object PanelHttp {
         if (cookie != null && !sent.keys.any { it.equals("Cookie", true) }) {
             put("Cookie", cookie)
         }
-        if (chunked) {
+        if (exactLength != null) {
+            require(exactLength >= 0)
+            sent.keys.filter { it.equals("Transfer-Encoding", true) || it.equals("Content-Length", true) }
+                .toList().forEach { sent.remove(it) }
+            put("Content-Length", exactLength.toString())
+        } else if (chunked) {
             sent.keys.filter { it.equals("Content-Length", true) }.toList().forEach { sent.remove(it) }
             put("Transfer-Encoding", "chunked")
         } else if (body.isNotEmpty()) put("Content-Length", body.size.toString())
@@ -270,16 +276,25 @@ object PanelHttp {
         onSocket: (LocalSocket) -> Unit,
         limitFor: (PanelWire.Response) -> Long,
         outputFor: (PanelWire.Response) -> OutputStream,
+        exactLength: Long? = null,
+        onUploadProgress: (Long) -> Unit = {},
     ): PanelWire.Response {
         require(path.startsWith('/')) { "invalid panel path" }
+        require(exactLength == null || (source != null && jsonBody == null)) {
+            "exact length requires a raw source"
+        }
         val uri = URI(ORIGIN + path)
         val local = connect(sock)
         onSocket(local)
         try {
             val body = jsonBody?.toByteArray(Charsets.UTF_8) ?: ByteArray(0)
-            writeRequest(local.outputStream, method, path, uri, headers, body, source != null)
+            writeRequest(local.outputStream, method, path, uri, headers, body,
+                source != null && exactLength == null, exactLength)
             if (source != null) {
-                val size = PanelWire.writeChunked(source, local.outputStream, maxUploadBytes)
+                val size = if (exactLength != null) {
+                    require(exactLength <= maxUploadBytes)
+                    PanelWire.writeExact(source, local.outputStream, exactLength, onUploadProgress)
+                } else PanelWire.writeChunked(source, local.outputStream, maxUploadBytes)
                 if (size == 0L) throw IOException("NO_MEDIA")
             }
             return PanelWire.readResponse(BufferedInputStream(local.inputStream), limitFor, outputFor,

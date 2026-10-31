@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="host_data_unavailable">مجلد البيانات يحتاج إلى إصدار متوافق من Levix أو إلى إصلاح من نسخة احتياطية</string>
     <string name="app_name">Levix</string>
 
     <!-- جولة الشاشة الرئيسية: كل خطوة تبرز الزر الحقيقي الذي تتحدث عنه. -->
