@@ -34,7 +34,13 @@ type Contents = {
   paired: boolean;
   maskedAccount: string | null;
 };
-type PlanSection = { added: string[]; replaced: string[]; unchanged: number; kept: string[] };
+type PlanSection = {
+  added: string[];
+  replaced: string[];
+  removed: string[];
+  unchanged: number;
+  kept: string[];
+};
 type Plan = {
   exact: boolean;
   destructive: boolean;
@@ -67,7 +73,7 @@ type Job = {
   bytes: number;
   totalBytes: number;
   done: boolean;
-  error: { code: string } | null;
+  error: { code: string; plan?: Plan } | null;
   result: unknown;
 };
 type ExportResult = { token: string; fileName: string; size: number; expiresAt: string };
@@ -204,6 +210,13 @@ export function BackupView() {
       }
       setBusy(false);
       if (next.error) {
+        const refusedPlan = next.error.code === "CONFIRM_REQUIRED" ? next.error.plan : undefined;
+        // The job found more to overwrite than the preview showed: show its plan
+        // and ask for the confirmation again.
+        if (refusedPlan) {
+          setConfirmed(false);
+          setPreview((current) => (current ? { ...current, plan: refusedPlan } : current));
+        }
         setError(message(new ApiError(0, next.error.code, next.error)));
         return;
       }
@@ -257,6 +270,7 @@ export function BackupView() {
     hostAbort.current?.abort();
     setError("");
     setPreview(null);
+    setConfirmed(false);
     setRestored(null);
     setUploadId("");
     setFileName("");
@@ -479,10 +493,17 @@ export function BackupView() {
         : t("backupNone")}
     </p>
   );
+  const nameList = (names: string[]) =>
+    names.map((name, i) => (
+      <span key={name}>
+        {i ? ", " : ""}
+        <UserText as="span">{name}</UserText>
+      </span>
+    ));
   const planNames = (label: Key, names: string[]) =>
     names.length > 0 && (
       <p className="text-sm">
-        <span className="font-semibold">{t(label)}:</span> {names.join(", ")}
+        <span className="font-semibold">{t(label)}:</span> {nameList(names)}
       </p>
     );
   const planSection = (title: Key, part: PlanSection) => (
@@ -490,12 +511,13 @@ export function BackupView() {
       <h4 className="text-sm font-semibold">{t(title)}</h4>
       {planNames("backupPlanAdded", part.added)}
       {planNames("backupPlanReplaced", part.replaced)}
+      {planNames("backupPlanRemoved", part.removed)}
       {part.unchanged > 0 && (
         <p className="text-sm text-muted">{fill(t("backupPlanUnchanged"), { n: part.unchanged })}</p>
       )}
       {part.kept.length > 0 && (
         <Disclosure summary={fill(t("backupPlanKept"), { n: part.kept.length })}>
-          <p className="text-sm text-muted">{part.kept.join(", ")}</p>
+          <p className="text-sm text-muted">{nameList(part.kept)}</p>
         </Disclosure>
       )}
     </div>

@@ -1179,9 +1179,10 @@ before creation can succeed. Unknown data must not enter an archive.
 Restore journals each change in `<data>/restore/journal.json`; startup recovers
 it under the instance lock. Settings apply on restore, but only what the backup
 holds: a missing setting, API key or persona keeps its value. `src/backup/plan.cjs`
-builds the restore plan (added, replaced, unchanged, kept) for the preview from
-the manifest digests and again from the staged rows; a destructive plan needs
-`confirmDestructive: true` or the job stops with `CONFIRM_REQUIRED`. Account data waits until
+builds the restore plan (added, replaced, removed, unchanged, kept) for the
+preview from the manifest digests; the job decides from the before/after values
+inside the apply transaction, side effects included, and rolls back with
+`CONFIRM_REQUIRED` unless the request sent `confirmDestructive: true`. Account data waits until
 the matching WhatsApp account is paired, then activates before roles and
 schedules load. A different account cannot activate it.
 

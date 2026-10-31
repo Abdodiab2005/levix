@@ -47,7 +47,7 @@ function currentDigests() {
 }
 
 function compare(source, target) {
-  const result = { added: [], replaced: [], unchanged: [], kept: [] };
+  const result = { added: [], replaced: [], removed: [], unchanged: [], kept: [] };
   for (const [key, hash] of Object.entries(source)) {
     if (!Object.hasOwn(target, key)) result.added.push(key);
     else if (target[key] === hash) result.unchanged.push(key);
@@ -102,7 +102,7 @@ function buildPlan({ digests, apiKeyNames = [], personaSha = null, account = nul
   const current = currentDigests();
   const exact = Boolean(digests);
   const settingsPlan = exact ? compare(digests.settings, current.settings)
-    : { added: [], replaced: [], unchanged: [], kept: [], unknown: true };
+    : { added: [], replaced: [], removed: [], unchanged: [], kept: [] };
   const apiKeySource = exact ? digests.apiKeys
     : Object.fromEntries(apiKeyNames.map((name) => [name, null]));
   const apiKeys = compare(apiKeySource, current.apiKeys);
@@ -117,17 +117,46 @@ function buildPlan({ digests, apiKeyNames = [], personaSha = null, account = nul
     };
   }
   const destructive = !exact || settingsPlan.replaced.length > 0 || apiKeys.replaced.length > 0 ||
+    settingsPlan.removed.length > 0 || apiKeys.removed.length > 0 ||
     persona === "replaced" || Boolean(accountData?.replacesCurrent || accountData?.replacesWaiting);
   return { exact, destructive, settings: settingsPlan, apiKeys, persona, accountData };
+}
+
+/**
+ * The plan of a restore that has run inside an open transaction: before and
+ * after are currentDigests() on each side of it, source the backup's digests.
+ * A value that changed only as a side effect (a capability guard that turns
+ * speech or vision off) counts as replaced, so it needs confirmation too.
+ */
+function appliedPlan({ before, after, source, base }) {
+  const section = (was, now, from) => {
+    const result = { added: [], replaced: [], removed: [], unchanged: [], kept: [] };
+    for (const key of new Set([...Object.keys(was), ...Object.keys(now)])) {
+      const had = Object.hasOwn(was, key);
+      const has = Object.hasOwn(now, key);
+      if (!had) result.added.push(key);
+      else if (!has) result.removed.push(key);
+      else if (was[key] !== now[key]) result.replaced.push(key);
+      else if (Object.hasOwn(from, key)) result.unchanged.push(key);
+      else result.kept.push(key);
+    }
+    for (const list of Object.values(result)) list.sort();
+    return result;
+  };
+  const settingsPlan = section(before.settings, after.settings, source.settings);
+  const apiKeys = section(before.apiKeys, after.apiKeys, source.apiKeys);
+  const destructive = [settingsPlan, apiKeys].some((part) => part.replaced.length + part.removed.length > 0) ||
+    base.persona === "replaced" || Boolean(base.accountData?.replacesCurrent || base.accountData?.replacesWaiting);
+  return { exact: true, destructive, settings: settingsPlan, apiKeys, persona: base.persona, accountData: base.accountData };
 }
 
 /** The plan as the panel sees it: names only, never a value or a digest. */
 function publicPlan(plan) {
   const names = (list) => list.map((key) => key.startsWith("setting:") ? key.slice(8) : key);
   const section = (part) => ({ added: names(part.added), replaced: names(part.replaced),
-    unchanged: part.unchanged.length, kept: names(part.kept) });
+    removed: names(part.removed), unchanged: part.unchanged.length, kept: names(part.kept) });
   return { exact: plan.exact, destructive: plan.destructive, settings: section(plan.settings),
     apiKeys: section(plan.apiKeys), persona: plan.persona, accountData: plan.accountData };
 }
 
-module.exports = { digest, digestsFrom, restorableRows, buildPlan, publicPlan };
+module.exports = { digest, digestsFrom, restorableRows, currentDigests, buildPlan, appliedPlan, publicPlan };

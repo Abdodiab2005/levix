@@ -15,7 +15,8 @@ const secrets = require("./src/config/secrets.cjs");
 const { createBackup } = require("./src/backup/create.cjs");
 const restore = require("./src/backup/restore.cjs");
 const { openBackup, writeBackup, validateManifest } = require("./src/backup/format.cjs");
-const { buildPlan, publicPlan } = require("./src/backup/plan.cjs");
+const { buildPlan, publicPlan, currentDigests } = require("./src/backup/plan.cjs");
+const { runRestoreRecovery } = require("./src/backup/recovery.cjs");
 const { readJournal } = require("./src/backup/journal.cjs");
 
 const password = "merge-test-backup-password";
@@ -287,6 +288,88 @@ section("routes: preview plan and confirmation");
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+}
+
+section("side effects of a restore need confirmation");
+{
+  // gpt-4o-mini is a seeded model without speech input, so applying the
+  // provider switch turns speech off as a side effect.
+  settings.set("ai_provider", "openai");
+  settings.set("openai_model", "gpt-4o-mini");
+  settings.set("ai_stt_enabled", null);
+  store.authRemove("creds");
+  const providerOnly = await createBackup({ password, kdf });
+  pair(accountA);
+  settings.set("ai_provider", null);
+  settings.set("openai_model", null);
+  settings.set("ai_stt_enabled", true);
+  const preview = publicPlan(await planOf(providerOnly.path));
+  ok("preview adds the provider", preview.settings.added.includes("ai_provider"));
+  ok("preview keeps speech", preview.settings.kept.includes("ai_stt_enabled"));
+  let refused;
+  try { await restore.restoreUpload(upload(providerOnly.path), password); }
+  catch (error) { refused = error; }
+  equal("side effect refused", refused?.code, "CONFIRM_REQUIRED");
+  ok("refusal names the side effect", refused?.plan?.settings.replaced.includes("ai_stt_enabled"));
+  equal("refusal is about the side effect only", refused?.plan?.accountData, null);
+  equal("refusal keeps speech on", settings.get("ai_stt_enabled"), true);
+  equal("refusal keeps the provider", settings.get("ai_provider"), "gemini");
+  await restore.restoreUpload(upload(providerOnly.path), password, undefined, CONFIRM);
+  equal("confirmed restore switches the provider", settings.get("ai_provider"), "openai");
+  equal("confirmed restore turns speech off", settings.get("ai_stt_enabled"), false);
+  settings.set("ai_provider", null);
+  settings.set("openai_model", null);
+  settings.set("ai_stt_enabled", null);
+}
+
+section("a forged manifest cannot skip confirmation");
+{
+  settings.set("bot_language", "ar");
+  settings.set("gemini_api_key", "gem-current-value");
+  runtime.setPrefix(">");
+  writeFileSync(personaFile, "backup persona");
+  const opened = await openBackup({ path: partial.path, password });
+  const dest = mkdtempSync(join(data, "forged-"));
+  const { memory } = await opened.extract({ dest });
+  const now = currentDigests();
+  const forge = (claimed, current) => Object.fromEntries(Object.keys(claimed)
+    .map((key) => [key, current[key] ?? claimed[key]]));
+  const manifest = { ...opened.manifest, digests: {
+    settings: forge(opened.manifest.digests.settings, now.settings),
+    apiKeys: forge(opened.manifest.digests.apiKeys, now.apiKeys) } };
+  const forged = join(data, "forged.levixbak");
+  await writeBackup({ outPath: forged, password, manifest, kdf,
+    entries: manifest.entries.map((entry) => ({ ...entry, source: memory[entry.path] ?? join(dest, entry.path) })) });
+  equal("forged preview looks harmless", publicPlan(await planOf(forged)).destructive, false);
+  let refused;
+  try { await restore.restoreUpload(upload(forged), password); }
+  catch (error) { refused = error; }
+  equal("job refuses the forged restore", refused?.code, "CONFIRM_REQUIRED");
+  ok("job plan shows the real replacement", refused?.plan?.settings.replaced.includes("bot_language"));
+  equal("forged restore changes nothing", settings.get("bot_language"), "ar");
+}
+
+section("crash recovery keeps a persona the backup lacks");
+{
+  writeFileSync(personaFile, "persona before crash");
+  restore.setCrashHookForTest((step) => { if (step === "persona") throw new Error("test crash"); });
+  try { await restore.restoreUpload(upload(empty.path), password); } catch {}
+  restore.setCrashHookForTest(null);
+  ok("crash left a journal", readJournal() !== null);
+  runRestoreRecovery();
+  equal("recovery finished", readJournal(), null);
+  equal("recovery keeps the persona", readFileSync(personaFile, "utf8"), "persona before crash");
+}
+
+section("an invalid command-table entry keeps the current one");
+{
+  store.saveBotSetting("command_permissions", { ping: "NOT_A_LEVEL", help: "MEMBERS" });
+  const badPermissions = await createBackup({ password, kdf });
+  store.deleteBotSetting("command_permissions");
+  runtime.setPermission("ping", "ADMINS_ONLY");
+  const result = await restore.restoreUpload(upload(badPermissions.path), password, undefined, CONFIRM);
+  ok("entry reported as skipped", result.skipped.some((item) => item.key === "command_permissions"));
+  equal("current permission kept", runtime.getPermission("ping"), "ADMINS_ONLY");
 }
 
 finish();

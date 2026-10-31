@@ -80,7 +80,7 @@ function startRestore(uploadId, password, options = {}) {
       job.phase = "error";
       const code = error?.code === "WRONG_PASSWORD" && uploads.wrongPassword(uploadId) ?
         "too_many_attempts" : error instanceof BackupError ? error.code : "IO";
-      job.error = { code };
+      job.error = code === "CONFIRM_REQUIRED" && error.plan ? { code, plan: error.plan } : { code };
     } finally {
       pin.release();
       job.done = true;

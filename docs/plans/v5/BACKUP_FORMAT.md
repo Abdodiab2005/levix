@@ -229,9 +229,8 @@ cannot restore it from the UI.
    into `<data>/restore/<id>/staged/`, runs `PRAGMA integrity_check` on the database copy and
    migrates the copy to the running schema with the normal migrations. The `secrets.json` entry is
    decrypted into memory only, at most 1 MiB, and is never written into the staged folder. Live data
-   is untouched until all of this passes. The job then builds the plan again from the staged rows
-   and the decrypted keys, so a manifest cannot hide a change, and stops with `CONFIRM_REQUIRED`
-   before changing anything when that plan is destructive and the request did not confirm it.
+   is untouched until all of this passes. The journal written for staging only lets recovery
+   delete the staged files after a crash; no live value changes before step 6 decides.
 6. The settings group is applied in one SQLite transaction on the live database. Only what the
    backup holds is written: each restorable `bot_settings` row in the backup is added or replaces
    the current one, and each API key in `secrets.json` replaces the current key. A setting or API
@@ -239,8 +238,14 @@ cannot restore it from the UI.
    (`prefix`, `command_permissions`, `command_aliases`, `disabled_commands`) replaces that whole
    entry; one the backup lacks stays. The target keeps its device keys, panel authentication rows,
    session key and pairing. The API keys are sealed with the target's `levix.key` inside that
-   transaction. `ai-persona.md` is replaced atomically only when the backup holds a persona; a
-   backup without one leaves the current persona as it is. The new values take effect like a settings import. If
+   transaction. Inside that transaction the job compares this install's settings and API keys
+   before and after the apply, side effects included (a provider or model change can turn speech
+   or vision off through the capability guards). When anything was replaced or removed, or the
+   persona or account data would be replaced, and the request did not confirm it, the transaction
+   rolls back and the job ends with `CONFIRM_REQUIRED` and that exact plan, so a forged manifest
+   cannot hide a change. A command-table entry is replaced all or nothing: one invalid item puts
+   the current entry back. `ai-persona.md` is replaced atomically only when the backup holds a
+   persona; a backup without one leaves the current persona as it is, also after crash recovery. The new values take effect like a settings import. If
    Levix stops before that transaction commits, recovery discards the staged restore and the
    operator runs the restore again with the backup password. After the commit the keys are already
    sealed in `levix.db`. No file in the data directory holds a plaintext secret at any moment.

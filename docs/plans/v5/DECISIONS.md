@@ -227,8 +227,9 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
   current value; a restore never resets them. The preview lists what is added, replaced, unchanged
   or kept (`src/backup/plan.cjs`, from digests in the encrypted manifest). Any replacement or
   removal, including account data that would replace this install's data for the same account or
-  a waiting restore, needs an explicit confirmation; the restore job rebuilds the plan from the
-  staged rows and refuses with `CONFIRM_REQUIRED` without it. Device QA found the earlier rule
+  a waiting restore, needs an explicit confirmation; the restore job compares the values before
+  and after the apply inside its transaction, side effects included, and rolls back with
+  `CONFIRM_REQUIRED` without it. Device QA found the earlier rule
   (every restorable row replaced, persona removed when absent) erased the API key, language and
   AI provider of an install restored from a backup that held none.
 - Decision (secret material): secret material means the WhatsApp pairing (`baileys_auth` and

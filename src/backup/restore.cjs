@@ -14,7 +14,7 @@ const { classifyTables, RESTORABLE_SETTING_KEYS, COMMAND_TABLE_KEYS } = require(
 const { readPairedAccount, maskAccount, accountsMatch } = require("./account.cjs");
 const { writeJournal, readJournal, clearJournal, writeOutcome, readOutcome, atomicJson } = require("./journal.cjs");
 const uploads = require("./uploads.cjs");
-const { buildPlan, digestsFrom, restorableRows, publicPlan } = require("./plan.cjs");
+const { buildPlan, appliedPlan, currentDigests, digestsFrom, restorableRows, publicPlan } = require("./plan.cjs");
 
 const root = () => {
   const folder = ensureDataDir("restore");
@@ -107,7 +107,7 @@ function fsyncStagedTree(folder) {
   fsyncDirectory(folder);
 }
 
-function applySettings(id, secrets) {
+function applySettings(id, secrets, { base, confirmDestructive = false } = {}) {
   const source = new DatabaseSync(path.join(staged(id), "db", "levix.db"), { readOnly: true });
   const report = { applied: [], skipped: [], restartNeeded: [] };
   const skip = (key) => report.skipped.push({ key, reason: "Rejected value" });
@@ -115,6 +115,7 @@ function applySettings(id, secrets) {
     db.exec("PRAGMA synchronous = FULL");
     db.exec("BEGIN IMMEDIATE");
     try {
+      const before = currentDigests();
       // Only what the backup contains is written. A setting, an API key or a
       // command-table entry the backup lacks keeps its value on this install.
       const rows = source.prepare(`SELECT key,
@@ -150,35 +151,43 @@ function applySettings(id, secrets) {
       for (const row of rows.filter((item) => COMMAND_TABLE_KEYS.includes(item.key) && item.oversized)) skip(row.key);
       const commandRows = new Map(rows.filter((row) => COMMAND_TABLE_KEYS.includes(row.key) && !row.oversized)
         .map((row) => [row.key, safeJson(row.value, null)]));
-      // A valid command-table key in the backup replaces this install's whole
-      // entry; a missing or unreadable one leaves the current entry alone.
-      const isMap = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
-      const valid = { command_permissions: isMap, command_aliases: isMap, disabled_commands: Array.isArray };
-      for (const [key, check] of Object.entries(valid)) {
-        if (commandRows.has(key) && check(commandRows.get(key))) store.deleteBotSetting(key);
-      }
       if (commandRows.has("prefix")) {
         try { runtime.setPrefix(commandRows.get("prefix")); report.applied.push("prefix"); }
         catch { skip("prefix"); }
       }
-      const permissions = commandRows.get("command_permissions");
-      if (permissions && typeof permissions === "object" && !Array.isArray(permissions)) {
-        for (const [name, level] of Object.entries(permissions)) {
-          try { runtime.setPermission(name, level); } catch { skip("permission"); }
+      // A command-table key in the backup replaces this install's whole entry,
+      // all or nothing: one bad item puts the current entry back and skips it.
+      const isMap = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+      const replaceEntry = (key, value, valid, applyAll) => {
+        if (!commandRows.has(key)) return;
+        if (!valid(value)) { skip(key); return; }
+        const previous = store.getBotSetting(key, null);
+        store.deleteBotSetting(key);
+        try { applyAll(value); report.applied.push(key); }
+        catch {
+          store.deleteBotSetting(key);
+          if (previous !== null) store.saveBotSetting(key, previous);
+          skip(key);
         }
-        report.applied.push("command_permissions");
-      }
-      const aliases = commandRows.get("command_aliases");
-      if (aliases && typeof aliases === "object" && !Array.isArray(aliases)) {
-        for (const [name, list] of Object.entries(aliases)) {
-          try { runtime.setAliases(name, list); } catch { skip("aliases"); }
-        }
-        report.applied.push("command_aliases");
-      }
-      const disabled = commandRows.get("disabled_commands");
-      if (Array.isArray(disabled)) {
-        for (const name of disabled) runtime.setEnabled(String(name), false);
-        report.applied.push("disabled_commands");
+      };
+      replaceEntry("command_permissions", commandRows.get("command_permissions"), isMap, (map) => {
+        for (const [name, level] of Object.entries(map)) runtime.setPermission(name, level);
+      });
+      replaceEntry("command_aliases", commandRows.get("command_aliases"), isMap, (map) => {
+        for (const [name, list] of Object.entries(map)) runtime.setAliases(name, list);
+      });
+      replaceEntry("disabled_commands", commandRows.get("disabled_commands"), Array.isArray, (list) => {
+        for (const name of list) runtime.setEnabled(String(name), false);
+      });
+      // The decision uses what this transaction actually changed, side effects
+      // included. Refusing rolls back, so nothing live has changed.
+      const plan = appliedPlan({ before, after: currentDigests(),
+        source: digestsFrom(rows, secrets?.settings ?? {}), base });
+      report.plan = publicPlan(plan);
+      if (plan.destructive && confirmDestructive !== true) {
+        const refused = new BackupError("CONFIRM_REQUIRED", "Restore replaces existing values");
+        refused.plan = report.plan;
+        throw refused;
       }
       crash("inside-apply");
       store.saveBotSetting("restore:applied", JSON.stringify({ id }));
@@ -362,20 +371,18 @@ async function restorePinnedUpload(id, file, password, onProgress, { confirmDest
         throw new BackupError("DAMAGED", "Backup database failed integrity check");
       classifyTables(copy);
       migrate(copy);
-      // The exact plan, from the staged rows, decides. The preview only showed
-      // what the manifest claimed.
+      // Persona and account parts of the plan; applySettings adds the exact
+      // settings and API key changes inside its transaction and decides there.
       plan = buildPlan({
         digests: digestsFrom(restorableRows(copy), secretsPayload?.settings ?? {}),
         personaSha: opened.manifest.entries.find((entry) => entry.kind === "persona")?.sha256 ?? null,
         account: opened.manifest.account,
       });
     } finally { copy.close(); }
-    if (plan.destructive && confirmDestructive !== true)
-      throw new BackupError("CONFIRM_REQUIRED", "Restore replaces existing values");
     fsyncStagedTree(staged(restoreId));
     writeJournal({ op: "restore", id: restoreId, step: "apply" });
     onProgress?.({ phase: "apply", bytes: total, totalBytes: total });
-    const report = { ...applySettings(restoreId, secretsPayload), plan: publicPlan(plan) };
+    const report = applySettings(restoreId, secretsPayload, { base: plan, confirmDestructive });
     atomicJson(path.join(dir, "metadata.json"), { ...metadata(restoreId), report });
     writeJournal({ op: "restore", id: restoreId, step: "persona" });
     validateBeforePersona(restoreId);

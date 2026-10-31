@@ -117,7 +117,7 @@ Rules kept from the Codex plan review:
 | 02f | Account activation (Q-24): match rule, activation at connection open before roles and schedules load, journaled folder moves, recovery; tests for same account, recycled number, different account, unlink, crash at each step | 02e |
 | 02g | Panel UI: Settings → Backup (create, download, upload, preview, confirm, progress, errors, pending account notice), both languages | 02f |
 | 02h | Android: Storage Access Framework save and open with native streaming, host coordination; `PRIVACY.md`, `SETUP.md` and the manual offline QA steps | 02g |
-| 02i | Restore safety after device QA: a restore writes only what the backup holds (missing settings, API keys and persona keep their values); restore plan in the preview from manifest digests (`src/backup/plan.cjs`); explicit confirmation for replacements and removals, enforced again by the job from the staged rows (`CONFIRM_REQUIRED`); tests in `tests/backup-restore-merge.test.mjs` | `main` |
+| 02i | Restore safety after device QA: a restore writes only what the backup holds (missing settings, API keys and persona keep their values); restore plan in the preview from manifest digests (`src/backup/plan.cjs`); explicit confirmation for replacements and removals, enforced by the job from the before/after values inside the apply transaction, side effects included (`CONFIRM_REQUIRED`); command-table entries replaced all or nothing; tests in `tests/backup-restore-merge.test.mjs` | `main` |
 
 The PRs form one stack in this order, so each shows only its own change. 02a, 02b and 02c touch
 separate files and are built in parallel, then stacked.
@@ -170,7 +170,10 @@ The owner also decided that every exported backup is encrypted with a user-provi
   data replacement and a waiting restore count as destructive; a different account waits without
   touching the current account rows; wrong password and damaged files change nothing; a manifest
   without digests stays valid and its plan counts as destructive; the preview route returns names
-  only (no digest, no value) and only a literal `confirmDestructive: true` confirms.
+  only (no digest, no value) and only a literal `confirmDestructive: true` confirms; a provider
+  switch that turns speech off as a side effect is refused until confirmed; a forged manifest whose
+  digests claim no change is refused by the job; crash recovery keeps a persona the backup lacks;
+  an invalid command-table item keeps the current entry.
 - `settings-transfer` tests unchanged.
 - Core gates plus Docker, SEA and tarball in CI. Android save, open and restore on a device: see
   section 7.1.
