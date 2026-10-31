@@ -205,22 +205,18 @@ job prints a component size table and the delta against the previous release.
 
 ### 10.2 Backup (Phase 02)
 
-A backup is a local archive with a manifest (format version, app version, schema version, file list
-with sha256). The database is copied through the SQLite backup API from `node:sqlite`. Restore runs
-preview, validation, checksum check, stop of the session and the scheduler, staging, switch, then
-restart. A schema newer than the running app is refused. Three design points must be settled in the
-Phase 02 ADR before the format is fixed:
+Decided on 2026-10-31; the format and the restore rules are in `BACKUP_FORMAT.md` and ADR-016.
 
-1. Secrets share tables with ordinary data (`baileys_auth`, `setting:<secret key>` rows, `auth:*`
-   and `secret:session` in `bot_settings`). "Secrets excluded" therefore means a filtered copy of
-   the database with those rows removed, plus a defined restore rule for them (Q-22).
-2. A restore replaces several files and directories (database, memory, persona, schedule media,
-   stickers). One rename does not make that atomic. The switch needs a journal written before the
-   first move and a recovery step at the next start that completes or undoes an interrupted switch.
-3. A backup before a pending migration is impossible today, because importing the store opens and
-   migrates the database before the instance lock (AUDIT B-09). Phase 02 changes the start order:
-   open the database without migrating, take the lock, detect pending migrations, write the backup,
-   then migrate.
+1. Every exported backup is encrypted with the operator's password. It holds a filtered copy of the
+   database (no `baileys_auth`, `auth:*`, `secret:session`, device keys or unknown keys), the API
+   keys in plain text inside the encrypted payload, the persona, memory, schedule media and
+   stickers. A restore seals the API keys with the target's `levix.key`.
+2. A restore never replaces the live database file or `levix.key`. It applies the settings in one
+   transaction and holds the account data until a matching WhatsApp account is paired; the folder
+   moves of an activation are journaled and recovered at the next start.
+3. The start path takes the lock, runs restore recovery, opens the database without migrating,
+   refuses a newer schema, writes a verified pre-migration copy and runs all pending migrations in
+   one transaction (AUDIT B-09).
 
 ### 10.3 Locale catalog (Phase 03)
 
