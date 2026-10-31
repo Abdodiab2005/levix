@@ -206,9 +206,10 @@ jobs:
             ~/.cache/levix-android
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: android-${{ runner.os }}-${{ hashFiles('android/scripts/fetch-node-android.sh', 'android/scripts/build-ffmpeg-android.sh', 'android/scripts/termux-packages.lock', 'android/gradle/wrapper/gradle-wrapper.properties', 'package-lock.json', 'frontend/package-lock.json') }}
+          # The v2 namespace starts empty, so the first build after the runtime archive change is a cold build from the release asset.
+          key: android-${{ runner.os }}-v2-${{ hashFiles('android/scripts/fetch-node-android.sh', 'android/scripts/build-ffmpeg-android.sh', 'android/scripts/termux-packages.lock', 'android/scripts/node-runtime.lock', 'android/scripts/node-runtime-archive.py', 'android/gradle/wrapper/gradle-wrapper.properties', 'package-lock.json', 'frontend/package-lock.json') }}
           restore-keys: |
-            android-${{ runner.os }}-
+            android-${{ runner.os }}-v2-
       - name: Set up Android SDK (API 36) + NDK
         run: |
           set -e

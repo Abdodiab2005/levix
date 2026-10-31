@@ -70,7 +70,11 @@ equal(
 ok("the FFmpeg recipe is a stamp input", scriptInputs.includes("build-ffmpeg-android.sh"));
 ok("the runtime recipe itself is a stamp input", scriptInputs.includes("fetch-node-android.sh"));
 ok("the pin file is a stamp input", scriptInputs.includes("termux-packages.lock"));
+ok("node-runtime.lock is a stamp input", scriptInputs.includes("node-runtime.lock"));
+ok("node-runtime-archive.py is a stamp input", scriptInputs.includes("node-runtime-archive.py"));
 ok("Gradle hashes the pin file too", gradleInputs.includes("termux-packages.lock"));
+ok("Gradle hashes node-runtime.lock", gradleInputs.includes("node-runtime.lock"));
+ok("Gradle hashes node-runtime-archive.py", gradleInputs.includes("node-runtime-archive.py"));
 for (const input of scriptInputs) {
   ok(`stamp input ${input} exists in android/scripts`, existsSync(join(SCRIPTS, input)));
 }
@@ -155,41 +159,41 @@ if (!haveTools) {
   ok("--print-stamp rejects an unknown ABI", bad.status !== 0 && /unknown ABI/.test(bad.stderr));
 }
 
-section("pinned debs, not the cache directory");
+section("the runtime archive, not Termux debs");
 
-// The bug extracted every cached deb: `for deb in "$WORKDIR/debs"/*.deb`.
-function debGlobLoops(src) {
-  const bodies = [];
-  const open = /for\s+\w+\s+in\s+"\$WORKDIR\/debs"\/\*\.deb;\s*do/g;
-  for (let match = open.exec(src); match; match = open.exec(src)) {
-    const token = /\b(?:do|done)\b/g;
-    token.lastIndex = match.index + match[0].length;
-    let depth = 1;
-    let end = src.length;
-    for (let step = token.exec(src); step; step = token.exec(src)) {
-      depth += step[0] === "do" ? 1 : -1;
-      if (depth === 0) {
-        end = step.index + step[0].length;
-        break;
-      }
-    }
-    bodies.push(src.slice(match.index, end));
-  }
-  return bodies;
-}
-
+// --update-pins also runs `pins check`. The default staging check is the later one.
+const stagingAt = fetchSrc.lastIndexOf('pins check "$PIN_FILE"');
+const staging = stagingAt >= 0 ? fetchSrc.slice(stagingAt) : "";
+ok("staging starts at the default pins check", stagingAt > fetchSrc.indexOf("--update-pins"));
+ok("the fetch script never calls dpkg-deb", !fetchSrc.includes("dpkg-deb"));
+ok("staging never calls dpkg-deb", staging.length > 0 && !staging.includes("dpkg-deb"));
 ok(
-  "extraction walks pinned_debs and extracts that dest",
-  /for dest in "\$\{pinned_debs\[@\]\}"; do\s+dpkg-deb -x "\$dest"/.test(fetchSrc),
+  "staging never downloads a Termux url",
+  staging.length > 0 && !staging.includes("packages.termux.dev"),
 );
-const debGlobBodies = debGlobLoops(fetchSrc);
+const fetchEnd = staging.indexOf("Downloading patchelf");
+const runtimeFetch = fetchEnd >= 0 ? staging.slice(0, fetchEnd) : "";
+// Any line that runs curl, including `if ! curl ...`.
+const runtimeCurls = runtimeFetch.match(/^.*\bcurl\s.*$/gm) ?? [];
 ok(
-  "a $WORKDIR/debs glob loop does not run dpkg-deb",
-  debGlobBodies.length > 0 && debGlobBodies.every((body) => !body.includes("dpkg-deb")),
+  "the runtime fetch downloads only the node-runtime.lock url",
+  runtimeCurls.length === 1 &&
+    runtimeCurls[0].includes('"$runtime_url"') &&
+    !/packages\.termux\.dev|\$BASE/.test(runtimeFetch),
 );
 ok(
-  "a cached deb that is not pinned is deleted",
-  /for deb in "\$WORKDIR\/debs"\/\*\.deb;[\s\S]{0,600}rm -f "\$deb"/.test(fetchSrc),
+  "the patchelf download is checked against a pinned sha256",
+  /^PATCHELF_SHA256="[0-9a-f]{64}"$/m.test(fetchSrc) &&
+    fetchSrc.includes('"$(sha256sum "$tmp/patchelf.tgz" | cut -c1-64)" != "$PATCHELF_SHA256"'),
+);
+ok(
+  "staging checks the archive sha256",
+  staging.includes('[ "$(sha256sum "$ARCHIVE" | cut -c1-64)" = "$runtime_sha" ]') &&
+    staging.includes('"$runtime_have" != "$runtime_sha"'),
+);
+ok(
+  "staging extracts through node-runtime-archive.py",
+  staging.includes('"$SCRIPTS/node-runtime-archive.py" extract'),
 );
 ok(
   "Gradle requires the lock's nodejs-lts version inside libnode.so",

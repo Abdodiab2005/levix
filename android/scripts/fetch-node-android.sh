@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
-# Fetch Bionic Node.js 24 runtimes and stage them for jniLibs.
+# Fetch the Android Node.js 24 runtime and stage it for jniLibs.
 #
 # Stages one directory per ABI under $CACHE/node-runtime:
-#   arm64-v8a/     from Termux aarch64 packages
-#   armeabi-v7a/   from Termux arm packages
+#   arm64-v8a/     from the aarch64 half of the runtime archive
+#   armeabi-v7a/   from the arm half of the runtime archive
 #
 # Termux is not required on the phone — only the ELF files are packaged into
-# the APK. FFmpeg is built from source per ABI by build-ffmpeg-android.sh.
+# the APK. The default path downloads the one archive pinned in
+# node-runtime.lock, checks its sha256 and size, and extracts it with
+# node-runtime-archive.py. That archive is the only source of the Android
+# Node runtime: this path never contacts Termux and never falls back to
+# another Node. FFmpeg is built from source per ABI by build-ffmpeg-android.sh.
 #
 # Usage:
-#   fetch-node-android.sh [abi ...]        # default: arm64-v8a armeabi-v7a
-#   LEVIX_ANDROID_ABIS="arm64-v8a" ...     # same list via env (what Gradle reads)
-#   fetch-node-android.sh --print-stamp <abi>   # print the stamp, stage nothing
-#   fetch-node-android.sh --check-pins [file]   # validate a pin file offline, stage nothing
-#   fetch-node-android.sh --update-pins         # refresh pins from Termux, stage nothing
+#   fetch-node-android.sh [abi ...]              # default: arm64-v8a armeabi-v7a
+#   LEVIX_ANDROID_ABIS="arm64-v8a" ...           # same list via env (what Gradle reads)
+#   fetch-node-android.sh --print-stamp <abi>    # print the stamp, stage nothing
+#   fetch-node-android.sh --check-pins [file]    # validate a pin file offline, stage nothing
+#   fetch-node-android.sh --update-pins          # refresh pins from Termux, stage nothing
+#   fetch-node-android.sh --build-archive [dir]  # build the runtime archive, stage nothing
 #
 # Each staged runtime gets a stamp (node-runtime/<abi>/.levix-stamp) naming
 # the recipes it was built from; Gradle recomputes it and refuses to package a
@@ -31,6 +36,9 @@ SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE="${LEVIX_NODE_CACHE:-$HOME/.cache/levix-android}"
 BASE="https://packages.termux.dev/apt/termux-main"
 PATCH="$CACHE/bin/patchelf"
+PATCHELF_SHA256="ce84f2447fb7a8679e58bc54a20dc2b01b37b5802e12c57eece772a6f14bf3f0"
+PATCHELF_BIN_SHA256="b699cb82300dfd08ea6c895d8829b46bea970cfa737fa34188d8256ca89404e5"
+PATCHELF_URL="https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-x86_64.tar.gz"
 # Everything Node links against; must cover every DT_NEEDED of the node
 # binary (verified below) apart from Bionic's own libc/libm/libdl.
 PACKAGES_NEED=(nodejs-lts libc++ openssl c-ares libicu libsqlite zlib)
@@ -56,10 +64,11 @@ termux_arch() {
 # when it is missing or different. RUNTIME_STAMP_FILE, RUNTIME_STAMP_INPUTS and
 # the line format must match runtimeStampFile / runtimeStampInputs there;
 # tests/android-runtime-stamp.test.mjs holds the two sides together.
-# termux-packages.lock is one of the inputs: a pin change has to restage,
-# or the runtime built from the previous pins stays in the APK.
+# termux-packages.lock, node-runtime.lock and node-runtime-archive.py are
+# inputs with the scripts: a pin change or an extractor change has to restage,
+# or the runtime built from the previous recipe stays in the APK.
 RUNTIME_STAMP_FILE=".levix-stamp"
-RUNTIME_STAMP_INPUTS=(build-ffmpeg-android.sh fetch-node-android.sh termux-packages.lock)
+RUNTIME_STAMP_INPUTS=(build-ffmpeg-android.sh fetch-node-android.sh termux-packages.lock node-runtime.lock node-runtime-archive.py)
 
 runtime_stamp() {
   local abi="$1" input
@@ -85,12 +94,11 @@ ARCHES = ("aarch64", "arm")
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 NODE_MAJOR = os.environ["LEVIX_NODE_MAJOR"]
 HEADER = """# Termux packages the Android Node runtime is built from (ADR-001).
-# fetch-node-android.sh downloads exactly these files, checks each sha256 and
-# stages nothing else. Termux serves only the newest build of each package, so
-# a pinned file stops downloading once Termux updates that package. Refresh
-# the pins with
+# These are the Termux packages the runtime archive is built from
+# (--build-archive). A default build downloads the archive pinned in
+# node-runtime.lock instead. Refresh with
 #   bash android/scripts/fetch-node-android.sh --update-pins
-# which refuses a nodejs-lts that is not Node 24, then review the diff.
+# which refuses a nodejs-lts that is not Node 24, then rebuild the archive.
 #
 # arch package version sha256 url
 """
@@ -407,7 +415,98 @@ if [ "${1:-}" = "--update-pins" ]; then
   exit 0
 fi
 
+if [ "${1:-}" = "--build-archive" ]; then
+  python3 "$SCRIPTS/node-runtime-archive.py" build \
+    --lock "$PIN_FILE" \
+    --debs "$CACHE/termux-debs" \
+    --licenses "$CACHE/license-sources" \
+    --out "${2:-$CACHE/runtime-archive}"
+  exit 0
+fi
+
 pins check "$PIN_FILE" "${PACKAGES_NEED[@]}"
+
+# The one runtime archive. A lock with any other shape is a hard error.
+# Nothing in this path contacts Termux or downloads another Node.
+RUNTIME_LOCK="$SCRIPTS/node-runtime.lock"
+runtime_count=0
+runtime_file=""
+runtime_sha=""
+runtime_size=""
+runtime_url=""
+while IFS= read -r runtime_line || [ -n "${runtime_line:-}" ]; do
+  case "$runtime_line" in
+    ""|\#*) continue ;;
+  esac
+  runtime_count=$((runtime_count + 1))
+  if [ "$runtime_count" -gt 1 ]; then
+    printf '%s\n' "$RUNTIME_LOCK: expected exactly one data row" >&2
+    exit 1
+  fi
+  runtime_rest=""
+  read -r runtime_file runtime_sha runtime_size runtime_url runtime_rest <<< "$runtime_line"
+  if [ -n "$runtime_rest" ] || [ -z "$runtime_file" ] || [ -z "$runtime_sha" ] \
+    || [ -z "$runtime_size" ] || [ -z "$runtime_url" ]; then
+    printf '%s\n' "$RUNTIME_LOCK: expected 4 fields (file sha256 size url)" >&2
+    exit 1
+  fi
+done < "$RUNTIME_LOCK"
+if [ "$runtime_count" -ne 1 ]; then
+  printf '%s\n' "$RUNTIME_LOCK: expected exactly one data row, got $runtime_count" >&2
+  exit 1
+fi
+if [[ ! "$runtime_sha" =~ ^[0-9a-f]{64}$ ]]; then
+  printf '%s\n' "$RUNTIME_LOCK: sha256 is not 64 lowercase hex" >&2
+  exit 1
+fi
+if [[ ! "$runtime_size" =~ ^[0-9]+$ ]]; then
+  printf '%s\n' "$RUNTIME_LOCK: size is not numeric" >&2
+  exit 1
+fi
+if [[ "$runtime_url" != https://* ]]; then
+  printf '%s\n' "$RUNTIME_LOCK: url does not start with https://" >&2
+  exit 1
+fi
+runtime_node="$(pins node-version "$PIN_FILE" aarch64)"
+runtime_expected="levix-node-runtime-${runtime_node}-android.tar.xz"
+if [ "$runtime_file" != "$runtime_expected" ]; then
+  printf '%s\n' "$RUNTIME_LOCK: file is $runtime_file, expected $runtime_expected" >&2
+  exit 1
+fi
+mkdir -p "$CACHE/runtime-archive"
+ARCHIVE="$CACHE/runtime-archive/$runtime_file"
+if [ -f "$ARCHIVE" ] && [ "$(sha256sum "$ARCHIVE" | cut -c1-64)" = "$runtime_sha" ]; then
+  echo "reuse $ARCHIVE"
+else
+  echo "GET $runtime_url"
+  if ! curl -fL --retry 3 -o "$ARCHIVE.part" "$runtime_url"; then
+    rm -f "$ARCHIVE.part"
+    printf '%s\n' "Download failed: $runtime_url" >&2
+    printf '%s\n' "The archive is the only source of the Android Node runtime." >&2
+    printf '%s\n' "See \"Rebuilding the runtime archive\" in ANDROID.md." >&2
+    exit 1
+  fi
+  runtime_have="$(sha256sum "$ARCHIVE.part" | cut -c1-64)"
+  runtime_bytes="$(wc -c < "$ARCHIVE.part" | tr -d '[:space:]')"
+  runtime_bad=0
+  if [ "$runtime_have" != "$runtime_sha" ]; then
+    printf '%s\n' "sha256 mismatch for $runtime_url" >&2
+    printf '%s\n' "expected $runtime_sha" >&2
+    printf '%s\n' "actual   $runtime_have" >&2
+    runtime_bad=1
+  fi
+  if [ "$runtime_bytes" != "$runtime_size" ]; then
+    printf '%s\n' "size mismatch for $runtime_url" >&2
+    printf '%s\n' "expected $runtime_size" >&2
+    printf '%s\n' "actual   $runtime_bytes" >&2
+    runtime_bad=1
+  fi
+  if [ "$runtime_bad" -ne 0 ]; then
+    rm -f "$ARCHIVE.part"
+    exit 1
+  fi
+  mv "$ARCHIVE.part" "$ARCHIVE"
+fi
 
 if [ "$#" -gt 0 ]; then
   ABIS=("$@")
@@ -417,20 +516,63 @@ fi
 
 mkdir -p "$CACHE/bin"
 
-if [ ! -x "$PATCH" ]; then
-  echo "Downloading patchelf..."
+# A cached binary is reused only when its sha256 matches. Any other file is
+# replaced from the pinned tarball, whose sha256 is checked before the binary's.
+ensure_patchelf() {
+  local tmp found bin_have
+  if [ -f "$PATCH" ] && [ "$(sha256sum "$PATCH" | cut -c1-64)" = "$PATCHELF_BIN_SHA256" ]; then
+    if [ ! -x "$PATCH" ]; then
+      chmod +x "$PATCH"
+    fi
+    return 0
+  fi
+  echo "Downloading patchelf..." >&2
   tmp="$(mktemp -d)"
-  curl -fsSL -o "$tmp/patchelf.tgz" \
-    "https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-x86_64.tar.gz"
+  if ! curl -fsSL -o "$tmp/patchelf.tgz" "$PATCHELF_URL"; then
+    echo "patchelf download failed: $PATCHELF_URL" >&2
+    rm -rf "$tmp"
+    exit 1
+  fi
+  if [ "$(sha256sum "$tmp/patchelf.tgz" | cut -c1-64)" != "$PATCHELF_SHA256" ]; then
+    echo "patchelf 0.18.0 tarball sha256 mismatch" >&2
+    echo "expected $PATCHELF_SHA256" >&2
+    echo "actual   $(sha256sum "$tmp/patchelf.tgz" | cut -c1-64)" >&2
+    rm -rf "$tmp"
+    exit 1
+  fi
   tar -xzf "$tmp/patchelf.tgz" -C "$tmp"
-  find "$tmp" -type f -name patchelf -exec cp {} "$PATCH" \;
+  found="$(find "$tmp" -type f -name patchelf -print -quit)"
+  if [ -z "$found" ]; then
+    echo "patchelf tarball contains no patchelf binary" >&2
+    rm -rf "$tmp"
+    exit 1
+  fi
+  bin_have="$(sha256sum "$found" | cut -c1-64)"
+  if [ "$bin_have" != "$PATCHELF_BIN_SHA256" ]; then
+    echo "patchelf binary sha256 mismatch" >&2
+    echo "expected $PATCHELF_BIN_SHA256" >&2
+    echo "actual   $bin_have" >&2
+    rm -rf "$tmp"
+    exit 1
+  fi
+  cp "$found" "$PATCH.part"
+  mv "$PATCH.part" "$PATCH"
   chmod +x "$PATCH"
   rm -rf "$tmp"
-fi
+}
+
+run_patchelf() {
+  ensure_patchelf
+  "$PATCH" "$@"
+}
+
+ensure_patchelf
 
 # Which library files each Termux package contributes. Globbed per arch so a
 # soname bump upstream (libicu .so.78 -> .so.79, openssl .so.3 -> .so.4 ...)
 # needs no change here — the new name is discovered and rewritten automatically.
+# stage_globs() is the staging source of truth. GLOB_PATTERNS in
+# node-runtime-archive.py must list the same patterns.
 stage_globs() {
   case "$1" in
     libc++) echo "lib/libc++_shared.so" ;;
@@ -564,72 +706,16 @@ for ABI in "${ABIS[@]}"; do
   ARCH="$(termux_arch "$ABI")"
   WORKDIR="$CACHE/termux-node24-$ARCH"
   RUNTIME="$CACHE/node-runtime/$ABI"
-  mkdir -p "$WORKDIR/debs" "$WORKDIR/root"
+  mkdir -p "$WORKDIR"
 
-  echo "==> [$ABI] fetching pinned Termux $ARCH packages..."
-  # A process substitution would drop the exit status of `pins rows`.
-  # The assignment fails the script (set -e) before any download.
-  pinned_rows="$(pins rows "$PIN_FILE" "$ARCH")"
-  row_count=0
-  while read -r sha url; do
-    [ -z "${url:-}" ] && continue
-    row_count=$((row_count + 1))
-  done <<< "$pinned_rows"
-  if [ "$row_count" -ne "${#PACKAGES_NEED[@]}" ]; then
-    printf '%s\n' "$ARCH: $PIN_FILE has $row_count pinned files, expected ${#PACKAGES_NEED[@]}" >&2
-    exit 1
-  fi
-  pinned_debs=()
-  while read -r sha url; do
-    [ -z "${url:-}" ] && continue
-    dest="$WORKDIR/debs/$(basename "$url")"
-    pinned_debs+=("$dest")
-    if [ -f "$dest" ]; then
-      have="$(sha256sum "$dest" | cut -c1-64)"
-      if [ "$have" = "$sha" ]; then
-        echo "reuse $dest"
-        continue
-      fi
-    fi
-    echo "GET $url"
-    if ! curl -fL --retry 3 -o "$dest.part" "$url"; then
-      rm -f "$dest.part"
-      printf '%s\n' "Download failed: $url" >&2
-      printf '%s\n' "Termux serves only the newest build of each package, so this pin must be refreshed with: bash android/scripts/fetch-node-android.sh --update-pins" >&2
-      printf '%s\n' "That refuses a nodejs-lts that is not Node ${SUPPORTED_NODE_MAJOR}. Review the lock diff." >&2
-      exit 1
-    fi
-    have="$(sha256sum "$dest.part" | cut -c1-64)"
-    if [ "$have" != "$sha" ]; then
-      rm -f "$dest.part"
-      printf '%s\n' "sha256 mismatch for $url" >&2
-      printf '%s\n' "expected $sha" >&2
-      printf '%s\n' "actual   $have" >&2
-      exit 1
-    fi
-    mv "$dest.part" "$dest"
-  done <<< "$pinned_rows"
-
-  # Drop cached .debs this arch did not pin. The cache survives across runs,
-  # and extracting every .deb in it would stage stale libraries over the
-  # pinned ones (libsqlite has no SONAME, so an old file is an extra .so).
-  for deb in "$WORKDIR/debs"/*.deb; do
-    [ -f "$deb" ] || continue
-    keep=0
-    for pinned in "${pinned_debs[@]:-}"; do
-      [ "$deb" = "$pinned" ] && keep=1 && break
-    done
-    if [ "$keep" -eq 0 ]; then
-      rm -f "$deb"
-    fi
-  done
-
-  echo "==> [$ABI] extracting pinned debs..."
+  echo "==> [$ABI] extracting Node runtime archive ($ARCH)..."
   rm -rf "$WORKDIR/root"
   mkdir -p "$WORKDIR/root"
-  for dest in "${pinned_debs[@]}"; do
-    dpkg-deb -x "$dest" "$WORKDIR/root"
-  done
+  python3 "$SCRIPTS/node-runtime-archive.py" extract \
+    --lock "$PIN_FILE" \
+    --archive "$ARCHIVE" \
+    --arch "$ARCH" \
+    --dest "$WORKDIR/root/data/data/com.termux/files"
 
   PREFIX="$WORKDIR/root/data/data/com.termux/files/usr"
 
@@ -678,7 +764,7 @@ PY
         done
         [ "$already" = "1" ] && continue
         staged_sources+=("$real")
-        soname="$("$PATCH" --print-soname "$real" 2>/dev/null || true)"
+        soname="$(run_patchelf --print-soname "$real" 2>/dev/null || true)"
         if [ -z "$soname" ]; then
           # No SONAME in the ELF (some Termux libs are built without one):
           # dependents reference the plain .so symlink name instead.
@@ -687,7 +773,7 @@ PY
         new="$(sanitize_name "$soname")"
         copy_real "$real" "$RUNTIME/$new"
         if [ "$new" != "$soname" ]; then
-          "$PATCH" --set-soname "$new" "$RUNTIME/$new" < /dev/null
+          run_patchelf --set-soname "$new" "$RUNTIME/$new" < /dev/null
           echo "$soname,$new" >> "$RENAMES"
         fi
       done
@@ -699,12 +785,12 @@ PY
   # node needs them all). No subprocess may inherit the loop's stdin, or it
   # eats the renames file and later entries are skipped silently.
   for f in "$RUNTIME"/*.so; do
-    needed="$("$PATCH" --print-needed "$f" | tr '\n' ' ')"
+    needed="$(run_patchelf --print-needed "$f" | tr '\n' ' ')"
     while IFS=, read -r old new; do
       [ -z "$old" ] && continue
       case " $needed " in
         *" $old "*)
-          "$PATCH" --replace-needed "$old" "$new" "$f" < /dev/null
+          run_patchelf --replace-needed "$old" "$new" "$f" < /dev/null
           needed="${needed/ $old / $new }"
           ;;
       esac
@@ -717,7 +803,7 @@ PY
   for f in "$RUNTIME"/*.so; do
     # Command substitution keeps patchelf's status. A process substitution
     # would hide a failure and this runtime would still be stamped.
-    needed_list="$("$PATCH" --print-needed "$f")"
+    needed_list="$(run_patchelf --print-needed "$f")"
     while read -r need; do
       # A here-string always yields one read, so an empty list is a blank line.
       [ -z "$need" ] && continue
@@ -735,7 +821,7 @@ PY
   # FFmpeg links against Bionic only, so it takes no $ORIGIN runpath: staged
   # after the rewrite, it keeps exactly the segment layout the NDK linked.
   for f in "$RUNTIME"/*; do
-    "$PATCH" --set-rpath '$ORIGIN' "$f"
+    run_patchelf --set-rpath '$ORIGIN' "$f"
   done
   bash "$SCRIPTS/build-ffmpeg-android.sh" "$ABI" "$RUNTIME/libffmpeg.so"
 
@@ -747,7 +833,8 @@ PY
 
   echo "==> [$ABI] runtime ready:"
   ls -lh "$RUNTIME" | tail -n +2
-  "$PATCH" --print-needed "$RUNTIME/libnode.so"
+  run_patchelf --print-needed "$RUNTIME/libnode.so"
+  sha256sum "$RUNTIME"/*.so
 done
 
 echo "Done. Runtimes staged under $CACHE/node-runtime for: ${ABIS[*]}"

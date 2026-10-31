@@ -39,10 +39,11 @@ to all v5 work and add to the rules below; they remove none of them.
   patch (v24.22.2 on 2026-10-30) for CI, the release jobs, the SEA executables
   (they embed the Node that builds them) and the Docker image (`ARG
   NODE_VERSION`); `tests/node-version-policy.test.mjs` keeps them equal. Android
-  `libnode.so` is the Termux `nodejs-lts` build pinned with sha256 in
-  `android/scripts/termux-packages.lock` (24.22.1); `fetch-node-android.sh
-  --update-pins` refuses a `nodejs-lts` that is not Node 24, and Gradle refuses
-  a staged `libnode.so` that is not the pinned version. No component moves to
+  `libnode.so` comes from the pinned release archive built from the Termux
+  debs in `android/scripts/termux-packages.lock` (24.22.1);
+  `fetch-node-android.sh --update-pins` refuses a `nodejs-lts` that is not
+  Node 24, and Gradle refuses a staged `libnode.so` that is not the pinned
+  version. No component moves to
   Node 26 (ADR-001). `package.json` declares `engines` `>=24 <25`. A self-hosted
   user may run Node 25, 26 or later: the CLI and the installer print a warning
   that the version is not officially supported and support is best effort, then
