@@ -73,7 +73,7 @@
     "url": "https://github.com/Abdodiab2005/levix/issues"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=24 <25"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.14",

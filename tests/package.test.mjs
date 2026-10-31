@@ -125,7 +125,7 @@ section("the manifest itself");
 
 equal("declares a bin", typeof pkg.bin?.levix, "string");
 ok("the bin file exists", existsSync(join(ROOT, pkg.bin.levix)));
-ok("requires Node 24+", /(>=\s*24|\^24|24\.x)/.test(pkg.engines?.node || ""));
+equal("supports Node 24 only (engines >=24 <25)", pkg.engines?.node, ">=24 <25");
 ok("has no mongoose dependency", !("mongoose" in (pkg.dependencies || {})));
 ok("has no dotenv dependency", !("dotenv" in (pkg.dependencies || {})));
 ok("has no deprecated node-gtts dependency", !("node-gtts" in (pkg.dependencies || {})));

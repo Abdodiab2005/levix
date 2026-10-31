@@ -138,6 +138,13 @@ class LevixHostService : Service() {
 
     private fun scheduleNodeRetry(code: Int) {
         if (userStop || tornDown || !HostPrefs.wantedRunning(this)) return
+        if (code == DATA_UNAVAILABLE_EXIT_CODE) {
+            HostLog.event("node stopped: data directory needs attention (exit 78)")
+            HostPrefs.setWantedRunning(this, false)
+            handler.removeCallbacks(retryNode)
+            HostState.markNodeError(localizedString(R.string.host_data_unavailable))
+            return
+        }
         if (nodeRetry >= NODE_RETRY_DELAYS_MS.size) {
             HostLog.event("node retry exhausted after exit $code")
             HostState.markNodeError("exited repeatedly")
@@ -530,6 +537,7 @@ class LevixHostService : Service() {
         private const val NOTIFICATION_ID = 1001
         const val NOTIFICATION_ALERT_ID = 1002
         private const val HEARTBEAT_MS = 30_000L
+        private const val DATA_UNAVAILABLE_EXIT_CODE = 78
         private val NODE_RETRY_DELAYS_MS = longArrayOf(5_000L, 10_000L, 15_000L, 20_000L, 25_000L)
         private const val WAKE_LOCK_TAG = "net.leviro.levix:host"
 

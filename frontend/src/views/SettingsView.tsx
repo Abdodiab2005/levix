@@ -50,6 +50,7 @@ import { useI18n } from "../context/I18nContext";
 import { type Language, translations } from "../i18n/translations";
 import { fill } from "../utils/fill";
 import { DiagnosticsView } from "./DiagnosticsView";
+import { BackupView } from "./BackupView";
 
 type SettingsTab =
   | "general"
@@ -57,6 +58,7 @@ type SettingsTab =
   | "proxy"
   | "security"
   | "storage"
+  | "backup"
   | "feedback"
   | "diagnostics";
 
@@ -66,6 +68,7 @@ const SETTINGS_TABS: SettingsTab[] = [
   "proxy",
   "security",
   "storage",
+  "backup",
   "feedback",
   "diagnostics",
 ];
@@ -487,7 +490,6 @@ export const SettingsView: React.FC = () => {
   const timezone = useSavedValue(String(settings["bot_timezone"] || "Africa/Cairo"));
   const connectionLogLevel = useSavedValue(String(settings["connection_log_level"] || "info"));
   const weatherKey = useSavedValue(String(settings["openweathermap_api_key"] || ""));
-  const youtubeKey = useSavedValue(String(settings["youtube_api_key"] || ""));
   const forwardTtl = useSavedValue(Number(settings["forward_score_ttl_days"] || 30));
   const maxFetch = useSavedValue(Number(settings["max_fetch_bytes"] || 524288));
   const stickerLimit = useSavedValue(Number(settings["sticker_library_limit"] || 1000));
@@ -687,6 +689,7 @@ export const SettingsView: React.FC = () => {
           { value: "proxy", label: t("tabProxy"), icon: <Globe size={17} /> },
           { value: "security", label: t("tabSecurity"), icon: <Shield size={17} /> },
           { value: "storage", label: t("tabStorage"), icon: <HardDrive size={17} /> },
+          { value: "backup", label: t("tabBackup"), icon: <HardDrive size={17} /> },
           { value: "feedback", label: t("tabFeedback"), icon: <MessageSquareHeart size={17} /> },
           { value: "diagnostics", label: t("tabDiagnostics"), icon: <FileText size={17} /> },
         ]}
@@ -992,38 +995,6 @@ export const SettingsView: React.FC = () => {
                 onChange={(e) => weatherKey.setValue(e.target.value)}
               />
             </SaveField>
-
-            <SaveField
-              label={t("youtubeApiKey")}
-              description={
-                language === "ar"
-                  ? "مطلوب لأدوات البحث ومعلومات الفيديوهات من يوتيوب"
-                  : "Required for YouTube search and video tools"
-              }
-              htmlFor="youtube-api-key"
-              dirty={youtubeKey.dirty}
-              saving={youtubeKey.status === "saving"}
-              justSaved={youtubeKey.status === "saved"}
-              error={youtubeKey.error}
-              onSave={() =>
-                youtubeKey.save(async (next) => {
-                  await persistSetting("youtube_api_key", next);
-                  youtubeKey.setValue("");
-                })
-              }
-              onRevert={youtubeKey.revert}
-              {...saveLabels}
-            >
-              <PasswordInput
-                id="youtube-api-key"
-                className="font-mono"
-                placeholder={
-                  configuredKeys.youtube_api_key ? "••••••••••••" : "YouTube Data API Key"
-                }
-                value={youtubeKey.value}
-                onChange={(e) => youtubeKey.setValue(e.target.value)}
-              />
-            </SaveField>
           </div>
         </Card>
       )}
@@ -1293,6 +1264,8 @@ export const SettingsView: React.FC = () => {
           <FeedbackForm />
         </div>
       )}
+
+      {activeTab === "backup" && <BackupView />}
 
       {activeTab === "diagnostics" && (
         <div data-tour="settings-diagnostics" className="flex flex-col gap-5">

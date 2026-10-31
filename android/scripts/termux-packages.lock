@@ -1,0 +1,22 @@
+# Termux packages the Android Node runtime is built from (ADR-001).
+# These are the Termux packages the runtime archive is built from
+# (--build-archive). A default build downloads the archive pinned in
+# node-runtime.lock instead. Refresh with
+#   bash android/scripts/fetch-node-android.sh --update-pins
+# which refuses a nodejs-lts that is not Node 24, then rebuild the archive.
+#
+# arch package version sha256 url
+aarch64 nodejs-lts 24.22.1 c4aae57009e4398613807d77ff395026455fe03b6d9d8a29f929212b04f74719 https://packages.termux.dev/apt/termux-main/pool/main/n/nodejs-lts/nodejs-lts_24.22.1_aarch64.deb
+aarch64 libc++ 30 53d0b84a7ba7459024257cb94d5b136fe13ef858567f65a8064b35950799f2ca https://packages.termux.dev/apt/termux-main/pool/main/libc/libc++/libc++_30_aarch64.deb
+aarch64 openssl 1:3.6.5 a2fb7856875e63ef6b90442752e05974813372c3ca86d2513a78ea43c67a0f8b https://packages.termux.dev/apt/termux-main/pool/main/o/openssl/openssl_1:3.6.5_aarch64.deb
+aarch64 c-ares 1.34.9 623d84855e176f3f2a415d24c0e1d2f529356f4b5439bb3313e6d7ff0da4585c https://packages.termux.dev/apt/termux-main/pool/main/c/c-ares/c-ares_1.34.9_aarch64.deb
+aarch64 libicu 78.3 f536403f65a08fe0df6e7304184e902d54def77d5c3bd5edfd9109d57601d276 https://packages.termux.dev/apt/termux-main/pool/main/libi/libicu/libicu_78.3_aarch64.deb
+aarch64 libsqlite 3.54.1 0856cac8cc87f6e112f2eef4fcac6ad5cb08209ecb7cc260f997874fc186a3c0 https://packages.termux.dev/apt/termux-main/pool/main/libs/libsqlite/libsqlite_3.54.1_aarch64.deb
+aarch64 zlib 1.3.2 75e7d0af17fcc3b40004309fdc00a1ddb9ae08346dce5e269902c34ac3966ac9 https://packages.termux.dev/apt/termux-main/pool/main/z/zlib/zlib_1.3.2_aarch64.deb
+arm nodejs-lts 24.22.1 dd15f26c9765fb2b150d54967f868d46ffb690f068bfcf06e2da9022764d48b9 https://packages.termux.dev/apt/termux-main/pool/main/n/nodejs-lts/nodejs-lts_24.22.1_arm.deb
+arm libc++ 30 5d4e4dfea77402c0b3ee05b6cb4c73108bb69cc149e2d3a73d4ec6ee6919fd16 https://packages.termux.dev/apt/termux-main/pool/main/libc/libc++/libc++_30_arm.deb
+arm openssl 1:3.6.5 4271df34c1cad73da0143b6d9013df4b80a4f6fc4d8a107f4069ef864606e0a9 https://packages.termux.dev/apt/termux-main/pool/main/o/openssl/openssl_1:3.6.5_arm.deb
+arm c-ares 1.34.9 6c9b77ed08a606c854ea73875f7fb8ae389f7752b49e2b473d589a418ce222d1 https://packages.termux.dev/apt/termux-main/pool/main/c/c-ares/c-ares_1.34.9_arm.deb
+arm libicu 78.3 3ddca664e8cbe4cc775f585dc6457c65b3de454f5ca10bede412dfffbbbab8a8 https://packages.termux.dev/apt/termux-main/pool/main/libi/libicu/libicu_78.3_arm.deb
+arm libsqlite 3.54.1 c578eb270a4786ec9a5c065b9a62b104b1bfaf2a16a3bae14c2907f1a2328ac6 https://packages.termux.dev/apt/termux-main/pool/main/libs/libsqlite/libsqlite_3.54.1_arm.deb
+arm zlib 1.3.2 c63ee590f2f02254725bdd8e415582c70737b63712a20d5395b45e4b13ffffc5 https://packages.termux.dev/apt/termux-main/pool/main/z/zlib/zlib_1.3.2_arm.deb

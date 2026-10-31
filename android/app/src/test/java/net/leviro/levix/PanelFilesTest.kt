@@ -128,4 +128,27 @@ class PanelFilesTest {
         assertFalse(PanelFiles.exportAllowed("/dashboard/api/settings/export", "GET"))
         assertFalse(PanelFiles.exportAllowed("/dashboard/api/stickers/export", "DELETE"))
     }
+
+    @Test fun backupRoutesTokensNamesAndLimitsAreRestricted() {
+        val token = "a".repeat(64)
+        assertTrue(PanelFiles.backupUploadAllowed("/dashboard/api/backup/restore/uploads"))
+        assertFalse(PanelFiles.backupUploadAllowed("/dashboard/api/backup/restore/uploads/other"))
+        assertFalse(PanelFiles.backupUploadAllowed("/dashboard/api/backup/restore/uploads?x=1"))
+        assertFalse(PanelFiles.backupUploadAllowed("/dashboard/api/backup/exports/$token"))
+        assertTrue(PanelFiles.backupToken(token))
+        assertFalse(PanelFiles.backupToken("A".repeat(64)))
+        assertFalse(PanelFiles.backupToken("a".repeat(63)))
+        assertTrue(PanelFiles.backupExportAllowed("/dashboard/api/backup/exports/$token"))
+        assertFalse(PanelFiles.backupExportAllowed("/dashboard/api/backup/exports/$token/extra"))
+        assertFalse(PanelFiles.backupExportAllowed("/dashboard/api/backup/exports/$token?x=1"))
+        assertFalse(PanelFiles.backupExportAllowed("/dashboard/api/backup/exports/${"A".repeat(64)}"))
+        assertTrue(PanelFiles.backupFileName("levix-backup-20261031-123456.levixbak"))
+        assertFalse(PanelFiles.backupFileName("../levix-backup-20261031-123456.levixbak"))
+        assertFalse(PanelFiles.backupFileName("levix-backup-20261031-123456.zip"))
+        assertTrue(PanelFiles.backupSize(1))
+        assertTrue(PanelFiles.backupSize(PanelFiles.BACKUP_MAX_BYTES))
+        assertFalse(PanelFiles.backupSize(0))
+        assertFalse(PanelFiles.backupSize(-1))
+        assertFalse(PanelFiles.backupSize(PanelFiles.BACKUP_MAX_BYTES + 1))
+    }
 }

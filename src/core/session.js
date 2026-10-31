@@ -864,6 +864,12 @@ export class WhatsAppSession {
     try {
       await this.onOpen(this.#socket, this.initializeScheduledJobs);
     } catch (error) {
+      if (error?.code === "ACTIVATION_UNSAFE") {
+        this.log.error("[Session] Account activation rollback incomplete; stopping WhatsApp until recovery succeeds");
+        await this.stop({ reason: "activation_unsafe", state: S.ERROR,
+          detail: "Account recovery is incomplete. Restart Levix before connecting." });
+        return;
+      }
       this.log.error({ err: error }, "[Session] post-connect setup failed");
     }
   }

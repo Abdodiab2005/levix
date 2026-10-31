@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:
-          node-version: 24
+          node-version-file: .node-version
           cache: npm
       - run: npm ci
       # The suite starts real processes and talks to WhatsApp's servers up to
@@ -41,7 +41,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:
-          node-version: 24
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: |
             package-lock.json
@@ -65,7 +65,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:
-          node-version: 24
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: |
             package-lock.json
@@ -105,7 +105,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
         with:
-          node-version: 24
+          node-version-file: .node-version
           cache: npm
           cache-dependency-path: |
             package-lock.json
@@ -124,9 +124,10 @@ jobs:
             ~/.cache/levix-android
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: android-${{ runner.os }}-${{ hashFiles('android/scripts/fetch-node-android.sh', 'android/scripts/build-ffmpeg-android.sh', 'android/gradle/wrapper/gradle-wrapper.properties', 'package-lock.json', 'frontend/package-lock.json') }}
+          # The v2 namespace starts empty, so the first build after the runtime archive change is a cold build from the release asset.
+          key: android-${{ runner.os }}-v2-${{ hashFiles('android/scripts/fetch-node-android.sh', 'android/scripts/build-ffmpeg-android.sh', 'android/scripts/termux-packages.lock', 'android/scripts/node-runtime.lock', 'android/scripts/node-runtime-archive.py', 'android/gradle/wrapper/gradle-wrapper.properties', 'package-lock.json', 'frontend/package-lock.json') }}
           restore-keys: |
-            android-${{ runner.os }}-
+            android-${{ runner.os }}-v2-
       - name: Set up Android SDK (API 36) + NDK
         run: |
           set -e

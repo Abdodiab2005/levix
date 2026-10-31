@@ -768,9 +768,15 @@ function mergePacks(owner, sourceId, intoPackId) {
   return { pack: packDto(store.stickerPackGet(bound.key, intoPackId)), moved };
 }
 
-function clearAll() {
+function resetForActivation() {
   require("./jobs.cjs").cancelAll();
   epoch++;
+  try { require("./uploads.cjs").discardAll(); }
+  catch (error) { logger.warn({ err: error }, "[Stickers] failed to discard uploads"); }
+}
+
+function clearAll() {
+  resetForActivation();
   store.stickerClearAll();
   try {
     fs.rmSync(dataPath("stickers"), { recursive: true, force: true });
@@ -778,14 +784,10 @@ function clearAll() {
     logger.error({ err: error }, "[Stickers] failed to remove sticker files");
     throw new StickerError("STORAGE_UNAVAILABLE", {}, { cause: error });
   }
-  try {
-    require("./uploads.cjs").discardAll();
-  } catch (error) {
-    logger.warn({ err: error }, "[Stickers] failed to discard uploads");
-  }
 }
 
 module.exports = {
+  resetForActivation,
   saveSticker,
   hasRoom,
   findStickerByContent,
@@ -814,4 +816,6 @@ module.exports = {
   clearAll,
   epoch: () => epoch,
   fileNameFor,
+  webpPath,
+  thumbPath,
 };

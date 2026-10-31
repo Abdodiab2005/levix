@@ -23,6 +23,23 @@ import { groupMetadataCache } from "./socket.js";
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
 const { primePermissions } = require("../utils/permissions.cjs");
+const { activatePendingIfMatching } = require("../backup/activation.cjs");
+const { maskAccount } = require("../backup/account.cjs");
+
+function resetActivatedAccountCaches() {
+  for (const reset of [
+    () => require("../commands/gemini.cjs").clearAllContextBuffers(),
+    () => groupMetadataCache.flushAll(),
+    () => bootstrapOwners([]),
+    () => bootstrapAdmins([]),
+    () => require("../../scheduler.cjs").stopAllScheduledJobs(),
+    () => require("../db/store.cjs").invalidateAutoDeleteRuleCache(),
+    () => require("../stickers/library.cjs").resetForActivation(),
+  ]) {
+    try { reset(); } catch { logger.error("[Backup] Could not reset an account cache"); }
+  }
+  lastFullGroupSyncAt = 0;
+}
 
 /**
  * WhatsApp answers a `<failure reason="405">` when it refuses the connection
@@ -150,7 +167,12 @@ export function describeCloseError(error) {
  * @param {object} sock
  * @param {(sock: object) => void} [initializeScheduledJobs]
  */
-export async function handleConnectionOpen(sock, initializeScheduledJobs) {
+export function handleConnectionOpen(sock, initializeScheduledJobs) {
+  activatePendingIfMatching(resetActivatedAccountCaches);
+  return finishConnectionOpen(sock, initializeScheduledJobs);
+}
+
+async function finishConnectionOpen(sock, initializeScheduledJobs) {
   logger.info("✅ Connection opened successfully!");
 
   // The paired account is always an owner — that's the whole bootstrap.
@@ -210,9 +232,7 @@ async function saveBotOwnerMetadata(sock) {
         isOwner: true,
         displayName,
       });
-      logger.info(
-        `[User Metadata] Saved bot owner: ${phoneNumber} (JID: ${userJid}, LID: ${userLid})`,
-      );
+      logger.info(`[User Metadata] Saved bot owner: ${maskAccount({ pn: userJid })}`);
     }
   } catch (err) {
     logger.error({ err }, "[Error] Failed to save bot owner metadata");

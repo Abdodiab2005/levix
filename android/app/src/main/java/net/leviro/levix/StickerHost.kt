@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.provider.DocumentsContract
 import androidx.core.net.toUri
 import net.leviro.levix.media.PendingStickers
 import net.leviro.levix.media.StickerIntent
@@ -27,13 +28,16 @@ class StickerHost(
     private val deliver: (String, JSONObject) -> Unit,
     private val launchPicker: (String, Boolean) -> Unit,
     private val share: (File, String) -> Unit,
+    private val launchBackupSave: (String, String) -> Unit,
+    private val progress: (String, Long, Long) -> Unit,
 ) {
-    private class Transfer {
+    private class Transfer(val document: PendingDocument? = null) {
         val finished = AtomicBoolean(false)
         @Volatile var socket: LocalSocket? = null
         @Volatile var source: InputStream? = null
         @Volatile var output: OutputStream? = null
         @Volatile var cancelled = false
+        var started = false // guarded by this Transfer
         fun stop() {
             cancelled = true
             runCatching { socket?.close() }
@@ -43,6 +47,8 @@ class StickerHost(
     }
     private val executor = Executors.newSingleThreadExecutor()
     private val transfers = ConcurrentHashMap<String, Transfer>()
+    private val pendingSaves = ConcurrentHashMap<String, String>()
+    private val cancelledSaves = ConcurrentHashMap.newKeySet<String>()
     @Volatile private var picker: String? = null
     private val parts = ConcurrentHashMap.newKeySet<File>()
     @Volatile private var destroyed = false
@@ -58,20 +64,37 @@ class StickerHost(
     private fun accepted() = JSONObject().put("ok", true).toString()
     private fun bad(error: String) = JSONObject().put("ok", false).put("error", error).toString()
     private fun valid(id: String) = PanelFiles.validCallId(id) && !destroyed
-    private fun submit(id: String, job: (Transfer) -> JSONObject): String {
-        if (!valid(id)) return bad("invalid call id")
-        val transfer = Transfer()
-        if (transfers.putIfAbsent(id, transfer) != null) return bad("duplicate call id")
-        executor.execute {
-            try {
-                if (transfer.cancelled) answer(id, cancelled(), transfer)
-                else answer(id, job(transfer), transfer)
-            } catch (error: Exception) {
-                HostLog.event("sticker transfer ${error.message}")
-                answer(id, if (transfer.cancelled) cancelled() else failure("UNAVAILABLE"), transfer)
-            } finally {
-                transfer.stop()
+    private fun submit(id: String, document: PendingDocument? = null, job: (Transfer) -> JSONObject): String {
+        if (!valid(id)) {
+            document?.discard()
+            return bad("invalid call id")
+        }
+        val transfer = Transfer(document)
+        if (transfers.putIfAbsent(id, transfer) != null) {
+            document?.discard()
+            return bad("duplicate call id")
+        }
+        try {
+            executor.execute {
+                synchronized(transfer) { transfer.started = true }
+                try {
+                    val result = if (transfer.cancelled) cancelled() else job(transfer)
+                    transfer.document?.discard()
+                    answer(id, result, transfer)
+                } catch (_: Exception) {
+                    HostLog.event("panel file transfer failed")
+                    transfer.document?.discard()
+                    answer(id, if (transfer.cancelled) cancelled() else failure("UNAVAILABLE"), transfer)
+                } finally {
+                    transfer.stop()
+                    transfer.document?.discard()
+                }
             }
+        } catch (_: Exception) {
+            transfers.remove(id, transfer)
+            transfer.stop()
+            transfer.document?.discard()
+            return failure("UNAVAILABLE").toString()
         }
         return accepted()
     }
@@ -155,6 +178,130 @@ class StickerHost(
                 else if (transfer.cancelled) cancelled() else failure("UNAVAILABLE")
             }
         }
+    }
+
+    /** A picked document goes straight to the restore upload route over the panel socket. */
+    fun uploadBackup(id: String, token: String, maxBytes: Long): String {
+        if (!valid(id)) return bad("invalid call id")
+        if (!PanelFiles.backupSize(maxBytes)) return bad("invalid upload limit")
+        if (sources.get(token) == null) return failure("UNAVAILABLE").toString()
+        return submit(id) { transfer ->
+            val source = sources.get(token) ?: return@submit failure("UNAVAILABLE")
+            val uri = source.uri.toUri()
+            var size = -1L
+            try {
+                context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use {
+                    if (it.moveToFirst() && !it.isNull(0)) size = it.getLong(0)
+                }
+            } catch (_: Exception) { return@submit failure("UNAVAILABLE") }
+            if (size < 0) return@submit failure("SIZE_UNKNOWN")
+            if (size > maxBytes) return@submit failure("TOO_LARGE")
+            if (size == 0L) return@submit failure("BAD_LENGTH")
+            val stream = try { context.contentResolver.openInputStream(uri) }
+                catch (_: Exception) { null } ?: return@submit failure("UNAVAILABLE")
+            transfer.source = stream
+            val body = ByteArrayOutputStream()
+            var lastProgress = 0L
+            try {
+                val response = PanelHttp.stream(sock, "POST", PanelFiles.BACKUP_UPLOAD,
+                    mapOf("Content-Type" to "application/octet-stream"), null, stream, maxBytes,
+                    { if (transfer.cancelled) it.close() else transfer.socket = it },
+                    { 64 * 1024L }, { body }, exactLength = size,
+                    onUploadProgress = { copied ->
+                        if (copied - lastProgress >= 256 * 1024 || copied == size) {
+                            lastProgress = copied
+                            if (!transfer.cancelled) progress(id, copied, size)
+                        }
+                    })
+                if (transfer.cancelled) cancelled() else JSONObject().put("ok", true)
+                    .put("status", response.status).put("body", body.toString(Charsets.UTF_8.name()))
+            } catch (_: PanelWire.WrongLength) {
+                if (transfer.cancelled) cancelled() else failure("BAD_LENGTH")
+            } catch (_: Exception) {
+                if (transfer.cancelled) cancelled() else failure("UNAVAILABLE")
+            }
+        }
+    }
+
+    /** Reserve the call while Android's create-document dialog is open. */
+    @Synchronized
+    fun saveBackup(id: String, token: String, fileName: String): String {
+        if (!valid(id)) return bad("invalid call id")
+        if (!PanelFiles.backupToken(token) || !PanelFiles.backupFileName(fileName))
+            return bad("invalid backup export")
+        if (pendingSaves.isNotEmpty()) return bad("save dialog busy")
+        if (transfers.containsKey(id) || pendingSaves.putIfAbsent(id, token) != null)
+            return bad("duplicate call id")
+        try { launchBackupSave(id, fileName) }
+        catch (_: Exception) {
+            pendingSaves.remove(id)
+            return failure("UNAVAILABLE").toString()
+        }
+        return accepted()
+    }
+
+    @Synchronized
+    fun backupSavePicked(id: String, uri: Uri?) {
+        val token = pendingSaves.remove(id)
+        val wasCancelled = cancelledSaves.remove(id)
+        if (token == null || wasCancelled || destroyed) {
+            if (uri != null) deleteDocument(uri)
+            if (token == null && id.isNotEmpty() && !destroyed) answer(id, cancelled())
+            return
+        }
+        if (uri == null) return answer(id, cancelled())
+        val path = "/dashboard/api/backup/exports/$token"
+        if (!PanelFiles.backupExportAllowed(path)) {
+            deleteDocument(uri)
+            return answer(id, failure("UNAVAILABLE"))
+        }
+        val document = PendingDocument { deleteDocument(uri) }
+        val accepted = submit(id, document) { transfer ->
+            val errors = ByteArrayOutputStream()
+            var output: OutputStream? = null
+            try {
+                val response = PanelHttp.stream(sock, "GET", path, emptyMap(), null, null, 0,
+                    { if (transfer.cancelled) it.close() else transfer.socket = it },
+                    { if (it.status == 200) PanelFiles.BACKUP_MAX_BYTES + 1 else 64 * 1024L },
+                    { head ->
+                        if (head.status != 200) errors else {
+                            output = context.contentResolver.openOutputStream(uri, "w")
+                                ?: throw java.io.IOException("cannot open document")
+                            transfer.output = output
+                            output!!
+                        }
+                    })
+                output?.close()
+                output = null
+                transfer.output = null
+                if (response.status != 200) failure("UNAVAILABLE")
+                else if (response.bytes == 0L || response.bytes > PanelFiles.BACKUP_MAX_BYTES)
+                    failure("BAD_LENGTH")
+                else synchronized(transfer) {
+                    if (transfer.cancelled) cancelled() else {
+                        check(document.keep()) { "document was discarded" }
+                        val result = JSONObject().put("ok", true)
+                        answer(id, result, transfer)
+                        result
+                    }
+                }
+            } catch (_: Exception) {
+                if (transfer.cancelled) cancelled() else failure("UNAVAILABLE")
+            } finally {
+                runCatching { output?.close() }
+            }
+        }
+        if (!JSONObject(accepted).optBoolean("ok")) answer(id, failure("UNAVAILABLE"))
+    }
+
+    @Synchronized
+    fun backupSaveFailed(id: String) {
+        if (pendingSaves.remove(id) != null && !cancelledSaves.remove(id))
+            answer(id, failure("UNAVAILABLE"))
+    }
+
+    private fun deleteDocument(uri: Uri) {
+        runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
     }
 
     /**
@@ -309,10 +456,18 @@ class StickerHost(
 
     fun cancel(id: String): String {
         if (!PanelFiles.validCallId(id)) return bad("invalid call id")
-        transfers[id]?.let {
-            synchronized(it) {
-                it.stop()
-                answer(id, cancelled(), it)
+        synchronized(this) {
+            if (pendingSaves.containsKey(id) && cancelledSaves.add(id)) {
+                answer(id, cancelled())
+            }
+            transfers[id]?.let {
+                synchronized(it) {
+                    it.stop()
+                    // A running job closes its output before deleting the
+                    // document. A queued job may never run after shutdown.
+                    if (!it.started) it.document?.discard()
+                    answer(id, cancelled(), it)
+                }
             }
         }
         return accepted()
@@ -322,6 +477,8 @@ class StickerHost(
         // First, so nothing below posts a result into a WebView being torn down.
         destroyed = true
         picker = null
+        pendingSaves.clear()
+        cancelledSaves.clear()
         transfers.forEach { (id, _) -> cancel(id) }
         executor.shutdownNow()
         sources.clear()

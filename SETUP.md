@@ -12,8 +12,9 @@ guide anywhere tells you to create a `.env` file, it is out of date.
 ## What you need
 
 - A computer or a small server that stays on. A Raspberry Pi is enough.
-- **Node.js 24 or newer** — [nodejs.org](https://nodejs.org), pick the LTS
-  button. (Or skip Node entirely and use Docker, below.)
+- **Node.js 24** — [nodejs.org](https://nodejs.org), pick the Node 24 LTS
+  build. A newer Node also starts, with a warning that only Node 24 is
+  supported. (Or skip Node entirely and use Docker, below.)
 - A phone with WhatsApp, to scan the QR once.
 
 Levix stores everything in one file using SQLite, which Node 24 includes.
@@ -224,9 +225,26 @@ levix where
 - running from a git clone: `./data` inside the clone
 - Docker: the `levix-data` volume
 
-**Backing up** means copying that directory. **Moving to another machine**
-means copying it across and starting Levix there — including the WhatsApp
-session, so you don't even rescan the QR.
+A copy of this directory, taken while Levix is stopped, is a full copy: it holds
+the WhatsApp pairing and the encryption key, so keep it private. On another
+device WhatsApp may still ask you to pair again. For an encrypted backup without
+the pairing, use **Settings → Backup** (below).
+
+## Back up and restore
+
+Open **Settings → Backup**. Create a backup with a password of at least 12
+characters and save the `.levixbak` file. Keep the password safe: Levix cannot
+recover it. To restore, upload the file, enter its backup password, review the
+preview, then confirm with your panel password.
+
+Restore replaces the backed-up bot settings, command setup, API keys and AI
+persona. It keeps this install's panel password, recovery email, session key,
+device settings and encryption key. WhatsApp pairing is never in the backup;
+pair the account again by hand. Conversations, AI memory, stickers, schedules,
+roles and group data activate only when the same WhatsApp account connects.
+If a different account connects, the Backup screen shows **waiting account
+data**. You can later pair the matching account or choose **Discard** to remove
+the waiting data.
 
 ---
 
@@ -267,8 +285,12 @@ Then start it again and pick a new one. The WhatsApp link is untouched.
 phone was offline for a long time. Open the panel; if it asks for a QR, scan it
 again.
 
-**"Levix needs Node 24 or newer"** — your Node is older. Install the LTS build
-from [nodejs.org](https://nodejs.org) and try again.
+**"levix-bot needs Node 24"** — your Node is older. Install the Node 24 LTS
+build from [nodejs.org](https://nodejs.org) and try again.
+
+**"Warning: Node 26… is newer than Node 24"** — Levix still runs. Only Node 24
+is built and tested, so help with problems on a newer Node is best effort.
+Install Node 24 LTS for a supported setup.
 
 **Start over completely** — stop the bot, delete the data directory
 (`levix where` prints it), start it again. That wipes everything: settings,

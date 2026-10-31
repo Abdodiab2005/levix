@@ -28,9 +28,12 @@ val knownAbis = setOf("arm64-v8a", "armeabi-v7a")
 // recomputed here and a missing or different one fails the build. The file
 // name, the inputs and the line format must match RUNTIME_STAMP_FILE /
 // RUNTIME_STAMP_INPUTS in the script (tests/android-runtime-stamp.test.mjs).
-// The script is deliberately not run from here: it downloads and compiles.
+// termux-packages.lock, node-runtime.lock and node-runtime-archive.py are
+// stamp inputs with the scripts: a pin change or an extractor change fails
+// the build until the runtime is restaged. The script is deliberately not
+// run from here: it downloads and compiles.
 val runtimeStampFile = ".levix-stamp"
-val runtimeStampInputs = listOf("build-ffmpeg-android.sh", "fetch-node-android.sh")
+val runtimeStampInputs = listOf("build-ffmpeg-android.sh", "fetch-node-android.sh", "termux-packages.lock", "node-runtime.lock", "node-runtime-archive.py")
 val androidScriptsDir = File(repoRoot, "android/scripts")
 
 // The first 16 hex characters of the file's sha256 — `sha256sum | cut -c1-16`.
@@ -47,6 +50,37 @@ fun expectedRuntimeStamp(abi: String): List<String> =
 // The sticker encoders the panel needs, as the NUL-terminated names FFmpeg
 // registers them under. Catches a binary copied in by hand, which no stamp can.
 val requiredFfmpegEncoders = listOf("libwebp", "libwebp_anim")
+
+// Node's process.version is a NUL-delimited C string inside libnode.so.
+// Catches a runtime copied in by hand, which no stamp can, and keeps a Node
+// other than the pinned 24.x out of the APK.
+val supportedNodeMajor = 24
+val termuxArch = mapOf("arm64-v8a" to "aarch64", "armeabi-v7a" to "arm")
+val termuxPackagesLock = File(androidScriptsDir, "termux-packages.lock")
+
+fun pinnedNodeVersion(arch: String): String {
+    if (!termuxPackagesLock.isFile) {
+        throw GradleException(
+            "Missing $termuxPackagesLock. Official Android builds pin Node $supportedNodeMajor (ADR-001).",
+        )
+    }
+    val row = termuxPackagesLock.readLines()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && !it.startsWith("#") }
+        .map { it.split(Regex("\\s+")) }
+        .firstOrNull { it.size >= 3 && it[0] == arch && it[1] == "nodejs-lts" }
+        ?: throw GradleException(
+            "No nodejs-lts row for $arch in $termuxPackagesLock. Official Android builds pin Node $supportedNodeMajor (ADR-001).",
+        )
+    val version = row[2].substringAfter(':').replace(Regex("-\\d+$"), "")
+    val major = version.substringBefore('.').toIntOrNull()
+    if (major != supportedNodeMajor) {
+        throw GradleException(
+            "$termuxPackagesLock pins nodejs-lts $version for $arch, not Node $supportedNodeMajor (ADR-001).",
+        )
+    }
+    return version
+}
 
 levixAbis.forEach { abi ->
     if (abi !in knownAbis) {
@@ -94,6 +128,20 @@ levixAbis.forEach { abi ->
         throw GradleException(
             "Android runtime for $abi has an FFmpeg without the ${missingEncoders.joinToString(", ")} " +
                 "encoder(s) at ${File(dir, "libffmpeg.so")} — Sticker Studio cannot write WebP with it. " +
+                "Re-stage it from the repository root:\n  $refresh",
+        )
+    }
+    val nodeArch = termuxArch[abi]
+    if (nodeArch == null) {
+        throw GradleException(
+            "No Termux arch for $abi. Official Android builds pin Node $supportedNodeMajor (ADR-001).",
+        )
+    }
+    val nodeVersion = pinnedNodeVersion(nodeArch)
+    val nodeBytes = File(dir, "libnode.so").readBytes().toString(Charsets.ISO_8859_1)
+    if ("\u0000v$nodeVersion\u0000" !in nodeBytes) {
+        throw GradleException(
+            "Staged libnode.so for $abi is not Node $nodeVersion pinned in $termuxPackagesLock. " +
                 "Re-stage it from the repository root:\n  $refresh",
         )
     }

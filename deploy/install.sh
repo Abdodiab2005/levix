@@ -11,16 +11,16 @@
 # What it does, in order — read it before you pipe it into a shell, as you
 # should with any script that asks for sudo:
 #
-#   1. makes sure Node 24+ is available (bootstraps it on Debian/Ubuntu)
+#   1. makes sure Node 24 is available (bootstraps it on Debian/Ubuntu)
 #   2. installs the `levix` command globally from the `levix-bot` npm package
 #   3. creates a `levix` system user and /var/lib/levix for its data
 #   4. installs the systemd unit, pointed at the levix it just installed
 #   5. enables it, starts it, and prints where to go next
 #   6. offers — but never assumes — to connect a domain
 #
-# On a machine that already has Node 24+, the installer does not touch the
-# system package manager. On a fresh Debian/Ubuntu machine it also installs
-# Node.js from NodeSource, which adds its signing key and APT source.
+# A machine that already has Node 24 or newer keeps it (a newer major gets a
+# warning, because only Node 24 is supported). A fresh Debian/Ubuntu machine
+# gets Node 24 from NodeSource, which adds its signing key and APT source.
 #
 # Levix itself writes exactly three things outside npm's own prefix: the system
 # user, /var/lib/levix, and /etc/systemd/system/levix.service. It never touches
@@ -40,6 +40,7 @@ PORT=3001
 
 say() { printf '\n  %s\n' "$*"; }
 die() { printf '\n  error: %s\n\n' "$*" >&2; exit 1; }
+warn() { printf '\n  warning: %s\n' "$*" >&2; }
 
 sudo_if_needed() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -155,7 +156,11 @@ command -v npm >/dev/null 2>&1 ||
 command -v systemctl >/dev/null 2>&1 ||
   die "This script installs a systemd service, and systemd isn't here. Run 'npm i -g ${PACKAGE}' and start 'levix' yourself."
 
-say "Node $(node -v) — good."
+if [ "$NODE_MAJOR" -gt "$MIN_NODE_MAJOR" ]; then
+  warn "Node $(node -v) is newer than Node ${MIN_NODE_MAJOR}, the version Levix is built and tested on. Levix will run, but this Node version is not officially supported, and help with problems on it is best effort."
+else
+  say "Node $(node -v) — good."
+fi
 
 # --- 2. The package --------------------------------------------------------
 
