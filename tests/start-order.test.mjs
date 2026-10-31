@@ -295,7 +295,8 @@ section("directory fsync portability");
 section("data failure exit code");
 {
   const { exitCodeFor } = (await import("../src/config/exit-codes.cjs")).default;
-  for (const code of ["SCHEMA_NEWER", "BACKUP_FAILED", "MIGRATION_FAILED", "DATABASE_NOT_PREPARED"]) {
+  for (const code of ["SCHEMA_NEWER", "BACKUP_FAILED", "MIGRATION_FAILED", "DATABASE_NOT_PREPARED",
+    "ACTIVATION_RECOVERY_FAILED"]) {
     equal(`${code} is terminal on CLI and Android`, exitCodeFor({ code }), 78);
   }
   equal("unrelated failures keep their existing path", exitCodeFor({ code: "EADDRINUSE" }), null);

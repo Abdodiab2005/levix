@@ -81,6 +81,7 @@ export async function bootstrapPanel({ core } = {}) {
   if (core?.session) {
     setSession(core.session);
     stickerApi.setSession(core.session);
+    require("../backup/jobs.cjs").setSession(core.session);
   }
   // The WhatsApp-code password reset talks to the same session manager.
   if (core?.session) require("../panel/password-reset.cjs").setSession(core.session);

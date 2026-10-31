@@ -413,5 +413,5 @@ function discardPending() {
   fs.rmSync(trash, { recursive: true, force: true });
 }
 
-module.exports = { restoreUpload, schemaCheck, pendingStatus, discardPending, installPersona,
+module.exports = { restoreUpload, schemaCheck, expectedSchema, pendingStatus, discardPending, installPersona,
   installPending, finish, marker, stageRoot, validateBeforePersona, setCrashHookForTest };

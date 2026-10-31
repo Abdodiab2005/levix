@@ -49,7 +49,14 @@ function saveScheduledJob(job) {
 }
 
 const runningTasks = new Map();
-const deliveriesInFlight = new Set();
+const deliveriesInFlight = new Map();
+let scheduleGeneration = 0;
+function bumpScheduleGeneration() { scheduleGeneration += 1; }
+function staleDelivery(jobId, generation) {
+  if (generation === scheduleGeneration) return false;
+  logger.debug({ jobId }, "[Scheduler] Stale delivery stopped after account activation");
+  return true;
+}
 // The socket the jobs were last armed with. Callers that don't hold a socket
 // themselves (the AI agent's reminder tool) arm new jobs through it.
 let currentSock = null;
@@ -206,36 +213,44 @@ function buildScheduledPayloads(job) {
 }
 
 async function deliverScheduledJob(sock, job) {
-  if (deliveriesInFlight.has(job.id)) {
+  const generation = scheduleGeneration;
+  if (deliveriesInFlight.get(job.id) === generation) {
     logger.warn(`[Scheduler] Job ${job.id} is already being delivered — skipping overlap`);
     return { ok: false, reason: "in_flight", skipped: true };
   }
 
-  deliveriesInFlight.add(job.id);
+  deliveriesInFlight.set(job.id, generation);
   const runAt = Date.now();
 
   try {
+    if (staleDelivery(job.id, generation)) return { ok: false, reason: "stale", skipped: true };
     // No message is being answered here, so the header follows the scheduled
     // text itself (in "auto"), or the bot's language.
     const payloads = withLang(detectLang(job.message || " "), () => buildScheduledPayloads(job));
     for (const payload of payloads) {
+      if (staleDelivery(job.id, generation)) return { ok: false, reason: "stale", skipped: true };
       await sock.sendMessage(job.targetJid, payload);
     }
+    if (staleDelivery(job.id, generation)) return { ok: false, reason: "stale", skipped: true };
     recordDelivery(job.id, "sent", runAt);
     logger.info(`[Scheduler] Executed job ${job.id} -> ${job.targetJid}`);
     return { ok: true, reason: "sent" };
   } catch (error) {
+    if (staleDelivery(job.id, generation)) return { ok: false, reason: "stale", skipped: true };
     const message = deliveryErrorMessage(error);
     recordDelivery(job.id, "failed", runAt, message);
     logger.error({ err: error, jobId: job.id }, "[Scheduler] failed to send scheduled message");
     return { ok: false, reason: "delivery_failed", error: message };
   } finally {
-    deliveriesInFlight.delete(job.id);
+    if (deliveriesInFlight.get(job.id) === generation) deliveriesInFlight.delete(job.id);
   }
 }
 
 async function executeScheduledJob(sock, job) {
+  const generation = scheduleGeneration;
   const result = await deliverScheduledJob(sock, job);
+  if (result.reason === "stale") return result;
+  if (staleDelivery(job.id, generation)) return { ok: false, reason: "stale", skipped: true };
 
   if (job.type !== "recurring" && !result.skipped) {
     try {
@@ -346,6 +361,7 @@ module.exports = {
   SCHEDULE_MEDIA_MAX_BYTES,
   initializeScheduledJobs,
   stopAllScheduledJobs,
+  bumpScheduleGeneration,
   scheduleNewJob,
   scheduleJobNow,
   retryScheduledJob,
