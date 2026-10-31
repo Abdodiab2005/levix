@@ -3,9 +3,12 @@ import { Router } from "express";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { CODES, validatePassword } = require("../backup/format.cjs");
+const { CODES, validatePassword, openBackup } = require("../backup/format.cjs");
 const { describeBackupContents } = require("../backup/create.cjs");
 const jobs = require("../backup/jobs.cjs");
+const uploads = require("../backup/uploads.cjs");
+const restore = require("../backup/restore.cjs");
+const { readPairedAccount, maskAccount, accountsMatch } = require("../backup/account.cjs");
 const secrets = require("../config/secrets.cjs");
 const { blockedFor, recordFailure, clearAttempts } = require("../panel/login-throttle.cjs");
 const { clientAddress } = require("../utils/requestOrigin.cjs");
@@ -13,14 +16,93 @@ const { clientAddress } = require("../utils/requestOrigin.cjs");
 const router = Router();
 const tokenRe = /^[0-9a-f]{64}$/;
 const jobRe = /^[0-9a-f]{32}$/;
-const errorCodes = new Set([...CODES, "NO_SPACE", "UNCLASSIFIED_TABLE", "SECRET_FOUND"]);
+const errorCodes = new Set([...CODES, "NO_SPACE", "UNCLASSIFIED_TABLE", "SECRET_FOUND", "SCHEMA_NEWER", "SCHEMA_MISMATCH", "NOT_FOUND", "BAD_LENGTH", "LENGTH_REQUIRED", "too_many_attempts", "RESTORE_INCOMPLETE"]);
+
+export function jsonUnlessBackupUpload(jsonParser) {
+  return (req, res, next) => {
+    const urlPath = (req.originalUrl || "").split("?")[0];
+    if (req.method === "POST" && urlPath.endsWith("/backup/restore/uploads")) return next();
+    return jsonParser(req, res, next);
+  };
+}
 
 function respondError(res, error) {
   const code = errorCodes.has(error?.code) ? error.code : "IO";
-  const status = code === "BUSY" ? 409 : code === "BAD_PASSWORD" ? 400 :
-    code === "NO_SPACE" ? 507 : code === "UNCLASSIFIED_TABLE" ? 409 : 500;
+  const status = code === "BUSY" || code === "UNCLASSIFIED_TABLE" || code === "SCHEMA_NEWER" || code === "SCHEMA_MISMATCH" ? 409 :
+    code === "LENGTH_REQUIRED" ? 411 : code === "LIMIT" ? 413 :
+    code === "NO_SPACE" ? 507 : code === "NOT_FOUND" ? 404 :
+    ["BAD_PASSWORD", "BAD_LENGTH", "WRONG_PASSWORD", "DAMAGED", "too_many_attempts"].includes(code) ? 400 : 500;
   return res.status(status).json({ success: false, code });
 }
+
+function requireCurrent(req, res) {
+  const peer = clientAddress(req);
+  const retryAfter = blockedFor(peer);
+  if (retryAfter) {
+    res.set("Retry-After", String(retryAfter));
+    res.status(429).json({ success: false, code: "throttled", retryAfter });
+    return false;
+  }
+  if (!secrets.verifyDashboardPassword(req.body?.current)) {
+    recordFailure(peer);
+    res.status(403).json({ success: false, code: "wrong_password" });
+    return false;
+  }
+  clearAttempts(peer);
+  return true;
+}
+
+router.post("/backup/restore/uploads", async (req, res) => {
+  try {
+    if (req.headers["content-type"]?.split(";")[0] !== "application/octet-stream")
+      return res.status(415).json({ success: false, code: "UNSUPPORTED_MEDIA_TYPE" });
+    return res.json(await uploads.receiveUpload(req));
+  } catch (error) { return respondError(res, error); }
+});
+
+router.post("/backup/restore/uploads/:id/preview", async (req, res) => {
+  const id = req.params.id;
+  if (!uploads.idRe.test(id)) return res.status(404).json({ success: false, code: "NOT_FOUND" });
+  if (uploads.lockedOut(id)) return respondError(res, { code: "too_many_attempts" });
+  const pin = uploads.pinUpload(id);
+  if (!pin) return res.status(404).json({ success: false, code: "NOT_FOUND" });
+  try {
+    const opened = await openBackup({ path: pin.path, password: req.body?.password });
+    restore.schemaCheck(opened.manifest);
+    const m = opened.manifest;
+    const paired = readPairedAccount();
+    const status = !m.account ? "none" : !paired ? "target-unpaired" :
+      accountsMatch(m.account, paired) ? "match" : "different";
+    return res.json({ created: m.created, app: m.app, schema: m.schema, platform: m.platform,
+      counts: m.counts, apiKeys: m.apiKeys, account: { masked: maskAccount(m.account), status },
+      accountData: m.account ? "waits" : "none" });
+  } catch (error) {
+    if (error.code === "WRONG_PASSWORD" && uploads.wrongPassword(id))
+      return respondError(res, { code: "too_many_attempts" });
+    return respondError(res, error);
+  } finally { pin.release(); }
+});
+
+router.post("/backup/restore/uploads/:id/restore", (req, res) => {
+  const id = req.params.id;
+  if (uploads.idRe.test(id) && uploads.lockedOut(id)) return respondError(res, { code: "too_many_attempts" });
+  if (!uploads.idRe.test(id) || !uploads.getUpload(id))
+    return res.status(404).json({ success: false, code: "NOT_FOUND" });
+  if (!requireCurrent(req, res)) return;
+  try { return res.json({ jobId: jobs.startRestore(id, req.body?.password) }); }
+  catch (error) { return respondError(res, error); }
+});
+
+router.get("/backup/pending", (_req, res) => {
+  try { return res.json(restore.pendingStatus()); }
+  catch (error) { return respondError(res, error); }
+});
+
+router.delete("/backup/pending", (req, res) => {
+  if (!requireCurrent(req, res)) return;
+  try { restore.discardPending(); return res.json({ success: true }); }
+  catch (error) { return respondError(res, error); }
+});
 
 router.get("/backup/contents", (_req, res) => {
   try { res.json(describeBackupContents()); }

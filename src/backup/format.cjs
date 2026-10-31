@@ -18,6 +18,7 @@ const DEFAULT_KDF = Object.freeze({ N: 131072, r: 8, p: 1 });
 const LIMITS = Object.freeze({
   header: 4096, manifest: 8 * 1024 * 1024, chunk: 65536,
   file: 16 * 1024 ** 3, db: 4 * 1024 ** 3, entry: 64 * 1024 ** 2,
+  memory: 1024 ** 2,
   entries: 200000, passwordPointsMin: 12, passwordPointsMax: 1024,
   passwordBytes: 4096, saltBytes: 32, kdfMinN: 32768, kdfMaxN: 262144,
   maxPathSegments: 4,
@@ -361,12 +362,27 @@ async function extractInto(filePath, info, keys, manifestBytes, dest, onProgress
     const current = await readManifest(reader);
     if (!current.bytes.equals(manifestBytes)) fail("DAMAGED", "Backup manifest changed");
     let done = 0;
+    const memory = {};
     for (const entry of current.manifest.entries) {
+      const hash = crypto.createHash("sha256");
+      // Decrypted API keys stay in memory. Callers cannot opt into a file.
+      if (entry.kind === "secrets") {
+        if (entry.size > LIMITS.memory) fail("LIMIT", "In-memory backup entry too large");
+        const buffer = await reader.read(entry.size);
+        hash.update(buffer);
+        done += buffer.length;
+        onProgress?.({ phase: "write", bytes: done, totalBytes: current.total });
+        if (hash.digest("hex") !== entry.sha256) {
+          buffer.fill(0);
+          fail("DAMAGED", "Backup entry checksum failed");
+        }
+        memory[entry.path] = buffer;
+        continue;
+      }
       const target = await entryTarget(root, entry.path);
       const flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL |
         (fs.constants.O_NOFOLLOW || 0);
       const output = await fsp.open(target, flags, 0o600);
-      const hash = crypto.createHash("sha256");
       try {
         await reader.read(entry.size, async (piece) => {
           hash.update(piece);
@@ -382,7 +398,7 @@ async function extractInto(filePath, info, keys, manifestBytes, dest, onProgress
       fail("DAMAGED", "Missing backup end marker");
     }
     await reader.end();
-    return { entries: current.manifest.entries.length, bytes: done };
+    return { entries: current.manifest.entries.length, bytes: done, memory };
   });
 }
 async function openWithKeys({ path: filePath, keys }) {
