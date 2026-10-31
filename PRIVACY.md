@@ -91,10 +91,15 @@ decides whether to search for each answer.
    reads the device's location and requests no location permission; the only
    place information is the city name you type into these two commands. `!shortlink` sends the URL to
    `is.gd`, then to `v.gd` if the first service fails.
-10. **Optional page and media fetches:** enabling link previews lets Baileys
+10. **Optional page and media fetches:** enabling link previews lets Levix
     request the host of a URL in an outgoing message to build a preview.
     Enabling remote thumbnails lets Levix download a remote media URL from its
-    host to build a thumbnail. Both settings are off by default.
+    host to build a thumbnail. Both settings are off by default. These requests
+    accept public HTTPS URLs only; every redirect is validated, and HTTP,
+    credentials in URLs and private/loopback destinations are refused. A refused
+    preview does not prevent sending the text message. Actual remote media sends
+    use the same validation and the configured remote media size/time limits;
+    the downloaded bytes are reused for the send and thumbnail.
 11. **Model discovery and domain setup:** when you request live model
     discovery in the panel, the chosen provider's models endpoint receives
     your API key. On a desktop or server, `levix domain` requests
@@ -401,12 +406,13 @@ updates the Console after review.
 → **Yes**
 
 **Q: Is all of the user data collected by your app encrypted in transit?**
-→ **No.** WhatsApp traffic uses WhatsApp's encrypted transport, and every
-service Levix itself calls uses HTTPS. Two optional settings, both off by
-default, can send a plain HTTP request: link previews (`link_previews_enabled`)
-and remote thumbnails (`thumbnail_remote`) fetch the URL as written, so an
-`http://` link in an outgoing message or remote media URL travels unencrypted.
-While Levix keeps that behaviour, the accurate answer is No.
+→ **Keep the existing No answer pending the final v5.0.0 transit audit.** The
+previous HTTP paths in link previews and remote thumbnails are now blocked,
+including redirects from HTTPS to HTTP. Outbound remote media URLs use the same
+HTTPS-only boundary. These fixes alone do not establish an app-wide Yes: the
+release audit must still examine other clients, redirects and supported local
+provider/panel connections. This PR does not change the Play Console answer;
+the owner reviews it before publishing v5.0.0.
 
 **Account creation**
 → **My app does not allow users to create an account**
