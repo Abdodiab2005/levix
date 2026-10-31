@@ -58,6 +58,16 @@ class PanelActivity : AppCompatActivity() {
     private lateinit var stickerHost: StickerHost
     private val stickerSources = StickerSources()
     private val stickerPickerIds = ArrayDeque<String>()
+    private val backupSaveIds = ArrayDeque<String>()
+
+    private val createBackup = registerForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        val id = backupSaveIds.removeFirstOrNull()
+        // The old WebView and host are destroyed on recreation. An orphaned
+        // result must still remove the empty document the picker created.
+        stickerHost.backupSavePicked(id ?: "", uri)
+    }
 
     private val pickSticker = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val id = stickerPickerIds.removeFirstOrNull()
@@ -89,6 +99,7 @@ class PanelActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        savedInstanceState?.getString(BACKUP_SAVE_ID)?.let { backupSaveIds.addLast(it) }
         applySystemBars()
         sock = File(HostState.dataDir(this), "panel.sock")
         bridgeJs = try {
@@ -209,7 +220,19 @@ class PanelActivity : AppCompatActivity() {
                     stickerHost.picked(id, null)
                 }
             } },
-            { file, mime -> runOnUiThread { shareStickerFile(file, mime) } })
+            { file, mime -> runOnUiThread { shareStickerFile(file, mime) } },
+            { id, fileName -> runOnUiThread {
+                backupSaveIds.addLast(id)
+                try { createBackup.launch(fileName) }
+                catch (_: Exception) {
+                    backupSaveIds.remove(id)
+                    stickerHost.backupSaveFailed(id)
+                }
+            } },
+            { id, bytes, total -> runOnUiThread {
+                web.evaluateJavascript(
+                    "window.__levixHostProgress(${JSONObject.quote(id)}, $bytes, $total)", null)
+            } })
         web.addJavascriptInterface(
             PanelBridge(
                 sock,
@@ -452,6 +475,7 @@ class PanelActivity : AppCompatActivity() {
     override fun onDestroy() {
         stickerHost.destroy()
         stickerPickerIds.clear()
+        backupSaveIds.clear()
         val chooser = fileChooserCallback
         fileChooserCallback = null
         chooser?.onReceiveValue(null)
@@ -459,10 +483,14 @@ class PanelActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-
+    override fun onSaveInstanceState(outState: Bundle) {
+        backupSaveIds.firstOrNull()?.let { outState.putString(BACKUP_SAVE_ID, it) }
+        super.onSaveInstanceState(outState)
+    }
 
     companion object {
         const val EXTRA_URL = "url"
+        private const val BACKUP_SAVE_ID = "backupSaveCallId"
 
         /**
          * The one place a panel URL with a screen hash is built, so the app has

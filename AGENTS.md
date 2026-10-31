@@ -1168,6 +1168,25 @@ its preview Blob is not posted through the WebView bridge.
 row, removes `<data>/stickers`, and discards pending uploads. The next phone
 that pairs starts a new self library and does not inherit the previous one.
 
+### Backup and restore
+
+`src/backup/` owns format v1, snapshot filtering, restore, journal recovery and
+account activation. `src/routes/backup.api.esm.js` exposes the authenticated
+panel API; `frontend/src/views/BackupView.tsx` is Settings → Backup. Every new
+database table or `bot_settings` key must be classified in the backup allowlist
+before creation can succeed. Unknown data must not enter an archive.
+
+Restore journals each change in `<data>/restore/journal.json`; startup recovers
+it under the instance lock. Settings apply on restore. Account data waits until
+the matching WhatsApp account is paired, then activates before roles and
+schedules load. A different account cannot activate it.
+
+Android's `PanelBridge` delegates `uploadBackup(callId, token, maxBytes)` and
+`saveBackup(callId, token, fileName)` to `StickerHost`. Files stream over the
+panel socket. Upload is pinned to `POST /dashboard/api/backup/restore/uploads`;
+save is pinned to `GET /dashboard/api/backup/exports/<64 lowercase hex>`.
+Only small results and progress cross the JavaScript bridge.
+
 ## Dashboard (`views/` + `public/` + `src/routes/dashboard.api.esm.js`)
 
 A password-gated control panel at `/`. It is not a viewer — almost everything

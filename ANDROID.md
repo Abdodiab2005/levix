@@ -175,8 +175,16 @@ The Media Hub offers files up to 16 MB, mirroring Sticker Studio's server upload
 | `uploadSource(callId, token, fileName, maxBytes)` | Streams the selected URI to the local Sticker Studio upload route |
 | `exportFile(callId, action, path, method, jsonBody, fileName, mime)` | Streams an export from Node to the share cache or Downloads/Levix |
 | `cancel(callId)` | Closes an active transfer and returns a cancelled result |
+| `pickFile(callId)` | Opens an openable document and returns a source token and metadata |
+| `uploadBackup(callId, token, maxBytes)` | Streams the picked document to `POST /dashboard/api/backup/restore/uploads` with exact length |
+| `saveBackup(callId, token, fileName)` | Opens Create Document and streams `GET /dashboard/api/backup/exports/<64 lowercase hex>` to it |
 
 The asynchronous methods acknowledge immediately and deliver small JSON through `window.__levixHostDone(callId, result)`. Tokens expire after one hour; the activity keeps at most eight and clears them when it closes. Share files are written to `cache/shared/` and swept after 24 hours. Save writes a pending MediaStore Downloads row and publishes it only after the stream finishes. Both export destinations enforce the Sticker Studio MIME allowlist and sanitize the file name.
+
+Backup bytes never enter JavaScript. Backup upload reports progress through
+`window.__levixHostProgress(callId, bytes, total)` and requires a known size up
+to 16 GiB. Backup save uses Android's document picker; cancellation or transfer
+failure deletes a created partial document where the provider permits it.
 
 The ordinary `request()` bridge still carries other panel POST bodies; the small settings JSON export still uses `saveExportFile()`.
 Re-editing a sticker from the library creates its upload on the server, so its preview Blob is never posted through the bridge.
