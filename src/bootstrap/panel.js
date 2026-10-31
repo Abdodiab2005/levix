@@ -47,6 +47,8 @@ export async function bootstrapPanel({ core } = {}) {
     "../routes/dashboard.api.esm.js"
   );
   const stickerApi = await import("../routes/stickers.api.esm.js");
+  const backupApi = await import("../routes/backup.api.esm.js");
+  require("../backup/jobs.cjs").sweepBackupTemp();
 
   // Same session as the control panel. One chain and one JSON parser: the
   // sticker upload is raw bytes (any Content-Type, up to the upload cap) and
@@ -57,6 +59,7 @@ export async function bootstrapPanel({ core } = {}) {
     noStore,
     stickerApi.jsonUnlessStickerUpload(dashboardJson),
     stickerApi.default,
+    backupApi.default,
     dashboardApiRoutes,
   );
   logger.info("Dashboard API routes registered");
