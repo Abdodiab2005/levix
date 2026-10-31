@@ -377,9 +377,16 @@ section("command permission and disabled-list guards");
 {
   store.deleteBotSetting("command_permissions");
   store.saveBotSetting("command_permissions", { "group:kick": "MEMBERS" });
+  // Unpaired source: no account data, so only the permission guard can make
+  // this plan destructive.
+  store.authRemove("creds");
   const widened = await createBackup({ password, kdf });
+  pair(accountA);
   store.deleteBotSetting("command_permissions");
   const plan = publicPlan(await planOf(widened.path));
+  equal("permission backup has no account data", plan.accountData, null);
+  equal("permission backup replaces no setting", plan.settings.replaced.length + plan.apiKeys.replaced.length, 0);
+  equal("permission backup keeps the persona", ["unchanged", "kept"].includes(plan.persona), true);
   ok("permission overrides are added", plan.settings.added.includes("command_permissions"));
   equal("adding permission overrides needs confirmation", plan.destructive, true);
   equal("unconfirmed permission change refused",
