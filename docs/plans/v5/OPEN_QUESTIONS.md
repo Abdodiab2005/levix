@@ -29,7 +29,7 @@ blocked without an answer.
 | Q-22 | Every exported backup is encrypted with a user-provided password and holds the API keys. A restore seals the API keys again with the target's `levix.key`, keeps the target's panel password, session key and recovery email, and never imports WhatsApp pairing; the operator pairs manually. A new install goes through the normal setup first. | ADR-016; PR 02e |
 | Q-24 | Account data activates only after the paired WhatsApp account is verified to match the backup's account (LIDs when both are known, phone numbers otherwise). Until then it waits and the operator can discard it. | `BACKUP_FORMAT.md` section 8; PR 02f |
 | Q-25 | AI memory lives in `<data>/memory`. A legacy `PACKAGE_ROOT/memory` is copied there once. | PR 02c |
-| Q-26 | A verified local pre-migration copy (mode 0600, never exported, last two kept) and all pending migrations in one transaction. Recovery from a copy is a documented manual step, since there is no CLI restore. | ADR-016; PR 02b |
+| Q-26 | A verified local pre-migration copy (mode 0600, never exported, newest two kept) that holds every table and every row except the secret material: no WhatsApp pairing, no panel password hash, no recovery email, no session key and no API key. `src/db/copy.cjs` writes it, verifies it and renames it from a `.part` file. All pending migrations run in one transaction. Recovery from a copy is a documented manual step, since there is no CLI restore: the rollback steps are in `MIGRATION.md` section 5. A rollback leaves the install with no pairing and no panel password, so the next start goes through `/setup` again and the operator pairs WhatsApp by hand. Amended 2026-10-31 after the #91 review. | ADR-016; PR 02b |
 
 ## Still open
 

@@ -40,10 +40,12 @@ Rules kept from the Codex plan review:
 
 - Tables and `bot_settings` keys are allowlisted. A table the allowlist does not know makes backup
   creation fail, so a future table cannot leak.
-- The database copy is a `VACUUM INTO` snapshot taken in the same synchronous step as the file
-  links, then excluded rows are deleted, then
-  `VACUUM INTO` writes a new file without free pages, then `PRAGMA integrity_check` and a scan for
-  every value that must never travel run, and only then the file is archived.
+- The database copy is a filtered copy written by `src/db/copy.cjs` in the same synchronous step as
+  the file links. It creates the schema in a new file and copies only the allowed rows, so excluded
+  rows, unknown keys, secret settings and unpaired account tables are never written and no second
+  `VACUUM` is needed. Then `PRAGMA integrity_check`, a scan for every value that must never travel, and
+  only then the archive. The API key values stay in memory until they are written inside the
+  encrypted archive.
 - Every archive is sensitive: it holds API keys, chats, people and notes. It is always encrypted.
 
 ## 3. Design
@@ -53,12 +55,13 @@ Rules kept from the Codex plan review:
   chunk flag, header HMAC as additional data) of one gzip member that holds the manifest and the
   entry bytes. The password is always required. Node core only (`crypto.scrypt`,
   `crypto.createCipheriv`, `zlib`), no new dependency.
-- Creating (PR 02d): one synchronous step, with no `await` inside, takes a `VACUUM INTO` snapshot
-  of the live database and hard-links the sticker and schedule-media files (written once, never
-  edited) and copies the memory files and persona into a private staging folder, so rows and files
-  match without pausing other code (P2-08). Then filtering, the secret scan, hashing, the manifest
-  and the encrypted file, written to `<data>/tmp/backup/exports/` and downloadable by the signed-in
-  operator for 30 minutes. Creating needs the backup password twice and the panel password.
+- Creating (PR 02d): one synchronous step, with no `await` inside, writes a filtered copy of the live
+  database with `src/db/copy.cjs` into a private temporary folder `<data>/tmp/backup/<id>/` (0700),
+  hard-links the sticker and schedule-media files (written once, never edited) and copies the memory
+  files and persona in the same step, so rows and files match without pausing other code (P2-08).
+  Rows the backup excludes and secret settings are never written. Then the secret scan, hashing, the
+  manifest and the encrypted file, written to `<data>/tmp/backup/exports/` and downloadable by the
+  signed-in operator for 30 minutes. Creating needs the backup password twice and the panel password.
 - Restoring (PR 02e): upload, preview with the backup password, confirm with the panel password,
   then a job that stages and verifies everything, migrates the staged database copy, applies the
   settings group in one transaction (API keys sealed with the target's `levix.key`) and moves the
@@ -78,11 +81,19 @@ Rules kept from the Codex plan review:
   recovery, opens the database without migrating, refuses a schema newer than the build (P2-13),
   writes and verifies a pre-migration copy when a migration is pending, then runs every pending
   migration in one transaction, so a failure leaves the database at its old version. The copy is a
-  full local file in `<data>/backups/pre-migration/` (mode 0600, folder 0700), checked with
-  `PRAGMA integrity_check` and `user_version`, never exported and never offered for download; the
-  last two are kept. Recovery from a copy is a documented manual step with Levix stopped, because
-  there is no CLI restore (Q-14). `reset-password` never migrates without the lock (P2-02). The
-  stale-lock takeover becomes race-free (P2-12).
+  filtered local file in `<data>/backups/pre-migration/levix-v<from>-<stamp>.db` (file 0600, folder
+  0700), never exported and never offered for download; the newest two are kept. It holds every
+  table and every row except the secret material: no WhatsApp pairing (`baileys_auth`, `qr_codes`),
+  no panel password hash (`auth:password`), no recovery email (`auth:recovery-email`), no session
+  key (`secret:session`), and no API key or proxy password. `src/db/copy.cjs` creates the schema in a
+  new file and copies only the allowed rows in one read transaction, so no secret row reaches the
+  copy or a temporary file; the pairing tables exist in the copy with no rows. The copy is written as
+  a `.part` file, checked with `PRAGMA integrity_check`, `user_version`, row counts and a check for
+  secret rows, fsynced and renamed, and the next start deletes stale `.part` files. Recovery from a
+  copy is a documented manual step with Levix stopped, because there is no CLI restore (Q-14): copy
+  the chosen file over `levix.db`, delete `levix.db-wal` and `levix.db-shm`, start the previous
+  build, choose a new panel password at `/setup` and pair WhatsApp by hand. `reset-password` never
+  migrates without the lock (P2-02). The stale-lock takeover becomes race-free (P2-12).
 - Memory (PR 02c, Q-25): `memory.cjs` reads and writes `<data>/memory` only. On the first start
   with an empty `<data>/memory` and files in the legacy `PACKAGE_ROOT/memory`, those files are
   copied into the data directory once; the legacy folder is left in place and reported in the log.
@@ -117,7 +128,7 @@ separate files and are built in parallel, then stacked.
 | Q-22 | A restore keeps the target's panel password, session key and recovery email, and never imports WhatsApp pairing. API keys come from the backup and are sealed with the target's `levix.key`. A new install goes through the normal setup first. |
 | Q-24 | Account data activates only after the paired WhatsApp account is verified to match the backup's account; until then it waits, and the operator can discard it. |
 | Q-25 | AI memory lives in `<data>/memory`. |
-| Q-26 | Migrations get crash-resistant rollback protection: a verified local pre-migration copy (never exported, last two kept) and all pending migrations in one transaction. |
+| Q-26 | Migrations get crash-resistant rollback protection: a verified local pre-migration copy (never exported, newest two kept) and all pending migrations in one transaction. The copy holds every table and every row except the secret material (no WhatsApp pairing, panel password hash, recovery email, session key or API key), so a rollback leaves the install with no pairing and no panel password. |
 
 The owner also decided that every exported backup is encrypted with a user-provided password
 (AES-256-GCM with a secure KDF) and holds the AI and third-party API keys. This replaces the
@@ -137,6 +148,17 @@ The owner also decided that every exported backup is encrypted with a user-provi
 - Newer schema refused; a v4.9.x fixture database restored and migrated.
 - No pairing credential, panel secret, session key, recovery email or device key in a backup: a test
   decrypts the archive and scans the database copy and every entry for each planted value.
+- Pre-migration copy (`tests/start-order.test.mjs`): planted sentinel values for each secret never
+  appear in any file under `<data>/backups/pre-migration/`; the pairing tables are empty and every
+  other row is present; the copy's schema equals the source's. A kill during the copy leaves no final
+  file, no secret in the `.part` file and an unchanged live database. A rollback onto the previous
+  schema opens with no pairing and no panel password.
+- Backup creation survives a crash (`tests/backup-create.test.mjs`): a crash after the database copy
+  and after the file copies leaves no secret value in any file under `<data>/tmp/`, including the
+  plaintext API keys.
+- Restore survives a crash (`tests/backup-restore.test.mjs`): at every crash point, no file under the
+  data directory holds a plaintext API key; the recovery outcome is unchanged; extraction keeps the
+  `secrets.json` entry in memory only.
 - `settings-transfer` tests unchanged.
 - Core gates plus Docker, SEA and tarball in CI. Android save, open and restore on a device: NOT
   RUN until a device and a dedicated test account are available.

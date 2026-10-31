@@ -176,8 +176,11 @@ replaces them in its own plan before writing code.
 2. A migration test runs against v4.9.2 fixture databases before merge.
 3. A failing migration step already rolls back inside its own transaction and stops the process
    with a logged error (`src/db/db.cjs:689` to `:701`), so WhatsApp never starts on a half-migrated
-   database. v5 keeps that behaviour and adds the pre-migration backup as the restore point.
+   database. v5 keeps that behaviour and adds the pre-migration backup as the restore point. The
+   copy holds no secret material, so restoring it needs a new panel password, the API keys typed
+   again and a manual WhatsApp pairing (`MIGRATION.md` section 5).
 4. An older Levix opening a newer database continues silently today (`src/db/db.cjs:680`). A v4
    build therefore must not be pointed at a v5 database; rolling back from v5 to v4 means restoring
-   the pre-migration backup. v5 adds an explicit refusal for a schema newer than the running build.
+   the pre-migration backup. That restore has the same consequence as item 3. v5 adds an explicit
+   refusal for a schema newer than the running build.
 5. No migration is edited after it ships (`AGENTS.md`, Schema and migrations).

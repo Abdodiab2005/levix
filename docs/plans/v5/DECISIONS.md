@@ -204,6 +204,8 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
 
 - Status: ACCEPTED. Ordering rule accepted by the owner on 2026-10-30; backup content, encryption,
   restore and migration safety accepted on 2026-10-31 (Q-10, Q-14, Q-22, Q-24, Q-25, Q-26).
+- Amended 2026-10-31 after the #91 review: the pre-migration copy and every temporary file exclude
+  secret material.
 - Rule: no migration runs until Levix holds the single-instance lock and has written a backup that
   passes verification. Phase 02 ships concurrency and failure tests for that rule: a second process
   starting at the same time, a crash during the backup, a crash during the migration, and a full
@@ -219,9 +221,37 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
   stages and verifies everything first, applies the settings in one transaction, seals the API keys
   with the target's `levix.key`, keeps the target's panel password, and holds the account data until
   a WhatsApp account that matches the backup is paired. A journal makes every step finish or undo
-  after a crash. Before a pending migration, the start path writes a verified local copy of the
-  database (`<data>/backups/pre-migration/`, mode 0600, never exported, last two kept) and runs all
-  pending migrations in one transaction. There is no CLI and no WhatsApp command for backups.
+  after a crash. There is no CLI and no WhatsApp command for backups.
+- Decision (secret material): secret material means the WhatsApp pairing (`baileys_auth` and
+  `qr_codes`), the panel password hash (`auth:password`), the recovery email record
+  (`auth:recovery-email`), the panel session key (`secret:session`), and the API keys and the proxy
+  password (`setting:<key>` for every secret setting). No pre-migration copy, no journal and no
+  temporary or staging file holds it in plain text. Inside a backup the API keys are plain only
+  within the encrypted payload (`secrets.json`).
+- Decision (pre-migration copy, amended 2026-10-31 after the #91 review): before a pending migration
+  the start path writes a local copy of the database to
+  `<data>/backups/pre-migration/levix-v<from>-<stamp>.db` (file 0600, folder 0700, never exported,
+  newest two kept) and runs all pending migrations in one transaction. The copy holds every table and
+  every row except the secret material above. One module, `src/db/copy.cjs`, creates the schema in a
+  new file and copies only the allowed rows from the live database in one read transaction, so no
+  secret row reaches the copy, its journal or a temporary file. The pairing tables exist in the copy
+  with no rows. The copy is written as a `.part` file, verified with `PRAGMA integrity_check`,
+  `user_version`, row counts and a check for secret rows, fsynced and renamed. A crash leaves no file
+  under a final name, and the next start deletes stale `.part` files.
+- Decision (rollback without a stored WhatsApp session): with Levix stopped, the operator copies the
+  chosen copy over `levix.db`, deletes `levix.db-wal` and `levix.db-shm` and starts the previous
+  build. Levix then has no pairing, no panel password, no recovery email, no session key and no API
+  keys. The panel opens `/setup` for a new password, and from another machine it also asks for the
+  setup code printed in the terminal. A new session key is generated, the operator types the API keys
+  again and pairs WhatsApp from the Connection screen. The operator pairs the same WhatsApp account;
+  to start fresh for another account, Unlink is pressed after pairing. A failed migration needs none
+  of this, because all pending migrations run in one transaction and the database stays at its old
+  version.
+- Decision (no plaintext secret in a temporary file): creating a backup holds the API key values in
+  memory and writes them only inside the encrypted archive. Restoring decrypts the `secrets.json`
+  entry into memory only and never writes it into the staged restore. A stop before the settings
+  transaction commits discards the staged restore and the operator runs the restore again with the
+  backup password. After the commit the keys are already sealed in `levix.db`.
 
 ## ADR-017: Android ships production dependencies only
 

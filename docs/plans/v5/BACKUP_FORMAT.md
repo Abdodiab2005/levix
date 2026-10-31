@@ -163,14 +163,41 @@ install's `levix.key`, so the source key never leaves its device.
 Tables are an allowlist. Backup creation fails on a table that this list does not classify, so a
 table added later cannot leak until someone classifies it.
 
-The database copy is made in this order: a `VACUUM INTO` snapshot of the live database into a
-private temporary file, taken in the same synchronous step that hard-links or copies the files, so
-rows and files match; deletion of every row and table that the backup excludes, `VACUUM INTO` a
-second file so no deleted page survives, `PRAGMA integrity_check`, a scan of that file for every
-value that must never travel (the sealed secret-setting rows, the panel password hash, the recovery
-email record, the session key and the pairing credentials), and only then the archive. Plain API
-key values are not scanned for: they travel in `secrets.json` by design. The temporary files are
-deleted.
+The database copy is made in this order: `src/db/copy.cjs` writes a filtered copy of the live
+database into a private temporary folder `<data>/tmp/backup/<id>/` (mode 0700) in one synchronous
+step, while the referenced files are hard-linked or copied, so rows and files match. It creates the
+schema in the new file and copies only the allowed rows from the live database. Rows this section
+excludes, unknown `bot_settings` keys, secret settings, and the account tables when no account is
+paired are never written, so no second `VACUUM` is needed. Then `PRAGMA integrity_check`, a scan for
+every value that must never travel (the sealed secret-setting rows, the panel password hash, the
+recovery email record, the session key and the pairing credentials), and only then the archive. The
+API key values are held in memory and written only inside the encrypted archive (`secrets.json`), so
+they are not in the temporary folder at all. The temporary folder is deleted, and a folder left by a
+crash holds no secret material and is swept when the panel starts.
+
+### 7.1 Pre-migration copy
+
+Before a pending migration, the start path writes a second kind of copy. It is not a backup: it never
+leaves `<data>/backups/pre-migration/`, the panel never offers it for download, and the operator
+cannot restore it from the UI.
+
+- File: `<data>/backups/pre-migration/levix-v<from>-<stamp>.db`, file mode 0600, folder mode 0700.
+  The newest two files are kept.
+- Content: every table and every row except the secret material. That means no WhatsApp pairing
+  (`baileys_auth`, `qr_codes`), no panel password hash (`auth:password`), no recovery email record
+  (`auth:recovery-email`), no panel session key (`secret:session`), and no API key or proxy password
+  (`setting:<key>` for every secret setting). The pairing tables exist in the copy with no rows.
+- Writer: `src/db/copy.cjs` creates the schema in a new file and copies only the allowed rows from the
+  live database in one read transaction. No secret row reaches the copy, its journal or a temporary
+  file.
+- Write order: a `.part` file, then verification (`PRAGMA integrity_check`, `user_version`, row
+  counts, no secret rows), then `fsync`, then rename. A crash leaves no file under a final name, and
+  the next start deletes stale `.part` files.
+- Rollback: with Levix stopped, copy the chosen file over `levix.db`, delete `levix.db-wal` and
+  `levix.db-shm`, then start the previous build. The install then has no pairing and no panel
+  password, so `/setup` asks for a new one, and the operator pairs WhatsApp by hand. The steps are in
+  `MIGRATION.md` section 5. A failed migration needs no rollback, because all pending migrations run
+  in one transaction.
 
 ## 8. Restore
 
@@ -184,12 +211,16 @@ deleted.
    wrong password or any damage.
 5. Confirming needs the panel password. A background job decrypts and checks every chunk and entry
    into `<data>/restore/<id>/staged/`, runs `PRAGMA integrity_check` on the database copy and
-   migrates the copy to the running schema with the normal migrations. Live data is untouched until
-   all of this passes.
+   migrates the copy to the running schema with the normal migrations. The `secrets.json` entry is
+   decrypted into memory only, at most 1 MiB, and is never written into the staged folder. Live data
+   is untouched until all of this passes.
 6. The settings group is applied in one SQLite transaction on the live database. Every restorable
    `bot_settings` row is replaced; the target keeps its device keys, panel authentication rows and
-   session key. The API keys are sealed with the target's `levix.key`. `ai-persona.md` is replaced
-   atomically. The new values take effect like a settings import.
+   session key. The API keys are sealed with the target's `levix.key` inside that transaction.
+   `ai-persona.md` is replaced atomically. The new values take effect like a settings import. If
+   Levix stops before that transaction commits, recovery discards the staged restore and the
+   operator runs the restore again with the backup password. After the commit the keys are already
+   sealed in `levix.db`. No file in the data directory holds a plaintext secret at any moment.
 7. The account group moves to `<data>/restore/pending/` with the account identity. It activates
    only when the paired WhatsApp account matches the backup's account (Q-24):
    - Match rule: when both sides know a LID, the LIDs must be equal. The phone-number JIDs decide
