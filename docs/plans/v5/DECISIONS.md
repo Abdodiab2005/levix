@@ -200,26 +200,58 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
   Nothing is pushed to `main` directly, merged automatically, tagged, released or uploaded to Google
   Play without the owner's explicit approval. The `play` job keeps its required reviewer.
 
-## ADR-016: Local backups, secrets excluded or encrypted
+## ADR-016: Local encrypted backups and safe migrations
 
-- Status: ordering rule ACCEPTED (owner, 2026-10-30); format PROPOSED (Phase 02 finalizes it).
-- Rule (ACCEPTED): no migration runs until Levix holds the single-instance lock and has written a
-  backup that passes verification. Phase 02 ships concurrency and failure tests for that rule: a
-  second process starting at the same time, a crash during the backup, a crash during the migration,
-  and a full disk.
-- Context: Node v24.19.0 exports `backup()` from `node:sqlite` and `DatabaseSync.prototype.serialize`
-  (checked with `node -e` on 2026-10-30). The Android runtime is Node v24.22.1 linked against a
-  system `libsqlite3.so`; the API there is NOT VERIFIED yet. Secret material and the vault key layout
-  are mapped in `ARCHITECTURE.md` section 6.
-- Decision (PROPOSED): backups are local files that the operator creates. By default they leave out
-  WhatsApp pairing credentials, the panel password hash, the session signing key, API keys and
-  recovery tokens. Those live in the same tables as ordinary data, so the default backup holds a
-  filtered copy of the database with those rows removed, and Phase 02 defines how a restore treats
-  them (Q-22). A backup that includes secrets must be encrypted with a key derived from an operator
-  passphrase, using Node core primitives (AES-256-GCM and scrypt) whose parameters are recorded in
-  the manifest. Restore stages everything, writes a journal before the first move, and completes or
-  undoes an interrupted switch at the next start, so a corrupt or interrupted restore leaves the old
-  data intact. The start order changes so a backup can run before a pending migration (AUDIT B-09).
+- Status: ACCEPTED. Ordering rule accepted by the owner on 2026-10-30; backup content, encryption,
+  restore and migration safety accepted on 2026-10-31 (Q-10, Q-14, Q-22, Q-24, Q-25, Q-26).
+- Amended 2026-10-31 after the #91 review: the pre-migration copy and every temporary file exclude
+  secret material.
+- Rule: no migration runs until Levix holds the single-instance lock and has written a backup that
+  passes verification. Phase 02 ships concurrency and failure tests for that rule: a second process
+  starting at the same time, a crash during the backup, a crash during the migration, and a full
+  disk.
+- Context: Node v24.22.2 exports `backup()` from `node:sqlite` and `DatabaseSync.prototype.serialize`;
+  the pinned Android `libsqlite3` exports the backup functions (run time on a device NOT VERIFIED).
+  Secret material and the vault key layout are mapped in `ARCHITECTURE.md` section 6.
+- Decision: backups are local files that the operator creates from the panel or the Android app.
+  Every exported backup is encrypted with a password the operator types (scrypt, AES-256-GCM chunk
+  stream, Node core only; `BACKUP_FORMAT.md`). It holds the settings, the command table, the API
+  keys and the bot data, and never the WhatsApp pairing, the panel password, the panel session key,
+  panel sessions, the recovery email, `levix.key`, device settings or Android preferences. A restore
+  stages and verifies everything first, applies the settings in one transaction, seals the API keys
+  with the target's `levix.key`, keeps the target's panel password, and holds the account data until
+  a WhatsApp account that matches the backup is paired. A journal makes every step finish or undo
+  after a crash. There is no CLI and no WhatsApp command for backups.
+- Decision (secret material): secret material means the WhatsApp pairing (`baileys_auth` and
+  `qr_codes`), the panel password hash (`auth:password`), the recovery email record
+  (`auth:recovery-email`), the panel session key (`secret:session`), and the API keys and the proxy
+  password (`setting:<key>` for every secret setting). No pre-migration copy, no journal and no
+  temporary or staging file holds it in plain text. Inside a backup the API keys are plain only
+  within the encrypted payload (`secrets.json`).
+- Decision (pre-migration copy, amended 2026-10-31 after the #91 review): before a pending migration
+  the start path writes a local copy of the database to
+  `<data>/backups/pre-migration/levix-v<from>-<stamp>.db` (file 0600, folder 0700, never exported,
+  newest two kept) and runs all pending migrations in one transaction. The copy holds every table and
+  every row except the secret material above. One module, `src/db/copy.cjs`, creates the schema in a
+  new file and copies only the allowed rows from the live database in one read transaction, so no
+  secret row reaches the copy, its journal or a temporary file. The pairing tables exist in the copy
+  with no rows. The copy is written as a `.part` file, verified with `PRAGMA integrity_check`,
+  `user_version`, row counts and a check for secret rows, fsynced and renamed. A crash leaves no file
+  under a final name, and the next start deletes stale `.part` files.
+- Decision (rollback without a stored WhatsApp session): with Levix stopped, the operator copies the
+  chosen copy over `levix.db`, deletes `levix.db-wal` and `levix.db-shm` and starts the previous
+  build. Levix then has no pairing, no panel password, no recovery email, no session key and no API
+  keys. The panel opens `/setup` for a new password, and from another machine it also asks for the
+  setup code printed in the terminal. A new session key is generated, the operator types the API keys
+  again and pairs WhatsApp from the Connection screen. The operator pairs the same WhatsApp account;
+  to start fresh for another account, Unlink is pressed after pairing. A failed migration needs none
+  of this, because all pending migrations run in one transaction and the database stays at its old
+  version.
+- Decision (no plaintext secret in a temporary file): creating a backup holds the API key values in
+  memory and writes them only inside the encrypted archive. Restoring decrypts the `secrets.json`
+  entry into memory only and never writes it into the staged restore. A stop before the settings
+  transaction commits discards the staged restore and the operator runs the restore again with the
+  backup password. After the commit the keys are already sealed in `levix.db`.
 
 ## ADR-017: Android ships production dependencies only
 

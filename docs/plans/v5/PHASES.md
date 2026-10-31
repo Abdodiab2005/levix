@@ -59,16 +59,16 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
-| Status | PLAN since 2026-10-31: `PHASE-02-RESULTS.md` (re-audit, design, PRs 02a to 02e) and `BACKUP_FORMAT.md` (PROPOSED). Waiting for owner decisions Q-10, Q-14, Q-22, Q-24, Q-25 and Q-26. PR 02b (start order) needs only Q-26. |
+| Status | Decisions APPROVED by the owner on 2026-10-31 (Q-10, Q-14, Q-22, Q-24, Q-25, Q-26); implementation in PRs 02a to 02h (`PHASE-02-RESULTS.md` section 4). `BACKUP_FORMAT.md` is ACCEPTED. |
 | Inputs | The old local branch `zcode/commands-panel-upgrades` adds nothing: both commits are patch-identical to `main` commits `ec1d762` and `cb9d09a` (Q-02, checked 2026-10-30). |
-| Goal | Local backup and restore of the data in `ARCHITECTURE.md` section 6, with a manifest, checksums, a filtered database copy without secrets by default, passphrase encryption when secrets are included, and a journaled restore that survives interruption (`ARCHITECTURE.md` section 10.2). |
-| Files | new `src/backup/` (manifest, create, verify, restore), `src/db/db.cjs` and `src/bootstrap/core.js` (start order: open, lock, detect pending migrations, back up, migrate; AUDIT B-09), `src/routes/dashboard.api.esm.js` (routes), `src/cli.js` (new `backup` and `restore` subcommands for headless use, Q-14), `frontend/src/views/SettingsView.tsx` (new section), `android/app/src/main/java/net/leviro/levix/PanelBridge.kt` and `PanelFiles.kt` (save and open through the Storage Access Framework), new `docs/plans/v5/BACKUP_FORMAT.md`. |
+| Goal | Local, always-encrypted backup and restore of the settings, API keys and bot data in `BACKUP_FORMAT.md` section 7, account data that activates only for the same WhatsApp account, a journaled restore that survives interruption, and a start order that never migrates without the instance lock and a verified pre-migration copy. |
+| Files | new `src/backup/` (format, create, restore, activation, journal), `src/db/db.cjs`, `src/config/lock.cjs`, `src/bootstrap/core.js` and `src/cli.js` (start order, AUDIT B-09), `src/utils/memory.cjs` (Q-25), `src/routes/` (backup routes), `frontend/src/views/` (Settings → Backup), `android/app/src/main/java/net/leviro/levix/` (`PanelBridge.kt`, `PanelFiles.kt`, Storage Access Framework save and open), `docs/plans/v5/BACKUP_FORMAT.md`. No CLI or WhatsApp command (Q-14). |
 | Migrations | No table change. The start order changes so a backup can run before pending migrations; each later phase that adds a migration relies on that hook. |
-| Compliance | Local only; nothing is uploaded; the operator sees the content list before creating or restoring. |
-| Tests | backup, mutate, restore, verify; corrupt backup rejected with old data intact; interrupted restore; wrong passphrase; newer schema refused; path traversal, symlink, bomb and KDF-cost fuzz; schedules, group settings, memory and secure settings covered; settings export unchanged. |
-| Gate | No data loss in any failure test; no secret in a default backup; content list shown before restore; no migration runs before the instance lock is held and a verified backup exists (ADR-016 rule, accepted 2026-10-30), proven by concurrency and failure tests (two processes at once, crash during backup, crash during migration, full disk). |
-| Rollback | Feature routes disabled; restore never deletes current data before the atomic switch. |
-| PRs | Revised 2026-10-31 (`PHASE-02-RESULTS.md` section 4): 02a format, archive reader and writer, limits, read-only preview. 02b start order: lazy database open, lock first, newer-schema refusal, verified pre-migration backup. 02c create. 02d restore. 02e UI, CLI and Android. |
+| Compliance | Local only; nothing is uploaded; every exported file is encrypted with the operator's password; the operator sees the content list before creating and before restoring. |
+| Tests | backup, mutate, restore, verify; corrupt backup rejected with old data intact; interrupted restore and activation; wrong password; account mismatch never activates; newer schema refused; tampering, path, bomb and KDF-cost fuzz; schedules, group settings, memory and secure settings covered; settings export unchanged. |
+| Gate | No data loss in any failure test; no pairing credential, panel secret or device key in a backup; API keys usable after restore on another install; account data never activates for a different account; content list shown before restore; no migration runs before the instance lock is held and a verified copy exists, proven by concurrency and failure tests (two processes at once, crash during backup, crash during migration, full disk). |
+| Rollback | Backup routes disabled; restore never deletes current data before its replacement is verified and in place; a failed migration leaves the database at its old version. |
+| PRs | Revised 2026-10-31 after the owner's decisions: 02a format library, 02b start order and migration safety, 02c memory root, 02d create, 02e restore, 02f account activation, 02g panel UI, 02h Android and docs. One stack in that order. |
 
 ### Phase 03: unified i18n
 
@@ -176,8 +176,11 @@ replaces them in its own plan before writing code.
 2. A migration test runs against v4.9.2 fixture databases before merge.
 3. A failing migration step already rolls back inside its own transaction and stops the process
    with a logged error (`src/db/db.cjs:689` to `:701`), so WhatsApp never starts on a half-migrated
-   database. v5 keeps that behaviour and adds the pre-migration backup as the restore point.
+   database. v5 keeps that behaviour and adds the pre-migration backup as the restore point. The
+   copy holds no secret material, so restoring it needs a new panel password, the API keys typed
+   again and a manual WhatsApp pairing (`MIGRATION.md` section 5).
 4. An older Levix opening a newer database continues silently today (`src/db/db.cjs:680`). A v4
    build therefore must not be pointed at a v5 database; rolling back from v5 to v4 means restoring
-   the pre-migration backup. v5 adds an explicit refusal for a schema newer than the running build.
+   the pre-migration backup. That restore has the same consequence as item 3. v5 adds an explicit
+   refusal for a schema newer than the running build.
 5. No migration is edited after it ships (`AGENTS.md`, Schema and migrations).
