@@ -50,6 +50,7 @@ import { useI18n } from "../context/I18nContext";
 import { type Language, translations } from "../i18n/translations";
 import { fill } from "../utils/fill";
 import { DiagnosticsView } from "./DiagnosticsView";
+import { BackupView } from "./BackupView";
 
 type SettingsTab =
   | "general"
@@ -57,6 +58,7 @@ type SettingsTab =
   | "proxy"
   | "security"
   | "storage"
+  | "backup"
   | "feedback"
   | "diagnostics";
 
@@ -66,6 +68,7 @@ const SETTINGS_TABS: SettingsTab[] = [
   "proxy",
   "security",
   "storage",
+  "backup",
   "feedback",
   "diagnostics",
 ];
@@ -686,6 +689,7 @@ export const SettingsView: React.FC = () => {
           { value: "proxy", label: t("tabProxy"), icon: <Globe size={17} /> },
           { value: "security", label: t("tabSecurity"), icon: <Shield size={17} /> },
           { value: "storage", label: t("tabStorage"), icon: <HardDrive size={17} /> },
+          { value: "backup", label: t("tabBackup"), icon: <HardDrive size={17} /> },
           { value: "feedback", label: t("tabFeedback"), icon: <MessageSquareHeart size={17} /> },
           { value: "diagnostics", label: t("tabDiagnostics"), icon: <FileText size={17} /> },
         ]}
@@ -1260,6 +1264,8 @@ export const SettingsView: React.FC = () => {
           <FeedbackForm />
         </div>
       )}
+
+      {activeTab === "backup" && <BackupView />}
 
       {activeTab === "diagnostics" && (
         <div data-tour="settings-diagnostics" className="flex flex-col gap-5">

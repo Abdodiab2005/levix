@@ -6,6 +6,8 @@ interface LevixHost {
   takePendingSticker?(): string;
   pickStickerSource?(id: string): string;
   pickFile?(id: string): string;
+  uploadBackup?(id: string, token: string, maxBytes: number): string;
+  saveBackup?(id: string, token: string, fileName: string): string;
   uploadSource?(id: string, token: string, name: string, maxBytes: number): string;
   uploadForm?(
     id: string,
@@ -41,7 +43,9 @@ type HostResult = {
   size?: number;
 };
 const host = () => (window as { LevixHost?: LevixHost }).LevixHost;
+export const hasHostBridge = () => host() != null;
 const waiting = new Map<string, (value: HostResult) => void>();
+const progress = new Map<string, (bytes: number, total: number) => void>();
 let installed = false;
 
 function installDone() {
@@ -52,14 +56,18 @@ function installDone() {
   ).__levixHostDone = (id, result) => {
     const done = waiting.get(id);
     waiting.delete(id);
+    progress.delete(id);
     done?.(result);
   };
+  (window as Window & { __levixHostProgress?: (id: string, bytes: number, total: number) => void })
+    .__levixHostProgress = (id, bytes, total) => progress.get(id)?.(bytes, total);
 }
 
 function call(
-  method: "pickStickerSource" | "pickFile" | "uploadSource" | "uploadForm" | "exportFile",
+  method: "pickStickerSource" | "pickFile" | "uploadSource" | "uploadForm" | "exportFile" | "uploadBackup" | "saveBackup",
   args: (string | number)[],
   signal?: AbortSignal,
+  onProgress?: (bytes: number, total: number) => void,
 ): Promise<HostResult> {
   const h = host();
   const fn = h?.[method];
@@ -69,11 +77,13 @@ function call(
   return new Promise((resolve) => {
     const finish = (result: HostResult) => {
       signal?.removeEventListener("abort", abort);
+      progress.delete(id);
       resolve(result);
     };
     const abort = () => h.cancel?.(id);
     if (signal?.aborted) return finish({ ok: false, cancelled: true });
     waiting.set(id, finish);
+    if (onProgress) progress.set(id, onProgress);
     signal?.addEventListener("abort", abort, { once: true });
     try {
       const raw =
@@ -91,7 +101,11 @@ function call(
                     args[2] as string,
                     args[3] as number,
                   )
-                : h.exportFile?.(
+                : method === "uploadBackup"
+                  ? h.uploadBackup?.(id, args[0] as string, args[1] as number)
+                  : method === "saveBackup"
+                    ? h.saveBackup?.(id, args[0] as string, args[1] as string)
+                    : h.exportFile?.(
                     id,
                     args[0] as string,
                     args[1] as string,
@@ -195,6 +209,41 @@ export async function pickHostFile(): Promise<HostSource | null> {
   const result = await call("pickFile", []);
   if (!result.ok && !result.cancelled) throw apiError(result);
   return result.ok && result.token && result.url ? (result as HostSource) : null;
+}
+
+/** Backup picker only needs the document token, name and size. */
+export async function pickHostBackupFile(): Promise<{ token: string; name: string; size: number } | null> {
+  const result = await call("pickFile", []);
+  if (!result.ok && !result.cancelled) throw apiError(result);
+  return result.ok && result.token && result.name && typeof result.size === "number"
+    ? { token: result.token, name: result.name, size: result.size }
+    : null;
+}
+
+export function canHostBackupUpload(): boolean {
+  return typeof host()?.uploadBackup === "function" && typeof host()?.pickFile === "function";
+}
+
+export function canHostBackupSave(): boolean {
+  return typeof host()?.saveBackup === "function";
+}
+
+export async function uploadHostBackup(token: string, maxBytes: number, signal?: AbortSignal,
+  onProgress?: (bytes: number, total: number) => void): Promise<{ uploadId: string; size: number } | "UNAVAILABLE" | "CANCELLED"> {
+  const result = await call("uploadBackup", [token, maxBytes], signal, onProgress);
+  if (result.code === "UNAVAILABLE") return "UNAVAILABLE";
+  if (result.cancelled) return "CANCELLED";
+  if (!result.ok || !result.status || result.status < 200 || result.status >= 300) throw apiError(result);
+  try { return JSON.parse(result.body || "") as { uploadId: string; size: number }; }
+  catch { throw new ApiError(result.status, "Invalid upload response", { code: "INTERNAL" }); }
+}
+
+export async function saveHostBackup(token: string, fileName: string): Promise<"SAVED" | "UNAVAILABLE" | "CANCELLED"> {
+  const result = await call("saveBackup", [token, fileName]);
+  if (result.code === "UNAVAILABLE") return "UNAVAILABLE";
+  if (result.cancelled) return "CANCELLED";
+  if (!result.ok) throw apiError(result);
+  return "SAVED";
 }
 
 /**
