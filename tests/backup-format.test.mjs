@@ -281,6 +281,37 @@ if (typeof process.getuid === "function") {
     readFileSync(join(privateDest, "db/levix.db")).equals(data[0].source));
 }
 
+section("in-memory secrets extraction");
+const memDest = mkdtempSync(join(testDir, "in-memory-"));
+const memOpened = await openBackup({ path: outPath, password: PASSWORD });
+const memReport = await memOpened.extract({ dest: memDest, inMemoryKinds: ["secrets"] });
+ok("in-memory extract writes no secrets.json", !existsSync(join(memDest, "secrets.json")));
+ok("in-memory extract returns secrets bytes",
+  Buffer.isBuffer(memReport.memory["secrets.json"]) && memReport.memory["secrets.json"].equals(data[1].source));
+ok("in-memory extract still writes other files", readFileSync(join(memDest, "db/levix.db")).equals(data[0].source));
+ok("in-memory extract reports all entries", memReport.entries === data.length);
+ok("in-memory extract reports all bytes", memReport.bytes === data.reduce((n, item) => n + item.size, 0));
+try {
+  const badKinds = await openBackup({ path: outPath, password: PASSWORD });
+  await badKinds.extract({ dest: mkdtempSync(join(testDir, "bad-kinds-")), inMemoryKinds: ["persona"] });
+  ok("non-secrets inMemoryKinds rejected", false);
+} catch (error) {
+  ok("non-secrets inMemoryKinds rejected", error instanceof TypeError);
+}
+const secretBytes = Buffer.from(`{"settings":{"gemini_api_key":"${SECRET}"}}`);
+const tamperedSecrets = await openRaw(sealed(gzipSync(plain(base([db,
+  { path: "secrets.json", kind: "secrets", size: secretBytes.length, sha256: "0".repeat(64) }]), [secretBytes]))));
+const tamperedDest = mkdtempSync(join(testDir, "tampered-secrets-"));
+await caught("tampered in-memory secrets checksum", () => tamperedSecrets.extract({
+  dest: tamperedDest, inMemoryKinds: ["secrets"],
+}), "DAMAGED");
+ok("tampered in-memory secrets wrote no secrets.json", !existsSync(join(tamperedDest, "secrets.json")));
+const hugeSecrets = await openRaw(sealed(gzipSync(plain(base([db,
+  { path: "secrets.json", kind: "secrets", size: LIMITS.memory + 1, sha256: sha(Buffer.alloc(0)) }])))));
+await caught("in-memory secrets over 1 MiB", () => hugeSecrets.extract({
+  dest: mkdtempSync(join(testDir, "huge-secrets-")), inMemoryKinds: ["secrets"],
+}), "LIMIT");
+
 section("KDF queue and secret-safe errors");
 const requests = Array.from({ length: 4 }, () => _internal.deriveKeys(PASSWORD,
   { ...kdf, salt: salt.toString("base64") }).then(() => "ok", (error) => {

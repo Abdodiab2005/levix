@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { spawnSync } from "node:child_process";
@@ -199,7 +199,7 @@ try { await restore.restoreUpload(crashId, password); }
 catch (error) { equal("committed crash reports incomplete", error.code, "RESTORE_INCOMPLETE"); }
 restore.setCrashHookForTest(null);
 equal("journal records apply", readJournal()?.step, "apply");
-ok("plaintext secrets removed before post-commit crash",
+ok("staged restore has no plaintext secrets.json",
   !existsSync(join(data, "restore", readJournal().id, "staged", "secrets.json")));
 runRestoreRecovery();
 equal("recovery finishes persona", readFileSync(join(data, "ai-persona.md"), "utf8"), "original persona");
@@ -298,6 +298,66 @@ for (const [point, expected] of [
   if (movedMemory !== null) equal(`${point} memory renamed`,
     statSync(join(data, "restore", "pending", "files", "memory", "global.md")).ino, movedMemory);
 }
+
+section("plaintext secrets stay off disk");
+const apiSentinel = `APIKEY-SENTINEL-${randomBytes(16).toString("hex")}`;
+const proxySentinel = `PROXY-SENTINEL-${randomBytes(16).toString("hex")}`;
+settings.set("gemini_api_key", apiSentinel);
+settings.set("whatsapp_proxy_password", proxySentinel);
+const sentinelArchive = await createBackup({ password, kdf });
+const oldApiKey = "old-gemini-key-before-sentinel-restore";
+const oldProxyPassword = "old-proxy-password-before-sentinel-restore";
+settings.set("gemini_api_key", oldApiKey);
+settings.set("whatsapp_proxy_password", oldProxyPassword);
+function assertNoPlaintextSecrets(label) {
+  const needles = [Buffer.from(apiSentinel), Buffer.from(proxySentinel)];
+  const hits = [];
+  function walk(dir) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const item = join(dir, entry.name);
+      if (entry.isDirectory()) walk(item);
+      else if (entry.isFile()) {
+        const bytes = readFileSync(item);
+        if (needles.some((needle) => bytes.includes(needle))) hits.push(item);
+      }
+    }
+  }
+  walk(data);
+  ok(label, hits.length === 0, hits.length ? hits.join(", ") : undefined);
+}
+for (const [point, expected] of [
+  ["after-extract", "interrupted-unchanged"],
+  ["stage", "interrupted-unchanged"],
+  ["inside-apply", "interrupted-unchanged"],
+  ["after-commit", "completed-after-restart"],
+  ["persona", "completed-after-restart"],
+  ["after-persona", "completed-after-restart"],
+  ["during-pending-items", "completed-after-restart"],
+  ["during-pending-renames", "completed-after-restart"],
+]) {
+  settings.set("gemini_api_key", oldApiKey);
+  settings.set("whatsapp_proxy_password", oldProxyPassword);
+  const attempt = upload(sentinelArchive.path);
+  restore.setCrashHookForTest((step) => { if (step === point) throw new Error("test crash"); });
+  try { await restore.restoreUpload(attempt, password); }
+  catch (error) { equal(`${point} secret-crash hook`, error.code || error.message,
+    expected === "interrupted-unchanged" ? "test crash" : "RESTORE_INCOMPLETE"); }
+  restore.setCrashHookForTest(null);
+  assertNoPlaintextSecrets(`${point} has no plaintext secrets after crash`);
+  runRestoreRecovery();
+  equal(`${point} secret-crash outcome`, readOutcome()?.outcome, expected);
+  assertNoPlaintextSecrets(`${point} has no plaintext secrets after recovery`);
+  equal(`${point} api key after recovery`, settings.get("gemini_api_key"),
+    expected === "completed-after-restart" ? apiSentinel : oldApiKey);
+  equal(`${point} proxy password after recovery`, settings.get("whatsapp_proxy_password"),
+    expected === "completed-after-restart" ? proxySentinel : oldProxyPassword);
+}
+settings.set("gemini_api_key", oldApiKey);
+settings.set("whatsapp_proxy_password", oldProxyPassword);
+await restore.restoreUpload(upload(sentinelArchive.path), password);
+assertNoPlaintextSecrets("successful restore has no plaintext secrets");
+equal("successful restore api key", settings.get("gemini_api_key"), apiSentinel);
+equal("successful restore proxy password", settings.get("whatsapp_proxy_password"), proxySentinel);
 
 section("pending discard");
 ok("pending visible before discard", restore.pendingStatus().waiting);

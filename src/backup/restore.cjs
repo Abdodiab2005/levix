@@ -45,10 +45,6 @@ function spaceCheck(manifest) {
   return total;
 }
 function safeJson(raw, fallback) { try { return JSON.parse(raw); } catch { return fallback; } }
-function discardStagedSecrets(id) {
-  fs.rmSync(path.join(staged(id), "secrets.json"), { force: true });
-  fsyncDirectory(staged(id));
-}
 
 const restorableKeys = [...RESTORABLE_SETTING_KEYS.map((key) => `setting:${key}`), ...COMMAND_TABLE_KEYS];
 function expectedSchema(database) {
@@ -88,11 +84,10 @@ function fsyncStagedTree(folder) {
   fsyncDirectory(folder);
 }
 
-function applySettings(id) {
+function applySettings(id, secrets) {
   const source = new DatabaseSync(path.join(staged(id), "db", "levix.db"), { readOnly: true });
   const report = { applied: [], skipped: [], restartNeeded: [] };
   const skip = (key) => report.skipped.push({ key, reason: "Rejected value" });
-  let committed = false;
   try {
     db.exec("PRAGMA synchronous = FULL");
     db.exec("BEGIN IMMEDIATE");
@@ -120,12 +115,10 @@ function applySettings(id) {
           if (settings.RESTART_SETTING_KEYS.includes(name)) report.restartNeeded.push(name);
         } catch { skip(name); }
       }
-      const secretFile = path.join(staged(id), "secrets.json");
-      if (fs.existsSync(secretFile)) {
-        const payload = safeJson(fs.readFileSync(secretFile, "utf8"), null);
-        if (!payload || !payload.settings || typeof payload.settings !== "object" || Array.isArray(payload.settings))
+      if (secrets) {
+        if (!secrets.settings || typeof secrets.settings !== "object" || Array.isArray(secrets.settings))
           throw new BackupError("BAD_MANIFEST", "Invalid secret payload");
-        for (const [key, value] of Object.entries(payload.settings)) {
+        for (const [key, value] of Object.entries(secrets.settings)) {
           if (!settings.SECRET_SETTING_KEYS.includes(key)) { skip("unknown secret"); continue; }
           try { applySettingChange(key, value); report.applied.push(key); }
           catch { skip(key); }
@@ -160,14 +153,10 @@ function applySettings(id) {
       crash("inside-apply");
       store.saveBotSetting("restore:applied", JSON.stringify({ id }));
       db.exec("COMMIT");
-      committed = true;
     } catch (error) { db.exec("ROLLBACK"); throw error; }
   } finally {
     try { db.exec("PRAGMA synchronous = NORMAL"); }
-    finally {
-      try { source.close(); }
-      finally { if (committed) discardStagedSecrets(id); }
-    }
+    finally { source.close(); }
   }
   crash("after-commit");
   return report;
@@ -317,11 +306,22 @@ async function restorePinnedUpload(id, file, password, onProgress) {
       scheduleMedia: opened.manifest.entries.some((entry) => entry.kind === "schedule-media") } });
   writeJournal({ op: "restore", id: restoreId, step: "stage" });
   crash("stage");
+  let secretsBuffer = null;
+  let secretsPayload = null;
   try {
     onProgress?.({ phase: "stage", bytes: 0, totalBytes: total });
-    await opened.extract({ dest: staged(restoreId), onProgress(update) {
-      onProgress?.({ phase: "stage", bytes: update.bytes, totalBytes: total });
-    } });
+    const extracted = await opened.extract({ dest: staged(restoreId), inMemoryKinds: ["secrets"],
+      onProgress(update) {
+        onProgress?.({ phase: "stage", bytes: update.bytes, totalBytes: total });
+      } });
+    secretsBuffer = extracted.memory?.["secrets.json"] ?? null;
+    if (secretsBuffer) {
+      secretsPayload = safeJson(secretsBuffer.toString("utf8"), null);
+      if (!secretsPayload || !secretsPayload.settings || typeof secretsPayload.settings !== "object" ||
+          Array.isArray(secretsPayload.settings))
+        throw new BackupError("BAD_MANIFEST", "Invalid secret payload");
+    }
+    crash("after-extract");
     const copy = new DatabaseSync(path.join(staged(restoreId), "db", "levix.db"));
     try {
       expectedSchema(copy);
@@ -333,7 +333,7 @@ async function restorePinnedUpload(id, file, password, onProgress) {
     fsyncStagedTree(staged(restoreId));
     writeJournal({ op: "restore", id: restoreId, step: "apply" });
     onProgress?.({ phase: "apply", bytes: total, totalBytes: total });
-    const report = applySettings(restoreId);
+    const report = applySettings(restoreId, secretsPayload);
     atomicJson(path.join(dir, "metadata.json"), { ...metadata(restoreId), report });
     writeJournal({ op: "restore", id: restoreId, step: "persona" });
     validateBeforePersona(restoreId);
@@ -355,6 +355,11 @@ async function restorePinnedUpload(id, file, password, onProgress) {
       clearJournal();
     }
     throw error;
+  } finally {
+    // Best-effort wipe of the decrypted secrets buffer. Parsed JS strings
+    // cannot be overwritten.
+    if (secretsBuffer) secretsBuffer.fill(0);
+    secretsPayload = null;
   }
 }
 
@@ -383,5 +388,4 @@ function discardPending() {
 }
 
 module.exports = { restoreUpload, schemaCheck, pendingStatus, discardPending, installPersona,
-  installPending, finish, marker, stageRoot, discardStagedSecrets, validateBeforePersona,
-  setCrashHookForTest };
+  installPending, finish, marker, stageRoot, validateBeforePersona, setCrashHookForTest };

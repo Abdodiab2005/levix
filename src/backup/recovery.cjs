@@ -53,7 +53,6 @@ function recover(journal) {
     return;
   }
   if (journal.step === "apply" || journal.step === "persona") {
-    restore.discardStagedSecrets(id);
     restore.validateBeforePersona(id);
     writeJournal({ op: "restore", id, step: "persona" });
     restore.installPersona(id);
