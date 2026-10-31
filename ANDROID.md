@@ -218,8 +218,17 @@ All state is stored in your device's private app storage:
 ```
 
 ### Backing Up Your Data
-To back up your configuration and WhatsApp session:
-- **Via Root / File Manager**:
+- **Settings → Backup (recommended)**: create an encrypted `.levixbak` file with
+  a password of at least 12 characters, then save it with Android's save picker
+  (Download, Drive or any document provider you choose). It holds bot settings,
+  command setup, API keys, the AI persona, conversations, memory, schedules,
+  group data, roles and stickers. It never holds the WhatsApp pairing, the panel
+  password, the recovery email, `levix.key` or Android preferences. To restore,
+  open the file with the Android picker, enter its password, review what the
+  restore adds or replaces, confirm, and link the same WhatsApp account by hand.
+  Settings, API keys and a persona the backup does not hold keep their values.
+  Levix never uploads a backup anywhere. See [SETUP.md](SETUP.md#back-up-and-restore).
+- **Via Root / File Manager** (full copy, including the WhatsApp session):
   Copy the whole `/data/data/net.leviro.levix/files/data/` folder to private storage.
   `levix.db` alone cannot restore API keys or the WhatsApp session: both are
   sealed with `levix.key` in the same folder. Anyone holding both files can

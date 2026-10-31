@@ -1,6 +1,6 @@
 # Levix Privacy Policy & Google Play Data Safety
 
-> **Effective date:** 2026-10-30
+> **Effective date:** 2026-10-31
 > **Applies to:** the Levix Android app (`net.leviro.levix`) and the Levix
 > self-hosted server distributed from this repository.
 > **Product:** Levix, built by Abdelrhman Diab, Leviro.
@@ -13,10 +13,10 @@ Levix is a **self-hosted** personal WhatsApp bot. The Android app runs the
 entire bot **on your device** — there is no Levix cloud, no Levix account, and
 no Levix server. The developer does **not** receive any data from your
 installation on its own: no analytics, no telemetry, no ads, and no automatic
-crash reporting. The only things that ever reach the developer are the ones
-**you** choose to send: a message in **Settings → Feedback** (and the optional
-diagnostics block you can tick on that form), and a crash report you press Send
-on in the panel. Nothing is transmitted until you do. A Levix-operated mail
+crash reporting. The only things that ever reach **Leviro Support** (the
+developer's support channel) are the ones **you** choose to send: a message in
+**Settings → Feedback** (and the optional diagnostics block you can tick on that
+form), and a crash report you press Send on in the panel. Nothing is transmitted until you do. A Levix-operated mail
 relay delivers a recovery code only when you ask for one. It keeps keyed hashes
 for verification, authorization and rate limiting, never the readable address,
 code or token, and it does not send the address to the developer.
@@ -45,23 +45,27 @@ decides whether to search for each answer.
    or Google Programmable Search when configured. `search_wikipedia` sends a
    query and matching page titles to `ar.wikipedia.org` or `en.wikipedia.org`.
    `fetch_url` requests the HTTPS page the AI opens from that page's host.
-4. **The developer, if you send feedback** — the panel's **Settings → Feedback**
+4. **Leviro Support, if you send feedback** — the panel's **Settings → Feedback**
    form sends what you typed (your message, the topic, an optional 1–5 rating,
    an optional contact), one optional file you pick yourself (a screenshot or a
    log, up to 20 MB), plus the Levix version and the platform it runs on. If —
    and only if — you also tick **Attach device & technical diagnostics**, it
    additionally sends the diagnostics listed in section 2a. It travels through
-   `levix.leviro.net/api/feedback` and is delivered to the developer as a
-   Telegram message, or as a Telegram document when a file is attached. Nothing
+   `levix.leviro.net/api/feedback`. Leviro Support currently receives it through
+   Telegram, as a Telegram message, or as a Telegram document when a file is
+   attached, so Telegram carries and stores that message. A private Leviro
+   Support dashboard is planned to replace the Telegram delivery; this policy
+   will change with a new effective date when it does. Nothing
    is attached from WhatsApp — no message, chat, contact, credential or key —
    and nothing is sent unless you press Send.
-5. **The developer, if you send a crash report** — a crash or a web error is
+5. **Leviro Support, if you send a crash report** — a crash or a web error is
    written to a report file inside the app's own data directory, where it stays
    until **you** open the panel and press Send on that one report. Nothing is
    sent automatically and nothing is retried on its own. A report holds the
    error type, a sanitized message and stack, an optional screen id, the app and
    device fields listed in section 2a, and a few navigation breadcrumbs. It goes
-   to the developer through `levix.leviro.net/api/crash-reports`.
+   to Leviro Support through `levix.leviro.net/api/crash-reports`, a
+   Levix-operated server; it is not forwarded to Telegram or any other service.
 6. **The Levix mail relay, if you set a recovery email** — verifying the address
    in **Settings**, or choosing **Email** on **Forgot password**, posts the
    address and UI language (`en` or `ar`) to `levix.leviro.net/api/recovery-email`.
@@ -82,8 +86,10 @@ decides whether to search for each answer.
    without a key. `!tts` and the AI `speak` tool send text to
    `translate.google.com` for speech generation.
 9. **Weather, prayer times and short links:** `!weather` sends the city name
-   to `api.openweathermap.org` when you configured its API key. `!prayer`
-   sends the city name to `api.aladhan.com`. `!shortlink` sends the URL to
+   you type to `api.openweathermap.org` when you configured its API key.
+   `!prayer` sends the city name you type to `api.aladhan.com`. Levix never
+   reads the device's location and requests no location permission; the only
+   place information is the city name you type into these two commands. `!shortlink` sends the URL to
    `is.gd`, then to `v.gd` if the first service fails.
 10. **Optional page and media fetches:** enabling link previews lets Baileys
     request the host of a URL in an outgoing message to build a preview.
@@ -99,14 +105,21 @@ The database, settings, API keys, memory files and control panel are stored in
 the app's private storage on Android. An API key also goes to its configured
 provider when you use that provider or request live model discovery.
 
-**Backups** are local files created only when you ask. Every exported backup is
-encrypted with a password you choose; Levix cannot recover that password.
+**Backups** (Settings → Backup) are local files created only when you ask. Every
+exported backup is encrypted with a password you choose (scrypt and
+AES-256-GCM); Levix cannot recover that password.
 Levix never uploads a backup to the developer or a cloud service. A backup can
 contain bot settings, command setup, API keys, AI persona, conversations,
 memory, schedules and their media, group data, roles and stickers. It never
 contains WhatsApp pairing credentials, the panel password or session key,
 recovery email, the install encryption key, device settings, logs, crash
-reports or Android preferences. You control where the exported file is saved.
+reports or Android preferences. You control where the exported file is saved;
+on Android it goes through the system's save and open pickers. A restore first
+shows what it changes and asks you to confirm before it overwrites anything.
+It writes only what the backup holds: settings, API keys or a persona the
+backup lacks keep their current values, and it never changes the panel
+password, the recovery email or the WhatsApp pairing. Conversations, memory and
+other account data wait until the same WhatsApp account is linked.
 
 ---
 
@@ -170,13 +183,13 @@ Notes:
 | **Configured AI provider's models endpoint** | The operator's API key | When the operator requests live model discovery in the panel | Listing available models |
 | **IP lookup service** (`api.ipify.org`) | An IP lookup request, exposing the server's source IP | When the operator runs `levix domain` on a desktop or server; not an Android flow | Checking the server's public IP |
 | **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |
-| **The developer** (via `levix.leviro.net/api/feedback`, delivered as a Telegram message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact, an optional file you attach yourself — plus the Levix version, the platform, and the sending app's user-agent. If you tick the diagnostics box, the section 2a diagnostics object and the sanitized technical debug log in section 2b as well | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
-| **The developer** (via `levix.leviro.net/api/crash-reports`) | One crash report: category, sanitized error type/message/stack, an optional screen id, the app + section 2a device fields, the sanitized technical debug log in section 2b, and a few navigation breadcrumbs. Never a phone number, JID, chat/message body or media file | Only when **you** open the panel and press Send on one report; never automatically | Support: so a crash can be grouped and fixed |
+| **Leviro Support** (via `levix.leviro.net/api/feedback`; currently delivered to Leviro Support through **Telegram**, which carries and stores the message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact, an optional file you attach yourself — plus the Levix version, the platform, and the sending app's user-agent. If you tick the diagnostics box, the section 2a diagnostics object and the sanitized technical debug log in section 2b as well | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
+| **Leviro Support** (via `levix.leviro.net/api/crash-reports`, a Levix-operated server) | One crash report: category, sanitized error type/message/stack, an optional screen id, the app + section 2a device fields, the sanitized technical debug log in section 2b, and a few navigation breadcrumbs. Never a phone number, JID, chat/message body or media file | Only when **you** open the panel and press Send on one report; never automatically | Support: so a crash can be grouped and fixed |
 | **Levix mail relay** (`levix.leviro.net/api/recovery-email`) | The recovery address and UI language; verification ID and entered verification code on confirmation; address, reset code, recovery token and language on reset. No free text | When you verify an address in **Settings**, or when you choose **Email** on **Forgot password** | To verify address ownership and authorize delivery. Only keyed hashes and authorization state persist, never readable addresses, codes or tokens; the address is not forwarded to the developer |
 | **Your own Levix instance** (on Android, reached inside the app through a private socket; never the developer or an AI provider) | The one image, GIF or video you picked in Sticker Studio or the Media Hub, as a single upload | Only when you choose it in Sticker Studio or tap **Make sticker** / **Add to stickers** | Sticker Studio works in the local host, so it has to receive the file you chose |
 
-Apart from feedback and crash reports you deliberately send, the developer of
-Levix is **not** a recipient of any of the above. The recovery-email relay
+Apart from feedback and crash reports you deliberately send to Leviro Support,
+the developer of Levix is **not** a recipient of any of the above. The recovery-email relay
 receives the fixed verification and reset fields described above. It stores only
 keyed hashes and authorization state, never readable addresses, codes or tokens. The AI provider's use of the content you send
 it is governed by that provider's own privacy policy.
@@ -319,7 +332,7 @@ Two smaller points about the file while it is being handled:
   permission to the app *you* pick and nothing more.
 
 No location, camera, microphone, contacts, SMS, or unrestricted storage permissions are
-requested. The in-app WebView loads only the local control panel
+requested. Levix never collects the device's location. The in-app WebView loads only the local control panel
 (`http://127.0.0.1:3001`); it does not load third-party web content.
 
 ## 4. Data retention and deletion
@@ -336,14 +349,14 @@ requested. The in-app WebView loads only the local control panel
   limiting. `levix reset-password` does not remove it either.
 - **Uninstall the app** — removes everything; there is no server-side copy of
   any of your data to survive deletion.
-- **Feedback you chose to send** — it is a message in the developer's inbox, not
-  a record in a database, and the app has no copy of it. Ask the developer to
-  delete it (section 9) and it will be deleted.
+- **Feedback you chose to send** — it is a message in Leviro Support's Telegram
+  chat, not a record in a Levix database, and the app has no copy of it. Ask
+  Leviro Support to delete it (section 9) and it will be deleted from that chat.
 - **Crash reports** — an unsent report stays on your device and is deleted
   automatically seven days after it is created (at most the 20 newest are kept);
   you can also delete any report, or all of them, from the panel at any time.
-  A report you send is kept on the developer's server for at most 30 days and
-  then deleted; ask the developer to delete a sent one by its report id
+  A report you send is kept on the Levix crash-report server for at most 30 days
+  and then deleted; ask Leviro Support to delete a sent one by its report id
   (section 9) and it will be deleted.
 - **A file picked for a sticker** — the handover is in-memory and one-shot, so
   nothing to delete: once the panel reads it, the app has no copy left. It lives
@@ -387,8 +400,13 @@ updates the Console after review.
 **Q: Does your app collect or share any of the required user data types?**
 → **Yes**
 
-**Q: Is all of the data collected encrypted in transit?**
-→ **Yes**
+**Q: Is all of the user data collected by your app encrypted in transit?**
+→ **No.** WhatsApp traffic uses WhatsApp's encrypted transport, and every
+service Levix itself calls uses HTTPS. Two optional settings, both off by
+default, can send a plain HTTP request: link previews (`link_previews_enabled`)
+and remote thumbnails (`thumbnail_remote`) fetch the URL as written, so an
+`http://` link in an outgoing message or remote media URL travels unencrypted.
+While Levix keeps that behaviour, the accurate answer is No.
 
 **Account creation**
 → **My app does not allow users to create an account**
@@ -401,10 +419,10 @@ updates the Console after review.
 Users can still delete locally stored data with the in-app controls described
 in section 4, unlink WhatsApp, or uninstall the app. Remove in Settings deletes
 the recovery email and token from the device. The relay retains only keyed
-hashes and authorization state subject to expiry, never the readable address. Feedback a user chose to
-send is the one thing the developer holds; crash reports a user chose to send
-are held for at most 30 days and then deleted. Both are deleted on request
-through the contact in section 9.
+hashes and authorization state subject to expiry, never the readable address.
+Feedback a user chose to send is held in Leviro Support's Telegram chat; crash
+reports a user chose to send are held for at most 30 days and then deleted. Both
+are deleted on request through the contact in section 9.
 
 Declare these data types:
 
@@ -413,17 +431,18 @@ Declare these data types:
 | Personal info → **Name** | Yes | No | Optional | App functionality |
 | Personal info → **User IDs / personal identifiers** | Yes | No | Required | App functionality |
 | Personal info → **Phone number** | Yes | No | Required | App functionality |
-| Messages → **Other in-app messages** | Yes | No | Optional | App functionality, Customer support |
 | Personal info → **Email address** | Yes | No | Optional | App functionality, Customer support |
+| Location → **Approximate location** | Yes | No | Optional | App functionality |
+| Messages → **Other in-app messages** | Yes | No | Optional | App functionality, Customer support |
 | Photos and videos → **Photos** | Yes | No | Optional | App functionality, Customer support |
 | Photos and videos → **Videos** | Yes | No | Optional | App functionality, Customer support |
 | Audio files → **Voice or sound recordings** | Yes | No | Optional | App functionality |
 | Audio files → **Other audio files** | Yes | No | Optional | App functionality, Customer support |
 | Files and docs → **Files and docs** | Yes | No | Optional | App functionality, Customer support |
 | Contacts → **Contacts** | Yes | No | Optional | App functionality |
-| App activity → **In-app search history** | Yes | No | Optional | App functionality |
-| App activity → **Other user-generated content** | Yes | No | Optional | App functionality |
-| Web browsing → **Web browsing history** | Yes | No | Optional | App functionality |
+| App activity → **In-app search history** | Yes | **Yes** | Optional | App functionality |
+| App activity → **Other user-generated content** | Yes | **Yes** | Optional | App functionality |
+| Web browsing → **Web browsing history** | Yes | **Yes** | Optional | App functionality |
 | App info and performance → **Crash logs** | Yes | No | Optional | App functionality, Analytics |
 | App info and performance → **Diagnostics** | Yes | No | Optional | App functionality, Analytics |
 
@@ -432,37 +451,44 @@ Declare these data types:
 Google Play calls transmission off the device **collection**, including by a
 library or SDK and regardless of who receives it. Its end-to-end encryption
 exclusion applies only to content unreadable by anyone except sender and
-recipient, not automatically to metadata. Processing is **ephemeral** only if
-the recipient keeps the data in memory no longer than the real-time request;
-the code alone does not establish that. **Sharing** means transfer of collected
-user data to a third party, subject to the service-provider, legal,
-user-initiated action with reasonable expectation, prominent disclosure and
-consent, or full-anonymization exceptions. See [Google Play's definitions](https://support.google.com/googleplay/android-developer/answer/10787469).
+recipient, not to metadata. Processing is **ephemeral** only if the recipient
+keeps the data in memory no longer than the real-time request; Levix cannot
+show that for any recipient, so no row claims it. **Sharing** means a transfer
+of collected user data to a third party. It is not sharing when the transfer is
+to a service provider that processes the data on the developer's behalf, when a
+user action in the app initiates the transfer and the user reasonably expects
+it (the user-initiated exception), when the law requires it, or when the data
+is fully anonymized. See [Google Play's definitions](https://support.google.com/googleplay/android-developer/answer/10787469).
 
-| Flow | Collected? (definition applied) | Shared? | Exception or reason | Status |
-| --- | --- | --- | --- | --- |
-| WhatsApp message and media content | No if end-to-end encrypted from sender to recipient | No if excluded from collection | End-to-end encryption exclusion applies only to content the intermediary cannot read | Owner review: verify content boundary |
-| WhatsApp pairing and message or group metadata | Yes, transmitted off device | Review | Encryption of content does not exclude identifiers and metadata; assess the WhatsApp recipient and the user-initiated exception | Owner review |
-| Configured AI provider, including prompts, context and supported media | Yes, transmitted off device | Review | The operator chooses the provider, but it is not automatically the developer's service provider; assess reasonable user expectation for each AI use | Owner review |
-| Gemini Google Search grounding | Yes, search derived from a collected Gemini prompt | Review | Gemini can decide to search; grounding is enabled by default for Gemini requests | Owner review |
-| `web_search` and `search_news` to DuckDuckGo or keyed Google Programmable Search | Yes, query transmitted off device | Review | An AI tool can choose the search; assess whether the specific user action makes this transfer reasonably expected | Owner review |
-| `search_wikipedia` to Arabic or English Wikipedia | Yes, query and page-title requests transmitted off device | Review | An AI tool chooses the lookup; assess the user-initiated exception | Owner review |
-| `fetch_url` to a page host | Yes, page request transmitted off device | Review | An AI tool chooses the page; assess whether the requested answer makes that host request reasonably expected | Owner review |
-| `!translate google` with an API key | Yes, text transmitted off device | No if the user-initiated exception applies | The named Google command requests translation through Google's official API; the key is an operator credential | Mapped; owner checks expectation |
-| `!translate google` without a key | Yes, text transmitted off device | Review | The named command uses Google's public endpoint; assess whether that endpoint is reasonably expected | Owner review |
-| `!tts` or AI `speak` through Google TTS | Yes, text transmitted off device | Review | Assess whether invoking speech makes Google TTS transfer reasonably expected, especially for an AI tool call | Owner review |
-| `!weather` to OpenWeatherMap | Yes, typed city transmitted off device | Review | Assess the user-initiated exception and whether a typed city falls under Approximate location | Owner review: location type |
-| `!prayer` to Aladhan | Yes, typed city transmitted off device | Review | Assess the user-initiated exception and whether a typed city falls under Approximate location | Owner review: location type |
-| `!shortlink` to `is.gd` or fallback `v.gd` | Yes, URL transmitted off device | Review | The command asks for a short link, but the destination can switch on failure; assess reasonable expectation | Owner review |
-| Optional outgoing link preview | Yes, page request transmitted off device when enabled | Review | The page host receives a request for a URL in an outgoing message; assess whether enabling previews establishes expectation | Owner review |
-| Optional remote thumbnail | Yes, remote media request transmitted off device when enabled | Review | The media host receives a download request; assess whether enabling thumbnails establishes expectation | Owner review |
-| Live model discovery | Yes, operator API key transmitted off device | No if the user-initiated exception applies | The operator requests the configured provider's model list with that provider's key | Mapped; owner checks credential type |
-| Optional WhatsApp outbound proxy | Yes, WhatsApp traffic is transmitted off device through the configured proxy | Review | The operator chooses the proxy, but its handling of content and metadata depends on the WhatsApp encryption boundary and the proxy operator | Owner review |
-| Feedback sent to Levix and delivered through Telegram | Yes, feedback and optional attachment transmitted off device | Review | Developer receives the chosen report; assess whether Telegram acts as a service provider under the developer's instructions | Owner review |
-| Crash report sent to Levix | Yes, the selected report transmitted off device | No for the developer-operated endpoint | The operator presses Send; no further third-party recipient is shown in this path | Mapped |
-| Recovery email relay | Yes, address and verification or reset fields transmitted off device | No for the developer-operated relay | The operator requests a code; the relay stores keyed hashes and authorization state | Mapped |
-| Sticker upload to the Android host | No, data stays on the device | No | The WebView reaches the app's private socket, so no off-device collection occurs | Mapped |
-| `levix domain` IP lookup | Not an Android app flow | Not an Android app flow | The CLI runs on a desktop or server and sends a request to `api.ipify.org` | Outside Play form |
+The rule applied below: a transfer whose destination the user chose with the
+command or setting they used is **user-initiated**. A transfer whose destination
+the AI agent or an optional setting chose without the user naming it is
+**shared**, so it is declared.
+
+| Flow | Collected? | Shared? | Rule applied |
+| --- | --- | --- | --- |
+| WhatsApp message and media content | No | No | End-to-end encrypted between WhatsApp users; Levix is the user's own client |
+| WhatsApp pairing, phone number, user IDs, names and group metadata | Yes | No | User-initiated: the user links their own WhatsApp account, and Levix works only as that account's client |
+| Configured AI provider: prompts, context, supported media | Yes | No | User-initiated: the operator picks the provider and its API key, then invokes an AI command |
+| Gemini Google Search grounding | Yes, as part of the Gemini request | No | Same recipient as the Gemini request (Google, the configured provider); on by default and can be turned off with `ai_google_search` |
+| AI `web_search` and `search_news` (DuckDuckGo, or Google Programmable Search when configured) | Yes | **Yes** | The AI chooses the search and the query; declared as **In-app search history** shared |
+| AI `search_wikipedia` (Arabic or English Wikipedia) | Yes | **Yes** | The AI chooses the lookup; declared as **In-app search history** shared |
+| AI `fetch_url` to a page host | Yes | **Yes** | The AI chooses the page; declared as **Web browsing history** shared |
+| AI `speak` through Google TTS | Yes | **Yes** | The AI chooses to answer as speech; the spoken text is declared as **Other user-generated content** shared |
+| `!tts` through Google TTS | Yes | No | User-initiated: the user asks for speech of the text they gave |
+| `!translate google`, with or without a Google key | Yes | No | User-initiated: the command names Google translation; the key is the operator's own credential |
+| `!weather` to OpenWeatherMap, `!prayer` to Aladhan | Yes, the typed city | No | User-initiated: the user types a city name for that lookup. Declared as **Approximate location** because a city can describe where the user is; Levix never reads device location |
+| `!shortlink` to `is.gd`, then `v.gd` on failure | Yes, the URL | No | User-initiated: the user asks for a short link; both services are named in the command help |
+| Optional outgoing link preview | Yes, the linked URL | **Yes** | The page host is chosen by a link, not by the user's request for a preview; declared as **Web browsing history** shared |
+| Optional remote thumbnail | Yes, the media URL | **Yes** | The media host receives a download request the user did not name; declared as **Other user-generated content** shared |
+| Live model discovery | Yes, the operator's API key | No | User-initiated: the operator asks the configured provider for its models |
+| Optional WhatsApp outbound proxy | Yes, WhatsApp traffic | No | User-initiated: the operator sets their own proxy; WhatsApp content stays end-to-end encrypted |
+| Feedback to Leviro Support, delivered through Telegram | Yes | No | Service provider: Telegram delivers and stores the message for Leviro Support. Disclosed by name in sections 2 and 4 |
+| Crash report to Leviro Support | Yes | No | The developer's own server is the only recipient |
+| Recovery email relay | Yes | No | The developer's own relay is the only recipient; it keeps keyed hashes and authorization state only |
+| Sticker upload to the Android host | No | No | The WebView reaches the app's private socket on the device; nothing leaves the device |
+| Encrypted backup file | No | No | Created and saved on the device where the user chooses; Levix never transmits it |
+| `levix domain` IP lookup | Outside the Play form | Outside the Play form | A desktop or server command, not part of the Android app |
 
 For every data type in the declaration table above:
 
@@ -479,29 +505,33 @@ For every data type in the declaration table above:
   you press Send on it, and the feedback diagnostics leave only when you tick
   their checkbox. Their purpose is **Analytics** in Google Play's sense —
   grouping and fixing crashes and faults.
-- **Sharing purpose:** none, because the form, the crash report, and the
-  recovery-email relay are declared as collected rather than shared under
-  Google Play's applicable user-initiated/service-provider handling rules.
+- **Sharing purpose:** **App functionality** for the three shared rows (In-app
+  search history, Other user-generated content, Web browsing history): the AI
+  agent's searches, page reads and spoken answers, and the optional link
+  previews and remote thumbnails. Every other row is collected, not shared,
+  under the rule above.
 
 The **Email address** declaration covers the optional contact field in the
 feedback form and, when you choose it, the recovery address you type in
 Settings for panel-password reset. Neither is read from the device. The
 feedback contact can be left empty. The recovery address is stored sealed on
 the device and is sent to the Levix mail relay only when you verify it or
-request a reset code. The relay does not store it beyond rate limiting. Under
-Google Play's user-initiated handling this stays **collected**, not shared.
+request a reset code. The relay does not store it beyond rate limiting.
 
 The **Contacts** declaration does not mean Levix requests Android's Contacts
 permission. It covers WhatsApp participant identifiers (for example mentioned
 or quoted participants) that can be included in an AI request.
 
-Do **not** declare location, financial info, health/fitness, calendar, installed
-apps, or device/other identifiers. Levix contains no analytics, advertising, or
-crash-reporting SDK: the **Crash logs** and **Diagnostics** rows above are the
-user-initiated reports described in sections 2a and 4, which the app writes
-locally and sends only when the user presses Send. There is no device-following
-identifier anywhere in them. The location answer needs owner review for typed
-city names sent by `!weather` and `!prayer`, as flagged above.
+The **Approximate location** declaration covers only a city name the user types
+into `!weather` or `!prayer`. Levix does not request a location permission and
+never reads the device's location, so **Precise location** is not declared.
+
+Do **not** declare precise location, financial info, health/fitness, calendar,
+installed apps, or device/other identifiers. Levix contains no analytics,
+advertising, or crash-reporting SDK: the **Crash logs** and **Diagnostics** rows
+above are the user-initiated reports described in sections 2a and 4, which the
+app writes locally and sends only when the user presses Send. There is no
+device-following identifier anywhere in them.
 
 ### Other Play Console declarations
 
@@ -528,8 +558,8 @@ date. Continued use after a change means acceptance.
 
 ## 9. Contact
 
-- In the app: **Settings → Feedback** in the control panel — it reaches the
-  developer directly, and is the fastest route for a bug or a request.
+- In the app: **Settings → Feedback** in the control panel — it reaches Leviro
+  Support, and is the fastest route for a bug or a request.
 - On the web: [levix.leviro.net/feedback](https://levix.leviro.net/feedback)
 - Issues & security reports: [github.com/Abdodiab2005/levix](https://github.com/Abdodiab2005/levix)
 - Product: Levix, built by Abdelrhman Diab, Leviro.

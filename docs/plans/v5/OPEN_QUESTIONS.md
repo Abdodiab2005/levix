@@ -20,6 +20,12 @@ blocked without an answer.
 | Q-21 | Option (a). `!schedule` errors keep going to the creator's private chat; password-reset codes keep going to their current private destination. | ADR-007; Phase 05 |
 | Q-23 | 2026-10-31: no upload of the 14 `.deb` files. One deterministic archive with both ABIs (unmodified runtime files, upstream licence texts, a manifest with full provenance), published as the only asset of a dedicated GitHub prerelease, pinned by sha256, with a local backup, and a cold-cache CI build before merge. | ADR-018; R-33 |
 
+## Decided by the owner on 2026-10-31 (privacy, PR #82)
+
+| ID | Decision | Where it lands |
+| --- | --- | --- |
+| Q-27 | Gemini Google Search grounding and the AI web-search tools stay on as designed. `PRIVACY.md` discloses every AI, search, translation, TTS and other transfer without changing behaviour. Feedback is described as sent to Leviro Support, with the current Telegram delivery stated until a private dashboard replaces it. The Data safety map applies Google's definitions: transfers whose destination the AI agent or an optional setting chooses are declared shared; user-initiated and service-provider transfers are collected only. A city name typed into `!weather` or `!prayer` is declared as Approximate location, separate from device location, which Levix never collects. | `PRIVACY.md` section 7; PR #82 |
+
 ## Decided by the owner on 2026-10-31 (Phase 02)
 
 | ID | Decision | Where it lands |
