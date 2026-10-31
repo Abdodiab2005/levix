@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Levix</string>
+    <string name="host_data_unavailable">Data directory needs a compatible Levix version or repair from a backup.</string>
 
     <!-- Home tour: every stop spotlights the real control it describes, in the
          order an operator meets them. A hidden control is skipped, so bodies

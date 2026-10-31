@@ -8,6 +8,7 @@ import java.io.OutputStream
 /** HTTP body framing kept independent of Android for stream tests. */
 object PanelWire {
     class TooLarge : IOException("source exceeds upload limit")
+    class WrongLength : IOException("source length differs from declared length")
     data class Response(val status: Int, val reason: String, val headers: Map<String, String>, val bytes: Long) {
         fun header(name: String) = headers.entries.firstOrNull { it.key.equals(name, true) }?.value
     }
@@ -28,6 +29,24 @@ object PanelWire {
         output.write("0\r\n\r\n".toByteArray(Charsets.US_ASCII))
         output.flush()
         return total
+    }
+
+    fun writeExact(source: InputStream, output: OutputStream, length: Long,
+        onProgress: (Long) -> Unit = {}): Long {
+        require(length >= 0)
+        val buffer = ByteArray(64 * 1024)
+        var copied = 0L
+        while (copied < length) {
+            val count = source.read(buffer, 0, minOf(buffer.size.toLong(), length - copied).toInt())
+            if (count < 0) throw WrongLength()
+            if (count == 0) continue
+            output.write(buffer, 0, count)
+            copied += count
+            onProgress(copied)
+        }
+        if (source.read() != -1) throw WrongLength()
+        output.flush()
+        return copied
     }
 
     fun readResponse(input: InputStream, output: OutputStream, maxBytes: Long = Long.MAX_VALUE): Response =

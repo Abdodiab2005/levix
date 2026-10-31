@@ -13,16 +13,15 @@
 // install can be configured before it ever tries to pair. Headless has no
 // screen and nobody to press anything, so it asks the core to connect for it.
 
+import "./db/startup-guard.js";
 import os from "node:os";
 import { createRequire } from "module";
 import { bootstrapCore } from "./bootstrap/core.js";
 import brand from "./config/brand.esm.js";
-import { flushStore } from "./db/store.esm.js";
 
 const require = createRequire(import.meta.url);
 const qrcodeTerminal = require("qrcode-terminal");
 const logger = require("./utils/logger.cjs");
-const secrets = require("./config/secrets.cjs");
 const { DATA_DIR } = require("./config/paths.cjs");
 const { release: releaseLock } = require("./config/lock.cjs");
 const { close: closeDatabase } = require("./db/db.cjs");
@@ -183,14 +182,13 @@ async function startHeadless() {
 // ---------------------------------------------------------------------------
 
 async function startWithPanel({ open }) {
-  const { bootstrapPanel, panelUrl } = await import("./bootstrap/panel.js");
-
   attachTerminalQr();
 
   // Nothing dials WhatsApp here. The panel comes up against an idle session and
   // the Connection screen offers a Start button.
   const core = await bootstrapCore({ autoStart: false });
   liveSession = core.session;
+  const { bootstrapPanel, panelUrl } = await import("./bootstrap/panel.js");
   if (process.env.LEVIX_ANDROID === "1") {
     console.log("Database ready");
     console.log("Commands loaded " + core.commandCount);
@@ -215,7 +213,7 @@ async function startWithPanel({ open }) {
     throw error;
   }
 
-  const firstRun = !secrets.hasDashboardPassword();
+  const firstRun = !require("./config/secrets.cjs").hasDashboardPassword();
   const url = panelUrl({ port: panel.port, firstRun });
 
   logger.info(`✅ Control panel: ${url}`);
@@ -238,7 +236,7 @@ async function startWithPanel({ open }) {
     line("  First run — that link asks you to pick a password.");
     line("  Opening it from another machine also needs this code:");
     line();
-    line(`  ${secrets.formatSetupCodeLine()}`);
+    line(`  ${require("./config/secrets.cjs").formatSetupCodeLine()}`);
   }
 
   if (open) {
@@ -314,7 +312,7 @@ export function installShutdownHandlers() {
     }
 
     const finish = async () => {
-      await Promise.allSettled([flushStore()]);
+      await Promise.allSettled([require("./db/store.cjs").flushStore()]);
       closeDatabase();
       releaseLock();
       clearTimeout(watchdog);

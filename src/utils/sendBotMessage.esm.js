@@ -39,6 +39,10 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Tests replace timing.sleep to skip the real wait; the bot still computes and
+// requests the same delays.
+export const timing = { sleep };
+
 function typingDelayFor(content) {
   const text = content?.text || content?.caption || "";
   if (!text) return jitter(300, 700);
@@ -83,11 +87,11 @@ export async function sendBotMessage(sock, jid, content, options = {}) {
     const { min, max } = sendGap();
     targetGap = jitter(min, max);
   }
-  if (elapsed < targetGap) await sleep(targetGap - elapsed);
+  if (elapsed < targetGap) await timing.sleep(targetGap - elapsed);
 
   if (typing) {
     await safePresence(sock, jid, "composing");
-    await sleep(typingDelayFor(content));
+    await timing.sleep(typingDelayFor(content));
     await safePresence(sock, jid, "paused");
   }
 

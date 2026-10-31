@@ -225,9 +225,26 @@ levix where
 - running from a git clone: `./data` inside the clone
 - Docker: the `levix-data` volume
 
-**Backing up** means copying that directory. **Moving to another machine**
-means copying it across and starting Levix there — including the WhatsApp
-session, so you don't even rescan the QR.
+A copy of this directory, taken while Levix is stopped, is a full copy: it holds
+the WhatsApp pairing and the encryption key, so keep it private. On another
+device WhatsApp may still ask you to pair again. For an encrypted backup without
+the pairing, use **Settings → Backup** (below).
+
+## Back up and restore
+
+Open **Settings → Backup**. Create a backup with a password of at least 12
+characters and save the `.levixbak` file. Keep the password safe: Levix cannot
+recover it. To restore, upload the file, enter its backup password, review the
+preview, then confirm with your panel password.
+
+Restore replaces the backed-up bot settings, command setup, API keys and AI
+persona. It keeps this install's panel password, recovery email, session key,
+device settings and encryption key. WhatsApp pairing is never in the backup;
+pair the account again by hand. Conversations, AI memory, stickers, schedules,
+roles and group data activate only when the same WhatsApp account connects.
+If a different account connects, the Backup screen shows **waiting account
+data**. You can later pair the matching account or choose **Discard** to remove
+the waiting data.
 
 ---
 

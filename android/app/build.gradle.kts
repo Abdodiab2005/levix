@@ -28,12 +28,12 @@ val knownAbis = setOf("arm64-v8a", "armeabi-v7a")
 // recomputed here and a missing or different one fails the build. The file
 // name, the inputs and the line format must match RUNTIME_STAMP_FILE /
 // RUNTIME_STAMP_INPUTS in the script (tests/android-runtime-stamp.test.mjs).
-// termux-packages.lock is a stamp input with the scripts: the pinned .deb
-// files are part of the recipe, so a pin change fails the build until the
-// runtime is restaged. The script is deliberately not run from here: it
-// downloads and compiles.
+// termux-packages.lock, node-runtime.lock and node-runtime-archive.py are
+// stamp inputs with the scripts: a pin change or an extractor change fails
+// the build until the runtime is restaged. The script is deliberately not
+// run from here: it downloads and compiles.
 val runtimeStampFile = ".levix-stamp"
-val runtimeStampInputs = listOf("build-ffmpeg-android.sh", "fetch-node-android.sh", "termux-packages.lock")
+val runtimeStampInputs = listOf("build-ffmpeg-android.sh", "fetch-node-android.sh", "termux-packages.lock", "node-runtime.lock", "node-runtime-archive.py")
 val androidScriptsDir = File(repoRoot, "android/scripts")
 
 // The first 16 hex characters of the file's sha256 — `sha256sum | cut -c1-16`.

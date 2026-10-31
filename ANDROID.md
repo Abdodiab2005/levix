@@ -175,8 +175,16 @@ The Media Hub offers files up to 16 MB, mirroring Sticker Studio's server upload
 | `uploadSource(callId, token, fileName, maxBytes)` | Streams the selected URI to the local Sticker Studio upload route |
 | `exportFile(callId, action, path, method, jsonBody, fileName, mime)` | Streams an export from Node to the share cache or Downloads/Levix |
 | `cancel(callId)` | Closes an active transfer and returns a cancelled result |
+| `pickFile(callId)` | Opens an openable document and returns a source token and metadata |
+| `uploadBackup(callId, token, maxBytes)` | Streams the picked document to `POST /dashboard/api/backup/restore/uploads` with exact length |
+| `saveBackup(callId, token, fileName)` | Opens Create Document and streams `GET /dashboard/api/backup/exports/<64 lowercase hex>` to it |
 
 The asynchronous methods acknowledge immediately and deliver small JSON through `window.__levixHostDone(callId, result)`. Tokens expire after one hour; the activity keeps at most eight and clears them when it closes. Share files are written to `cache/shared/` and swept after 24 hours. Save writes a pending MediaStore Downloads row and publishes it only after the stream finishes. Both export destinations enforce the Sticker Studio MIME allowlist and sanitize the file name.
+
+Backup bytes never enter JavaScript. Backup upload reports progress through
+`window.__levixHostProgress(callId, bytes, total)` and requires a known size up
+to 16 GiB. Backup save uses Android's document picker; cancellation or transfer
+failure deletes a created partial document where the provider permits it.
 
 The ordinary `request()` bridge still carries other panel POST bodies; the small settings JSON export still uses `saveExportFile()`.
 Re-editing a sticker from the library creates its upload on the server, so its preview Blob is never posted through the bridge.
@@ -236,7 +244,7 @@ If you prefer to compile Levix Host from source:
 ### 1. Prerequisites
 - **JDK 17** & **Android SDK 36** (`$ANDROID_HOME` configured)
 - **Node.js 24** on your development machine (the version in `.node-version`)
-- Tools: `zip`, `unzip`, `rsync`, `curl`, `python3`, `dpkg-deb` (for extracting the runtime packages), `make` and `pkg-config` (for building FFmpeg)
+- Tools: `zip`, `unzip`, `rsync`, `curl`, `python3`, `make` and `pkg-config` (for building FFmpeg). `dpkg-deb` is needed only for `--build-archive`, not for a default build. `--update-pins` needs `curl` and `python3`.
 
 ### 2. Fetch the Embedded Node.js Runtimes (ARM64 + ARMv7)
 Download and unpack the Node.js 24 binaries for Android and build FFmpeg for each ABI (the first run downloads NDK r29 unless `$ANDROID_HOME/ndk/29.0.14206865` exists):
@@ -244,11 +252,17 @@ Download and unpack the Node.js 24 binaries for Android and build FFmpeg for eac
 android/scripts/fetch-node-android.sh                 # both ABIs
 android/scripts/fetch-node-android.sh arm64-v8a       # one ABI only
 ```
-The runtime comes from the Termux packages pinned in `android/scripts/termux-packages.lock`: version, sha256 and download URL for each of the seven packages per ABI. The script downloads exactly those files, rejects any file whose sha256 differs, deletes every other cached `.deb`, and checks that `libnode.so` is the pinned Node 24 build. `--check-pins` validates the lock offline. `--update-pins` rewrites it from Termux's current index and refuses a `nodejs-lts` that is not Node 24; review the diff before committing it. Termux serves only the newest build of each package, so a pinned file stops downloading once Termux updates that package, and the fetch then fails with the refresh command.
+The runtime comes from `levix-node-runtime-24.22.1-android.tar.xz`, a release asset pinned by sha256 in `android/scripts/node-runtime.lock`. The script downloads that one file, checks its sha256 and size, then extracts the ABI through `node-runtime-archive.py`, which checks `MANIFEST.json`: schema 1, Node 24, the package rows in `termux-packages.lock` (package, version, sha256, url), every file sha256, and every symlink target. It never contacts Termux and never falls back to another Node.
 
 The script verifies every 64-bit ELF is safe on 16 KB-page devices — 16 KB aligned, RELRO not sharing a page with writable data, built with NDK r28+ — as Google Play requires for apps targeting API 35+, and fails the build otherwise.
 
-Each staged runtime is stamped (`~/.cache/levix-android/node-runtime/<abi>/.levix-stamp`) with the sha256 prefixes of `build-ffmpeg-android.sh`, `fetch-node-android.sh` and `termux-packages.lock`. Gradle recomputes the stamp and refuses to package a runtime staged from older recipes or pins, one whose `libffmpeg.so` lacks the `libwebp`/`libwebp_anim` sticker encoders, or one whose `libnode.so` is not the Node version in the lock, and prints the command that refreshes it (`LEVIX_ANDROID_ABIS=<abi> bash android/scripts/fetch-node-android.sh`). Re-run the script whenever a recipe or the lock changes; Gradle will not run it for you.
+Each staged runtime is stamped (`~/.cache/levix-android/node-runtime/<abi>/.levix-stamp`) with the sha256 prefixes of `build-ffmpeg-android.sh`, `fetch-node-android.sh`, `termux-packages.lock`, `node-runtime.lock` and `node-runtime-archive.py`. Gradle recomputes the stamp and refuses to package a runtime staged from older recipes or pins, one whose `libffmpeg.so` lacks the `libwebp`/`libwebp_anim` sticker encoders, or one whose `libnode.so` is not the Node version in the lock, and prints the command that refreshes it (`LEVIX_ANDROID_ABIS=<abi> bash android/scripts/fetch-node-android.sh`). Re-run the script whenever a recipe or a lock changes; Gradle will not run it for you.
+
+#### Rebuilding the runtime archive
+
+Maintainers refresh the deb pins with `bash android/scripts/fetch-node-android.sh --update-pins` while Termux still serves Node 24, then build the archive with `bash android/scripts/fetch-node-android.sh --build-archive`. Publishing the new release asset needs the owner's approval; after it is published, put its file name, sha256, size and URL in `android/scripts/node-runtime.lock`. The archive build is deterministic, so a rebuild from the same pinned debs gives the same sha256 with the same Python and liblzma. Every file is checked against the manifest either way.
+
+A default build uses the cached copy when its sha256 matches `node-runtime.lock`, and otherwise downloads the release asset. If that download fails it prints the URL and stops. It never rebuilds the archive by itself. Maintainers rebuild with `bash android/scripts/fetch-node-android.sh --build-archive`. The recovery order for them is: the release asset; any cached copy with the pinned sha256; that rebuild from the pinned debs; otherwise an owner decision, because Termux may stop shipping Node 24.
 
 ### 3. Build the APKs
 Run Gradle to assemble one APK per ABI:

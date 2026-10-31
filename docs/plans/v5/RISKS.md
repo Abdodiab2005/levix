@@ -8,11 +8,11 @@ phase or reverts a change. Owners are phases; the release owner is the project o
 | ID | Risk | Phase | Likelihood | Impact | Mitigation | Stop trigger |
 | --- | --- | --- | --- | --- | --- | --- |
 | R-01 | Termux promotes `nodejs-lts` to 26.x and the next Android build ships Node 26. | 01 | High | High | Done in PR 01a: `android/scripts/termux-packages.lock` pins version and sha256 per ABI; the fetch refuses other bytes and a `libnode.so` that is not the pinned 24.x; `--update-pins` refuses a non-24 `nodejs-lts`; Gradle checks the staged version. Remaining exposure: R-33. | Any artifact reports a major other than 24. |
-| R-33 | Termux serves only the newest build of each package (an older `nodejs-lts` answers HTTP 404). Once Termux updates a pinned package, a build without a cached copy cannot download it. Once Termux moves `nodejs-lts` to 26.x, no Termux source for Node 24 remains. | 01 to 10 | High | High | The CI cache is keyed on the lock and keeps the pinned files while it lives; the fetch fails with the refresh command instead of staging another version; Q-23 decides a durable source. | An Android build fails to download a pinned file. |
+| R-33 | Termux serves only the newest build of each package (an older `nodejs-lts` answers HTTP 404), and the Actions cache is evicted, so a cold build could lose its Node source. A new Node 24 patch still needs a Termux build; once Termux moves `nodejs-lts` to 26.x, no Termux source for a newer Node 24 remains. | 01 to 10 | Medium | High | ADR-018: builds use one pinned release archive and never contact Termux; a separate backup copy exists; the archive rebuilds deterministically from the pinned debs. A Node 24 patch after Termux moves on needs a source build (owner decision). | A pinned archive download fails, or Node 24 needs a security patch that Termux does not ship. |
 | R-02 | A production-only `node_modules/` misses a package that Levix loads at run time. | 01 | Medium | High | Build the tree from the lockfile; boot smoke on both ABIs; a test that loads every command and route module from the staged tree. | Boot, pairing or a command fails on device. |
 | R-03 | R8 or resource shrinking removes classes used by JNI, the WebView bridge (`@JavascriptInterface`) or reflection. | 01 | Medium | High | Experiment on a branch; keep rules; device test of `PanelBridge` and Media Hub. | Any bridge call fails on device. |
 | R-04 | A v5 migration fails on a real v4.9.x database. | 02 to 08 | Medium | High | Append-only migrations; backup before migrating; tests with v4.9.x fixture databases. | Migration test fails or data differs after upgrade. |
-| R-05 | A backup exposes secrets: `levix.key` together with the database opens every sealed value, and `secret:session` is unsealed. | 02 | Medium | High | Secrets excluded by default; passphrase encryption when included; no secret in previews or logs. | A test finds a secret in a default backup. |
+| R-05 | A backup exposes secrets: `levix.key` together with the database opens every sealed value, and `secret:session` is unsealed. | 02 | Medium | High | Every exported backup is encrypted with the operator's password; `levix.key`, pairing credentials, panel secrets and the session key are never included; API keys are sealed again with the target's key; no secret in previews or logs. | A test finds a pairing credential, panel secret or device key in a decrypted backup, or any secret in a preview or log. |
 | R-06 | An interrupted or corrupt restore damages the live data. | 02 | Medium | High | Stage, verify checksums, switch atomically, keep the old copy until the restarted app is healthy. | Old data not intact after a failed restore test. |
 | R-07 | A crafted backup uses path traversal, symlinks, a decompression bomb or extreme KDF parameters. | 02 | Low | High | Reject `..`, absolute paths and links; cap entry count, sizes and KDF cost. | Any fuzz case escapes the staging directory. |
 | R-08 | A second process writes the database during backup or restore (`levix reset-password` takes no lock). | 02 | Low | Medium | Use the SQLite backup API; take or check the instance lock in every writer. | Snapshot differs from a quiesced copy in tests. |
@@ -85,10 +85,12 @@ phase or reverts a change. Owners are phases; the release owner is the project o
 
 ### Restoring backups (Phase 02)
 
-- Threats: archive path traversal, symlinks, bombs; newer schema than the app; wrong passphrase;
-  restore during writes; credentials restored on another device.
-- Controls: validation before staging; refusal of newer schemas; atomic switch; WhatsApp pairing
-  restore across devices not claimed without proof.
+- Threats: tampered or truncated archives, path tricks, inflation bombs, KDF cost abuse; newer schema
+  than the app; wrong password; restore during writes; one account's data attached to another
+  WhatsApp account.
+- Controls: authenticated chunk stream and manifest checks before staging; refusal of newer
+  schemas; journaled steps with recovery at start; account data activates only for the same
+  WhatsApp account; WhatsApp pairing is never restored, the operator pairs manually.
 
 ### Model tool calls (Phase 06)
 

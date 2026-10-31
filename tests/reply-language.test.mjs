@@ -28,6 +28,11 @@ const {
 settings.set("bot_min_delay_ms", 0);
 settings.set("bot_max_delay_ms", 0);
 
+// These files check reply language, and the typing delay (400 to 2,500 ms per
+// reply) is covered by tests/send-bot-message.test.mjs.
+const { timing } = await import(join(ROOT, "src/utils/sendBotMessage.esm.js"));
+timing.sleep = async () => {};
+
 const ARABIC_LETTERS = /[ء-ي]/;
 const todo = require("./src/commands/todo.cjs");
 const rand = require("./src/commands/rand.cjs");

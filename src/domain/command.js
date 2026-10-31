@@ -82,21 +82,23 @@ async function askDomain({ assumeYes }) {
  * only a proxy we actually put in front justifies trusting one hop of
  * forwarded headers, and only then is it safe to stop listening publicly.
  */
-function persist({ domain, proxied }) {
-  settings.set("public_domain", domain);
-  if (proxied) {
-    // Exactly one hop: the proxy on this machine. See src/utils/requestOrigin.cjs
-    // for why this does not weaken the first-run check.
-    settings.set("trust_proxy", "1");
-    // Nobody should be able to reach the panel past the certificate by asking
-    // for the raw port.
-    settings.set("bind_address", "127.0.0.1");
-  }
+async function persist({ domain, proxied }, asDataOwner) {
+  await asDataOwner(() => {
+    settings.set("public_domain", domain);
+    if (proxied) {
+      // Exactly one hop: the proxy on this machine. See src/utils/requestOrigin.cjs
+      // for why this does not weaken the first-run check.
+      settings.set("trust_proxy", "1");
+      // Nobody should be able to reach the panel past the certificate by asking
+      // for the raw port.
+      settings.set("bind_address", "127.0.0.1");
+    }
+  });
 }
 
-export async function runDomainCommand({ domain = null, assumeYes = false, system } = {}) {
+export async function runDomainCommand({ domain = null, assumeYes = false, system, asDataOwner = async (fn) => fn() } = {}) {
   const sys = system || createSystem();
-  const port = settings.get("port");
+  const port = await asDataOwner(() => settings.get("port"));
 
   line();
   line("  Levix — domain setup");
@@ -128,7 +130,7 @@ export async function runDomainCommand({ domain = null, assumeYes = false, syste
       line("  Levix is running inside a container.");
       line("  A container cannot — and should not — configure the host's web server.");
       proxyInstructions(name, port, { https: "the host proxy" });
-      persist({ domain: name, proxied: false });
+      await persist({ domain: name, proxied: false }, asDataOwner);
       tick(`Saved ${name} as the public address.`);
       return 0;
 
@@ -141,7 +143,7 @@ export async function runDomainCommand({ domain = null, assumeYes = false, syste
       proxyInstructions(name, port, { https: decision.target });
       const hint = PANEL_HINTS[decision.target];
       if (hint) line(`  In ${decision.target}: ${hint}\n`);
-      persist({ domain: name, proxied: false });
+      await persist({ domain: name, proxied: false }, asDataOwner);
       tick(`Saved ${name} as the public address.`);
       return 0;
     }
@@ -155,7 +157,7 @@ export async function runDomainCommand({ domain = null, assumeYes = false, syste
       proxyInstructions(name, port, { https: "certbot --apache" });
       line("  The proxy needs mod_proxy, mod_proxy_http and mod_proxy_wstunnel.");
       line();
-      persist({ domain: name, proxied: false });
+      await persist({ domain: name, proxied: false }, asDataOwner);
       return 0;
 
     case "blocked":
@@ -167,13 +169,13 @@ export async function runDomainCommand({ domain = null, assumeYes = false, syste
       return 1;
 
     case "nginx":
-      return configureNginx(sys, { name, port, report, assumeYes });
+      return configureNginx(sys, { name, port, report, assumeYes, asDataOwner });
 
     case "caddy":
-      return configureCaddy(sys, { name, port, report, assumeYes, install: false });
+      return configureCaddy(sys, { name, port, report, assumeYes, install: false, asDataOwner });
 
     case "install-caddy":
-      return configureCaddy(sys, { name, port, report, assumeYes, install: true });
+      return configureCaddy(sys, { name, port, report, assumeYes, install: true, asDataOwner });
 
     default:
       cross(`Nothing to do (${decision.reason}).`);
@@ -249,7 +251,7 @@ async function confirmDns(sys, name, { assumeYes }) {
   return ask("Continue without HTTPS for now?", { assumeYes });
 }
 
-async function configureNginx(sys, { name, port, report, assumeYes }) {
+async function configureNginx(sys, { name, port, report, assumeYes, asDataOwner }) {
   if (!requireRoot(report)) return 1;
 
   const dnsOk = await confirmDns(sys, name, { assumeYes });
@@ -313,12 +315,12 @@ async function configureNginx(sys, { name, port, report, assumeYes }) {
     line();
   }
 
-  persist({ domain: name, proxied: true });
+  await persist({ domain: name, proxied: true }, asDataOwner);
   finalUrl(name, https, { restart: true });
   return 0;
 }
 
-async function configureCaddy(sys, { name, port, report, assumeYes, install }) {
+async function configureCaddy(sys, { name, port, report, assumeYes, install, asDataOwner }) {
   if (!requireRoot(report)) return 1;
 
   if (install) {
@@ -379,7 +381,7 @@ async function configureCaddy(sys, { name, port, report, assumeYes, install }) {
   tick("Caddy reloaded");
   tick("HTTPS will be issued automatically on the first request");
 
-  persist({ domain: name, proxied: true });
+  await persist({ domain: name, proxied: true }, asDataOwner);
   finalUrl(name, true, { restart: true });
   return 0;
 }

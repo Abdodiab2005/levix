@@ -19,6 +19,11 @@ const settings = require("./src/config/settings.cjs");
 const { localize, parseLang } = require("./src/utils/commandDocs.cjs");
 const help = require("./src/commands/help.cjs");
 
+// These files check reply language, and the typing delay (400 to 2,500 ms per
+// reply) is covered by tests/send-bot-message.test.mjs.
+const { timing } = await import(join(ROOT, "src/utils/sendBotMessage.esm.js"));
+timing.sleep = async () => {};
+
 const ARABIC_LETTERS = /[\u0621-\u064A]/;
 const DM = "201000000004@s.whatsapp.net";
 

@@ -331,8 +331,9 @@ Every official build uses Node 24 (ADR-001 in `docs/plans/v5/DECISIONS.md`).
   refuses to run on any other major.
 - The Docker image takes the same patch as `ARG NODE_VERSION`.
   `tests/node-version-policy.test.mjs` fails when the two differ.
-- The Android runtime is the Termux `nodejs-lts` build pinned, with its
-  libraries, in `android/scripts/termux-packages.lock` (see ANDROID.md).
+- The Android runtime is the release archive
+  `levix-node-runtime-24.22.1-android.tar.xz`, pinned by sha256 in
+  `android/scripts/node-runtime.lock` (see ANDROID.md).
 - To move to a newer Node 24 patch, change `.node-version` and the Dockerfile
   `ARG` in one pull request; CI then runs every job on it.
 - People who install from npm get `engines` `>=24 <25`: npm warns about any

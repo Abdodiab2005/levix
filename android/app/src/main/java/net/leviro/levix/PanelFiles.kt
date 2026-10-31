@@ -13,6 +13,17 @@ import java.util.Locale
 object PanelFiles {
     fun validCallId(id: String): Boolean = id.matches(Regex("[A-Za-z0-9_-]{1,64}"))
 
+    const val BACKUP_MAX_BYTES = 16L * 1024 * 1024 * 1024
+    const val BACKUP_UPLOAD = "/dashboard/api/backup/restore/uploads"
+    fun backupUploadAllowed(path: String): Boolean = path == BACKUP_UPLOAD
+    fun backupToken(token: String): Boolean = token.matches(Regex("[0-9a-f]{64}"))
+    fun backupExportAllowed(path: String): Boolean =
+        path.startsWith("/dashboard/api/backup/exports/") &&
+            backupToken(path.removePrefix("/dashboard/api/backup/exports/"))
+    fun backupFileName(name: String): Boolean =
+        name.matches(Regex("levix-backup-[0-9]{8}-[0-9]{6}\\.levixbak"))
+    fun backupSize(size: Long): Boolean = size in 1..BACKUP_MAX_BYTES
+
     fun exportAllowed(path: String, method: String): Boolean {
         if (method != "GET" && method != "POST") return false
         if (!path.startsWith("/dashboard/api/stickers/") &&

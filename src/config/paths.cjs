@@ -15,42 +15,13 @@
 //      node_modules) — keeps a developer's data next to the code
 //   4. `~/.levix` — global installs, packaged binaries, read-only images
 //
-// This module deliberately has no dependencies: the logger and the database
-// both need it, and neither can wait for the other.
+// This module has no application dependencies: the logger and database both
+// need it, and neither can wait for the other.
 
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
+const { ROOT, DATA_DIR } = require("./data-dir.cjs");
 
-const ROOT = path.join(__dirname, "..", "..");
-
-function argDataDir() {
-  const index = process.argv.indexOf("--data");
-  if (index !== -1 && process.argv[index + 1]) return process.argv[index + 1];
-  const inline = process.argv.find((arg) => arg.startsWith("--data="));
-  return inline ? inline.slice("--data=".length) : null;
-}
-
-function isWritable(dir) {
-  try {
-    fs.accessSync(dir, fs.constants.W_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function resolveDataDir() {
-  const explicit = argDataDir() || process.env.LEVIX_DATA_DIR;
-  if (explicit) return path.resolve(explicit);
-
-  const installed = ROOT.includes(`${path.sep}node_modules${path.sep}`);
-  if (!installed && isWritable(ROOT)) return path.join(ROOT, "data");
-
-  return path.join(os.homedir(), ".levix");
-}
-
-const DATA_DIR = resolveDataDir();
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 // Where the read-only files that ship with the bot live: views/, public/, the

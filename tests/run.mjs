@@ -7,10 +7,14 @@
 // Files that need a built artifact (a packed tarball, a compiled executable)
 // live in scripts/validate-*.mjs instead and run separately — they take
 // minutes, and `npm test` has to stay something you run constantly.
+//
+// The summary lists each file's wall time and the five slowest, so a slow file
+// shows up in every run's output.
 
 import { spawn } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
@@ -29,10 +33,12 @@ if (!files.length) {
 const results = [];
 let totalChecks = 0;
 let totalFailed = 0;
+const runStart = performance.now();
 
 for (const file of files) {
   console.log(`\n${"─".repeat(64)}\n▸ ${file}`);
 
+  const started = performance.now();
   const { code, output } = await new Promise((resolve) => {
     const child = spawn(process.execPath, [join(HERE, file)], {
       stdio: ["ignore", "pipe", "pipe"],
@@ -51,6 +57,8 @@ for (const file of files) {
     });
     child.on("close", (code) => resolve({ code, output }));
   });
+  // Wall time of this file, measured from just before spawn to close.
+  const seconds = (performance.now() - started) / 1000;
 
   const tally = /^CHECKS (\d+) (\d+)$/m.exec(output);
   const checks = tally ? Number(tally[1]) : 0;
@@ -62,17 +70,28 @@ for (const file of files) {
   // A file that exits non-zero without printing a tally crashed — count that
   // as a failure rather than a silent zero.
   const crashed = !tally && code !== 0;
-  results.push({ file, checks, failed, crashed, code });
+  results.push({ file, checks, failed, crashed, code, seconds });
 }
 
 console.log(`\n${"═".repeat(64)}`);
 for (const r of results) {
   const status = r.crashed ? "CRASHED" : r.failed ? `${r.failed} FAILED` : "ok";
-  console.log(`  ${r.file.padEnd(34)} ${String(r.checks).padStart(4)} checks   ${status}`);
+  const time = `${r.seconds.toFixed(1).padStart(6)} s`;
+  const row = `${r.file.padEnd(34)} ${String(r.checks).padStart(4)} checks   ${status}`;
+  // Append the file's wall time in its own column.
+  console.log(`  ${row.padEnd(56)}${time}`);
 }
 
 const crashed = results.filter((r) => r.crashed).length;
 console.log(`${"═".repeat(64)}`);
 console.log(`  ${totalChecks} checks · ${totalFailed} failed · ${crashed} file(s) crashed\n`);
+
+// The five slowest files, slowest first, then the whole run's wall time.
+const slowest = [...results].sort((a, b) => b.seconds - a.seconds).slice(0, 5);
+console.log("  Slowest files");
+for (const r of slowest) {
+  console.log(`    ${r.file.padEnd(34)}${r.seconds.toFixed(1).padStart(6)} s`);
+}
+console.log(`  Total ${((performance.now() - runStart) / 1000).toFixed(1)} s`);
 
 process.exit(totalFailed || crashed ? 1 : 0);

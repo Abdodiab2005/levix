@@ -39,10 +39,11 @@ to all v5 work and add to the rules below; they remove none of them.
   patch (v24.22.2 on 2026-10-30) for CI, the release jobs, the SEA executables
   (they embed the Node that builds them) and the Docker image (`ARG
   NODE_VERSION`); `tests/node-version-policy.test.mjs` keeps them equal. Android
-  `libnode.so` is the Termux `nodejs-lts` build pinned with sha256 in
-  `android/scripts/termux-packages.lock` (24.22.1); `fetch-node-android.sh
-  --update-pins` refuses a `nodejs-lts` that is not Node 24, and Gradle refuses
-  a staged `libnode.so` that is not the pinned version. No component moves to
+  `libnode.so` comes from the pinned release archive built from the Termux
+  debs in `android/scripts/termux-packages.lock` (24.22.1);
+  `fetch-node-android.sh --update-pins` refuses a `nodejs-lts` that is not
+  Node 24, and Gradle refuses a staged `libnode.so` that is not the pinned
+  version. No component moves to
   Node 26 (ADR-001). `package.json` declares `engines` `>=24 <25`. A self-hosted
   user may run Node 25, 26 or later: the CLI and the installer print a warning
   that the version is not officially supported and support is best effort, then
@@ -308,11 +309,18 @@ install keeps `registered: false` for good.
 
 - `src/cli.js` — the command line. Every branch imports only what it needs, so
   `where` never opens a database and `reset-password` never starts WhatsApp.
+  Password reset and domain setup take the instance lock when free; with a
+  running bot they only write when the database already has this build's schema.
   `bin/levix.js` is a two-line wrapper, and the packaged executable bundles the
   same file.
 - `src/bootstrap/core.js` — lock, database, commands, the session manager,
   the scheduler. It *builds* the WhatsApp session; it only *starts* it when
   asked.
+  `levix.lock.db` holds a SQLite exclusive lock for the process lifetime, so
+  a crash releases it without a pid check. `levix.lock` is a pid hint for the
+  contention message only. A sudo CLI command requires an existing real data
+  directory, accesses its database and lock as that directory's owner, and
+  runs web server setup as root.
 - `src/bootstrap/panel.js` — Express, sessions, EJS, socket.io, routes, listen.
   Requiring `app.cjs` is what *constructs* the panel, so it happens here and
   nowhere else; headless never imports this file.
@@ -523,10 +531,10 @@ This project uses **Baileys v7.0.0-rc14** which has breaking changes from v6:
 
 ## Database (SQLite)
 
-One file, `levix.db`, in the data directory. Opened synchronously by
-`src/db/db.cjs` the moment it is required — there is nothing to connect to and
-nothing that can be unreachable, which is why `src/index.js` has no database
-pre-flight any more.
+One file, `levix.db`, in the data directory. Importing `src/db/db.cjs` does
+not open it. Direct store use opens and migrates on first access. Startup
+acquires the SQLite instance lock, prepares the database, then runs restore
+recovery before commands, session, scheduler or panel use it.
 
 **Why `node:sqlite`**: it ships inside Node, so the datastore adds no
 dependency, nothing compiles, and nobody has to install a server before the bot
@@ -581,6 +589,18 @@ inside the data directory.
 `src/db/db.cjs` holds an array of migration functions and stamps
 `PRAGMA user_version`. Every start applies what is missing, so upgrading is
 just new code. **Append a migration; never edit one that has shipped.**
+Startup refuses a newer schema. For an existing older schema it verifies a
+pre-migration copy before all pending steps run in one transaction. The copy
+holds every table, but leaves out pairing credentials and QR codes, panel
+authentication, the recovery email record, the session key, API keys and the
+WhatsApp proxy password. These secrets are never written to the copy. Levix writes a `.part` file, verifies
+it, then renames it to `levix-v*.db`. With Levix stopped, manual recovery
+copies a `backups/pre-migration/levix-v*.db` over `levix.db` and deletes
+`levix.db-wal` and `levix.db-shm`. There is no CLI restore. On the previous
+build, `/setup` asks for a new panel password and, from another machine, the
+setup code printed in the terminal. Levix generates a new session key. Enter
+API keys again and pair the same WhatsApp account on the Connection screen.
+To start with another account, press Unlink after pairing.
 
 ### Access
 
@@ -1147,6 +1167,25 @@ its preview Blob is not posted through the WebView bridge.
 `library.clearAll()`, which deletes every sticker, pack, and `sticker_owners`
 row, removes `<data>/stickers`, and discards pending uploads. The next phone
 that pairs starts a new self library and does not inherit the previous one.
+
+### Backup and restore
+
+`src/backup/` owns format v1, snapshot filtering, restore, journal recovery and
+account activation. `src/routes/backup.api.esm.js` exposes the authenticated
+panel API; `frontend/src/views/BackupView.tsx` is Settings → Backup. Every new
+database table or `bot_settings` key must be classified in the backup allowlist
+before creation can succeed. Unknown data must not enter an archive.
+
+Restore journals each change in `<data>/restore/journal.json`; startup recovers
+it under the instance lock. Settings apply on restore. Account data waits until
+the matching WhatsApp account is paired, then activates before roles and
+schedules load. A different account cannot activate it.
+
+Android's `PanelBridge` delegates `uploadBackup(callId, token, maxBytes)` and
+`saveBackup(callId, token, fileName)` to `StickerHost`. Files stream over the
+panel socket. Upload is pinned to `POST /dashboard/api/backup/restore/uploads`;
+save is pinned to `GET /dashboard/api/backup/exports/<64 lowercase hex>`.
+Only small results and progress cross the JavaScript bridge.
 
 ## Dashboard (`views/` + `public/` + `src/routes/dashboard.api.esm.js`)
 

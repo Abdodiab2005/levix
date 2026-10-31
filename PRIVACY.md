@@ -74,6 +74,15 @@ Data only leaves your device as a direct result of features you use:
 Everything else — the database, your settings, API keys, memory files, the
 control panel — stays in the app's private storage on the device.
 
+**Backups** are local files created only when you ask. Every exported backup is
+encrypted with a password you choose; Levix cannot recover that password.
+Levix never uploads a backup to the developer or a cloud service. A backup can
+contain bot settings, command setup, API keys, AI persona, conversations,
+memory, schedules and their media, group data, roles and stickers. It never
+contains WhatsApp pairing credentials, the panel password or session key,
+recovery email, the install encryption key, device settings, logs, crash
+reports or Android preferences. You control where the exported file is saved.
+
 ---
 
 ## 1. Data stored locally
