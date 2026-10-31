@@ -83,7 +83,7 @@ section("a lock left behind by a crash is not fatal");
   }
 }
 
-section("a live holder is never evicted");
+section("an unrelated live pid does not own the SQLite lock");
 
 {
   // Hold it from a child, then try to claim it from another child.
@@ -105,7 +105,7 @@ section("a live holder is never evicted");
   ok("a lock pointing at a live process is planted", holder.stdout === "PLANTED");
 
   const child = claimInChild(dataDir);
-  ok("a live holder blocks the claim", child.stdout.startsWith("REFUSED"));
+  ok("a stale pid hint does not block the claim", child.stdout.startsWith("ACQUIRED"));
   ok("our own pid is reported as alive", lock.processAlive(process.pid) === true);
 }
 

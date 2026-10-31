@@ -85,9 +85,17 @@ attach((event, payload) => {
   if (event === "session" && payload) reportSession(payload);
 });
 
-const { start, getLiveSession } = await import("./src/index.js");
-const app = await start({ headless: false, open: false });
-session = app?.session || getLiveSession();
-// An unpaired session begins idle and emits no transition. Send the actual
-// initial snapshot too, so Android can guide pairing without guessing.
-if (session) reportSession(session.getState());
+const { exitCodeFor } = (await import("./src/config/exit-codes.cjs")).default;
+try {
+  const { start, getLiveSession } = await import("./src/index.js");
+  const app = await start({ headless: false, open: false });
+  session = app?.session || getLiveSession();
+  // An unpaired session begins idle and emits no transition. Send the actual
+  // initial snapshot too, so Android can guide pairing without guessing.
+  if (session) reportSession(session.getState());
+} catch (error) {
+  const code = exitCodeFor(error);
+  if (code === null) throw error;
+  console.error(error.message);
+  process.exit(code);
+}

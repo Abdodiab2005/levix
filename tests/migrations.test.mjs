@@ -308,7 +308,8 @@ section("a database written by a newer Levix is left alone");
   const database = scratchDatabase();
   migrate(database);
   database.exec(`PRAGMA user_version = ${MIGRATIONS.length + 5}`);
-  migrate(database);
+  const newer = throws("a newer schema is refused", () => migrate(database));
+  equal("the refusal has a stable code", newer?.code, "SCHEMA_NEWER");
   equal("the version is not rewound", versionOf(database), MIGRATIONS.length + 5);
   database.close();
 }
@@ -332,7 +333,7 @@ section("a migration that fails leaves no half-applied schema");
 
   throws("the failure propagates rather than being swallowed", () => migrate(database, failing));
 
-  equal("the version still says the last good migration", versionOf(database), MIGRATIONS.length);
+  equal("the version still says the starting migration", versionOf(database), 0);
   ok("the table the failed step created is gone", !tablesOf(database).includes("half_applied"));
 
   // The decisive part: the next start must be able to finish the job.
