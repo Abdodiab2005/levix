@@ -20,4 +20,10 @@ function maskAccount(account) {
   return `+${digits.slice(0, 2)} ••• ••• ••${digits.slice(-2)}`;
 }
 
-module.exports = { readPairedAccount, maskAccount };
+function accountsMatch(backupAccount, pairedAccount) {
+  if (!backupAccount || !pairedAccount) return false;
+  if (backupAccount.lid && pairedAccount.lid) return backupAccount.lid === pairedAccount.lid;
+  return !backupAccount.lid && !!backupAccount.pn && backupAccount.pn === pairedAccount.pn;
+}
+
+module.exports = { readPairedAccount, maskAccount, accountsMatch };

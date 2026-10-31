@@ -9,6 +9,8 @@
 // handler: the rules can be stated as facts instead of hoped for.
 
 import { EventEmitter } from "node:events";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   equal,
   finish,
@@ -46,7 +48,7 @@ const silent = { info() {}, warn() {}, error() {}, debug() {}, trace() {} };
  * `harness.push(update)` delivers a connection.update to the CURRENT socket, so
  * a test can also aim one at an old socket on purpose.
  */
-function makeHarness({ paired = false, retryDelaysMs, clearAll, isLinked } = {}) {
+function makeHarness({ paired = false, retryDelaysMs, clearAll, isLinked, realClear = false } = {}) {
   const sockets = [];
   const events = [];
 
@@ -87,7 +89,7 @@ function makeHarness({ paired = false, retryDelaysMs, clearAll, isLinked } = {})
     log: silent,
     pairingCodeDelayMs: 0,
     isLinked: isLinked ?? (() => paired),
-    clearDirectory: () => {
+    clearDirectory: realClear ? undefined : () => {
       events.push({ event: "directory_cleared", payload: null });
     },
   });
@@ -645,6 +647,21 @@ section("unlinking from the panel");
 
   await sleep(80);
   equal("and nothing reconnected", h.sockets.length, 1);
+}
+
+section("unlink keeps staged account data pending");
+
+{
+  const { dataPath } = harnessRequire("./src/config/paths.cjs");
+  const pending = dataPath("restore", "pending");
+  mkdirSync(pending, { recursive: true });
+  writeFileSync(join(pending, "pending.json"), "pending marker");
+  const h = makeHarness({ paired: true, clearAll: async () => {}, realClear: true });
+  await h.session.start();
+  h.latest().user = { id: "1@s.whatsapp.net" };
+  await h.push({ connection: "open" });
+  await h.session.logout();
+  ok("unlink leaves pending directory", existsSync(join(pending, "pending.json")));
 }
 
 section("unlinking works when there is no socket to unlink through");

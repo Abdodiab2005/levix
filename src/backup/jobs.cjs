@@ -4,6 +4,9 @@ const path = require("node:path");
 const { ensureDataDir } = require("../config/paths.cjs");
 const { BackupError, CODES } = require("./format.cjs");
 const { createBackup } = require("./create.cjs");
+const { restoreUpload } = require("./restore.cjs");
+const uploads = require("./uploads.cjs");
+const { readJournal } = require("./journal.cjs");
 
 function sweepBackupTemp() {
   const root = ensureDataDir("tmp", "backup");
@@ -18,7 +21,7 @@ let active = null;
 const EXPIRE_MS = 30 * 60 * 1000;
 
 function startExport(password) {
-  if (active) throw new BackupError("BUSY", "Backup job busy");
+  if (active || readJournal()) throw new BackupError("BUSY", "Backup job busy");
   const job = { id: crypto.randomBytes(16).toString("hex"), kind: "backup",
     phase: "queued", bytes: 0, totalBytes: 0, done: false, error: null, result: null };
   jobs.set(job.id, job);
@@ -49,6 +52,34 @@ function startExport(password) {
   return job.id;
 }
 
+function startRestore(uploadId, password) {
+  if (active || readJournal()) throw new BackupError("BUSY", "Backup job busy");
+  const pin = uploads.pinUpload(uploadId);
+  if (!pin) throw new BackupError("NOT_FOUND", "Upload not found");
+  const job = { id: crypto.randomBytes(16).toString("hex"), kind: "restore",
+    phase: "queued", bytes: 0, totalBytes: 0, done: false, error: null, result: null };
+  jobs.set(job.id, job);
+  active = job.id;
+  setImmediate(async () => {
+    try {
+      job.result = await restoreUpload(uploadId, password, (update) => Object.assign(job, update));
+      job.phase = "done";
+    } catch (error) {
+      job.phase = "error";
+      const code = error?.code === "WRONG_PASSWORD" && uploads.wrongPassword(uploadId) ?
+        "too_many_attempts" : error instanceof BackupError ? error.code : "IO";
+      job.error = { code };
+    } finally {
+      pin.release();
+      job.done = true;
+      active = null;
+      const timer = setTimeout(() => jobs.delete(job.id), EXPIRE_MS);
+      timer.unref();
+    }
+  });
+  return job.id;
+}
+
 function getJob(id) { return jobs.get(id) || null; }
 function getExport(token) {
   const entry = exportsByToken.get(token);
@@ -64,4 +95,4 @@ function removeExport(token) {
   return true;
 }
 
-module.exports = { sweepBackupTemp, startExport, getJob, getExport, removeExport };
+module.exports = { sweepBackupTemp, startExport, startRestore, getJob, getExport, removeExport };
