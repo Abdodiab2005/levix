@@ -39,12 +39,22 @@ const logger = require("./logger.cjs");
 
 const { dataPath, PACKAGE_ROOT } = require("../config/paths.cjs");
 
-// The memory files live in the data directory. An install that predates that
-// keeps using its existing ./memory folder rather than silently starting empty.
+// The active root is always <data>/memory, so a backup of the data directory
+// includes the AI memory. An older install that still has files in
+// PACKAGE_ROOT/memory is copied into the data directory once, on first
+// memory access — never at require() time, because a copy failure must not
+// crash the process during module load. The copy never writes back to the
+// legacy folder (a packaged or global install may have it read-only).
 const LEGACY_ROOT = path.join(PACKAGE_ROOT, "memory");
-const ROOT = fs.existsSync(LEGACY_ROOT) ? LEGACY_ROOT : dataPath("memory");
+const ROOT = dataPath("memory");
 const CHATS_DIR = path.join(ROOT, "chats");
 const GLOBAL_FILE = path.join(ROOT, "global.md");
+// Present after a successful copy, and after unlink, so a later pairing
+// cannot import the previous account's PACKAGE_ROOT/memory. Not a memory file.
+const LEGACY_COPY_MARKER = ".legacy-copied";
+// Present for the duration of an in-place copy so a crash mid-loop can resume
+// instead of looking like a conflict. Not a memory file.
+const LEGACY_COPYING_MARKER = ".legacy-copying";
 
 // Guardrails so a runaway agent can't grow the prompt without bound.
 const MAX_ENTRY_CHARS = 2000;
@@ -58,6 +68,7 @@ const maxContextChars = () => settings.get("memory_context_chars");
 // ---------------------------------------------------------------------------
 
 function ensureDirs() {
+  maybeMigrateLegacy();
   fs.mkdirSync(CHATS_DIR, { recursive: true });
 }
 
@@ -76,6 +87,7 @@ function normalizeScope(scope) {
 
 /** Absolute path of the markdown file backing a scope. */
 function memoryFilePath(scope, chatId) {
+  maybeMigrateLegacy();
   if (normalizeScope(scope) === "global") return GLOBAL_FILE;
   if (!chatId) return GLOBAL_FILE;
   return path.join(CHATS_DIR, `${safeFileName(chatId)}.md`);
@@ -108,6 +120,7 @@ function headerFor(scope, chatId, chatName) {
 }
 
 function readRaw(filePath) {
+  maybeMigrateLegacy();
   try {
     return fs.readFileSync(filePath, "utf8");
   } catch {
@@ -118,6 +131,310 @@ function readRaw(filePath) {
 function writeRaw(filePath, content) {
   ensureDirs();
   fs.writeFileSync(filePath, content, "utf8");
+}
+
+// ---------------------------------------------------------------------------
+// legacy copy (PACKAGE_ROOT/memory -> <data>/memory)
+// ---------------------------------------------------------------------------
+
+let legacyCopyAttempted = false;
+
+function emitLog(log, level, obj, msg) {
+  if (!log || typeof log[level] !== "function") return;
+  try {
+    log[level](obj, msg);
+  } catch {
+    // A log sink must not fail a copy or a skip.
+  }
+}
+
+function legacyCopyMarkerPath(dir) {
+  return path.join(dir, LEGACY_COPY_MARKER);
+}
+
+function hasLegacyCopyMarker(dir) {
+  try {
+    fs.lstatSync(legacyCopyMarkerPath(dir));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function writeLegacyCopyMarker(dir) {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(legacyCopyMarkerPath(dir), "", "utf8");
+  // Copied first, then drop the in-progress marker, so a crash between the
+  // two still skips on the next start instead of looking like a conflict.
+  removeLegacyCopyingMarker(dir);
+}
+
+function legacyCopyingMarkerPath(dir) {
+  return path.join(dir, LEGACY_COPYING_MARKER);
+}
+
+function hasLegacyCopyingMarker(dir) {
+  try {
+    fs.lstatSync(legacyCopyingMarkerPath(dir));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function writeLegacyCopyingMarker(dir) {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(legacyCopyingMarkerPath(dir), "", "utf8");
+}
+
+function removeLegacyCopyingMarker(dir) {
+  try {
+    fs.unlinkSync(legacyCopyingMarkerPath(dir));
+  } catch {
+    // Already gone, or the in-place path never wrote it.
+  }
+}
+
+/** Writes `.legacy-copied` so a later migrate will not import PACKAGE_ROOT/memory. */
+function markLegacyMemoryHandled(dir = ROOT) {
+  writeLegacyCopyMarker(dir);
+}
+
+function isRegularMarkdownFile(filePath) {
+  if (!String(filePath).endsWith(".md")) return false;
+  try {
+    const st = fs.lstatSync(filePath);
+    return st.isFile() && !st.isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+function isLiveMemoryMarkdownName(name) {
+  return (
+    name.endsWith(".md") && name !== LEGACY_COPY_MARKER && name !== LEGACY_COPYING_MARKER
+  );
+}
+
+function listMarkdownMemoryFiles(root) {
+  const files = [];
+  if (!root) return files;
+
+  if (isRegularMarkdownFile(path.join(root, "global.md"))) {
+    files.push("global.md");
+  }
+
+  const chatsDir = path.join(root, "chats");
+  try {
+    const st = fs.lstatSync(chatsDir);
+    if (st.isSymbolicLink() || !st.isDirectory()) return files;
+  } catch {
+    return files;
+  }
+
+  let names = [];
+  try {
+    names = fs.readdirSync(chatsDir);
+  } catch {
+    return files;
+  }
+
+  for (const name of names) {
+    if (!isLiveMemoryMarkdownName(name)) continue;
+    if (isRegularMarkdownFile(path.join(chatsDir, name))) {
+      files.push(path.join("chats", name));
+    }
+  }
+  return files;
+}
+
+function siblingCopyPrefix(dataMemoryDir) {
+  return `${path.basename(dataMemoryDir)}.legacy-copy-`;
+}
+
+function removeSiblingCopyTemps(dataMemoryDir) {
+  const parent = path.dirname(dataMemoryDir);
+  const prefix = siblingCopyPrefix(dataMemoryDir);
+  let names = [];
+  try {
+    names = fs.readdirSync(parent);
+  } catch {
+    return;
+  }
+  for (const name of names) {
+    if (!name.startsWith(prefix)) continue;
+    try {
+      fs.rmSync(path.join(parent, name), { recursive: true, force: true });
+    } catch {
+      // Best effort; the copy may still succeed.
+    }
+  }
+}
+
+function removeInPlaceCopyTemps(dataMemoryDir) {
+  const dirs = [dataMemoryDir, path.join(dataMemoryDir, "chats")];
+  for (const dir of dirs) {
+    let names = [];
+    try {
+      names = fs.readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      if (!name.includes(".legacy-copy-")) continue;
+      try {
+        fs.rmSync(path.join(dir, name), { force: true });
+      } catch {
+        // Best effort; the copy may still succeed.
+      }
+    }
+  }
+}
+
+function copyIntoNewDir(dataMemoryDir, legacyDir, files) {
+  const tmpDir = path.join(
+    path.dirname(dataMemoryDir),
+    `${siblingCopyPrefix(dataMemoryDir)}${process.pid}`,
+  );
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.mkdirSync(tmpDir, { recursive: true });
+  try {
+    for (const rel of files) {
+      const dest = path.join(tmpDir, rel);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.copyFileSync(path.join(legacyDir, rel), dest);
+    }
+    writeLegacyCopyMarker(tmpDir);
+    fs.renameSync(tmpDir, dataMemoryDir);
+  } catch (err) {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // The original error is the one the caller needs.
+    }
+    throw err;
+  }
+}
+
+function destPathExists(filePath) {
+  try {
+    fs.lstatSync(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function copyIntoExistingDir(dataMemoryDir, legacyDir, files, { afterFile } = {}) {
+  fs.mkdirSync(dataMemoryDir, { recursive: true });
+  // Before the first file, so a crash mid-loop resumes instead of conflicting.
+  writeLegacyCopyingMarker(dataMemoryDir);
+  for (const rel of files) {
+    const dest = path.join(dataMemoryDir, rel);
+    if (destPathExists(dest)) continue;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    const tmp = path.join(
+      path.dirname(dest),
+      `.${path.basename(dest)}.legacy-copy-${process.pid}`,
+    );
+    try {
+      fs.copyFileSync(path.join(legacyDir, rel), tmp);
+      fs.renameSync(tmp, dest);
+    } catch (err) {
+      try {
+        fs.rmSync(tmp, { force: true });
+      } catch {
+        // The original error is the one the caller needs.
+      }
+      throw err;
+    }
+    // Test hook: throw after a committed file to simulate a crash. Production
+    // never passes afterFile.
+    if (typeof afterFile === "function") afterFile(rel);
+  }
+  writeLegacyCopyMarker(dataMemoryDir);
+}
+
+/**
+ * Decide whether a PACKAGE_ROOT/memory tree should be copied into the data
+ * directory. Pure: no writes. Tests pass temp folders so they never touch
+ * the real install.
+ *
+ * @returns {{action: "copy"|"skip"|"conflict", reason: string, files: string[]}}
+ */
+function planLegacyMemoryCopy({ dataMemoryDir, legacyDir } = {}) {
+  if (hasLegacyCopyMarker(dataMemoryDir)) {
+    return { action: "skip", reason: "marker", files: [] };
+  }
+  const destFiles = listMarkdownMemoryFiles(dataMemoryDir);
+  const srcFiles = listMarkdownMemoryFiles(legacyDir);
+  if (hasLegacyCopyingMarker(dataMemoryDir)) {
+    const destSet = new Set(destFiles);
+    const missing = srcFiles.filter((rel) => !destSet.has(rel));
+    return { action: "copy", reason: "resume", files: missing };
+  }
+  if (srcFiles.length && destFiles.length) {
+    return { action: "conflict", reason: "both", files: srcFiles };
+  }
+  if (!srcFiles.length) {
+    return { action: "skip", reason: "no-legacy", files: [] };
+  }
+  return { action: "copy", reason: "legacy-only", files: srcFiles };
+}
+
+function migrateLegacyMemory({ dataMemoryDir, legacyDir, log, afterFile } = {}) {
+  const plan = planLegacyMemoryCopy({ dataMemoryDir, legacyDir });
+  if (plan.action === "conflict") {
+    emitLog(
+      log,
+      "warn",
+      { legacy: legacyDir, data: dataMemoryDir },
+      `[memory] ${legacyDir} still holds memory files; using ${dataMemoryDir}. Merge by hand if needed.`,
+    );
+    return { ...plan, copied: false };
+  }
+  if (plan.action !== "copy") {
+    return { ...plan, copied: false };
+  }
+
+  try {
+    removeSiblingCopyTemps(dataMemoryDir);
+    if (fs.existsSync(dataMemoryDir)) {
+      removeInPlaceCopyTemps(dataMemoryDir);
+      copyIntoExistingDir(dataMemoryDir, legacyDir, plan.files, { afterFile });
+    } else {
+      copyIntoNewDir(dataMemoryDir, legacyDir, plan.files);
+    }
+    emitLog(
+      log,
+      "info",
+      { from: legacyDir, to: dataMemoryDir, files: plan.files.length },
+      `[memory] copied ${plan.files.length} file(s) from ${legacyDir} into ${dataMemoryDir}`,
+    );
+    return { ...plan, copied: true };
+  } catch (err) {
+    emitLog(
+      log,
+      "error",
+      { err, from: legacyDir, to: dataMemoryDir },
+      "[memory] failed to copy legacy memory; continuing with the data directory",
+    );
+    return { ...plan, copied: false };
+  }
+}
+
+function maybeMigrateLegacy() {
+  if (legacyCopyAttempted) return;
+  legacyCopyAttempted = true;
+  try {
+    migrateLegacyMemory({
+      dataMemoryDir: ROOT,
+      legacyDir: LEGACY_ROOT,
+      log: logger,
+    });
+  } catch (err) {
+    logger.error({ err }, "[memory] legacy copy failed");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -298,6 +615,18 @@ function clearMemory({ scope = "chat", chatId } = {}) {
  * global facts may silently cross that account boundary.
  */
 function clearAllMemoryFiles() {
+  // Unlink is an account boundary. Record that the copy is done before
+  // deleting .md files, so a later access cannot import PACKAGE_ROOT/memory
+  // from the previous account.
+  try {
+    fs.mkdirSync(ROOT, { recursive: true });
+    writeLegacyCopyMarker(ROOT);
+  } catch (err) {
+    logger.warn({ err }, "[memory] failed to write the unlink memory marker");
+  }
+
+  maybeMigrateLegacy();
+
   let removed = 0;
   try {
     if (fs.existsSync(GLOBAL_FILE)) {
@@ -311,7 +640,7 @@ function clearAllMemoryFiles() {
   try {
     if (fs.existsSync(CHATS_DIR)) {
       for (const name of fs.readdirSync(CHATS_DIR)) {
-        if (!name.endsWith(".md")) continue;
+        if (!isLiveMemoryMarkdownName(name)) continue;
         const filePath = path.join(CHATS_DIR, name);
         const stat = fs.lstatSync(filePath);
         if (!stat.isFile() || stat.isSymbolicLink()) continue;
@@ -321,6 +650,12 @@ function clearAllMemoryFiles() {
     }
   } catch (err) {
     logger.warn({ err }, "[memory] failed to remove chat memory during unlink");
+  }
+
+  try {
+    writeLegacyCopyMarker(ROOT);
+  } catch (err) {
+    logger.warn({ err }, "[memory] failed to write the unlink memory marker");
   }
   return removed;
 }
@@ -394,11 +729,12 @@ function buildMemoryContext(chatId, { limitChars = maxContextChars() } = {}) {
 
 /** Counts + file paths, for `!memory` and `!status`. */
 function memoryStats(chatId) {
+  maybeMigrateLegacy();
   const globalEntries = listMemory({ scope: "global" });
   const chatEntries = chatId ? listMemory({ scope: "chat", chatId }) : [];
   let chatFiles = 0;
   try {
-    chatFiles = fs.readdirSync(CHATS_DIR).filter((f) => f.endsWith(".md")).length;
+    chatFiles = fs.readdirSync(CHATS_DIR).filter((f) => isLiveMemoryMarkdownName(f)).length;
   } catch {
     chatFiles = 0;
   }
@@ -413,9 +749,22 @@ function memoryStats(chatId) {
 }
 
 module.exports = {
-  ROOT,
-  CHATS_DIR,
-  GLOBAL_FILE,
+  // Getters so the dashboard's first read of GLOBAL_FILE / ROOT still runs
+  // the copy: those routes write files themselves and never call ensureDirs.
+  get ROOT() {
+    maybeMigrateLegacy();
+    return ROOT;
+  },
+  get CHATS_DIR() {
+    maybeMigrateLegacy();
+    return CHATS_DIR;
+  },
+  get GLOBAL_FILE() {
+    maybeMigrateLegacy();
+    return GLOBAL_FILE;
+  },
+  LEGACY_COPY_MARKER,
+  LEGACY_COPYING_MARKER,
   ensureDirs,
   normalizeScope,
   memoryFilePath,
@@ -428,4 +777,7 @@ module.exports = {
   buildMemoryContext,
   memoryStats,
   parseEntries,
+  planLegacyMemoryCopy,
+  migrateLegacyMemory,
+  markLegacyMemoryHandled,
 };
