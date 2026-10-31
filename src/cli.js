@@ -102,6 +102,89 @@ export function parseArgv(argv) {
   return { command: positional[0] ?? null, positional, flags };
 }
 
+/** Run data access as the data directory owner; keep domain setup privileged. */
+export function createCliDataIdentity({
+  proc = process,
+  fs = require("node:fs"),
+  dataDir,
+} = {}) {
+  const direct = async (fn) => fn();
+  if (proc.getuid?.() !== 0) return direct;
+
+  const directory = dataDir ?? require("./config/data-dir.cjs").DATA_DIR;
+  let owner;
+  try {
+    owner = fs.lstatSync(directory);
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      throw new Error("Create the Levix data directory as the service user before running this command with sudo");
+    }
+    throw error;
+  }
+  if (owner.isSymbolicLink() || !owner.isDirectory()) {
+    throw new Error("Levix data directory must be a real directory for sudo commands");
+  }
+  if (owner.uid === 0) return direct;
+
+  return async (fn) => {
+    proc.setegid(owner.gid);
+    let changedUid = false;
+    try {
+      proc.seteuid(owner.uid);
+      changedUid = true;
+      return await fn();
+    } finally {
+      try {
+        if (changedUid) proc.seteuid(0);
+      } finally {
+        proc.setegid(0);
+      }
+    }
+  };
+}
+
+/** CLI commands that use settings share the same lock and schema boundary. */
+export async function withCliDatabase(fn) {
+  const asDataOwner = createCliDataIdentity();
+  const { DATA_UNAVAILABLE } = (await import("./config/exit-codes.cjs")).default;
+  let lock;
+  let database;
+  let ownsLock = false;
+  try {
+    const ready = await asDataOwner(async () => {
+      lock = (await import("./config/lock.cjs")).default;
+      database = (await import("./db/db.cjs")).default;
+      try {
+        lock.acquireSingleInstanceLock();
+        ownsLock = true;
+      } catch (error) {
+        if (error.code !== "ELEVIXLOCKED") throw error;
+      }
+      if (ownsLock) {
+        await database.prepareDatabase();
+        await (await import("./backup/recovery.cjs")).default.runRestoreRecovery();
+      } else {
+        const current = database.schemaVersion(database.openWithoutMigration());
+        if (current !== database.MIGRATIONS.length) {
+          console.error(`Cannot access this data directory while Levix runs: schema ${current} differs from this build's schema ${database.MIGRATIONS.length}. Stop Levix and use the matching version.`);
+          return false;
+        }
+      }
+      return true;
+    });
+    if (!ready) return DATA_UNAVAILABLE;
+    return await fn(asDataOwner);
+  } finally {
+    if (database) await asDataOwner(async () => {
+      try {
+        database.close();
+      } finally {
+        if (ownsLock) lock.release();
+      }
+    });
+  }
+}
+
 export async function main(argv = process.argv) {
   const { command, positional, flags } = parseArgv(argv);
 
@@ -125,19 +208,22 @@ export async function main(argv = process.argv) {
     }
 
     case "reset-password": {
-      const store = (await import("./db/store.cjs")).default;
-      const { close } = await import("./db/db.cjs");
-      store.deleteBotSetting("auth:password");
-      close();
-      console.log("\n  Password cleared. Start the bot and open the panel to choose a new one.\n");
-      return 0;
+      return withCliDatabase(async (asDataOwner) => {
+        const store = (await import("./db/store.cjs")).default;
+        await asDataOwner(() => store.deleteBotSetting("auth:password"));
+        console.log("\n  Password cleared. Start the bot and open the panel to choose a new one.\n");
+        return 0;
+      });
     }
 
     case "domain": {
-      const { runDomainCommand } = await import("./domain/command.js");
-      return runDomainCommand({
-        domain: positional[1] ?? null,
-        assumeYes: flags.has("--yes") || flags.has("-y"),
+      return withCliDatabase(async (asDataOwner) => {
+        const { runDomainCommand } = await import("./domain/command.js");
+        return runDomainCommand({
+          domain: positional[1] ?? null,
+          assumeYes: flags.has("--yes") || flags.has("-y"),
+          asDataOwner,
+        });
       });
     }
 
@@ -162,7 +248,18 @@ export async function main(argv = process.argv) {
 
 /** Entry point for bin/levix.js and for the packaged executable. */
 export async function run(argv = process.argv) {
-  const code = await main(argv);
+  let code;
+  try {
+    code = await main(argv);
+  } catch (error) {
+    const classified = (await import("./config/exit-codes.cjs")).default.exitCodeFor(error);
+    if (classified !== null) {
+      console.error(error.message);
+      code = classified;
+    } else {
+      throw error;
+    }
+  }
   // `null` means "the bot is running now" — exiting would kill it.
   if (code !== null) process.exit(code);
 }

@@ -12,19 +12,14 @@
 // `autoStart` and starts even when pairing is still required.
 
 import { createRequire } from "module";
-import { WhatsAppSession } from "../core/session.js";
-import { initStore } from "../db/store.esm.js";
-import { getLoadedCommands, loadCommands } from "../handlers/command.handler.js";
-import { deleteQrCode } from "../utils/storage.esm.js";
-import { hasPairedCredentials, sessionStartupPolicy } from "./session-startup-policy.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
 const { sink } = require("./events.cjs");
 const { acquireSingleInstanceLock } = require("../config/lock.cjs");
+const { prepareDatabase } = require("../db/db.cjs");
+const { runRestoreRecovery } = require("../backup/recovery.cjs");
 const { ensureDataDir } = require("../config/paths.cjs");
-const store = require("../db/store.cjs");
-const { initializeScheduledJobs, stopAllScheduledJobs } = require("../../scheduler.cjs");
 
 /**
  * Start the bot.
@@ -40,6 +35,16 @@ export async function bootstrapCore({ autoStart = false } = {}) {
   // second copy has to fail here, not after it has written to the auth rows
   // the first one is using.
   acquireSingleInstanceLock();
+  await prepareDatabase();
+  await runRestoreRecovery();
+
+  const { WhatsAppSession } = await import("../core/session.js");
+  const { initStore } = await import("../db/store.esm.js");
+  const { getLoadedCommands, loadCommands } = await import("../handlers/command.handler.js");
+  const { deleteQrCode } = await import("../utils/storage.esm.js");
+  const { hasPairedCredentials, sessionStartupPolicy } = await import("./session-startup-policy.js");
+  const store = require("../db/store.cjs");
+  const { initializeScheduledJobs, stopAllScheduledJobs } = require("../../scheduler.cjs");
 
   // Runtime, CA store and (when connection debug logging is on) every
   // outbound socket. See src/diagnostics/nodeRuntime.cjs.

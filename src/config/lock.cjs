@@ -1,110 +1,77 @@
-// One bot process per data directory.
-//
-// A WhatsApp pairing is a single session. Two Levix processes on one database
-// would both hold the same Baileys credentials, overwrite each other's session
-// keys, and answer every message twice — and the second one would only fail
-// much later, when it tried to bind the panel's port, long after it had
-// touched the auth rows.
-//
-// So the bot claims the data directory before it does anything else. This is a
-// lock file with a pid in it, which is the simplest thing that works on a
-// single machine — which is the only place a WhatsApp pairing can run anyway.
-// No daemon, no distributed anything.
-//
-// The CLI's read-only and recovery commands (`where`, `reset-password`) do NOT
-// take this lock: they have to work while the bot is running, or when it is
-// wedged, which is the whole point of having them.
-
+// SQLite holds this lock until the connection closes, including on a crash.
+// The text file is only a pid hint for a useful error message.
 const fs = require("node:fs");
-
+const { DatabaseSync } = require("node:sqlite");
 const { dataPath } = require("./paths.cjs");
-const logger = require("../utils/logger.cjs");
 
 const LOCK_FILE = dataPath("levix.lock");
+const LOCK_DB_FILE = dataPath("levix.lock.db");
+let connection = null;
 
-/** Is that pid a process that still exists? */
 function processAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
-    // Signal 0 checks for existence without delivering anything.
     process.kill(pid, 0);
     return true;
-  } catch (err) {
-    // EPERM means it exists and belongs to somebody else — still alive.
-    return err.code === "EPERM";
+  } catch (error) {
+    return error.code === "EPERM";
   }
 }
 
-function readLock() {
+function readPid() {
   try {
-    const raw = fs.readFileSync(LOCK_FILE, "utf8");
-    const pid = Number.parseInt(String(raw).trim(), 10);
-    return Number.isFinite(pid) ? pid : null;
+    const pid = Number.parseInt(fs.readFileSync(LOCK_FILE, "utf8").trim(), 10);
+    return Number.isInteger(pid) && pid > 0 ? pid : "unknown";
   } catch {
-    return null;
+    return "unknown";
   }
 }
 
-let held = false;
+function lockedError() {
+  const error = new Error(
+    `Another Levix (pid ${readPid()}) is already using this data directory.\n` +
+      `  ${LOCK_FILE}\n\n` +
+      `  Only one Levix can run per data directory. Stop the other one, or use --data.`,
+  );
+  error.code = "ELEVIXLOCKED";
+  return error;
+}
 
 function release() {
-  if (!held) return;
-  held = false;
+  if (!connection) return;
   try {
-    // Only remove it if it is still ours — a stale-lock takeover elsewhere
-    // could have replaced it.
-    if (readLock() === process.pid) fs.unlinkSync(LOCK_FILE);
+    if (readPid() === process.pid) fs.rmSync(LOCK_FILE, { force: true });
   } catch {}
+  connection.close();
+  connection = null;
 }
 
-/**
- * Claim the data directory for this process.
- *
- * @throws {Error} when another live Levix already holds it. The message is
- *   written for whoever is reading the terminal, not for a stack trace.
- */
+function isLockHeld() {
+  return connection !== null;
+}
+
 function acquireSingleInstanceLock() {
-  if (held) return LOCK_FILE;
-
-  const claim = () => {
-    // "wx" fails if the file exists — the check and the create are one
-    // syscall, so two processes starting together can't both win.
-    const handle = fs.openSync(LOCK_FILE, "wx");
-    fs.writeFileSync(handle, String(process.pid));
-    fs.closeSync(handle);
-  };
-
+  if (connection) return LOCK_FILE;
+  let candidate;
   try {
-    claim();
-  } catch (err) {
-    if (err.code !== "EEXIST") throw err;
-
-    const owner = readLock();
-    if (owner !== null && owner !== process.pid && processAlive(owner)) {
-      const error = new Error(
-        `Another Levix (pid ${owner}) is already using this data directory.\n` +
-          `  ${LOCK_FILE}\n\n` +
-          `  Only one Levix can run per data directory — a WhatsApp pairing is a\n` +
-          `  single session. Stop the other one, or start this one with --data\n` +
-          `  pointing somewhere else.`,
-      );
-      error.code = "ELEVIXLOCKED";
-      throw error;
+    candidate = new DatabaseSync(LOCK_DB_FILE);
+    candidate.exec("PRAGMA busy_timeout = 0");
+    candidate.exec("PRAGMA locking_mode = EXCLUSIVE");
+    candidate.exec("CREATE TABLE IF NOT EXISTS owner (pid INTEGER NOT NULL)");
+    candidate.exec("DELETE FROM owner");
+    candidate.prepare("INSERT INTO owner (pid) VALUES (?)").run(process.pid);
+    connection = candidate;
+    fs.writeFileSync(LOCK_FILE, String(process.pid), { mode: 0o600 });
+    process.once("exit", release);
+    return LOCK_FILE;
+  } catch (error) {
+    candidate?.close();
+    if (connection === candidate) connection = null;
+    if (error.code === "SQLITE_BUSY" || error.errcode === 5 || /database is locked/i.test(error.message)) {
+      throw lockedError();
     }
-
-    // The holder is gone (a crash, a kill -9, a reboot). Take it over.
-    logger.warn(
-      `[lock] Removing a stale lock from pid ${owner ?? "unknown"} — that process is gone`,
-    );
-    fs.rmSync(LOCK_FILE, { force: true });
-    claim();
+    throw error;
   }
-
-  held = true;
-  // Best effort: a SIGKILL or a power cut leaves the file behind, which the
-  // stale check above handles on the next start.
-  process.once("exit", release);
-  return LOCK_FILE;
 }
 
-module.exports = { acquireSingleInstanceLock, release, LOCK_FILE, processAlive };
+module.exports = { acquireSingleInstanceLock, release, isLockHeld, LOCK_FILE, LOCK_DB_FILE, processAlive };
