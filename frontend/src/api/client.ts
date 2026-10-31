@@ -187,6 +187,8 @@ export const api = {
   put: <T = any>(endpoint: string, body?: any) =>
     request<T>(endpoint, { method: "PUT", body: body ? JSON.stringify(body) : undefined }),
   delete: <T = any>(endpoint: string) => request<T>(endpoint, { method: "DELETE" }),
+  deleteWithBody: <T = any>(endpoint: string, body: object) =>
+    request<T>(endpoint, { method: "DELETE", body: JSON.stringify(body) }),
 
   // Helpers
   getStats: () => api.get<{ stats: any; success: boolean }>("/stats"),
