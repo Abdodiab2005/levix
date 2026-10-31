@@ -1,6 +1,6 @@
 # Levix v5.0.0 Phase 01 results: code, build and performance
 
-Status: IN PROGRESS (PR 01a open for review). Phase 01 started on 2026-10-30 after the owner approved and merged Phase 00
+Status: IN PROGRESS. PRs 01a to 01e are open for review; 01d is a draft experiment. Phase 01 started on 2026-10-30 after the owner approved and merged Phase 00
 (PRs #80, #81 and #83; PR #82 is postponed by the owner and is not part of this phase's work).
 Every number in this file comes from a command or an artifact named next to it. A number that was
 not measured says NOT MEASURED.
@@ -158,6 +158,93 @@ silently, a SEA could build on another 24.x patch without notice, and `--update-
 regression test. The P1 is that Termux deletes old builds, so a cold cache cannot fetch the pins.
 That needs a durable source for the pinned files, which is owner question Q-23.
 
-### PR 01b to 01e
+### PR 01b: production-only Android archive, reproducible zip, size report
 
-NOT STARTED.
+Branch `build/01b-prod-staging`, stacked on 01a. Implemented by Grok (3 rounds), reviewed by Codex
+(read-only, 3 P2 findings, all fixed) and by the orchestrator.
+
+- `stage-levix-app.sh` installs production dependencies from `package-lock.json` into a separate
+  directory (`npm ci --omit=dev --ignore-scripts --no-bin-links --prefer-offline`). It no longer
+  reads the repository's `node_modules`.
+- Removed from the archive, each for a stated reason:
+  - `ffmpeg-static`: Android ships `libffmpeg.so`.
+  - `sharp` and `@img/*`: linux-x64 binaries pulled in as a Baileys peer dependency. Baileys loads `sharp` with `import('sharp').catch(() => {})`, and v4.9.2 also shipped without it.
+  - `@types/*` and `*.d.ts`: type declarations Node never loads.
+  - `*.node`, `*.map` and `.package-lock.json`.
+  - Markdown files stay, because some packages keep their license text only in `README.md`.
+- `check-stage-deps.mjs` fails the staging when app code loads a package that is missing from the
+  staged tree. Result: 19 packages loaded, all present.
+- `zip-tree.mjs` writes the archive with sorted entries and a fixed 1980-01-01 time. It uses no data
+  descriptors, deflate level 9, or stored entries when deflate does not shrink them.
+- `scripts/size-report.mjs` prints component sizes and deltas against
+  `docs/plans/v5/size-baseline-v4.9.2.json`. That baseline was generated from the v4.9.2 release
+  artifacts. Its numbers equal an independent Python count of the same files, byte for byte.
+- CI builds release APKs and the AAB with the debug key, adds the table to the job summary and keeps
+  `android-size.json` with the builds for 7 days.
+
+| `levix-app.zip` | v4.9.2 release | PR 01b (local staging) | Change |
+| --- | --- | --- | --- |
+| File size | 44,217,091 | 9,861,112 | -34,355,979 (-77.7%) |
+| Bytes stored in each APK | 43,078,460 | 9,289,297 | -33,789,163 (-78.4%) |
+| Entries | 5,393 | 4,482 | -911 |
+| Uncompressed bytes | 137,525,769 | 38,577,138 | -72.0% |
+| Dev-only packages | 32,008,227 bytes (74.4%) | 0 | -100% |
+
+Reproducibility: two local stagings produced byte-identical archives (sha256 `045337008006d4c5944e582dc83c58f04af7578d959c1e8e32491f458d8002df`).
+The CI build of the same commit printed the same sha256 (run 41118871330), so the archive is byte-identical across two machines.
+
+Release builds from CI (run 41118871330, commit `5fb8ef3`). They are signed with the debug key; the
+release key changes only the signature block. Stored bytes come from `scripts/size-report.mjs`
+against `docs/plans/v5/size-baseline-v4.9.2.json`.
+
+| Artifact | v4.9.2 file bytes | PR 01b file bytes | Change |
+| --- | --- | --- | --- |
+| `levix-android-arm64.apk` | 94,439,912 | 59,301,600 | -35,138,312 (-37.2%) |
+| `levix-android-armv7.apk` | 89,781,950 | 54,873,910 | -34,908,040 (-38.9%) |
+| `levix-android.aab` | 122,807,543 | 86,549,167 | -36,258,376 (-29.5%) |
+
+| Component (stored bytes) | v4.9.2 arm64 | PR 01b arm64 | v4.9.2 armv7 | PR 01b armv7 |
+| --- | --- | --- | --- | --- |
+| native libraries | 39,816,124 | 38,467,263 (01a removed the 2 orphans) | 35,158,107 | 34,039,529 |
+| `levix-app.zip` | 43,078,460 | 9,289,297 | 43,078,460 | 9,289,297 |
+| dex | 9,709,524 | 9,709,524 | 9,709,524 | 9,709,524 |
+| resources | 1,689,848 | 1,689,848 | 1,689,848 | 1,689,848 |
+
+Google Play download and update sizes for the new build: NOT MEASURED. The v4.9.2 bundletool
+estimate is in section 2; the new AAB was not downloaded, because the artifact download ran at
+46 KB/s.
+
+### PR 01c: runtime dependency advisories (#86)
+
+`npm audit fix` without `--force` cleared all 9 advisories with patch and minor updates: 7 production
+(3 high) and 2 frontend build tools. `npm audit` reports 0 in both trees. Local gates PASS
+(5,077 checks); CI 7 of 7 (run 41097614902). Nothing remains unresolved.
+
+### PR 01d: R8 experiment (#88, draft, not for merge)
+
+R8 code shrinking on the release build, measured on top of 01b (CI run 41118876875):
+
+| Artifact | PR 01b | With R8 | Change |
+| --- | --- | --- | --- |
+| arm64 APK file bytes | 59,301,600 | 51,286,827 | -8,014,773 (-13.5%) |
+| armv7 APK file bytes | 54,873,910 | 46,859,137 | -8,014,773 (-14.6%) |
+| AAB file bytes | 86,549,167 | 84,940,435 | -1,608,732 (-1.9%) |
+| dex in each APK (stored) | 9,709,524 | 1,696,368 | -82.5% |
+
+- Resource shrinking with the per-ABI splits fails `:app:buildReleasePreBundle` on AGP 8.10.1
+  ("Sequence contains more than one matching element"), so the measured build uses R8 code
+  shrinking alone.
+- Kept: `PanelBridge`'s `@JavascriptInterface` methods and their annotations. `-dontobfuscate`
+  keeps crash-report stack traces readable without a mapping file.
+- Not proposed for merge: it needs device proof of start-up, the WebView bridge, Media Hub,
+  stickers, TLS and the background service on both ABIs (R-03). Device smoke: NOT RUN, no device.
+- The 11 packaged native libraries per ABI are all reachable from `libnode.so`'s `DT_NEEDED` graph,
+  or executed (`libffmpeg.so`), so no other library is redundant after 01a.
+
+### PR 01e: test-suite timing (#85)
+
+`tests/run.mjs` prints each file's wall time and the five slowest. Two files took 154.5 s of a
+247.6 s run, all of it in `sendBotMessage()`'s typing delay (P1-10). They now replace that wait
+through an exported `timing` object. `tests/send-bot-message.test.mjs` pins the delays with 17
+checks. Local suite: 92.9 s. CI `tests` job: 2 min 2 s, against 4 min 34 s on `main`. R-30's
+11-minute run stays NOT IDENTIFIED; its file no longer waits on the typing delay.

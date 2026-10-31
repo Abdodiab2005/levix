@@ -27,7 +27,6 @@ for (const [, source] of stageSrc.matchAll(/copy_tree "\$ROOT\/([^"]+)"/g)) {
   ok(`Gradle tracks the packaged ${source} tree`, tracked.includes(source));
 }
 for (const source of [
-  "node_modules",
   "app.cjs",
   "scheduler.cjs",
   "package.json",
@@ -35,10 +34,37 @@ for (const source of [
   "LICENSE",
   "android/host-boot.mjs",
   "android/scripts/stage-levix-app.sh",
+  "android/scripts/zip-tree.mjs",
+  "android/scripts/check-stage-deps.mjs",
   "scripts/build-frontend.mjs",
 ]) {
   ok(`Gradle tracks archive input ${source}`, tracked.includes(source));
 }
+ok("Gradle does not track the repository node_modules", !tracked.includes("node_modules"));
+ok(
+  "production install omits dev dependencies, scripts and bin links",
+  /npm ci --omit=dev --ignore-scripts --no-bin-links\b/.test(stageSrc),
+);
+ok(
+  "the archive script does not copy the repository node_modules",
+  !stageSrc.includes('"$ROOT/node_modules"'),
+);
+ok("the staged tree is checked before it is packed", stageSrc.includes("check-stage-deps.mjs"));
+ok("the archive is written by zip-tree.mjs", stageSrc.includes("zip-tree.mjs"));
+ok("the archive is not written with zip -qr", !stageSrc.includes("zip -qr"));
+ok(
+  "sharp and @img are removed",
+  stageSrc.includes('"$STAGE/node_modules/sharp"') &&
+    stageSrc.includes('"$STAGE/node_modules/@img"'),
+);
+ok("@types is removed", stageSrc.includes('"$STAGE/node_modules/@types"'));
+ok(
+  "declaration files are deleted",
+  stageSrc.includes("-name '*.d.ts'") &&
+    stageSrc.includes("-name '*.d.mts'") &&
+    stageSrc.includes("-name '*.d.cts'"),
+);
+ok("markdown files are not deleted", !stageSrc.includes("*.md"));
 ok(
   "Gradle tracks the complete frontend, including build configuration and lockfile",
   /inputs\.files\(fileTree\(File\(repoRoot, "frontend"\)\)/.test(stageTask),
