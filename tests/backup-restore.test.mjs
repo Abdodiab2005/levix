@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -359,6 +359,56 @@ assertNoPlaintextSecrets("successful restore has no plaintext secrets");
 equal("successful restore api key", settings.get("gemini_api_key"), apiSentinel);
 equal("successful restore proxy password", settings.get("whatsapp_proxy_password"), proxySentinel);
 
+section("process death leaves no plaintext secrets");
+if (process.platform === "win32") {
+  console.log("  SKIP SIGKILL restore crash: Windows has different termination semantics");
+} else {
+  const killFixture = join(ROOT, "tests", "fixtures", "backup-restore-kill.mjs");
+  const deathApi = "APIKEY-SENTINEL-RESTORE-KILL";
+  const deathProxy = "PROXY-SENTINEL-RESTORE-KILL";
+  const deathOldApi = "old-gemini-key-after-backup";
+  const deathOldProxy = "old-proxy-password-after-backup";
+  function plaintextHits(dir) {
+    const needles = [Buffer.from(deathApi), Buffer.from(deathProxy)];
+    const hits = [];
+    function walk(folder) {
+      for (const entry of readdirSync(folder, { withFileTypes: true })) {
+        const item = join(folder, entry.name);
+        if (entry.isDirectory()) walk(item);
+        else if (entry.isFile()) {
+          const bytes = readFileSync(item);
+          if (needles.some((needle) => bytes.includes(needle))) hits.push(item);
+        }
+      }
+    }
+    walk(dir);
+    return hits;
+  }
+  for (const point of ["after-extract", "inside-apply"]) {
+    const dir = mkdtempSync(join(data, `kill-${point}-`));
+    const env = { ...process.env, LEVIX_DATA_DIR: dir };
+    const killed = spawnSync(process.execPath, [killFixture, point, deathApi, deathProxy, deathOldApi, deathOldProxy], {
+      env, encoding: "utf8", timeout: 30000,
+    });
+    equal(`${point} child died by SIGKILL`, killed.signal, "SIGKILL");
+    const leaked = plaintextHits(dir);
+    ok(`${point} data dir has no plaintext sentinel`, leaked.length === 0, leaked.join(", ") || undefined);
+    const recovered = spawnSync(process.execPath, [killFixture, "recover"], {
+      env, encoding: "utf8", timeout: 30000,
+    });
+    equal(`${point} recover exits`, recovered.status, 0);
+    const line = recovered.stdout.split("\n").map((row) => row.trim())
+      .filter((row) => row.startsWith("{") && row.includes('"outcome"')).at(-1);
+    const parsed = line ? JSON.parse(line) : {};
+    equal(`${point} death outcome`, parsed.outcome, "interrupted-unchanged");
+    equal(`${point} death keeps api key`, parsed.gemini_api_key, deathOldApi);
+    equal(`${point} death keeps proxy password`, parsed.whatsapp_proxy_password, deathOldProxy);
+    const leakedAfter = plaintextHits(dir);
+    ok(`${point} data dir has no plaintext sentinel after recovery`, leakedAfter.length === 0,
+      leakedAfter.join(", ") || undefined);
+  }
+}
+
 section("pending discard");
 ok("pending visible before discard", restore.pendingStatus().waiting);
 const pendingBeforeReplace = JSON.parse(readFileSync(join(data, "restore", "pending", "pending.json"), "utf8")).id;
@@ -422,6 +472,48 @@ checkpoint();
 equal("crafted schemas leave live database unchanged", createHash("sha256")
   .update(readFileSync(join(data, "levix.db"))).digest("hex"), schemaBefore);
 equal("crafted schemas leave persona unchanged", readFileSync(join(data, "ai-persona.md"), "utf8"), personaBeforeSchema);
+
+section("staged database with excluded secrets is damaged");
+const languageBeforeExcluded = settings.get("bot_language");
+const keyBeforeExcluded = settings.get("gemini_api_key");
+const proxyBeforeExcluded = settings.get("whatsapp_proxy_password");
+const personaBeforeExcluded = readFileSync(join(data, "ai-persona.md"), "utf8");
+function restoreNames() {
+  const folder = join(data, "restore");
+  return existsSync(folder) ? readdirSync(folder).sort() : [];
+}
+const namesBeforeExcluded = restoreNames();
+function excludedDatabase(label, fill) {
+  const file = join(data, `${label}.db`);
+  const crafted = new DatabaseSync(file);
+  migrate(crafted, MIGRATIONS.slice(0, 1));
+  fill(crafted);
+  crafted.close();
+  return file;
+}
+const authArchive = await backupDatabaseFile(excludedDatabase("excluded-auth", (crafted) => {
+  crafted.prepare("INSERT INTO baileys_auth (key, value) VALUES (?, ?)").run("creds", "crafted-auth-row");
+}), "excluded-auth");
+const passwordArchive = await backupDatabaseFile(excludedDatabase("excluded-password", (crafted) => {
+  crafted.prepare("INSERT INTO bot_settings (key, value) VALUES (?, ?)").run("auth:password", "crafted-password");
+}), "excluded-password");
+for (const [label, archiveFile] of [["baileys_auth", authArchive], ["auth:password", passwordArchive]]) {
+  const badId = upload(archiveFile);
+  try {
+    await restore.restoreUpload(badId, password);
+    ok(`${label} excluded data rejected`, false);
+  } catch (error) {
+    equal(`${label} excluded data rejected`, error.code, "DAMAGED");
+    equal(`${label} excluded data message`, error.message, "Backup database holds excluded data");
+  }
+  uploads.removeUpload(badId);
+  ok(`${label} leaves journal clear`, readJournal() === null);
+}
+equal("excluded data leaves restore folders", restoreNames().join(","), namesBeforeExcluded.join(","));
+equal("excluded data leaves language", settings.get("bot_language"), languageBeforeExcluded);
+equal("excluded data leaves api key", settings.get("gemini_api_key"), keyBeforeExcluded);
+equal("excluded data leaves proxy password", settings.get("whatsapp_proxy_password"), proxyBeforeExcluded);
+equal("excluded data leaves persona", readFileSync(join(data, "ai-persona.md"), "utf8"), personaBeforeExcluded);
 
 section("large junk settings table stays bounded");
 const manyFile = join(data, "many-settings.db");

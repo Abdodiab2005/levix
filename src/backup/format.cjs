@@ -356,9 +356,8 @@ async function entryTarget(root, entryPath) {
   }
   return target;
 }
-async function extractInto(filePath, info, keys, manifestBytes, dest, onProgress, inMemoryKinds) {
+async function extractInto(filePath, info, keys, manifestBytes, dest, onProgress) {
   const root = await emptyDestination(dest);
-  const keep = new Set(inMemoryKinds);
   return withPayload(filePath, info, keys, async (reader) => {
     const current = await readManifest(reader);
     if (!current.bytes.equals(manifestBytes)) fail("DAMAGED", "Backup manifest changed");
@@ -366,7 +365,8 @@ async function extractInto(filePath, info, keys, manifestBytes, dest, onProgress
     const memory = {};
     for (const entry of current.manifest.entries) {
       const hash = crypto.createHash("sha256");
-      if (keep.has(entry.kind)) {
+      // Decrypted API keys stay in memory. Callers cannot opt into a file.
+      if (entry.kind === "secrets") {
         if (entry.size > LIMITS.memory) fail("LIMIT", "In-memory backup entry too large");
         const buffer = await reader.read(entry.size);
         hash.update(buffer);
@@ -409,12 +409,10 @@ async function openWithKeys({ path: filePath, keys }) {
   return { header: info.header, manifest,
     // Callers must create dest as a private directory and remove it on any
     // failure; extraction leaves partial files for the caller to clean up.
-    async extract({ dest, onProgress, inMemoryKinds = [] } = {}) {
+    async extract({ dest, onProgress } = {}) {
     if (used) fail("IO", "Backup extraction already used");
-    if (!Array.isArray(inMemoryKinds) || inMemoryKinds.some((kind) => kind !== "secrets"))
-      throw new TypeError("inMemoryKinds only accepts the secrets kind");
     used = true;
-    try { return await extractInto(filePath, info, keys, bytes, dest, onProgress, inMemoryKinds); }
+    try { return await extractInto(filePath, info, keys, bytes, dest, onProgress); }
     catch (error) { throw io(error); }
   } };
 }

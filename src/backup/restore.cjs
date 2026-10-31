@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
 const { db, migrate, MIGRATIONS, fsyncDirectory } = require("../db/db.cjs");
+const { SECRET_TABLES, isSecretBotKey } = require("../db/copy.cjs");
 const store = require("../db/store.cjs");
 const settings = require("../config/settings.cjs");
 const runtime = require("../config/runtime-config.cjs");
@@ -47,6 +48,27 @@ function spaceCheck(manifest) {
 function safeJson(raw, fallback) { try { return JSON.parse(raw); } catch { return fallback; } }
 
 const restorableKeys = [...RESTORABLE_SETTING_KEYS.map((key) => `setting:${key}`), ...COMMAND_TABLE_KEYS];
+function quoteSqlName(name) {
+  return `"${String(name).replaceAll('"', '""')}"`;
+}
+// A Levix backup never contains these rows. Treat a copy that has them as crafted.
+function assertNoExcludedData(database) {
+  for (const table of SECRET_TABLES) {
+    const present = database.prepare(
+      "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = ?",
+    ).get(table);
+    if (!present) continue;
+    const row = database.prepare(`SELECT 1 AS present FROM ${quoteSqlName(table)} LIMIT 1`).get();
+    if (row) throw new BackupError("DAMAGED", "Backup database holds excluded data");
+  }
+  const settingsTable = database.prepare(
+    "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'bot_settings'",
+  ).get();
+  if (!settingsTable) return;
+  for (const row of database.prepare("SELECT key FROM bot_settings").iterate()) {
+    if (isSecretBotKey(row.key)) throw new BackupError("DAMAGED", "Backup database holds excluded data");
+  }
+}
 function expectedSchema(database) {
   const version = database.prepare("PRAGMA user_version").get().user_version;
   if (!Number.isInteger(version) || version < 0) throw new BackupError("SCHEMA_MISMATCH", "Backup database schema differs");
@@ -310,11 +332,11 @@ async function restorePinnedUpload(id, file, password, onProgress) {
   let secretsPayload = null;
   try {
     onProgress?.({ phase: "stage", bytes: 0, totalBytes: total });
-    const extracted = await opened.extract({ dest: staged(restoreId), inMemoryKinds: ["secrets"],
+    const extracted = await opened.extract({ dest: staged(restoreId),
       onProgress(update) {
         onProgress?.({ phase: "stage", bytes: update.bytes, totalBytes: total });
       } });
-    secretsBuffer = extracted.memory?.["secrets.json"] ?? null;
+    secretsBuffer = extracted.memory["secrets.json"] ?? null;
     if (secretsBuffer) {
       secretsPayload = safeJson(secretsBuffer.toString("utf8"), null);
       if (!secretsPayload || !secretsPayload.settings || typeof secretsPayload.settings !== "object" ||
@@ -322,7 +344,11 @@ async function restorePinnedUpload(id, file, password, onProgress) {
         throw new BackupError("BAD_MANIFEST", "Invalid secret payload");
     }
     crash("after-extract");
-    const copy = new DatabaseSync(path.join(staged(restoreId), "db", "levix.db"));
+    const stagedDb = path.join(staged(restoreId), "db", "levix.db");
+    const secretScan = new DatabaseSync(stagedDb, { readOnly: true });
+    try { assertNoExcludedData(secretScan); }
+    finally { secretScan.close(); }
+    const copy = new DatabaseSync(stagedDb);
     try {
       expectedSchema(copy);
       if (copy.prepare("PRAGMA integrity_check").get().integrity_check !== "ok")

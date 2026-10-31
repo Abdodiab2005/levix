@@ -40,8 +40,9 @@ async function unpack(file) {
   const opened = await openBackup({ path: file.path, password });
   const dest = mkdtempSync(join(data, "extract-"));
   chmodSync(dest, 0o700);
-  await opened.extract({ dest });
-  return { manifest: opened.manifest, dest, copy: new DatabaseSync(join(dest, "db", "levix.db"), { readOnly: true }) };
+  const extracted = await opened.extract({ dest });
+  return { manifest: opened.manifest, dest, memory: extracted.memory,
+    copy: new DatabaseSync(join(dest, "db", "levix.db"), { readOnly: true }) };
 }
 async function rejects(action, code) {
   try { await action(); ok(`rejects ${code}`, false); }
@@ -116,8 +117,9 @@ equal("settings allowlist", keys.join(","),
 for (const table of ["baileys_auth", "qr_codes", "moderation_applied", "forward_scores"])
   equal(`${table} empty`, first.copy.prepare(`SELECT count(*) AS n FROM ${table}`).get().n, 0);
 equal("account rows remain", first.copy.prepare("SELECT count(*) AS n FROM stickers").get().n, 2);
-equal("secrets plaintext", JSON.stringify(JSON.parse(readFileSync(join(first.dest, "secrets.json"), "utf8")).settings),
+equal("secrets plaintext", JSON.stringify(JSON.parse(first.memory["secrets.json"].toString("utf8")).settings),
   JSON.stringify({ gemini_api_key: "gemini-plain-test-key", openai_api_key: "openai-plain-test-key" }));
+ok("secrets.json absent from extract folder", !existsSync(join(first.dest, "secrets.json")));
 for (const entry of ["persona.md", "memory/global.md", "memory/chats/chat.md",
   `stickers/ab/${shaA}.webp`, `stickers/cd/${shaB}.thumb.webp`, "media/schedules/schedule-one"])
   ok(`${entry} copied`, readFileSync(join(first.dest, entry)).equals(readFileSync(join(data,
