@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { DatabaseSync } = require("node:sqlite");
 const { db } = require("../db/db.cjs");
+const { writeSecretFreeCopy, verifySecretFreeCopy } = require("../db/copy.cjs");
 const settings = require("../config/settings.cjs");
 const { dataPath, ensureDataDir } = require("../config/paths.cjs");
 const memory = require("../utils/memory.cjs");
@@ -19,6 +20,9 @@ const EXCLUDED_CATEGORIES = Object.freeze([
 ]);
 const shaRe = /^[0-9a-f]{64}$/;
 const mediaIdRe = /^[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}$/;
+let captureHookForTest;
+
+function setCaptureHookForTest(fn) { captureHookForTest = fn; }
 
 function countsOf(database, paired, memoryFiles, apiKeys) {
   const count = (sql) => Number(database.prepare(sql).get().n);
@@ -99,15 +103,6 @@ function referencedFiles(database, paired) {
       entry: `media/schedules/${id}`, kind: "schedule-media", stable: true });
   }
   return files;
-}
-
-function vacuumInto(database, target) {
-  try { database.prepare("VACUUM INTO ?").run(target); fs.chmodSync(target, 0o600); }
-  catch (error) {
-    fs.rmSync(target, { force: true });
-    const busy = /busy|locked|transaction/i.test(String(error.message));
-    throw new BackupError(busy ? "BUSY" : "IO", "Backup snapshot unavailable");
-  }
 }
 
 function rawForbiddenValues() {
@@ -193,42 +188,36 @@ function capture(stage, statfs = fs.statfsSync) {
     (fs.statSync(dataPath("levix.db-wal"), { throwIfNoEntry: false })?.size || 0);
   const space = statfs(dataPath());
   const outputBytes = Math.ceil((databaseBytes + sourceBytes + secretsBytes) * 1.01);
-  const needed = databaseBytes * 2 + sourceBytes + outputBytes + 64 * 1024 * 1024;
+  const needed = databaseBytes + sourceBytes + outputBytes + 64 * 1024 * 1024;
   if (Number(space.bavail) * Number(space.bsize) < needed) throw new BackupError("NO_SPACE", "Not enough space for backup");
   fs.mkdirSync(stage, { recursive: true, mode: 0o700 });
-  const captureDb = path.join(stage, "capture.db");
-  vacuumInto(db, captureDb);
-  for (const file of files) copyPrivate(file.source, path.join(stage, file.entry), file.stable);
-  return { paired, files, captureDb, forbidden: rawForbiddenValues(), secrets };
-}
-
-function filterDatabase(stage, snapshot) {
-  const database = new DatabaseSync(snapshot.captureDb);
+  const filtered = path.join(stage, "filtered.db");
+  const omitTables = [...EXCLUDED_TABLES, ...(paired ? [] : ACCOUNT_TABLES)];
+  const keepBotKey = (key) => RESTORABLE_BOT_KEYS.includes(key);
   try {
-    classifyTables(database);
-    database.exec("PRAGMA foreign_keys = OFF");
-    database.exec("BEGIN IMMEDIATE");
+    writeSecretFreeCopy(dataPath("levix.db"), filtered, { omitTables, keepBotKey });
+    captureHookForTest?.("after-db-copy", stage);
+    const source = new DatabaseSync(dataPath("levix.db"), { readOnly: true });
     try {
-      const keys = RESTORABLE_BOT_KEYS;
-      const placeholders = keys.map(() => "?").join(",");
-      database.prepare(`DELETE FROM bot_settings WHERE key NOT IN (${placeholders})`).run(...keys);
-      for (const table of EXCLUDED_TABLES) database.exec(`DELETE FROM ${table}`);
-      if (!snapshot.paired) for (const table of ACCOUNT_TABLES) database.exec(`DELETE FROM ${table}`);
-      database.exec("COMMIT");
-    } catch (error) { database.exec("ROLLBACK"); throw error; }
-    const filtered = path.join(stage, "filtered.db");
-    vacuumInto(database, filtered);
-    database.close();
-    fs.rmSync(snapshot.captureDb);
-    const verify = new DatabaseSync(filtered, { readOnly: true });
-    try {
-      if (verify.prepare("PRAGMA integrity_check").get().integrity_check !== "ok")
-        throw new BackupError("IO", "Backup database integrity failed");
-      return { filtered, schema: verify.prepare("PRAGMA user_version").get().user_version,
-        counts: countsOf(verify, Boolean(snapshot.paired), snapshot.files.filter((f) => f.kind === "memory").length,
-          Object.keys(snapshot.secrets).length) };
-    } finally { verify.close(); }
-  } finally { try { database.close(); } catch {} }
+      verifySecretFreeCopy(filtered, source, {
+        expectedVersion: source.prepare("PRAGMA user_version").get().user_version,
+        omitTables, keepBotKey,
+      });
+    } finally { source.close(); }
+  }
+  catch (error) {
+    const busy = /busy|locked|transaction/i.test(String(error.message));
+    throw new BackupError(busy ? "BUSY" : "IO", "Backup snapshot unavailable");
+  }
+  for (const file of files) copyPrivate(file.source, path.join(stage, file.entry), file.stable);
+  captureHookForTest?.("after-files", stage);
+  const database = new DatabaseSync(filtered, { readOnly: true });
+  try {
+    return { paired, files, forbidden: rawForbiddenValues(), secrets, filtered,
+      schema: database.prepare("PRAGMA user_version").get().user_version,
+      counts: countsOf(database, Boolean(paired), files.filter((f) => f.kind === "memory").length,
+        Object.keys(secrets).length) };
+  } finally { database.close(); }
 }
 
 function describeBackupContents() {
@@ -261,18 +250,17 @@ async function createBackup({ password, onProgress, kdf, statfs } = {}) {
       }
     }
     onProgress?.({ phase: "filter", bytes: 0, totalBytes: 0 });
-    const result = filterDatabase(stage, snapshot);
-    await scanSecrets(result.filtered, snapshot.files, stage, snapshot.forbidden);
+    await scanSecrets(snapshot.filtered, snapshot.files, stage, snapshot.forbidden);
     const apiKeys = Object.keys(snapshot.secrets).sort();
-    const sources = [await entryFor(result.filtered, "db/levix.db", "db")];
+    const sources = [await entryFor(snapshot.filtered, "db/levix.db", "db")];
     if (apiKeys.length) sources.push(await entryFor(Buffer.from(JSON.stringify({ settings: snapshot.secrets })), "secrets.json", "secrets"));
     for (const file of snapshot.files) sources.push(await entryFor(path.join(stage, file.entry), file.entry, file.kind));
     const now = new Date();
     const fileName = `levix-backup-${now.toISOString().replace(/[-:]/g, "").slice(0, 15).replace("T", "-")}.levixbak`;
     const manifest = { format: "levix-backup-manifest", version: 1, created: now.toISOString(),
-      app: require("../../package.json").version, schema: result.schema,
+      app: require("../../package.json").version, schema: snapshot.schema,
       platform: `${process.platform}-${process.arch}`, account: snapshot.paired,
-      apiKeys, counts: result.counts };
+      apiKeys, counts: snapshot.counts };
     const written = await writeBackup({ outPath: out, password, manifest, entries: sources, kdf, onProgress });
     return { token, fileName, path: out, size: written.size };
   } catch (error) {
@@ -281,4 +269,4 @@ async function createBackup({ password, onProgress, kdf, statfs } = {}) {
   } finally { fs.rmSync(stage, { recursive: true, force: true }); }
 }
 
-module.exports = { createBackup, describeBackupContents };
+module.exports = { createBackup, describeBackupContents, setCaptureHookForTest };

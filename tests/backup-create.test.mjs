@@ -1,16 +1,17 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, chmodSync,
   existsSync, readdirSync, statSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import express from "express";
-import { equal, finish, ok, require, section, useTempDataDir } from "./harness.mjs";
+import { equal, finish, ok, require, ROOT, section, useTempDataDir } from "./harness.mjs";
 
 const data = useTempDataDir("levix-backup-create");
 const { db } = require("./src/db/db.cjs");
 const store = require("./src/db/store.cjs");
 const settings = require("./src/config/settings.cjs");
 const secrets = require("./src/config/secrets.cjs");
-const { createBackup, describeBackupContents } = require("./src/backup/create.cjs");
+const { createBackup, describeBackupContents, setCaptureHookForTest } = require("./src/backup/create.cjs");
 const { maskAccount } = require("./src/backup/account.cjs");
 const { openBackup } = require("./src/backup/format.cjs");
 const { scheduleMediaPath } = require("./scheduler.cjs");
@@ -27,6 +28,13 @@ const pack = "b".repeat(16);
 function exportFiles() {
   const dir = join(data, "tmp", "backup", "exports");
   return existsSync(dir) ? readdirSync(dir) : [];
+}
+function filesUnder(root) {
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+    const file = join(root, entry.name);
+    return entry.isDirectory() ? filesUnder(file) : [file];
+  });
 }
 async function unpack(file) {
   const opened = await openBackup({ path: file.path, password });
@@ -83,7 +91,18 @@ equal("preview account mask", preview.maskedAccount, "+20 ••• ••• �
 equal("other country mask", maskAccount({ lid: null, pn: "15555555599@s.whatsapp.net" }), "+15 ••• ••• ••99");
 equal("LID-only mask", maskAccount({ lid: "123@lid", pn: null }), "WhatsApp account");
 equal("unpaired mask", maskAccount(null), null);
-const file = await createBackup({ password, kdf });
+let stagedFiles;
+setCaptureHookForTest((point, stage) => {
+  if (point === "after-files") stagedFiles = filesUnder(stage).map((filePath) => relative(stage, filePath)).sort();
+});
+let file;
+try { file = await createBackup({ password, kdf }); }
+finally { setCaptureHookForTest(null); }
+equal("stage contains only filtered database and selected files", stagedFiles?.join(","), [
+  "filtered.db", "media/schedules/schedule-one", "memory/chats/chat.md", "memory/global.md", "persona.md",
+  `stickers/ab/${shaA}.thumb.webp`, `stickers/ab/${shaA}.webp`,
+  `stickers/cd/${shaB}.thumb.webp`, `stickers/cd/${shaB}.webp`,
+].sort().join(","));
 const first = await unpack(file);
 equal("account LID", first.manifest.account.lid, "123456789@lid");
 equal("account phone", first.manifest.account.pn, "201000000012@s.whatsapp.net");
@@ -139,7 +158,7 @@ const databaseBytes = statSync(join(data, "levix.db")).size +
 const secretsBytes = Buffer.byteLength(JSON.stringify({ settings: {
   gemini_api_key: "gemini-plain-test-key", openai_api_key: "openai-plain-test-key",
 } }));
-const required = databaseBytes * 2 + sourceBytes +
+const required = databaseBytes + sourceBytes +
   Math.ceil((databaseBytes + sourceBytes + secretsBytes) * 1.01) + 64 * 1024 * 1024;
 await rejects(() => createBackup({ password, kdf, statfs: () => ({ bavail: required - 1, bsize: 1 }) }), "NO_SPACE");
 ok("exact free-space estimate accepted", existsSync((await createBackup({ password, kdf,
@@ -174,7 +193,7 @@ db.exec("BEGIN IMMEDIATE");
 const releaseTransaction = setTimeout(() => db.exec("COMMIT"), 20);
 try {
   const retried = await createBackup({ password, kdf });
-  ok("capture succeeds after transaction releases", existsSync(retried.path));
+  ok("capture succeeds with an open writer", existsSync(retried.path));
   ok("retry leaves no stage", readdirSync(join(data, "tmp", "backup")).every((name) => name === "exports"));
 } finally { clearTimeout(releaseTransaction); }
 
@@ -187,6 +206,41 @@ equal("account table empty", unpaired.copy.prepare("SELECT count(*) AS n FROM st
 ok("no account files", unpaired.manifest.entries.every((entry) => !["memory", "sticker", "schedule-media"].includes(entry.kind)));
 ok("settings remain", unpaired.copy.prepare("SELECT count(*) AS n FROM bot_settings").get().n > 0);
 unpaired.copy.close();
+
+if (process.platform === "win32") {
+  console.log("  SKIP SIGKILL backup capture crash: Windows has different termination semantics");
+} else {
+  section("crash leaves no excluded secrets in temporary files");
+  const fixture = join(ROOT, "tests", "fixtures", "backup-create-crash.mjs");
+  for (const point of ["after-db-copy", "after-files"]) {
+    const dir = mkdtempSync(join(data, `crash-${point}-`));
+    const env = { ...process.env, LEVIX_DATA_DIR: dir };
+    const killed = spawnSync(process.execPath, [fixture, point], { env, encoding: "utf8", timeout: 8000 });
+    equal(`${point} child died by SIGKILL`, killed.signal, "SIGKILL");
+    const live = new DatabaseSync(join(dir, "levix.db"), { readOnly: true });
+    const stored = ["auth:password", "auth:recovery-email", "secret:session",
+      "setting:gemini_api_key", "setting:openai_api_key"].map((key) =>
+      live.prepare("SELECT value FROM bot_settings WHERE key = ?").get(key)?.value);
+    const storedAuth = live.prepare("SELECT value FROM baileys_auth ORDER BY key").all().map(({ value }) => value);
+    live.close();
+    ok(`${point} stored secret rows seeded`, stored.every((value) => typeof value === "string" && value.length > 0));
+    equal(`${point} authentication rows seeded`, storedAuth.length, 2);
+    const sentinels = ["CREDS-SENTINEL-CREATE", "AUTH-ROW-SENTINEL-CREATE", "QR-SENTINEL-CREATE",
+      "RECOVERY-SENTINEL-CREATE", "SESSION-SENTINEL-CREATE", "GEMINI-PLAINTEXT-SENTINEL-CREATE",
+      "OPENAI-PLAINTEXT-SENTINEL-CREATE", ...stored, ...storedAuth].map((value) => Buffer.from(value));
+    const temporaryFiles = filesUnder(join(dir, "tmp"));
+    ok(`${point} leaves a stage to inspect`, temporaryFiles.some((filePath) => filePath.endsWith("filtered.db")));
+    for (const filePath of temporaryFiles) {
+      const bytes = readFileSync(filePath);
+      ok(`${point} ${relative(dir, filePath)} has no excluded value`,
+        sentinels.every((value) => !bytes.includes(value)));
+    }
+    const swept = spawnSync(process.execPath, [fixture, "sweep"], { env, encoding: "utf8", timeout: 8000 });
+    equal(`${point} sweep exits`, swept.status, 0);
+    equal(`${point} sweep removes stage`, readdirSync(join(dir, "tmp", "backup")).join(","), "exports");
+    ok(`${point} sweep keeps exports directory`, existsSync(join(dir, "tmp", "backup", "exports")));
+  }
+}
 
 section("routes");
 secrets.setDashboardPassword(panelPassword);
