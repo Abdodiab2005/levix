@@ -237,9 +237,14 @@ characters and save the `.levixbak` file. Keep the password safe: Levix cannot
 recover it. To restore, upload the file, enter its backup password, review the
 preview, then confirm with your panel password.
 
-Restore replaces the backed-up bot settings, command setup, API keys and AI
-persona. It keeps this install's panel password, recovery email, session key,
-device settings and encryption key. WhatsApp pairing is never in the backup;
+The preview lists what the restore changes: settings and API keys that are
+added, replaced or unchanged, the ones the backup does not hold (they stay as
+they are), the AI persona, and the WhatsApp account data. When the restore would
+replace or remove something this install already has, tick the confirmation
+before **Confirm restore** is enabled. Restore writes only what the backup
+holds: a setting, an API key or a persona missing from the backup keeps its
+current value. It keeps this install's panel password, recovery email, session
+key, device settings and encryption key. WhatsApp pairing is never in the backup;
 pair the account again by hand. Conversations, AI memory, stickers, schedules,
 roles and group data activate only when the same WhatsApp account connects.
 If a different account connects, the Backup screen shows **waiting account

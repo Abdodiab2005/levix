@@ -106,6 +106,8 @@ Nothing may follow `end`. A reader stops inflating as soon as the output passes
   "apiKeys": ["gemini_api_key", "openai_api_key", "whatsapp_proxy_password"],
   "counts": { "settings": 41, "apiKeys": 3, "schedules": 2, "groups": 3, "roles": 2,
               "conversations": 12, "memoryFiles": 4, "stickers": 120, "packs": 5 },
+  "digests": { "settings": { "setting:bot_language": "<hex>", "prefix": "<hex>" },
+               "apiKeys": { "gemini_api_key": "<hex>" } },
   "entries": [
     { "path": "db/levix.db", "kind": "db", "size": 1048576, "sha256": "<hex>" },
     { "path": "secrets.json", "kind": "secrets", "size": 312, "sha256": "<hex>" },
@@ -119,6 +121,14 @@ Nothing may follow `end`. A reader stops inflating as soon as the output passes
 
 `apiKeys` lists the names (never the values) of the secret settings in `secrets.json`, so the
 preview can show them; each name is a key of `SECRET_SETTING_KEYS`.
+
+`digests` (optional) holds the sha256 of every restorable `bot_settings` row value as stored
+(`setting:<key>` and the command-table keys) and of every plain API key value in `secrets.json`.
+The restore preview compares them with this install's values to list what is added, replaced,
+unchanged or kept. The keys of `digests.apiKeys` must equal `apiKeys`. The digests sit inside the
+encrypted payload and never leave the server: the preview returns names only. A file without
+`digests` (made by a build before the field existed) is still valid; its preview cannot list the
+setting changes and is treated as destructive.
 
 `account` names the WhatsApp account that was paired when the backup was made: its LID and its
 phone-number JID, either of which may be null. It is null when the install was not paired, and then
@@ -206,18 +216,40 @@ cannot restore it from the UI.
 2. The file is uploaded into `<data>/tmp/restore/` (16 GiB cap, free space checked first).
 3. Preview needs the backup password. Levix opens the header and the manifest only and shows the
    creation date, app version, schema, platform, counts, the names (never the values) of the API
-   keys, the account as a masked phone number, and whether the paired account matches.
+   keys, the account as a masked phone number, and whether the paired account matches. It also
+   shows the restore plan (`src/backup/plan.cjs`): which settings, command-table keys and API keys
+   are added, replaced, unchanged, or kept because the backup does not hold them; whether the
+   persona is added, replaced, unchanged or kept; whether the account data would replace this
+   install's current data for the same account; and whether it would remove account data still
+   waiting from an earlier restore. A plan with any replacement or removal is destructive.
 4. Levix refuses a file with `version` other than 1, a `schema` newer than the running build, a
    wrong password or any damage.
-5. Confirming needs the panel password. A background job decrypts and checks every chunk and entry
+5. Confirming needs the panel password, and a destructive plan also needs the operator to tick
+   the confirmation (`confirmDestructive: true`). A background job decrypts and checks every chunk and entry
    into `<data>/restore/<id>/staged/`, runs `PRAGMA integrity_check` on the database copy and
    migrates the copy to the running schema with the normal migrations. The `secrets.json` entry is
    decrypted into memory only, at most 1 MiB, and is never written into the staged folder. Live data
-   is untouched until all of this passes.
-6. The settings group is applied in one SQLite transaction on the live database. Every restorable
-   `bot_settings` row is replaced; the target keeps its device keys, panel authentication rows and
-   session key. The API keys are sealed with the target's `levix.key` inside that transaction.
-   `ai-persona.md` is replaced atomically. The new values take effect like a settings import. If
+   is untouched until all of this passes. The journal written for staging only lets recovery
+   delete the staged files after a crash; no live value changes before step 6 decides.
+6. The settings group is applied in one SQLite transaction on the live database. Only what the
+   backup holds is written: each restorable `bot_settings` row in the backup is added or replaces
+   the current one, and each API key in `secrets.json` replaces the current key. A setting or API
+   key the backup does not hold keeps its current value. A command-table key in the backup
+   (`prefix`, `command_permissions`, `command_aliases`, `disabled_commands`) replaces that whole
+   entry; one the backup lacks stays. The target keeps its device keys, panel authentication rows,
+   session key and pairing. The API keys are sealed with the target's `levix.key` inside that
+   transaction. Inside that transaction the job compares this install's settings and API keys
+   before and after the apply, side effects included: a setting the backup does not hold counts
+   as replaced when its effective value changes, default included (a provider or model change can
+   turn speech or vision off through the capability guards). Adding `command_permissions`
+   overrides to an install that has none also needs confirmation, because it changes who may run
+   a command. When anything was replaced or removed, or the
+   persona or account data would be replaced, and the request did not confirm it, the transaction
+   rolls back and the job ends with `CONFIRM_REQUIRED` and that exact plan, so a forged manifest
+   cannot hide a change. A command-table entry is replaced all or nothing: one invalid item (an
+   unknown permission level, a bad alias, a disabled-command name that is not a plain string) puts
+   the current entry back. `ai-persona.md` is replaced atomically only when the backup holds a
+   persona; a backup without one leaves the current persona as it is, also after crash recovery. The new values take effect like a settings import. If
    Levix stops before that transaction commits, recovery discards the staged restore and the
    operator runs the restore again with the backup password. After the commit the keys are already
    sealed in `levix.db`. No file in the data directory holds a plaintext secret at any moment.

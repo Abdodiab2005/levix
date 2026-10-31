@@ -59,7 +59,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
-| Status | Decisions APPROVED by the owner on 2026-10-31 (Q-10, Q-14, Q-22, Q-24, Q-25, Q-26); implementation in PRs 02a to 02h (`PHASE-02-RESULTS.md` section 4). `BACKUP_FORMAT.md` is ACCEPTED. |
+| Status | Decisions APPROVED by the owner on 2026-10-31 (Q-10, Q-14, Q-22, Q-24, Q-25, Q-26). PRs 02a to 02h merged on 2026-10-31; PR 02i (restore writes only what the backup holds, confirmation for destructive changes) open. Android device QA PASS on 2026-10-31 with one real test account and a simulated mismatched account; desktop manual QA NOT RUN (`PHASE-02-RESULTS.md` sections 4 and 7.1). `BACKUP_FORMAT.md` is ACCEPTED. |
 | Inputs | The old local branch `zcode/commands-panel-upgrades` adds nothing: both commits are patch-identical to `main` commits `ec1d762` and `cb9d09a` (Q-02, checked 2026-10-30). |
 | Goal | Local, always-encrypted backup and restore of the settings, API keys and bot data in `BACKUP_FORMAT.md` section 7, account data that activates only for the same WhatsApp account, a journaled restore that survives interruption, and a start order that never migrates without the instance lock and a verified pre-migration copy. |
 | Files | new `src/backup/` (format, create, restore, activation, journal), `src/db/db.cjs`, `src/config/lock.cjs`, `src/bootstrap/core.js` and `src/cli.js` (start order, AUDIT B-09), `src/utils/memory.cjs` (Q-25), `src/routes/` (backup routes), `frontend/src/views/` (Settings → Backup), `android/app/src/main/java/net/leviro/levix/` (`PanelBridge.kt`, `PanelFiles.kt`, Storage Access Framework save and open), `docs/plans/v5/BACKUP_FORMAT.md`. No CLI or WhatsApp command (Q-14). |

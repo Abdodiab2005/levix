@@ -85,8 +85,24 @@ function validPath(entry) {
   return false;
 }
 
+// Optional: digests of the restorable settings and API keys, so the restore
+// preview can list what changes. Files from earlier v1 builds have none.
+function validateDigests(digests, apiKeys) {
+  exactKeys(digests, ["settings", "apiKeys"], "BAD_MANIFEST");
+  const map = (value, keyRe, limit) => value && typeof value === "object" && !Array.isArray(value) &&
+    Object.keys(value).length <= limit &&
+    Object.entries(value).every(([key, hash]) => keyRe.test(key) && typeof hash === "string" && /^[0-9a-f]{64}$/.test(hash));
+  if (!map(digests.settings, /^[a-z][a-z0-9_:]{0,95}$/, 1024) || !map(digests.apiKeys, /^[a-z][a-z0-9_]{0,63}$/, 32))
+    fail("BAD_MANIFEST", "Invalid manifest digests");
+  const names = Object.keys(digests.apiKeys).sort();
+  if (JSON.stringify(names) !== JSON.stringify([...apiKeys].sort()))
+    fail("BAD_MANIFEST", "Manifest digests do not match the API key names");
+}
+
 function validateManifest(manifest) {
-  exactKeys(manifest, ["format", "version", "created", "app", "schema", "platform", "account", "counts", "apiKeys", "entries"], "BAD_MANIFEST");
+  const required = ["format", "version", "created", "app", "schema", "platform", "account", "counts", "apiKeys", "entries"];
+  const hasDigests = Boolean(manifest) && typeof manifest === "object" && Object.hasOwn(manifest, "digests");
+  exactKeys(manifest, hasDigests ? [...required, "digests"] : required, "BAD_MANIFEST");
   if (manifest.format !== "levix-backup-manifest") fail("BAD_MANIFEST", "Invalid manifest format");
   if (manifest.version !== 1) fail("UNSUPPORTED_VERSION", "Unsupported manifest version");
   if (typeof manifest.created !== "string" || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(manifest.created) ||
@@ -108,6 +124,7 @@ function validateManifest(manifest) {
       manifest.apiKeys.some((name) => typeof name !== "string" || !/^[a-z][a-z0-9_]{0,63}$/.test(name)) ||
       new Set(manifest.apiKeys).size !== manifest.apiKeys.length)
     fail("BAD_MANIFEST", "Invalid API key names");
+  if (hasDigests) validateDigests(manifest.digests, manifest.apiKeys);
   if (!Array.isArray(manifest.entries)) fail("BAD_MANIFEST", "Invalid manifest entries");
   if (manifest.entries.length > LIMITS.entries) fail("LIMIT", "Too many backup entries");
   const paths = new Set();

@@ -1,7 +1,9 @@
 # Levix v5.0.0 Phase 02: backup, restore and migration safety
 
-Status: decisions APPROVED by the owner on 2026-10-31 (section 5); implementation in PRs 02a to
-02h (section 4). Every claim below cites code at `main` 966cd2b or a command run on 2026-10-31.
+Status: decisions APPROVED by the owner on 2026-10-31 (section 5). PRs 02a to 02h merged on
+2026-10-31 (#91 to #99, `main` b14a3e6). PR 02i (restore safety, section 4) is open. Android device
+QA ran on 2026-10-31 (section 7.1); desktop manual QA is NOT RUN. Every claim below cites code at
+`main` 966cd2b or a command run on 2026-10-31.
 
 ## 1. Re-audit (2026-10-31)
 
@@ -115,6 +117,7 @@ Rules kept from the Codex plan review:
 | 02f | Account activation (Q-24): match rule, activation at connection open before roles and schedules load, journaled folder moves, recovery; tests for same account, recycled number, different account, unlink, crash at each step | 02e |
 | 02g | Panel UI: Settings → Backup (create, download, upload, preview, confirm, progress, errors, pending account notice), both languages | 02f |
 | 02h | Android: Storage Access Framework save and open with native streaming, host coordination; `PRIVACY.md`, `SETUP.md` and the manual offline QA steps | 02g |
+| 02i | Restore safety after device QA: a restore writes only what the backup holds (missing settings, API keys and persona keep their values); restore plan in the preview from manifest digests (`src/backup/plan.cjs`); explicit confirmation for replacements and removals, enforced by the job from the before/after values inside the apply transaction, side effects included (`CONFIRM_REQUIRED`); command-table entries replaced all or nothing; tests in `tests/backup-restore-merge.test.mjs` | `main` |
 
 The PRs form one stack in this order, so each shows only its own change. 02a, 02b and 02c touch
 separate files and are built in parallel, then stacked.
@@ -125,7 +128,7 @@ separate files and are built in parallel, then stacked.
 | --- | --- |
 | Q-10 | Android preferences and other device data stay out of backups. |
 | Q-14 | Backup and restore run from the React panel and the Android app only. No CLI command and no WhatsApp command. |
-| Q-22 | A restore keeps the target's panel password, session key and recovery email, and never imports WhatsApp pairing. API keys come from the backup and are sealed with the target's `levix.key`. A new install goes through the normal setup first. |
+| Q-22 | A restore keeps the target's panel password, session key and recovery email, and never imports WhatsApp pairing. API keys come from the backup and are sealed with the target's `levix.key`. A new install goes through the normal setup first. Amended in 02i: a restore writes only what the backup holds, so an API key, a setting or the persona that the backup lacks keeps its current value, and replacements need an explicit confirmation. |
 | Q-24 | Account data activates only after the paired WhatsApp account is verified to match the backup's account; until then it waits, and the operator can discard it. |
 | Q-25 | AI memory lives in `<data>/memory`. |
 | Q-26 | Migrations get crash-resistant rollback protection: a verified local pre-migration copy (never exported, newest two kept) and all pending migrations in one transaction. The copy holds every table and every row except the secret material (no WhatsApp pairing, panel password hash, recovery email, session key or API key), so a rollback leaves the install with no pairing and no panel password. |
@@ -159,13 +162,26 @@ The owner also decided that every exported backup is encrypted with a user-provi
 - Restore survives a crash (`tests/backup-restore.test.mjs`): at every crash point, no file under the
   data directory holds a plaintext API key; the recovery outcome is unchanged; extraction keeps the
   `secrets.json` entry in memory only.
+- Restore writes only what the backup holds (`tests/backup-restore-merge.test.mjs`, PR 02i): an
+  empty backup keeps every setting, API key, the persona, the panel password, the session key, the
+  recovery record and the pairing; a partial backup replaces only its own keys, keeps the sealed
+  rows of the others byte for byte, and is refused with `CONFIRM_REQUIRED` (no change, no staging,
+  no journal) until confirmed; added-only and unchanged restores need no confirmation; same-account
+  data replacement and a waiting restore count as destructive; a different account waits without
+  touching the current account rows; wrong password and damaged files change nothing; a manifest
+  without digests stays valid and its plan counts as destructive; the preview route returns names
+  only (no digest, no value) and only a literal `confirmDestructive: true` confirms; a provider
+  switch that turns speech off as a side effect is refused until confirmed; a forged manifest whose
+  digests claim no change is refused by the job; crash recovery keeps a persona the backup lacks;
+  an invalid command-table item keeps the current entry.
 - `settings-transfer` tests unchanged.
-- Core gates plus Docker, SEA and tarball in CI. Android save, open and restore on a device: NOT
-  RUN until a device and a dedicated test account are available.
+- Core gates plus Docker, SEA and tarball in CI. Android save, open and restore on a device: see
+  section 7.1.
 
 ## 7. Manual QA: offline restore
 
-Status: **NOT RUN** (desktop and Android). Use isolated installs, offline from
+Status: desktop steps 1 to 3 **NOT RUN**. Android: run on 2026-10-31, results in section 7.1.
+Use isolated installs, offline from
 Levix-operated services, and a dedicated WhatsApp test account with owner
 authorization. Record platform, commit, date and result for each run.
 
@@ -184,3 +200,47 @@ authorization. Record platform, commit, date and result for each run.
 4. Repeat steps 1 to 3 on Android. Use the native picker to open the backup and
    Create Document to save it. Verify upload progress, the saved file, and that
    cancelling a save or download leaves no partial document.
+
+### 7.1 Android device results (2026-10-31)
+
+Build: `main` b14a3e6, debug arm64 APK built with `-PlevixIsolatedDebug=true` (package
+`net.leviro.levix.dev`, "Levix QA", installed beside the release app, which was not touched).
+Device: Realme RMX3636, Android 15, arm64. The panel ran inside the app's WebView; the steps were
+driven through that WebView (Chrome DevTools protocol over adb) and the system pickers through adb
+taps. Test values (panel password, backup password, API keys) were generated for the run.
+
+Real device, no WhatsApp pairing:
+
+| Check | Result |
+| --- | --- |
+| Create a backup from Settings → Backup (scrypt on the device) | PASS, 2 s |
+| Save through the Android Create Document picker | PASS: the file in Download is byte-identical to the server export (sha256 `b790cd67…`, 8,026 bytes) |
+| Cancel the save picker | PASS: no new and no partial file in Download |
+| Open the file through the Android picker; wrong backup password | PASS: "The backup password is wrong." |
+| Preview and restore with the right password | PASS: 2 items applied, panel password kept |
+| Restored values | PASS: `bot_language` back to `en`; a new backup from the device, decrypted on a desktop, holds the restored API key and not the changed one |
+| Plaintext secrets in the app's data folder (database, WAL, logs, `restore/`, `tmp/`) | PASS: 0 hits for the panel password, the backup password and both API keys |
+| Leftover files | PASS: only `restore/last-outcome.json` and the encrypted export |
+
+Real device, paired with the owner's dedicated WhatsApp test account (masked `+20 ••• ••• ••21`):
+
+| Check | Result |
+| --- | --- |
+| Backup while paired | PASS: manifest account is the test account's LID and phone number; 2 memory files; the database copy has 0 pairing rows and 0 secret keys |
+| Same account: change memory, restore | PASS: preview `match`; account data activated 3.5 s after the restore; the 3 original memory entries came back; WhatsApp stayed connected |
+| Discard of waiting data | PASS: `waiting=false`, no leftover files |
+
+Simulated mismatched account (one test number was available, so no second real account):
+
+| Check | Result |
+| --- | --- |
+| A backup made on a desktop for a fake account (`+20 ••• ••• ••99`), restored on the device while it was paired with the test account | PASS: preview `different`; account data waited and was not used; memory unchanged; Discard removed it |
+
+Finding fixed in PR 02i: the simulated backup held no settings and no API keys, and the restore
+reset the device's Gemini API key, bot language and AI provider to their defaults, because a
+restore then replaced every restorable row and removed the persona when the backup had none. PR
+02i keeps every value a backup does not hold and asks for confirmation before replacing one. The
+fixed behaviour is verified by `tests/backup-restore-merge.test.mjs`; a device re-run after PR 02i
+is NOT RUN.
+
+Not covered on the device: the recycled-number case, a crash during restore on Android, and ARMv7.
