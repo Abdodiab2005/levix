@@ -1,8 +1,8 @@
 # Levix backup format, version 1
 
 Status: ACCEPTED on 2026-10-31 with the owner's decisions Q-10, Q-14, Q-22, Q-24, Q-25 and Q-26
-(`OPEN_QUESTIONS.md`, ADR-016). PR 02a implements the file format, PR 02d writes backups and PR 02e
-restores them. Nothing reads or writes this format before PR 02a merges.
+(`OPEN_QUESTIONS.md`, ADR-016). PR 02a implements the file format, PR 02d writes backups, PR 02e
+restores them and PR 02f activates restored account data. Nothing reads or writes this format before PR 02a merges.
 
 ## 1. Rules
 
@@ -48,7 +48,7 @@ other than 1, `chunk` other than 65,536, `r` other than 8, `p` other than 1, a s
 bytes, and an `N` that is not a power of two from 2^15 to 2^18. scrypt needs `128 * N * r` bytes:
 128 MiB at the default `N` of 2^17 and 256 MiB at the cap. Levix passes that value plus 1 MiB as
 `maxmem`, because Node's default `maxmem` is 32 MiB. One key derivation runs at a time per process.
-Memory and time on an ARMv7 device: NOT VERIFIED until the Android smoke test in PR 02g.
+Memory and time on an ARMv7 device: NOT VERIFIED until the Android smoke test in PR 02h.
 
 ## 4. Keys and password
 
@@ -103,6 +103,7 @@ Nothing may follow `end`. A reader stops inflating as soon as the output passes
   "schema": 1,
   "platform": "android-arm64",
   "account": { "lid": "123456789012345@lid", "pn": "201000000000@s.whatsapp.net" },
+  "apiKeys": ["gemini_api_key", "openai_api_key", "whatsapp_proxy_password"],
   "counts": { "settings": 41, "apiKeys": 3, "schedules": 2, "groups": 3, "roles": 2,
               "conversations": 12, "memoryFiles": 4, "stickers": 120, "packs": 5 },
   "entries": [
@@ -115,6 +116,9 @@ Nothing may follow `end`. A reader stops inflating as soon as the output passes
   ]
 }
 ```
+
+`apiKeys` lists the names (never the values) of the secret settings in `secrets.json`, so the
+preview can show them; each name is a key of `SECRET_SETTING_KEYS`.
 
 `account` names the WhatsApp account that was paired when the backup was made: its LID and its
 phone-number JID, either of which may be null. It is null when the install was not paired, and then

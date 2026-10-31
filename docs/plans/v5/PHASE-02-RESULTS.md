@@ -1,7 +1,7 @@
 # Levix v5.0.0 Phase 02: backup, restore and migration safety
 
 Status: decisions APPROVED by the owner on 2026-10-31 (section 5); implementation in PRs 02a to
-02g (section 4). Every claim below cites code at `main` 966cd2b or a command run on 2026-10-31.
+02h (section 4). Every claim below cites code at `main` 966cd2b or a command run on 2026-10-31.
 
 ## 1. Re-audit (2026-10-31)
 
@@ -65,7 +65,7 @@ Rules kept from the Codex plan review:
   account group to `<data>/restore/pending/`. Nothing replaces the live database file or
   `levix.key`, so the prepared statements and the vault key cache stay valid (P2-09); restored
   settings take effect the way a settings import does.
-- Account activation (PR 02e, Q-24): at connection open, before roles are seeded and schedules
+- Account activation (PR 02f, Q-24): at connection open, before roles are seeded and schedules
   start, Levix compares the paired account with the pending identity (LIDs when both are known,
   otherwise phone numbers) and, on a match, migrates the pending copy, moves the memory, sticker
   and schedule-media folders into place and replaces the account tables in one transaction. A
@@ -86,7 +86,7 @@ Rules kept from the Codex plan review:
 - Memory (PR 02c, Q-25): `memory.cjs` reads and writes `<data>/memory` only. On the first start
   with an empty `<data>/memory` and files in the legacy `PACKAGE_ROOT/memory`, those files are
   copied into the data directory once; the legacy folder is left in place and reported in the log.
-- Surfaces (PRs 02f and 02g): Settings → Backup in the React panel with progress and errors; in the
+- Surfaces (PRs 02g and 02h): Settings → Backup in the React panel with progress and errors; in the
   Android app the same screen saves through `ACTION_CREATE_DOCUMENT` and opens through
   `ACTION_OPEN_DOCUMENT`, streaming bytes natively over the panel socket so no file passes through
   the JavaScript bridge (P2-11), and coordinates with `LevixHostService` (P2-10). No CLI command and
@@ -100,9 +100,10 @@ Rules kept from the Codex plan review:
 | 02b | Start order and migration safety: lock first, race-free stale lock, lazy database open, newer-schema refusal, verified pre-migration copy with retention, all pending migrations in one transaction, `reset-password` under the same rules, restore-recovery hook; concurrency and failure tests (two starts, stale lock, newer schema, copy failure, failing migration, crash during migration) | 02a |
 | 02c | Memory root under `<data>/memory` with a one-time legacy copy (Q-25) | 02b |
 | 02d | Create backup: quiesce, snapshot, filter, files, manifest, encrypted file, job progress, one-time download, panel password check; tests for inclusion, exclusion and secret scanning | 02c |
-| 02e | Restore: upload, preview, staging, settings apply, API key re-sealing, pending account data, activation at connection open, discard, journal and recovery; end-to-end tests | 02d |
-| 02f | Panel UI: Settings → Backup (create, download, upload, preview, confirm, progress, errors, pending account notice), both languages | 02e |
-| 02g | Android: Storage Access Framework save and open with native streaming, host coordination; `PRIVACY.md`, `SETUP.md` and the manual offline QA steps | 02f |
+| 02e | Restore: upload, preview, staging, settings apply, API key re-sealing, pending account data, discard, journal and recovery; end-to-end tests | 02d |
+| 02f | Account activation (Q-24): match rule, activation at connection open before roles and schedules load, journaled folder moves, recovery; tests for same account, recycled number, different account, unlink, crash at each step | 02e |
+| 02g | Panel UI: Settings → Backup (create, download, upload, preview, confirm, progress, errors, pending account notice), both languages | 02f |
+| 02h | Android: Storage Access Framework save and open with native streaming, host coordination; `PRIVACY.md`, `SETUP.md` and the manual offline QA steps | 02g |
 
 The PRs form one stack in this order, so each shows only its own change. 02a, 02b and 02c touch
 separate files and are built in parallel, then stacked.

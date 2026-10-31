@@ -59,7 +59,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
-| Status | Decisions APPROVED by the owner on 2026-10-31 (Q-10, Q-14, Q-22, Q-24, Q-25, Q-26); implementation in PRs 02a to 02g (`PHASE-02-RESULTS.md` section 4). `BACKUP_FORMAT.md` is ACCEPTED. |
+| Status | Decisions APPROVED by the owner on 2026-10-31 (Q-10, Q-14, Q-22, Q-24, Q-25, Q-26); implementation in PRs 02a to 02h (`PHASE-02-RESULTS.md` section 4). `BACKUP_FORMAT.md` is ACCEPTED. |
 | Inputs | The old local branch `zcode/commands-panel-upgrades` adds nothing: both commits are patch-identical to `main` commits `ec1d762` and `cb9d09a` (Q-02, checked 2026-10-30). |
 | Goal | Local, always-encrypted backup and restore of the settings, API keys and bot data in `BACKUP_FORMAT.md` section 7, account data that activates only for the same WhatsApp account, a journaled restore that survives interruption, and a start order that never migrates without the instance lock and a verified pre-migration copy. |
 | Files | new `src/backup/` (format, create, restore, activation, journal), `src/db/db.cjs`, `src/config/lock.cjs`, `src/bootstrap/core.js` and `src/cli.js` (start order, AUDIT B-09), `src/utils/memory.cjs` (Q-25), `src/routes/` (backup routes), `frontend/src/views/` (Settings → Backup), `android/app/src/main/java/net/leviro/levix/` (`PanelBridge.kt`, `PanelFiles.kt`, Storage Access Framework save and open), `docs/plans/v5/BACKUP_FORMAT.md`. No CLI or WhatsApp command (Q-14). |
@@ -68,7 +68,7 @@ replaces them in its own plan before writing code.
 | Tests | backup, mutate, restore, verify; corrupt backup rejected with old data intact; interrupted restore and activation; wrong password; account mismatch never activates; newer schema refused; tampering, path, bomb and KDF-cost fuzz; schedules, group settings, memory and secure settings covered; settings export unchanged. |
 | Gate | No data loss in any failure test; no pairing credential, panel secret or device key in a backup; API keys usable after restore on another install; account data never activates for a different account; content list shown before restore; no migration runs before the instance lock is held and a verified copy exists, proven by concurrency and failure tests (two processes at once, crash during backup, crash during migration, full disk). |
 | Rollback | Backup routes disabled; restore never deletes current data before its replacement is verified and in place; a failed migration leaves the database at its old version. |
-| PRs | Revised 2026-10-31 after the owner's decisions: 02a format library, 02b start order and migration safety, 02c memory root, 02d create, 02e restore and account activation, 02f panel UI, 02g Android and docs. One stack in that order. |
+| PRs | Revised 2026-10-31 after the owner's decisions: 02a format library, 02b start order and migration safety, 02c memory root, 02d create, 02e restore, 02f account activation, 02g panel UI, 02h Android and docs. One stack in that order. |
 
 ### Phase 03: unified i18n
 
