@@ -12,7 +12,7 @@ phase or reverts a change. Owners are phases; the release owner is the project o
 | R-02 | A production-only `node_modules/` misses a package that Levix loads at run time. | 01 | Medium | High | Build the tree from the lockfile; boot smoke on both ABIs; a test that loads every command and route module from the staged tree. | Boot, pairing or a command fails on device. |
 | R-03 | R8 or resource shrinking removes classes used by JNI, the WebView bridge (`@JavascriptInterface`) or reflection. | 01 | Medium | High | Experiment on a branch; keep rules; device test of `PanelBridge` and Media Hub. | Any bridge call fails on device. |
 | R-04 | A v5 migration fails on a real v4.9.x database. | 02 to 08 | Medium | High | Append-only migrations; backup before migrating; tests with v4.9.x fixture databases. | Migration test fails or data differs after upgrade. |
-| R-05 | A backup exposes secrets: `levix.key` together with the database opens every sealed value, and `secret:session` is unsealed. | 02 | Medium | High | Secrets excluded by default; passphrase encryption when included; no secret in previews or logs. | A test finds a secret in a default backup. |
+| R-05 | A backup exposes secrets: `levix.key` together with the database opens every sealed value, and `secret:session` is unsealed. | 02 | Medium | High | Every exported backup is encrypted with the operator's password; `levix.key`, pairing credentials, panel secrets and the session key are never included; API keys are sealed again with the target's key; no secret in previews or logs. | A test finds a pairing credential, panel secret or device key in a decrypted backup, or any secret in a preview or log. |
 | R-06 | An interrupted or corrupt restore damages the live data. | 02 | Medium | High | Stage, verify checksums, switch atomically, keep the old copy until the restarted app is healthy. | Old data not intact after a failed restore test. |
 | R-07 | A crafted backup uses path traversal, symlinks, a decompression bomb or extreme KDF parameters. | 02 | Low | High | Reject `..`, absolute paths and links; cap entry count, sizes and KDF cost. | Any fuzz case escapes the staging directory. |
 | R-08 | A second process writes the database during backup or restore (`levix reset-password` takes no lock). | 02 | Low | Medium | Use the SQLite backup API; take or check the instance lock in every writer. | Snapshot differs from a quiesced copy in tests. |
@@ -85,10 +85,12 @@ phase or reverts a change. Owners are phases; the release owner is the project o
 
 ### Restoring backups (Phase 02)
 
-- Threats: archive path traversal, symlinks, bombs; newer schema than the app; wrong passphrase;
-  restore during writes; credentials restored on another device.
-- Controls: validation before staging; refusal of newer schemas; atomic switch; WhatsApp pairing
-  restore across devices not claimed without proof.
+- Threats: tampered or truncated archives, path tricks, inflation bombs, KDF cost abuse; newer schema
+  than the app; wrong password; restore during writes; one account's data attached to another
+  WhatsApp account.
+- Controls: authenticated chunk stream and manifest checks before staging; refusal of newer
+  schemas; journaled steps with recovery at start; account data activates only for the same
+  WhatsApp account; WhatsApp pairing is never restored, the operator pairs manually.
 
 ### Model tool calls (Phase 06)
 

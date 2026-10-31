@@ -200,26 +200,28 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
   Nothing is pushed to `main` directly, merged automatically, tagged, released or uploaded to Google
   Play without the owner's explicit approval. The `play` job keeps its required reviewer.
 
-## ADR-016: Local backups, secrets excluded or encrypted
+## ADR-016: Local encrypted backups and safe migrations
 
-- Status: ordering rule ACCEPTED (owner, 2026-10-30); format PROPOSED (Phase 02 finalizes it).
-- Rule (ACCEPTED): no migration runs until Levix holds the single-instance lock and has written a
-  backup that passes verification. Phase 02 ships concurrency and failure tests for that rule: a
-  second process starting at the same time, a crash during the backup, a crash during the migration,
-  and a full disk.
-- Context: Node v24.19.0 exports `backup()` from `node:sqlite` and `DatabaseSync.prototype.serialize`
-  (checked with `node -e` on 2026-10-30). The Android runtime is Node v24.22.1 linked against a
-  system `libsqlite3.so`; the API there is NOT VERIFIED yet. Secret material and the vault key layout
-  are mapped in `ARCHITECTURE.md` section 6.
-- Decision (PROPOSED): backups are local files that the operator creates. By default they leave out
-  WhatsApp pairing credentials, the panel password hash, the session signing key, API keys and
-  recovery tokens. Those live in the same tables as ordinary data, so the default backup holds a
-  filtered copy of the database with those rows removed, and Phase 02 defines how a restore treats
-  them (Q-22). A backup that includes secrets must be encrypted with a key derived from an operator
-  passphrase, using Node core primitives (AES-256-GCM and scrypt) whose parameters are recorded in
-  the manifest. Restore stages everything, writes a journal before the first move, and completes or
-  undoes an interrupted switch at the next start, so a corrupt or interrupted restore leaves the old
-  data intact. The start order changes so a backup can run before a pending migration (AUDIT B-09).
+- Status: ACCEPTED. Ordering rule accepted by the owner on 2026-10-30; backup content, encryption,
+  restore and migration safety accepted on 2026-10-31 (Q-10, Q-14, Q-22, Q-24, Q-25, Q-26).
+- Rule: no migration runs until Levix holds the single-instance lock and has written a backup that
+  passes verification. Phase 02 ships concurrency and failure tests for that rule: a second process
+  starting at the same time, a crash during the backup, a crash during the migration, and a full
+  disk.
+- Context: Node v24.22.2 exports `backup()` from `node:sqlite` and `DatabaseSync.prototype.serialize`;
+  the pinned Android `libsqlite3` exports the backup functions (run time on a device NOT VERIFIED).
+  Secret material and the vault key layout are mapped in `ARCHITECTURE.md` section 6.
+- Decision: backups are local files that the operator creates from the panel or the Android app.
+  Every exported backup is encrypted with a password the operator types (scrypt, AES-256-GCM chunk
+  stream, Node core only; `BACKUP_FORMAT.md`). It holds the settings, the command table, the API
+  keys and the bot data, and never the WhatsApp pairing, the panel password, the panel session key,
+  panel sessions, the recovery email, `levix.key`, device settings or Android preferences. A restore
+  stages and verifies everything first, applies the settings in one transaction, seals the API keys
+  with the target's `levix.key`, keeps the target's panel password, and holds the account data until
+  a WhatsApp account that matches the backup is paired. A journal makes every step finish or undo
+  after a crash. Before a pending migration, the start path writes a verified local copy of the
+  database (`<data>/backups/pre-migration/`, mode 0600, never exported, last two kept) and runs all
+  pending migrations in one transaction. There is no CLI and no WhatsApp command for backups.
 
 ## ADR-017: Android ships production dependencies only
 
