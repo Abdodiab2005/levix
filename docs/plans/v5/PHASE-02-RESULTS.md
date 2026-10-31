@@ -140,3 +140,25 @@ The owner also decided that every exported backup is encrypted with a user-provi
 - `settings-transfer` tests unchanged.
 - Core gates plus Docker, SEA and tarball in CI. Android save, open and restore on a device: NOT
   RUN until a device and a dedicated test account are available.
+
+## 7. Manual QA: offline restore
+
+Status: **NOT RUN** (desktop and Android). Use isolated installs, offline from
+Levix-operated services, and a dedicated WhatsApp test account with owner
+authorization. Record platform, commit, date and result for each run.
+
+1. On desktop, create and download a password-protected backup from Settings →
+   Backup. Change a setting, an API key, a conversation or memory item, a
+   schedule, a sticker and a group role. Restore on the same install. Verify
+   restored settings and data, retained panel password and device settings,
+   and manual WhatsApp pairing when needed.
+2. On a fresh desktop install, set up its own panel password and restore the
+   file. Pair the same WhatsApp test account by hand. Verify account data
+   activates; verify the fresh install retains its own panel password and
+   device settings.
+3. On another fresh desktop install, restore and pair a different test account.
+   Verify account data stays in the waiting notice and is not used. Choose
+   Discard and verify the notice and pending data are removed.
+4. Repeat steps 1 to 3 on Android. Use the native picker to open the backup and
+   Create Document to save it. Verify upload progress, the saved file, and that
+   cancelling a save or download leaves no partial document.
