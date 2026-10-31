@@ -38,6 +38,7 @@ const path = require("path");
 const logger = require("./logger.cjs");
 
 const { dataPath, PACKAGE_ROOT } = require("../config/paths.cjs");
+const { fsyncDirectory } = require("../db/db.cjs");
 
 // The active root is always <data>/memory, so a backup of the data directory
 // includes the AI memory. An older install that still has files in
@@ -163,10 +164,14 @@ function hasLegacyCopyMarker(dir) {
 
 function writeLegacyCopyMarker(dir) {
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(legacyCopyMarkerPath(dir), "", "utf8");
+  const marker = legacyCopyMarkerPath(dir);
+  fs.writeFileSync(marker, "", "utf8");
+  const fd = fs.openSync(marker, "r");
+  try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
   // Copied first, then drop the in-progress marker, so a crash between the
   // two still skips on the next start instead of looking like a conflict.
   removeLegacyCopyingMarker(dir);
+  fsyncDirectory(dir);
 }
 
 function legacyCopyingMarkerPath(dir) {

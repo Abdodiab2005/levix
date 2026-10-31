@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { ensureDataDir, dataPath } = require("../config/paths.cjs");
-const { readJournal, writeJournal, clearJournal, writeOutcome } = require("./journal.cjs");
+const { atomicJson, readJournal, writeJournal, clearJournal, writeOutcome } = require("./journal.cjs");
 const uploads = require("./uploads.cjs");
 const logger = require("../utils/logger.cjs");
 const { fsyncDirectory } = require("../db/db.cjs");
@@ -62,18 +62,42 @@ function recover(journal) {
   restore.finish(id, "completed-after-restart");
 }
 
+function activationRecoveryFailure(id) {
+  try {
+    atomicJson(dataPath("restore", "last-activation.json"),
+      { id, status: "failed", code: "ACTIVATION_RECOVERY_FAILED", at: new Date().toISOString() });
+  } catch {}
+  logger.error("[Backup] Account activation recovery failed; refusing startup");
+  const error = new Error("Account activation recovery failed");
+  error.code = "ACTIVATION_RECOVERY_FAILED";
+  return error;
+}
+
 function runRestoreRecovery() {
   let journal;
   try { journal = readJournal(); }
   catch { quarantineJournal(); return; }
-  if (journal && (journal.op !== "restore" || !/^[0-9a-f]{32}$/.test(journal.id) ||
-      !["stage", "apply", "persona", "pending"].includes(journal.step))) {
+  const validRestore = journal?.op === "restore" &&
+    ["stage", "apply", "persona", "pending"].includes(journal.step);
+  const validActivate = journal?.op === "activate" &&
+    ["migrate", "files", "db", "cleanup"].includes(journal.step) &&
+    Array.isArray(journal.moved) && journal.moved.length <= 6 &&
+    journal.moved.every((entry) => entry && typeof entry === "object" &&
+      ["memory", "stickers", path.join("media", "schedules")].some((name) =>
+        (entry.from === name && entry.to === path.join("restore", journal.id, "previous", name)) ||
+        (entry.from === path.join("restore", "pending", "files", name) && entry.to === name)));
+  if (journal && (!/^[0-9a-f]{32}$/.test(journal.id) || !(validRestore || validActivate))) {
+    if (journal.op === "activate") throw activationRecoveryFailure(journal.id);
     quarantineJournal();
     return;
   }
   if (journal) {
-    try { recover(journal); }
+    try {
+      if (journal.op === "activate") require("./activation.cjs").recoverActivation(journal);
+      else recover(journal);
+    }
     catch {
+      if (journal.op === "activate") throw activationRecoveryFailure(journal.id);
       logger.error("[Backup] Restore recovery failed; will retry on next start");
       recordOutcome(journal.id, "recovery-failed");
       return;

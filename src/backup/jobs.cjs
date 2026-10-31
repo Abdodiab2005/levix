@@ -7,6 +7,17 @@ const { createBackup } = require("./create.cjs");
 const { restoreUpload } = require("./restore.cjs");
 const uploads = require("./uploads.cjs");
 const { readJournal } = require("./journal.cjs");
+const logger = require("../utils/logger.cjs");
+let session = null;
+function setSession(manager) { session = manager; }
+function reconnectForMatchingResult(result) {
+  if (!result?.accountMatchesPaired || !session ||
+      ["idle", "disconnected", "retry_exhausted", "logged_out", "error"].includes(session.state))
+    return Promise.resolve(false);
+  return Promise.resolve().then(() => session.reconnect({ reason: "restore-activation" }))
+    .then(() => true)
+    .catch(() => { logger.error("[Backup] Reconnect after restore failed"); return false; });
+}
 
 function sweepBackupTemp() {
   const root = ensureDataDir("tmp", "backup");
@@ -64,6 +75,7 @@ function startRestore(uploadId, password) {
     try {
       job.result = await restoreUpload(uploadId, password, (update) => Object.assign(job, update));
       job.phase = "done";
+      void reconnectForMatchingResult(job.result);
     } catch (error) {
       job.phase = "error";
       const code = error?.code === "WRONG_PASSWORD" && uploads.wrongPassword(uploadId) ?
@@ -95,4 +107,5 @@ function removeExport(token) {
   return true;
 }
 
-module.exports = { sweepBackupTemp, startExport, startRestore, getJob, getExport, removeExport };
+module.exports = { sweepBackupTemp, startExport, startRestore, getJob, getExport, removeExport,
+  setSession, reconnectForMatchingResult };

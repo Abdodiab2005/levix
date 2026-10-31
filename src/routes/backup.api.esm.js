@@ -8,6 +8,7 @@ const { describeBackupContents } = require("../backup/create.cjs");
 const jobs = require("../backup/jobs.cjs");
 const uploads = require("../backup/uploads.cjs");
 const restore = require("../backup/restore.cjs");
+const { readLastActivation } = require("../backup/activation.cjs");
 const { readPairedAccount, maskAccount, accountsMatch } = require("../backup/account.cjs");
 const secrets = require("../config/secrets.cjs");
 const { blockedFor, recordFailure, clearAttempts } = require("../panel/login-throttle.cjs");
@@ -94,7 +95,7 @@ router.post("/backup/restore/uploads/:id/restore", (req, res) => {
 });
 
 router.get("/backup/pending", (_req, res) => {
-  try { return res.json(restore.pendingStatus()); }
+  try { return res.json({ ...restore.pendingStatus(), lastActivation: readLastActivation() }); }
   catch (error) { return respondError(res, error); }
 });
 
