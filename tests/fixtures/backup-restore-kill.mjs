@@ -3,6 +3,8 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 
 const require = createRequire(import.meta.url);
+// These cases test restore mechanics, so they confirm destructive changes up front.
+const CONFIRM = { confirmDestructive: true };
 const mode = process.argv[2];
 const password = "restore-kill-backup-password";
 const kdf = { N: 32768, r: 8, p: 1 };
@@ -41,6 +43,6 @@ if (mode === "recover") {
   restore.setCrashHookForTest((step) => {
     if (step === mode) process.kill(process.pid, "SIGKILL");
   });
-  await restore.restoreUpload(id, password);
+  await restore.restoreUpload(id, password, undefined, CONFIRM);
   throw new Error("crash hook was not reached");
 }

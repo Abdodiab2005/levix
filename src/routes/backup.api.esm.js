@@ -10,6 +10,7 @@ const uploads = require("../backup/uploads.cjs");
 const restore = require("../backup/restore.cjs");
 const { readLastActivation } = require("../backup/activation.cjs");
 const { readPairedAccount, maskAccount, accountsMatch } = require("../backup/account.cjs");
+const { buildPlan, publicPlan } = require("../backup/plan.cjs");
 const secrets = require("../config/secrets.cjs");
 const { blockedFor, recordFailure, clearAttempts } = require("../panel/login-throttle.cjs");
 const { clientAddress } = require("../utils/requestOrigin.cjs");
@@ -17,7 +18,7 @@ const { clientAddress } = require("../utils/requestOrigin.cjs");
 const router = Router();
 const tokenRe = /^[0-9a-f]{64}$/;
 const jobRe = /^[0-9a-f]{32}$/;
-const errorCodes = new Set([...CODES, "NO_SPACE", "UNCLASSIFIED_TABLE", "SECRET_FOUND", "SCHEMA_NEWER", "SCHEMA_MISMATCH", "NOT_FOUND", "BAD_LENGTH", "LENGTH_REQUIRED", "too_many_attempts", "RESTORE_INCOMPLETE"]);
+const errorCodes = new Set([...CODES, "NO_SPACE", "UNCLASSIFIED_TABLE", "SECRET_FOUND", "SCHEMA_NEWER", "SCHEMA_MISMATCH", "NOT_FOUND", "BAD_LENGTH", "LENGTH_REQUIRED", "too_many_attempts", "RESTORE_INCOMPLETE", "CONFIRM_REQUIRED"]);
 
 export function jsonUnlessBackupUpload(jsonParser) {
   return (req, res, next) => {
@@ -29,7 +30,7 @@ export function jsonUnlessBackupUpload(jsonParser) {
 
 function respondError(res, error) {
   const code = errorCodes.has(error?.code) ? error.code : "IO";
-  const status = code === "BUSY" || code === "UNCLASSIFIED_TABLE" || code === "SCHEMA_NEWER" || code === "SCHEMA_MISMATCH" ? 409 :
+  const status = code === "BUSY" || code === "CONFIRM_REQUIRED" || code === "UNCLASSIFIED_TABLE" || code === "SCHEMA_NEWER" || code === "SCHEMA_MISMATCH" ? 409 :
     code === "LENGTH_REQUIRED" ? 411 : code === "LIMIT" ? 413 :
     code === "NO_SPACE" ? 507 : code === "NOT_FOUND" ? 404 :
     ["BAD_PASSWORD", "BAD_LENGTH", "WRONG_PASSWORD", "DAMAGED", "too_many_attempts"].includes(code) ? 400 : 500;
@@ -74,9 +75,11 @@ router.post("/backup/restore/uploads/:id/preview", async (req, res) => {
     const paired = readPairedAccount();
     const status = !m.account ? "none" : !paired ? "target-unpaired" :
       accountsMatch(m.account, paired) ? "match" : "different";
+    const plan = buildPlan({ digests: m.digests ?? null, apiKeyNames: m.apiKeys, account: m.account,
+      personaSha: m.entries.find((entry) => entry.kind === "persona")?.sha256 ?? null });
     return res.json({ created: m.created, app: m.app, schema: m.schema, platform: m.platform,
       counts: m.counts, apiKeys: m.apiKeys, account: { masked: maskAccount(m.account), status },
-      accountData: m.account ? "waits" : "none" });
+      accountData: m.account ? "waits" : "none", plan: publicPlan(plan) });
   } catch (error) {
     if (error.code === "WRONG_PASSWORD" && uploads.wrongPassword(id))
       return respondError(res, { code: "too_many_attempts" });
@@ -90,7 +93,10 @@ router.post("/backup/restore/uploads/:id/restore", (req, res) => {
   if (!uploads.idRe.test(id) || !uploads.getUpload(id))
     return res.status(404).json({ success: false, code: "NOT_FOUND" });
   if (!requireCurrent(req, res)) return;
-  try { return res.json({ jobId: jobs.startRestore(id, req.body?.password) }); }
+  try {
+    return res.json({ jobId: jobs.startRestore(id, req.body?.password,
+      { confirmDestructive: req.body?.confirmDestructive === true }) });
+  }
   catch (error) { return respondError(res, error); }
 });
 

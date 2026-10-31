@@ -14,6 +14,7 @@ const { classifyTables, RESTORABLE_SETTING_KEYS, COMMAND_TABLE_KEYS } = require(
 const { readPairedAccount, maskAccount, accountsMatch } = require("./account.cjs");
 const { writeJournal, readJournal, clearJournal, writeOutcome, readOutcome, atomicJson } = require("./journal.cjs");
 const uploads = require("./uploads.cjs");
+const { buildPlan, appliedPlan, currentDigests, digestsFrom, restorableRows, publicPlan } = require("./plan.cjs");
 
 const root = () => {
   const folder = ensureDataDir("restore");
@@ -106,7 +107,7 @@ function fsyncStagedTree(folder) {
   fsyncDirectory(folder);
 }
 
-function applySettings(id, secrets) {
+function applySettings(id, secrets, { base, confirmDestructive = false } = {}) {
   const source = new DatabaseSync(path.join(staged(id), "db", "levix.db"), { readOnly: true });
   const report = { applied: [], skipped: [], restartNeeded: [] };
   const skip = (key) => report.skipped.push({ key, reason: "Rejected value" });
@@ -114,8 +115,9 @@ function applySettings(id, secrets) {
     db.exec("PRAGMA synchronous = FULL");
     db.exec("BEGIN IMMEDIATE");
     try {
-      for (const key of [...RESTORABLE_SETTING_KEYS, ...settings.SECRET_SETTING_KEYS]) settings.set(key, null);
-      for (const key of COMMAND_TABLE_KEYS) store.deleteBotSetting(key);
+      const before = currentDigests();
+      // Only what the backup contains is written. A setting, an API key or a
+      // command-table entry the backup lacks keeps its value on this install.
       const rows = source.prepare(`SELECT key,
         CASE WHEN length(CAST(value AS BLOB)) <= 1048576 THEN value ELSE NULL END AS value,
         length(CAST(value AS BLOB)) > 1048576 AS oversized
@@ -153,24 +155,41 @@ function applySettings(id, secrets) {
         try { runtime.setPrefix(commandRows.get("prefix")); report.applied.push("prefix"); }
         catch { skip("prefix"); }
       }
-      const permissions = commandRows.get("command_permissions");
-      if (permissions && typeof permissions === "object" && !Array.isArray(permissions)) {
-        for (const [name, level] of Object.entries(permissions)) {
-          try { runtime.setPermission(name, level); } catch { skip("permission"); }
+      // A command-table key in the backup replaces this install's whole entry,
+      // all or nothing: one bad item puts the current entry back and skips it.
+      const isMap = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+      const replaceEntry = (key, value, valid, applyAll) => {
+        if (!commandRows.has(key)) return;
+        if (!valid(value)) { skip(key); return; }
+        const previous = store.getBotSetting(key, null);
+        store.deleteBotSetting(key);
+        try { applyAll(value); report.applied.push(key); }
+        catch {
+          store.deleteBotSetting(key);
+          if (previous !== null) store.saveBotSetting(key, previous);
+          skip(key);
         }
-        report.applied.push("command_permissions");
-      }
-      const aliases = commandRows.get("command_aliases");
-      if (aliases && typeof aliases === "object" && !Array.isArray(aliases)) {
-        for (const [name, list] of Object.entries(aliases)) {
-          try { runtime.setAliases(name, list); } catch { skip("aliases"); }
-        }
-        report.applied.push("command_aliases");
-      }
-      const disabled = commandRows.get("disabled_commands");
-      if (Array.isArray(disabled)) {
-        for (const name of disabled) runtime.setEnabled(String(name), false);
-        report.applied.push("disabled_commands");
+      };
+      replaceEntry("command_permissions", commandRows.get("command_permissions"), isMap, (map) => {
+        for (const [name, level] of Object.entries(map)) runtime.setPermission(name, level);
+      });
+      replaceEntry("command_aliases", commandRows.get("command_aliases"), isMap, (map) => {
+        for (const [name, list] of Object.entries(map)) runtime.setAliases(name, list);
+      });
+      const names = (list) => Array.isArray(list) &&
+        list.every((name) => typeof name === "string" && /^[^\s]{1,64}$/.test(name));
+      replaceEntry("disabled_commands", commandRows.get("disabled_commands"), names, (list) => {
+        for (const name of list) runtime.setEnabled(String(name), false);
+      });
+      // The decision uses what this transaction actually changed, side effects
+      // included. Refusing rolls back, so nothing live has changed.
+      const plan = appliedPlan({ before, after: currentDigests(),
+        source: digestsFrom(rows, secrets?.settings ?? {}), base });
+      report.plan = publicPlan(plan);
+      if (plan.destructive && confirmDestructive !== true) {
+        const refused = new BackupError("CONFIRM_REQUIRED", "Restore replaces existing values");
+        refused.plan = report.plan;
+        throw refused;
       }
       crash("inside-apply");
       store.saveBotSetting("restore:applied", JSON.stringify({ id }));
@@ -191,11 +210,8 @@ function installPersona(id) {
   if (typeof persona !== "boolean") throw new BackupError("DAMAGED", "Staged persona metadata missing");
   if (persona && !fs.existsSync(source))
     throw new BackupError("DAMAGED", "Staged persona missing");
-  if (!fs.existsSync(source)) {
-    fs.rmSync(target, { force: true });
-    fsyncDirectory(dataPath());
-    return;
-  }
+  // A backup without a persona leaves this install's persona as it is.
+  if (!persona) return;
   const temp = dataPath(`ai-persona.${id}.part`);
   fs.copyFileSync(source, temp);
   fs.chmodSync(temp, 0o600);
@@ -301,7 +317,8 @@ function finish(id, outcome = "restored") {
   const meta = metadata(id);
   const paired = readPairedAccount();
   const result = { applied: meta.report?.applied || [], skipped: meta.report?.skipped || [],
-    restartNeeded: meta.report?.restartNeeded || [], accountData: meta.account ? "waits" : "none",
+    restartNeeded: meta.report?.restartNeeded || [], plan: meta.report?.plan ?? null,
+    accountData: meta.account ? "waits" : "none",
     accountMatchesPaired: accountsMatch(meta.account, paired) };
   writeOutcome({ id, outcome, at: new Date().toISOString() });
   clearJournal();
@@ -310,7 +327,7 @@ function finish(id, outcome = "restored") {
   return result;
 }
 
-async function restorePinnedUpload(id, file, password, onProgress) {
+async function restorePinnedUpload(id, file, password, onProgress, { confirmDestructive = false } = {}) {
   if (readJournal()) throw new BackupError("BUSY", "A restore is awaiting recovery");
   const opened = await openBackup({ path: file, password });
   schemaCheck(opened.manifest);
@@ -330,6 +347,7 @@ async function restorePinnedUpload(id, file, password, onProgress) {
   crash("stage");
   let secretsBuffer = null;
   let secretsPayload = null;
+  let plan = null;
   try {
     onProgress?.({ phase: "stage", bytes: 0, totalBytes: total });
     const extracted = await opened.extract({ dest: staged(restoreId),
@@ -355,11 +373,18 @@ async function restorePinnedUpload(id, file, password, onProgress) {
         throw new BackupError("DAMAGED", "Backup database failed integrity check");
       classifyTables(copy);
       migrate(copy);
+      // Persona and account parts of the plan; applySettings adds the exact
+      // settings and API key changes inside its transaction and decides there.
+      plan = buildPlan({
+        digests: digestsFrom(restorableRows(copy), secretsPayload?.settings ?? {}),
+        personaSha: opened.manifest.entries.find((entry) => entry.kind === "persona")?.sha256 ?? null,
+        account: opened.manifest.account,
+      });
     } finally { copy.close(); }
     fsyncStagedTree(staged(restoreId));
     writeJournal({ op: "restore", id: restoreId, step: "apply" });
     onProgress?.({ phase: "apply", bytes: total, totalBytes: total });
-    const report = applySettings(restoreId, secretsPayload);
+    const report = applySettings(restoreId, secretsPayload, { base: plan, confirmDestructive });
     atomicJson(path.join(dir, "metadata.json"), { ...metadata(restoreId), report });
     writeJournal({ op: "restore", id: restoreId, step: "persona" });
     validateBeforePersona(restoreId);
@@ -389,10 +414,10 @@ async function restorePinnedUpload(id, file, password, onProgress) {
   }
 }
 
-async function restoreUpload(id, password, onProgress) {
+async function restoreUpload(id, password, onProgress, options = {}) {
   const pin = uploads.pinUpload(id);
   if (!pin) throw new BackupError("NOT_FOUND", "Upload not found");
-  try { return await restorePinnedUpload(id, pin.path, password, onProgress); }
+  try { return await restorePinnedUpload(id, pin.path, password, onProgress, options); }
   finally { pin.release(); }
 }
 

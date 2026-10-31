@@ -24,6 +24,8 @@ const { accountsMatch } = require("./src/backup/account.cjs");
 const { writeBackup } = require("./src/backup/format.cjs");
 const { MIGRATIONS, migrate } = require("./src/db/db.cjs");
 const { checkpoint } = require("./src/db/db.cjs");
+// These cases test restore mechanics, so they confirm destructive changes up front.
+const CONFIRM = { confirmDestructive: true };
 
 const password = "restore-test-backup-password";
 const kdf = { N: 32768, r: 8, p: 1 };
@@ -129,7 +131,7 @@ restore.setCrashHookForTest((step) => {
   if (step === "inside-apply")
     equal("settings transaction uses synchronous FULL", db.prepare("PRAGMA synchronous").get().synchronous, 2);
 });
-const result = await restore.restoreUpload(id, password);
+const result = await restore.restoreUpload(id, password, undefined, CONFIRM);
 restore.setCrashHookForTest(null);
 equal("settings connection returns to synchronous NORMAL", db.prepare("PRAGMA synchronous").get().synchronous, 1);
 equal("language restored", settings.get("bot_language"), "en");
@@ -181,10 +183,10 @@ const bytes = readFileSync(archive.path);
 bytes[bytes.length - 20] ^= 1;
 const damaged = join(data, "damaged.levixbak");
 writeFileSync(damaged, bytes);
-await rejects("corrupted backup", () => restore.restoreUpload(upload(damaged), password), "DAMAGED");
+await rejects("corrupted backup", () => restore.restoreUpload(upload(damaged), password, undefined, CONFIRM), "DAMAGED");
 const truncated = join(data, "truncated.levixbak");
 writeFileSync(truncated, readFileSync(archive.path).subarray(0, -30));
-await rejects("truncated backup", () => restore.restoreUpload(upload(truncated), password), "DAMAGED");
+await rejects("truncated backup", () => restore.restoreUpload(upload(truncated), password, undefined, CONFIRM), "DAMAGED");
 equal("corruption leaves persona", readFileSync(join(data, "ai-persona.md"), "utf8"), "original persona");
 checkpoint();
 equal("corruption leaves database byte-identical", createHash("sha256")
@@ -195,7 +197,7 @@ section("recovery after a committed settings transaction");
 settings.set("bot_language", "ar");
 const crashId = upload(archive.path);
 restore.setCrashHookForTest((step) => { if (step === "after-commit") throw new Error("test crash"); });
-try { await restore.restoreUpload(crashId, password); }
+try { await restore.restoreUpload(crashId, password, undefined, CONFIRM); }
 catch (error) { equal("committed crash reports incomplete", error.code, "RESTORE_INCOMPLETE"); }
 restore.setCrashHookForTest(null);
 equal("journal records apply", readJournal()?.step, "apply");
@@ -209,7 +211,7 @@ ok("recovery clears journal", readJournal() === null);
 section("post-apply recovery requires the durable marker");
 writeFileSync(join(data, "ai-persona.md"), "persona before unmarked recovery");
 restore.setCrashHookForTest((step) => { if (step === "persona") throw new Error("test crash"); });
-await rejects("unmarked restore starts incomplete", () => restore.restoreUpload(upload(archive.path), password), "RESTORE_INCOMPLETE");
+await rejects("unmarked restore starts incomplete", () => restore.restoreUpload(upload(archive.path), password, undefined, CONFIRM), "RESTORE_INCOMPLETE");
 restore.setCrashHookForTest(null);
 equal("unmarked recovery starts at persona", readJournal()?.step, "persona");
 store.deleteBotSetting("restore:applied");
@@ -222,7 +224,7 @@ ok("unmarked journal cleared", readJournal() === null);
 section("missing staged persona fails closed");
 writeFileSync(join(data, "ai-persona.md"), "persona before damaged recovery");
 restore.setCrashHookForTest((step) => { if (step === "after-commit") throw new Error("test crash"); });
-await rejects("damaged restore starts incomplete", () => restore.restoreUpload(upload(archive.path), password), "RESTORE_INCOMPLETE");
+await rejects("damaged restore starts incomplete", () => restore.restoreUpload(upload(archive.path), password, undefined, CONFIRM), "RESTORE_INCOMPLETE");
 restore.setCrashHookForTest(null);
 const damagedStage = join(data, "restore", readJournal().id, "staged");
 rmSync(join(damagedStage, "persona.md"));
@@ -238,7 +240,7 @@ ok("repaired staged persona finishes recovery", readJournal() === null);
 section("missing staged account item keeps live persona");
 writeFileSync(join(data, "ai-persona.md"), "persona before missing account item");
 restore.setCrashHookForTest((step) => { if (step === "after-commit") throw new Error("test crash"); });
-await rejects("account item restore starts incomplete", () => restore.restoreUpload(upload(archive.path), password), "RESTORE_INCOMPLETE");
+await rejects("account item restore starts incomplete", () => restore.restoreUpload(upload(archive.path), password, undefined, CONFIRM), "RESTORE_INCOMPLETE");
 restore.setCrashHookForTest(null);
 const accountStage = join(data, "restore", readJournal().id, "staged");
 rmSync(join(accountStage, "memory"), { recursive: true });
@@ -253,7 +255,7 @@ ok("repaired account item finishes recovery", readJournal() === null);
 
 section("persona failure reports an incomplete restore job");
 restore.setCrashHookForTest((step) => { if (step === "persona") throw new Error("test persona failure"); });
-const personaJobId = jobs.startRestore(upload(archive.path), password);
+const personaJobId = jobs.startRestore(upload(archive.path), password, CONFIRM);
 let personaJob;
 for (let attempt = 0; attempt < 100; attempt += 1) {
   personaJob = jobs.getJob(personaJobId);
@@ -278,7 +280,7 @@ for (const [point, expected] of [
   writeFileSync(join(data, "ai-persona.md"), "mutated persona");
   const attempt = upload(archive.path);
   restore.setCrashHookForTest((step) => { if (step === point) throw new Error("test crash"); });
-  try { await restore.restoreUpload(attempt, password); }
+  try { await restore.restoreUpload(attempt, password, undefined, CONFIRM); }
   catch (error) { equal(`${point} hook`, error.code || error.message,
     expected === "interrupted-unchanged" ? "test crash" : "RESTORE_INCOMPLETE"); }
   restore.setCrashHookForTest(null);
@@ -339,7 +341,7 @@ for (const [point, expected] of [
   settings.set("whatsapp_proxy_password", oldProxyPassword);
   const attempt = upload(sentinelArchive.path);
   restore.setCrashHookForTest((step) => { if (step === point) throw new Error("test crash"); });
-  try { await restore.restoreUpload(attempt, password); }
+  try { await restore.restoreUpload(attempt, password, undefined, CONFIRM); }
   catch (error) { equal(`${point} secret-crash hook`, error.code || error.message,
     expected === "interrupted-unchanged" ? "test crash" : "RESTORE_INCOMPLETE"); }
   restore.setCrashHookForTest(null);
@@ -354,7 +356,7 @@ for (const [point, expected] of [
 }
 settings.set("gemini_api_key", oldApiKey);
 settings.set("whatsapp_proxy_password", oldProxyPassword);
-await restore.restoreUpload(upload(sentinelArchive.path), password);
+await restore.restoreUpload(upload(sentinelArchive.path), password, undefined, CONFIRM);
 assertNoPlaintextSecrets("successful restore has no plaintext secrets");
 equal("successful restore api key", settings.get("gemini_api_key"), apiSentinel);
 equal("successful restore proxy password", settings.get("whatsapp_proxy_password"), proxySentinel);
@@ -412,12 +414,12 @@ if (process.platform === "win32") {
 section("pending discard");
 ok("pending visible before discard", restore.pendingStatus().waiting);
 const pendingBeforeReplace = JSON.parse(readFileSync(join(data, "restore", "pending", "pending.json"), "utf8")).id;
-await restore.restoreUpload(upload(archive.path), password);
+await restore.restoreUpload(upload(archive.path), password, undefined, CONFIRM);
 const pendingAfterReplace = JSON.parse(readFileSync(join(data, "restore", "pending", "pending.json"), "utf8")).id;
 ok("second restore replaces pending", pendingBeforeReplace !== pendingAfterReplace);
 restore.discardPending();
 ok("pending gone", !restore.pendingStatus().waiting);
-await restore.restoreUpload(upload(archive.path), password);
+await restore.restoreUpload(upload(archive.path), password, undefined, CONFIRM);
 ok("later restore creates new pending data", restore.pendingStatus().waiting);
 
 section("older schema migrates in staging");
@@ -433,7 +435,7 @@ await writeBackup({ outPath: oldArchive, password, kdf,
     app: "test", schema: 1, platform: "test", account: null, counts: {}, apiKeys: [] },
   entries: [{ path: "db/levix.db", kind: "db", size: oldBytes.length,
     sha256: createHash("sha256").update(oldBytes).digest("hex"), source: oldBytes }] });
-await restore.restoreUpload(upload(oldArchive), password);
+await restore.restoreUpload(upload(oldArchive), password, undefined, CONFIRM);
 equal("old schema setting applied", settings.get("bot_language"), "ar");
 
 section("crafted staged schemas fail before migration");
@@ -464,7 +466,7 @@ for (const [label, sql] of [
   crafted.close();
   const archiveFile = await backupDatabaseFile(file, label);
   const badId = upload(archiveFile);
-  await rejects(`${label} schema rejected`, () => restore.restoreUpload(badId, password), "SCHEMA_MISMATCH");
+  await rejects(`${label} schema rejected`, () => restore.restoreUpload(badId, password, undefined, CONFIRM), "SCHEMA_MISMATCH");
   uploads.removeUpload(badId);
   ok(`${label} leaves journal clear`, readJournal() === null);
 }
@@ -500,7 +502,7 @@ const passwordArchive = await backupDatabaseFile(excludedDatabase("excluded-pass
 for (const [label, archiveFile] of [["baileys_auth", authArchive], ["auth:password", passwordArchive]]) {
   const badId = upload(archiveFile);
   try {
-    await restore.restoreUpload(badId, password);
+    await restore.restoreUpload(badId, password, undefined, CONFIRM);
     ok(`${label} excluded data rejected`, false);
   } catch (error) {
     equal(`${label} excluded data rejected`, error.code, "DAMAGED");
@@ -527,7 +529,7 @@ for (let index = 0; index < 200000; index += 1)
 many.exec("COMMIT");
 many.close();
 const manyArchive = await backupDatabaseFile(manyFile, "many-settings");
-const manyResult = await restore.restoreUpload(upload(manyArchive), password);
+const manyResult = await restore.restoreUpload(upload(manyArchive), password, undefined, CONFIRM);
 equal("allowlisted setting restored amid junk", settings.get("bot_language"), "en");
 equal("junk settings are not loaded or reported", manyResult.skipped.length, 0);
 
@@ -540,7 +542,7 @@ await writeBackup({ outPath: newerArchive, password, kdf,
   entries: [{ path: "db/levix.db", kind: "db", size: oldBytes.length,
     sha256: createHash("sha256").update(oldBytes).digest("hex"), source: oldBytes }] });
 const newerDirectId = upload(newerArchive);
-await rejects("newer schema restore refused", () => restore.restoreUpload(newerDirectId, password), "SCHEMA_NEWER");
+await rejects("newer schema restore refused", () => restore.restoreUpload(newerDirectId, password, undefined, CONFIRM), "SCHEMA_NEWER");
 uploads.removeUpload(newerDirectId);
 
 section("upload limits and expiry");
