@@ -1,7 +1,9 @@
 // Startup must lock, copy, and migrate in that order, with no WhatsApp socket.
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { equal, finish, ok, ROOT, section, throws, useTempDataDir } from "./harness.mjs";
 
 const root = useTempDataDir("levix-start-order");
@@ -67,6 +69,29 @@ section("preparation and backup");
     equal("folder mode", old.folderMode, 0o700);
   }
 
+  const secrets = run("secrets", freshDir("secrets"));
+  equal("copy contains no sentinel bytes", secrets.sentinels.join(","), "");
+  equal("copy contains no pairing rows", secrets.authRows, 0);
+  equal("copy contains no QR rows", secrets.qrRows, 0);
+  equal("copy contains only non-secret bot keys", secrets.botKeys.join(","),
+    "prefix,setting:bot_language,test:row");
+  ok("secret setting key was seeded", !!secrets.secretKey);
+  equal("copy preserves ordinary todo", secrets.todo, '["nonsecret task"]');
+  equal("copy preserves prefix", secrets.prefix, '"!"');
+  equal("copy schema matches source schema", JSON.stringify(secrets.copySchema), JSON.stringify(secrets.sourceSchema));
+  equal("copy retains source version", secrets.version, 1);
+  equal("secret-free copy passes integrity check", secrets.integrity, "ok");
+  equal("secret-free copy has one final file", secrets.files.filter((name) => name.endsWith(".db")).length, 1);
+  if (process.platform !== "win32") equal("secret-free copy mode", secrets.mode, 0o600);
+
+  const rolledBack = run("rollback", freshDir("rollback"));
+  equal("previous build opens restored schema", rolledBack.previous?.from, 1);
+  equal("restored database remains version 1", rolledBack.version, 1);
+  equal("restored database keeps ordinary setting", rolledBack.row, "kept");
+  equal("restored database keeps todo", rolledBack.todo, '["nonsecret task"]');
+  equal("restored database has no pairing", rolledBack.authRows, 0);
+  equal("restored database has no password", rolledBack.password, null);
+
   const newer = run("newer", freshDir("newer"));
   equal("newer schema is refused", newer.code, "SCHEMA_NEWER");
   equal("newer file is byte identical", newer.after, newer.before);
@@ -76,6 +101,12 @@ section("preparation and backup");
   equal("copy failure has code", failed.code, "BACKUP_FAILED");
   equal("copy failure leaves file byte identical", failed.after, failed.before);
   equal("copy failure leaves version", failed.version, 1);
+
+  const verificationFailure = run("verifyfail", freshDir("verifyfail"));
+  equal("pre-rename failure has code", verificationFailure.code, "BACKUP_FAILED");
+  equal("pre-rename failure leaves live bytes unchanged", verificationFailure.after, verificationFailure.before);
+  equal("pre-rename failure leaves source version", verificationFailure.version, 1);
+  equal("pre-rename failure removes partial and final files", verificationFailure.files.length, 0);
 
   const migration = run("failure", freshDir("failure"));
   equal("migration error is rethrown", migration.message, "injected migration failure");
@@ -107,6 +138,32 @@ section("process lifetime lock");
 if (process.platform === "win32") {
   console.log("  SKIP SIGKILL migration crash: Windows has different termination semantics");
 } else {
+  section("crash during secret-free copy");
+  const copyDir = freshDir("copycrash");
+  const killed = spawnSync(process.execPath, [fixture, "copycrash"], {
+    env: envFor(copyDir), encoding: "utf8", timeout: 8000,
+  });
+  equal("copy child died at after-rows", killed.signal, "SIGKILL");
+  const beforeHash = /^BEFORE ([a-f0-9]{64})$/m.exec(killed.stdout)?.[1];
+  ok("copy child recorded live hash", !!beforeHash);
+  const liveFile = join(copyDir, "levix.db");
+  equal("copy crash leaves live bytes unchanged",
+    createHash("sha256").update(readFileSync(liveFile)).digest("hex"), beforeHash);
+  const oldDb = new DatabaseSync(liveFile, { readOnly: true });
+  equal("copy crash leaves version 1", oldDb.prepare("PRAGMA user_version").get().user_version, 1);
+  oldDb.close();
+  const backupDir = join(copyDir, "backups", "pre-migration");
+  const partialNames = readdirSync(backupDir);
+  equal("copy crash leaves no final copy", partialNames.filter((name) => name.endsWith(".db")).length, 0);
+  ok("copy crash leaves a partial file", partialNames.some((name) => name.endsWith(".part")));
+  const partialBytes = partialNames.map((name) => readFileSync(join(backupDir, name)).toString("utf8")).join("");
+  ok("partial files contain no secret sentinels", !/\b(?:CREDS|SIGNAL|QR|PASSWORD|RECOVERY|SESSION|APIKEY|PROXY)-SENTINEL-/.test(partialBytes));
+  const afterCrash = run("recover", copyDir);
+  equal("recovery removes stale part", afterCrash.parts.length, 0);
+  equal("recovery leaves one final copy", afterCrash.finals.length, 1);
+  equal("recovery starts from old schema", afterCrash.prior?.version, 1);
+  ok("recovery migrates successfully", afterCrash.report?.to > 1);
+
   section("crash during migration");
   const dir = freshDir("crash");
   const child = launch("crash", dir);

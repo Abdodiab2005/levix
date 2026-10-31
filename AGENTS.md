@@ -590,9 +590,17 @@ inside the data directory.
 `PRAGMA user_version`. Every start applies what is missing, so upgrading is
 just new code. **Append a migration; never edit one that has shipped.**
 Startup refuses a newer schema. For an existing older schema it verifies a
-pre-migration copy before all pending steps run in one transaction. With Levix
-stopped, manual recovery copies a `backups/pre-migration/levix-v*.db` over
-`levix.db` and deletes `levix.db-wal` and `levix.db-shm`. There is no CLI restore.
+pre-migration copy before all pending steps run in one transaction. The copy
+holds every table, but leaves out pairing credentials and QR codes, panel
+authentication, the recovery email record, the session key, API keys and the
+WhatsApp proxy password. These secrets are never written to the copy. Levix writes a `.part` file, verifies
+it, then renames it to `levix-v*.db`. With Levix stopped, manual recovery
+copies a `backups/pre-migration/levix-v*.db` over `levix.db` and deletes
+`levix.db-wal` and `levix.db-shm`. There is no CLI restore. On the previous
+build, `/setup` asks for a new panel password and, from another machine, the
+setup code printed in the terminal. Levix generates a new session key. Enter
+API keys again and pair the same WhatsApp account on the Connection screen.
+To start with another account, press Unlink after pairing.
 
 ### Access
 

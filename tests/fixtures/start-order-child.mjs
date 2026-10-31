@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -29,6 +29,29 @@ if (mode === "imports") {
   };
   const hash = () => createHash("sha256").update(readFileSync(file)).digest("hex");
   const marker = (database) => database.prepare("SELECT value FROM bot_settings WHERE key = 'test:row'").get()?.value;
+  const backupDir = join(dir, "backups", "pre-migration");
+  const schema = (database) => database.prepare(`SELECT type, name, sql FROM sqlite_master
+    WHERE sql IS NOT NULL ORDER BY type, name`).all();
+  const seedSecrets = () => {
+    seed(1);
+    const database = new DatabaseSync(file);
+    const auth = database.prepare("INSERT INTO baileys_auth (key, value) VALUES (?, ?)");
+    auth.run("creds", "CREDS-SENTINEL-1");
+    auth.run("signal-key", "SIGNAL-SENTINEL-2");
+    database.prepare("INSERT INTO qr_codes (id, qr_string) VALUES (1, ?)").run("QR-SENTINEL-3");
+    const setting = database.prepare("INSERT INTO bot_settings (key, value) VALUES (?, ?)");
+    setting.run("auth:password", "PASSWORD-SENTINEL-4");
+    setting.run("auth:recovery-email", "RECOVERY-SENTINEL-5");
+    setting.run("secret:session", "SESSION-SENTINEL-6");
+    const secretKey = require("../../src/config/settings.cjs").SECRET_SETTING_KEYS[0];
+    setting.run(`setting:${secretKey}`, "APIKEY-SENTINEL-7");
+    setting.run("setting:whatsapp_proxy_password", "PROXY-SENTINEL-8");
+    setting.run("setting:bot_language", '"en"');
+    setting.run("prefix", '"!"');
+    database.prepare("INSERT INTO todos (user_id, tasks) VALUES (?, ?)").run("person", '["nonsecret task"]');
+    database.close();
+    return secretKey;
+  };
 
   if (mode === "guard") {
     db.guardStartup();
@@ -106,7 +129,67 @@ if (mode === "imports") {
     before.close();
     lock.acquireSingleInstanceLock();
     const report = await db.prepareDatabase();
-    result({ prior, report, row: marker(db.openWithoutMigration()) });
+    result({ prior, report, row: marker(db.openWithoutMigration()),
+      parts: readdirSync(backupDir).filter((name) => name.endsWith(".part")),
+      finals: readdirSync(backupDir).filter((name) => name.endsWith(".db")) });
+  } else if (mode === "secrets") {
+    const secretKey = seedSecrets();
+    const before = new DatabaseSync(file, { readOnly: true });
+    const sourceSchema = schema(before);
+    before.close();
+    lock.acquireSingleInstanceLock();
+    const report = await db.prepareDatabase();
+    const copy = new DatabaseSync(report.copyPath, { readOnly: true });
+    const files = readdirSync(backupDir);
+    const bytes = files.map((name) => readFileSync(join(backupDir, name)).toString("utf8")).join("");
+    result({ report, secretKey, files, sourceSchema, copySchema: schema(copy),
+      sentinels: ["CREDS-SENTINEL-1", "SIGNAL-SENTINEL-2", "QR-SENTINEL-3",
+        "PASSWORD-SENTINEL-4", "RECOVERY-SENTINEL-5", "SESSION-SENTINEL-6", "APIKEY-SENTINEL-7",
+        "PROXY-SENTINEL-8"]
+        .filter((value) => bytes.includes(value)),
+      authRows: copy.prepare("SELECT count(*) AS n FROM baileys_auth").get().n,
+      qrRows: copy.prepare("SELECT count(*) AS n FROM qr_codes").get().n,
+      botKeys: copy.prepare("SELECT key FROM bot_settings ORDER BY key").all().map(({ key }) => key),
+      todo: copy.prepare("SELECT tasks FROM todos WHERE user_id = 'person'").get()?.tasks,
+      prefix: copy.prepare("SELECT value FROM bot_settings WHERE key = 'prefix'").get()?.value,
+      version: version(copy), integrity: copy.prepare("PRAGMA integrity_check").get().integrity_check,
+      mode: statSync(report.copyPath).mode & 0o777 });
+    copy.close();
+  } else if (mode === "copycrash") {
+    seedSecrets();
+    const before = hash();
+    process.stdout.write(`BEFORE ${before}\n`);
+    lock.acquireSingleInstanceLock();
+    db.setCopyHookForTest((point) => {
+      if (point === "after-rows") process.kill(process.pid, "SIGKILL");
+    });
+    await db.prepareDatabase();
+  } else if (mode === "verifyfail") {
+    seedSecrets();
+    const before = hash();
+    lock.acquireSingleInstanceLock();
+    db.setCopyHookForTest((point) => {
+      if (point === "before-rename") throw new Error("injected pre-rename failure");
+    });
+    let error;
+    try { await db.prepareDatabase(); } catch (cause) { error = cause; }
+    result({ code: error?.code, before, after: hash(),
+      version: version(db.openWithoutMigration()), files: readdirSync(backupDir) });
+  } else if (mode === "rollback") {
+    seedSecrets();
+    lock.acquireSingleInstanceLock();
+    const report = await db.prepareDatabase();
+    db.close();
+    copyFileSync(report.copyPath, file);
+    for (const suffix of ["-wal", "-shm"]) {
+      if (existsSync(file + suffix)) unlinkSync(file + suffix);
+    }
+    const previous = await db.prepareDatabase(db.MIGRATIONS.slice(0, 1));
+    const restored = db.openWithoutMigration();
+    result({ previous, version: version(restored), row: marker(restored),
+      todo: restored.prepare("SELECT tasks FROM todos WHERE user_id = 'person'").get()?.tasks,
+      authRows: restored.prepare("SELECT count(*) AS n FROM baileys_auth").get().n,
+      password: restored.prepare("SELECT value FROM bot_settings WHERE key = 'auth:password'").get()?.value ?? null });
   } else if (mode === "retention") {
     seed(1);
     lock.acquireSingleInstanceLock();

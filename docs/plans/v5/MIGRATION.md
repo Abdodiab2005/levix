@@ -11,6 +11,11 @@ installs, SEA binaries, Docker volumes, headless servers and the Android app.
   newer schema, and verifies a copy under `backups/pre-migration/` before migrating
   an existing database. Restore recovery runs after preparation. A newer schema exits
   with code 78 without changing the file.
+- The copy holds every table, but omits pairing credentials and QR codes, panel
+  authentication, the recovery email record, the session key, API keys and the
+  WhatsApp proxy password.
+  Those secrets are never written to it. Levix writes a `.part` file, verifies
+  it, then renames it to `levix-v*.db`.
 - Settings: `setting:*` values resolve to a saved override or the default in
   `src/config/settings.cjs`. A new setting needs no migration; a changed meaning of an old setting
   does.
@@ -21,8 +26,9 @@ installs, SEA binaries, Docker volumes, headless servers and the Android app.
 
 1. Migrations are appended, never edited after release.
 2. Phase 02 ships before the first v5 migration. Startup takes the lock, opens
-   without migrating, verifies the pre-migration copy when needed, migrates,
-   then runs restore recovery (owner rule, accepted 2026-10-30).
+   without migrating, writes and verifies the secret-free pre-migration copy
+   when needed, migrates, then runs restore recovery (owner rule, accepted
+   2026-10-30).
 3. Every new migration has a test that runs it against v4.9.2 fixture databases built by the test
    itself, with no real user data.
 4. A build refuses a database whose `user_version` is newer than it knows.
@@ -66,4 +72,8 @@ installs, SEA binaries, Docker volumes, headless servers and the Android app.
 
 With Levix stopped, copy the chosen `backups/pre-migration/levix-v*.db` over
 `levix.db`, then delete `levix.db-wal` and `levix.db-shm`. This copy has no CLI
-restore command.
+restore command. Start the previous build. `/setup` asks for a new panel
+password and, from another machine, the setup code printed in the terminal.
+Levix generates a new session key. Enter API keys again and pair the same
+WhatsApp account on the Connection screen. To start with another account,
+press Unlink after pairing.

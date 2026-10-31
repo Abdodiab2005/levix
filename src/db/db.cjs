@@ -19,7 +19,8 @@
 
 const path = require("node:path");
 const fs = require("node:fs");
-const { DatabaseSync, backup } = require("node:sqlite");
+const { DatabaseSync } = require("node:sqlite");
+const { writeSecretFreeCopy, verifySecretFreeCopy } = require("./copy.cjs");
 
 const logger = require("../utils/logger.cjs");
 const { DATA_DIR, dataPath } = require("../config/paths.cjs");
@@ -760,12 +761,24 @@ function fsyncDirectory(folder, filesystem = fs) {
   }
 }
 
+let copyHookForTest = null;
+function setCopyHookForTest(fn) {
+  copyHookForTest = fn;
+}
+
 async function makePreMigrationCopy(database, from) {
   const folder = dataPath("backups", "pre-migration");
   let copyPath;
+  let partPath;
+  let renamed = false;
   try {
     fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
     fs.chmodSync(folder, 0o700);
+    for (const name of fs.readdirSync(folder)) {
+      if (/^levix-v\d+-\d{8}T\d{6}Z\.db\.part(?:-journal|-wal|-shm)?$/.test(name)) {
+        fs.rmSync(path.join(folder, name));
+      }
+    }
     const names = fs.readdirSync(folder).filter((name) => /^levix-v\d+-\d{8}T\d{6}Z\.db$/.test(name));
     let instant = Date.now();
     const latest = names.map((name) => name.match(/-(\d{8}T\d{6}Z)\.db$/)[1]).sort().at(-1);
@@ -775,35 +788,22 @@ async function makePreMigrationCopy(database, from) {
     }
     const stamp = new Date(instant).toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
     copyPath = path.join(folder, `levix-v${from}-${stamp}.db`);
-    if (backup) {
-      // Give SQLite an existing private destination so there is no window
-      // where the copy inherits a permissive process umask.
-      const destination = fs.openSync(copyPath, "wx", 0o600);
-      fs.closeSync(destination);
-      await backup(database, copyPath);
-    } else {
-      const oldMask = process.umask(0o077);
-      try {
-        database.exec(`VACUUM INTO '${copyPath.replaceAll("'", "''")}'`);
-      } finally {
-        process.umask(oldMask);
-      }
-    }
-    fs.chmodSync(copyPath, 0o600);
-    const file = fs.openSync(copyPath, "r");
-    try { fs.fsyncSync(file); } finally { fs.closeSync(file); }
+    partPath = `${copyPath}.part`;
+    writeSecretFreeCopy(DB_PATH, partPath, {
+      onAfterRows: () => copyHookForTest?.("after-rows"),
+    });
+    verifySecretFreeCopy(partPath, database, { expectedVersion: from });
+    copyHookForTest?.("before-rename");
+    fs.renameSync(partPath, copyPath);
+    renamed = true;
+    partPath = null;
     fsyncDirectory(folder);
-    const check = new DatabaseSync(copyPath, { readOnly: true });
-    try {
-      if (check.prepare("PRAGMA integrity_check").get().integrity_check !== "ok" || schemaVersion(check) !== from) {
-        throw new Error("pre-migration copy failed verification");
-      }
-    } finally { check.close(); }
     const copies = fs.readdirSync(folder).filter((name) => /^levix-v\d+-\d{8}T\d{6}Z\.db$/.test(name)).sort((a, b) => b.match(/-(\d{8}T\d{6}Z)/)[1].localeCompare(a.match(/-(\d{8}T\d{6}Z)/)[1]));
     for (const old of copies.slice(2)) fs.rmSync(path.join(folder, old));
     return copyPath;
   } catch (cause) {
-    if (copyPath) try { fs.rmSync(copyPath, { force: true }); } catch {}
+    if (partPath) try { fs.rmSync(partPath, { force: true }); } catch {}
+    if (renamed) try { fs.rmSync(copyPath, { force: true }); } catch {}
     const error = new Error(`Could not verify a pre-migration database copy: ${cause.message}`);
     error.code = "BACKUP_FAILED";
     error.cause = cause;
@@ -940,6 +940,7 @@ module.exports = {
   openWithoutMigration,
   schemaVersion,
   fsyncDirectory,
+  setCopyHookForTest,
   parseJson,
   sweepExpired,
   checkpoint,
