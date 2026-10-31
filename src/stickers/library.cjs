@@ -814,4 +814,6 @@ module.exports = {
   clearAll,
   epoch: () => epoch,
   fileNameFor,
+  webpPath,
+  thumbPath,
 };

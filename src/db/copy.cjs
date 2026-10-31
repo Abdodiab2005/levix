@@ -30,6 +30,7 @@ function writeSecretFreeCopy(sourcePath, targetPath, {
     fs.closeSync(handle);
     target = new DatabaseSync(targetPath);
     target.exec("PRAGMA temp_store = MEMORY");
+    target.exec("PRAGMA busy_timeout = 5000");
     target.prepare("ATTACH DATABASE ? AS src").run(sourcePath);
     // The first source read inside this transaction fixes one SQLite snapshot.
     target.exec("BEGIN");

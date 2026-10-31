@@ -100,4 +100,4 @@ async function forMessage(msg, sock) {
   return store.stickerOwnerEnsure(lid);
 }
 
-module.exports = { forPanel, forMessage };
+module.exports = { forPanel, forMessage, normalizedLid, normalizedPn };
