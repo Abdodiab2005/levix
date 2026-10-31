@@ -20,6 +20,17 @@ blocked without an answer.
 | Q-21 | Option (a). `!schedule` errors keep going to the creator's private chat; password-reset codes keep going to their current private destination. | ADR-007; Phase 05 |
 | Q-23 | 2026-10-31: no upload of the 14 `.deb` files. One deterministic archive with both ABIs (unmodified runtime files, upstream licence texts, a manifest with full provenance), published as the only asset of a dedicated GitHub prerelease, pinned by sha256, with a local backup, and a cold-cache CI build before merge. | ADR-018; R-33 |
 
+## Decided by the owner on 2026-10-31 (Phase 02)
+
+| ID | Decision | Where it lands |
+| --- | --- | --- |
+| Q-10 | Option (a). Android preferences and other device data stay out of backups. | `BACKUP_FORMAT.md` section 7; Phase 02 |
+| Q-14 | Option (b). Backup and restore run from the React panel and the Android app only: no CLI command and no WhatsApp command. A headless install without a panel cannot back up in v5. | `BACKUP_FORMAT.md` section 10; PRs 02f and 02g |
+| Q-22 | Every exported backup is encrypted with a user-provided password and holds the API keys. A restore seals the API keys again with the target's `levix.key`, keeps the target's panel password, session key and recovery email, and never imports WhatsApp pairing; the operator pairs manually. A new install goes through the normal setup first. | ADR-016; PR 02e |
+| Q-24 | Account data activates only after the paired WhatsApp account is verified to match the backup's account (LIDs when both are known, phone numbers otherwise). Until then it waits and the operator can discard it. | `BACKUP_FORMAT.md` section 8; PR 02e |
+| Q-25 | AI memory lives in `<data>/memory`. A legacy `PACKAGE_ROOT/memory` is copied there once. | PR 02c |
+| Q-26 | A verified local pre-migration copy (mode 0600, never exported, last two kept) and all pending migrations in one transaction. Recovery from a copy is a documented manual step, since there is no CLI restore. | ADR-016; PR 02b |
+
 ## Still open
 
 | ID | Question | Options | Recommendation | Needed by |
@@ -29,12 +40,9 @@ blocked without an answer.
 | Q-05 | When new Terms arrive while WhatsApp is connected, what happens? | (a) keep the socket and ask for acceptance before the next start; (b) disconnect at once | (a). Emergency disconnects need their own authenticated delivery and offline rules, which are out of scope until designed. (Agreed with codex review.) | 04 |
 | Q-06 | Who may run the short `!status` by default? | (a) keep `OWNER_ONLY` and make the output short; (b) `MEMBERS` for the short output, with `!status debug` owner only | (a). It keeps today's permission. Operators who want members to see it can lower it in the panel. | 05 |
 | Q-09 | Should `memory/global.md` stay in every agent prompt (today: groups and other people's private chats too)? | (a) keep; (b) the owner's own private chat only, other chats by explicit per-chat opt-in; (c) per-group opt-in only | (b), before AI Auto Reply ships, because Auto Reply answers contacts who should not see the owner's global facts. (Agreed with codex review.) | 07 |
-| Q-10 | Should Android preferences (host running flag, onboarding, Media Hub choices, theme) be part of a backup? | (a) no, Node data only; (b) yes, through a host bridge | (a) for v5; document the gap. | 02 |
-| Q-14 | Should backups be available from the CLI (`levix backup`, `levix restore`)? | (a) yes, for headless and Docker; (b) panel only | (a). Headless has no panel. | 02 |
 | Q-15 | The recovery mail relay accepts `ar` and `en`. What do `pt-BR` and `es-419` users get? | (a) English mail until the relay supports more; (b) relay update in `levix-ui` in step with Phase 03 | (a) in Phase 03, with (b) as separate work in the relay repository. | 03 |
 | Q-16 | Play in-app updates and in-app review need Google Play libraries. The GitHub APK is built from the same sources. | (a) one build with the libraries, which do nothing outside Play; (b) a build flavour per channel | (b) only if (a) adds Google Play services requirements to GitHub APK users; otherwise (a). Decide after measuring in Phase 09. | 09 |
 | Q-17 | Does a Terms acceptance survive a panel password reset and a WhatsApp unlink? | (a) both; (b) survives a password reset, re-accept after unlink; (c) neither | (b). A password reset keeps the operator; an unlink can bring a different WhatsApp account, whose owner carries the ban risk the Terms describe. (Agreed with codex review.) | 04 |
 | Q-18 | Which documents feed the documentation-aware AI? | (a) public docs in this repository only; (b) plus the website docs from `levix-ui` | (a) first. Website docs need their own version tags before they can be cited. | 06 |
 | Q-19 | Who reviews the `pt-BR` and `es-419` translations? | (a) native reviewers before release; (b) ship machine drafts labelled as drafts | (a) for the bot and the Terms text; (b) is acceptable only for low-risk UI strings, labelled. | 03 |
 | Q-20 | Should Plus entitlements work on desktop and self-hosted installs? | (a) Android Play only in v5; (b) a portable entitlement design now | (a). The phase prompt marks portability as an open design question. | 08 |
-| Q-22 | What does restoring a default backup (no secrets) do to the secrets of the install it lands on? | (a) keep the target install's current secrets (pairing, keys, password) and replace everything else; (b) clear them, so the operator re-pairs and re-enters keys; (c) ask in the restore preview | (c) with (a) preselected for a same-install restore. Moving to a new device always needs re-pairing. | 02 |

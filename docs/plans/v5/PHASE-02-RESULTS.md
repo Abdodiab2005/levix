@@ -1,8 +1,7 @@
 # Levix v5.0.0 Phase 02: backup, restore and migration safety
 
-Status: PLAN, waiting for the owner's decisions in section 5. Started 2026-10-31 on the owner's
-instruction. No product code changes yet. Every claim below cites code at `main` 966cd2b or a
-command run on 2026-10-31.
+Status: decisions APPROVED by the owner on 2026-10-31 (section 5); implementation in PRs 02a to
+02g (section 4). Every claim below cites code at `main` 966cd2b or a command run on 2026-10-31.
 
 ## 1. Re-audit (2026-10-31)
 
@@ -29,91 +28,112 @@ re-checked the findings that change the plan.
 
 ## 2. What a backup holds
 
-| Item | Default backup | Backup with secrets (encrypted) | Never |
-| --- | --- | --- | --- |
-| Database snapshot (`node:sqlite` `backup()`), filtered as below | yes | yes, unfiltered | |
-| `bot_settings`: non-secret `setting:*` keys known to `settings.cjs`, `prefix`, `command_permissions`, `command_aliases`, `disabled_commands` | yes | yes | |
-| `bot_settings`: the seven secret `setting:*` keys, `auth:*`, `secret:session`, any unknown key | no | yes | |
-| `baileys_auth` (pairing credentials) and `levix.key` (vault key) | no | yes, only together (sealed rows are useless without the key) | |
-| `qr_codes`, `moderation_applied`, `forward_scores` | | | yes (rebuilt or expiring) |
-| The account set: every WhatsApp-derived table (`user_metadata`, `lid_mapping`, `group_directory`, `group_settings`, `warnings`, `todos`, `notes`, `debts`, `ai_history`, `schedules`, `moderation_flags`, `auto_delete_rules`, `auto_delete_log`, the four sticker tables) plus the active memory root (P2-03), `media/schedules/<id>` and the sticker files | yes, restored only under Q-24 | yes | |
-| `ai-persona.md` | yes (it may hold operator text, so the archive is labelled sensitive) | yes | |
-| WAL and SHM files, lock, `panel.sock`, `tmp/`, other `media/`, logs, crash reports, host log, Android preferences and caches | | | yes |
+`BACKUP_FORMAT.md` section 7 is the authoritative list. In short:
 
-Rules from the Codex plan review:
+| Group | Content | When it is applied |
+| --- | --- | --- |
+| Settings | Every `setting:*` key in `settings.cjs` except the six device keys; the seven API keys and the proxy password, sealed again with the target's `levix.key`; the command table (`prefix`, `command_permissions`, `command_aliases`, `disabled_commands`); `ai-persona.md` | At restore, in one transaction |
+| Account | Roles, LID map, group directory and settings, warnings, todos, notes, debts, AI conversations, schedules and their media, moderation flags, auto-delete rules and copies, the sticker tables and files, AI memory | Only when the paired WhatsApp account matches the backup (Q-24) |
+| Never | WhatsApp pairing (`baileys_auth`, `qr_codes`), panel password, panel session key and sessions, recovery email, unknown `bot_settings` keys, device keys (`port`, `bind_address`, `trust_proxy`, `public_domain`, `dashboard_origin`, `ffmpeg_path`), `levix.key`, `moderation_applied`, `forward_scores`, logs, crash reports, temporary files, Android preferences | |
 
-- Tables and files are allowlisted per backup mode and schema version. A table the allowlist does
-  not know makes backup creation fail until it is classified, so a future table cannot leak.
-- Order for the default copy: snapshot to a private temporary file, delete the excluded rows there,
-  `VACUUM INTO` a new file, archive only that file, check it with `PRAGMA integrity_check` and a scan
-  for every planted secret, then delete the temporary files. WAL and SHM files are never archived.
-- Every archive is labelled sensitive, even without credentials: it holds chats, people and notes.
+Rules kept from the Codex plan review:
 
-## 3. Design (detail in `BACKUP_FORMAT.md`, PROPOSED)
+- Tables and `bot_settings` keys are allowlisted. A table the allowlist does not know makes backup
+  creation fail, so a future table cannot leak.
+- The database copy is a `node:sqlite` `backup()` snapshot, then excluded rows are deleted, then
+  `VACUUM INTO` writes a new file without free pages, then `PRAGMA integrity_check` and a scan for
+  every secret value of the source run, and only then the file is archived.
+- Every archive is sensitive: it holds API keys, chats, people and notes. It is always encrypted.
 
-- Archive: a cleartext header (format, version, encryption parameters, schema version, content
-  counts; no secret and no account identity), then a gzip-compressed tar with `manifest.json`
-  first. With secrets, the payload is encrypted with AES-256-GCM in length-framed records under a
-  key from scrypt and a passphrase, with an authenticated final record. Node core only.
-- Account identity lives inside the payload: an archive-specific random salt and an HMAC of the
-  paired LID. A restore compares it after decryption, or against the target's own paired LID.
-- Creating: hold a backup lock that pauses the scheduler, sticker jobs and panel writes for the
-  seconds the snapshot and the file copy take, so files and rows match (P2-08).
-- Restoring: upload, preview, validate, re-enter the panel password, check free space for the
-  staged copy plus the moved entries, stage under `<data>/.restore/<id>/staged/`, write and `fsync`
-  a journal, stop the process. At the next start, before any database import and under the
-  instance lock, recovery runs. The previous process closed the database after a `TRUNCATE`
-  checkpoint, so `levix.db` has no WAL left. Each top-level
-  entry (`levix.db`, the memory root, `ai-persona.md`, `media/schedules`, `stickers`, and `levix.key`
-  for an encrypted backup) moves into `<data>/.restore/<id>/previous/` and its staged replacement
-  moves into place, one same-filesystem rename at a time, each step journalled and the directories
-  `fsync`ed. The journal makes recovery idempotent: a crash, a host restart (Android, systemd,
-  Docker) or a full disk at any step finishes or undoes the switch on the next start. `previous/`
-  stays until the restored install passes a health check (database opens, `integrity_check`, schema
-  supported, the panel starts).
-- Start order (P2-01, ADR-016): open without migrating, take the lock, read `user_version`, refuse a
-  newer schema (P2-13), back up and verify when a migration is pending, then migrate. Keep the last
-  two pre-migration backups under `<data>/backups/`. `reset-password` takes the lock (P2-02).
-- Surfaces: Settings → Backup in the panel; `levix backup` and `levix restore` for headless (Q-14);
-  Android saves and opens through the native streaming path with a `ACTION_CREATE_DOCUMENT` save
-  (P2-11).
+## 3. Design
+
+- Archive (`BACKUP_FORMAT.md`): magic, a cleartext header with only the format and the scrypt
+  parameters, a header HMAC, then an AES-256-GCM chunk stream (64 KiB chunks, counter nonces, final
+  chunk flag, header HMAC as additional data) of one gzip member that holds the manifest and the
+  entry bytes. The password is always required. Node core only (`crypto.scrypt`,
+  `crypto.createCipheriv`, `zlib`), no new dependency.
+- Creating (PR 02d): a short pause of the scheduler, sticker jobs and the panel's sticker and
+  schedule-media writes while the database snapshot is taken and the files are linked or copied
+  into a private staging folder (P2-08); then filtering, hashing, the manifest and the encrypted
+  file, written to `<data>/tmp/backup/` and served once to the signed-in operator. Creating needs
+  the backup password twice and the panel password.
+- Restoring (PR 02e): upload, preview with the backup password, confirm with the panel password,
+  then a job that stages and verifies everything, migrates the staged database copy, applies the
+  settings group in one transaction (API keys sealed with the target's `levix.key`) and moves the
+  account group to `<data>/restore/pending/`. Nothing replaces the live database file or
+  `levix.key`, so the prepared statements and the vault key cache stay valid (P2-09); restored
+  settings take effect the way a settings import does.
+- Account activation (PR 02e, Q-24): at connection open, before roles are seeded and schedules
+  start, Levix compares the paired account with the pending identity (LIDs when both are known,
+  otherwise phone numbers) and, on a match, migrates the pending copy, moves the memory, sticker
+  and schedule-media folders into place and replaces the account tables in one transaction. A
+  restore onto an install already paired with the same account reconnects the session so the same
+  path runs. A different account leaves the data waiting; the panel offers Discard.
+- Crash safety: `<data>/restore/journal.json` is written (temporary file, `fsync`, rename) before
+  each step. The start path runs recovery under the instance lock before the runtime loads, and
+  finishes or undoes an interrupted restore or activation.
+- Start order and migrations (PR 02b, Q-26): the start path takes the instance lock, runs restore
+  recovery, opens the database without migrating, refuses a schema newer than the build (P2-13),
+  writes and verifies a pre-migration copy when a migration is pending, then runs every pending
+  migration in one transaction, so a failure leaves the database at its old version. The copy is a
+  full local file in `<data>/backups/pre-migration/` (mode 0600, folder 0700), checked with
+  `PRAGMA integrity_check` and `user_version`, never exported and never offered for download; the
+  last two are kept. Recovery from a copy is a documented manual step with Levix stopped, because
+  there is no CLI restore (Q-14). `reset-password` never migrates without the lock (P2-02). The
+  stale-lock takeover becomes race-free (P2-12).
+- Memory (PR 02c, Q-25): `memory.cjs` reads and writes `<data>/memory` only. On the first start
+  with an empty `<data>/memory` and files in the legacy `PACKAGE_ROOT/memory`, those files are
+  copied into the data directory once; the legacy folder is left in place and reported in the log.
+- Surfaces (PRs 02f and 02g): Settings → Backup in the React panel with progress and errors; in the
+  Android app the same screen saves through `ACTION_CREATE_DOCUMENT` and opens through
+  `ACTION_OPEN_DOCUMENT`, streaming bytes natively over the panel socket so no file passes through
+  the JavaScript bridge (P2-11), and coordinates with `LevixHostService` (P2-10). No CLI command and
+  no WhatsApp command (Q-14).
 
 ## 4. Pull requests
 
-| PR | Content | Needs |
+| PR | Content | Base |
 | --- | --- | --- |
-| 02a | `BACKUP_FORMAT.md` accepted; the archive reader, writer and limits (`src/backup/`), with fuzz tests for traversal, links, bombs, oversized manifests, KDF limits and wrong passphrases; a read-only "what a backup would hold" preview route | section 5 decisions |
-| 02b | Start order: the CLI start path takes the lock, runs restore recovery, opens the database without migrating, refuses a newer schema, writes and verifies the pre-migration copy, migrates, then loads the runtime; `reset-password` uses the same locked opener; concurrency and failure tests (two starts, stale lock, newer schema, backup failure, full disk, crash at each migration step) | Q-26 |
-| 02c | Create backup (snapshot, filter, vacuum, quiesce, files, manifest, encryption) | 02a |
-| 02d | Restore (staging, journal, switch, rollback, restart, Q-22 and Q-24 rules); end-to-end tests: backup, mutate, restore, verify; corrupt backup rejected with the old install intact; interrupted restore | 02a, 02c |
-| 02e | Panel UI, CLI, Android save and open; privacy, SETUP and manual offline QA steps | 02c, 02d |
+| 02a | Archive format library `src/backup/format.cjs`: writer, reader, limits, errors; tests for round trip, wrong password, tampered header and chunks, truncation, extension, reordering, KDF limits, manifest and path rules, inflation bomb | `main` |
+| 02b | Start order and migration safety: lock first, race-free stale lock, lazy database open, newer-schema refusal, verified pre-migration copy with retention, all pending migrations in one transaction, `reset-password` under the same rules, restore-recovery hook; concurrency and failure tests (two starts, stale lock, newer schema, copy failure, failing migration, crash during migration) | 02a |
+| 02c | Memory root under `<data>/memory` with a one-time legacy copy (Q-25) | 02b |
+| 02d | Create backup: quiesce, snapshot, filter, files, manifest, encrypted file, job progress, one-time download, panel password check; tests for inclusion, exclusion and secret scanning | 02c |
+| 02e | Restore: upload, preview, staging, settings apply, API key re-sealing, pending account data, activation at connection open, discard, journal and recovery; end-to-end tests | 02d |
+| 02f | Panel UI: Settings → Backup (create, download, upload, preview, confirm, progress, errors, pending account notice), both languages | 02e |
+| 02g | Android: Storage Access Framework save and open with native streaming, host coordination; `PRIVACY.md`, `SETUP.md` and the manual offline QA steps | 02f |
 
-02b goes first once Q-26 is decided, because every later migration in v5 depends on it. The
-Codex review showed that the pre-migration copy holds pairing credentials, so its storage policy is
-an owner decision, not an ADR-016 detail.
+The PRs form one stack in this order, so each shows only its own change. 02a, 02b and 02c touch
+separate files and are built in parallel, then stacked.
 
-## 5. Decisions needed from the owner
+## 5. Owner decisions (2026-10-31)
 
-| ID | Question | Recommendation |
-| --- | --- | --- |
-| Q-10 | Android preferences (host state, onboarding, Media Hub, theme) in a backup? | No; Node data only. Media Hub folder grants cannot move between installs anyway. |
-| Q-14 | `levix backup` and `levix restore` on the command line? | Yes; headless and Docker have no panel. Both refuse while Levix runs. |
-| Q-22 | What does restoring a default backup (no secrets) do to the target's secrets? | Keep the target's pairing, keys and password. The account set follows Q-24. (Codex agrees.) |
-| Q-24 (new) | The account set when the target's WhatsApp account differs from the backup's, or is unknown (P2-07)? | Restore the account set only when the identity inside the payload matches the target's paired account; otherwise omit the whole set and list it in the preview. An unpaired target gets settings only; moving an account to a new device uses an encrypted backup with its pairing. (Codex's position; a "hold until the same account pairs" variant is possible but adds a quarantine state.) |
-| Q-25 (new) | Legacy memory root (P2-03)? | Back up the active root; restore into `<data>/memory` and change `memory.cjs` so the data directory wins over `PACKAGE_ROOT/memory`; when both hold files, keep the data directory's and report the other. |
-| Q-26 (new) | The automatic pre-migration copy holds the pairing credentials and sealed secrets. How is it stored? | A full local copy in `<data>/backups/`, mode 0600, never exported, the last two kept, beside the live database it protects (which has the same exposure); restored only by an explicit `levix restore --pre-migration` command. |
+| ID | Decision |
+| --- | --- |
+| Q-10 | Android preferences and other device data stay out of backups. |
+| Q-14 | Backup and restore run from the React panel and the Android app only. No CLI command and no WhatsApp command. |
+| Q-22 | A restore keeps the target's panel password, session key and recovery email, and never imports WhatsApp pairing. API keys come from the backup and are sealed with the target's `levix.key`. A new install goes through the normal setup first. |
+| Q-24 | Account data activates only after the paired WhatsApp account is verified to match the backup's account; until then it waits, and the operator can discard it. |
+| Q-25 | AI memory lives in `<data>/memory`. |
+| Q-26 | Migrations get crash-resistant rollback protection: a verified local pre-migration copy (never exported, last two kept) and all pending migrations in one transaction. |
 
-## 6. Tests and gates (from `TEST_MATRIX.md`, extended)
+The owner also decided that every exported backup is encrypted with a user-provided password
+(AES-256-GCM with a secure KDF) and holds the AI and third-party API keys. This replaces the
+"default backup without secrets" of the earlier plan.
 
-- End to end: backup, mutate, restore, verify (schedules, group settings, memory, persona,
-  stickers, settings); corrupt or truncated backup rejected with the old install byte-identical.
-- Interrupted restore at every journal step; restart during restore; full disk during backup and
-  during restore.
-- Archive fuzz: `..`, absolute paths, links, duplicate names, oversized manifest, entry-count and
-  ratio bombs, KDF parameters above the cap, wrong passphrase, tampered chunk, truncated stream.
-- Newer schema refused; v4.9.x fixture database restored and migrated.
-- No secret in a default backup: a test greps the archive bytes and the database for every secret
-  key and value it planted.
+## 6. Tests and gates
+
+- End to end: backup, mutate, restore, verify (settings, command table, API keys usable after
+  re-sealing, schedules, group settings, memory, persona, stickers); a corrupt or truncated backup
+  is rejected and the install stays byte-identical.
+- Account activation: same account (LID), recycled phone number (same phone, new LID) refused,
+  different account refused, unlink keeps pending data, discard, activation before roles and
+  schedules load.
+- Interrupted restore and activation at every journal step; full disk during backup and restore.
+- Archive fuzz: tampered header and chunk, truncation, extension, reordering, KDF parameters
+  above the cap, wrong password, oversized manifest, bad paths, duplicate paths, inflation bomb.
+- Newer schema refused; a v4.9.x fixture database restored and migrated.
+- No pairing credential, panel secret, session key, recovery email or device key in a backup: a test
+  decrypts the archive and scans the database copy and every entry for each planted value.
 - `settings-transfer` tests unchanged.
-- Core gates plus Docker, SEA and tarball in CI. Android device smoke for save, open and restart:
-  NOT RUN until a device and a dedicated test account are available.
+- Core gates plus Docker, SEA and tarball in CI. Android save, open and restore on a device: NOT
+  RUN until a device and a dedicated test account are available.

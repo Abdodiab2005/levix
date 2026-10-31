@@ -41,7 +41,7 @@ output.
 | Phase | Required gates | Phase-specific tests |
 | --- | --- | --- |
 | 01 | all of section 1, both ABI release builds, size report | staged tree contains no dev dependency; `libnode.so` major is 24; 16 KB alignment; FFmpeg `libwebp` encoders; TLS roots; boot smoke on device |
-| 02 | section 1 core gates | backup and restore end to end; corrupt and interrupted restore; path traversal, symlink, bomb and KDF fuzz; wrong passphrase; newer schema refused; settings export unchanged; no migration before the instance lock and a verified backup: two processes at once, crash during backup, crash during migration, full disk |
+| 02 | section 1 core gates | backup and restore end to end; corrupt and interrupted restore; tampering, path, bomb and KDF fuzz; wrong password; account mismatch never activates; newer schema refused; settings export unchanged; no migration before the instance lock and a verified backup: two processes at once, crash during backup, crash during migration, full disk |
 | 03 | core gates, Android unit tests | locale matrix for help and replies; catalog validator; placeholder parity; RTL and LTR smoke; Android locale switch without network |
 | 04 | core gates, Docker, SEA, Android unit tests | auth negative paths; consent on every start path; offline first start; tampered Terms; old WebView |
 | 05 | core gates | parser matrix; permission matrix for 69 commands; routing privacy; status editing; health without network |
