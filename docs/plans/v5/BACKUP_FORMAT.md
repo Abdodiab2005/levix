@@ -159,10 +159,14 @@ install's `levix.key`, so the source key never leaves its device.
 Tables are an allowlist. Backup creation fails on a table that this list does not classify, so a
 table added later cannot leak until someone classifies it.
 
-The database copy is made in this order: an online snapshot with `node:sqlite` `backup()` into a
-private temporary file, deletion of every row and table that the backup excludes, `VACUUM INTO` a
+The database copy is made in this order: a `VACUUM INTO` snapshot of the live database into a
+private temporary file, taken in the same synchronous step that hard-links or copies the files, so
+rows and files match; deletion of every row and table that the backup excludes, `VACUUM INTO` a
 second file so no deleted page survives, `PRAGMA integrity_check`, a scan of that file for every
-secret value the source holds, and only then the archive. The temporary files are deleted.
+value that must never travel (the sealed secret-setting rows, the panel password hash, the recovery
+email record, the session key and the pairing credentials), and only then the archive. Plain API
+key values are not scanned for: they travel in `secrets.json` by design. The temporary files are
+deleted.
 
 ## 8. Restore
 

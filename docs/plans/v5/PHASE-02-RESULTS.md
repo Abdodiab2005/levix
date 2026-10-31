@@ -40,9 +40,10 @@ Rules kept from the Codex plan review:
 
 - Tables and `bot_settings` keys are allowlisted. A table the allowlist does not know makes backup
   creation fail, so a future table cannot leak.
-- The database copy is a `node:sqlite` `backup()` snapshot, then excluded rows are deleted, then
+- The database copy is a `VACUUM INTO` snapshot taken in the same synchronous step as the file
+  links, then excluded rows are deleted, then
   `VACUUM INTO` writes a new file without free pages, then `PRAGMA integrity_check` and a scan for
-  every secret value of the source run, and only then the file is archived.
+  every value that must never travel run, and only then the file is archived.
 - Every archive is sensitive: it holds API keys, chats, people and notes. It is always encrypted.
 
 ## 3. Design
