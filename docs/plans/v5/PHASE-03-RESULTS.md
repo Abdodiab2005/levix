@@ -1,8 +1,9 @@
 # Levix v5.0.0 Phase 03: unified i18n
 
-Status: PLAN, PENDING REVIEW. The owner started Phase 03 on 2026-11-01 and decided Q-15 and Q-19
-(section 2). No code has changed yet. Every claim below cites code at `main` b6e777e or a command
-run on 2026-11-01.
+Status: IMPLEMENTED IN OPEN PULL REQUESTS, PENDING REVIEW. The owner started Phase 03 on 2026-11-01
+and decided Q-15 and Q-19 (section 2). Every pull request in section 10 is open; nothing is merged.
+Sections 1 to 9 are the plan; section 10 records what was built and measured. Every claim cites
+code at `main` b6e777e or a command run on 2026-11-01 or 2026-11-02.
 
 ## 1. Re-audit (2026-11-01)
 
@@ -266,3 +267,70 @@ changes from "Arabic or English" to the four languages.
 React login, setup and QR screens (Phase 04); Plus custom message editing (Phase 08); store listings
 and release notes in four languages (Phase 10); `public/dashboard.js` (removed in Phase 04);
 translating on every send.
+
+## 10. Results (2026-11-02)
+
+### 10.1 Pull requests
+
+All open. CI is the 7-job workflow (tests, package install, three SEA runs, Docker volume, Android
+APK builds); every Levix PR below passed it on its last push unless the row says otherwise.
+
+| PR | Slice | Base | Implemented by | Local evidence |
+| --- | --- | --- | --- | --- |
+| #103 | plan (this file) | `main` | orchestrator | docs only |
+| levix-ui #22 | relay accepts `pt-BR`, `es-419` mail and diagnostics | levix-ui `main` | Antigravity (Gemini) | `node --test` 68 PASS, eslint and `tsc --noEmit` PASS |
+| #104 | 03a catalog, generator, validator | `main` | Grok | generated values identical to `main` (1116 dashboard, 89 gateway, 255 Android per locale); `npm test` 6618 PASS |
+| #105 | 03b `t()`, four bot languages, `ai_reply_language`, `!lang` | #104 | Codex | `npm test` 6681 PASS |
+| #106 | 03d Android locales, picker, `localeConfig`, split off, locale filters | #104 | OpenCode | `npm test` 6655 PASS; Gradle unit tests (74) and `assembleDebug` PASS; debug APK -524,276 bytes (arm64) |
+| #107 | 03e command docs and `!help` from the catalog | #105 | Codex | 138 of 138 extracted strings equal the modules; `npm test` 7260 PASS |
+| #113 | 03c dashboard and gateway, four UI languages | #105 | Grok | `npm test` 6753 PASS; frontend build PASS; headless browser smoke in four locales PASS |
+| #116 | 03f1 AI replies (99 calls) | #105 | Antigravity (Claude Sonnet), Grok | `npm test` 6681 PASS |
+| #110 | 03f2 moderation replies (158 calls) | #105 | Codex | `npm test` 6681 PASS |
+| #111 | 03f3 group replies (all calls) | #105 | Antigravity (Claude Sonnet) | `npm test` 6681 PASS |
+| #108 | 03f4 sticker replies (47 calls) | #105 | OpenCode | `npm test` 6681 PASS |
+| #114 | 03f5 tool command replies | #105 | OpenCode, Grok | `npm test` 6681 PASS |
+| #109 | 03f6 core and system replies | #105 | Antigravity (Claude Sonnet) | `npm test` 6681 PASS |
+| #112 | 03f7 schedule replies | #105 | Antigravity (Claude Sonnet) | `npm test` 6681 PASS |
+| #117 | 03g1 pt-BR, es-419 dashboard and gateway text (draft) | #113 | Antigravity (Gemini), Grok | `i18n:check` PASS; `npm test` 6751 PASS |
+| #118 | 03g2 pt-BR, es-419 Android text (draft) | #106 | Antigravity (Gemini), Grok | `npm test` 6655 PASS; Gradle PASS; strings present in the APK for both locales |
+| #120 | 03g3 pt-BR, es-419 bot replies and command docs (draft); both locales required | `integration/phase-03` | Grok | full Phase 03 tree: `npm test` 7399 PASS, `i18n:check` PASS |
+| #115 | 03h recovery mail language (draft) | #113 | Codex | `npm test` 6787 PASS; merge only after levix-ui #22 is deployed |
+| #119 | 03i `docs/TRANSLATING.md`, `AGENTS.md` | #105 | Grok | docs only |
+
+`integration/phase-03` merges every PR above (before #120) with the generated files rebuilt. It
+exists so CI and reviewers can test the whole phase; it is not for merge. Local result on it:
+`npm test` 7400 PASS, frontend build PASS.
+
+### 10.2 Merge order and expected conflicts
+
+1. #103, then #104, then #105 and #106.
+2. #113, #107, the 03f PRs (#108 to #112, #114, #116) and #119, in any order after #105. Two
+   import lines conflict when the second of a pair lands: `src/commands/group.cjs` (#107 with
+   #111) and `src/handlers/command.handler.js` (#107 with #109); the resolution keeps both imports
+   (`attachCommandDocs` and `t`). `src/i18n/catalog.generated.cjs` and `translations.ts` conflict
+   on almost every pair; the resolution is `npm run i18n:build`.
+3. #117 after #113, #118 after #106, then #120 retargeted to `main`.
+4. #115 only after levix-ui #22 is merged and deployed.
+5. ChatGPT review (Q-19) before #117, #118 and #120 merge; each review updates `i18n/review.json`.
+
+### 10.3 Numbers
+
+- `tr(` lines outside `src/utils/i18n.cjs`: 575 in 86 files on `main`; 36 in 24 files on the full
+  tree. The rest are date or API
+  locale codes, pairs whose English and Arabic pass different arguments, or help texts written
+  before the markup exemption. They answer in English for `pt-BR` and `es-419`.
+- Catalog per locale on the full tree: dashboard 1196, gateway 89, Android 260, commands 138, bot
+  624 keys. All four locales are complete and required.
+
+### 10.4 Not done or not run
+
+- ChatGPT review of every `pt-BR` and `es-419` file: NOT RUN (owner, Q-19). Native review: NOT
+  RUN.
+- Relay deploy for levix-ui #22: NOT RUN (owner).
+- Android device QA (picker, offline switch, notification language on API 29 to 32 and 33+):
+  NOT RUN. Release APK, AAB and Play download sizes: NOT RUN.
+- Recurrence text (`src/utils/recurrence.cjs`) and the dashboard schedule `when` / `whenAr`
+  fields stay Arabic and English; Portuguese and Spanish show English.
+- The 36 remaining `tr(` lines (section 10.3).
+- `validate:sea`, `validate:tarball`, `validate:docker` locally: NOT RUN; CI runs them on each PR.
+
