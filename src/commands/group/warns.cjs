@@ -1,7 +1,7 @@
 // file: /commands/warns.js
 const { getUserWarnings } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t, tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "warns",
@@ -23,10 +23,7 @@ module.exports = {
 
       if (!mentionedJid) {
         return await sock.sendMessage(groupId, {
-          text: tr(
-            "Mention the member whose warnings you want to see.",
-            "يجب عمل منشن للعضو الذي تريد عرض تحذيراته.",
-          ),
+          text: t("bot.moderation.warns.mentionTheMemberWhoseWarnings"),
         });
       }
 
@@ -35,19 +32,13 @@ module.exports = {
 
       if (userWarnings.length === 0) {
         return await sock.sendMessage(groupId, {
-          text: tr(
-            `✅ @${mentionedJid.split("@")[0]} has no warnings.`,
-            `✅ لا توجد أي تحذيرات للعضو @${mentionedJid.split("@")[0]}.`,
-          ),
+          text: t("bot.moderation.warns.hasNoWarnings", { member: mentionedJid.split("@")[0] }),
           mentions: [mentionedJid],
         });
       }
 
       const who = mentionedJid.split("@")[0];
-      let reply = tr(
-        `*Warnings for @${who}:*\n*Total: ${userWarnings.length}*\n\n`,
-        `*سجل تحذيرات @${who}:*\n*إجمالي التحذيرات: ${userWarnings.length}*\n\n`,
-      );
+      let reply = t("bot.moderation.warns.warningsForTotal", { member: who, count: userWarnings.length });
 
       const mentionedAdmins = [];
       userWarnings.forEach((warning, index) => {
@@ -57,16 +48,12 @@ module.exports = {
           timeZone: "Africa/Cairo",
         });
 
-        reply += tr(
-          `*${index + 1}. Warning:*\n` +
-            `*Reason:* ${warning.reason}\n` +
-            `*By:* @${adminJid.split("@")[0]}\n` +
-            `*Date:* ${warningDate}\n\n`,
-          `*${index + 1}. التحذير:*\n` +
-            `*السبب:* ${warning.reason}\n` +
-            `*بواسطة المشرف:* @${adminJid.split("@")[0]}\n` +
-            `*التاريخ:* ${warningDate}\n\n`,
-        );
+        reply += t("bot.moderation.warns.warningReasonByDate", {
+          number: index + 1,
+          reason: warning.reason,
+          admin: adminJid.split("@")[0],
+          warningDate,
+        });
       });
 
       const mentions = [mentionedJid, ...mentionedAdmins];
@@ -78,7 +65,7 @@ module.exports = {
     } catch (error) {
       logger.error({ err: error }, "Error in !warns command");
       await sock.sendMessage(msg.key.remoteJid, {
-        text: tr("Something went wrong while listing the warnings.", "حدث خطأ أثناء عرض التحذيرات."),
+        text: t("bot.moderation.warns.somethingWentWrongWhileListing"),
       });
     }
   },

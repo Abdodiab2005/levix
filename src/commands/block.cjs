@@ -2,7 +2,7 @@
 const logger = require("../utils/logger.cjs");
 const { isOwnerJidSync } = require("../utils/permissions.cjs");
 const normalizeJid = require("../utils/normalizeJid.esm.js").default;
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "block",
@@ -40,10 +40,7 @@ module.exports = {
         targetJid = `${numberArg.replace(/\D/g, "")}@s.whatsapp.net`;
       } else {
         return await sock.sendMessage(remoteJid, {
-          text: tr(
-            "Use this in a private chat with no arguments, or mention / reply to / type the number of the user.",
-            "لكي يعمل هذا الأمر، استخدمه في شات خاص بدون وسائط، أو قم بعمل منشن/رد/كتابة رقم المستخدم.",
-          ),
+          text: t("bot.moderation.block.useThisInAPrivate"),
         });
       }
     }
@@ -53,7 +50,7 @@ module.exports = {
     // Safety Check
     if (isOwnerJidSync(normalizedTargetJid)) {
       return await sock.sendMessage(remoteJid, {
-        text: tr("You can't block the bot owner.", "لا يمكنك حظر مالك البوت."),
+        text: t("bot.moderation.block.youCanTBlockThe"),
       });
     }
 
@@ -71,10 +68,7 @@ module.exports = {
     } catch (error) {
       logger.error({ err: error, command: "block" }, "Error in !block command");
       await sock.sendMessage(remoteJid, {
-        text: tr(
-          "Something went wrong while blocking the user.",
-          "حدث خطأ أثناء محاولة حظر المستخدم.",
-        ),
+        text: t("bot.moderation.block.somethingWentWrongWhileBlocking"),
       });
     }
   },

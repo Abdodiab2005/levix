@@ -1,7 +1,7 @@
 // file: /commands/clearwarns.js
 const logger = require("../../utils/logger.cjs");
 const { clearMemberModeration, targetFromCommand } = require("../../utils/moderationAction.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "clearwarns",
@@ -24,19 +24,13 @@ module.exports = {
 
       if (!mentionedJid) {
         return await sock.sendMessage(groupId, {
-          text: tr(
-            "Mention the member whose warnings you want to clear.",
-            "يجب عمل منشن للعضو الذي تريد مسح تحذيراته.",
-          ),
+          text: t("bot.moderation.clearwarns.mentionTheMemberWhoseWarnings"),
         });
       }
 
       clearMemberModeration(groupId, mentionedJid);
 
-      const replyText = tr(
-        `✅ Cleared every warning for @${mentionedJid.split("@")[0]}.`,
-        `✅ تم مسح جميع تحذيرات العضو @${mentionedJid.split("@")[0]} بنجاح.`,
-      );
+      const replyText = t("bot.moderation.clearwarns.clearedEveryWarningFor", { member: mentionedJid.split("@")[0] });
       await sock.sendMessage(groupId, {
         text: replyText,
         mentions: [mentionedJid],
@@ -44,7 +38,7 @@ module.exports = {
     } catch (error) {
       logger.error({ err: error }, "Error in !clearwarns command");
       await sock.sendMessage(msg.key.remoteJid, {
-        text: tr("Something went wrong while clearing the warnings.", "حدث خطأ أثناء مسح التحذيرات."),
+        text: t("bot.moderation.clearwarns.somethingWentWrongWhileClearing"),
       });
     }
   },
