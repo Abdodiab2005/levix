@@ -51,6 +51,12 @@ equal("abi survives", built.abi, "arm64-v8a");
 equal("webview survives", built.webview, "131.0.6778.135");
 equal("screen survives", built.screen, "412x915@2.63");
 equal("language survives", built.language, "ar");
+equal(
+  "Portuguese language keeps canonical case",
+  buildDiagnostics({ language: "pt-BR" }).language,
+  "pt-BR",
+);
+equal("Spanish language survives", buildDiagnostics({ language: "es-419" }).language, "es-419");
 equal("theme survives", built.theme, "dark");
 equal("connectivity survives", built.connectivity, "wifi");
 equal("memory survives", built.memory, "ok");

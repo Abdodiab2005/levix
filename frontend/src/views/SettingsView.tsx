@@ -98,12 +98,6 @@ function toBase64(text: string): string {
 type RecoveryPhase = "email" | "code";
 type TranslationKey = keyof (typeof translations)["en"];
 
-/** The recovery relay accepts only ar and en. Every other panel language sends English. */
-function recoveryMailLanguage(lang: Language): "ar" | "en" {
-  if (lang === "ar") return "ar";
-  return "en";
-}
-
 /** Stable relay/route codes become sentences. `backToEmail` means the code is dead. */
 function recoveryMessage(
   t: (key: TranslationKey, fallback?: string) => string,
@@ -221,7 +215,7 @@ function RecoveryEmailCard() {
     if (phase === "email") {
       setEmailError(null);
       try {
-        await api.startRecoveryEmail(draft.trim(), current, recoveryMailLanguage(language));
+        await api.startRecoveryEmail(draft.trim(), current, language);
         setPhase("code");
         setCurrent("");
         setCode("");
