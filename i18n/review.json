@@ -78,10 +78,10 @@
     "sha256": "61a4827110cf609c03235c897698eea820e66de0f9a75704ee8571b88f3289aa"
   },
   "pt-BR/bot/schedules": {
-    "status": "reviewed",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
+    "status": "draft",
+    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review",
     "date": "2026-11-02",
-    "sha256": "00affdd7d1992c8b8ad2a4128231ff3dd82c34d402b72ce74521338cfb3022e3"
+    "sha256": "11971a32fcdf514fbeb8602d56afa0ed519514b1e526263837bd9f4392d13817"
   },
   "pt-BR/bot/stickers": {
     "status": "draft",
@@ -138,10 +138,10 @@
     "sha256": "0fd78b565ea630148f368a4b755943e5fed983f4345aac90717892abbd4d8943"
   },
   "es-419/bot/schedules": {
-    "status": "reviewed",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
+    "status": "draft",
+    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review",
     "date": "2026-11-02",
-    "sha256": "3b5c4ca77c0d1829c27ce397a3df27f86856c7723cc13c2d35f9d99d364d387a"
+    "sha256": "9ed9a4e1c7c7469a788efd5402992bbd43166f68f7814a82b3e5c0f2146c23ee"
   },
   "es-419/bot/stickers": {
     "status": "draft",

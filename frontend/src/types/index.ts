@@ -109,6 +109,7 @@ export interface ScheduleItem {
   scheduledTime?: number;
   when: string;
   whenAr?: string;
+  whenByLocale?: Partial<Record<Language, string>>;
   status: "active" | "paused" | "completed";
   createdAt?: number;
   lastRunAt?: number;

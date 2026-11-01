@@ -22,5 +22,32 @@
   "deleteschedule.missingId": "يرجى تحديد ID المهمة التي تريد حذفها. يمكنك الحصول على الـ ID باستخدام أمر `!listschedules`.",
   "deleteschedule.notFound": "⚠️ لم يتم العثور على مهمة بهذا الـ ID: `{id}`",
   "deleteschedule.deleted": "✅ تم حذف المهمة المجدولة بالـ ID: `{id}` بنجاح.",
-  "scheduler.header": "*رسالة مجدولة 🗓️*"
+  "scheduler.header": "*رسالة مجدولة 🗓️*",
+  "recurrence.weekday0": "الأحد",
+  "recurrence.weekday1": "الاثنين",
+  "recurrence.weekday2": "الثلاثاء",
+  "recurrence.weekday3": "الأربعاء",
+  "recurrence.weekday4": "الخميس",
+  "recurrence.weekday5": "الجمعة",
+  "recurrence.weekday6": "السبت",
+  "recurrence.weekdaySep": " و",
+  "recurrence.weekdayAnd": " و",
+  "recurrence.daily": "يومياً الساعة {time}",
+  "recurrence.weekly": "كل يوم {days} الساعة {time}",
+  "recurrence.monthly": "كل شهر في اليوم {day} الساعة {time}",
+  "recurrence.hourly": {
+    "zero": "كل {n} ساعة عند الدقيقة {minute}",
+    "one": "كل ساعة عند الدقيقة {minute}{n}",
+    "two": "كل ساعتين عند الدقيقة {minute}{n}",
+    "few": "كل {n} ساعات عند الدقيقة {minute}",
+    "many": "كل {n} ساعة عند الدقيقة {minute}",
+    "other": "كل {n} ساعة عند الدقيقة {minute}"
+  },
+  "recurrence.unknown": "تكرار غير معروف",
+  "recurrence.invalidDate": "تاريخ غير صالح",
+  "recurrence.errorTime": "وقت غير صالح",
+  "recurrence.errorWeekdays": "اختر يوماً واحداً على الأقل",
+  "recurrence.errorDayOfMonth": "يوم الشهر يجب أن يكون من 1 إلى 31",
+  "recurrence.errorEveryHours": "الساعات يجب أن تكون 1 أو 2 أو 3 أو 4 أو 6 أو 8 أو 12",
+  "recurrence.errorInvalid": "تكرار غير صالح"
 }

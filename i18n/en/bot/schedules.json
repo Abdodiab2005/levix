@@ -22,5 +22,28 @@
   "deleteschedule.missingId": "Give the ID of the scheduled message to delete. `!listschedules` shows the IDs.",
   "deleteschedule.notFound": "⚠️ No scheduled message has the ID `{id}`",
   "deleteschedule.deleted": "✅ Deleted the scheduled message `{id}`.",
-  "scheduler.header": "*Scheduled message 🗓️*"
+  "scheduler.header": "*Scheduled message 🗓️*",
+  "recurrence.weekday0": "Sunday",
+  "recurrence.weekday1": "Monday",
+  "recurrence.weekday2": "Tuesday",
+  "recurrence.weekday3": "Wednesday",
+  "recurrence.weekday4": "Thursday",
+  "recurrence.weekday5": "Friday",
+  "recurrence.weekday6": "Saturday",
+  "recurrence.weekdaySep": ", ",
+  "recurrence.weekdayAnd": " and ",
+  "recurrence.daily": "Daily at {time}",
+  "recurrence.weekly": "Every {days} at {time}",
+  "recurrence.monthly": "Every month on day {day} at {time}",
+  "recurrence.hourly": {
+    "one": "Every hour at minute {minute}{n}",
+    "other": "Every {n} hours at minute {minute}"
+  },
+  "recurrence.unknown": "Unknown recurrence",
+  "recurrence.invalidDate": "Invalid date",
+  "recurrence.errorTime": "Invalid time",
+  "recurrence.errorWeekdays": "Select at least one weekday",
+  "recurrence.errorDayOfMonth": "Day of month must be between 1 and 31",
+  "recurrence.errorEveryHours": "Hours must be 1, 2, 3, 4, 6, 8 or 12",
+  "recurrence.errorInvalid": "Invalid recurrence"
 }
