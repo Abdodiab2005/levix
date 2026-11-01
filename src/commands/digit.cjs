@@ -8,34 +8,14 @@ const {
   isExplicitEn,
   oppositeNumeralLang,
 } = require("../utils/numerals.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 function mixedDigitsNotice(prefix) {
-  return tr(
-    `⚠️ The digits are mixed (Arabic and English). Say which way:\n\`${prefix}digit ar ...\` or \`${prefix}digit en ...\`.`,
-    `⚠️ الأرقام مختلطة (عربي وإنجليزي). حدد الاتجاه:\n\`${prefix}digit ar ...\` أو \`${prefix}digit en ...\`.`,
-  );
+  return t("bot.tools.digit.mixed", { prefix });
 }
 
 function helpText(prefix) {
-  return tr(
-    `🔢 *Digit converter*
-
-• \`${prefix}digit 12345\` ➔ ١٢٣٤٥  (auto-detected)
-• \`${prefix}digit ١٢٣٤٥\` ➔ 12345
-• \`${prefix}digit ar 12345\` ➔ ١٢٣٤٥
-• \`${prefix}digit en ١٢٣٤٥\` ➔ 12345
-_Or reply to a message with digits in it using \`${prefix}digit\` — it converts the other way._
-_When Arabic and English digits are mixed, say which way: \`${prefix}digit ar\` or \`${prefix}digit en\`._`,
-    `🔢 *تحويل الأرقام*
-
-• \`${prefix}digit 12345\` ➔ ١٢٣٤٥  (يُكتشف تلقائياً)
-• \`${prefix}digit ١٢٣٤٥\` ➔ 12345
-• \`${prefix}digit ar 12345\` ➔ ١٢٣٤٥
-• \`${prefix}digit en ١٢٣٤٥\` ➔ 12345
-_أو رد على رسالة فيها أرقام بـ \`${prefix}digit\` — يحوّل للاتجاه المعاكس._
-_إذا اختلطت الأرقام العربية والإنجليزية يجب تحديد الاتجاه: \`${prefix}digit ar\` أو \`${prefix}digit en\`._`,
-  );
+  return t("bot.tools.digit.help", { prefix });
 }
 
 module.exports = {
@@ -82,10 +62,7 @@ module.exports = {
       await sock.sendMessage(
         chatId,
         {
-          text: tr(
-            `❌ Type a number after the command, or reply to a message.\nExample: \`${prefix}digit 12345\` or \`${prefix}digit ar 12345\``,
-            `❌ اكتب رقماً بعد الأمر، أو رد على رسالة.\nمثال: \`${prefix}digit 12345\` أو \`${prefix}digit ar 12345\``,
-          ),
+          text: t("bot.tools.digit.noText", { prefix }),
         },
         { quoted: msg },
       );
@@ -107,10 +84,7 @@ module.exports = {
       await sock.sendMessage(
         chatId,
         {
-          text: tr(
-            `❌ No digits to convert.\nUse:\n• \`${prefix}digit 12345\`\n• \`${prefix}digit ar\` / \`${prefix}digit en\` with text, or as a reply to a message.`,
-            `❌ لا توجد أرقام للتحويل.\nاستخدم:\n• \`${prefix}digit 12345\`\n• \`${prefix}digit ar\` / \`${prefix}digit en\` مع النص أو بالرد على رسالة.`,
-          ),
+          text: t("bot.tools.digit.noDigits", { prefix }),
         },
         { quoted: msg },
       );

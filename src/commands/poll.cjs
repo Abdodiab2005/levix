@@ -7,7 +7,7 @@
 // and WhatsApp counts the results.
 
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t, tr } = require("../utils/i18n.cjs");
 
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 12; // WhatsApp's own ceiling
@@ -50,18 +50,13 @@ function buildPollContent(question, options, { multi = false } = {}) {
   const name = String(question || "").trim().slice(0, MAX_QUESTION_CHARS);
   const values = [...new Set((options || []).map((o) => String(o || "").trim().slice(0, MAX_OPTION_CHARS)).filter(Boolean))];
 
-  if (!name) throw new Error(tr("A question is required.", "السؤال مطلوب."));
+  if (!name) throw new Error(t("bot.tools.poll.missingQuestion"));
   if (values.length < MIN_OPTIONS) {
-    throw new Error(
-      tr("At least two different options are needed.", "محتاج خيارين مختلفين على الأقل."),
-    );
+    throw new Error(t("bot.tools.poll.needOptions"));
   }
   if (values.length > MAX_OPTIONS) {
     throw new Error(
-      tr(
-        `${MAX_OPTIONS} options at most (got ${values.length}).`,
-        `الحد الأقصى ${MAX_OPTIONS} خيار (اتعطى ${values.length}).`,
-      ),
+      t("bot.tools.poll.tooManyOptions", { count: MAX_OPTIONS, got: values.length }),
     );
   }
 

@@ -11,7 +11,7 @@
 // Used for settling arguments in the group. No dependencies, no state.
 
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t, tr } = require("../utils/i18n.cjs");
 
 const MAX_DICE = 20;
 const MAX_SIDES = 1000;
@@ -97,7 +97,7 @@ module.exports = {
 
     if (["coin", "flip", "عملة", "معملة"].includes(mode)) {
       const heads = Math.random() < 0.5;
-      return reply(`🪙 *${heads ? tr("Heads 👑", "ملك 👑") : tr("Tails ✍️", "كتابة ✍️")}*`);
+      return reply(`🪙 *${heads ? t("bot.tools.rand.heads") : t("bot.tools.rand.tails")}*`);
     }
 
     if (["dice", "die", "نرد", "زهر"].includes(mode)) {
@@ -116,28 +116,15 @@ module.exports = {
         .filter(Boolean);
 
       if (choices.length < 2) {
-        return reply(
-          tr(
-            "❌ Give me at least two options separated by `|`.\nExample: `!rand pick tea | coffee`",
-            "❌ اديني خيارين على الأقل مفصولين بـ `|`.\nمثال: `!rand pick شاي | قهوة`",
-          ),
-        );
+        return reply(t("bot.tools.rand.pickTooFew"));
       }
       if (choices.length > MAX_CHOICES) {
-        return reply(
-          tr(
-            `❌ Too many options (the limit is ${MAX_CHOICES}).`,
-            `❌ الخيارات كثيرة جدًا (الحد ${MAX_CHOICES}).`,
-          ),
-        );
+        return reply(t("bot.tools.rand.pickTooMany", { limit: MAX_CHOICES }));
       }
 
       const winner = choices[randomInt(0, choices.length - 1)];
       return reply(
-        tr(
-          `🎯 I picked: *${winner}*\n_(out of ${choices.length} options)_`,
-          `🎯 اخترت: *${winner}*\n_(من ${choices.length} خيارات)_`,
-        ),
+        t("bot.tools.rand.picked", { winner, count: choices.length }),
       );
     }
 
@@ -159,11 +146,7 @@ module.exports = {
 
     if (min === max) return reply(`🎲 *${min}*`);
 
-    return reply(
-      tr(
-        `🎲 *${randomInt(min, max)}*\n_(between ${min} and ${max})_`,
-        `🎲 *${randomInt(min, max)}*\n_(بين ${min} و ${max})_`,
-      ),
-    );
+    const value = randomInt(min, max);
+    return reply(t("bot.tools.rand.rolled", { value, min, max }));
   },
 };
