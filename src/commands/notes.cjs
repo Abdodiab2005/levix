@@ -1,6 +1,6 @@
 // file: /commands/notes.js
 const { getAllNotes } = require("../utils/storage.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "notes",
@@ -22,16 +22,13 @@ module.exports = {
 
     if (keywords.length === 0) {
       return await sock.sendMessage(groupId, {
-        text: tr("This group has no saved notes.", "لا توجد ملاحظات محفوظة في هذه المجموعة."),
+        text: t("bot.core.notes.empty"),
       });
     }
 
-    let reply = tr("*🔑 Saved note keywords:*\n\n", "*🔑 الكلمات المفتاحية للملاحظات المحفوظة:*\n\n");
+    let reply = t("bot.core.notes.heading");
     reply += keywords.map((kw) => `\`#${kw}\``).join("\n");
-    reply += tr(
-      "\n\nTo get a note, use: `!note #keyword`",
-      "\n\nللحصول على ملاحظة، استخدم: `!note #keyword`",
-    );
+    reply += t("bot.core.notes.footer");
 
     await sock.sendMessage(groupId, { text: reply });
   },

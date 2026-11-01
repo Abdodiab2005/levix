@@ -8,7 +8,7 @@
 // the panel out.
 const { getSession } = require("../core/session-holder.cjs");
 const logger = require("../utils/logger.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "restart",
@@ -27,16 +27,13 @@ module.exports = {
     const session = getSession();
     if (!session) {
       return await sock.sendMessage(chatId, {
-        text: tr("The session manager isn't ready yet.", "مدير الجلسة غير جاهز بعد."),
+        text: t("bot.core.restart.notReady"),
       });
     }
 
     // Goes out while the current socket is still alive.
     await sock.sendMessage(chatId, {
-      text: tr(
-        "🔄 Reconnecting WhatsApp... back in a moment.",
-        "🔄 جارٍ إعادة تشغيل اتصال واتساب... سأعود خلال لحظات.",
-      ),
+      text: t("bot.core.restart.reconnecting"),
     });
 
     let state = null;
@@ -49,7 +46,7 @@ module.exports = {
 
     if (state?.connected) {
       await sock.sendMessage(chatId, {
-        text: tr("✅ WhatsApp is back online.", "✅ اتصال واتساب رجع يشتغل."),
+        text: t("bot.core.restart.backOnline"),
       });
     } else {
       // Not connected (a QR wait, a retry, a failure) — say where things
@@ -57,10 +54,9 @@ module.exports = {
       // so this send is best-effort.
       await sock
         .sendMessage(chatId, {
-          text: tr(
-            `Connection state now: ${state?.status || "unknown"}. Check the panel's Connection screen.`,
-            `حالة الاتصال الحالية: ${state?.status || "غير معروفة"}. راجع صفحة الاتصال في لوحة التحكم.`,
-          ),
+          text: t("bot.core.restart.stateNow", {
+            status: state?.status || t("bot.core.restart.unknownState"),
+          }),
         })
         .catch(() => {});
     }

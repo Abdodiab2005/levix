@@ -1,5 +1,5 @@
 const runtimeConfig = require("../config/runtime-config.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 const { quotedOf, visibleText } = require("../utils/messageContent.cjs");
 const { formatMarkdownForWhatsApp } = require("../utils/markdownParser.cjs");
 
@@ -33,10 +33,7 @@ module.exports = {
       {
         text: text.trim()
           ? formatMarkdownForWhatsApp(text)
-          : tr(
-              `Reply to a Markdown message with \`${prefix}md\`, or paste it after the command.\n\nExample: \`${prefix}md **Bold** and __italic__\`\nTables become labeled bullet lists; code stays unchanged.`,
-              `رد على رسالة ماركداون باستخدام \`${prefix}md\`، أو الصق النص بعد الأمر.\n\nمثال: \`${prefix}md **عريض** و __مائل__\`\nتُعرض الجداول كقوائم نقطية منظمة، ويُحفظ محتوى الكود كما هو.`,
-            ),
+          : t("bot.core.md.usage", { prefix }),
       },
       { quoted: msg },
     );
