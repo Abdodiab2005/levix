@@ -117,14 +117,15 @@ class MainActivity : AppCompatActivity(), CoachMarkOverlay.Host {
 
         // Bind views
 
-        // Language and appearance live in the header and nowhere else, as icons
-        // only: the strip has no room for a label beside the brand, and each one
-        // flips on tap rather than asking a question with two answers.
+        // Language and appearance live in the header and nowhere else, as
+        // icons only: the strip has no room for a label beside the brand.
+        // The theme icon flips on tap; the language icon opens the four-item
+        // picker below, because a question with four answers does not fit a
+        // single tap.
         headerThemeControl = findViewById(R.id.headerThemeControl)
         paintThemeIcon()
         findViewById<View>(R.id.headerLanguageControl).setOnClickListener {
-            val next = if (UiPrefs.language(this) == "ar") "en" else "ar"
-            UiPrefs.set(this, next, UiPrefs.theme(this), "language")
+            showLanguagePicker()
         }
         headerThemeControl.setOnClickListener {
             val next = if (UiPrefs.theme(this) == "dark") "light" else "dark"
@@ -230,6 +231,33 @@ class MainActivity : AppCompatActivity(), CoachMarkOverlay.Host {
         headerThemeControl.setImageResource(
             if (UiPrefs.theme(this) == "dark") R.drawable.ic_moon else R.drawable.ic_sun,
         )
+    }
+
+    /**
+     * One tap on the header language icon: a single-choice dialog over the
+     * four shipped languages (UiPrefs.LANGUAGES). Every entry shows its own
+     * native name, whatever language the app runs in.
+     */
+    private fun showLanguagePicker() {
+        val names = UiPrefs.LANGUAGES.map { code ->
+            when (code) {
+                "ar" -> getString(R.string.language_name_ar)
+                "en" -> getString(R.string.language_name_en)
+                "pt-BR" -> getString(R.string.language_name_pt_br)
+                else -> getString(R.string.language_name_es_419)
+            }
+        }.toTypedArray()
+        val checked = UiPrefs.LANGUAGES.indexOf(UiPrefs.language(this)).coerceAtLeast(0)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.language_picker_title)
+            .setSingleChoiceItems(names, checked) { dialog, which ->
+                dialog.dismiss()
+                val language = UiPrefs.LANGUAGES[which]
+                if (language != UiPrefs.language(this)) {
+                    UiPrefs.set(this, language, UiPrefs.theme(this), "language")
+                }
+            }
+            .show()
     }
 
     private fun openPanel() {

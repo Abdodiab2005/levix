@@ -1,6 +1,6 @@
 // Markdown from any provider -> WhatsApp text. This is a display boundary:
 // stored AI history, code contents, identifiers and URLs remain untouched.
-const { tr } = require("./i18n.cjs");
+const { t } = require("./i18n.cjs");
 
 /** Split table cells without splitting escaped pipes or pipes inside code. */
 function tableCells(line) {
@@ -57,10 +57,10 @@ function tableText({ headers, rows }) {
   }
   return rows
     .map((row, index) => {
-      const title = row[0] || tr(`Item ${index + 1}`, `عنصر ${index + 1}`);
+      const title = row[0] || t("bot.core.markdownParser.item", { number: index + 1 });
       const fields = [];
       for (let c = 1; c < Math.max(headers.length, row.length); c++) {
-        const header = headers[c] || tr(`Column ${c + 1}`, `عمود ${c + 1}`);
+        const header = headers[c] || t("bot.core.markdownParser.column", { number: c + 1 });
         const label = header.replace(/^\*([^*]+)\*$/, "$1");
         const value = (row[c] || "—").replace(/<br\s*\/?>/gi, "\n");
         fields.push(`  • ${bold(`${label}:`)} ${value.replace(/\n/g, "\n    ")}`);

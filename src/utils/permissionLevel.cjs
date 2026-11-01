@@ -10,7 +10,7 @@
 // and this only answers "may that sender use something gated at `level`".
 // The refusal is worded in the language of the message being answered.
 
-const { tr } = require("./i18n.cjs");
+const { t } = require("./i18n.cjs");
 
 /**
  * @param {string} level - MEMBERS | ALL | OWNER_ONLY | ADMINS_ONLY | ADMINS_OWNER
@@ -28,49 +28,28 @@ function evaluatePermissionLevel(level, { isGroup, isOwner, isBotAdmin, isSender
       return verdict(true, "");
 
     case "OWNER_ONLY":
-      return verdict(
-        Boolean(isOwner),
-        tr("🚫 Only the bot owner can use this command.", "🚫 هذا الأمر متاح للمالك فقط."),
-      );
+      return verdict(Boolean(isOwner), t("bot.core.permissionLevel.ownerOnly"));
 
     case "ADMINS_ONLY":
       // Owners and bot-admins can run admin-only commands from anywhere —
       // useful for the operator pinging the bot privately to manage a group.
       return isGroup
-        ? verdict(
-            Boolean(isSenderAdmin || isOwner),
-            tr("🚫 Only group admins can use this command.", "🚫 هذا الأمر متاح للمشرفين فقط."),
-          )
-        : verdict(
-            Boolean(isOwner || isBotAdmin),
-            tr(
-              "⚠️ This command only works in groups (or for the owner in private).",
-              "⚠️ هذا الأمر يعمل في المجموعات فقط (أو للمالك في الخاص).",
-            ),
-          );
+        ? verdict(Boolean(isSenderAdmin || isOwner), t("bot.core.permissionLevel.adminsOnly"))
+        : verdict(Boolean(isOwner || isBotAdmin), t("bot.core.permissionLevel.adminsOnlyWrongChat"));
 
     case "ADMINS_OWNER":
       return isGroup
-        ? verdict(
-            Boolean(isOwner || isSenderAdmin),
-            tr(
-              "🚫 Only group admins and the owner can use this command.",
-              "🚫 هذا الأمر متاح للمشرفين والمالك فقط.",
-            ),
-          )
+        ? verdict(Boolean(isOwner || isSenderAdmin), t("bot.core.permissionLevel.adminsOwnerOnly"))
         : verdict(
             Boolean(isOwner || isBotAdmin),
-            tr(
-              "⚠️ This command only works in groups, or for the owner.",
-              "⚠️ هذا الأمر يعمل في المجموعات أو للمالك فقط.",
-            ),
+            t("bot.core.permissionLevel.adminsOwnerWrongChat"),
           );
 
     default:
       // Fail closed: a level nobody knows how to evaluate lets nobody through.
       return {
         hasPermission: false,
-        reason: tr("🚫 Unknown permission level.", "🚫 مستوى الصلاحية غير معروف."),
+        reason: t("bot.core.permissionLevel.unknownLevel"),
         unknownLevel: true,
       };
   }

@@ -3,6 +3,7 @@
 import { CircleHelp, Globe, Menu as MenuIcon, Moon, Sun } from "lucide-react";
 import type { FC } from "react";
 import { useI18n } from "../context/I18nContext";
+import { LOCALES } from "../i18n/translations";
 import type { SessionStatus } from "../types";
 import { useGuidedTour } from "./GuidedTour";
 import type { ViewTab } from "./Sidebar";
@@ -62,12 +63,15 @@ export const Header: FC<HeaderProps> = ({ onToggleMobileMenu, title, view, statu
           }
         >
           <MenuLabel>{t("chooseLanguage")}</MenuLabel>
-          <MenuItem checked={language === "ar"} onSelect={() => setLanguage("ar")}>
-            العربية
-          </MenuItem>
-          <MenuItem checked={language === "en"} onSelect={() => setLanguage("en")}>
-            English
-          </MenuItem>
+          {LOCALES.map((locale) => (
+            <MenuItem
+              key={locale.code}
+              checked={language === locale.code}
+              onSelect={() => setLanguage(locale.code)}
+            >
+              {locale.name}
+            </MenuItem>
+          ))}
         </Menu>
 
         <IconButton

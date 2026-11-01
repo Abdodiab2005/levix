@@ -206,7 +206,21 @@
   // </i18n:generated>
 
   var root = document.documentElement;
-  var lang = root.lang === "ar" ? "ar" : "en";
+  // Same subtag rule as frontend/src/i18n/locale.ts. Unknown values are English.
+  // Right-to-left is Arabic only. pt-BR and es-419 use the English dictionary
+  // until those catalogs exist.
+  function normalizeLocale(value) {
+    if (typeof value !== "string") return null;
+    var subtag = value.trim().split(/[_-]/)[0].toLowerCase();
+    if (subtag === "ar") return "ar";
+    if (subtag === "pt") return "pt-BR";
+    if (subtag === "es") return "es-419";
+    if (subtag === "en") return "en";
+    return null;
+  }
+  var lang = normalizeLocale(root.lang) || "en";
+  root.lang = lang;
+  root.dir = lang === "ar" ? "rtl" : "ltr";
 
   function t(key, vars) {
     var value = (DICT[lang] && DICT[lang][key]) || DICT.en[key] || key;
@@ -250,8 +264,9 @@
   }
 
   function setLanguage(nextLang) {
-    if (nextLang !== "ar" && nextLang !== "en") return;
-    lang = nextLang;
+    var resolved = normalizeLocale(nextLang);
+    if (!resolved) return;
+    lang = resolved;
     root.lang = lang;
     root.dir = lang === "ar" ? "rtl" : "ltr";
     window.LevixGatewayI18n.lang = lang;
@@ -275,9 +290,8 @@
     if (event.key === "levix_theme" && (event.newValue === "dark" || event.newValue === "light")) {
       setTheme(event.newValue);
     }
-    if (event.key === "levix_lang" && (event.newValue === "ar" || event.newValue === "en")) {
-      setLanguage(event.newValue);
-    }
+    var savedLang = event.key === "levix_lang" ? normalizeLocale(event.newValue) : null;
+    if (savedLang) setLanguage(savedLang);
   });
 
   window.LevixGatewayI18n = { lang: lang, t: t, apply: apply };

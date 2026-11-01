@@ -18,7 +18,7 @@
     <string name="guide_privacy_title">Privacy and diagnostics</string>
     <string name="guide_privacy_body">Levix runs on this phone and talks only to WhatsApp and the services you enable. Logs and crash reports wait here until you save, share or delete them.</string>
     <string name="guide_header_title">Language and appearance</string>
-    <string name="guide_header_body">These two icons switch between Arabic and English, and between light and dark. Levix remembers your choice.</string>
+    <string name="guide_header_body">The language icon picks the app language and the theme icon switches between light and dark. Levix remembers your choice.</string>
     <string name="guide_skip">Skip</string>
     <string name="guide_back">Back</string>
     <string name="guide_next">Next</string>
@@ -45,7 +45,12 @@
     <string name="btn_start_host">Start Assistant</string>
     <string name="btn_stop_host">Stop Assistant</string>
     <!-- Sections -->
-    <string name="action_switch_language">Switch language (Arabic / English)</string>
+    <string name="action_switch_language">Choose the app language</string>
+    <string name="language_picker_title">App language</string>
+    <string name="language_name_ar">العربية</string>
+    <string name="language_name_en">English</string>
+    <string name="language_name_pt_br">Português (Brasil)</string>
+    <string name="language_name_es_419">Español (Latinoamérica)</string>
     <string name="action_switch_theme">Switch light and dark</string>
     <string name="section_overview">Status Overview</string>
     <string name="section_overview_sub">Core system health at a glance</string>

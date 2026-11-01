@@ -11,18 +11,10 @@ const { downloadMedia } = require("../utils/geminiMedia.cjs");
 const { visibleText, pickMedia, quotedOf } = require("../utils/messageContent.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const logger = require("../utils/logger.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "send",
-  description: {
-    en: "Re-sends the replied message here: a status/story, photo, video, voice note, sticker, document or text.",
-    ar: "يعيد إرسال الرسالة الموجّه لها الرد هنا: استوري، صورة، فيديو، رسالة صوتية، ستيكر، مستند أو نص.",
-  },
-  usage: {
-    en: "send   (reply to a status or any message with it)",
-    ar: "send   (اعمل رد على استوري أو أي رسالة بالأمر)",
-  },
   chat: "all",
 
   async execute(sock, msg) {
@@ -39,14 +31,11 @@ module.exports = {
         return await sock.sendMessage(chatId, { text: quotedText });
       }
       return await sock.sendMessage(chatId, {
-        text: tr(
-          "Reply to a status or any message with `!send` and I'll re-send it here.",
-          "اعمل رد على استوري أو أي رسالة بالأمر `!send` وأنا هعيد إرسالها هنا.",
-        ),
+        text: t("bot.core.send.replyHint"),
       });
     }
 
-    const status = await createStatus(sock, chatId, tr("📥 Sending...", "📥 جارٍ الإرسال..."), {
+    const status = await createStatus(sock, chatId, t("bot.core.send.sending"), {
       replyTo: msg,
     });
 
@@ -89,10 +78,7 @@ module.exports = {
       logger.error({ err: error, command: "send" }, "Failed to re-send replied media");
       await status.fail(
         error,
-        tr(
-          "Couldn't re-send it — the media may have expired",
-          "تعذّر إرساله — ربما انتهت صلاحية ملف الوسائط",
-        ),
+        t("bot.core.send.resendFailed"),
       );
     }
   },

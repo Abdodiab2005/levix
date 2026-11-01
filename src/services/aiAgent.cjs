@@ -23,7 +23,7 @@ const {
   downloadMedia,
   geminiMediaPart,
 } = require("../utils/geminiMedia.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t, tr } = require("../utils/i18n.cjs");
 const aiIdentity = require("../config/ai-identity.cjs");
 const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
@@ -429,7 +429,7 @@ function formatSources(sources) {
     lines.push(`• ${label} — ${source.uri}`);
     if (lines.length >= MAX_SOURCES) break;
   }
-  return lines.length ? `\n\n${tr("*Sources:*", "*المصادر:*")}\n${lines.join("\n")}` : "";
+  return lines.length ? `\n\n${t("bot.ai.aiAgent.sources")}\n${lines.join("\n")}` : "";
 }
 
 /**
@@ -532,7 +532,7 @@ async function runGeminiTurn({
   search = null,
 } = {}) {
   const genAI = geminiClient();
-  if (!genAI) throw new Error(tr("No Gemini API key is set", "لم يُضبط مفتاح Gemini API"));
+  if (!genAI) throw new Error(t("bot.ai.aiAgent.noGeminiKey"));
   await assertProviderRequestUrl(settings.get("gemini_base_url"), { allowLoopback: true });
 
   const stepBudget = maxSteps ?? settings.get("ai_max_tool_steps");
@@ -632,7 +632,7 @@ async function runGeminiTurn({
       });
     }
 
-    if (status) await status.update(tr("🤖 Writing the answer...", "🤖 بجهّز الرد..."));
+    if (status) await status.update(t("bot.ai.aiAgent.writingAnswer"));
     // One message carrying every functionResponse part, which is what the API
     // expects when the model asked for several calls in one turn.
     response = await chat.sendMessage({ message: responses });
@@ -650,10 +650,7 @@ async function runGeminiTurn({
   }
 
   if (!text && steps >= stepBudget) {
-    text = tr(
-      "I ran the tools I have but couldn't reach a final answer. Try asking more clearly.",
-      "استخدمت الأدوات المتاحة، لكنني لم أتمكن من الوصول إلى إجابة نهائية. حاول صياغة السؤال بوضوح أكبر.",
-    );
+    text = t("bot.ai.aiAgent.toolBudget");
   }
 
   let newHistory = [];

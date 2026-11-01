@@ -11,7 +11,7 @@ const settings = require("../config/settings.cjs");
 const { isLinkedCreds } = require("../utils/linkedCreds.cjs");
 const { fetchHttpsBuffer } = require("../utils/httpsFetch.cjs");
 const { getHttpsUrlInfo } = require("../utils/linkPreview.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 const socketDispatchers = new WeakMap();
 
 // Never leave a remote media URL for Baileys to fetch again without validation.
@@ -32,13 +32,7 @@ async function withHttpsMedia(sock, content) {
       });
       payload = { ...payload, [field]: buffer };
     } catch (cause) {
-      throw new Error(
-        tr(
-          "Could not fetch remote media securely. Use a public HTTPS URL within the remote media limits, or send a local file.",
-          "تعذّر تحميل الوسائط بأمان. استخدم رابط HTTPS عامًا ضمن حدود الوسائط البعيدة، أو أرسل ملفًا محليًا.",
-        ),
-        { cause },
-      );
+      throw new Error(t("bot.core.socket.remoteMediaFailed"), { cause });
     }
   }
   return payload;

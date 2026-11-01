@@ -1,17 +1,9 @@
 // file: /commands/listschedules.js
 const { getScheduledJobs } = require("../../scheduler.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t, tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "listschedules",
-  description: {
-    en: "Lists all active and pending scheduled messages.",
-    ar: "يعرض كل الرسائل المجدولة النشطة والمعلّقة.",
-  },
-  usage: {
-    en: "listschedules",
-    ar: "listschedules",
-  },
   chat: "all",
   userAdminRequired: true,
 
@@ -21,39 +13,34 @@ module.exports = {
 
     if (activeJobs.length === 0) {
       return await sock.sendMessage(msg.key.remoteJid, {
-        text: tr("There are no scheduled messages.", "لا توجد مهام مجدولة حاليًا."),
+        text: t("bot.schedules.listschedules.none"),
       });
     }
 
-    let reply = tr("*⏰ Active scheduled messages:*\n\n", "*⏰ المهام المجدولة النشطة:*\n\n");
+    let reply = t("bot.schedules.listschedules.header");
 
     activeJobs.forEach((job, index) => {
-      reply += tr(`*${index + 1}. Job:*\n`, `*${index + 1}. المهمة:*\n`);
+      reply += t("bot.schedules.listschedules.jobTitle", { number: index + 1 });
       reply += `*ID:* \`${job.id}\`\n`;
-      reply += tr(`*Message:* "${job.message}"\n`, `*الرسالة:* "${job.message}"\n`);
+      reply += t("bot.schedules.listschedules.message", { message: job.message });
 
       if (job.type === "recurring") {
-        reply += tr(
-          `*Repeats:* ${job.cronString} (daily/weekly)\n`,
-          `*التكرار:* ${job.cronString} (يوميًا/أسبوعيًا)\n`,
-        );
+        reply += t("bot.schedules.listschedules.repeats", { cron: job.cronString });
       } else {
         const jobDate = new Date(job.date).toLocaleString(tr("en-GB", "ar-EG"), {
           timeZone: "Africa/Cairo",
         });
-        reply += tr(`*When:* ${jobDate}\n`, `*الوقت المحدد:* ${jobDate}\n`);
+        reply += t("bot.schedules.listschedules.when", { date: jobDate });
       }
       const inGroup = job.targetJid.endsWith("@g.us");
-      reply += tr(
-        `*Where:* ${inGroup ? "this group" : "a private chat"}\n\n`,
-        `*الوجهة:* ${inGroup ? "هذه المجموعة" : "محادثة خاصة"}\n\n`,
-      );
+      reply += t("bot.schedules.listschedules.where", {
+        place: inGroup
+          ? t("bot.schedules.listschedules.placeGroup")
+          : t("bot.schedules.listschedules.placePrivate"),
+      });
     });
 
-    reply += tr(
-      "*To delete one, use:*\n`!deleteschedule <ID>`",
-      "*لحذف مهمة، استخدم:*\n`!deleteschedule <ID>`",
-    );
+    reply += t("bot.schedules.listschedules.deleteHint");
 
     await sock.sendMessage(msg.key.remoteJid, { text: reply });
   },
