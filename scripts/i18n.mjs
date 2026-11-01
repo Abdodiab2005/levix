@@ -282,6 +282,21 @@ function androidRel(locale) {
   return `android/app/src/main/res/${locale.android}/strings.xml`;
 }
 
+/** The Android 13+ per-app language list: one registry code per locale, in
+ * locales.json (registry) order. */
+export function renderLocalesConfig(catalog) {
+  const lines = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    `<!-- ${GENERATED_BY} -->`,
+    '<locale-config xmlns:android="http://schemas.android.com/apk/res/android">',
+  ];
+  for (const locale of localeEntries(catalog)) {
+    lines.push(`    <locale android:name="${escapeAttr(locale.code)}"/>`);
+  }
+  lines.push('</locale-config>');
+  return `${lines.join("\n")}\n`;
+}
+
 export function renderNodeCatalog(catalog) {
   const messages = {};
   for (const code of nodeLocales(catalog)) messages[code] = nodeMessages(catalog.bundles?.[code]);
@@ -317,6 +332,7 @@ export function renderGenerated(catalog, gatewaySource) {
       files[androidRel(locale)] = renderAndroidXml(catalog, locale.code);
     }
   }
+  files["android/app/src/main/res/xml/locales_config.xml"] = renderLocalesConfig(catalog);
   files["src/i18n/catalog.generated.cjs"] = renderNodeCatalog(catalog);
   return files;
 }
