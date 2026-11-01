@@ -16,7 +16,7 @@ const { grantRole, revokeRole, listRoles, isOwnerJidSync } = require("../utils/p
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 const normalizeJid = require("../utils/normalizeJid.cjs");
 const logger = require("../utils/logger.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t, tr } = require("../utils/i18n.cjs");
 
 const ROLE_WORDS = {
   owner: "owner",
@@ -76,13 +76,13 @@ function labelFor(user) {
 // is async — awaiting them is not optional.
 async function rolesReport() {
   const { owners, admins, bootstrapOwners, bootstrapAdmins } = await listRoles();
-  const none = tr("• (none)", "• (لا شيء)");
-  const lines = [tr("*🔑 Bot roles*", "*🔑 صلاحيات البوت*"), ""];
+  const none = t("bot.tools.perm.none");
+  const lines = [t("bot.tools.perm.heading"), ""];
 
-  lines.push(tr(`*👑 Owners (${owners.length}):*`, `*👑 المالكين (${owners.length}):*`));
+  lines.push(t("bot.tools.perm.ownersHeader", { count: owners.length }));
   lines.push(owners.length ? owners.map((o) => `• ${labelFor(o)}`).join("\n") : none);
 
-  lines.push("", tr(`*🛡️ Admins (${admins.length}):*`, `*🛡️ الأدمنز (${admins.length}):*`));
+  lines.push("", t("bot.tools.perm.adminsHeader", { count: admins.length }));
   lines.push(admins.length ? admins.map((a) => `• ${labelFor(a)}`).join("\n") : none);
 
   const envOnly = [
@@ -93,10 +93,7 @@ async function rolesReport() {
     const count = [...new Set(envOnly)].length;
     lines.push(
       "",
-      tr(
-        `_From settings (env/config): ${count} entries._`,
-        `_من الإعدادات (env/config): ${count} إدخال._`,
-      ),
+      t("bot.tools.perm.envOnly", { count }),
     );
   }
 
@@ -159,12 +156,7 @@ module.exports = {
         sock,
         jid,
         {
-          text: tr(
-            "Say who: mention them (@), reply to their message, or type their number.\n" +
-              "Example: `!perm add admin @member`",
-            "محتاج تحدد الشخص: منشن (@) أو رد على رسالته أو اكتب رقمه.\n" +
-              "مثال: `!perm add admin @عضو`",
-          ),
+          text: t("bot.tools.perm.missingTarget"),
         },
         { replyTo: msg },
       );
@@ -178,7 +170,7 @@ module.exports = {
       return sendBotMessage(
         sock,
         jid,
-        { text: tr("🚫 Only an owner can make a new owner.", "🚫 تعيين مالك جديد للمالك فقط.") },
+        { text: t("bot.tools.perm.ownerOnly") },
         { replyTo: msg },
       );
     }
@@ -186,7 +178,8 @@ module.exports = {
     try {
       const record = isAdd ? await grantRole(target, role) : await revokeRole(target, role);
       const who = record ? labelFor(record) : target;
-      const roleLabel = role === "owner" ? tr("owner 👑", "مالك 👑") : tr("admin 🛡️", "أدمن 🛡️");
+      const roleLabel =
+        role === "owner" ? t("bot.tools.perm.ownerLabel") : t("bot.tools.perm.adminLabel");
 
       logger.info({ target, role, granted: isAdd, by: sender }, "[perm] role change");
 
@@ -195,11 +188,8 @@ module.exports = {
         jid,
         {
           text: isAdd
-            ? tr(`✅ *${who}* is now *${roleLabel}*.`, `✅ تم تعيين *${who}* كـ *${roleLabel}*.`)
-            : tr(
-                `✅ *${who}* is no longer *${roleLabel}*.`,
-                `✅ تم سحب صلاحية *${roleLabel}* من *${who}*.`,
-              ),
+            ? t("bot.tools.perm.granted", { who, role: roleLabel })
+            : t("bot.tools.perm.revoked", { who, role: roleLabel }),
           mentions: target.includes("@") ? [target] : undefined,
         },
         { replyTo: msg },
@@ -210,10 +200,7 @@ module.exports = {
         sock,
         jid,
         {
-          text: tr(
-            `❌ *I couldn't change the role*\n\n*Details:* ${error.message}`,
-            `❌ *تعذّر تعديل الصلاحية*\n\n*التفاصيل:* ${error.message}`,
-          ),
+          text: t("bot.tools.perm.changeError", { details: error.message }),
         },
         { replyTo: msg },
       );

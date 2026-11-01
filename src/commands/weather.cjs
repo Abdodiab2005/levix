@@ -5,7 +5,7 @@ const logger = require("../utils/logger.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 
 const settings = require("../config/settings.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t, tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "weather",
@@ -17,10 +17,7 @@ module.exports = {
   async execute(sock, msg, args) {
     if (!args || args.length === 0) {
       return await sock.sendMessage(msg.key.remoteJid, {
-        text: tr(
-          "Give the city's name in English.\n\n*Example:* `!weather cairo`",
-          "يرجى تقديم اسم المدينة باللغة الانجليزية.\n\n*مثال:* `!weather cairo`",
-        ),
+        text: t("bot.tools.weather.noCity"),
       });
     }
 
@@ -36,7 +33,7 @@ module.exports = {
     const status = await createStatus(
       sock,
       msg.key.remoteJid,
-      tr(`🔍 Looking up the weather in ${city}...`, `🔍 بدور على طقس ${city}...`),
+      t("bot.tools.weather.looking", { city }),
       {
         replyTo: msg,
       },
@@ -54,20 +51,14 @@ module.exports = {
       const windSpeed = weatherData.wind.speed;
 
       // تنسيق رسالة الرد مع الأيقونات
-      const reply = tr(
-        `*Weather in ${city}:*\n\n` +
-          `🌤️ Conditions: ${weatherDescription}\n` +
-          `🌡️ Temperature: ${currentTemp}°C\n` +
-          `🤔 Feels like: ${feelsLike}°C\n` +
-          `💧 Humidity: ${humidity}%\n` +
-          `🌬️ Wind: ${windSpeed} m/s`,
-        `*حالة الطقس في مدينة ${city}:*\n\n` +
-          `🌤️ الوصف: ${weatherDescription}\n` +
-          `🌡️ درجة الحرارة: ${currentTemp}°C\n` +
-          `🤔 الإحساس الفعلي: ${feelsLike}°C\n` +
-          `💧 الرطوبة: ${humidity}%\n` +
-          `🌬️ سرعة الرياح: ${windSpeed} متر/ثانية`,
-      );
+      const reply = t("bot.tools.weather.forecast", {
+        city,
+        description: weatherDescription,
+        temp: currentTemp,
+        feelsLike,
+        humidity,
+        wind: windSpeed,
+      });
 
       await status.finish(reply);
     } catch (error) {
@@ -75,26 +66,20 @@ module.exports = {
       if (error.response && error.response.status === 404) {
         // خطأ 404 يعني أن المدينة غير موجودة
         await status.finish(
-          tr(
-            `I couldn't find a city called "${city}". Check the name.`,
-            `لم أتمكن من العثور على مدينة باسم "${city}". يرجى التحقق من الاسم.`,
-          ),
+          t("bot.tools.weather.cityNotFound", { city }),
         );
       } else if (error.response && error.response.status === 401) {
         // خطأ 401 يعني أن مفتاح الـ API غير صالح
         logger.error("[Error] Invalid API Key for OpenWeatherMap.");
         await status.finish(
-          tr(
-            "The weather service rejected the API key. Check it in the settings.",
-            `حدث خطأ في المصادقة مع خدمة الطقس. يرجى مراجعة مفتاح الـ API.`,
-          ),
+          t("bot.tools.weather.authError"),
         );
       } else {
         // أي أخطاء أخرى
         logger.error(error.message, "[Error] in Weather API:");
         await status.fail(
           error,
-          tr("Sorry, fetching the weather failed", "عذرًا، حدث خطأ أثناء جلب بيانات الطقس"),
+          t("bot.tools.weather.failed"),
         );
       }
     }
