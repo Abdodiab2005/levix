@@ -4,14 +4,6 @@ const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "all",
-  description: {
-    en: "Mentions every member of the group.",
-    ar: "يذكر (منشن) جميع أعضاء المجموعة.",
-  },
-  usage: {
-    en: "all [message]",
-    ar: "all [رسالة التنبيه]",
-  },
   chat: "group",
 
   async execute(sock, msg, args) {

@@ -5,14 +5,6 @@ const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "setpp", // pp = profile picture
-  description: {
-    en: "Changes the group's profile picture.",
-    ar: "يغيّر صورة المجموعة.",
-  },
-  usage: {
-    en: "setpp   (reply to an image)",
-    ar: "setpp   (رد على صورة)",
-  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true,

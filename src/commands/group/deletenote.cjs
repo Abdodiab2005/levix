@@ -4,14 +4,6 @@ const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "deletenote",
-  description: {
-    en: "Deletes a saved note.",
-    ar: "يحذف ملاحظة محفوظة.",
-  },
-  usage: {
-    en: "deletenote #keyword",
-    ar: "deletenote #الكلمة-المفتاحية",
-  },
   chat: "all",
   userAdminRequired: true,
 

@@ -18,6 +18,7 @@ import {
   Toolbar,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
+import { intlLocale } from "../i18n/locale";
 import type { CommandItem, PermissionLevel } from "../types";
 import { fill } from "../utils/fill";
 import { CommandAliasDialog } from "./commands/CommandAliasDialog";
@@ -149,7 +150,10 @@ export const CommandsView: React.FC = () => {
     setFilters(EMPTY_COMMAND_FILTERS);
   };
 
-  const collator = useMemo(() => new Intl.Collator(language), [language]);
+  const collator = useMemo(
+    () => new Intl.Collator(intlLocale(language, { ar: "ar", en: "en" })),
+    [language],
+  );
   const query = search.trim().toLowerCase();
   const visible = useMemo(
     () =>

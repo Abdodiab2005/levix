@@ -1,14 +1,14 @@
-// !help — every command, or one command, in Arabic or English.
+// !help lists commands or shows one command in the selected locale.
 //
 //   help                 the list, in the bot's language
-//   help ar | help en    the list, in that language
+//   help ar | en | pt | es  the list, in that language
 //   help <command>       one command, in the bot's language
 //   help <command> ar    one command, in that language (`help ar <command>` too)
 //
 // "The bot's language" is the language every reply uses (utils/i18n.cjs): the
 // `bot_language` setting, and in "auto" the language the message is written
 // in — with command names counted as syntax, so `!help kick` is not English.
-// Each command carries its own description and usage as `{ en, ar }`.
+// Command documentation comes from the catalog.
 
 const fs = require("fs");
 const path = require("path");
@@ -16,8 +16,8 @@ const logger = require("../utils/logger.cjs");
 const brand = require("../config/brand.cjs");
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
-const { parseLang, localize } = require("../utils/commandDocs.cjs");
-const { detectLang, syntaxWords } = require("../utils/i18n.cjs");
+const { parseLang, localize, attachCommandDocs } = require("../utils/commandDocs.cjs");
+const { detectLang, syntaxWords, t, withLang } = require("../utils/i18n.cjs");
 
 // Every command module, the way the loader finds them: from the generated
 // manifest in a packaged build (there is no directory to read inside an
@@ -62,9 +62,12 @@ function loadAllCommands() {
 
   const commands = { general: [], group: [] };
   for (const { module: command, category } of commandModules()) {
-    if (!command?.name || !command?.description || command === module.exports) continue;
+    if (!command?.name || command === module.exports) continue;
+    attachCommandDocs(command, category);
+    if (!command.description) continue;
     (category === "group" ? commands.group : commands.general).push(command);
   }
+  attachCommandDocs(module.exports);
   commands.general.push(module.exports);
 
   // Build alias index for inverse lookup.
@@ -131,76 +134,40 @@ function examplesOf(command, lang) {
   return Array.isArray(picked) ? picked : [];
 }
 
-// Everything !help itself says, in both languages.
-const TEXT = {
-  en: {
-    title: `🤖 ${brand.name} Commands`,
-    general: "General Commands",
-    group: "Group Commands",
-    legendTitle: "Legend",
-    legend: "`<...>` required · `[...]` optional · `a|b` pick one",
-    languageTitle: "Language",
-    footer: (p) => `Type *${p}help <command>* for details`,
-    detailTitle: "Command Details",
-    command: "Command:",
-    aliases: "Aliases:",
-    description: "Description:",
-    usage: "Usage:",
-    examples: "Examples:",
-    where: "Where:",
-    permission: "Permission:",
-    userAdmin: "⚠️ You must be a group admin",
-    botAdmin: "⚠️ The bot must be a group admin",
-    detailLegend: "`<...>` required · `[...]` optional",
-    notFound: (query, p) =>
-      `❌ Command "*${query}*" not found.\nType \`${p}help\` to list every command.`,
-    permissions: {
-      MEMBERS: "Everyone",
-      ALL: "Everyone",
-      ADMINS_ONLY: "Group admins only",
-      ADMINS_OWNER: "Group admins and the owner",
-      OWNER_ONLY: "Owner only",
-    },
-    chats: {
-      all: "All chats",
-      group: "Groups only",
-      private: "Private chats only",
-    },
-  },
-  ar: {
-    title: `🤖 أوامر ${brand.name}`,
-    general: "الأوامر العامة",
-    group: "أوامر المجموعات",
-    legendTitle: "الرموز",
-    legend: "`<...>` مطلوب · `[...]` اختياري · `a|b` اختر واحدًا",
-    languageTitle: "اللغة",
-    footer: (p) => `اكتب *${p}help <أمر>* لمزيد من التفاصيل`,
-    detailTitle: "تفاصيل الأمر",
-    command: "الأمر:",
-    aliases: "الاختصارات:",
-    description: "الوصف:",
-    usage: "الاستخدام:",
-    examples: "أمثلة:",
-    where: "المكان:",
-    permission: "الصلاحية:",
-    userAdmin: "⚠️ يجب أن تكون مشرفًا",
-    botAdmin: "⚠️ يجب أن يكون البوت مشرفًا",
-    detailLegend: "`<...>` مطلوب · `[...]` اختياري",
-    notFound: (query, p) => `❌ الأمر "*${query}*" غير موجود.\nاكتب \`${p}help\` لعرض كل الأوامر.`,
-    permissions: {
-      MEMBERS: "الجميع",
-      ALL: "الجميع",
-      ADMINS_ONLY: "المشرفون فقط",
-      ADMINS_OWNER: "المشرفون والمالك",
-      OWNER_ONLY: "المالك فقط",
-    },
-    chats: {
-      all: "كل المحادثات",
-      group: "المجموعات فقط",
-      private: "المحادثات الخاصة فقط",
-    },
-  },
-};
+function helpText(lang) {
+  const get = (key, params) => withLang(lang, () => t(`bot.help.${key}`, params));
+  return {
+    title: get("title", { name: brand.name }),
+    general: get("general"),
+    group: get("group"),
+    legendTitle: get("legendTitle"),
+    legend: get("legend"),
+    languageTitle: get("languageTitle"),
+    languages: (prefix) => get("languages", { prefix }),
+    footer: (prefix) => get("footer", { prefix }),
+    detailTitle: get("detailTitle"),
+    command: get("command"),
+    aliases: get("aliases"),
+    description: get("description"),
+    usage: get("usage"),
+    examples: get("examples"),
+    where: get("where"),
+    permission: get("permission"),
+    userAdmin: get("userAdmin"),
+    botAdmin: get("botAdmin"),
+    detailLegend: get("detailLegend"),
+    notFound: (query, prefix) => get("notFound", { query, prefix }),
+    permissions: Object.fromEntries(
+      ["MEMBERS", "ALL", "ADMINS_ONLY", "ADMINS_OWNER", "OWNER_ONLY"].map((level) => [
+        level,
+        get(`permissions.${level}`),
+      ]),
+    ),
+    chats: Object.fromEntries(
+      ["all", "group", "private"].map((chat) => [chat, get(`chats.${chat}`)]),
+    ),
+  };
+}
 
 // Permission level as configured for this command (group sub-commands live in
 // their own map). Shown in the detail view so members know why a command is
@@ -225,7 +192,7 @@ function parseArgs(args = []) {
 }
 
 function renderList(commands, prefix, lang) {
-  const t = TEXT[lang];
+  const t = helpText(lang);
   const section = (title, list) => {
     let text = `├─ *${title}*\n`;
     list.forEach((cmd) => {
@@ -262,13 +229,13 @@ function renderList(commands, prefix, lang) {
   // Starts with the LTR command, so the line lays out left-to-right in both
   // menus and each language name stays next to its own command.
   text += `├─ *${t.languageTitle}*\n`;
-  text += `│  \`${prefix}help ar\` — العربية · \`${prefix}help en\` — English\n│\n`;
+  text += `│  ${t.languages(prefix)}\n│\n`;
   text += `╰───「 ${t.footer(prefix)} 」`;
   return text;
 }
 
 function renderDetail(command, isGroupCommand, prefix, lang) {
-  const t = TEXT[lang];
+  const t = helpText(lang);
   // Same bidi rule as the list: a label ends its own line and the value
   // starts the next one, so no line mixes RTL and LTR content.
   let text = `╭───「 *${t.detailTitle}* 」\n│\n`;
@@ -311,14 +278,6 @@ function renderDetail(command, isGroupCommand, prefix, lang) {
 module.exports = {
   name: "help",
   aliases: ["menu", "commands", "h", "مساعدة", "الاوامر", "اوامر"],
-  description: {
-    en: "Lists every command, or shows the details of one — in Arabic or English.",
-    ar: "يعرض كل الأوامر أو تفاصيل أمر واحد — بالعربية أو الإنجليزية.",
-  },
-  usage: {
-    en: "help [ar|en]\nhelp <command> [ar|en]",
-    ar: "help [ar|en]\nhelp <اسم الأمر> [ar|en]",
-  },
   chat: "all",
 
   async execute(sock, msg, args = [], _body = "", _groupMetadata = null, ctx = {}) {
@@ -349,7 +308,7 @@ module.exports = {
       return sendBotMessage(
         sock,
         msg.key.remoteJid,
-        { text: TEXT[lang].notFound(parsed.query, prefix) },
+        { text: helpText(lang).notFound(parsed.query, prefix) },
         { replyTo: msg },
       );
     }

@@ -5,14 +5,6 @@ const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "approveall",
-  description: {
-    en: "Manages automatic approval of join requests.",
-    ar: "يدير الموافقة التلقائية على طلبات الانضمام.",
-  },
-  usage: {
-    en: "approveall <on|off>",
-    ar: "approveall <on|off>",
-  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true, // The bot must be an admin to approve requests

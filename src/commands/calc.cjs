@@ -10,7 +10,7 @@
 // FUNCTIONS.
 
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 // ---------------------------------------------------------------------------
 // whitelist
@@ -62,10 +62,10 @@ const FUNCTIONS = {
 function factorial(n) {
   if (!Number.isInteger(n)) {
     throw new CalcError(
-      tr("Factorial (!) only works on whole numbers", "يُحسب المضروب (!) للأعداد الصحيحة فقط"),
+      t("bot.tools.calc.factorialWholeNumbers"),
     );
   }
-  if (n < 0) throw new CalcError(tr("Negative numbers have no factorial", "لا يُعرَّف المضروب للأعداد السالبة"));
+  if (n < 0) throw new CalcError(t("bot.tools.calc.factorialNegative"));
   if (n > 170) return Infinity; // beyond this a double is Infinity anyway
   let result = 1;
   for (let i = 2; i <= n; i++) result *= i;
@@ -135,7 +135,7 @@ function tokenize(text) {
       }
       const value = Number(raw);
       if (!Number.isFinite(value)) {
-        throw new CalcError(tr(`Invalid number: \`${raw}\``, `رقم غير صالح: \`${raw}\``));
+        throw new CalcError(t("bot.tools.calc.invalidNumber", { raw }));
       }
       tokens.push({ type: "num", value });
       continue;
@@ -154,7 +154,7 @@ function tokenize(text) {
       continue;
     }
 
-    throw new CalcError(tr(`Unknown symbol: \`${char}\``, `رمز غير معروف: \`${char}\``));
+    throw new CalcError(t("bot.tools.calc.unknownSymbol", { char }));
   }
 
   return tokens;
@@ -199,7 +199,7 @@ function parse(tokens) {
       } else if (eat("/")) {
         const right = parseUnary();
         if (right === 0) {
-          throw new CalcError(tr("Division by zero isn't defined 😅", "القسمة على صفر ملهاش لازمة 😅"));
+          throw new CalcError(t("bot.tools.calc.divisionByZero"));
         }
         left /= right;
       } else if (peek()?.type === "%" && startsValue(peek(1))) {
@@ -207,7 +207,7 @@ function parse(tokens) {
         pos++;
         const right = parseUnary();
         if (right === 0) {
-          throw new CalcError(tr("Modulo by zero isn't defined", "باقي القسمة على صفر غير معرّف"));
+          throw new CalcError(t("bot.tools.calc.moduloByZero"));
         }
         left %= right;
       } else if (startsValue(peek())) {
@@ -247,11 +247,11 @@ function parse(tokens) {
 
   function parsePrimary() {
     const token = peek();
-    if (!token) throw new CalcError(tr("The expression is incomplete", "المعادلة ناقصة"));
+    if (!token) throw new CalcError(t("bot.tools.calc.emptyExpression"));
 
     if (eat("(")) {
       const value = parseExpression();
-      expect(")", tr("A bracket was opened and never closed", "قوس مفتوح ومقفلش"));
+      expect(")", t("bot.tools.calc.unclosedBracket"));
       return value;
     }
 
@@ -268,28 +268,22 @@ function parse(tokens) {
         const spec = FUNCTIONS[name];
         expect(
           "(",
-          tr(
-            `The function \`${name}\` needs brackets, like \`${name}(9)\``,
-            `الدالة \`${name}\` محتاجة أقواس، زي \`${name}(9)\``,
-          ),
+          t("bot.tools.calc.needsBrackets", { name }),
         );
         const args = [];
         if (peek()?.type !== ")") {
           args.push(parseExpression());
           while (eat(",")) args.push(parseExpression());
         }
-        expect(")", tr(`The bracket of \`${name}\` is never closed`, `قوس \`${name}\` مقفلش`));
+        expect(")", t("bot.tools.calc.unfinishedBracket", { name }));
         if (spec.arity !== -1 && args.length !== spec.arity) {
           throw new CalcError(
-            tr(
-              `The function \`${name}\` takes ${spec.arity} ${spec.arity === 1 ? "value" : "values"}`,
-              `الدالة \`${name}\` بتاخد ${spec.arity} ${spec.arity === 1 ? "قيمة" : "قيم"}`,
-            ),
+            t("bot.tools.calc.functionArity", { name, count: spec.arity }),
           );
         }
         if (!args.length) {
           throw new CalcError(
-            tr(`The function \`${name}\` got no values`, `الدالة \`${name}\` من غير قيم`),
+            t("bot.tools.calc.functionNoValues", { name }),
           );
         }
         return spec.fn(...args);
@@ -297,18 +291,18 @@ function parse(tokens) {
 
       if (name in CONSTANTS) return CONSTANTS[name];
 
-      throw new CalcError(tr(`I don't know what \`${name}\` is`, `لا أعرف معنى \`${name}\``));
+      throw new CalcError(t("bot.tools.calc.unknownName", { name }));
     }
 
     throw new CalcError(
-      tr(`\`${token.type}\` is in the wrong place`, `مكان غلط للرمز \`${token.type}\``),
+      t("bot.tools.calc.wrongTokenPlace", { symbol: token.type }),
     );
   }
 
   const result = parseExpression();
   if (pos < tokens.length) {
     throw new CalcError(
-      tr("There is something extra at the end of the expression", "في زيادة في آخر المعادلة"),
+      t("bot.tools.calc.trailingContent"),
     );
   }
   return result;
@@ -316,14 +310,14 @@ function parse(tokens) {
 
 function evaluate(expression) {
   const normalized = normalize(expression);
-  if (!normalized) throw new CalcError(tr("Type an expression first", "اكتب معادلة الأول"));
+  if (!normalized) throw new CalcError(t("bot.tools.calc.typeExpression"));
   if (normalized.length > 300) {
-    throw new CalcError(tr("The expression is too long", "التعبير الرياضي طويل جدًا"));
+    throw new CalcError(t("bot.tools.calc.expressionTooLong"));
   }
 
   const value = parse(tokenize(normalized));
   if (typeof value !== "number" || Number.isNaN(value)) {
-    throw new CalcError(tr("The result isn't a valid number", "النتيجة ليست عددًا صالحًا"));
+    throw new CalcError(t("bot.tools.calc.invalidResult"));
   }
   return { normalized, value };
 }
@@ -348,54 +342,11 @@ function formatNumber(value) {
   return fraction ? `${grouped}.${fraction}` : grouped;
 }
 
-const helpText = () =>
-  tr(
-    "🧮 *Calculator*\n\n" +
-      "*Usage:* `!calc <expression>`\n" +
-      "or reply to a message containing an expression with `!calc`\n\n" +
-      "*Operators:* `+` `-` `*` `/` `%` (modulo) `^` (power) `!` (factorial)\n" +
-      "*Percentages:* `15%` · `20% of 300`\n" +
-      "*Constants:* `pi` · `e` · `tau`\n" +
-      "*Functions:* sqrt, cbrt, abs, round, floor, ceil, ln, log, log2, exp,\n" +
-      "sin, cos, tan, sind, cosd, tand, asin, acos, atan, deg, rad,\n" +
-      "pow, root, hypot, min, max, avg, sum, fact\n\n" +
-      "*Examples:*\n" +
-      "`!calc (12 + 8) * 3`\n" +
-      "`!calc 2^10`\n" +
-      "`!calc 25% of 480`\n" +
-      "`!calc sqrt(144) + 5!`\n" +
-      "`!calc max(3, 9, 4) * pi`",
-    HELP_TEXT_AR,
-  );
-
-const HELP_TEXT_AR =
-  "🧮 *الآلة الحاسبة*\n\n" +
-  "*الاستخدام:* `!calc <معادلة>`\n" +
-  "أو رد على رسالة فيها معادلة واكتب `!calc`\n\n" +
-  "*العمليات:* `+` `-` `*` `/` `%` (باقي القسمة) `^` (أُس) `!` (مضروب)\n" +
-  "*النِّسب:* `15%` · `20% من 300`\n" +
-  "*الثوابت:* `pi` · `e` · `tau`\n" +
-  "*الدوال:* sqrt, cbrt, abs, round, floor, ceil, ln, log, log2, exp,\n" +
-  "sin, cos, tan, sind, cosd, tand, asin, acos, atan, deg, rad,\n" +
-  "pow, root, hypot, min, max, avg, sum, fact\n\n" +
-  "*أمثلة:*\n" +
-  "`!calc (12 + 8) * 3`\n" +
-  "`!calc 2^10`\n" +
-  "`!calc 25% من 480`\n" +
-  "`!calc sqrt(144) + 5!`\n" +
-  "`!calc max(3, 9, 4) * pi`";
+const helpText = () => t("bot.tools.calc.help");
 
 module.exports = {
   name: "calc",
   aliases: ["calculate", "حساب", "احسب", "="],
-  description: {
-    en: "Calculator: arithmetic, percentages, powers and math functions.",
-    ar: "آلة حاسبة: عمليات حسابية، ونِسب مئوية، وأُسس، ودوال رياضية.",
-  },
-  usage: {
-    en: "calc <expression>",
-    ar: "calc <معادلة>",
-  },
   chat: "all",
 
   async execute(sock, msg, args) {
@@ -425,15 +376,12 @@ module.exports = {
       const reason =
         error instanceof CalcError
           ? error.message
-          : tr("I couldn't understand that expression", "تعذّر فهم التعبير الرياضي");
+          : t("bot.tools.calc.unclearExpression");
       return sendBotMessage(
         sock,
         chatId,
         {
-          text: tr(
-            `❌ ${reason}\n\nSend \`!calc\` on its own to see examples.`,
-            `❌ ${reason}\n\nاكتب \`!calc\` وحده لعرض الأمثلة.`,
-          ),
+          text: t("bot.tools.calc.errorWithHint", { reason }),
         },
         { replyTo: msg },
       );

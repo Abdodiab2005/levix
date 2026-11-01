@@ -5,14 +5,6 @@ const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "save",
-  description: {
-    en: "Saves a new note for the group.",
-    ar: "يحفظ ملاحظة جديدة للمجموعة.",
-  },
-  usage: {
-    en: "save #keyword <note text>",
-    ar: "save #الكلمة-المفتاحية <نص الملاحظة>",
-  },
   chat: "group",
   userAdminRequired: true,
 

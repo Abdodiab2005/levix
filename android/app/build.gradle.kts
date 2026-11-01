@@ -167,6 +167,21 @@ android {
         versionName = "4.9.2"
     }
 
+    // App languages ship whole. enableSplit = false keeps the translations in
+    // the base APK, so a language picked in the app or in Android's app
+    // settings works with no network download. localeFilters is the AGP 8.10
+    // name for this setting: it packs only the four shipped locales
+    // (i18n/locales.json) and drops the extra languages that AndroidX and the
+    // libraries carry.
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
+    androidResources {
+        localeFilters += listOf("en", "ar", "pt-rBR", "b+es+419")
+    }
+
     // One APK per ABI — each carries only its own Node runtime, so both
     // artifacts stay ~half the size of a universal build. The AAB keeps
     // every ABI (Google Play generates per-device APKs from it).

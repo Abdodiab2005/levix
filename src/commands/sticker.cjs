@@ -1,4 +1,4 @@
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const {
   targetOf,
@@ -19,14 +19,6 @@ const toimage = require("./toimage.cjs");
 module.exports = {
   name: "sticker",
   aliases: ["s", "ملصق", "tosticker"],
-  description: {
-    en: "Create a sticker from an image, GIF or video.",
-    ar: "ينشئ ملصقًا من صورة أو صورة متحركة أو فيديو.",
-  },
-  usage: {
-    en: "sticker [crop] [nobg] (attach an image, GIF or video)\nsticker [crop] [nobg] (reply to media)\nsticker (reply to a sticker for PNG)",
-    ar: "sticker [قص] [بدون-خلفية] (أرفق صورة أو صورة متحركة أو فيديو)\nsticker [قص] [بدون-خلفية] (رد على وسائط)\nsticker (رد على ملصق لصورة PNG)",
-  },
   keywords: ["crop", "قص", "nobg", "بدون-خلفية"],
   chat: "all",
   async execute(sock, msg, args = []) {
@@ -38,7 +30,7 @@ module.exports = {
     const who = await ownerModule.forMessage(msg, sock);
     if (!who.key) {
       return sock.sendMessage(jid, {
-        text: tr("I couldn't identify the sender.", "تعذّر تحديد هوية المرسل."),
+        text: t("bot.stickers.sticker.senderUnknown"),
       });
     }
     const target = targetOf(msg);
@@ -60,12 +52,9 @@ module.exports = {
       }
       const buffer = await downloadTarget(target);
       if (!media.sniff(buffer)) throw new StickerError("UNSUPPORTED_TYPE");
-      status = await createStatus(
-        sock,
-        jid,
-        tr("🎨 Creating sticker...", "🎨 جارٍ إنشاء الملصق..."),
-        { replyTo: msg },
-      );
+      status = await createStatus(sock, jid, t("bot.stickers.sticker.creating"), {
+        replyTo: msg,
+      });
       if (library.hasRoom(who)) {
         const { promise } = studio.createFromBuffer({
           owner: who,

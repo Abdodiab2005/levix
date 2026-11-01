@@ -44,6 +44,7 @@ import {
   useSavedValue,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
+import { intlLocale } from "../i18n/locale";
 import type { translations } from "../i18n/translations";
 import { ModelCapabilityIndicators } from "./ai/ModelCapabilityIndicators";
 
@@ -402,10 +403,7 @@ export const AIAssistantView: React.FC = () => {
   const savePersona = async () => {
     try {
       await api.updatePersona(personaText);
-      toast(
-        language === "ar" ? "تم تحديث توجيه الشخصية بنجاح!" : "Persona updated successfully!",
-        "success",
-      );
+      toast(t("aiPersonaUpdated"), "success");
       setPersonaModalOpen(false);
     } catch (err: any) {
       toast(err.message, "error");
@@ -463,7 +461,7 @@ export const AIAssistantView: React.FC = () => {
     if (!selectedMemoryFile) return;
     try {
       await api.updateMemoryFile(selectedMemoryFile, memoryContent);
-      toast(language === "ar" ? "تم حفظ ملف الذاكرة بنجاح!" : "Memory file updated!", "success");
+      toast(t("aiMemoryUpdated"), "success");
       loadMemoryFiles();
       setSelectedMemoryFile(null);
     } catch (err: any) {
@@ -502,7 +500,7 @@ export const AIAssistantView: React.FC = () => {
 
   const formatStamp = (ts: number | null) =>
     ts
-      ? new Date(ts).toLocaleString(language === "ar" ? "ar-EG" : "en-GB", {
+      ? new Date(ts).toLocaleString(intlLocale(language, { ar: "ar-EG", en: "en-GB" }), {
           dateStyle: "medium",
           timeStyle: "short",
         })

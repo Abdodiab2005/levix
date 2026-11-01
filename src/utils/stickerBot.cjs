@@ -7,7 +7,7 @@ const media = require("../stickers/media.cjs");
 const library = require("../stickers/library.cjs");
 const { StickerError, isStickerError, userMessage } = require("../stickers/errors.cjs");
 const { WHATSAPP_MEDIA_MAX_BYTES } = require("../stickers/limits.cjs");
-const { tr } = require("./i18n.cjs");
+const { tr, t } = require("./i18n.cjs");
 
 function targetOf(msg, { quotedOnly = false } = {}) {
   const quoted = quotedOf(msg);
@@ -67,9 +67,7 @@ function countLabel(count, kind = "sticker") {
 }
 
 function errorText(error) {
-  return isStickerError(error)
-    ? userMessage(error)
-    : tr("Something went wrong with the sticker.", "حدث خطأ في الملصق.");
+  return isStickerError(error) ? userMessage(error) : t("bot.stickers.errors.internal");
 }
 
 module.exports = {

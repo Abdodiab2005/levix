@@ -19,7 +19,7 @@ const {
   isAdminInGroupSync,
 } = require("../utils/permissions.cjs");
 const logger = require("../utils/logger.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 const GLOBAL_WORDS = new Set(["global", "-g", "--global", "عام", "العام", "الكل"]);
 
@@ -40,13 +40,11 @@ function extractScope(args) {
 
 // "the global memory" / "this chat's memory", in the reply language.
 function scopeName(scope) {
-  return scope === "global"
-    ? tr("the global memory", "الذاكرة العامة")
-    : tr("this chat's memory", "ذاكرة المحادثة");
+  return scope === "global" ? t("bot.ai.memory.scopeGlobal") : t("bot.ai.memory.scopeChat");
 }
 
 function formatEntries(entries, { limit = 30 } = {}) {
-  if (!entries.length) return tr("_(empty)_", "_(فارغة)_");
+  if (!entries.length) return t("bot.ai.memory.empty");
   const shown = entries.slice(-limit);
   const lines = shown.map((entry, index) => {
     const number = entries.length - shown.length + index + 1;
@@ -57,23 +55,13 @@ function formatEntries(entries, { limit = 30 } = {}) {
   });
   const skipped = entries.length - shown.length;
   return (
-    (skipped > 0
-      ? tr(`_(+${skipped} older ones not shown)_\n\n`, `_(+${skipped} معلومات أقدم لم تُعرض)_\n\n`)
-      : "") + lines.join("\n")
+    (skipped > 0 ? t("bot.ai.memory.olderSkipped", { skipped }) : "") + lines.join("\n")
   );
 }
 
 module.exports = {
   name: "memory",
   aliases: ["mem", "ذاكرة", "remember"],
-  description: {
-    en: "The bot's long-term memory (.md files): add, list, search, forget, or export the file.",
-    ar: "الذاكرة الدائمة للبوت (ملفات .md): إضافة، أو عرض، أو بحث، أو حذف، أو تصدير الملف.",
-  },
-  usage: {
-    en: "memory\nmemory add <fact>\nmemory add global <fact>\nmemory search <word>\nmemory forget <number|part of the text>\nmemory clear [global]\nmemory file [global]",
-    ar: "memory\nmemory add <المعلومة>\nmemory add global <المعلومة>\nmemory search <كلمة>\nmemory forget <رقم|جزء من النص>\nmemory clear [global]\nmemory file [global]",
-  },
   chat: "all",
 
   async execute(sock, msg, args, body, groupMetadata) {
@@ -92,24 +80,14 @@ module.exports = {
       sendBotMessage(sock, chatId, { text, ...extra }, { replyTo: msg });
 
     const denied = () =>
-      reply(
-        tr(
-          "🚫 That's for admins and the owner only. Anyone can add to this chat's memory.",
-          "🚫 هذا الإجراء للمشرفين والمالك فقط. يمكنك إضافة معلومات إلى ذاكرة هذه المحادثة.",
-        ),
-      );
+      reply(t("bot.ai.memory.denied"));
 
     try {
       // ---------------------------------------------------------------- add
       if (["add", "save", "احفظ", "ضيف", "اضف"].includes(action)) {
         const content = rest.join(" ").trim();
         if (!content) {
-          return reply(
-            tr(
-              "Write the fact after the command.\nExample: `!memory add the meeting is every Tuesday at 9`",
-              "اكتب المعلومة بعد الأمر.\nمثال: `!memory add الاجتماع كل ثلاثاء الساعة ٩`",
-            ),
-          );
+          return reply(t("bot.ai.memory.addUsage"));
         }
         if (scope === "global" && !botPrivileged) return denied();
 
@@ -122,7 +100,7 @@ module.exports = {
         });
 
         return reply(
-          tr(`🧠 Saved to *${scopeName(scope)}*.\n`, `🧠 حُفظت في *${scopeName(scope)}*.\n`) +
+          t("bot.ai.memory.saved", { scope: scopeName(scope) }) +
             `\`${entry.id}\` — ${content.length > 80 ? content.slice(0, 80) + "…" : content}`,
         );
       }
@@ -131,21 +109,19 @@ module.exports = {
       if (["search", "find", "بحث", "دور"].includes(action)) {
         const query = rest.join(" ").trim();
         if (!query) {
-          return reply(tr("Write the word you're looking for.", "اكتب الكلمة التي تبحث عنها."));
+          return reply(t("bot.ai.memory.searchPrompt"));
         }
         const chatHits = memory.searchMemory(query, { scope: "chat", chatId });
         const globalHits = memory.searchMemory(query, { scope: "global" });
 
         if (!chatHits.length && !globalHits.length) {
-          return reply(
-            tr(`🔍 Nothing is saved about "${query}".`, `🔍 لا توجد معلومات محفوظة عن "${query}".`),
-          );
+          return reply(t("bot.ai.memory.searchNone", { query }));
         }
         return reply(
-          tr(`🔍 *Results for* "${query}"\n\n`, `🔍 *نتائج البحث عن* "${query}"\n\n`) +
-            tr(`*This chat (${chatHits.length}):*\n`, `*ذاكرة المحادثة (${chatHits.length}):*\n`) +
+          t("bot.ai.memory.searchResults", { query }) +
+            t("bot.ai.memory.searchChatHeader", { count: chatHits.length }) +
             `${formatEntries(chatHits, { limit: 10 })}\n\n` +
-            tr(`*Global (${globalHits.length}):*\n`, `*الذاكرة العامة (${globalHits.length}):*\n`) +
+            t("bot.ai.memory.searchGlobalHeader", { count: globalHits.length }) +
             formatEntries(globalHits, { limit: 10 }),
         );
       }
@@ -155,25 +131,13 @@ module.exports = {
         if (scope === "global" ? !botPrivileged : !botPrivileged && !groupAdmin) return denied();
         const ref = rest.join(" ").trim();
         if (!ref) {
-          return reply(
-            tr(
-              "Say what to forget: its number from `!memory`, or part of its text.\nExample: `!memory forget 3`",
-              "حدّد ما تريد حذفه: رقمه من `!memory` أو جزء من نصه.\n" +
-                "مثال: `!memory forget 3`",
-            ),
-          );
+          return reply(t("bot.ai.memory.forgetUsage"));
         }
         const removed = memory.removeMemory({ scope, chatId, ref });
         return reply(
           removed
-            ? tr(
-                `🗑️ Forgotten: ${removed.content.slice(0, 120)}`,
-                `🗑️ حُذفت: ${removed.content.slice(0, 120)}`,
-              )
-            : tr(
-                `Nothing in ${scopeName(scope)} matches "${ref}".`,
-                `لم أجد ما يطابق "${ref}" في ${scopeName(scope)}.`,
-              ),
+            ? t("bot.ai.memory.forgotten", { content: removed.content.slice(0, 120) })
+            : t("bot.ai.memory.noMatch", { scope: scopeName(scope), ref }),
         );
       }
 
@@ -183,11 +147,8 @@ module.exports = {
         const count = memory.clearMemory({ scope, chatId });
         return reply(
           count
-            ? tr(
-                `🧹 Cleared *${count}* facts from ${scopeName(scope)}.`,
-                `🧹 حُذفت *${count}* معلومة من ${scopeName(scope)}.`,
-              )
-            : tr("The memory was already empty.", "الذاكرة فارغة بالفعل."),
+            ? t("bot.ai.memory.cleared", { count, scope: scopeName(scope) })
+            : t("bot.ai.memory.alreadyEmpty"),
         );
       }
 
@@ -196,12 +157,7 @@ module.exports = {
         if (scope === "global" ? !botPrivileged : !botPrivileged && !groupAdmin) return denied();
         const filePath = memory.memoryFilePath(scope, chatId);
         if (!fs.existsSync(filePath)) {
-          return reply(
-            tr(
-              "There is no memory file yet — start with `!memory add ...`.",
-              "لا يوجد ملف ذاكرة بعد — ابدأ بـ `!memory add ...`.",
-            ),
-          );
+          return reply(t("bot.ai.memory.noFile"));
         }
         return sendBotMessage(
           sock,
@@ -210,7 +166,7 @@ module.exports = {
             document: fs.readFileSync(filePath),
             mimetype: "text/markdown",
             fileName: scope === "global" ? "global.md" : `${chatId}.md`,
-            caption: tr(`🧠 The file for ${scopeName(scope)}`, `🧠 ملف ${scopeName(scope)}`),
+            caption: t("bot.ai.memory.fileCaption", { scope: scopeName(scope) }),
           },
           { replyTo: msg },
         );
@@ -222,27 +178,20 @@ module.exports = {
       const entries = memory.listMemory({ scope: target, chatId });
 
       return reply(
-        tr(
-          `🧠 *${target === "global" ? "Global memory" : "This chat's memory"}* ` +
-            `(${entries.length} facts)\n\n` +
-            `${formatEntries(entries)}\n\n` +
-            `_Chat: ${stats.chatCount} · Global: ${stats.globalCount}_\n` +
-            "`!memory add <fact>` · `!memory add global <fact>` · `!memory forget <number>` · `!memory file`",
-          `🧠 *${target === "global" ? "الذاكرة العامة" : "ذاكرة هذه المحادثة"}* ` +
-            `(${entries.length} معلومة)\n\n` +
-            `${formatEntries(entries)}\n\n` +
-            `_المحادثة: ${stats.chatCount} · العام: ${stats.globalCount}_\n` +
-            "`!memory add <معلومة>` · `!memory add global <معلومة>` · `!memory forget <رقم>` · `!memory file`",
-        ),
+        t("bot.ai.memory.list", {
+          title:
+            target === "global"
+              ? t("bot.ai.memory.listTitleGlobal")
+              : t("bot.ai.memory.listTitleChat"),
+          count: entries.length,
+          entries: formatEntries(entries),
+          chatCount: stats.chatCount,
+          globalCount: stats.globalCount,
+        }),
       );
     } catch (error) {
       logger.error({ err: error }, "[memory] command failed");
-      return reply(
-        tr(
-          `❌ *Memory problem*\n\n*Details:* ${error.message || error}`,
-          `❌ *مشكلة في الذاكرة*\n\n*التفاصيل:* ${error.message || error}`,
-        ),
-      );
+      return reply(t("bot.ai.memory.failed", { details: error.message || error }));
     }
   },
 };

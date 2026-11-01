@@ -1,6 +1,7 @@
 // file: frontend/src/views/commands/shared.ts
 
 import { useI18n } from "../../context/I18nContext";
+import { pickLocalized } from "../../i18n/locale";
 import type { CommandItem, PermissionLevel } from "../../types";
 
 /** What a row can ask the screen to do. The screen owns the API call and the state. */
@@ -61,11 +62,12 @@ export function useCommandLabels() {
     return key ? t(key) : chat;
   };
 
-  // Every command documents itself in both languages; show the panel's.
+  // Panel language, then English, then Arabic, then the flat field.
   const describe = (command: CommandItem) =>
-    command.descriptions?.[language] || command.description || "";
+    pickLocalized(command.descriptions, language) || command.description || "";
 
-  const usageOf = (command: CommandItem) => command.usages?.[language] || command.usage || "";
+  const usageOf = (command: CommandItem) =>
+    pickLocalized(command.usages, language) || command.usage || "";
 
   /** One prefixed line per usage variant, the way the bot prints them. */
   const usageLines = (command: CommandItem, prefix: string) =>

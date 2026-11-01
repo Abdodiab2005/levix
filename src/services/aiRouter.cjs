@@ -7,7 +7,7 @@
 
 const settings = require("../config/settings.cjs");
 const { resolveCapabilities } = require("./modelRegistry.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 class BaseAIProvider {
   constructor({
@@ -83,7 +83,7 @@ function getProvider(id = settings.get("ai_provider")) {
   const key = String(id || "gemini").toLowerCase();
   const provider = REGISTRY.get(key);
   if (!provider) {
-    throw new Error(tr(`Unknown provider: ${id}`, `مزود غير معروف: ${id}`));
+    throw new Error(t("bot.ai.aiRouter.unknownProvider", { provider: id }));
   }
   return provider;
 }

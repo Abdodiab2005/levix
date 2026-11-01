@@ -26,6 +26,7 @@ import {
   usePagination,
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
+import { intlLocale } from "../../i18n/locale";
 import type { AutoDeleteMatch, AutoDeleteRule } from "../../types";
 import {
   AUTO_DELETE_LIMITS,
@@ -76,7 +77,10 @@ export const AutoDeleteView: React.FC = () => {
   const alive = useRef(true);
   // Bumped around every write so an in-flight list refresh cannot overwrite it.
   const written = useRef(0);
-  const countFormat = useMemo(() => new Intl.NumberFormat(language), [language]);
+  const countFormat = useMemo(
+    () => new Intl.NumberFormat(intlLocale(language, { ar: "ar", en: "en" })),
+    [language],
+  );
 
   const applyRules = useCallback((next: AutoDeleteRule[]) => {
     setRules((prev) =>

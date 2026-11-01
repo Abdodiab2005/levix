@@ -4,14 +4,6 @@ const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "members",
-  description: {
-    en: "Lists every member of the group with their number.",
-    ar: "يعرض كل أعضاء المجموعة مع أرقامهم.",
-  },
-  usage: {
-    en: "members",
-    ar: "members",
-  },
   chat: "group", // This command only works in groups
 
   async execute(sock, msg) {
