@@ -74,6 +74,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
+| Status | STARTED on 2026-11-01. Plan PENDING REVIEW in `PHASE-03-RESULTS.md`; Q-15 and Q-19 decided by the owner on 2026-11-01. The PR list there replaces the one below. |
 | Goal | One catalog for `ar`, `en`, `pt-BR`, `es-419`; generated outputs for Node, React, gateway and Android; three language settings; CI validator. |
 | Files | new catalog directory and generator script, `src/utils/i18n.cjs`, `src/utils/commandDocs.cjs`, `src/commands/help.cjs`, `src/commands/lang.cjs`, `src/config/settings.cjs`, `src/services/aiAgent.cjs` (AI language directive), `frontend/src/i18n/`, `frontend/src/context/I18nContext.tsx`, views with inline ternaries, `public/gateway-i18n.js`, `public/ui-boot.js`, Android `res/values-pt-rBR/`, `res/values-b+es+419/`, `UiPrefs.kt`, `MainActivity.kt`, `AndroidManifest.xml` (`localeConfig`), `src/panel/recovery-email.cjs` (Q-15). |
 | Migrations | Setting choices widen; new AI reply language setting with a default that keeps today's behaviour. |
