@@ -1,13 +1,13 @@
 // The language the bot answers in.
 //
-// Every reply is written in both languages where it is sent —
-// `tr("Done.", "تم.")` — and tr() picks one for the message being answered.
+// New replies use keyed catalog messages through t(). Older replies use
+// `tr("Done.", "تم.")`, which answers in English for pt-BR and es-419.
 // The choice is made once per incoming message, before any handler runs, and
 // AsyncLocalStorage carries it through everything that message causes: the
 // helpers deep inside a command, the status line it edits, a timer it starts.
 // Nothing has to pass a `lang` argument around.
 //
-//   bot_language = ar | en   that language, always
+//   bot_language = ar | en | pt-BR | es-419   that language, always
 //   bot_language = auto      the language the message is written in:
 //                            Arabic letters          -> Arabic
 //                            English words, other than the command's own
@@ -24,6 +24,45 @@ const { AsyncLocalStorage } = require("node:async_hooks");
 const settings = require("../config/settings.cjs");
 
 const scope = new AsyncLocalStorage();
+const FIXED_LANGUAGES = new Set(["ar", "en", "pt-BR", "es-419"]);
+
+function normalizeLocale(value) {
+  if (typeof value !== "string") return null;
+  const language = value.trim().replaceAll("_", "-").split("-")[0].toLowerCase();
+  if (language === "ar") return "ar";
+  if (language === "pt") return "pt-BR";
+  if (language === "es") return "es-419";
+  if (language === "en") return "en";
+  return null;
+}
+
+function createTranslator(catalog, { getLocale, warn } = {}) {
+  const pluralRules = new Map();
+  const warned = new Set();
+  return (key, params = {}) => {
+    const locale = getLocale?.() || "en";
+    const messages = catalog.messages || {};
+    let value = messages[locale]?.[key] ?? messages.en?.[key];
+    if (value === undefined) {
+      if (!warned.has(key)) {
+        warned.add(key);
+        warn?.(key);
+      }
+      return key;
+    }
+    if (value && typeof value === "object") {
+      let rules = pluralRules.get(locale);
+      if (!rules) {
+        rules = new Intl.PluralRules(locale);
+        pluralRules.set(locale, rules);
+      }
+      value = value[rules.select(Number(params.count))] ?? value.other;
+    }
+    return String(value).replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (token, name) =>
+      Object.hasOwn(params, name) ? String(params[name]) : token,
+    );
+  };
+}
 
 const ARABIC_LETTERS = /[\u0621-\u064A\u0671-\u06D3\u06FA-\u06FF]/;
 const LATIN_WORD = /[a-z][a-z'’-]*/gi;
@@ -37,7 +76,7 @@ const NOT_WORDS = /(?:https?:\/\/|www\.)\S+|\S+@\S+|@\S+/gi;
 /** The configured language, or null for "auto". */
 function configuredLang() {
   const setting = settings.get("bot_language");
-  return setting === "ar" || setting === "en" ? setting : null;
+  return FIXED_LANGUAGES.has(setting) ? setting : null;
 }
 
 /**
@@ -97,7 +136,7 @@ function langForCommand(command, args = [], aliases = command?.aliases || []) {
 
 /** Run `fn` with replies in `lang`. Returns what `fn` returns. */
 function withLang(lang, fn) {
-  return scope.run(lang === "en" ? "en" : "ar", fn);
+  return scope.run(FIXED_LANGUAGES.has(lang) ? lang : "ar", fn);
 }
 
 /** The language of the message being answered right now. */
@@ -107,7 +146,29 @@ function currentLang() {
 
 /** Pick the reply for the current message. */
 function tr(en, ar) {
-  return currentLang() === "en" ? en : ar;
+  return currentLang() === "ar" ? ar : en;
 }
 
-module.exports = { detectLang, syntaxWords, langForCommand, withLang, currentLang, tr };
+const t = createTranslator(require("../i18n/catalog.generated.cjs"), {
+  getLocale: currentLang,
+  warn: (key) => {
+    try {
+      require("./logger.cjs").warn({ key }, "Missing bot translation");
+    } catch {
+      // Translation lookup must still work during early startup.
+    }
+  },
+});
+
+module.exports = {
+  normalizeLocale,
+  createTranslator,
+  t,
+  configuredLang,
+  detectLang,
+  syntaxWords,
+  langForCommand,
+  withLang,
+  currentLang,
+  tr,
+};

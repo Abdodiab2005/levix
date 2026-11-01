@@ -158,7 +158,10 @@ function nowLabel() {
 }
 
 function botLangDirective() {
-  const botLang = settings.get("bot_language") || "auto";
+  const aiLang = settings.get("ai_reply_language");
+  const botLang = ["auto", "ar", "en", "pt-BR", "es-419"].includes(aiLang)
+    ? aiLang
+    : settings.get("bot_language") || "auto";
   // The dialect rule lives here on purpose, not in the persona: the operator
   // owns src/config/ai-persona.md and can rewrite every line of it, and this
   // one must survive every edit (Levix users worldwide; Levix is built in
@@ -168,6 +171,12 @@ function botLangDirective() {
   }
   if (botLang === "en") {
     return "- Language instruction: Always reply in English, clear, professional, natural, and direct.";
+  }
+  if (botLang === "pt-BR") {
+    return "- Language instruction: Always reply in Brazilian Portuguese, clear, natural, and direct.";
+  }
+  if (botLang === "es-419") {
+    return "- Language instruction: Always reply in Latin American Spanish, clear, natural, and direct.";
   }
   return "- Language instruction: Reply in the language and dialect the user writes in. Egyptian Arabic gets natural Egyptian Arabic back; formal Arabic or other Arabic dialects get clear, natural Arabic matching the user; English gets English; any other language gets that language.";
 }

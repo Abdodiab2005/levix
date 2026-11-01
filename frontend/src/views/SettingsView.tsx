@@ -487,6 +487,7 @@ export const SettingsView: React.FC = () => {
 
   const panelLang = useSavedValue<Language>(language);
   const botLang = useSavedValue(String(settings["bot_language"] || "auto"));
+  const aiReplyLang = useSavedValue(String(settings["ai_reply_language"] || "follow_bot"));
   const timezone = useSavedValue(String(settings["bot_timezone"] || "Africa/Cairo"));
   const connectionLogLevel = useSavedValue(String(settings["connection_log_level"] || "info"));
   const weatherKey = useSavedValue(String(settings["openweathermap_api_key"] || ""));
@@ -830,6 +831,34 @@ export const SettingsView: React.FC = () => {
                   <option value="auto">{t("langAuto")}</option>
                   <option value="ar">{t("langAr")}</option>
                   <option value="en">{t("langEn")}</option>
+                  <option value="pt-BR">{t("langPtBr")}</option>
+                  <option value="es-419">{t("langEs419")}</option>
+                </Select>
+              </SaveField>
+
+              <SaveField
+                label={t("aiReplyLanguage")}
+                description={t("aiReplyLanguageDesc")}
+                htmlFor="ai-reply-language"
+                dirty={aiReplyLang.dirty}
+                saving={aiReplyLang.status === "saving"}
+                justSaved={aiReplyLang.status === "saved"}
+                error={aiReplyLang.error}
+                onSave={() => aiReplyLang.save((next) => persistSetting("ai_reply_language", next))}
+                onRevert={aiReplyLang.revert}
+                {...saveLabels}
+              >
+                <Select
+                  id="ai-reply-language"
+                  value={aiReplyLang.value}
+                  onChange={(e) => aiReplyLang.setValue(e.target.value)}
+                >
+                  <option value="follow_bot">{t("aiLangFollowBot")}</option>
+                  <option value="auto">{t("langAuto")}</option>
+                  <option value="ar">{t("langAr")}</option>
+                  <option value="en">{t("langEn")}</option>
+                  <option value="pt-BR">{t("langPtBr")}</option>
+                  <option value="es-419">{t("langEs419")}</option>
                 </Select>
               </SaveField>
 
