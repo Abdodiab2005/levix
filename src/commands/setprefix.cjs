@@ -2,12 +2,14 @@
 const logger = require("../utils/logger.cjs");
 // Same validation and storage the dashboard uses, so both doors agree.
 const runtimeConfig = require("../config/runtime-config.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t, tr } = require("../utils/i18n.cjs");
 
-const PREFIX_ERRORS_AR = {
-  "Prefix can't be empty": "البادئة لا يمكن أن تكون فارغة",
-  "Prefix can't be longer than 3 characters": "البادئة لا يمكن أن تزيد عن 3 أحرف",
-  "Prefix can't contain whitespace": "البادئة لا يمكن أن تحتوي على مسافات",
+// runtime-config words its refusals in English for the dashboard. Each known
+// refusal maps to a catalog message, built when it is sent.
+const PREFIX_ERRORS = {
+  "Prefix can't be empty": () => t("bot.core.setprefix.errorEmpty"),
+  "Prefix can't be longer than 3 characters": () => t("bot.core.setprefix.errorTooLong"),
+  "Prefix can't contain whitespace": () => t("bot.core.setprefix.errorWhitespace"),
 };
 
 module.exports = {
@@ -37,7 +39,7 @@ module.exports = {
     } catch (error) {
       // runtime-config words its refusals in English for the dashboard.
       await sock.sendMessage(chatId, {
-        text: `❌ ${tr(error.message, PREFIX_ERRORS_AR[error.message] || error.message)}`,
+        text: `❌ ${Object.hasOwn(PREFIX_ERRORS, error.message) ? PREFIX_ERRORS[error.message]() : error.message}`,
       });
       return;
     }
@@ -45,10 +47,7 @@ module.exports = {
     logger.info(`[Prefix] Bot prefix changed to: ${newPrefix}`);
 
     await sock.sendMessage(chatId, {
-      text: tr(
-        `✅ The prefix is now \`${newPrefix}\`\n\nUse \`${newPrefix}help\` to see the commands.\n\n⚠️ The new prefix works in every chat right away.`,
-        `✅ تم تغيير البادئة بنجاح إلى: \`${newPrefix}\`\n\nالآن استخدم \`${newPrefix}help\` لعرض الأوامر.\n\n⚠️ البادئة الجديدة تعمل الآن في كل المحادثات.`,
-      ),
+      text: t("bot.core.setprefix.changed", { prefix: newPrefix }),
     });
   },
 };
