@@ -1,6 +1,6 @@
 // file: /commands/deletenote.js
 const { deleteNote } = require("../../utils/storage.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "deletenote",
@@ -13,10 +13,7 @@ module.exports = {
 
     if (!keywordArg || !keywordArg.startsWith("#")) {
       return await sock.sendMessage(groupId, {
-        text: tr(
-          "Wrong format. Use: `!deletenote #keyword`",
-          "صيغة غير صحيحة. استخدم: `!deletenote #keyword`",
-        ),
+        text: t("bot.group.deletenote.usageHint"),
       });
     }
 
@@ -24,14 +21,11 @@ module.exports = {
 
     if (deleteNote(groupId, keyword)) {
       await sock.sendMessage(groupId, {
-        text: tr(`☑️ Deleted the note \`#${keyword}\`.`, `☑️ تم حذف الملاحظة \`#${keyword}\` بنجاح.`),
+        text: t("bot.group.deletenote.deleted", { keyword }),
       });
     } else {
       await sock.sendMessage(groupId, {
-        text: tr(
-          `⚠️ No note has the keyword \`${keywordArg}\``,
-          `⚠️ لم يتم العثور على ملاحظة بالكلمة المفتاحية: \`${keywordArg}\``,
-        ),
+        text: t("bot.group.deletenote.notFound", { keyword: keywordArg }),
       });
     }
   },

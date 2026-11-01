@@ -5,7 +5,7 @@ const {
   rosterJidForSync,
 } = require("../../utils/permissions.cjs");
 const { targetFromCommand } = require("../../utils/moderationAction.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "demote",
@@ -20,10 +20,7 @@ module.exports = {
 
     if (!targetJid) {
       return await sock.sendMessage(groupId, {
-        text: tr(
-          "Mention the admin, or reply to their message, to demote them.",
-          "يجب عمل منشن للمشرف أو الرد على رسالته لعزله.",
-        ),
+        text: t("bot.group.demote.noTarget"),
       });
     }
 
@@ -32,33 +29,27 @@ module.exports = {
 
     if (!targetUser || !targetUser.admin) {
       return await sock.sendMessage(groupId, {
-        text: tr(
-          `⚠️ @${targetJid.split("@")[0]} isn't an admin.`,
-          `⚠️ العضو @${targetJid.split("@")[0]} ليس مشرفًا بالفعل.`,
-        ),
+        text: t("bot.group.demote.notAdmin", { number: targetJid.split("@")[0] }),
         mentions: [targetJid],
       });
     }
 
     if (targetUser.admin === "superadmin") {
       return await sock.sendMessage(groupId, {
-        text: tr("The group's creator can't be demoted.", "لا يمكن عزل منشئ المجموعة."),
+        text: t("bot.group.demote.creator"),
       });
     }
 
     try {
       await sock.groupParticipantsUpdate(groupId, [rosterJid], "demote");
       await sock.sendMessage(groupId, {
-        text: tr(
-          `👤 @${targetJid.split("@")[0]} is no longer an admin.`,
-          `👤 تم عزل @${targetJid.split("@")[0]} من الإشراف.`,
-        ),
+        text: t("bot.group.demote.done", { number: targetJid.split("@")[0] }),
         mentions: [targetJid],
       });
     } catch (error) {
       logger.error({ err: error, command: "demote" }, "Error in !demote command");
       await sock.sendMessage(groupId, {
-        text: tr("Something went wrong while demoting.", "حدث خطأ أثناء محاولة العزل."),
+        text: t("bot.group.demote.failed"),
       });
     }
   },

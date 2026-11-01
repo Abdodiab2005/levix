@@ -1,6 +1,6 @@
 // file: /commands/all.js
 const logger = require("../../utils/logger.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "all",
@@ -20,9 +20,9 @@ module.exports = {
 
       // 7. Prepare the message text and the mentions array
       // You can customize the message text here
-      let text = tr("📢 | Attention everyone", "📢 | تنبيه للجميع");
+      let text = t("bot.group.all.default");
       if (args && args.length > 0) {
-        text = tr(`*📢 | Attention everyone:*\n`, `*📢 | تنبيه للجميع:*\n`) + args.join(" ");
+        text = t("bot.group.all.header") + args.join(" ");
       }
 
       // 8. Send the message with mentions
@@ -35,10 +35,7 @@ module.exports = {
       logger.error(error, "[Error] in !all command:");
       // Send a reply in case of an error
       await sock.sendMessage(msg.key.remoteJid, {
-        text: tr(
-          "Something went wrong while mentioning everyone.",
-          "حدث خطأ أثناء محاولة عمل منشن للجميع.",
-        ),
+        text: t("bot.group.all.failed"),
       });
     }
   },

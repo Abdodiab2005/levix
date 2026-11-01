@@ -1,7 +1,7 @@
 // file: /commands/group/setpp.js
 const { downloadMediaMessage } = require("@whiskeysockets/baileys");
 const logger = require("../../utils/logger.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "setpp", // pp = profile picture
@@ -16,16 +16,13 @@ module.exports = {
     const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
     if (!quoted || !quoted.imageMessage) {
       return await sock.sendMessage(groupId, {
-        text: tr(
-          "To change the group's picture, reply to the image you want with this command.",
-          "لتغيير صورة المجموعة، يرجى الرد على الصورة التي تريدها بهذا الأمر.",
-        ),
+        text: t("bot.group.setpp.notImage"),
       });
     }
 
     try {
       await sock.sendMessage(groupId, {
-        text: tr("🖼️ Changing the group's picture...", "🖼️ جارٍ تغيير صورة المجموعة..."),
+        text: t("bot.group.setpp.changing"),
       });
 
       // Download the image from the quoted message
@@ -43,15 +40,12 @@ module.exports = {
       await sock.updateProfilePicture(groupId, imageBuffer);
 
       await sock.sendMessage(groupId, {
-        text: tr("✅ The group's picture was updated.", "✅ تم تحديث صورة المجموعة بنجاح."),
+        text: t("bot.group.setpp.done"),
       });
     } catch (error) {
       logger.error({ err: error }, "Error in !group setpp command");
       await sock.sendMessage(groupId, {
-        text: tr(
-          "Something went wrong. Make sure I'm an admin and the image is valid.",
-          "حدث خطأ. تأكد من أنني مشرف وأن الصورة صالحة.",
-        ),
+        text: t("bot.group.setpp.failed"),
       });
     }
   },

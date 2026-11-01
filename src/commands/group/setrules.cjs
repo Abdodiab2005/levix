@@ -1,6 +1,6 @@
 const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "setrules",
@@ -13,10 +13,7 @@ module.exports = {
 
     if (!rulesText) {
       return await sock.sendMessage(groupId, {
-        text: tr(
-          "Write the rules after the command.\n*Example:*\n`!setrules 1. Respect the members.\n2. No spam.`",
-          "يرجى كتابة القواعد بعد الأمر.\n*مثال:*\n`!setrules 1. احترام الأعضاء.\n2. ممنوع السبام.`",
-        ),
+        text: t("bot.group.setrules.usageHint"),
       });
     }
 
@@ -31,13 +28,13 @@ module.exports = {
       saveGroupSettings(groupId, settings);
 
       await sock.sendMessage(groupId, {
-        text: tr("✅ The group's rules were saved.", "✅ تم حفظ قواعد المجموعة بنجاح في قاعدة البيانات."),
+        text: t("bot.group.setrules.saved"),
       });
     } catch (error) {
       // Improved logging for better debugging
       logger.error({ err: error, groupId: groupId }, "Error in !setrules command");
       await sock.sendMessage(groupId, {
-        text: tr("Something went wrong while saving the rules.", "حدث خطأ أثناء حفظ القواعد."),
+        text: t("bot.group.setrules.failed"),
       });
     }
   },

@@ -5,7 +5,7 @@ const {
   rosterJidForSync,
 } = require("../../utils/permissions.cjs");
 const { targetFromCommand } = require("../../utils/moderationAction.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "promote",
@@ -20,10 +20,7 @@ module.exports = {
 
     if (!targetJid) {
       return await sock.sendMessage(groupId, {
-        text: tr(
-          "Mention the member, or reply to their message, to promote them.",
-          "يجب عمل منشن للعضو أو الرد على رسالته لترقيته.",
-        ),
+        text: t("bot.group.promote.noTarget"),
       });
     }
 
@@ -32,10 +29,7 @@ module.exports = {
 
     if (targetUser && (targetUser.admin === "admin" || targetUser.admin === "superadmin")) {
       return await sock.sendMessage(groupId, {
-        text: tr(
-          `⚠️ @${targetJid.split("@")[0]} is already an admin.`,
-          `⚠️ العضو @${targetJid.split("@")[0]} مشرف بالفعل.`,
-        ),
+        text: t("bot.group.promote.alreadyAdmin", { number: targetJid.split("@")[0] }),
         mentions: [targetJid],
       });
     }
@@ -43,16 +37,13 @@ module.exports = {
     try {
       await sock.groupParticipantsUpdate(groupId, [rosterJid], "promote");
       await sock.sendMessage(groupId, {
-        text: tr(
-          `👑 @${targetJid.split("@")[0]} is now an admin.`,
-          `👑 تم ترقية @${targetJid.split("@")[0]} إلى مشرف بنجاح.`,
-        ),
+        text: t("bot.group.promote.done", { number: targetJid.split("@")[0] }),
         mentions: [targetJid],
       });
     } catch (error) {
       logger.error({ err: error, command: "promote" }, "Error in !promote command");
       await sock.sendMessage(groupId, {
-        text: tr("Something went wrong while promoting.", "حدث خطأ أثناء محاولة الترقية."),
+        text: t("bot.group.promote.failed"),
       });
     }
   },
