@@ -75,6 +75,10 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
   build steps generate the React, Node, gateway and Android resources from it.
 - Consequences: Phase 03 replaces the two-argument `tr()` progressively, keeps it as a wrapper during
   the migration, and adds a catalog validator to CI.
+- Amended 2026-11-01 (PENDING REVIEW): the re-audit counts are 577 `tr(` lines in 87 files, 1116
+  dashboard keys, 89 gateway keys, and 247 Android strings plus 8 plurals per locale. The catalog
+  layout, generated outputs, `ai_reply_language` setting and validator rules are in
+  `PHASE-03-RESULTS.md` section 3.
 
 ## ADR-005: React gateway replaces the EJS pages without weakening auth
 
