@@ -1,18 +1,10 @@
 // file: /commands/group/approveall.js
 const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs"); // Note the path is ../../
 const logger = require("../../utils/logger.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "approveall",
-  description: {
-    en: "Manages automatic approval of join requests.",
-    ar: "يدير الموافقة التلقائية على طلبات الانضمام.",
-  },
-  usage: {
-    en: "approveall <on|off>",
-    ar: "approveall <on|off>",
-  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true, // The bot must be an admin to approve requests
@@ -31,31 +23,25 @@ module.exports = {
         settings.join_requests.auto_approve_enabled = true;
         saveGroupSettings(groupId, settings);
         return await sock.sendMessage(groupId, {
-          text: tr(
-            "✅ Join requests are now approved automatically.",
-            "✅ تم تفعيل نظام الموافقة التلقائية على طلبات الانضمام.",
-          ),
+          text: t("bot.group.approveall.enabled"),
         });
       } else if (option === "off") {
         settings.join_requests.auto_approve_enabled = false;
         saveGroupSettings(groupId, settings);
         return await sock.sendMessage(groupId, {
-          text: tr("☑️ Automatic approval is off.", "☑️ تم تعطيل نظام الموافقة التلقائية."),
+          text: t("bot.group.approveall.disabled"),
         });
       } else {
         const status = settings.join_requests.auto_approve_enabled
-          ? tr("on ✅", "مفعل ✅")
-          : tr("off ☑️", "معطل ☑️");
+          ? t("bot.group.approveall.stateOn")
+          : t("bot.group.approveall.stateOff");
         return await sock.sendMessage(groupId, {
-          text: tr(
-            `Automatic approval: ${status}.\nUse 'on' or 'off' to change it.`,
-            `حالة الموافقة التلقائية: ${status}.\nاستخدم 'on' أو 'off' للتغيير.`,
-          ),
+          text: t("bot.group.approveall.status", { status }),
         });
       }
     } catch (error) {
       logger.error({ err: error, command: "approveall" }, "Error in !group approveall command");
-      await sock.sendMessage(groupId, { text: tr("Something went wrong.", "حدث خطأ.") });
+      await sock.sendMessage(groupId, { text: t("bot.group.approveall.failed") });
     }
   },
 };

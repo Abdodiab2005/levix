@@ -51,7 +51,7 @@ const {
   assertProviderBaseUrl,
   assertProviderRequestUrl,
 } = require("../utils/providerUrl.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 // Per-(chat, sender) explicit context buffer for the multi-message workflow.
 // Entries accumulate until `!gemini send` flushes them into a single call.
@@ -218,7 +218,7 @@ function buildPartsFromBuffer(entries) {
   const parts = [];
   for (const e of entries) {
     if (e.quotedText) {
-      parts.push({ text: tr(`(Reference: "${e.quotedText}")`, `(مرجع: "${e.quotedText}")`) });
+      parts.push({ text: t("bot.ai.gemini.reference", { quotedText: e.quotedText }) });
     }
     if (e.quotedMediaParts?.length) parts.push(...e.quotedMediaParts);
     if (e.mediaParts?.length) parts.push(...e.mediaParts);
@@ -238,29 +238,16 @@ function summarizeEntry(e, idx) {
     bits.push(`↩️ "${preview}"`);
   }
   if (e.mediaParts?.length)
-    bits.push(tr(`🖼️ media (${e.mediaParts.length})`, `🖼️ ميديا (${e.mediaParts.length})`));
+    bits.push(t("bot.ai.gemini.mediaCount", { count: e.mediaParts.length }));
   if (e.quotedMediaParts?.length) {
-    bits.push(
-      tr(
-        `🖼️↩️ quoted media (${e.quotedMediaParts.length})`,
-        `🖼️↩️ وسائط مقتبسة (${e.quotedMediaParts.length})`,
-      ),
-    );
+    bits.push(t("bot.ai.gemini.quotedMediaCount", { count: e.quotedMediaParts.length }));
   }
-  return `${idx + 1}. ${bits.join(" · ") || tr("(empty)", "(فارغة)")}`;
+  return `${idx + 1}. ${bits.join(" · ") || t("bot.ai.gemini.emptyEntry")}`;
 }
 
 module.exports = {
   name: "gemini",
   aliases: ["ask", "ai", "resetai", "del", "delall", "generate"],
-  description: {
-    en: "AI assistant with tools (web search, reading links, long-term memory). Sub-commands: add/send/clear/show for context, generate for images, del/delall to clear the conversation.",
-    ar: "مساعد ذكي بأدوات (بحث في الويب، قراءة الروابط، ذاكرة دائمة). أوامر فرعية: add/send/clear/show للسياق، وgenerate للصور، وdel/delall لمسح المحادثة.",
-  },
-  usage: {
-    en: "gemini <text>\ngemini add <text>\ngemini send\ngemini show\ngemini clear\ngenerate <image description>\ndel   (clear this chat's conversation)\ndelall   (clear every conversation)",
-    ar: "gemini <النص>\ngemini add <النص>\ngemini send\ngemini show\ngemini clear\ngenerate <وصف الصورة>\ndel   (مسح سجل هذه المحادثة)\ndelall   (مسح كل المحادثات)",
-  },
   chat: "all",
 
   async execute(sock, msg, args, body, groupMetadata, ctx = {}) {
@@ -298,7 +285,7 @@ module.exports = {
         return sendBotMessage(
           sock,
           chatId,
-          { text: tr("🚫 Only the bot owner can use this.", "🚫 هذا الأمر مخصص للمالك فقط.") },
+          { text: t("bot.ai.gemini.ownerOnly") },
           { replyTo: msg },
         );
       await deleteChatHistoryAsync(chatId);
@@ -306,12 +293,7 @@ module.exports = {
         sock,
         chatId,
         {
-          text: tr(
-            "✅ Conversation history cleared.\n" +
-              "_(Long-term memory isn't cleared this way — use `!memory clear` if that's what you meant.)_",
-            "✅ تم مسح سجل المحادثة.\n" +
-              "_(لا تُحذف الذاكرة الدائمة بهذه الطريقة. استخدم `!memory clear` إذا أردت حذفها.)_",
-          ),
+          text: t("bot.ai.gemini.historyCleared"),
         },
         { replyTo: msg },
       );
@@ -321,7 +303,7 @@ module.exports = {
         return sendBotMessage(
           sock,
           chatId,
-          { text: tr("🚫 Only the bot owner can use this.", "🚫 هذا الأمر مخصص للمالك فقط.") },
+          { text: t("bot.ai.gemini.ownerOnly") },
           { replyTo: msg },
         );
       await deleteAllChatHistoriesAsync();
@@ -329,10 +311,7 @@ module.exports = {
         sock,
         chatId,
         {
-          text: tr(
-            "✅ Every conversation history was cleared.",
-            "✅ تم مسح كل سجلات المحادثات بنجاح.",
-          ),
+          text: t("bot.ai.gemini.allHistoryCleared"),
         },
         { replyTo: msg },
       );
@@ -348,33 +327,22 @@ module.exports = {
           sock,
           chatId,
           {
-            text: tr(
-              "Describe the image you want after the command. Example: !generate a cat wearing a hat",
-              "اكتب وصفًا للصورة التي تريدها بعد الأمر. مثال: !generate قطة ترتدي قبعة",
-            ),
+            text: t("bot.ai.gemini.generateUsage"),
           },
           { replyTo: msg },
         );
       }
 
-      const status = await createStatus(
-        sock,
-        chatId,
-        tr("🎨 Making the image...", "🎨 جارٍ إنشاء الصورة..."),
-        { replyTo: msg },
-      );
+      const status = await createStatus(sock, chatId, t("bot.ai.gemini.makingImage"), {
+        replyTo: msg,
+      });
 
       try {
         // Image generation needs a model that returns image bytes, which only
         // the Gemini image models do — it stays on Gemini whatever the chat
         // provider is.
         if (!geminiClients().genAI) {
-          throw new Error(
-            tr(
-              "No Gemini API key is set — image generation only runs on Gemini",
-              "لم يُضبط مفتاح Gemini API — توليد الصور يعمل على Gemini فقط",
-            ),
-          );
+          throw new Error(t("bot.ai.gemini.noGeminiKeyImages"));
         }
         await assertProviderRequestUrl(settings.get("gemini_base_url"), {
           allowLoopback: true,
@@ -397,7 +365,7 @@ module.exports = {
           (part) => part?.inlineData?.data,
         );
         if (!image) {
-          throw new Error(tr("The model answered without an image", "أعاد النموذج ردًا دون صورة"));
+          throw new Error(t("bot.ai.gemini.noImageInAnswer"));
         }
         const imageBuffer = Buffer.from(image.inlineData.data, "base64");
 
@@ -407,13 +375,13 @@ module.exports = {
           chatId,
           {
             image: imageBuffer,
-            caption: tr(`🖼️ Here you go: "${imagePrompt}"`, `🖼️ تفضل، صورة لـ: "${imagePrompt}"`),
+            caption: t("bot.ai.gemini.imageCaption", { prompt: imagePrompt }),
           },
           { replyTo: msg },
         );
       } catch (error) {
         logger.error({ err: error }, `Error in !generate command`);
-        await status.fail(error, tr("I couldn't make the image", "تعذّر إنشاء الصورة"));
+        await status.fail(error, t("bot.ai.gemini.imageFailed"));
       }
       return;
     }
@@ -426,12 +394,7 @@ module.exports = {
           sock,
           chatId,
           {
-            text: tr(
-              "📭 Nothing to add to the context.\n\n" +
-                "Write text after the command, reply to a message, or send media with the caption `!gemini add`.",
-              "📭 لا يوجد محتوى لإضافته إلى السياق.\n\n" +
-                "اكتب نصًا بعد الأمر، أو ردّ على رسالة، أو أرسل ملف وسائط مع الوصف `!gemini add`.",
-            ),
+            text: t("bot.ai.gemini.nothingToAdd"),
           },
           { replyTo: msg },
         );
@@ -442,10 +405,7 @@ module.exports = {
           sock,
           chatId,
           {
-            text: tr(
-              `The context is full (${MAX_BUFFER_ENTRIES} messages at most). Send \`!gemini send\` or \`!gemini clear\`.`,
-              `السياق ممتلئ (حد أقصى ${MAX_BUFFER_ENTRIES} رسائل). أرسل \`!gemini send\` أو \`!gemini clear\`.`,
-            ),
+            text: t("bot.ai.gemini.contextFull", { max: MAX_BUFFER_ENTRIES }),
           },
           { replyTo: msg },
         );
@@ -456,12 +416,7 @@ module.exports = {
           sock,
           chatId,
           {
-            text: tr(
-              "The context is too big, or too many contexts are open. " +
-                "Send `!gemini send` or `!gemini clear` and try again.",
-              "السياق كبير جدًا، أو بلغ عدد السياقات المفتوحة الحد الأقصى. " +
-                "أرسل `!gemini send` أو `!gemini clear` وحاول مرة أخرى.",
-            ),
+            text: t("bot.ai.gemini.contextTooBig"),
           },
           { replyTo: msg },
         );
@@ -471,12 +426,7 @@ module.exports = {
         sock,
         chatId,
         {
-          text: tr(
-            `✅ Added to the context. (Total now: *${stored.length}*)\n\n` +
-              "Keep going with `!gemini add ...`, or send it all with `!gemini send`.",
-            `✅ أُضيفت إلى السياق. (إجمالي الآن: *${stored.length}*)\n\n` +
-              "تابع باستخدام `!gemini add ...`، أو أرسل المحتوى كله باستخدام `!gemini send`.",
-          ),
+          text: t("bot.ai.gemini.contextAdded", { total: stored.length }),
         },
         { replyTo: msg },
       );
@@ -490,11 +440,8 @@ module.exports = {
         chatId,
         {
           text: had
-            ? tr(
-                `🗑️ Cleared *${had}* messages from the context.`,
-                `🗑️ تم مسح *${had}* رسالة من السياق.`,
-              )
-            : tr("📭 The context was already empty.", "📭 السياق فارغ بالفعل."),
+            ? t("bot.ai.gemini.contextCleared", { count: had })
+            : t("bot.ai.gemini.contextAlreadyEmpty"),
         },
         { replyTo: msg },
       );
@@ -507,10 +454,7 @@ module.exports = {
           sock,
           chatId,
           {
-            text: tr(
-              "📭 The context is empty. Start with `!gemini add ...`.",
-              "📭 السياق فارغ. ابدأ بـ `!gemini add ...`.",
-            ),
+            text: t("bot.ai.gemini.contextEmptyHint"),
           },
           { replyTo: msg },
         );
@@ -520,15 +464,9 @@ module.exports = {
         chatId,
         {
           text:
-            tr(
-              `📋 *Current context:* (${buf.length} messages)\n\n`,
-              `📋 *السياق الحالي:* (${buf.length} رسالة)\n\n`,
-            ) +
+            t("bot.ai.gemini.contextHeader", { count: buf.length }) +
             buf.map((e, i) => summarizeEntry(e, i)).join("\n") +
-            tr(
-              "\n\nSend it all with `!gemini send` or clear it with `!gemini clear`.",
-              "\n\nأرسل المحتوى كله باستخدام `!gemini send` أو امسحه باستخدام `!gemini clear`.",
-            ),
+            t("bot.ai.gemini.contextFooter"),
         },
         { replyTo: msg },
       );
@@ -548,12 +486,7 @@ module.exports = {
           sock,
           chatId,
           {
-            text: tr(
-              "📭 The context is empty and `!gemini send` has no text.\n\n" +
-                "Start with `!gemini add ...`, or write text with `!gemini send ...`.",
-              "📭 السياق فارغ ولا يوجد نص في `!gemini send`.\n\n" +
-                "ابدأ بـ `!gemini add ...` أولًا، أو اكتب نصًا مع `!gemini send ...`.",
-            ),
+            text: t("bot.ai.gemini.sendEmpty"),
           },
           { replyTo: msg },
         );
@@ -576,7 +509,7 @@ module.exports = {
           text:
             prompt ||
             mediaMessage.caption ||
-            tr("What is in this image/video?", "ماذا يوجد في هذه الصورة/الفيديو؟"),
+            t("bot.ai.gemini.mediaPrompt"),
         });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload media to Gemini.");
@@ -584,7 +517,7 @@ module.exports = {
           sock,
           chatId,
           error,
-          tr("Uploading the image/video failed", "حصلت مشكلة في رفع الصورة/الفيديو"),
+          t("bot.ai.gemini.uploadMediaFailed"),
           {
             replyTo: msg,
           },
@@ -593,14 +526,14 @@ module.exports = {
     } else if (!parts.length && msg.message?.audioMessage) {
       try {
         await processIncomingMedia(parts, msg.message.audioMessage, "audio");
-        parts.push({ text: prompt || tr("Analyze this recording.", "حلل لي هذا التسجيل الصوتي.") });
+        parts.push({ text: prompt || t("bot.ai.gemini.analyzeRecording") });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload audio to Gemini.");
         return sendBotError(
           sock,
           chatId,
           error,
-          tr("Uploading the recording failed", "حصلت مشكلة في رفع التسجيل الصوتي"),
+          t("bot.ai.gemini.uploadRecordingFailed"),
           {
             replyTo: msg,
           },
@@ -613,8 +546,8 @@ module.exports = {
         const text = prompt || msg.message.documentMessage.caption || "";
         parts.push({
           text: text
-            ? tr(`${text}\n(File: ${fileName})`, `${text}\n(الملف: ${fileName})`)
-            : tr(`Analyze/summarize the file: ${fileName}`, `حلل/لخّص الملف: ${fileName}`),
+            ? t("bot.ai.gemini.fileWithText", { text, fileName })
+            : t("bot.ai.gemini.analyzeFile", { fileName }),
         });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload document to Gemini.");
@@ -622,7 +555,7 @@ module.exports = {
           sock,
           chatId,
           error,
-          tr("Uploading the file failed", "حصلت مشكلة في رفع الملف"),
+          t("bot.ai.gemini.uploadFileFailed"),
           {
             replyTo: msg,
           },
@@ -637,10 +570,7 @@ module.exports = {
         sock,
         chatId,
         {
-          text: tr(
-            "Write a question, or send an image/video/voice note/file with the command.",
-            "يرجى كتابة سؤال أو إرسال صورة/فيديو/تسجيل صوتي/ملف مع الأمر.",
-          ),
+          text: t("bot.ai.gemini.askPrompt"),
         },
         { replyTo: msg },
       );
@@ -671,7 +601,7 @@ module.exports = {
             sock,
             chatId,
             mediaError,
-            tr("There was a problem with the quoted message", "حدثت مشكلة في الرسالة المقتبسة"),
+            t("bot.ai.gemini.quotedProblem"),
             {
               replyTo: msg,
             },
@@ -683,18 +613,12 @@ module.exports = {
         parts.unshift(quotedMediaPart);
         if (quotedText) {
           parts.unshift({
-            text: tr(
-              `Using this message as a reference:\n"""\n${quotedText}\n"""\n\n`,
-              `بالاعتماد على هذه الرسالة كمرجع:\n"""\n${quotedText}\n"""\n\n`,
-            ),
+            text: t("bot.ai.gemini.referenceMessage", { quotedText }),
           });
         }
       } else if (quotedText) {
         parts.unshift({
-          text: tr(
-            `Using this message as a reference:\n"""\n${quotedText}\n"""\n\nAnswer the following:`,
-            `بالاعتماد على هذه الرسالة كمرجع:\n"""\n${quotedText}\n"""\n\nأجب على التالي:`,
-          ),
+          text: t("bot.ai.gemini.referenceMessageAnswer", { quotedText }),
         });
       }
     }
@@ -706,10 +630,9 @@ module.exports = {
         sock,
         chatId,
         {
-          text: tr(
-            `Settings problem: no API key is set for the current AI provider (${activeProvider.label || activeProvider.id}) — set it in the control panel.`,
-            `خطأ في الإعدادات: لم يُضبط مفتاح مزوّد الذكاء الاصطناعي الحالي (${activeProvider.label || activeProvider.id}) — اضبطه من لوحة التحكم.`,
-          ),
+          text: t("bot.ai.gemini.providerNotConfigured", {
+            provider: activeProvider.label || activeProvider.id,
+          }),
         },
         { replyTo: msg },
       );
@@ -741,15 +664,12 @@ module.exports = {
     const targets = [...caller.mentionedJids, caller.quotedParticipant].filter(Boolean);
     if (targets.length) {
       parts.unshift({
-        text: tr(
-          `(IDs mentioned in the message: ${[...new Set(targets)].join(", ")})`,
-          `(معرفات مذكورة في الرسالة: ${[...new Set(targets)].join(", ")})`,
-        ),
+        text: t("bot.ai.gemini.mentionedIds", { ids: [...new Set(targets)].join(", ") }),
       });
     }
 
     // The one message that will carry the whole run.
-    const status = await createStatus(sock, chatId, tr("🤖 Thinking...", "🤖 جارٍ التفكير..."), {
+    const status = await createStatus(sock, chatId, t("bot.ai.gemini.thinking"), {
       replyTo: msg,
     });
 
@@ -787,10 +707,7 @@ module.exports = {
 
       const text =
         result.text?.trim() ||
-        tr(
-          "The model sent no answer. Try asking another way.",
-          "لم يردّ النموذج. حاول صياغة السؤال بطريقة أخرى.",
-        );
+        t("bot.ai.gemini.noAnswer");
       // Appended only when Gemini really grounded the answer on a search —
       // formatSources() returns "" for an answer the model gave from its own
       // knowledge, so there is never a Sources block with nothing behind it.
@@ -800,7 +717,7 @@ module.exports = {
       logger.error({ err: error }, "Error in !gemini command");
       await status.fail(
         error,
-        tr("Something went wrong while talking to the AI", "حصلت مشكلة وأنا بكلم الذكاء الاصطناعي"),
+        t("bot.ai.gemini.chatFailed"),
       );
     }
   },

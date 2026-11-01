@@ -7,7 +7,7 @@ const logger = require("./src/utils/logger.cjs");
 const settings = require("./src/config/settings.cjs");
 const { ensureDataDir } = require("./src/config/paths.cjs");
 const storage = require("./src/utils/storage.cjs");
-const { detectLang, withLang, tr } = require("./src/utils/i18n.cjs");
+const { detectLang, withLang, t } = require("./src/utils/i18n.cjs");
 
 // الجدولة كانت في config/schedule.json: الداشبورد مش شايفاه، وكراش وسط
 // الكتابة كان ممكن يقصّه. دلوقتي جدول في نفس قاعدة البيانات زي أي حاجة تانية.
@@ -180,10 +180,10 @@ function recordDelivery(jobId, status, runAt, error = null) {
  * What sendMessage receives for one job, in order: the text, or the stored
  * media with the text as its caption. Audio and stickers take no caption, so
  * their text follows as a message of its own instead of being dropped. Runs
- * inside withLang() so tr() picks the right header.
+ * inside withLang() so t() picks the right header.
  */
 function buildScheduledPayloads(job) {
-  const header = tr("*Scheduled message 🗓️*", "*رسالة مجدولة 🗓️*");
+  const header = t("bot.schedules.scheduler.header");
   const text = job.message ? `${header}\n\n${job.message}` : header;
   if (!job.media) return [{ text }];
 

@@ -11,7 +11,7 @@ const runtimeConfig = require("../config/runtime-config.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const { quotedOf, visibleText } = require("../utils/messageContent.cjs");
 const { decodeEscapes, decodeHtmlEntities, repairMojibake } = require("../utils/textDecode.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { currentLang, t } = require("../utils/i18n.cjs");
 const {
   isAgentEnabled,
   activeProviderKeySetting,
@@ -429,7 +429,7 @@ async function translateWithAi({ text, target, sourceLabel, mode, tone }) {
 function formatDetect(value) {
   const raw = String(value || "").trim();
   if (!raw) {
-    return tr("I could not detect the language.", "تعذر اكتشاف اللغة.");
+    return t("bot.ai.translate.detectFailed");
   }
   const lower = raw.toLowerCase();
   let code = LANGUAGE_INDEX.get(normalizeToken(raw));
@@ -439,17 +439,15 @@ function formatDetect(value) {
   }
   if (code && LANGUAGE_NAMES[code]) {
     const names = LANGUAGE_NAMES[code];
-    return tr(`Detected language: ${names.en} (${code})`, `اللغة المكتشفة: ${names.ar} (${code})`);
+    const name = currentLang() === "ar" ? names.ar : names.en;
+    return t("bot.ai.translate.detectedNamed", { name, code });
   }
-  return tr(`Detected language: ${raw}`, `اللغة المكتشفة: ${raw}`);
+  return t("bot.ai.translate.detectedRaw", { raw });
 }
 
 function usageText() {
   const prefix = runtimeConfig.getPrefix();
-  return tr(
-    `Usage:\n\`${prefix}translate <text>\`\n\`${prefix}translate <language> <text>\`\n\`${prefix}translate google <text>\`\nReply to a message, or pass the text after the command.`,
-    `الاستخدام:\n\`${prefix}translate <النص>\`\n\`${prefix}translate <اللغة> <النص>\`\n\`${prefix}translate google <النص>\`\nرد على رسالة، أو اكتب النص بعد الأمر.`,
-  );
+  return t("bot.ai.translate.usage", { prefix });
 }
 
 function isAbortError(err) {
@@ -472,10 +470,7 @@ async function execute(sock, msg, args) {
   }
   if (text.length > MAX_INPUT_CHARS) {
     return sock.sendMessage(chatId, {
-      text: tr(
-        `That text is too long (max ${MAX_INPUT_CHARS} characters).`,
-        `هذا النص طويل جداً (الحد الأقصى ${MAX_INPUT_CHARS} حرف).`,
-      ),
+      text: t("bot.ai.translate.tooLong", { max: MAX_INPUT_CHARS }),
     });
   }
 
@@ -489,19 +484,13 @@ async function execute(sock, msg, args) {
       engine = "ai";
     } else {
       return sock.sendMessage(chatId, {
-        text: tr(
-          "That option needs an AI key. Add one in the control panel (Settings), or drop summary / explain / formal / casual.",
-          "هذا الخيار يحتاج مفتاح ذكاء اصطناعي. أضفه من لوحة التحكم (Settings)، أو أزل summary / explain / formal / casual.",
-        ),
+        text: t("bot.ai.translate.needsAi"),
       });
     }
   }
   if (engine === "ai" && !canUseAi()) {
     return sock.sendMessage(chatId, {
-      text: tr(
-        "No AI key is set. Add one in the control panel (Settings), or use `!translate google`.",
-        "مفتاح الذكاء الاصطناعي غير مضبوط. أضفه من لوحة التحكم (Settings)، أو استخدم `!translate google`.",
-      ),
+      text: t("bot.ai.translate.noAiKey"),
     });
   }
 
@@ -509,8 +498,8 @@ async function execute(sock, msg, args) {
   const sourceLabel = ARABIC_LETTERS.test(text) ? "Arabic" : "auto-detect";
   const statusLine =
     parsed.mode === "detect"
-      ? tr("🌐 Detecting language...", "🌐 جارٍ اكتشاف اللغة...")
-      : tr("🌐 Translating...", "🌐 جارٍ الترجمة...");
+      ? t("bot.ai.translate.detecting")
+      : t("bot.ai.translate.translating");
 
   const status = await createStatus(sock, chatId, statusLine, { replyTo: msg });
 
@@ -532,7 +521,7 @@ async function execute(sock, msg, args) {
     }
     if (!result.text) {
       await status.finish(
-        tr("I couldn't translate that. Try again.", "تعذر ترجمة هذا النص. حاول مرة أخرى."),
+        t("bot.ai.translate.emptyResult"),
       );
       return;
     }
@@ -541,28 +530,17 @@ async function execute(sock, msg, args) {
     logger.error({ err: error }, "[translate] failed");
     if (isAbortError(error)) {
       await status.finish(
-        tr(
-          "The translation service timed out. Try again.",
-          "انتهت مهلة خدمة الترجمة. حاول مرة أخرى.",
-        ),
+        t("bot.ai.translate.timedOut"),
       );
       return;
     }
-    await status.fail(error, tr("Translation failed", "فشلت الترجمة"));
+    await status.fail(error, t("bot.ai.translate.failed"));
   }
 }
 
 module.exports = {
   name: "translate",
   aliases: ["tr", "ترجم", "ترجمة"],
-  description: {
-    en: "Translates text. Arabic ↔ English by default, or into a chosen language. AI (default) or Google Translate.",
-    ar: "يترجم النص. العربية ↔ الإنجليزية تلقائياً، أو إلى لغة تختارها. المحرك الافتراضي الذكاء الاصطناعي أو Google Translate.",
-  },
-  usage: {
-    en: "translate <text>\ntranslate <language> <text>\ntranslate google <text>\ntranslate ai <text>\ntranslate summary <text>\ntranslate explain <text>\ntranslate detect [text]\ntranslate formal <text>\ntranslate casual <text>\ntranslate (reply to a message)",
-    ar: "translate <النص>\ntranslate <اللغة> <النص>\ntranslate google <النص>\ntranslate ai <النص>\ntranslate summary <النص>\ntranslate explain <النص>\ntranslate detect [النص]\ntranslate formal <النص>\ntranslate casual <النص>\ntranslate (رد على رسالة)",
-  },
   chat: "all",
   neutralArgs: true,
   keywords: SUBCOMMAND_KEYWORDS,

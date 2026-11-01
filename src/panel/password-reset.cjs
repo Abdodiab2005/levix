@@ -33,7 +33,7 @@ const logger = require("../utils/logger.cjs");
 const secrets = require("../config/secrets.cjs");
 const brand = require("../config/brand.cjs");
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
-const { withLang, detectLang, tr } = require("../utils/i18n.cjs");
+const { withLang, detectLang, t } = require("../utils/i18n.cjs");
 const normalizeJid = require("../utils/normalizeJid.esm.js").default;
 const recoveryEmail = require("./recovery-email.cjs");
 const {
@@ -102,14 +102,7 @@ function noteRecoveryAddress(address) {
 
 function codeMessage(code) {
   return withLang(detectLang(""), () =>
-    tr(
-      `🔐 *${brand.name} — password reset code: ${code}*\n\n` +
-        `Enter it in the control panel within 10 minutes. ` +
-        `If you didn't request this, ignore this message — nobody else can use it.`,
-      `🔐 *${brand.name} — كود إعادة تعيين كلمة السر: ${code}*\n\n` +
-        `ادخل الكود في لوحة التحكم خلال ١٠ دقائق. ` +
-        `إذا لم تطلب هذا الرمز، فتجاهل الرسالة — لا يمكن لأحد سواك استخدامه.`,
-    ),
+    t("bot.core.passwordReset.codeMessage", { brandName: brand.name, code }),
   );
 }
 
