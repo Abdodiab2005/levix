@@ -1,4 +1,4 @@
-const { tr } = require("../utils/i18n.cjs");
+const { tr, t } = require("../utils/i18n.cjs");
 const { isolate } = require("../utils/bidi.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const {
@@ -61,7 +61,7 @@ module.exports = {
     const who = await ownerModule.forMessage(msg, sock);
     if (!who.key)
       return sock.sendMessage(jid, {
-        text: tr("I couldn't identify the sender.", "تعذّر تحديد هوية المرسل."),
+        text: t("bot.stickers.pack.senderUnknown"),
       });
     const parsed = parse(args);
     let status;
@@ -85,10 +85,7 @@ module.exports = {
         } else {
           const pack = requirePack(who, oldName);
           const renamed = library.updatePack(who, pack.id, newName);
-          line = tr(
-            `Renamed pack to ${isolate(renamed.name)}.`,
-            `أُعيدت تسمية الحزمة إلى ${isolate(renamed.name)}.`,
-          );
+          line = t("bot.stickers.pack.renamed", { name: isolate(renamed.name) });
         }
       } else if (!parsed.name) {
         line = tr(
@@ -97,14 +94,11 @@ module.exports = {
         );
       } else if (parsed.action === "create") {
         const pack = library.createPack(who, parsed.name);
-        line = tr(`Created pack ${isolate(pack.name)}.`, `أُنشئت الحزمة ${isolate(pack.name)}.`);
+        line = t("bot.stickers.pack.created", { name: isolate(pack.name) });
       } else if (parsed.action === "delete") {
         const pack = requirePack(who, parsed.name);
         library.deletePack(who, pack.id);
-        line = tr(
-          `Deleted pack ${isolate(pack.name)}. Its stickers remain in your library.`,
-          `حُذفت الحزمة ${isolate(pack.name)}. بقيت ملصقاتها في مكتبتك.`,
-        );
+        line = t("bot.stickers.pack.deleted", { name: isolate(pack.name) });
       } else if (parsed.action === "remove") {
         const pack = requirePack(who, parsed.name);
         const target = targetOf(msg, { quotedOnly: true });
@@ -113,10 +107,7 @@ module.exports = {
         const sticker = library.findStickerByContent(who, buffer);
         const removed = library.removeFromPack(who, pack.id, [sticker.id]);
         if (!removed.affected) throw new StickerError("NOT_FOUND");
-        line = tr(
-          `Removed the sticker from ${isolate(pack.name)}. It remains in your library.`,
-          `أُزيل الملصق من ${isolate(pack.name)}. بقي في مكتبتك.`,
-        );
+        line = t("bot.stickers.pack.removed", { name: isolate(pack.name) });
       } else {
         const target = targetOf(msg, { quotedOnly: true });
         if (parsed.action === "show" || (parsed.action === "auto" && !target)) {
@@ -132,12 +123,9 @@ module.exports = {
           if (createdPack) pack = library.createPack(who, parsed.name);
           try {
             const buffer = await downloadTarget(target);
-            status = await createStatus(
-              sock,
-              jid,
-              tr("🎨 Saving sticker...", "🎨 جارٍ حفظ الملصق..."),
-              { replyTo: msg },
-            );
+            status = await createStatus(sock, jid, t("bot.stickers.pack.saving"), {
+              replyTo: msg,
+            });
             const { promise } = studio.createFromBuffer({
               owner: who,
               buffer,
@@ -147,14 +135,8 @@ module.exports = {
             });
             const result = await promise;
             line = result.created
-              ? tr(
-                  `Saved sticker to ${isolate(pack.name)}.`,
-                  `حُفظ الملصق في ${isolate(pack.name)}.`,
-                )
-              : tr(
-                  `Already in your library; added to ${isolate(pack.name)}.`,
-                  `الملصق موجود في مكتبتك بالفعل؛ أُضيف إلى ${isolate(pack.name)}.`,
-                );
+              ? t("bot.stickers.pack.saved", { name: isolate(pack.name) })
+              : t("bot.stickers.pack.duplicate", { name: isolate(pack.name) });
           } catch (error) {
             if (createdPack) {
               try {

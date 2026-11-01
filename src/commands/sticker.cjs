@@ -1,4 +1,4 @@
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const {
   targetOf,
@@ -38,7 +38,7 @@ module.exports = {
     const who = await ownerModule.forMessage(msg, sock);
     if (!who.key) {
       return sock.sendMessage(jid, {
-        text: tr("I couldn't identify the sender.", "تعذّر تحديد هوية المرسل."),
+        text: t("bot.stickers.sticker.senderUnknown"),
       });
     }
     const target = targetOf(msg);
@@ -60,12 +60,9 @@ module.exports = {
       }
       const buffer = await downloadTarget(target);
       if (!media.sniff(buffer)) throw new StickerError("UNSUPPORTED_TYPE");
-      status = await createStatus(
-        sock,
-        jid,
-        tr("🎨 Creating sticker...", "🎨 جارٍ إنشاء الملصق..."),
-        { replyTo: msg },
-      );
+      status = await createStatus(sock, jid, t("bot.stickers.sticker.creating"), {
+        replyTo: msg,
+      });
       if (library.hasRoom(who)) {
         const { promise } = studio.createFromBuffer({
           owner: who,

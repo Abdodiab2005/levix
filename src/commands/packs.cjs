@@ -1,4 +1,4 @@
-const { tr } = require("../utils/i18n.cjs");
+const { tr, t } = require("../utils/i18n.cjs");
 const { isolate } = require("../utils/bidi.cjs");
 const ownerModule = require("../stickers/owner.cjs");
 const library = require("../stickers/library.cjs");
@@ -18,7 +18,7 @@ module.exports = {
     const who = await ownerModule.forMessage(msg, sock);
     if (!who.key)
       return sock.sendMessage(jid, {
-        text: tr("I couldn't identify the sender.", "تعذّر تحديد هوية المرسل."),
+        text: t("bot.stickers.packs.senderUnknown"),
       });
     try {
       const packs = library.listPacks(who);
@@ -34,14 +34,9 @@ module.exports = {
         .slice(0, 30)
         .map((pack) => `${isolate(pack.name)} — ${countLabel(pack.count)}`);
       if (packs.length > 30)
-        lines.push(
-          tr(
-            `and ${countLabel(packs.length - 30, "pack")} more`,
-            `و${countLabel(packs.length - 30, "pack")} أخرى`,
-          ),
-        );
+        lines.push(t("bot.stickers.packs.more", { count: countLabel(packs.length - 30, "pack") }));
       await sock.sendMessage(jid, {
-        text: `${tr("Your packs · Library:", "حزمك · المكتبة:")} ${countLabel(total)}\n${lines.join("\n")}`,
+        text: `${t("bot.stickers.packs.header")} ${countLabel(total)}\n${lines.join("\n")}`,
       });
     } catch (error) {
       await sock.sendMessage(jid, { text: errorText(error) });
