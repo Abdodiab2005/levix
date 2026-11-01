@@ -69,7 +69,7 @@
     "status": "draft",
     "by": "machine draft (Grok)",
     "date": "2026-11-02",
-    "sha256": "b0b4d2ee3ef110d8eb4fa1c6c9391d7e4f47cee3d7cf171eff548b982d3e54c4"
+    "sha256": "efe08523ab4c98950c46f1f263b857dcad9834687e7d5cac83761551d41c77e6"
   },
   "pt-BR/bot/moderation": {
     "status": "draft",
@@ -129,7 +129,7 @@
     "status": "draft",
     "by": "machine draft (Grok)",
     "date": "2026-11-02",
-    "sha256": "0618b3b44bcbd0b502dc58d0652cbaf9837ff2987d94ff45185616aee9330169"
+    "sha256": "9653ca922f1199ca98d70e4c37bdb4498fa98625031aff96845ef5dcd295a952"
   },
   "es-419/bot/moderation": {
     "status": "draft",
