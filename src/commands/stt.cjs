@@ -17,7 +17,7 @@ const {
   assertProviderRequestUrl,
   safeProviderFetch,
 } = require("../utils/providerUrl.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 // Built on first use from whatever key is in force, and
 // rebuilt if that key changes — the operator can paste one without a restart.
@@ -75,9 +75,7 @@ const TRANSCRIBE_PROMPT =
 async function transcribeWithGemini(audioBuffer, mimetype) {
   const gemini = geminiStt();
   if (!gemini)
-    throw new Error(
-      tr("No Gemini key is set in the settings", "مفتاح Gemini غير مضبوط في الإعدادات"),
-    );
+    throw new Error(t("bot.ai.stt.noGeminiKey"));
   await assertProviderRequestUrl(settings.get("gemini_base_url"), {
     allowLoopback: true,
   });
@@ -105,12 +103,7 @@ async function transcribeWithGemini(audioBuffer, mimetype) {
 async function transcribeWithOpenAi(audioBuffer, mimetype) {
   const apiKey = settings.get("openai_api_key");
   if (!apiKey) {
-    throw new Error(
-      tr(
-        "No OpenAI / Groq key is set in the settings",
-        "مفتاح OpenAI / Groq غير مضبوط في الإعدادات",
-      ),
-    );
+    throw new Error(t("bot.ai.stt.noOpenAiKey"));
   }
   const baseUrl = assertProviderBaseUrl(
     settings.get("openai_base_url") || "https://api.openai.com/v1",
@@ -173,30 +166,19 @@ async function transcribe(audioBuffer, mimetype) {
     logger.info("[STT] Fallback transcribing via OpenAI/Groq Whisper API");
     return transcribeWithOpenAi(audioBuffer, mimetype);
   }
-  throw new Error(
-    tr(
-      "No AI key (Gemini or OpenAI/Groq) is set",
-      "مفتاح الذكاء الاصطناعي (Gemini أو OpenAI/Groq) غير مضبوط",
-    ),
-  );
+  throw new Error(t("bot.ai.stt.noAiKey"));
 }
 
 function sttErrorHint(error) {
   const message = String(error?.message || "");
   if (/quota|RESOURCE_EXHAUSTED|429/i.test(message)) {
-    return tr(
-      "The free quota is used up. Try again later.",
-      "تم تجاوز الحد المجاني. حاول مرة أخرى لاحقاً.",
-    );
+    return t("bot.ai.stt.quota");
   }
   if (/API key|API_KEY|401|403/i.test(message)) {
-    return tr(
-      "Check the API key in the control panel (Settings).",
-      "راجع مفتاح الـ API من لوحة التحكم (Settings).",
-    );
+    return t("bot.ai.stt.apiKeyHint");
   }
   if (/upload/i.test(message)) {
-    return tr("Uploading the audio failed. Try again.", "فشل رفع الملف الصوتي. حاول مرة أخرى.");
+    return t("bot.ai.stt.uploadFailed");
   }
   return "";
 }
@@ -225,10 +207,7 @@ module.exports = {
 
     if (!audioMessage) {
       return await sock.sendMessage(chatId, {
-        text: tr(
-          "📢 Usage:\nSend a voice note, or reply to one, with !stt\n\n✨ Transcribes with Gemini or Groq/OpenAI Whisper\n🌍 Arabic, English and every other language",
-          "📢 الاستخدام:\nأرسل رسالة صوتية أو قم بالرد على رسالة صوتية بالأمر !stt\n\n✨ يدعم تفريغ الصوت عبر Gemini و Groq/OpenAI Whisper\n🌍 يدعم العربية والإنجليزية وكافة اللغات",
-        ),
+        text: t("bot.ai.stt.usage"),
       });
     }
 
@@ -237,10 +216,7 @@ module.exports = {
 
     if (!hasGemini && !hasOpenAi) {
       return await sock.sendMessage(chatId, {
-        text: tr(
-          "⚠️ No AI key (Gemini or OpenAI/Groq) is set. Add one in the control panel (Settings).",
-          "⚠️ مفتاح الذكاء الاصطناعي (Gemini أو OpenAI/Groq) غير مضبوط. يرجى إضافته من لوحة التحكم (Settings).",
-        ),
+        text: t("bot.ai.stt.noKeySet"),
       });
     }
 
@@ -248,7 +224,7 @@ module.exports = {
     const status = await createStatus(
       sock,
       chatId,
-      tr("🎧 Transcribing...", "🎧 جارٍ تحويل الصوت إلى نص..."),
+      t("bot.ai.stt.transcribing"),
       {
         replyTo: msg,
       },
@@ -262,17 +238,14 @@ module.exports = {
 
       if (!transcription) {
         await status.finish(
-          tr(
-            "⚠️ I couldn't get any text out of that voice note. Make sure the audio is clear.",
-            "⚠️ لم أتمكن من استخراج أي نص من الرسالة الصوتية. تأكد من أن الصوت واضح.",
-          ),
+          t("bot.ai.stt.emptyTranscript"),
         );
         return;
       }
 
       // The status line becomes the transcript.
       await status.finish(
-        tr(`📝 Transcript:\n\n${transcription}`, `📝 النص المستخرج:\n\n${transcription}`),
+        t("bot.ai.stt.transcript", { transcription }),
       );
 
       logger.info("[STT] Successfully transcribed audio to text");
@@ -281,13 +254,13 @@ module.exports = {
 
       // The real reason goes in the card — a bare "an error happened" left
       // nothing to act on.
-      const details = String(error?.message || error || tr("unknown", "غير معروف")).slice(0, 800);
+      const details = String(error?.message || error || t("bot.ai.stt.unknown")).slice(0, 800);
       const hint = sttErrorHint(error);
       await status.finish(
-        tr(
-          `❌ *Transcription failed*\n\n*Details:* ${details}${hint ? `\n\n${hint}` : ""}`,
-          `❌ *حدث خطأ أثناء تحويل الصوت إلى نص*\n\n*التفاصيل:* ${details}${hint ? `\n\n${hint}` : ""}`,
-        ),
+        t("bot.ai.stt.failed", {
+          details,
+          hintBlock: hint ? `\n\n${hint}` : "",
+        }),
       );
     }
   },
