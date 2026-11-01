@@ -1,4 +1,4 @@
-// !help in four locales, with English catalog fallback for untranslated locales.
+// !help in four locales. pt-BR and es-419 use their own catalog text.
 //
 //   help                 the list, in the bot's language
 //   help ar | help en    the list, in that language
@@ -55,7 +55,7 @@ section("every loaded command has catalog documentation");
 
 {
   const catalogs = Object.fromEntries(
-    ["en", "ar"].map((lang) => [
+    ["en", "ar", "pt-BR", "es-419"].map((lang) => [
       lang,
       JSON.parse(readFileSync(join(ROOT, `i18n/${lang}/commands.json`), "utf8")),
     ]),
@@ -113,7 +113,7 @@ section("every loaded command has catalog documentation");
         equal(
           `${key}.${field} attached in ${lang}`,
           command[field]?.[lang],
-          catalogs[lang]?.[`${key}.${field}`] || catalogs.en[`${key}.${field}`],
+          catalogs[lang][`${key}.${field}`],
         );
       }
     }
@@ -168,20 +168,20 @@ section("help follows the bot's language");
   ok("Arabic footer has four choices", ar.includes("`!help pt`") && ar.includes("`!help es`"));
 }
 
-section("help pt and help es use English until translated");
+section("help pt and help es use their catalogs");
 
 {
+  const locales = { pt: "pt-BR", es: "es-419" };
   settings.set("bot_language", "ar");
-  for (const lang of ["pt", "es"]) {
+  for (const [lang, locale] of Object.entries(locales)) {
+    const helpText = JSON.parse(readFileSync(join(ROOT, `i18n/${locale}/bot/help.json`), "utf8"));
+    const commands = JSON.parse(readFileSync(join(ROOT, `i18n/${locale}/commands.json`), "utf8"));
     const list = await runHelp([lang]);
-    ok(`help ${lang} lists English commands`, list.includes("*General Commands*"));
-    ok(
-      `help ${lang} includes English descriptions`,
-      list.includes("Removes a member from the group."),
-    );
+    ok(`help ${lang} section heading`, list.includes(`*${helpText.general}*`));
+    ok(`help ${lang} kick description`, list.includes(commands["group.kick.description"]));
     const detail = await runHelp(["kick", lang]);
-    ok(`help kick ${lang} is English`, detail.includes("*Command Details*"));
-    ok(`help kick ${lang} has English usage`, detail.includes("`!kick @member [reason]`"));
+    ok(`help kick ${lang} detail heading`, detail.includes(`*${helpText.detailTitle}*`));
+    ok(`help kick ${lang} kick usage`, detail.includes(`\`!${commands["group.kick.usage"]}\``));
   }
 }
 
@@ -272,12 +272,13 @@ section("the dashboard gets four languages");
   equal("usage stays a string", kick?.usage, "kick @member [reason]");
   equal("Arabic usage rides along", kick?.usages?.ar, "kick @عضو [السبب]");
   for (const lang of ["pt-BR", "es-419"]) {
+    const commands = JSON.parse(readFileSync(join(ROOT, `i18n/${lang}/commands.json`), "utf8"));
     equal(
-      `${lang} description falls back to English`,
+      `${lang} description matches its catalog`,
       kick?.descriptions?.[lang],
-      kick?.description,
+      commands["group.kick.description"],
     );
-    equal(`${lang} usage falls back to English`, kick?.usages?.[lang], kick?.usage);
+    equal(`${lang} usage matches its catalog`, kick?.usages?.[lang], commands["group.kick.usage"]);
   }
 }
 

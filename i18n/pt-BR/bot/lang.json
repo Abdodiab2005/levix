@@ -1,0 +1,16 @@
+{
+  "autoLabel": "Automático (segue cada mensagem)",
+  "arLabel": "Árabe",
+  "enLabel": "Inglês",
+  "ptBrLabel": "Português (Brasil)",
+  "es419Label": "Espanhol (América Latina)",
+  "list": "🌐 *Idioma do bot*\n\n⚙️ *Atual:* `{current}`\n• `{prefix}lang ar` — árabe padrão moderno, sempre\n• `{prefix}lang en` — inglês sempre\n• `{prefix}lang pt-BR` - português (Brasil), sempre\n• `{prefix}lang es-419` - espanhol (América Latina), sempre\n• `{prefix}lang auto` — segue o idioma de cada mensagem\n\nOs comandos e o !help usam esse idioma. A IA segue esse idioma, a menos que o Idioma das respostas da IA esteja definido no painel.\n\n🔢 *Para converter dígitos* use `{prefix}digit` — ex.: `{prefix}digit 12345`",
+  "digitHint": "🔢 Para converter dígitos, use `{prefix}digit`:\n• `{prefix}digit {option} {rest}`\n• ou `{prefix}digit {rest}` para detectar a direção.",
+  "denied": "⚠️ Desculpe, só o dono do bot e os admins podem mudar o idioma do bot.\n_Para converter dígitos, use `{prefix}digit`._",
+  "selectedAr": "✅ Idioma do bot definido para *árabe padrão moderno*. Os comandos e o !help usam esse idioma. A IA segue esse idioma, a menos que o Idioma das respostas da IA esteja definido no painel.",
+  "selectedEn": "✅ Idioma do bot definido para *inglês*. Os comandos e o !help usam esse idioma. A IA segue esse idioma, a menos que o Idioma das respostas da IA esteja definido no painel.",
+  "selectedAuto": "✅ Idioma definido para *Automático*. Os comandos e o !help usam o idioma de cada mensagem. A IA segue esse idioma, a menos que o Idioma das respostas da IA esteja definido no painel.",
+  "selectedPtBr": "✅ Idioma do bot definido para *português (Brasil)*. Os comandos e o !help usam esse idioma. A IA segue esse idioma, a menos que o Idioma das respostas da IA esteja definido no painel.",
+  "selectedEs419": "✅ Idioma do bot definido para *espanhol (América Latina)*. Os comandos e o !help usam esse idioma. A IA segue esse idioma, a menos que o Idioma das respostas da IA esteja definido no painel.",
+  "unknown": "❌ Opção desconhecida.\nUse:\n• `{prefix}lang ar` / `{prefix}lang en` / `{prefix}lang pt-BR` / `{prefix}lang es-419` / `{prefix}lang auto` para o idioma do bot\n• `{prefix}digit 12345` para converter dígitos"
+}
