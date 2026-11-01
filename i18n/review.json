@@ -1,1 +1,26 @@
-{}
+{
+  "pt-BR/dashboard": {
+    "status": "reviewed",
+    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "date": "2026-11-02",
+    "sha256": "66e2f7ed09ff09c5dfbe5e537f4521179c971fc60b95cb1fba6f427858eaf337"
+  },
+  "pt-BR/gateway": {
+    "status": "reviewed",
+    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "date": "2026-11-02",
+    "sha256": "155233f330c80adf0ce34e240d830c6bd4633c58e9a206bb7c63686849c621f3"
+  },
+  "es-419/dashboard": {
+    "status": "reviewed",
+    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "date": "2026-11-02",
+    "sha256": "fec49974cce70a040def006459ae464fb6d6a955106afd4d44954f2c08023185"
+  },
+  "es-419/gateway": {
+    "status": "reviewed",
+    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "date": "2026-11-02",
+    "sha256": "c32db9ebd862d1abf1c53c3d5e166001386668d201ba5bfaf724c08122bf660c"
+  }
+}
