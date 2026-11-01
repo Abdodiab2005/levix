@@ -221,6 +221,25 @@ equal("none of those called the relay", received.length, 0);
 result = await reset.requestResetCode("10.0.0.1", { channel: "email" });
 equal("the unknown channel did not spend the cooldown", result.reason, "no_email");
 
+section("verification sends only the four relay language codes");
+
+for (const [input, expected] of [
+  ["ar", "ar"],
+  ["en", "en"],
+  ["pt-BR", "pt-BR"],
+  ["es-419", "es-419"],
+  ["pt", "en"],
+  ["fr", "en"],
+  ["PT-BR", "en"],
+  [undefined, "en"],
+]) {
+  recovery._resetForTests();
+  const sent = await recovery.startVerification(ADDRESS, input, "language-check");
+  equal(`verification with ${String(input)} succeeds`, sent.ok, true);
+  equal(`verification with ${String(input)} sends ${expected}`, lastRelay().lang, expected);
+}
+recovery._resetForTests();
+
 section("relay errors become stable codes and leave nothing pending");
 
 for (const [mode, reason] of [
@@ -475,6 +494,25 @@ result = await recovery.confirmVerification(otherCode);
 equal("the new mask", result.masked, "ot***@g***.com");
 equal("now the second address", secrets.getRecoveryEmail(), OTHER);
 equal("with the second address's token", recovery.getRecord().token, stubToken(OTHER));
+
+section("email reset sends only the four relay language codes");
+
+for (const [input, expected] of [
+  ["ar", "ar"],
+  ["en", "en"],
+  ["pt-BR", "pt-BR"],
+  ["es-419", "es-419"],
+  ["pt", "en"],
+  ["fr", "en"],
+  ["PT-BR", "en"],
+  [undefined, "en"],
+]) {
+  reset._resetForTests();
+  const options = input === undefined ? { channel: "email" } : { channel: "email", lang: input };
+  const sent = await reset.requestResetCode("reset-language-check", options);
+  equal(`reset with ${String(input)} succeeds`, sent.ok, true);
+  equal(`reset with ${String(input)} sends ${expected}`, lastRelay().lang, expected);
+}
 
 section("email reset sends the token, shares the WhatsApp throttle, and bumps the epoch");
 

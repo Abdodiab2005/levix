@@ -14,6 +14,7 @@
 //   confirm { kind, verification, code }     the operator's guess; a match
 //                                            answers a token for the address
 //   reset   { kind, to, code, token, lang }  refused without that token
+//   lang is exactly en, ar, pt-BR or es-419; other values become en
 //
 // This process never sees a verify code, so the relay checks it: five
 // guesses per code, single use. The token is sealed with the address and is
@@ -57,7 +58,7 @@ const RELAY_REASONS = new Set([
 const VERIFY_DEAD = new Set(["expired", "too_many_attempts", "no_pending"]);
 
 function normalizeLang(lang) {
-  return lang === "ar" ? "ar" : "en";
+  return lang === "ar" || lang === "en" || lang === "pt-BR" || lang === "es-419" ? lang : "en";
 }
 
 /**
@@ -319,6 +320,7 @@ function _expireForTests() {
 module.exports = {
   DEFAULT_ENDPOINT,
   RELAY_TIMEOUT_MS,
+  normalizeLang,
   normalizeEmail,
   maskEmail,
   getRecord,

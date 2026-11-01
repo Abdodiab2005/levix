@@ -23,7 +23,7 @@ const STRING_CAPS = Object.freeze({
 
 /** Enumerated client fields. Anything outside the list is dropped. */
 const ENUMS = Object.freeze({
-  language: ["ar", "en"],
+  language: ["ar", "en", "pt-BR", "es-419"],
   theme: ["light", "dark"],
   connectivity: ["wifi", "cellular", "ethernet", "vpn", "none", "unknown"],
   memory: ["ok", "low", "unknown"],
@@ -63,8 +63,10 @@ function sanitizeClientFields(client) {
   for (const [key, allowed] of Object.entries(ENUMS)) {
     const raw = client[key];
     if (typeof raw !== "string") continue;
+    // Match without case, keep the canonical spelling (pt-BR, es-419).
     const value = raw.trim().toLowerCase();
-    if (allowed.includes(value)) out[key] = value;
+    const match = allowed.find((item) => item.toLowerCase() === value);
+    if (match) out[key] = match;
   }
 
   return out;

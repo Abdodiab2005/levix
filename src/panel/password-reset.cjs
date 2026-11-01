@@ -116,8 +116,9 @@ function resolveChannel(channel) {
  * Generate a reset code and deliver it.
  *
  * `options.channel` is `"whatsapp"` (the default, including a missing value)
- * or `"email"`. `options.lang` is `"en"` or `"ar"` and is sent to the relay;
- * anything else is English. The WhatsApp text keeps the bot's reply language.
+ * or `"email"`. `options.lang` is `"en"`, `"ar"`, `"pt-BR"` or `"es-419"` and
+ * is sent to the relay; anything else is English. The WhatsApp text keeps
+ * the bot's reply language.
  *
  * @param {string} peer TCP peer, from clientAddress() — never req.ip
  * @param {{ channel?: string, lang?: string }} [options]
@@ -128,7 +129,7 @@ async function requestResetCode(peer, options = {}) {
   const channel = resolveChannel(opts.channel);
   if (!channel) return { ok: false, reason: "invalid" };
 
-  const lang = opts.lang === "ar" ? "ar" : "en";
+  const lang = recoveryEmail.normalizeLang(opts.lang);
 
   const now = Date.now();
   const locked = lockedFor(now);
