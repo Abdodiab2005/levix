@@ -1,6 +1,6 @@
 const { listModerationFlags } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
-const { t, tr } = require("../../utils/i18n.cjs");
+const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "flagged",
@@ -24,10 +24,12 @@ module.exports = {
         const tag = `@${String(row.user_id).split("@")[0]}`;
         const when = row.flagged_at ? new Date(row.flagged_at).toISOString() : "";
         lines.push(
-          tr(
-            `• ${tag} — warnings ${row.warn_count}, last: ${row.last_rule || "—"}${when ? `, ${when}` : ""}`,
-            `• ${tag} — الإنذارات ${row.warn_count}، آخر مخالفة: ${row.last_rule || "—"}${when ? `، ${when}` : ""}`,
-          ),
+          t("bot.moderation.flagged.line", {
+            tag,
+            count: row.warn_count,
+            rule: row.last_rule || "—",
+            when: when ? t("bot.moderation.flagged.when", { when }) : "",
+          }),
         );
       }
       await sock.sendMessage(groupId, { text: lines.join("\n"), mentions });

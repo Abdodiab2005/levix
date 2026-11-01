@@ -1,4 +1,4 @@
-const { tr, t } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 const { isolate } = require("../utils/bidi.cjs");
 const ownerModule = require("../stickers/owner.cjs");
 const library = require("../stickers/library.cjs");
@@ -20,10 +20,10 @@ module.exports = {
       const total = library.listStickers(who, { limit: 1 }).total;
       if (!packs.length)
         return sock.sendMessage(jid, {
-          text: tr(
-            `No packs yet. Reply to media with ${commandHint("pack", "<name>")} to start one. Library: ${countLabel(total)}.`,
-            `لا توجد حزم بعد. رد على وسائط بالأمر ${commandHint("pack", "<الاسم>")} لإنشاء حزمة. المكتبة: ${countLabel(total)}.`,
-          ),
+          text: t("bot.stickers.packs.empty", {
+            hint: commandHint("pack", t("bot.stickers.hint.name")),
+            count: countLabel(total),
+          }),
         });
       const lines = packs
         .slice(0, 30)

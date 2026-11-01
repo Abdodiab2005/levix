@@ -4,12 +4,11 @@
 // The panel API answers `{ error, code, ...details }` with the status below and
 // the dashboard translates the code; a bot command replies with userMessage(),
 // which reads the catalog through t() so it follows the reply language of the
-// message (one pair, VIDEO_TOO_LONG, is still on tr() because the English
-// number and the Arabic secondsAr() form need different placeholders).
+// message.
 // Internal detail (ffmpeg stderr, paths) belongs in `cause` and the log, never
 // in `message` or `details`.
 
-const { tr, t, withLang } = require("../utils/i18n.cjs");
+const { t, withLang, currentLang } = require("../utils/i18n.cjs");
 const { isolate } = require("../utils/bidi.cjs");
 
 const CODES = Object.freeze({
@@ -116,12 +115,7 @@ function message(error) {
     case "DIMENSIONS_TOO_LARGE":
       return t("bot.stickers.errors.dimensionsTooLarge", { limit: d.limit || 4096 });
     case "VIDEO_TOO_LONG":
-      // English shows the raw number where Arabic needs secondsAr(); keying
-      // would need different placeholders per language, so this stays tr().
-      return tr(
-        `The video is too long (limit ${d.limitSeconds || 10} seconds). Send a shorter clip, or trim it in the panel's Sticker Studio.`,
-        `الفيديو طويل جدًا (الحد ${secondsAr(d.limitSeconds || 10)}). أرسل مقطعًا أقصر، أو اقتطع جزءًا منه في استوديو الملصقات في لوحة التحكم.`,
-      );
+      return videoTooLong(d.limitSeconds);
     case "CORRUPT":
       return t("bot.stickers.errors.corrupt");
     case "CONVERSION_FAILED":
@@ -161,13 +155,28 @@ function message(error) {
   }
 }
 
-// Arabic counts agree with the number: 3–10 take the plural, 11 and up the
-// singular accusative.
-function secondsAr(n) {
-  if (n === 1) return "ثانية واحدة";
-  if (n === 2) return "ثانيتان";
-  if (n >= 3 && n <= 10) return `${n} ثوانٍ`;
-  return `${n} ثانية`;
+// The old Arabic phrase is "few" only for 3 through 10. CLDR "few" also covers
+// 103 and 203, so the count passed to t() is a number in the category that
+// matches the old phrase. {n} is the number shown. Arabic for 1 and 2 has no
+// digit. Every category still contains {n}, so those two pass an empty {n}.
+// The sentence already has one space before that token. -1 and -2 are CLDR
+// one and two, but the old phrase uses the leftover form for them.
+function secondsPluralCount(n) {
+  if (n === 1 || n === 2 || n === 0) return n;
+  if (n >= 3 && n <= 10) return 3;
+  const mod = Math.abs(n % 100);
+  if (mod >= 3 && mod <= 10) return 11;
+  if (!Number.isFinite(n) || n === -1 || n === -2) return 100;
+  return n;
+}
+
+function videoTooLong(limitSeconds) {
+  const n = limitSeconds || 10;
+  const bare = currentLang() === "ar" && (n === 1 || n === 2);
+  return t("bot.stickers.errors.videoTooLong", {
+    count: secondsPluralCount(n),
+    n: bare ? "" : n,
+  });
 }
 
 function formatMb(bytes) {

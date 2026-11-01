@@ -277,6 +277,7 @@ function withTimeout(promise, ms, label) {
         () =>
           reject(
             new Error(
+              // i18n-exception: sent to the model
               tr(
                 `${label} took longer than ${Math.round(ms / 1000)} seconds`,
                 `${label} تأخرت أكتر من ${Math.round(ms / 1000)} ثانية`,

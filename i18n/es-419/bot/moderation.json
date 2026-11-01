@@ -153,5 +153,10 @@
   "clearwarns.somethingWentWrongWhileClearing": "Algo salió mal al borrar las advertencias.",
   "flagged.noMembersAreWaitingFor": "Ningún miembro está esperando revisión.",
   "flagged.flaggedMembers": "*Miembros marcados* ({count})",
-  "flagged.somethingWentWrongWhileListing": "Algo salió mal al listar los miembros marcados."
+  "flagged.somethingWentWrongWhileListing": "Algo salió mal al listar los miembros marcados.",
+  "flagged.line": "• {tag}: advertencias {count}, último: {rule}{when}",
+  "flagged.when": ", {when}",
+  "policy.conflictGeneric": "Esta opción entra en conflicto con la política actual.",
+  "policy.valueNotAllowed": "Ese valor no está permitido.",
+  "actionNotAllowed": "Esa acción no está permitida."
 }

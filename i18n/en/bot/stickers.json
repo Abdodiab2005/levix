@@ -39,5 +39,32 @@
   "errors.inUse": "This sticker is in one or more packs. Confirm to delete it everywhere.",
   "errors.storageUnavailable": "The sticker library can't be written right now.",
   "errors.notConnected": "WhatsApp is not connected, so nothing can be sent.",
-  "errors.cancelled": "The conversion was cancelled."
+  "errors.cancelled": "The conversion was cancelled.",
+  "count.sticker": {
+    "one": "{n} sticker",
+    "other": "{n} stickers"
+  },
+  "count.pack": {
+    "one": "{n} pack",
+    "other": "{n} packs"
+  },
+  "errors.videoTooLong": {
+    "one": "The video is too long (limit {n} seconds). Send a shorter clip, or trim it in the panel's Sticker Studio.",
+    "other": "The video is too long (limit {n} seconds). Send a shorter clip, or trim it in the panel's Sticker Studio."
+  },
+  "hint.name": "<name>",
+  "hint.rename": "rename <old> | <new>",
+  "hint.create": "create <name>",
+  "hint.showWord": "pack",
+  "hint.toimageModes": "[doc|gif]",
+  "hint.gif": "gif",
+  "packs.empty": "No packs yet. Reply to media with {hint} to start one. Library: {count}.",
+  "stickers.empty": "No stickers here yet. Reply to media with {sticker} or {pack} to save one.",
+  "stickers.page": "{label} — {count} · page {page}/{pages}{more}",
+  "stickers.pageMore": " · {next} for more",
+  "pack.renameUsage": "Use {hint}.",
+  "pack.needName": "Use {add} while replying to media, or {create}.",
+  "pack.show": "{name} — {count}. Use {hint} to see them.",
+  "toimage.reply": "Reply to a sticker with {hint}.",
+  "toimage.firstFrame": "First frame of an animated sticker. Use {hint} for the animation."
 }

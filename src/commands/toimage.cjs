@@ -1,4 +1,4 @@
-const { tr, t } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const { targetOf, downloadTarget, commandHint, errorText } = require("../utils/stickerBot.cjs");
 const media = require("../stickers/media.cjs");
@@ -14,10 +14,9 @@ module.exports = {
     const target = targetOf(msg, { quotedOnly: true });
     if (target?.type !== "sticker") {
       return sock.sendMessage(jid, {
-        text: tr(
-          `Reply to a sticker with ${commandHint("toimage", "[doc|gif]")}.`,
-          `رد على ملصق بالأمر ${commandHint("toimage", "[ملف|متحرك]")}.`,
-        ),
+        text: t("bot.stickers.toimage.reply", {
+          hint: commandHint("toimage", t("bot.stickers.hint.toimageModes")),
+        }),
       });
     }
     let status;
@@ -43,10 +42,9 @@ module.exports = {
       const caption = staticGif
         ? t("bot.stickers.toimage.staticGif")
         : result.animated
-          ? tr(
-              `First frame of an animated sticker. Use ${commandHint("toimage", "gif")} for the animation.`,
-              `الإطار الأول من ملصق متحرك. استخدم ${commandHint("toimage", "متحرك")} للحصول على الحركة.`,
-            )
+          ? t("bot.stickers.toimage.firstFrame", {
+              hint: commandHint("toimage", t("bot.stickers.hint.gif")),
+            })
           : undefined;
       if (mode === "gif") {
         await sock.sendMessage(jid, { video: result, mimetype: "video/mp4", gifPlayback: true });

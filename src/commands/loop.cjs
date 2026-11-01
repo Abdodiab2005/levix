@@ -13,7 +13,7 @@
 // flood bot (and from getting the account banned).
 
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
-const { t, tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 const MAX_ITEMS = 100; // total iterations, one-message mode
 const MAX_SPLIT_ITEMS = 15; // total iterations, separate-messages mode
@@ -24,43 +24,7 @@ const SPLIT_FLAGS = new Set(["-s", "--split", "split", "منفصل", "منفصل
 const NO_NUMBER_FLAGS = new Set(["-n", "--nonum", "--plain", "بدون-ترقيم"]);
 
 const helpText = () =>
-  tr(
-    "🔁 *Loop*\n\n" +
-      "*Usage:*\n" +
-      "`!loop <count> <text>` — repeat the text in one message\n" +
-      "`!loop <from>-<to>` — print the numbers from/to\n" +
-      "`!loop <from>-<to>:<step>` — with a custom step\n\n" +
-      "*Options:*\n" +
-      "`-s` separate messages instead of one\n" +
-      "`-n` no numbering\n\n" +
-      "*Placeholders in the text:*\n" +
-      "`{n}` the current number · `{i}` the repetition number\n\n" +
-      "*Examples:*\n" +
-      "`!loop 5 hello`\n" +
-      "`!loop 1-10`\n" +
-      "`!loop 0-100:25 counter {n}`\n" +
-      "`!loop 3 good morning -s`\n\n" +
-      `_At most ${MAX_ITEMS} repetitions in one message, ${MAX_SPLIT_ITEMS} separate messages._`,
-    HELP_TEXT_AR,
-  );
-
-const HELP_TEXT_AR =
-  "🔁 *أمر التكرار*\n\n" +
-  "*الاستخدام:*\n" +
-  "`!loop <عدد> <النص>` — يكرر النص في رسالة واحدة\n" +
-  "`!loop <من>-<إلى>` — يطبع الأرقام من/إلى\n" +
-  "`!loop <من>-<إلى>:<خطوة>` — بخطوة مخصصة\n\n" +
-  "*خيارات:*\n" +
-  "`-s` رسائل منفصلة بدل رسالة واحدة\n" +
-  "`-n` من غير ترقيم\n\n" +
-  "*متغيرات داخل النص:*\n" +
-  "`{n}` الرقم الحالي · `{i}` رقم التكرار\n\n" +
-  "*أمثلة:*\n" +
-  "`!loop 5 اهلا`\n" +
-  "`!loop 1-10`\n" +
-  "`!loop 0-100:25 العداد {n}`\n" +
-  "`!loop 3 صباح الخير -s`\n\n" +
-  `_الحد الأقصى: ${MAX_ITEMS} تكرار في رسالة واحدة، ${MAX_SPLIT_ITEMS} رسالة منفصلة._`;
+  t("bot.tools.loop.help", { maxItems: MAX_ITEMS, maxSplit: MAX_SPLIT_ITEMS });
 
 /**
  * `5` -> 1..5 · `3-9` -> 3..9 · `0-100:25` -> 0,25,50,75,100

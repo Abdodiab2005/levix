@@ -10,8 +10,16 @@ const {
   normalizeFeatureAction,
   policyFromFeatureAction,
 } = require("../utils/moderationSummary.cjs");
-const { t, tr } = require("../utils/i18n.cjs");
+const { t, currentLang } = require("../utils/i18n.cjs");
 const { applyModerationPolicy } = require("../services/moderationPolicy.cjs");
+
+// The validator's detail is English only. Other languages get a generic line.
+// A catalog value of "{detail}" is rejected: placeholder sets must match.
+function actionNotAllowed(error) {
+  const generic = t("bot.moderation.actionNotAllowed");
+  const detail = error.errors?.[0]?.message;
+  return currentLang() === "en" ? detail || generic : generic;
+}
 
 // الهيكل الافتراضي لإعدادات المراقبة
 const defaultModSettings = {
@@ -154,10 +162,7 @@ module.exports = {
           return sock.sendMessage(
             groupId,
             {
-              text: tr(
-                error.errors?.[0]?.message || "That action is not allowed.",
-                "هذا الإجراء غير مسموح.",
-              ),
+              text: actionNotAllowed(error),
             },
             { quoted: msg },
           );

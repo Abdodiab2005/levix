@@ -16,7 +16,7 @@ const { grantRole, revokeRole, listRoles, isOwnerJidSync } = require("../utils/p
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 const normalizeJid = require("../utils/normalizeJid.cjs");
 const logger = require("../utils/logger.cjs");
-const { t, tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 const ROLE_WORDS = {
   owner: "owner",
@@ -122,18 +122,7 @@ module.exports = {
         sock,
         jid,
         {
-          text: tr(
-            "Wrong usage.\n\n" +
-              "`!perm list` — the current roles\n" +
-              "`!perm add admin @member` — make an admin\n" +
-              "`!perm add owner <number>` — make an owner\n" +
-              "`!perm remove admin @member` — take the role away",
-            "استخدام غير صحيح.\n\n" +
-              "`!perm list` — القائمة الحالية\n" +
-              "`!perm add admin @عضو` — تعيين أدمن\n" +
-              "`!perm add owner <رقم>` — تعيين مالك\n" +
-              "`!perm remove admin @عضو` — سحب الصلاحية",
-          ),
+          text: t("bot.tools.perm.usage"),
         },
         { replyTo: msg },
       );
