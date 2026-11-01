@@ -4,14 +4,6 @@ const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "deleteschedule",
-  description: {
-    en: "Deletes a scheduled message by its ID.",
-    ar: "يحذف رسالة مجدولة برقمها التعريفي (ID).",
-  },
-  usage: {
-    en: "deleteschedule <id>",
-    ar: "deleteschedule <id>",
-  },
   chat: "all",
   userAdminRequired: true,
 

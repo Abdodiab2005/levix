@@ -15,6 +15,7 @@ import {
   UserText,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
+import { intlLocale } from "../i18n/locale";
 import { translations } from "../i18n/translations";
 import { fill } from "../utils/fill";
 import {
@@ -125,10 +126,11 @@ const errors: Record<string, Key> = {
 };
 const maxBytes = 16 * 1024 ** 3;
 const bytes = (n: number) => `${(n / 1024 ** 2).toFixed(1)} MiB`;
-const date = (value: string) => new Date(value).toLocaleString();
+const date = (value: string, locale: string) => new Date(value).toLocaleString(locale);
 
 export function BackupView() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const stampLocale = intlLocale(language);
   const [contents, setContents] = useState<Contents | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState("");
@@ -623,7 +625,7 @@ export function BackupView() {
           <div className="flex items-center gap-3">
             <p className="min-w-0 flex-1 text-sm">
               <UserText as="span">{exported.fileName}</UserText> · {bytes(exported.size)} ·{" "}
-              {fill(t("backupExpires"), { date: date(exported.expiresAt) })}
+              {fill(t("backupExpires"), { date: date(exported.expiresAt, stampLocale) })}
             </p>
             <IconButton
               label={t("backupDownload")}
@@ -689,7 +691,7 @@ export function BackupView() {
             <h3 className="font-semibold">{t("backupPreviewTitle")}</h3>
             <p className="text-sm">
               {fill(t("backupPreviewMeta"), {
-                date: date(preview.created),
+                date: date(preview.created, stampLocale),
                 version: preview.app,
                 platform: preview.platform,
               })}
@@ -780,7 +782,7 @@ export function BackupView() {
             title={t("backupPendingTitle")}
             description={fill(t("backupPendingDescription"), {
               account: pending.account || "",
-              date: date(pending.backupCreated || ""),
+              date: date(pending.backupCreated || "", stampLocale),
             })}
             actions={
               <IconButton
@@ -795,7 +797,7 @@ export function BackupView() {
             <p className="text-sm">
               {t("backupActivation")}:{" "}
               {t(`backupActivation${pending.lastActivation.status}` as Key)} ·{" "}
-              {date(pending.lastActivation.at)}
+              {date(pending.lastActivation.at, stampLocale)}
             </p>
           )}
         </Card>
@@ -808,7 +810,7 @@ export function BackupView() {
                 ? "backupOutcomeCompleted"
                 : "backupOutcomeUnchanged",
             ),
-            date: date(pending.lastOutcome.at),
+            date: date(pending.lastOutcome.at, stampLocale),
           })}
         </p>
       )}

@@ -37,6 +37,13 @@ blocked without an answer.
 | Q-25 | AI memory lives in `<data>/memory`. A legacy `PACKAGE_ROOT/memory` is copied there once. | PR 02c |
 | Q-26 | A verified local pre-migration copy (mode 0600, never exported, newest two kept) that holds every table and every row except the secret material: no WhatsApp pairing, no panel password hash, no recovery email, no session key and no API key. `src/db/copy.cjs` writes it, verifies it and renames it from a `.part` file. All pending migrations run in one transaction. Recovery from a copy is a documented manual step, since there is no CLI restore: the rollback steps are in `MIGRATION.md` section 5. A rollback leaves the install with no pairing and no panel password, so the next start goes through `/setup` again and the operator pairs WhatsApp by hand. Amended 2026-10-31 after the #91 review. | ADR-016; PR 02b |
 
+## Decided by the owner on 2026-11-01 (Phase 03)
+
+| ID | Decision | Where it lands |
+| --- | --- | --- |
+| Q-15 | Option (b). The recovery relay in `levix-ui` gains `pt-BR` and `es-419` mail in step with Phase 03. The relay deploys before the Levix change that sends those values merges. | `PHASE-03-RESULTS.md` section 3.10; PR 03h |
+| Q-19 | ChatGPT reviews the `pt-BR` and `es-419` translations before each translation PR merges. The catalog records a machine review by ChatGPT, not a native-speaker review. | `PHASE-03-RESULTS.md` section 3.9; PR 03g |
+
 ## Still open
 
 | ID | Question | Options | Recommendation | Needed by |
@@ -46,9 +53,7 @@ blocked without an answer.
 | Q-05 | When new Terms arrive while WhatsApp is connected, what happens? | (a) keep the socket and ask for acceptance before the next start; (b) disconnect at once | (a). Emergency disconnects need their own authenticated delivery and offline rules, which are out of scope until designed. (Agreed with codex review.) | 04 |
 | Q-06 | Who may run the short `!status` by default? | (a) keep `OWNER_ONLY` and make the output short; (b) `MEMBERS` for the short output, with `!status debug` owner only | (a). It keeps today's permission. Operators who want members to see it can lower it in the panel. | 05 |
 | Q-09 | Should `memory/global.md` stay in every agent prompt (today: groups and other people's private chats too)? | (a) keep; (b) the owner's own private chat only, other chats by explicit per-chat opt-in; (c) per-group opt-in only | (b), before AI Auto Reply ships, because Auto Reply answers contacts who should not see the owner's global facts. (Agreed with codex review.) | 07 |
-| Q-15 | The recovery mail relay accepts `ar` and `en`. What do `pt-BR` and `es-419` users get? | (a) English mail until the relay supports more; (b) relay update in `levix-ui` in step with Phase 03 | (a) in Phase 03, with (b) as separate work in the relay repository. | 03 |
 | Q-16 | Play in-app updates and in-app review need Google Play libraries. The GitHub APK is built from the same sources. | (a) one build with the libraries, which do nothing outside Play; (b) a build flavour per channel | (b) only if (a) adds Google Play services requirements to GitHub APK users; otherwise (a). Decide after measuring in Phase 09. | 09 |
 | Q-17 | Does a Terms acceptance survive a panel password reset and a WhatsApp unlink? | (a) both; (b) survives a password reset, re-accept after unlink; (c) neither | (b). A password reset keeps the operator; an unlink can bring a different WhatsApp account, whose owner carries the ban risk the Terms describe. (Agreed with codex review.) | 04 |
 | Q-18 | Which documents feed the documentation-aware AI? | (a) public docs in this repository only; (b) plus the website docs from `levix-ui` | (a) first. Website docs need their own version tags before they can be cited. | 06 |
-| Q-19 | Who reviews the `pt-BR` and `es-419` translations? | (a) native reviewers before release; (b) ship machine drafts labelled as drafts | (a) for the bot and the Terms text; (b) is acceptable only for low-risk UI strings, labelled. | 03 |
 | Q-20 | Should Plus entitlements work on desktop and self-hosted installs? | (a) Android Play only in v5; (b) a portable entitlement design now | (a). The phase prompt marks portability as an open design question. | 08 |

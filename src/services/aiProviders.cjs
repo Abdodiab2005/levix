@@ -103,7 +103,7 @@ const {
   getProvider,
   detectModelCapabilities,
 } = require("./aiRouter.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t, tr } = require("../utils/i18n.cjs");
 
 function visionAllowed(providerId) {
   const id = providerId || settings.get("ai_provider");
@@ -217,7 +217,7 @@ registerProvider("anthropic", new AnthropicProvider());
 
 function adapterFor(provider) {
   const adapter = ADAPTERS[provider];
-  if (!adapter) throw new Error(tr(`Unknown provider: ${provider}`, `مزود غير معروف: ${provider}`));
+  if (!adapter) throw new Error(t("bot.ai.aiProviders.unknownProvider", { provider }));
   return adapter;
 }
 
@@ -238,7 +238,7 @@ const PROVIDER_KEY_SETTINGS = Object.freeze({
 
 function activeProviderKeySetting(provider = settings.get("ai_provider")) {
   const keySetting = PROVIDER_KEY_SETTINGS[provider];
-  if (!keySetting) throw new Error(tr(`Unknown provider: ${provider}`, `مزود غير معروف: ${provider}`));
+  if (!keySetting) throw new Error(t("bot.ai.aiProviders.unknownProvider", { provider }));
   return keySetting;
 }
 
@@ -755,10 +755,7 @@ async function runProviderAgent(
       return finish({
         text:
           parsed.text ||
-          tr(
-            "I ran the tools I have but couldn't reach a final answer. Try asking more clearly.",
-            "استخدمت الأدوات المتاحة، لكنني لم أتمكن من الوصول إلى إجابة نهائية. حاول صياغة السؤال بوضوح أكبر.",
-          ),
+          t("bot.ai.aiProviders.toolBudget"),
         canonical,
         toolCalls,
         steps,
@@ -805,7 +802,7 @@ async function runProviderAgent(
       })),
     });
 
-    if (status) await status.update(tr("🤖 Writing the answer...", "🤖 بجهّز الرد..."));
+    if (status) await status.update(t("bot.ai.aiProviders.writingAnswer"));
     response = await send();
   }
 }

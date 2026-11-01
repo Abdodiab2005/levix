@@ -37,6 +37,7 @@ import {
   usePagination,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
+import { pickLocalized } from "../i18n/locale";
 import type {
   CommandItem,
   FlaggedMember,
@@ -605,7 +606,7 @@ function GroupSettings({
   prefix: string;
 }) {
   const { t, language } = useI18n();
-  const { permissionLabel } = useCommandLabels();
+  const { permissionLabel, describe } = useCommandLabels();
   const savedPolicy = { ...DEFAULT_POLICY, ...group.moderation_policy } as ModerationPolicy;
   const form = useDirtyForm({
     linkMode: group.antilink.mode,
@@ -688,8 +689,7 @@ function GroupSettings({
     ],
   );
 
-  const savedPreview =
-    language === "en" ? group.moderation_summary?.en : group.moderation_summary?.ar;
+  const savedPreview = pickLocalized(group.moderation_summary, language);
   const [livePreview, setLivePreview] = useState(savedPreview || "");
   const previewKey = JSON.stringify(previewSettings);
 
@@ -700,7 +700,7 @@ function GroupSettings({
         .previewModeration(previewSettings)
         .then((res) => {
           if (cancelled) return;
-          setLivePreview(language === "en" ? res.en : res.ar);
+          setLivePreview(pickLocalized(res, language));
           if (res.visibility) setPolicyVisibility(res.visibility);
           setPolicyErrors(errorsByKey(res.errors));
         })
@@ -1340,7 +1340,7 @@ function GroupSettings({
                   </Badge>
                 </span>
                 <p dir="auto" className="text-xs text-muted">
-                  {command.descriptions?.[language] || command.description}
+                  {describe(command)}
                 </p>
               </li>
             ))}

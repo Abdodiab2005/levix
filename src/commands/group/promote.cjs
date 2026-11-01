@@ -9,14 +9,6 @@ const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "promote",
-  description: {
-    en: "Promotes a member to admin.",
-    ar: "يرقّي عضوًا إلى مشرف.",
-  },
-  usage: {
-    en: "promote @member",
-    ar: "promote @عضو",
-  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true,

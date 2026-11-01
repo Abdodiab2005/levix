@@ -41,14 +41,6 @@ function parse(args) {
 module.exports = {
   name: "stickers",
   aliases: ["ملصقاتي"],
-  description: {
-    en: "Browse your recent, favorite or packed stickers.",
-    ar: "يعرض ملصقاتك الحديثة أو المفضلة أو الموجودة في حزمة.",
-  },
-  usage: {
-    en: "stickers [page]\nstickers recent [page]\nstickers favorites [page]\nstickers pack <name> [page]",
-    ar: "stickers [الصفحة]\nstickers الأحدث [الصفحة]\nstickers المفضلة [الصفحة]\nstickers حزمة <الاسم> [الصفحة]",
-  },
   keywords: ["recent", "الأحدث", "favorites", "المفضلة", "pack", "حزمة"],
   chat: "all",
   async execute(sock, msg, args = []) {

@@ -1,5 +1,7 @@
 // file: frontend/src/types/index.ts
 
+import type { Language } from "../i18n/translations";
+
 export interface BrandInfo {
   name: string;
   tagline: string;
@@ -70,9 +72,9 @@ export interface CommandItem {
   name: string;
   aliases: string[];
   description: string;
-  descriptions?: { en?: string; ar?: string };
+  descriptions?: Partial<Record<Language, string>>;
   usage?: string | null;
-  usages?: { en?: string; ar?: string } | null;
+  usages?: Partial<Record<Language, string>> | null;
   /** "general", or "group" for a `group/<name>` sub-command. */
   category?: string;
   /** The permissions key: the name, or `group:<name>` for a sub-command. */
@@ -171,7 +173,7 @@ export interface GroupItem {
   mediaRestriction: string;
   welcomeEnabled: boolean;
   forbidden_words?: { enabled: boolean; count: number; action?: string };
-  moderation_summary?: { en: string; ar: string };
+  moderation_summary?: Partial<Record<Language, string>>;
   flagged_members?: FlaggedMember[];
 }
 
@@ -346,7 +348,7 @@ export interface ClientDiagnostics {
   abi?: string;
   webview?: string;
   screen?: string;
-  language?: "ar" | "en";
+  language?: Language;
   theme?: "light" | "dark";
   connectivity?: "wifi" | "cellular" | "ethernet" | "vpn" | "none" | "unknown";
   memory?: "ok" | "low" | "unknown";
@@ -365,7 +367,7 @@ export interface DiagnosticsObject {
   abi?: string;
   webview?: string;
   screen?: string;
-  language?: "ar" | "en";
+  language?: Language;
   theme?: "light" | "dark";
   connectivity?: "wifi" | "cellular" | "ethernet" | "vpn" | "none" | "unknown";
   memory?: "ok" | "low" | "unknown";

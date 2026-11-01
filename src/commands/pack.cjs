@@ -46,14 +46,6 @@ function requirePack(who, name) {
 module.exports = {
   name: "pack",
   aliases: ["حزمة"],
-  description: {
-    en: "Create, fill and manage your sticker packs.",
-    ar: "ينشئ حزم الملصقات ويديرها ويضيف إليها.",
-  },
-  usage: {
-    en: "pack <name> (reply to media to add)\npack <name> (show without a reply)\npack create <name>\npack add <name>\npack remove <name>\npack rename <old> | <new>\npack delete <name>\npack show <name>",
-    ar: "pack <الاسم> (رد على وسائط للإضافة)\npack <الاسم> (عرض بلا رد)\npack إنشاء <الاسم>\npack إضافة <الاسم>\npack إزالة <الاسم>\npack تسمية <القديم> | <الجديد>\npack حذف <الاسم>\npack عرض <الاسم>",
-  },
   keywords,
   chat: "all",
   async execute(sock, msg, args = []) {

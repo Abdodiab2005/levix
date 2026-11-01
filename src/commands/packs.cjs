@@ -7,11 +7,6 @@ const { commandHint, countLabel, errorText } = require("../utils/stickerBot.cjs"
 module.exports = {
   name: "packs",
   aliases: ["حزم"],
-  description: {
-    en: "List your sticker packs and library total.",
-    ar: "يعرض حزم ملصقاتك وإجمالي المكتبة.",
-  },
-  usage: { en: "packs", ar: "packs" },
   chat: "all",
   async execute(sock, msg) {
     const jid = msg.key.remoteJid;

@@ -7,14 +7,6 @@ const jobs = require("../stickers/jobs.cjs");
 module.exports = {
   name: "toimage",
   aliases: ["toimg", "صورة"],
-  description: {
-    en: "Turn a replied sticker into a PNG or animated video.",
-    ar: "يحوّل الملصق المردود عليه إلى صورة PNG أو فيديو متحرك.",
-  },
-  usage: {
-    en: "toimage (reply to a sticker)\ntoimage doc (reply to a sticker)\ntoimage gif (reply to an animated sticker)",
-    ar: "toimage (رد على ملصق)\ntoimage ملف (رد على ملصق)\ntoimage متحرك (رد على ملصق متحرك)",
-  },
   keywords: ["doc", "ملف", "gif", "متحرك"],
   chat: "all",
   async execute(sock, msg, args = []) {

@@ -47,7 +47,7 @@ import {
   useSavedValue,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
-import { type Language, translations } from "../i18n/translations";
+import { LOCALES, type Language, translations } from "../i18n/translations";
 import { fill } from "../utils/fill";
 import { DiagnosticsView } from "./DiagnosticsView";
 import { BackupView } from "./BackupView";
@@ -97,6 +97,12 @@ function toBase64(text: string): string {
 
 type RecoveryPhase = "email" | "code";
 type TranslationKey = keyof (typeof translations)["en"];
+
+/** The recovery relay accepts only ar and en. Every other panel language sends English. */
+function recoveryMailLanguage(lang: Language): "ar" | "en" {
+  if (lang === "ar") return "ar";
+  return "en";
+}
 
 /** Stable relay/route codes become sentences. `backToEmail` means the code is dead. */
 function recoveryMessage(
@@ -215,7 +221,7 @@ function RecoveryEmailCard() {
     if (phase === "email") {
       setEmailError(null);
       try {
-        await api.startRecoveryEmail(draft.trim(), current, language === "ar" ? "ar" : "en");
+        await api.startRecoveryEmail(draft.trim(), current, recoveryMailLanguage(language));
         setPhase("code");
         setCurrent("");
         setCode("");
@@ -782,7 +788,7 @@ export const SettingsView: React.FC = () => {
 
           <Card className="flex flex-col gap-4">
             <CardHeader
-              title={language === "ar" ? "سلوك النظام والردود" : "System Behavior & Delays"}
+              title={t("settingsBehaviorTitle")}
             />
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -803,11 +809,15 @@ export const SettingsView: React.FC = () => {
                   value={panelLang.value}
                   onChange={(e) => {
                     const next = e.target.value;
-                    if (next === "ar" || next === "en") panelLang.setValue(next);
+                    const locale = LOCALES.find((item) => item.code === next);
+                    if (locale) panelLang.setValue(locale.code);
                   }}
                 >
-                  <option value="ar">العربية (RTL - اليمين لليسار)</option>
-                  <option value="en">English (LTR - Left to Right)</option>
+                  {LOCALES.map((locale) => (
+                    <option key={locale.code} value={locale.code}>
+                      {`${locale.name} (${t(locale.dir === "rtl" ? "settingsDirRtl" : "settingsDirLtr")})`}
+                    </option>
+                  ))}
                 </Select>
               </SaveField>
 
@@ -995,11 +1005,7 @@ export const SettingsView: React.FC = () => {
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <SaveField
               label={t("weatherApiKey")}
-              description={
-                language === "ar"
-                  ? "مطلوب لتشغيل أمر الطقس والأحوال الجوية !weather"
-                  : "Required for the !weather forecast command"
-              }
+              description={t("settingsWeatherDesc")}
               htmlFor="weather-api-key"
               dirty={weatherKey.dirty}
               saving={weatherKey.status === "saving"}
