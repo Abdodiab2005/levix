@@ -16,7 +16,7 @@ const {
   getSenderCandidatesSync,
 } = require("../utils/permissions.cjs");
 const normalizeJid = require("../utils/normalizeJid.cjs");
-const { langForCommand, withLang, tr } = require("../utils/i18n.cjs");
+const { langForCommand, withLang, t } = require("../utils/i18n.cjs");
 const { attachCommandDocs } = require("../utils/commandDocs.cjs");
 
 // --- Sub-command Loader ---
@@ -74,17 +74,14 @@ module.exports = {
 
     if (!subCommandName) {
       return await sock.sendMessage(msg.key.remoteJid, {
-        text: tr("Name a sub-command after `!group`.", "يرجى تحديد أمر فرعي بعد `!group`."),
+        text: t("bot.group.group.missingSubCommand"),
       });
     }
 
     const subCommand = subCommands.get(subCommandName);
     if (!subCommand) {
       return await sock.sendMessage(msg.key.remoteJid, {
-        text: tr(
-          `Unknown sub-command \`${subCommandName}\`.`,
-          `الأمر الفرعي \`${subCommandName}\` غير معروف.`,
-        ),
+        text: t("bot.group.group.unknownSubCommand", { name: subCommandName }),
       });
     }
 
@@ -103,7 +100,7 @@ async function runSubCommand(sock, msg, args, body, groupMetadata, subCommand) {
   // just the direct `!kick`.
   if (runtimeConfig.isDisabled(subCommand.name)) {
     return await sock.sendMessage(msg.key.remoteJid, {
-      text: tr("⛔ This command is turned off right now.", "⛔ هذا الأمر معطّل حاليًا."),
+      text: t("bot.group.group.disabled"),
     });
   }
 
@@ -142,25 +139,19 @@ async function runSubCommand(sock, msg, args, body, groupMetadata, subCommand) {
 
   if (!hasPermission) {
     return await sock.sendMessage(msg.key.remoteJid, {
-      text: tr(
-        "🚫 You don't have permission to use this command.",
-        "🚫 ليس لديك الصلاحية لاستخدام هذا الأمر.",
-      ),
+      text: t("bot.group.group.noPermission"),
     });
   }
 
   const isBotAdmin = isBotAdminInGroupSync(groupMetadata, sock);
   if (subCommand.userAdminRequired && !isSenderAdmin && !isOwner) {
     return await sock.sendMessage(msg.key.remoteJid, {
-      text: tr(
-        "⚠️ You need to be a group admin to use this command.",
-        "⚠️ هذا الأمر يتطلب أن تكون مشرفًا.",
-      ),
+      text: t("bot.group.group.userAdminRequired"),
     });
   }
   if (subCommand.botAdminRequired && !isBotAdmin) {
     return await sock.sendMessage(msg.key.remoteJid, {
-      text: tr("⚠️ I need to be a group admin to do that.", "⚠️ يجب أن أكون مشرفًا لتنفيذ هذا الأمر."),
+      text: t("bot.group.group.botAdminRequired"),
     });
   }
 
@@ -169,12 +160,10 @@ async function runSubCommand(sock, msg, args, body, groupMetadata, subCommand) {
   } catch (error) {
     logger.error({ err: error, subCommand: subCommandName }, "Error executing a group sub-command");
     await sock.sendMessage(msg.key.remoteJid, {
-      text: tr(
-        `❌ *The sub-command failed* (\`${error.name || "Error"}\`): ${error.message || "unknown"}`,
-        `❌ *فشل تنفيذ الأمر الفرعي* (\`${error.name || "Error"}\`): ${
-          error.message || "غير معروف"
-        }`,
-      ),
+      text: t("bot.group.group.failed", {
+        errorName: error.name || "Error",
+        errorMessage: error.message || t("bot.group.group.unknownError"),
+      }),
     });
   }
 }

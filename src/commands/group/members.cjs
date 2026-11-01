@@ -1,6 +1,6 @@
 // file: /commands/members.js
 const logger = require("../../utils/logger.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "members",
@@ -13,7 +13,7 @@ module.exports = {
 
       // Send a temporary message to let the user know we're working on it
       await sock.sendMessage(groupId, {
-        text: tr("Fetching the member list...", "جارٍ جلب قائمة الأعضاء..."),
+        text: t("bot.group.members.fetching"),
       });
 
       // Fetch the group's metadata
@@ -23,10 +23,7 @@ module.exports = {
       // --- Building the reply message ---
 
       // Start with a header
-      let replyText = tr(
-        `*Group members:*\n*Total: ${members.length}*\n\n`,
-        `*قائمة أعضاء المجموعة:*\n*العدد الإجمالي: ${members.length}*\n\n`,
-      );
+      let replyText = t("bot.group.members.header", { count: members.length });
 
       // Create an array of JIDs for the mentions property
       const mentions = [];
@@ -41,7 +38,7 @@ module.exports = {
 
         // Add the formatted line to our reply text
         // Using @ will create a "mention link" in the WhatsApp message
-        replyText += `${index + 1}. @${phone}${isAdmin ? tr(" 👑 *admin*", " 👑 *مشرف*") : ""}\n`;
+        replyText += `${index + 1}. @${phone}${isAdmin ? t("bot.group.members.adminBadge") : ""}\n`;
 
         // Add the member's JID to the mentions array
         mentions.push(member.id);
@@ -55,10 +52,7 @@ module.exports = {
     } catch (error) {
       logger.error(error, "[Error] in !members command:");
       await sock.sendMessage(msg.key.remoteJid, {
-        text: tr(
-          "Something went wrong while fetching the member list.",
-          "حدث خطأ أثناء جلب قائمة الأعضاء.",
-        ),
+        text: t("bot.group.members.failed"),
       });
     }
   },

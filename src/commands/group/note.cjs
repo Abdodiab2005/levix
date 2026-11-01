@@ -1,6 +1,6 @@
 // file: /commands/note.js
 const { getAllNotes, getNote } = require("../../utils/storage.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "note",
@@ -12,7 +12,7 @@ module.exports = {
 
     if (!keywordArg || !keywordArg.startsWith("#")) {
       return await sock.sendMessage(groupId, {
-        text: tr("Wrong format. Use: `!note #keyword`", "صيغة غير صحيحة. استخدم: `!note #keyword`"),
+        text: t("bot.group.note.usageHint"),
       });
     }
 
@@ -24,10 +24,7 @@ module.exports = {
       await sock.sendMessage(groupId, { text: noteText });
     } else {
       await sock.sendMessage(groupId, {
-        text: tr(
-          `⚠️ No note has the keyword \`${keywordArg}\`\n\nTo see every note, use: \`!notes\``,
-          `⚠️ لم يتم العثور على ملاحظة بالكلمة المفتاحية: \`${keywordArg}\`\n\nلعرض كل الملاحظات، استخدم: \`!notes\``,
-        ),
+        text: t("bot.group.note.notFound", { keyword: keywordArg }),
       });
     }
   },
