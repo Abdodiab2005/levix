@@ -8,7 +8,7 @@ const {
   listDebts: storeListDebts,
 } = require("../utils/storage.cjs");
 const logger = require("../utils/logger.cjs");
-const { t, tr } = require("../utils/i18n.cjs");
+const { t, intlTag } = require("../utils/i18n.cjs");
 const normalizeJid = require("../utils/normalizeJid.esm.js").default;
 
 module.exports = {
@@ -44,20 +44,7 @@ module.exports = {
 
       default:
         await sock.sendMessage(remote, {
-          text: tr(
-            `📊 *Debt tracker (private chats only)*\n\n` +
-              `Commands:\n\n` +
-              `• \`!debt add <amount> [description]\` — add a debt\n` +
-              `• \`!debt list\` — list debts\n` +
-              `• \`!debt del <id>\` — delete a debt\n\n` +
-              `Example:\n\`!debt add 50 lunch\``,
-            `📊 *نظام الديون (خاص فقط)*\n\n` +
-              `الأوامر:\n\n` +
-              `• \`!debt add <amount> [description]\` — إضافة دين\n` +
-              `• \`!debt list\` — عرض الديون\n` +
-              `• \`!debt del <id>\` — حذف دين\n\n` +
-              `مثال:\n\`!debt add 50 غداء\``,
-          ),
+          text: t("bot.tools.debt.help"),
         });
     }
   },
@@ -68,10 +55,7 @@ async function addDebt(sock, msg, args, creditorId, debtorId, chatKey) {
 
   if (args.length < 1) {
     return sock.sendMessage(remote, {
-      text: tr(
-        "❌ Usage: `!debt add <amount> [description]`",
-        "❌ الاستخدام: `!debt add <amount> [description]`",
-      ),
+      text: t("bot.tools.debt.addUsage"),
     });
   }
 
@@ -123,7 +107,7 @@ async function listDebts(sock, msg, creditorId, debtorId, chatKey) {
     let text = t("bot.tools.debt.listHeader");
 
     debts.forEach((d) => {
-      const date = new Date(d.created_at).toLocaleDateString(tr("en-GB", "ar-EG"));
+      const date = new Date(d.created_at).toLocaleDateString(intlTag());
       text += `*#${d.id}*\n`;
       text += `${t("bot.tools.debt.debtorLabel")}: ${d.debtor_id.split("@")[0]}\n`;
       text += `${t("bot.tools.debt.creditorLabel")}: ${d.creditor_id.split("@")[0]}\n`;
@@ -146,7 +130,7 @@ async function deleteDebt(sock, msg, args, creditorId, debtorId, chatKey) {
 
   if (args.length < 1) {
     return sock.sendMessage(remote, {
-      text: tr("❌ Usage: `!debt del <id>`", "❌ الاستخدام: `!debt del <id>`"),
+      text: t("bot.tools.debt.delUsage"),
     });
   }
 

@@ -1,4 +1,4 @@
-const { tr, t } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 const { isolate } = require("../utils/bidi.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const {
@@ -70,20 +70,19 @@ module.exports = {
           }
         }
         if (!oldName || !newName) {
-          line = tr(
-            `Use ${commandHint("pack", "rename <old> | <new>")}.`,
-            `استخدم ${commandHint("pack", "تسمية <القديم> | <الجديد>")}.`,
-          );
+          line = t("bot.stickers.pack.renameUsage", {
+            hint: commandHint("pack", t("bot.stickers.hint.rename")),
+          });
         } else {
           const pack = requirePack(who, oldName);
           const renamed = library.updatePack(who, pack.id, newName);
           line = t("bot.stickers.pack.renamed", { name: isolate(renamed.name) });
         }
       } else if (!parsed.name) {
-        line = tr(
-          `Use ${commandHint("pack", "<name>")} while replying to media, or ${commandHint("pack", "create <name>")}.`,
-          `استخدم ${commandHint("pack", "<الاسم>")} عند الرد على وسائط، أو ${commandHint("pack", "إنشاء <الاسم>")}.`,
-        );
+        line = t("bot.stickers.pack.needName", {
+          add: commandHint("pack", t("bot.stickers.hint.name")),
+          create: commandHint("pack", t("bot.stickers.hint.create")),
+        });
       } else if (parsed.action === "create") {
         const pack = library.createPack(who, parsed.name);
         line = t("bot.stickers.pack.created", { name: isolate(pack.name) });
@@ -104,10 +103,14 @@ module.exports = {
         const target = targetOf(msg, { quotedOnly: true });
         if (parsed.action === "show" || (parsed.action === "auto" && !target)) {
           const pack = requirePack(who, parsed.name);
-          line = tr(
-            `${isolate(pack.name)} — ${countLabel(pack.count)}. Use ${commandHint("stickers", `pack ${pack.name}`)} to see them.`,
-            `${isolate(pack.name)} — ${countLabel(pack.count)}. استخدم ${commandHint("stickers", `حزمة ${pack.name}`)} لعرضها.`,
-          );
+          line = t("bot.stickers.pack.show", {
+            name: isolate(pack.name),
+            count: countLabel(pack.count),
+            hint: commandHint(
+              "stickers",
+              `${t("bot.stickers.hint.showWord")} ${pack.name}`,
+            ),
+          });
         } else {
           if (!target) throw new StickerError("NO_MEDIA");
           let pack = library.findPackByName(who, parsed.name);

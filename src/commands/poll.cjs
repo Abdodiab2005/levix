@@ -7,7 +7,7 @@
 // and WhatsApp counts the results.
 
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
-const { t, tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 const MIN_OPTIONS = 2;
 const MAX_OPTIONS = 12; // WhatsApp's own ceiling
@@ -17,27 +17,7 @@ const MAX_OPTION_CHARS = 100;
 const MULTI_FLAGS = new Set(["--multi", "-m", "متعدد"]);
 
 const helpText = () =>
-  tr(
-    "📊 *Poll*\n\n" +
-      "*Usage:*\n" +
-      "`!poll <question> | <option> | <option> ...`\n\n" +
-      "*Options:*\n" +
-      "`--multi` allows more than one answer\n\n" +
-      "*Example:*\n" +
-      "`!poll Where to? | Cinema | Beach | Home`\n\n" +
-      `_${MIN_OPTIONS} to ${MAX_OPTIONS} options._`,
-    HELP_TEXT_AR,
-  );
-
-const HELP_TEXT_AR =
-  "📊 *استفتاء*\n\n" +
-  "*الاستخدام:*\n" +
-  "`!poll <السؤال> | <خيار> | <خيار> ...`\n\n" +
-  "*خيارات:*\n" +
-  "`--multi` يسمح باختيار أكتر من إجابة\n\n" +
-  "*مثال:*\n" +
-  "`!poll إلى أين نذهب؟ | السينما | البحر | البيت`\n\n" +
-  `_من ${MIN_OPTIONS} لـ ${MAX_OPTIONS} خيارات._`;
+  t("bot.tools.poll.help", { min: MIN_OPTIONS, max: MAX_OPTIONS });
 
 /**
  * Validate question/options and build the exact `sendMessage` content for a

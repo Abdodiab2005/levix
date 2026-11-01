@@ -7,7 +7,7 @@ const media = require("../stickers/media.cjs");
 const library = require("../stickers/library.cjs");
 const { StickerError, isStickerError, userMessage } = require("../stickers/errors.cjs");
 const { WHATSAPP_MEDIA_MAX_BYTES } = require("../stickers/limits.cjs");
-const { tr, t } = require("./i18n.cjs");
+const { t, currentLang } = require("./i18n.cjs");
 
 function targetOf(msg, { quotedOnly = false } = {}) {
   const quoted = quotedOf(msg);
@@ -50,20 +50,24 @@ function commandHint(name, args = "") {
   return `${runtimeConfig.getPrefix()}${name}${args ? ` ${args}` : ""}`;
 }
 
+// The old Arabic phrase uses one form through 10 and another after that.
+// CLDR "few" also covers 103 and 203, so the count passed to t() is a number
+// in the category that matches the old phrase. {n} is the number shown.
+// Arabic for 1 and 2 has no digit. Every plural category still has to contain
+// {n}, so those two pass an empty {n}.
+function countPluralCount(n) {
+  if (n === 1 || n === 2 || n === 0) return n;
+  if (n <= 10) return 3;
+  const mod = Math.abs(n % 100);
+  if (mod >= 3 && mod <= 10) return 11;
+  return n;
+}
+
 function countLabel(count, kind = "sticker") {
   const n = Number(count);
-  const singular = kind === "pack" ? "pack" : "sticker";
-  const english = `${n} ${singular}${n === 1 ? "" : "s"}`;
-  if (kind === "pack") {
-    return tr(
-      english,
-      n === 1 ? "حزمة واحدة" : n === 2 ? "حزمتان" : n <= 10 ? `${n} حزم` : `${n} حزمة`,
-    );
-  }
-  return tr(
-    english,
-    n === 1 ? "ملصق واحد" : n === 2 ? "ملصقان" : n <= 10 ? `${n} ملصقات` : `${n} ملصقًا`,
-  );
+  const key = kind === "pack" ? "bot.stickers.count.pack" : "bot.stickers.count.sticker";
+  const bare = currentLang() === "ar" && (n === 1 || n === 2);
+  return t(key, { count: countPluralCount(n), n: bare ? "" : n });
 }
 
 function errorText(error) {

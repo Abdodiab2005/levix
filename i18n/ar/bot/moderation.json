@@ -153,5 +153,10 @@
   "clearwarns.somethingWentWrongWhileClearing": "حدث خطأ أثناء مسح التحذيرات.",
   "flagged.noMembersAreWaitingFor": "لا يوجد أعضاء بانتظار المراجعة.",
   "flagged.flaggedMembers": "*الأعضاء المعلَّمون للمراجعة* ({count})",
-  "flagged.somethingWentWrongWhileListing": "حدث خطأ أثناء عرض الأعضاء المعلَّمين."
+  "flagged.somethingWentWrongWhileListing": "حدث خطأ أثناء عرض الأعضاء المعلَّمين.",
+  "flagged.line": "• {tag} — الإنذارات {count}، آخر مخالفة: {rule}{when}",
+  "flagged.when": "، {when}",
+  "policy.conflictGeneric": "يتعارض هذا الإعداد مع السياسة الحالية.",
+  "policy.valueNotAllowed": "هذه القيمة غير مسموحة.",
+  "actionNotAllowed": "هذا الإجراء غير مسموح."
 }

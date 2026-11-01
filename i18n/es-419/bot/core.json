@@ -49,5 +49,6 @@
   "markdownParser.item": "Ítem {number}",
   "markdownParser.column": "Columna {number}",
   "socket.remoteMediaFailed": "No se pudieron obtener los medios remotos de forma segura. Usa una URL HTTPS pública dentro de los límites de medios remotos, o envía un archivo local.",
-  "passwordReset.codeMessage": "🔐 *{brandName} — código de restablecimiento de contraseña: {code}*\n\nIngrésalo en el panel dentro de 10 minutos. Si no lo pediste, ignora este mensaje — nadie más puede usarlo."
+  "passwordReset.codeMessage": "🔐 *{brandName} — código de restablecimiento de contraseña: {code}*\n\nIngrésalo en el panel dentro de 10 minutos. Si no lo pediste, ignora este mensaje — nadie más puede usarlo.",
+  "setprefix.current": "El prefijo actual del bot: `{prefix}`\n\nPara cambiarlo, usa:\n`{prefix}setprefix <nuevo_prefijo>`\n\nEjemplo: `{prefix}setprefix /`\n\n⚠️ Solo el propietario puede cambiar el prefijo."
 }

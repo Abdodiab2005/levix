@@ -1,4 +1,4 @@
-const { tr, t } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 const { isolate } = require("../utils/bidi.cjs");
 const { BOT_PAGE_SIZE } = require("../stickers/limits.cjs");
 const { StickerError } = require("../stickers/errors.cjs");
@@ -81,10 +81,10 @@ module.exports = {
       const { items, total } = library.listStickers(who, query);
       if (!total)
         return sock.sendMessage(jid, {
-          text: tr(
-            `No stickers here yet. Reply to media with ${commandHint("sticker")} or ${commandHint("pack", "<name>")} to save one.`,
-            `لا توجد ملصقات هنا بعد. رد على وسائط بالأمر ${commandHint("sticker")} أو ${commandHint("pack", "<الاسم>")} لحفظ ملصق.`,
-          ),
+          text: t("bot.stickers.stickers.empty", {
+            sticker: commandHint("sticker"),
+            pack: commandHint("pack", t("bot.stickers.hint.name")),
+          }),
         });
       const pages = Math.ceil(total / BOT_PAGE_SIZE);
       if (selected.page > pages) throw new StickerError("INVALID_OPTIONS");
@@ -96,11 +96,15 @@ module.exports = {
               ? commandHint("stickers", `favorites ${selected.page + 1}`)
               : commandHint("stickers", String(selected.page + 1))
           : null;
+      const more = next ? t("bot.stickers.stickers.pageMore", { next }) : "";
       await sock.sendMessage(jid, {
-        text: tr(
-          `${label} — ${countLabel(total)} · page ${selected.page}/${pages}${next ? ` · ${next} for more` : ""}`,
-          `${label} — ${countLabel(total)} · الصفحة ${selected.page}/${pages}${next ? ` · ${next} للمزيد` : ""}`,
-        ),
+        text: t("bot.stickers.stickers.page", {
+          label,
+          count: countLabel(total),
+          page: selected.page,
+          pages,
+          more,
+        }),
       });
       for (const sticker of items) await sendLibrarySticker(sock, jid, who, sticker);
     } catch (error) {

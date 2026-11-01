@@ -10,7 +10,7 @@ function formatTime12Hour(time24) {
 const axios = require("axios");
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
-const { t, tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 // The one HTTP GET the command performs. Exposed so tests can stub the network.
 const http = {
@@ -54,10 +54,7 @@ module.exports = {
     // 2. Check if the user provided a city name
     if (!args || args.length === 0) {
       return await sock.sendMessage(msg.key.remoteJid, {
-        text: tr(
-          "Give the city's name in English.\n\n*Example:* `!prayer cairo`",
-          "يرجى تقديم اسم المدينة باللغة الانجليزية.\n\nمثال:* `!prayer cairo`",
-        ),
+        text: t("bot.tools.prayer.needCity"),
       });
     }
 

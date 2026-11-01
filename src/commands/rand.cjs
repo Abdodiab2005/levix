@@ -11,7 +11,7 @@
 // Used for settling arguments in the group. No dependencies, no state.
 
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
-const { t, tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 const MAX_DICE = 20;
 const MAX_SIDES = 1000;
@@ -30,26 +30,7 @@ function toNumber(token) {
   return Number.isFinite(value) ? Math.trunc(value) : null;
 }
 
-const helpText = () =>
-  tr(
-    "🎲 *Random*\n\n" +
-      "`!rand` a number from 1 to 100\n" +
-      "`!rand <max>` a number from 1 to that number\n" +
-      "`!rand <min> <max>` a number between the two\n" +
-      "`!rand dice [count d sides]` dice — e.g. `!rand dice 2d6`\n" +
-      "`!rand coin` heads or tails\n" +
-      "`!rand pick option | option | option` picks one",
-    HELP_TEXT_AR,
-  );
-
-const HELP_TEXT_AR =
-  "🎲 *عشوائي*\n\n" +
-  "`!rand` رقم من 1 لـ 100\n" +
-  "`!rand <أقصى>` رقم من 1 للرقم ده\n" +
-  "`!rand <أدنى> <أقصى>` رقم بين الحدّين\n" +
-  "`!rand dice [عدد d أوجه]` نرد — مثال `!rand dice 2d6`\n" +
-  "`!rand coin` ملك ولا كتابة\n" +
-  "`!rand pick خيار | خيار | خيار` يختار واحد";
+const helpText = () => t("bot.tools.rand.help");
 
 function rollDice(spec) {
   const match = String(spec || "1d6")
@@ -60,12 +41,7 @@ function rollDice(spec) {
 
   if (!match || count < 1 || count > MAX_DICE || sides < 2 || sides > MAX_SIDES) {
     return {
-      error: tr(
-        `❌ Wrong dice format. Use \`<count>d<sides>\` — e.g. \`2d6\`.\n` +
-          `(at most ${MAX_DICE} dice and ${MAX_SIDES} sides)`,
-        `❌ صيغة النرد غلط. استخدم \`عددdأوجه\` — مثال \`2d6\`.\n` +
-          `(حد أقصى ${MAX_DICE} نرد و ${MAX_SIDES} وجه)`,
-      ),
+      error: t("bot.tools.rand.diceError", { maxDice: MAX_DICE, maxSides: MAX_SIDES }),
     };
   }
 

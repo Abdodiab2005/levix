@@ -39,5 +39,35 @@
   "errors.inUse": "Este sticker está en uno o más paquetes. Confirma para eliminarlo de todos.",
   "errors.storageUnavailable": "No se puede escribir en la biblioteca de stickers ahora.",
   "errors.notConnected": "WhatsApp no está conectado, así que no se puede enviar nada.",
-  "errors.cancelled": "La conversión se canceló."
+  "errors.cancelled": "La conversión se canceló.",
+  "count.sticker": {
+    "one": "{n} sticker",
+    "many": "{n} stickers",
+    "other": "{n} stickers"
+  },
+  "count.pack": {
+    "one": "{n} paquete",
+    "many": "{n} paquetes",
+    "other": "{n} paquetes"
+  },
+  "errors.videoTooLong": {
+    "one": "El video es demasiado largo (límite de {n} segundo). Envía un clip más corto o recórtalo en el Sticker Studio del panel.",
+    "many": "El video es demasiado largo (límite de {n} segundos). Envía un clip más corto o recórtalo en el Sticker Studio del panel.",
+    "other": "El video es demasiado largo (límite de {n} segundos). Envía un clip más corto o recórtalo en el Sticker Studio del panel."
+  },
+  "hint.name": "<nombre>",
+  "hint.rename": "rename <anterior> | <nuevo>",
+  "hint.create": "create <nombre>",
+  "hint.showWord": "pack",
+  "hint.toimageModes": "[doc|gif]",
+  "hint.gif": "gif",
+  "packs.empty": "Todavía no hay paquetes. Responde a un archivo con {hint} para empezar uno. Biblioteca: {count}.",
+  "stickers.empty": "Todavía no hay stickers aquí. Responde a un archivo con {sticker} o {pack} para guardar uno.",
+  "stickers.page": "{label} · {count} · página {page}/{pages}{more}",
+  "stickers.pageMore": " · {next} para ver más",
+  "pack.renameUsage": "Usa {hint}.",
+  "pack.needName": "Usa {add} al responder a un archivo, o {create}.",
+  "pack.show": "{name}: {count}. Usa {hint} para verlos.",
+  "toimage.reply": "Responde a un sticker con {hint}.",
+  "toimage.firstFrame": "Primer cuadro de un sticker animado. Usa {hint} para la animación."
 }

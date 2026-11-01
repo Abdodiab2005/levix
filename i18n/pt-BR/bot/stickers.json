@@ -39,5 +39,35 @@
   "errors.inUse": "Esta figurinha está em um ou mais pacotes. Confirme para apagá-la de todos.",
   "errors.storageUnavailable": "Não dá para gravar na biblioteca de figurinhas agora.",
   "errors.notConnected": "O WhatsApp não está conectado, então nada pode ser enviado.",
-  "errors.cancelled": "A conversão foi cancelada."
+  "errors.cancelled": "A conversão foi cancelada.",
+  "count.sticker": {
+    "one": "{n} figurinha",
+    "many": "{n} figurinhas",
+    "other": "{n} figurinhas"
+  },
+  "count.pack": {
+    "one": "{n} pacote",
+    "many": "{n} pacotes",
+    "other": "{n} pacotes"
+  },
+  "errors.videoTooLong": {
+    "one": "O vídeo é longo demais (limite de {n} segundo). Envie um clipe mais curto ou corte-o no Estúdio de Figurinhas do painel.",
+    "many": "O vídeo é longo demais (limite de {n} segundos). Envie um clipe mais curto ou corte-o no Estúdio de Figurinhas do painel.",
+    "other": "O vídeo é longo demais (limite de {n} segundos). Envie um clipe mais curto ou corte-o no Estúdio de Figurinhas do painel."
+  },
+  "hint.name": "<nome>",
+  "hint.rename": "rename <antigo> | <novo>",
+  "hint.create": "create <nome>",
+  "hint.showWord": "pack",
+  "hint.toimageModes": "[doc|gif]",
+  "hint.gif": "gif",
+  "packs.empty": "Ainda não há pacotes. Responda a uma mídia com {hint} para começar um. Biblioteca: {count}.",
+  "stickers.empty": "Ainda não há figurinhas aqui. Responda a uma mídia com {sticker} ou {pack} para salvar uma.",
+  "stickers.page": "{label} · {count} · página {page}/{pages}{more}",
+  "stickers.pageMore": " · {next} para ver mais",
+  "pack.renameUsage": "Use {hint}.",
+  "pack.needName": "Use {add} ao responder a uma mídia, ou {create}.",
+  "pack.show": "{name}: {count}. Use {hint} para ver.",
+  "toimage.reply": "Responda a uma figurinha com {hint}.",
+  "toimage.firstFrame": "Primeiro quadro de uma figurinha animada. Use {hint} para a animação."
 }

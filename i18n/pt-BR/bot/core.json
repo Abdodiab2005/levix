@@ -49,5 +49,6 @@
   "markdownParser.item": "Item {number}",
   "markdownParser.column": "Coluna {number}",
   "socket.remoteMediaFailed": "Não foi possível buscar a mídia remota com segurança. Use uma URL HTTPS pública dentro dos limites de mídia remota, ou envie um arquivo local.",
-  "passwordReset.codeMessage": "🔐 *{brandName} — código de redefinição de senha: {code}*\n\nDigite-o no painel em até 10 minutos. Se você não pediu isso, ignore esta mensagem — ninguém mais pode usá-lo."
+  "passwordReset.codeMessage": "🔐 *{brandName} — código de redefinição de senha: {code}*\n\nDigite-o no painel em até 10 minutos. Se você não pediu isso, ignore esta mensagem — ninguém mais pode usá-lo.",
+  "setprefix.current": "O prefixo atual do bot: `{prefix}`\n\nPara mudá-lo, use:\n`{prefix}setprefix <novo_prefixo>`\n\nExemplo: `{prefix}setprefix /`\n\n⚠️ Só o dono pode mudar o prefixo."
 }

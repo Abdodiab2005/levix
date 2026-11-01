@@ -153,5 +153,10 @@
   "clearwarns.somethingWentWrongWhileClearing": "Something went wrong while clearing the warnings.",
   "flagged.noMembersAreWaitingFor": "No members are waiting for review.",
   "flagged.flaggedMembers": "*Flagged members* ({count})",
-  "flagged.somethingWentWrongWhileListing": "Something went wrong while listing flagged members."
+  "flagged.somethingWentWrongWhileListing": "Something went wrong while listing flagged members.",
+  "flagged.line": "• {tag} — warnings {count}, last: {rule}{when}",
+  "flagged.when": ", {when}",
+  "policy.conflictGeneric": "This setting conflicts with the current policy.",
+  "policy.valueNotAllowed": "That value is not allowed.",
+  "actionNotAllowed": "That action is not allowed."
 }

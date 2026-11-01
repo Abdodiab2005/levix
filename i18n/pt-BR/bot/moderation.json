@@ -153,5 +153,10 @@
   "clearwarns.somethingWentWrongWhileClearing": "Algo deu errado ao limpar os avisos.",
   "flagged.noMembersAreWaitingFor": "Nenhum membro está aguardando revisão.",
   "flagged.flaggedMembers": "*Membros marcados* ({count})",
-  "flagged.somethingWentWrongWhileListing": "Algo deu errado ao listar os membros marcados."
+  "flagged.somethingWentWrongWhileListing": "Algo deu errado ao listar os membros marcados.",
+  "flagged.line": "• {tag}: avisos {count}, último: {rule}{when}",
+  "flagged.when": ", {when}",
+  "policy.conflictGeneric": "Esta configuração entra em conflito com a política atual.",
+  "policy.valueNotAllowed": "Esse valor não é permitido.",
+  "actionNotAllowed": "Essa ação não é permitida."
 }

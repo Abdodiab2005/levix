@@ -49,5 +49,6 @@
   "markdownParser.item": "Item {number}",
   "markdownParser.column": "Column {number}",
   "socket.remoteMediaFailed": "Could not fetch remote media securely. Use a public HTTPS URL within the remote media limits, or send a local file.",
-  "passwordReset.codeMessage": "🔐 *{brandName} — password reset code: {code}*\n\nEnter it in the control panel within 10 minutes. If you didn't request this, ignore this message — nobody else can use it."
+  "passwordReset.codeMessage": "🔐 *{brandName} — password reset code: {code}*\n\nEnter it in the control panel within 10 minutes. If you didn't request this, ignore this message — nobody else can use it.",
+  "setprefix.current": "The bot's current prefix: `{prefix}`\n\nTo change it, use:\n`{prefix}setprefix <new_prefix>`\n\nExample: `{prefix}setprefix /`\n\n⚠️ Only the owner can change the prefix."
 }

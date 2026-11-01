@@ -108,5 +108,14 @@
   "digit.mixed": "⚠️ The digits are mixed (Arabic and English). Say which way:\n`{prefix}digit ar ...` or `{prefix}digit en ...`.",
   "digit.help": "🔢 *Digit converter*\n\n• `{prefix}digit 12345` ➔ ١٢٣٤٥  (auto-detected)\n• `{prefix}digit ١٢٣٤٥` ➔ 12345\n• `{prefix}digit ar 12345` ➔ ١٢٣٤٥\n• `{prefix}digit en ١٢٣٤٥` ➔ 12345\n_Or reply to a message with digits in it using `{prefix}digit` — it converts the other way._\n_When Arabic and English digits are mixed, say which way: `{prefix}digit ar` or `{prefix}digit en`._",
   "digit.noText": "❌ Type a number after the command, or reply to a message.\nExample: `{prefix}digit 12345` or `{prefix}digit ar 12345`",
-  "digit.noDigits": "❌ No digits to convert.\nUse:\n• `{prefix}digit 12345`\n• `{prefix}digit ar` / `{prefix}digit en` with text, or as a reply to a message."
+  "digit.noDigits": "❌ No digits to convert.\nUse:\n• `{prefix}digit 12345`\n• `{prefix}digit ar` / `{prefix}digit en` with text, or as a reply to a message.",
+  "debt.help": "📊 *Debt tracker (private chats only)*\n\nCommands:\n\n• `!debt add <amount> [description]` — add a debt\n• `!debt list` — list debts\n• `!debt del <id>` — delete a debt\n\nExample:\n`!debt add 50 lunch`",
+  "debt.addUsage": "❌ Usage: `!debt add <amount> [description]`",
+  "debt.delUsage": "❌ Usage: `!debt del <id>`",
+  "loop.help": "🔁 *Loop*\n\n*Usage:*\n`!loop <count> <text>` — repeat the text in one message\n`!loop <from>-<to>` — print the numbers from/to\n`!loop <from>-<to>:<step>` — with a custom step\n\n*Options:*\n`-s` separate messages instead of one\n`-n` no numbering\n\n*Placeholders in the text:*\n`{n}` the current number · `{i}` the repetition number\n\n*Examples:*\n`!loop 5 hello`\n`!loop 1-10`\n`!loop 0-100:25 counter {n}`\n`!loop 3 good morning -s`\n\n_At most {maxItems} repetitions in one message, {maxSplit} separate messages._",
+  "rand.help": "🎲 *Random*\n\n`!rand` a number from 1 to 100\n`!rand <max>` a number from 1 to that number\n`!rand <min> <max>` a number between the two\n`!rand dice [count d sides]` dice — e.g. `!rand dice 2d6`\n`!rand coin` heads or tails\n`!rand pick option | option | option` picks one",
+  "rand.diceError": "❌ Wrong dice format. Use `<count>d<sides>` — e.g. `2d6`.\n(at most {maxDice} dice and {maxSides} sides)",
+  "poll.help": "📊 *Poll*\n\n*Usage:*\n`!poll <question> | <option> | <option> ...`\n\n*Options:*\n`--multi` allows more than one answer\n\n*Example:*\n`!poll Where to? | Cinema | Beach | Home`\n\n_{min} to {max} options._",
+  "prayer.needCity": "Give the city's name in English.\n\n*Example:* `!prayer cairo`",
+  "perm.usage": "Wrong usage.\n\n`!perm list` — the current roles\n`!perm add admin @member` — make an admin\n`!perm add owner <number>` — make an owner\n`!perm remove admin @member` — take the role away"
 }

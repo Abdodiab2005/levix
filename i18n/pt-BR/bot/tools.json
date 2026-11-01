@@ -109,5 +109,14 @@
   "digit.mixed": "⚠️ Os dígitos estão misturados (árabes e ingleses). Diga a direção:\n`{prefix}digit ar ...` ou `{prefix}digit en ...`.",
   "digit.help": "🔢 *Conversor de dígitos*\n\n• `{prefix}digit 12345` ➔ ١٢٣٤٥  (detectado automaticamente)\n• `{prefix}digit ١٢٣٤٥` ➔ 12345\n• `{prefix}digit ar 12345` ➔ ١٢٣٤٥\n• `{prefix}digit en ١٢٣٤٥` ➔ 12345\n_Ou responda a uma mensagem com dígitos usando `{prefix}digit` — ele converte para o outro lado._\n_Quando dígitos árabes e ingleses estão misturados, diga a direção: `{prefix}digit ar` ou `{prefix}digit en`._",
   "digit.noText": "❌ Digite um número depois do comando, ou responda a uma mensagem.\nExemplo: `{prefix}digit 12345` ou `{prefix}digit ar 12345`",
-  "digit.noDigits": "❌ Não há dígitos para converter.\nUse:\n• `{prefix}digit 12345`\n• `{prefix}digit ar` / `{prefix}digit en` com texto, ou como resposta a uma mensagem."
+  "digit.noDigits": "❌ Não há dígitos para converter.\nUse:\n• `{prefix}digit 12345`\n• `{prefix}digit ar` / `{prefix}digit en` com texto, ou como resposta a uma mensagem.",
+  "debt.help": "📊 *Controle de dívidas (só em chats privados)*\n\nComandos:\n\n• `!debt add <valor> [descrição]`: adiciona uma dívida\n• `!debt list`: lista as dívidas\n• `!debt del <id>`: apaga uma dívida\n\nExemplo:\n`!debt add 50 almoço`",
+  "debt.addUsage": "❌ Uso: `!debt add <valor> [descrição]`",
+  "debt.delUsage": "❌ Uso: `!debt del <id>`",
+  "loop.help": "🔁 *Repetir*\n\n*Uso:*\n`!loop <quantidade> <texto>`: repete o texto em uma mensagem\n`!loop <de>-<até>`: imprime os números de/até\n`!loop <de>-<até>:<passo>`: com um passo personalizado\n\n*Opções:*\n`-s` mensagens separadas em vez de uma\n`-n` sem numeração\n\n*Marcadores no texto:*\n`{n}` o número atual · `{i}` o número da repetição\n\n*Exemplos:*\n`!loop 5 olá`\n`!loop 1-10`\n`!loop 0-100:25 contador {n}`\n`!loop 3 bom dia -s`\n\n_No máximo {maxItems} repetições em uma mensagem, {maxSplit} mensagens separadas._",
+  "rand.help": "🎲 *Aleatório*\n\n`!rand` um número de 1 a 100\n`!rand <máximo>` um número de 1 até esse número\n`!rand <mínimo> <máximo>` um número entre os dois\n`!rand dice [quantidade d faces]` dados, por exemplo `!rand dice 2d6`\n`!rand coin` cara ou coroa\n`!rand pick opção | opção | opção` escolhe uma",
+  "rand.diceError": "❌ Formato de dado inválido. Use `<quantidade>d<faces>`, por exemplo `2d6`.\n(no máximo {maxDice} dados e {maxSides} faces)",
+  "poll.help": "📊 *Enquete*\n\n*Uso:*\n`!poll <pergunta> | <opção> | <opção> ...`\n\n*Opções:*\n`--multi` permite mais de uma resposta\n\n*Exemplo:*\n`!poll Para onde? | Cinema | Praia | Casa`\n\n_De {min} a {max} opções._",
+  "prayer.needCity": "Informe o nome da cidade em inglês.\n\n*Exemplo:* `!prayer cairo`",
+  "perm.usage": "Uso incorreto.\n\n`!perm list`: os papéis atuais\n`!perm add admin @membro`: tornar admin\n`!perm add owner <número>`: tornar dono\n`!perm remove admin @membro`: tirar o papel"
 }

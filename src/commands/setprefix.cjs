@@ -2,7 +2,7 @@
 const logger = require("../utils/logger.cjs");
 // Same validation and storage the dashboard uses, so both doors agree.
 const runtimeConfig = require("../config/runtime-config.cjs");
-const { t, tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 // runtime-config words its refusals in English for the dashboard. Each known
 // refusal maps to a catalog message, built when it is sent.
@@ -25,10 +25,7 @@ module.exports = {
       const currentPrefix = runtimeConfig.getPrefix();
 
       await sock.sendMessage(chatId, {
-        text: tr(
-          `The bot's current prefix: \`${currentPrefix}\`\n\nTo change it, use:\n\`${currentPrefix}setprefix <new_prefix>\`\n\nExample: \`${currentPrefix}setprefix /\`\n\n⚠️ Only the owner can change the prefix.`,
-          `البادئة الحالية للبوت: \`${currentPrefix}\`\n\nلتغيير البادئة، استخدم:\n\`${currentPrefix}setprefix <البادئة_الجديدة>\`\n\nمثال: \`${currentPrefix}setprefix /\`\n\n⚠️ ملاحظة: يمكن للمالك فقط تغيير البادئة.`,
-        ),
+        text: t("bot.core.setprefix.current", { prefix: currentPrefix }),
       });
       return;
     }

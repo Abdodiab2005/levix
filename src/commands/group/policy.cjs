@@ -1,6 +1,6 @@
 const { getGroupSettings } = require("../../utils/storage.cjs");
 const { buildModerationSummary } = require("../../utils/moderationSummary.cjs");
-const { t, tr } = require("../../utils/i18n.cjs");
+const { t, currentLang } = require("../../utils/i18n.cjs");
 const {
   applyModerationPolicy,
   applyModerationPreset,
@@ -78,14 +78,16 @@ function rangeReply(sock, groupId, min, max) {
 
 function policyErrorReply(sock, groupId, error) {
   const item = error?.errors?.[0];
+  // The validator's detail is English only. Other languages get a generic line.
+  // A catalog value of "{detail}" is rejected: placeholder sets must match.
   if (item?.code === "conflict") {
-    return sock.sendMessage(groupId, {
-      text: tr(item.message, "يتعارض هذا الإعداد مع السياسة الحالية."),
-    });
+    const text =
+      currentLang() === "en" ? item.message : t("bot.moderation.policy.conflictGeneric");
+    return sock.sendMessage(groupId, { text });
   }
-  return sock.sendMessage(groupId, {
-    text: tr(item?.message || "That value is not allowed.", "هذه القيمة غير مسموحة."),
-  });
+  const generic = t("bot.moderation.policy.valueNotAllowed");
+  const text = currentLang() === "en" ? item?.message || generic : generic;
+  return sock.sendMessage(groupId, { text });
 }
 
 function parsePatch(field, raw) {
