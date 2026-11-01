@@ -6,14 +6,6 @@ const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "block",
-  description: {
-    en: "Blocks a user from contacting the bot on WhatsApp.",
-    ar: "يحظر مستخدمًا من التواصل مع البوت على واتساب.",
-  },
-  usage: {
-    en: "block [@member|number]   (or reply to their message)",
-    ar: "block [@عضو|رقم]   (أو رد على رسالته)",
-  },
   chat: "all",
 
   async execute(sock, msg, args) {

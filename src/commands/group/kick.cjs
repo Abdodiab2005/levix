@@ -10,14 +10,6 @@ const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "kick",
-  description: {
-    en: "Removes a member from the group.",
-    ar: "يطرد عضوًا من المجموعة.",
-  },
-  usage: {
-    en: "kick @member [reason]",
-    ar: "kick @عضو [السبب]",
-  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true,

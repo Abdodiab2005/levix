@@ -388,14 +388,6 @@ const HELP_TEXT_AR =
 module.exports = {
   name: "calc",
   aliases: ["calculate", "حساب", "احسب", "="],
-  description: {
-    en: "Calculator: arithmetic, percentages, powers and math functions.",
-    ar: "آلة حاسبة: عمليات حسابية، ونِسب مئوية، وأُسس، ودوال رياضية.",
-  },
-  usage: {
-    en: "calc <expression>",
-    ar: "calc <معادلة>",
-  },
   chat: "all",
 
   async execute(sock, msg, args) {

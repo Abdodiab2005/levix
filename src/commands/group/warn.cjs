@@ -10,14 +10,6 @@ const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "warn",
-  description: {
-    en: "Warns a member, and takes action once the limit is reached.",
-    ar: "يوجّه تحذيرًا لعضو، ويتخذ إجراءً عند بلوغ الحد.",
-  },
-  usage: {
-    en: "warn @member [reason]",
-    ar: "warn @عضو [السبب]",
-  },
   chat: "group",
   userAdminRequired: true,
 

@@ -5,14 +5,6 @@ const { applyModerationPolicy } = require("../../services/moderationPolicy.cjs")
 
 module.exports = {
   name: "setwarn",
-  description: {
-    en: "Configures the automatic warning system.",
-    ar: "يضبط نظام التحذيرات التلقائي.",
-  },
-  usage: {
-    en: "setwarn max <count>\nsetwarn action <KICK|FLAG>",
-    ar: "setwarn max <عدد>\nsetwarn action <KICK|FLAG>",
-  },
   chat: "group",
   userAdminRequired: true,
 

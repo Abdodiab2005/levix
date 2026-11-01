@@ -16,14 +16,6 @@ const { applyModerationPolicy } = require("../../services/moderationPolicy.cjs")
 // --- The Main Command Logic ---
 const command = {
   name: "antilink",
-  description: {
-    en: "Advanced control of the anti-link protection.",
-    ar: "تحكم متقدم في ميزة منع الروابط.",
-  },
-  usage: {
-    en: "antilink [status]\nantilink <on|off>\nantilink mode <ALL|WHITELIST|BLACKLIST>\nantilink action <DELETE|WARN|KICK>\nantilink <allow|disallow> <domain>",
-    ar: "antilink [status]\nantilink <on|off>\nantilink mode <ALL|WHITELIST|BLACKLIST>\nantilink action <DELETE|WARN|KICK>\nantilink <allow|disallow> <النطاق>",
-  },
   chat: "group",
   userAdminRequired: true,
 

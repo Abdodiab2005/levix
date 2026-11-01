@@ -5,14 +5,6 @@ const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "clearwarns",
-  description: {
-    en: "Clears all of a member's warnings and dismisses their flag.",
-    ar: "يمسح كل تحذيرات عضو معيّن ويلغي تعليمه للمراجعة.",
-  },
-  usage: {
-    en: "clearwarns @member",
-    ar: "clearwarns @عضو",
-  },
   chat: "group",
   userAdminRequired: true,
 

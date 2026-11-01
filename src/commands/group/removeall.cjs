@@ -4,14 +4,6 @@ const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "removeall",
-  description: {
-    en: "Removes every non-admin member from the group, after confirmation.",
-    ar: "يطرد كل الأعضاء غير المشرفين من المجموعة بعد التأكيد.",
-  },
-  usage: {
-    en: "removeall",
-    ar: "removeall",
-  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true,

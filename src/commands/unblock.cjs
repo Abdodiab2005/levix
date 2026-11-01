@@ -5,14 +5,6 @@ const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "unblock",
-  description: {
-    en: "Unblocks a user.",
-    ar: "يلغي حظر مستخدم.",
-  },
-  usage: {
-    en: "unblock [@member|number]   (or reply to their message)",
-    ar: "unblock [@عضو|رقم]   (أو رد على رسالته)",
-  },
   chat: "all",
 
   async execute(sock, msg, args) {

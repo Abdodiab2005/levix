@@ -4,14 +4,6 @@ const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "tagadmins",
-  description: {
-    en: "Mentions every admin in the group.",
-    ar: "يذكر (منشن) جميع مشرفي المجموعة.",
-  },
-  usage: {
-    en: "tagadmins [message]",
-    ar: "tagadmins [رسالة]",
-  },
   chat: "group",
 
   async execute(sock, msg, args, body, groupMetadata) {

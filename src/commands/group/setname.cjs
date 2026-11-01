@@ -4,14 +4,6 @@ const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "setname",
-  description: {
-    en: "Changes the group's name.",
-    ar: "يغيّر اسم المجموعة.",
-  },
-  usage: {
-    en: "setname <new name>",
-    ar: "setname <الاسم الجديد>",
-  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true,
