@@ -234,7 +234,7 @@
             errorBox.textContent = msg;
           } else if (currentErrorState.type === "invalid_password") {
             errorBox.textContent =
-              window.LevixGatewayI18n && window.LevixGatewayI18n.lang === "ar"
+              window.LevixGatewayI18n && window.LevixGatewayI18n.lang !== "en"
                 ? t("resetErrInvalidPassword")
                 : currentErrorState.message || t("resetErrInvalidPassword");
           } else if (currentErrorState.type === "raw") {
@@ -321,7 +321,7 @@
           var button = event.target.closest("[data-channel]");
           if (!button || button.disabled) return;
           var channel = button.getAttribute("data-channel");
-          var lang = window.LevixGatewayI18n && window.LevixGatewayI18n.lang === "ar" ? "ar" : "en";
+          var lang = (window.LevixGatewayI18n && window.LevixGatewayI18n.lang) || "en";
           setChannelBusy(true);
           hideError();
           try {

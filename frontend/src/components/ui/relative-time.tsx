@@ -1,6 +1,8 @@
 // file: frontend/src/components/ui/relative-time.tsx
 import { useEffect, useState } from "react";
 import { useI18n } from "../../context/I18nContext";
+import { intlLocale } from "../../i18n/locale";
+import type { Language } from "../../i18n/translations";
 import { cn } from "../../utils/cn";
 
 const listeners = new Set<() => void>();
@@ -22,8 +24,8 @@ function subscribe(listener: () => void) {
   };
 }
 
-function localeOf(language: string) {
-  return language === "ar" ? "ar" : "en";
+function localeOf(language: Language) {
+  return intlLocale(language, { ar: "ar", en: "en" });
 }
 
 function toMillis(value: number | string | Date): number | null {
@@ -42,7 +44,7 @@ const UNITS: Array<{ unit: Intl.RelativeTimeFormatUnit; ms: number }> = [
   { unit: "second", ms: 1000 },
 ];
 
-function formatRelative(ms: number, now: number, language: string) {
+function formatRelative(ms: number, now: number, language: Language) {
   const diff = ms - now;
   const abs = Math.abs(diff);
   const format = new Intl.RelativeTimeFormat(localeOf(language), { numeric: "auto" });

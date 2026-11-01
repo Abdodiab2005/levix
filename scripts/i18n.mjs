@@ -1,11 +1,12 @@
 // Catalog generator and validator.
 //
-// English is the source locale. `translations.ts` lists `ar` before `en`
-// because that is the module shape the dashboard already imports. The gateway
-// dictionary and the Node catalog follow locales.json order. Android plural
-// tokens are compared as a multiset union: the count of a token is the most
-// times it appears in any one category, so a locale with more categories still
-// matches when each category carries the same tokens.
+// English is the source locale. `translations.ts` lists every registry locale.
+// The `ar` object stays before the `en` binding, and a locale with no
+// dashboard.json is an empty object. The gateway dictionary and the Node
+// catalog follow locales.json order. Android plural tokens are compared as a
+// multiset union: the count of a token is the most times it appears in any one
+// category, so a locale with more categories still matches when each category
+// carries the same tokens.
 
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
@@ -124,16 +125,61 @@ function renderJs(value, indent) {
   return `{\n${lines.join("\n")}\n${pad}}`;
 }
 
+function jsKey(code) {
+  return IDENT.test(code) ? code : JSON.stringify(code);
+}
+
+function translationOrder(catalog) {
+  const codes = localeEntries(catalog).map((locale) => locale.code);
+  const ordered = [];
+  for (const code of DASHBOARD_FIRST) {
+    if (codes.includes(code)) ordered.push(code);
+  }
+  for (const code of codes) {
+    if (!ordered.includes(code)) ordered.push(code);
+  }
+  return ordered;
+}
+
+function dashboardMessages(catalog, code) {
+  const dashboard = catalog.bundles?.[code]?.dashboard;
+  return isPlain(dashboard) ? dashboard : {};
+}
+
 export function renderTranslations(catalog) {
-  const codes = dashboardLocales(catalog);
+  const registry = localeEntries(catalog);
+  const codes = registry.map((locale) => locale.code);
   const type = codes.length ? codes.map((code) => JSON.stringify(code)).join(" | ") : "never";
-  const obj = {};
-  for (const code of codes) obj[code] = catalog.bundles[code].dashboard;
-  const body = renderJs(obj, 0);
+  const order = translationOrder(catalog);
+  const typeFields = order.map((code) => {
+    const field =
+      code === SOURCE ? "Record<MessageKey, string>" : "Partial<Record<MessageKey, string>>";
+    return `  ${jsKey(code)}: ${field};`;
+  });
+  const valueLines = order.map((code) => {
+    if (code === SOURCE) return "  en,";
+    const messages = dashboardMessages(catalog, code);
+    const rendered = Object.keys(messages).length ? renderJs(messages, 2) : "{}";
+    return `  ${jsKey(code)}: ${rendered},`;
+  });
+  const localeLines = registry.map((locale) => {
+    const dir = locale.dir === "rtl" ? "rtl" : "ltr";
+    const name = typeof locale.name === "string" ? locale.name : locale.code;
+    return `  { code: ${JSON.stringify(locale.code)}, name: ${JSON.stringify(name)}, dir: ${JSON.stringify(dir)} },`;
+  });
   return (
     `// ${GENERATED_BY}\n\n` +
     `export type Language = ${type};\n\n` +
-    `export const translations = ${body};\n`
+    `const en = ${renderJs(dashboardMessages(catalog, SOURCE), 0)};\n\n` +
+    `export type MessageKey = keyof typeof en;\n\n` +
+    `export const translations: {\n` +
+    `${typeFields.join("\n")}\n` +
+    `} = {\n` +
+    `${valueLines.join("\n")}\n` +
+    `};\n\n` +
+    `export const LOCALES: { code: Language; name: string; dir: "ltr" | "rtl" }[] = [\n` +
+    `${localeLines.join("\n")}\n` +
+    `];\n`
   );
 }
 
