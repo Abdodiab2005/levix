@@ -11,7 +11,7 @@ const __dirname = dirname(__filename);
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
-const { localize, bothLanguages, allLanguages, attachCommandDocs } = require("../utils/commandDocs.cjs");
+const { localize, allLanguages, attachCommandDocs } = require("../utils/commandDocs.cjs");
 const { langForCommand, withLang, t } = require("../utils/i18n.cjs");
 
 // Commands collection (keyed by both names and aliases)
