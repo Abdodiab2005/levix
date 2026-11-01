@@ -372,7 +372,7 @@ export const api = {
       masked?: string;
     }>("/recovery-email"),
   /** `current` is the panel password: binding an address can reset it. */
-  startRecoveryEmail: (email: string, current: string, lang: "en" | "ar") =>
+  startRecoveryEmail: (email: string, current: string, lang: Language) =>
     recoveryRequest<{ success: boolean }>("/recovery-email/start", "POST", {
       email,
       current,

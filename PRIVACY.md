@@ -68,7 +68,8 @@ decides whether to search for each answer.
    Levix-operated server; it is not forwarded to Telegram or any other service.
 6. **The Levix mail relay, if you set a recovery email** — verifying the address
    in **Settings**, or choosing **Email** on **Forgot password**, posts the
-   address and UI language (`en` or `ar`) to `levix.leviro.net/api/recovery-email`.
+   address and UI language (one of `en`, `ar`, `pt-BR`, `es-419`) to
+   `levix.leviro.net/api/recovery-email`.
    The relay generates the verification code; confirming it sends the verification
    ID and your code and returns an address-bound recovery token. Password-reset
    requests send the address, locally generated code, token and language. The relay
@@ -223,7 +224,7 @@ Send, so what you see is what is sent.
 | `abi` | `arm64-v8a` | the Android app |
 | `webview` | `131.0.6778.135` | the Android app |
 | `screen` | `412x915@2.63` | the panel page |
-| `language` | `ar` / `en` | the panel page |
+| `language` | `ar` / `en` / `pt-BR` / `es-419` | the panel page |
 | `theme` | `light` / `dark` | the panel page |
 | `connectivity` | `wifi` / `cellular` / `ethernet` / `vpn` / `none` / `unknown` | the Android app |
 | `memory` | `ok` / `low` / `unknown` | the Android app |
