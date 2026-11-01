@@ -8,7 +8,7 @@ const {
   listDebts: storeListDebts,
 } = require("../utils/storage.cjs");
 const logger = require("../utils/logger.cjs");
-const { t, currentLang } = require("../utils/i18n.cjs");
+const { t, intlTag } = require("../utils/i18n.cjs");
 const normalizeJid = require("../utils/normalizeJid.esm.js").default;
 
 module.exports = {
@@ -107,9 +107,7 @@ async function listDebts(sock, msg, creditorId, debtorId, chatKey) {
     let text = t("bot.tools.debt.listHeader");
 
     debts.forEach((d) => {
-      // No intlTag helper. en and ar keep the tags tr() used.
-      const dateLocales = { en: "en-GB", ar: "ar-EG", "pt-BR": "pt-BR", "es-419": "es-419" };
-      const date = new Date(d.created_at).toLocaleDateString(dateLocales[currentLang()] || "en-GB");
+      const date = new Date(d.created_at).toLocaleDateString(intlTag());
       text += `*#${d.id}*\n`;
       text += `${t("bot.tools.debt.debtorLabel")}: ${d.debtor_id.split("@")[0]}\n`;
       text += `${t("bot.tools.debt.creditorLabel")}: ${d.creditor_id.split("@")[0]}\n`;
