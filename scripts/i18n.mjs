@@ -722,7 +722,9 @@ function validateBundle(catalog, errors, warnings) {
       return;
     }
     if (value === "") errors.push(problem(label, key, "empty string"));
-    else {
+    else if (id !== "commands" && !id.startsWith("bot/")) {
+      // Command usage contains literal CLI placeholders such as <member>.
+      // These Node messages are sent as WhatsApp text, not rendered as HTML.
       for (const issue of markupIssues(value, allowedTags(id, key, english))) {
         errors.push(problem(label, key, issue));
       }
