@@ -1,3 +1,5 @@
+const { t, withLang, currentLang, intlTag } = require("./i18n.cjs");
+
 const DAY_ALIASES = new Map([
   ["0", 0],
   ["7", 0],
@@ -44,8 +46,6 @@ const DAY_ALIASES = new Map([
   ["سبت", 6],
 ]);
 
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const WEEKDAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 // */N restarts at midnight; only these keep a gap of N across the day boundary.
 const HOURLY_INTERVALS = [1, 2, 3, 4, 6, 8, 12];
 
@@ -191,43 +191,71 @@ function recurrenceToCron(recurrence) {
   return { error: "kind" };
 }
 
-function recurrenceErrorMessage(error) {
-  switch (error) {
-    case "time":
-      return "Invalid time";
-    case "weekdays":
-      return "Select at least one weekday";
-    case "dayOfMonth":
-      return "Day of month must be between 1 and 31";
-    case "everyHours":
-      return "Hours must be 1, 2, 3, 4, 6, 8 or 12";
-    default:
-      return "Invalid recurrence";
-  }
+const DESCRIBE_LANGS = new Set(["en", "ar", "pt-BR", "es-419"]);
+
+function describeLang(lang) {
+  // Codes outside en, ar, pt-BR, and es-419 stay English.
+  return DESCRIBE_LANGS.has(lang) ? lang : "en";
 }
 
-function joinWeekdayNames(days, lang) {
-  const names = days.map((day) => (lang === "ar" ? WEEKDAYS_AR[day] : WEEKDAYS[day]));
-  if (lang === "ar") return names.join(" و");
+function recurrenceErrorMessage(error, lang = "en") {
+  // The panel calls this with no reply language, so the default stays English.
+  return withLang(describeLang(lang), () => {
+    switch (error) {
+      case "time":
+        return t("bot.schedules.recurrence.errorTime");
+      case "weekdays":
+        return t("bot.schedules.recurrence.errorWeekdays");
+      case "dayOfMonth":
+        return t("bot.schedules.recurrence.errorDayOfMonth");
+      case "everyHours":
+        return t("bot.schedules.recurrence.errorEveryHours");
+      default:
+        return t("bot.schedules.recurrence.errorInvalid");
+    }
+  });
+}
+
+function joinWeekdayNames(days) {
+  const names = days.map((day) => t(`bot.schedules.recurrence.weekday${day}`));
   if (names.length === 1) return names[0];
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  const and = t("bot.schedules.recurrence.weekdayAnd");
+  if (names.length === 2) return `${names[0]}${and}${names[1]}`;
+  const sep = t("bot.schedules.recurrence.weekdaySep");
+  return `${names.slice(0, -1).join(sep)}${and}${names[names.length - 1]}`;
 }
 
 function withZone(text, timezone) {
   return `${text} (${timezone})`;
 }
 
-function arabicEveryHours(n) {
-  if (n === 1) return "كل ساعة";
-  if (n === 2) return "كل ساعتين";
-  if (n >= 3 && n <= 10) return `كل ${n} ساعات`;
-  return `كل ${n} ساعة`;
+// The old phrase used the plural noun for 3 to 10 only. CLDR "few" also
+// covers 103 and 110, and those used the same phrase as 11.
+function hourlyPluralCount(n) {
+  const category = new Intl.PluralRules(currentLang()).select(n);
+  if (category === "few" && (n < 3 || n > 10)) return 11;
+  return n;
 }
 
-function describeRecurringCron(cronString, timezone, lang) {
-  const ar = lang === "ar";
-  const fallback = withZone(cronString || (ar ? "تكرار غير معروف" : "Unknown recurrence"), timezone);
+// one and two name the interval and do not print the number.
+function hourlyToken(n) {
+  const category = new Intl.PluralRules(currentLang()).select(n);
+  if (category === "one" || category === "two") return "";
+  return String(n);
+}
+
+function everyHoursPhrase(n, minute, lang = "en") {
+  return withLang(describeLang(lang), () =>
+    t("bot.schedules.recurrence.hourly", {
+      count: hourlyPluralCount(n),
+      n: hourlyToken(n),
+      minute,
+    }),
+  );
+}
+
+function describeRecurringCron(cronString, timezone) {
+  const fallback = withZone(cronString || t("bot.schedules.recurrence.unknown"), timezone);
   const parts = String(cronString ?? "")
     .trim()
     .split(/\s+/);
@@ -240,22 +268,10 @@ function describeRecurringCron(cronString, timezone, lang) {
   const validHour = /^\d+$/.test(hourText) && hour >= 0 && hour <= 23;
 
   const everyHours = /^\*\/(\d+)$/.exec(hourText);
-  if (
-    validMinute &&
-    everyHours &&
-    dayOfMonth === "*" &&
-    month === "*" &&
-    dayText === "*"
-  ) {
+  if (validMinute && everyHours && dayOfMonth === "*" && month === "*" && dayText === "*") {
     const n = Number(everyHours[1]);
     if (n >= 1 && n <= 12) {
-      if (ar) {
-        return withZone(`${arabicEveryHours(n)} عند الدقيقة ${minute}`, timezone);
-      }
-      return withZone(
-        n === 1 ? `Every hour at minute ${minute}` : `Every ${n} hours at minute ${minute}`,
-        timezone,
-      );
+      return withZone(everyHoursPhrase(n, minute, currentLang()), timezone);
     }
   }
 
@@ -265,10 +281,7 @@ function describeRecurringCron(cronString, timezone, lang) {
   if (dayOfMonth !== "*" && dayText === "*") {
     const day = Number(dayOfMonth);
     if (/^\d+$/.test(dayOfMonth) && day >= 1 && day <= 31) {
-      return withZone(
-        ar ? `كل شهر في اليوم ${day} الساعة ${time}` : `Every month on day ${day} at ${time}`,
-        timezone,
-      );
+      return withZone(t("bot.schedules.recurrence.monthly", { day, time }), timezone);
     }
     return fallback;
   }
@@ -276,34 +289,32 @@ function describeRecurringCron(cronString, timezone, lang) {
   if (dayOfMonth !== "*") return fallback;
 
   if (dayText === "*") {
-    return withZone(ar ? `يومياً الساعة ${time}` : `Daily at ${time}`, timezone);
+    return withZone(t("bot.schedules.recurrence.daily", { time }), timezone);
   }
 
   const days = dayText.split(",").map((token) => parseDayOfWeek(token.trim()));
   if (!days.length || days.some((day) => day === null)) return fallback;
   const unique = [...new Set(days)].sort((a, b) => a - b);
-  const names = joinWeekdayNames(unique, ar ? "ar" : "en");
-  if (ar) return withZone(`كل يوم ${names} الساعة ${time}`, timezone);
-  if (unique.length === 1) return withZone(`Every ${names} at ${time}`, timezone);
-  return withZone(`Every ${names} at ${time}`, timezone);
+  const names = joinWeekdayNames(unique);
+  return withZone(t("bot.schedules.recurrence.weekly", { days: names, time }), timezone);
 }
 
 function describeScheduledJob(job, timezone, lang = "en") {
-  const ar = lang === "ar";
-  if (job.type === "recurring") {
-    return describeRecurringCron(job.cronString, timezone, ar ? "ar" : "en");
-  }
+  const code = describeLang(lang);
+  return withLang(code, () => {
+    if (job.type === "recurring") return describeRecurringCron(job.cronString, timezone);
 
-  const date = new Date(job.date);
-  if (!Number.isFinite(date.getTime())) return ar ? "تاريخ غير صالح" : "Invalid date";
-  return withZone(
-    new Intl.DateTimeFormat(ar ? "ar-EG" : "en-GB", {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: timezone,
-    }).format(date),
-    timezone,
-  );
+    const date = new Date(job.date);
+    if (!Number.isFinite(date.getTime())) return t("bot.schedules.recurrence.invalidDate");
+    return withZone(
+      new Intl.DateTimeFormat(intlTag(code), {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: timezone,
+      }).format(date),
+      timezone,
+    );
+  });
 }
 
 module.exports = {
@@ -312,5 +323,6 @@ module.exports = {
   parseTime,
   recurrenceToCron,
   recurrenceErrorMessage,
+  everyHoursPhrase,
   describeScheduledJob,
 };

@@ -148,6 +148,7 @@ function joinWeekdayNames(days: number[], t: ScheduleCopy) {
 }
 
 function scheduleWhen(item: ScheduleItem, language: Language): string {
+  if (item.whenByLocale) return pickLocalized(item.whenByLocale, language);
   return pickLocalized(
     { en: item.when || undefined, ar: item.whenAr || undefined },
     language,
@@ -246,6 +247,7 @@ function matchesSchedule(s: ScheduleItem, query: string, filters: ScheduleFilter
       s.targetPhone,
       s.when,
       s.whenAr,
+      ...(s.whenByLocale ? Object.values(s.whenByLocale) : []),
     ]
       .filter(Boolean)
       .join(" ")

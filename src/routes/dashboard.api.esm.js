@@ -1226,14 +1226,21 @@ router.post("/roles", (req, res) => {
 // Scheduled messages
 // ===========================================================================
 
+const SCHEDULE_LOCALES = ["en", "ar", "pt-BR", "es-419"];
+
 function scheduleView(job) {
   if (!job) return null;
   const timezone = settings.get("bot_timezone");
   const peer = describePeer(job.targetJid);
+  const whenByLocale = {};
+  for (const lang of SCHEDULE_LOCALES) {
+    whenByLocale[lang] = describeScheduledJob(job, timezone, lang);
+  }
   return {
     ...job,
-    when: describeScheduledJob(job, timezone, "en"),
-    whenAr: describeScheduledJob(job, timezone, "ar"),
+    when: whenByLocale.en,
+    whenAr: whenByLocale.ar,
+    whenByLocale,
     targetLabel: peer.label,
     targetKind: peer.kind,
     targetPhone: peer.phone,
@@ -1407,7 +1414,7 @@ router.post(
         // sends a structured `recurrence` object and never a cron string.
         job.cronString = cronString;
       } else {
-        return badRequest(res, "Invalid recurrence");
+        return badRequest(res, recurrenceErrorMessage("recurrence"));
       }
     } else {
       const timeMs = Number(scheduledTime);

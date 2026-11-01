@@ -1,6 +1,6 @@
 // file: /commands/listschedules.js
 const { getScheduledJobs } = require("../../scheduler.cjs");
-const { t, tr } = require("../utils/i18n.cjs");
+const { t, intlTag } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "listschedules",
@@ -27,7 +27,7 @@ module.exports = {
       if (job.type === "recurring") {
         reply += t("bot.schedules.listschedules.repeats", { cron: job.cronString });
       } else {
-        const jobDate = new Date(job.date).toLocaleString(tr("en-GB", "ar-EG"), {
+        const jobDate = new Date(job.date).toLocaleString(intlTag(), {
           timeZone: "Africa/Cairo",
         });
         reply += t("bot.schedules.listschedules.when", { date: jobDate });
