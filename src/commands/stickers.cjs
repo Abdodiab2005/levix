@@ -1,4 +1,4 @@
-const { tr } = require("../utils/i18n.cjs");
+const { tr, t } = require("../utils/i18n.cjs");
 const { isolate } = require("../utils/bidi.cjs");
 const { BOT_PAGE_SIZE } = require("../stickers/limits.cjs");
 const { StickerError } = require("../stickers/errors.cjs");
@@ -41,14 +41,6 @@ function parse(args) {
 module.exports = {
   name: "stickers",
   aliases: ["ملصقاتي"],
-  description: {
-    en: "Browse your recent, favorite or packed stickers.",
-    ar: "يعرض ملصقاتك الحديثة أو المفضلة أو الموجودة في حزمة.",
-  },
-  usage: {
-    en: "stickers [page]\nstickers recent [page]\nstickers favorites [page]\nstickers pack <name> [page]",
-    ar: "stickers [الصفحة]\nstickers الأحدث [الصفحة]\nstickers المفضلة [الصفحة]\nstickers حزمة <الاسم> [الصفحة]",
-  },
   keywords: ["recent", "الأحدث", "favorites", "المفضلة", "pack", "حزمة"],
   chat: "all",
   async execute(sock, msg, args = []) {
@@ -56,15 +48,15 @@ module.exports = {
     const who = await ownerModule.forMessage(msg, sock);
     if (!who.key)
       return sock.sendMessage(jid, {
-        text: tr("I couldn't identify the sender.", "تعذّر تحديد هوية المرسل."),
+        text: t("bot.stickers.stickers.senderUnknown"),
       });
     try {
       const selected = parse(args);
       const query = { limit: BOT_PAGE_SIZE };
-      let label = tr("Recent stickers", "الملصقات الحديثة");
+      let label = t("bot.stickers.stickers.recent");
       if (selected.mode === "favorites") {
         query.filter = "favorites";
-        label = tr("Favorite stickers", "الملصقات المفضلة");
+        label = t("bot.stickers.stickers.favorites");
       } else if (selected.mode === "pack") {
         // A trailing number is a page unless the whole text names an existing
         // pack (a pack can itself end in a number: "عيد 2").

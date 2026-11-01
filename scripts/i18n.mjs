@@ -1,11 +1,12 @@
 // Catalog generator and validator.
 //
-// English is the source locale. `translations.ts` lists `ar` before `en`
-// because that is the module shape the dashboard already imports. The gateway
-// dictionary and the Node catalog follow locales.json order. Android plural
-// tokens are compared as a multiset union: the count of a token is the most
-// times it appears in any one category, so a locale with more categories still
-// matches when each category carries the same tokens.
+// English is the source locale. `translations.ts` lists every registry locale.
+// The `ar` object stays before the `en` binding, and a locale with no
+// dashboard.json is an empty object. The gateway dictionary and the Node
+// catalog follow locales.json order. Android plural tokens are compared as a
+// multiset union: the count of a token is the most times it appears in any one
+// category, so a locale with more categories still matches when each category
+// carries the same tokens.
 
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
@@ -124,16 +125,61 @@ function renderJs(value, indent) {
   return `{\n${lines.join("\n")}\n${pad}}`;
 }
 
+function jsKey(code) {
+  return IDENT.test(code) ? code : JSON.stringify(code);
+}
+
+function translationOrder(catalog) {
+  const codes = localeEntries(catalog).map((locale) => locale.code);
+  const ordered = [];
+  for (const code of DASHBOARD_FIRST) {
+    if (codes.includes(code)) ordered.push(code);
+  }
+  for (const code of codes) {
+    if (!ordered.includes(code)) ordered.push(code);
+  }
+  return ordered;
+}
+
+function dashboardMessages(catalog, code) {
+  const dashboard = catalog.bundles?.[code]?.dashboard;
+  return isPlain(dashboard) ? dashboard : {};
+}
+
 export function renderTranslations(catalog) {
-  const codes = dashboardLocales(catalog);
+  const registry = localeEntries(catalog);
+  const codes = registry.map((locale) => locale.code);
   const type = codes.length ? codes.map((code) => JSON.stringify(code)).join(" | ") : "never";
-  const obj = {};
-  for (const code of codes) obj[code] = catalog.bundles[code].dashboard;
-  const body = renderJs(obj, 0);
+  const order = translationOrder(catalog);
+  const typeFields = order.map((code) => {
+    const field =
+      code === SOURCE ? "Record<MessageKey, string>" : "Partial<Record<MessageKey, string>>";
+    return `  ${jsKey(code)}: ${field};`;
+  });
+  const valueLines = order.map((code) => {
+    if (code === SOURCE) return "  en,";
+    const messages = dashboardMessages(catalog, code);
+    const rendered = Object.keys(messages).length ? renderJs(messages, 2) : "{}";
+    return `  ${jsKey(code)}: ${rendered},`;
+  });
+  const localeLines = registry.map((locale) => {
+    const dir = locale.dir === "rtl" ? "rtl" : "ltr";
+    const name = typeof locale.name === "string" ? locale.name : locale.code;
+    return `  { code: ${JSON.stringify(locale.code)}, name: ${JSON.stringify(name)}, dir: ${JSON.stringify(dir)} },`;
+  });
   return (
     `// ${GENERATED_BY}\n\n` +
     `export type Language = ${type};\n\n` +
-    `export const translations = ${body};\n`
+    `const en = ${renderJs(dashboardMessages(catalog, SOURCE), 0)};\n\n` +
+    `export type MessageKey = keyof typeof en;\n\n` +
+    `export const translations: {\n` +
+    `${typeFields.join("\n")}\n` +
+    `} = {\n` +
+    `${valueLines.join("\n")}\n` +
+    `};\n\n` +
+    `export const LOCALES: { code: Language; name: string; dir: "ltr" | "rtl" }[] = [\n` +
+    `${localeLines.join("\n")}\n` +
+    `];\n`
   );
 }
 
@@ -236,6 +282,21 @@ function androidRel(locale) {
   return `android/app/src/main/res/${locale.android}/strings.xml`;
 }
 
+/** The Android 13+ per-app language list: one registry code per locale, in
+ * locales.json (registry) order. */
+export function renderLocalesConfig(catalog) {
+  const lines = [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    `<!-- ${GENERATED_BY} -->`,
+    '<locale-config xmlns:android="http://schemas.android.com/apk/res/android">',
+  ];
+  for (const locale of localeEntries(catalog)) {
+    lines.push(`    <locale android:name="${escapeAttr(locale.code)}"/>`);
+  }
+  lines.push('</locale-config>');
+  return `${lines.join("\n")}\n`;
+}
+
 export function renderNodeCatalog(catalog) {
   const messages = {};
   for (const code of nodeLocales(catalog)) messages[code] = nodeMessages(catalog.bundles?.[code]);
@@ -271,6 +332,7 @@ export function renderGenerated(catalog, gatewaySource) {
       files[androidRel(locale)] = renderAndroidXml(catalog, locale.code);
     }
   }
+  files["android/app/src/main/res/xml/locales_config.xml"] = renderLocalesConfig(catalog);
   files["src/i18n/catalog.generated.cjs"] = renderNodeCatalog(catalog);
   return files;
 }
@@ -608,10 +670,49 @@ function formatSetDiff(got, want) {
   return formatDiff(gotBag, wantBag, (key) => `{${key}}`);
 }
 
-function tagSet(text) {
-  const names = new Set();
-  for (const match of text.matchAll(TAG)) names.add(match[1].toLowerCase());
-  return names;
+function collapseWs(text) {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+// Gateway html is inserted with innerHTML. A translated tag is accepted only
+// when the English value has that same tag. The key is the tag name plus the
+// full attribute text, with whitespace runs collapsed to one space. Closing
+// tags are compared the same way. An on* attribute fails on its own, because
+// the browser would run it as script.
+function exactTagKey(raw) {
+  const match = /^<(\/?)([A-Za-z][A-Za-z0-9]*)\b([^>]*)>$/.exec(raw);
+  if (!match) return "";
+  const name = match[2].toLowerCase();
+  const attrs = collapseWs(match[3]);
+  const head = match[1] ? `/${name}` : name;
+  return attrs ? `${head} ${attrs}` : head;
+}
+
+function exactTagSet(text) {
+  const keys = new Set();
+  for (const match of text.matchAll(TAG)) {
+    const key = exactTagKey(match[0]);
+    if (key) keys.add(key);
+  }
+  return keys;
+}
+
+function sameTagName(allowed, raw) {
+  const parsed = /^<(\/?)([A-Za-z][A-Za-z0-9]*)\b/.exec(raw);
+  if (!parsed) return false;
+  const head = `${parsed[1] ? "/" : ""}${parsed[2].toLowerCase()}`;
+  for (const key of allowed) {
+    if (key === head || key.startsWith(`${head} `)) return true;
+  }
+  return false;
+}
+
+function eventHandlerAttribute(attrText) {
+  const names = /([^\s"'=/<>]+)(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?/g;
+  for (const match of attrText.matchAll(names)) {
+    if (/^on/i.test(match[1])) return match[1];
+  }
+  return "";
 }
 
 function markupIssues(text, allowed) {
@@ -619,13 +720,18 @@ function markupIssues(text, allowed) {
   const issues = [];
   for (let i = 0; i < text.length; i += 1) {
     if (text[i] !== "<" || !/[A-Za-z/!]/.test(text[i + 1] || "")) continue;
-    const match = /^<\/?([A-Za-z][A-Za-z0-9]*)\b[^>]*>/.exec(text.slice(i));
+    const match = /^<\/?([A-Za-z][A-Za-z0-9]*)\b([^>]*)>/.exec(text.slice(i));
     if (!match) {
       issues.push("contains markup");
       break;
     }
-    if (!allowed.has(match[1].toLowerCase())) {
-      issues.push(`tag "${match[1]}" is not in the English value`);
+    const handler = eventHandlerAttribute(match[2]);
+    if (handler) issues.push(`attribute "${handler}" is not allowed`);
+    const key = exactTagKey(match[0]);
+    if (!key || !allowed.has(key)) {
+      const known = sameTagName(allowed, match[0]);
+      const why = known ? "attributes are not in the English value" : "is not in the English value";
+      issues.push(`tag "${match[1]}" ${why}`);
     }
     i += match[0].length - 1;
   }
@@ -665,7 +771,7 @@ function validateBundle(catalog, errors, warnings) {
 
   const allowedTags = (id, key, english) => {
     if (id !== "gateway" || !htmlKeys.has(key)) return null;
-    return tagSet(typeof english === "string" ? english : "");
+    return exactTagSet(typeof english === "string" ? english : "");
   };
 
   const checkValue = (label, id, key, code, value, english) => {
@@ -722,7 +828,9 @@ function validateBundle(catalog, errors, warnings) {
       return;
     }
     if (value === "") errors.push(problem(label, key, "empty string"));
-    else {
+    else if (id !== "commands" && !id.startsWith("bot/")) {
+      // Command usage contains literal CLI placeholders such as <member>.
+      // These Node messages are sent as WhatsApp text, not rendered as HTML.
       for (const issue of markupIssues(value, allowedTags(id, key, english))) {
         errors.push(problem(label, key, issue));
       }

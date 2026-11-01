@@ -63,4 +63,44 @@ ok(
   app.includes('code: "wrongSetupCode"') && app.includes('code: "passwordMismatch"'),
 );
 
+section("four ui languages");
+
+ok("gateway accepts pt-BR", i18n.includes('"pt-BR"'));
+ok("gateway accepts es-419", i18n.includes('"es-419"'));
+ok("rtl is arabic only", i18n.includes('lang === "ar" ? "rtl" : "ltr"'));
+ok(
+  "storage normalizes a saved language",
+  i18n.includes("normalizeLocale(event.newValue)"),
+);
+ok(
+  "storage is not a two-code guard",
+  !i18n.includes('event.newValue === "ar" || event.newValue === "en"'),
+);
+ok("an unknown gateway language is ignored", i18n.includes("if (!resolved) return;"));
+
+const login = views["login.ejs"];
+ok("login does not force a non-arabic page to en", !login.includes('=== "ar" ? "ar" : "en"'));
+ok(
+  "login sends the page language",
+  /var lang = \(window\.LevixGatewayI18n && window\.LevixGatewayI18n\.lang\) \|\| "en";/.test(login),
+);
+ok(
+  "a non-english reset password uses the catalog",
+  login.includes('window.LevixGatewayI18n.lang !== "en"'),
+);
+
+const enStart = i18n.indexOf("\n    en: {");
+const arStart = i18n.indexOf("\n    ar: {");
+ok("the English dictionary is present", enStart >= 0 && arStart > enStart);
+const enDict = i18n.slice(enStart, arStart);
+for (const code of [
+  "tooManyAttempts",
+  "incorrectPassword",
+  "wrongSetupCode",
+  "passwordMismatch",
+  "invalidPassword",
+]) {
+  ok(`en dictionary has ${code}`, new RegExp(`\\n\\s+${code}:`).test(enDict));
+}
+
 finish();

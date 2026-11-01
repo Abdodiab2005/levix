@@ -5,14 +5,6 @@ const { t } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "qr",
-  description: {
-    en: "Generates a QR code from text.",
-    ar: "ينشئ رمز QR من نص.",
-  },
-  usage: {
-    en: "qr <text|link>",
-    ar: "qr <نص|رابط>",
-  },
   chat: "all",
   // What goes in the code is data, not the language you are talking in.
   neutralArgs: true,

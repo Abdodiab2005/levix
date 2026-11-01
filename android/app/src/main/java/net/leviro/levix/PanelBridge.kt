@@ -33,11 +33,24 @@ class PanelBridge(
     fun getDiagnostics(): String = appContext?.let(DeviceDiagnostics::json)
         ?: DeviceDiagnostics.UNKNOWN_JSON
 
+    /**
+     * Returns true when the request was a real save or an already-equal,
+     * valid value, and false when it was rejected (bad value or field). The
+     * page may ignore the result; at least a refusal is no longer silent.
+     */
     @JavascriptInterface
-    fun setUiPrefs(language: String, theme: String, field: String) {
-        val context = appContext ?: return
-        if (!UiPrefs.validLanguage(language) || !UiPrefs.validTheme(theme)) return
-        if (UiPrefs.set(context, language, theme, field)) onUiPrefsChanged?.invoke()
+    fun setUiPrefs(language: String, theme: String, field: String): Boolean {
+        val context = appContext ?: return false
+        if (!UiPrefs.validLanguage(language) || !UiPrefs.validTheme(theme)) return false
+        if (UiPrefs.set(context, language, theme, field)) {
+            onUiPrefsChanged?.invoke()
+            return true
+        }
+        // set() returns false both for a refusal and for "no change"; only
+        // the latter, with the field itself valid, is a success.
+        val noChange = if (field == "language") UiPrefs.language(context) == language
+        else field == "theme" && UiPrefs.theme(context) == theme
+        return noChange
     }
 
     @JavascriptInterface

@@ -15,14 +15,6 @@ const PREFIX_ERRORS = {
 module.exports = {
   name: "setprefix",
   aliases: ["prefix"],
-  description: {
-    en: "Sets the bot's command prefix (owner only).",
-    ar: "يغيّر بادئة أوامر البوت (للمالك فقط).",
-  },
-  usage: {
-    en: "setprefix <new prefix>",
-    ar: "setprefix <البادئة الجديدة>",
-  },
   chat: "all",
 
   async execute(sock, msg, args) {

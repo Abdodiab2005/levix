@@ -10,8 +10,7 @@
 //   run         - what happens when the model calls it; ALWAYS resolves to a
 //                 plain object (errors included) so one bad tool call doesn't
 //                 kill the turn
-//   describe    - the Arabic line shown in the live status message while the
-//                 tool runs ("🔍 ببحث عن: ...")
+//   describe    - the status line a WhatsApp user sees while the tool runs
 //
 // Anything privileged is gated on the *caller* — the person whose message
 // started the run, resolved by aiToolAuth.resolveCaller() — and never on the
@@ -56,7 +55,7 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 const settings = require("../config/settings.cjs");
-const { currentLang } = require("../utils/i18n.cjs");
+const { currentLang, t, withLang } = require("../utils/i18n.cjs");
 
 const MAX_PAGE_CHARS = 6000;
 const MAX_FETCH_BYTES = 3 * 1024 * 1024;
@@ -405,8 +404,7 @@ const TOOLS = {
         required: ["query"],
       },
     },
-    describe: (args) => `🔍 جارٍ البحث عن: ${preview(args?.query, 50)}`,
-    describeEn: (args) => `🔍 Searching for: ${preview(args?.query, 50)}`,
+    describe: (args) => t("bot.ai.aiTools.webSearch", { query: preview(args?.query, 50) }),
     async run(args) {
       const query = String(args?.query || "").trim();
       if (!query) return { error: "query is required" };
@@ -446,8 +444,8 @@ const TOOLS = {
         required: ["query"],
       },
     },
-    describe: (args) => `📚 جارٍ البحث في ويكيبيديا: ${preview(args?.query, 45)}`,
-    describeEn: (args) => `📚 Searching Wikipedia: ${preview(args?.query, 45)}`,
+    describe: (args) =>
+      t("bot.ai.aiTools.searchWikipedia", { query: preview(args?.query, 45) }),
     async run(args) {
       const query = String(args?.query || "").trim();
       if (!query) return { error: "query is required" };
@@ -476,8 +474,7 @@ const TOOLS = {
         required: ["query"],
       },
     },
-    describe: (args) => `📰 جارٍ البحث عن الأخبار: ${preview(args?.query, 45)}`,
-    describeEn: (args) => `📰 Searching news: ${preview(args?.query, 45)}`,
+    describe: (args) => t("bot.ai.aiTools.searchNews", { query: preview(args?.query, 45) }),
     async run(args) {
       const query = String(args?.query || "").trim();
       if (!query) return { error: "query is required" };
@@ -505,8 +502,7 @@ const TOOLS = {
         required: ["url"],
       },
     },
-    describe: (args) => `🌐 جارٍ فتح الرابط: ${preview(args?.url, 45)}`,
-    describeEn: (args) => `🌐 Opening link: ${preview(args?.url, 45)}`,
+    describe: (args) => t("bot.ai.aiTools.fetchUrl", { url: preview(args?.url, 45) }),
     async run(args) {
       const url = String(args?.url || "").trim();
       if (!url) return { error: "url is required" };
@@ -535,13 +531,13 @@ const TOOLS = {
       },
     },
     describe: (args) =>
-      `🧠 جارٍ الحفظ في ${scopeOf(args) === "global" ? "الذاكرة العامة" : "ذاكرة المحادثة"}: ${preview(
-        args?.content,
-      )}`,
-    describeEn: (args) =>
-      `🧠 Saving to ${scopeOf(args) === "global" ? "global" : "chat"} memory: ${preview(
-        args?.content,
-      )}`,
+      t("bot.ai.aiTools.saveMemory", {
+        scope:
+          scopeOf(args) === "global"
+            ? t("bot.ai.aiTools.scopeGlobal")
+            : t("bot.ai.aiTools.scopeChat"),
+        content: preview(args?.content),
+      }),
     // Same rule as `!memory add`: anyone may add to this chat, but global
     // memory reaches every chat's prompt, so only the owner or a bot admin.
     access: (args) => ({
@@ -585,8 +581,7 @@ const TOOLS = {
         },
       },
     },
-    describe: () => "🧠 جارٍ البحث في الذاكرة...",
-    describeEn: () => "🧠 Searching memory...",
+    describe: () => t("bot.ai.aiTools.searchMemory"),
     // `!memory search` reads both scopes for anyone who may run `!memory`.
     access: { command: "memory" },
     async run(args, { caller }) {
@@ -619,8 +614,7 @@ const TOOLS = {
         required: ["ref"],
       },
     },
-    describe: (args) => `🗑️ جارٍ الحذف من الذاكرة: ${preview(args?.ref)}`,
-    describeEn: (args) => `🗑️ Removing from memory: ${preview(args?.ref)}`,
+    describe: (args) => t("bot.ai.aiTools.forgetMemory", { ref: preview(args?.ref) }),
     // `!memory forget`: global needs the owner or a bot admin; chat memory
     // also lets an admin of this group tidy their own chat.
     access: (args) => ({
@@ -659,9 +653,10 @@ const TOOLS = {
       },
     },
     describe: (args) =>
-      `🔑 جارٍ فحص صلاحيات: ${preview(args?.target, 25)} (${args?.role || "admin"})`,
-    describeEn: (args) =>
-      `🔑 Checking permissions: ${preview(args?.target, 25)} (${args?.role || "admin"})`,
+      t("bot.ai.aiTools.grantRole", {
+        target: preview(args?.target, 25),
+        role: args?.role || "admin",
+      }),
     // `!perm add`: that command's level (owner only unless the operator
     // changed it), and the owner role is always the owner's to hand out.
     access: (args) => ({ command: "perm", role: roleOf(args) === "owner" ? "owner" : undefined }),
@@ -699,8 +694,7 @@ const TOOLS = {
         required: ["target"],
       },
     },
-    describe: (args) => `🔑 جارٍ سحب الصلاحية من: ${preview(args?.target, 25)}`,
-    describeEn: (args) => `🔑 Revoking permissions from: ${preview(args?.target, 25)}`,
+    describe: (args) => t("bot.ai.aiTools.revokeRole", { target: preview(args?.target, 25) }),
     // `!perm remove`, gated exactly like grant_role.
     access: (args) => ({ command: "perm", role: roleOf(args) === "owner" ? "owner" : undefined }),
     async run(args, { caller }) {
@@ -723,8 +717,7 @@ const TOOLS = {
         "List who currently holds bot owner / admin roles. Allowed for whoever may run !perm (the owner, by default).",
       parameters: { type: T.OBJECT, properties: {} },
     },
-    describe: () => "🔑 جارٍ جلب قائمة الصلاحيات...",
-    describeEn: () => "🔑 Fetching roles list...",
+    describe: () => t("bot.ai.aiTools.listRoles"),
     // `!perm list` — the roster is `!perm`'s to show.
     access: { command: "perm" },
     async run() {
@@ -753,8 +746,7 @@ const TOOLS = {
         },
       },
     },
-    describe: () => "🕒 جارٍ التحقق من الوقت الحالي...",
-    describeEn: () => "🕒 Checking current time...",
+    describe: () => t("bot.ai.aiTools.datetime"),
     async run(args) {
       const timeZone = args?.timezone || settings.get("bot_timezone");
       const now = new Date();
@@ -788,8 +780,8 @@ const TOOLS = {
         required: ["expression"],
       },
     },
-    describe: (args) => `🧮 جارٍ الحساب: ${preview(args?.expression, 40)}`,
-    describeEn: (args) => `🧮 Calculating: ${preview(args?.expression, 40)}`,
+    describe: (args) =>
+      t("bot.ai.aiTools.calculate", { expression: preview(args?.expression, 40) }),
     async run(args) {
       const expression = String(args?.expression || "").trim();
       if (!expression) return { error: "expression is required" };
@@ -829,8 +821,8 @@ const TOOLS = {
         required: ["message"],
       },
     },
-    describe: (args) => `⏰ جارٍ إعداد التذكير: ${preview(args?.message, 40)}`,
-    describeEn: (args) => `⏰ Setting a reminder: ${preview(args?.message, 40)}`,
+    describe: (args) =>
+      t("bot.ai.aiTools.createReminder", { message: preview(args?.message, 40) }),
     // Posting into a chat at a later time is exactly what `!schedule` does, so
     // it takes `!schedule`'s permission level — whatever the dashboard sets.
     access: { command: "schedule" },
@@ -911,8 +903,7 @@ const TOOLS = {
         required: ["id"],
       },
     },
-    describe: (args) => `⏰ جارٍ إلغاء التذكير: ${preview(args?.id, 20)}`,
-    describeEn: (args) => `⏰ Cancelling reminder: ${preview(args?.id, 20)}`,
+    describe: (args) => t("bot.ai.aiTools.cancelReminder", { id: preview(args?.id, 20) }),
     // Deleting a scheduled job is `!deleteschedule`'s job, so its level.
     access: { command: "deleteschedule" },
     async run(args, { caller }) {
@@ -953,8 +944,7 @@ const TOOLS = {
         required: ["text"],
       },
     },
-    describe: (args) => `🎙️ جارٍ تحويل الرد لرسالة صوتية: ${preview(args?.text, 40)}`,
-    describeEn: (args) => `🎙️ Converting the reply to a voice note: ${preview(args?.text, 40)}`,
+    describe: (args) => t("bot.ai.aiTools.speak", { text: preview(args?.text, 40) }),
     // Posting a voice note into this chat is what `!tts` does, so its level.
     access: { command: "tts" },
     async run(args, { caller, sock }) {
@@ -1003,8 +993,7 @@ const TOOLS = {
         required: ["question", "options"],
       },
     },
-    describe: (args) => `📊 جارٍ إنشاء الاستفتاء: ${preview(args?.question, 40)}`,
-    describeEn: (args) => `📊 Creating a poll: ${preview(args?.question, 40)}`,
+    describe: (args) => t("bot.ai.aiTools.createPoll", { question: preview(args?.question, 40) }),
     // A poll is a group message like any other, so `!poll`'s level.
     access: { command: "poll" },
     async run(args, { caller, sock }) {
@@ -1042,8 +1031,7 @@ const TOOLS = {
         },
       },
     },
-    describe: () => "🧠 جارٍ تلخيص المحادثة وحفظ المهم...",
-    describeEn: () => "🧠 Summarizing the chat and saving what matters...",
+    describe: () => t("bot.ai.aiTools.summarizeChat"),
     // Saving chat memory is what `!memory add` allows here; the global scope
     // reaches every chat's prompt, so it takes save_memory's owner/admin role.
     access: (args) => ({
@@ -1169,18 +1157,18 @@ async function summarizeWithProvider(transcript) {
 
 /** The status line for a tool call (falls back to the raw name). */
 function describeCall(name, args, lang = currentLang()) {
-  const tool = TOOLS[name];
-  const isEn = lang === "en";
-  const fallback = isEn ? `⚙️ Running: ${name}` : `⚙️ جارٍ تشغيل: ${name}`;
-  if (!tool) return fallback;
-  try {
-    if (isEn && typeof tool.describeEn === "function") {
-      return tool.describeEn(args) || fallback;
+  // The status line follows the reply language. pt-BR and es-419 read their
+  // own catalog values, or English until those are translated.
+  return withLang(lang, () => {
+    const tool = TOOLS[name];
+    const fallback = t("bot.ai.aiTools.running", { name });
+    if (!tool || typeof tool.describe !== "function") return fallback;
+    try {
+      return tool.describe(args) || fallback;
+    } catch {
+      return fallback;
     }
-    return tool.describe(args) || fallback;
-  } catch {
-    return fallback;
-  }
+  });
 }
 
 /**

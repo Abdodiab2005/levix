@@ -6,14 +6,6 @@ const { formatMarkdownForWhatsApp } = require("../utils/markdownParser.cjs");
 module.exports = {
   name: "md",
   aliases: ["markdown"],
-  description: {
-    en: "Converts Markdown from any AI or message into WhatsApp formatting, with tables as labeled bullet lists.",
-    ar: "يحوّل ماركداون من أي ذكاء اصطناعي أو رسالة إلى تنسيق واتساب، مع عرض الجداول كقوائم نقطية منظمة.",
-  },
-  usage: {
-    en: "md <markdown text> | reply to a message with md",
-    ar: "md <نص ماركداون> | أو رد على رسالة باستخدام md",
-  },
   chat: "all",
 
   async execute(sock, msg, args, body) {

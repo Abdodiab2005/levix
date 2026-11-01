@@ -13,7 +13,7 @@
 // flood bot (and from getting the account banned).
 
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t, tr } = require("../utils/i18n.cjs");
 
 const MAX_ITEMS = 100; // total iterations, one-message mode
 const MAX_SPLIT_ITEMS = 15; // total iterations, separate-messages mode
@@ -113,14 +113,6 @@ function renderLine(template, number, index) {
 module.exports = {
   name: "loop",
   aliases: ["repeat", "كرر", "تكرار"],
-  description: {
-    en: "Repeats text or numbers — in one message or as separate messages.",
-    ar: "يكرر نصًا أو أرقامًا — في رسالة واحدة أو في رسائل منفصلة.",
-  },
-  usage: {
-    en: "loop <count|from-to[:step]> [text] [-s separate messages] [-n no numbering]",
-    ar: "loop <عدد|من-إلى[:خطوة]> [النص] [-s رسائل منفصلة] [-n بدون ترقيم]",
-  },
   chat: "all",
 
   async execute(sock, msg, args) {
@@ -145,17 +137,15 @@ module.exports = {
     const limit = split ? MAX_SPLIT_ITEMS : MAX_ITEMS;
     const requested = countOf(range);
 
-    const emptyRange = () =>
-      reply(tr("❌ That range doesn't produce any numbers.", "❌ لا ينتج هذا النطاق أي أعداد."));
+    const emptyRange = () => reply(t("bot.tools.loop.emptyRange"));
     if (requested < 1) return emptyRange();
     if (requested > limit) {
       return reply(
-        tr(
-          `❌ ${requested} repetitions is too many.\n` +
-            `The limit is ${limit} ${split ? "separate messages" : "repetitions in one message"}.`,
-          `❌ عدد التكرارات المطلوب (${requested}) كبير جدًا.\n` +
-            `الحد الأقصى ${limit} ${split ? "رسالة منفصلة" : "تكرار في الرسالة الواحدة"}.`,
-        ),
+        t("bot.tools.loop.tooMany", {
+          requested,
+          limit,
+          kind: t(split ? "bot.tools.loop.limitSplit" : "bot.tools.loop.limitOne"),
+        }),
       );
     }
 
@@ -182,7 +172,7 @@ module.exports = {
     let text = lines.map((line, i) => (numbered ? `${i + 1}. ${line}` : line)).join("\n");
 
     if (text.length > MAX_OUTPUT_CHARS) {
-      text = `${text.slice(0, MAX_OUTPUT_CHARS)}\n…\n${tr("_(cut short — too long)_", "_(اختُصر النص لطوله)_")}`;
+      text = `${text.slice(0, MAX_OUTPUT_CHARS)}\n…\n${t("bot.tools.loop.cutShort")}`;
     }
 
     return reply(text);

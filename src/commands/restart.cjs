@@ -12,14 +12,6 @@ const { t } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "restart",
-  description: {
-    en: "Reconnects WhatsApp (the process and panel stay up).",
-    ar: "يعيد تشغيل اتصال واتساب (مع استمرار تشغيل البوت ولوحة التحكم).",
-  },
-  usage: {
-    en: "restart",
-    ar: "restart",
-  },
   chat: "all",
 
   async execute(sock, msg) {

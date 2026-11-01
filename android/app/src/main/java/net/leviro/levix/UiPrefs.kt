@@ -14,16 +14,37 @@ internal object UiPrefs {
     private const val LANGUAGE_FIELD = "language"
     private const val THEME = "theme"
 
-    fun validLanguage(value: String) = value == "ar" || value == "en"
+    // The four app languages in registry order (i18n/locales.json). The panel
+    // and the native picker both address a language by this exact code.
+    val LANGUAGES = listOf("en", "ar", "pt-BR", "es-419")
+
+    fun validLanguage(value: String) = LANGUAGES.contains(value)
     fun validTheme(value: String) = value == "light" || value == "dark"
 
-    fun fromLocale(language: String?): String =
-        if (language?.startsWith("ar", ignoreCase = true) == true) "ar" else "en"
+    /**
+     * Normalizes a BCP-47 tag or a bare language code. "_" and "-" both split
+     * subtags and case does not matter. pt and es have one shipped form each
+     * (pt-BR, es-419), so any variant of them maps there; anything that is not
+     * one of the four shipped languages falls back to English.
+     */
+    fun fromLocale(tag: String?): String {
+        val primary = tag?.replace('_', '-')?.split('-')
+            ?.firstOrNull { it.isNotEmpty() }?.lowercase()
+        return when (primary) {
+            "ar" -> "ar"
+            "pt" -> "pt-BR"
+            "es" -> "es-419"
+            "en" -> "en"
+            else -> "en"
+        }
+    }
 
     fun language(context: Context): String {
+        // Full tag, not just the language subtag, so "es-419" and "pt-BR"
+        // survive; both accepted by Locale.forLanguageTag.
         val locales = AppCompatDelegate.getApplicationLocales()
-        if (!locales.isEmpty) return fromLocale(locales[0]?.language)
-        return fromLocale(context.resources.configuration.locales[0]?.language)
+        if (!locales.isEmpty) return fromLocale(locales[0]?.toLanguageTag())
+        return fromLocale(context.resources.configuration.locales[0]?.toLanguageTag())
     }
 
     fun theme(context: Context): String {
@@ -49,14 +70,21 @@ internal object UiPrefs {
         )
     }
 
+    // Set while the host service is alive: redraws its notification after an
+    // in-app language change (see LevixHostService for why API 29-32 needs it).
+    @Volatile internal var onLanguageApplied: (() -> Unit)? = null
+
     fun set(context: Context, language: String, theme: String, field: String): Boolean {
         if (!validLanguage(language) || !validTheme(theme) ||
             (field != LANGUAGE_FIELD && field != THEME)) return false
         if (field == LANGUAGE_FIELD) {
             val locales = AppCompatDelegate.getApplicationLocales()
-            if (!locales.isEmpty && fromLocale(locales[0]?.language) == language) return false
+            // Both sides are full tags; fromLocale puts "pt-BR" beside a stored
+            // "pt-BR" again, so comparing the normalized forms is exact.
+            if (!locales.isEmpty && fromLocale(locales[0]?.toLanguageTag()) == language) return false
             Handler(Looper.getMainLooper()).post {
                 AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(language))
+                onLanguageApplied?.invoke()
             }
             return true
         }

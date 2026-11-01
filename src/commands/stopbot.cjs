@@ -13,14 +13,6 @@ const { t } = require("../utils/i18n.cjs");
 module.exports = {
   name: "stopbot",
   aliases: ["stop", "pause"],
-  description: {
-    en: "Pauses the WhatsApp connection (the bot process and panel keep running).",
-    ar: "يوقف اتصال واتساب مؤقتًا (مع استمرار تشغيل البوت ولوحة التحكم).",
-  },
-  usage: {
-    en: "stopbot",
-    ar: "stopbot",
-  },
   chat: "all",
 
   async execute(sock, msg) {

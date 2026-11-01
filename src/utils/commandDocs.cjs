@@ -1,14 +1,8 @@
-// A command's documentation, in the language the reader wants.
-//
-// `description` and `usage` on a command are either a plain string — one
-// language, shown as-is in both menus — or `{ en, ar }`. localize() picks the
-// requested language and falls back to the other one, so a command that ships
-// only one language still appears in both.
-//
-// Which language: `!help ar` / `!help en` say so explicitly. Otherwise it is
-// the language every other reply uses — see utils/i18n.cjs.
+// Command documentation is stored in the generated catalog. Module-owned
+// documentation takes precedence for commands added outside the catalog.
+const catalog = require("../i18n/catalog.generated.cjs");
 
-const LANGS = ["en", "ar"];
+const LANGS = ["en", "ar", "pt-BR", "es-419"];
 
 // Words accepted after !help to pick a language.
 const LANG_WORDS = new Map([
@@ -25,9 +19,19 @@ const LANG_WORDS = new Map([
   ["عربي", "ar"],
   ["عربى", "ar"],
   ["العربية", "ar"],
+  ["pt", "pt-BR"],
+  ["pt-br", "pt-BR"],
+  ["português", "pt-BR"],
+  ["portugues", "pt-BR"],
+  ["portuguese", "pt-BR"],
+  ["es", "es-419"],
+  ["es-419", "es-419"],
+  ["español", "es-419"],
+  ["espanol", "es-419"],
+  ["spanish", "es-419"],
 ]);
 
-/** "ar" | "en" for a word like `ar`, `english`, `عربي`; null otherwise. */
+/** Resolve a language word after !help, or return null. */
 function parseLang(word) {
   return (
     LANG_WORDS.get(
@@ -38,21 +42,39 @@ function parseLang(word) {
   );
 }
 
-/** Pick `lang` out of a string or an `{ en, ar }` object. */
+/** Pick a locale, then English, then Arabic. */
 function localize(value, lang = "en") {
   if (value == null) return "";
   if (typeof value === "string") return value;
   if (typeof value !== "object") return String(value);
   if (value[lang]) return value[lang];
-  for (const other of LANGS) {
-    if (value[other]) return value[other];
+  return value.en || value.ar || "";
+}
+
+function allLanguages(value) {
+  return Object.fromEntries(LANGS.map((lang) => [lang, localize(value, lang)]));
+}
+
+function attachCommandDocs(command, category = null) {
+  if (!command?.name) return command;
+  const key = category === "group" ? `group.${command.name}` : command.name;
+  for (const field of ["description", "usage"]) {
+    if (Object.hasOwn(command, field)) continue;
+    const messageKey = `commands.${key}.${field}`;
+    const english = catalog.messages.en?.[messageKey];
+    if (english === undefined) continue;
+    command[field] = Object.fromEntries(
+      LANGS.map((lang) => [lang, catalog.messages[lang]?.[messageKey] ?? english]),
+    );
   }
-  return "";
+  return command;
 }
 
-/** Both languages, for the dashboard (which follows its own UI language). */
-function bothLanguages(value) {
-  return { en: localize(value, "en"), ar: localize(value, "ar") };
-}
-
-module.exports = { LANGS, parseLang, localize, bothLanguages };
+module.exports = {
+  LANGS,
+  parseLang,
+  localize,
+  allLanguages,
+  bothLanguages: allLanguages,
+  attachCommandDocs,
+};

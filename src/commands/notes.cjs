@@ -4,14 +4,6 @@ const { t } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "notes",
-  description: {
-    en: "Lists all saved note keywords for the group.",
-    ar: "يعرض الكلمات المفتاحية لكل الملاحظات المحفوظة في المجموعة.",
-  },
-  usage: {
-    en: "notes",
-    ar: "notes",
-  },
   chat: "all",
 
   async execute(sock, msg) {
