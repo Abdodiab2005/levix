@@ -8,14 +8,6 @@ const { normalizeLocale, t, withLang } = require("../utils/i18n.cjs");
 module.exports = {
   name: "lang",
   aliases: ["language", "لغة"],
-  description: {
-    en: "Shows or changes the bot's language.",
-    ar: "يعرض لغة البوت أو يغيّرها.",
-  },
-  usage: {
-    en: "lang [en|ar|pt-BR|es-419|auto]",
-    ar: "lang [en|ar|pt-BR|es-419|auto]",
-  },
   chat: "all",
 
   async execute(sock, msg, args) {
