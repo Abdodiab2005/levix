@@ -6,14 +6,6 @@ const { t } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "autoschedule",
-  description: {
-    en: "Schedules a recurring message (daily or weekly).",
-    ar: "يجدول رسالة متكررة (يومية أو أسبوعية).",
-  },
-  usage: {
-    en: "autoschedule daily <HH:mm> <message>\nautoschedule weekly <day> <HH:mm> <message>",
-    ar: "autoschedule daily <HH:mm> <الرسالة>\nautoschedule weekly <اليوم> <HH:mm> <الرسالة>",
-  },
   chat: "all",
 
   async execute(sock, msg, args) {

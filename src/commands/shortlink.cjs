@@ -11,7 +11,7 @@
 const axios = require("axios");
 const logger = require("../utils/logger.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 const { visibleText, quotedOf } = require("../utils/messageContent.cjs");
 
 // The one HTTP GET the command performs. Exposed so tests can stub the network.
@@ -176,19 +176,13 @@ async function shortenUrl(longUrl, get = http.get) {
 function failureText(reason) {
   switch (reason) {
     case "invalid":
-      return tr(
-        "the service rejected the link (invalid or blocked)",
-        "الخدمة رفضت الرابط (غير صالح أو محظور)",
-      );
+      return t("bot.tools.shortlink.reasonInvalid");
     case "rate":
-      return tr(
-        "the service is rate-limiting, try again later",
-        "الخدمة تحدّ من الطلبات، جرّب لاحقًا",
-      );
+      return t("bot.tools.shortlink.reasonRate");
     case "unreachable":
-      return tr("the service is unreachable right now", "تعذّر الوصول إلى الخدمة حاليًا");
+      return t("bot.tools.shortlink.reasonUnreachable");
     default:
-      return tr("an unknown error happened", "حدث خطأ غير معروف");
+      return t("bot.tools.shortlink.reasonUnknown");
   }
 }
 
@@ -199,22 +193,16 @@ function renderResults(results) {
   if (!ok.length) {
     const reason = results[results.length - 1].reason;
     if (results.length === 1) {
-      return tr(
-        `❌ *Couldn't shorten the link*\n\n${failureText(reason)}`,
-        `❌ *تعذّر اختصار الرابط*\n\n${failureText(reason)}`,
-      );
+      return t("bot.tools.shortlink.oneFail", { reason: failureText(reason) });
     }
     const failed = results.map((r) => `• ${r.url} — ${failureText(r.reason)}`).join("\n");
-    return tr(
-      `❌ *Couldn't shorten any of the links*\n\n${failed}`,
-      `❌ *تعذّر اختصار أي من الروابط*\n\n${failed}`,
-    );
+    return t("bot.tools.shortlink.allFail", { failed });
   }
 
   const heading =
     results.length === 1
-      ? tr("✅ Link shortened!", "✅ تم اختصار الرابط!")
-      : tr(`✅ Links shortened (${ok.length})!`, `✅ تم اختصار الروابط (${ok.length})!`);
+      ? t("bot.tools.shortlink.oneDone")
+      : t("bot.tools.shortlink.manyDone", { count: ok.length });
 
   const body = results
     .map((r) => (r.ok ? `🔗 ${r.url}` : `❌ ${r.url} — ${failureText(r.reason)}`))
@@ -233,32 +221,18 @@ async function shortenMany(urls) {
 
 function sendUsage(sock, chatId) {
   return sock.sendMessage(chatId, {
-    text: tr(
-      "Send the link you want to shorten, or reply to a message containing one.\n\n*Example:*\n`!shortlink https://github.com/WhiskeySockets/Baileys`",
-      "أرسل الرابط الذي تريد اختصاره، أو اعمل رد على رسالة تحتوي رابطًا.\n\n*مثال:*\n`!shortlink https://github.com/WhiskeySockets/Baileys`",
-    ),
+    text: t("bot.tools.shortlink.usageHint"),
   });
 }
 
 function sendInvalid(sock, chatId) {
   return sock.sendMessage(chatId, {
-    text: tr(
-      "I couldn't find a valid link. Send a URL like `https://example.com`, or reply to a message with one.",
-      "لم أجد رابطًا صالحًا. أرسل رابطًا مثل `https://example.com`، أو اعمل رد على رسالة تحتوي عليه.",
-    ),
+    text: t("bot.tools.shortlink.noLink"),
   });
 }
 
 module.exports = {
   name: "shortlink",
-  description: {
-    en: "Shortens up to 5 links with is.gd, falling back to v.gd. Reads a URL from the command or a replied message.",
-    ar: "يختصر حتى 5 روابط باستخدام is.gd مع التحويل إلى v.gd عند الحاجة، من الأمر أو من رسالة موجّه لها الرد.",
-  },
-  usage: {
-    en: "shortlink <url> | reply to a message containing a link",
-    ar: "shortlink <الرابط> | اعمل رد على رسالة تحتوي رابطًا",
-  },
   chat: "all",
   neutralArgs: true, // a URL is not a language
 
@@ -277,7 +251,7 @@ module.exports = {
     }
 
     // One message: "shortening..." becomes the short link(s) or the reason.
-    const status = await createStatus(sock, chatId, tr("🔗 Shortening...", "🔗 بختصر الرابط..."), {
+    const status = await createStatus(sock, chatId, t("bot.tools.shortlink.shortening"), {
       replyTo: msg,
     });
 
@@ -286,7 +260,7 @@ module.exports = {
       await status.finish(renderResults(results));
     } catch (error) {
       logger.error({ err: error, command: "shortlink" }, "[Error] in !shortlink command");
-      await status.fail(error, tr("Couldn't shorten the link", "تعذّر اختصار الرابط"));
+      await status.fail(error, t("bot.tools.shortlink.failed"));
     }
   },
 

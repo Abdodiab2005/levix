@@ -1,11 +1,12 @@
 // file: frontend/src/utils/diagnostics.ts
+import { resolveLocale } from "../i18n/locale";
 import type { ClientDiagnostics } from "../types";
 
 export function getClientDiagnostics(
-  language?: "ar" | "en",
+  language?: ClientDiagnostics["language"],
   theme?: "light" | "dark",
 ): ClientDiagnostics {
-  const lang = language || (document.documentElement.lang === "en" ? "en" : "ar");
+  const lang = resolveLocale(language || document.documentElement.lang);
   const thm =
     theme || (document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark");
   const screen = `${window.innerWidth}x${window.innerHeight}@${Number(window.devicePixelRatio || 1).toFixed(2)}`;

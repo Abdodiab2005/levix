@@ -1,4 +1,4 @@
-const { tr } = require("../utils/i18n.cjs");
+const { tr, t } = require("../utils/i18n.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const { targetOf, downloadTarget, commandHint, errorText } = require("../utils/stickerBot.cjs");
 const media = require("../stickers/media.cjs");
@@ -7,14 +7,6 @@ const jobs = require("../stickers/jobs.cjs");
 module.exports = {
   name: "toimage",
   aliases: ["toimg", "صورة"],
-  description: {
-    en: "Turn a replied sticker into a PNG or animated video.",
-    ar: "يحوّل الملصق المردود عليه إلى صورة PNG أو فيديو متحرك.",
-  },
-  usage: {
-    en: "toimage (reply to a sticker)\ntoimage doc (reply to a sticker)\ntoimage gif (reply to an animated sticker)",
-    ar: "toimage (رد على ملصق)\ntoimage ملف (رد على ملصق)\ntoimage متحرك (رد على ملصق متحرك)",
-  },
   keywords: ["doc", "ملف", "gif", "متحرك"],
   chat: "all",
   async execute(sock, msg, args = []) {
@@ -39,12 +31,9 @@ module.exports = {
           : args.some((arg) => ["doc", "ملف"].includes(String(arg).toLowerCase()))
             ? "doc"
             : "png";
-      status = await createStatus(
-        sock,
-        jid,
-        tr("🎨 Converting sticker...", "🎨 جارٍ تحويل الملصق..."),
-        { replyTo: msg },
-      );
+      status = await createStatus(sock, jid, t("bot.stickers.toimage.converting"), {
+        replyTo: msg,
+      });
       const job = jobs.submit(
         ({ signal }) =>
           mode === "gif" ? media.toMp4(buffer, { signal }) : media.toPng(buffer, { signal }),
@@ -52,10 +41,7 @@ module.exports = {
       );
       const result = await job.promise;
       const caption = staticGif
-        ? tr(
-            "This sticker is not animated, so I sent a PNG.",
-            "هذا الملصق غير متحرك، لذا أرسلت صورة PNG.",
-          )
+        ? t("bot.stickers.toimage.staticGif")
         : result.animated
           ? tr(
               `First frame of an animated sticker. Use ${commandHint("toimage", "gif")} for the animation.`,

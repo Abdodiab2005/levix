@@ -10,7 +10,7 @@ function formatTime12Hour(time24) {
 const axios = require("axios");
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t, tr } = require("../utils/i18n.cjs");
 
 // The one HTTP GET the command performs. Exposed so tests can stub the network.
 const http = {
@@ -45,14 +45,6 @@ function buildPrayerUrl(city, { now = new Date(), timeZone = settings.get("bot_t
 
 module.exports = {
   name: "prayer",
-  description: {
-    en: "Shows prayer times for a city.",
-    ar: "يعرض مواقيت الصلاة لمدينة معيّنة.",
-  },
-  usage: {
-    en: "prayer <city in English>",
-    ar: "prayer <اسم المدينة بالإنجليزية>",
-  },
   chat: "all", // This command can be used anywhere
   // The city is asked for in English whatever language you speak, so it says
   // nothing about which language to answer in (see utils/i18n.cjs).
@@ -77,7 +69,7 @@ module.exports = {
 
     try {
       await sock.sendMessage(msg.key.remoteJid, {
-        text: tr("Fetching the times...", "يتم جلب البيانات..."),
+        text: t("bot.tools.prayer.fetching"),
       });
       // 5. We will make the API call using axios
       const response = await http.get(API_URL);
@@ -86,13 +78,13 @@ module.exports = {
 
       // 7. We will format the reply message
       const reply =
-        tr(`*Prayer times for ${city}:*\n\n`, `*مواقيت الصلاة لمدينة ${city}:*\n\n`) +
-        `${tr("Fajr", "الفجر")}: ${formatTime12Hour(timings.Fajr)}\n` +
-        `${tr("Sunrise", "الشروق")}: ${formatTime12Hour(timings.Sunrise)}\n` +
-        `${tr("Dhuhr", "الظهر")}: ${formatTime12Hour(timings.Dhuhr)}\n` +
-        `${tr("Asr", "العصر")}: ${formatTime12Hour(timings.Asr)}\n` +
-        `${tr("Maghrib", "المغرب")}: ${formatTime12Hour(timings.Maghrib)}\n` +
-        `${tr("Isha", "العشاء")}: ${formatTime12Hour(timings.Isha)}`;
+        t("bot.tools.prayer.header", { city }) +
+        `${t("bot.tools.prayer.fajr")}: ${formatTime12Hour(timings.Fajr)}\n` +
+        `${t("bot.tools.prayer.sunrise")}: ${formatTime12Hour(timings.Sunrise)}\n` +
+        `${t("bot.tools.prayer.dhuhr")}: ${formatTime12Hour(timings.Dhuhr)}\n` +
+        `${t("bot.tools.prayer.asr")}: ${formatTime12Hour(timings.Asr)}\n` +
+        `${t("bot.tools.prayer.maghrib")}: ${formatTime12Hour(timings.Maghrib)}\n` +
+        `${t("bot.tools.prayer.isha")}: ${formatTime12Hour(timings.Isha)}`;
 
       // 8. Send the formatted message
       await sock.sendMessage(msg.key.remoteJid, {
@@ -102,10 +94,7 @@ module.exports = {
       logger.error(error.message, "[Error] in Prayer API:");
       // 9. Handle errors, like city not found or API failure
       await sock.sendMessage(msg.key.remoteJid, {
-        text: tr(
-          `Sorry, I couldn't find prayer times for "${city}". Check the city's name and try again.`,
-          `عذراً، لم أتمكن من العثور على وقت الصلاة في "${city}". يرجى التحقق من اسم المدينة ومحاولة مرة أخرى.`,
-        ),
+        text: t("bot.tools.prayer.cityNotFound", { city }),
       });
     }
   },

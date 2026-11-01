@@ -28,10 +28,16 @@ export function activeCommandFilterCount(filters: CommandFilters): number {
   return count;
 }
 
+function localizedValues(map: object | null | undefined): string[] {
+  if (!map) return [];
+  return Object.values(map).filter(
+    (value): value is string => typeof value === "string" && value !== "",
+  );
+}
+
 /**
- * Search the name, every alias (either script), and both languages of the
- * description and usage, so an operator searching in English on an Arabic panel
- * still finds the command.
+ * Search the name, every alias (either script), and every string in the
+ * description and usage maps.
  */
 export function commandMatches(
   command: CommandItem,
@@ -43,11 +49,9 @@ export function commandMatches(
       command.name,
       ...(command.aliases || []),
       command.description,
-      command.descriptions?.en,
-      command.descriptions?.ar,
+      ...localizedValues(command.descriptions),
       command.usage,
-      command.usages?.en,
-      command.usages?.ar,
+      ...localizedValues(command.usages),
     ]
       .filter(Boolean)
       .join(" ")

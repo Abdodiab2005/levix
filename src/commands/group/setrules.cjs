@@ -4,14 +4,6 @@ const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "setrules",
-  description: {
-    en: "Sets the rules for this group.",
-    ar: "يضبط قواعد هذه المجموعة.",
-  },
-  usage: {
-    en: "setrules <rules>",
-    ar: "setrules <القواعد>",
-  },
   chat: "group",
   userAdminRequired: true,
 

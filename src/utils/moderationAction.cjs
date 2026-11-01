@@ -37,7 +37,7 @@ const { unwrapMessage } = require("./messageContent.cjs");
 const { mediaLabel } = require("./moderationSummary.cjs");
 const { resolveModerationPolicy, effectivePoints } = require("../services/moderationPolicy.cjs");
 const logger = require("./logger.cjs");
-const { tr } = require("./i18n.cjs");
+const { t } = require("./i18n.cjs");
 
 const MAX_POINTS_PER_MESSAGE = 50;
 const RULE_FEATURE = {
@@ -151,56 +151,41 @@ function ruleNotice({
   const lines = [];
   if (rule === "warn") {
     lines.push(
-      tr(
-        `✅ ${mentionTag} has been warned.\n*Reason:* ${detail || ""}`,
-        `✅ تم توجيه تحذير إلى ${mentionTag}.\n*السبب:* ${detail || ""}`,
-      ),
+      t("bot.moderation.moderationAction.hasBeenWarnedReason", { mentionTag, detail: detail || "" }),
     );
   } else {
     lines.push(mentionTag);
     if (rule === "link") {
       lines.push(
-        tr("Links are not allowed in this group.", "الروابط غير مسموحة في هذه المجموعة."),
+        t("bot.moderation.moderationAction.linksAreNotAllowedIn"),
       );
     } else if (rule === "spam") {
-      lines.push(tr("Spam is not allowed in this group.", "الإزعاج غير مسموح في هذه المجموعة."));
+      lines.push(t("bot.moderation.moderationAction.spamIsNotAllowedIn"));
     } else if (rule === "media") {
       const label = mediaLabel(detail);
       lines.push(
-        tr(
-          `${label} are not allowed in this group.`,
-          `يُمنع إرسال ${label} في هذه المجموعة.`,
-        ),
+        t("bot.moderation.moderationAction.mediaNotAllowed", { label }),
       );
     } else if (rule === "forbidden") {
       lines.push(
-        tr(
-          "Forbidden words are not allowed in this group.",
-          "الكلمات الممنوعة غير مسموحة في هذه المجموعة.",
-        ),
+        t("bot.moderation.moderationAction.forbiddenWordsAreNotAllowed"),
       );
     }
   }
   if (count && limit) {
-    lines.push(tr(`Warnings: ${count}/${limit}`, `الإنذارات: ${count}/${limit}`));
+    lines.push(t("bot.moderation.moderationAction.warnings", { count, limit }));
   }
   if (announceKick) {
-    lines.push(tr("The member will be removed.", "سيتم حذف العضو."));
+    lines.push(t("bot.moderation.moderationAction.theMemberWillBeRemoved"));
   }
   if (announceNeedAdmin) {
     lines.push(
-      tr(
-        "I am not a group admin, so an admin must act.",
-        "لست مشرفًا في المجموعة، لذلك يجب أن يتصرف أحد المشرفين.",
-      ),
+      t("bot.moderation.moderationAction.iAmNotAGroup"),
     );
   }
   if (announceFlag) {
     lines.push(
-      tr(
-        "The member reached the warning limit. Admins have been notified.",
-        "بلغ العضو حد الإنذارات. تم إشعار المشرفين.",
-      ),
+      t("bot.moderation.moderationAction.theMemberReachedTheWarning"),
     );
   }
   if (adminTags) lines.push(adminTags);
@@ -363,10 +348,7 @@ async function performKick(sock, ctx) {
     });
     try {
       await sock.sendMessage(ctx.groupId, {
-        text: tr(
-          "I tried to remove the member, but I don't have enough permissions.",
-          "حاولت حذف العضو ولكني لا أملك صلاحية كافية لذلك.",
-        ),
+        text: t("bot.moderation.moderationAction.iTriedToRemoveThe"),
       });
     } catch (noticeErr) {
       logger.error({ err: noticeErr, group: ctx.groupId }, "moderation kick-failure notice failed");
