@@ -74,6 +74,9 @@
     if (saved) next.language = saved;
     if (next.theme || next.language) {
       apply(next);
+      // Same signal as the system theme listener. React listens for this
+      // event. A storage event does not reach the tab that wrote the value.
+      window.dispatchEvent(new CustomEvent("levix-ui-prefs", { detail: next }));
     }
   });
   if (!host && savedTheme !== "dark" && savedTheme !== "light" && dark) {
