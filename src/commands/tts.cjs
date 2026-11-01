@@ -23,7 +23,7 @@ const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 const execFileAsync = promisify(execFile);
 
 const { ffmpegPath } = require("../utils/thumbnail.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 function tmpPath(ext) {
   return path.join(
@@ -151,10 +151,7 @@ module.exports = {
         sock,
         chatId,
         {
-          text: tr(
-            "📢 Usage:\n!tts <text>\n\nor reply to a text message with !tts\n\n✨ Completely free — no costs!",
-            "📢 الاستخدام:\n!tts <النص>\n\nأو ردّ على رسالة نصية بالأمر !tts\n\n✨ الخدمة مجانية!",
-          ),
+          text: t("bot.ai.tts.usage"),
         },
         { replyTo: msg },
       );
@@ -164,7 +161,7 @@ module.exports = {
     const status = await createStatus(
       sock,
       chatId,
-      tr("🎙️ Turning the text into speech...", "🎙️ بحوّل النص لصوت..."),
+      t("bot.ai.tts.working"),
       {
         replyTo: msg,
       },
@@ -207,7 +204,7 @@ module.exports = {
       logger.error({ err: error }, "[TTS] Error converting text to speech");
       await status.fail(
         error,
-        tr("Something went wrong turning the text into speech", "حصلت مشكلة وأنا بحوّل النص لصوت"),
+        t("bot.ai.tts.failed"),
       );
     }
   },

@@ -61,7 +61,7 @@ const LEGACY_COPYING_MARKER = ".legacy-copying";
 const MAX_ENTRY_CHARS = 2000;
 // Read per call so the dashboard can change it without a restart.
 const settings = require("../config/settings.cjs");
-const { tr } = require("./i18n.cjs");
+const { t } = require("./i18n.cjs");
 const maxContextChars = () => settings.get("memory_context_chars");
 
 // ---------------------------------------------------------------------------
@@ -534,7 +534,7 @@ function addMemory({ scope = "chat", chatId, content, by, chatName } = {}) {
   const text = String(content || "")
     .trim()
     .slice(0, MAX_ENTRY_CHARS);
-  if (!text) throw new Error(tr("There is nothing to save", "لا يوجد محتوى لحفظه"));
+  if (!text) throw new Error(t("bot.ai.memoryStore.nothingToSave"));
 
   const filePath = memoryFilePath(normalizedScope, chatId);
   ensureDirs();
