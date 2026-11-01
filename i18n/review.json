@@ -1,4 +1,16 @@
 {
+  "pt-BR/android": {
+    "status": "reviewed",
+    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "date": "2026-11-02",
+    "sha256": "d5085e8a568d2a62a318a922cd96e1b903a2810074b5815741a85652eb40ace8"
+  },
+  "es-419/android": {
+    "status": "reviewed",
+    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "date": "2026-11-02",
+    "sha256": "ff85a81b819eb71de6597cb6ede5608521575204706960599e4b7850bfdc9598"
+  },
   "pt-BR/dashboard": {
     "status": "reviewed",
     "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
