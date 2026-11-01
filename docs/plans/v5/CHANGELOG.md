@@ -58,7 +58,7 @@
 
 - Started on the owner's request on 2026-11-01, `main` b6e777e.
 - Four read-only audits (Codex, Grok, OpenCode, Antigravity); re-audit, design and PR plan in
-  `PHASE-03-RESULTS.md`. Corrected counts: 577 `tr(` lines in 87 files, 1116 dashboard keys, 90
+  `PHASE-03-RESULTS.md`. Corrected counts: 577 `tr(` lines in 87 files, 1116 dashboard keys, 89
   gateway keys, 247 Android strings plus 8 plurals per locale.
 - Owner decisions: Q-15 option (b), the recovery relay gains `pt-BR` and `es-419` and deploys
   first; Q-19, ChatGPT reviews the new translations.

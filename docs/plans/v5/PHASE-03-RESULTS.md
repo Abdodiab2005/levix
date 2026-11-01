@@ -8,13 +8,13 @@ run on 2026-11-01.
 
 Four read-only audits ran in parallel: Codex (Node backend and bot), Grok (dashboard), OpenCode
 (Android) and Antigravity (gateway, build and packaging). The orchestrator re-checked every finding
-that changes the plan. One audit count was wrong and is corrected here (P3-02).
+that changes the plan. Two audit counts were wrong and are corrected here (P3-02, P3-03).
 
 | ID | Finding | Evidence |
 | --- | --- | --- |
 | P3-01 | `tr(` appears on 577 lines in 87 files (`grep -rcE '\btr\('` over `src/` and `scheduler.cjs`). ADR-004 said 584 call sites in 86 files. | `src/utils/i18n.cjs:109` |
 | P3-02 | The dashboard has 1116 keys per locale, the same set in `ar` and `en`, parsed with the TypeScript compiler. ADR-004 said 1001; the 115 `backup*` keys from Phase 02 account for the rest. 44 keys hold `{name}` placeholders; none holds a plural. | `frontend/src/i18n/translations.ts:3`, `:5` |
-| P3-03 | The gateway has 90 keys per locale (ADR-004: 89). Seven keys are rendered as HTML through `data-i18n-html`. | `public/gateway-i18n.js:22`, `:268` |
+| P3-03 | The gateway has 89 keys per locale, as ADR-004 said. Seven keys are rendered as HTML through `data-i18n-html`. | `public/gateway-i18n.js:22`, `:268` |
 | P3-04 | Android has 247 `<string>` and 8 `<plurals>` per locale (ADR-004: 246 strings). Key and placeholder parity between `values` and `values-ar` is exact. The files hold 11 XML comments. | `android/app/src/main/res/values/strings.xml` |
 | P3-05 | `bot_language` accepts `auto`, `ar`, `en`. `withLang()` maps every value except `en` to `ar`, and `tr()` has two outputs. | `src/config/settings.cjs:32`, `src/utils/i18n.cjs:99`, `:109` |
 | P3-06 | There is no AI reply language setting. `botLangDirective()` follows `bot_language`: fixed Arabic, fixed English, or in `auto` the language the user writes in. | `src/services/aiAgent.cjs:160` |
