@@ -37,121 +37,121 @@
   },
   "pt-BR/commands": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "5706ddd6ccf01fbfa8f27b8aee6cc12eb8d1278463094b87dbdcfc3dc7d63744"
   },
   "pt-BR/bot/ai": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "dc66d793b7ee1a4144b3f5c99be06eb3fd1b24529de242a1473c72bedee64e56"
   },
   "pt-BR/bot/core": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "c18763fcd4b4b42183c99787d109604f9c89ea30f541757969743b3616f1a80b"
   },
   "pt-BR/bot/group": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "8d0a50ae379ebfd430a64a7f7fd933f2e9ea52192966c4a2d6b9e65a20ebb12c"
   },
   "pt-BR/bot/help": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "0b03d08f033a597eb019c7d4aef1fb2bea078b24de4cab120c9df67ce844c4fc"
   },
   "pt-BR/bot/lang": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "efe08523ab4c98950c46f1f263b857dcad9834687e7d5cac83761551d41c77e6"
   },
   "pt-BR/bot/moderation": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "d08cad6c59cd1f4d60969bf1c923cacd2999473dfb0d18e817a029d27e15bf27"
   },
   "pt-BR/bot/schedules": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "00affdd7d1992c8b8ad2a4128231ff3dd82c34d402b72ce74521338cfb3022e3"
   },
   "pt-BR/bot/stickers": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "79b336edf52c5baaa30db60211757617459d9034feb2a4ab7fc38b9c415aa956"
   },
   "pt-BR/bot/tools": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "7b9ae7a1722ebd34d1c5e06d02d7451ff7f510617d81220788ecfb4028d3e656"
   },
   "es-419/commands": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "4b8dbbd472d71af03f38a2b5e8f40881d9ce7ba147f3507a274184d1f3f1718b"
   },
   "es-419/bot/ai": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "6243abf50d9b612666cdb7f8de3c3e2fd32e0f55d5f1263472d297f6d279a31b"
   },
   "es-419/bot/core": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "dcafee6bb3c92528fc33aec3533a5a4ef241742638542b7ff2c167ef06fd3972"
   },
   "es-419/bot/group": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "bf7751c0e06a962a29245a75529d42192789bd882cee44947febe4df6915f6ef"
   },
   "es-419/bot/help": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "8d80d073318e97cdcba9e508d8f41bf3c3be9e5238e13a17f8a1023535a40dca"
   },
   "es-419/bot/lang": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "9653ca922f1199ca98d70e4c37bdb4498fa98625031aff96845ef5dcd295a952"
   },
   "es-419/bot/moderation": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "79ab4c9a5a2de6096cf58c44fc5a9e031c2c25de270837edb049eda54c0f355f"
   },
   "es-419/bot/schedules": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "3b5c4ca77c0d1829c27ce397a3df27f86856c7723cc13c2d35f9d99d364d387a"
   },
   "es-419/bot/stickers": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "d95e676ff627a59e949ed9debce80203888eb420b77f045d8e272d8fc549177c"
   },
   "es-419/bot/tools": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "cf50226205c1c13b62e2493345feb1cd0eed176b5c71a3d3d489998262b3ef4e"
   }
