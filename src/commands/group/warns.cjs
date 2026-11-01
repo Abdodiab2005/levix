@@ -5,14 +5,6 @@ const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "warns",
-  description: {
-    en: "Shows a member's warnings.",
-    ar: "يعرض تحذيرات عضو معيّن.",
-  },
-  usage: {
-    en: "warns @member",
-    ar: "warns @عضو",
-  },
   chat: "group",
   userAdminRequired: true,
 

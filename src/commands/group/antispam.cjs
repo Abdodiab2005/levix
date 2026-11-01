@@ -5,14 +5,6 @@ const { applyModerationPolicy } = require("../../services/moderationPolicy.cjs")
 
 module.exports = {
   name: "antispam",
-  description: {
-    en: "Controls anti-spam in the group.",
-    ar: "يتحكم في مكافحة الإزعاج في المجموعة.",
-  },
-  usage: {
-    en: "antispam [status]\nantispam <on|off>\nantispam action <WARN|KICK>\nantispam window <seconds>\nantispam count <number>",
-    ar: "antispam [status]\nantispam <on|off>\nantispam action <WARN|KICK>\nantispam window <ثوان>\nantispam count <عدد>",
-  },
   chat: "group",
   userAdminRequired: true,
 

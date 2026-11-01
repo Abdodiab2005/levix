@@ -136,14 +136,6 @@ function parsePatch(field, raw) {
 
 module.exports = {
   name: "policy",
-  description: {
-    en: "Shows and changes this group's moderation policy.",
-    ar: "يعرض سياسة إشراف المجموعة ويغيّرها.",
-  },
-  usage: {
-    en: "policy\npolicy set <field> <value>\npolicy reset",
-    ar: "policy\npolicy set <حقل> <قيمة>\npolicy reset",
-  },
   chat: "group",
   userAdminRequired: true,
 

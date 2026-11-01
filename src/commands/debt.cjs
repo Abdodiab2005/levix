@@ -14,14 +14,6 @@ const normalizeJid = require("../utils/normalizeJid.esm.js").default;
 module.exports = {
   name: "debt",
   aliases: ["دين", "owes"],
-  description: {
-    en: "Private debt tracker.",
-    ar: "نظام خاص لتتبّع الديون.",
-  },
-  usage: {
-    en: "debt add <amount> [description]\ndebt del <id>\ndebt list",
-    ar: "debt add <المبلغ> [الوصف]\ndebt del <id>\ndebt list",
-  },
   chat: "private",
 
   async execute(sock, msg, args) {

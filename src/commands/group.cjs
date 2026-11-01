@@ -17,6 +17,7 @@ const {
 } = require("../utils/permissions.cjs");
 const normalizeJid = require("../utils/normalizeJid.cjs");
 const { langForCommand, withLang, tr } = require("../utils/i18n.cjs");
+const { attachCommandDocs } = require("../utils/commandDocs.cjs");
 
 // --- Sub-command Loader ---
 //
@@ -28,6 +29,7 @@ const subCommands = new Map();
 function register(command, label) {
   try {
     if (!command?.name) return;
+    attachCommandDocs(command, "group");
     subCommands.set(command.name, command);
     if (Array.isArray(command.aliases)) {
       command.aliases.forEach((alias) => {
@@ -65,14 +67,6 @@ if (manifest) {
 
 module.exports = {
   name: "group",
-  description: {
-    en: "Main command for all group management actions.",
-    ar: "الأمر الرئيسي لكل إجراءات إدارة المجموعة.",
-  },
-  usage: {
-    en: "group <sub-command> [arguments]",
-    ar: "group <أمر فرعي> [المعاملات]",
-  },
   chat: "group",
 
   async execute(sock, msg, args, body, groupMetadata) {

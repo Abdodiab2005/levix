@@ -74,6 +74,9 @@ equal("digits are not English", detectLang("12 + 30"), "ar");
 
 section("a command's own keywords are syntax, not English");
 
+const { attachCommandDocs } = require("./src/utils/commandDocs.cjs");
+for (const command of [todo, rand, perm, prayer, deleteschedule]) attachCommandDocs(command);
+
 equal("!todo list", detectLang("list", { syntax: syntaxWords(todo) }), "ar");
 equal("!todo add buy milk", detectLang("add buy milk", { syntax: syntaxWords(todo) }), "en");
 equal("!rand dice 2d6", detectLang("dice 2d6", { syntax: syntaxWords(rand) }), "ar");

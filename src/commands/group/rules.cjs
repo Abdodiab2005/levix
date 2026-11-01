@@ -6,14 +6,6 @@ const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "rules",
-  description: {
-    en: "Shows the group rules.",
-    ar: "يعرض قواعد المجموعة.",
-  },
-  usage: {
-    en: "rules",
-    ar: "rules",
-  },
   chat: "group",
 
   async execute(sock, msg) {
