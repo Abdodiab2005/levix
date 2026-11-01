@@ -45,14 +45,6 @@ function formatWhen(ts) {
 module.exports = {
   name: "autodelete",
   aliases: [...autoDelete.DECLARED_ALIASES],
-  description: {
-    en: "Manages keyword auto-delete rules: add, remove, enable, disable, and counters.",
-    ar: "يدير قواعد الحذف التلقائي حسب الكلمات: إضافة وإزالة وتشغيل وإيقاف والعداد.",
-  },
-  usage: {
-    en: "autodelete list\nautodelete add <word> [| <word> ...]\nautodelete remove <id>\nautodelete on <id>\nautodelete off <id>\nautodelete stats [id]\nautodelete reset <id>",
-    ar: "autodelete list\nautodelete add <كلمة> [| <كلمة> ...]\nautodelete remove <id>\nautodelete on <id>\nautodelete off <id>\nautodelete stats [id]\nautodelete reset <id>",
-  },
   chat: "all",
   keywords: [
     ...LIST_WORDS,

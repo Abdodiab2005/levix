@@ -12,14 +12,6 @@ function sameIdentity(a, b) {
 module.exports = {
   name: "blacklist",
   aliases: ["unblacklist", "block", "unblock"], // We keep aliases here for a reason
-  description: {
-    en: "Manages the group's user blacklist.",
-    ar: "يدير القائمة السوداء لأعضاء المجموعة.",
-  },
-  usage: {
-    en: "blacklist [add|remove|list] [@member|number]",
-    ar: "blacklist [add|remove|list] [@عضو|رقم]",
-  },
   chat: "group",
   userAdminRequired: true,
 

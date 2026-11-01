@@ -4,14 +4,6 @@ const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "flagged",
-  description: {
-    en: "Lists members waiting for admin review.",
-    ar: "يعرض الأعضاء بانتظار مراجعة المشرف.",
-  },
-  usage: {
-    en: "flagged",
-    ar: "flagged",
-  },
   chat: "group",
   userAdminRequired: true,
 

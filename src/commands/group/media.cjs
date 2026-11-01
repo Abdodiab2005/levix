@@ -18,14 +18,6 @@ const VALID_TYPES = ["image", "video", "sticker", "audio"];
 // --- The Main Command Logic ---
 const command = {
   name: "media",
-  description: {
-    en: "Controls which message types are allowed in the group.",
-    ar: "يتحكم في أنواع الرسائل المسموح بها في المجموعة.",
-  },
-  usage: {
-    en: "media [status]\nmedia <on|off>\nmedia action <DELETE|WARN|KICK>\nmedia <block|unblock> <image|video|sticker|audio>",
-    ar: "media [status]\nmedia <on|off>\nmedia action <DELETE|WARN|KICK>\nmedia <block|unblock> <image|video|sticker|audio>",
-  },
   chat: "group",
   userAdminRequired: true,
 

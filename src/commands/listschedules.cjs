@@ -4,14 +4,6 @@ const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "listschedules",
-  description: {
-    en: "Lists all active and pending scheduled messages.",
-    ar: "يعرض كل الرسائل المجدولة النشطة والمعلّقة.",
-  },
-  usage: {
-    en: "listschedules",
-    ar: "listschedules",
-  },
   chat: "all",
   userAdminRequired: true,
 

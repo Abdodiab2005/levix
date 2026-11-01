@@ -63,6 +63,16 @@ section("validator");
 
 {
   const catalog = sample();
+  catalog.bundles.en.commands = { "kick.usage": "kick <member> [reason]" };
+  catalog.bundles.ar.commands = { "kick.usage": "kick <عضو> [السبب]" };
+  catalog.bundles.en.bot = { help: { footer: "Type *help <command>* for details" } };
+  catalog.bundles.ar.bot = { help: { footer: "اكتب *help <أمر>* لمزيد من التفاصيل" } };
+  const { errors } = validate(catalog);
+  equal("command syntax and help placeholders are plain text", errors.length, 0);
+}
+
+{
+  const catalog = sample();
   delete catalog.bundles.ar.dashboard.hello;
   const { errors } = validate(catalog);
   ok("missing key fails", problemHas(errors, "ar/dashboard", "hello", "missing key"));
