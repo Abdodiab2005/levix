@@ -52,10 +52,10 @@ to all v5 work and add to the rules below; they remove none of them.
   and passes its tests with no private code or credential. `levix-plus` code,
   keys and build output never enter this repository or its public artifacts
   (ADR-002). No required Levix Cloud and no downloaded executable code (ADR-003).
-- **Languages.** Shipped today: `ar` and `en`. Planned: `ar`, `en`, `pt-BR`,
-  `es-419`, with UI, bot reply and AI reply language as three separate settings
-  (ADR-004). Until Phase 03 lands, bot strings still go through `tr(en, ar)`;
-  the AI follows `bot_language` and, in `auto`, answers in the user's language.
+- **Languages.** Phase 03 adds `ar`, `en`, `pt-BR`, `es-419` as bot reply choices,
+  with UI, bot reply and AI reply language as three separate settings (ADR-004).
+  Unmigrated bot strings still use `tr(en, ar)`; the AI uses
+  `ai_reply_language`, which follows `bot_language` by default.
 - **Replies stay in the source chat by default.** No v5 feature may send a
   group's or a private chat's content to another chat unless the backend has
   checked that destination for the real sender (ADR-007). If that check fails,
@@ -474,6 +474,10 @@ session records the proxy the live socket was built with and reports
 ### Command System
 
 Commands are loaded dynamically from `src/commands/`:
+New user-facing text goes in `i18n/en/bot/<area>.json` and
+`i18n/ar/bot/<area>.json`, and is read with `t("bot.<area>.<key>", params)`.
+`tr(en, ar)` stays for unmigrated call sites and answers in English for
+`pt-BR` and `es-419`.
 - Each command exports: `{ name, aliases, description, usage, chat, execute }`
 - `description` and `usage` are `{ en, ar }` — `!help` shows the reply
   language (below), `!help ar` / `!help en` and `!help <command> [ar|en]` pick
@@ -485,7 +489,7 @@ Commands are loaded dynamically from `src/commands/`:
   per incoming message and carried by AsyncLocalStorage through everything the
   message causes (helpers, status edits, timers), so nothing passes a `lang`
   around:
-  - `bot_language` `ar` / `en`: that language, always
+  - `bot_language` `ar` / `en` / `pt-BR` / `es-419`: that language, always
   - `auto`: Arabic letters in the arguments -> Arabic; English words that are
     not the command's own syntax -> English; a bare command (`!ping`,
     `!kick @x`, `!todo list`) -> Arabic. "Syntax" is the command's name,
@@ -637,6 +641,8 @@ template. A packaged build unpacks those and calls
 The AI is an **agent**, not a single API call: it can call tools over several
 rounds before answering, and the whole run is narrated in ONE WhatsApp message
 that gets edited (`🤖 بفكر...` → `🔍 ببحث عن ...` → the answer).
+`ai_reply_language` controls the AI's answer language independently and follows
+`bot_language` by default.
 
 **The provider is a setting, not a code path choice.** `ai_provider` (dashboard
 dropdown) picks which API answers: `gemini`, `openai` (any OpenAI-compatible
@@ -1631,10 +1637,10 @@ logger.debug('Debug info');
     against `ctx.caller`. Never read who is calling from the tool's arguments,
     and never hand-roll `isOwner` checks inside `run()` — see
     `src/services/aiToolAuth.cjs`.
-29. **Every reply goes through `tr(en, ar)`.** A new `text:`, caption, status
-    line or thrown message a user will read is written in both languages at
-    the call site. Build it inside the function that sends it, never in a
-    module-level constant (the language is per message). Arabic words a
+29. **New replies use catalog keys.** Put new user-facing text in the English
+    and Arabic `i18n/` JSON sources and read it with `t()`. Older replies use
+    `tr(en, ar)` at the call site until migrated. Build the reply inside the
+    function that sends it because the language is per message. Arabic words a
     command *accepts* (`اضف`, `عام`) are input, not replies, and stay as they
     are.
 30. **`require()` of an ESM module returns the namespace, not the default.**
