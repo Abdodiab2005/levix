@@ -1,6 +1,6 @@
 // file: /commands/deleteschedule.js
 const { deleteScheduledJob, getScheduledJobs } = require("../../scheduler.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "deleteschedule",
@@ -20,10 +20,7 @@ module.exports = {
 
     if (!jobIdToDelete) {
       return await sock.sendMessage(msg.key.remoteJid, {
-        text: tr(
-          "Give the ID of the scheduled message to delete. `!listschedules` shows the IDs.",
-          "يرجى تحديد ID المهمة التي تريد حذفها. يمكنك الحصول على الـ ID باستخدام أمر `!listschedules`.",
-        ),
+        text: t("bot.schedules.deleteschedule.missingId"),
       });
     }
 
@@ -32,10 +29,7 @@ module.exports = {
 
     if (!jobExists) {
       return await sock.sendMessage(msg.key.remoteJid, {
-        text: tr(
-          `⚠️ No scheduled message has the ID \`${jobIdToDelete}\``,
-          `⚠️ لم يتم العثور على مهمة بهذا الـ ID: \`${jobIdToDelete}\``,
-        ),
+        text: t("bot.schedules.deleteschedule.notFound", { id: jobIdToDelete }),
       });
     }
 
@@ -43,10 +37,7 @@ module.exports = {
     deleteScheduledJob(jobIdToDelete);
 
     await sock.sendMessage(msg.key.remoteJid, {
-      text: tr(
-        `✅ Deleted the scheduled message \`${jobIdToDelete}\`.`,
-        `✅ تم حذف المهمة المجدولة بالـ ID: \`${jobIdToDelete}\` بنجاح.`,
-      ),
+      text: t("bot.schedules.deleteschedule.deleted", { id: jobIdToDelete }),
     });
   },
 };
