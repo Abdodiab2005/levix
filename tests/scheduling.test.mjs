@@ -69,6 +69,41 @@ section("daily and weekly recurrence parsing");
   );
 }
 
+section("autoschedule usage hints parse for every locale");
+
+{
+  const locales = JSON.parse(readFileSync(join(ROOT, "i18n/locales.json"), "utf8"));
+
+  function backtickedAutoscheduleExamples(usage) {
+    return [...String(usage).matchAll(/`(!autoschedule[^`]*)`/g)].map((match) => match[1]);
+  }
+
+  function argsFromExample(example) {
+    const prepared = example.replace(/HH:mm/g, "09:30").replace(/\bday\b/g, "monday");
+    return prepared.trim().split(/\s+/).slice(1);
+  }
+
+  for (const locale of locales) {
+    const schedules = JSON.parse(
+      readFileSync(join(ROOT, `i18n/${locale.code}/bot/schedules.json`), "utf8"),
+    );
+    const examples = backtickedAutoscheduleExamples(schedules["autoschedule.usage"]);
+    ok(`${locale.code} has an autoschedule example`, examples.length > 0);
+    for (const example of examples) {
+      const parsed = recurrence.parseRecurringArgs(argsFromExample(example));
+      equal(`${locale.code} ${example} parses`, parsed.error, undefined);
+    }
+  }
+
+  const planted = "`!autoschedule weekly dia HH:mm sua mensagem`";
+  const [badExample] = backtickedAutoscheduleExamples(planted);
+  equal(
+    "a translated day word such as dia is refused",
+    recurrence.parseRecurringArgs(argsFromExample(badExample)).error,
+    "day",
+  );
+}
+
 section("recurrence builder -> cron for every kind");
 
 {

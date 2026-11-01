@@ -9,7 +9,7 @@
   "listschedules.placeGroup": "este grupo",
   "listschedules.placePrivate": "un chat privado",
   "listschedules.deleteHint": "*Para eliminar una, usa:*\n`!deleteschedule <ID>`",
-  "autoschedule.usage": "Formato incorrecto. Usa:\n`!autoschedule daily HH:mm tu mensaje`\n`!autoschedule weekly día HH:mm tu mensaje`",
+  "autoschedule.usage": "Formato incorrecto. Usa:\n`!autoschedule daily HH:mm tu mensaje`\n`!autoschedule weekly monday HH:mm tu mensaje`",
   "autoschedule.type": "Tipo no soportado. Usa `daily` o `weekly`.",
   "autoschedule.day": "Día no válido. Usa el nombre del día en inglés o árabe, o un número del 0 al 7 (0 y 7 son domingo).",
   "autoschedule.time": "Hora no válida. Usa `HH:mm` (por ejemplo `09:30`).",
