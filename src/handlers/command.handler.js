@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
 const { localize, allLanguages, attachCommandDocs } = require("../utils/commandDocs.cjs");
-const { langForCommand, withLang, tr } = require("../utils/i18n.cjs");
+const { langForCommand, withLang, t } = require("../utils/i18n.cjs");
 
 // Commands collection (keyed by both names and aliases)
 const commands = new Map();
@@ -306,7 +306,7 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
     await sendBotMessage(
       sock,
       msg.key.remoteJid,
-      { text: tr("⛔ This command is turned off right now.", "⛔ هذا الأمر معطّل حاليًا.") },
+      { text: t("bot.core.commandHandler.disabled") },
       { replyTo: msg },
     );
     return true;
@@ -327,7 +327,7 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
           sock,
           msg.key.remoteJid,
           {
-            text: tr("⚠️ This command only works in groups.", "⚠️ هذا الأمر يعمل في المجموعات فقط."),
+            text: t("bot.core.commandHandler.groupsOnly"),
           },
           { replyTo: msg },
         );
@@ -338,10 +338,7 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
           sock,
           msg.key.remoteJid,
           {
-            text: tr(
-              "⚠️ This command only works in private chats.",
-              "⚠️ هذا الأمر يعمل في المحادثات الخاصة فقط.",
-            ),
+            text: t("bot.core.commandHandler.privateOnly"),
           },
           { replyTo: msg },
         );
@@ -370,10 +367,7 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
           sock,
           msg.key.remoteJid,
           {
-            text: tr(
-              "⚠️ You need to be a group admin to use this command.",
-              "⚠️ هذا الأمر يتطلب أن تكون مشرفًا.",
-            ),
+            text: t("bot.core.commandHandler.adminRequired"),
           },
           { replyTo: msg },
         );
@@ -385,10 +379,7 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
           sock,
           msg.key.remoteJid,
           {
-            text: tr(
-              "⚠️ I need to be a group admin to do that.",
-              "⚠️ يجب أن أكون مشرفًا لتنفيذ هذا الأمر.",
-            ),
+            text: t("bot.core.commandHandler.botAdminRequired"),
           },
           { replyTo: msg },
         );
@@ -423,14 +414,10 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
         sock,
         msg.key.remoteJid,
         {
-          text: tr(
-            `❌ *The command failed*\n\n*Type:* \`${error.name || "Error"}\`\n*Details:* ${
-              error.message || "unknown"
-            }`,
-            `❌ *فشل تنفيذ الأمر*\n\n*النوع:* \`${error.name || "Error"}\`\n*التفاصيل:* ${
-              error.message || "غير معروف"
-            }`,
-          ),
+          text: t("bot.core.commandHandler.failed", {
+            name: error.name || "Error",
+            details: error.message || t("bot.core.commandHandler.unknownDetails"),
+          }),
         },
         { replyTo: msg },
       );

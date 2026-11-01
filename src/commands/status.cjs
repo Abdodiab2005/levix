@@ -4,7 +4,7 @@ const os = require("os");
 const baileysVersion = require("@whiskeysockets/baileys/package.json").version;
 const logger = require("../utils/logger.cjs");
 const { checkFfmpeg } = require("../utils/thumbnail.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 /**
  * A helper function to format seconds into a human-readable string.
@@ -18,7 +18,7 @@ function formatUptime(seconds) {
   const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
 
-  return tr(`${d}d ${h}h ${m}m ${s}s`, `${d} يوم, ${h} ساعة, ${m} دقيقة, ${s} ثانية`);
+  return t("bot.core.status.uptime", { days: d, hours: h, minutes: m, seconds: s });
 }
 
 module.exports = {
@@ -49,39 +49,25 @@ module.exports = {
       //    binary is otherwise invisible.
       const ffmpeg = await checkFfmpeg();
       const ffmpegLine = ffmpeg.ok
-        ? `✅ ${ffmpeg.version || tr("working", "يعمل")}`
-        : tr(`❌ not working (${ffmpeg.path})`, `❌ لا يعمل (${ffmpeg.path})`);
+        ? `✅ ${ffmpeg.version || t("bot.core.status.working")}`
+        : t("bot.core.status.ffmpegBroken", { path: ffmpeg.path });
 
       // --- BUILDING THE REPLY ---
-      const reply = tr(
-        `*🤖 Bot Status 🤖*
-
-*⏰ Uptime:* ${formattedUptime}
-*📊 Memory:* ${rssMb} MB
-*🟢 Node.js:* ${nodeVersion}
-*📚 Baileys:* v${baileysVersion}
-*💻 OS:* ${platform}
-*💿 OS release:* ${osRelease}
-*🎞️ ffmpeg (thumbnails):* ${ffmpegLine}`,
-        `*🤖 حالة البوت 🤖*
-
-*⏰ وقت التشغيل:* ${formattedUptime}
-*📊 استخدام الذاكرة:* ${rssMb} MB
-*🟢 إصدار Node.js:* ${nodeVersion}
-*📚 إصدار Baileys:* v${baileysVersion}
-*💻 نظام التشغيل:* ${platform}
-*💿 إصدار نظام التشغيل:* ${osRelease}
-*🎞️ ffmpeg (الصور المصغرة):* ${ffmpegLine}`,
-      );
+      const reply = t("bot.core.status.report", {
+        uptime: formattedUptime,
+        memoryMb: rssMb,
+        nodeVersion,
+        baileysVersion,
+        platform,
+        osRelease,
+        ffmpegLine,
+      });
 
       await sock.sendMessage(msg.key.remoteJid, { text: reply });
     } catch (error) {
       logger.error(error, "[Error] في أمر !status:");
       await sock.sendMessage(msg.key.remoteJid, {
-        text: tr(
-          "Something went wrong while reading the system status.",
-          "حدث خطأ أثناء جلب حالة النظام.",
-        ),
+        text: t("bot.core.status.failed"),
       });
     }
   },
