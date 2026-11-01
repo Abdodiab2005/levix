@@ -127,6 +127,8 @@ npm run format         # format code with Biome
 npm start              # node bin/levix.js — data lands in ./data
 npm run dev            # same, under nodemon
 npm test               # the whole suite (tests/run.mjs)
+npm run i18n:build     # regenerate committed files from i18n/ (scripts/i18n.mjs)
+npm run i18n:check     # validate i18n/ and fail if a generated file was edited by hand
 
 node bin/levix.js headless         # the bot with no panel and no open port
 node bin/levix.js where            # print the data directory
@@ -278,7 +280,9 @@ public/           # Static assets (socket.io.min.js, qrcode.min.js) and public/d
 public/brand/     # Generated logo and branding files (committed)
 android/          # Android companion app (Kotlin, Gradle, embedded Node 24 ARM64 + ARMv7, FFmpeg; API 36, per-ABI APKs + Play AAB)
 deploy/           # install.sh · levix.service · nginx/ (reference config)
-scripts/          # build-brand-assets.mjs · build-sea.mjs · release installer
+i18n/             # Canonical UI strings. Edit the JSON, then npm run i18n:build.
+                  # Generated files are committed and must not be edited by hand.
+scripts/          # build-brand-assets.mjs · build-sea.mjs · i18n.mjs · release installer
 Dockerfile · docker-compose.yml
 data/             # Created at runtime, gitignored (or ~/.levix)
 ```
@@ -1385,7 +1389,7 @@ The control panel UI is `frontend/src/components/ui/`. Read `frontend/src/compon
 - R4. Sorting MUST be one `SortMenu`. NEVER a row of sort options or a visible sort `<select>`.
 - R5. An `OverflowMenu` needs at least two items — a single secondary action is an `IconButton`. The overflow sits beside the primary action it belongs to (same row, at its end), never alone on its own row.
 - R6. Text, number, password, and select settings MUST use an explicit save. A single independent value (timezone, a standalone API key, a storage number, panel language, bot reply language, a per-row select) MUST use `SaveField` / `useSavedValue` from `frontend/src/components/ui`: the input plus an inline Save `IconButton` at its end, enabled only when the draft differs from the saved value, spinner while saving, a brief success state, Enter saves, Escape reverts, error shown under the field. Values that only make sense together (min+max human delay, the selected AI provider's API key + base URL + model, the WhatsApp proxy protocol/host/port/username/password) MUST use `useDirtyForm` + `FormActions`: one primary Save and a Discard, disabled until something changed, with an unsaved-changes hint. NEVER save those inputs on blur or on every change. A `Toggle` applies immediately — that is what a switch means. Dialog forms that already end in a submit button are fine.
-- MUST put every new visible string, including tooltips and the words Filter, Sort, and More, in `frontend/src/i18n/translations.ts` in both `en` and `ar`.
+- MUST put every new visible string, including tooltips and the words Filter, Sort, and More, in `i18n/en/dashboard.json` and `i18n/ar/dashboard.json`, then run `npm run i18n:build`. `frontend/src/i18n/translations.ts` is generated.
 - MUST lay out with logical CSS (`ms-` / `me-` / `ps-` / `pe-` / `start` / `end`) so Arabic RTL works. NEVER `ml-` / `mr-` / `pl-` / `pr-` / `left-` / `right-` for layout.
 - MUST keep touch targets at least 40px. `IconButton` `label` is required. Menus MUST use `role="menu"` / `role="menuitem"`, arrow keys, `aria-haspopup`, and `aria-expanded`. Dialogs MUST trap focus and return it on close.
 - MUST keep light and dark on the existing theme tokens. MUST keep working inside the Android WebView (`PanelActivity`). No CDN and no new npm dependency for UI.

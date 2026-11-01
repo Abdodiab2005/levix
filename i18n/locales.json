@@ -1,0 +1,30 @@
+[
+  {
+    "code": "en",
+    "name": "English",
+    "dir": "ltr",
+    "android": "values",
+    "required": true
+  },
+  {
+    "code": "ar",
+    "name": "العربية",
+    "dir": "rtl",
+    "android": "values-ar",
+    "required": true
+  },
+  {
+    "code": "pt-BR",
+    "name": "Português (Brasil)",
+    "dir": "ltr",
+    "android": "values-pt-rBR",
+    "required": false
+  },
+  {
+    "code": "es-419",
+    "name": "Español (Latinoamérica)",
+    "dir": "ltr",
+    "android": "values-b+es+419",
+    "required": false
+  }
+]

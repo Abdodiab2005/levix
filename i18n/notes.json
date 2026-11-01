@@ -1,0 +1,15 @@
+{
+  "android": {
+    "guide_step": "Home tour: every stop spotlights the real control it describes, in the order an operator meets them. A hidden control is skipped, so bodies must read as sentences about the highlighted button, not about order.",
+    "guide_announce": "Spoken by TalkBack when a stop appears: title, body, then the count.",
+    "hero_eyebrow": "Hero Section",
+    "action_switch_language": "Sections",
+    "card_whatsapp_title": "Essential User Cards",
+    "diagnostics_sub": "Diagnostics",
+    "status_connected": "Status Badges",
+    "notifications_required": "Notifications & System",
+    "section_diagnostics_short": "Compact tile strings",
+    "wa_status_sheet_title": "WhatsApp status sheet",
+    "media_hub_title": "Native Media Hub"
+  }
+}
