@@ -22,5 +22,17 @@
     "by": "machine draft (Antigravity Gemini 4 Argon; delta by Grok)",
     "date": "2026-11-01",
     "sha256": "c32db9ebd862d1abf1c53c3d5e166001386668d201ba5bfaf724c08122bf660c"
+  },
+  "pt-BR/android": {
+    "status": "draft",
+    "by": "machine draft (Antigravity Gemini 4 Argon; delta by Grok)",
+    "date": "2026-11-01",
+    "sha256": "d5085e8a568d2a62a318a922cd96e1b903a2810074b5815741a85652eb40ace8"
+  },
+  "es-419/android": {
+    "status": "draft",
+    "by": "machine draft (Antigravity Gemini 4 Argon; delta by Grok)",
+    "date": "2026-11-01",
+    "sha256": "ff85a81b819eb71de6597cb6ede5608521575204706960599e4b7850bfdc9598"
   }
 }
