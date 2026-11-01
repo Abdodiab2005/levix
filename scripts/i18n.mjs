@@ -608,10 +608,49 @@ function formatSetDiff(got, want) {
   return formatDiff(gotBag, wantBag, (key) => `{${key}}`);
 }
 
-function tagSet(text) {
-  const names = new Set();
-  for (const match of text.matchAll(TAG)) names.add(match[1].toLowerCase());
-  return names;
+function collapseWs(text) {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+// Gateway html is inserted with innerHTML. A translated tag is accepted only
+// when the English value has that same tag. The key is the tag name plus the
+// full attribute text, with whitespace runs collapsed to one space. Closing
+// tags are compared the same way. An on* attribute fails on its own, because
+// the browser would run it as script.
+function exactTagKey(raw) {
+  const match = /^<(\/?)([A-Za-z][A-Za-z0-9]*)\b([^>]*)>$/.exec(raw);
+  if (!match) return "";
+  const name = match[2].toLowerCase();
+  const attrs = collapseWs(match[3]);
+  const head = match[1] ? `/${name}` : name;
+  return attrs ? `${head} ${attrs}` : head;
+}
+
+function exactTagSet(text) {
+  const keys = new Set();
+  for (const match of text.matchAll(TAG)) {
+    const key = exactTagKey(match[0]);
+    if (key) keys.add(key);
+  }
+  return keys;
+}
+
+function sameTagName(allowed, raw) {
+  const parsed = /^<(\/?)([A-Za-z][A-Za-z0-9]*)\b/.exec(raw);
+  if (!parsed) return false;
+  const head = `${parsed[1] ? "/" : ""}${parsed[2].toLowerCase()}`;
+  for (const key of allowed) {
+    if (key === head || key.startsWith(`${head} `)) return true;
+  }
+  return false;
+}
+
+function eventHandlerAttribute(attrText) {
+  const names = /([^\s"'=/<>]+)(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?/g;
+  for (const match of attrText.matchAll(names)) {
+    if (/^on/i.test(match[1])) return match[1];
+  }
+  return "";
 }
 
 function markupIssues(text, allowed) {
@@ -619,13 +658,18 @@ function markupIssues(text, allowed) {
   const issues = [];
   for (let i = 0; i < text.length; i += 1) {
     if (text[i] !== "<" || !/[A-Za-z/!]/.test(text[i + 1] || "")) continue;
-    const match = /^<\/?([A-Za-z][A-Za-z0-9]*)\b[^>]*>/.exec(text.slice(i));
+    const match = /^<\/?([A-Za-z][A-Za-z0-9]*)\b([^>]*)>/.exec(text.slice(i));
     if (!match) {
       issues.push("contains markup");
       break;
     }
-    if (!allowed.has(match[1].toLowerCase())) {
-      issues.push(`tag "${match[1]}" is not in the English value`);
+    const handler = eventHandlerAttribute(match[2]);
+    if (handler) issues.push(`attribute "${handler}" is not allowed`);
+    const key = exactTagKey(match[0]);
+    if (!key || !allowed.has(key)) {
+      const known = sameTagName(allowed, match[0]);
+      const why = known ? "attributes are not in the English value" : "is not in the English value";
+      issues.push(`tag "${match[1]}" ${why}`);
     }
     i += match[0].length - 1;
   }
@@ -665,7 +709,7 @@ function validateBundle(catalog, errors, warnings) {
 
   const allowedTags = (id, key, english) => {
     if (id !== "gateway" || !htmlKeys.has(key)) return null;
-    return tagSet(typeof english === "string" ? english : "");
+    return exactTagSet(typeof english === "string" ? english : "");
   };
 
   const checkValue = (label, id, key, code, value, english) => {
