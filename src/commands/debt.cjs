@@ -8,7 +8,7 @@ const {
   listDebts: storeListDebts,
 } = require("../utils/storage.cjs");
 const logger = require("../utils/logger.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t, tr } = require("../utils/i18n.cjs");
 const normalizeJid = require("../utils/normalizeJid.esm.js").default;
 
 module.exports = {
@@ -76,11 +76,11 @@ async function addDebt(sock, msg, args, creditorId, debtorId, chatKey) {
   }
 
   const amount = parseFloat(args[0]);
-  const description = args.slice(1).join(" ") || tr("No description", "بدون وصف");
+  const description = args.slice(1).join(" ") || t("bot.tools.debt.noDescription");
 
   if (isNaN(amount) || amount <= 0) {
     return sock.sendMessage(remote, {
-      text: tr("❌ The amount must be a positive number", "❌ المبلغ يجب أن يكون رقم موجب"),
+      text: t("bot.tools.debt.amountInvalid"),
     });
   }
 
@@ -94,25 +94,18 @@ async function addDebt(sock, msg, args, creditorId, debtorId, chatKey) {
     });
 
     await sock.sendMessage(remote, {
-      text: tr(
-        `✅ *Debt added*\n\n` +
-          `Debtor: ${debtorId.split("@")[0]}\n` +
-          `Creditor: ${creditorId.split("@")[0]}\n` +
-          `Amount: ${amount}\n` +
-          `Description: ${description}\n` +
-          `Record: #${debt.id}`,
-        `✅ *تم إضافة الدين*\n\n` +
-          `المدين: ${debtorId.split("@")[0]}\n` +
-          `الدائن: ${creditorId.split("@")[0]}\n` +
-          `المبلغ: ${amount}\n` +
-          `الوصف: ${description}\n` +
-          `رقم السجل: #${debt.id}`,
-      ),
+      text: t("bot.tools.debt.added", {
+        debtor: debtorId.split("@")[0],
+        creditor: creditorId.split("@")[0],
+        amount,
+        description,
+        id: debt.id,
+      }),
     });
   } catch (err) {
     logger.error(err, "[Debt] Add error:");
     await sock.sendMessage(remote, {
-      text: tr("❌ Something went wrong while saving the debt", "❌ حدث خطأ أثناء تسجيل الدين"),
+      text: t("bot.tools.debt.saveError"),
     });
   }
 }
@@ -124,26 +117,26 @@ async function listDebts(sock, msg, creditorId, debtorId, chatKey) {
     const debts = storeListDebts(chatKey, { settled: false });
 
     if (debts.length === 0) {
-      return sock.sendMessage(remote, { text: tr("No debts right now ✅", "لا توجد ديون حالياً ✅") });
+      return sock.sendMessage(remote, { text: t("bot.tools.debt.listEmpty") });
     }
 
-    let text = tr("📋 *Debts:*\n\n", "📋 *قائمة الديون:*\n\n");
+    let text = t("bot.tools.debt.listHeader");
 
     debts.forEach((d) => {
       const date = new Date(d.created_at).toLocaleDateString(tr("en-GB", "ar-EG"));
       text += `*#${d.id}*\n`;
-      text += `${tr("Debtor", "المدين")}: ${d.debtor_id.split("@")[0]}\n`;
-      text += `${tr("Creditor", "الدائن")}: ${d.creditor_id.split("@")[0]}\n`;
-      text += `${tr("Amount", "المبلغ")}: ${d.amount}\n`;
-      text += `${tr("Description", "الوصف")}: ${d.description}\n`;
-      text += `${tr("Date", "التاريخ")}: ${date}\n\n`;
+      text += `${t("bot.tools.debt.debtorLabel")}: ${d.debtor_id.split("@")[0]}\n`;
+      text += `${t("bot.tools.debt.creditorLabel")}: ${d.creditor_id.split("@")[0]}\n`;
+      text += `${t("bot.tools.debt.amountLabel")}: ${d.amount}\n`;
+      text += `${t("bot.tools.debt.descriptionLabel")}: ${d.description}\n`;
+      text += `${t("bot.tools.debt.dateLabel")}: ${date}\n\n`;
     });
 
     await sock.sendMessage(remote, { text });
   } catch (err) {
     logger.error(err, "[Debt] List error:");
     await sock.sendMessage(remote, {
-      text: tr("❌ Something went wrong while listing debts", "❌ حدث خطأ أثناء عرض الديون"),
+      text: t("bot.tools.debt.listError"),
     });
   }
 }
@@ -160,7 +153,7 @@ async function deleteDebt(sock, msg, args, creditorId, debtorId, chatKey) {
   const id = parseInt(args[0]);
   if (isNaN(id)) {
     return sock.sendMessage(remote, {
-      text: tr("❌ Invalid record number", "❌ رقم السجل غير صحيح"),
+      text: t("bot.tools.debt.invalidRecord"),
     });
   }
 
@@ -169,25 +162,25 @@ async function deleteDebt(sock, msg, args, creditorId, debtorId, chatKey) {
 
     if (!debt) {
       return sock.sendMessage(remote, {
-        text: tr("❌ That debt wasn't found", "❌ لم يتم العثور على الدين"),
+        text: t("bot.tools.debt.notFound"),
       });
     }
 
     if (debt.group_id !== chatKey) {
       return sock.sendMessage(remote, {
-        text: tr("❌ That debt belongs to another chat", "❌ هذا الدين لا يخص هذه المحادثة"),
+        text: t("bot.tools.debt.wrongChat"),
       });
     }
 
     storeDeleteDebt(id);
 
     await sock.sendMessage(remote, {
-      text: tr(`🗑️ Deleted debt #${id}`, `🗑️ تم حذف الدين رقم #${id} بنجاح`),
+      text: t("bot.tools.debt.deleted", { id }),
     });
   } catch (err) {
     logger.error(err, "[Debt] Del error:");
     await sock.sendMessage(remote, {
-      text: tr("❌ Something went wrong while deleting the debt", "❌ حدث خطأ أثناء حذف الدين"),
+      text: t("bot.tools.debt.deleteError"),
     });
   }
 }
