@@ -11,7 +11,7 @@ const __dirname = dirname(__filename);
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
-const { localize, bothLanguages } = require("../utils/commandDocs.cjs");
+const { localize, allLanguages, attachCommandDocs } = require("../utils/commandDocs.cjs");
 const { langForCommand, withLang, tr } = require("../utils/i18n.cjs");
 
 // Commands collection (keyed by both names and aliases)
@@ -168,12 +168,11 @@ export function getCommandCatalog() {
       name: command.name,
       key,
       category: command.__category || "general",
-      // Strings, as the dashboard has always had them (English first), plus
-      // both languages so it can follow its own UI language.
+      // Keep the English strings for existing clients and expose all locales.
       description: localize(command.description, "en"),
-      descriptions: bothLanguages(command.description),
+      descriptions: allLanguages(command.description),
       usage: command.usage ? localize(command.usage, "en") : null,
-      usages: command.usage ? bothLanguages(command.usage) : null,
+      usages: command.usage ? allLanguages(command.usage) : null,
       chat: command.chat || "all",
       declaredAliases: command.__declaredAliases || [],
       aliases: runtimeConfig.getAliases(command.name, command.__declaredAliases || []),
@@ -254,6 +253,7 @@ function registerCommand(command, label, category) {
   try {
     if (!command?.name) return;
 
+    attachCommandDocs(command, category);
     command.__category = category || "general";
     // What the FILE declares, kept aside so a dashboard override can be
     // cleared back to it later (command.aliases itself is what we index).

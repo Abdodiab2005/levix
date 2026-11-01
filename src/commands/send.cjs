@@ -15,14 +15,6 @@ const { tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "send",
-  description: {
-    en: "Re-sends the replied message here: a status/story, photo, video, voice note, sticker, document or text.",
-    ar: "يعيد إرسال الرسالة الموجّه لها الرد هنا: استوري، صورة، فيديو، رسالة صوتية، ستيكر، مستند أو نص.",
-  },
-  usage: {
-    en: "send   (reply to a status or any message with it)",
-    ar: "send   (اعمل رد على استوري أو أي رسالة بالأمر)",
-  },
   chat: "all",
 
   async execute(sock, msg) {

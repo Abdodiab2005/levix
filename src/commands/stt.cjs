@@ -186,14 +186,6 @@ function sttErrorHint(error) {
 module.exports = {
   name: "stt",
   aliases: ["totext", "transcribe"],
-  description: {
-    en: "Converts speech/audio to text (Gemini or Groq/OpenAI Whisper).",
-    ar: "يحوّل الكلام/الصوت إلى نص (عبر Gemini أو Groq/OpenAI Whisper).",
-  },
-  usage: {
-    en: "stt   (reply to a voice note, or send one with the command)",
-    ar: "stt   (رد على رسالة صوتية أو أرسلها مع الأمر)",
-  },
   chat: "all",
 
   async execute(sock, msg, args, body, groupMetadata) {

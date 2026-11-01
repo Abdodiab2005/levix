@@ -1,7 +1,8 @@
 // file: frontend/src/context/I18nContext.tsx
 import type React from "react";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { type Language, translations } from "../i18n/translations";
+import { dirOf, normalizeLocale, resolveLocale } from "../i18n/locale";
+import { type Language, type MessageKey, translations } from "../i18n/translations";
 
 export interface I18nContextType {
   language: Language;
@@ -9,25 +10,26 @@ export interface I18nContextType {
   direction: "rtl" | "ltr";
   setLanguage: (lang: Language) => void;
   setTheme: (theme: "light" | "dark") => void;
-  t: (key: keyof (typeof translations)["en"], fallback?: string) => string;
+  t: (key: MessageKey, fallback?: string) => string;
 }
 
 export const I18nContext = createContext<I18nContextType | null>(null);
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() =>
-    document.documentElement.lang === "ar" ? "ar" : "en",
+    resolveLocale(document.documentElement.lang),
   );
   const [theme, setThemeState] = useState<"light" | "dark">(() =>
     document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark",
   );
 
-  const direction = language === "ar" ? "rtl" : "ltr";
+  const direction = dirOf(language);
 
   useEffect(() => {
     const onHostPrefs = (event: Event) => {
-      const next = (event as CustomEvent<{ language?: Language; theme?: "light" | "dark" }>).detail;
-      if (next?.language === "ar" || next?.language === "en") setLanguageState(next.language);
+      const next = (event as CustomEvent<{ language?: string; theme?: "light" | "dark" }>).detail;
+      const lang = normalizeLocale(next?.language);
+      if (lang) setLanguageState(lang);
       if (next?.theme === "light" || next?.theme === "dark") setThemeState(next.theme);
     };
     window.addEventListener("levix-ui-prefs", onHostPrefs);
@@ -51,7 +53,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (lang === language) return;
     setLanguageState(lang);
     document.documentElement.lang = lang;
-    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+    document.documentElement.dir = dirOf(lang);
     localStorage.setItem("levix_lang", lang);
     notifyHost(lang, theme, "language");
   };
@@ -65,9 +67,8 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const t = useMemo(() => {
-    return (key: keyof (typeof translations)["en"], fallback?: string): string => {
-      const dict = translations[language] || translations["en"];
-      return (dict as any)[key] ?? (translations["en"] as any)[key] ?? fallback ?? String(key);
+    return (key: MessageKey, fallback?: string): string => {
+      return translations[language]?.[key] ?? translations.en[key] ?? fallback ?? key;
     };
   }, [language]);
 

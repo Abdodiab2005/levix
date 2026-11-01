@@ -10,7 +10,7 @@ const {
   normalizeFeatureAction,
   policyFromFeatureAction,
 } = require("../../utils/moderationSummary.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t, tr } = require("../../utils/i18n.cjs");
 const { applyModerationPolicy } = require("../../services/moderationPolicy.cjs");
 
 const VALID_TYPES = ["image", "video", "sticker", "audio"];
@@ -18,14 +18,6 @@ const VALID_TYPES = ["image", "video", "sticker", "audio"];
 // --- The Main Command Logic ---
 const command = {
   name: "media",
-  description: {
-    en: "Controls which message types are allowed in the group.",
-    ar: "يتحكم في أنواع الرسائل المسموح بها في المجموعة.",
-  },
-  usage: {
-    en: "media [status]\nmedia <on|off>\nmedia action <DELETE|WARN|KICK>\nmedia <block|unblock> <image|video|sticker|audio>",
-    ar: "media [status]\nmedia <on|off>\nmedia action <DELETE|WARN|KICK>\nmedia <block|unblock> <image|video|sticker|audio>",
-  },
   chat: "group",
   userAdminRequired: true,
 
@@ -43,23 +35,20 @@ const command = {
       case "on":
         mediaConfig.enabled = true;
         await sock.sendMessage(groupId, {
-          text: tr("✅ Media control is on.", "✅ تم تفعيل نظام مراقبة الوسائط."),
+          text: t("bot.moderation.media.mediaControlIsOn"),
         });
         break;
       case "off":
         mediaConfig.enabled = false;
         await sock.sendMessage(groupId, {
-          text: tr("☑️ Media control is off.", "☑️ تم تعطيل نظام مراقبة الوسائط."),
+          text: t("bot.moderation.media.mediaControlIsOff"),
         });
         break;
       case "action": {
         const action = normalizeFeatureAction(args[1]);
         if (!action) {
           return await sock.sendMessage(groupId, {
-            text: tr(
-              "Invalid action. Available: `DELETE`, `WARN`, `KICK`",
-              "الإجراء غير صالح. الإجراءات المتاحة: `DELETE`, `WARN`, `KICK`",
-            ),
+            text: t("bot.moderation.media.invalidActionAvailableDeleteWarn"),
           });
         }
         try {
@@ -73,7 +62,7 @@ const command = {
           });
         }
         await sock.sendMessage(groupId, {
-          text: tr(`✅ Media action is now ${action}.`, `✅ تم تعيين إجراء الوسائط إلى ${action}.`),
+          text: t("bot.moderation.media.mediaActionIsNow", { action }),
         });
         return;
       }
@@ -81,16 +70,13 @@ const command = {
         const typeToBlock = args[1] ? args[1].toLowerCase() : "";
         if (!VALID_TYPES.includes(typeToBlock))
           return await sock.sendMessage(groupId, {
-            text: tr(
-              `Invalid type. Available types: ${VALID_TYPES.join(", ")}`,
-              `نوع غير صالح. الأنواع المتاحة: ${VALID_TYPES.join(", ")}`,
-            ),
+            text: t("bot.moderation.media.invalidTypeAvailableTypes", { types: VALID_TYPES.join(", ") }),
           });
         if (!mediaConfig.blocked_types.includes(typeToBlock)) {
           mediaConfig.blocked_types.push(typeToBlock);
         }
         await sock.sendMessage(groupId, {
-          text: tr(`✅ '${typeToBlock}' is now blocked.`, `✅ تم إضافة '${typeToBlock}' للأنواع الممنوعة.`),
+          text: t("bot.moderation.media.isNowBlocked", { typeToBlock }),
         });
         break;
       }
@@ -98,26 +84,20 @@ const command = {
         const typeToUnblock = args[1] ? args[1].toLowerCase() : "";
         if (!typeToUnblock)
           return await sock.sendMessage(groupId, {
-            text: tr("Say which type to unblock.", "يرجى تحديد نوع لإلغاء حظره."),
+            text: t("bot.moderation.media.sayWhichTypeToUnblock"),
           });
         mediaConfig.blocked_types = mediaConfig.blocked_types.filter((t) => t !== typeToUnblock);
         await sock.sendMessage(groupId, {
-          text: tr(
-            `☑️ '${typeToUnblock}' is no longer blocked.`,
-            `☑️ تم إزالة '${typeToUnblock}' من الأنواع الممنوعة.`,
-          ),
+          text: t("bot.moderation.media.isNoLongerBlocked", { typeToUnblock }),
         });
         break;
       }
       default: {
         // 'status'
-        const state = mediaConfig.enabled ? tr("on ✅", "مفعل ✅") : tr("off ☑️", "معطل ☑️");
-        const blocked = mediaConfig.blocked_types.join(", ") || tr("none", "لا يوجد");
+        const state = mediaConfig.enabled ? t("bot.moderation.media.on") : t("bot.moderation.media.off");
+        const blocked = mediaConfig.blocked_types.join(", ") || t("bot.moderation.media.none");
         const action = featureActionOf(settings, "media");
-        const statusReply = tr(
-          `*Media control:*\n\nState: ${state}\nAction: ${action}\nBlocked types: ${blocked}`,
-          `*حالة نظام مراقبة الوسائط:*\n\nالحالة: ${state}\nالإجراء: ${action}\nالأنواع الممنوعة: ${blocked}`,
-        );
+        const statusReply = t("bot.moderation.media.mediaControlStateActionBlocked", { state, action, blocked });
         await sock.sendMessage(groupId, { text: statusReply });
       }
     }

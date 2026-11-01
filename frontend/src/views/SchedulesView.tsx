@@ -47,7 +47,10 @@ import {
   usePagination,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
+import { intlLocale, pickLocalized } from "../i18n/locale";
+import type { Language, MessageKey } from "../i18n/translations";
 import type { ScheduleItem } from "../types";
+import { fill } from "../utils/fill";
 import {
   canHostUploadForm,
   type HostSource,
@@ -77,17 +80,19 @@ const WEEKDAY_KEYS = [
   "weekdaySat",
 ] as const;
 
-const WEEKDAY_FULL_EN = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
-const WEEKDAY_FULL_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+const WEEKDAY_FULL_KEYS = [
+  "schedulesWeekdaySunday",
+  "schedulesWeekdayMonday",
+  "schedulesWeekdayTuesday",
+  "schedulesWeekdayWednesday",
+  "schedulesWeekdayThursday",
+  "schedulesWeekdayFriday",
+  "schedulesWeekdaySaturday",
+] as const satisfies readonly MessageKey[];
+
 const HOURLY_INTERVALS = [1, 2, 3, 4, 6, 8, 12];
+
+type ScheduleCopy = (key: MessageKey) => string;
 
 function hasPhoneBookPicker() {
   const host = (window as { LevixHost?: { pickContact?: () => void } }).LevixHost;
@@ -134,19 +139,19 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
-function joinWeekdayNames(days: number[], ar: boolean) {
-  const names = days.map((day) => (ar ? WEEKDAY_FULL_AR[day] : WEEKDAY_FULL_EN[day]));
-  if (ar) return names.join(" و");
-  if (names.length === 1) return names[0];
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+function joinWeekdayNames(days: number[], t: ScheduleCopy) {
+  const names = days.map((day) => t(WEEKDAY_FULL_KEYS[day]));
+  if (names.length <= 1) return names[0] || "";
+  const and = t("schedulesWeekdayAnd");
+  if (names.length === 2) return `${names[0]}${and}${names[1]}`;
+  return `${names.slice(0, -1).join(t("schedulesWeekdaySep"))}${and}${names[names.length - 1]}`;
 }
 
-function arabicEveryHours(n: number) {
-  if (n === 1) return "كل ساعة";
-  if (n === 2) return "كل ساعتين";
-  if (n >= 3 && n <= 10) return `كل ${n} ساعات`;
-  return `كل ${n} ساعة`;
+function scheduleWhen(item: ScheduleItem, language: Language): string {
+  return pickLocalized(
+    { en: item.when || undefined, ar: item.whenAr || undefined },
+    language,
+  );
 }
 
 function mediaKindLabel(
@@ -176,41 +181,31 @@ function previewRecurrence(
   everyHours: number,
   minute: number,
   timezone: string,
-  ar: boolean,
+  t: ScheduleCopy,
 ): string | null {
   const timeOk = /^\d{1,2}:\d{2}$/.test(time);
   const zone = timezone || "UTC";
   if (kind === "hourly") {
     if (!Number.isInteger(everyHours) || !HOURLY_INTERVALS.includes(everyHours)) return null;
     if (!Number.isInteger(minute) || minute < 0 || minute > 59) return null;
-    if (ar) {
-      const body = `${arabicEveryHours(everyHours)} عند الدقيقة ${minute}`;
-      return `${body} (${zone})`;
-    }
-    const body =
-      everyHours === 1
-        ? `Every hour at minute ${minute}`
-        : `Every ${everyHours} hours at minute ${minute}`;
-    return `${body} (${zone})`;
+    if (everyHours === 1) return fill(t("schedulesHourlyOne"), { minute, zone });
+    if (everyHours === 2) return fill(t("schedulesHourlyTwo"), { minute, zone });
+    if (everyHours <= 10) return fill(t("schedulesHourlyFew"), { hours: everyHours, minute, zone });
+    return fill(t("schedulesHourlyMany"), { hours: everyHours, minute, zone });
   }
   if (!timeOk) return null;
   const [h, m] = time.split(":").map(Number);
   if (h > 23 || m > 59) return null;
   const hhmm = `${pad2(h)}:${pad2(m)}`;
-  if (kind === "daily") {
-    return ar ? `يومياً الساعة ${hhmm} (${zone})` : `Daily at ${hhmm} (${zone})`;
-  }
+  if (kind === "daily") return fill(t("schedulesDaily"), { time: hhmm, zone });
   if (kind === "weekly") {
     const days = [...new Set(weekdays.filter((d) => d >= 0 && d <= 6))].sort((a, b) => a - b);
     if (!days.length) return null;
-    const names = joinWeekdayNames(days, ar);
-    return ar ? `كل يوم ${names} الساعة ${hhmm} (${zone})` : `Every ${names} at ${hhmm} (${zone})`;
+    return fill(t("schedulesWeekly"), { days: joinWeekdayNames(days, t), time: hhmm, zone });
   }
   if (kind === "monthly") {
     if (!Number.isInteger(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > 31) return null;
-    return ar
-      ? `كل شهر في اليوم ${dayOfMonth} الساعة ${hhmm} (${zone})`
-      : `Every month on day ${dayOfMonth} at ${hhmm} (${zone})`;
+    return fill(t("schedulesMonthly"), { day: dayOfMonth, time: hhmm, zone });
   }
   return null;
 }
@@ -335,7 +330,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const MEDIA_MAX_BYTES = 20 * 1024 * 1024;
   const MEDIA_MAX_MB = 20;
   const isLimitReached = schedules.length >= MAX_SCHEDULES;
-  const ar = language === "ar";
 
   const recurrencePreview = useMemo(
     () =>
@@ -347,9 +341,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         everyHours,
         hourlyMinute,
         timezone,
-        ar,
+        t,
       ),
-    [repeatKind, sendTime, weekdays, dayOfMonth, everyHours, hourlyMinute, timezone, ar],
+    [repeatKind, sendTime, weekdays, dayOfMonth, everyHours, hourlyMinute, timezone, t],
   );
 
   const loadSchedules = async () => {
@@ -425,17 +419,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   const handleRetry = async (id: string) => {
     if (!isConnected) {
-      toast(
-        language === "ar"
-          ? "واتساب غير متصل، يرجى بدء الاتصال أولاً"
-          : "WhatsApp is disconnected, please connect first",
-        "warning",
-      );
+      toast(t("schedulesRetryDisconnected"), "warning");
       return;
     }
     try {
       await api.retrySchedule(id);
-      toast(language === "ar" ? "تمت إعادة محاولة الإرسال" : "Delivery retry triggered", "info");
+      toast(t("schedulesRetryTriggered"), "info");
       loadSchedules();
     } catch (err: any) {
       toast(err.message, "error");
@@ -445,12 +434,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const handlePickPhoneContact = async () => {
     const host = (window as { LevixHost?: { pickContact?: () => void } }).LevixHost;
     if (!host?.pickContact) {
-      toast(
-        language === "ar"
-          ? "دليل الهاتف متاح من تطبيق أندرويد فقط"
-          : "Phone book is available in the Android app",
-        "info",
-      );
+      toast(t("schedulesPhoneBookAndroid"), "info");
       return;
     }
     const picked = await new Promise<{ name: string; phone: string } | null>((resolve) => {
@@ -474,12 +458,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     if (!picked) return;
     const jid = digitsToWhatsAppJid(picked.phone);
     if (!jid) {
-      toast(
-        language === "ar"
-          ? "الرقم غير صالح. استخدم رقمًا مع كود الدولة."
-          : "That number is not valid. Use a number with country code.",
-        "error",
-      );
+      toast(t("schedulesInvalidNumber"), "error");
       return;
     }
     const phone = `+${jid.split("@")[0]}`;
@@ -531,12 +510,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   const handleOpenAddModal = () => {
     if (!isConnected) {
-      toast(
-        language === "ar"
-          ? "يلزم اتصال واتساب لجدولة الرسائل"
-          : "Active WhatsApp connection is required to schedule messages",
-        "warning",
-      );
+      toast(t("schedulesNeedConnection"), "warning");
       return;
     }
     if (isLimitReached) {
@@ -556,29 +530,16 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   const handleCreateSchedule = async () => {
     if (!selectedRecipient) {
-      toast(
-        language === "ar" ? "يرجى اختيار المحادثة المستهدفة" : "Please select a recipient chat",
-        "warning",
-      );
+      toast(t("schedulesSelectRecipient"), "warning");
       return;
     }
     if (!message.trim() && !scheduleMedia && !scheduleMediaHost) {
-      toast(
-        language === "ar"
-          ? "يرجى كتابة نص الرسالة أو إرفاق ملف"
-          : "Please write the message text or attach a file",
-        "warning",
-      );
+      toast(t("schedulesMessageOrFile"), "warning");
       return;
     }
 
     if (scheduleType === "once" && (!oneOffTime || new Date(oneOffTime).getTime() <= Date.now())) {
-      toast(
-        language === "ar"
-          ? "يرجى تحديد وقت وتاريخ مستقبلي صالح"
-          : "Please select a valid future date and time",
-        "warning",
-      );
+      toast(t("schedulesFutureTime"), "warning");
       return;
     }
 
@@ -720,17 +681,15 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-bold text-warn">
-                {language === "ar" ? "واتساب غير متصل حالياً" : "WhatsApp is Disconnected"}
+                {t("schedulesDisconnectedTitle")}
               </h3>
               <p className="text-xs sm:text-sm text-text-main/80 mt-0.5">
-                {language === "ar"
-                  ? "يلزم وجود اتصال نشط بواتساب لجدولة الرسائل وإرسالها واختيار جهات الاتصال."
-                  : "An active WhatsApp connection is required to schedule messages, fetch chats, and deliver automated jobs."}
+                {t("schedulesDisconnectedBody")}
               </p>
             </div>
           </div>
           <Button variant="primary" className="shrink-0" onClick={() => onNavigate?.("connection")}>
-            {language === "ar" ? "الذهاب للاتصال" : "Go to Connection"}
+            {t("schedulesGoToConnection")}
           </Button>
         </div>
       )}
@@ -765,9 +724,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               disabled={isLimitReached || !isConnected}
             >
               {!isConnected
-                ? language === "ar"
-                  ? "يلزم اتصال واتساب"
-                  : "Connection Required"
+                ? t("schedulesConnectionRequired")
                 : isLimitReached
                   ? t("limitReached")
                   : t("scheduleNewMsg")}
@@ -937,7 +894,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                         )}
                       </bdi>
                       <p className="mt-0.5 truncate text-xs text-muted" dir="auto">
-                        {ar ? s.whenAr || s.when : s.when || s.cronString || "—"}
+                        {scheduleWhen(s, language) || s.cronString || "—"}
                       </p>
                     </div>
                   </div>
@@ -1057,7 +1014,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                       </td>
                       <td className="px-4 py-4 text-xs text-muted">
                         <span dir="auto">
-                          {ar ? s.whenAr || s.when : s.when || s.cronString || "—"}
+                          {scheduleWhen(s, language) || s.cronString || "—"}
                         </span>
                       </td>
                       <td className="px-4 py-4">
@@ -1535,7 +1492,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             )}
             <DetailRow label={t("thSchedule")}>
               <span dir="auto">
-                {ar ? detailSchedule.whenAr || detailSchedule.when : detailSchedule.when}
+                {scheduleWhen(detailSchedule, language)}
               </span>
             </DetailRow>
             <DetailRow label={t("thType")}>
@@ -1568,7 +1525,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             {detailSchedule.lastRunAt && (
               <DetailRow label={t("detailLastRun")}>
                 {new Date(detailSchedule.lastRunAt).toLocaleString(
-                  language === "ar" ? "ar-EG" : "en-GB",
+                  intlLocale(language, { ar: "ar-EG", en: "en-GB" }),
                 )}
               </DetailRow>
             )}
@@ -1582,7 +1539,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             {detailSchedule.createdAt && (
               <DetailRow label={t("detailCreated")}>
                 {new Date(detailSchedule.createdAt).toLocaleString(
-                  language === "ar" ? "ar-EG" : "en-GB",
+                  intlLocale(language, { ar: "ar-EG", en: "en-GB" }),
                 )}
               </DetailRow>
             )}

@@ -1,6 +1,6 @@
 const { getGroupSettings } = require("../../utils/storage.cjs");
 const { buildModerationSummary } = require("../../utils/moderationSummary.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t, tr } = require("../../utils/i18n.cjs");
 const {
   applyModerationPolicy,
   applyModerationPreset,
@@ -66,16 +66,13 @@ function assignPath(patch, path, value) {
 function allowedReply(sock, groupId, allowed) {
   const list = allowed.join(", ");
   return sock.sendMessage(groupId, {
-    text: tr(`Invalid value. Available: ${list}`, `قيمة غير صالحة. المتاح: ${list}`),
+    text: t("bot.moderation.policy.invalidValueAvailable", { list }),
   });
 }
 
 function rangeReply(sock, groupId, min, max) {
   return sock.sendMessage(groupId, {
-    text: tr(
-      `Give a whole number from ${min} to ${max}.`,
-      `يرجى تحديد عدد صحيح من ${min} إلى ${max}.`,
-    ),
+    text: t("bot.moderation.policy.giveAWholeNumberFrom", { min, max }),
   });
 }
 
@@ -136,14 +133,6 @@ function parsePatch(field, raw) {
 
 module.exports = {
   name: "policy",
-  description: {
-    en: "Shows and changes this group's moderation policy.",
-    ar: "يعرض سياسة إشراف المجموعة ويغيّرها.",
-  },
-  usage: {
-    en: "policy\npolicy set <field> <value>\npolicy reset",
-    ar: "policy\npolicy set <حقل> <قيمة>\npolicy reset",
-  },
   chat: "group",
   userAdminRequired: true,
 
@@ -163,19 +152,13 @@ module.exports = {
         return policyErrorReply(sock, groupId, error);
       }
       return sock.sendMessage(groupId, {
-        text: tr(
-          "✅ Moderation policy reset to standard.",
-          "✅ تمت إعادة سياسة الإشراف إلى الوضع القياسي.",
-        ),
+        text: t("bot.moderation.policy.moderationPolicyResetToStandard"),
       });
     }
 
     if (sub !== "set") {
       return sock.sendMessage(groupId, {
-        text: tr(
-          "Wrong format. Use:\n`!group policy`\n`!group policy set <field> <value>`\n`!group policy reset`",
-          "صيغة غير صحيحة. استخدم:\n`!group policy`\n`!group policy set <field> <value>`\n`!group policy reset`",
-        ),
+        text: t("bot.moderation.policy.wrongFormatUseGroupPolicy"),
       });
     }
 
@@ -183,10 +166,7 @@ module.exports = {
     const raw = args.slice(2).join(" ").trim();
     if (!field || !raw) {
       return sock.sendMessage(groupId, {
-        text: tr(
-          `Name a field and a value. Available: ${FIELD_LIST.join(", ")}`,
-          `حدد الحقل والقيمة. المتاح: ${FIELD_LIST.join(", ")}`,
-        ),
+        text: t("bot.moderation.policy.nameAFieldAndA", { fields: FIELD_LIST.join(", ") }),
       });
     }
 
@@ -195,10 +175,7 @@ module.exports = {
     if (parsed.error === "range") return rangeReply(sock, groupId, parsed.min, parsed.max);
     if (parsed.error) {
       return sock.sendMessage(groupId, {
-        text: tr(
-          `Unknown field. Available: ${FIELD_LIST.join(", ")}`,
-          `حقل غير معروف. المتاح: ${FIELD_LIST.join(", ")}`,
-        ),
+        text: t("bot.moderation.policy.unknownFieldAvailable", { fields: FIELD_LIST.join(", ") }),
       });
     }
 
@@ -209,7 +186,7 @@ module.exports = {
       return policyErrorReply(sock, groupId, error);
     }
     return sock.sendMessage(groupId, {
-      text: tr(`✅ ${field} is now ${raw}.`, `✅ تم تعيين ${field} إلى ${raw}.`),
+      text: t("bot.moderation.policy.isNow", { field, raw }),
     });
   },
 };

@@ -541,14 +541,6 @@ async function execute(sock, msg, args) {
 module.exports = {
   name: "translate",
   aliases: ["tr", "ترجم", "ترجمة"],
-  description: {
-    en: "Translates text. Arabic ↔ English by default, or into a chosen language. AI (default) or Google Translate.",
-    ar: "يترجم النص. العربية ↔ الإنجليزية تلقائياً، أو إلى لغة تختارها. المحرك الافتراضي الذكاء الاصطناعي أو Google Translate.",
-  },
-  usage: {
-    en: "translate <text>\ntranslate <language> <text>\ntranslate google <text>\ntranslate ai <text>\ntranslate summary <text>\ntranslate explain <text>\ntranslate detect [text]\ntranslate formal <text>\ntranslate casual <text>\ntranslate (reply to a message)",
-    ar: "translate <النص>\ntranslate <اللغة> <النص>\ntranslate google <النص>\ntranslate ai <النص>\ntranslate summary <النص>\ntranslate explain <النص>\ntranslate detect [النص]\ntranslate formal <النص>\ntranslate casual <النص>\ntranslate (رد على رسالة)",
-  },
   chat: "all",
   neutralArgs: true,
   keywords: SUBCOMMAND_KEYWORDS,

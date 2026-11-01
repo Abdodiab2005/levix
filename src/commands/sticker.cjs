@@ -19,14 +19,6 @@ const toimage = require("./toimage.cjs");
 module.exports = {
   name: "sticker",
   aliases: ["s", "ملصق", "tosticker"],
-  description: {
-    en: "Create a sticker from an image, GIF or video.",
-    ar: "ينشئ ملصقًا من صورة أو صورة متحركة أو فيديو.",
-  },
-  usage: {
-    en: "sticker [crop] [nobg] (attach an image, GIF or video)\nsticker [crop] [nobg] (reply to media)\nsticker (reply to a sticker for PNG)",
-    ar: "sticker [قص] [بدون-خلفية] (أرفق صورة أو صورة متحركة أو فيديو)\nsticker [قص] [بدون-خلفية] (رد على وسائط)\nsticker (رد على ملصق لصورة PNG)",
-  },
   keywords: ["crop", "قص", "nobg", "بدون-خلفية"],
   chat: "all",
   async execute(sock, msg, args = []) {
