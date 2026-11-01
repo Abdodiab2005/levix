@@ -155,6 +155,59 @@ section("validator");
 
 {
   const catalog = sample();
+  catalog.htmlKeys = ["trust"];
+  catalog.bundles.en.gateway.trust = '<span class="mark">Private</span> workspace';
+  catalog.bundles.ar.gateway.trust =
+    '<span class="mark" onmouseover="alert(1)">x</span> workspace';
+  const { errors } = validate(catalog);
+  ok(
+    "html key rejects an extra onmouseover",
+    problemHas(errors, "ar/gateway", "trust", 'attribute "onmouseover" is not allowed'),
+  );
+}
+
+{
+  const catalog = sample();
+  catalog.htmlKeys = ["trust"];
+  catalog.bundles.en.gateway.trust = '<span class="mark">Private</span> workspace';
+  catalog.bundles.ar.gateway.trust = '<span class="other">خاص</span> workspace';
+  const { errors } = validate(catalog);
+  ok(
+    "html key rejects a changed class",
+    problemHas(errors, "ar/gateway", "trust", "attributes are not in the English value"),
+  );
+}
+
+{
+  const catalog = sample();
+  catalog.htmlKeys = ["trust"];
+  catalog.bundles.en.gateway.trust = '<span class="mark">Private</span> workspace';
+  catalog.bundles.ar.gateway.trust = '<span class="mark">خاص</span> مساحة';
+  const { errors } = validate(catalog);
+  ok(
+    "html key allows the same tags with translated text",
+    errors.length === 0,
+    errors.map((item) => item.message).join("; "),
+  );
+}
+
+{
+  // A missing tag is allowed. Each tag that is present must still be an exact
+  // English tag. The translation may drop one.
+  const catalog = sample();
+  catalog.htmlKeys = ["trust"];
+  catalog.bundles.en.gateway.trust = '<span class="mark">Private</span> workspace';
+  catalog.bundles.ar.gateway.trust = "مساحة عمل خاصة";
+  const { errors } = validate(catalog);
+  ok(
+    "html key allows a missing tag",
+    errors.length === 0,
+    errors.map((item) => item.message).join("; "),
+  );
+}
+
+{
+  const catalog = sample();
   catalog.bundles.en.dashboard.bye = "Bye";
   catalog.bundles.ar.dashboard.bye = "Ma salama";
   catalog.bundles["pt-BR"] = { dashboard: { hello: "Ola {name}" } };

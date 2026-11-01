@@ -34,11 +34,14 @@ function boot(options = {}) {
     language: options.navigatorLanguage || "",
     languages,
   };
+  const events = [];
   const window = {
     addEventListener(name, fn) {
       listeners[name] = fn;
     },
-    dispatchEvent() {},
+    dispatchEvent(event) {
+      events.push(event);
+    },
   };
   if (options.host !== false) {
     window.LevixHost = {
@@ -47,8 +50,12 @@ function boot(options = {}) {
       },
     };
   }
-  runInNewContext(source, { document, window, localStorage, navigator });
-  return { root, listeners, store };
+  function CustomEvent(type, init) {
+    this.type = type;
+    this.detail = init && init.detail;
+  }
+  runInNewContext(source, { document, window, localStorage, navigator, CustomEvent });
+  return { root, listeners, store, events };
 }
 
 section("host, saved value, then the browser");
@@ -121,6 +128,19 @@ section("unknown values");
   booted.listeners.storage({ key: "levix_theme", newValue: "dark" });
   equal("a theme event keeps the language", booted.root.lang, "ar");
   equal("a theme event keeps rtl", booted.root.dir, "rtl");
+}
+
+{
+  const booted = boot({ host: false, navigatorLanguage: "en" });
+  booted.listeners.storage({ key: "levix_lang", newValue: "es-419" });
+  const event = booted.events[0];
+  equal("storage es-419 sets lang", booted.root.lang, "es-419");
+  equal("storage es-419 sets ltr", booted.root.dir, "ltr");
+  equal("storage es-419 dispatches one event", booted.events.length, 1);
+  equal("storage es-419 event is levix-ui-prefs", event && event.type, "levix-ui-prefs");
+  equal("storage es-419 event language", event && event.detail && event.detail.language, "es-419");
+  booted.listeners.storage({ key: "levix_lang", newValue: "zz" });
+  equal("unknown storage dispatches nothing", booted.events.length, 1);
 }
 
 {
