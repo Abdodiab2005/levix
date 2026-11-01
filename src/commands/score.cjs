@@ -93,14 +93,6 @@ function getQuotedInfo(msg) {
 module.exports = {
   name: "score",
   aliases: ["نقاط", "احصائية"],
-  description: {
-    en: "Shows how many times a message has been forwarded.",
-    ar: "يعرض عدد مرات إعادة توجيه رسالة معيّنة.",
-  },
-  usage: {
-    en: "score   (reply to the message)",
-    ar: "score   (رد على الرسالة)",
-  },
   chat: "all",
 
   async execute(sock, msg, args, body, groupMetadata) {

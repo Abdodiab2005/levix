@@ -1,18 +1,10 @@
 const { getGroupSettings, saveGroupSettings } = require("../../utils/storage.cjs");
 const { featureActionOf, normalizeFeatureAction } = require("../../utils/moderationSummary.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t, tr } = require("../../utils/i18n.cjs");
 const { applyModerationPolicy } = require("../../services/moderationPolicy.cjs");
 
 module.exports = {
   name: "antispam",
-  description: {
-    en: "Controls anti-spam in the group.",
-    ar: "يتحكم في مكافحة الإزعاج في المجموعة.",
-  },
-  usage: {
-    en: "antispam [status]\nantispam <on|off>\nantispam action <WARN|KICK>\nantispam window <seconds>\nantispam count <number>",
-    ar: "antispam [status]\nantispam <on|off>\nantispam action <WARN|KICK>\nantispam window <ثوان>\nantispam count <عدد>",
-  },
   chat: "group",
   userAdminRequired: true,
 
@@ -29,23 +21,20 @@ module.exports = {
       case "on":
         spam.enabled = true;
         await sock.sendMessage(groupId, {
-          text: tr("✅ Anti-spam is on.", "✅ تم تفعيل مكافحة الإزعاج."),
+          text: t("bot.moderation.antispam.antiSpamIsOn"),
         });
         break;
       case "off":
         spam.enabled = false;
         await sock.sendMessage(groupId, {
-          text: tr("☑️ Anti-spam is off.", "☑️ تم تعطيل مكافحة الإزعاج."),
+          text: t("bot.moderation.antispam.antiSpamIsOff"),
         });
         break;
       case "action": {
         const action = normalizeFeatureAction(args[1], { allowDelete: false });
         if (!action) {
           return await sock.sendMessage(groupId, {
-            text: tr(
-              "Invalid action. Available: `WARN`, `KICK`",
-              "الإجراء غير صالح. الإجراءات المتاحة: `WARN`, `KICK`",
-            ),
+            text: t("bot.moderation.antispam.invalidActionAvailableWarnKick"),
           });
         }
         try {
@@ -59,7 +48,7 @@ module.exports = {
           });
         }
         await sock.sendMessage(groupId, {
-          text: tr(`✅ Anti-spam action is now ${action}.`, `✅ تم تعيين إجراء مكافحة الإزعاج إلى ${action}.`),
+          text: t("bot.moderation.antispam.antiSpamActionIsNow", { action }),
         });
         return;
       }
@@ -67,15 +56,12 @@ module.exports = {
         const seconds = parseInt(args[1], 10);
         if (!Number.isFinite(seconds) || seconds < 1 || seconds > 600) {
           return await sock.sendMessage(groupId, {
-            text: tr(
-              "Give a window between 1 and 600 seconds.",
-              "يرجى تحديد مدة بين 1 و 600 ثانية.",
-            ),
+            text: t("bot.moderation.antispam.giveAWindowBetweenAnd"),
           });
         }
         spam.time_window = seconds;
         await sock.sendMessage(groupId, {
-          text: tr(`✅ Anti-spam window is now ${seconds}s.`, `✅ أصبحت مدة الرصد ${seconds} ثانية.`),
+          text: t("bot.moderation.antispam.antiSpamWindowIsNow", { seconds }),
         });
         break;
       }
@@ -83,26 +69,25 @@ module.exports = {
         const count = parseInt(args[1], 10);
         if (!Number.isFinite(count) || count < 2 || count > 100) {
           return await sock.sendMessage(groupId, {
-            text: tr(
-              "Give a message count between 2 and 100.",
-              "يرجى تحديد عدد رسائل بين 2 و 100.",
-            ),
+            text: t("bot.moderation.antispam.giveAMessageCountBetween"),
           });
         }
         spam.message_count = count;
         await sock.sendMessage(groupId, {
-          text: tr(`✅ Anti-spam limit is now ${count} messages.`, `✅ أصبح حد الرسائل ${count}.`),
+          text: t("bot.moderation.antispam.antiSpamLimitIsNow", { count }),
         });
         break;
       }
       default: {
-        const state = spam.enabled ? tr("on ✅", "مفعل ✅") : tr("off ☑️", "معطل ☑️");
+        const state = spam.enabled ? t("bot.moderation.antispam.on") : t("bot.moderation.antispam.off");
         const action = featureActionOf(settings, "antispam");
         await sock.sendMessage(groupId, {
-          text: tr(
-            `*Anti-spam:*\n\nState: ${state}\nWindow: ${spam.time_window ?? 10}s\nCount: ${spam.message_count ?? 5}\nAction: ${action}`,
-            `*مكافحة الإزعاج:*\n\nالحالة: ${state}\nالمدة: ${spam.time_window ?? 10}ث\nالعدد: ${spam.message_count ?? 5}\nالإجراء: ${action}`,
-          ),
+          text: t("bot.moderation.antispam.antiSpamStateWindowS", {
+            state,
+            timeWindow: spam.time_window ?? 10,
+            messageCount: spam.message_count ?? 5,
+            action,
+          }),
         });
         return;
       }

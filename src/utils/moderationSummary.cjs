@@ -1,7 +1,7 @@
 // One builder for the "Active moderation" block. !rules, welcome, and the
 // panel preview all call this so the wording cannot drift.
 
-const { tr, withLang } = require("./i18n.cjs");
+const { t, withLang } = require("./i18n.cjs");
 const { resolveModerationPolicy, policyFieldVisibility } = require("../services/moderationPolicy.cjs");
 
 const MEDIA_TYPES = ["image", "video", "sticker", "audio"];
@@ -10,13 +10,13 @@ const DELETE_WARN_KICK = ["DELETE", "WARN", "KICK"];
 function mediaLabel(type) {
   switch (type) {
     case "image":
-      return tr("photos", "الصور");
+      return t("bot.moderation.moderationSummary.photos");
     case "video":
-      return tr("videos", "الفيديو");
+      return t("bot.moderation.moderationSummary.videos");
     case "audio":
-      return tr("voice notes", "الصوتيات");
+      return t("bot.moderation.moderationSummary.voiceNotes");
     case "sticker":
-      return tr("stickers", "الملصقات");
+      return t("bot.moderation.moderationSummary.stickers");
     default:
       return type;
   }
@@ -27,15 +27,12 @@ function linkModeLine(antilink) {
   const allowed = Array.isArray(antilink?.allowed_domains) ? antilink.allowed_domains.length : 0;
   const blocked = Array.isArray(antilink?.blocked_domains) ? antilink.blocked_domains.length : 0;
   if (mode === "WHITELIST") {
-    return tr(
-      `allow listed domains only (${allowed})`,
-      `السماح بالنطاقات المدرجة فقط (${allowed})`,
-    );
+    return t("bot.moderation.moderationSummary.allowListedDomainsOnly", { allowed });
   }
   if (mode === "BLACKLIST") {
-    return tr(`block listed domains (${blocked})`, `حظر النطاقات المدرجة (${blocked})`);
+    return t("bot.moderation.moderationSummary.blockListedDomains", { blocked });
   }
-  return tr("block all links", "حظر كل الروابط");
+  return t("bot.moderation.moderationSummary.blockAllLinks");
 }
 
 function forbiddenInfo(settings) {
@@ -91,21 +88,21 @@ function policyFromFeatureAction(action) {
 }
 
 function deleteWarnKickLabel(action) {
-  if (action === "DELETE") return tr("delete only", "حذف فقط");
-  if (action === "KICK") return tr("delete and remove the member", "حذف وطرد العضو");
-  return tr("delete and warn", "حذف وإنذار");
+  if (action === "DELETE") return t("bot.moderation.moderationSummary.deleteOnly");
+  if (action === "KICK") return t("bot.moderation.moderationSummary.deleteAndRemoveTheMember");
+  return t("bot.moderation.moderationSummary.deleteAndWarn");
 }
 
 function renderModerationSummary(settings = {}) {
-  const lines = [tr("*Active moderation*", "*الإشراف المفعّل*")];
+  const lines = [t("bot.moderation.moderationSummary.activeModeration")];
 
   if (settings.antilink?.enabled) {
     const action = deleteWarnKickLabel(featureActionOf(settings, "antilink"));
     lines.push(
-      tr(
-        `• Anti-link: on — ${linkModeLine(settings.antilink)}. Action: ${action}.`,
-        `• منع الروابط: مفعّل — ${linkModeLine(settings.antilink)}. الإجراء: ${action}.`,
-      ),
+      t("bot.moderation.moderationSummary.antiLinkOnAction", {
+        linkMode: linkModeLine(settings.antilink),
+        action,
+      }),
     );
   }
 
@@ -115,13 +112,10 @@ function renderModerationSummary(settings = {}) {
     const action = featureActionOf(settings, "antispam");
     const actionText =
       action === "KICK"
-        ? tr("remove the member", "طرد العضو")
-        : tr("warn", "إنذار");
+        ? t("bot.moderation.moderationSummary.removeTheMember")
+        : t("bot.moderation.moderationSummary.warn");
     lines.push(
-      tr(
-        `• Anti-spam: on — ${count} messages / ${windowSec}s. Action: ${actionText}.`,
-        `• مكافحة الإزعاج: مفعّلة — ${count} رسائل / ${windowSec}ث. الإجراء: ${actionText}.`,
-      ),
+      t("bot.moderation.moderationSummary.antiSpamOnMessagesS", { count, windowSec, actionText }),
     );
   }
 
@@ -129,10 +123,10 @@ function renderModerationSummary(settings = {}) {
     MEDIA_TYPES.includes(type),
   );
   if (settings.media_control?.enabled && blocked.length) {
-    const names = blocked.map(mediaLabel).join(tr(", ", "، "));
+    const names = blocked.map(mediaLabel).join(t("bot.moderation.moderationSummary.mediaListSeparator"));
     const action = deleteWarnKickLabel(featureActionOf(settings, "media"));
     lines.push(
-      tr(`• Media: ${names}. Action: ${action}.`, `• الوسائط: ${names}. الإجراء: ${action}.`),
+      t("bot.moderation.moderationSummary.mediaAction", { names, action }),
     );
   }
 
@@ -140,61 +134,43 @@ function renderModerationSummary(settings = {}) {
   if (words.enabled) {
     const action = deleteWarnKickLabel(featureActionOf(settings, "forbidden"));
     lines.push(
-      tr(
-        `• Forbidden words: ${words.count}. Action: ${action}.`,
-        `• الكلمات الممنوعة: ${words.count}. الإجراء: ${action}.`,
-      ),
+      t("bot.moderation.moderationSummary.forbiddenWordsAction", { count: words.count, action }),
     );
   }
 
   const warn = warnConfigOf(settings);
   const atLimit =
     warn.action === "FLAG"
-      ? tr("flag for admin review", "إبلاغ المشرفين للمراجعة")
-      : tr("remove the member", "طرد العضو");
+      ? t("bot.moderation.moderationSummary.flagForAdminReview")
+      : t("bot.moderation.moderationSummary.removeTheMember");
   lines.push(
-    tr(
-      `• Warn limit: ${warn.max_warnings}. At the limit: ${atLimit}.`,
-      `• حد الإنذارات: ${warn.max_warnings}. عند بلوغ الحد: ${atLimit}.`,
-    ),
+    t("bot.moderation.moderationSummary.warnLimitAtTheLimit", { maxWarnings: warn.max_warnings, atLimit }),
   );
 
   const policy = resolveModerationPolicy(settings);
   const visibility = policyFieldVisibility(policy);
   if (policy.decay.mode === "expire") {
     lines.push(
-      tr(
-        `• Warnings drop after ${policy.decay.days} days.`,
-        `• تسقط الإنذارات بعد ${policy.decay.days} يومًا.`,
-      ),
+      t("bot.moderation.moderationSummary.warningsDropAfterDays", { days: policy.decay.days }),
     );
   } else if (policy.decay.mode === "step") {
     lines.push(
-      tr(
-        `• Warnings lose one point every ${policy.decay.days} days.`,
-        `• تفقد الإنذارات نقطة كل ${policy.decay.days} يومًا.`,
-      ),
+      t("bot.moderation.moderationSummary.warningsLoseOnePointEvery", { days: policy.decay.days }),
     );
   }
   if (visibility["flag.notify"]) {
     const notify =
       policy.flag.notify === "silent"
-        ? tr("silent", "بصمت")
-        : tr("in the group", "في المجموعة");
+        ? t("bot.moderation.moderationSummary.silent")
+        : t("bot.moderation.moderationSummary.inTheGroup");
     lines.push(
-      tr(`• Flag notice: ${notify}.`, `• إشعار الإبلاغ: ${notify}.`),
+      t("bot.moderation.moderationSummary.flagNotice", { notify }),
     );
   }
   lines.push(
     policy.membership === "keep"
-      ? tr(
-          "• Leaving or being removed keeps warnings.",
-          "• المغادرة أو الإزالة تبقي الإنذارات.",
-        )
-      : tr(
-          "• Leaving or being removed clears warnings.",
-          "• المغادرة أو الإزالة تمسح الإنذارات.",
-        ),
+      ? t("bot.moderation.moderationSummary.leavingOrBeingRemovedKeeps")
+      : t("bot.moderation.moderationSummary.leavingOrBeingRemovedClears"),
   );
 
   return lines.join("\n");

@@ -5,14 +5,6 @@ const normalizeJid = require("../../utils/normalizeJid.esm.js").default;
 
 module.exports = {
   name: "add",
-  description: {
-    en: "Adds a member to the group, or sends an invite if their privacy settings block it.",
-    ar: "يضيف عضوًا إلى المجموعة، أو يرسل له دعوة إذا منعت إعدادات الخصوصية إضافته.",
-  },
-  usage: {
-    en: "add [admin] <phone number>",
-    ar: "add [admin] <رقم الهاتف>",
-  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true,

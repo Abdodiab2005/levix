@@ -233,14 +233,6 @@ function sendInvalid(sock, chatId) {
 
 module.exports = {
   name: "shortlink",
-  description: {
-    en: "Shortens up to 5 links with is.gd, falling back to v.gd. Reads a URL from the command or a replied message.",
-    ar: "يختصر حتى 5 روابط باستخدام is.gd مع التحويل إلى v.gd عند الحاجة، من الأمر أو من رسالة موجّه لها الرد.",
-  },
-  usage: {
-    en: "shortlink <url> | reply to a message containing a link",
-    ar: "shortlink <الرابط> | اعمل رد على رسالة تحتوي رابطًا",
-  },
   chat: "all",
   neutralArgs: true, // a URL is not a language
 

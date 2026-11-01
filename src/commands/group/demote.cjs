@@ -9,14 +9,6 @@ const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "demote",
-  description: {
-    en: "Demotes an admin to a regular member.",
-    ar: "يحوّل مشرفًا إلى عضو عادي.",
-  },
-  usage: {
-    en: "demote @member",
-    ar: "demote @عضو",
-  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true,

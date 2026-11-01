@@ -420,6 +420,8 @@ section("execute: reply input, google free, official key, AI-only fallback");
 
 section("command metadata");
 
+require("./src/utils/commandDocs.cjs").attachCommandDocs(translate);
+
 equal("name", translate.name, "translate");
 ok("tr alias", translate.aliases.includes("tr"));
 ok("ترجم alias", translate.aliases.includes("ترجم"));

@@ -5,14 +5,6 @@ const { tr } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "welcome",
-  description: {
-    en: "Manages the group's welcome messages.",
-    ar: "يدير رسائل الترحيب في المجموعة.",
-  },
-  usage: {
-    en: "welcome [status]\nwelcome <on|off>\nwelcome add <welcome text>\nwelcome list\nwelcome delete <number>",
-    ar: "welcome [status]\nwelcome <on|off>\nwelcome add <نص الترحيب>\nwelcome list\nwelcome delete <رقم>",
-  },
   chat: "group",
   userAdminRequired: true,
 

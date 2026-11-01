@@ -45,14 +45,6 @@ function buildPrayerUrl(city, { now = new Date(), timeZone = settings.get("bot_t
 
 module.exports = {
   name: "prayer",
-  description: {
-    en: "Shows prayer times for a city.",
-    ar: "يعرض مواقيت الصلاة لمدينة معيّنة.",
-  },
-  usage: {
-    en: "prayer <city in English>",
-    ar: "prayer <اسم المدينة بالإنجليزية>",
-  },
   chat: "all", // This command can be used anywhere
   // The city is asked for in English whatever language you speak, so it says
   // nothing about which language to answer in (see utils/i18n.cjs).

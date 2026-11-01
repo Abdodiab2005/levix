@@ -3,11 +3,13 @@
 // Every failure a person can see is a StickerError with a code from CODES.
 // The panel API answers `{ error, code, ...details }` with the status below and
 // the dashboard translates the code; a bot command replies with userMessage(),
-// which goes through tr() so it follows the reply language of the message.
+// which reads the catalog through t() so it follows the reply language of the
+// message (one pair, VIDEO_TOO_LONG, is still on tr() because the English
+// number and the Arabic secondsAr() form need different placeholders).
 // Internal detail (ffmpeg stderr, paths) belongs in `cause` and the log, never
 // in `message` or `details`.
 
-const { tr } = require("../utils/i18n.cjs");
+const { tr, t, withLang } = require("../utils/i18n.cjs");
 const { isolate } = require("../utils/bidi.cjs");
 
 const CODES = Object.freeze({
@@ -90,127 +92,72 @@ function toResponseBody(error) {
 }
 
 function userMessageIn(lang, error) {
-  const pick = (en, ar) => (lang === "ar" ? ar : en);
-  return message(pick, error);
+  // withLang is what forces the catalog onto `lang`; only "en" is used today.
+  return withLang(lang, () => message(error));
 }
 
 /** A reply for the person who sent the command, in the language of that message. */
 function userMessage(error) {
-  return message(tr, error);
+  return message(error);
 }
 
-function message(pick, error) {
+function message(error) {
   const d = (isStickerError(error) && error.details) || {};
   switch (isStickerError(error) ? error.code : "INTERNAL") {
     case "NO_MEDIA":
-      return pick(
-        "Send or reply to an image, GIF, video or sticker.",
-        "أرسل صورة أو صورة متحركة أو فيديو أو ملصقًا، أو رد على واحد منها.",
-      );
+      return t("bot.stickers.errors.noMedia");
     case "UNSUPPORTED_TYPE":
-      return pick(
-        "That file type can't be made into a sticker. Use a JPEG, PNG, WebP, GIF or MP4/WebM video.",
-        "لا يمكن تحويل هذا النوع من الملفات إلى ملصق. استخدم صورة JPEG أو PNG أو WebP أو GIF أو فيديو MP4/WebM.",
-      );
+      return t("bot.stickers.errors.unsupportedType");
     case "TOO_LARGE":
       if (d.limitFrames) {
-        return pick(
-          `The animation has too many frames (limit ${d.limitFrames}).`,
-          `في الرسم المتحرك إطارات كثيرة جدًا (الحد ${d.limitFrames}).`,
-        );
+        return t("bot.stickers.errors.tooManyFrames", { limitFrames: d.limitFrames });
       }
-      return pick(
-        `The file is too large (limit ${formatMb(d.limitBytes)}).`,
-        `الملف كبير جدًا (الحد ${formatMb(d.limitBytes)}).`,
-      );
+      return t("bot.stickers.errors.tooLarge", { limitMb: formatMb(d.limitBytes) });
     case "DIMENSIONS_TOO_LARGE":
-      return pick(
-        `The image is too large (limit ${d.limit || 4096} px per side).`,
-        `أبعاد الصورة كبيرة جدًا (الحد ${d.limit || 4096} بكسل لكل ضلع).`,
-      );
+      return t("bot.stickers.errors.dimensionsTooLarge", { limit: d.limit || 4096 });
     case "VIDEO_TOO_LONG":
-      return pick(
+      // English shows the raw number where Arabic needs secondsAr(); keying
+      // would need different placeholders per language, so this stays tr().
+      return tr(
         `The video is too long (limit ${d.limitSeconds || 10} seconds). Send a shorter clip, or trim it in the panel's Sticker Studio.`,
         `الفيديو طويل جدًا (الحد ${secondsAr(d.limitSeconds || 10)}). أرسل مقطعًا أقصر، أو اقتطع جزءًا منه في استوديو الملصقات في لوحة التحكم.`,
       );
     case "CORRUPT":
-      return pick(
-        "The file is damaged or incomplete, so it can't be read.",
-        "الملف تالف أو غير مكتمل، ولا يمكن قراءته.",
-      );
+      return t("bot.stickers.errors.corrupt");
     case "CONVERSION_FAILED":
-      return pick(
-        "The sticker could not be created from this file.",
-        "تعذّر إنشاء ملصق من هذا الملف.",
-      );
+      return t("bot.stickers.errors.conversionFailed");
     case "OUTPUT_TOO_LARGE":
-      return pick(
-        "Even at the lowest quality the sticker is over WhatsApp's size limit. Try a shorter or simpler clip.",
-        "حجم الملصق يتجاوز حد واتساب حتى بأقل جودة. جرّب مقطعًا أقصر أو أبسط.",
-      );
+      return t("bot.stickers.errors.outputTooLarge");
     case "ENCODER_MISSING":
-      return pick(
-        "This Levix build can't encode stickers (its FFmpeg has no WebP encoder). Update Levix.",
-        "لا يستطيع إصدار Levix هذا ترميز الملصقات (أداة FFmpeg فيه بلا مرمّز WebP). حدّث Levix.",
-      );
+      return t("bot.stickers.errors.encoderMissing");
     case "TIMEOUT":
-      return pick(
-        "The conversion took too long and was stopped.",
-        "استغرق التحويل وقتًا طويلًا فأُوقف.",
-      );
+      return t("bot.stickers.errors.timeout");
     case "BUSY":
-      return pick(
-        "Levix is converting other stickers right now. Try again in a moment.",
-        "يحوّل Levix ملصقات أخرى الآن. حاول مرة أخرى بعد قليل.",
-      );
+      return t("bot.stickers.errors.busy");
     case "NOT_FOUND":
-      return pick("That sticker is not in your library.", "هذا الملصق غير موجود في مكتبتك.");
+      return t("bot.stickers.errors.notFound");
     case "PACK_NOT_FOUND":
-      return pick(
-        `There is no pack named "${isolate(d.name || "")}".`,
-        `لا توجد حزمة باسم "${isolate(d.name || "")}".`,
-      );
+      return t("bot.stickers.errors.packNotFound", { name: isolate(d.name || "") });
     case "PACK_EXISTS":
-      return pick(
-        `A pack named "${isolate(d.name || "")}" already exists.`,
-        `توجد حزمة باسم "${isolate(d.name || "")}" بالفعل.`,
-      );
+      return t("bot.stickers.errors.packExists", { name: isolate(d.name || "") });
     case "INVALID_NAME":
-      return pick(
-        "Pack names are 1–40 characters: letters, digits, spaces, - _ ' . & , or emoji, and can't be a command word.",
-        "اسم الحزمة من 1 إلى 40 حرفًا: حروف أو أرقام أو مسافات أو - _ ' . & , أو رموز تعبيرية، ولا يجوز أن يكون كلمة أمر.",
-      );
+      return t("bot.stickers.errors.invalidName");
     case "INVALID_OPTIONS":
-      return pick("Those sticker options are not valid.", "خيارات الملصق هذه غير صالحة.");
+      return t("bot.stickers.errors.invalidOptions");
     case "LIBRARY_FULL":
-      return pick(
-        `Your sticker library is full (${d.limit || 0} stickers). Delete some first.`,
-        `مكتبة ملصقاتك ممتلئة (${d.limit || 0} ملصق). احذف بعضها أولًا.`,
-      );
+      return t("bot.stickers.errors.libraryFull", { limit: d.limit || 0 });
     case "PACK_LIMIT":
-      return pick(
-        `You can have at most ${d.limit || 0} packs.`,
-        `الحد الأقصى لعدد الحزم ${d.limit || 0}.`,
-      );
+      return t("bot.stickers.errors.packLimit", { limit: d.limit || 0 });
     case "IN_USE":
-      return pick(
-        "This sticker is in one or more packs. Confirm to delete it everywhere.",
-        "هذا الملصق موجود في حزمة أو أكثر. أكّد لحذفه من كل مكان.",
-      );
+      return t("bot.stickers.errors.inUse");
     case "STORAGE_UNAVAILABLE":
-      return pick(
-        "The sticker library can't be written right now.",
-        "لا يمكن الكتابة في مكتبة الملصقات الآن.",
-      );
+      return t("bot.stickers.errors.storageUnavailable");
     case "NOT_CONNECTED":
-      return pick(
-        "WhatsApp is not connected, so nothing can be sent.",
-        "واتساب غير متصل، فلا يمكن إرسال شيء.",
-      );
+      return t("bot.stickers.errors.notConnected");
     case "CANCELLED":
-      return pick("The conversion was cancelled.", "أُلغي التحويل.");
+      return t("bot.stickers.errors.cancelled");
     default:
-      return pick("Something went wrong with the sticker.", "حدث خطأ في الملصق.");
+      return t("bot.stickers.errors.internal");
   }
 }
 

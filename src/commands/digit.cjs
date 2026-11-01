@@ -21,14 +21,6 @@ function helpText(prefix) {
 module.exports = {
   name: "digit",
   aliases: ["digits", "num", "numbers", "numeral", "ارقام", "رقم"],
-  description: {
-    en: "Converts numbers between Arabic-Indic (٠١٢) and English (012) digits.",
-    ar: "يحوّل الأرقام بين الأرقام العربية (٠١٢) والإنجليزية (012).",
-  },
-  usage: {
-    en: "digit [en|ar] [number/text]   (or reply to a message)",
-    ar: "digit [en|ar] [رقم/نص]   (أو رد على رسالة)",
-  },
   chat: "all",
 
   async execute(sock, msg, args) {

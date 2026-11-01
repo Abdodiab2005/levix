@@ -9,14 +9,6 @@ const { t, tr } = require("../utils/i18n.cjs");
 
 module.exports = {
   name: "weather",
-  description: {
-    en: "Shows the current weather for a city.",
-    ar: "يعرض حالة الطقس الحالية لمدينة معيّنة.",
-  },
-  usage: {
-    en: "weather <city in English>",
-    ar: "weather <اسم المدينة بالإنجليزية>",
-  },
   chat: "all",
   // The city is asked for in English whatever language you speak, so it says
   // nothing about which language to answer in (see utils/i18n.cjs).
