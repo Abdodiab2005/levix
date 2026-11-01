@@ -63,6 +63,6 @@
 - Owner decisions: Q-15 option (b), the recovery relay gains `pt-BR` and `es-419` and deploys
   first; Q-19, ChatGPT reviews the new translations.
 - 2026-11-02: every slice implemented in open PRs (#104 to #120, levix-ui #22); see
-  `PHASE-03-RESULTS.md` section 10. Full Phase 03 tree: `npm test` 7399 checks PASS, all four
+  `PHASE-03-RESULTS.md` section 10. Full Phase 03 tree: `npm test` 7409 checks PASS after the Codex review fixes, all four
   locales complete and required. Translations are drafts until the ChatGPT review; #115 waits for
   the relay deploy; device QA NOT RUN.

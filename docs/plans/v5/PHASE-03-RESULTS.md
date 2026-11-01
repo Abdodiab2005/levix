@@ -293,7 +293,7 @@ APK builds); every Levix PR below passed it on its last push unless the row says
 | #112 | 03f7 schedule replies | #105 | Antigravity (Claude Sonnet) | `npm test` 6681 PASS |
 | #117 | 03g1 pt-BR, es-419 dashboard and gateway text (draft) | #113 | Antigravity (Gemini), Grok | `i18n:check` PASS; `npm test` 6751 PASS |
 | #118 | 03g2 pt-BR, es-419 Android text (draft) | #106 | Antigravity (Gemini), Grok | `npm test` 6655 PASS; Gradle PASS; strings present in the APK for both locales |
-| #120 | 03g3 pt-BR, es-419 bot replies and command docs (draft); both locales required | `integration/phase-03` | Grok | full Phase 03 tree: `npm test` 7399 PASS, `i18n:check` PASS |
+| #120 | 03g3 pt-BR, es-419 bot replies and command docs (draft); both locales required | `integration/phase-03` | Grok | full Phase 03 tree with the review fixes: `npm test` 7409 PASS, `i18n:check` PASS |
 | #115 | 03h recovery mail language (draft) | #113 | Codex | `npm test` 6787 PASS; merge only after levix-ui #22 is deployed |
 | #119 | 03i `docs/TRANSLATING.md`, `AGENTS.md` | #105 | Grok | docs only |
 
@@ -301,7 +301,19 @@ APK builds); every Levix PR below passed it on its last push unless the row says
 exists so CI and reviewers can test the whole phase; it is not for merge. Local result on it:
 `npm test` 7400 PASS, frontend build PASS.
 
-### 10.2 Merge order and expected conflicts
+### 10.2 Codex review (2026-11-02)
+
+A read-only Codex review of the full tree found four issues; each fix is a separate commit on the
+PR it belongs to.
+
+| Severity | Finding | Fix |
+| --- | --- | --- |
+| P1 | A translated gateway HTML value could add an attribute such as `onmouseover`; the validator checked tag names only, and `gateway-i18n.js` inserts these values with `innerHTML`. | #104: every tag must match an English tag exactly, attributes included; four new test cases. |
+| P2 | The Android language hook ran the channel reset, which deletes a channel the user made louder and can throw while the foreground notification is posted. | #106: the language path only renames channels in place; the reset runs from `onCreate` and `onConfigurationChanged` as before. |
+| P2 | A language or theme change in another browser tab updated `<html>` but not React. | #113: `ui-boot.js` dispatches `levix-ui-prefs` after a storage event; new test case. |
+| P3 | `!lang` said the AI always follows the bot language, which is wrong once `ai_reply_language` is set. | #105 (en, ar) and #120 (pt-BR, es-419): the text says the AI follows unless an AI reply language is set in the panel. |
+
+### 10.3 Merge order and expected conflicts
 
 1. #103, then #104, then #105 and #106.
 2. #113, #107, the 03f PRs (#108 to #112, #114, #116) and #119, in any order after #105. Two
@@ -313,7 +325,7 @@ exists so CI and reviewers can test the whole phase; it is not for merge. Local 
 4. #115 only after levix-ui #22 is merged and deployed.
 5. ChatGPT review (Q-19) before #117, #118 and #120 merge; each review updates `i18n/review.json`.
 
-### 10.3 Numbers
+### 10.4 Numbers
 
 - `tr(` lines outside `src/utils/i18n.cjs`: 575 in 86 files on `main`; 36 in 24 files on the full
   tree. The rest are date or API
@@ -322,7 +334,7 @@ exists so CI and reviewers can test the whole phase; it is not for merge. Local 
 - Catalog per locale on the full tree: dashboard 1196, gateway 89, Android 260, commands 138, bot
   624 keys. All four locales are complete and required.
 
-### 10.4 Not done or not run
+### 10.5 Not done or not run
 
 - ChatGPT review of every `pt-BR` and `es-419` file: NOT RUN (owner, Q-19). Native review: NOT
   RUN.
@@ -331,6 +343,6 @@ exists so CI and reviewers can test the whole phase; it is not for merge. Local 
   NOT RUN. Release APK, AAB and Play download sizes: NOT RUN.
 - Recurrence text (`src/utils/recurrence.cjs`) and the dashboard schedule `when` / `whenAr`
   fields stay Arabic and English; Portuguese and Spanish show English.
-- The 36 remaining `tr(` lines (section 10.3).
+- The 36 remaining `tr(` lines (section 10.4).
 - `validate:sea`, `validate:tarball`, `validate:docker` locally: NOT RUN; CI runs them on each PR.
 
