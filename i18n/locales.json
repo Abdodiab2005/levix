@@ -18,13 +18,13 @@
     "name": "Português (Brasil)",
     "dir": "ltr",
     "android": "values-pt-rBR",
-    "required": false
+    "required": true
   },
   {
     "code": "es-419",
     "name": "Español (Latinoamérica)",
     "dir": "ltr",
     "android": "values-b+es+419",
-    "required": false
+    "required": true
   }
 ]

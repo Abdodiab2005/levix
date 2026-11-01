@@ -10,6 +10,7 @@
 // commands through the real dispatcher with the bot set to English and fails
 // on any Arabic letter that comes back.
 
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { equal, finish, ok, ROOT, require, section, useTempDataDir } from "./harness.mjs";
 
@@ -17,6 +18,7 @@ useTempDataDir("levix-reply-language");
 
 const settings = require("./src/config/settings.cjs");
 const {
+  createTranslator,
   detectLang,
   syntaxWords,
   langForCommand,
@@ -113,7 +115,13 @@ section("the language rides along with everything the message causes");
   equal("…inside a timer it started", seen[2], "en");
   equal("and nothing leaks out", tr("en", "ar"), "ar");
   equal("keyed Arabic reply", withLang("ar", () => t("bot.lang.arLabel")), "العربية الفصحى");
-  equal("keyed pt-BR fallback", withLang("pt-BR", () => t("bot.lang.arLabel")), "Arabic");
+  const ptBrLang = JSON.parse(readFileSync(join(ROOT, "i18n/pt-BR/bot/lang.json"), "utf8"));
+  equal("keyed pt-BR arLabel", withLang("pt-BR", () => t("bot.lang.arLabel")), ptBrLang.arLabel);
+  const missingPtBr = createTranslator(
+    { messages: { en: { "sample.missing": "English" }, "pt-BR": {} } },
+    { getLocale: () => "pt-BR" },
+  );
+  equal("missing pt-BR key falls back to English", missingPtBr("sample.missing"), "English");
 
   const [a, b] = await Promise.all([
     withLang("en", async () => {
@@ -387,14 +395,20 @@ section("!lang accepts new locales and lists every choice");
   await permissions.primePermissions();
   await permissions.grantRole(SELF, "owner");
   const lang = require("./src/commands/lang.cjs");
+  const ptBrLang = JSON.parse(readFileSync(join(ROOT, "i18n/pt-BR/bot/lang.json"), "utf8"));
+  const es419Lang = JSON.parse(readFileSync(join(ROOT, "i18n/es-419/bot/lang.json"), "utf8"));
   const sock = makeSock();
   const msg = messageFrom(SELF, "!lang pt");
   await withLang("ar", () => lang.execute(sock, msg, ["pt"]));
   equal("!lang pt saves pt-BR", settings.get("bot_language"), "pt-BR");
-  ok("pt-BR confirmation uses English fallback", sock.sent.at(-1)?.content?.text?.includes("Brazilian Portuguese"));
+  equal("pt-BR confirmation is selectedPtBr", sock.sent.at(-1)?.content?.text, ptBrLang.selectedPtBr);
   await withLang("ar", () => lang.execute(sock, msg, ["es-419"]));
   equal("!lang es-419 saves es-419", settings.get("bot_language"), "es-419");
-  ok("es-419 confirmation uses English fallback", sock.sent.at(-1)?.content?.text?.includes("Latin American Spanish"));
+  equal(
+    "es-419 confirmation is selectedEs419",
+    sock.sent.at(-1)?.content?.text,
+    es419Lang.selectedEs419,
+  );
   await withLang("en", () => lang.execute(sock, msg, ["xx"]));
   equal("!lang xx is refused", settings.get("bot_language"), "es-419");
   ok("unknown option is explained", sock.sent.at(-1)?.content?.text?.includes("Unknown option"));
