@@ -22,5 +22,29 @@
   "deleteschedule.missingId": "Indica el ID del mensaje programado a eliminar. `!listschedules` muestra los IDs.",
   "deleteschedule.notFound": "⚠️ Ningún mensaje programado tiene el ID `{id}`",
   "deleteschedule.deleted": "✅ Se eliminó el mensaje programado `{id}`.",
-  "scheduler.header": "*Mensaje programado 🗓️*"
+  "scheduler.header": "*Mensaje programado 🗓️*",
+  "recurrence.weekday0": "Domingo",
+  "recurrence.weekday1": "Lunes",
+  "recurrence.weekday2": "Martes",
+  "recurrence.weekday3": "Miércoles",
+  "recurrence.weekday4": "Jueves",
+  "recurrence.weekday5": "Viernes",
+  "recurrence.weekday6": "Sábado",
+  "recurrence.weekdaySep": ", ",
+  "recurrence.weekdayAnd": " y ",
+  "recurrence.daily": "Todos los días a las {time}",
+  "recurrence.weekly": "Cada {days} a las {time}",
+  "recurrence.monthly": "Todos los meses el día {day} a las {time}",
+  "recurrence.hourly": {
+    "one": "Cada hora en el minuto {minute}{n}",
+    "many": "Cada {n} horas en el minuto {minute}",
+    "other": "Cada {n} horas en el minuto {minute}"
+  },
+  "recurrence.unknown": "Repetición desconocida",
+  "recurrence.invalidDate": "Fecha no válida",
+  "recurrence.errorTime": "Hora no válida",
+  "recurrence.errorWeekdays": "Selecciona al menos un día de la semana",
+  "recurrence.errorDayOfMonth": "El día del mes debe estar entre 1 y 31",
+  "recurrence.errorEveryHours": "Las horas deben ser 1, 2, 3, 4, 6, 8 o 12",
+  "recurrence.errorInvalid": "Repetición no válida"
 }

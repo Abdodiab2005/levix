@@ -1,7 +1,7 @@
 // file: /commands/warns.js
 const { getUserWarnings } = require("../../utils/storage.cjs");
 const logger = require("../../utils/logger.cjs");
-const { t, tr } = require("../../utils/i18n.cjs");
+const { t, intlTag } = require("../../utils/i18n.cjs");
 
 module.exports = {
   name: "warns",
@@ -36,7 +36,7 @@ module.exports = {
       userWarnings.forEach((warning, index) => {
         const adminJid = warning.by;
         mentionedAdmins.push(adminJid);
-        const warningDate = new Date(warning.date).toLocaleString(tr("en-GB", "ar-EG"), {
+        const warningDate = new Date(warning.date).toLocaleString(intlTag(), {
           timeZone: "Africa/Cairo",
         });
 

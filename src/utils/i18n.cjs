@@ -144,6 +144,26 @@ function currentLang() {
   return scope.getStore() || configuredLang() || "ar";
 }
 
+// ar and en keep the tags listschedules and warns already passed to Intl.
+const INTL_TAGS = {
+  ar: "ar-EG",
+  en: "en-GB",
+  "pt-BR": "pt-BR",
+  "es-419": "es-419",
+};
+
+/**
+ * Intl locale for a reply language.
+ * With no argument, this follows the current reply language.
+ */
+function intlTag(lang) {
+  let code;
+  if (lang === undefined) code = currentLang();
+  else if (FIXED_LANGUAGES.has(lang)) code = lang;
+  else code = normalizeLocale(lang) || "en";
+  return INTL_TAGS[code] || "en-GB";
+}
+
 /** Pick the reply for the current message. */
 function tr(en, ar) {
   return currentLang() === "ar" ? ar : en;
@@ -170,5 +190,6 @@ module.exports = {
   langForCommand,
   withLang,
   currentLang,
+  intlTag,
   tr,
 };

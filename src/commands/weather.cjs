@@ -5,10 +5,29 @@ const logger = require("../utils/logger.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 
 const settings = require("../config/settings.cjs");
-const { t, tr } = require("../utils/i18n.cjs");
+const { t, currentLang } = require("../utils/i18n.cjs");
+
+// OpenWeather codes. A map, not tr(): pt-BR and es-419 are not English.
+const OPENWEATHER_LANG = {
+  en: "en",
+  ar: "ar",
+  "pt-BR": "pt_br",
+  "es-419": "es",
+};
+
+function openWeatherLang() {
+  return OPENWEATHER_LANG[currentLang()] || "en";
+}
+
+function weatherApiUrl(city, apiKey) {
+  const lang = openWeatherLang();
+  const query = `q=${city}&appid=${apiKey}&units=metric&lang=${lang}`;
+  return `https://api.openweathermap.org/data/2.5/weather?${query}`;
+}
 
 module.exports = {
   name: "weather",
+  weatherApiUrl,
   chat: "all",
   // The city is asked for in English whatever language you speak, so it says
   // nothing about which language to answer in (see utils/i18n.cjs).
@@ -27,7 +46,7 @@ module.exports = {
     // - units=metric للحصول على درجة الحرارة بالسيليزيوس
     // - lang: الوصف بلغة الرد
     const apiKey = settings.get("openweathermap_api_key");
-    const API_URL = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric&lang=${tr("en", "ar")}`;
+    const API_URL = weatherApiUrl(city, apiKey);
 
     // One message: it starts as "looking it up" and turns into the forecast.
     const status = await createStatus(

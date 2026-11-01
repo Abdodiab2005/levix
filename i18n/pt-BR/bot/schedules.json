@@ -22,5 +22,29 @@
   "deleteschedule.missingId": "Informe o ID da mensagem agendada a apagar. `!listschedules` mostra os IDs.",
   "deleteschedule.notFound": "⚠️ Nenhuma mensagem agendada tem o ID `{id}`",
   "deleteschedule.deleted": "✅ A mensagem agendada `{id}` foi apagada.",
-  "scheduler.header": "*Mensagem agendada 🗓️*"
+  "scheduler.header": "*Mensagem agendada 🗓️*",
+  "recurrence.weekday0": "Domingo",
+  "recurrence.weekday1": "Segunda-feira",
+  "recurrence.weekday2": "Terça-feira",
+  "recurrence.weekday3": "Quarta-feira",
+  "recurrence.weekday4": "Quinta-feira",
+  "recurrence.weekday5": "Sexta-feira",
+  "recurrence.weekday6": "Sábado",
+  "recurrence.weekdaySep": ", ",
+  "recurrence.weekdayAnd": " e ",
+  "recurrence.daily": "Todos os dias às {time}",
+  "recurrence.weekly": "A cada {days} às {time}",
+  "recurrence.monthly": "Todo mês no dia {day} às {time}",
+  "recurrence.hourly": {
+    "one": "A cada hora no minuto {minute}{n}",
+    "many": "A cada {n} horas no minuto {minute}",
+    "other": "A cada {n} horas no minuto {minute}"
+  },
+  "recurrence.unknown": "Repetição desconhecida",
+  "recurrence.invalidDate": "Data inválida",
+  "recurrence.errorTime": "Horário inválido",
+  "recurrence.errorWeekdays": "Selecione pelo menos um dia da semana",
+  "recurrence.errorDayOfMonth": "O dia do mês deve estar entre 1 e 31",
+  "recurrence.errorEveryHours": "As horas devem ser 1, 2, 3, 4, 6, 8 ou 12",
+  "recurrence.errorInvalid": "Repetição inválida"
 }
