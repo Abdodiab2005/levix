@@ -76,9 +76,13 @@ class LevixHostService : Service() {
         checkStateAndNotify()
     }
 
-    // AppCompat's app language can differ from a Service's resources on API 29–32.
-    // Resolve strings at notification time so the heartbeat also refreshes an
-    // already-running notification after an in-app language change.
+    // AppCompat's app language can differ from a Service's resources on API
+    // 29 to 32: the system still delivers configuration changes to the
+    // service on those versions, but for system config switches, not for an
+    // app language set in the panel. Resolve strings at notification time so
+    // the heartbeat also refreshes an already-running notification after an
+    // in-app language change, and the hook in UiPrefs.onLanguageApplied
+    // (registered in onCreate) covers the versions where nothing else does.
     private fun localizedString(@StringRes id: Int, vararg args: Any): String {
         val config = Configuration(resources.configuration)
         config.setLocale(Locale.forLanguageTag(UiPrefs.language(this)))
@@ -88,6 +92,14 @@ class LevixHostService : Service() {
     override fun onCreate() {
         super.onCreate()
         ensureChannel()
+        // In-app language change on API 29 to 32: nothing would otherwise tell
+        // a running service that the app language moved, so this redraws the
+        // channel and the visible notification straight after the switch
+        // (UiPrefs.set fires the hook from the language branch).
+        UiPrefs.onLanguageApplied = { handler.post {
+            ensureChannel()
+            checkStateAndNotify()
+        } }
         // Promote immediately so a fast STOP still satisfies the FGS contract.
         startAsForeground(buildNotification(localizedString(R.string.notif_starting)))
         NodeRuntime.unexpectedExitListener = { code ->
@@ -132,6 +144,7 @@ class LevixHostService : Service() {
             HostLog.event("service stop: user")
         }
         NodeRuntime.unexpectedExitListener = null
+        UiPrefs.onLanguageApplied = null
         teardown()
         super.onDestroy()
     }
@@ -500,32 +513,33 @@ class LevixHostService : Service() {
             manager.deleteNotificationChannel(CHANNEL_ALERT_ID)
         }
 
-        if (manager.getNotificationChannel(CHANNEL_ID) == null) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                localizedString(R.string.notif_channel_name),
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply {
-                description = localizedString(R.string.notif_channel_description)
-                setShowBadge(false)
-                setSound(null, null)
-                enableVibration(false)
-            }
-            manager.createNotificationChannel(channel)
+        // A channel follows the app language: createNotificationChannel with
+        // the same id updates the name and description in place, and the
+        // user's importance and sound choices are kept. Never delete a channel
+        // to rename it: that throws on recent Android versions while a
+        // foreground service notification is posted on it.
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            localizedString(R.string.notif_channel_name),
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = localizedString(R.string.notif_channel_description)
+            setShowBadge(false)
+            setSound(null, null)
+            enableVibration(false)
         }
-        if (manager.getNotificationChannel(CHANNEL_ALERT_ID) == null) {
-            val alertChannel = NotificationChannel(
-                CHANNEL_ALERT_ID,
-                localizedString(R.string.notif_alerts_channel_name),
-                NotificationManager.IMPORTANCE_LOW,
-            ).apply {
-                description = localizedString(R.string.notif_alerts_channel_description)
-                setShowBadge(false)
-                setSound(null, null)
-                enableVibration(false)
-            }
-            manager.createNotificationChannel(alertChannel)
+        manager.createNotificationChannel(channel)
+        val alertChannel = NotificationChannel(
+            CHANNEL_ALERT_ID,
+            localizedString(R.string.notif_alerts_channel_name),
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = localizedString(R.string.notif_alerts_channel_description)
+            setShowBadge(false)
+            setSound(null, null)
+            enableVibration(false)
         }
+        manager.createNotificationChannel(alertChannel)
     }
 
     companion object {

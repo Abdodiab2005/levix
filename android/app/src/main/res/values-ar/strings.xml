@@ -17,7 +17,7 @@
     <string name="guide_privacy_title">الخصوصية والتشخيصات</string>
     <string name="guide_privacy_body">يعمل Levix على هذا الهاتف ولا يتصل إلا بواتساب والخدمات التي تفعّلها. تبقى السجلات وتقارير الأعطال هنا حتى تحفظها أو تشاركها أو تحذفها.</string>
     <string name="guide_header_title">اللغة والمظهر</string>
-    <string name="guide_header_body">هذان الزران يبدّلان بين العربية والإنجليزية، وبين الوضع الفاتح والداكن. يحتفظ Levix باختيارك.</string>
+    <string name="guide_header_body">أيقونة اللغة تختار لغة التطبيق، وأيقونة المظهر تبدّل بين الوضع الفاتح والداكن. يحتفظ Levix باختيارك.</string>
     <string name="guide_skip">تخطي</string>
     <string name="guide_back">رجوع</string>
     <string name="guide_next">التالي</string>
@@ -41,7 +41,12 @@
     <string name="panel_starting">جارٍ تشغيل Levix…</string>
     <string name="btn_start_host">تشغيل المساعد</string>
     <string name="btn_stop_host">إيقاف المساعد</string>
-    <string name="action_switch_language">تبديل اللغة (العربية / English)</string>
+    <string name="action_switch_language">اختيار لغة التطبيق</string>
+    <string name="language_picker_title">لغة التطبيق</string>
+    <string name="language_name_ar">العربية</string>
+    <string name="language_name_en">English</string>
+    <string name="language_name_pt_br">Português (Brasil)</string>
+    <string name="language_name_es_419">Español (Latinoamérica)</string>
     <string name="action_switch_theme">تبديل المظهر الفاتح والداكن</string>
     <string name="section_overview">نظرة عامة على الحالة</string>
     <string name="section_overview_sub">مؤشرات النظام والخدمات الأساسية في لمحة</string>
