@@ -10,7 +10,7 @@ const {
   normalizeFeatureAction,
   policyFromFeatureAction,
 } = require("../utils/moderationSummary.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t, tr } = require("../utils/i18n.cjs");
 const { applyModerationPolicy } = require("../services/moderationPolicy.cjs");
 
 // الهيكل الافتراضي لإعدادات المراقبة
@@ -72,7 +72,7 @@ module.exports = {
     if (!senderIsAdmin && !isOwner) {
       return sock.sendMessage(
         groupId,
-        { text: tr("🚫 This command is for admins only.", "🚫 هذا الأمر للمشرفين فقط.") },
+        { text: t("bot.moderation.mod.thisCommandIsForAdmins") },
         { quoted: msg },
       );
     }
@@ -90,10 +90,7 @@ module.exports = {
           return sock.sendMessage(
             groupId,
             {
-              text: tr(
-                `⚠️ There is no feature called "${args[1] || ""}".`,
-                `⚠️ الميزة "${args[1] || ""}" غير موجودة.`,
-              ),
+              text: t("bot.moderation.mod.thereIsNoFeatureCalled", { featureName: args[1] || "" }),
             },
             { quoted: msg },
           );
@@ -102,7 +99,7 @@ module.exports = {
         saveGroupSettings(groupId, settings);
         await sock.sendMessage(
           groupId,
-          { text: tr(`✅ *${feature}* is on.`, `✅ تم تفعيل ميزة *${feature}*.`) },
+          { text: t("bot.moderation.mod.isOn", { feature }) },
           { quoted: msg },
         );
         break;
@@ -112,10 +109,7 @@ module.exports = {
           return sock.sendMessage(
             groupId,
             {
-              text: tr(
-                `⚠️ There is no feature called "${args[1] || ""}".`,
-                `⚠️ الميزة "${args[1] || ""}" غير موجودة.`,
-              ),
+              text: t("bot.moderation.mod.thereIsNoFeatureCalled", { featureName: args[1] || "" }),
             },
             { quoted: msg },
           );
@@ -124,7 +118,7 @@ module.exports = {
         saveGroupSettings(groupId, settings);
         await sock.sendMessage(
           groupId,
-          { text: tr(`❌ *${feature}* is off.`, `❌ تم تعطيل ميزة *${feature}*.`) },
+          { text: t("bot.moderation.mod.isOff", { feature }) },
           { quoted: msg },
         );
         break;
@@ -134,10 +128,7 @@ module.exports = {
           return sock.sendMessage(
             groupId,
             {
-              text: tr(
-                `⚠️ There is no feature called "${args[1] || ""}".`,
-                `⚠️ الميزة "${args[1] || ""}" غير موجودة.`,
-              ),
+              text: t("bot.moderation.mod.thereIsNoFeatureCalled", { featureName: args[1] || "" }),
             },
             { quoted: msg },
           );
@@ -148,14 +139,9 @@ module.exports = {
           return sock.sendMessage(
             groupId,
             {
-              text: tr(
-                allowDelete
-                  ? "Invalid action. Available: `DELETE`, `WARN`, `KICK`"
-                  : "Invalid action. Available: `WARN`, `KICK`",
-                allowDelete
-                  ? "الإجراء غير صالح. الإجراءات المتاحة: `DELETE`, `WARN`, `KICK`"
-                  : "الإجراء غير صالح. الإجراءات المتاحة: `WARN`, `KICK`",
-              ),
+              text: allowDelete
+                ? t("bot.moderation.mod.invalidActionWithDelete")
+                : t("bot.moderation.mod.invalidActionWithoutDelete"),
             },
             { quoted: msg },
           );
@@ -178,14 +164,14 @@ module.exports = {
         }
         await sock.sendMessage(
           groupId,
-          { text: tr(`✅ *${feature}* action is now ${action}.`, `✅ تم تعيين إجراء *${feature}* إلى ${action}.`) },
+          { text: t("bot.moderation.mod.actionIsNow", { feature, action }) },
           { quoted: msg },
         );
         break;
       }
 
       case "status": {
-        let statusText = tr("📊 *Moderation settings* 📊\n\n", "📊 *حالة إعدادات المراقبة* 📊\n\n");
+        let statusText = t("bot.moderation.mod.moderationSettings");
         const actionOf = {
           antiLink: featureActionOf(settings, "antilink"),
           antiSpam: featureActionOf(settings, "antispam"),
@@ -193,14 +179,11 @@ module.exports = {
         };
         for (const key of Object.values(FEATURE_KEYS)) {
           const status = featureEnabled(settings, key)
-            ? tr("✅ on", "✅ مفعل")
-            : tr("❌ off", "❌ معطل");
+            ? t("bot.moderation.mod.on")
+            : t("bot.moderation.mod.off");
           statusText += `› *${key}*: ${status} · ${actionOf[key]}\n`;
         }
-        statusText += tr(
-          `\n- To see the forbidden words, type: \`!mod words list\``,
-          `\n- لعرض قائمة الكلمات الممنوعة، اكتب: \`!mod words list\``,
-        );
+        statusText += t("bot.moderation.mod.toSeeTheForbiddenWords");
         await sock.sendMessage(groupId, { text: statusText }, { quoted: msg });
         break;
       }
@@ -212,34 +195,31 @@ module.exports = {
         if (wordAction === "add") {
           if (!word)
             return sock.sendMessage(groupId, {
-              text: tr("Write the word you want to add.", "الرجاء كتابة الكلمة التي تريد إضافتها."),
+              text: t("bot.moderation.mod.wordToAddRequired"),
             });
           if (!modSettings.forbiddenWords.list.includes(word)) {
             modSettings.forbiddenWords.list.push(word.slice(0, 100));
           }
           saveGroupSettings(groupId, settings);
           await sock.sendMessage(groupId, {
-            text: tr(
-              `✅ Added "${word}" to the forbidden words.`,
-              `✅ تم إضافة "${word}" إلى قائمة الكلمات الممنوعة.`,
-            ),
+            text: t("bot.moderation.mod.addedToTheForbiddenWords", { word }),
           });
         } else if (wordAction === "remove") {
           if (!word)
             return sock.sendMessage(groupId, {
-              text: tr("Write the word you want to remove.", "الرجاء كتابة الكلمة التي تريد إزالتها."),
+              text: t("bot.moderation.mod.wordToRemoveRequired"),
             });
           modSettings.forbiddenWords.list = modSettings.forbiddenWords.list.filter(
             (w) => w !== word,
           );
           saveGroupSettings(groupId, settings);
           await sock.sendMessage(groupId, {
-            text: tr(`🗑️ Removed "${word}" from the list.`, `🗑️ تم إزالة "${word}" من القائمة.`),
+            text: t("bot.moderation.mod.removedFromTheList", { word }),
           });
         } else if (wordAction === "list") {
-          let listText = tr("🚫 *Forbidden words* 🚫\n\n", "🚫 *قائمة الكلمات الممنوعة* 🚫\n\n");
+          let listText = t("bot.moderation.mod.forbiddenWords");
           if (modSettings.forbiddenWords.list.length === 0) {
-            listText += tr("The list is empty.", "القائمة فارغة حاليًا.");
+            listText += t("bot.moderation.mod.theListIsEmpty");
           } else {
             modSettings.forbiddenWords.list.forEach((w, i) => {
               listText += `${i + 1}. ${w}\n`;
@@ -248,34 +228,14 @@ module.exports = {
           await sock.sendMessage(groupId, { text: listText });
         } else {
           await sock.sendMessage(groupId, {
-            text: tr(
-              "Wrong usage. Available: `add`, `remove`, `list`",
-              "استخدام خاطئ. الأوامر المتاحة: `add`, `remove`, `list`",
-            ),
+            text: t("bot.moderation.mod.wrongUsageAvailableAddRemove"),
           });
         }
         break;
       }
 
       default: {
-        const helpText = tr(
-          "🤖 *Moderation commands*\n\n" +
-            "• `!mod enable <feature>`\nTurn a feature on (antilink, antispam, forbiddenwords)\n\n" +
-            "• `!mod disable <feature>`\nTurn a feature off.\n\n" +
-            "• `!mod action <feature> <DELETE|WARN|KICK>`\nSet the feature action (antiSpam: WARN|KICK).\n\n" +
-            "• `!mod status`\nShow which features are on.\n\n" +
-            "• `!mod words add <word>`\nAdd a forbidden word.\n\n" +
-            "• `!mod words remove <word>`\nRemove a forbidden word.\n\n" +
-            "• `!mod words list`\nList the forbidden words.",
-          "🤖 *أوامر التحكم في المراقبة*\n\n" +
-            "• `!mod enable <feature>`\nلتفعيل ميزة (antilink, antispam, forbiddenwords)\n\n" +
-            "• `!mod disable <feature>`\nلتعطيل ميزة.\n\n" +
-            "• `!mod action <feature> <DELETE|WARN|KICK>`\nتعيين إجراء الميزة (antiSpam: WARN|KICK).\n\n" +
-            "• `!mod status`\nلعرض حالة الميزات الحالية.\n\n" +
-            "• `!mod words add <word>`\nلإضافة كلمة ممنوعة.\n\n" +
-            "• `!mod words remove <word>`\nلإزالة كلمة ممنوعة.\n\n" +
-            "• `!mod words list`\nلعرض قائمة الكلمات الممنوعة.",
-        );
+        const helpText = t("bot.moderation.mod.help");
         await sock.sendMessage(groupId, { text: helpText }, { quoted: msg });
         break;
       }

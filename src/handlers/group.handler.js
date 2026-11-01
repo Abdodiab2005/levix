@@ -4,7 +4,7 @@ import { getGroupSettings } from "../utils/storage.esm.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 const { buildModerationSummary } = require("../utils/moderationSummary.cjs");
 const { resolveModerationPolicy } = require("../services/moderationPolicy.cjs");
 const { clearMemberModeration } = require("../utils/moderationAction.cjs");
@@ -94,10 +94,7 @@ export async function handleGroupJoinRequests(sock, events) {
 
         await delay(500);
         await sock.sendMessage(groupId, {
-          text: tr(
-            `✅ @${participantId.split("@")[0]}'s join request was approved automatically.`,
-            `✅ تم قبول طلب انضمام @${participantId.split("@")[0]} تلقائيًا.`,
-          ),
+          text: t("bot.moderation.groupHandler.joinRequestApproved", { member: participantId.split("@")[0] }),
           mentions: [participantId],
         });
       }

@@ -1,4 +1,4 @@
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 const logger = require("../utils/logger.cjs");
 const autoDelete = require("../services/autoDelete.cjs");
 
@@ -28,17 +28,22 @@ function parseIdArg(value) {
 }
 
 function formatRule(rule) {
-  const state = rule.enabled ? tr("on", "تشغيل") : tr("off", "إيقاف");
+  const state = rule.enabled ? t("bot.moderation.autodelete.on") : t("bot.moderation.autodelete.off");
   const label = rule.name ? ` "${rule.name}"` : "";
   const keywords = rule.keywords.join(", ");
-  return tr(
-    `#${rule.id}${label} · ${state} · ${rule.match} · ${rule.keywords.length} keyword(s) · deleted ${rule.deletedCount}\n  ${keywords}`,
-    `#${rule.id}${label} · ${state} · ${rule.match} · ${rule.keywords.length} كلمة · حُذف ${rule.deletedCount}\n  ${keywords}`,
-  );
+  return t("bot.moderation.autodelete.ruleListLine", {
+    id: rule.id,
+    label,
+    state,
+    match: rule.match,
+    keywordCount: rule.keywords.length,
+    deletedCount: rule.deletedCount,
+    keywords,
+  });
 }
 
 function formatWhen(ts) {
-  if (!ts) return tr("never", "أبداً");
+  if (!ts) return t("bot.moderation.autodelete.never");
   return new Date(ts).toISOString();
 }
 
@@ -65,13 +70,10 @@ module.exports = {
         const rules = autoDelete.listRules();
         if (!rules.length) {
           return sock.sendMessage(jid, {
-            text: tr("No auto-delete rules yet.", "لا توجد قواعد حذف تلقائي بعد."),
+            text: t("bot.moderation.autodelete.noAutoDeleteRulesYet"),
           });
         }
-        const header = tr(
-          `*Auto-delete rules (${rules.length}):*\n\n`,
-          `*قواعد الحذف التلقائي (${rules.length}):*\n\n`,
-        );
+        const header = t("bot.moderation.autodelete.autoDeleteRules", { count: rules.length });
         return sock.sendMessage(jid, {
           text: header + rules.map(formatRule).join("\n"),
         });
@@ -81,10 +83,7 @@ module.exports = {
         const keywords = parseKeywords(args.slice(1));
         if (!keywords.length) {
           return sock.sendMessage(jid, {
-            text: tr(
-              "Write one or more words to auto-delete, separated by |.",
-              "اكتب كلمة أو أكثر للحذف التلقائي، مفصولة بـ |.",
-            ),
+            text: t("bot.moderation.autodelete.writeOneOrMoreWords"),
           });
         }
         const rule = autoDelete.createRule({
@@ -98,10 +97,10 @@ module.exports = {
           enabled: true,
         });
         return sock.sendMessage(jid, {
-          text: tr(
-            `Added auto-delete rule #${rule.id} (${rule.keywords.join(", ")}).`,
-            `تمت إضافة قاعدة الحذف التلقائي #${rule.id} (${rule.keywords.join(", ")}).`,
-          ),
+          text: t("bot.moderation.autodelete.addedAutoDeleteRule", {
+            id: rule.id,
+            keywords: rule.keywords.join(", "),
+          }),
         });
       }
 
@@ -109,12 +108,12 @@ module.exports = {
         const id = parseIdArg(args[1]);
         if (!id) {
           return sock.sendMessage(jid, {
-            text: tr("Give a rule id to remove.", "أدخل رقم القاعدة للحذف."),
+            text: t("bot.moderation.autodelete.ruleIdToRemoveRequired"),
           });
         }
         autoDelete.deleteRule(id);
         return sock.sendMessage(jid, {
-          text: tr(`Removed auto-delete rule #${id}.`, `تم حذف قاعدة الحذف التلقائي #${id}.`),
+          text: t("bot.moderation.autodelete.removedAutoDeleteRule", { id }),
         });
       }
 
@@ -122,15 +121,15 @@ module.exports = {
         const id = parseIdArg(args[1]);
         if (!id) {
           return sock.sendMessage(jid, {
-            text: tr("Give a rule id.", "أدخل رقم القاعدة."),
+            text: t("bot.moderation.autodelete.giveARuleId"),
           });
         }
         const enabled = ON_WORDS.has(action);
         autoDelete.updateRule(id, { enabled });
         return sock.sendMessage(jid, {
           text: enabled
-            ? tr(`Auto-delete rule #${id} is on.`, `قاعدة الحذف التلقائي #${id} مفعّلة.`)
-            : tr(`Auto-delete rule #${id} is off.`, `قاعدة الحذف التلقائي #${id} موقوفة.`),
+            ? t("bot.moderation.autodelete.autoDeleteRuleIsOn", { id })
+            : t("bot.moderation.autodelete.autoDeleteRuleIsOff", { id }),
         });
       }
 
@@ -139,24 +138,26 @@ module.exports = {
           const id = parseIdArg(args[1]);
           if (!id) {
             return sock.sendMessage(jid, {
-              text: tr("Give a rule id.", "أدخل رقم القاعدة."),
+              text: t("bot.moderation.autodelete.giveARuleId"),
             });
           }
           const rule = autoDelete.getRule(id);
           return sock.sendMessage(jid, {
-            text: tr(
-              `*Rule #${rule.id}*${rule.name ? ` ${rule.name}` : ""}\nDeleted: ${rule.deletedCount}\nLast: ${formatWhen(rule.lastDeletedAt)}`,
-              `*القاعدة #${rule.id}*${rule.name ? ` ${rule.name}` : ""}\nحُذف: ${rule.deletedCount}\nآخر مرة: ${formatWhen(rule.lastDeletedAt)}`,
-            ),
+            text: t("bot.moderation.autodelete.ruleStats", {
+              id: rule.id,
+              name: rule.name ? ` ${rule.name}` : "",
+              deletedCount: rule.deletedCount,
+              last: formatWhen(rule.lastDeletedAt),
+            }),
           });
         }
         const rules = autoDelete.listRules();
         const total = rules.reduce((sum, rule) => sum + (rule.deletedCount || 0), 0);
         return sock.sendMessage(jid, {
-          text: tr(
-            `*Auto-delete counters*\nRules: ${rules.length}\nDeleted: ${total}`,
-            `*عدادات الحذف التلقائي*\nالقواعد: ${rules.length}\nحُذف: ${total}`,
-          ),
+          text: t("bot.moderation.autodelete.autoDeleteCountersRulesDeleted", {
+            count: rules.length,
+            total,
+          }),
         });
       }
 
@@ -164,41 +165,32 @@ module.exports = {
         const id = parseIdArg(args[1]);
         if (!id) {
           return sock.sendMessage(jid, {
-            text: tr("Give a rule id to reset.", "أدخل رقم القاعدة لتصفير العداد."),
+            text: t("bot.moderation.autodelete.ruleIdToResetRequired"),
           });
         }
         autoDelete.resetCounter(id);
         return sock.sendMessage(jid, {
-          text: tr(
-            `Reset the counter for auto-delete rule #${id}.`,
-            `تم تصفير عداد قاعدة الحذف التلقائي #${id}.`,
-          ),
+          text: t("bot.moderation.autodelete.resetTheCounterForAuto", { id }),
         });
       }
 
       return sock.sendMessage(jid, {
-        text: tr(
-          "Unknown sub-command. Try list, add, remove, on, off, stats, reset.",
-          "أمر فرعي غير معروف. جرّب list أو add أو remove أو on أو off أو stats أو reset.",
-        ),
+        text: t("bot.moderation.autodelete.unknownSubCommandTryList"),
       });
     } catch (error) {
       if (error?.status === 404) {
         return sock.sendMessage(jid, {
-          text: tr("No auto-delete rule with that id.", "لا توجد قاعدة حذف تلقائي بهذا الرقم."),
+          text: t("bot.moderation.autodelete.noAutoDeleteRuleWith"),
         });
       }
       if (error?.name === "AutoDeleteError" || error?.status === 400) {
         return sock.sendMessage(jid, {
-          text: tr(
-            `Could not update that rule: ${error.message}`,
-            `تعذر تحديث القاعدة: ${error.message}`,
-          ),
+          text: t("bot.moderation.autodelete.couldNotUpdateThatRule", { message: error.message }),
         });
       }
       logger.error({ err: error, command: "autodelete" }, "auto-delete command failed");
       return sock.sendMessage(jid, {
-        text: tr("Something went wrong with auto-delete.", "حدث خطأ أثناء معالجة الحذف التلقائي."),
+        text: t("bot.moderation.autodelete.somethingWentWrongWithAuto"),
       });
     }
   },

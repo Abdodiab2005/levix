@@ -1,6 +1,6 @@
 // file: /commands/group/setwarn.js
 const { normalizeWarnAction } = require("../../utils/moderationSummary.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t } = require("../../utils/i18n.cjs");
 const { applyModerationPolicy } = require("../../services/moderationPolicy.cjs");
 
 module.exports = {
@@ -18,15 +18,12 @@ module.exports = {
         const max = parseInt(value, 10);
         if (!Number.isInteger(max) || max < 1 || max > 50) {
           return await sock.sendMessage(groupId, {
-            text: tr(
-              "Give a whole number from 1 to 50 for the warning limit.",
-              "يرجى تحديد عدد صحيح من 1 إلى 50 للحد الأقصى للتحذيرات.",
-            ),
+            text: t("bot.moderation.setwarn.giveAWholeNumberFrom"),
           });
         }
         applyModerationPolicy(groupId, { limit: max });
         return await sock.sendMessage(groupId, {
-          text: tr(`✅ The warning limit is now ${max}.`, `✅ تم تعيين الحد الأقصى للتحذيرات إلى ${max}.`),
+          text: t("bot.moderation.setwarn.theWarningLimitIsNow", { max }),
         });
       }
 
@@ -34,24 +31,18 @@ module.exports = {
         const action = normalizeWarnAction(value);
         if (!action) {
           return await sock.sendMessage(groupId, {
-            text: tr(
-              "Invalid action. Available: `KICK`, `FLAG`",
-              "الإجراء غير صالح. الإجراءات المتاحة: `KICK`, `FLAG`",
-            ),
+            text: t("bot.moderation.setwarn.invalidActionAvailableKickFlag"),
           });
         }
         applyModerationPolicy(groupId, { limitAction: action });
         return await sock.sendMessage(groupId, {
-          text: tr(`✅ The automatic action is now ${action}.`, `✅ تم تعيين الإجراء التلقائي إلى ${action}.`),
+          text: t("bot.moderation.setwarn.theAutomaticActionIsNow", { action }),
         });
       }
 
       default:
         return await sock.sendMessage(groupId, {
-          text: tr(
-            "Wrong format. Use:\n`!setwarn max <number>`\n`!setwarn action <KICK|FLAG>`",
-            "صيغة غير صحيحة. استخدم:\n`!setwarn max <number>`\n`!setwarn action <KICK|FLAG>`",
-          ),
+          text: t("bot.moderation.setwarn.wrongFormatUseSetwarnMax"),
         });
     }
   },

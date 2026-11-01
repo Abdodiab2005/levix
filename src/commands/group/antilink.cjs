@@ -10,7 +10,7 @@ const {
   normalizeFeatureAction,
   policyFromFeatureAction,
 } = require("../../utils/moderationSummary.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t, tr } = require("../../utils/i18n.cjs");
 const { applyModerationPolicy } = require("../../services/moderationPolicy.cjs");
 
 // --- The Main Command Logic ---
@@ -40,28 +40,25 @@ const command = {
       case "on":
         antilinkConfig.enabled = true;
         await sock.sendMessage(groupId, {
-          text: tr("✅ Anti-link is on.", "✅ تم تفعيل نظام منع الروابط."),
+          text: t("bot.moderation.antilink.antiLinkIsOn"),
         });
         break;
       case "off":
         antilinkConfig.enabled = false;
         await sock.sendMessage(groupId, {
-          text: tr("☑️ Anti-link is off.", "☑️ تم تعطيل نظام منع الروابط."),
+          text: t("bot.moderation.antilink.antiLinkIsOff"),
         });
         break;
       case "mode": {
         const mode = args[1] ? args[1].toUpperCase() : "";
         if (!["ALL", "WHITELIST", "BLACKLIST"].includes(mode)) {
           return await sock.sendMessage(groupId, {
-            text: tr(
-              "Invalid mode. Available: `ALL`, `WHITELIST`, `BLACKLIST`",
-              "الوضع غير صالح. الأوضاع المتاحة: `ALL`, `WHITELIST`, `BLACKLIST`",
-            ),
+            text: t("bot.moderation.antilink.invalidModeAvailableAllWhitelist"),
           });
         }
         antilinkConfig.mode = mode;
         await sock.sendMessage(groupId, {
-          text: tr(`✅ Anti-link mode is now: ${mode}`, `✅ تم تغيير وضع منع الروابط إلى: ${mode}`),
+          text: t("bot.moderation.antilink.antiLinkModeIsNow", { mode }),
         });
         break;
       }
@@ -69,16 +66,13 @@ const command = {
         const domainToAllow = args[1] ? args[1].toLowerCase() : "";
         if (!domainToAllow)
           return await sock.sendMessage(groupId, {
-            text: tr("Say which domain to allow.", "يرجى تحديد دومين للسماح به."),
+            text: t("bot.moderation.antilink.sayWhichDomainToAllow"),
           });
         if (!antilinkConfig.allowed_domains.includes(domainToAllow)) {
           antilinkConfig.allowed_domains.push(domainToAllow);
         }
         await sock.sendMessage(groupId, {
-          text: tr(
-            `✅ '${domainToAllow}' is now allowed.`,
-            `✅ تم إضافة '${domainToAllow}' إلى قائمة الدومينات المسموح بها.`,
-          ),
+          text: t("bot.moderation.antilink.isNowAllowed", { domainToAllow }),
         });
         break;
       }
@@ -86,10 +80,7 @@ const command = {
         const action = normalizeFeatureAction(args[1]);
         if (!action) {
           return await sock.sendMessage(groupId, {
-            text: tr(
-              "Invalid action. Available: `DELETE`, `WARN`, `KICK`",
-              "الإجراء غير صالح. الإجراءات المتاحة: `DELETE`, `WARN`, `KICK`",
-            ),
+            text: t("bot.moderation.antilink.invalidActionAvailableDeleteWarn"),
           });
         }
         try {
@@ -103,7 +94,7 @@ const command = {
           });
         }
         await sock.sendMessage(groupId, {
-          text: tr(`✅ Anti-link action is now ${action}.`, `✅ تم تعيين إجراء منع الروابط إلى ${action}.`),
+          text: t("bot.moderation.antilink.antiLinkActionIsNow", { action }),
         });
         return;
       }
@@ -111,28 +102,27 @@ const command = {
         const domainToDisallow = args[1] ? args[1].toLowerCase() : "";
         if (!domainToDisallow)
           return await sock.sendMessage(groupId, {
-            text: tr("Say which domain to remove.", "يرجى تحديد دومين لإزالته."),
+            text: t("bot.moderation.antilink.sayWhichDomainToRemove"),
           });
         antilinkConfig.allowed_domains = antilinkConfig.allowed_domains.filter(
           (d) => d !== domainToDisallow,
         );
         await sock.sendMessage(groupId, {
-          text: tr(
-            `☑️ '${domainToDisallow}' is no longer allowed.`,
-            `☑️ تم إزالة '${domainToDisallow}' من قائمة الدومينات المسموح بها.`,
-          ),
+          text: t("bot.moderation.antilink.isNoLongerAllowed", { domainToDisallow }),
         });
         break;
       }
       default: {
         // Display current status
-        const state = antilinkConfig.enabled ? tr("on ✅", "مفعل ✅") : tr("off ☑️", "معطل ☑️");
-        const allowed = antilinkConfig.allowed_domains.join(", ") || tr("none", "لا يوجد");
+        const state = antilinkConfig.enabled ? t("bot.moderation.antilink.on") : t("bot.moderation.antilink.off");
+        const allowed = antilinkConfig.allowed_domains.join(", ") || t("bot.moderation.antilink.none");
         const action = featureActionOf(settings, "antilink");
-        const statusReply = tr(
-          `*Anti-link:*\n\nState: ${state}\nMode: ${antilinkConfig.mode}\nAction: ${action}\nAllowed domains: ${allowed}\n`,
-          `*حالة نظام منع الروابط:*\n\nالحالة: ${state}\nالوضع: ${antilinkConfig.mode}\nالإجراء: ${action}\nالدومينات المسموح بها: ${allowed}\n`,
-        );
+        const statusReply = t("bot.moderation.antilink.antiLinkStateModeAction", {
+          state,
+          mode: antilinkConfig.mode,
+          action,
+          allowed,
+        });
         await sock.sendMessage(groupId, { text: statusReply });
       }
     }
