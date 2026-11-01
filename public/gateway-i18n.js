@@ -202,11 +202,207 @@
       passwordMismatch: "كلمتا المرور غير متطابقتين.",
       invalidPassword: "يجب ألا تقل كلمة المرور عن {n} خانات",
     },
+    "pt-BR": {
+      titleLogin: "{brand} · Entrar",
+      titleSetup: "{brand} · Primeira execução",
+      titleQr: "{brand} · Vincular WhatsApp",
+      tagline: "Bot pessoal do WhatsApp",
+      storyAbout: "Sobre o {brand}",
+      by: "por",
+      backToApp: "Voltar ao app",
+      showPassword: "Mostrar senha",
+      hidePassword: "Ocultar senha",
+      selfHosted: "Auto-hospedado por natureza",
+      loginHeadline: "A sala de controle silenciosa por trás de cada conversa.",
+      loginLede: "Conexão, comandos, memória e moderação ficam juntos — no seu servidor e ao seu alcance.",
+      loginTrust: "<span></span> Espaço privado · controle direto",
+      secureAccess: "Acesso seguro",
+      welcomeBack: "Bem-vindo de volta",
+      loginSub: "Entre para gerenciar seu espaço do {brand}.",
+      passwordLabel: "Senha do painel",
+      passwordPlaceholder: "Digite sua senha",
+      openWorkspace: "Abrir espaço de trabalho",
+      forgotPassword: "Esqueceu a senha?",
+      backToSignIn: "Voltar para entrar",
+      resetEyebrow: "Redefinição de senha",
+      resetTitle: "Redefinir sua senha",
+      resetSubtitle: "O {brand} envia um código de uso único para o seu WhatsApp — na conversa da própria conta vinculada. O código vale por 10 minutos.",
+      resetSubtitleChannels: "O {brand} pode enviar um código de uso único para o WhatsApp ou para o seu e-mail de recuperação. O código vale por 10 minutos.",
+      resetSend: "Enviar código para o WhatsApp",
+      resetSendEmail: "Enviar código para o e-mail",
+      resetEmailHint: "O código será enviado para",
+      resetCodeLabel: "Código de redefinição",
+      resetCodePlaceholder: "6 dígitos",
+      newPassword: "Nova senha",
+      minLengthPlaceholder: "Pelo menos {n} caracteres",
+      repeatPassword: "Repetir senha",
+      repeatPlaceholder: "Digite novamente",
+      resetSubmit: "Definir nova senha",
+      resetChooseChannel: "Escolher outro método de recuperação",
+      resetErrThrottled: "Muitas solicitações. Tente novamente em {n} segundos.",
+      resetErrNoSession: "O WhatsApp não está conectado, por isso o código não pode ser enviado. Entre no servidor e execute `levix reset-password`, ou inicie a sessão do WhatsApp primeiro.",
+      resetErrSendFailed: "Não foi possível enviar a mensagem do WhatsApp. Tente novamente em um minuto.",
+      resetErrNoEmail: "O e-mail de recuperação não está configurado.",
+      resetErrUnverified: "O e-mail de recuperação precisa ser verificado novamente em Configurações. Use o WhatsApp ou execute `levix reset-password` no servidor.",
+      resetErrLocked: "Muitos códigos incorretos hoje; a redefinição foi pausada. Tente novamente mais tarde ou execute `levix reset-password` no servidor.",
+      resetErrRateLimited: "O serviço de e-mail está ocupado. Tente novamente em instantes.",
+      resetErrUnavailable: "Não foi possível conectar ao serviço de e-mail. Tente novamente.",
+      resetErrInvalid: "O serviço de e-mail recusou a solicitação.",
+      resetErrStart: "Não foi possível iniciar a redefinição. Tente novamente.",
+      resetErrServer: "Não foi possível conectar ao servidor. Tente novamente.",
+      resetDone: "Senha atualizada. Levando você para entrar…",
+      resetErrWrongCode: "Código incorreto.",
+      resetErrAttemptsLeft: "{n} tentativas restantes.",
+      resetErrExpired: "Esse código não é mais válido. Envie um novo.",
+      resetErrMismatch: "As duas senhas não coincidem.",
+      resetErrInvalidPassword: "Essa senha não é permitida.",
+      resetErrFailed: "Não foi possível redefinir a senha. Tente novamente.",
+      firstMinute: "Seu primeiro minuto",
+      setupHeadline: "Torne o espaço de trabalho seu.",
+      setupLede: "Escolha uma senha forte e gerencie o assistente em uma única sala de controle privada.",
+      setupTrust: "<span></span> Configuração única · sem arquivos de configuração",
+      createWorkspace: "Crie seu espaço de trabalho",
+      setupWelcome: "Bem-vindo ao {brand}",
+      setupSub: "Proteja a conta do WhatsApp vinculada com pelo menos {n} caracteres.",
+      setupCodeLabel: "Código de configuração",
+      setupCodePlaceholder: "Exibido no terminal do bot",
+      setupCodeHint: "Confirma que você tem acesso ao servidor que executa o {brand}.",
+      setupPasswordLabel: "Senha",
+      createWorkspaceBtn: "Criar espaço de trabalho",
+      directLine: "Uma linha direta",
+      qrHeadline: "Coloque seu assistente online.",
+      qrLede: "Uma leitura vincula o {brand} com segurança à conta do WhatsApp que você escolher.",
+      qrTrust: "<span></span> Status da vinculação ao vivo",
+      linkDevice: "Vincular dispositivo",
+      qrScanTitle: "Escaneie com o WhatsApp",
+      qrWaiting: "Aguardando…",
+      qrStep1: "<span>Abra</span> o WhatsApp no celular que o bot vai usar.",
+      qrStep2: "<span>Escolha</span> Configurações → Dispositivos vinculados → Vincular um dispositivo.",
+      qrStep3: "<span>Escaneie</span> o código exibido acima.",
+      qrCallout: "Ainda sem código? Pressione <strong>Iniciar sessão</strong> na tela Conexão do painel.",
+      backToDashboard: "Voltar ao painel",
+      qrScanMe: "Escaneie-me",
+      qrWaitingCode: "Aguardando um código…",
+      qrConnected: "Conectado",
+      qrLinked: "Vinculado ✓",
+      qrNotStarted: "Não iniciado — inicie pelo painel",
+      qrConnecting: "Conectando…",
+      tooManyAttempts: "Muitas tentativas. Tente novamente mais tarde.",
+      incorrectPassword: "Senha incorreta",
+      wrongSetupCode: "Código de configuração incorreto.",
+      passwordMismatch: "As duas senhas não coincidem.",
+      invalidPassword: "A senha deve ter pelo menos {n} caracteres",
+    },
+    "es-419": {
+      titleLogin: "{brand} · Iniciar sesión",
+      titleSetup: "{brand} · Primera ejecución",
+      titleQr: "{brand} · Vincular WhatsApp",
+      tagline: "Bot personal de WhatsApp",
+      storyAbout: "Acerca de {brand}",
+      by: "por",
+      backToApp: "Volver a la app",
+      showPassword: "Mostrar contraseña",
+      hidePassword: "Ocultar contraseña",
+      selfHosted: "Autoalojado por diseño",
+      loginHeadline: "La sala de control silenciosa detrás de cada chat.",
+      loginLede: "Conexión, comandos, memoria y moderación en un solo lugar: en tu servidor y a tu alcance.",
+      loginTrust: "<span></span> Espacio privado · control directo",
+      secureAccess: "Acceso seguro",
+      welcomeBack: "Te damos la bienvenida de nuevo",
+      loginSub: "Inicia sesión para administrar tu espacio de {brand}.",
+      passwordLabel: "Contraseña del panel",
+      passwordPlaceholder: "Ingresa tu contraseña",
+      openWorkspace: "Abrir espacio de trabajo",
+      forgotPassword: "¿Olvidaste tu contraseña?",
+      backToSignIn: "Volver a iniciar sesión",
+      resetEyebrow: "Restablecimiento de contraseña",
+      resetTitle: "Restablece tu contraseña",
+      resetSubtitle: "{brand} envía un código de un solo uso a tu WhatsApp, al chat de la propia cuenta vinculada. El código es válido por 10 minutos.",
+      resetSubtitleChannels: "{brand} puede enviar un código de un solo uso a WhatsApp o a tu correo de recuperación. El código es válido por 10 minutos.",
+      resetSend: "Enviar código a WhatsApp",
+      resetSendEmail: "Enviar código al correo",
+      resetEmailHint: "El código se enviará a",
+      resetCodeLabel: "Código de restablecimiento",
+      resetCodePlaceholder: "6 dígitos",
+      newPassword: "Nueva contraseña",
+      minLengthPlaceholder: "Al menos {n} caracteres",
+      repeatPassword: "Repetir contraseña",
+      repeatPlaceholder: "Escríbela de nuevo",
+      resetSubmit: "Establecer nueva contraseña",
+      resetChooseChannel: "Elegir otro método de recuperación",
+      resetErrThrottled: "Demasiadas solicitudes. Inténtalo de nuevo en {n} segundos.",
+      resetErrNoSession: "WhatsApp no está conectado, por lo que no se puede enviar el código. Inicia sesión en el servidor y ejecuta `levix reset-password`, o inicia primero la sesión de WhatsApp.",
+      resetErrSendFailed: "No se pudo enviar el mensaje de WhatsApp. Inténtalo de nuevo en un minuto.",
+      resetErrNoEmail: "El correo de recuperación no está configurado.",
+      resetErrUnverified: "El correo de recuperación debe verificarse de nuevo en Configuración. Usa WhatsApp o ejecuta `levix reset-password` en el servidor.",
+      resetErrLocked: "Demasiados códigos incorrectos hoy; el restablecimiento está en pausa. Inténtalo más tarde o ejecuta `levix reset-password` en el servidor.",
+      resetErrRateLimited: "El servicio de correo está ocupado. Inténtalo de nuevo en un momento.",
+      resetErrUnavailable: "No se pudo conectar con el servicio de correo. Inténtalo de nuevo.",
+      resetErrInvalid: "El servicio de correo rechazó la solicitud.",
+      resetErrStart: "No se pudo iniciar el restablecimiento. Inténtalo de nuevo.",
+      resetErrServer: "No se pudo conectar con el servidor. Inténtalo de nuevo.",
+      resetDone: "Contraseña actualizada. Redirigiendo para iniciar sesión…",
+      resetErrWrongCode: "Código incorrecto.",
+      resetErrAttemptsLeft: "Quedan {n} intentos.",
+      resetErrExpired: "Ese código ya no es válido. Envía uno nuevo.",
+      resetErrMismatch: "Las dos contraseñas no coinciden.",
+      resetErrInvalidPassword: "Esa contraseña no está permitida.",
+      resetErrFailed: "No se pudo restablecer la contraseña. Inténtalo de nuevo.",
+      firstMinute: "Tu primer minuto",
+      setupHeadline: "Haz tuyo el espacio de trabajo.",
+      setupLede: "Elige una contraseña segura y administra el asistente desde una única sala de control privada.",
+      setupTrust: "<span></span> Configuración única · sin archivos de configuración",
+      createWorkspace: "Crea tu espacio de trabajo",
+      setupWelcome: "Te damos la bienvenida a {brand}",
+      setupSub: "Protege la cuenta de WhatsApp vinculada con al menos {n} caracteres.",
+      setupCodeLabel: "Código de configuración",
+      setupCodePlaceholder: "Mostrado en la terminal del bot",
+      setupCodeHint: "Confirma que tienes acceso al servidor donde se ejecuta {brand}.",
+      setupPasswordLabel: "Contraseña",
+      createWorkspaceBtn: "Crear espacio de trabajo",
+      directLine: "Una línea directa",
+      qrHeadline: "Pon tu asistente en línea.",
+      qrLede: "Un escaneo vincula {brand} de forma segura con la cuenta de WhatsApp que elijas.",
+      qrTrust: "<span></span> Estado de vinculación en vivo",
+      linkDevice: "Vincular dispositivo",
+      qrScanTitle: "Escanea con WhatsApp",
+      qrWaiting: "Esperando…",
+      qrStep1: "<span>Abre</span> WhatsApp en el teléfono que usará el bot.",
+      qrStep2: "<span>Elige</span> Configuración → Dispositivos vinculados → Vincular un dispositivo.",
+      qrStep3: "<span>Escanea</span> el código que se muestra arriba.",
+      qrCallout: "¿Aún no hay código? Presiona <strong>Iniciar sesión</strong> en la pantalla Conexión del panel.",
+      backToDashboard: "Volver al panel",
+      qrScanMe: "Escanéame",
+      qrWaitingCode: "Esperando un código…",
+      qrConnected: "Conectado",
+      qrLinked: "Vinculado ✓",
+      qrNotStarted: "No iniciado — inícialo desde el panel",
+      qrConnecting: "Conectando…",
+      tooManyAttempts: "Demasiados intentos. Inténtalo de nuevo más tarde.",
+      incorrectPassword: "Contraseña incorrecta",
+      wrongSetupCode: "Código de configuración incorrecto.",
+      passwordMismatch: "Las dos contraseñas no coinciden.",
+      invalidPassword: "La contraseña debe tener al menos {n} caracteres",
+    },
   };
   // </i18n:generated>
 
   var root = document.documentElement;
-  var lang = root.lang === "ar" ? "ar" : "en";
+  // Same subtag rule as frontend/src/i18n/locale.ts. Unknown values are English.
+  // Right-to-left is Arabic only. pt-BR and es-419 use the English dictionary
+  // until those catalogs exist.
+  function normalizeLocale(value) {
+    if (typeof value !== "string") return null;
+    var subtag = value.trim().split(/[_-]/)[0].toLowerCase();
+    if (subtag === "ar") return "ar";
+    if (subtag === "pt") return "pt-BR";
+    if (subtag === "es") return "es-419";
+    if (subtag === "en") return "en";
+    return null;
+  }
+  var lang = normalizeLocale(root.lang) || "en";
+  root.lang = lang;
+  root.dir = lang === "ar" ? "rtl" : "ltr";
 
   function t(key, vars) {
     var value = (DICT[lang] && DICT[lang][key]) || DICT.en[key] || key;
@@ -250,8 +446,9 @@
   }
 
   function setLanguage(nextLang) {
-    if (nextLang !== "ar" && nextLang !== "en") return;
-    lang = nextLang;
+    var resolved = normalizeLocale(nextLang);
+    if (!resolved) return;
+    lang = resolved;
     root.lang = lang;
     root.dir = lang === "ar" ? "rtl" : "ltr";
     window.LevixGatewayI18n.lang = lang;
@@ -275,9 +472,8 @@
     if (event.key === "levix_theme" && (event.newValue === "dark" || event.newValue === "light")) {
       setTheme(event.newValue);
     }
-    if (event.key === "levix_lang" && (event.newValue === "ar" || event.newValue === "en")) {
-      setLanguage(event.newValue);
-    }
+    var savedLang = event.key === "levix_lang" ? normalizeLocale(event.newValue) : null;
+    if (savedLang) setLanguage(savedLang);
   });
 
   window.LevixGatewayI18n = { lang: lang, t: t, apply: apply };

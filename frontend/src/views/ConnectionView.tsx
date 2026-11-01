@@ -35,6 +35,7 @@ import {
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 import type { SessionStatus } from "../types";
+import { fill } from "../utils/fill";
 
 function isAndroidCompanionApp() {
   return typeof window !== "undefined" && Boolean((window as { LevixHost?: unknown }).LevixHost);
@@ -56,7 +57,7 @@ interface ConnectionViewProps {
 }
 
 export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onStatusUpdate }) => {
-  const { t, language } = useI18n();
+  const { t } = useI18n();
   const { toast } = useToast();
   const [showUnlinkModal, setShowUnlinkModal] = useState(false);
   const [acting, setActing] = useState(false);
@@ -78,12 +79,8 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
   const isOnline = status?.isOnline !== false;
   const resumeLabel =
     isPaused || state === "disconnected" || state === "retry_exhausted"
-      ? language === "ar"
-        ? "استئناف الجلسة"
-        : "Resume session"
-      : language === "ar"
-        ? "الاتصال"
-        : "Connect";
+      ? t("connectionResumeSession")
+      : t("connectionConnect");
 
   // Generate QR code locally in offline-first mode
   useEffect(() => {
@@ -146,40 +143,30 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
     if (e) e.preventDefault();
     const cleanPhone = phoneNumber.replace(/\D/g, "");
     if (!cleanPhone) {
-      toast(
-        language === "ar"
-          ? "يرجى إدخال رقم الهاتف مع كود الدولة أولاً."
-          : "Please enter your phone number with country code.",
-        "error",
-      );
+      toast(t("connectionPhoneRequired"), "error");
       return;
     }
     if (cleanPhone.startsWith("0")) {
-      toast(
-        language === "ar"
-          ? "يرجى حذف الصفر في البداية وكتابة كود الدولة (مثلاً: 2010... وليس 010...)"
-          : "Drop the leading 0 and include the country code (e.g. 2010... not 010...).",
-        "error",
-      );
+      toast(t("connectionDropLeadingZero"), "error");
       return;
     }
     await handleAction(
       () => api.startSession({ method: "pairing", phone: cleanPhone }),
-      language === "ar" ? "جارٍ طلب رمز الربط من واتساب..." : "Requesting pairing code...",
+      t("connectionRequestingPairing"),
     );
   };
 
   const handleStartQr = async () => {
     await handleAction(
       () => api.startSession({ method: "qr" }),
-      language === "ar" ? "جارٍ بدء الاتصال برمز QR..." : "Starting QR code connection...",
+      t("connectionStartingQr"),
     );
   };
 
   const handleSwitchToPhone = async () => {
     await handleAction(
       api.stopSession,
-      language === "ar" ? "تم الإلغاء، أدخل رقم هاتفك" : "Cancelled, enter your phone number",
+      t("connectionCancelledEnterPhone"),
     );
     setPairingMethod("pairing");
   };
@@ -188,7 +175,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
     if (status?.pairingCode) {
       navigator.clipboard.writeText(status.pairingCode.replace(/\s+/g, ""));
       setCopiedCode(true);
-      toast(language === "ar" ? "تم نسخ كود الربط!" : "Pairing code copied!", "success");
+      toast(t("connectionPairingCopied"), "success");
       setTimeout(() => setCopiedCode(false), 2500);
     }
   };
@@ -197,7 +184,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
     setShowUnlinkModal(false);
     await handleAction(
       api.unlinkSession,
-      language === "ar" ? "تم إلغاء ربط الجلسة بنجاح" : "Session unlinked successfully.",
+      t("connectionUnlinked"),
     );
   };
 
@@ -288,9 +275,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                   : isPaused
                     ? t("paused")
                     : linked
-                      ? language === "ar"
-                        ? "جلسة محفوظة — يمكن استئنافها"
-                        : "Saved session — ready to resume"
+                      ? t("connectionSavedReady")
                       : t("sessionOffline")}
               </p>
             </div>
@@ -319,14 +304,9 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
           <div className="rounded-xl border border-warn/30 bg-warn/10 p-3.5 flex items-center gap-3 text-warn">
             <AlertCircle size={20} className="shrink-0" />
             <div className="text-xs sm:text-sm">
-              <span className="font-bold">
-                {language === "ar" ? "إعادة الاتصال قريباً" : "Reconnecting soon"}
-              </span>{" "}
-              &bull;{" "}
+              <span className="font-bold">{t("connectionReconnectingSoon")}</span> &bull;{" "}
               <span>
-                {language === "ar"
-                  ? `المحاولة التالية خلال ${status.retryInSeconds} ثانية`
-                  : `Next attempt in ${status.retryInSeconds}s`}
+                {fill(t("connectionNextAttempt"), { seconds: status.retryInSeconds })}
               </span>
             </div>
           </div>
@@ -347,7 +327,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
               </div>
             </div>
             <StatusPill tone="ok" className="shrink-0">
-              {language === "ar" ? "متصل" : "Online"}
+              {t("connectionOnline")}
             </StatusPill>
           </div>
         )}
@@ -380,7 +360,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                 disabled={acting}
                 className="flex-1 sm:flex-none"
               >
-                {language === "ar" ? "إلغاء المحاولة" : "Cancel Attempt"}
+                {t("connectionCancelAttempt")}
               </Button>
               {renderSecondary(withRestart([]))}
             </div>
@@ -391,13 +371,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
             <div className="flex flex-col gap-3 w-full max-w-xl">
               {isPaused && (
                 <p className="text-xs sm:text-sm text-muted leading-relaxed">
-                  {isOnline
-                    ? language === "ar"
-                      ? "الجلسة محفوظة. اضغط استئناف لإعادة استخدام نفس حساب واتساب."
-                      : "This WhatsApp session is saved. Resume to reconnect with the same account."
-                    : language === "ar"
-                      ? "الاتصال متوقف بسبب انقطاع الإنترنت. سيُستأنف تلقائياً عند عودة الشبكة، أو اضغط استئناف."
-                      : "Paused while the device is offline. It will resume when the network returns, or tap Resume."}
+                  {isOnline ? t("connectionPausedResume") : t("connectionPausedOffline")}
                 </p>
               )}
               <div className="flex items-center gap-2.5">
@@ -427,12 +401,12 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                 options={[
                   {
                     value: "pairing",
-                    label: language === "ar" ? "كود الربط الرقمي (الهاتف)" : "Pairing Code (Phone)",
+                    label: t("connectionPairingCodePhone"),
                     icon: <Smartphone size={16} />,
                   },
                   {
                     value: "qr",
-                    label: language === "ar" ? "مسح رمز QR" : "QR Code Scan",
+                    label: t("connectionQrScan"),
                     icon: <QrCode size={16} />,
                   },
                 ]}
@@ -451,7 +425,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                       value={phoneNumber}
                       onChange={(e) => setPhoneNumber(e.target.value)}
                       placeholder={
-                        language === "ar" ? "201012345678 (مع كود الدولة)" : "e.g. 201012345678"
+                        t("connectionPhonePlaceholder")
                       }
                       dir="ltr"
                       className="ps-10"
@@ -466,14 +440,12 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                       className="flex-1 whitespace-nowrap sm:flex-none"
                       data-tour="connection-start"
                     >
-                      {language === "ar" ? "الحصول على كود الربط" : "Get Pairing Code"}
+                      {t("connectionGetPairingCode")}
                     </Button>
                     {renderSecondary(pairedSecondary)}
                   </div>
                   <p className="text-xs text-muted leading-relaxed">
-                    {language === "ar"
-                      ? "💡 أدخل رقم هاتفك مسبوقاً بكود الدولة وبدون 0 في البداية (مثال: 2010... وليس 010...). سيظهر لك كود لإدخاله في واتساب فوراً."
-                      : "💡 Enter your number with country code, no leading zeros (e.g. 2010... not 010...). A code will appear to enter into WhatsApp."}
+                    {t("connectionPairingHint")}
                   </p>
                 </form>
               )}
@@ -490,15 +462,11 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                       className="flex-1 whitespace-nowrap sm:flex-none"
                       data-tour="connection-start"
                     >
-                      {language === "ar" ? "بدء الربط عبر رمز QR" : "Start QR Linking"}
+                      {t("connectionStartQr")}
                     </Button>
                     {renderSecondary(pairedSecondary)}
                   </div>
-                  <p className="text-xs text-muted">
-                    {language === "ar"
-                      ? "سيتم إنشاء رمز QR لمسحه من هاتف آخر أو من شاشة الحاسوب عبر كاميرا واتساب."
-                      : "Generates a QR code to be scanned using WhatsApp camera on another device or screen."}
-                  </p>
+                  <p className="text-xs text-muted">{t("connectionQrHint")}</p>
                 </div>
               )}
             </div>
@@ -513,19 +481,9 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
             <RefreshCw size={24} className="animate-spin" />
           </div>
           <h3 className="text-base sm:text-lg font-bold text-text-main mb-1.5">
-            {state === "linking"
-              ? language === "ar"
-                ? "جارٍ إتمام الربط مع الهاتف..."
-                : "Finishing link handshake..."
-              : language === "ar"
-                ? "جارٍ بدء تشغيل الجلسة..."
-                : "Initializing WhatsApp session..."}
+            {state === "linking" ? t("connectionFinishingLink") : t("connectionInitializing")}
           </h3>
-          <p className="text-xs sm:text-sm text-muted max-w-md">
-            {language === "ar"
-              ? "يتم الآن إنشاء مقبس الاتصال، ستظهر بيانات الربط خلال ثوانٍ معدودة."
-              : "Creating connection socket. Pairing details will appear in just a few seconds."}
-          </p>
+          <p className="text-xs sm:text-sm text-muted max-w-md">{t("connectionCreatingSocket")}</p>
         </Card>
       )}
 
@@ -539,17 +497,15 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                 <Smartphone size={26} />
               </div>
               <h3 className="text-lg sm:text-xl font-bold text-text-main mb-1.5">
-                {language === "ar" ? "كود الربط الرقمي مع واتساب" : "WhatsApp Pairing Code"}
+                {t("connectionPairingCodeTitle")}
               </h3>
               <p className="text-xs sm:text-sm text-muted max-w-md mb-6">
-                {language === "ar"
-                  ? "أدخل هذا الكود في تطبيق واتساب على هاتفك لتأكيد الربط مباشرة."
-                  : "Enter this code into WhatsApp on your phone to complete pairing."}
+                {t("connectionPairingCodeBody")}
               </p>
 
               <div className="rounded-2xl border-2 border-brand-cyan/40 bg-brand-cyan/10 p-5 sm:p-6 w-full max-w-md flex flex-col items-center gap-4 shadow-lg shadow-brand-cyan/10">
                 <div className="text-xs font-bold text-brand-cyan uppercase tracking-wider">
-                  {language === "ar" ? "كود الربط المكون من 8 خانات" : "8-Digit Pairing Code"}
+                  {t("connectionEightDigit")}
                 </div>
                 <div
                   className="text-3xl sm:text-4xl font-mono font-extrabold tracking-widest text-brand-cyan select-all"
@@ -564,44 +520,22 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                   icon={copiedCode ? <Check size={18} /> : <Copy size={18} />}
                   onClick={copyPairingCode}
                 >
-                  {copiedCode
-                    ? language === "ar"
-                      ? "تم النسخ بنجاح!"
-                      : "Copied!"
-                    : language === "ar"
-                      ? "نسخ كود الربط"
-                      : "Copy Code"}
+                  {copiedCode ? t("connectionCopied") : t("connectionCopyCode")}
                 </Button>
               </div>
 
               {/* Instructions Box */}
               <div className="mt-6 p-4 rounded-xl border border-line bg-panel-raised text-start w-full max-w-md">
                 <div className="text-xs font-bold text-text-main mb-3">
-                  {language === "ar" ? "خطوات الإدخال في واتساب:" : "Steps to enter in WhatsApp:"}
+                  {t("connectionStepsTitle")}
                 </div>
                 <ol className="text-xs text-muted space-y-2 list-decimal list-inside leading-relaxed">
+                  <li>{t("connectionStepOpen")}</li>
+                  <li>{t("connectionStepLinkedDevices")}</li>
                   <li>
-                    {language === "ar"
-                      ? "افتح تطبيق واتساب على هاتفك."
-                      : "Open WhatsApp on your phone."}
+                    <strong className="text-text-main">{t("connectionStepLinkWithPhone")}</strong>
                   </li>
-                  <li>
-                    {language === "ar"
-                      ? "اذهب إلى الإعدادات > الأجهزة المرتبطة > ربط جهاز."
-                      : "Go to Settings > Linked Devices > Link a Device."}
-                  </li>
-                  <li>
-                    <strong className="text-text-main">
-                      {language === "ar"
-                        ? "اضغط على «الربط باستخدام رقم الهاتف بدلاً من ذلك» أسفل الشاشة."
-                        : "Tap 'Link with phone number instead' at bottom of screen."}
-                    </strong>
-                  </li>
-                  <li>
-                    {language === "ar"
-                      ? "اكتب هذا الكود وسيتم ربط البوت مباشرة!"
-                      : "Enter the code above to connect immediately!"}
-                  </li>
+                  <li>{t("connectionStepEnterCode")}</li>
                 </ol>
               </div>
             </div>
@@ -613,9 +547,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
               </div>
               <h3 className="text-lg font-bold text-text-main mb-1.5">{t("waiting_for_qr")}</h3>
               <p className="text-xs sm:text-sm text-muted max-w-md mb-6">
-                {language === "ar"
-                  ? "افتح واتساب على هاتفك، اذهب إلى الأجهزة المرتبطة، ثم امسح هذا الرمز للربط."
-                  : "Open WhatsApp on your phone, go to Linked Devices, and scan this code to link."}
+                {t("connectionScanHint")}
               </p>
 
               <div className="p-3 sm:p-4 bg-panel rounded-2xl shadow-xl border border-line animate-in fade-in zoom-in-95 duration-300">
@@ -629,9 +561,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
               {/* Helper for users on mobile who can't scan their own screen */}
               <div className="mt-6 pt-5 border-t border-line w-full max-w-md flex flex-col items-center gap-2.5">
                 <p className="text-xs text-muted text-center">
-                  {language === "ar"
-                    ? "هل تستخدم التطبيق من نفس الهاتف ولا تستطيع مسح الرمز؟"
-                    : "Using the app on the same phone and can't scan?"}
+                  {t("connectionSamePhone")}
                 </p>
                 <Button
                   variant="secondary"
@@ -640,9 +570,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
                   disabled={acting}
                   className="w-full"
                 >
-                  {language === "ar"
-                    ? "الربط برقم الهاتف (كود الربط الرقمي) بدلاً من QR"
-                    : "Link with Phone Pairing Code Instead"}
+                  {t("connectionLinkWithPhoneInstead")}
                 </Button>
               </div>
             </div>
@@ -651,9 +579,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
             <div className="flex flex-col items-center gap-3 py-8">
               <Spinner className="size-8" />
               <span className="text-xs sm:text-sm font-semibold text-muted animate-pulse">
-                {language === "ar"
-                  ? "جارٍ تجهيز بيانات الربط من واتساب..."
-                  : "Preparing pairing details from WhatsApp..."}
+                {t("connectionPreparing")}
               </span>
             </div>
           )}
@@ -677,9 +603,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
         }
       >
         <p className="text-xs sm:text-sm text-text-main leading-relaxed">
-          {language === "ar"
-            ? "هل أنت متأكد من رغبتك في إلغاء ربط جلسة واتساب الحالية؟ ستحتاج إلى مسح رمز QR جديد أو إدخال كود ربط لإعادة ربط الحساب."
-            : "Are you sure you want to unlink this WhatsApp session? You will need to scan a new QR code or enter a pairing code to reconnect."}
+          {t("connectionUnlinkConfirm")}
         </p>
         <p className="text-xs sm:text-sm text-muted leading-relaxed mt-2">
           {t("unlinkStickersWarning")}

@@ -44,6 +44,7 @@ import {
   useSavedValue,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
+import { intlLocale } from "../i18n/locale";
 import type { translations } from "../i18n/translations";
 import { ModelCapabilityIndicators } from "./ai/ModelCapabilityIndicators";
 
@@ -202,6 +203,7 @@ export const AIAssistantView: React.FC = () => {
   });
   const sttProvider = useSavedValue(String(settings["ai_stt_provider"] || "auto"));
   const botLang = useSavedValue(String(settings["bot_language"] || "auto"));
+  const aiReplyLang = useSavedValue(String(settings["ai_reply_language"] || "follow_bot"));
   const translateEngine = useSavedValue(String(settings["translate_engine"] || "ai"));
   const googleTranslateKey = useSavedValue(String(settings["google_translate_api_key"] || ""));
 
@@ -401,10 +403,7 @@ export const AIAssistantView: React.FC = () => {
   const savePersona = async () => {
     try {
       await api.updatePersona(personaText);
-      toast(
-        language === "ar" ? "تم تحديث توجيه الشخصية بنجاح!" : "Persona updated successfully!",
-        "success",
-      );
+      toast(t("aiPersonaUpdated"), "success");
       setPersonaModalOpen(false);
     } catch (err: any) {
       toast(err.message, "error");
@@ -462,7 +461,7 @@ export const AIAssistantView: React.FC = () => {
     if (!selectedMemoryFile) return;
     try {
       await api.updateMemoryFile(selectedMemoryFile, memoryContent);
-      toast(language === "ar" ? "تم حفظ ملف الذاكرة بنجاح!" : "Memory file updated!", "success");
+      toast(t("aiMemoryUpdated"), "success");
       loadMemoryFiles();
       setSelectedMemoryFile(null);
     } catch (err: any) {
@@ -501,7 +500,7 @@ export const AIAssistantView: React.FC = () => {
 
   const formatStamp = (ts: number | null) =>
     ts
-      ? new Date(ts).toLocaleString(language === "ar" ? "ar-EG" : "en-GB", {
+      ? new Date(ts).toLocaleString(intlLocale(language, { ar: "ar-EG", en: "en-GB" }), {
           dateStyle: "medium",
           timeStyle: "short",
         })
@@ -858,6 +857,37 @@ export const AIAssistantView: React.FC = () => {
                 <option value="auto">{t("langAuto")}</option>
                 <option value="ar">{t("langAr")}</option>
                 <option value="en">{t("langEn")}</option>
+                <option value="pt-BR">{t("langPtBr")}</option>
+                <option value="es-419">{t("langEs419")}</option>
+              </Select>
+            </SaveField>
+          </div>
+
+          <div className="py-2">
+            <SaveField
+              label={t("aiReplyLanguage")}
+              description={t("aiReplyLanguageDesc")}
+              htmlFor="ai-reply-language"
+              dirty={aiReplyLang.dirty}
+              saving={aiReplyLang.status === "saving"}
+              justSaved={aiReplyLang.status === "saved"}
+              error={aiReplyLang.error}
+              onSave={() => aiReplyLang.save((next) => persistSetting("ai_reply_language", next))}
+              onRevert={aiReplyLang.revert}
+              {...saveLabels}
+            >
+              <Select
+                id="ai-reply-language"
+                aria-label={t("aiReplyLanguage")}
+                value={aiReplyLang.value}
+                onChange={(e) => aiReplyLang.setValue(e.target.value)}
+              >
+                <option value="follow_bot">{t("aiLangFollowBot")}</option>
+                <option value="auto">{t("langAuto")}</option>
+                <option value="ar">{t("langAr")}</option>
+                <option value="en">{t("langEn")}</option>
+                <option value="pt-BR">{t("langPtBr")}</option>
+                <option value="es-419">{t("langEs419")}</option>
               </Select>
             </SaveField>
           </div>

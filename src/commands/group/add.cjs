@@ -1,18 +1,10 @@
 // file: /commands/add.js (Upgraded with Invite Fallback)
 const logger = require("../../utils/logger.cjs");
-const { tr } = require("../../utils/i18n.cjs");
+const { t } = require("../../utils/i18n.cjs");
 const normalizeJid = require("../../utils/normalizeJid.esm.js").default;
 
 module.exports = {
   name: "add",
-  description: {
-    en: "Adds a member to the group, or sends an invite if their privacy settings block it.",
-    ar: "يضيف عضوًا إلى المجموعة، أو يرسل له دعوة إذا منعت إعدادات الخصوصية إضافته.",
-  },
-  usage: {
-    en: "add [admin] <phone number>",
-    ar: "add [admin] <رقم الهاتف>",
-  },
   chat: "group",
   userAdminRequired: true,
   botAdminRequired: true,
@@ -60,18 +52,12 @@ module.exports = {
         const cleanNumber = numberArg.replace(/\D/g, "");
         if (!cleanNumber)
           return await sock.sendMessage(groupId, {
-            text: tr(
-              "Give a valid phone number, a mention, or a contact card.",
-              "يرجى تقديم رقم هاتف صالح، أو عمل منشن، أو إرسال جهة اتصال.",
-            ),
+            text: t("bot.group.add.invalidNumber"),
           });
         targetJid = `${cleanNumber}@s.whatsapp.net`;
       } else {
         return await sock.sendMessage(groupId, {
-          text: tr(
-            "To add someone, mention them, send their number, or send their contact card.",
-            "لإضافة عضو، قم بعمل منشن له، أو أرسل رقمه، أو أرسل جهة الاتصال الخاصة به.",
-          ),
+          text: t("bot.group.add.usageHint"),
         });
       }
       // --- End of Target Identification Logic ---
@@ -82,32 +68,23 @@ module.exports = {
       );
       if (isAlreadyMember) {
         return await sock.sendMessage(groupId, {
-          text: tr(
-            `⚠️ @${targetJid.split("@")[0]} is already in the group.`,
-            `⚠️ العضو @${targetJid.split("@")[0]} موجود بالفعل في المجموعة.`,
-          ),
+          text: t("bot.group.add.alreadyMember", { number: targetJid.split("@")[0] }),
           mentions: [targetJid],
         });
       }
 
       await sock.sendMessage(groupId, {
-        text: tr(
-          `Trying to add @${targetJid.split("@")[0]}...`,
-          `جارٍ محاولة إضافة @${targetJid.split("@")[0]}...`,
-        ),
+        text: t("bot.group.add.trying", { number: targetJid.split("@")[0] }),
         mentions: [targetJid],
       });
       const response = await sock.groupParticipantsUpdate(groupId, [targetJid], "add");
       const status = response[0].status;
 
       if (status === "200") {
-        let successMsg = tr(
-          `✅ Added @${targetJid.split("@")[0]}.`,
-          `✅ تم إضافة @${targetJid.split("@")[0]} بنجاح.`,
-        );
+        let successMsg = t("bot.group.add.added", { number: targetJid.split("@")[0] });
         if (shouldPromote) {
           await sock.groupParticipantsUpdate(groupId, [targetJid], "promote");
-          successMsg += tr(`\n👑 And made them an admin.`, `\n👑 وتمت ترقيته إلى مشرف.`);
+          successMsg += t("bot.group.add.madeAdmin");
         }
         await sock.sendMessage(groupId, {
           text: successMsg,
@@ -115,14 +92,7 @@ module.exports = {
         });
       } else if (status === "403") {
         await sock.sendMessage(groupId, {
-          text: tr(
-            `⚠️ @${
-              targetJid.split("@")[0]
-            } can't be added directly because of their privacy settings.\n\nSend them an invite link in private?\nSend \`yes\` to confirm.`,
-            `⚠️ لا يمكن إضافة @${
-              targetJid.split("@")[0]
-            } مباشرة بسبب إعدادات الخصوصية لديه.\n\nهل تود إرسال رابط دعوة له في الخاص؟\nأرسل \`yes\` للتأكيد.`,
-          ),
+          text: t("bot.group.add.privacyBlocked", { number: targetJid.split("@")[0] }),
           mentions: [targetJid],
         });
 
@@ -141,19 +111,13 @@ module.exports = {
         }, 30000);
       } else {
         await sock.sendMessage(groupId, {
-          text: tr(
-            `⚠️ I couldn't add that number. (status code: ${status})`,
-            `⚠️ لم أتمكن من إضافة الرقم. (كود الحالة: ${status})`,
-          ),
+          text: t("bot.group.add.failedStatus", { status }),
         });
       }
     } catch (error) {
       logger.error({ err: error, command: "add" }, "Error in !add command");
       await sock.sendMessage(groupId, {
-        text: tr(
-          "Something went wrong. Make sure I'm an admin and the number is right.",
-          "حدث خطأ. تأكد من أنني مشرف وأن الرقم صحيح.",
-        ),
+        text: t("bot.group.add.failed"),
       });
     }
   },

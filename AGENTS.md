@@ -52,10 +52,10 @@ to all v5 work and add to the rules below; they remove none of them.
   and passes its tests with no private code or credential. `levix-plus` code,
   keys and build output never enter this repository or its public artifacts
   (ADR-002). No required Levix Cloud and no downloaded executable code (ADR-003).
-- **Languages.** Shipped today: `ar` and `en`. Planned: `ar`, `en`, `pt-BR`,
-  `es-419`, with UI, bot reply and AI reply language as three separate settings
-  (ADR-004). Until Phase 03 lands, bot strings still go through `tr(en, ar)`;
-  the AI follows `bot_language` and, in `auto`, answers in the user's language.
+- **Languages.** Phase 03 adds `ar`, `en`, `pt-BR`, `es-419` as bot reply choices,
+  with UI, bot reply and AI reply language as three separate settings (ADR-004).
+  Unmigrated bot strings still use `tr(en, ar)`; the AI uses
+  `ai_reply_language`, which follows `bot_language` by default.
 - **Replies stay in the source chat by default.** No v5 feature may send a
   group's or a private chat's content to another chat unless the backend has
   checked that destination for the real sender (ADR-007). If that check fails,
@@ -253,10 +253,12 @@ src/
 │   ├── aiToolAuth.cjs # who a tool call acts for, and whether they may
 │   ├── llmDiscovery.cjs # live, credential-scoped model discovery
 │   └── modelRegistry.cjs # model catalog and capability lookup
+├── i18n/
+│   └── catalog.generated.cjs # generated Node catalog (scripts/i18n.mjs)
 └── utils/            # Utility functions (Mixed)
     ├── memory.cjs    # Long-term memory as Markdown files
     ├── statusMessage.cjs # One message per command, edited in place
-    ├── i18n.cjs      # tr(en, ar) + the per-message reply language
+    ├── i18n.cjs      # t(), tr(en, ar), and the per-message reply language
     ├── textDecode.cjs    # charset / entity / mojibake decoding
     ├── messageContent.cjs # unwrap visible text/media from Baileys envelopes
     ├── geminiMedia.cjs # WhatsApp media -> Gemini: bare MIME types, in-memory
@@ -273,13 +275,14 @@ src/
 Outside `src/`:
 
 ```
-frontend/         # React 19 + Vite + TypeScript dashboard SPA (bilingual Arabic RTL / English).
+frontend/         # React 19 + Vite + TypeScript dashboard SPA. Locale rule: frontend/src/i18n/locale.ts.
                   # UI primitives live in frontend/src/components/ui/ — see "Design system — STRICT RULES"
 views/            # Gateway pages (login.ejs · setup.ejs · qr.ejs) + fallback dashboard.ejs
 public/           # Static assets (socket.io.min.js, qrcode.min.js) and public/dashboard/ (built SPA)
 public/brand/     # Generated logo and branding files (committed)
 android/          # Android companion app (Kotlin, Gradle, embedded Node 24 ARM64 + ARMv7, FFmpeg; API 36, per-ABI APKs + Play AAB)
 deploy/           # install.sh · levix.service · nginx/ (reference config)
+docs/TRANSLATING.md # how to edit i18n/ and review translations
 i18n/             # Canonical UI strings. Edit the JSON, then npm run i18n:build.
                   # Generated files are committed and must not be edited by hand.
 scripts/          # build-brand-assets.mjs · build-sea.mjs · i18n.mjs · release installer
@@ -474,21 +477,27 @@ session records the proxy the live socket was built with and reports
 ### Command System
 
 Commands are loaded dynamically from `src/commands/`:
-- Each command exports: `{ name, aliases, description, usage, chat, execute }`
-- `description` and `usage` are `{ en, ar }` — `!help` shows the reply
-  language (below), `!help ar` / `!help en` and `!help <command> [ar|en]` pick
-  one, and the dashboard shows the panel's. `src/utils/commandDocs.cjs` does
-  the picking; `tests/help-i18n.test.mjs` fails a command that ships only one
-  language
-- Every reply is written in both languages where it is sent:
-  `tr("Done.", "تم.")` from `src/utils/i18n.cjs`. The language is decided once
+New replies use `t("bot.<area>.<key>", params)`. Put the key in
+`i18n/en/bot/<area>.json` and in every required locale (`docs/TRANSLATING.md`).
+`tr(en, ar)` remains for unmigrated calls. It returns Arabic only for `ar`,
+and English for `en`, `pt-BR`, and `es-419` (`src/utils/i18n.cjs`).
+- Each command exports: `{ name, aliases, chat, execute }`. `description` and
+  `usage` come from `i18n/<locale>/commands.json` through
+  `attachCommandDocs` in `src/utils/commandDocs.cjs`, which fills `en`, `ar`,
+  `pt-BR`, and `es-419` and falls back to English. A field the module already
+  sets is left as it is. `!help` shows the reply language. `!help ar`,
+  `!help en`, `!help pt`, and `!help es` pick one. The dashboard shows the
+  panel language. `tests/help-i18n.test.mjs` requires an English and an Arabic
+  catalog entry for every command.
+- `t()` is the API for a new reply. The language is decided once
   per incoming message and carried by AsyncLocalStorage through everything the
   message causes (helpers, status edits, timers), so nothing passes a `lang`
-  around:
-  - `bot_language` `ar` / `en`: that language, always
+  around. The fixed values are `ar`, `en`, `pt-BR`, and `es-419`:
+  - `bot_language` `ar`, `en`, `pt-BR`, or `es-419`: that language, always
   - `auto`: Arabic letters in the arguments -> Arabic; English words that are
     not the command's own syntax -> English; a bare command (`!ping`,
-    `!kick @x`, `!todo list`) -> Arabic. "Syntax" is the command's name,
+    `!kick @x`, `!todo list`) -> Arabic. `auto` never selects `pt-BR` or
+    `es-419`. "Syntax" is the command's name,
     aliases, the Latin keywords in its Arabic `usage`, and any `keywords: []`
     it declares; ids, numbers, links and mentions are never words
   - a command whose arguments are never language (a city `!weather` wants in
@@ -505,8 +514,7 @@ Commands are loaded dynamically from `src/commands/`:
 module.exports = {
   name: "ping",
   aliases: ["p"],
-  description: { en: "Check bot latency", ar: "يقيس سرعة استجابة البوت" },
-  usage: { en: "ping", ar: "ping" },
+  // description and usage: i18n/en/commands.json (docs/TRANSLATING.md)
   chat: "all", // "all", "group", "private"
   async execute(sock, msg, args, body, groupMetadata) {
     // Command logic here
@@ -637,6 +645,8 @@ template. A packaged build unpacks those and calls
 The AI is an **agent**, not a single API call: it can call tools over several
 rounds before answering, and the whole run is narrated in ONE WhatsApp message
 that gets edited (`🤖 بفكر...` → `🔍 ببحث عن ...` → the answer).
+`ai_reply_language` controls the AI's answer language independently and follows
+`bot_language` by default.
 
 **The provider is a setting, not a code path choice.** `ai_provider` (dashboard
 dropdown) picks which API answers: `gemini`, `openai` (any OpenAI-compatible
@@ -1251,20 +1261,26 @@ for how a value resolves. Browser mutations must be same-origin; an opaque
 `data-theme` before CSS paints, from the Android host
 (`LevixHost.getUiPrefs()`), then `levix_lang` / `levix_theme` in
 localStorage, then the OS (`navigator.language`, `prefers-color-scheme`,
-followed live until the user picks). React reads the result off `<html>`
-(`I18nContext` owns both language and theme). Inside the app a user change
-calls `LevixHost.setUiPrefs(language, theme, field)`, which accepts only
-`ar|en` and `light|dark`; native changes come back as a `levix-ui-prefs`
-event and never call the setter again. Android keeps the language in
-AppCompat's application locales and the theme in `UiPrefs`; `PanelActivity`
-handles locale, layoutDirection and uiMode itself so the WebView never
-reloads. The gateway pages are bilingual like the SPA: English is the default
-markup, `data-i18n*` attributes carry the keys, and `public/gateway-i18n.js`
-applies the dictionary for the language `ui-boot.js` resolved (server-rendered
-errors travel as a stable code the script translates). They follow the shared
-language and theme, RTL included: the gateway CSS reads `--gateway-*` tokens
-defined for both themes, and a `levix-ui-prefs` event or a `storage` change from
-another tab repaints them, JavaScript-built text included, without a reload.
+followed live until the user picks). The boot and the Android host accept
+`ar`, `en`, `pt-BR`, and `es-419`. The shared subtag rule maps `ar` to `ar`,
+`pt` to `pt-BR`, `es` to `es-419`, and `en` to `en`
+(`public/ui-boot.js`, `frontend/src/i18n/locale.ts`, `UiPrefs.fromLocale`).
+Anything else is English on the boot and the host. RTL is only `ar`. React
+reads the result off `<html>` (`I18nContext` owns both language and theme).
+Inside the app a user change calls `LevixHost.setUiPrefs(language, theme, field)`,
+which accepts those four language codes and `light` or `dark`
+(`PanelBridge.kt`, `UiPrefs.validLanguage`); native changes come back as a
+`levix-ui-prefs` event and never call the setter again. Android keeps the
+language in AppCompat's application locales and the theme in `UiPrefs`;
+`PanelActivity` handles locale, layoutDirection and uiMode itself so the
+WebView never reloads. The gateway pages use the same four locales as the SPA:
+English is the default markup, `data-i18n*` attributes carry the keys, and
+`public/gateway-i18n.js` applies the dictionary for the language `ui-boot.js`
+resolved (server-rendered errors travel as a stable code the script translates).
+They follow the shared language and theme, with RTL only for `ar`: the gateway
+CSS reads `--gateway-*` tokens defined for both themes, and a `levix-ui-prefs`
+event or a `storage` change from another tab repaints them, JavaScript-built
+text included, without a reload.
 
 **Diagnostics and crash reports.** Nothing leaves the device without a distinct
 action, and the two consents are separate.
@@ -1389,7 +1405,7 @@ The control panel UI is `frontend/src/components/ui/`. Read `frontend/src/compon
 - R4. Sorting MUST be one `SortMenu`. NEVER a row of sort options or a visible sort `<select>`.
 - R5. An `OverflowMenu` needs at least two items — a single secondary action is an `IconButton`. The overflow sits beside the primary action it belongs to (same row, at its end), never alone on its own row.
 - R6. Text, number, password, and select settings MUST use an explicit save. A single independent value (timezone, a standalone API key, a storage number, panel language, bot reply language, a per-row select) MUST use `SaveField` / `useSavedValue` from `frontend/src/components/ui`: the input plus an inline Save `IconButton` at its end, enabled only when the draft differs from the saved value, spinner while saving, a brief success state, Enter saves, Escape reverts, error shown under the field. Values that only make sense together (min+max human delay, the selected AI provider's API key + base URL + model, the WhatsApp proxy protocol/host/port/username/password) MUST use `useDirtyForm` + `FormActions`: one primary Save and a Discard, disabled until something changed, with an unsaved-changes hint. NEVER save those inputs on blur or on every change. A `Toggle` applies immediately — that is what a switch means. Dialog forms that already end in a submit button are fine.
-- MUST put every new visible string, including tooltips and the words Filter, Sort, and More, in `i18n/en/dashboard.json` and `i18n/ar/dashboard.json`, then run `npm run i18n:build`. `frontend/src/i18n/translations.ts` is generated.
+- MUST put every new visible string, including tooltips and the words Filter, Sort, and More, in `i18n/en/dashboard.json` and the same key in every locale with `required: true` (`i18n/locales.json`), then run `npm run i18n:build`. Rules: `docs/TRANSLATING.md`. `frontend/src/i18n/translations.ts` is generated.
 - MUST lay out with logical CSS (`ms-` / `me-` / `ps-` / `pe-` / `start` / `end`) so Arabic RTL works. NEVER `ml-` / `mr-` / `pl-` / `pr-` / `left-` / `right-` for layout.
 - MUST keep touch targets at least 40px. `IconButton` `label` is required. Menus MUST use `role="menu"` / `role="menuitem"`, arrow keys, `aria-haspopup`, and `aria-expanded`. Dialogs MUST trap focus and return it on close.
 - MUST keep light and dark on the existing theme tokens. MUST keep working inside the Android WebView (`PanelActivity`). No CDN and no new npm dependency for UI.
@@ -1544,7 +1560,8 @@ logger.debug('Debug info');
    ffmpeg-static and `src/core/socket.js` patches `sock.sendMessage` so every send
    path gets one. Pass your own `jpegThumbnail` to opt out.
 9. **Command `usage`**: Written WITHOUT the prefix, one variant per line, in
-   both languages: `{ en: "kick @member [reason]", ar: "kick @عضو [السبب]" }`.
+   `i18n/<locale>/commands.json` (`<name>.usage`, or `group.<name>.usage`
+   for a group sub-command). See `docs/TRANSLATING.md`.
    `!help` prepends the live prefix and prints them as the command's
    parameters. Placeholders are translated; literal sub-commands and flags
    (`add`, `on|off`, `--multi`) are not.
@@ -1631,12 +1648,13 @@ logger.debug('Debug info');
     against `ctx.caller`. Never read who is calling from the tool's arguments,
     and never hand-roll `isOwner` checks inside `run()` — see
     `src/services/aiToolAuth.cjs`.
-29. **Every reply goes through `tr(en, ar)`.** A new `text:`, caption, status
-    line or thrown message a user will read is written in both languages at
-    the call site. Build it inside the function that sends it, never in a
-    module-level constant (the language is per message). Arabic words a
-    command *accepts* (`اضف`, `عام`) are input, not replies, and stay as they
-    are.
+29. **New replies use catalog keys.** Put new user-facing text through `t()`
+    with catalog keys in the English `i18n/` JSON and the same key in every
+    required locale (`docs/TRANSLATING.md`). Use `tr(en, ar)` only where a
+    pair cannot follow the catalog rules (different placeholders per language).
+    Build the reply inside the function that sends it because the language is
+    per message. Arabic words a command *accepts* (`اضف`, `عام`) are input,
+    not replies, and stay as they are.
 30. **`require()` of an ESM module returns the namespace, not the default.**
     When a module has named exports (`normalizeJid.esm.js`), CommonJS callers
     must take `.default` explicitly — `block.cjs`/`unblock.cjs` once called the

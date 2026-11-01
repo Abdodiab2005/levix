@@ -1,6 +1,6 @@
 // Every reply the bot sends goes out in one language (src/utils/i18n.cjs).
 //
-//   bot_language = ar | en   that language, always
+//   bot_language = ar | en | pt-BR | es-419   that language, always
 //   bot_language = auto      the language the message is written in: Arabic
 //                            letters -> Arabic; English words that aren't the
 //                            command's own syntax -> English; a bare command
@@ -22,7 +22,9 @@ const {
   langForCommand,
   withLang,
   currentLang,
+  configuredLang,
   tr,
+  t,
 } = require("./src/utils/i18n.cjs");
 
 settings.set("bot_min_delay_ms", 0);
@@ -48,10 +50,18 @@ settings.set("bot_language", "en");
 equal("en answers Arabic text in English", detectLang("اشتري لبن"), "en");
 settings.set("bot_language", "ar");
 equal("ar answers English text in Arabic", detectLang("buy milk"), "ar");
+for (const fixed of ["pt-BR", "es-419"]) {
+  settings.set("bot_language", fixed);
+  equal(`${fixed} is configured`, configuredLang(), fixed);
+  equal(`${fixed} answers Arabic text in the fixed locale`, detectLang("اشتري لبن"), fixed);
+  equal(`${fixed} keeps its scope`, withLang(fixed, currentLang), fixed);
+  equal(`${fixed} uses English in tr`, withLang(fixed, () => tr("English", "العربية")), "English");
+}
 
 section("auto: the language of the message");
 
 settings.set("bot_language", "auto");
+equal("auto is not a fixed locale", configuredLang(), null);
 equal("Arabic letters -> Arabic", detectLang("اشتري لبن"), "ar");
 equal("English words -> English", detectLang("buy milk"), "en");
 equal("nothing to go on -> Arabic", detectLang(""), "ar");
@@ -63,6 +73,9 @@ equal("2d6 is not English", detectLang("2d6"), "ar");
 equal("digits are not English", detectLang("12 + 30"), "ar");
 
 section("a command's own keywords are syntax, not English");
+
+const { attachCommandDocs } = require("./src/utils/commandDocs.cjs");
+for (const command of [todo, rand, perm, prayer, deleteschedule]) attachCommandDocs(command);
 
 equal("!todo list", detectLang("list", { syntax: syntaxWords(todo) }), "ar");
 equal("!todo add buy milk", detectLang("add buy milk", { syntax: syntaxWords(todo) }), "en");
@@ -99,6 +112,8 @@ section("the language rides along with everything the message causes");
   equal("…after an await", seen[1], "en");
   equal("…inside a timer it started", seen[2], "en");
   equal("and nothing leaks out", tr("en", "ar"), "ar");
+  equal("keyed Arabic reply", withLang("ar", () => t("bot.lang.arLabel")), "العربية الفصحى");
+  equal("keyed pt-BR fallback", withLang("pt-BR", () => t("bot.lang.arLabel")), "Arabic");
 
   const [a, b] = await Promise.all([
     withLang("en", async () => {
@@ -364,4 +379,34 @@ section("with the bot set to Arabic, nothing comes back English-only");
 }
 
 settings.set("bot_language", "auto");
+
+section("!lang accepts new locales and lists every choice");
+
+{
+  const permissions = require("./src/utils/permissions.cjs");
+  await permissions.primePermissions();
+  await permissions.grantRole(SELF, "owner");
+  const lang = require("./src/commands/lang.cjs");
+  const sock = makeSock();
+  const msg = messageFrom(SELF, "!lang pt");
+  await withLang("ar", () => lang.execute(sock, msg, ["pt"]));
+  equal("!lang pt saves pt-BR", settings.get("bot_language"), "pt-BR");
+  ok("pt-BR confirmation uses English fallback", sock.sent.at(-1)?.content?.text?.includes("Brazilian Portuguese"));
+  await withLang("ar", () => lang.execute(sock, msg, ["es-419"]));
+  equal("!lang es-419 saves es-419", settings.get("bot_language"), "es-419");
+  ok("es-419 confirmation uses English fallback", sock.sent.at(-1)?.content?.text?.includes("Latin American Spanish"));
+  await withLang("en", () => lang.execute(sock, msg, ["xx"]));
+  equal("!lang xx is refused", settings.get("bot_language"), "es-419");
+  ok("unknown option is explained", sock.sent.at(-1)?.content?.text?.includes("Unknown option"));
+  await withLang("en", () => lang.execute(sock, msg, []));
+  const enList = sock.sent.at(-1)?.content?.text || "";
+  ok("English list has pt-BR", enList.includes("!lang pt-BR"));
+  ok("English list has es-419", enList.includes("!lang es-419"));
+  await withLang("ar", () => lang.execute(sock, msg, []));
+  const arList = sock.sent.at(-1)?.content?.text || "";
+  ok("Arabic list has pt-BR", arList.includes("!lang pt-BR"));
+  ok("Arabic list has es-419", arList.includes("!lang es-419"));
+  settings.set("bot_language", "auto");
+}
+
 finish();

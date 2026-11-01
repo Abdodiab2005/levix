@@ -2,20 +2,12 @@
 const { scheduleNewJob, saveScheduledJob } = require("../../scheduler.cjs");
 const { zonedTimeToDate } = require("../utils/datetime.cjs");
 const logger = require("../utils/logger.cjs");
-const { tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 const DATETIME_RE = /^(\d{1,2}):(\d{2})\s+(\d{1,2})-(\d{1,2})-(\d{4})$/;
 
 module.exports = {
   name: "schedule",
-  description: {
-    en: "Schedules a message to be sent later.",
-    ar: "يجدول رسالة لتُرسل في وقت لاحق.",
-  },
-  usage: {
-    en: 'schedule "HH:mm DD-MM-YYYY" "message"',
-    ar: 'schedule "HH:mm DD-MM-YYYY" "الرسالة"',
-  },
   chat: "all",
 
   async execute(sock, msg, args) {
@@ -28,10 +20,7 @@ module.exports = {
 
     if (!parts || parts.length < 2) {
       return await sock.sendMessage(creatorJid, {
-        text: tr(
-          'Wrong format. Use:\n`!schedule "HH:mm DD-MM-YYYY" "your message"`',
-          'الصيغة غير صحيحة. يرجى استخدام:\n`!schedule "HH:mm DD-MM-YYYY" "رسالتك"`',
-        ),
+        text: t("bot.schedules.schedule.wrongFormat"),
       });
     }
 
@@ -42,10 +31,7 @@ module.exports = {
     const match = DATETIME_RE.exec(dateTimeString.trim());
     if (!match) {
       return await sock.sendMessage(creatorJid, {
-        text: tr(
-          "Wrong time format. Use `HH:mm DD-MM-YYYY` (for example `22:30 07-06-2025`).",
-          "صيغة الوقت غير صحيحة. استخدم `HH:mm DD-MM-YYYY` (مثال: `22:30 07-06-2025`).",
-        ),
+        text: t("bot.schedules.schedule.wrongTime"),
       });
     }
 
@@ -64,10 +50,7 @@ module.exports = {
 
     if (isNaN(scheduleDate.getTime()) || scheduleDate <= new Date()) {
       return await sock.sendMessage(creatorJid, {
-        text: tr(
-          "That date or time is invalid or in the past. Use `HH:mm DD-MM-YYYY` with a future date.",
-          "التاريخ أو الوقت غير صالح أو في الماضي. يرجى استخدام صيغة `HH:mm DD-MM-YYYY` بتاريخ مستقبلي.",
-        ),
+        text: t("bot.schedules.schedule.pastDate"),
       });
     }
 
@@ -84,10 +67,7 @@ module.exports = {
     // Schedule the job to run in the current session
     if (!scheduleNewJob(sock, newJob)) {
       return await sock.sendMessage(creatorJid, {
-        text: tr(
-          "I couldn't schedule that message. Check the time and try again.",
-          "تعذّرت جدولة هذه الرسالة. راجع الوقت وحاول مرة أخرى.",
-        ),
+        text: t("bot.schedules.schedule.couldNotSchedule"),
       });
     }
 

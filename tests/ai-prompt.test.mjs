@@ -264,6 +264,45 @@ ok(
   }
 }
 
+section("AI reply language follows or overrides the bot language");
+
+{
+  const settings = require("./src/config/settings.cjs");
+  const previousBot = settings.get("bot_language");
+  const previousAi = settings.get("ai_reply_language");
+  const directives = {
+    ar: "- Language instruction: Always reply in Arabic. Match the dialect the user writes in: Egyptian Arabic gets natural Egyptian Arabic back; formal Arabic or any other Arabic dialect gets clear, natural Arabic matching the user's.",
+    en: "- Language instruction: Always reply in English, clear, professional, natural, and direct.",
+    auto: "- Language instruction: Reply in the language and dialect the user writes in. Egyptian Arabic gets natural Egyptian Arabic back; formal Arabic or other Arabic dialects get clear, natural Arabic matching the user; English gets English; any other language gets that language.",
+    "pt-BR": "- Language instruction: Always reply in Brazilian Portuguese, clear, natural, and direct.",
+    "es-419": "- Language instruction: Always reply in Latin American Spanish, clear, natural, and direct.",
+  };
+  const directive = () =>
+    aiAgent.buildSystemInstruction({ chatId: "1@s.whatsapp.net" })
+      .split("\n")
+      .find((line) => line.startsWith("- Language instruction:"));
+  try {
+    settings.set("ai_reply_language", "follow_bot");
+    for (const botLang of ["auto", "ar", "en", "pt-BR", "es-419"]) {
+      settings.set("bot_language", botLang);
+      equal(`follow_bot with ${botLang}`, directive(), directives[botLang]);
+    }
+    settings.set("bot_language", "ar");
+    for (const aiLang of ["ar", "en", "pt-BR", "es-419"]) {
+      settings.set("ai_reply_language", aiLang);
+      equal(`AI override ${aiLang}`, directive(), directives[aiLang]);
+    }
+    settings.set("ai_reply_language", "auto");
+    for (const botLang of ["auto", "ar", "en", "pt-BR", "es-419"]) {
+      settings.set("bot_language", botLang);
+      equal(`AI auto with ${botLang}`, directive(), directives.auto);
+    }
+  } finally {
+    settings.set("ai_reply_language", previousAi || "follow_bot");
+    settings.set("bot_language", previousBot || "auto");
+  }
+}
+
 section("the operator cannot edit the identity away");
 
 {

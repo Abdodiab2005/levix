@@ -53,3 +53,16 @@
   and newer; `engines` `>=24 <25`; the Android fetch stages only pinned files, which removes the two
   unused `libsqlite3_*.so` from the APKs. New: R-33, Q-23.
 
+
+## Phase 03: unified i18n (started 2026-11-01)
+
+- Started on the owner's request on 2026-11-01, `main` b6e777e.
+- Four read-only audits (Codex, Grok, OpenCode, Antigravity); re-audit, design and PR plan in
+  `PHASE-03-RESULTS.md`. Corrected counts: 577 `tr(` lines in 87 files, 1116 dashboard keys, 89
+  gateway keys, 247 Android strings plus 8 plurals per locale.
+- Owner decisions: Q-15 option (b), the recovery relay gains `pt-BR` and `es-419` and deploys
+  first; Q-19, ChatGPT reviews the new translations.
+- 2026-11-02: every slice implemented in open PRs (#104 to #120, levix-ui #22); see
+  `PHASE-03-RESULTS.md` section 10. Full Phase 03 tree: `npm test` 7409 checks PASS after the Codex review fixes, all four
+  locales complete and required. Translations are drafts until the ChatGPT review; #115 waits for
+  the relay deploy; device QA NOT RUN.

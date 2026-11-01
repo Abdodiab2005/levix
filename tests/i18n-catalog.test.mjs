@@ -63,6 +63,16 @@ section("validator");
 
 {
   const catalog = sample();
+  catalog.bundles.en.commands = { "kick.usage": "kick <member> [reason]" };
+  catalog.bundles.ar.commands = { "kick.usage": "kick <عضو> [السبب]" };
+  catalog.bundles.en.bot = { help: { footer: "Type *help <command>* for details" } };
+  catalog.bundles.ar.bot = { help: { footer: "اكتب *help <أمر>* لمزيد من التفاصيل" } };
+  const { errors } = validate(catalog);
+  equal("command syntax and help placeholders are plain text", errors.length, 0);
+}
+
+{
+  const catalog = sample();
   delete catalog.bundles.ar.dashboard.hello;
   const { errors } = validate(catalog);
   ok("missing key fails", problemHas(errors, "ar/dashboard", "hello", "missing key"));
@@ -140,6 +150,59 @@ section("validator");
   ok(
     "markup in a plain key fails",
     problemHas(errors, "en/dashboard", "hello", "contains markup"),
+  );
+}
+
+{
+  const catalog = sample();
+  catalog.htmlKeys = ["trust"];
+  catalog.bundles.en.gateway.trust = '<span class="mark">Private</span> workspace';
+  catalog.bundles.ar.gateway.trust =
+    '<span class="mark" onmouseover="alert(1)">x</span> workspace';
+  const { errors } = validate(catalog);
+  ok(
+    "html key rejects an extra onmouseover",
+    problemHas(errors, "ar/gateway", "trust", 'attribute "onmouseover" is not allowed'),
+  );
+}
+
+{
+  const catalog = sample();
+  catalog.htmlKeys = ["trust"];
+  catalog.bundles.en.gateway.trust = '<span class="mark">Private</span> workspace';
+  catalog.bundles.ar.gateway.trust = '<span class="other">خاص</span> workspace';
+  const { errors } = validate(catalog);
+  ok(
+    "html key rejects a changed class",
+    problemHas(errors, "ar/gateway", "trust", "attributes are not in the English value"),
+  );
+}
+
+{
+  const catalog = sample();
+  catalog.htmlKeys = ["trust"];
+  catalog.bundles.en.gateway.trust = '<span class="mark">Private</span> workspace';
+  catalog.bundles.ar.gateway.trust = '<span class="mark">خاص</span> مساحة';
+  const { errors } = validate(catalog);
+  ok(
+    "html key allows the same tags with translated text",
+    errors.length === 0,
+    errors.map((item) => item.message).join("; "),
+  );
+}
+
+{
+  // A missing tag is allowed. Each tag that is present must still be an exact
+  // English tag. The translation may drop one.
+  const catalog = sample();
+  catalog.htmlKeys = ["trust"];
+  catalog.bundles.en.gateway.trust = '<span class="mark">Private</span> workspace';
+  catalog.bundles.ar.gateway.trust = "مساحة عمل خاصة";
+  const { errors } = validate(catalog);
+  ok(
+    "html key allows a missing tag",
+    errors.length === 0,
+    errors.map((item) => item.message).join("; "),
   );
 }
 
@@ -258,6 +321,53 @@ section("determinism");
   );
   const marked = applyGatewayMarkers(gateway, renderGatewayDict(catalog));
   equal("markers twice", marked, applyGatewayMarkers(gateway, renderGatewayDict(catalog)));
+}
+
+section("translations shape");
+
+{
+  const catalog = sample();
+  catalog.locales.push({
+    code: "es-419",
+    name: "Español (Latinoamérica)",
+    dir: "ltr",
+    android: "values-b+es+419",
+    required: false,
+  });
+  const text = renderTranslations(catalog);
+  ok(
+    "Language is every registry code",
+    text.includes('export type Language = "en" | "ar" | "pt-BR" | "es-419";'),
+  );
+  ok("MessageKey is the English object", text.includes("export type MessageKey = keyof typeof en;"));
+  ok("en is a complete record", text.includes("en: Record<MessageKey, string>;"));
+  ok("ar is partial", text.includes("ar: Partial<Record<MessageKey, string>>;"));
+  ok(
+    "pt-BR is partial",
+    text.includes('"pt-BR": Partial<Record<MessageKey, string>>;'),
+  );
+  ok(
+    "es-419 is partial",
+    text.includes('"es-419": Partial<Record<MessageKey, string>>;'),
+  );
+  const enDecl = text.indexOf("const en = ");
+  const translationsDecl = text.indexOf("export const translations:");
+  ok("the English object is bound before translations", enDecl >= 0 && enDecl < translationsDecl);
+  const body = text.slice(translationsDecl);
+  const arValue = body.indexOf("\n  ar: {");
+  const enValue = body.indexOf("\n  en,\n");
+  ok("ar content stays before the en binding", arValue >= 0 && arValue < enValue);
+  ok("ar text is kept", body.includes('hello: "Ahlan {name}"'));
+  ok("en text is kept", text.includes('hello: "Hello {name}"'));
+  ok("a locale without dashboard.json is empty", body.includes('\n  "pt-BR": {},'));
+  ok("es-419 without dashboard.json is empty", body.includes('\n  "es-419": {},'));
+  const locales = [
+    '  { code: "en", name: "English", dir: "ltr" },',
+    '  { code: "ar", name: "Arabic", dir: "rtl" },',
+    '  { code: "pt-BR", name: "Portuguese", dir: "ltr" },',
+    '  { code: "es-419", name: "Español (Latinoamérica)", dir: "ltr" },',
+  ].join("\n");
+  ok("LOCALES follow the registry", text.includes(locales));
 }
 
 section("android escaping");

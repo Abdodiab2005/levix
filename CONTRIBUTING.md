@@ -46,6 +46,7 @@ A change should preserve these invariants:
 
 Read [AGENTS.md](AGENTS.md) for the module layout, storage API, message flow, and
 additional architectural constraints.
+Catalog strings: [docs/TRANSLATING.md](docs/TRANSLATING.md).
 
 ## Making a change
 

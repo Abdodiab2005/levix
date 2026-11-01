@@ -18,6 +18,7 @@ import {
   Toolbar,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
+import { intlLocale } from "../i18n/locale";
 import type { LogItem } from "../types";
 
 type LogSource = "bot" | "host";
@@ -25,7 +26,7 @@ type LogSource = "bot" | "host";
 const hasHostLog = typeof (window as any).LevixHost?.hostLog === "function";
 
 export const LogsView: React.FC = () => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const { toast } = useToast();
   const [error, setError] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -223,7 +224,7 @@ export const LogsView: React.FC = () => {
                 <div key={i} className="rounded px-1 py-0.5 hover:bg-panel-hover/40">
                   <div className="flex items-center gap-2">
                     <span className="shrink-0 select-none text-[11px] text-faint">
-                      {l.time || new Date().toLocaleTimeString()}
+                      {l.time || new Date().toLocaleTimeString(intlLocale(language))}
                     </span>
                     <Badge
                       tone={levelTone(l.level || "info")}
