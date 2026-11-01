@@ -11,6 +11,8 @@
     "format": "biome format --write .",
     "check": "biome check .",
     "check:fix": "biome check --write .",
+    "i18n:build": "node scripts/i18n.mjs build",
+    "i18n:check": "node scripts/i18n.mjs check",
     "brand:assets": "node scripts/build-brand-assets.mjs",
     "build": "npm run build:frontend",
     "build:frontend": "node scripts/build-frontend.mjs",

@@ -6,7 +6,7 @@ Every screen in `frontend/src` is built from this folder. Import from the barrel
 import { Button, IconButton, Card, PageHeader } from "../components/ui";
 ```
 
-Colours come only from the tokens in `frontend/src/index.css` (`bg`, `panel`, `line`, `text-main`, `muted`, `faint`, `brand-*`, `ok`, `warn`, `danger`, `info`). Layout uses logical properties (`ms` / `me` / `ps` / `pe` / `start` / `end`) so Arabic RTL works. Touch targets are at least 40px. New visible strings, including tooltips, go through `frontend/src/i18n/translations.ts` in both `en` and `ar`.
+Colours come only from the tokens in `frontend/src/index.css` (`bg`, `panel`, `line`, `text-main`, `muted`, `faint`, `brand-*`, `ok`, `warn`, `danger`, `info`). Layout uses logical properties (`ms` / `me` / `ps` / `pe` / `start` / `end`) so Arabic RTL works. Touch targets are at least 40px. New visible strings, including tooltips, go in `i18n/en/dashboard.json` and `i18n/ar/dashboard.json`, then `npm run i18n:build`. `frontend/src/i18n/translations.ts` is generated.
 
 `text-white` is the foreground on `primary` and `danger` fills, and the switch thumb is `bg-white`, because those sit on saturated brand / danger tokens in both themes. Do not add any other raw colour.
 
