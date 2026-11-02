@@ -407,7 +407,12 @@ class LevixHostService : Service() {
         if (!running || tornDown) return
         val snap = HostState.snapshot
 
-        if (!isNetworkOnline || snap.whatsAppState == "paused") {
+        if (snap.whatsAppState == "consent_required") {
+            postOfflineAlert(
+                localizedString(R.string.notif_terms_title),
+                localizedString(R.string.notif_terms_text),
+            )
+        } else if (!isNetworkOnline || snap.whatsAppState == "paused") {
             postOfflineAlert(
                 localizedString(R.string.notif_offline_title),
                 localizedString(R.string.notif_offline_network),
@@ -436,6 +441,7 @@ class LevixHostService : Service() {
         val snap = HostState.snapshot
 
         val statusLabel = when {
+            snap.whatsAppState == "consent_required" -> R.string.status_terms
             !isNetworkOnline || snap.whatsAppState == "paused" -> R.string.status_paused
             snap.whatsAppState == "connected" -> R.string.status_connected
             snap.whatsAppState == "waiting_for_qr" -> R.string.status_pairing
