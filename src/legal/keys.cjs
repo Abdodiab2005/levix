@@ -2,7 +2,7 @@
 //
 // The private key never lives here. The owner generates it outside this
 // repository (`scripts/legal-release.mjs keygen`) and adds only the public
-// half. An empty list is the shipped state: the remote client stays off.
+// half. Remote fetching has a separate activation gate in remote.cjs.
 //
 // Callers read `TRUSTED_KEYS` from this module at the moment they verify, not
 // a copy taken when they were loaded.
@@ -80,9 +80,13 @@ function assertTrustedKeys(entries) {
   }
 }
 
-// The owner adds `{ keyId, publicKey }` here. `publicKey` is the base64 raw
-// 32-byte key printed by `legal-release.mjs keygen`. Empty until then.
-const TRUSTED_KEYS = Object.freeze([]);
+// The public half supplied by the owner; the private key stays outside the repository.
+const TRUSTED_KEYS = Object.freeze([
+  Object.freeze({
+    keyId: "8aa0176930c8d7f8",
+    publicKey: "VRvBOTkLFIYuPaTKVAKMdCxMpWBKXV00bCSGdMpQENY=",
+  }),
+]);
 assertTrustedKeys(TRUSTED_KEYS);
 
 module.exports = {

@@ -122,6 +122,7 @@ async function refresh(fetchImpl, extra = {}) {
     remote.refreshRemoteRelease({
       url: remote.RELEASE_URL,
       fetchImpl,
+      enabled: true,
       keys: [pair.entry],
       dataDir,
       ...extra,
@@ -137,7 +138,9 @@ const goodEnvelope = release.signRelease(goodRelease, pair.privateKey);
 section("constants and shipped keys");
 
 {
-  equal("shipped trusted key list is empty", shippedKeys.length, 0);
+  equal("shipped trusted key count", shippedKeys.length, 1);
+  equal("owner key id", shippedKeys[0].keyId, "8aa0176930c8d7f8");
+  equal("remote fetching is disabled", remote.REMOTE_TERMS_ENABLED, false);
   equal("release url", remote.RELEASE_URL, "https://levix.leviro.net/api/legal/v1/release");
   equal("body cap", remote.MAX_BODY_BYTES, 393216);
   equal("timeout", remote.TIMEOUT_MS, 5000);
@@ -150,7 +153,7 @@ section("constants and shipped keys");
   } catch {
     validated = false;
   }
-  ok("empty trusted list validates", validated);
+  ok("shipped trusted list validates", validated);
 }
 
 section("verifyEnvelope");
@@ -338,13 +341,17 @@ section("empty trusted key list");
     calls += 1;
     throw new Error("schedule must not fetch");
   };
-  const stopped = remote.startRemoteTermsSchedule({ keys: [], fetchImpl });
+  const stopped = remote.startRemoteTermsSchedule({ enabled: true, keys: [], fetchImpl });
   stopped();
   stopped();
-  const omitted = remote.startRemoteTermsSchedule({ fetchImpl });
+  const omitted = remote.startRemoteTermsSchedule({ fetchImpl, firstDelayMs: 0 });
+  const disabled = await remote.refreshRemoteRelease({ fetchImpl });
+  await new Promise((resolve) => setTimeout(resolve, 80));
   omitted();
-  equal("empty key list does not fetch", calls, 0);
+  equal("disabled schedule and refresh do not fetch with a trusted key", calls, 0);
+  equal("disabled refresh does not update", disabled.updated, false);
   const armed = remote.startRemoteTermsSchedule({
+    enabled: true,
     keys: [pair.entry],
     fetchImpl,
     firstDelayMs: 40,

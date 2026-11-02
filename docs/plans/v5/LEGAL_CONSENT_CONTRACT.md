@@ -2,7 +2,7 @@
 
 Status: sections 1 to 6 are implemented in PR #126 (04a), section 7 in PR #127 (04b) and
 section 8 in PR #128 (04c). The PRs are open and not merged, so nothing here ships yet. The 04c
-client is off and BLOCKED on the owner's signing key and the `levix-ui` endpoint (levix-ui #23).
+client is off pending human legal/privacy approval and a signed release (levix-ui #23).
 Decisions: ADR-006, ADR-019, ADR-020.
 
 ## 1. Legal document
@@ -145,9 +145,10 @@ acceptance within 5 seconds. No start flag and no environment variable can accep
 
 ## 8. Remote release (implemented, off, BLOCKED)
 
-The client in `src/legal/remote.cjs` is implemented and shipped off. `TRUSTED_KEYS` in
-`src/legal/keys.cjs` is empty, so the schedule does nothing and no request is made. BLOCKED on the
-owner's signing key and on the `levix-ui` endpoint below. The private key never enters this
+The client in `src/legal/remote.cjs` is implemented and shipped off. Its explicit
+`REMOTE_TERMS_ENABLED` gate is false even though the owner's public key is bundled and validated.
+The schedule and direct refresh make no request. Activation is blocked on human legal/privacy
+approval, a signed release and the `levix-ui` endpoint below. The private key never enters this
 repository, CI logs, the npm tarball, Docker images or app bundles.
 
 One release is signed as one unit, so every locale carries the same version. This replaces the
@@ -218,7 +219,7 @@ stores a newer release calls it.
 
 `startRemoteTermsSchedule()` runs from `src/bootstrap/core.js` after the session is built.
 `stop()` runs from process shutdown in `src/index.js`, next to the session timer shutdown. When
-`TRUSTED_KEYS` is empty the schedule is a no-op and its stop function does nothing.
+the activation gate is disabled or `TRUSTED_KEYS` is empty the schedule is a no-op and its stop function does nothing.
 
 Otherwise the first refresh is 60 seconds after boot and then every 24 hours. The timers are
 `unref()`ed. Boot does not await the refresh. The refresh is not on the session start path and
@@ -241,23 +242,20 @@ stays current and acceptable.
 
 ### Turning the client on
 
-The owner does all of this. Until then the client stays off.
+The owner does all of this. Until then the client stays off. The owner has already generated the
+key outside the repositories and provided its public half (`8aa0176930c8d7f8`), which is bundled.
 
-1. Generate the key outside this repository:
-   `node scripts/legal-release.mjs keygen --out <path>`. The command refuses a path inside the git
-   work tree and refuses to overwrite a file. It writes a PKCS#8 PEM with mode `0600` and prints
-   `keyId` and the base64 public key. The private key stays with the owner.
-2. Add `{ keyId, publicKey }` to `TRUSTED_KEYS` in `src/legal/keys.cjs` and ship that build. A bad
-   entry throws when the module loads.
-3. Sign and publish:
+1. Obtain human legal and privacy approval for the notice and release.
+2. Sign and publish only with the owner's approval:
    `node scripts/legal-release.mjs sign --key <path> --out <envelope.json>` (default document
    directory `src/legal/bundled`). The command verifies the envelope with the derived public key
    before writing. Publish that JSON as the body of
    `GET https://levix.leviro.net/api/legal/v1/release` on `levix-ui`.
-4. Update `PRIVACY.md`: add a row for this fetch (host `levix.leviro.net`, path
+3. Update `PRIVACY.md`: add a row for this fetch (host `levix.leviro.net`, path
    `/api/legal/v1/release`, HTTPS, no cookie, no account or device identifier, signed Terms and
    Privacy text only) and publish a new Privacy Notice version that names the fetch. That notice
-   change is a new Terms release.
+   change is a new Terms release. In a reviewed app release, explicitly enable
+   `REMOTE_TERMS_ENABLED` after the approved signed release and endpoint are ready.
 
 `node scripts/legal-release.mjs public-key --key <path>` prints the id and the public key again.
 The script is an owner tool. CI does not run it.

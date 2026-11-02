@@ -1,7 +1,7 @@
 // Fetch, cache and schedule a signed Terms release (ADR-019).
 //
-// Shipped off: `TRUSTED_KEYS` is empty, so the schedule does not arm a timer
-// and does not request anything. A Leviro outage never blocks an acceptance.
+// Shipped off: activation is a code-owned decision independent of the keys.
+// A Leviro outage never blocks an acceptance.
 // The bundled release stays the fallback. Nothing here reads an environment
 // variable or a setting. The URL is fixed.
 
@@ -13,6 +13,8 @@ const { compareVersions } = require("./document.cjs");
 const { verifyEnvelope } = require("./release.cjs");
 
 const RELEASE_URL = "https://levix.leviro.net/api/legal/v1/release";
+// Enable only in a reviewed release after legal/privacy approval and a signed release.
+const REMOTE_TERMS_ENABLED = false;
 const LOG_FAILED = "[legal] remote terms refresh failed";
 const LOG_IGNORED = "[legal] remote terms release is not newer";
 const LOG_UPDATED = "[legal] remote terms updated";
@@ -255,6 +257,10 @@ function readCachedRelease(options = {}) {
  * including when a verified release is not strictly newer.
  */
 async function refreshRemoteRelease(options = {}) {
+  // `enabled` is an injection seam for deterministic tests, never an operator setting.
+  if (!(options.enabled ?? REMOTE_TERMS_ENABLED)) {
+    return { updated: false, version: null, error: null };
+  }
   const keys = keyList(options);
   const at = stamp(options.now);
   try {
@@ -355,9 +361,10 @@ async function refreshRemoteRelease(options = {}) {
 
 /**
  * First refresh 60s after boot, then every 24h. Timers are unref'd.
- * An empty key list returns a stop function and does nothing else.
+ * The activation gate or an empty key list leaves the schedule disarmed.
  */
 function startRemoteTermsSchedule(options = {}) {
+  if (!(options.enabled ?? REMOTE_TERMS_ENABLED)) return function stop() {};
   const keys = keyList(options);
   if (!Array.isArray(keys) || keys.length === 0) return function stop() {};
 
@@ -401,6 +408,7 @@ function startRemoteTermsSchedule(options = {}) {
 
 module.exports = {
   RELEASE_URL,
+  REMOTE_TERMS_ENABLED,
   MAX_BODY_BYTES,
   TIMEOUT_MS,
   FIRST_DELAY_MS,
