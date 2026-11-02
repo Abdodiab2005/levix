@@ -1,6 +1,9 @@
 // Terms document, hash, acceptance record, and the local-only rule (Phase 04a).
 
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync,
+  writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
@@ -391,6 +394,7 @@ section("Q-17 lifecycle");
     JSON.stringify(store.getBotSetting(consent.KEY)),
     before,
   );
+  equal("password reset keeps a valid acceptance", consent.consentStatus().ok, true);
 
   const { WhatsAppSession } = await import("../src/core/session.js");
   const silent = {
@@ -414,6 +418,7 @@ section("Q-17 lifecycle");
     JSON.stringify(store.getBotSetting(consent.KEY)),
     before,
   );
+  equal("unlink keeps a valid acceptance", consent.consentStatus().ok, true);
 }
 
 // --- f. the record never leaves the device -------------------------------
@@ -520,6 +525,171 @@ section("no network");
     ok(`${rel} has no node:http`, !text.includes('require("node:http'));
     ok(`${rel} has no node:https`, !text.includes('require("node:https'));
     ok(`${rel} has no node:net`, !text.includes('require("node:net'));
+  }
+}
+
+// --- h. release identity ---------------------------------------------------
+
+section("release identity");
+
+function runConsentProbe(assetDir, mode) {
+  const data = mkdtempSync(join(tmpdir(), "levix-consent-identity-"));
+  const probeDir = mkdtempSync(join(tmpdir(), "levix-consent-probe-"));
+  const file = join(probeDir, "probe.cjs");
+  const paths = JSON.stringify(join(ROOT, "src/config/paths.cjs"));
+  const consentPath = JSON.stringify(join(ROOT, "src/legal/consent.cjs"));
+  const termsPath = JSON.stringify(join(ROOT, "src/legal/terms.cjs"));
+  const storePath = JSON.stringify(join(ROOT, "src/db/store.cjs"));
+  writeFileSync(
+    file,
+    `process.env.LEVIX_DATA_DIR = process.argv[2];
+const { setAssetRoot } = require(${paths});
+setAssetRoot(process.argv[3]);
+const consent = require(${consentPath});
+const terms = require(${termsPath});
+const store = require(${storePath});
+function stored() {
+  return store.getBotSetting(consent.KEY, null);
+}
+function emit(payload) {
+  process.stdout.write("\\nLEVIX_PROBE " + JSON.stringify(payload) + "\\n");
+}
+if (process.argv[4] === "status") {
+  const status = consent.consentStatus();
+  emit({ ok: status.ok, reason: status.reason, stored: stored() });
+  process.exit(0);
+}
+const current = terms.documentFor("en");
+try {
+  consent.recordAcceptance({
+    version: current.version,
+    sha256: current.sha256,
+    locale: "en",
+    via: "provision",
+  });
+  emit({ threw: false, stored: stored() });
+} catch (error) {
+  emit({ threw: true, code: error.code || null, stored: stored() });
+}
+process.exit(0);
+`,
+  );
+  const run = spawnSync(process.execPath, [file, data, assetDir, mode], { encoding: "utf8" });
+  rmSync(data, { recursive: true, force: true });
+  rmSync(probeDir, { recursive: true, force: true });
+  return run;
+}
+
+function probeBody(assetDir, mode) {
+  const run = runConsentProbe(assetDir, mode);
+  const marker = "LEVIX_PROBE ";
+  const line = String(run.stdout ?? "")
+    .split("\n")
+    .find((entry) => entry.startsWith(marker));
+  let body = null;
+  if (line) {
+    try {
+      body = JSON.parse(line.slice(marker.length));
+    } catch {
+      body = null;
+    }
+  }
+  return { run, body };
+}
+
+function childDetail(run) {
+  return `status=${run.status} stdout=${JSON.stringify(run.stdout)} stderr=${JSON.stringify(run.stderr)}`;
+}
+
+{
+  const current = terms.documentFor("en");
+  const invalidRoot = mkdtempSync(join(tmpdir(), "levix-build-invalid-"));
+  const unreadRoot = mkdtempSync(join(tmpdir(), "levix-build-unread-"));
+  try {
+    function acceptAs(identity) {
+      consent._setAppVersionForTests(identity);
+      const record = consent.recordAcceptance({
+        version: current.version,
+        sha256: current.sha256,
+        locale: "en",
+        via: "provision",
+      });
+      equal(`recorded ${identity}`, record.appVersion, identity);
+      return record;
+    }
+
+    acceptAs("4.9.2");
+    equal("npm restart keeps a matching identity", consent.consentStatus().reason, null);
+    equal("npm restart is ok", consent.consentStatus().ok, true);
+    equal("ordinary restart keeps acceptance", consent.consentStatus().ok, true);
+
+    consent._setAppVersionForTests("5.0.0");
+    equal("desktop package update is app_updated", consent.consentStatus().reason, "app_updated");
+
+    acceptAs("4.9.2");
+    consent._setAppVersionForTests("4.9.2+android.69");
+    equal(
+      "plain record read by an android build is app_updated",
+      consent.consentStatus().reason,
+      "app_updated",
+    );
+
+    acceptAs("4.9.2+android.69");
+    equal("android restart keeps the same versionCode", consent.consentStatus().reason, null);
+    consent._setAppVersionForTests("4.9.2+android.70");
+    equal("android versionCode bump is app_updated", consent.consentStatus().reason, "app_updated");
+    equal(
+      "a versionCode bump does not rewrite the record",
+      store.getBotSetting(consent.KEY).appVersion,
+      "4.9.2+android.69",
+    );
+
+    acceptAs("4.9.2+android.70");
+    consent._setAppVersionForTests("4.9.2+android.69");
+    equal("android versionCode downgrade is app_updated", consent.consentStatus().reason, "app_updated");
+
+    writeFileSync(join(invalidRoot, "levix-build.json"), "{");
+    const invalidStatus = probeBody(invalidRoot, "status");
+    ok(
+      "invalid build file is consent_unreadable",
+      invalidStatus.run.status === 0 &&
+        invalidStatus.body?.ok === false &&
+        invalidStatus.body?.reason === "consent_unreadable" &&
+        invalidStatus.body?.stored === null,
+      childDetail(invalidStatus.run),
+    );
+    const invalidRecord = probeBody(invalidRoot, "record");
+    ok(
+      "invalid build file records nothing",
+      invalidRecord.run.status === 0 &&
+        invalidRecord.body?.threw === true &&
+        invalidRecord.body?.code === "BUILD_INFO_INVALID" &&
+        invalidRecord.body?.stored === null,
+      childDetail(invalidRecord.run),
+    );
+
+    mkdirSync(join(unreadRoot, "levix-build.json"));
+    const unreadStatus = probeBody(unreadRoot, "status");
+    ok(
+      "unreadable build file is consent_unreadable",
+      unreadStatus.run.status === 0 &&
+        unreadStatus.body?.ok === false &&
+        unreadStatus.body?.reason === "consent_unreadable" &&
+        unreadStatus.body?.stored === null,
+      childDetail(unreadStatus.run),
+    );
+    const unreadRecord = probeBody(unreadRoot, "record");
+    ok(
+      "unreadable build file records nothing",
+      unreadRecord.run.status === 0 &&
+        unreadRecord.body?.threw === true &&
+        unreadRecord.body?.stored === null,
+      childDetail(unreadRecord.run),
+    );
+  } finally {
+    consent._setAppVersionForTests(undefined);
+    rmSync(invalidRoot, { recursive: true, force: true });
+    rmSync(unreadRoot, { recursive: true, force: true });
   }
 }
 
