@@ -226,3 +226,33 @@ then hit its free-tier limit at once, and Codex finished it from the partial dif
 - Observation, not changed: the CI `tests` job comment says the suite talks to WhatsApp's servers
   up to the pairing boundary, which the v5 rule "no live side effects" does not allow. This
   predates Phase 04.
+
+### 3.8 Follow-up after owner decisions (2026-11-02)
+
+This section supersedes the open decisions and status in 3.6–3.7. PR #128 carries the validated
+public key and an explicit disabled remote-fetch gate; a signed release, endpoint deployment and
+human legal/privacy approval remain prerequisites for activation. PR #129 adds QR script error
+and retry handling. PR #130 remains draft and adds locally hosted fonts, the versioned privacy
+correction and the reviewed translations. The standalone `PRIVACY.md` is not read at runtime:
+future policy changes must also version the bundled notice so installations are asked again.
+No English-prevails clause was added. Machine language review is not legal approval or native
+speaker certification.
+
+The headless and connection tests now use fake Baileys sockets, and the suite preloads a guard
+against external TCP/UDP. The updated #128 and #129 remain siblings; merging the updated #128
+and #130 trees produced the same tree tested locally (integration tree `e00219c`, Linux,
+2026-11-02). No production WhatsApp connection or device test was made in this follow-up.
+
+| Gate | Result on that integration tree |
+| --- | --- |
+| `npm test`, Node 24.22.2 | PASS: 9,204 checks, 0 failed, 0 crashed |
+| `npm run lint`, `npm run i18n:check`, `npm run build:frontend` | PASS (lint reported warnings) |
+| Android `:app:testDebugUnitTest :app:assembleDebug :app:assembleRelease`, offline | PASS: 87 unit tests; both APK ABIs |
+| Android `:app:bundleRelease`, offline | PASS on retry after freeing temporary disk space; local build only |
+| `npm run validate:tarball` | PASS: 36 checks, using a loopback mirror of the cached FFmpeg binary and no external test traffic |
+| `npm run build:sea` and `npm run validate:sea` | PASS: 51 checks, Linux x64, Node 24.22.2 |
+| `npm run validate:docker` | BLOCKED locally: Docker socket permission denied. GitHub CI passed the Docker job on #128, #129 and #130. |
+| Android device and WebView QA | NOT RUN: owner device and instruction required. |
+
+Human legal/privacy review remains a release blocker. The remote client remains disabled; no legal
+document has been approved or published, and the owner's private signing key was not accessed.

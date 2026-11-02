@@ -98,7 +98,8 @@ Not changed, because the fix is a legal or product decision:
 - `ar`, `pt-BR` and `es-419` are machine translations (Antigravity, Claude Sonnet 5.5). ChatGPT
   reviewed the Portuguese and Spanish documents against English on 2026-11-02 and corrected a
   Spanish consent sentence. The new Caddy sentences also received machine review. This is not
-  native-speaker certification or legal approval; the Arabic addition still needs language review.
+  native-speaker certification or legal approval. ChatGPT also reviewed the added Arabic Caddy
+  sentence for its intended meaning; it has no native-speaker or legal review.
 - Google Play Data safety: the consent record stays on the device and is never collected or
   shared, so it needs no Data safety change. No Play Console change has been made.
 
