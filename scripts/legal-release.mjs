@@ -108,14 +108,36 @@ function keygen(args) {
   if (fs.existsSync(target)) die("Refusing to overwrite an existing file.");
   const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
   const pem = privateKey.export({ type: "pkcs8", format: "pem" });
+  const bytes = Buffer.from(pem, "utf8");
+  let fd = null;
   try {
-    fs.writeFileSync(target, pem, { flag: "wx", mode: 0o600 });
+    fd = fs.openSync(target, "wx", 0o600);
+  } catch {
+    die("Could not write the private key.");
+  }
+  try {
+    let offset = 0;
+    while (offset < bytes.length) {
+      const wrote = fs.writeSync(fd, bytes, offset);
+      if (wrote <= 0) throw new Error("incomplete write");
+      offset += wrote;
+    }
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = null;
     fs.chmodSync(target, 0o600);
   } catch {
+    if (fd !== null) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // The original error is the one that matters.
+      }
+    }
     try {
       fs.rmSync(target, { force: true });
     } catch {
-      // The write already failed. Leave the refuse message.
+      // The file is leftover only when unlink also fails.
     }
     die("Could not write the private key.");
   }
@@ -138,8 +160,50 @@ function publicKey(args) {
   printPublic(rawOf(readPrivate(args.key)));
 }
 
+function sameRealPath(keyFile, outFile) {
+  return fs.realpathSync(path.resolve(keyFile)) === realTarget(outFile);
+}
+
+function writeNewFile(file, text) {
+  const bytes = Buffer.from(text, "utf8");
+  let fd = null;
+  try {
+    fd = fs.openSync(file, "wx");
+  } catch {
+    die("Could not write the envelope.");
+  }
+  try {
+    let offset = 0;
+    while (offset < bytes.length) {
+      const wrote = fs.writeSync(fd, bytes, offset);
+      if (wrote <= 0) throw new Error("incomplete write");
+      offset += wrote;
+    }
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = null;
+  } catch {
+    if (fd !== null) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // The original error is the one that matters.
+      }
+    }
+    try {
+      fs.rmSync(file, { force: true });
+    } catch {
+      // The file is leftover only when unlink also fails.
+    }
+    die("Could not write the envelope.");
+  }
+}
+
 function sign(args) {
   if (!args.key || !args.out) die("sign requires --key <path> and --out <path>");
+  if (sameRealPath(args.key, args.out)) die("Refusing to write the envelope over the private key.");
+  const destination = path.resolve(args.out);
+  if (fs.existsSync(destination)) die("Refusing to overwrite an existing file.");
   const privateKey = readPrivate(args.key);
   const dir = args.dir ? path.resolve(args.dir) : DEFAULT_DIR;
   const documents = {};
@@ -155,9 +219,7 @@ function sign(args) {
   const envelope = signRelease(release, privateKey);
   const raw = rawOf(privateKey);
   verifyEnvelope(envelope, [{ keyId: keyIdForRaw(raw), publicKey: raw.toString("base64") }]);
-  const outDir = path.dirname(path.resolve(args.out));
-  if (!fs.existsSync(outDir)) die("output directory does not exist");
-  fs.writeFileSync(args.out, `${JSON.stringify(envelope, null, 2)}\n`);
+  writeNewFile(destination, `${JSON.stringify(envelope, null, 2)}\n`);
   process.stdout.write(`signed version=${release.version} keyId=${envelope.keyId}\n`);
 }
 

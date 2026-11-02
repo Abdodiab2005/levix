@@ -78,7 +78,13 @@ function writeAtomic(file, bytes) {
   let fd = null;
   try {
     fd = fs.openSync(temp, "wx", 0o600);
-    fs.writeSync(fd, bytes);
+    const data = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+    let offset = 0;
+    while (offset < data.length) {
+      const wrote = fs.writeSync(fd, data, offset);
+      if (wrote <= 0) throw new Error("incomplete write");
+      offset += wrote;
+    }
     fs.fsyncSync(fd);
     fs.closeSync(fd);
     fd = null;
@@ -166,11 +172,26 @@ async function readCapped(response, signals) {
     throw error;
   }
   const reader = response.body.getReader();
+  const onAbort = () => {
+    reader.cancel().catch(() => {});
+  };
+  if (signals.signal.aborted) onAbort();
+  else signals.signal.addEventListener("abort", onAbort, { once: true });
   const chunks = [];
   let total = 0;
   try {
     for (;;) {
+      if (signals.timedOut()) {
+        const error = new Error("timeout");
+        error.code = "TIMEOUT";
+        throw error;
+      }
       const { done, value } = await reader.read();
+      if (signals.timedOut()) {
+        const error = new Error("timeout");
+        error.code = "TIMEOUT";
+        throw error;
+      }
       if (done) return Buffer.concat(chunks, total);
       const bytes = Buffer.from(value);
       total += bytes.length;
@@ -188,6 +209,7 @@ async function readCapped(response, signals) {
       chunks.push(bytes);
     }
   } finally {
+    signals.signal.removeEventListener("abort", onAbort);
     try {
       reader.releaseLock();
     } catch {
@@ -352,13 +374,16 @@ function startRemoteTermsSchedule(options = {}) {
       });
   };
 
+  // firstDelayMs is a test seam. Production omits it and waits 60 seconds.
+  const requested = options.firstDelayMs;
+  const delay = Number.isFinite(requested) && requested >= 0 ? requested : FIRST_DELAY_MS;
   pending = setTimeout(() => {
     pending = null;
     if (stopped) return;
     tick();
     interval = setInterval(tick, INTERVAL_MS);
     interval.unref?.();
-  }, FIRST_DELAY_MS);
+  }, delay);
   pending.unref?.();
 
   return function stop() {

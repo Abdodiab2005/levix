@@ -6,11 +6,13 @@ import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -30,10 +32,12 @@ const dataDir = useTempDataDir("levix-legal-remote");
 const home = mkdtempSync(join(tmpdir(), "levix-legal-home-"));
 const outside = mkdtempSync(join(tmpdir(), "levix-legal-keys-"));
 const insideKey = join(ROOT, "src", "legal", "owner-key.pem");
+const insideKeyExisted = existsSync(insideKey);
+const insideKeyBefore = insideKeyExisted ? readFileSync(insideKey) : null;
 const cacheFile = join(dataDir, "legal", "remote-release.json");
 
 process.on("exit", () => {
-  rmSync(insideKey, { force: true });
+  if (!insideKeyExisted) rmSync(insideKey, { force: true });
   rmSync(home, { recursive: true, force: true });
   rmSync(outside, { recursive: true, force: true });
 });
@@ -340,8 +344,13 @@ section("empty trusted key list");
   const omitted = remote.startRemoteTermsSchedule({ fetchImpl });
   omitted();
   equal("empty key list does not fetch", calls, 0);
-  const armed = remote.startRemoteTermsSchedule({ keys: [pair.entry], fetchImpl });
+  const armed = remote.startRemoteTermsSchedule({
+    keys: [pair.entry],
+    fetchImpl,
+    firstDelayMs: 40,
+  });
   armed();
+  await new Promise((resolve) => setTimeout(resolve, 120));
   equal("stop before the first delay does not fetch", calls, 0);
 }
 
@@ -466,6 +475,27 @@ section("fetch rules");
     "network error is refused",
     !network.error && network.result?.updated === false && !existsSync(cacheFile),
     network.error?.message || network.result?.error,
+  );
+
+  clearCache();
+  const slowStart = Date.now();
+  const slow = await refresh(() => {
+    const stream = new ReadableStream();
+    return new Response(stream, {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }, { keys: [pair.entry] });
+  const slowElapsed = Date.now() - slowStart;
+  ok(
+    "slow body times out",
+    !slow.error &&
+      slow.result?.updated === false &&
+      slow.result?.error === "timeout" &&
+      slowElapsed >= 4500 &&
+      slowElapsed < 10000 &&
+      !existsSync(cacheFile),
+    slow.result?.error,
   );
 }
 
@@ -634,6 +664,34 @@ section("offline fallback");
   }
 }
 
+section("recordAcceptance re-reads another process cache");
+
+{
+  clearCache();
+  installKeys([pair.entry]);
+  try {
+    consent.revokeAcceptance();
+    const shown = terms.documentFor("en");
+    equal("warm memo is the bundled release", shown.source, "bundled");
+    mkdirSync(join(dataDir, "legal"), { recursive: true });
+    writeFileSync(cacheFile, JSON.stringify(goodEnvelope));
+    const mismatch = throws("stale memo acceptance throws TERMS_MISMATCH", () =>
+      consent.recordAcceptance({
+        version: shown.version,
+        sha256: shown.sha256,
+        locale: "en",
+        via: "provision",
+      }),
+    );
+    equal("stale memo acceptance code", mismatch?.code, "TERMS_MISMATCH");
+    ok("stale memo acceptance writes nothing", store.getBotSetting(consent.KEY, null) === null);
+  } finally {
+    consent.revokeAcceptance();
+    clearCache();
+    installKeys(shippedKeys);
+  }
+}
+
 section("legal-release.mjs");
 
 {
@@ -651,7 +709,10 @@ section("legal-release.mjs");
 
   const relative = runScript(["keygen", "--out", "src/legal/owner-key.pem"]);
   ok("keygen refuses a path inside the repository", relative.status !== 0);
-  ok("keygen writes nothing inside the repository", !existsSync(insideKey));
+  const insideUntouched = insideKeyExisted
+    ? readFileSync(insideKey).equals(insideKeyBefore)
+    : !existsSync(insideKey);
+  ok("keygen writes nothing inside the repository", insideUntouched);
 
   const existing = join(outside, "existing.pem");
   writeFileSync(existing, "keep-me\n");
@@ -679,6 +740,22 @@ section("legal-release.mjs");
   const shownPub = printed(shown.stdout);
   equal("public-key keyId", shownPub.keyId, pub.keyId);
   equal("public-key publicKey", shownPub.publicKey, pub.publicKey);
+
+  const overKey = runScript(["sign", "--key", keyPath, "--out", keyPath]);
+  ok("sign refuses to overwrite the private key", overKey.status !== 0);
+  equal("sign leaves the private key in place", readFileSync(keyPath, "utf8"), pem);
+
+  const alias = join(outside, "key-alias.pem");
+  symlinkSync(keyPath, alias);
+  const overAlias = runScript(["sign", "--key", keyPath, "--out", alias]);
+  ok("sign refuses a symlink to the private key", overAlias.status !== 0);
+  equal("sign leaves the symlinked key in place", readFileSync(keyPath, "utf8"), pem);
+
+  const existingOut = join(outside, "envelope-exists.json");
+  writeFileSync(existingOut, "keep\n");
+  const refusedOut = runScript(["sign", "--key", keyPath, "--out", existingOut]);
+  ok("sign refuses an existing file", refusedOut.status !== 0);
+  equal("sign leaves the existing envelope untouched", readFileSync(existingOut, "utf8"), "keep\n");
 
   const out = join(outside, "envelope.json");
   const signedRun = runScript(["sign", "--key", keyPath, "--out", out]);
