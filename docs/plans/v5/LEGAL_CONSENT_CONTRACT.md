@@ -60,6 +60,11 @@ Stored in `bot_settings` under `legal:acceptance`:
 }
 ```
 
+`appVersion` is the release identity of the build that wrote the record. On npm, Docker, the
+single executable and headless it is the `package.json` version (`5.0.0`). On an Android build it
+is that version plus the APK `versionCode` (`4.9.2+android.69`), read from `levix-build.json` in
+the app archive. The field is still at most 64 characters. It is not a device, account or commit.
+
 `via` is `panel`, `cli` or `provision`. The record has no device, account, user or network
 identifier. It is never uploaded. Settings export, backup and restore never carry it. Unlink,
 password reset and restarts keep it.
@@ -70,11 +75,23 @@ password reset and restarts keep it.
 
 | Condition | `ok` | `reason` |
 | --- | --- | --- |
-| the record cannot be read (database error) | false | `consent_unreadable` |
+| the record or the release identity cannot be read | false | `consent_unreadable` |
 | no record, or a record that fails validation | false | `terms_not_accepted` |
 | `termsVersion` differs from the current release, the record's locale is no longer in it, or `sha256` differs from the current document for the record's locale | false | `terms_changed` |
-| `appVersion` differs from the running `package.json` version | false | `app_updated` |
+| `appVersion` differs from the running release identity | false | `app_updated` |
 | otherwise | true | `null` |
+
+The running release identity is the `package.json` version. An Android build appends
+`+android.<versionCode>` from `levix-build.json` (`schema` 1, `platform` `"android"`, `versionCode`
+the integer the stage script wrote from Gradle's `versionCode`). `app_updated` compares that string with the record. A Play
+update that changes only `versionCode` asks again. A build file that is present but cannot be read
+or parsed makes `consentStatus()` return `consent_unreadable`, and `recordAcceptance()` throws
+without writing.
+
+Two builds with the same `package.json` version and no `versionCode` — a source checkout at
+different commits, or a rebuilt Docker image — share one identity. Official releases always bump
+`package.json`; `.github/workflows/release.yml` refuses a tag that differs from it or from Android
+`versionName`.
 
 The current release is the bundled release in 04a and 04b. From 04c it is the newest of the bundled
 release and a verified cached remote release.

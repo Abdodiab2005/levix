@@ -66,24 +66,30 @@ const MainLayout: React.FC = () => {
   const [initialStatus, setInitialStatus] = useState<Partial<SessionStatus> | null>(null);
   const [acceptedStatus, setAcceptedStatus] = useState<SessionStatus | null>(null);
   const socketAtAccept = useRef<SessionStatus | null>(null);
+  const statusRequestId = useRef(0);
   const wasConsentRequired = useRef(false);
   const [termsOpen, setTermsOpen] = useState(false);
 
   const refreshStatus = useCallback(async () => {
+    const request = ++statusRequestId.current;
     try {
       const res = await api.getSession();
+      if (request !== statusRequestId.current) return null;
       if (res?.session) {
         setInitialStatus({
           ...res.session,
           qr: res.qr ?? null,
           pairingCode: res.pairingCode ?? null,
         });
+        return res.session as SessionStatus;
       } else if (res?.status) {
         setInitialStatus(res.status);
+        return res.status as SessionStatus;
       }
     } catch {
       // ignore
     }
+    return null;
   }, []);
 
   useEffect(() => {
@@ -91,17 +97,27 @@ const MainLayout: React.FC = () => {
   }, [refreshStatus]);
 
   const activeStatus: SessionStatus | null =
-    initialStatus || socketStatus
+    initialStatus || socketStatus || acceptedStatus
       ? {
           state: (socketStatus?.state || initialStatus?.state || "idle") as SessionState,
           ...(initialStatus || {}),
           ...(socketStatus || {}),
-          ...(acceptedStatus || {}),
+          // A queued consent snapshot can arrive after the acceptance response.
+          ...(acceptedStatus && (!socketStatus || socketStatus.state === "consent_required")
+            ? acceptedStatus
+            : {}),
         }
       : null;
 
   useEffect(() => {
-    if (acceptedStatus && socketStatus !== socketAtAccept.current) setAcceptedStatus(null);
+    if (
+      acceptedStatus &&
+      socketStatus &&
+      socketStatus !== socketAtAccept.current &&
+      socketStatus.state !== "consent_required"
+    ) {
+      setAcceptedStatus(null);
+    }
   }, [acceptedStatus, socketStatus]);
 
   useEffect(() => {
@@ -211,8 +227,12 @@ const MainLayout: React.FC = () => {
         onClose={() => setTermsOpen(false)}
         onAccepted={(next) => {
           socketAtAccept.current = socketStatus;
+          statusRequestId.current++;
           setAcceptedStatus(next);
           setInitialStatus((prev) => ({ ...(prev || {}), ...next }));
+          void refreshStatus().then((fresh) => {
+            if (fresh) setAcceptedStatus(fresh.state === "consent_required" ? null : fresh);
+          });
         }}
       />
     </div>

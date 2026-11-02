@@ -271,6 +271,12 @@ android.applicationVariants.configureEach {
 tasks.register<Exec>("stageLevixApp") {
     workingDir = repoRoot
     commandLine("bash", "android/scripts/stage-levix-app.sh")
+    // versionCode is Int?. A bump must restage: the zip carries levix-build.json,
+    // and consent treats +android.<versionCode> as a different release.
+    val versionCode = android.defaultConfig.versionCode?.toString()
+        ?: throw GradleException("defaultConfig.versionCode is not set")
+    environment("LEVIX_ANDROID_VERSION_CODE", versionCode)
+    inputs.property("versionCode", versionCode)
     inputs.dir(File(repoRoot, "src"))
     inputs.dir(File(repoRoot, "views"))
     inputs.dir(File(repoRoot, "public"))

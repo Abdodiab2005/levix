@@ -11,7 +11,7 @@
         "paragraphs": [
           "Levix is open-source software for running a personal WhatsApp bot. It runs on a device you control: your phone, your computer or your server. Abdelrhman Diab (Leviro) develops it and publishes the official builds.",
           "The source code is licensed under the MIT License. Nothing in these terms limits the rights that license gives you. These terms set the conditions for using the official Levix builds and the services the developer runs for them: the account-recovery mail relay, feedback and crash reports.",
-          "You accept these terms once for each installation. Levix asks again after these terms or the Privacy Notice change, and after Levix is updated to a new version."
+          "You accept these terms once for each installation. Levix asks again after these terms or the Privacy Notice change, and after Levix is updated to a new version. Unlinking or changing the WhatsApp account, reconnecting, restarting and resetting the panel password do not ask again."
         ]
       },
       {
@@ -34,7 +34,7 @@
       {
         "heading": "4. Services you connect",
         "paragraphs": [
-          "AI providers, search engines, translation, speech and other services that you configure or use through Levix are run by third parties under their own terms, privacy policies, prices and limits. You use them with your own accounts and keys, and you pay their costs. The developer does not control them and is not responsible for them."
+          "AI providers, search engines, translation, speech and other services that you configure or use through Levix are run by third parties under their own terms, privacy policies, prices and limits. Where a service needs an account or an API key, you supply it and pay its costs. The developer does not control them and is not responsible for them."
         ]
       },
       {
@@ -53,8 +53,8 @@
       {
         "heading": "7. Changes and contact",
         "paragraphs": [
-          "The developer can change these terms. A change takes effect for your installation when you accept it. A WhatsApp connection that is already open stays open; Levix asks for the new acceptance before it next connects. If you do not accept, Levix does not connect to WhatsApp, and you can stop using it.",
-          "Questions and requests go to Leviro Support through Settings, then Feedback, in the Levix control panel, or through the contact options on the Levix website."
+          "The developer can change these terms. A change takes effect for your installation when you accept it. A WhatsApp connection that is already open stays open; Levix asks for the new acceptance before it next connects. If that connection drops, for example after a network change, Levix stays offline until the new terms are accepted. If you do not accept, Levix does not connect to WhatsApp, and you can stop using it.",
+          "Questions and requests go to Leviro Support through Settings, then Feedback & Support, in the Levix control panel, or through the contact options on the Levix website."
         ]
       }
     ]
@@ -73,28 +73,28 @@
         "heading": "2. What leaves your device",
         "paragraphs": [
           "WhatsApp (Meta) receives your messages, the media the bot sends and your pairing data for as long as an account is linked, because Levix is a WhatsApp client.",
-          "When you use an AI feature, the prompt and its context go to the AI provider you configured. That context can include names, WhatsApp identifiers, message text, AI history, memory and media you ask it to process. Gemini can search the web with Google Search while it answers; you can turn that off.",
-          "Other features contact other services only when they run: web search, Wikipedia and pages the AI opens; Google Translate and Google text-to-speech; weather, prayer times and link shorteners. Link previews and remote thumbnails are off by default.",
+          "When you use an AI feature, the prompt and its context go to the AI provider you configured. That context can include names, WhatsApp identifiers, message text, AI history, memory and media you ask it to process. With Gemini, Google Search grounding is on by default: Gemini decides for each answer whether to search the web, and you can turn this off in the settings.",
+          "Other features contact other services only when they run. The AI can send search queries drawn from your chats to web search and Wikipedia, and can open web pages. Other features use Google Translate, Google text-to-speech, weather, prayer times and link shortener services. Looking up the models of an AI provider sends your API key to that provider, and setting up a domain with the levix domain command asks an IP lookup service for the server's public address. Link previews and remote thumbnails are off by default.",
           "If you set a proxy, WhatsApp traffic goes through it."
         ]
       },
       {
         "heading": "3. What reaches the developer",
         "paragraphs": [
-          "The developer receives data only when you act: a message you send from Settings, then Feedback, with diagnostics only if you tick that box; a crash report you choose to send; and an address and code sent through the recovery mail relay when you verify a recovery email or ask for a reset code. The relay keeps only keyed hashes and authorization state."
+          "The developer receives data only after an action in your installation. Feedback you send from Settings, then Feedback & Support, carries your message, its topic, an optional rating, an optional contact and an optional file, and the Levix version and platform; device diagnostics and a sanitized debug log are added only if you tick that box. Leviro Support receives feedback through Telegram, which stores it. A crash report, with its device details and sanitized debug log, is sent only when you choose to send it. The recovery mail relay receives an address and a code when you verify a recovery email or when a reset code is requested from the login page. The relay keeps only keyed hashes and authorization state."
         ]
       },
       {
         "heading": "4. Your acceptance of these terms",
         "paragraphs": [
-          "Levix records your acceptance on this device: the Levix version, the version and fingerprint of these documents, the language and the time. That record is not uploaded, is not included in backups or settings exports, and holds no identifier of you, your device or your WhatsApp account."
+          "Levix records your acceptance on this device: the Levix version, the version and SHA-256 hash of these documents, the language, the time and how you accepted (the control panel or the command line). That record is not uploaded and is not included in backups or settings exports made in Settings. The local database copy that Levix keeps before an upgrade does contain it. The record holds no identifier of you, your device or your WhatsApp account."
         ]
       },
       {
         "heading": "5. Your choices",
         "paragraphs": [
-          "You can unlink WhatsApp, delete AI history and memory, delete unsent crash reports, or uninstall Levix to remove its data from the device. Data already sent to WhatsApp, an AI provider or another service is governed by that service's own policy.",
-          "The full Privacy Policy, linked with these documents, lists every destination, what is sent and how long it is kept."
+          "You can unlink WhatsApp, delete AI history and memory, and delete unsent crash reports. On Android, uninstalling Levix removes its data from the device. On a computer or a server, delete the data folder that the levix where command prints, or the Docker volume. Data already sent to WhatsApp, an AI provider or another service is governed by that service's own policy. To delete feedback or a crash report you sent, ask Leviro Support.",
+          "The full Privacy Policy, linked with these documents, lists every destination and what is sent, and how long the developer keeps the data it receives."
         ]
       }
     ]
