@@ -33,7 +33,7 @@ const bundled = require("./src/legal/bundled/en.json");
 // Computed from canonicalJson + sha256 of src/legal/bundled/en.json (same
 // algorithm as documentHash). A mismatch means the text changed.
 const PINNED_BUNDLED_EN_SHA256 =
-  "0da63c58cc94c23d244b5e8a28f78f2181941d91aa5f65aac19bd0c479dd7cbf";
+  "2ff5fb5a5a4d361f22a4c2a169aba1b1fd972e18835cbf1a703e3d2292db17d7";
 
 function cloneDoc() {
   return JSON.parse(JSON.stringify(bundled));

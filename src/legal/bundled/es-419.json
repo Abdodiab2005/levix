@@ -11,7 +11,7 @@
         "paragraphs": [
           "Levix es software de código abierto para ejecutar un bot personal de WhatsApp. Funciona en un dispositivo que usted controla: su teléfono, su computadora o su servidor. Abdelrhman Diab (Leviro) lo desarrolla y publica las versiones oficiales.",
           "El código fuente se licencia bajo la Licencia MIT (MIT License). Nada en estos términos limita los derechos que esa licencia le otorga. Estos términos establecen las condiciones para usar las versiones oficiales de Levix y los servicios que el desarrollador opera para ellas: el relé de correo para la recuperación de la cuenta, los comentarios y los informes de fallos.",
-          "Usted acepta estos términos una vez por cada instalación. Levix vuelve a preguntar después de que estos términos o el Aviso de Privacidad cambien, y después de que Levix se actualice a una nueva versión."
+          "Usted acepta estos términos una vez por cada instalación. Levix vuelve a preguntar después de que estos términos o el Aviso de Privacidad cambien, y después de que Levix se actualice a una nueva versión. Desvincular o cambiar la cuenta de WhatsApp, reconectar, reiniciar y restablecer la contraseña del panel no vuelven a preguntar."
         ]
       },
       {
@@ -34,7 +34,7 @@
       {
         "heading": "4. Servicios que usted conecta",
         "paragraphs": [
-          "Los proveedores de IA, los motores de búsqueda, la traducción, la voz y otros servicios que usted configura o usa a través de Levix son operados por terceros, bajo sus propios términos, políticas de privacidad, precios y límites. Usted los usa con sus propias cuentas y claves, y paga sus costos. El desarrollador no los controla y no es responsable de ellos."
+          "Los proveedores de IA, los motores de búsqueda, la traducción, la voz y otros servicios que usted configura o usa a través de Levix son operados por terceros, bajo sus propios términos, políticas de privacidad, precios y límites. Cuando un servicio requiere una cuenta o una clave de API, usted la proporciona y paga sus costos. El desarrollador no los controla y no es responsable de ellos."
         ]
       },
       {
@@ -53,7 +53,7 @@
       {
         "heading": "7. Cambios y contacto",
         "paragraphs": [
-          "El desarrollador puede cambiar estos términos. Un cambio entra en vigor para su instalación cuando usted lo acepta. Una conexión de WhatsApp que ya esté abierta sigue abierta; Levix pide la nueva aceptación antes de conectarse de nuevo. Si usted no acepta, Levix no se conecta a WhatsApp, y usted puede dejar de usarlo.",
+          "El desarrollador puede cambiar estos términos. Un cambio entra en vigor para su instalación cuando usted lo acepta. Una conexión de WhatsApp que ya esté abierta sigue abierta; Levix pide la nueva aceptación antes de conectarse de nuevo. Si esa conexión se interrumpe, por ejemplo después de un cambio de red, Levix permanece sin conexión hasta que se acepten los nuevos términos. Si usted no acepta, Levix no se conecta a WhatsApp, y usted puede dejar de usarlo.",
           "Las preguntas y solicitudes se dirigen a Leviro Support (el soporte de Leviro) desde Configuración, luego Comentarios y soporte, en el panel de control de Levix, o mediante las opciones de contacto del sitio web de Levix."
         ]
       }
@@ -73,28 +73,28 @@
         "heading": "2. Qué sale de su dispositivo",
         "paragraphs": [
           "WhatsApp (Meta) recibe sus mensajes, los archivos multimedia que el bot envía y sus datos de emparejamiento mientras haya una cuenta vinculada, porque Levix es un cliente de WhatsApp.",
-          "Cuando usted usa una función de IA, el prompt y su contexto van al proveedor de IA que usted configuró. Ese contexto puede incluir nombres, identificadores de WhatsApp, texto de mensajes, historial de la IA, memoria y archivos multimedia que usted le pide procesar. Gemini puede buscar en la web con Google Search mientras responde; usted puede desactivarlo.",
-          "Otras funciones contactan otros servicios solo cuando se ejecutan: búsqueda web, Wikipedia y las páginas que abre la IA; Google Translate y la conversión de texto a voz de Google; el clima, los horarios de oración y los acortadores de enlaces. Las vistas previas de enlaces y las miniaturas remotas están desactivadas de forma predeterminada.",
+          "Cuando usted usa una función de IA, el prompt y su contexto van al proveedor de IA que usted configuró. Ese contexto puede incluir nombres, identificadores de WhatsApp, texto de mensajes, historial de la IA, memoria y archivos multimedia que usted le pide procesar. Con Gemini, el anclaje con Google Search (Google Search grounding) está activado de forma predeterminada: Gemini decide en cada respuesta si busca en la web, y usted puede desactivarlo en la configuración.",
+          "Otras funciones contactan otros servicios solo cuando se ejecutan. La IA puede enviar consultas de búsqueda tomadas de sus chats a la búsqueda web y a Wikipedia, y puede abrir páginas web. Otras funciones usan Google Translate, la conversión de texto a voz de Google y servicios de clima, horarios de oración y acortadores de enlaces. Consultar los modelos de un proveedor de IA envía su clave de API a ese proveedor, y configurar un dominio con el comando levix domain le pide a un servicio de consulta de IP la dirección pública del servidor. Las vistas previas de enlaces y las miniaturas remotas están desactivadas de forma predeterminada.",
           "Si usted configura un proxy, el tráfico de WhatsApp pasa por él."
         ]
       },
       {
         "heading": "3. Qué llega al desarrollador",
         "paragraphs": [
-          "El desarrollador recibe datos solo cuando usted actúa: un mensaje que usted envía desde Configuración, luego Comentarios y soporte, con diagnósticos solo si usted marca esa casilla; un informe de fallo que usted elige enviar; y una dirección y un código enviados a través del relé de correo de recuperación cuando usted verifica un correo de recuperación o pide un código de restablecimiento. El relé guarda solo hashes con clave y el estado de autorización."
+          "El desarrollador recibe datos solo después de una acción en su instalación. Los comentarios que usted envía desde Configuración, luego Comentarios y soporte, llevan su mensaje, su tema, una calificación opcional, un contacto opcional y un archivo opcional, además de la versión de Levix y la plataforma; los diagnósticos del dispositivo y un registro de depuración saneado solo se agregan si usted marca esa casilla. El soporte de Leviro (Leviro Support) recibe los comentarios a través de Telegram, que los almacena. Un informe de fallo, con los detalles del dispositivo y el registro de depuración saneado, solo se envía cuando usted elige enviarlo. El relé de correo de recuperación recibe una dirección y un código cuando usted verifica un correo de recuperación o cuando se solicita un código de restablecimiento desde la página de inicio de sesión. El relé guarda solo hashes con clave y el estado de autorización."
         ]
       },
       {
         "heading": "4. Su aceptación de estos términos",
         "paragraphs": [
-          "Levix registra su aceptación en este dispositivo: la versión de Levix, la versión y la huella digital de estos documentos, el idioma y la hora. Ese registro no se sube, no se incluye en las copias de seguridad ni en las exportaciones de configuración, y no contiene ningún identificador suyo, de su dispositivo ni de su cuenta de WhatsApp."
+          "Levix registra su aceptación en este dispositivo: la versión de Levix, la versión y el hash SHA-256 de estos documentos, el idioma, la hora y la forma de aceptación (el panel de control o la línea de comandos). Ese registro no se sube y no se incluye en las copias de seguridad ni en las exportaciones de configuración hechas en Configuración. La copia local de la base de datos que Levix conserva antes de una actualización sí lo contiene. El registro no contiene ningún identificador suyo, de su dispositivo ni de su cuenta de WhatsApp."
         ]
       },
       {
         "heading": "5. Sus opciones",
         "paragraphs": [
-          "Usted puede desvincular WhatsApp, borrar el historial y la memoria de la IA, borrar los informes de fallos sin enviar, o desinstalar Levix para quitar sus datos del dispositivo. Los datos ya enviados a WhatsApp, a un proveedor de IA o a otro servicio se rigen por la política de ese servicio.",
-          "La Política de Privacidad completa, enlazada con estos documentos, enumera cada destino, qué se envía y por cuánto tiempo se conserva."
+          "Usted puede desvincular WhatsApp, borrar el historial y la memoria de la IA y borrar los informes de fallos sin enviar. En Android, desinstalar Levix quita sus datos del dispositivo. En una computadora o un servidor, borre la carpeta de datos que imprime el comando levix where, o el volumen de Docker. Los datos ya enviados a WhatsApp, a un proveedor de IA o a otro servicio se rigen por la política de ese servicio. Para borrar comentarios o un informe de fallo que usted envió, pídalo al soporte de Leviro.",
+          "La Política de Privacidad completa, enlazada con estos documentos, enumera cada destino, qué se envía y por cuánto tiempo el desarrollador conserva los datos que recibe."
         ]
       }
     ]
