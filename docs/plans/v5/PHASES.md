@@ -88,7 +88,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
-| Status | STARTED 2026-11-02 on `main` 407bf1e. Owner decisions Q-03, Q-04, Q-05 and Q-17 recorded (ADR-006, ADR-019, ADR-020). Re-audit and plan in `PHASE-04-RESULTS.md`; contract in `LEGAL_CONSENT_CONTRACT.md`. |
+| Status | IN REVIEW 2026-11-02, nothing merged. 04a #126 and 04b #127 updated after the owner's review; 04c #128 (client shipped off, BLOCKED on the owner's signing key); 04d and 04e in their own PRs; levix-ui #23 draft. Device QA NOT RUN. Details in `PHASE-04-RESULTS.md` section 3. |
 | Goal | React login, setup, QR and recovery with unchanged server checks; Terms and Privacy consent per installation, enforced inside `WhatsAppSession` before any socket (ADR-005, ADR-006, ADR-020); signed remote Terms with a bundled offline fallback (ADR-019). |
 | Files | `src/legal/` (new: bundled release, canonical hash, acceptance record, later the signed remote client), `src/core/session.js` (`consent_required` state), `src/index.js` (headless lines), `src/cli.js` (`levix terms`), `src/config/exit-codes.cjs`, `src/routes/dashboard.api.esm.js` (consent API), `frontend/src/` (consent dialog, Connection state, later the gateway routes), `i18n/` (UI strings), Android `HomePresentation.kt`, `LevixHostService.kt`, `WhatsAppStatusSheet.kt` (state shown), `app.cjs` and `views/*.ejs` (removed last), `public/gateway-i18n.js` (retired last), new `LEGAL_CONSENT_CONTRACT.md` and `LEGAL_COPY_REVIEW.md`. |
 | Migrations | None. One `bot_settings` key, `legal:acceptance`, outside `setting:*`. Pairing credentials untouched. |

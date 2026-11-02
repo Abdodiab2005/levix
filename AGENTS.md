@@ -68,10 +68,11 @@ to all v5 work and add to the rules below; they remove none of them.
   `WhatsAppSession` at the top of `#open()`, because the retry timer calls
   `#open()` directly (ADR-006). A gate on a route or on `start()` alone is
   incomplete. Consent belongs to the installation (ADR-020): ask again on first
-  install, on a Terms or Privacy change, and on every new app version; never
-  because of unlink, relink, another account, a reconnect, a restart or a
-  password reset. A connected socket stays up when the Terms change; the next
-  `#open()` asks (Q-05). The record (`legal:acceptance`) stays local: never
+  install, on a Terms or Privacy change, and on every new app version (the
+  release identity in `src/config/release.cjs`; an Android `versionCode` bump
+  counts); never because of unlink, relink, another account, a reconnect, a
+  restart or a password reset. A connected socket stays up when the Terms
+  change; the next `#open()` asks (Q-05). The record (`legal:acceptance`) stays local: never
   uploaded, never in settings export or a backup. Headless accepts with
   `levix terms` or the provisioning command; no start flag or environment
   variable may accept. Remote Terms need a valid Ed25519 signature and render as
