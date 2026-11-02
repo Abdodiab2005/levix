@@ -44,9 +44,8 @@ equal("setup shell no-store", response.headers.get("cache-control"), "no-store")
 let page = state(await response.text());
 equal("setup shell state", page?.page, "setup");
 equal("local setup needs no code", page?.needsCode, false);
-ok("setup state has no setup code", !JSON.stringify(page).includes(secrets.getSetupCode()));
 equal(
-  "setup state has only allowed fields",
+  "setup state has only allowed fields and no setup code",
   Object.keys(page).sort().join(","),
   "brand,error,minLength,needsCode,page,recoveryEmail,recoveryEmailVerified",
 );
@@ -94,7 +93,13 @@ equal("claimed GET setup redirects", (await http.call("/setup")).status, 302);
 equal("claimed POST setup redirects", (await http.form("/setup", {})).status, 302);
 response = await http.call("/qr");
 equal("signed-in QR status", response.status, 200);
-equal("signed-in QR current value", state(await response.text())?.qr, "CURRENT-QR");
+page = state(await response.text());
+equal("signed-in QR current value", page?.qr, "CURRENT-QR");
+equal(
+  "QR state has only allowed fields",
+  Object.keys(page).sort().join(","),
+  "brand,error,minLength,needsCode,page,qr,recoveryEmail,recoveryEmailVerified",
+);
 response = await http.form("/login", { password: "valid-password" });
 equal("login from an existing session redirects", response.status, 303);
 ok(
@@ -114,9 +119,10 @@ for (const url of ["/", "/login"]) {
   equal(`${url} login no-store`, response.headers.get("cache-control"), "no-store");
   page = state(await response.text());
   equal(`${url} login state`, page?.page, "login");
-  ok(
-    `${url} recovery address is masked or null`,
-    page?.recoveryEmail == null || page.recoveryEmail.includes("*"),
+  equal(
+    `${url} login state has only allowed fields`,
+    Object.keys(page).sort().join(","),
+    "brand,error,minLength,needsCode,page,recoveryEmail,recoveryEmailVerified",
   );
 }
 for (let i = 0; i < 5; i++) {
@@ -240,7 +246,7 @@ const expected = JSON.stringify({
 equal("dollar replacement tokens preserve exact JSON bytes", injected, expected);
 
 section("static React boundaries");
-const source = ["main.tsx", "login.tsx", "qr.tsx"].map((name) =>
+const source = ["main.tsx", "login.tsx", "qr.tsx", "inline-markup.ts"].map((name) =>
   readFileSync(join(ROOT, "frontend", "src", "gateway", name), "utf8"),
 );
 ok(
@@ -252,6 +258,20 @@ ok(
   source.every((text) => !text.includes('fetch("/dashboard/api')),
 );
 ok("login opens no socket", !source[1].includes("io(") && !source[1].includes("socket.io"));
+ok(
+  "React reset requests abort after 20000 ms",
+  source[1].includes("new AbortController()") &&
+    source[1].includes("controller.abort(), 20000") &&
+    source[1].includes("signal: controller.signal") &&
+    source[1].includes("window.clearTimeout(timeout)") &&
+    source[1].includes('showError("resetErrServer")') &&
+    source[1].includes("setBusy(false)"),
+);
+ok(
+  "React reset confirmation reads submitted form fields",
+  source[1].includes("new FormData(event.currentTarget)") &&
+    ["code", "password", "confirm"].every((name) => source[1].includes(`fields.get("${name}")`)),
+);
 const shell = readFileSync(join(ROOT, "frontend", "gateway.html"), "utf8");
 ok("ui boot is first in head", /<head>\s*<script src="\/ui-boot\.js"><\/script>/.test(shell));
 ok("gateway has no remote font", !shell.includes("fonts.googleapis.com"));

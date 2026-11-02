@@ -2,7 +2,9 @@
 // against the shipped source and generated translations.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { finish, ok, ROOT, section } from "./harness.mjs";
+import { runInNewContext } from "node:vm";
+import { parseInlineMarkup } from "../frontend/src/gateway/inline-markup-parse.ts";
+import { equal, finish, ok, ROOT, section } from "./harness.mjs";
 
 const read = (path) => readFileSync(join(ROOT, path), "utf8");
 const login = read("frontend/src/gateway/login.tsx");
@@ -71,4 +73,91 @@ for (const language of ["en", "ar"]) {
   }
   if (language === "ar") ok("Arabic recovery text is localized", /[\u0600-\u06ff]/.test(entries));
 }
+
+section("React recovery reason mapping");
+const reactSource = readFileSync(join(ROOT, "frontend/src/gateway/login.tsx"), "utf8");
+const mappingSource = /const RESET_REASON_KEYS: Record<string, GatewayKey> = (\{[\s\S]*?\});/.exec(
+  reactSource,
+);
+ok("React recovery reason map is declared", Boolean(mappingSource));
+const reasonKeys = runInNewContext(`(${mappingSource?.[1] || "{}"})`);
+const expectedReasons = {
+  no_session: "resetErrNoSession",
+  send_failed: "resetErrSendFailed",
+  no_email: "resetErrNoEmail",
+  unverified: "resetErrUnverified",
+  rate_limited: "resetErrRateLimited",
+  locked: "resetErrLocked",
+  invalid: "resetErrInvalid",
+  unavailable: "resetErrUnavailable",
+  throttled: "resetErrThrottled",
+  wrong_code: "resetErrWrongCode",
+  address_changed: "resetErrExpired",
+  expired: "resetErrExpired",
+  no_pending: "resetErrExpired",
+  too_many_attempts: "resetErrExpired",
+  mismatch: "resetErrMismatch",
+  invalid_password: "resetErrInvalidPassword",
+};
+equal(
+  "React maps every reset reason",
+  Object.keys(reasonKeys).sort().join(","),
+  Object.keys(expectedReasons).sort().join(","),
+);
+const generated = readFileSync(join(ROOT, "frontend/src/i18n/gateway.generated.ts"), "utf8");
+const generatedDictionary = runInNewContext(
+  generated.replace("export const gatewayTranslations = ", "(").replace(/ as const;\s*$/, ")"),
+);
+for (const [reason, key] of Object.entries(expectedReasons)) {
+  equal(`React ${reason} maps to ${key}`, reasonKeys[reason], key);
+  for (const locale of ["ar", "en", "pt-BR", "es-419"]) {
+    ok(
+      `React ${reason} has ${locale} copy`,
+      typeof generatedDictionary[locale]?.[key] === "string" &&
+        generatedDictionary[locale][key].length > 0,
+    );
+  }
+}
+ok(
+  "React wrong code shows attempts left",
+  reactSource.includes("result.attemptsLeft") && reactSource.includes('t("resetErrAttemptsLeft"'),
+);
+for (const locale of ["ar", "en", "pt-BR", "es-419"]) {
+  ok(
+    `React attempts-left has ${locale} copy`,
+    Boolean(generatedDictionary[locale]?.resetErrAttemptsLeft),
+  );
+}
+
+section("React inline catalog markup");
+const suspicious =
+  "<img onerror=alert(1)><script>alert(1)</script><span onmouseover=alert(1)>bad</span><span>safe</span><strong>bold</strong>";
+const segments = parseInlineMarkup(suspicious);
+equal(
+  "inline catalog allows exact span and strong",
+  segments.map((segment) => segment.kind).join(","),
+  "text,span,strong",
+);
+ok(
+  "inline catalog keeps img as text",
+  segments[0].value.includes("<img onerror=alert(1)>") && segments[0].kind === "text",
+);
+ok(
+  "inline catalog keeps script as text",
+  segments[0].value.includes("<script>alert(1)</script>") && segments[0].kind === "text",
+);
+ok(
+  "inline catalog rejects tag attributes",
+  segments[0].value.includes("<span onmouseover=alert(1)>bad</span>"),
+);
+const rendererSource = readFileSync(join(ROOT, "frontend/src/gateway/inline-markup.ts"), "utf8");
+ok(
+  "inline catalog renderer uses only parsed strong and span elements",
+  rendererSource.includes("parseInlineMarkup(value).map") &&
+    rendererSource.includes('segment.kind === "text"') &&
+    rendererSource.includes("createElement(") &&
+    rendererSource.includes("segment.kind,") &&
+    rendererSource.includes("segment.value,") &&
+    !rendererSource.includes("dangerouslySetInnerHTML"),
+);
 finish();

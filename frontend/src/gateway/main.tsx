@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button, Card, Field, Input, PasswordInput } from "../components/ui";
 import { gatewayTranslations } from "../i18n/gateway.generated";
 import { resolveLocale } from "../i18n/locale";
@@ -8,10 +8,20 @@ import "./style.css";
 import { Login } from "./login";
 import { Qr } from "./qr";
 import { I18nProvider } from "../context/I18nContext";
+import { renderInlineMarkup } from "./inline-markup";
 
 type Language = keyof typeof gatewayTranslations;
 export type GatewayKey = keyof typeof gatewayTranslations.en;
 export type GatewayText = (key: GatewayKey, vars?: Record<string, string | number>) => string;
+export type GatewayMarkupKey =
+  | "loginTrust"
+  | "setupTrust"
+  | "qrTrust"
+  | "qrStep1"
+  | "qrStep2"
+  | "qrStep3"
+  | "qrCallout";
+export type GatewayMarkup = (key: GatewayMarkupKey) => ReactNode;
 export type GatewayState = {
   page: "login" | "setup" | "qr";
   error: { code: string | null; message: string } | null;
@@ -44,9 +54,11 @@ export function useGatewayText() {
     let value: string = gatewayTranslations[language][key] ?? gatewayTranslations.en[key];
     for (const [name, replacement] of Object.entries(vars))
       value = value.split(`{${name}}`).join(String(replacement));
-    return value.replace(/<[^>]*>/g, "");
+    return value;
   };
-  return { t, language };
+  const markup: GatewayMarkup = (key) =>
+    renderInlineMarkup(gatewayTranslations[language][key], key.endsWith("Trust"));
+  return { t, markup, language };
 }
 
 export function PasswordField({
@@ -55,8 +67,6 @@ export function PasswordField({
   label,
   minLength,
   autoComplete,
-  value,
-  onChange,
   t,
 }: {
   id: string;
@@ -64,8 +74,6 @@ export function PasswordField({
   label: string;
   minLength: number;
   autoComplete: string;
-  value?: string;
-  onChange?: (value: string) => void;
   t: GatewayText;
 }) {
   return (
@@ -76,12 +84,6 @@ export function PasswordField({
         minLength={minLength || undefined}
         required
         autoComplete={autoComplete}
-        {...(value === undefined
-          ? {}
-          : {
-              value,
-              onChange: (event: ChangeEvent<HTMLInputElement>) => onChange?.(event.target.value),
-            })}
         placeholder={
           minLength ? t("minLengthPlaceholder", { n: minLength }) : t("passwordPlaceholder")
         }
@@ -93,7 +95,7 @@ export function PasswordField({
 }
 
 function Gateway() {
-  const { t } = useGatewayText();
+  const { t, markup } = useGatewayText();
   const host = (window as Window & { LevixHost?: { closePanel?: () => void } }).LevixHost;
   useEffect(() => {
     document.title = t(
@@ -139,7 +141,7 @@ function Gateway() {
           <h2 className="max-w-xl text-4xl font-bold leading-tight">{t(story[1])}</h2>
           <p className="mt-5 max-w-xl text-muted">{t(story[2], { brand: state.brand.name })}</p>
         </div>
-        <p className="text-sm text-muted">{t(story[3])}</p>
+        <p className="text-sm text-muted">{markup(story[3])}</p>
       </section>
       <section className="gateway-content flex items-center justify-center p-4 md:p-10">
         <div className="w-full max-w-lg space-y-4">
@@ -206,7 +208,7 @@ function Gateway() {
                 )}
               </>
             ) : (
-              <Qr initial={state.qr || ""} t={t} />
+              <Qr initial={state.qr || ""} t={t} markup={markup} />
             )}
           </Card>
           <p className="text-center text-xs text-muted">

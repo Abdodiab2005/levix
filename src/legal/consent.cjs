@@ -7,8 +7,11 @@
 //
 // The session asks consentStatus() before every socket it builds
 // (src/core/session.js). Anything that cannot be read counts as "not
-// accepted": the gate fails closed.
+// accepted": the gate fails closed. That includes the release identity
+// (src/config/release.cjs): a build file that exists but cannot be read
+// is not a reason to keep an old acceptance.
 
+const { releaseIdentity } = require("../config/release.cjs");
 const { HASH_RE, parseVersion } = require("./document.cjs");
 const terms = require("./terms.cjs");
 
@@ -48,11 +51,19 @@ class ConsentError extends Error {
 }
 
 let cachedAppVersion = null;
+// Tests only. A string stands in for releaseIdentity(); undefined uses it.
+let appVersionOverride;
 
-/** The running Levix version, the one an acceptance is bound to. */
+/** The release identity an acceptance is bound to. The export name stays appVersion. */
 function appVersion() {
-  if (cachedAppVersion === null) cachedAppVersion = String(require("../../package.json").version);
+  if (appVersionOverride !== undefined) return appVersionOverride;
+  if (cachedAppVersion === null) cachedAppVersion = releaseIdentity();
   return cachedAppVersion;
+}
+
+/** Test seam. Pass a release-identity string, or undefined to use releaseIdentity(). */
+function _setAppVersionForTests(identity) {
+  appVersionOverride = identity;
 }
 
 // Required lazily: `levix terms show` and the tests of the document format
@@ -101,13 +112,15 @@ function readAcceptance() {
 function consentStatus() {
   let release;
   let accepted;
+  let identity;
   try {
     release = terms.currentRelease();
     accepted = readAcceptance();
+    identity = appVersion();
   } catch {
     return { ok: false, reason: REASONS.UNREADABLE, current: null, accepted: null };
   }
-  const current = { version: release.version, locales: Object.keys(release.documents), appVersion: appVersion() };
+  const current = { version: release.version, locales: Object.keys(release.documents), appVersion: identity };
   const result = (ok, reason) => ({ ok, reason, current, accepted });
 
   if (!accepted) return result(false, REASONS.NOT_ACCEPTED);
@@ -115,7 +128,7 @@ function consentStatus() {
   if (!document || accepted.termsVersion !== document.version || accepted.sha256 !== document.sha256) {
     return result(false, REASONS.CHANGED);
   }
-  if (accepted.appVersion !== appVersion()) return result(false, REASONS.APP_UPDATED);
+  if (accepted.appVersion !== identity) return result(false, REASONS.APP_UPDATED);
   return result(true, null);
 }
 
@@ -132,9 +145,11 @@ function recordAcceptance({ version, sha256, locale, via, now = new Date() } = {
   if (version !== document.version || sha256 !== document.sha256) {
     throw new ConsentError("TERMS_MISMATCH", "The Terms version or SHA-256 does not match the current document");
   }
+  // A broken release identity throws here, before the write.
+  const identity = appVersion();
   const record = {
     schema: RECORD_SCHEMA,
-    appVersion: appVersion(),
+    appVersion: identity,
     termsVersion: document.version,
     sha256: document.sha256,
     locale: document.locale,
@@ -161,6 +176,7 @@ module.exports = {
   VIA,
   ConsentError,
   appVersion,
+  _setAppVersionForTests,
   readAcceptance,
   consentStatus,
   recordAcceptance,
