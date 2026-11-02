@@ -285,3 +285,52 @@ The full gates in 3.8 refer to the preceding tree. They were rerun for the lock 
 
 The merge of the #128 and #130 heads differs from `88e5483` only in this file and
 `LEGAL_COPY_REVIEW.md`; the code is identical.
+
+### 3.10 Manual device QA (2026-11-03)
+
+Owner-authorized live test. Device: Redmi 9 (`lancelot`), LineageOS, Android 14 (API 34), arm64,
+system WebView `com.android.webview` 120.0.6099.230. Build: merge of #130 `594ba9f` and #128
+`a9b5e88` (code identical to `88e5483`), isolated debug APK `net.leviro.levix.dev`
+(`-PlevixIsolatedDebug=true`), versionCode 69, then a local-only build with versionCode 70. The
+production `net.leviro.levix` 4.8.0 on the device was not touched. No WhatsApp account was paired;
+the session reached WhatsApp only to fetch QR codes.
+
+| Check | Result |
+| --- | --- |
+| Fresh install, first Start: dialog before any socket; no TCP socket for the app's uid; state `consent_required` | PASS |
+| Dialog close keeps `consent_required`; Connection shows "Review terms"; home card and one alert notification appear | PASS |
+| Accept is disabled until the box is ticked; accept records `2026-11-02.1`, locale `ar`, `4.9.2+android.69`; QR follows | PASS |
+| Force-stop and relaunch: no new prompt; Start goes straight to QR | PASS |
+| Unlink (unpaired) and Start again: no new prompt | PASS |
+| `adb install -r` versionCode 70 over 69: data kept, consent `app_updated`, dialog on Start, alert shown; accept records `4.9.2+android.70`; alert cleared | PASS |
+| `/qr` with `qrcode.min.js` blocked (CDP): error and Retry; Retry after unblocking loads both libraries and clears the error | PASS |
+| Dashboard and gateway: no request leaves `127.0.0.1:3001`; fonts load from local files | PASS |
+| Theme and language from the dashboard and the native home reach the gateway (dark; `es-419`, LTR; Arabic RTL) | PASS |
+| Recovery: only the WhatsApp channel without a verified email; unlinked send shows the 409 message inline | PASS |
+| Wrong password on `/login` | FAIL: blank page (D-1) |
+| `FLAG_SECURE` on login and setup | FAIL: screens are capturable (D-2) |
+| Arabic legal text direction | FAIL: paragraphs starting with a Latin word render LTR (D-3) |
+| Password reset keeps consent; pairing and relinking a real account; oldest supported WebView (R-27) | NOT RUN |
+
+Defects found:
+
+- D-1 (P1, Android, from 04d). A failed login (401) leaves an empty page. `panel-bridge.js`
+  renders a POST answer of 400 or more with `document.open`/`document.write`. The gateway entry is
+  an ES module that already ran in that window, so it does not run again and `#root` stays empty.
+  The EJS pages used classic scripts. The same path serves the failed `/setup` POST. Reproduced
+  twice. Recovery uses `fetch` and is not affected.
+- D-2 (P1, privacy, older than Phase 04). `PanelActivity.applyScreenCaptureGuard` compares the
+  WebView URL path with exactly `/login` and `/setup`. The panel opens `<panelUrl>/#<hash>`, so
+  first run loads `/setup/`, and `PanelHttp.exchange` follows redirects internally, so the login
+  page shows at `/`. `adb exec-out screencap` captured both screens.
+- D-3 (P2). Legal blocks carry `dir="auto"`, so an Arabic paragraph that starts with "Levix" takes
+  LTR direction and its words reorder.
+- D-4 (P3). The version and effective date in the Arabic dialog render as `02.1-11-2026`; they
+  need an LTR isolate.
+- D-5 (P3). The Android recovery error tells the user to run `levix reset-password` on the server.
+- D-6 (P3, native home). In Spanish, the battery card's text column is squeezed by the
+  `RESTRINGIDO` badge and words break mid-word.
+
+Observation: the production app on the device logged `state=logged_out code=401` at 00:08:43 when
+the phone's Wi-Fi came back. The QA build has its own data and never paired, so the test did not
+cause it; the owner should check that install.
