@@ -45,12 +45,12 @@ class LevixHostService : Service() {
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var isNetworkOnline = true
-    private var offlineAlertPosted = false
-    // Which alert kind is on screen ("terms", "offline", "wa", or null). The
-    // Terms alert must not be reposted on every heartbeat after the operator
-    // dismisses it, and it has to be cleared when consent_required ends without
-    // passing through "connected" (accepted but unpaired, or Stop).
-    private var lastAlert: String? = null
+    // The alert AlertPolicy decided to keep on screen, or null. It is the state
+    // that makes "post once per entry" work: an equal alert is kept, so a
+    // dismissed one stays dismissed across heartbeats, and it is cancelled when
+    // the condition ends without passing through "connected" (accepted but
+    // unpaired, network back while idle, or Stop).
+    private var postedAlert: AlertPolicy.Alert? = null
     private var powerReceiver: BroadcastReceiver? = null
 
     private val retryNode = Runnable {
@@ -371,7 +371,7 @@ class LevixHostService : Service() {
         }
     }
 
-    private fun postOfflineAlert(title: String, message: String, kind: String) {
+    private fun postAlert(alert: AlertPolicy.Alert, title: String, message: String) {
         val openIntent = PendingIntent.getActivity(
             this,
             3,
@@ -399,44 +399,43 @@ class LevixHostService : Service() {
 
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(NOTIFICATION_ALERT_ID, builder.build())
-        offlineAlertPosted = true
-        lastAlert = kind
+        postedAlert = alert
     }
 
     private fun cancelOfflineAlert() {
         val manager = getSystemService(NotificationManager::class.java)
         manager.cancel(NOTIFICATION_ALERT_ID)
-        offlineAlertPosted = false
-        lastAlert = null
+        postedAlert = null
     }
 
     private fun checkStateAndNotify() {
         if (!running || tornDown) return
         val snap = HostState.snapshot
 
-        if (snap.whatsAppState == "consent_required") {
-            // Posted once per entry into this state: a dismissed Terms alert
-            // stays dismissed until the state is left and entered again.
-            if (lastAlert != ALERT_TERMS) {
-                postOfflineAlert(
-                    localizedString(R.string.notif_terms_title),
-                    localizedString(R.string.notif_terms_text),
-                    ALERT_TERMS,
-                )
-            }
-        } else {
-            // consent_required ends without a "connected" pass when the operator
-            // accepts but the install is still unpaired, and when the assistant
-            // is stopped, so the Terms alert is cleared here.
-            if (lastAlert == ALERT_TERMS) cancelOfflineAlert()
-            if (!isNetworkOnline || snap.whatsAppState == "paused") {
-                postOfflineAlert(
-                    localizedString(R.string.notif_offline_title),
-                    localizedString(R.string.notif_offline_network),
-                    ALERT_OFFLINE,
-                )
-            } else if (snap.whatsAppState in listOf("retry_exhausted", "error", "logged_out")) {
-                val detail = when (snap.whatsAppState) {
+        val desired = AlertPolicy.desired(isNetworkOnline, snap.whatsAppState)
+        when (val decision = AlertPolicy.decide(postedAlert, desired)) {
+            is AlertPolicy.Decision.Post -> showAlert(decision.alert, snap)
+            AlertPolicy.Decision.Cancel -> cancelOfflineAlert()
+            AlertPolicy.Decision.Keep -> Unit
+        }
+
+        updateNotification()
+    }
+
+    private fun showAlert(alert: AlertPolicy.Alert, snap: HostState.Snapshot) {
+        when (alert.kind) {
+            AlertPolicy.Kind.TERMS -> postAlert(
+                alert,
+                localizedString(R.string.notif_terms_title),
+                localizedString(R.string.notif_terms_text),
+            )
+            AlertPolicy.Kind.OFFLINE -> postAlert(
+                alert,
+                localizedString(R.string.notif_offline_title),
+                localizedString(R.string.notif_offline_network),
+            )
+            AlertPolicy.Kind.WHATSAPP -> {
+                val detail = when (alert.state) {
                     "logged_out" -> localizedString(R.string.card_whatsapp_desc_expired_long)
                     else -> {
                         val codeStr = snap.whatsAppCode?.let { "$it: " } ?: ""
@@ -444,17 +443,13 @@ class LevixHostService : Service() {
                         "$codeStr$reasonStr"
                     }
                 }
-                postOfflineAlert(
+                postAlert(
+                    alert,
                     localizedString(R.string.notif_offline_title),
                     localizedString(R.string.notif_offline_wa, detail),
-                    ALERT_WA,
                 )
-            } else if (snap.whatsAppState == "connected") {
-                cancelOfflineAlert()
             }
         }
-
-        updateNotification()
     }
 
     private fun updateNotification() {
@@ -582,9 +577,6 @@ class LevixHostService : Service() {
         private const val NOTIFICATION_ID = 1001
         const val NOTIFICATION_ALERT_ID = 1002
         private const val HEARTBEAT_MS = 30_000L
-        private const val ALERT_TERMS = "terms"
-        private const val ALERT_OFFLINE = "offline"
-        private const val ALERT_WA = "wa"
         private const val DATA_UNAVAILABLE_EXIT_CODE = 78
         private val NODE_RETRY_DELAYS_MS = longArrayOf(5_000L, 10_000L, 15_000L, 20_000L, 25_000L)
         private const val WAKE_LOCK_TAG = "net.leviro.levix:host"

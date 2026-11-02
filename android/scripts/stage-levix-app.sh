@@ -99,6 +99,27 @@ find "$STAGE/node_modules" -name '*.map' -delete
 rm -f "$STAGE/node_modules/.package-lock.json"
 
 node "$ROOT/android/scripts/check-stage-deps.mjs" "$STAGE"
+
+# Consent binds an acceptance to this versionCode. Gradle is the only writer
+# of LEVIX_ANDROID_VERSION_CODE. A missing or padded value must not produce an
+# archive that would keep an acceptance from another build.
+version_code="${LEVIX_ANDROID_VERSION_CODE-}"
+if [ -z "$version_code" ]; then
+  echo "LEVIX_ANDROID_VERSION_CODE is missing" >&2
+  exit 1
+fi
+if [[ ! "$version_code" =~ ^[1-9][0-9]*$ ]]; then
+  echo "LEVIX_ANDROID_VERSION_CODE must be a positive integer without leading zeros" >&2
+  exit 1
+fi
+# Play's ceiling, and the maximum parseBuildInfo accepts. Longer digit strings
+# are rejected before the arithmetic test, which cannot hold them.
+if [ "${#version_code}" -gt 10 ] || [ "$version_code" -gt 2100000000 ]; then
+  echo "LEVIX_ANDROID_VERSION_CODE must be from 1 to 2100000000" >&2
+  exit 1
+fi
+printf '%s\n' '{"schema":1,"platform":"android","versionCode":'"${version_code}"'}' > "$STAGE/levix-build.json"
+
 node "$ROOT/android/scripts/zip-tree.mjs" "$STAGE" "$OUT"
 
 # The panel's HTML, JS and CSS have to be inside the archive the APK ships,
@@ -112,6 +133,10 @@ for ref in /dashboard/index.html /dashboard/gateway.html $(dashboard_assets); do
     exit 1
   fi
 done
+if ! grep -qxF "levix-build.json" <<<"$listing"; then
+  echo "$OUT is missing levix-build.json" >&2
+  exit 1
+fi
 
 ls -lh "$OUT"
 echo "Wrote $OUT ($(dashboard_assets | wc -l) dashboard assets verified inside)"
