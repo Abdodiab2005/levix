@@ -45,6 +45,7 @@ const session = new WhatsAppSession({
     sock.onConnectionUpdate = onConnectionUpdate;
   },
   onOpen: async () => {},
+  checkConsent: () => ({ ok: true }),
   // Long enough that only a ref'd timer can hold the process open across it.
   retryDelaysMs: [1500],
   log: { info() {}, warn() {}, error() {}, debug() {}, trace() {} },

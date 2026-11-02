@@ -175,6 +175,7 @@ const session = new WhatsAppSession({
   initializeScheduledJobs: () => { schedulesStarted += 1; },
   stopScheduledJobs: () => {},
   isLinked: () => true,
+  checkConsent: () => ({ ok: true }),
   loadProxy: () => null,
   buildProxyAgents: () => null,
   log: { info() {}, warn() {}, debug() {}, error(message) { sessionErrors.push(message); } },
