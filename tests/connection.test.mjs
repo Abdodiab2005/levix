@@ -8,7 +8,7 @@
 //   * starting Levix creates no Baileys socket, and the dashboard works anyway
 //   * pressing Start once — or three times at once — creates exactly one
 //
-// It stops at the pairing boundary. Whether the QR is accepted needs a phone.
+// The real session creates a fake Baileys socket and never contacts WhatsApp.
 
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -35,7 +35,11 @@ require("./src/db/db.cjs").checkpoint();
 const SOCKET_MARKER = "Initializing WhatsApp socket";
 
 function startLevix({ waitFor = "Ctrl+C", timeoutMs = 60000 } = {}) {
-  const child = spawn(process.execPath, [join(ROOT, "bin", "levix.js")], {
+  const child = spawn(process.execPath, [
+    "--import",
+    join(ROOT, "tests", "fixtures", "fake-whatsapp-loader.mjs"),
+    join(ROOT, "bin", "levix.js"),
+  ], {
     env: {
       ...process.env,
       LEVIX_DATA_DIR: dataDir,
