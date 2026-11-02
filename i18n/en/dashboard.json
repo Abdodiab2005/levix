@@ -1209,7 +1209,7 @@
   "legalWebsite": "Website",
   "legalReadAccept": "I have read and accept the Terms of Use and the Privacy Notice",
   "legalAccept": "Accept",
-  "legalLoadError": "Could not load the Terms. Close and reopen this dialog to try again.",
+  "legalLoadError": "Could not load the Terms. Please try again.",
   "legalAcceptError": "Could not save your acceptance. Please try again.",
   "legalReviewTerms": "Review Terms"
 }

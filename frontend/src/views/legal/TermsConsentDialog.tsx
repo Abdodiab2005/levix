@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../../api/client";
 import { Button, Checkbox, Dialog, Spinner } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
@@ -24,13 +25,14 @@ export function consentReasonText(
 function DocumentPart({ part }: { part: LegalPart }) {
   return (
     <section className="space-y-3">
-      <h3 className="text-base font-bold text-text-main">{part.title}</h3>
+      <h3 dir="auto" className="text-base font-bold text-text-main">{part.title}</h3>
       {part.sections.map((section, index) => (
         <div key={index} className="space-y-2">
-          <h4 className="text-sm font-semibold text-text-main">{section.heading}</h4>
+          <h4 dir="auto" className="text-sm font-semibold text-text-main">{section.heading}</h4>
           {section.paragraphs.map((paragraph, paragraphIndex) => (
             <p
               key={paragraphIndex}
+              dir="auto"
               className="text-sm leading-relaxed text-muted whitespace-pre-wrap"
             >
               {paragraph}
@@ -60,11 +62,12 @@ export function TermsConsentDialog({
   const [loading, setLoading] = useState(false);
   const [changed, setChanged] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
+  const savingRef = useRef(false);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    let current = true;
-    setDocument(null);
+  const loadTerms = useCallback(() => {
+    const request = ++requestId.current;
+    if (!savingRef.current) setDocument(null);
     setChecked(false);
     setChanged(false);
     setError(null);
@@ -72,22 +75,30 @@ export function TermsConsentDialog({
     api
       .getLegalTerms(language)
       .then((result) => {
-        if (current) setDocument(result);
+        if (request === requestId.current && !savingRef.current) setDocument(result);
       })
       .catch(() => {
-        if (current) setError(t("legalLoadError"));
+        if (request === requestId.current && !savingRef.current) setError(t("legalLoadError"));
       })
       .finally(() => {
-        if (current) setLoading(false);
+        if (request === requestId.current) setLoading(false);
       });
+  }, [language, t]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    loadTerms();
     return () => {
-      current = false;
+      requestId.current++;
     };
-  }, [isOpen, language, t]);
+  }, [isOpen, loadTerms]);
 
   const accept = async () => {
     if (!document || !checked || saving) return;
+    requestId.current++;
+    savingRef.current = true;
     setSaving(true);
+    setLoading(false);
     setError(null);
     try {
       const result = await api.acceptLegalTerms({
@@ -106,6 +117,9 @@ export function TermsConsentDialog({
         setError(t("legalAcceptError"));
       }
     } finally {
+      requestId.current++;
+      savingRef.current = false;
+      setLoading(false);
       setSaving(false);
     }
   };
@@ -134,8 +148,13 @@ export function TermsConsentDialog({
         </div>
       }
     >
-      {loading ? <Spinner /> : null}
-      {document && (
+      {loading ? <Spinner label={t("loading")} /> : null}
+      {!loading && !document && error && (
+        <Button variant="secondary" icon={<RefreshCw size={16} />} onClick={loadTerms}>
+          {t("retry")}
+        </Button>
+      )}
+      {!loading && document && (
         <div className="space-y-4">
           <p className="text-sm text-text-main" role={changed ? "alert" : undefined}>
             {changed
