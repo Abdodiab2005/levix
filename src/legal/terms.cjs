@@ -14,7 +14,10 @@ const { LOCALES, LegalDocumentError, documentHash, validateDocument } = require(
 // Every bundled locale. One `require` per file so the single-executable build
 // bundles them (scripts/build-sea.mjs cannot read a directory at run time).
 const BUNDLED = Object.freeze({
+  ar: () => require("./bundled/ar.json"),
   en: () => require("./bundled/en.json"),
+  "pt-BR": () => require("./bundled/pt-BR.json"),
+  "es-419": () => require("./bundled/es-419.json"),
 });
 
 const DEFAULT_LOCALE = "en";
