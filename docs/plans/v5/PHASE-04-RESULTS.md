@@ -256,3 +256,19 @@ and #130 trees produced the same tree tested locally (integration tree `e00219c`
 
 Human legal/privacy review remains a release blocker. The remote client remains disabled; no legal
 document has been approved or published, and the owner's private signing key was not accessed.
+
+### 3.9 Follow-up: simultaneous startup lock (2026-11-02)
+
+CI run 41526919711 failed `start-order.test.mjs`: both simultaneous fresh starters could report
+`ELEVIXLOCKED`, leaving no winner. The race was reproduced with isolated child processes. Two
+SQLite connections could both fail while promoting their locks; merely adding SQLite's busy timeout
+did not eliminate it. The fix closes a busy candidate and retries a bounded number of times with a
+short stagger; SQLite remains the single-instance authority, and persistent contention still fails
+closed. No database migration or lock-file format changes.
+
+On Linux, Node 24.22.2, 2026-11-02, integration commit `88e5483`: PASS `node tests/run.mjs
+start-order` (136 checks), PASS `node tests/run.mjs lock` (18 checks), and PASS 100 independently
+created simultaneous startup pairs (zero pairs without exactly one holder). The focused test also
+injects transient and persistent SQLite-busy errors to check connection cleanup and the retry bound.
+The full gates in 3.8 refer to the preceding tree; CI and the combined-tree gates are rerun for the
+lock change.
