@@ -110,10 +110,10 @@ Evidence labels: PASS, FAIL, NOT RUN or BLOCKED, each with the command, platform
 | --- | --- | --- | --- | --- | --- |
 | #125 plan | `docs/v5-phase-04-plan` | `main` | 32a4b59 | PASS 7/7, run 41451742790 | no |
 | #126 04a | `feat/04a-consent-gate` | #125 | 51d0051 | PASS 7/7, run 41494231560 | no |
-| #127 04b | `feat/04b-consent-ui` | #126 | 898193f plus this documents commit | PASS 7/7 on 898193f, run 41494234796 | no |
-| #128 04c | `feat/04c-remote-terms` | #127 | 4267edb | runs on the PR | no |
-| #129 04d | `feat/04d-react-gateway` | #127 | 048f233 | runs on the PR | no |
-| #130 04e | `feat/04e-ejs-removal` | #129 | see #130 | runs on the PR | no (draft) |
+| #127 04b | `feat/04b-consent-ui` | #126 | 5fecb1d (documents on top of 898193f) | PASS 7/7 on 5fecb1d, run 41501993838; on 898193f, run 41494234796 | no |
+| #128 04c | `feat/04c-remote-terms` | #127 | 6731d23 (merge of #127 into 4267edb) | PASS 7/7, run 41502096276 | no |
+| #129 04d | `feat/04d-react-gateway` | #127 | 1fb92f1 | PASS 7/7, run 41503237658; the first run failed `validate:sea` on 3 OS (fixed in 1fb92f1) | no |
+| #130 04e | `feat/04e-ejs-removal` | #129 | 3c66a3a | PASS 7/7, run 41504217295; the first run failed one `tests` check (fallback credit links, fixed in 3c66a3a) | no (draft) |
 | levix-ui #23 | `feat/legal-release-endpoint` | `main` | 7d52df0 | not in CI; local gates in 3.4 | no (draft) |
 
 The earlier heads also passed CI 7/7: #126 f34a2bd (run 41451749569) and #127 65b793e (run
@@ -163,7 +163,7 @@ The orchestrator wrote the briefs, ran every gate and reviewed every diff. The f
 | `npm run build:frontend` | n/a | PASS local | PASS local | PASS local | `npm run build` PASS local |
 | Android `:app:testDebugUnitTest` | PASS local, 74 tests | PASS local, 87 tests | PASS local, 87 | PASS local, 87 | n/a |
 | Android `:app:assembleDebug` | PASS local | PASS local | PASS local | PASS local | n/a |
-| Tarball, SEA (3 OS), Docker, APK and AAB | PASS (CI run 41494231560) | PASS (CI run 41494234796) | CI on #128 | CI on #129 | n/a |
+| Tarball, SEA (3 OS), Docker, APK and AAB | PASS (CI run 41494231560) | PASS (CI run 41501993838) | PASS (CI run 41502096276) | PASS (CI run 41503237658) | n/a |
 | Android device QA | NOT RUN | NOT RUN | NOT RUN | NOT RUN | n/a |
 | Live endpoint smoke | n/a | n/a | n/a | n/a | NOT RUN |
 
@@ -199,8 +199,8 @@ Local Android builds are debug builds; their sizes are not release or Play sizes
 | --- | --- | --- | --- | --- | --- |
 | 04c signed remote Terms | #128 (`feat/04c-remote-terms`, 4267edb) | Ed25519 envelope check, HTTPS fetch with no redirect, 5 s timeout and size cap, atomic verified cache, no downgrade, owner script, contract section 8 | Codex, read-only: no signature bypass; 3 P1 (owner script, test cleanup), 2 P2 (short write, stale memo), 1 P3; all fixed in 4267edb | PASS on 4267edb: `npm test` 8911 checks, 0 failed (`legal-remote` 113); lint, i18n, frontend build; Android 87 tests and debug build | Implemented and shipped off (`TRUSTED_KEYS` empty). BLOCKED on the owner: key, signed envelope, levix-ui #23 deploy, `PRIVACY.md` row, new notice version |
 | levix-ui endpoint | levix-ui #23 (draft, 7d52df0) | `GET /api/legal/v1/release` serves the committed envelope, 404 until one exists, 503 on a bad shape | orchestrator | PASS: `npm test` 80, `tsc`, eslint, `npm run build` | Draft; deploy is harmless (404) |
-| 04d React gateway | #129 (`feat/04d-react-gateway`, 048f233) | Login, setup, QR and recovery in React with unchanged server checks; EJS fallback kept | Grok, read-only: 0 P1, 3 P2 (no recovery timeout, stale confirm state, stylesheet gate), 4 P3; all fixed in bb33c6f; root tests made free of `react` in 048f233 | PASS on 048f233: `npm test` 9007 checks, 0 failed; lint, i18n, frontend build; Android 87 tests and debug build; headless Chrome 23/24 (3.5) | Implemented; Android WebView QA NOT RUN |
-| 04e EJS removal | #130 (`feat/04e-ejs-removal`, draft) | EJS views, legacy gateway scripts and the `ejs` dependency removed; code-owned static fallback when the build is missing; docs | orchestrator | see the PR | Draft. Merge only after Android WebView QA of 04d (R-27) |
+| 04d React gateway | #129 (`feat/04d-react-gateway`, 048f233) | Login, setup, QR and recovery in React with unchanged server checks; EJS fallback kept | Grok, read-only: 0 P1, 3 P2 (no recovery timeout, stale confirm state, stylesheet gate), 4 P3; all fixed in bb33c6f; root tests made free of `react` in 048f233 | PASS on 048f233: `npm test` 9007 checks, 0 failed; lint, i18n, frontend build; Android 87 tests and debug build; headless Chrome 23/24 (3.5) | Implemented; SEA validator updated in 1fb92f1 (local `validate:sea` 51 checks PASS); Android WebView QA NOT RUN |
+| 04e EJS removal | #130 (`feat/04e-ejs-removal`, draft, 3c66a3a) | EJS views, legacy gateway scripts and the `ejs` dependency removed; code-owned static fallback with the credit links when the build is missing; docs | orchestrator | PASS on 3c66a3a: `npm test` 9012 checks, 0 failed; `build:sea` plus `validate:sea` 51 checks; lint 0 errors; no-build curl smoke (302 to /setup, 200 form, 400 mismatch) | Draft. Merge only after Android WebView QA of 04d (R-27) |
 
 04e was started by Antigravity, which stopped after about three minutes with no report; OpenCode
 then hit its free-tier limit at once, and Codex finished it from the partial diff.
