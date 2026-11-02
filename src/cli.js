@@ -92,8 +92,13 @@ export function parseArgv(argv) {
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
     if (FLAGS_WITH_VALUES.has(arg)) {
-      // The value is the next argument, never a command.
-      if (i + 1 < argv.length) values.set(arg, argv[i + 1]);
+      // A value flag given last with no argument is present-but-empty, so
+      // `accept` and `--lang` fail closed instead of inheriting a default.
+      if (i + 1 >= argv.length) {
+        values.set(arg, "");
+        continue;
+      }
+      values.set(arg, argv[i + 1]);
       i += 1;
       continue;
     }
@@ -224,10 +229,16 @@ export async function main(argv = process.argv) {
     }
 
     case "terms": {
-      return withCliDatabase(async (asDataOwner) => {
-        const { runTerms, terminalIo } = (await import("./legal/cli.cjs")).default;
-        return runTerms({ positional, values, io: terminalIo(), asDataOwner });
-      });
+      const { runTerms, terminalIo } = (await import("./legal/cli.cjs")).default;
+      const io = terminalIo();
+      // `show` only prints the bundled documents. Opening the database would
+      // migrate it and run restore recovery, which is a write.
+      if ((positional[1] ?? null) === "show") {
+        return runTerms({ positional, values, io });
+      }
+      return withCliDatabase(async (asDataOwner) =>
+        runTerms({ positional, values, io, asDataOwner }),
+      );
     }
 
     case "domain": {
