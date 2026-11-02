@@ -12,17 +12,43 @@ type Result = {
 };
 type ErrorState = { key: GatewayKey; vars?: Record<string, string | number>; raw?: string };
 
+const RESET_REASON_KEYS: Record<string, GatewayKey> = {
+  no_session: "resetErrNoSession",
+  send_failed: "resetErrSendFailed",
+  no_email: "resetErrNoEmail",
+  unverified: "resetErrUnverified",
+  rate_limited: "resetErrRateLimited",
+  locked: "resetErrLocked",
+  invalid: "resetErrInvalid",
+  unavailable: "resetErrUnavailable",
+  throttled: "resetErrThrottled",
+  wrong_code: "resetErrWrongCode",
+  address_changed: "resetErrExpired",
+  expired: "resetErrExpired",
+  no_pending: "resetErrExpired",
+  too_many_attempts: "resetErrExpired",
+  mismatch: "resetErrMismatch",
+  invalid_password: "resetErrInvalidPassword",
+};
+
 async function postJson(url: string, body: object): Promise<Result> {
-  const response = await fetch(url, {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const result = (await response.json()) as Result;
-  const retry = Number(response.headers.get("Retry-After"));
-  if (!result.retryAfter && Number.isFinite(retry) && retry > 0) result.retryAfter = retry;
-  return result;
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const result = (await response.json()) as Result;
+    const retry = Number(response.headers.get("Retry-After"));
+    if (!result.retryAfter && Number.isFinite(retry) && retry > 0) result.retryAfter = retry;
+    return result;
+  } finally {
+    window.clearTimeout(timeout);
+  }
 }
 
 export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
@@ -30,9 +56,6 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ErrorState | null>(null);
-  const [code, setCode] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
   const [done, setDone] = useState(false);
   const showError = (key: GatewayKey, vars?: Record<string, string | number>, raw?: string) =>
     setError({ key, vars, raw });
@@ -47,25 +70,12 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
       });
       if (result.ok) setSent(true);
       else {
-        const keys: Record<string, GatewayKey> = {
-          no_session: "resetErrNoSession",
-          send_failed: "resetErrSendFailed",
-          no_email: "resetErrNoEmail",
-          unverified: "resetErrUnverified",
-          locked: "resetErrLocked",
-          unavailable: "resetErrUnavailable",
-          invalid: "resetErrInvalid",
-        };
         if (
           result.reason === "throttled" ||
           (result.reason === "rate_limited" && result.retryAfter)
         )
           showError("resetErrThrottled", { n: result.retryAfter || 60 });
-        else
-          showError(
-            keys[result.reason || ""] ||
-              (result.reason === "rate_limited" ? "resetErrRateLimited" : "resetErrStart"),
-          );
+        else showError(RESET_REASON_KEYS[result.reason || ""] || "resetErrStart");
       }
     } catch {
       showError("resetErrServer");
@@ -73,13 +83,19 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
       setBusy(false);
     }
   };
-  const complete = async (event: FormEvent) => {
+  const complete = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (busy) return;
+    const fields = new FormData(event.currentTarget);
+    const values = {
+      code: String(fields.get("code") ?? ""),
+      password: String(fields.get("password") ?? ""),
+      confirm: String(fields.get("confirm") ?? ""),
+    };
     setBusy(true);
     setError(null);
     try {
-      const result = await postJson("/reset/confirm", { code, password, confirm });
+      const result = await postJson("/reset/confirm", values);
       if (result.ok) {
         setDone(true);
         showError("resetDone");
@@ -88,7 +104,7 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
         }, 900);
       } else if (result.reason === "wrong_code") {
         showError(
-          "resetErrWrongCode",
+          RESET_REASON_KEYS.wrong_code,
           result.attemptsLeft ? { n: result.attemptsLeft } : undefined,
         );
       } else if (
@@ -96,16 +112,16 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
           result.reason || "",
         )
       ) {
-        showError("resetErrExpired");
+        showError(RESET_REASON_KEYS[result.reason || ""]);
         setSent(false);
       } else if (result.reason === "locked") {
-        showError("resetErrLocked");
+        showError(RESET_REASON_KEYS.locked);
         setSent(false);
       } else if (result.reason === "throttled")
-        showError("resetErrThrottled", { n: result.retryAfter || 60 });
-      else if (result.reason === "mismatch") showError("resetErrMismatch");
+        showError(RESET_REASON_KEYS.throttled, { n: result.retryAfter || 60 });
+      else if (result.reason === "mismatch") showError(RESET_REASON_KEYS.mismatch);
       else if (result.reason === "invalid_password")
-        showError("resetErrInvalidPassword", undefined, result.message);
+        showError(RESET_REASON_KEYS.invalid_password, undefined, result.message);
       else showError("resetErrFailed");
     } catch {
       showError("resetErrServer");
@@ -164,8 +180,7 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
           <Field label={t("resetCodeLabel")} htmlFor="reset-code">
             <Input
               id="reset-code"
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
+              name="code"
               inputMode="numeric"
               autoComplete="one-time-code"
               maxLength={6}
@@ -179,8 +194,6 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
             label={t("newPassword")}
             minLength={state.minLength}
             autoComplete="new-password"
-            value={password}
-            onChange={setPassword}
             t={t}
           />
           <PasswordField
@@ -189,8 +202,6 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
             label={t("repeatPassword")}
             minLength={state.minLength}
             autoComplete="new-password"
-            value={confirm}
-            onChange={setConfirm}
             t={t}
           />
           <Button variant="primary" type="submit" className="w-full" disabled={busy}>
@@ -201,7 +212,6 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
             className="w-full"
             onClick={() => {
               setSent(false);
-              setCode("");
               setError(null);
             }}
           >

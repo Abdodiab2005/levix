@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { LinkButton, StatusPill } from "../components/ui";
-import type { GatewayKey, GatewayText } from "./main";
+import type { GatewayKey, GatewayMarkup, GatewayText } from "./main";
 
 type Socket = {
   on(event: "qr", callback: (value: string) => void): void;
@@ -27,7 +27,15 @@ function loadScript(src: string): Promise<void> {
   });
 }
 
-export function Qr({ initial, t }: { initial: string; t: GatewayText }) {
+export function Qr({
+  initial,
+  t,
+  markup,
+}: {
+  initial: string;
+  t: GatewayText;
+  markup: GatewayMarkup;
+}) {
   const frame = useRef<HTMLDivElement>(null);
   const qrValue = useRef(initial);
   const [status, setStatus] = useState<GatewayKey>(initial ? "qrScanMe" : "qrWaitingCode");
@@ -98,11 +106,11 @@ export function Qr({ initial, t }: { initial: string; t: GatewayText }) {
         {linked ? <strong>{t("qrLinked")}</strong> : <div ref={frame} />}
       </div>
       <ol className="list-decimal space-y-2 ps-5 text-sm text-muted">
-        <li>{t("qrStep1")}</li>
-        <li>{t("qrStep2")}</li>
-        <li>{t("qrStep3")}</li>
+        <li>{markup("qrStep1")}</li>
+        <li>{markup("qrStep2")}</li>
+        <li>{markup("qrStep3")}</li>
       </ol>
-      <p className="text-sm text-muted">{t("qrCallout")}</p>
+      <p className="text-sm text-muted">{markup("qrCallout")}</p>
       <LinkButton href="/" className="w-full">
         {t("backToDashboard")}
       </LinkButton>

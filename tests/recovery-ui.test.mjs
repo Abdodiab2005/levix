@@ -3,6 +3,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { renderInlineMarkup } from "../frontend/src/gateway/inline-markup.ts";
 import { equal, finish, ok, require, ROOT, section } from "./harness.mjs";
 
 const template = readFileSync(join(ROOT, "views/login.ejs"), "utf8");
@@ -177,4 +180,79 @@ for (const language of ["en", "ar"]) {
   equal("offline is localized", get("reset-error").textContent, t("resetErrServer"));
   equal("offline releases channel buttons", channelButton.disabled, false);
 }
+
+section("React recovery reason mapping");
+const reactSource = readFileSync(join(ROOT, "frontend/src/gateway/login.tsx"), "utf8");
+const mappingSource = /const RESET_REASON_KEYS: Record<string, GatewayKey> = (\{[\s\S]*?\});/.exec(
+  reactSource,
+);
+ok("React recovery reason map is declared", Boolean(mappingSource));
+const reasonKeys = runInNewContext(`(${mappingSource?.[1] || "{}"})`);
+const expectedReasons = {
+  no_session: "resetErrNoSession",
+  send_failed: "resetErrSendFailed",
+  no_email: "resetErrNoEmail",
+  unverified: "resetErrUnverified",
+  rate_limited: "resetErrRateLimited",
+  locked: "resetErrLocked",
+  invalid: "resetErrInvalid",
+  unavailable: "resetErrUnavailable",
+  throttled: "resetErrThrottled",
+  wrong_code: "resetErrWrongCode",
+  address_changed: "resetErrExpired",
+  expired: "resetErrExpired",
+  no_pending: "resetErrExpired",
+  too_many_attempts: "resetErrExpired",
+  mismatch: "resetErrMismatch",
+  invalid_password: "resetErrInvalidPassword",
+};
+equal(
+  "React maps every reset reason",
+  Object.keys(reasonKeys).sort().join(","),
+  Object.keys(expectedReasons).sort().join(","),
+);
+const generated = readFileSync(join(ROOT, "frontend/src/i18n/gateway.generated.ts"), "utf8");
+const generatedDictionary = runInNewContext(
+  generated.replace("export const gatewayTranslations = ", "(").replace(/ as const;\s*$/, ")"),
+);
+for (const [reason, key] of Object.entries(expectedReasons)) {
+  equal(`React ${reason} maps to ${key}`, reasonKeys[reason], key);
+  for (const locale of ["ar", "en", "pt-BR", "es-419"]) {
+    ok(
+      `React ${reason} has ${locale} copy`,
+      typeof generatedDictionary[locale]?.[key] === "string" &&
+        generatedDictionary[locale][key].length > 0,
+    );
+  }
+}
+ok(
+  "React wrong code shows attempts left",
+  reactSource.includes("result.attemptsLeft") && reactSource.includes('t("resetErrAttemptsLeft"'),
+);
+for (const locale of ["ar", "en", "pt-BR", "es-419"]) {
+  ok(
+    `React attempts-left has ${locale} copy`,
+    Boolean(generatedDictionary[locale]?.resetErrAttemptsLeft),
+  );
+}
+
+section("React inline catalog markup");
+const suspicious =
+  "<img onerror=alert(1)><script>alert(1)</script><span onmouseover=alert(1)>bad</span><span>safe</span><strong>bold</strong>";
+const rendered = renderToStaticMarkup(
+  createElement("p", null, renderInlineMarkup(suspicious, false)),
+);
+ok(
+  "inline catalog allows exact span and strong",
+  rendered.includes("<span") && rendered.includes("<strong"),
+);
+ok(
+  "inline catalog renders img as text",
+  rendered.includes("&lt;img onerror=alert(1)&gt;") && !rendered.includes("<img"),
+);
+ok(
+  "inline catalog renders script as text",
+  rendered.includes("&lt;script&gt;") && !rendered.includes("<script"),
+);
+ok("inline catalog rejects tag attributes", rendered.includes("&lt;span onmouseover=alert(1)&gt;"));
 finish();

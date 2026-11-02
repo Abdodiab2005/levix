@@ -44,7 +44,7 @@ if [ ! -f "$DASHBOARD/gateway.html" ]; then
   exit 1
 fi
 
-if [ -z "$(dashboard_assets | grep '\.css$' || true)" ]; then
+if ! grep -q '/dashboard/assets/[A-Za-z0-9._-]*\.css' "$DASHBOARD/index.html"; then
   echo "$DASHBOARD/index.html links no stylesheet — refusing to package a styleless panel" >&2
   exit 1
 fi
