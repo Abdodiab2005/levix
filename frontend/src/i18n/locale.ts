@@ -1,5 +1,5 @@
-// Panel locale helpers. ui-boot.js and gateway-i18n.js repeat normalizeLocale
-// inline because they run before modules load. Keep the subtag rule the same:
+// Panel locale helpers. ui-boot.js repeats normalizeLocale inline because it
+// runs before modules load. Keep the subtag rule the same:
 // ar, pt -> pt-BR, es -> es-419, en. Anything else is null.
 
 import type { Language } from "./translations";

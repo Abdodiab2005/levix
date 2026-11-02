@@ -8,12 +8,11 @@ import { equal, finish, ok, ROOT, section, useTempDataDir } from "./harness.mjs"
 useTempDataDir("levix-i18n-catalog");
 
 const {
-  applyGatewayMarkers,
   diffGenerated,
   escapeAndroidString,
   loadCatalog,
   renderAndroidXml,
-  renderGatewayDict,
+  renderGatewayTranslations,
   renderGenerated,
   renderLocalesConfig,
   renderNodeCatalog,
@@ -286,21 +285,19 @@ section("determinism");
   const catalog = sample();
   catalog.bundles.en.android.count = { one: "%1$d item", other: "%1$d items" };
   catalog.bundles.ar.android.count = { one: "%1$d", other: "%1$d" };
-  const gateway = [
-    "// head",
-    "// <i18n:generated>",
-    "  var DICT = {};",
-    "// </i18n:generated>",
-    "// tail",
-    "",
-  ].join("\n");
-  const first = renderGenerated(catalog, gateway);
-  const second = renderGenerated(catalog, gateway);
+  const first = renderGenerated(catalog);
+  const second = renderGenerated(catalog);
   const names = Object.keys(first).sort();
   equal("same paths", names.join("\n"), Object.keys(second).sort().join("\n"));
   for (const name of names) equal(name, first[name], second[name]);
   equal("translations twice", renderTranslations(catalog), renderTranslations(catalog));
-  equal("gateway dict twice", renderGatewayDict(catalog), renderGatewayDict(catalog));
+  equal(
+    "gateway dictionary twice",
+    renderGatewayTranslations(catalog),
+    renderGatewayTranslations(catalog),
+  );
+  ok("the React gateway dictionary is generated", "frontend/src/i18n/gateway.generated.ts" in first);
+  ok("public/gateway-i18n.js is not generated", !("public/gateway-i18n.js" in first));
   equal("android twice", renderAndroidXml(catalog, "en"), renderAndroidXml(catalog, "en"));
   equal("node catalog twice", renderNodeCatalog(catalog), renderNodeCatalog(catalog));
   // locales_config.xml walks the registry in locales.json order.
@@ -319,8 +316,6 @@ section("determinism");
       "",
     ].join("\n"),
   );
-  const marked = applyGatewayMarkers(gateway, renderGatewayDict(catalog));
-  equal("markers twice", marked, applyGatewayMarkers(gateway, renderGatewayDict(catalog)));
 }
 
 section("translations shape");

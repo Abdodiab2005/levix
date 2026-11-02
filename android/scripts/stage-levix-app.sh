@@ -62,7 +62,6 @@ done
 
 copy_tree "$ROOT/bin" "$STAGE/bin"
 copy_tree "$ROOT/src" "$STAGE/src"
-copy_tree "$ROOT/views" "$STAGE/views"
 copy_tree "$ROOT/public" "$STAGE/public"
 cp -a "$ROOT/app.cjs" "$ROOT/scheduler.cjs" "$ROOT/package.json" "$ROOT/LICENSE" "$STAGE/"
 cp -a "$ROOT/android/host-boot.mjs" "$STAGE/boot.mjs"

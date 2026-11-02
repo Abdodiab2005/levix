@@ -24,7 +24,7 @@ const { ROOT, DATA_DIR } = require("./data-dir.cjs");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// Where the read-only files that ship with the bot live: views/, public/, the
+// Where the read-only files that ship with the bot live: public/ and the
 // persona template. Normally that is the package itself. A packaged build
 // (a single executable has no package directory) unpacks them somewhere the
 // filesystem can see and points this at that copy instead.

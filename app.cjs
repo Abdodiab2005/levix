@@ -21,6 +21,7 @@ const { assetPath } = require("./src/config/paths.cjs");
 const brand = require("./src/config/brand.cjs");
 const settings = require("./src/config/settings.cjs");
 const secrets = require("./src/config/secrets.cjs");
+const { renderFallbackPage } = require("./src/panel/fallback-page.cjs");
 const { PanelSessionStore } = require("./src/panel/session-store.cjs");
 const { getQrCode } = require("./src/utils/storage.cjs");
 const { clientAddress, isDirectLocalRequest } = require("./src/utils/requestOrigin.cjs");
@@ -148,12 +149,8 @@ function requireLoginPage(req, res, next) {
   return res.redirect("/");
 }
 
-// Bind the engine by value rather than letting express require("ejs") lazily
-// by name: a packaged build has no module resolver to answer that call.
-app.engine("ejs", require("ejs").__express);
-app.set("view engine", "ejs");
-app.set("views", assetPath("views"));
-// Name, tagline and credit for every template. Frozen — see brand.cjs.
+// Name, tagline and credit for the gateway state, the dashboard shell and the
+// fallback page. Frozen — see brand.cjs.
 // The one addition is the version from package.json, so the panel shows the
 // shipped version instead of a string frozen in the frontend bundle.
 const pkg = require("./package.json");
@@ -219,9 +216,24 @@ function isLocalRequest(req) {
   return isDirectLocalRequest(req, { proxyConfigured: PROXY_CONFIGURED });
 }
 
+// The code-owned static page from src/panel/fallback-page.cjs, for a build
+// that is missing. `view` is "login", "setup", "qr" or "panel".
+function sendFallback(res, view, locals, status = 200) {
+  const html = renderFallbackPage({
+    page: view,
+    brandName: app.locals.brand.name,
+    error: locals.error || null,
+    needsCode: view === "setup" && locals.needsCode === true,
+    minLength: locals.minLength ?? secrets.MIN_PASSWORD_LENGTH,
+  });
+  return res.status(status).type("html").send(html);
+}
+
+// The React shell when the frontend build exists; otherwise the fallback page.
+// The status code is the same either way.
 function renderGateway(req, res, view, locals, status = 200) {
   const shell = assetPath("public", "dashboard", "gateway.html");
-  if (!fs.existsSync(shell)) return res.status(status).render(view, locals);
+  if (!fs.existsSync(shell)) return sendFallback(res, view, locals, status);
   const state = {
     page: view,
     error: locals.error ? { code: locals.errorCode || null, message: locals.error } : null,
@@ -253,8 +265,8 @@ function renderGateway(req, res, view, locals, status = 200) {
 }
 
 // `error` is { code, message } or null: `message` is the English the page
-// renders by default, `code` is the stable key public/gateway-i18n.js turns
-// into the reader's language. A string is still accepted for callers that
+// renders by default, `code` is the stable key the React gateway turns into
+// the reader's language. A string is still accepted for callers that
 // have no code to offer.
 function renderSetup(req, res, error, status = 200) {
   renderGateway(
@@ -365,7 +377,7 @@ app.get("/", noStore, (req, res) => {
         .replace("</body>", `${credits}</body>`);
       return res.type("html").send(html);
     }
-    return res.render("dashboard");
+    return sendFallback(res, "panel", {});
   }
   return renderGateway(req, res, "login", loginPageLocals(null, null));
 });

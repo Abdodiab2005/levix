@@ -34,7 +34,7 @@ import { gatewayAssets, gatewayState } from "./fixtures/gateway-assets.mjs";
 
 const dataDir = useTempDataDir("levix-setup");
 const assets = gatewayAssets();
-assets.ejs();
+assets.fallback();
 
 const {
   isLoopbackAddress,
@@ -162,7 +162,7 @@ async function claimAttempt(base, headers, { code } = {}) {
   try {
     react = gatewayState(await (await http.call("/setup", { headers })).text());
   } finally {
-    assets.ejs();
+    assets.fallback();
   }
   const response = await http.form(
     "/setup",
@@ -250,7 +250,7 @@ section("proxy configured: nobody skips the code, however they ask");
       const react = gatewayState(await (await fetch(`${server.base}/setup`)).text());
       equal("React setup page still needs code", react?.needsCode, true);
     } finally {
-      assets.ejs();
+      assets.fallback();
     }
 
     const wrongCode = await claimAttempt(server.base, {}, { code: "DEADBEEF" });
@@ -286,7 +286,7 @@ section("a legitimate reverse-proxy deployment still works");
         "wrongSetupCode",
       );
     } finally {
-      assets.ejs();
+      assets.fallback();
     }
   } finally {
     server.stop();

@@ -8,7 +8,7 @@
 //      the loader doesn't have to read a directory that won't exist inside an
 //      executable (the loader falls back to the directory scan without it, so
 //      a normal install is unaffected)
-//   2. inlines views/, public/ and the persona template as base64 in a
+//   2. inlines public/ and the persona template as base64 in a
 //      generated entry file; at startup they are written into the data
 //      directory and the app is pointed at that copy
 //   3. bundles the whole thing with esbuild into one CommonJS file, then runs
@@ -138,7 +138,7 @@ if (fs.existsSync(path.join(ROOT, "frontend"))) {
   });
 }
 
-step("Inlining views, public and the persona template");
+step("Inlining public and the persona template");
 
 function collect(dir, prefix, into) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -150,7 +150,6 @@ function collect(dir, prefix, into) {
 }
 
 const assets = {};
-collect(path.join(ROOT, "views"), "views", assets);
 collect(path.join(ROOT, "public"), "public", assets);
 assets["src/config/ai-persona.md"] = fs
   .readFileSync(path.join(ROOT, "src", "config", "ai-persona.md"))
