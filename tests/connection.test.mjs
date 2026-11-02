@@ -148,7 +148,21 @@ try {
     [a, b, c].every((r) => r.status === 200),
   );
 
-  ok("a socket was created", await levix.waitForOutput(SOCKET_MARKER));
+  session = await (await http.call("/dashboard/api/bot/session")).json();
+  equal("the session is consent_required", session.session.state, "consent_required");
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  equal("no socket before acceptance", count(levix.output, SOCKET_MARKER), 0);
+
+  const current = require("./src/legal/terms.cjs").documentFor("en");
+  require("./src/legal/consent.cjs").recordAcceptance({
+    version: current.version,
+    sha256: current.sha256,
+    locale: "en",
+    via: "provision",
+  });
+  require("./src/db/db.cjs").checkpoint();
+
+  ok("a socket was created", await levix.waitForOutput(SOCKET_MARKER, 15000));
   equal("exactly one", count(levix.output, SOCKET_MARKER), 1);
 
   session = await (await http.call("/dashboard/api/bot/session")).json();
