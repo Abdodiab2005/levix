@@ -256,6 +256,7 @@ function makeHarness() {
     },
     onOpen: async () => {},
     retryDelaysMs: [20, 40],
+    checkConsent: () => ({ ok: true }),
     log: silent,
   });
 
@@ -469,6 +470,7 @@ section("a proxy that rejects the handshake does not hang");
     // Long enough that the state after the rejection is observable — the
     // retry itself is covered in session.test.mjs.
     retryDelaysMs: [5000],
+    checkConsent: () => ({ ok: true }),
     log: silent,
   });
 

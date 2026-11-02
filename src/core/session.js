@@ -454,7 +454,9 @@ export class WhatsAppSession {
     // A known pairing reuses the stored session. Do not request a pairing code.
     if (this.isLinked()) {
       this.#pairingIntent = { method: "qr", phone: null };
-    } else {
+    } else if (this.#state !== S.CONSENT_REQUIRED || method != null) {
+      // A Start pressed while waiting for consent must not replace an earlier
+      // pairing-code request with the default QR choice.
       this.#pairingIntent = parseStartOptions({ method, phone });
     }
 
@@ -1029,7 +1031,7 @@ export class WhatsAppSession {
    */
   async recheckConsent() {
     if (this.#state !== S.CONSENT_REQUIRED || this.#shuttingDown) return this.getState();
-    if (this.#readConsent().ok !== true) return this.getState();
+    if (!this.#consentAllows()) return this.getState();
     this.#stopConsentWatch();
     const { method, phone } = this.#pairingIntent || {};
     return this.start({ reason: "consent_accepted", method, phone });
@@ -1038,7 +1040,7 @@ export class WhatsAppSession {
   #readConsent() {
     try {
       const status = this.checkConsent();
-      if (status && typeof status === "object") return status;
+      if (status !== null && typeof status === "object" && !Array.isArray(status)) return status;
     } catch (error) {
       this.log.error({ err: error }, "[Session] the Terms acceptance check failed");
     }
@@ -1050,13 +1052,18 @@ export class WhatsAppSession {
     const status = this.#readConsent();
     if (status.ok === true) return true;
 
-    const reason = status.reason || consent.REASONS.NOT_ACCEPTED;
+    const reason =
+      typeof status.reason === "string" && status.reason
+        ? status.reason
+        : consent.REASONS.NOT_ACCEPTED;
     if (this.#state !== S.CONSENT_REQUIRED) {
       this.log.warn(`[Session] WhatsApp waits for the Terms to be accepted (${reason})`);
+      this.#clearQr();
+      this.#pairing = false;
     }
-    this.#clearQr();
-    this.#pairing = false;
-    this.#transition(S.CONSENT_REQUIRED, { reason, detail: consent.describeReason(reason) });
+    if (this.#state !== S.CONSENT_REQUIRED || this.#reason !== reason) {
+      this.#transition(S.CONSENT_REQUIRED, { reason, detail: consent.describeReason(reason) });
+    }
     this.#watchConsent();
     return false;
   }

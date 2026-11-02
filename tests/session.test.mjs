@@ -86,6 +86,7 @@ function makeHarness({ paired = false, retryDelaysMs, clearAll, isLinked, realCl
     onOpen: async () => {},
     emit: (event, payload) => events.push({ event, payload }),
     retryDelaysMs,
+    checkConsent: () => ({ ok: true }),
     log: silent,
     pairingCodeDelayMs: 0,
     isLinked: isLinked ?? (() => paired),
