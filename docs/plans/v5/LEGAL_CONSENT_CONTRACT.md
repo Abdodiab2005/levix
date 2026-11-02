@@ -1,7 +1,7 @@
 # Legal consent contract (Phase 04)
 
 Status: sections 1 to 6 are the 04a contract (PENDING REVIEW until 04a merges). Section 7 is
-`PLANNED` for 04b. Section 8 is `PLANNED` for 04c and BLOCKED on the owner's signing key and the
+`PLANNED` for 04b. Section 8 is implemented and off, BLOCKED on the owner's signing key and the
 `levix-ui` endpoint. Decisions: ADR-006, ADR-019, ADR-020.
 
 ## 1. Legal document
@@ -125,15 +125,121 @@ acceptance within 5 seconds. No start flag and no environment variable can accep
   current document; otherwise `409 TERMS_CHANGED` with the current document. Then calls
   `session.recheckConsent()`.
 
-## 8. Remote release (PLANNED, 04c, BLOCKED)
+## 8. Remote release (implemented, off, BLOCKED)
 
-- Endpoint: `GET https://levix.leviro.net/api/legal/v1/<locale>` (to be created in `levix-ui`).
-- Response: `200`, `content-type: application/json`, at most 131072 bytes:
-  `{ "keyId": "<id>", "payload": "<base64 canonical document bytes>", "signature": "<base64 Ed25519 signature of the payload bytes>" }`.
-- Client rules: HTTPS only, no redirects, 5 second timeout, no cookie, no query string, no
-  identifier in headers. Verify the signature with the bundled public key named by `keyId`; decode
-  the payload; require it to be canonical, valid under section 1 and for the requested locale;
-  ignore a version older than the bundled or cached one. Cache verified releases in the data
-  directory. A failure keeps the previous release and never blocks a start.
-- The fetch never runs on the start path. It runs in the background after boot and once a day.
-- The private key stays with the owner, outside every repository and artifact.
+The client in `src/legal/remote.cjs` is implemented and shipped off. `TRUSTED_KEYS` in
+`src/legal/keys.cjs` is empty, so the schedule does nothing and no request is made. BLOCKED on the
+owner's signing key and on the `levix-ui` endpoint below. The private key never enters this
+repository, CI logs, the npm tarball, Docker images or app bundles.
+
+One release is signed as one unit, so every locale carries the same version. This replaces the
+per-locale URL from the earlier draft of this section.
+
+### Endpoint
+
+`GET https://levix.leviro.net/api/legal/v1/release`
+
+No query string. The client sends one header, `accept: application/json`. No cookie, no body, no
+account or device identifier.
+
+### Release
+
+```json
+{ "schema": 1, "version": "2026-11-02", "documents": { "en": { } } }
+```
+
+Keys exactly `schema`, `version`, `documents`. Every value in `documents` passes section 1. Its
+`locale` equals its key, its `version` equals the release `version`, `en` is present, and every
+key is one of `ar`, `en`, `pt-BR`, `es-419`.
+
+### Envelope
+
+The HTTP body and the cache file are the envelope. Keys exactly `keyId`, `payload`, `signature`:
+
+```json
+{
+  "keyId": "<first 16 hex chars of sha256 of the raw 32-byte public key>",
+  "payload": "<base64 of the UTF-8 canonical JSON of the release>",
+  "signature": "<base64 Ed25519 signature over those payload bytes>"
+}
+```
+
+Base64 is strict: alphabet `A-Za-z0-9+/` with padding, and decoding then re-encoding equals the
+input. The public key stored in the app is the base64 raw 32-byte key. The `KeyObject` is the SPKI
+DER prefix `302a300506032b6570032100` plus those 32 bytes.
+
+### Verification order
+
+Any failure is a typed error (`LegalReleaseError` or `LegalKeyError`). Nothing is cached.
+
+1. Envelope shape: an object with exactly `keyId`, `payload` and `signature`. `keyId` is 16
+   lowercase hex characters. `payload` and `signature` are strings.
+2. `keyId` is in the trusted list, once. The entry is `{ keyId, publicKey }`, and `keyId` equals
+   the id derived from that public key.
+3. `payload` and `signature` decode as strict base64.
+4. `crypto.verify(null, payloadBytes, publicKey, signatureBytes)` is true.
+5. The payload is valid UTF-8 JSON.
+6. `canonicalJson` of that value, encoded as UTF-8, byte-equals the payload.
+7. The release validates (the rules above, and section 1 for every document).
+
+A release older than the bundled one, or older than the newest verified cached one, is ignored.
+Equal versions keep the bundled release.
+
+### Cache
+
+`dataPath("legal", "remote-release.json")` stores the envelope bytes as received. The write is a
+temp file in that directory, an fsync, then a rename. On load the cache is verified again with the
+keys the process is using. A cache that fails verification is ignored and left on disk. It is never
+trusted. A cache read error falls back to the bundled release. A broken bundle still fails closed.
+
+`currentRelease()` returns the newer of the bundled release and that verified cache.
+`documentFor().source` is `bundled` or `remote`. `invalidate()` drops the memo. A refresh that
+stores a newer release calls it.
+
+### Schedule
+
+`startRemoteTermsSchedule()` runs from `src/bootstrap/core.js` after the session is built.
+`stop()` runs from process shutdown in `src/index.js`, next to the session timer shutdown. When
+`TRUSTED_KEYS` is empty the schedule is a no-op and its stop function does nothing.
+
+Otherwise the first refresh is 60 seconds after boot and then every 24 hours. The timers are
+`unref()`ed. Boot does not await the refresh. The refresh is not on the session start path and
+does not run inside `consentStatus()` or `recordAcceptance()`. `refreshRemoteRelease()` never
+throws. It returns `{ updated, version, error }` and logs through `src/utils/logger.cjs` without
+the payload or the document text.
+
+### Limits
+
+HTTPS only. A non-`https:` URL, a URL with a query, a hash or credentials is refused before any
+request. `redirect: "manual"`, and any 3xx or opaque redirect is a failure. Timeout 5 seconds
+(`AbortSignal.timeout(5000)`, forwarded onto the request so a too-large body can abort it too).
+That signal does not keep the event loop alive, so the same deadline also arms a ref'd timer that
+is cleared when the request ends. The 60s and 24h schedule timers stay `unref()`ed. Status must be
+200. `content-type` must start with `application/json`. The body is read as a stream and aborted
+once it exceeds 393216 bytes. The request has no cookie, no query string and no body.
+
+A Leviro outage never blocks an acceptance or a start. With no verified cache, the bundled release
+stays current and acceptable.
+
+### Turning the client on
+
+The owner does all of this. Until then the client stays off.
+
+1. Generate the key outside this repository:
+   `node scripts/legal-release.mjs keygen --out <path>`. The command refuses a path inside the git
+   work tree and refuses to overwrite a file. It writes a PKCS#8 PEM with mode `0600` and prints
+   `keyId` and the base64 public key. The private key stays with the owner.
+2. Add `{ keyId, publicKey }` to `TRUSTED_KEYS` in `src/legal/keys.cjs` and ship that build. A bad
+   entry throws when the module loads.
+3. Sign and publish:
+   `node scripts/legal-release.mjs sign --key <path> --out <envelope.json>` (default document
+   directory `src/legal/bundled`). The command verifies the envelope with the derived public key
+   before writing. Publish that JSON as the body of
+   `GET https://levix.leviro.net/api/legal/v1/release` on `levix-ui`.
+4. Update `PRIVACY.md`: add a row for this fetch (host `levix.leviro.net`, path
+   `/api/legal/v1/release`, HTTPS, no cookie, no account or device identifier, signed Terms and
+   Privacy text only) and publish a new Privacy Notice version that names the fetch. That notice
+   change is a new Terms release.
+
+`node scripts/legal-release.mjs public-key --key <path>` prints the id and the public key again.
+The script is an owner tool. CI does not run it.

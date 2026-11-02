@@ -91,10 +91,16 @@ export async function bootstrapCore({ autoStart = false } = {}) {
   const startup = sessionStartupPolicy({ autoStart, wasPaired });
   if (startup.start) await session.start({ reason: startup.reason });
 
+  // Remote Terms. An empty trusted-key list makes this a no-op: no timer and
+  // no request. The first refresh is a minute after boot, off the #open path.
+  const { startRemoteTermsSchedule } = require("../legal/remote.cjs");
+  const stopRemoteTerms = startRemoteTermsSchedule();
+
   return {
     session,
     commandCount: getLoadedCommands().size,
     wasPaired,
+    stopRemoteTerms,
     /** The live socket, or null. Re-read it; a reconnect replaces it. */
     get sock() {
       return session.socket;
