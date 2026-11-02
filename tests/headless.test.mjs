@@ -5,10 +5,8 @@
 // proves it two ways — by looking at what the process loaded, and by binding
 // the panel port itself, which only works if nothing else has it.
 //
-// WhatsApp is not stubbed. With a valid Terms acceptance the bot creates its
-// socket and starts connecting; the test waits for the point just before
-// pairing and stops there. A real pairing needs a phone and is not something
-// CI can do. An install with no acceptance stays in consent_required.
+// A fake Baileys socket emits a deterministic QR; the real session, auth and
+// CLI paths still run. An install with no acceptance stays in consent_required.
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
@@ -42,6 +40,8 @@ function startLevix(args, { waitFor, timeoutMs = 60000, data = dataDir } = {}) {
     [
       "--require",
       join(ROOT, "tests", "fixtures", "probe.cjs"),
+      "--import",
+      join(ROOT, "tests", "fixtures", "fake-whatsapp-loader.mjs"),
       join(ROOT, "bin", "levix.js"),
       ...args,
     ],
@@ -231,22 +231,10 @@ section("an unpaired install shows the pairing instructions");
     data: fresh,
   });
 
-  let reached = true;
-  try {
-    await levix.seen;
-  } catch (error) {
-    // No network in this environment means no QR is ever issued. That is a
-    // real limitation of the test host, not a failure of the bot — say so
-    // rather than pretending the path was covered.
-    reached = false;
-    console.log("    SKIP  no QR arrived (WhatsApp unreachable from here)");
-  }
-
-  if (reached) {
-    ok("it says there is no session yet", /No WhatsApp session found/.test(levix.output));
-    ok("it says where to scan from", /Linked devices/.test(levix.output));
-    ok("it prints a QR in the terminal", /█|▄|▀/.test(levix.output));
-  }
+  await levix.seen;
+  ok("it says there is no session yet", /No WhatsApp session found/.test(levix.output));
+  ok("it says where to scan from", /Linked devices/.test(levix.output));
+  ok("it prints a QR in the terminal", /█|▄|▀/.test(levix.output));
 
   await levix.stop();
 }
