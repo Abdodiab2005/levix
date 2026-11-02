@@ -10,7 +10,7 @@ internal data class HomePresentation(
     val step: Int,
     val busy: Boolean = false,
 ) {
-    enum class State { STOPPED, STARTING, PAIRING, READY, RECONNECTING, PAUSED, FAILED, EXPIRED, UNKNOWN }
+    enum class State { STOPPED, STARTING, PAIRING, READY, RECONNECTING, PAUSED, FAILED, EXPIRED, ATTENTION, UNKNOWN }
     enum class Action { START, CONNECTION, PANEL, DIAGNOSTICS, NONE }
 
     companion object {
@@ -37,6 +37,7 @@ internal data class HomePresentation(
                 "idle", "waiting_for_qr" -> view(State.PAIRING, R.string.home_pairing, R.string.home_pairing_body, Action.CONNECTION, R.string.home_connect, 2)
                 "reconnecting" -> view(State.RECONNECTING, R.string.status_reconnecting, R.string.home_reconnecting_body, Action.CONNECTION, R.string.home_connection_details, 2)
                 "paused" -> view(State.PAUSED, R.string.status_paused, R.string.home_paused_body, Action.CONNECTION, R.string.home_connection_details, 2)
+                "consent_required" -> view(State.ATTENTION, R.string.home_terms, R.string.home_terms_body, Action.CONNECTION, R.string.home_review_terms, 2)
                 "logged_out" -> view(State.EXPIRED, R.string.status_expired, R.string.home_expired_body, Action.CONNECTION, R.string.home_connect, 2)
                 "disconnected", "retry_exhausted", "error" -> view(State.FAILED, R.string.home_connection_failed, R.string.home_connection_error_body, Action.CONNECTION, R.string.home_connection_details, 2)
                 "starting", "linking" -> {
