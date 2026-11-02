@@ -337,6 +337,10 @@ section("terms");
   equal("show --lang xx exits 1", badLang.status, 1);
   ok("unknown locale lists available locales", badLang.stderr.includes("en"));
 
+  const inheritedLang = levix(["terms", "show", "--lang", "constructor"]);
+  equal("show --lang constructor exits 1", inheritedLang.status, 1);
+  ok("inherited locale lists available locales", inheritedLang.stderr.includes("en"));
+
   const before = levix(["terms", "status"]);
   equal("status exits 2 before acceptance", before.status, 2);
 

@@ -193,8 +193,7 @@ section("one warning per entry, even after several polls");
 {
   const h = makeHarness();
   await h.session.start();
-  await sleep(110);
-  ok("polling happened", h.checks >= 3);
+  await waitFor(() => h.checks >= 3, "polling happened");
   equal("one warning", h.warnings.length, 1);
   await h.session.stop();
   await h.session.start();
