@@ -86,3 +86,7 @@
 - Re-audit and plan in `PHASE-04-RESULTS.md`; contract in `LEGAL_CONSENT_CONTRACT.md`. Slices 04a
   to 04e; 04a and 04b merge together; 04c is BLOCKED on the owner's signing key and the `levix-ui`
   endpoint.
+- 2026-11-02: 04a (consent gate, record, `levix terms`) and 04b (panel dialog, Android state, the
+  documents in four locales) implemented by Codex, Grok, OpenCode and Antigravity from an
+  orchestrator draft. Codex review: 0 P1, 3 P2, 3 P3, all fixed. Local gates PASS
+  (`PHASE-04-RESULTS.md` section 3.2). CI and device QA NOT RUN.

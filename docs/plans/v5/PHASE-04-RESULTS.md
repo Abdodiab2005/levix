@@ -1,6 +1,6 @@
 # Phase 04: React gateway and Terms consent
 
-Status: STARTED 2026-11-02 on `main` 407bf1e. Owner decisions Q-03, Q-04, Q-05 and Q-17 recorded
+Status: 04a and 04b IMPLEMENTED 2026-11-02 on `main` 407bf1e, in review. Owner decisions Q-03, Q-04, Q-05 and Q-17 recorded
 the same day (ADR-006, ADR-019, ADR-020). This file holds the re-audit, the plan and, later, the
 results. The contract lives in `LEGAL_CONSENT_CONTRACT.md`.
 
@@ -99,4 +99,38 @@ Revert 04a and 04b together. No data cleanup is needed: a build without the gate
 
 ## 3. Results
 
-Filled in as slices land.
+### 3.1 Who wrote what (04a and 04b)
+
+| Branch | Content | Implementer |
+| --- | --- | --- |
+| `feat/04a-consent-gate` | first draft of `src/legal/`, the gate and `levix terms` (commit 8efc99b) | orchestrator draft, kept on the owner's instruction |
+| `feat/04a-session` | gate fixes, `tests/session-consent.test.mjs`, allowing checks in existing tests | Codex |
+| `feat/04a-legal` | CLI fixes, `tests/legal-consent.test.mjs`, `levix terms` and headless tests, review fixes | Grok |
+| `feat/04b-panel` | panel API, React dialog, Connection card, 17 dashboard strings | Codex |
+| `feat/04b-android` | home card, status sheet, tile, notification and alert, 6 strings | OpenCode (deepseek-v4.1-flash-free) |
+| `feat/04b-legal-i18n` | Terms and Privacy Notice in `ar`, `pt-BR`, `es-419` | Antigravity (Claude Sonnet 5.5) |
+
+A read-only Codex review of both branches found 0 P1, 3 P2 and 3 P3 defects. All six are fixed:
+the strict record shape, the own-key locale lookup, the Android alert lifecycle, the attention colour
+and two test weaknesses.
+
+### 3.2 Gates (local, Linux x64, Node v24.22.2, 2026-11-02)
+
+| Gate | 04a f34a2bd | 04b fe7ae34 |
+| --- | --- | --- |
+| `npm test` | PASS, 8665 checks, 0 failed | PASS, 8712 checks, 0 failed |
+| `npm run lint` | PASS, 0 errors | PASS, 0 errors |
+| `npm run i18n:check` | PASS | PASS |
+| `npm run build:frontend` | not changed | PASS |
+| Android `:app:testDebugUnitTest` | not changed | PASS, 75 tests |
+| Android `:app:assembleDebug` | not changed | PASS, arm64 64,733,918 B, armv7 59,818,752 B |
+| CI | NOT RUN | NOT RUN |
+| Device QA (Android consent flow, update path) | NOT RUN | NOT RUN |
+| Docker, SEA and tarball validators | NOT RUN | NOT RUN |
+
+### 3.3 Open items
+
+- Legal review of the English text and the three translations (`LEGAL_COPY_REVIEW.md`).
+- ChatGPT review of the new `pt-BR` and `es-419` dashboard and Android strings (Q-19); both files
+  are `draft` in `i18n/review.json`.
+- 04c waits for the owner's signing key and the `levix-ui` endpoint; 04d and 04e follow.
