@@ -115,7 +115,7 @@ async function runTerms({ positional = [], values = new Map(), io, asDataOwner =
     }
 
     case "status": {
-      const status = consent.consentStatus();
+      const status = await asDataOwner(() => consent.consentStatus());
       io.out(statusLine(status));
       return status.ok ? EXIT.OK : EXIT.REQUIRED;
     }

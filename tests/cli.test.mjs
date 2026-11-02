@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseArgv } from "../src/cli.js";
 import { equal, finish, ok, ROOT, require, section, useTempDataDir } from "./harness.mjs";
 
 const dataDir = useTempDataDir("levix-cli");
@@ -277,4 +278,152 @@ section("Node 24 starts with no warning");
   ok("Node 24.22.2 prints no warning", !current.stderr.includes("Warning"));
 }
 
+// --- terms ----------------------------------------------------------------
+
+section("terms");
+
+{
+  const termsMod = require("./src/legal/terms.cjs");
+  const { runTerms } = require("./src/legal/cli.cjs");
+  const currentTerms = termsMod.documentFor("en");
+  const pkgVersion = require("./package.json").version;
+
+  function readAcceptance(data = dataDir) {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "-e",
+        `
+        const store = require(${JSON.stringify(`${ROOT}src/db/store.cjs`)});
+        process.stdout.write(JSON.stringify(store.getBotSetting("legal:acceptance", null)));
+        `,
+      ],
+      { encoding: "utf8", env: { ...process.env, LEVIX_DATA_DIR: data } },
+    );
+    return JSON.parse(result.stdout);
+  }
+
+  const missingValue = parseArgv([
+    "node",
+    "levix",
+    "terms",
+    "accept",
+    "--terms-version",
+    currentTerms.version,
+    "--sha256",
+  ]);
+  equal("flag last with no value is empty", missingValue.values.get("--sha256"), "");
+  ok("that flag is not stored as --version", !missingValue.flags.has("--version"));
+
+  const help = levix(["--help"]);
+  ok("--help lists levix terms", help.stdout.includes("levix terms"));
+
+  const shown = levix(["terms", "show"]);
+  equal("terms show exits 0", shown.status, 0);
+  ok("show prints the Terms title", shown.stdout.includes("Levix Terms of Use"));
+  ok("show prints the Privacy title", shown.stdout.includes("Levix Privacy Notice"));
+  ok("show prints Version:", shown.stdout.includes("Version:"));
+  ok("show prints SHA-256:", shown.stdout.includes("SHA-256:"));
+  ok("show prints the bundled hash", shown.stdout.includes(currentTerms.sha256));
+  ok(
+    "show prints the provisioning line",
+    shown.stdout.includes(
+      `levix terms accept --terms-version ${currentTerms.version} --sha256 ${currentTerms.sha256}`,
+    ),
+  );
+  equal("show wrote no acceptance", readAcceptance(), null);
+
+  const badLang = levix(["terms", "show", "--lang", "xx"]);
+  equal("show --lang xx exits 1", badLang.status, 1);
+  ok("unknown locale lists available locales", badLang.stderr.includes("en"));
+
+  const before = levix(["terms", "status"]);
+  equal("status exits 2 before acceptance", before.status, 2);
+
+  const piped = levix(["terms"]);
+  equal("piped terms exits 1", piped.status, 1);
+  equal("piped terms writes no stdout", piped.stdout, "");
+  ok("piped terms points to show", piped.stderr.includes("show"));
+  ok("piped terms points to accept", piped.stderr.includes("accept"));
+  equal("piped terms wrote no record", readAcceptance(), null);
+
+  equal("accept with no values exits 1", levix(["terms", "accept"]).status, 1);
+  equal(
+    "accept with --sha256 last and no value exits 1",
+    levix(["terms", "accept", "--terms-version", currentTerms.version, "--sha256"]).status,
+    1,
+  );
+
+  const wrong = levix([
+    "terms",
+    "accept",
+    "--terms-version",
+    currentTerms.version,
+    "--sha256",
+    "a".repeat(64),
+  ]);
+  equal("accept with a wrong hash exits 1", wrong.status, 1);
+  equal("wrong hash wrote no record", readAcceptance(), null);
+
+  const accepted = levix([
+    "terms",
+    "accept",
+    "--terms-version",
+    currentTerms.version,
+    "--sha256",
+    currentTerms.sha256,
+  ]);
+  equal("accept with the right version and hash exits 0", accepted.status, 0);
+  ok("accept did not print the package version", accepted.stdout.trim() !== pkgVersion);
+  ok("accept printed Accepted", /Accepted/.test(accepted.stdout));
+  const afterAccept = levix(["terms", "status"]);
+  equal("status exits 0 after accept", afterAccept.status, 0);
+  ok("status names the version", afterAccept.stdout.includes(currentTerms.version));
+  ok("status names en", afterAccept.stdout.includes("en"));
+  equal("stored via is provision", readAcceptance()?.via, "provision");
+
+  levix(["terms", "revoke"]);
+  const equals = levix([
+    "terms",
+    "accept",
+    "--terms-version",
+    currentTerms.version,
+    `--sha256=${currentTerms.sha256}`,
+  ]);
+  equal("--sha256=<hash> equals form exits 0", equals.status, 0);
+  equal("equals form status is 0", levix(["terms", "status"]).status, 0);
+
+  const revoked = levix(["terms", "revoke"]);
+  equal("revoke exits 0", revoked.status, 0);
+  equal("status exits 2 after revoke", levix(["terms", "status"]).status, 2);
+
+  function fakeIo({ interactive, answer }) {
+    return {
+      out() {},
+      error() {},
+      isInteractive: interactive,
+      ask: async () => answer,
+    };
+  }
+
+  store.deleteBotSetting("legal:acceptance");
+  const acceptedCli = await runTerms({
+    positional: ["terms"],
+    values: new Map(),
+    io: fakeIo({ interactive: true, answer: "accept" }),
+  });
+  equal('interactive "accept" returns 0', acceptedCli, 0);
+  equal('interactive "accept" records via cli', store.getBotSetting("legal:acceptance")?.via, "cli");
+
+  store.deleteBotSetting("legal:acceptance");
+  const yes = await runTerms({
+    positional: ["terms"],
+    values: new Map(),
+    io: fakeIo({ interactive: true, answer: "yes" }),
+  });
+  equal('interactive "yes" returns 1', yes, 1);
+  equal('interactive "yes" records nothing', store.getBotSetting("legal:acceptance", null), null);
+}
+
 finish();
+

@@ -1,0 +1,502 @@
+// Terms document, hash, acceptance record, and the local-only rule (Phase 04a).
+
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import {
+  equal,
+  finish,
+  ok,
+  require,
+  ROOT,
+  section,
+  throws,
+  useTempDataDir,
+} from "./harness.mjs";
+
+const dataDir = useTempDataDir("levix-legal-consent");
+
+const document = require("./src/legal/document.cjs");
+const terms = require("./src/legal/terms.cjs");
+const consent = require("./src/legal/consent.cjs");
+const store = require("./src/db/store.cjs");
+const { checkpoint, db } = require("./src/db/db.cjs");
+const transfer = require("./src/services/settingsTransfer.cjs");
+const { RESTORABLE_BOT_KEYS } = require("./src/backup/content.cjs");
+const { restorableRows, currentDigests } = require("./src/backup/plan.cjs");
+
+const bundled = require("./src/legal/bundled/en.json");
+
+// Computed from canonicalJson + sha256 of src/legal/bundled/en.json (same
+// algorithm as documentHash). A mismatch means the text changed.
+const PINNED_BUNDLED_EN_SHA256 =
+  "0da63c58cc94c23d244b5e8a28f78f2181941d91aa5f65aac19bd0c479dd7cbf";
+
+function cloneDoc() {
+  return JSON.parse(JSON.stringify(bundled));
+}
+
+function filesUnder(dir) {
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...filesUnder(path));
+    else out.push(path);
+  }
+  return out;
+}
+
+function validRecord(overrides = {}) {
+  const current = terms.documentFor("en");
+  return {
+    schema: 1,
+    appVersion: consent.appVersion(),
+    termsVersion: current.version,
+    sha256: current.sha256,
+    locale: "en",
+    acceptedAt: "2026-11-02T12:00:00.000Z",
+    via: "provision",
+    ...overrides,
+  };
+}
+
+// --- a. bundled document and pinned hash ---------------------------------
+
+section("bundled English document");
+
+{
+  const doc = document.validateDocument(cloneDoc());
+  ok("the bundled English document validates", doc.locale === "en" && doc.schema === 1);
+  const actual = document.documentHash(doc);
+  ok(
+    "its hash is pinned",
+    actual === PINNED_BUNDLED_EN_SHA256,
+    actual === PINNED_BUNDLED_EN_SHA256
+      ? undefined
+      : `${actual}; a text change needs a new version and a LEGAL_COPY_REVIEW.md entry`,
+  );
+  equal("documentFor uses the same hash", terms.documentFor("en").sha256, PINNED_BUNDLED_EN_SHA256);
+}
+
+// --- b. validateDocument refusals ----------------------------------------
+
+section("validateDocument refusals");
+
+{
+  throws("an unknown key", () => {
+    const doc = cloneDoc();
+    doc.extra = "no";
+    document.validateDocument(doc);
+  });
+
+  throws("a missing key", () => {
+    const doc = cloneDoc();
+    delete doc.effective;
+    document.validateDocument(doc);
+  });
+
+  throws("schema 2", () => {
+    const doc = cloneDoc();
+    doc.schema = 2;
+    document.validateDocument(doc);
+  });
+
+  throws("version 2026-13-01", () => {
+    const doc = cloneDoc();
+    doc.version = "2026-13-01";
+    document.validateDocument(doc);
+  });
+
+  throws("version 2026-11-02.0", () => {
+    const doc = cloneDoc();
+    doc.version = "2026-11-02.0";
+    document.validateDocument(doc);
+  });
+
+  throws("version 2026-11-02.1000", () => {
+    const doc = cloneDoc();
+    doc.version = "2026-11-02.1000";
+    document.validateDocument(doc);
+  });
+
+  throws("an unknown locale", () => {
+    const doc = cloneDoc();
+    doc.locale = "xx";
+    document.validateDocument(doc);
+  });
+
+  throws("a bad effective date", () => {
+    const doc = cloneDoc();
+    doc.effective = "2026-11-31";
+    document.validateDocument(doc);
+  });
+
+  throws("a control character", () => {
+    const doc = cloneDoc();
+    doc.terms.sections[0].paragraphs[0] = `Has a control\ncharacter`;
+    document.validateDocument(doc);
+  });
+
+  throws("a bidi override U+202E", () => {
+    const doc = cloneDoc();
+    doc.terms.sections[0].heading = `Heading\u202E`;
+    document.validateDocument(doc);
+  });
+
+  throws("a bidi isolate U+2066", () => {
+    const doc = cloneDoc();
+    doc.terms.sections[0].heading = `Heading\u2066`;
+    document.validateDocument(doc);
+  });
+
+  throws("https://", () => {
+    const doc = cloneDoc();
+    doc.privacy.sections[0].paragraphs[0] = "See https://example.com";
+    document.validateDocument(doc);
+  });
+
+  throws("www.", () => {
+    const doc = cloneDoc();
+    doc.privacy.sections[0].paragraphs[0] = "See www.example.com";
+    document.validateDocument(doc);
+  });
+
+  throws("a non-NFC string", () => {
+    const doc = cloneDoc();
+    doc.terms.title = "Cafe\u0301";
+    document.validateDocument(doc);
+  });
+
+  throws("leading space", () => {
+    const doc = cloneDoc();
+    doc.terms.title = " Levix Terms of Use";
+    document.validateDocument(doc);
+  });
+
+  throws("trailing space", () => {
+    const doc = cloneDoc();
+    doc.terms.title = "Levix Terms of Use ";
+    document.validateDocument(doc);
+  });
+
+  throws("an empty paragraph list", () => {
+    const doc = cloneDoc();
+    doc.terms.sections[0].paragraphs = [];
+    document.validateDocument(doc);
+  });
+
+  throws("31 sections", () => {
+    const doc = cloneDoc();
+    doc.terms.sections = Array.from({ length: 31 }, (_, i) => ({
+      heading: `Section ${i + 1}`,
+      paragraphs: ["A paragraph."],
+    }));
+    document.validateDocument(doc);
+  });
+
+  throws("21 paragraphs", () => {
+    const doc = cloneDoc();
+    doc.terms.sections[0].paragraphs = Array.from({ length: 21 }, () => "A paragraph.");
+    document.validateDocument(doc);
+  });
+
+  throws("a 2001-character paragraph", () => {
+    const doc = cloneDoc();
+    doc.terms.sections[0].paragraphs[0] = "a".repeat(2001);
+    document.validateDocument(doc);
+  });
+
+  throws("a document over 65536 canonical bytes", () => {
+    const doc = cloneDoc();
+    const para = "a".repeat(2000);
+    doc.terms.sections = [
+      { heading: "A", paragraphs: Array.from({ length: 20 }, () => para) },
+      { heading: "B", paragraphs: Array.from({ length: 20 }, () => para) },
+    ];
+    document.validateDocument(doc);
+  });
+}
+
+// --- c. canonical bytes, hash, versions ----------------------------------
+
+section("canonicalJson, documentHash, compareVersions");
+
+{
+  equal(
+    "canonicalJson sorts keys at every depth and keeps array order",
+    document.canonicalJson({ b: 1, a: [{ z: 1, y: 2 }, { m: 3, k: 4 }] }),
+    '{"a":[{"y":2,"z":1},{"k":4,"m":3}],"b":1}',
+  );
+
+  const original = document.validateDocument(cloneDoc());
+  const first = document.documentHash(original);
+  const changed = cloneDoc();
+  changed.terms.sections[0].heading = "1. What Levix is not";
+  const second = document.documentHash(document.validateDocument(changed));
+  ok("changing one heading changes documentHash", first !== second);
+
+  ok(
+    "2026-11-02 < 2026-11-02.1",
+    document.compareVersions("2026-11-02", "2026-11-02.1") < 0,
+  );
+  ok(
+    "2026-11-02.1 < 2026-11-02.10",
+    document.compareVersions("2026-11-02.1", "2026-11-02.10") < 0,
+  );
+  ok(
+    "2026-11-02.10 < 2026-11-03",
+    document.compareVersions("2026-11-02.10", "2026-11-03") < 0,
+  );
+}
+
+// --- d. consentStatus and recordAcceptance -------------------------------
+
+section("consentStatus and recordAcceptance");
+
+{
+  consent.revokeAcceptance();
+  const none = consent.consentStatus();
+  equal("no record is not accepted", none.ok, false);
+  equal("no record reason", none.reason, "terms_not_accepted");
+
+  const current = terms.documentFor("en");
+  const mismatchVersion = throws("wrong version throws TERMS_MISMATCH", () =>
+    consent.recordAcceptance({
+      version: "2020-01-01",
+      sha256: current.sha256,
+      locale: "en",
+      via: "provision",
+    }),
+  );
+  equal("wrong version code", mismatchVersion?.code, "TERMS_MISMATCH");
+  equal("wrong version wrote nothing", store.getBotSetting(consent.KEY, null), null);
+
+  const mismatchHash = throws("wrong hash throws TERMS_MISMATCH", () =>
+    consent.recordAcceptance({
+      version: current.version,
+      sha256: "a".repeat(64),
+      locale: "en",
+      via: "provision",
+    }),
+  );
+  equal("wrong hash code", mismatchHash?.code, "TERMS_MISMATCH");
+  equal("wrong hash wrote nothing", store.getBotSetting(consent.KEY, null), null);
+
+  const recorded = consent.recordAcceptance({
+    version: current.version,
+    sha256: current.sha256,
+    locale: "en",
+    via: "provision",
+  });
+  const okStatus = consent.consentStatus();
+  equal("valid acceptance is ok", okStatus.ok, true);
+  equal("valid acceptance reason", okStatus.reason, null);
+  equal("recorded via", recorded.via, "provision");
+
+  store.saveBotSetting(consent.KEY, validRecord({ sha256: "b".repeat(64) }));
+  equal("changed sha256", consent.consentStatus().reason, "terms_changed");
+
+  store.saveBotSetting(consent.KEY, validRecord({ termsVersion: "2020-01-01" }));
+  equal("changed termsVersion", consent.consentStatus().reason, "terms_changed");
+
+  store.saveBotSetting(consent.KEY, validRecord({ locale: "ar" }));
+  equal("locale the release lacks", consent.consentStatus().reason, "terms_changed");
+
+  store.saveBotSetting(consent.KEY, validRecord({ appVersion: "0.0.1" }));
+  equal("another appVersion", consent.consentStatus().reason, "app_updated");
+
+  store.saveBotSetting(consent.KEY, validRecord({ schema: 2 }));
+  equal("wrong schema", consent.consentStatus().reason, "terms_not_accepted");
+
+  store.saveBotSetting(consent.KEY, validRecord({ via: "hack" }));
+  equal("bad via in the record", consent.consentStatus().reason, "terms_not_accepted");
+
+  store.saveBotSetting(consent.KEY, validRecord({ acceptedAt: "not-a-date" }));
+  equal("bad date in the record", consent.consentStatus().reason, "terms_not_accepted");
+
+  const originalGet = store.getBotSetting;
+  store.getBotSetting = () => {
+    throw new Error("store down");
+  };
+  try {
+    const unread = consent.consentStatus();
+    equal("store throw ok", unread.ok, false);
+    equal("store throw reason", unread.reason, "consent_unreadable");
+  } finally {
+    store.getBotSetting = originalGet;
+  }
+
+  const badVia = throws("unknown via is refused", () =>
+    consent.recordAcceptance({
+      version: current.version,
+      sha256: current.sha256,
+      locale: "en",
+      via: "tty",
+    }),
+  );
+  equal("unknown via code", badVia?.code, "CONSENT_BAD_REQUEST");
+
+  const badLocale = throws("unknown locale is refused", () =>
+    consent.recordAcceptance({
+      version: current.version,
+      sha256: current.sha256,
+      locale: "xx",
+      via: "provision",
+    }),
+  );
+  equal("unknown locale code", badLocale?.code, "CONSENT_BAD_LOCALE");
+}
+
+// --- e. Q-17 lifecycle ---------------------------------------------------
+
+section("Q-17 lifecycle");
+
+{
+  const current = terms.documentFor("en");
+  consent.recordAcceptance({
+    version: current.version,
+    sha256: current.sha256,
+    locale: "en",
+    via: "cli",
+  });
+  const before = JSON.stringify(store.getBotSetting(consent.KEY));
+  store.saveBotSetting("auth:password", "not-a-real-hash");
+  store.deleteBotSetting("auth:password");
+  equal(
+    "the record survives deleting auth:password",
+    JSON.stringify(store.getBotSetting(consent.KEY)),
+    before,
+  );
+
+  const { WhatsAppSession } = await import("../src/core/session.js");
+  const silent = {
+    info() {},
+    warn() {},
+    error() {},
+    debug() {},
+    trace() {},
+  };
+  const session = new WhatsAppSession({
+    checkConsent: () => ({ ok: true }),
+    log: silent,
+    debugLog: silent,
+    createSocket: async () => {
+      throw new Error("logout must not create a socket");
+    },
+  });
+  await session.logout();
+  equal(
+    "the record survives the real unlink cleanup",
+    JSON.stringify(store.getBotSetting(consent.KEY)),
+    before,
+  );
+}
+
+// --- f. the record never leaves the device -------------------------------
+
+section("the record never leaves the device");
+
+{
+  const current = terms.documentFor("en");
+  consent.recordAcceptance({
+    version: current.version,
+    sha256: current.sha256,
+    locale: "en",
+    via: "provision",
+  });
+  checkpoint();
+
+  const exported = transfer.exportSettings();
+  const exportedJson = JSON.stringify(exported);
+  ok("settings export has no legal: key", !exportedJson.includes("legal:"));
+  ok("settings export has no terms hash", !exportedJson.includes(current.sha256));
+
+  ok(
+    "RESTORABLE_BOT_KEYS excludes legal:acceptance",
+    !RESTORABLE_BOT_KEYS.includes("legal:acceptance"),
+  );
+  ok(
+    "restorable rows omit legal:acceptance",
+    restorableRows(db).every((row) => row.key !== "legal:acceptance"),
+  );
+  ok(
+    "restore planner digests omit legal:acceptance",
+    !Object.hasOwn(currentDigests().settings, "legal:acceptance"),
+  );
+
+  const { createBackup } = require("./src/backup/create.cjs");
+  const { openBackup } = require("./src/backup/format.cjs");
+  const password = "backup-create-password-123";
+  const kdf = { N: 32768, r: 8, p: 1 };
+  const file = await createBackup({ password, kdf });
+  const opened = await openBackup({ path: file.path, password });
+  const dest = mkdtempSync(join(dataDir, "extract-"));
+  chmodSync(dest, 0o700);
+  await opened.extract({ dest });
+
+  const hashUtf8 = Buffer.from(current.sha256, "utf8");
+  const leaked = [];
+  for (const path of filesUnder(dest)) {
+    const bytes = readFileSync(path);
+    if (bytes.includes(hashUtf8) || bytes.includes(Buffer.from("legal:"))) leaked.push(path);
+  }
+  ok(
+    "decrypted backup content has neither the hash nor legal:",
+    leaked.length === 0,
+    leaked.join(", "),
+  );
+
+  const copy = new DatabaseSync(join(dest, "db", "levix.db"), { readOnly: true });
+  equal(
+    "backup db has no legal:acceptance row",
+    copy.prepare("SELECT count(*) AS n FROM bot_settings WHERE key = 'legal:acceptance'").get().n,
+    0,
+  );
+  copy.close();
+
+  ok(
+    "manifest digests omit legal:acceptance",
+    !Object.hasOwn(opened.manifest.digests.settings, "legal:acceptance"),
+  );
+}
+
+// --- g. no network -------------------------------------------------------
+
+section("no network");
+
+{
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (...args) => {
+    calls.push(args);
+    return Promise.reject(new Error("network forbidden in legal tests"));
+  };
+  try {
+    consent.revokeAcceptance();
+    consent.consentStatus();
+    const current = terms.documentFor("en");
+    consent.recordAcceptance({
+      version: current.version,
+      sha256: current.sha256,
+      locale: "en",
+      via: "provision",
+    });
+    consent.revokeAcceptance();
+    equal("consentStatus/record/revoke make zero fetch calls", calls.length, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const legalRoot = join(ROOT, "src", "legal");
+  for (const file of filesUnder(legalRoot)) {
+    if (!statSync(file).isFile()) continue;
+    const text = readFileSync(file, "utf8");
+    const rel = file.slice(ROOT.length).replace(/^\//, "");
+    ok(`${rel} has no fetch(`, !text.includes("fetch("));
+    ok(`${rel} has no node:http`, !text.includes('require("node:http'));
+    ok(`${rel} has no node:https`, !text.includes('require("node:https'));
+    ok(`${rel} has no node:net`, !text.includes('require("node:net'));
+  }
+}
+
+finish();
