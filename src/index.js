@@ -144,6 +144,21 @@ async function startHeadless() {
           `  … WhatsApp disconnected, reconnecting (attempt ${payload.attempt}/${payload.maxAttempts})`,
         );
         break;
+      // Not a reason to exit: a supervisor would restart it into the same
+      // state forever. The session re-reads the acceptance every few seconds
+      // and connects by itself once `levix terms` has recorded one.
+      case "consent_required":
+        line();
+        line(`  ✗ WhatsApp is waiting for the Terms${payload.detail ? ` — ${payload.detail}` : ""}`);
+        line();
+        line("  Read and accept them in another terminal (add the same --data option):");
+        line("    levix terms");
+        line("  On an unattended install, read them and accept that exact version:");
+        line("    levix terms show");
+        line("    levix terms accept --terms-version <version> --sha256 <hash>");
+        line();
+        line("  WhatsApp connects within a few seconds of the acceptance.");
+        break;
       case "logged_out":
       case "retry_exhausted":
       case "disconnected":

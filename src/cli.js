@@ -62,6 +62,8 @@ function help() {
       "    levix headless           start Levix with no web UI at all",
       "    levix where              print the data directory",
       "    levix reset-password     reset the panel password",
+      "    levix terms              read and accept the Terms of Use",
+      "                             (show · status · accept · revoke)",
       "    levix domain [name]      point a domain at Levix (may need sudo)",
       "",
       "  Options",
@@ -80,26 +82,31 @@ function help() {
 // The command is the first argument that isn't a flag or a flag's value.
 // `levix --data /var/lib/levix where` has to run `where`, not start the bot —
 // which is exactly how someone debugging a systemd install types it.
-const FLAGS_WITH_VALUES = new Set(["--data"]);
+const FLAGS_WITH_VALUES = new Set(["--data", "--terms-version", "--sha256", "--lang"]);
 
 export function parseArgv(argv) {
   const flags = new Set();
+  const values = new Map();
   const positional = [];
 
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
     if (FLAGS_WITH_VALUES.has(arg)) {
-      i += 1; // skip its value
+      // The value is the next argument, never a command.
+      if (i + 1 < argv.length) values.set(arg, argv[i + 1]);
+      i += 1;
       continue;
     }
     if (arg.startsWith("-")) {
-      flags.add(arg.split("=")[0]);
+      const [name, ...rest] = arg.split("=");
+      flags.add(name);
+      if (rest.length && FLAGS_WITH_VALUES.has(name)) values.set(name, rest.join("="));
       continue;
     }
     positional.push(arg);
   }
 
-  return { command: positional[0] ?? null, positional, flags };
+  return { command: positional[0] ?? null, positional, flags, values };
 }
 
 /** Run data access as the data directory owner; keep domain setup privileged. */
@@ -186,7 +193,7 @@ export async function withCliDatabase(fn) {
 }
 
 export async function main(argv = process.argv) {
-  const { command, positional, flags } = parseArgv(argv);
+  const { command, positional, flags, values } = parseArgv(argv);
 
   if (flags.has("--help") || flags.has("-h") || command === "help") {
     help();
@@ -213,6 +220,13 @@ export async function main(argv = process.argv) {
         await asDataOwner(() => store.deleteBotSetting("auth:password"));
         console.log("\n  Password cleared. Start the bot and open the panel to choose a new one.\n");
         return 0;
+      });
+    }
+
+    case "terms": {
+      return withCliDatabase(async (asDataOwner) => {
+        const { runTerms, terminalIo } = (await import("./legal/cli.cjs")).default;
+        return runTerms({ positional, values, io: terminalIo(), asDataOwner });
       });
     }
 
