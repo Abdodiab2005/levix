@@ -270,5 +270,18 @@ On Linux, Node 24.22.2, 2026-11-02, integration commit `88e5483`: PASS `node tes
 start-order` (136 checks), PASS `node tests/run.mjs lock` (18 checks), and PASS 100 independently
 created simultaneous startup pairs (zero pairs without exactly one holder). The focused test also
 injects transient and persistent SQLite-busy errors to check connection cleanup and the retry bound.
-The full gates in 3.8 refer to the preceding tree; CI and the combined-tree gates are rerun for the
-lock change.
+The full gates in 3.8 refer to the preceding tree. They were rerun for the lock change:
+
+| Gate | Result on integration commit `88e5483` (Linux x64, Node 24.22.2, 2026-11-02) |
+| --- | --- |
+| `npm test`, external network guard preloaded | PASS: 9,212 checks, 0 failed, 0 crashed |
+| `npm run lint` | PASS: 0 errors (190 warnings, 67 infos) |
+| `npm run i18n:check`, `npm run build:frontend` | PASS |
+| Android `:app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:bundleRelease`, offline | PASS: 87 unit tests, 0 failures; both APK ABIs; local AAB; `levix-build.json` versionCode 69 |
+| `npm run build:sea` and `npm run validate:sea` | PASS: 51 checks, 0 failed |
+| `npm run validate:tarball` | PASS: 36 checks, 0 failed (loopback FFmpeg mirror, external network guard) |
+| `npm run validate:docker` | BLOCKED locally (Docker socket permission). CI job PASS on #130 `2136f83` |
+| GitHub CI on #128 `a9b5e88`, #129 `badb756`, #130 `2136f83` | PASS: 7/7 jobs on each |
+
+The merge of the #128 and #130 heads differs from `88e5483` only in this file and
+`LEGAL_COPY_REVIEW.md`; the code is identical.
