@@ -44,7 +44,11 @@ for (const file of files) {
       stdio: ["ignore", "pipe", "pipe"],
       // A stray real data directory would be a bug in the test, not something
       // to inherit quietly.
-      env: { ...process.env, LEVIX_DATA_DIR: "" },
+      env: {
+        ...process.env,
+        LEVIX_DATA_DIR: "",
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --require=${JSON.stringify(join(HERE, "fixtures", "no-external-network.cjs"))}`,
+      },
     });
     let output = "";
     child.stdout.on("data", (chunk) => {

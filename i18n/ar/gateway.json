@@ -83,6 +83,8 @@
   "qrLinked": "تم الربط ✓",
   "qrNotStarted": "لم تبدأ — ابدأها من لوحة التحكم",
   "qrConnecting": "جارٍ الاتصال…",
+  "qrLoadError": "تعذّر تحميل أدوات رمز QR. حاول مرة أخرى.",
+  "qrRetry": "إعادة المحاولة",
   "tooManyAttempts": "محاولات كثيرة جداً. حاول مرة أخرى لاحقاً.",
   "incorrectPassword": "كلمة المرور غير صحيحة",
   "wrongSetupCode": "رمز الإعداد غير صحيح.",
