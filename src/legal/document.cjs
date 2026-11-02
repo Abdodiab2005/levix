@@ -67,7 +67,7 @@ function part(value, where) {
   if (!Array.isArray(sections) || sections.length < 1 || sections.length > LIMITS.maxSections) {
     fail(`${where}.sections must hold 1 to ${LIMITS.maxSections} sections`);
   }
-  sections.forEach((section, i) => {
+  for (const [i, section] of sections.entries()) {
     const at = `${where}.sections[${i}]`;
     exactKeys(section, ["heading", "paragraphs"], at);
     text(section.heading, LIMITS.maxTitle, `${at}.heading`);
@@ -75,8 +75,10 @@ function part(value, where) {
     if (!Array.isArray(paragraphs) || paragraphs.length < 1 || paragraphs.length > LIMITS.maxParagraphs) {
       fail(`${at}.paragraphs must hold 1 to ${LIMITS.maxParagraphs} paragraphs`);
     }
-    paragraphs.forEach((paragraph, j) => text(paragraph, LIMITS.maxParagraph, `${at}.paragraphs[${j}]`));
-  });
+    for (const [j, paragraph] of paragraphs.entries()) {
+      text(paragraph, LIMITS.maxParagraph, `${at}.paragraphs[${j}]`);
+    }
+  }
 }
 
 function validDate(value) {
