@@ -24,16 +24,16 @@
     "sha256": "c32db9ebd862d1abf1c53c3d5e166001386668d201ba5bfaf724c08122bf660c"
   },
   "pt-BR/android": {
-    "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "status": "draft",
+    "by": "New Terms consent strings (home_terms, status_terms, notif_terms_*) have not been reviewed; earlier content had ChatGPT targeted machine review (Q-19)",
     "date": "2026-11-02",
-    "sha256": "d5085e8a568d2a62a318a922cd96e1b903a2810074b5815741a85652eb40ace8"
+    "sha256": "88a812eb17d27488a50b7799c9c21ef0e6d0a0f4466d05f2880260315044ce4f"
   },
   "es-419/android": {
-    "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "status": "draft",
+    "by": "New Terms consent strings (home_terms, status_terms, notif_terms_*) have not been reviewed; earlier content had ChatGPT targeted machine review (Q-19)",
     "date": "2026-11-02",
-    "sha256": "ff85a81b819eb71de6597cb6ede5608521575204706960599e4b7850bfdc9598"
+    "sha256": "1d392cbcbdfe2ceafd3664155532322059526f306f8d65c110dd9f53ed447d14"
   },
   "pt-BR/commands": {
     "status": "reviewed",
