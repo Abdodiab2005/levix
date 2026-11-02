@@ -3,9 +3,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { renderInlineMarkup } from "../frontend/src/gateway/inline-markup.ts";
+import { parseInlineMarkup } from "../frontend/src/gateway/inline-markup-parse.ts";
 import { equal, finish, ok, require, ROOT, section } from "./harness.mjs";
 
 const template = readFileSync(join(ROOT, "views/login.ejs"), "utf8");
@@ -239,20 +237,32 @@ for (const locale of ["ar", "en", "pt-BR", "es-419"]) {
 section("React inline catalog markup");
 const suspicious =
   "<img onerror=alert(1)><script>alert(1)</script><span onmouseover=alert(1)>bad</span><span>safe</span><strong>bold</strong>";
-const rendered = renderToStaticMarkup(
-  createElement("p", null, renderInlineMarkup(suspicious, false)),
-);
-ok(
+const segments = parseInlineMarkup(suspicious);
+equal(
   "inline catalog allows exact span and strong",
-  rendered.includes("<span") && rendered.includes("<strong"),
+  segments.map((segment) => segment.kind).join(","),
+  "text,span,strong",
 );
 ok(
-  "inline catalog renders img as text",
-  rendered.includes("&lt;img onerror=alert(1)&gt;") && !rendered.includes("<img"),
+  "inline catalog keeps img as text",
+  segments[0].value.includes("<img onerror=alert(1)>") && segments[0].kind === "text",
 );
 ok(
-  "inline catalog renders script as text",
-  rendered.includes("&lt;script&gt;") && !rendered.includes("<script"),
+  "inline catalog keeps script as text",
+  segments[0].value.includes("<script>alert(1)</script>") && segments[0].kind === "text",
 );
-ok("inline catalog rejects tag attributes", rendered.includes("&lt;span onmouseover=alert(1)&gt;"));
+ok(
+  "inline catalog rejects tag attributes",
+  segments[0].value.includes("<span onmouseover=alert(1)>bad</span>"),
+);
+const rendererSource = readFileSync(join(ROOT, "frontend/src/gateway/inline-markup.ts"), "utf8");
+ok(
+  "inline catalog renderer uses only parsed strong and span elements",
+  rendererSource.includes("parseInlineMarkup(value).map") &&
+    rendererSource.includes('segment.kind === "text"') &&
+    rendererSource.includes("createElement(") &&
+    rendererSource.includes("segment.kind,") &&
+    rendererSource.includes("segment.value,") &&
+    !rendererSource.includes("dangerouslySetInnerHTML"),
+);
 finish();
