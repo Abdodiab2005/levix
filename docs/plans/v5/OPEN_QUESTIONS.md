@@ -42,7 +42,7 @@ blocked without an answer.
 | ID | Decision | Where it lands |
 | --- | --- | --- |
 | Q-15 | Option (b). The recovery relay in `levix-ui` gains `pt-BR` and `es-419` mail in step with Phase 03. The relay deploys before the Levix change that sends those values merges. | `PHASE-03-RESULTS.md` section 3.10; PR 03h |
-| Q-19 | ChatGPT reviews the `pt-BR` and `es-419` translations before each translation PR merges. The catalog records a machine review by ChatGPT, not a native-speaker review. | `PHASE-03-RESULTS.md` section 3.9; PR 03g |
+| Q-19 | ChatGPT reviews the `pt-BR` and `es-419` translations before each translation PR merges. The catalog records a machine review by ChatGPT, not a native-speaker review. Amended 2026-11-02: ChatGPT is the approved Phase 03 reviewer; native-speaker review is not required to merge. | `PHASE-03-RESULTS.md` section 3.9; PR 03g |
 
 ## Still open
 

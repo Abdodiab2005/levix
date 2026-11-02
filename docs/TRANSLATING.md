@@ -95,9 +95,9 @@ It escapes `\`, `'`, `"`, newline, tab, carriage return, `&`, `<`, and `>`. It t
 
 New replies call `t(key, params)` from `src/utils/i18n.cjs`. `t` reads the current language, then English, then returns the key and logs `Missing bot translation` once. Parameters replace `{name}` as plain strings. A missing parameter leaves the token. A plural value uses `Intl.PluralRules` on `params.count`, then `other`.
 
-`tr(en, ar)` remains for unmigrated calls. It returns the Arabic string when the current language is `ar`, and the English string for `en`, `pt-BR`, and `es-419`.
+`tr(en, ar)` returns the Arabic string when the current language is `ar`, and the English string for `en`, `pt-BR`, and `es-419`. No user-facing call uses it. The two remaining calls send text to the AI model (`src/services/aiAgent.cjs`, `src/services/aiProviders.cjs`); each has `// i18n-exception: sent to the model` on the line above. A new call that must stay on `tr()` needs the same marker with its reason.
 
-A pair stays on `tr()` when the two strings need different placeholders. The validator requires the same `{name}` set in every locale. `VIDEO_TOO_LONG` in `src/stickers/errors.cjs` stays on `tr()`: English inserts the number, and Arabic builds the phrase with `secondsAr()`.
+Arabic number words (dual and plural forms) are plural objects: the Arabic categories `zero`, `one`, `two`, `few`, `many`, `other` reproduce them (`bot/stickers.json` `count.*`, `bot/schedules.json` `recurrence.hourly`). Dates use `intlTag()` from `src/utils/i18n.cjs`: `en-GB`, `ar-EG`, `pt-BR`, `es-419`.
 
 `withLang(lang, fn)` runs `fn` in `ar`, `en`, `pt-BR`, or `es-419`. Any other value runs as `ar` (`src/utils/i18n.cjs`). That is separate from the English fallback for a missing catalog key.
 
@@ -117,7 +117,7 @@ The `pt-BR` and `es-419` files start as machine drafts. Each is recorded in `i18
 
 `review.json` maps `<locale>/<file>` to an object with `status`, `by`, `date`, and `sha256` (`REVIEW_FIELDS`). `<file>` is `dashboard`, `gateway`, `android`, `commands`, or `bot/<area>`, without `.json`. `status` is `draft` or `reviewed`. The other three fields are non-empty strings. `sha256` is the hex digest of that file's bytes. The checker compares it in lower case (`reviewMismatches`).
 
-The owner decided that ChatGPT reviews `pt-BR` and `es-419` before a translation PR merges (Q-19 in `docs/plans/v5/PHASE-03-RESULTS.md`). Record that as `by`. The script does not check the reviewer name. That review is a machine review. Native-speaker review is not done unless the owner arranges it.
+The owner decided that ChatGPT is the approved reviewer for `pt-BR` and `es-419` and that native-speaker review is not required to merge (Q-19, amended 2026-11-02). A `reviewed` entry names that review in `by`, for example `ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified`. Never record a review that did not happen, and never describe a file as native-speaker reviewed. When keys are added to a reviewed file, set it back to `draft` and say in `by` what was not reviewed. The script does not check the reviewer name.
 
 `npm run i18n:check` prints `review <locale>/<file>: sha256 does not match the file` when the bytes differ or the file is missing. The print does not fail the check. Update `sha256` when a reviewed file changes.
 

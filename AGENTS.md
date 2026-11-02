@@ -54,8 +54,9 @@ to all v5 work and add to the rules below; they remove none of them.
   (ADR-002). No required Levix Cloud and no downloaded executable code (ADR-003).
 - **Languages.** Phase 03 adds `ar`, `en`, `pt-BR`, `es-419` as bot reply choices,
   with UI, bot reply and AI reply language as three separate settings (ADR-004).
-  Unmigrated bot strings still use `tr(en, ar)`; the AI uses
-  `ai_reply_language`, which follows `bot_language` by default.
+  Shipped in Phase 03: every user-facing bot string uses `t()` and the catalog
+  in `i18n/`; the AI uses `ai_reply_language`, which follows `bot_language` by
+  default. ChatGPT is the approved translation reviewer (Q-19).
 - **Replies stay in the source chat by default.** No v5 feature may send a
   group's or a private chat's content to another chat unless the backend has
   checked that destination for the real sender (ADR-007). If that check fails,
@@ -479,8 +480,9 @@ session records the proxy the live socket was built with and reports
 Commands are loaded dynamically from `src/commands/`:
 New replies use `t("bot.<area>.<key>", params)`. Put the key in
 `i18n/en/bot/<area>.json` and in every required locale (`docs/TRANSLATING.md`).
-`tr(en, ar)` remains for unmigrated calls. It returns Arabic only for `ar`,
-and English for `en`, `pt-BR`, and `es-419` (`src/utils/i18n.cjs`).
+`tr(en, ar)` returns Arabic only for `ar` and English for every other language
+(`src/utils/i18n.cjs`); only two calls remain, both text sent to the AI model
+and marked `// i18n-exception`.
 - Each command exports: `{ name, aliases, chat, execute }`. `description` and
   `usage` come from `i18n/<locale>/commands.json` through
   `attachCommandDocs` in `src/utils/commandDocs.cjs`, which fills `en`, `ar`,
@@ -1650,8 +1652,8 @@ logger.debug('Debug info');
     `src/services/aiToolAuth.cjs`.
 29. **New replies use catalog keys.** Put new user-facing text through `t()`
     with catalog keys in the English `i18n/` JSON and the same key in every
-    required locale (`docs/TRANSLATING.md`). Use `tr(en, ar)` only where a
-    pair cannot follow the catalog rules (different placeholders per language).
+    required locale (`docs/TRANSLATING.md`). `tr(en, ar)` is not for user-facing
+    text; an exception needs a `// i18n-exception: <reason>` comment.
     Build the reply inside the function that sends it because the language is
     per message. Arabic words a command *accepts* (`اضف`, `عام`) are input,
     not replies, and stay as they are.

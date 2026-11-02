@@ -1,9 +1,10 @@
 # Levix v5.0.0 Phase 03: unified i18n
 
-Status: IMPLEMENTED IN OPEN PULL REQUESTS, PENDING REVIEW. The owner started Phase 03 on 2026-11-01
-and decided Q-15 and Q-19 (section 2). Every pull request in section 10 is open; nothing is merged.
-Sections 1 to 9 are the plan; section 10 records what was built and measured. Every claim cites
-code at `main` b6e777e or a command run on 2026-11-01 or 2026-11-02.
+Status: COMPLETE on 2026-11-02 for every automated gate. All Phase 03 pull requests are merged
+(section 10.1); `main` 8651514 passes the final gates in section 10.6. The owner started Phase 03 on
+2026-11-01 and decided Q-15 and Q-19 (section 2, amended 2026-11-02). Android device QA is NOT RUN
+(section 10.7). Sections 1 to 9 are the plan; section 10 records what was built, merged and
+measured. Every claim cites code or a command run on 2026-11-01 or 2026-11-02.
 
 ## 1. Re-audit (2026-11-01)
 
@@ -38,7 +39,7 @@ that changes the plan. Two audit counts were wrong and are corrected here (P3-02
 | ID | Decision |
 | --- | --- |
 | Q-15 | Update the recovery relay now. The relay in `levix-ui` gains `pt-BR` and `es-419` mail. It must be deployed before the Levix change that sends those values merges (P3-14). |
-| Q-19 | ChatGPT reviews the `pt-BR` and `es-419` translations. The catalog records this as a machine review by ChatGPT, not a native-speaker review. |
+| Q-19 | ChatGPT reviews the `pt-BR` and `es-419` translations. The catalog records this as a machine review by ChatGPT, not a native-speaker review. Amended 2026-11-02: ChatGPT is the approved Phase 03 reviewer and native-speaker review is not required to merge. |
 
 ## 3. Design
 
@@ -272,8 +273,12 @@ translating on every send.
 
 ### 10.1 Pull requests
 
-All open. CI is the 7-job workflow (tests, package install, three SEA runs, Docker volume, Android
-APK builds); every Levix PR below passed it on its last push unless the row says otherwise.
+All merged on 2026-11-01 and 2026-11-02, each after the 7-job CI workflow (tests, package install,
+three SEA runs, Docker volume, Android APK builds) passed on its final head. Merge commits: #103
+d36586c, #104 a71b12b, #105 d4eaaad, #106 1e7a1f0, #113 8ec0d9e, #107 1972767, #110 5efd98b, #116
+af5fc91, #108 91c5637, #114 9f1da8e, #112 ac30f94, #111 3ead510, #109 c0f0c6b, #119 5201c53, #117
+70e5661, #118 e66cfcd, #115 99e64f3, #120 95fc7ad, #121 ceac6ca, #122 8651514; levix-ui #22
+f2ca096. The local evidence column is from the day each PR opened.
 
 | PR | Slice | Base | Implemented by | Local evidence |
 | --- | --- | --- | --- | --- |
@@ -293,9 +298,11 @@ APK builds); every Levix PR below passed it on its last push unless the row says
 | #112 | 03f7 schedule replies | #105 | Antigravity (Claude Sonnet) | `npm test` 6681 PASS |
 | #117 | 03g1 pt-BR, es-419 dashboard and gateway text (draft) | #113 | Antigravity (Gemini), Grok | `i18n:check` PASS; `npm test` 6751 PASS |
 | #118 | 03g2 pt-BR, es-419 Android text (draft) | #106 | Antigravity (Gemini), Grok | `npm test` 6655 PASS; Gradle PASS; strings present in the APK for both locales |
-| #120 | 03g3 pt-BR, es-419 bot replies and command docs (draft); both locales required | `integration/phase-03` | Grok | full Phase 03 tree with the review fixes: `npm test` 7409 PASS, `i18n:check` PASS |
+| #120 | 03g3 pt-BR, es-419 bot replies and command docs; both locales required | `main` (opened on `integration/phase-03`) | Grok | full Phase 03 tree with the review fixes: `npm test` 7409 PASS, `i18n:check` PASS |
 | #115 | 03h recovery mail language (draft) | #113 | Codex | `npm test` 6787 PASS; merge only after levix-ui #22 is deployed |
 | #119 | 03i `docs/TRANSLATING.md`, `AGENTS.md` | #105 | Grok | docs only |
+| #121 | 03j1 recurrence text, schedule dates, weather language | `main` | Grok | `npm test` 7656 PASS; English and Arabic recurrence output equal to the old code (reference test) |
+| #122 | 03j2 the last user-facing `tr()` calls | `main` | Grok | `npm test` 8479 PASS; Arabic number words equal to the old code for n = 0 to 120 and edge values |
 
 `integration/phase-03` merges every PR above (before #120) with the generated files rebuilt. It
 exists so CI and reviewers can test the whole phase; it is not for merge. Local result on it:
@@ -313,7 +320,7 @@ PR it belongs to.
 | P2 | A language or theme change in another browser tab updated `<html>` but not React. | #113: `ui-boot.js` dispatches `levix-ui-prefs` after a storage event; new test case. |
 | P3 | `!lang` said the AI always follows the bot language, which is wrong once `ai_reply_language` is set. | #105 (en, ar) and #120 (pt-BR, es-419): the text says the AI follows unless an AI reply language is set in the panel. |
 
-### 10.3 Merge order and expected conflicts
+### 10.3 Merge order and how it ran
 
 1. #103, then #104, then #105 and #106.
 2. #113, #107, the 03f PRs (#108 to #112, #114, #116) and #119, in any order after #105. Two
@@ -325,24 +332,69 @@ PR it belongs to.
 4. #115 only after levix-ui #22 is merged and deployed.
 5. ChatGPT review (Q-19) before #117, #118 and #120 merge; each review updates `i18n/review.json`.
 
+What happened: #103 to #107, #110 and #113 merged cleanly in that order. The other 03f PRs then
+conflicted on the generated catalog and the two import lines. Each was updated by merging the
+previous branch into it (a linear chain #116, #108, #114, #112, #111, #109, #119, #117, #118; no
+force push), with `npm run i18n:build` resolving the generated files, then merged in chain order
+as CI passed. #115 merged after the relay check (section 10.5), then #120, #121 and #122.
+
 ### 10.4 Numbers
 
-- `tr(` lines outside `src/utils/i18n.cjs`: 575 in 86 files on `main`; 36 in 24 files on the full
-  tree. The rest are date or API
-  locale codes, pairs whose English and Arabic pass different arguments, or help texts written
-  before the markup exemption. They answer in English for `pt-BR` and `es-419`.
-- Catalog per locale on the full tree: dashboard 1196, gateway 89, Android 260, commands 138, bot
-  624 keys. All four locales are complete and required.
+- `tr(` calls outside `src/utils/i18n.cjs`: 575 lines in 86 files on `main` b6e777e; 2 on `main`
+  8651514. Both send text to the AI model (`src/services/aiAgent.cjs:281`,
+  `src/services/aiProviders.cjs:645`) and carry `// i18n-exception: sent to the model`.
+- Catalog per locale on `main` 8651514: dashboard 1196, gateway 89, Android 260, commands 138, bot
+  677 keys. All four locales are complete and required.
+- `i18n/review.json`: 16 files `reviewed` (ChatGPT targeted review; the bot and command files by a
+  sampled review), 10 files `draft` (the `pt-BR` and `es-419` versions of `bot/core`,
+  `bot/moderation`, `bot/schedules`, `bot/stickers`, `bot/tools`, which gained keys in #121 and
+  #122 after the review).
+- Recurrence text, schedule dates and the `!weather` language follow all four locales (#121).
 
-### 10.5 Not done or not run
+### 10.5 ChatGPT review and relay check (2026-11-02)
 
-- ChatGPT review of every `pt-BR` and `es-419` file: NOT RUN (owner, Q-19). Native review: NOT
-  RUN.
-- Relay deploy for levix-ui #22: NOT RUN (owner).
-- Android device QA (picker, offline switch, notification language on API 29 to 32 and 33+):
-  NOT RUN. Release APK, AAB and Play download sizes: NOT RUN.
-- Recurrence text (`src/utils/recurrence.cjs`) and the dashboard schedule `when` / `whenAr`
-  fields stay Arabic and English; Portuguese and Spanish show English.
-- The 36 remaining `tr(` lines (section 10.4).
-- `validate:sea`, `validate:tarball`, `validate:docker` locally: NOT RUN; CI runs them on each PR.
+- #117 and #118: targeted review of key parity, placeholders and security-sensitive text; no
+  blocking discrepancy. Recorded as `reviewed` with that reviewer.
+- #120: sampled review; one finding. The `pt-BR` and `es-419` `!autoschedule weekly` hint showed a
+  translated day word the parser refuses. Fixed (the hint uses `monday`), with a regression test
+  in `tests/scheduling.test.mjs` that parses every locale's example.
+- Automated cross-locale audit of every `pt-BR` and `es-419` file: no Arabic left in a Latin
+  locale, no lost product name, command and sub-command tokens equal to English except marked
+  placeholders.
+- No file is described as native-speaker reviewed.
+- Relay: levix-ui #22 merged and deployed (run 41360221956, check and deploy jobs success). A
+  probe that cannot send mail (`kind: reset`, an example.com address, a well-formed unknown token)
+  answered `400 invalid` for `lang: pt-BR` before the deploy, and `403 unverified` for `pt-BR`,
+  `es-419` and `en` after it (`fr` stays `400 invalid`). #115 merged only after that.
+
+### 10.6 Final gates on `main` 8651514 (2026-11-02, Linux x64, Node v24.22.2, local)
+
+| Gate | Result |
+| --- | --- |
+| `npm test` | PASS, 8479 checks, 0 failed |
+| `npm run i18n:check` | PASS, four required locales |
+| `npm run lint` | PASS, 0 errors (181 warnings, 6 more than `main` b6e777e) |
+| `npm run build:frontend` | PASS |
+| `./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:bundleRelease` | PASS |
+| Release APK size | arm64 58,986,914 bytes; armv7 54,559,340 bytes |
+| Release AAB size | 86,598,073 bytes |
+| Debug APK size (clean package) | arm64 64,704,170 bytes, 406,928 less than `main` b6e777e; armv7 59,789,004 bytes |
+| APK locales (`aapt2 dump badging`) | ar, es, es-419, pt, pt-BR plus default |
+| CI on each merged PR head | PASS, 7 of 7 jobs |
+
+One `main` push run (c0f0c6b) failed in `tests/start-order.test.mjs` ("one simultaneous starter
+wins", a Phase 02 two-process race test); the same tree passed on its PR, and the rerun of the
+failed job passed. Recorded as a flaky test.
+
+### 10.7 Not done or not run
+
+- AI review of the 10 `draft` files' new keys (section 10.4): NOT RUN. Native-speaker review: not
+  required (Q-19) and NOT RUN.
+- Android device QA (picker, offline language switch, notification language on API 29 to 32 and
+  33+): NOT RUN. Google Play download sizes: NOT RUN (only Play Console or `bundletool` may
+  report them).
+- `validate:sea`, `validate:tarball`, `validate:docker` locally: NOT RUN; CI runs them on every PR
+  and on `main`.
+- Two `tr()` calls stay by design (section 10.4).
+- `tests/start-order.test.mjs` failed once on CI (section 10.6); not investigated in Phase 03.
 
