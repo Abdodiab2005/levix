@@ -1,14 +1,14 @@
 # Legal copy review (Phase 04)
 
 Status: PENDING HUMAN LEGAL REVIEW. No lawyer has reviewed the text. The bundled Terms of Use and
-Privacy Notice (`src/legal/bundled/*.json`, version `2026-11-02`) are drafts. A machine review on
+Privacy Notice (`src/legal/bundled/*.json`, version `2026-11-02.1`) are drafts. A machine review on
 2026-11-02 (section 3) found factual errors. Those errors are fixed in commit 1d34a86 on PR #127.
 No obligation, disclaimer, liability limit or consent rule changed. Every legal question that
 review raised is open (section 7).
 
 Any text change after a release needs a new `version`. The content hash changes, so every
-installation is asked to accept again (ADR-020). Version `2026-11-02` was corrected in place,
-because no installation has accepted it: PRs #126 and #127 are not merged.
+installation is asked to accept again (ADR-020). Version `2026-11-02.1` accompanies the full
+policy correction and adds the approved Caddy-installation disclosure to the notices.
 
 ## 1. Required points and where the draft covers them
 
@@ -41,8 +41,8 @@ because no installation has accepted it: PRs #126 and #127 are not merged.
 | Crash reports, sent only on Send, kept 30 days | Privacy 3.1, 5.2 | retention only in the full policy |
 | Recovery mail relay, keyed hashes only | Privacy 3.1 | none (was: reset request trigger understated) |
 | Sticker upload to the user's own Levix instance | not named | stays on the user's own server |
-| Dashboard fonts from `fonts.googleapis.com` and `fonts.gstatic.com` | not named | NOT IN `PRIVACY.md` EITHER. See section 4, item 1. |
-| `dl.cloudsmith.io` when `levix domain` installs Caddy with the operator's confirmation | not named | not in `PRIVACY.md`. See section 4, item 2. |
+| Dashboard fonts | no outbound request | The existing fonts are bundled locally. |
+| Caddy package sources | Privacy 2.3 | `PRIVACY.md` names Cloudsmith and system repositories. |
 
 ## 3. Machine review, 2026-11-02
 
@@ -69,9 +69,8 @@ Fixed in commit 1d34a86 (factual text only, all four locales):
 
 Not changed, because the fix is a legal or product decision:
 
-- Terms 7.1 says a change takes effect when the operator accepts it. `PRIVACY.md` section 8 says
-  continued use means acceptance. The consent gate enforces the Terms version. Aligning
-  `PRIVACY.md` is planned for 04e and needs the owner's approval.
+- Terms 7.1 and `PRIVACY.md` section 8 now describe explicit acceptance; the owner approved this
+  correction on 2026-11-02.
 - An edit to `PRIVACY.md` alone never asks for a new acceptance, because only the bundled
   documents are hashed. The reviewer should confirm that the short notice, not the linked policy,
   is the accepted text.
@@ -81,38 +80,27 @@ Not changed, because the fix is a legal or product decision:
 
 ## 4. Gaps outside the notice text
 
-1. The React dashboard (`frontend/index.html`, shipped since the React migration, commit 580a6b5)
-   loads fonts from `fonts.googleapis.com` and `fonts.gstatic.com`. The browser sends its IP
-   address and user agent to Google on every panel load. `PRIVACY.md` does not list it, and
-   `AGENTS.md` says the panel has no CDN dependency. The 04d gateway pages load no remote
-   resource (headless check, 2026-11-02). Owner decision: self-host the fonts, use system fonts,
-   or add a `PRIVACY.md` row and a notice sentence (R-24).
-2. `levix domain` can download Caddy from `dl.cloudsmith.io` after the operator confirms
-   (`src/domain/caddy.js`). `PRIVACY.md` does not list it.
-3. `withHttpsMedia` in `src/core/socket.js` downloads any http(s) media URL given to a send,
-   whatever `thumbnail_remote` says. No shipped caller passes a URL today. `PRIVACY.md` line 188
-   ties the fetch to `thumbnail_remote` only.
+1. Dashboard and gateway fonts are now self-hosted, as the owner approved.
+2. The notice and policy now disclose approved Caddy installation package requests.
+3. The policy now distinguishes sending remote media from optional thumbnail downloads.
 
 ## 5. Changes that need a new document version later
 
 | Change | Phase | Text to add |
 | --- | --- | --- |
 | Remote Terms fetch from `levix.leviro.net` (no identifier, no body), when the owner turns it on | 04c | Privacy 3: the app downloads the current Terms; the request carries no identifier. |
-| A decision on section 4, item 1 or 2 | 04e | Privacy 2: the font or download destination, if it stays. |
 | Google Play Billing for Levix Plus | 08 | Privacy: purchase and entitlement data handled by Google Play and the Leviro verification service. Terms: subscription terms. |
 | Update checks against GitHub Releases or Google Play | 09 | Privacy 2: version checks and what they send. |
 | Any new outbound destination | any | `PRIVACY.md` row first, then the notice, then a new version. |
 
 ## 6. Translations and Google Play
 
-- `ar`, `pt-BR` and `es-419` are machine translations (Antigravity, Claude Sonnet 5.5). The
-  machine review found the meaning equal to English in all 26 paragraphs of each file, apart from
-  the two fixes above and the "fingerprint" wording. ChatGPT reviews `pt-BR` and `es-419` for
-  language (Q-19); that review has NOT RUN for the legal documents. No native or legal review of
-  any translation exists.
+- `ar`, `pt-BR` and `es-419` are machine translations (Antigravity, Claude Sonnet 5.5). ChatGPT
+  reviewed the Portuguese and Spanish documents against English on 2026-11-02 and corrected a
+  Spanish consent sentence. The new Caddy sentences also received machine review. This is not
+  native-speaker certification or legal approval; the Arabic addition still needs language review.
 - Google Play Data safety: the consent record stays on the device and is never collected or
-  shared, so it needs no Data safety change. Section 4, item 1 may need one. No Play Console change
-  has been made.
+  shared, so it needs no Data safety change. No Play Console change has been made.
 
 ## 7. Questions for the legal reviewer
 

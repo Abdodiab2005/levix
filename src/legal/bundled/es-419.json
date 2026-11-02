@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026-11-02",
+  "version": "2026-11-02.1",
   "locale": "es-419",
   "effective": "2026-11-02",
   "terms": {
@@ -11,7 +11,7 @@
         "paragraphs": [
           "Levix es software de código abierto para ejecutar un bot personal de WhatsApp. Funciona en un dispositivo que usted controla: su teléfono, su computadora o su servidor. Abdelrhman Diab (Leviro) lo desarrolla y publica las versiones oficiales.",
           "El código fuente se licencia bajo la Licencia MIT (MIT License). Nada en estos términos limita los derechos que esa licencia le otorga. Estos términos establecen las condiciones para usar las versiones oficiales de Levix y los servicios que el desarrollador opera para ellas: el relé de correo para la recuperación de la cuenta, los comentarios y los informes de fallos.",
-          "Usted acepta estos términos una vez por cada instalación. Levix vuelve a preguntar después de que estos términos o el Aviso de Privacidad cambien, y después de que Levix se actualice a una nueva versión. Desvincular o cambiar la cuenta de WhatsApp, reconectar, reiniciar y restablecer la contraseña del panel no vuelven a preguntar."
+          "Usted acepta estos términos una vez por cada instalación. Levix vuelve a preguntar después de que estos términos o el Aviso de Privacidad cambien, y después de que Levix se actualice a una nueva versión. Desvincular o cambiar la cuenta de WhatsApp, reconectar, reiniciar y restablecer la contraseña del panel no hacen que Levix vuelva a pedir la aceptación."
         ]
       },
       {
@@ -74,7 +74,7 @@
         "paragraphs": [
           "WhatsApp (Meta) recibe sus mensajes, los archivos multimedia que el bot envía y sus datos de emparejamiento mientras haya una cuenta vinculada, porque Levix es un cliente de WhatsApp.",
           "Cuando usted usa una función de IA, el prompt y su contexto van al proveedor de IA que usted configuró. Ese contexto puede incluir nombres, identificadores de WhatsApp, texto de mensajes, historial de la IA, memoria y archivos multimedia que usted le pide procesar. Con Gemini, el anclaje con Google Search (Google Search grounding) está activado de forma predeterminada: Gemini decide en cada respuesta si busca en la web, y usted puede desactivarlo en la configuración.",
-          "Otras funciones contactan otros servicios solo cuando se ejecutan. La IA puede enviar consultas de búsqueda tomadas de sus chats a la búsqueda web y a Wikipedia, y puede abrir páginas web. Otras funciones usan Google Translate, la conversión de texto a voz de Google y servicios de clima, horarios de oración y acortadores de enlaces. Consultar los modelos de un proveedor de IA envía su clave de API a ese proveedor, y configurar un dominio con el comando levix domain le pide a un servicio de consulta de IP la dirección pública del servidor. Las vistas previas de enlaces y las miniaturas remotas están desactivadas de forma predeterminada.",
+          "Otras funciones contactan otros servicios solo cuando se ejecutan. La IA puede enviar consultas de búsqueda tomadas de sus chats a la búsqueda web y a Wikipedia, y puede abrir páginas web. Otras funciones usan Google Translate, la conversión de texto a voz de Google y servicios de clima, horarios de oración y acortadores de enlaces. Consultar los modelos de un proveedor de IA envía su clave de API a ese proveedor, y configurar un dominio con el comando levix domain le pide a un servicio de consulta de IP la dirección pública del servidor. Las vistas previas de enlaces y las miniaturas remotas están desactivadas de forma predeterminada. Si usted aprueba instalar Caddy durante la configuración del dominio, el servidor contactará repositorios de paquetes.",
           "Si usted configura un proxy, el tráfico de WhatsApp pasa por él."
         ]
       },

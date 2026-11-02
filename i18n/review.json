@@ -1,7 +1,7 @@
 {
   "pt-BR/dashboard": {
-    "status": "draft",
-    "by": "New legal consent keys have not been reviewed; earlier content had ChatGPT targeted machine review (Q-19)",
+    "status": "reviewed",
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "a3391ab8e8214fa4629fcf74e8becea94324365fa5431b9a040225dc5dd01759"
   },
@@ -12,8 +12,8 @@
     "sha256": "e2189af0dceb1a0eadc3655e245730231903cfcd4b13164b0d2389fbb89b3e9d"
   },
   "es-419/dashboard": {
-    "status": "draft",
-    "by": "New legal consent keys have not been reviewed; earlier content had ChatGPT targeted machine review (Q-19)",
+    "status": "reviewed",
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "56731a299d361ef5af92701f98ae234962c7b408f1bbf4ab2f12802ee24d594d"
   },
@@ -24,14 +24,14 @@
     "sha256": "c24b725238e74f640c016408de3fffd5c51e22c97982ddfeed4c479b73f904c2"
   },
   "pt-BR/android": {
-    "status": "draft",
-    "by": "New Terms consent strings (home_terms, status_terms, notif_terms_*) have not been reviewed; earlier content had ChatGPT targeted machine review (Q-19)",
+    "status": "reviewed",
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "88a812eb17d27488a50b7799c9c21ef0e6d0a0f4466d05f2880260315044ce4f"
   },
   "es-419/android": {
-    "status": "draft",
-    "by": "New Terms consent strings (home_terms, status_terms, notif_terms_*) have not been reviewed; earlier content had ChatGPT targeted machine review (Q-19)",
+    "status": "reviewed",
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified",
     "date": "2026-11-02",
     "sha256": "1d392cbcbdfe2ceafd3664155532322059526f306f8d65c110dd9f53ed447d14"
   },
