@@ -83,6 +83,8 @@
   "qrLinked": "Linked ✓",
   "qrNotStarted": "Not started — start it from the dashboard",
   "qrConnecting": "Connecting…",
+  "qrLoadError": "Couldn't load the QR code tools. Try again.",
+  "qrRetry": "Retry",
   "tooManyAttempts": "Too many attempts. Try again later.",
   "incorrectPassword": "Incorrect Password",
   "wrongSetupCode": "Wrong setup code.",

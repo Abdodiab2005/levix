@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { LinkButton, StatusPill } from "../components/ui";
+import { Button, LinkButton, StatusPill } from "../components/ui";
 import type { GatewayKey, GatewayMarkup, GatewayText } from "./main";
+import { loadScript } from "./script-loader.mjs";
 
 type Socket = {
   on(event: "qr", callback: (value: string) => void): void;
@@ -17,16 +18,6 @@ type QrWindow = Window & {
   QRCode?: QrConstructor;
 };
 
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = src;
-    script.onload = () => resolve();
-    script.onerror = reject;
-    document.body.appendChild(script);
-  });
-}
-
 export function Qr({
   initial,
   t,
@@ -40,9 +31,12 @@ export function Qr({
   const qrValue = useRef(initial);
   const [status, setStatus] = useState<GatewayKey>(initial ? "qrScanMe" : "qrWaitingCode");
   const [linked, setLinked] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
     let socket: Socket | undefined;
+    setLoadError(false);
     const paint = (qr: string) => {
       if (
         !active ||
@@ -71,8 +65,9 @@ export function Qr({
       setStatus(key);
     };
     void (async () => {
-      await loadScript("/qrcode.min.js");
-      await loadScript("/socket.io.min.js");
+      await loadScript("/qrcode.min.js", () => typeof (window as QrWindow).QRCode === "function");
+      if (!active) return;
+      await loadScript("/socket.io.min.js", () => typeof (window as QrWindow).io === "function");
       if (!active) return;
       paint(initial);
       socket = (window as QrWindow).io?.();
@@ -87,12 +82,14 @@ export function Qr({
         } else if (session.state !== "waiting_for_qr")
           clear(session.canStart ? "qrNotStarted" : "qrConnecting");
       });
-    })();
+    })().catch(() => {
+      if (active) setLoadError(true);
+    });
     return () => {
       active = false;
       socket?.disconnect();
     };
-  }, [initial]);
+  }, [initial, attempt]);
   return (
     <>
       <header>
@@ -105,6 +102,12 @@ export function Qr({
       <div className="flex min-h-64 items-center justify-center rounded-xl border border-line bg-panel-raised p-3">
         {linked ? <strong>{t("qrLinked")}</strong> : <div ref={frame} />}
       </div>
+      {loadError && (
+        <div role="alert" className="space-y-2 text-sm text-danger">
+          <p>{t("qrLoadError")}</p>
+          <Button onClick={() => setAttempt((value) => value + 1)}>{t("qrRetry")}</Button>
+        </div>
+      )}
       <ol className="list-decimal space-y-2 ps-5 text-sm text-muted">
         <li>{markup("qrStep1")}</li>
         <li>{markup("qrStep2")}</li>

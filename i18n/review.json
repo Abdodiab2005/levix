@@ -7,9 +7,9 @@
   },
   "pt-BR/gateway": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted machine review (Q-19), including QR retry strings; not native-speaker certified",
     "date": "2026-11-02",
-    "sha256": "155233f330c80adf0ce34e240d830c6bd4633c58e9a206bb7c63686849c621f3"
+    "sha256": "e2189af0dceb1a0eadc3655e245730231903cfcd4b13164b0d2389fbb89b3e9d"
   },
   "es-419/dashboard": {
     "status": "draft",
@@ -19,9 +19,9 @@
   },
   "es-419/gateway": {
     "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19); machine translation, not native-speaker certified",
+    "by": "ChatGPT targeted machine review (Q-19), including QR retry strings; not native-speaker certified",
     "date": "2026-11-02",
-    "sha256": "c32db9ebd862d1abf1c53c3d5e166001386668d201ba5bfaf724c08122bf660c"
+    "sha256": "c24b725238e74f640c016408de3fffd5c51e22c97982ddfeed4c479b73f904c2"
   },
   "pt-BR/android": {
     "status": "draft",
