@@ -12,6 +12,7 @@ import type {
   EditOptions,
   GroupItem,
   Job,
+  LegalTermsResponse,
   LogItem,
   ModerationPolicyFieldError,
   ModerationPolicyVisibility,
@@ -197,6 +198,10 @@ export const api = {
     api.get<{ status?: any; session?: any; qr?: string | null; pairingCode?: string | null }>(
       "/bot/session",
     ),
+  getLegalTerms: (locale: string) =>
+    api.get<LegalTermsResponse>(`/legal/terms?locale=${encodeURIComponent(locale)}`),
+  acceptLegalTerms: (body: { version: string; sha256: string; locale: string }) =>
+    api.post<{ success: true; session: import("../types").SessionStatus }>("/legal/accept", body),
   startSession: (body?: { method?: "qr" | "pairing"; phone?: string }) =>
     api.post("/bot/session/start", body),
   reconnectSession: () => api.post("/bot/session/reconnect"),
