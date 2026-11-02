@@ -66,6 +66,37 @@ if (mode === "imports") {
     } catch (error) {
       result({ code: error.code });
     }
+  } else if (mode === "transient-busy" || mode === "persistent-busy") {
+    const exec = DatabaseSync.prototype.exec;
+    const close = DatabaseSync.prototype.close;
+    let attempts = 0;
+    let closed = 0;
+    let closedBeforeRetry = false;
+    DatabaseSync.prototype.close = function () {
+      closed += 1;
+      return close.call(this);
+    };
+    DatabaseSync.prototype.exec = function (sql) {
+      if (sql === "BEGIN EXCLUSIVE") {
+        attempts += 1;
+        if (attempts === 2) closedBeforeRetry = closed > 0;
+        if (mode === "persistent-busy" || attempts === 1) {
+          const error = new Error("database is locked");
+          error.errcode = 5;
+          throw error;
+        }
+      }
+      return exec.call(this, sql);
+    };
+    try {
+      lock.acquireSingleInstanceLock();
+      result({ acquired: true, attempts, closedBeforeRetry });
+    } catch (error) {
+      result({ code: error.code, attempts, held: lock.isLockHeld() });
+    } finally {
+      DatabaseSync.prototype.exec = exec;
+      DatabaseSync.prototype.close = close;
+    }
   } else if (mode === "claim") {
     try { lock.acquireSingleInstanceLock(); result({ acquired: true }); }
     catch (error) { result({ code: error.code }); }

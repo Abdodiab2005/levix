@@ -52,25 +52,32 @@ function isLockHeld() {
 
 function acquireSingleInstanceLock() {
   if (connection) return LOCK_FILE;
-  let candidate;
-  try {
-    candidate = new DatabaseSync(LOCK_DB_FILE);
-    candidate.exec("PRAGMA busy_timeout = 0");
-    candidate.exec("PRAGMA locking_mode = EXCLUSIVE");
-    candidate.exec("CREATE TABLE IF NOT EXISTS owner (pid INTEGER NOT NULL)");
-    candidate.exec("DELETE FROM owner");
-    candidate.prepare("INSERT INTO owner (pid) VALUES (?)").run(process.pid);
-    connection = candidate;
-    fs.writeFileSync(LOCK_FILE, String(process.pid), { mode: 0o600 });
-    process.once("exit", release);
-    return LOCK_FILE;
-  } catch (error) {
-    candidate?.close();
-    if (connection === candidate) connection = null;
-    if (error.code === "SQLITE_BUSY" || error.errcode === 5 || /database is locked/i.test(error.message)) {
-      throw lockedError();
+  // Two fresh SQLite connections can both hold a shared lock and fail to
+  // promote it. Close before retrying so neither prevents the other winning.
+  const sleeper = new Int32Array(new SharedArrayBuffer(4));
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    let candidate;
+    try {
+      candidate = new DatabaseSync(LOCK_DB_FILE);
+      candidate.exec("PRAGMA busy_timeout = 0");
+      candidate.exec("PRAGMA locking_mode = EXCLUSIVE");
+      candidate.exec("BEGIN EXCLUSIVE");
+      candidate.exec("CREATE TABLE IF NOT EXISTS owner (pid INTEGER NOT NULL)");
+      candidate.exec("DELETE FROM owner");
+      candidate.prepare("INSERT INTO owner (pid) VALUES (?)").run(process.pid);
+      candidate.exec("COMMIT");
+      connection = candidate;
+      fs.writeFileSync(LOCK_FILE, String(process.pid), { mode: 0o600 });
+      process.once("exit", release);
+      return LOCK_FILE;
+    } catch (error) {
+      candidate?.close();
+      if (connection === candidate) connection = null;
+      const busy = error.code === "SQLITE_BUSY" || error.errcode === 5 || /database is locked/i.test(error.message);
+      if (!busy) throw error;
+      if (attempt === 9) throw lockedError();
+      Atomics.wait(sleeper, 0, 0, 1 + Math.floor(Math.random() * 25));
     }
-    throw error;
   }
 }
 
