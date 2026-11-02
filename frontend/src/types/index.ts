@@ -21,7 +21,8 @@ export type SessionState =
   | "paused"
   | "retry_exhausted"
   | "logged_out"
-  | "error";
+  | "error"
+  | "consent_required";
 
 export interface SessionStatus {
   state: SessionState;
@@ -36,6 +37,8 @@ export interface SessionStatus {
   canUnlink?: boolean;
   linked?: boolean;
   connected?: boolean;
+  consentRequired?: boolean;
+  reason?: string | null;
   isOnline?: boolean;
   terminal?: boolean;
   hasQr?: boolean;
@@ -44,6 +47,34 @@ export interface SessionStatus {
     id: string;
     name?: string;
   } | null;
+}
+
+export interface LegalPart {
+  title: string;
+  sections: Array<{ heading: string; paragraphs: string[] }>;
+}
+
+export interface LegalTermsResponse {
+  success: boolean;
+  version: string;
+  locale: string;
+  requestedLocale: string | null;
+  sha256: string;
+  effective: string;
+  terms: LegalPart;
+  privacy: LegalPart;
+  links: { privacyPolicy: string; license: string; website: string };
+  locales: string[];
+  consent: {
+    ok: boolean;
+    reason: string | null;
+    accepted: {
+      termsVersion: string;
+      locale: string;
+      acceptedAt: string;
+      appVersion: string;
+    } | null;
+  };
 }
 
 export interface DashboardStats {

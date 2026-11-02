@@ -1,6 +1,6 @@
 // file: frontend/src/App.tsx
 import type React from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 import { CrashBanner } from "./components/CrashBanner";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -18,6 +18,7 @@ import { CommandsView } from "./views/CommandsView";
 import { ConnectionView } from "./views/ConnectionView";
 import { GroupsView } from "./views/GroupsView";
 import { LogsView } from "./views/LogsView";
+import { TermsConsentDialog } from "./views/legal/TermsConsentDialog";
 // Views
 import { OverviewView } from "./views/OverviewView";
 import { SchedulesView } from "./views/SchedulesView";
@@ -63,6 +64,10 @@ const MainLayout: React.FC = () => {
   });
 
   const [initialStatus, setInitialStatus] = useState<Partial<SessionStatus> | null>(null);
+  const [acceptedStatus, setAcceptedStatus] = useState<SessionStatus | null>(null);
+  const socketAtAccept = useRef<SessionStatus | null>(null);
+  const wasConsentRequired = useRef(false);
+  const [termsOpen, setTermsOpen] = useState(false);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -91,8 +96,19 @@ const MainLayout: React.FC = () => {
           state: (socketStatus?.state || initialStatus?.state || "idle") as SessionState,
           ...(initialStatus || {}),
           ...(socketStatus || {}),
+          ...(acceptedStatus || {}),
         }
       : null;
+
+  useEffect(() => {
+    if (acceptedStatus && socketStatus !== socketAtAccept.current) setAcceptedStatus(null);
+  }, [acceptedStatus, socketStatus]);
+
+  useEffect(() => {
+    const required = activeStatus?.state === "consent_required";
+    if (required && !wasConsentRequired.current) setTermsOpen(true);
+    wasConsentRequired.current = required;
+  }, [activeStatus?.state]);
 
   const isConnected = activeStatus?.connected === true || activeStatus?.state === "connected";
 
@@ -174,6 +190,7 @@ const MainLayout: React.FC = () => {
                 status={activeStatus}
                 onRefresh={refreshStatus}
                 onStatusUpdate={(s) => setInitialStatus((prev) => ({ ...(prev || {}), ...s }))}
+                onReviewTerms={() => setTermsOpen(true)}
               />
             )}
             {currentView === "ai" && <AIAssistantView />}
@@ -189,6 +206,15 @@ const MainLayout: React.FC = () => {
           </ErrorBoundary>
         </main>
       </div>
+      <TermsConsentDialog
+        isOpen={termsOpen}
+        onClose={() => setTermsOpen(false)}
+        onAccepted={(next) => {
+          socketAtAccept.current = socketStatus;
+          setAcceptedStatus(next);
+          setInitialStatus((prev) => ({ ...(prev || {}), ...next }));
+        }}
+      />
     </div>
   );
 };

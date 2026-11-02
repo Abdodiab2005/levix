@@ -36,6 +36,7 @@ import {
 import { useI18n } from "../context/I18nContext";
 import type { SessionStatus } from "../types";
 import { fill } from "../utils/fill";
+import { consentReasonText } from "./legal/TermsConsentDialog";
 
 function isAndroidCompanionApp() {
   return typeof window !== "undefined" && Boolean((window as { LevixHost?: unknown }).LevixHost);
@@ -54,9 +55,15 @@ interface ConnectionViewProps {
   status: SessionStatus | null;
   onRefresh?: () => Promise<void>;
   onStatusUpdate?: (status: Partial<SessionStatus>) => void;
+  onReviewTerms: () => void;
 }
 
-export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onStatusUpdate }) => {
+export const ConnectionView: FC<ConnectionViewProps> = ({
+  status,
+  onRefresh,
+  onStatusUpdate,
+  onReviewTerms,
+}) => {
   const { t } = useI18n();
   const { toast } = useToast();
   const [showUnlinkModal, setShowUnlinkModal] = useState(false);
@@ -71,6 +78,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
   const isWaitingQr = state === "waiting_for_qr";
   const isStarting = state === "starting" || state === "linking";
   const isReconnecting = state === "reconnecting";
+  const isConsentRequired = state === "consent_required";
   const isPaused = state === "paused";
   const isLoggedOut = state === "logged_out";
   const linked = Boolean(status?.linked) && !isLoggedOut;
@@ -367,7 +375,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
           )}
 
           {/* 3a. Known session (paused / idle / disconnected): resume, never QR or pairing codes */}
-          {!isConnected && !isStarting && !isWaitingQr && !isReconnecting && linked && (
+          {!isConnected && !isStarting && !isWaitingQr && !isReconnecting && !isConsentRequired && linked && (
             <div className="flex flex-col gap-3 w-full max-w-xl">
               {isPaused && (
                 <p className="text-xs sm:text-sm text-muted leading-relaxed">
@@ -391,7 +399,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
           )}
 
           {/* 3b. No saved session / logged out: QR or pairing code */}
-          {!isConnected && !isStarting && !isWaitingQr && !isReconnecting && needsPairing && (
+          {!isConnected && !isStarting && !isWaitingQr && !isReconnecting && !isConsentRequired && needsPairing && (
             <div className="flex flex-col gap-4 w-full" data-tour="connection-pairing">
               <SegmentedControl
                 aria-label={t("connection")}
@@ -473,6 +481,15 @@ export const ConnectionView: FC<ConnectionViewProps> = ({ status, onRefresh, onS
           )}
         </div>
       </Card>
+
+      {isConsentRequired && (
+        <Card className="flex flex-col items-start gap-4">
+          <p className="text-sm text-text-main">{consentReasonText(status?.reason, t)}</p>
+          <Button variant="primary" onClick={onReviewTerms}>
+            {t("legalReviewTerms")}
+          </Button>
+        </Card>
+      )}
 
       {/* Starting / Linking Progress Feedback Card */}
       {isStarting && (
