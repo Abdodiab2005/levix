@@ -1,0 +1,255 @@
+import { useState, type FormEvent } from "react";
+import { Button, Field, Input } from "../components/ui";
+import { PasswordField, type GatewayKey, type GatewayState, type GatewayText } from "./main";
+import { gatewayTranslations } from "../i18n/gateway.generated";
+
+type Result = {
+  ok?: boolean;
+  reason?: string;
+  retryAfter?: number;
+  attemptsLeft?: number;
+  message?: string;
+};
+type ErrorState = { key: GatewayKey; vars?: Record<string, string | number>; raw?: string };
+
+async function postJson(url: string, body: object): Promise<Result> {
+  const response = await fetch(url, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const result = (await response.json()) as Result;
+  const retry = Number(response.headers.get("Retry-After"));
+  if (!result.retryAfter && Number.isFinite(retry) && retry > 0) result.retryAfter = retry;
+  return result;
+}
+
+export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
+  const [reset, setReset] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ErrorState | null>(null);
+  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [done, setDone] = useState(false);
+  const showError = (key: GatewayKey, vars?: Record<string, string | number>, raw?: string) =>
+    setError({ key, vars, raw });
+  const send = async (channel: string) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await postJson("/reset/request", {
+        channel,
+        lang: document.documentElement.lang,
+      });
+      if (result.ok) setSent(true);
+      else {
+        const keys: Record<string, GatewayKey> = {
+          no_session: "resetErrNoSession",
+          send_failed: "resetErrSendFailed",
+          no_email: "resetErrNoEmail",
+          unverified: "resetErrUnverified",
+          locked: "resetErrLocked",
+          unavailable: "resetErrUnavailable",
+          invalid: "resetErrInvalid",
+        };
+        if (
+          result.reason === "throttled" ||
+          (result.reason === "rate_limited" && result.retryAfter)
+        )
+          showError("resetErrThrottled", { n: result.retryAfter || 60 });
+        else
+          showError(
+            keys[result.reason || ""] ||
+              (result.reason === "rate_limited" ? "resetErrRateLimited" : "resetErrStart"),
+          );
+      }
+    } catch {
+      showError("resetErrServer");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const complete = async (event: FormEvent) => {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await postJson("/reset/confirm", { code, password, confirm });
+      if (result.ok) {
+        setDone(true);
+        showError("resetDone");
+        window.setTimeout(() => {
+          window.location.href = "/";
+        }, 900);
+      } else if (result.reason === "wrong_code") {
+        showError(
+          "resetErrWrongCode",
+          result.attemptsLeft ? { n: result.attemptsLeft } : undefined,
+        );
+      } else if (
+        ["address_changed", "expired", "no_pending", "too_many_attempts"].includes(
+          result.reason || "",
+        )
+      ) {
+        showError("resetErrExpired");
+        setSent(false);
+      } else if (result.reason === "locked") {
+        showError("resetErrLocked");
+        setSent(false);
+      } else if (result.reason === "throttled")
+        showError("resetErrThrottled", { n: result.retryAfter || 60 });
+      else if (result.reason === "mismatch") showError("resetErrMismatch");
+      else if (result.reason === "invalid_password")
+        showError("resetErrInvalidPassword", undefined, result.message);
+      else showError("resetErrFailed");
+    } catch {
+      showError("resetErrServer");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return reset ? (
+    <>
+      <header>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setReset(false);
+            setSent(false);
+            setError(null);
+          }}
+        >
+          {t("backToSignIn")}
+        </Button>
+        <p className="mt-4 text-sm text-brand-cyan">{t("resetEyebrow")}</p>
+        <h1 className="text-2xl font-bold">{t("resetTitle")}</h1>
+        <p className="text-muted">
+          {t(
+            state.recoveryEmailVerified && state.recoveryEmail
+              ? "resetSubtitleChannels"
+              : "resetSubtitle",
+            { brand: state.brand.name },
+          )}
+        </p>
+      </header>
+      {!sent && !done && (
+        <div className="space-y-3">
+          <Button
+            variant="primary"
+            className="w-full"
+            disabled={busy}
+            onClick={() => send("whatsapp")}
+          >
+            {t("resetSend")}
+          </Button>
+          {state.recoveryEmailVerified && state.recoveryEmail && (
+            <>
+              <Button className="w-full" disabled={busy} onClick={() => send("email")}>
+                {t("resetSendEmail")}
+              </Button>
+              <p className="text-sm text-muted">
+                {t("resetEmailHint")} <strong dir="ltr">{state.recoveryEmail}</strong>
+              </p>
+            </>
+          )}
+        </div>
+      )}
+      {sent && !done && (
+        <form onSubmit={complete} className="space-y-4">
+          <Field label={t("resetCodeLabel")} htmlFor="reset-code">
+            <Input
+              id="reset-code"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              required
+              placeholder={t("resetCodePlaceholder")}
+            />
+          </Field>
+          <PasswordField
+            id="reset-password"
+            name="password"
+            label={t("newPassword")}
+            minLength={state.minLength}
+            autoComplete="new-password"
+            value={password}
+            onChange={setPassword}
+            t={t}
+          />
+          <PasswordField
+            id="reset-confirm"
+            name="confirm"
+            label={t("repeatPassword")}
+            minLength={state.minLength}
+            autoComplete="new-password"
+            value={confirm}
+            onChange={setConfirm}
+            t={t}
+          />
+          <Button variant="primary" type="submit" className="w-full" disabled={busy}>
+            {t("resetSubmit")}
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full"
+            onClick={() => {
+              setSent(false);
+              setCode("");
+              setError(null);
+            }}
+          >
+            {t("resetChooseChannel")}
+          </Button>
+        </form>
+      )}
+      {error && (
+        <p role="alert" className="text-danger">
+          {error.raw && document.documentElement.lang === "en"
+            ? error.raw
+            : t(error.key, error.vars)}
+          {error.key === "resetErrWrongCode" && error.vars?.n
+            ? ` ${t("resetErrAttemptsLeft", error.vars)}`
+            : ""}
+        </p>
+      )}
+    </>
+  ) : (
+    <>
+      <header>
+        <p className="text-sm text-brand-cyan">{t("secureAccess")}</p>
+        <h1 className="text-2xl font-bold">{t("welcomeBack")}</h1>
+        <p className="text-muted">{t("loginSub", { brand: state.brand.name })}</p>
+      </header>
+      <form action="/login" method="post" className="space-y-5">
+        <PasswordField
+          id="login-password"
+          name="password"
+          label={t("passwordLabel")}
+          minLength={0}
+          autoComplete="current-password"
+          t={t}
+        />
+        <Button type="submit" variant="primary" className="w-full">
+          {t("openWorkspace")}
+        </Button>
+      </form>
+      {state.error && (
+        <p role="alert" className="text-danger">
+          {state.error.code && state.error.code in gatewayTranslations.en
+            ? t(state.error.code as GatewayKey)
+            : state.error.message}
+        </p>
+      )}
+      <Button variant="ghost" onClick={() => setReset(true)}>
+        {t("forgotPassword")}
+      </Button>
+    </>
+  );
+}

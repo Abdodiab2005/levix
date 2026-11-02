@@ -189,6 +189,12 @@ export function renderGatewayDict(catalog) {
   return `  // ${GENERATED_BY}\n  var DICT = ${renderJs(obj, 2)};`;
 }
 
+export function renderGatewayTranslations(catalog) {
+  const obj = {};
+  for (const code of gatewayLocales(catalog)) obj[code] = catalog.bundles[code].gateway;
+  return `// ${GENERATED_BY}\nexport const gatewayTranslations = ${renderJs(obj, 0)} as const;\n`;
+}
+
 export function applyGatewayMarkers(source, dict) {
   const start = source.indexOf(GATEWAY_START);
   const end = source.indexOf(GATEWAY_END);
@@ -293,7 +299,7 @@ export function renderLocalesConfig(catalog) {
   for (const locale of localeEntries(catalog)) {
     lines.push(`    <locale android:name="${escapeAttr(locale.code)}"/>`);
   }
-  lines.push('</locale-config>');
+  lines.push("</locale-config>");
   return `${lines.join("\n")}\n`;
 }
 
@@ -320,6 +326,7 @@ export function renderGenerated(catalog, gatewaySource) {
   }
   if (gatewayLocales(catalog).length) {
     if (typeof gatewaySource !== "string") throw new Error("public/gateway-i18n.js is missing");
+    files["frontend/src/i18n/gateway.generated.ts"] = renderGatewayTranslations(catalog);
     files["public/gateway-i18n.js"] = applyGatewayMarkers(
       gatewaySource,
       renderGatewayDict(catalog),

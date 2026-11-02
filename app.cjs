@@ -219,17 +219,56 @@ function isLocalRequest(req) {
   return isDirectLocalRequest(req, { proxyConfigured: PROXY_CONFIGURED });
 }
 
+function renderGateway(req, res, view, locals, status = 200) {
+  const shell = assetPath("public", "dashboard", "gateway.html");
+  if (!fs.existsSync(shell)) return res.status(status).render(view, locals);
+  const state = {
+    page: view,
+    error: locals.error ? { code: locals.errorCode || null, message: locals.error } : null,
+    minLength: locals.minLength ?? secrets.MIN_PASSWORD_LENGTH,
+    needsCode: view === "setup" && locals.needsCode === true,
+    recoveryEmail: view === "login" ? (locals.recoveryEmail ?? null) : null,
+    recoveryEmailVerified: view === "login" && locals.recoveryEmailVerified === true,
+    ...(view === "qr" ? { qr: locals.qr } : {}),
+    brand: app.locals.brand,
+  };
+  const json = JSON.stringify(state).replace(
+    /[<>&\u2028\u2029]/g,
+    (char) =>
+      ({
+        "<": "\\u003c",
+        ">": "\\u003e",
+        "&": "\\u0026",
+        "\u2028": "\\u2028",
+        "\u2029": "\\u2029",
+      })[char],
+  );
+  const html = fs
+    .readFileSync(shell, "utf8")
+    .replace(
+      "</head>",
+      () => `<script id="levix-gateway-state" type="application/json">${json}</script></head>`,
+    );
+  return res.status(status).type("html").send(html);
+}
+
 // `error` is { code, message } or null: `message` is the English the page
 // renders by default, `code` is the stable key public/gateway-i18n.js turns
 // into the reader's language. A string is still accepted for callers that
 // have no code to offer.
 function renderSetup(req, res, error, status = 200) {
-  res.status(status).render("setup", {
-    error: error ? error.message || error : null,
-    errorCode: error?.code ?? null,
-    needsCode: !isLocalRequest(req),
-    minLength: secrets.MIN_PASSWORD_LENGTH,
-  });
+  renderGateway(
+    req,
+    res,
+    "setup",
+    {
+      error: error ? error.message || error : null,
+      errorCode: error?.code ?? null,
+      needsCode: !isLocalRequest(req),
+      minLength: secrets.MIN_PASSWORD_LENGTH,
+    },
+    status,
+  );
 }
 
 app.get("/setup", noStore, (req, res) => {
@@ -328,13 +367,13 @@ app.get("/", noStore, (req, res) => {
     }
     return res.render("dashboard");
   }
-  return res.render("login", loginPageLocals(null, null));
+  return renderGateway(req, res, "login", loginPageLocals(null, null));
 });
 
 app.get("/login", noStore, (req, res) => {
   if (!secrets.hasDashboardPassword()) return res.redirect("/setup");
   if (isPanelSessionValid(req.session)) return res.redirect("/");
-  return res.render("login", loginPageLocals(null, null));
+  return renderGateway(req, res, "login", loginPageLocals(null, null));
 });
 
 app.post("/login", (req, res, next) => {
@@ -344,19 +383,29 @@ app.post("/login", (req, res, next) => {
   const retryAfter = blockedFor(peer);
   if (retryAfter) {
     res.set("Retry-After", String(retryAfter));
-    return res
-      .status(429)
-      .render("login", loginPageLocals("Too many attempts. Try again later.", "tooManyAttempts"));
+    return renderGateway(
+      req,
+      res,
+      "login",
+      loginPageLocals("Too many attempts. Try again later.", "tooManyAttempts"),
+      429,
+    );
   }
 
   if (!secrets.verifyDashboardPassword(req.body?.password)) {
     recordFailure(peer);
     logger.warn({ ip: peer }, "[dashboard] Failed login attempt");
-    return res.status(401).render("login", {
-      ...loginPageLocals(null, null),
-      error: "Incorrect Password",
-      errorCode: "incorrectPassword",
-    });
+    return renderGateway(
+      req,
+      res,
+      "login",
+      {
+        ...loginPageLocals(null, null),
+        error: "Incorrect Password",
+        errorCode: "incorrectPassword",
+      },
+      401,
+    );
   }
 
   clearAttempts(peer);
@@ -463,7 +512,7 @@ app.post("/logout", (req, res, next) => {
 
 app.get("/qr", requireLoginPage, noStore, (req, res) => {
   const qr = getQrCode();
-  res.render("qr", { qr: qr || "" });
+  renderGateway(req, res, "qr", { qr: qr || "" });
 });
 
 // Unlink / restart / everything else live on the dashboard API
@@ -495,4 +544,5 @@ module.exports = {
   installFinalHandlers,
   disconnectInvalidPanelSockets,
   disconnectSessionSockets,
+  renderGateway,
 };

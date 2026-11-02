@@ -49,6 +49,8 @@ Use `primary` for the screen's main action, `secondary` for a named alternate, `
 
 ### IconButton
 
+`LinkButton` is the same button surface for navigation. It renders an anchor, so a link never nests a button.
+
 Icon only. `label` is required. Same variants and sizes. `pressed` sets `aria-pressed` for toggle-style tools (auto-scroll, active filter).
 
 ```tsx

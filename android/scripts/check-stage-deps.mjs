@@ -1,6 +1,7 @@
 // Prove the staged tree can load every package its own code names.
 // node_modules is not scanned: those files belong to dependencies, and a
-// missing package there is that package's problem, not the app's.
+// missing package there is that package's problem, not the app's. The stage's
+// top-level public/ is browser output, never loaded by Node.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { isBuiltin } from "node:module";
 import { join, relative, sep } from "node:path";
@@ -202,13 +203,14 @@ function packageName(specifier) {
   return slash === -1 ? specifier : specifier.slice(0, slash);
 }
 
-function sourceFiles(dir, out) {
+function sourceFiles(stageDir, dir, out) {
   for (const ent of readdirSync(dir, { withFileTypes: true })) {
     if (ent.isSymbolicLink()) continue;
     const full = join(dir, ent.name);
     if (ent.isDirectory()) {
-      if (ent.name === "node_modules") continue;
-      sourceFiles(full, out);
+      // Browser bundles are never loaded by Node. Keep nested public folders in the scan.
+      if (ent.name === "node_modules" || relative(stageDir, full) === "public") continue;
+      sourceFiles(stageDir, full, out);
       continue;
     }
     if (ent.isFile() && /\.(?:mjs|cjs|js)$/.test(ent.name)) out.push(full);
@@ -223,7 +225,7 @@ function packageJson(stageDir, name) {
 // Packages the staged app code loads, and which of them are absent.
 export function scanStage(stageDir) {
   const byPackage = new Map();
-  for (const file of sourceFiles(stageDir, [])) {
+  for (const file of sourceFiles(stageDir, stageDir, [])) {
     const rel = relative(stageDir, file).split(sep).join("/");
     const text = readFileSync(file, "utf8");
     for (const specifier of collectSpecifiers(text)) {

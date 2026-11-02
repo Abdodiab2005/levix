@@ -142,6 +142,7 @@ export async function startServer({
   trust,
   host,
   routes = false,
+  assetRoot,
   timeoutMs = 20000,
 } = {}) {
   const { spawn } = await import("node:child_process");
@@ -149,6 +150,7 @@ export async function startServer({
   if (trust !== undefined) args.push("--trust", String(trust));
   if (host) args.push("--host", host);
   if (routes) args.push("--routes");
+  if (assetRoot) args.push("--asset-root", assetRoot);
 
   const child = spawn(process.execPath, args, { stdio: ["ignore", "pipe", "pipe"] });
   let stderr = "";

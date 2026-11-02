@@ -26,9 +26,9 @@ fi
 
 DASHBOARD="$ROOT/public/dashboard"
 
-# Every /dashboard/assets file index.html pulls in, as a path under public/.
+# Every /dashboard/assets file either HTML entry pulls in, as a path under public/.
 dashboard_assets() {
-  grep -o '/dashboard/assets/[A-Za-z0-9._-]*' "$DASHBOARD/index.html" | sort -u
+  grep -oh '/dashboard/assets/[A-Za-z0-9._-]*' "$DASHBOARD/index.html" "$DASHBOARD/gateway.html" | sort -u
 }
 
 # The panel is a Vite build: index.html carries no styling of its own and only
@@ -39,9 +39,17 @@ if [ ! -f "$DASHBOARD/index.html" ]; then
   echo "missing $DASHBOARD/index.html — the frontend build did not produce a dashboard" >&2
   exit 1
 fi
+if [ ! -f "$DASHBOARD/gateway.html" ]; then
+  echo "missing $DASHBOARD/gateway.html — the frontend build did not produce a gateway" >&2
+  exit 1
+fi
 
 if [ -z "$(dashboard_assets | grep '\.css$' || true)" ]; then
   echo "$DASHBOARD/index.html links no stylesheet — refusing to package a styleless panel" >&2
+  exit 1
+fi
+if ! grep -q '/dashboard/assets/[A-Za-z0-9._-]*\.css' "$DASHBOARD/gateway.html"; then
+  echo "$DASHBOARD/gateway.html links no stylesheet — refusing to package a styleless gateway" >&2
   exit 1
 fi
 
@@ -98,7 +106,7 @@ node "$ROOT/android/scripts/zip-tree.mjs" "$STAGE" "$OUT"
 # sed both trims that and drains the pipe — piping into `grep -q` instead would
 # hand zip a SIGPIPE on the first match and, under pipefail, read as a failure.
 listing="$(zip -sf "$OUT" | sed 's/^[[:space:]]*//')"
-for ref in /dashboard/index.html $(dashboard_assets); do
+for ref in /dashboard/index.html /dashboard/gateway.html $(dashboard_assets); do
   if ! grep -qxF "public$ref" <<<"$listing"; then
     echo "$OUT is missing public$ref" >&2
     exit 1

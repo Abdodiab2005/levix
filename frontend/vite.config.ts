@@ -231,6 +231,10 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: false,
     rollupOptions: {
+      input: {
+        index: path.resolve(__dirname, "index.html"),
+        gateway: path.resolve(__dirname, "gateway.html"),
+      },
       output: {
         entryFileNames: "assets/[name]-[hash].js",
         chunkFileNames: "assets/[name]-[hash].js",
