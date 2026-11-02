@@ -53,7 +53,7 @@ interface SecondaryAction {
 
 interface ConnectionViewProps {
   status: SessionStatus | null;
-  onRefresh?: () => Promise<void>;
+  onRefresh?: () => Promise<unknown>;
   onStatusUpdate?: (status: Partial<SessionStatus>) => void;
   onReviewTerms: () => void;
 }

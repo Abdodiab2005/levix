@@ -1209,7 +1209,7 @@
   "legalWebsite": "Sitio web",
   "legalReadAccept": "He leído y acepto los Términos de Uso y el Aviso de Privacidad",
   "legalAccept": "Aceptar",
-  "legalLoadError": "No se pudieron cargar los Términos. Cierra y vuelve a abrir este cuadro para intentarlo de nuevo.",
+  "legalLoadError": "No se pudieron cargar los Términos. Inténtalo de nuevo.",
   "legalAcceptError": "No se pudo guardar tu aceptación. Inténtalo de nuevo.",
   "legalReviewTerms": "Revisar Términos"
 }
