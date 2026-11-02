@@ -34,7 +34,8 @@ ok(
 ok("another method is reachable", login.includes('t("resetChooseChannel")') && login.includes("setSent(false)"));
 ok(
   "confirmation submits code and passwords",
-  login.includes('postJson("/reset/confirm", { code, password, confirm })'),
+  login.includes('postJson("/reset/confirm", values)') &&
+    ["code", "password", "confirm"].every((name) => login.includes(`fields.get("${name}")`)),
 );
 ok("confirmation button is disabled while busy", /type="submit" className="w-full" disabled=\{busy\}/.test(login));
 ok(
@@ -46,7 +47,9 @@ ok("wrong code shows attempts left", login.includes('t("resetErrAttemptsLeft", e
 ok(
   "expired or changed code returns to channel choice",
   login.includes('"address_changed"') &&
-    login.includes('showError("resetErrExpired")') && login.includes("setSent(false)"),
+    login.includes('showError(RESET_REASON_KEYS[result.reason || ""])') &&
+    login.includes('address_changed: "resetErrExpired"') &&
+    login.includes("setSent(false)"),
 );
 ok("failed requests release busy state", (login.match(/finally \{\s*setBusy\(false\);/g) || []).length === 2);
 ok("offline requests show server error", (login.match(/showError\("resetErrServer"\)/g) || []).length === 2);
