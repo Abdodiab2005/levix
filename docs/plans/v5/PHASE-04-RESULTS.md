@@ -1,8 +1,10 @@
 # Phase 04: React gateway and Terms consent
 
-Status: 04a and 04b IMPLEMENTED 2026-11-02 on `main` 407bf1e, in review. Owner decisions Q-03, Q-04, Q-05 and Q-17 recorded
-the same day (ADR-006, ADR-019, ADR-020). This file holds the re-audit, the plan and, later, the
-results. The contract lives in `LEGAL_CONSENT_CONTRACT.md`.
+Status: IN REVIEW, NOT MERGED. Slices 04a and 04b are implemented in open PRs #126 and #127, which
+were updated after the owner's review on 2026-11-02 (section 3). Slices 04c (#128) and 04d
+(#129) are implemented in new open PRs; 04e (#130) is a draft. No Phase 04 PR is merged, so nothing in this phase
+ships on `main` (407bf1e). Owner decisions Q-03, Q-04, Q-05 and Q-17 are recorded in ADR-006,
+ADR-019 and ADR-020. The contract lives in `LEGAL_CONSENT_CONTRACT.md`.
 
 ## 1. Re-audit of the current tree (main 407bf1e, 2026-11-02)
 
@@ -99,38 +101,128 @@ Revert 04a and 04b together. No data cleanup is needed: a build without the gate
 
 ## 3. Results
 
-### 3.1 Who wrote what (04a and 04b)
+Evidence labels: PASS, FAIL, NOT RUN or BLOCKED, each with the command, platform, commit and date.
+"Local" means Linux x64, Node v24.22.2, npm 11.19.1. CI means the `ci.yml` workflow on GitHub.
 
-| Branch | Content | Implementer |
+### 3.1 Pull requests (state on 2026-11-02)
+
+| PR | Branch | Base | Head | CI on that head | Merged |
+| --- | --- | --- | --- | --- | --- |
+| #125 plan | `docs/v5-phase-04-plan` | `main` | 32a4b59 | PASS 7/7, run 41451742790 | no |
+| #126 04a | `feat/04a-consent-gate` | #125 | 51d0051 | PASS 7/7, run 41494231560 | no |
+| #127 04b | `feat/04b-consent-ui` | #126 | 898193f plus this documents commit | PASS 7/7 on 898193f, run 41494234796 | no |
+| #128 04c | `feat/04c-remote-terms` | #127 | 4267edb | runs on the PR | no |
+| #129 04d | `feat/04d-react-gateway` | #127 | 048f233 | runs on the PR | no |
+| #130 04e | `feat/04e-ejs-removal` | #129 | see #130 | runs on the PR | no (draft) |
+| levix-ui #23 | `feat/legal-release-endpoint` | `main` | 7d52df0 | not in CI; local gates in 3.4 | no (draft) |
+
+The earlier heads also passed CI 7/7: #126 f34a2bd (run 41451749569) and #127 65b793e (run
+41451757047). The seven jobs are `tests`, `package installs and boots` (tarball), `executable
+runs` on ubuntu, macos and windows (SEA), `container persists its volume` (Docker) and `android
+apk builds` (unit tests, debug and release APKs, AAB).
+
+### 3.2 Who wrote what
+
+| Change | Commit | Implementer |
 | --- | --- | --- |
-| `feat/04a-consent-gate` | first draft of `src/legal/`, the gate and `levix terms` (commit 8efc99b) | orchestrator draft, kept on the owner's instruction |
-| `feat/04a-session` | gate fixes, `tests/session-consent.test.mjs`, allowing checks in existing tests | Codex |
-| `feat/04a-legal` | CLI fixes, `tests/legal-consent.test.mjs`, `levix terms` and headless tests, review fixes | Grok |
-| `feat/04b-panel` | panel API, React dialog, Connection card, 17 dashboard strings | Codex |
-| `feat/04b-android` | home card, status sheet, tile, notification and alert, 6 strings | OpenCode (deepseek-v4.1-flash-free) |
-| `feat/04b-legal-i18n` | Terms and Privacy Notice in `ar`, `pt-BR`, `es-419` | Antigravity (Claude Sonnet 5.5) |
+| 04a first draft: `src/legal/`, the gate, `levix terms` | 8efc99b | orchestrator draft, kept on the owner's instruction |
+| 04a gate fixes and session tests | `feat/04a-session` | Codex |
+| 04a CLI fixes, consent, `levix terms` and headless tests | `feat/04a-legal` | Grok |
+| 04b panel API, dialog, Connection card | `feat/04b-panel` | Codex |
+| 04b Android home card, sheet, tile, notification | `feat/04b-android` | OpenCode (deepseek-v4.1-flash-free) |
+| 04b documents in `ar`, `pt-BR`, `es-419` | `feat/04b-legal-i18n` | Antigravity (Claude Sonnet 5.5) |
+| Review fix A: platform-aware release identity | 51d0051 | Grok |
+| Review fix C: dialog retry, stale guards, refresh after accept | 5e120d4 | Codex |
+| Review fix D: Android alert policy | 263a35c | OpenCode (deepseek-v4.1-flash-free) |
+| Review fix E: factual corrections to the four documents | 1d34a86 | Antigravity (Claude Sonnet 5.5); review by Antigravity, read-only |
+| Review fix B: these documents | on #127 | orchestrator |
+| 04c signed remote Terms client | c167565 | Grok |
+| 04d React gateway | e008ad8 | Codex |
+| levix-ui release endpoint | 7d52df0 | OpenCode (glm-5.3-flash-free) |
 
-A read-only Codex review of both branches found 0 P1, 3 P2 and 3 P3 defects. All six are fixed:
-the strict record shape, the own-key locale lookup, the Android alert lifecycle, the attention colour
-and two test weaknesses.
+The orchestrator wrote the briefs, ran every gate and reviewed every diff. The first review round
+(before 2026-11-02 evening) was a read-only Codex review: 0 P1, 3 P2, 3 P3, all fixed in f34a2bd.
 
-### 3.2 Gates (local, Linux x64, Node v24.22.2, 2026-11-02)
+### 3.3 Owner review findings and fixes (2026-11-02)
 
-| Gate | 04a f34a2bd | 04b fe7ae34 |
-| --- | --- | --- |
-| `npm test` | PASS, 8665 checks, 0 failed | PASS, 8712 checks, 0 failed |
-| `npm run lint` | PASS, 0 errors | PASS, 0 errors |
-| `npm run i18n:check` | PASS | PASS |
-| `npm run build:frontend` | not changed | PASS |
-| Android `:app:testDebugUnitTest` | not changed | PASS, 75 tests |
-| Android `:app:assembleDebug` | not changed | PASS, arm64 64,733,918 B, armv7 59,818,752 B |
-| CI | NOT RUN | NOT RUN |
-| Device QA (Android consent flow, update path) | NOT RUN | NOT RUN |
-| Docker, SEA and tarball validators | NOT RUN | NOT RUN |
+| Finding | Problem | Fix | Proof |
+| --- | --- | --- | --- |
+| A, high | Consent compared `package.json` only. A Play update with a new `versionCode` and the same `package.json` kept the old acceptance. | Release identity `<version>+android.<versionCode>` from `levix-build.json`, written into the app archive by the stage script from Gradle's `versionCode`; Gradle re-stages on a bump; a broken file fails closed. npm, Docker, SEA and headless keep the plain version. | `tests/release-identity.test.mjs` 42 PASS; `tests/legal-consent.test.mjs` scenarios for bump, downgrade, desktop update, restart, unlink, reset, plain record on Android, invalid and unreadable file; `levix-app.zip` holds `{"schema":1,"platform":"android","versionCode":69}` |
+| B | This file claimed "implemented on `main`" and "CI NOT RUN"; the gate table named fe7ae34 while the PR head was 65b793e. | Rewritten: PR state, CI runs, commits, and evidence labels. | this section |
+| C | The dialog had no retry, a stale socket snapshot could hide a later `consent_required`, and acceptance waited for a socket push. | Retry, request ids for load and accept, a backend refresh after accept, an override that ends when the socket moves on, a labelled spinner. | `tests/legal-dialog.test.mjs` 13 PASS; headless Chrome run, 25/25 PASS (3.5) |
+| D | Offline and WhatsApp-failure alerts came back every 30 s after a dismissal and stayed after the condition ended without `connected`. | `AlertPolicy`: post once per condition, cancel when it ends. | `AlertPolicyTest` 12 PASS |
+| E | The documents described the app wrongly in 10 places (one BLOCKER: uninstall on non-Android). | Factual corrections in four locales, no obligation changed; open legal questions listed. | `LEGAL_COPY_REVIEW.md` sections 3 and 7 |
 
-### 3.3 Open items
+### 3.4 Gates
 
-- Legal review of the English text and the three translations (`LEGAL_COPY_REVIEW.md`).
-- ChatGPT review of the new `pt-BR` and `es-419` dashboard and Android strings (Q-19); both files
-  are `draft` in `i18n/review.json`.
-- 04c waits for the owner's signing key and the `levix-ui` endpoint; 04d and 04e follow.
+| Gate | 04a 51d0051 | 04b 898193f | 04c 4267edb | 04d 048f233 | levix-ui 7d52df0 |
+| --- | --- | --- | --- | --- | --- |
+| `npm test` | PASS (CI) | PASS local, 8786 checks, 0 failed | PASS local, 8911, 0 failed | PASS local, 9007, 0 failed | PASS local, 80 tests |
+| `npm run lint` | PASS (CI) | PASS local, 0 errors | PASS local, 0 errors | PASS local, 0 errors | PASS local (eslint, changed files) |
+| `npm run i18n:check` | PASS (CI) | PASS local | PASS local | PASS local | n/a |
+| `npm run build:frontend` | n/a | PASS local | PASS local | PASS local | `npm run build` PASS local |
+| Android `:app:testDebugUnitTest` | PASS local, 74 tests | PASS local, 87 tests | PASS local, 87 | PASS local, 87 | n/a |
+| Android `:app:assembleDebug` | PASS local | PASS local | PASS local | PASS local | n/a |
+| Tarball, SEA (3 OS), Docker, APK and AAB | PASS (CI run 41494231560) | PASS (CI run 41494234796) | CI on #128 | CI on #129 | n/a |
+| Android device QA | NOT RUN | NOT RUN | NOT RUN | NOT RUN | n/a |
+| Live endpoint smoke | n/a | n/a | n/a | n/a | NOT RUN |
+
+Local Android builds are debug builds; their sizes are not release or Play sizes.
+
+### 3.5 Manual and headless QA
+
+- Consent dialog, headless Chrome (`/usr/bin/google-chrome`, Linux) against a scratch Levix built
+  from 5e120d4, 2026-11-02: PASS 25/25. First install shows `terms_not_accepted`; Start leaves the
+  session in `consent_required`; the dialog opens; Accept stays disabled until the box is
+  checked; Escape closes it; the Connection card reopens it; the state label reads "Terms
+  acceptance required"; a blocked request shows the load error and Retry loads the document; a
+  tampered accept body gets 409, the changed notice and a cleared box, and the session stays
+  gated; Arabic renders `rtl`; accepting in Arabic records `locale: "ar"` with the shown version,
+  the session leaves `consent_required` at once, and the dialog stays closed.
+- React gateway, headless Chrome against 04d, 2026-11-02: PASS 23/24. Setup, password mismatch,
+  sign-in, sign-out, login, 401 on a wrong password, blur on window blur, blank print, recovery by
+  WhatsApp with no session, Arabic `rtl`, the QR page signed in, and `/qr` signed out all pass.
+  The failed check is the runtime "no remote resource" check: the dashboard SPA at `/` loads
+  Google Fonts (`LEGAL_COPY_REVIEW.md` section 4). A static check of the built `gateway.html`
+  and its gateway assets finds no remote reference.
+- Incident: in the first dialog run (2026-11-02 17:28 UTC) the script set the WhatsApp proxy with
+  a wrong request body, so after Accept the scratch Levix opened one unpaired socket to WhatsApp's
+  servers for about 2 seconds and received a pairing QR. No number was used, nothing was paired,
+  and the process was stopped. The script now seeds the proxy (`socks5://127.0.0.1:9`) in the
+  database before boot and aborts before Start unless the proxy is in effect; later runs ended
+  in `ECONNREFUSED 127.0.0.1:9` with no QR.
+- Not a device test: none of this ran in the Android WebView.
+
+### 3.6 Phase 04 slices after the review
+
+| Slice | PR | Content | Review | Local gates | State |
+| --- | --- | --- | --- | --- | --- |
+| 04c signed remote Terms | #128 (`feat/04c-remote-terms`, 4267edb) | Ed25519 envelope check, HTTPS fetch with no redirect, 5 s timeout and size cap, atomic verified cache, no downgrade, owner script, contract section 8 | Codex, read-only: no signature bypass; 3 P1 (owner script, test cleanup), 2 P2 (short write, stale memo), 1 P3; all fixed in 4267edb | PASS on 4267edb: `npm test` 8911 checks, 0 failed (`legal-remote` 113); lint, i18n, frontend build; Android 87 tests and debug build | Implemented and shipped off (`TRUSTED_KEYS` empty). BLOCKED on the owner: key, signed envelope, levix-ui #23 deploy, `PRIVACY.md` row, new notice version |
+| levix-ui endpoint | levix-ui #23 (draft, 7d52df0) | `GET /api/legal/v1/release` serves the committed envelope, 404 until one exists, 503 on a bad shape | orchestrator | PASS: `npm test` 80, `tsc`, eslint, `npm run build` | Draft; deploy is harmless (404) |
+| 04d React gateway | #129 (`feat/04d-react-gateway`, 048f233) | Login, setup, QR and recovery in React with unchanged server checks; EJS fallback kept | Grok, read-only: 0 P1, 3 P2 (no recovery timeout, stale confirm state, stylesheet gate), 4 P3; all fixed in bb33c6f; root tests made free of `react` in 048f233 | PASS on 048f233: `npm test` 9007 checks, 0 failed; lint, i18n, frontend build; Android 87 tests and debug build; headless Chrome 23/24 (3.5) | Implemented; Android WebView QA NOT RUN |
+| 04e EJS removal | #130 (`feat/04e-ejs-removal`, draft) | EJS views, legacy gateway scripts and the `ejs` dependency removed; code-owned static fallback when the build is missing; docs | orchestrator | see the PR | Draft. Merge only after Android WebView QA of 04d (R-27) |
+
+04e was started by Antigravity, which stopped after about three minutes with no report; OpenCode
+then hit its free-tier limit at once, and Codex finished it from the partial diff.
+
+### 3.7 Not run, blocked and open
+
+- NOT RUN: Android device QA of the consent flow, the update path (install a build with a higher
+  `versionCode` over a build that has an acceptance) and the alerts; Android WebView QA of the
+  React gateway on the oldest supported WebView (R-27); a live smoke of the levix-ui endpoint.
+- NOT RUN: ChatGPT language review (Q-19) of the new `pt-BR` and `es-419` strings. Dashboard keys
+  `consent_required` and `legal*` (17), Android keys `status_terms`, `notif_terms_title`,
+  `notif_terms_text`, `home_terms`, `home_terms_body`, `home_review_terms`, and the `pt-BR` and
+  `es-419` legal documents. `i18n/review.json` keeps the four catalogs `draft`.
+- NOT RUN: human legal review (`LEGAL_COPY_REVIEW.md` section 7 lists 14 questions).
+- BLOCKED (owner): turning on the remote Terms client needs the owner's Ed25519 key generated
+  outside both repositories, the public key in `src/legal/keys.cjs`, a signed envelope committed
+  to levix-ui, the levix-ui endpoint deployed, a `PRIVACY.md` row and a new notice version.
+- Owner decisions: Google Fonts in the dashboard (self-host, system fonts, or disclose); whether a
+  translation must say that the English text prevails; aligning `PRIVACY.md` section 8 ("continued
+  use means acceptance") with Terms 7.1.
+- Compatibility: two non-Android builds with the same `package.json` version share one release
+  identity, for example a source checkout at different commits. Official releases always bump it.
+- Observation, not changed: the CI `tests` job comment says the suite talks to WhatsApp's servers
+  up to the pairing boundary, which the v5 rule "no live side effects" does not allow. This
+  predates Phase 04.

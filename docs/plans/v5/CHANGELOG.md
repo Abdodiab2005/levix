@@ -88,5 +88,11 @@
   endpoint.
 - 2026-11-02: 04a (consent gate, record, `levix terms`) and 04b (panel dialog, Android state, the
   documents in four locales) implemented by Codex, Grok, OpenCode and Antigravity from an
-  orchestrator draft. Codex review: 0 P1, 3 P2, 3 P3, all fixed. Local gates PASS
-  (`PHASE-04-RESULTS.md` section 3.2). CI and device QA NOT RUN.
+  orchestrator draft. Codex review: 0 P1, 3 P2, 3 P3, all fixed. Local gates PASS. CI PASS 7/7
+  on #125 32a4b59, #126 f34a2bd and #127 65b793e. Device QA NOT RUN.
+- 2026-11-02, owner review: release identity per platform (an Android `versionCode` bump asks
+  again), dialog retry and fresh state, Android alerts posted once per condition, factual
+  corrections to the four documents, and corrected results records. CI PASS 7/7 on #126 51d0051
+  and #127 898193f. 04c (signed remote Terms, shipped off, BLOCKED on the owner's key) in #128;
+  levix-ui endpoint in levix-ui #23 (draft); 04d React gateway and 04e EJS removal in their own
+  PRs. Nothing in Phase 04 is merged (`PHASE-04-RESULTS.md` section 3).

@@ -1,8 +1,9 @@
 # Legal consent contract (Phase 04)
 
-Status: sections 1 to 6 are the 04a contract (PENDING REVIEW until 04a merges). Section 7 is
-`PLANNED` for 04b. Section 8 is implemented and off, BLOCKED on the owner's signing key and the
-`levix-ui` endpoint. Decisions: ADR-006, ADR-019, ADR-020.
+Status: sections 1 to 6 are implemented in PR #126 (04a), section 7 in PR #127 (04b) and
+section 8 in PR #128 (04c). The PRs are open and not merged, so nothing here ships yet. The 04c
+client is off and BLOCKED on the owner's signing key and the `levix-ui` endpoint (levix-ui #23).
+Decisions: ADR-006, ADR-019, ADR-020.
 
 ## 1. Legal document
 
@@ -88,8 +89,8 @@ update that changes only `versionCode` asks again. A build file that is present 
 or parsed makes `consentStatus()` return `consent_unreadable`, and `recordAcceptance()` throws
 without writing.
 
-Two builds with the same `package.json` version and no `versionCode` — a source checkout at
-different commits, or a rebuilt Docker image — share one identity. Official releases always bump
+Two builds with the same `package.json` version and no `versionCode` share one identity, for
+example a source checkout at different commits or a rebuilt Docker image. Official releases always bump
 `package.json`; `.github/workflows/release.yml` refuses a tag that differs from it or from Android
 `versionName`.
 
@@ -132,7 +133,7 @@ All of them use the same lock and schema rule as `levix reset-password`: with Le
 write only when the database already has this build's schema. A running Levix picks up an
 acceptance within 5 seconds. No start flag and no environment variable can accept.
 
-## 7. Panel API (PLANNED, 04b)
+## 7. Panel API (04b, PR #127)
 
 - `GET /dashboard/api/legal/terms?locale=<locale>`: panel session required. Returns the current
   document for the locale (falling back to `en`), its `version`, `sha256`, the code-owned links and

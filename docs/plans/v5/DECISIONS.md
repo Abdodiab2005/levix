@@ -366,3 +366,10 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
 - Consequences: every Levix update stops WhatsApp at the next start until the operator accepts
   again. Android and Docker installs that update while unattended stay offline until somebody
   accepts; the Android notification and the panel say so.
+- Implementation note (2026-11-02, review fix): "application version" is the release identity in
+  `src/config/release.cjs`. npm, Docker, the single executable and headless use the
+  `package.json` version. An Android build adds `+android.<versionCode>` from `levix-build.json`,
+  which the stage script writes into the app archive from Gradle's `versionCode`. A Google Play
+  update that keeps `package.json` but changes `versionCode` therefore asks again. A restart or a
+  reinstall of the same APK keeps the acceptance. Two non-Android builds with the same
+  `package.json` version share one identity; `release.yml` makes every official release bump it.
