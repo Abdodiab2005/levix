@@ -74,3 +74,15 @@
   Android unit tests and debug and release builds PASS. Phase 03 COMPLETE for automated gates;
   device QA NOT RUN; 10 translation files marked draft for keys added after the review.
 
+## Phase 04: React gateway and Terms consent (started 2026-11-02)
+
+- Started on the owner's request on 2026-11-02, `main` 407bf1e.
+- Owner decisions: Q-03 option (a), Ed25519-signed remote Terms with a bundled offline fallback
+  (ADR-019); Q-04 options (a) and (c), interactive `levix terms` and a provisioning command, no
+  start flag (ADR-006); Q-05 option (a), a live connection stays up and the next start asks
+  (ADR-006); Q-17 overridden, consent belongs to the installation and is asked again after a
+  document change or an app update, never after unlink, relink, restart or password reset
+  (ADR-020).
+- Re-audit and plan in `PHASE-04-RESULTS.md`; contract in `LEGAL_CONSENT_CONTRACT.md`. Slices 04a
+  to 04e; 04a and 04b merge together; 04c is BLOCKED on the owner's signing key and the `levix-ui`
+  endpoint.

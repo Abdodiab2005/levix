@@ -80,8 +80,9 @@ phase or reverts a change. Owners are phases; the release owner is the project o
 ### Central Terms with local fallback (Phase 04)
 
 - Threats: tampered remote text; downgrade to an old version; script in content.
-- Controls: version and hash checked; signature or pinned-hash scheme decided in Phase 04; plain
-  text rendering only.
+- Controls: Ed25519 signature checked against a bundled public key (ADR-019); version and hash
+  checked; no downgrade below the bundled or cached release; plain text rendering only; links come
+  from code, never from the document.
 
 ### Restoring backups (Phase 02)
 

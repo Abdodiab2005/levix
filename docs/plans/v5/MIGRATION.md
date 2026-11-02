@@ -46,7 +46,7 @@ installs, SEA binaries, Docker volumes, headless servers and the Android app.
 | 02 | backup manifest format (file, not schema) | new file format | settings export format `version: 1` unchanged |
 | 03 | `bot_language` gains `pt-BR` and `es-419`; new AI reply language setting | setting | default keeps today's behaviour (AI follows the bot language) |
 | 03 | dashboard `localStorage.levix_lang` and Android AppCompat locale accept two more values | client storage | an unknown stored value falls back to `en` |
-| 04 | local Terms acceptance record outside `setting:*` | additive key or table | v4 users accept once; credentials untouched |
+| 04 | local Terms acceptance record `legal:acceptance` in `bot_settings`, outside `setting:*` | additive key, no migration | v4 users accept once; credentials untouched |
 | 05 | Reply Router and message settings | additive settings | defaults reproduce v4 routing |
 | 05 | permission keys aligned with command files (Q-08) | runtime-config data | only with owner approval; unknown keys keep falling back |
 | 07 | rules, processed-event keys, bounded message lookup | new tables | empty on upgrade; features off |
@@ -57,8 +57,10 @@ installs, SEA binaries, Docker volumes, headless servers and the Android app.
 
 1. The database migrates (after the Phase 02 backup hook).
 2. The session reaches `consent_required` until the operator accepts the current Terms (Phase 04).
-   Pairing credentials stay; after acceptance, a paired install resumes as it does today.
-3. Headless installs accept through the mechanism chosen in Q-04 before WhatsApp starts.
+   Pairing credentials stay; after acceptance, a paired install resumes as it does today. Every
+   later app update asks again (ADR-020).
+3. Headless installs accept with `levix terms`, or with `levix terms accept --terms-version <v>
+   --sha256 <hash>` when unattended (ADR-006).
 4. Language settings keep their v4 values.
 
 ## 5. Rollback
