@@ -1,4 +1,5 @@
 /* file: frontend/src/index.css */
+@import "./assets/fonts/fonts.css";
 @import "tailwindcss";
 
 @theme {
