@@ -14,6 +14,15 @@ const terms = require("./terms.cjs");
 
 const KEY = "legal:acceptance";
 const RECORD_SCHEMA = 1;
+const RECORD_KEYS = Object.freeze([
+  "schema",
+  "appVersion",
+  "termsVersion",
+  "sha256",
+  "locale",
+  "acceptedAt",
+  "via",
+]);
 const VIA = Object.freeze(["panel", "cli", "provision"]);
 
 const REASONS = Object.freeze({
@@ -52,11 +61,18 @@ function store() {
   return require("../db/store.cjs");
 }
 
+function isIsoUtcTimestamp(value) {
+  if (typeof value !== "string") return false;
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date.toISOString() === value;
+}
+
 function isRecord(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
   return (
-    value !== null &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
+    keys.length === RECORD_KEYS.length &&
+    RECORD_KEYS.every((key) => Object.hasOwn(value, key)) &&
     value.schema === RECORD_SCHEMA &&
     typeof value.appVersion === "string" &&
     value.appVersion.length > 0 &&
@@ -65,8 +81,7 @@ function isRecord(value) {
     typeof value.sha256 === "string" &&
     HASH_RE.test(value.sha256) &&
     terms.LOCALES.includes(value.locale) &&
-    typeof value.acceptedAt === "string" &&
-    !Number.isNaN(Date.parse(value.acceptedAt)) &&
+    isIsoUtcTimestamp(value.acceptedAt) &&
     VIA.includes(value.via)
   );
 }

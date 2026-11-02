@@ -76,6 +76,8 @@ section("bundled English document");
       : `${actual}; a text change needs a new version and a LEGAL_COPY_REVIEW.md entry`,
   );
   equal("documentFor uses the same hash", terms.documentFor("en").sha256, PINNED_BUNDLED_EN_SHA256);
+  equal("documentFor constructor is null", terms.documentFor("constructor"), null);
+  equal("resolveLocale __proto__ is en", terms.resolveLocale("__proto__"), "en");
 }
 
 // --- b. validateDocument refusals ----------------------------------------
@@ -299,8 +301,14 @@ section("consentStatus and recordAcceptance");
   store.saveBotSetting(consent.KEY, validRecord({ termsVersion: "2020-01-01" }));
   equal("changed termsVersion", consent.consentStatus().reason, "terms_changed");
 
-  store.saveBotSetting(consent.KEY, validRecord({ locale: "ar" }));
-  equal("locale the release lacks", consent.consentStatus().reason, "terms_changed");
+  store.saveBotSetting(consent.KEY, validRecord({ locale: "en" }));
+  const originalDocumentFor = terms.documentFor;
+  try {
+    terms.documentFor = (locale) => (locale === "en" ? null : originalDocumentFor(locale));
+    equal("locale the release lacks", consent.consentStatus().reason, "terms_changed");
+  } finally {
+    terms.documentFor = originalDocumentFor;
+  }
 
   store.saveBotSetting(consent.KEY, validRecord({ appVersion: "0.0.1" }));
   equal("another appVersion", consent.consentStatus().reason, "app_updated");
@@ -310,6 +318,12 @@ section("consentStatus and recordAcceptance");
 
   store.saveBotSetting(consent.KEY, validRecord({ via: "hack" }));
   equal("bad via in the record", consent.consentStatus().reason, "terms_not_accepted");
+
+  store.saveBotSetting(consent.KEY, validRecord({ extra: "x" }));
+  equal("extra key in the record", consent.consentStatus().reason, "terms_not_accepted");
+
+  store.saveBotSetting(consent.KEY, validRecord({ acceptedAt: "2026-11-02" }));
+  equal("date-only acceptedAt", consent.consentStatus().reason, "terms_not_accepted");
 
   store.saveBotSetting(consent.KEY, validRecord({ acceptedAt: "not-a-date" }));
   equal("bad date in the record", consent.consentStatus().reason, "terms_not_accepted");
@@ -345,6 +359,16 @@ section("consentStatus and recordAcceptance");
     }),
   );
   equal("unknown locale code", badLocale?.code, "CONSENT_BAD_LOCALE");
+
+  const inheritedLocale = throws("locale toString is refused", () =>
+    consent.recordAcceptance({
+      version: current.version,
+      sha256: current.sha256,
+      locale: "toString",
+      via: "provision",
+    }),
+  );
+  equal("locale toString code", inheritedLocale?.code, "CONSENT_BAD_LOCALE");
 }
 
 // --- e. Q-17 lifecycle ---------------------------------------------------

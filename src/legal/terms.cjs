@@ -70,7 +70,7 @@ function availableLocales() {
 /** The locale itself when the release has it, otherwise English. */
 function resolveLocale(locale) {
   const release = currentRelease();
-  return typeof locale === "string" && release.documents[locale] ? locale : DEFAULT_LOCALE;
+  return typeof locale === "string" && Object.hasOwn(release.documents, locale) ? locale : DEFAULT_LOCALE;
 }
 
 /**
@@ -79,8 +79,8 @@ function resolveLocale(locale) {
  */
 function documentFor(locale) {
   const release = currentRelease();
-  const entry = typeof locale === "string" ? release.documents[locale] : null;
-  if (!entry) return null;
+  if (typeof locale !== "string" || !Object.hasOwn(release.documents, locale)) return null;
+  const entry = release.documents[locale];
   return { version: release.version, locale, sha256: entry.sha256, document: entry.document, source: release.source };
 }
 
