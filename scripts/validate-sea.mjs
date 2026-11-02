@@ -161,7 +161,21 @@ let panelUrl = null;
   const setup = await fetch(`${base}/setup`);
   ok("the setup view renders", setup.status === 200);
   const html = await setup.text();
-  ok("…as real HTML from the EJS template", html.includes("<form") && html.includes("password"));
+  const stateScript = /<script id="levix-gateway-state" type="application\/json">([^<]*)<\/script>/.exec(
+    html,
+  );
+  let reactSetup = false;
+  if (stateScript) {
+    try {
+      reactSetup = JSON.parse(stateScript[1]).page === "setup";
+    } catch {
+      reactSetup = false;
+    }
+  }
+  ok(
+    "…as the React setup shell or EJS form",
+    reactSetup || (html.includes("<form") && html.includes("password")),
+  );
 
   const css = await fetch(`${base}/dashboard.css`);
   ok("the stylesheet is served", css.status === 200);
