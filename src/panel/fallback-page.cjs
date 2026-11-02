@@ -14,6 +14,8 @@
 // has to fix the install, not for the everyday panel, and the translated
 // catalog ships with the frontend build that is missing.
 
+const brand = require("../config/brand.cjs");
+
 const ESCAPES = {
   "&": "&amp;",
   "<": "&lt;",
@@ -42,6 +44,8 @@ button{margin-top:20px;width:100%;padding:10px 12px;border:0;border-radius:8px;b
 .error{margin-top:16px;color:var(--danger);font-weight:600}
 .notice{margin-top:16px;padding:10px 12px;border:1px solid var(--line);border-radius:8px}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+footer{margin-top:24px;border-top:1px solid var(--line);padding-top:12px;text-align:center}
+footer a{color:inherit}
 `;
 
 const MISSING_NOTICE =
@@ -54,6 +58,14 @@ function notice() {
 
 function errorBlock(error) {
   return error ? `<p class="error" role="alert">${escapeHtml(error)}</p>` : "";
+}
+
+function credits() {
+  return (
+    `<footer class="muted">Built by ` +
+    `<a href="${escapeHtml(brand.developerSite)}">${escapeHtml(brand.developer)}</a>` +
+    ` · <a href="${escapeHtml(brand.studioSite)}">${escapeHtml(brand.studio)}</a></footer>`
+  );
 }
 
 function passwordInput({ name, label, autocomplete, minLength, autofocus }) {
@@ -158,7 +170,7 @@ function renderFallbackPage({ page, brandName = "Levix", error = null, needsCode
     `<meta name="robots" content="noindex">\n` +
     `<title>${escapeHtml(brandName)} · ${escapeHtml(view.title)}</title>\n` +
     `<style>${STYLE}</style>\n` +
-    `</head>\n<body>\n<main>${body}</main>\n</body>\n</html>\n`
+    `</head>\n<body>\n<main>${body}${credits()}</main>\n</body>\n</html>\n`
   );
 }
 

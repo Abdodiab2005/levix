@@ -161,9 +161,20 @@ let panelUrl = null;
   const setup = await fetch(`${base}/setup`);
   ok("the setup page renders", setup.status === 200);
   const html = await setup.text();
+  const stateScript = /<script id="levix-gateway-state" type="application\/json">([^<]*)<\/script>/.exec(
+    html,
+  );
+  let reactSetup = false;
+  if (stateScript) {
+    try {
+      reactSetup = JSON.parse(stateScript[1]).page === "setup";
+    } catch {
+      reactSetup = false;
+    }
+  }
   ok(
-    "…as the React shell or the static fallback form",
-    html.includes('id="levix-gateway-state"') || (html.includes("<form") && html.includes("password")),
+    "…as the React setup shell or static fallback form",
+    reactSetup || (html.includes("<form") && html.includes('action="/setup"')),
   );
 
   const uiBoot = await fetch(`${base}/ui-boot.js`);

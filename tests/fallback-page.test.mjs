@@ -6,6 +6,7 @@ import { gatewayAssets } from "./fixtures/gateway-assets.mjs";
 
 const require = createRequire(import.meta.url);
 const { renderFallbackPage } = require("../src/panel/fallback-page.cjs");
+const brand = require("../src/config/brand.cjs");
 const read = (path) => readFileSync(join(ROOT, path), "utf8");
 const assets = gatewayAssets();
 assets.fallback();
@@ -70,6 +71,17 @@ try {
 }
 
 section("static page boundaries");
+for (const page of ["login", "setup", "qr", "panel"]) {
+  const html = renderFallbackPage({ page });
+  ok(
+    `${page} credits the developer`,
+    html.includes(`<a href="${brand.developerSite}">${brand.developer}</a>`),
+  );
+  ok(
+    `${page} credits the studio`,
+    html.includes(`<a href="${brand.studioSite}">${brand.studio}</a>`),
+  );
+}
 const attack = `<script>alert("x")</script>'&`;
 const escaped = renderFallbackPage({ page: "login", brandName: attack, error: attack });
 ok(
@@ -77,7 +89,10 @@ ok(
   !escaped.includes(attack) && escaped.includes("&lt;script&gt;") && escaped.includes("&quot;") &&
     escaped.includes("&#39;") && escaped.includes("&amp;"),
 );
-ok("no inline handlers or remote resources", !/\son[a-z]+=|https?:\/\//i.test(escaped));
+ok(
+  "no inline handlers or remote resources",
+  !/\son[a-z]+=|<(?:script|link|img)[^>]+https?:\/\//i.test(escaped),
+);
 ok("fallback declares English", escaped.includes('<html lang="en">'));
 const code = renderFallbackPage({ page: "setup", needsCode: true });
 ok("remote setup has a code field", code.includes('name="code" autocomplete="off"'));
