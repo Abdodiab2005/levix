@@ -63,6 +63,11 @@ ok("server errors use translated codes", login.includes("state.error.code in gat
 
 section("gateway routes");
 const app = read("app.cjs");
-ok("login passes an error code beside English text", app.includes('errorCode: "incorrectPassword"'));
+ok(
+  "login passes an error code beside English text",
+  app.includes('code: "incorrectPassword"') &&
+    app.includes('message: "Incorrect Password"') &&
+    app.includes("errorCode: error.code"),
+);
 ok("setup errors travel as codes", app.includes('code: "wrongSetupCode"') && app.includes('code: "passwordMismatch"'));
 finish();
