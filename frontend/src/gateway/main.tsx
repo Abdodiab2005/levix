@@ -1,5 +1,5 @@
 import { createRoot } from "react-dom/client";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Button, Card, Field, Input, PasswordInput } from "../components/ui";
 import { gatewayTranslations } from "../i18n/gateway.generated";
 import { resolveLocale } from "../i18n/locale";
@@ -9,6 +9,7 @@ import { Login } from "./login";
 import { Qr } from "./qr";
 import { I18nProvider } from "../context/I18nContext";
 import { renderInlineMarkup } from "./inline-markup";
+import { navigateAfterAuth, submitGatewayForm } from "./auth-submit.mjs";
 
 type Language = keyof typeof gatewayTranslations;
 export type GatewayKey = keyof typeof gatewayTranslations.en;
@@ -95,6 +96,30 @@ export function PasswordField({
 }
 
 function Gateway() {
+  const [busy, setBusy] = useState(false);
+  const [setupError, setSetupError] = useState(state.error);
+  const submitSetup = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (busy) return;
+    const form = event.currentTarget;
+    setBusy(true);
+    setSetupError(null);
+    const result = await submitGatewayForm("/setup", form);
+    if (result.redirect !== undefined) return navigateAfterAuth(result.redirect);
+    setSetupError({ code: result.error.code, message: result.error.message || "" });
+    const names =
+      result.error.code === "wrongSetupCode"
+        ? ["code"]
+        : ["passwordMismatch", "invalidPassword"].includes(result.error.code)
+          ? ["password", "confirm"]
+          : [];
+    for (const name of names) {
+      const input = form.elements.namedItem(name) as HTMLInputElement | null;
+      if (input) input.value = "";
+    }
+    if (names.length) (form.elements.namedItem(names[0]) as HTMLInputElement | null)?.focus();
+    setBusy(false);
+  };
   const { t, markup } = useGatewayText();
   const host = (window as Window & { LevixHost?: { closePanel?: () => void } }).LevixHost;
   useEffect(() => {
@@ -162,7 +187,7 @@ function Gateway() {
                   </h1>
                   <p className="text-muted">{t("setupSub", { n: state.minLength })}</p>
                 </header>
-                <form action="/setup" method="post" className="space-y-5">
+                <form action="/setup" method="post" onSubmit={submitSetup} className="space-y-5">
                   {state.needsCode && (
                     <Field
                       label={t("setupCodeLabel")}
@@ -195,15 +220,15 @@ function Gateway() {
                     autoComplete="new-password"
                     t={t}
                   />
-                  <Button type="submit" variant="primary" className="w-full">
+                  <Button type="submit" variant="primary" className="w-full" disabled={busy}>
                     {t("createWorkspaceBtn")}
                   </Button>
                 </form>
-                {state.error && (
+                {setupError && (
                   <p role="alert" className="text-danger">
-                    {state.error.code && state.error.code in gatewayTranslations.en
-                      ? t(state.error.code as GatewayKey, { n: state.minLength })
-                      : state.error.message}
+                    {setupError.code && setupError.code in gatewayTranslations.en
+                      ? t(setupError.code as GatewayKey, { n: state.minLength })
+                      : setupError.message}
                   </p>
                 )}
               </>

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Button, Field, Input } from "../components/ui";
 import { PasswordField, type GatewayKey, type GatewayState, type GatewayText } from "./main";
 import { gatewayTranslations } from "../i18n/gateway.generated";
+import { navigateAfterAuth, submitGatewayForm } from "./auth-submit.mjs";
 
 type Result = {
   ok?: boolean;
@@ -57,6 +58,23 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ErrorState | null>(null);
   const [done, setDone] = useState(false);
+  const [loginError, setLoginError] = useState(state.error);
+  const submitLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (busy) return;
+    const form = event.currentTarget;
+    setBusy(true);
+    setLoginError(null);
+    const result = await submitGatewayForm("/login", form);
+    if (result.redirect !== undefined) return navigateAfterAuth(result.redirect);
+    setLoginError({ code: result.error.code, message: result.error.message || "" });
+    const password = form.elements.namedItem("password") as HTMLInputElement | null;
+    if (password) {
+      password.value = "";
+      password.focus();
+    }
+    setBusy(false);
+  };
   const showError = (key: GatewayKey, vars?: Record<string, string | number>, raw?: string) =>
     setError({ key, vars, raw });
   const send = async (channel: string) => {
@@ -237,7 +255,7 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
         <h1 className="text-2xl font-bold">{t("welcomeBack")}</h1>
         <p className="text-muted">{t("loginSub", { brand: state.brand.name })}</p>
       </header>
-      <form action="/login" method="post" className="space-y-5">
+      <form action="/login" method="post" onSubmit={submitLogin} className="space-y-5">
         <PasswordField
           id="login-password"
           name="password"
@@ -246,15 +264,15 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
           autoComplete="current-password"
           t={t}
         />
-        <Button type="submit" variant="primary" className="w-full">
+        <Button type="submit" variant="primary" className="w-full" disabled={busy}>
           {t("openWorkspace")}
         </Button>
       </form>
-      {state.error && (
+      {loginError && (
         <p role="alert" className="text-danger">
-          {state.error.code && state.error.code in gatewayTranslations.en
-            ? t(state.error.code as GatewayKey)
-            : state.error.message}
+          {loginError.code && loginError.code in gatewayTranslations.en
+            ? t(loginError.code as GatewayKey)
+            : loginError.message}
         </p>
       )}
       <Button variant="ghost" onClick={() => setReset(true)}>
