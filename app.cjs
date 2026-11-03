@@ -143,6 +143,13 @@ function noStore(req, res, next) {
   next();
 }
 
+// Android keeps FLAG_SECURE on unless the document just rendered says capture
+// is allowed. The value is the exact token "allow": the host trims it and
+// rejects any other text, including a repeated header joined as "allow, allow".
+function allowScreenCapture(res) {
+  res.set("X-Levix-Screen-Capture", "allow");
+}
+
 function requireLoginPage(req, res, next) {
   if (isPanelSessionValid(req.session)) return next();
   return res.redirect("/");
@@ -357,6 +364,8 @@ function loginPageLocals(error, errorCode) {
 app.get("/", noStore, (req, res) => {
   if (!secrets.hasDashboardPassword()) return res.redirect("/setup");
   if (isPanelSessionValid(req.session)) {
+    // Both signed-in documents: built index.html, and the EJS panel fallback
+    // (res.render("dashboard")) when that file is absent.
     const dashboardHtmlPath = path.join(assetPath("public"), "dashboard", "index.html");
     if (fs.existsSync(dashboardHtmlPath)) {
       let html = fs.readFileSync(dashboardHtmlPath, "utf8");
@@ -367,8 +376,10 @@ app.get("/", noStore, (req, res) => {
           `<script>window.__BRAND__ = ${JSON.stringify(app.locals.brand)};</script></head>`,
         )
         .replace("</body>", `${credits}</body>`);
+      allowScreenCapture(res);
       return res.type("html").send(html);
     }
+    allowScreenCapture(res);
     return res.render("dashboard");
   }
   return renderGateway(req, res, "login", loginPageLocals(null, null));
@@ -521,6 +532,7 @@ app.post("/logout", (req, res, next) => {
 
 app.get("/qr", requireLoginPage, noStore, (req, res) => {
   const qr = getQrCode();
+  allowScreenCapture(res);
   renderGateway(req, res, "qr", { qr: qr || "" });
 });
 
