@@ -13,14 +13,20 @@ const boot = read("public/ui-boot.js");
 
 section("React gateway and translations");
 ok("ui-boot runs first in the head", /<head>\s*<script src="\/ui-boot\.js"><\/script>/.test(shell));
-ok("gateway shell mounts React", shell.includes('id="root"') && shell.includes("/src/gateway/main.tsx"));
+ok(
+  "gateway shell mounts React",
+  shell.includes('id="root"') && shell.includes("/src/gateway/main.tsx"),
+);
 ok("brand name comes from server state", main.includes("state.brand.name"));
 ok("brand tagline is translated", main.includes('t("tagline")'));
 ok(
   "login, setup and QR have translated document titles",
   ["titleLogin", "titleSetup", "titleQr"].every((key) => main.includes(`"${key}"`)),
 );
-ok("gateway text uses resolved locale", main.includes("resolveLocale(document.documentElement.lang)"));
+ok(
+  "gateway text uses resolved locale",
+  main.includes("resolveLocale(document.documentElement.lang)"),
+);
 ok(
   "gateway responds to host and storage language changes",
   main.includes("levix-ui-prefs") && main.includes("storage"),
@@ -47,7 +53,11 @@ for (const language of ["en", "ar", "pt-BR", "es-419"]) {
   const entries = dictionary.slice(start, end);
   ok(`${language} dictionary exists`, start >= 0 && end > start);
   for (const code of [
-    "tooManyAttempts", "incorrectPassword", "wrongSetupCode", "passwordMismatch", "invalidPassword",
+    "tooManyAttempts",
+    "incorrectPassword",
+    "wrongSetupCode",
+    "passwordMismatch",
+    "invalidPassword",
   ]) {
     ok(`${language} has ${code}`, entries.includes(`    ${code}:`));
   }
@@ -57,9 +67,19 @@ for (const language of ["en", "ar", "pt-BR", "es-419"]) {
   );
 }
 ok("unknown locale falls back to English", locale.includes('normalizeLocale(value) ?? "en"'));
-ok("boot maps all four locales", ["ar", "en", "pt-BR", "es-419"].every((code) => boot.includes(code)));
-ok("login sends the selected page language on reset", login.includes("lang: document.documentElement.lang"));
-ok("server errors use translated codes", login.includes("state.error.code in gatewayTranslations.en"));
+ok(
+  "boot maps all four locales",
+  ["ar", "en", "pt-BR", "es-419"].every((code) => boot.includes(code)),
+);
+ok(
+  "login sends the selected page language on reset",
+  login.includes("lang: document.documentElement.lang"),
+);
+ok(
+  "server errors use translated codes",
+  login.includes("loginError.code in gatewayTranslations.en") &&
+    login.includes("useState(state.error)"),
+);
 
 section("gateway routes");
 const app = read("app.cjs");
@@ -69,5 +89,8 @@ ok(
     app.includes('message: "Incorrect Password"') &&
     app.includes("errorCode: error.code"),
 );
-ok("setup errors travel as codes", app.includes('code: "wrongSetupCode"') && app.includes('code: "passwordMismatch"'));
+ok(
+  "setup errors travel as codes",
+  app.includes('code: "wrongSetupCode"') && app.includes('code: "passwordMismatch"'),
+);
 finish();
