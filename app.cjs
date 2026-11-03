@@ -144,6 +144,13 @@ function noStore(req, res, next) {
   next();
 }
 
+// Android keeps FLAG_SECURE on unless the document just rendered says capture
+// is allowed. The value is the exact token "allow": the host trims it and
+// rejects any other text, including a repeated header joined as "allow, allow".
+function allowScreenCapture(res) {
+  res.set("X-Levix-Screen-Capture", "allow");
+}
+
 function requireLoginPage(req, res, next) {
   if (isPanelSessionValid(req.session)) return next();
   return res.redirect("/");
@@ -288,19 +295,24 @@ app.get("/setup", noStore, (req, res) => {
   renderSetup(req, res, null);
 });
 
+function gatewayError(req, res, status, error, render, retryAfter) {
+  if (req.accepts(["html", "json"]) !== "json") return render();
+  res.set("Cache-Control", "no-store");
+  return res.status(status).json({ ok: false, error, ...(retryAfter ? { retryAfter } : {}) });
+}
+
 app.post("/setup", (req, res, next) => {
-  if (secrets.hasDashboardPassword()) return res.redirect("/");
+  const json = req.accepts(["html", "json"]) === "json";
+  if (json) res.set("Cache-Control", "no-store");
+  if (secrets.hasDashboardPassword())
+    return json ? res.status(409).json({ ok: false, redirect: "/" }) : res.redirect("/");
 
   const peer = clientAddress(req);
   const retryAfter = blockedFor(peer);
   if (retryAfter) {
     res.set("Retry-After", String(retryAfter));
-    return renderSetup(
-      req,
-      res,
-      { code: "tooManyAttempts", message: "Too many attempts. Try again later." },
-      429,
-    );
+    const error = { code: "tooManyAttempts", message: "Too many attempts. Try again later." };
+    return gatewayError(req, res, 429, error, () => renderSetup(req, res, error, 429), retryAfter);
   }
 
   const { password, confirm, code } = req.body || {};
@@ -308,22 +320,20 @@ app.post("/setup", (req, res, next) => {
   if (!isLocalRequest(req) && !secrets.setupCodeMatches(code)) {
     recordFailure(peer);
     logger.warn({ ip: peer }, "[dashboard] Setup attempted with a wrong code");
-    return renderSetup(req, res, { code: "wrongSetupCode", message: "Wrong setup code." }, 401);
+    const error = { code: "wrongSetupCode", message: "Wrong setup code." };
+    return gatewayError(req, res, 401, error, () => renderSetup(req, res, error, 401));
   }
 
   if (password !== confirm) {
-    return renderSetup(
-      req,
-      res,
-      { code: "passwordMismatch", message: "The two passwords don't match." },
-      400,
-    );
+    const error = { code: "passwordMismatch", message: "The two passwords don't match." };
+    return gatewayError(req, res, 400, error, () => renderSetup(req, res, error, 400));
   }
 
   try {
     secrets.setDashboardPassword(password);
   } catch (error) {
-    return renderSetup(req, res, { code: "invalidPassword", message: error.message }, 400);
+    const detail = { code: "invalidPassword", message: error.message };
+    return gatewayError(req, res, 400, detail, () => renderSetup(req, res, detail, 400));
   }
 
   clearAttempts(peer);
@@ -334,7 +344,8 @@ app.post("/setup", (req, res, next) => {
     stampPanelSession(req.session);
     req.session.save((saveErr) => {
       if (saveErr) return next(saveErr);
-      res.redirect(303, "/");
+      if (json) return res.status(200).json({ ok: true, redirect: "/" });
+      return res.redirect(303, "/");
     });
   });
 });
@@ -365,6 +376,8 @@ function loginPageLocals(error, errorCode) {
 app.get("/", noStore, (req, res) => {
   if (!secrets.hasDashboardPassword()) return res.redirect("/setup");
   if (isPanelSessionValid(req.session)) {
+    // Both signed-in documents: built index.html, and the static panel
+    // fallback (sendFallback "panel") when that file is absent.
     const dashboardHtmlPath = path.join(assetPath("public"), "dashboard", "index.html");
     if (fs.existsSync(dashboardHtmlPath)) {
       let html = fs.readFileSync(dashboardHtmlPath, "utf8");
@@ -375,8 +388,10 @@ app.get("/", noStore, (req, res) => {
           `<script>window.__BRAND__ = ${JSON.stringify(app.locals.brand)};</script></head>`,
         )
         .replace("</body>", `${credits}</body>`);
+      allowScreenCapture(res);
       return res.type("html").send(html);
     }
+    allowScreenCapture(res);
     return sendFallback(res, "panel", {});
   }
   return renderGateway(req, res, "login", loginPageLocals(null, null));
@@ -389,34 +404,38 @@ app.get("/login", noStore, (req, res) => {
 });
 
 app.post("/login", (req, res, next) => {
-  if (!secrets.hasDashboardPassword()) return res.redirect("/setup");
+  const json = req.accepts(["html", "json"]) === "json";
+  if (json) res.set("Cache-Control", "no-store");
+  if (!secrets.hasDashboardPassword())
+    return json ? res.status(409).json({ ok: false, redirect: "/setup" }) : res.redirect("/setup");
 
   const peer = clientAddress(req);
   const retryAfter = blockedFor(peer);
   if (retryAfter) {
     res.set("Retry-After", String(retryAfter));
-    return renderGateway(
+    const error = { code: "tooManyAttempts", message: "Too many attempts. Try again later." };
+    return gatewayError(
       req,
       res,
-      "login",
-      loginPageLocals("Too many attempts. Try again later.", "tooManyAttempts"),
       429,
+      error,
+      () => renderGateway(req, res, "login", loginPageLocals(error.message, error.code), 429),
+      retryAfter,
     );
   }
 
   if (!secrets.verifyDashboardPassword(req.body?.password)) {
     recordFailure(peer);
     logger.warn({ ip: peer }, "[dashboard] Failed login attempt");
-    return renderGateway(
-      req,
-      res,
-      "login",
-      {
-        ...loginPageLocals(null, null),
-        error: "Incorrect Password",
-        errorCode: "incorrectPassword",
-      },
-      401,
+    const error = { code: "incorrectPassword", message: "Incorrect Password" };
+    return gatewayError(req, res, 401, error, () =>
+      renderGateway(
+        req,
+        res,
+        "login",
+        { ...loginPageLocals(null, null), error: error.message, errorCode: error.code },
+        401,
+      ),
     );
   }
 
@@ -428,7 +447,8 @@ app.post("/login", (req, res, next) => {
     stampPanelSession(req.session);
     req.session.save((saveErr) => {
       if (saveErr) return next(saveErr);
-      res.redirect(303, "/");
+      if (json) return res.status(200).json({ ok: true, redirect: "/" });
+      return res.redirect(303, "/");
     });
   });
 });
@@ -524,6 +544,7 @@ app.post("/logout", (req, res, next) => {
 
 app.get("/qr", requireLoginPage, noStore, (req, res) => {
   const qr = getQrCode();
+  allowScreenCapture(res);
   renderGateway(req, res, "qr", { qr: qr || "" });
 });
 

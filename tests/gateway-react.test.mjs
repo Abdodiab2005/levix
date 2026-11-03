@@ -56,6 +56,15 @@ for (const url of ["/setup", "/login", "/reset/request", "/reset/confirm", "/log
   });
   equal(`cross-origin ${url}`, res.status, 403);
 }
+response = await http.form(
+  "/setup",
+  {},
+  { accept: "application/json", origin: "https://evil.invalid" },
+);
+equal("cross-origin JSON setup refused", response.status, 403);
+response = await http.form("/login", {}, { accept: "application/json" });
+equal("JSON login before setup status", response.status, 409);
+equal("JSON login before setup redirect", (await response.json()).redirect, "/setup");
 for (const url of ["/setup", "/login", "/reset/request", "/reset/confirm", "/logout"]) {
   const res = await http.call(url, {
     method: "POST",
@@ -156,6 +165,75 @@ equal("login success location", response.headers.get("location"), "/");
 ok("login assigns a session cookie", Boolean(response.headers.get("set-cookie")));
 await server.stop();
 
+section("JSON authentication");
+const jsonData = useTempDataDir("gateway-json");
+server = await startServer({ dataDir: jsonData, assetRoot });
+http = httpClient(server.base);
+const jsonHeaders = { accept: "application/json" };
+response = await http.form(
+  "/setup",
+  { password: "valid-password", confirm: "different-password" },
+  jsonHeaders,
+);
+equal("JSON setup mismatch status", response.status, 400);
+equal("JSON setup mismatch code", (await response.json()).error.code, "passwordMismatch");
+response = await http.form("/setup", { password: "short", confirm: "short" }, jsonHeaders);
+equal("JSON setup weak status", response.status, 400);
+const weak = await response.json();
+equal("JSON setup weak code", weak.error.code, "invalidPassword");
+ok("JSON setup weak message", Boolean(weak.error.message));
+response = await http.form(
+  "/setup",
+  { password: "valid-password", confirm: "valid-password" },
+  jsonHeaders,
+);
+equal("JSON setup success status", response.status, 200);
+equal("JSON setup no-store", response.headers.get("cache-control"), "no-store");
+equal(
+  "JSON setup success body",
+  JSON.stringify(await response.json()),
+  JSON.stringify({ ok: true, redirect: "/" }),
+);
+equal("JSON setup cookie opens panel", (await http.call("/")).status, 200);
+response = await http.form("/setup", {}, jsonHeaders);
+equal("JSON setup after password status", response.status, 409);
+equal("JSON setup after password redirect", (await response.json()).redirect, "/");
+http.reset();
+response = await http.form("/login", { password: "valid-password" }, jsonHeaders);
+equal("JSON login success status", response.status, 200);
+equal(
+  "JSON login success body",
+  JSON.stringify(await response.json()),
+  JSON.stringify({ ok: true, redirect: "/" }),
+);
+response = await http.call("/");
+equal("JSON login cookie opens panel", response.status, 200);
+ok("JSON login opens dashboard, not login", state(await response.text())?.page !== "login");
+http.reset();
+response = await http.form("/login", {}, { ...jsonHeaders, origin: "https://evil.invalid" });
+equal("cross-origin JSON login refused", response.status, 403);
+for (let i = 0; i < 5; i++) {
+  response = await http.form("/login", { password: "wrong-password" }, jsonHeaders);
+  equal(`JSON wrong password ${i + 1}`, response.status, 401);
+  equal(`JSON wrong password ${i + 1} location`, response.headers.get("location"), null);
+  equal(`JSON wrong password ${i + 1} no-store`, response.headers.get("cache-control"), "no-store");
+  equal(
+    `JSON wrong password ${i + 1} body`,
+    JSON.stringify(await response.json()),
+    JSON.stringify({
+      ok: false,
+      error: { code: "incorrectPassword", message: "Incorrect Password" },
+    }),
+  );
+}
+response = await http.form("/login", { password: "wrong-password" }, jsonHeaders);
+equal("JSON lockout status", response.status, 429);
+const lockout = await response.json();
+equal("JSON lockout code", lockout.error.code, "tooManyAttempts");
+equal("JSON lockout retry header", Number(response.headers.get("retry-after")), lockout.retryAfter);
+ok("JSON lockout retry positive", lockout.retryAfter > 0);
+await server.stop();
+
 section("static fallback");
 rmSync(join(assetRoot, "public", "dashboard", "gateway.html"));
 server = await startServer({ dataDir, assetRoot });
@@ -166,7 +244,9 @@ for (const url of ["/", "/login"]) {
   equal(`${url} fallback status`, response.status, 200);
   ok(
     `${url} static fallback`,
-    html.includes("The panel files are missing") && html.includes('action="/login"') && !state(html),
+    html.includes("The panel files are missing") &&
+      html.includes('action="/login"') &&
+      !state(html),
   );
 }
 await server.stop();
@@ -191,6 +271,13 @@ server = await startServer({ dataDir: remoteData, assetRoot, trust: "1" });
 http = httpClient(server.base);
 response = await http.call("/setup");
 equal("proxied setup needs code", state(await response.text())?.needsCode, true);
+response = await http.form(
+  "/setup",
+  { password: "valid-password", confirm: "valid-password" },
+  jsonHeaders,
+);
+equal("JSON remote wrong setup code status", response.status, 401);
+equal("JSON remote wrong setup code", (await response.json()).error.code, "wrongSetupCode");
 response = await http.form("/setup", { password: "valid-password", confirm: "valid-password" });
 equal("missing remote setup code status", response.status, 401);
 equal(
