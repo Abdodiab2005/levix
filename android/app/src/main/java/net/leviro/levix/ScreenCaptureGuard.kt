@@ -8,9 +8,11 @@ package net.leviro.levix
  * served at the same address. The main-frame response carries
  * `X-Levix-Screen-Capture: allow` only for a document that may be captured.
  * [start], [onMainFrameResponse], [onPageStarted] and [onMainFrameError] make
- * the window secure immediately. [onPageFinished] clears it only when the
- * pending decision is for this URL with the fragment removed and the header
- * value is exactly `allow` after trim.
+ * the window secure immediately. A decision is committed by a matching
+ * [onPageStarted] and applied by a matching [onPageFinished]. This relies on
+ * the response arriving before the start, followed by the finish. If that
+ * order differs, the window stays secure. URLs are matched without fragments;
+ * capture is allowed only when the header value is exactly `allow` after trim.
  *
  * A finish with no pending decision, or for another document, changes nothing
  * and does not call [apply]. WebView reports a same-document hash move
@@ -39,7 +41,7 @@ class ScreenCaptureGuard(
 
     private var pending: Decision? = null
 
-    private data class Decision(val document: String, val allow: Boolean)
+    private data class Decision(val document: String, val allow: Boolean, val committed: Boolean = false)
 
     /** Secure, and drop any decision left from an older window. */
     fun start() {
@@ -64,26 +66,27 @@ class ScreenCaptureGuard(
     }
 
     /**
-     * Navigation started. Secure again. [url] is not read: the response is
-     * recorded before this callback, and this call must not drop it.
+     * Navigation started. Secure again and commit only a matching decision.
+     * A different start leaves the decision pending but uncommitted.
      */
-    fun onPageStarted(@Suppress("UNUSED_PARAMETER") url: String) {
+    fun onPageStarted(url: String) {
         synchronized(lock) {
             secure = true
+            pending = pending?.let { it.copy(committed = it.document == documentOf(url)) }
         }
         apply(true)
     }
 
     /**
-     * Apply the pending decision when it names this URL with the fragment
+     * Apply a committed decision when it names this URL with the fragment
      * removed, then drop it. `allow` clears secure. Any other matching
-     * decision keeps secure. No pending decision, or a decision for another
-     * document: no state change and no [apply] call.
+     * decision keeps secure. No pending decision, an uncommitted decision,
+     * or a decision for another document: no state change and no [apply] call.
      */
     fun onPageFinished(url: String) {
         val secureNow = synchronized(lock) {
             val decision = pending
-            if (decision == null || decision.document != documentOf(url)) return@synchronized null
+            if (decision == null || !decision.committed || decision.document != documentOf(url)) return@synchronized null
             pending = null
             secure = !decision.allow
             secure

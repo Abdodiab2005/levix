@@ -7,8 +7,8 @@ import org.junit.Test
 
 /**
  * Capture turns off only from [ScreenCaptureGuard.onPageFinished] when the
- * pending decision is for that document and the header value trims to the
- * exact token `allow`. A second header entry, or a comma-joined repeat, fails
+ * pending decision was committed by a matching start and the header value
+ * trims to the exact token `allow`. A second header entry, or a comma-joined repeat, fails
  * closed. A finish with no pending decision, or for another URL, does not
  * call apply and does not drop a pending decision.
  */
@@ -120,6 +120,62 @@ class ScreenCaptureGuardTest {
         assertEquals(0, rec.denied())
     }
 
+    @Test fun lateFinishAtSameUrlWaitsForTheNewStart() {
+        val rec = Rec()
+        rec.guard.onMainFrameResponse(ROOT, emptyMap())
+        rec.guard.onPageStarted(ROOT)
+        rec.guard.onMainFrameResponse(ROOT, allow())
+        val calls = rec.calls.size
+        rec.guard.onPageFinished(ROOT)
+        assertTrue(rec.guard.secure)
+        assertEquals(calls, rec.calls.size)
+        rec.guard.onPageStarted("$ROOT#connection")
+        rec.guard.onPageFinished(ROOT)
+        assertFalse(rec.guard.secure)
+        assertEquals(1, rec.denied())
+    }
+
+    @Test fun anotherStartDoesNotCommitThePendingDecision() {
+        val rec = Rec()
+        rec.guard.onMainFrameResponse(ROOT, allow())
+        rec.guard.onPageStarted("${ROOT}login")
+        val calls = rec.calls.size
+        rec.guard.onPageFinished(ROOT)
+        assertTrue(rec.guard.secure)
+        assertEquals(calls, rec.calls.size)
+        rec.guard.onPageStarted(ROOT)
+        rec.guard.onPageFinished(ROOT)
+        assertFalse(rec.guard.secure)
+    }
+
+    @Test fun newResponseReplacesACommittedDecision() {
+        val rec = Rec()
+        rec.guard.onMainFrameResponse(ROOT, allow())
+        rec.guard.onPageStarted(ROOT)
+        rec.guard.onMainFrameResponse(ROOT, allow())
+        val calls = rec.calls.size
+        rec.guard.onPageFinished(ROOT)
+        assertTrue(rec.guard.secure)
+        assertEquals(calls, rec.calls.size)
+        rec.guard.onPageStarted(ROOT)
+        rec.guard.onPageFinished(ROOT)
+        assertFalse(rec.guard.secure)
+    }
+
+    @Test fun anotherStartUncommitsAnEarlierMatchingStart() {
+        val rec = Rec()
+        rec.guard.onMainFrameResponse(ROOT, allow())
+        rec.guard.onPageStarted(ROOT)
+        rec.guard.onPageStarted("${ROOT}login")
+        val calls = rec.calls.size
+        rec.guard.onPageFinished(ROOT)
+        assertTrue(rec.guard.secure)
+        assertEquals(calls, rec.calls.size)
+        rec.guard.onPageStarted(ROOT)
+        rec.guard.onPageFinished(ROOT)
+        assertFalse(rec.guard.secure)
+    }
+
     @Test fun pendingAllowForAnotherUrlIsNotApplied() {
         val rec = Rec()
         val qr = "http://127.0.0.1:3001/qr"
@@ -128,6 +184,7 @@ class ScreenCaptureGuardTest {
         rec.guard.onPageFinished(ROOT)
         assertTrue(rec.guard.secure)
         assertEquals(calls, rec.calls.size)
+        rec.guard.onPageStarted(qr)
         rec.guard.onPageFinished(qr)
         assertFalse(rec.guard.secure)
         assertEquals(false, rec.calls.last())

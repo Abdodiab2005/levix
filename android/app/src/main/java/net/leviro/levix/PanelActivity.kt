@@ -405,8 +405,8 @@ class PanelActivity : AppCompatActivity() {
 
     /**
      * Window flags belong on the main thread. [shouldInterceptRequest] runs on
-     * a WebView thread and waits, bounded, so the flag is set before the
-     * response can paint. Already on the main thread: set it and return.
+     * a WebView thread and waits, bounded, for the flag update. Already on
+     * the main thread: set it and return.
      */
     private fun commitScreenCapture(secure: Boolean) {
         val update = Runnable {
@@ -426,7 +426,11 @@ class PanelActivity : AppCompatActivity() {
             }
         }
         try {
-            latch.await(SCREEN_CAPTURE_WAIT_MS, TimeUnit.MILLISECONDS)
+            // The update is queued before the response exists; the WebView can
+            // draw the new document only in a later main-thread traversal.
+            if (!latch.await(SCREEN_CAPTURE_WAIT_MS, TimeUnit.MILLISECONDS)) {
+                HostLog.event("panel screen guard wait timed out")
+            }
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
@@ -560,7 +564,7 @@ class PanelActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_URL = "url"
         private const val BACKUP_SAVE_ID = "backupSaveCallId"
-        private const val SCREEN_CAPTURE_WAIT_MS = 300L
+        private const val SCREEN_CAPTURE_WAIT_MS = 2000L
 
         /**
          * The one place a panel URL with a screen hash is built, so the app has

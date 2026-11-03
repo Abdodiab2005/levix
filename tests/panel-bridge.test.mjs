@@ -3,7 +3,8 @@ import { runInNewContext } from "node:vm";
 import { equal, finish, ok, ROOT, section } from "./harness.mjs";
 
 section("submit bridge");
-let listener;
+const documentListeners = new Map();
+const windowListeners = new Map();
 let capture;
 let requests = [];
 let writes = 0;
@@ -26,13 +27,12 @@ const location = {
   },
 };
 const document = {
-  addEventListener(name, handler, options) {
-    if (name === "submit") {
-      listener = handler;
-      capture = options;
-    }
+  addEventListener(name, handler) {
+    documentListeners.set(name, handler);
   },
-  open() {},
+  open() {
+    documentListeners.clear();
+  },
   write() {
     writes++;
   },
@@ -48,7 +48,15 @@ const host = {
     return JSON.stringify({ status: 401, body: Buffer.from("error").toString("base64") });
   },
 };
-const window = { LevixHost: host, fetch() {}, XMLHttpRequest: XHR };
+const window = {
+  LevixHost: host,
+  fetch() {},
+  XMLHttpRequest: XHR,
+  addEventListener(name, handler, options) {
+    windowListeners.set(name, handler);
+    if (name === "submit") capture = options;
+  },
+};
 const sessionStorage = {
   getItem() {
     return null;
@@ -79,6 +87,14 @@ runInNewContext(readFileSync(`${ROOT}/android/app/src/main/assets/panel-bridge.j
   atob: (s) => Buffer.from(s, "base64").toString("binary"),
 });
 equal("listener uses bubble phase", capture, false);
+ok(
+  "submit listener is on window",
+  windowListeners.has("submit") && !documentListeners.has("submit"),
+);
+const submit = (event) => {
+  documentListeners.get("submit")?.(event);
+  windowListeners.get("submit")?.(event);
+};
 const form = (method) => ({
   tagName: "FORM",
   fields: [["password", "secret value"]],
@@ -87,7 +103,7 @@ const form = (method) => ({
   },
 });
 let prevented = false;
-listener({
+submit({
   defaultPrevented: true,
   target: form("post"),
   preventDefault() {
@@ -98,7 +114,7 @@ ok(
   "prevented event ignored",
   !prevented && requests.length === 0 && navigations === 0 && writes === 0,
 );
-listener({
+submit({
   defaultPrevented: false,
   target: form("get"),
   preventDefault() {
@@ -109,7 +125,7 @@ ok(
   "GET left alone",
   !prevented && requests.length === 0 && navigations === 0 && !location.href.includes("secret"),
 );
-listener({
+submit({
   defaultPrevented: false,
   target: form(null),
   preventDefault() {
@@ -120,7 +136,8 @@ ok(
   "form without method left alone",
   !prevented && requests.length === 0 && navigations === 0 && !location.href.includes("secret"),
 );
-listener({
+document.addEventListener("other", () => {});
+submit({
   defaultPrevented: false,
   target: form("post"),
   preventDefault() {
@@ -135,4 +152,17 @@ equal(
   "password=secret+value",
 );
 equal("classic page error rendered", writes, 1);
+equal("document.open removes document listeners", documentListeners.size, 0);
+prevented = false;
+submit({
+  defaultPrevented: false,
+  target: form("post"),
+  preventDefault() {
+    prevented = true;
+  },
+});
+ok(
+  "second POST intercepted after error render",
+  prevented && requests.length === 2 && writes === 2,
+);
 finish();

@@ -181,7 +181,7 @@
 
   if (window.__levixSubmit) return;
   window.__levixSubmit = true;
-  document.addEventListener(
+  window.addEventListener(
     "submit",
     function (e) {
       if (e.defaultPrevented) return;
