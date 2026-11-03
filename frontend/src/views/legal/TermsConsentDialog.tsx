@@ -1,10 +1,10 @@
 import { RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../../api/client";
 import { Button, Checkbox, Dialog, Spinner } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { LegalPart, LegalTermsResponse, SessionStatus } from "../../types";
-import { fill } from "../../utils/fill";
+import { ltrSegments, templateSegments } from "./legal-bidi.mjs";
 
 export function consentReasonText(
   reason: string | null | undefined,
@@ -22,20 +22,35 @@ export function consentReasonText(
   }
 }
 
-function DocumentPart({ part }: { part: LegalPart }) {
+function renderSegments(segments: Array<{ text: string; ltr: boolean }>) {
+  return segments.map((segment, index) =>
+    segment.ltr ? (
+      <bdi key={index} dir="ltr">
+        {segment.text}
+      </bdi>
+    ) : (
+      <Fragment key={index}>{segment.text}</Fragment>
+    ),
+  );
+}
+
+function DocumentPart({ part, dir }: { part: LegalPart; dir: "rtl" | "ltr" }) {
   return (
-    <section className="space-y-3">
-      <h3 dir="auto" className="text-base font-bold text-text-main">{part.title}</h3>
+    <section dir={dir} className="space-y-3">
+      <h3 className="text-base font-bold text-text-main">
+        {renderSegments(ltrSegments(part.title))}
+      </h3>
       {part.sections.map((section, index) => (
         <div key={index} className="space-y-2">
-          <h4 dir="auto" className="text-sm font-semibold text-text-main">{section.heading}</h4>
+          <h4 className="text-sm font-semibold text-text-main">
+            {renderSegments(ltrSegments(section.heading))}
+          </h4>
           {section.paragraphs.map((paragraph, paragraphIndex) => (
             <p
               key={paragraphIndex}
-              dir="auto"
               className="text-sm leading-relaxed text-muted whitespace-pre-wrap"
             >
-              {paragraph}
+              {renderSegments(ltrSegments(paragraph))}
             </p>
           ))}
         </div>
@@ -50,11 +65,7 @@ interface TermsConsentDialogProps {
   onAccepted: (session: SessionStatus) => void;
 }
 
-export function TermsConsentDialog({
-  isOpen,
-  onClose,
-  onAccepted,
-}: TermsConsentDialogProps) {
+export function TermsConsentDialog({ isOpen, onClose, onAccepted }: TermsConsentDialogProps) {
   const { language, t } = useI18n();
   const [document, setDocument] = useState<LegalTermsResponse | null>(null);
   const [checked, setChecked] = useState(false);
@@ -124,6 +135,8 @@ export function TermsConsentDialog({
     }
   };
 
+  const documentDir = document?.locale === "ar" ? "rtl" : "ltr";
+
   return (
     <Dialog
       isOpen={isOpen}
@@ -157,33 +170,35 @@ export function TermsConsentDialog({
       {!loading && document && (
         <div className="space-y-4">
           <p className="text-sm text-text-main" role={changed ? "alert" : undefined}>
-            {changed
-              ? t("legalChangedReview")
-              : consentReasonText(document.consent.reason, t)}
+            {changed ? t("legalChangedReview") : consentReasonText(document.consent.reason, t)}
           </p>
           {document.locale !== language && (
             <p className="text-sm text-muted">{t("legalEnglishFallback")}</p>
           )}
           <p className="text-xs text-muted">
-            {fill(t("legalVersionEffective"), {
-              version: document.version,
-              date: document.effective,
-            })}
+            {renderSegments(
+              templateSegments(t("legalVersionEffective"), {
+                version: document.version,
+                date: document.effective,
+              }),
+            )}
           </p>
           <div
             lang={document.locale}
-            dir={document.locale === "ar" ? "rtl" : "ltr"}
+            dir={documentDir}
             className="max-h-[50dvh] space-y-6 overflow-y-auto rounded-xl border border-line bg-panel-raised p-4"
           >
-            <DocumentPart part={document.terms} />
-            <DocumentPart part={document.privacy} />
+            <DocumentPart part={document.terms} dir={documentDir} />
+            <DocumentPart part={document.privacy} dir={documentDir} />
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1">
-            {([
-              ["privacyPolicy", "legalFullPrivacy"],
-              ["license", "legalLicense"],
-              ["website", "legalWebsite"],
-            ] as const).map(([key, label]) => (
+            {(
+              [
+                ["privacyPolicy", "legalFullPrivacy"],
+                ["license", "legalLicense"],
+                ["website", "legalWebsite"],
+              ] as const
+            ).map(([key, label]) => (
               <a
                 key={key}
                 href={document.links[key]}
