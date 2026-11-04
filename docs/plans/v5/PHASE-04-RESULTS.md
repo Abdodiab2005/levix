@@ -517,8 +517,27 @@ README line above.
 | `npm run validate:tarball` (FFmpeg from a loopback mirror) | PASS: 36 checks |
 | `npm run validate:docker` | BLOCKED locally (Docker socket permission); GitHub CI runs it |
 
-Not run: D-5 and D-6 on the device (both need the Redmi 9 again), the recents thumbnail inspected by
-eye, accepting Terms on the device, the oldest supported WebView (R-27), the ChatGPT review of the
+Not run at that point: D-5 and D-6 on the device (done in 3.14), the recents thumbnail, accepting Terms on the device, the oldest supported WebView (R-27), the ChatGPT review of the
 three new `pt-BR` and `es-419` gateway strings, and the human legal review. Remote Terms fetching
 stays disabled. Release blockers: human legal approval and the R-27 WebView test.
+
+### 3.14 Android device test of #130 (2026-11-04)
+
+Owner instruction: live test #130, merge if it passes. Device: Redmi 9 (`lancelot`), Android 14,
+WebView 120.0.6099.230. Build: isolated debug APK `net.leviro.levix.dev` from #130 `67928a4`
+(arm64, versionCode 69), installed over the QA build with its data kept; production
+`net.leviro.levix` not touched. App locale set to `es-419` with `cmd locale set-app-locales` for the
+test and cleared afterwards. Terms were not accepted, so no WhatsApp connection was made.
+
+| Check | Result |
+| --- | --- |
+| D-6: home Battery Guard card in `es-419` with status `RESTRINGIDO`: badge under the title; "Protección de batería" and the hint wrap on whole words, no hyphen and no mid-word break | PASS (screenshot) |
+| D-5: login page in the app, Forgot password, send by WhatsApp with no session: inline "WhatsApp no está conectado ... Abre la app Levix, detén e inicia el asistente ... Usa el correo de recuperación si está configurado." No terminal command | PASS |
+| Login at `/` signed out: `screencap` exit 1; wrong password: inline "Contraseña incorrecta", field cleared and focused | PASS |
+| Sign-in opens the dashboard; dashboard `screencap` exit 0 | PASS |
+| Recents with the login screen as the Levix task: the overview cannot be captured at all (`screencap` exit 1, empty file) | Recorded. The same overview with the dashboard as the Levix task captures (exit 0) and shows the dashboard thumbnail, so the refusal comes from the secure Levix tile |
+| Host log: no panel URL with a query or fragment | PASS |
+
+The login thumbnail itself was not inspected by eye: the system refuses every capture of the
+overview while it is on screen, and no person looked at the device. That check stays NOT RUN.
 
