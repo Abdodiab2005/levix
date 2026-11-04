@@ -75,7 +75,7 @@ if (!existsSync(binary)) finish();
 
 const packageDir = join(prefix, "lib", "node_modules", ...PACKAGE_NAME.split("/"));
 ok("the package directory exists", existsSync(packageDir), `${packageDir} is missing`);
-ok("…with the views", existsSync(join(packageDir, "views", "setup.ejs")));
+ok("…without an EJS views directory", !existsSync(join(packageDir, "views")));
 ok("…with the public assets", existsSync(join(packageDir, "public", "socket.io.min.js")));
 ok("…with the deploy templates", existsSync(join(packageDir, "deploy", "levix.service")));
 ok("…and the licence", existsSync(join(packageDir, "LICENSE")));

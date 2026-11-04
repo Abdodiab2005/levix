@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -16,7 +16,6 @@ import {
 const dataDir = useTempDataDir("gateway-react");
 const assetRoot = mkdtempSync(join(tmpdir(), "levix-gateway-assets-"));
 process.on("exit", () => rmSync(assetRoot, { recursive: true, force: true }));
-cpSync(join(ROOT, "views"), join(assetRoot, "views"), { recursive: true });
 mkdirSync(join(assetRoot, "public", "dashboard"), { recursive: true });
 writeFileSync(
   join(assetRoot, "public", "dashboard", "gateway.html"),
@@ -235,7 +234,7 @@ equal("JSON lockout retry header", Number(response.headers.get("retry-after")), 
 ok("JSON lockout retry positive", lockout.retryAfter > 0);
 await server.stop();
 
-section("EJS fallback");
+section("static fallback");
 rmSync(join(assetRoot, "public", "dashboard", "gateway.html"));
 server = await startServer({ dataDir, assetRoot });
 http = httpClient(server.base);
@@ -243,7 +242,12 @@ for (const url of ["/", "/login"]) {
   response = await http.call(url);
   const html = await response.text();
   equal(`${url} fallback status`, response.status, 200);
-  ok(`${url} fallback EJS`, html.includes('src="/gateway-i18n.js"') && !state(html));
+  ok(
+    `${url} static fallback`,
+    html.includes("The panel files are missing") &&
+      html.includes('action="/login"') &&
+      !state(html),
+  );
 }
 await server.stop();
 
@@ -252,8 +256,8 @@ server = await startServer({ dataDir: fallbackData, assetRoot });
 http = httpClient(server.base);
 response = await http.call("/setup");
 ok(
-  "setup fallback EJS",
-  response.status === 200 && (await response.text()).includes('src="/gateway-i18n.js"'),
+  "setup static fallback",
+  response.status === 200 && (await response.text()).includes('action="/setup"'),
 );
 await server.stop();
 

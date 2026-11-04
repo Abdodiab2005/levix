@@ -278,7 +278,6 @@ tasks.register<Exec>("stageLevixApp") {
     environment("LEVIX_ANDROID_VERSION_CODE", versionCode)
     inputs.property("versionCode", versionCode)
     inputs.dir(File(repoRoot, "src"))
-    inputs.dir(File(repoRoot, "views"))
     inputs.dir(File(repoRoot, "public"))
     // Config, HTML, public assets and lockfile changes must invalidate the ZIP
     // too: checking only frontend/src can ship an old dashboard from Gradle's

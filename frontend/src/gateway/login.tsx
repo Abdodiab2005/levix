@@ -32,6 +32,12 @@ const RESET_REASON_KEYS: Record<string, GatewayKey> = {
   invalid_password: "resetErrInvalidPassword",
 };
 
+const RESET_ANDROID_KEYS: Record<string, GatewayKey> = {
+  resetErrNoSession: "resetErrNoSessionAndroid",
+  resetErrUnverified: "resetErrUnverifiedAndroid",
+  resetErrLocked: "resetErrLockedAndroid",
+};
+
 async function postJson(url: string, body: object): Promise<Result> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 20000);
@@ -76,7 +82,13 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
     setBusy(false);
   };
   const showError = (key: GatewayKey, vars?: Record<string, string | number>, raw?: string) =>
-    setError({ key, vars, raw });
+    setError({
+      key: (window as Window & { LevixHost?: object }).LevixHost
+        ? RESET_ANDROID_KEYS[key] || key
+        : key,
+      vars,
+      raw,
+    });
   const send = async (channel: string) => {
     if (busy) return;
     setBusy(true);

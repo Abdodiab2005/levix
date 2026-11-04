@@ -28,7 +28,7 @@ import { gatewayAssets, gatewayState } from "./fixtures/gateway-assets.mjs";
 
 const dataDir = useTempDataDir("levix-setupcode");
 const assets = gatewayAssets();
-assets.ejs();
+assets.fallback();
 
 const PANEL_PORT = 34121;
 const settings = require("./src/config/settings.cjs");
@@ -155,7 +155,7 @@ section("…and that code actually claims the panel from another machine");
     equal("React remote first run needs code", react?.needsCode, true);
     equal("React remote first run has no error", react?.error, null);
   } finally {
-    assets.ejs();
+    assets.fallback();
   }
 
   res = await http.form(
@@ -179,7 +179,7 @@ section("…and that code actually claims the panel from another machine");
       "wrongSetupCode",
     );
   } finally {
-    assets.ejs();
+    assets.fallback();
   }
 
   res = await http.form(

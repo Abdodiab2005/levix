@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026-11-02",
+  "version": "2026-11-02.1",
   "locale": "pt-BR",
   "effective": "2026-11-02",
   "terms": {
@@ -74,7 +74,7 @@
         "paragraphs": [
           "O WhatsApp (Meta) recebe as suas mensagens, as mídias que o bot envia e os seus dados de pareamento enquanto uma conta estiver vinculada, porque o Levix é um cliente do WhatsApp.",
           "Quando você usa um recurso de IA, o prompt e o seu contexto vão para o provedor de IA que você configurou. Esse contexto pode incluir nomes, identificadores do WhatsApp, texto de mensagens, histórico da IA, memória e mídias que você pede para processar. Com o Gemini, o embasamento no Google Search (Google Search grounding) vem ativado por padrão: o Gemini decide a cada resposta se pesquisa na web, e você pode desativar isso nas configurações.",
-          "Outros recursos só contatam outros serviços quando são executados. A IA pode enviar consultas de busca extraídas das suas conversas para a busca na web e para a Wikipédia, e pode abrir páginas da web. Outros recursos usam o Google Translate, a conversão de texto em fala do Google e serviços de clima, horários de oração e encurtadores de links. Consultar os modelos de um provedor de IA envia a sua chave de API a esse provedor, e configurar um domínio com o comando levix domain pede a um serviço de consulta de IP o endereço público do servidor. As prévias de links e as miniaturas remotas vêm desativadas por padrão.",
+          "Outros recursos só contatam outros serviços quando são executados. A IA pode enviar consultas de busca extraídas das suas conversas para a busca na web e para a Wikipédia, e pode abrir páginas da web. Outros recursos usam o Google Translate, a conversão de texto em fala do Google e serviços de clima, horários de oração e encurtadores de links. Consultar os modelos de um provedor de IA envia a sua chave de API a esse provedor, e configurar um domínio com o comando levix domain pede a um serviço de consulta de IP o endereço público do servidor. As prévias de links e as miniaturas remotas vêm desativadas por padrão. Se você aprovar a instalação do Caddy durante a configuração do domínio, o servidor acessará repositórios de pacotes.",
           "Se você definir um proxy, o tráfego do WhatsApp passa por ele."
         ]
       },

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "2026-11-02",
+  "version": "2026-11-02.1",
   "locale": "en",
   "effective": "2026-11-02",
   "terms": {
@@ -74,7 +74,7 @@
         "paragraphs": [
           "WhatsApp (Meta) receives your messages, the media the bot sends and your pairing data for as long as an account is linked, because Levix is a WhatsApp client.",
           "When you use an AI feature, the prompt and its context go to the AI provider you configured. That context can include names, WhatsApp identifiers, message text, AI history, memory and media you ask it to process. With Gemini, Google Search grounding is on by default: Gemini decides for each answer whether to search the web, and you can turn this off in the settings.",
-          "Other features contact other services only when they run. The AI can send search queries drawn from your chats to web search and Wikipedia, and can open web pages. Other features use Google Translate, Google text-to-speech, weather, prayer times and link shortener services. Looking up the models of an AI provider sends your API key to that provider, and setting up a domain with the levix domain command asks an IP lookup service for the server's public address. Link previews and remote thumbnails are off by default.",
+          "Other features contact other services only when they run. The AI can send search queries drawn from your chats to web search and Wikipedia, and can open web pages. Other features use Google Translate, Google text-to-speech, weather, prayer times and link shortener services. Looking up the models of an AI provider sends your API key to that provider, and setting up a domain with the levix domain command asks an IP lookup service for the server's public address. Link previews and remote thumbnails are off by default. If you approve installing Caddy during domain setup, the server contacts package repositories.",
           "If you set a proxy, WhatsApp traffic goes through it."
         ]
       },

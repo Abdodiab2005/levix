@@ -247,7 +247,7 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
+                android:gravity="top"
                 android:orientation="horizontal">
 
                 <ImageView
@@ -262,45 +262,50 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="12dp"
-                    android:layout_marginEnd="8dp"
                     android:layout_weight="1"
                     android:orientation="vertical">
 
                     <TextView
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:breakStrategy="simple"
                         android:fontFamily="?attr/fontFamily"
+                        android:hyphenationFrequency="none"
                         android:text="@string/card_battery_title"
                         android:textColor="@color/levix_text"
                         android:textSize="@dimen/home_card_title"
                         android:textStyle="bold" />
 
                     <TextView
-                        android:id="@+id/batteryHint"
+                        android:id="@+id/batteryBadge"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
+                        android:layout_gravity="start"
+                        android:layout_marginTop="4dp"
+                        android:background="@drawable/bg_badge_subtle"
+                        android:fontFamily="?attr/fontFamily"
+                        android:paddingStart="8dp"
+                        android:paddingTop="3dp"
+                        android:paddingEnd="8dp"
+                        android:paddingBottom="3dp"
+                        android:singleLine="true"
+                        android:text="@string/status_checking"
+                        android:textColor="@color/levix_warn"
+                        android:textSize="@dimen/home_badge"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/batteryHint"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:breakStrategy="simple"
                         android:ellipsize="end"
+                        android:hyphenationFrequency="none"
                         android:text="@string/battery_hint"
                         android:textColor="@color/levix_text_muted"
                         android:textSize="@dimen/home_caption" />
                 </LinearLayout>
-
-                <TextView
-                    android:id="@+id/batteryBadge"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_badge_subtle"
-                    android:fontFamily="?attr/fontFamily"
-                    android:paddingStart="8dp"
-                    android:paddingTop="3dp"
-                    android:paddingEnd="8dp"
-                    android:paddingBottom="3dp"
-                    android:singleLine="true"
-                    android:text="@string/status_checking"
-                    android:textColor="@color/levix_warn"
-                    android:textSize="@dimen/home_badge"
-                    android:textStyle="bold" />
             </LinearLayout>
 
             <Button

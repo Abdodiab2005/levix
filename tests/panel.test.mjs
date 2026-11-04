@@ -11,7 +11,7 @@ import { gatewayAssets, gatewayState } from "./fixtures/gateway-assets.mjs";
 
 const dataDir = useTempDataDir("levix-panel");
 const assets = gatewayAssets();
-assets.ejs();
+assets.fallback();
 const { saveSchedule } = await import("../src/utils/storage.esm.js");
 saveSchedule({
   id: "panel-weekly",
@@ -45,7 +45,7 @@ try {
     equal("React local first run needs no code", react?.needsCode, false);
     equal("React local first run has no error", react?.error, null);
   } finally {
-    assets.ejs();
+    assets.fallback();
   }
 
   res = await http.call("/dashboard/api/stats");

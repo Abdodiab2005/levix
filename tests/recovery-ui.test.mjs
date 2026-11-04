@@ -1,182 +1,117 @@
-// Execute the shipped login script and dictionaries with a tiny DOM test double.
-// No browser dependencies, network requests, real credentials or email.
+// Recovery UI now lives in React. Check the state gates and request handling
+// against the shipped source and generated translations.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
 import { parseInlineMarkup } from "../frontend/src/gateway/inline-markup-parse.ts";
-import { equal, finish, ok, require, ROOT, section } from "./harness.mjs";
+import { equal, finish, ok, ROOT, section } from "./harness.mjs";
 
-const template = readFileSync(join(ROOT, "views/login.ejs"), "utf8");
-const script = [...template.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1];
-const dictionary = readFileSync(join(ROOT, "public/gateway-i18n.js"), "utf8");
+const read = (path) => readFileSync(join(ROOT, path), "utf8");
+const login = read("frontend/src/gateway/login.tsx");
+const dictionary = read("frontend/src/i18n/gateway.generated.ts");
 
 section("only a verified address is a login recovery option");
-const ejs = require("ejs");
-for (const verified of [false, true]) {
-  const html = ejs.render(template, {
-    brand: require("./src/config/brand.cjs"),
-    error: null,
-    minLength: 8,
-    recoveryEmail: "re***@e***.com",
-    recoveryEmailVerified: verified,
-  });
-  equal(`verified=${verified}: email option`, html.includes('data-channel="email"'), verified);
-  equal(
-    `verified=${verified}: email subtitle`,
-    html.includes('data-i18n="resetSubtitleChannels"'),
-    verified,
+ok(
+  "email channel requires verified address and mask",
+  login.includes("state.recoveryEmailVerified && state.recoveryEmail &&"),
+);
+ok(
+  "email subtitle requires verified address and mask",
+  login.includes("state.recoveryEmailVerified && state.recoveryEmail") &&
+    login.includes('"resetSubtitleChannels"'),
+);
+ok("email mask comes from server state", login.includes("{state.recoveryEmail}"));
+ok("WhatsApp channel is always offered", login.includes('onClick={() => send("whatsapp")}'));
+
+section("recovery requests and states");
+ok("requests have a same-origin credential mode", login.includes('credentials: "same-origin"'));
+ok(
+  "channel request sends selected language",
+  login.includes("lang: document.documentElement.lang"),
+);
+ok(
+  "duplicate channel and confirm requests are blocked",
+  /const send = async \(channel: string\) => \{\s*if \(busy\) return;/.test(login) &&
+    /const complete = async \(event: FormEvent<HTMLFormElement>\) => \{\s*event\.preventDefault\(\);\s*if \(busy\) return;/.test(
+      login,
+    ),
+);
+ok(
+  "channel choices are disabled while busy",
+  login.includes("disabled={busy}") && login.includes('send("email")'),
+);
+ok(
+  "code form opens after a successful send",
+  login.includes("if (result.ok) setSent(true)") && login.includes("{sent && !done && ("),
+);
+ok(
+  "another method is reachable",
+  login.includes('t("resetChooseChannel")') && login.includes("setSent(false)"),
+);
+ok(
+  "confirmation submits code and passwords",
+  login.includes('postJson("/reset/confirm", values)') &&
+    ["code", "password", "confirm"].every((name) => login.includes(`fields.get("${name}")`)),
+);
+ok(
+  "confirmation button is disabled while busy",
+  /type="submit" className="w-full" disabled=\{busy\}/.test(login),
+);
+ok(
+  "wrong code keeps the typed code",
+  login.includes('result.reason === "wrong_code"') &&
+    !login.includes('setCode("");\n        showError("resetErrWrongCode"'),
+);
+ok("wrong code shows attempts left", login.includes('t("resetErrAttemptsLeft", error.vars)'));
+ok(
+  "expired or changed code returns to channel choice",
+  login.includes('"address_changed"') &&
+    login.includes('showError(RESET_REASON_KEYS[result.reason || ""])') &&
+    login.includes('address_changed: "resetErrExpired"') &&
+    login.includes("setSent(false)"),
+);
+ok(
+  "failed requests release busy state",
+  (login.match(/finally \{\s*setBusy\(false\);/g) || []).length === 2,
+);
+ok(
+  "offline requests show server error",
+  (login.match(/showError\("resetErrServer"\)/g) || []).length === 2,
+);
+ok(
+  "rate limit uses Retry-After and a translated countdown",
+  login.includes('response.headers.get("Retry-After")') &&
+    login.includes('showError("resetErrThrottled"'),
+);
+for (const reason of ["unverified", "unavailable", "no_email", "rate_limited"]) {
+  ok(
+    `${reason} maps to an error`,
+    login.includes(`${reason}:`) || login.includes(`result.reason === "${reason}"`),
   );
-  equal(`verified=${verified}: email mask`, html.includes("re***@e***.com"), verified);
-  ok(`verified=${verified}: WhatsApp remains`, html.includes('data-channel="whatsapp"'));
 }
 
+section("localized recovery copy");
 for (const language of ["en", "ar"]) {
-  section(`${language} recovery UI`);
-  function element() {
-    const events = {};
-    return {
-      hidden: false,
-      disabled: false,
-      value: "",
-      textContent: "",
-      events,
-      addEventListener(name, handler) {
-        events[name] = handler;
-      },
-      focus() {},
-      getAttribute() {
-        return "email";
-      },
-    };
-  }
-  const elements = new Map();
-  const get = (id) => {
-    if (!elements.has(id)) elements.set(id, element());
-    return elements.get(id);
-  };
-  const channelButton = element();
-  const submit = element();
-  get("reset-channels").querySelectorAll = () => [channelButton];
-  get("reset-form").querySelector = () => submit;
-  const document = {
-    documentElement: {
-      lang: language,
-      getAttribute() {
-        return "Levix";
-      },
-    },
-    getElementById: get,
-    querySelectorAll: () => [],
-    addEventListener() {},
-  };
-  const window = { location: {}, addEventListener() {} };
-  let answer = {};
-  let send;
-  let calls = 0;
-  let timeout;
-  const fetch = async (_url, options) => {
-    calls += 1;
-    ok("request has a timeout signal", Boolean(options.signal));
-    if (send) return send();
-    return { json: async () => answer };
-  };
-  runInNewContext(dictionary + script, {
-    document,
-    window,
-    fetch,
-    setTimeout(_callback, ms) {
-      timeout = ms;
-      return 1;
-    },
-    clearTimeout() {},
-    AbortController: class {
-      signal = {};
-      abort() {}
-    },
-  });
-  const t = window.LevixGatewayI18n.t;
-  const choose = () =>
-    get("reset-channels").events.click({ target: { closest: () => channelButton } });
-  const confirm = () => get("reset-form").events.submit({ preventDefault() {} });
-
-  for (const [reason, key] of [
-    ["unverified", "resetErrUnverified"],
-    ["unavailable", "resetErrUnavailable"],
-    ["no_email", "resetErrNoEmail"],
-    ["rate_limited", "resetErrRateLimited"],
+  const start = dictionary.indexOf(`  ${language}: {`);
+  const end = dictionary.indexOf("\n  },", start);
+  const entries = dictionary.slice(start, end);
+  ok(`${language} dictionary is present`, start >= 0 && end > start);
+  for (const key of [
+    "resetSubtitleChannels",
+    "resetChooseChannel",
+    "resetErrUnverified",
+    "resetErrUnavailable",
+    "resetErrNoEmail",
+    "resetErrRateLimited",
+    "resetErrThrottled",
+    "resetErrWrongCode",
+    "resetErrAttemptsLeft",
+    "resetErrExpired",
+    "resetErrServer",
   ]) {
-    answer = { ok: false, reason };
-    await choose();
-    equal(`${reason} is translated`, get("reset-error").textContent, t(key));
-    ok(
-      `${reason} has real localized copy`,
-      language === "ar" ? /[\u0600-\u06ff]/.test(t(key)) : t(key) !== key,
-    );
-    equal(`${reason} leaves channel choices enabled`, channelButton.disabled, false);
+    ok(`${language} has ${key}`, entries.includes(`    ${key}:`));
   }
-  answer = { ok: false, reason: "rate_limited", retryAfter: 173 };
-  await choose();
-  equal("rate delay is shown", get("reset-error").textContent, t("resetErrThrottled", { n: 173 }));
-  equal("UI timeout is bounded", timeout, 20000);
-
-  let release;
-  send = () =>
-    new Promise((resolve) => {
-      release = resolve;
-    });
-  const first = choose();
-  const before = calls;
-  await choose();
-  equal("duplicate channel send is prevented", calls, before);
-  release({ json: async () => ({ ok: true }) });
-  await first;
-  send = null;
-  equal("success opens the code form", get("reset-form").hidden, false);
-  get("reset-choose-channel").events.click();
-  equal("another method is reachable without guessing a code", get("reset-channels").hidden, false);
-  equal("another method hides the code form", get("reset-form").hidden, true);
-  ok(
-    "alternative method label is localized",
-    language === "ar"
-      ? /[\u0600-\u06ff]/.test(t("resetChooseChannel"))
-      : t("resetChooseChannel") !== "resetChooseChannel",
-  );
-
-  get("reset-code").value = "123456";
-  send = () =>
-    new Promise((resolve) => {
-      release = resolve;
-    });
-  const pending = confirm();
-  const beforeConfirm = calls;
-  await confirm();
-  equal("duplicate reset confirmation is prevented", calls, beforeConfirm);
-  equal("submit is disabled during confirmation", submit.disabled, true);
-  release({ json: async () => ({ ok: false, reason: "wrong_code", attemptsLeft: 4 }) });
-  await pending;
-  send = null;
-  equal("wrong code preserves the typed code", get("reset-code").value, "123456");
-  equal(
-    "attempt count is localized",
-    get("reset-error").textContent,
-    `${t("resetErrWrongCode")} ${t("resetErrAttemptsLeft", { n: 4 })}`,
-  );
-  equal("submit recovers after failure", submit.disabled, false);
-
-  answer = { ok: false, reason: "address_changed" };
-  await confirm();
-  equal("changed address returns to channel choice", get("reset-channels").hidden, false);
-  equal(
-    "changed address explains expired code",
-    get("reset-error").textContent,
-    t("resetErrExpired"),
-  );
-  send = async () => {
-    throw new Error("offline");
-  };
-  await choose();
-  equal("offline is localized", get("reset-error").textContent, t("resetErrServer"));
-  equal("offline releases channel buttons", channelButton.disabled, false);
+  if (language === "ar") ok("Arabic recovery text is localized", /[\u0600-\u06ff]/.test(entries));
 }
 
 section("React recovery reason mapping");
@@ -223,6 +158,55 @@ for (const [reason, key] of Object.entries(expectedReasons)) {
     );
   }
 }
+
+section("Android recovery errors");
+const androidMappingSource =
+  /const RESET_ANDROID_KEYS: Record<string, GatewayKey> = (\{[\s\S]*?\});/.exec(reactSource);
+const androidKeys = runInNewContext(`(${androidMappingSource?.[1] || "{}"})`);
+const androidReasons = ["no_session", "unverified", "locked"];
+equal(
+  "Android overrides only three errors",
+  Object.keys(androidKeys).length,
+  androidReasons.length,
+);
+for (const locale of ["en", "ar", "pt-BR", "es-419"]) {
+  const catalog = JSON.parse(read(`i18n/${locale}/gateway.json`));
+  for (const reason of androidReasons) {
+    const desktopKey = expectedReasons[reason];
+    const androidKey = `${desktopKey}Android`;
+    const copy = catalog[androidKey];
+    equal(`${reason} maps to ${androidKey}`, androidKeys[desktopKey], androidKey);
+    ok(`${locale} has ${androidKey}`, typeof copy === "string" && copy.length > 0);
+    ok(
+      `${locale} ${androidKey} has no terminal or server instruction`,
+      typeof copy === "string" && !/levix reset-password|server|servidor|الخادم|`/i.test(copy),
+    );
+    ok(
+      `${locale} ${desktopKey} keeps the offline command`,
+      catalog[desktopKey]?.includes("levix reset-password"),
+    );
+  }
+}
+const androidSelection =
+  /key: \(window as Window & \{ LevixHost\?: object \}\)\.LevixHost\s*\? (RESET_ANDROID_KEYS\[key\] \|\| key)\s*: (key)/.exec(
+    reactSource,
+  );
+ok("error display selects Android copy only with LevixHost", Boolean(androidSelection));
+for (const reason of [...androidReasons, "wrong_code"]) {
+  const key = expectedReasons[reason];
+  const select = (host) =>
+    runInNewContext(
+      `window.LevixHost ? ${androidSelection?.[1] || "key"} : ${androidSelection?.[2] || "key"}`,
+      { window: { LevixHost: host }, RESET_ANDROID_KEYS: androidKeys, key },
+    );
+  equal(`${reason} uses desktop copy without host`, select(undefined), key);
+  equal(`${reason} uses Android copy with host`, select({}), androidKeys[key] || key);
+}
+ok(
+  "request and confirmation errors use the shared selector",
+  reactSource.includes('showError(RESET_REASON_KEYS[result.reason || ""] || "resetErrStart")') &&
+    reactSource.includes("showError(RESET_REASON_KEYS.locked)"),
+);
 ok(
   "React wrong code shows attempts left",
   reactSource.includes("result.attemptsLeft") && reactSource.includes('t("resetErrAttemptsLeft"'),

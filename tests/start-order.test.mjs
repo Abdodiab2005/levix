@@ -122,6 +122,14 @@ section("preparation and backup");
 
 section("process lifetime lock");
 {
+  const transient = run("transient-busy", freshDir("transient-busy"));
+  equal("a transient SQLite lock is retried", transient.acquired, true);
+  equal("retry uses a fresh attempt", transient.attempts, 2);
+  equal("the failed connection closes before retry", transient.closedBeforeRetry, true);
+  const busy = run("persistent-busy", freshDir("persistent-busy"));
+  equal("persistent contention is refused", busy.code, "ELEVIXLOCKED");
+  equal("contention retries are bounded", busy.attempts, 10);
+  equal("failed retries retain no connection", busy.held, false);
   const dir = freshDir("lock");
   const a = launch("hold", dir);
   const b = launch("hold", dir);

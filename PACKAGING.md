@@ -164,11 +164,10 @@ CommonJS file and this app is neither:
    before, so a normal install is unaffected — and dropping a new `.cjs` into
    `src/commands/` still works with no build step.
 
-2. **Inlines the assets.** `views/`, `public/` and the persona template
-   (~690 KB) go in as base64. On first run the executable writes them under
+2. **Inlines the assets.** `public/` and the persona template
+   go in as base64. On first run the executable writes them under
    `<data>/assets/<build stamp>` and points the app there via
-   `setAssetRoot()`; a previous build's copy is deleted. Express and EJS get
-   real paths on a real filesystem and never know the difference.
+   `setAssetRoot()`; a previous build's copy is deleted. Express gets real asset paths on a real filesystem.
 
 3. **Unwraps `createRequire`.** Fifteen ESM files do
    `const require = createRequire(import.meta.url)` and then require a `.cjs`
@@ -184,8 +183,8 @@ CommonJS file and this app is neither:
 Three things had to change in the app itself for this to work, all of them
 improvements on their own:
 
-- `app.engine("ejs", require("ejs").__express)` instead of letting Express
-  `require("ejs")` lazily by name.
+- A code-owned static page keeps login and setup available when the frontend
+  build is missing; QR and the signed-in panel show repair instructions.
 - The socket.io browser bundle is vendored in `public/socket.io.min.js` with
   `serveClient: false`, rather than being read out of `node_modules` per
   request — the same treatment `qrcode.min.js` already had.

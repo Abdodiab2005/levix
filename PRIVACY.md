@@ -1,6 +1,6 @@
 # Levix Privacy Policy & Google Play Data Safety
 
-> **Effective date:** 2026-10-31
+> **Effective date:** 2026-11-02
 > **Applies to:** the Levix Android app (`net.leviro.levix`) and the Levix
 > self-hosted server distributed from this repository.
 > **Product:** Levix, built by Abdelrhman Diab, Leviro.
@@ -104,8 +104,9 @@ decides whether to search for each answer.
 11. **Model discovery and domain setup:** when you request live model
     discovery in the panel, the chosen provider's models endpoint receives
     your API key. On a desktop or server, `levix domain` requests
-    `api.ipify.org` to check the server's public IP; this command is not part
-    of the Android app.
+    `api.ipify.org` to check the server's public IP. If you approve installing
+    Caddy, the installation may contact `dl.cloudsmith.io` and your system's
+    package repositories. This command is not part of the Android app.
 
 The database, settings, API keys, memory files and control panel are stored in
 the app's private storage on Android. An API key also goes to its configured
@@ -185,9 +186,10 @@ Notes:
 | **Aladhan** (`api.aladhan.com`) | The city name | When you use `!prayer` | Getting prayer times for the named city |
 | **URL shorteners** (`is.gd`, then `v.gd` on fallback) | The URL to shorten | When you use `!shortlink` | Creating a short link |
 | **Host of a URL in an outgoing message** | Request for the linked page | When `link_previews_enabled` is on and an outgoing message contains a previewable link; off by default | Building a link preview |
-| **Host of a remote media URL** | Request to download the media | When `thumbnail_remote` is on and remote media is sent; off by default | Building a thumbnail |
+| **Host of a remote media URL** | Request to download the media | When remote media is sent, or when `thumbnail_remote` is enabled for a thumbnail | Sending media or building a thumbnail |
 | **Configured AI provider's models endpoint** | The operator's API key | When the operator requests live model discovery in the panel | Listing available models |
 | **IP lookup service** (`api.ipify.org`) | An IP lookup request, exposing the server's source IP | When the operator runs `levix domain` on a desktop or server; not an Android flow | Checking the server's public IP |
+| **Caddy package sources** (`dl.cloudsmith.io` and system package repositories) | Package and repository requests, exposing the server's source IP | If the operator approves installing Caddy through `levix domain` | Installing the reverse proxy |
 | **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |
 | **Leviro Support** (via `levix.leviro.net/api/feedback`; currently delivered to Leviro Support through **Telegram**, which carries and stores the message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact, an optional file you attach yourself — plus the Levix version, the platform, and the sending app's user-agent. If you tick the diagnostics box, the section 2a diagnostics object and the sanitized technical debug log in section 2b as well | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |
 | **Leviro Support** (via `levix.leviro.net/api/crash-reports`, a Levix-operated server) | One crash report: category, sanitized error type/message/stack, an optional screen id, the app + section 2a device fields, the sanitized technical debug log in section 2b, and a few navigation breadcrumbs. Never a phone number, JID, chat/message body or media file | Only when **you** open the panel and press Send on one report; never automatically | Support: so a crash can be grouped and fixed |
@@ -561,7 +563,13 @@ device-following identifier anywhere in them.
 ## 8. Changes to this policy
 
 Material changes will be published in this repository with a new effective
-date. Continued use after a change means acceptance.
+date. Levix asks for explicit acceptance of the updated Terms and Privacy
+Notice for each installation before its next WhatsApp connection. A connection
+already open remains open until it disconnects. Levix also asks again after an
+app update; unlinking or changing the WhatsApp account, reconnecting, restarting
+or resetting the panel password does not by itself require acceptance again.
+The acceptance record stays on the device and is excluded from settings exports
+and backups; the local pre-upgrade database copy retains it.
 
 ## 9. Contact
 

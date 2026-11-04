@@ -6,7 +6,6 @@ import { ROOT } from "../harness.mjs";
 
 export function gatewayAssets() {
   const root = mkdtempSync(join(tmpdir(), "levix-gateway-test-"));
-  symlinkSync(join(ROOT, "views"), join(root, "views"), "dir");
   symlinkSync(join(ROOT, "src"), join(root, "src"), "dir");
   const dashboard = join(root, "public", "dashboard");
   mkdirSync(dashboard, { recursive: true });
@@ -20,7 +19,7 @@ export function gatewayAssets() {
   return {
     root,
     preload,
-    ejs() {
+    fallback() {
       rmSync(shell, { force: true });
     },
     react() {

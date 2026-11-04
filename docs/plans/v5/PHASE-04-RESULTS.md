@@ -1,10 +1,8 @@
 # Phase 04: React gateway and Terms consent
 
-Status: IN REVIEW, NOT MERGED. Slices 04a and 04b are implemented in open PRs #126 and #127, which
-were updated after the owner's review on 2026-11-02 (section 3). Slices 04c (#128) and 04d
-(#129) are implemented in new open PRs; 04e (#130) is a draft. No Phase 04 PR is merged, so nothing in this phase
-ships on `main` (407bf1e). Owner decisions Q-03, Q-04, Q-05 and Q-17 are recorded in ADR-006,
-ADR-019 and ADR-020. The contract lives in `LEGAL_CONSENT_CONTRACT.md`.
+Status: 04a to 04d MERGED to `main` on 2026-11-04 through #131 (merge commit `0fff4ca`), which
+integrates #125 to #129 in one merge (section 3.13). 04e (#130) is open as a draft and is not merged.
+Owner decisions Q-03, Q-04, Q-05 and Q-17 are recorded in ADR-006, ADR-019 and ADR-020. The contract lives in `LEGAL_CONSENT_CONTRACT.md`.
 
 ## 1. Re-audit of the current tree (main 407bf1e, 2026-11-02)
 
@@ -226,3 +224,320 @@ then hit its free-tier limit at once, and Codex finished it from the partial dif
 - Observation, not changed: the CI `tests` job comment says the suite talks to WhatsApp's servers
   up to the pairing boundary, which the v5 rule "no live side effects" does not allow. This
   predates Phase 04.
+
+### 3.8 Follow-up after owner decisions (2026-11-02)
+
+This section supersedes the open decisions and status in 3.6–3.7. PR #128 carries the validated
+public key and an explicit disabled remote-fetch gate; a signed release, endpoint deployment and
+human legal/privacy approval remain prerequisites for activation. PR #129 adds QR script error
+and retry handling. PR #130 remains draft and adds locally hosted fonts, the versioned privacy
+correction and the reviewed translations. The standalone `PRIVACY.md` is not read at runtime:
+future policy changes must also version the bundled notice so installations are asked again.
+No English-prevails clause was added. Machine language review is not legal approval or native
+speaker certification.
+
+The headless and connection tests now use fake Baileys sockets, and the suite preloads a guard
+against external TCP/UDP. The updated #128 and #129 remain siblings; merging the updated #128
+and #130 trees produced the same tree tested locally (integration tree `e00219c`, Linux,
+2026-11-02). No production WhatsApp connection or device test was made in this follow-up.
+
+| Gate | Result on that integration tree |
+| --- | --- |
+| `npm test`, Node 24.22.2 | PASS: 9,204 checks, 0 failed, 0 crashed |
+| `npm run lint`, `npm run i18n:check`, `npm run build:frontend` | PASS (lint reported warnings) |
+| Android `:app:testDebugUnitTest :app:assembleDebug :app:assembleRelease`, offline | PASS: 87 unit tests; both APK ABIs |
+| Android `:app:bundleRelease`, offline | PASS on retry after freeing temporary disk space; local build only |
+| `npm run validate:tarball` | PASS: 36 checks, using a loopback mirror of the cached FFmpeg binary and no external test traffic |
+| `npm run build:sea` and `npm run validate:sea` | PASS: 51 checks, Linux x64, Node 24.22.2 |
+| `npm run validate:docker` | BLOCKED locally: Docker socket permission denied. GitHub CI passed the Docker job on #128, #129 and #130. |
+| Android device and WebView QA | NOT RUN: owner device and instruction required. |
+
+Human legal/privacy review remains a release blocker. The remote client remains disabled; no legal
+document has been approved or published, and the owner's private signing key was not accessed.
+
+### 3.9 Follow-up: simultaneous startup lock (2026-11-02)
+
+CI run 41526919711 failed `start-order.test.mjs`: both simultaneous fresh starters could report
+`ELEVIXLOCKED`, leaving no winner. The race was reproduced with isolated child processes. Two
+SQLite connections could both fail while promoting their locks; merely adding SQLite's busy timeout
+did not eliminate it. The fix closes a busy candidate and retries a bounded number of times with a
+short stagger; SQLite remains the single-instance authority, and persistent contention still fails
+closed. No database migration or lock-file format changes.
+
+On Linux, Node 24.22.2, 2026-11-02, integration commit `88e5483`: PASS `node tests/run.mjs
+start-order` (136 checks), PASS `node tests/run.mjs lock` (18 checks), and PASS 100 independently
+created simultaneous startup pairs (zero pairs without exactly one holder). The focused test also
+injects transient and persistent SQLite-busy errors to check connection cleanup and the retry bound.
+The full gates in 3.8 refer to the preceding tree. They were rerun for the lock change:
+
+| Gate | Result on integration commit `88e5483` (Linux x64, Node 24.22.2, 2026-11-02) |
+| --- | --- |
+| `npm test`, external network guard preloaded | PASS: 9,212 checks, 0 failed, 0 crashed |
+| `npm run lint` | PASS: 0 errors (190 warnings, 67 infos) |
+| `npm run i18n:check`, `npm run build:frontend` | PASS |
+| Android `:app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:bundleRelease`, offline | PASS: 87 unit tests, 0 failures; both APK ABIs; local AAB; `levix-build.json` versionCode 69 |
+| `npm run build:sea` and `npm run validate:sea` | PASS: 51 checks, 0 failed |
+| `npm run validate:tarball` | PASS: 36 checks, 0 failed (loopback FFmpeg mirror, external network guard) |
+| `npm run validate:docker` | BLOCKED locally (Docker socket permission). CI job PASS on #130 `2136f83` |
+| GitHub CI on #128 `a9b5e88`, #129 `badb756`, #130 `2136f83` | PASS: 7/7 jobs on each |
+
+The merge of the #128 and #130 heads differs from `88e5483` only in this file and
+`LEGAL_COPY_REVIEW.md`; the code is identical.
+
+### 3.10 Manual device QA (2026-11-03)
+
+Owner-authorized live test. Device: Redmi 9 (`lancelot`), LineageOS, Android 14 (API 34), arm64,
+system WebView `com.android.webview` 120.0.6099.230. Build: merge of #130 `594ba9f` and #128
+`a9b5e88` (code identical to `88e5483`), isolated debug APK `net.leviro.levix.dev`
+(`-PlevixIsolatedDebug=true`), versionCode 69, then a local-only build with versionCode 70. The
+production `net.leviro.levix` 4.8.0 on the device was not touched. No WhatsApp account was paired;
+the session reached WhatsApp only to fetch QR codes.
+
+| Check | Result |
+| --- | --- |
+| Fresh install, first Start: dialog before any socket; no TCP socket for the app's uid; state `consent_required` | PASS |
+| Dialog close keeps `consent_required`; Connection shows "Review terms"; home card and one alert notification appear | PASS |
+| Accept is disabled until the box is ticked; accept records `2026-11-02.1`, locale `ar`, `4.9.2+android.69`; QR follows | PASS |
+| Force-stop and relaunch: no new prompt; Start goes straight to QR | PASS |
+| Unlink (unpaired) and Start again: no new prompt | PASS |
+| `adb install -r` versionCode 70 over 69: data kept, consent `app_updated`, dialog on Start, alert shown; accept records `4.9.2+android.70`; alert cleared | PASS |
+| `/qr` with `qrcode.min.js` blocked (CDP): error and Retry; Retry after unblocking loads both libraries and clears the error | PASS |
+| Dashboard and gateway: no request leaves `127.0.0.1:3001`; fonts load from local files | PASS |
+| Theme and language from the dashboard and the native home reach the gateway (dark; `es-419`, LTR; Arabic RTL) | PASS |
+| Recovery: only the WhatsApp channel without a verified email; unlinked send shows the 409 message inline | PASS |
+| Wrong password on `/login` | FAIL: blank page (D-1) |
+| `FLAG_SECURE` on login and setup | FAIL: screens are capturable (D-2) |
+| Arabic legal text direction | FAIL: paragraphs starting with a Latin word render LTR (D-3) |
+| Password reset keeps consent; pairing and relinking a real account; oldest supported WebView (R-27) | NOT RUN |
+
+Defects found:
+
+- D-1 (P1, Android, from 04d). A failed login (401) leaves an empty page. `panel-bridge.js`
+  renders a POST answer of 400 or more with `document.open`/`document.write`. The gateway entry is
+  an ES module that already ran in that window, so it does not run again and `#root` stays empty.
+  The EJS pages used classic scripts. The same path serves the failed `/setup` POST. Reproduced
+  twice. Recovery uses `fetch` and is not affected.
+- D-2 (P1, privacy, older than Phase 04). `PanelActivity.applyScreenCaptureGuard` compares the
+  WebView URL path with exactly `/login` and `/setup`. The panel opens `<panelUrl>/#<hash>`, so
+  first run loads `/setup/`, and `PanelHttp.exchange` follows redirects internally, so the login
+  page shows at `/`. `adb exec-out screencap` captured both screens.
+- D-3 (P2). Legal blocks carry `dir="auto"`, so an Arabic paragraph that starts with "Levix" takes
+  LTR direction and its words reorder.
+- D-4 (P3). The version and effective date in the Arabic dialog render as `02.1-11-2026`; they
+  need an LTR isolate.
+- D-5 (P3). The Android recovery error tells the user to run `levix reset-password` on the server.
+- D-6 (P3, native home). In Spanish, the battery card's text column is squeezed by the
+  `RESTRINGIDO` badge and words break mid-word.
+
+Observation: the production app on the device logged `state=logged_out code=401` at 00:08:43 when
+the phone's Wi-Fi came back. The QA build has its own data and never paired, so the test did not
+cause it; the owner should check that install.
+
+D-1 to D-4 are fixed in section 3.11. D-5 and D-6 are still open.
+
+### 3.11 Defect fixes D-1 to D-4 (2026-11-03)
+
+The owner approved fixing D-1 to D-4 on 2026-11-03. D-5 and D-6 stay open and tracked as
+non-blocking UI issues; nothing here changes them. No PR is merged. #130 stays a draft.
+
+| Defect | Cause | Fix | PR and commits | Implementer | Regression tests |
+| --- | --- | --- | --- | --- | --- |
+| D-1 (P1) | `panel-bridge.js` rendered a 4xx POST answer with `document.write`; the gateway ES module does not run again, so `#root` stayed empty | The React gateway posts login and setup itself with `fetch` and `Accept: application/json`. `POST /login` and `POST /setup` then answer JSON: 200 `{ok, redirect}`, 401, 400 or 429 `{error}` (429 keeps `Retry-After`), 409 `{redirect}`, never 3xx, `no-store`. Errors render inline; the deep link hash is kept. HTML answers, throttling, failure counting and session regeneration are unchanged. | #129 `b0bc38f`, `23b9f5e` | Codex | `gateway-react` (JSON contract, throttle, cross-origin 403), `gateway-auth-submit`, `panel-bridge` |
+| D-7 (P1, privacy, new) | Found while auditing D-1. The bridge's submit listener ran in the capture phase on `document`, before React. Every `onSubmit` form without `method="post"` became a GET navigation built from its named fields: the password reset form (`code`, `password`, `confirm`) would put the new password in the URL, and the host logged that URL. Dashboard forms reloaded the page. | The listener is on `window` in the bubble phase, skips events the page already handled (`defaultPrevented`), and intercepts only POST forms. `window` listeners survive `document.open()`, so a classic-script page can submit again after a 4xx render. The host log records panel URLs without query or fragment. | #129 `b0bc38f`, `b35e173`, `23b9f5e` | Codex, Grok | `panel-bridge` (prevented event, GET form, form without method, second POST after a 4xx render) |
+| D-2 (P1) | The guard compared the URL path with `/login` and `/setup`; setup shows at `/` or `/setup/`, and login at `/` because `PanelHttp` follows redirects natively | `FLAG_SECURE` is set in `onCreate` before `setContentView`. Every main-frame response, page start and main-frame error sets it again; the intercept thread waits for the flag update (bounded, 2000 ms, logged on timeout) before it returns the response. `ScreenCaptureGuard` clears it only when the document's own response carried `X-Levix-Screen-Capture: allow`, that document's `onPageStarted` committed the decision, and its `onPageFinished` follows. The server sends the header only on the signed-in dashboard (`GET /`) and the signed-in QR page, which was capturable before. Any other callback order stays secure. A fragment-only finish changes nothing. | #129 `b35e173`, `23b9f5e` | Grok, then Codex (review fix) | `ScreenCaptureGuardTest` (21), `screen-capture-header` (40 checks) |
+| D-3 (P2) | `dir="auto"` on every legal block | Blocks inherit the document locale direction (`rtl` for `ar`) | #127 `6bfb019` | Grok | `legal-dialog`, `legal-bidi` |
+| D-4 (P3) | Unicode bidi rule W2 turns digits after Arabic letters into Arabic numbers; the hyphen between them stays neutral | ISO dates, dotted versions, URLs and e-mail addresses in the legal text, and the version and date values in the dialog header, render in `<bdi dir="ltr">`. Plain Latin words stay with the bidi algorithm. | #127 `6bfb019` | Grok | `legal-bidi` (all paragraphs of the four bundled documents round-trip) |
+
+Stack updates. #127 `feat/04b-consent-ui` is `6bfb019`. #128 `feat/04c-remote-terms` merges #127
+(`2f02bb2`), so the sibling keeps its signed remote Terms work. #129 `feat/04d-react-gateway` is
+`23b9f5e` with merges `e27e3c7` and `d163a92` and the source-check update `a25ac3d`. #130
+`feat/04e-ejs-removal` merges #129 (`2097849`, `43d7c0a`, `bf34db3`) and updates its own source
+checks (`5b67818`). Merge conflicts: the signed-in fallback in `GET /` keeps `sendFallback` and gains
+the header; the gateway and header tests use the static fallback.
+
+Who did what. Codex implemented D-1, the review fixes and one source check, and did the read-only
+review. Grok implemented D-2, D-3 and D-4. Antigravity (Gemini 3.8 Flash) updated two source checks;
+two other Antigravity runs were blocked by the local permission classifier. OpenCode
+(`deepseek-v4.1-flash-free`) hit `FreeUsageLimitError` before any edit. The orchestrator wrote the
+briefs, reviewed every diff, resolved the merges, and ran every gate.
+
+Read-only Codex review on integration `76fc27f` (0 findings on throttling, failure counting, session
+regeneration, the origin check, open redirects, secrets in URLs, desktop login, recovery, logout,
+and the D-3/D-4 tokenizer):
+
+| Finding | Disposition |
+| --- | --- |
+| P1: a pending allow matched by URL alone could be applied by a late finish of the previous document at the same URL | Fixed in `23b9f5e`: the decision needs its own `onPageStarted` |
+| P1: the 300 ms wait returned the response even if the flag update had not run | Bound raised to 2000 ms with a log line. The update is queued on the main looper before the response exists, and the WebView draws the new document only in a later main-thread traversal. |
+| P2: after a 4xx render on a classic-script page, the next POST was not intercepted | Fixed in `23b9f5e` (listener on `window`) |
+| P2: a dashboard restored from history without a new response stays secure | Accepted: fails closed; a reload restores capture |
+| P2: the 20 s `fetch` timeout cannot fire while the synchronous native request blocks JavaScript | Accepted: older than Phase 04; the native socket timeout (60 s) still ends the request |
+| P3: tests did not model `document.open()` or overlapping navigations | Fixed in `23b9f5e` |
+
+Gates on integration commit `8aacfd5` (#130 `bf34db3` merged with #128 `2f02bb2`), Linux x64, Node
+24.22.2, npm 11.19.1, 2026-11-03:
+
+| Gate | Result |
+| --- | --- |
+| `npm test`, external network guard preloaded | PASS: 9,477 checks, 0 failed, 0 crashed (`76fc27f` before the source-check updates: FAIL, 3 source checks) |
+| `npm run lint` | PASS: 0 errors (196 warnings, 67 infos) |
+| `npm run i18n:check`, `npm run build:frontend` (`tsc -b`, Vite) | PASS |
+| Android `:app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:bundleRelease`, offline | PASS: 108 unit tests, 0 failures; arm64 and armv7 APKs, debug and release; local AAB; `levix-build.json` versionCode 69 |
+| `npm run build:sea` and `npm run validate:sea` | PASS: 51 checks, 0 failed |
+| `npm run validate:tarball` (FFmpeg from a loopback mirror of the cached binary) | PASS: 36 checks, 0 failed |
+| `npm run validate:docker` | BLOCKED locally (Docker socket permission); CI runs it |
+| Headless Chrome with the Android bridge emulated (below) | PASS: 18/18 on `8aacfd5`; the same script on the pre-fix `25764aa` gives 8/16 |
+| Android device retest of D-1 to D-4 | NOT RUN: waits for the owner to reconnect the Redmi 9 |
+
+Headless check: `/usr/bin/google-chrome` (puppeteer-core) against a scratch Levix with a fresh data
+directory and the WhatsApp proxy set to `socks5://127.0.0.1:9` before boot. A fake `LevixHost`
+(synchronous XHR captured before `panel-bridge.js` runs) sends every local POST through the real
+bridge, as on Android. Start only reached `consent_required`; Terms were never accepted, and no
+WhatsApp connection was attempted.
+
+| Check | `25764aa` (pre-fix) | `8aacfd5` |
+| --- | --- | --- |
+| Setup mismatch: page rendered, inline error | FAIL: `#root` empty | PASS: "The two passwords don't match.", fields cleared and focused |
+| Wrong password at `/`: page rendered, inline error | FAIL: `#root` empty | PASS: "Incorrect Password", field cleared and focused |
+| Setup and login success reach the dashboard with the deep link (`#connection`, `#settings/security`) | PASS | PASS |
+| Settings password form submit (React `onSubmit`) | FAIL: the bridge navigated | PASS: no navigation |
+| No navigation URL holds a password | PASS (that form's inputs have no `name`) | PASS |
+| Arabic Terms dialog: no `dir="auto"`, paragraph starting with "Levix" | FAIL: 40 `dir="auto"`, `ltr` | PASS: 0, `rtl` |
+| Arabic header: `2026` left of `.1` in `2026-11-02.1` | FAIL: 653.7 px vs 626.3 px | PASS: 608.5 px vs 675.5 px |
+| Capture header on documents | absent everywhere | `allow` on the signed-in `/` only; absent on `/setup`, login at `/` |
+
+Android retest checklist for the owner (isolated `.dev` build from these heads, Redmi 9):
+
+1. D-1 setup: fresh data. Enter two different passwords: inline mismatch error, fields cleared, no
+   blank page. A too-short password: inline error. Then a valid password: the dashboard opens.
+2. D-1 login: sign out, then one wrong password at `/`: inline "Incorrect Password", field cleared
+   and focused, no blank page. Then the right password: the dashboard opens.
+3. D-1 deep link: open the panel signed out from the home "Review terms" or Connection entry, sign
+   in, and land on that screen.
+4. D-7: Settings, Security, change password with a mismatched confirmation: no reload, inline error.
+   Share the host log: panel URLs carry no `?` query.
+5. D-2: `adb exec-out screencap -p` (and the recents thumbnail) on first-run setup, login at `/`,
+   login after a wrong password, after a reload, and after Back from the dashboard to login: all
+   blocked.
+6. D-2: signed-in dashboard, then switch to Settings and Connection: screencap works. The signed-in
+   QR page: works (unchanged). Sign out: the login screen is blocked at once. If the dashboard stays
+   blocked, the WebView reported callbacks in another order; that fails closed, and the order must
+   be recorded.
+7. D-3: Arabic UI, Start, Terms dialog: the paragraph starting with "Levix" is right-aligned and its
+   words read right to left; WhatsApp, Android and SHA-256 read correctly.
+8. D-4: the Arabic header shows `2026-11-02.1` and `2026-11-02` with digits in order; English and
+   `es-419` dialogs unchanged.
+9. Regression: accept in Arabic records the version and the QR follows; force-stop and relaunch gives
+   no new prompt; recovery with no session shows the 409 message inline.
+
+Still NOT RUN: password reset keeping consent on the device, pairing a real account, the oldest
+supported WebView (R-27), and the human legal review.
+
+CI on the pushed heads, 2026-11-03: PASS 7/7 on #127 `6bfb019` (run 41905762409), #128 `2f02bb2`
+(run 41905767325), #129 `23b9f5e` (run 41905775090) and #130 `12f2a2a` (run 41905776405).
+
+### 3.12 Android device retest of D-1 to D-4 (2026-11-04)
+
+Owner-connected device: Redmi 9 (`lancelot`), LineageOS, Android 14, system WebView
+`com.android.webview` 120.0.6099.230. Build: isolated debug APK `net.leviro.levix.dev` from
+integration commit `8aacfd5` (`-PlevixIsolatedDebug=true`, arm64, versionCode 69). The previous
+`.dev` QA install (never paired) was uninstalled first so first-run setup could be tested; the
+production `net.leviro.levix` was not touched. UI language Arabic. Steps were driven over the
+WebView DevTools socket and `adb`; screen capture was checked with `adb shell screencap -p`, which
+exits 1 with an empty file while `FLAG_SECURE` is set. Terms were never accepted, so no WhatsApp
+connection was made.
+
+| Check | Result |
+| --- | --- |
+| D-2: first-run setup at `/setup/#connection`: window flags include `SECURE`; `screencap` exit 1 | PASS |
+| D-1: setup with two different passwords: page stays, inline "كلمتا المرور غير متطابقتين.", password cleared and focused | PASS |
+| D-1: setup with a 5-character password: inline "يجب ألا تقل كلمة المرور عن 8 خانات" | PASS |
+| D-1: valid setup opens the dashboard at `/#connection` | PASS |
+| D-2: signed-in dashboard capturable (`screencap` exit 0), also after a hash move to `#settings/security` | PASS |
+| D-7: Settings password form submit with a mismatched confirmation: same document, URL unchanged | PASS |
+| D-2: after sign-out, login at `/`: `screencap` exit 1 | PASS |
+| D-1: wrong password at `/`: page stays, inline "كلمة المرور غير صحيحة", field cleared and focused; `screencap` exit 1 | PASS |
+| D-2: reload of the login page: `screencap` exit 1 | PASS |
+| D-1: sign-in returns to `/#settings/security` | PASS once the guided tour is done. On the first sign-in the tour (`levix_tour_v1_done` unset) moves the hash to its first step, `#connection`; that is the tour's behaviour, not the gateway's |
+| D-2: signed-in `/qr` capturable; Back to the dashboard capturable | PASS |
+| D-3: Arabic Terms dialog after Start: 0 `dir="auto"`; the paragraph starting with "Levix" computes `direction: rtl` and renders right-aligned in RTL word order | PASS |
+| D-4: header reads `الإصدار 2026-11-02.1 · ساري المفعول من 2026-11-02`; `2026` at 249.4 px, `.1` at 319.2 px (left to right) | PASS |
+| Session stays `consent_required`; the dialog closes without accepting | PASS |
+| Host log: 10 panel URL lines, none with a query or fragment, no password text, no screen guard timeout | PASS |
+| Recovery with no WhatsApp session: inline 409 message (it still names `levix reset-password`, D-5) | PASS |
+| English and `es-419` dialogs on the device; accepting Terms and the QR after it; recents thumbnail inspected by eye | NOT RUN (accepting would contact WhatsApp) |
+
+D-1 to D-4 and D-7 pass on the device. D-5 and D-6 stay open.
+
+### 3.13 Merge of #125 to #129 and #130 reconciliation (2026-11-04)
+
+The owner authorized merging #125 to #129 and keeping #130 a draft.
+
+Integration. `integration/phase-04` was branched from `main` `0089a6a` (after dependabot #124),
+merged #129 `23b9f5e` (which contains #125 `32a4b59`, #126 `51d0051` and #127 `6bfb019`), then #128
+`2f02bb2`. Both merges were clean (`1b63fda`). #126 and #127 were never merged on their own: their
+trees still hold the older tests that could reach WhatsApp's servers, while the integrated tree has
+the fake sockets and preloads `tests/fixtures/no-external-network.cjs` into every test process
+through `NODE_OPTIONS`. `levix headless` on a fresh data directory under that guard stopped at
+`terms_not_accepted` and opened no socket, which covers the headless steps of `validate:tarball`,
+`validate:sea` and `validate:docker`.
+
+| Gate on `1b63fda` | Result |
+| --- | --- |
+| `npm test`, Linux x64, Node 24.22.2 | PASS: 9,416 checks, 0 failed, 0 crashed; no guard refusal in the log |
+| `npm run lint`, `npm run i18n:check`, `npm run build:frontend` | PASS (lint 0 errors) |
+| GitHub CI on #131 (7 jobs: tests, tarball, SEA on ubuntu, macos and windows, Docker, Android) | PASS 7/7 |
+
+#131 was merged with a merge commit: `main` is `0fff4ca`. GitHub marked #125 merged. It cannot mark
+a stacked PR merged when its base is another PR branch and refuses to retarget a PR with no new
+commits, so #126, #127, #128 and #129 were closed with a comment naming #131, `0fff4ca` and their
+own head commit. Their branches are kept.
+
+#130 (`feat/04e-ejs-removal`) merged `main` cleanly (`c0565ed`), now based on `main`, and gained:
+
+| Change | Commit | Implementer |
+| --- | --- | --- |
+| D-5: in the Android app (`window.LevixHost`), the `no_session`, `unverified` and `locked` recovery errors use Android messages (restart the assistant so a linked WhatsApp reconnects, use the recovery email, or try later) instead of `levix reset-password`; desktop keeps the CLI fallback; no server or throttle change. `pt-BR/gateway` and `es-419/gateway` go back to `draft` in `i18n/review.json` | `6ea8032` | Codex |
+| D-6: the battery card badge moves under the title inside the text column; title and hint set `hyphenationFrequency="none"` and `breakStrategy="simple"` | `832e135` | Grok |
+| `android/README.md` no longer lists `views/` | `90b0545` | Codex |
+
+A read-only Codex review of `git diff 0fff4ca HEAD` found no defect: no `res.render`, `ejs` or
+packaging reference to `views/` or the removed scripts, escaped values and credit links in the
+static fallback, no remote font reference, OFL licences shipped, D-5 and D-6 as described, the lock
+retry bounded and failing closed, nothing dropped by the merge with `main`. Its one note was the
+README line above.
+
+| Gate on #130 `ab1e364` (Linux x64, Node 24.22.2, 2026-11-04) | Result |
+| --- | --- |
+| `npm ci` from the merged lockfile | PASS, no `ejs` |
+| `npm test` | PASS: 9,536 checks, 0 failed, 0 crashed (`recovery-ui` 198, i18n 1,802) |
+| `npm run lint`, `npm run i18n:check`, `npm run build:frontend` | PASS (lint 0 errors; i18n prints the two expected draft hash notes) |
+| Android `:app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:bundleRelease`, offline | PASS: 110 unit tests (2 new in `BatteryCardLayoutTest`), 4 APKs, 1 AAB |
+| `npm run build:sea`, `npm run validate:sea` | PASS: 51 checks |
+| `npm run validate:tarball` (FFmpeg from a loopback mirror) | PASS: 36 checks |
+| `npm run validate:docker` | BLOCKED locally (Docker socket permission); GitHub CI runs it |
+
+Not run at that point: D-5 and D-6 on the device (done in 3.14), the recents thumbnail, accepting Terms on the device, the oldest supported WebView (R-27), the ChatGPT review of the
+three new `pt-BR` and `es-419` gateway strings, and the human legal review. Remote Terms fetching
+stays disabled. Release blockers: human legal approval and the R-27 WebView test.
+
+### 3.14 Android device test of #130 (2026-11-04)
+
+Owner instruction: live test #130, merge if it passes. Device: Redmi 9 (`lancelot`), Android 14,
+WebView 120.0.6099.230. Build: isolated debug APK `net.leviro.levix.dev` from #130 `67928a4`
+(arm64, versionCode 69), installed over the QA build with its data kept; production
+`net.leviro.levix` not touched. App locale set to `es-419` with `cmd locale set-app-locales` for the
+test and cleared afterwards. Terms were not accepted, so no WhatsApp connection was made.
+
+| Check | Result |
+| --- | --- |
+| D-6: home Battery Guard card in `es-419` with status `RESTRINGIDO`: badge under the title; "Protección de batería" and the hint wrap on whole words, no hyphen and no mid-word break | PASS (screenshot) |
+| D-5: login page in the app, Forgot password, send by WhatsApp with no session: inline "WhatsApp no está conectado ... Abre la app Levix, detén e inicia el asistente ... Usa el correo de recuperación si está configurado." No terminal command | PASS |
+| Login at `/` signed out: `screencap` exit 1; wrong password: inline "Contraseña incorrecta", field cleared and focused | PASS |
+| Sign-in opens the dashboard; dashboard `screencap` exit 0 | PASS |
+| Recents with the login screen as the Levix task: the overview cannot be captured at all (`screencap` exit 1, empty file) | Recorded. The same overview with the dashboard as the Levix task captures (exit 0) and shows the dashboard thumbnail, so the refusal comes from the secure Levix tile |
+| Host log: no panel URL with a query or fragment | PASS |
+
+The login thumbnail itself was not inspected by eye: the system refuses every capture of the
+overview while it is on screen, and no person looked at the device. That check stays NOT RUN.
+

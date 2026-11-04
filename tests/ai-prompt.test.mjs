@@ -337,11 +337,9 @@ section("nothing exposes the private identity block over HTTP");
   const sources = [
     "src/routes/dashboard.api.esm.js",
     "app.cjs",
-    "views/dashboard.ejs",
-    "views/setup.ejs",
-    "views/login.ejs",
-    "views/qr.ejs",
-    "public/dashboard.js",
+    "src/panel/fallback-page.cjs",
+    "frontend/src/gateway/main.tsx",
+    "frontend/src/gateway/login.tsx",
     "src/bootstrap/panel.js",
   ];
   for (const file of sources) {

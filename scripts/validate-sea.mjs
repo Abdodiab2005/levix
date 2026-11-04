@@ -156,10 +156,10 @@ let panelUrl = null;
 
   // --- what a packaged build breaks first ---------------------------------
 
-  console.log("\n· assets, views and the vendored client");
+  console.log("\n· assets and the vendored client");
 
   const setup = await fetch(`${base}/setup`);
-  ok("the setup view renders", setup.status === 200);
+  ok("the setup page renders", setup.status === 200);
   const html = await setup.text();
   const stateScript = /<script id="levix-gateway-state" type="application\/json">([^<]*)<\/script>/.exec(
     html,
@@ -173,12 +173,12 @@ let panelUrl = null;
     }
   }
   ok(
-    "…as the React setup shell or EJS form",
-    reactSetup || (html.includes("<form") && html.includes("password")),
+    "…as the React setup shell or static fallback form",
+    reactSetup || (html.includes("<form") && html.includes('action="/setup"')),
   );
 
-  const css = await fetch(`${base}/dashboard.css`);
-  ok("the stylesheet is served", css.status === 200);
+  const uiBoot = await fetch(`${base}/ui-boot.js`);
+  ok("the boot script is served", uiBoot.status === 200);
 
   const socketClient = await fetch(`${base}/socket.io.min.js`);
   ok("the vendored socket.io client is served", socketClient.status === 200);

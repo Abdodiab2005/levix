@@ -14,7 +14,7 @@ import { gatewayAssets } from "./fixtures/gateway-assets.mjs";
 
 const dataDir = useTempDataDir("screen-capture");
 const assets = gatewayAssets();
-assets.ejs();
+assets.fallback();
 
 const HEADER = "x-levix-screen-capture";
 
@@ -56,7 +56,7 @@ try {
   page = await read(await http.call("/"));
   equal("signed-in fallback dashboard status", page.status, 200);
   equal("signed-in fallback dashboard allows capture", page.header, "allow");
-  ok("signed-in fallback is the panel document", page.body.includes("dashboard-page"));
+  ok("signed-in fallback is the panel document", page.body.includes("The panel files are missing"));
 
   page = await read(await http.call("/qr"));
   equal("signed-in qr status", page.status, 200);
@@ -73,7 +73,7 @@ try {
   page = await read(await http.call("/"));
   equal("signed-out root is login", page.status, 200);
   equal("signed-out root has no capture header", page.header, null);
-  ok("signed-out root is the login document", page.body.includes("gateway-page"));
+  ok("signed-out root is the login document", page.body.includes('action="/login"'));
 
   page = await read(await http.call("/login"));
   equal("login status", page.status, 200);

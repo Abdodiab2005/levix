@@ -474,15 +474,13 @@ section("recurring failures stay active and retries cannot overlap");
 section("the panel exposes delivery state and manual retry");
 
 {
-  const source = readFileSync(join(ROOT, "public", "dashboard.js"), "utf8");
-  ok("the table renders the readable schedule", source.includes("job.when"));
-  ok("failed jobs get a retry control", source.includes("data-retry-schedule"));
+  const source = readFileSync(join(ROOT, "frontend", "src", "views", "SchedulesView.tsx"), "utf8");
+  ok("the table renders the readable schedule", source.includes("scheduleWhen(s, language)"));
   ok(
-    "the retry control calls the protected API",
-    /schedules\/\$\{encodeURIComponent\(retryButton\.dataset\.retrySchedule\)\}\/retry/.test(
-      source,
-    ),
+    "failed jobs get a retry control",
+    source.includes('s.lastDeliveryStatus === "failed"') && source.includes("void handleRetry(s.id)"),
   );
+  ok("the retry control calls the protected API", source.includes("await api.retrySchedule(id)"));
 }
 
 finish();

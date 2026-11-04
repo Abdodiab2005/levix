@@ -875,13 +875,13 @@ section("the panel routes and the login page");
 received.length = 0;
 mailed.length = 0;
 const assets = gatewayAssets();
-assets.ejs();
+assets.fallback();
 async function reactLogin(base) {
   assets.react();
   try {
     return gatewayState(await (await httpClient(base).call("/login")).text());
   } finally {
-    assets.ejs();
+    assets.fallback();
   }
 }
 const webDir = useTempDataDir("levix-recovery-http");
@@ -898,9 +898,8 @@ try {
   res = await anon.call("/login");
   equal("anonymous login renders", res.status, 200);
   let html = await res.text();
-  ok("WhatsApp is offered", html.includes('data-channel="whatsapp"'));
-  ok("email is hidden until an address exists", !html.includes('data-channel="email"'));
-  ok("the page has no address", !html.includes(ADDRESS));
+  ok("fallback login form remains available", html.includes('<form action="/login" method="post">'));
+  ok("fallback page has no address", !html.includes(ADDRESS));
   let react = await reactLogin(server.base);
   equal("React login starts on the login page", react?.page, "login");
   equal("React login starts without recovery email", react?.recoveryEmail, null);
@@ -1012,9 +1011,7 @@ try {
 
   res = await anon.call("/login");
   html = await res.text();
-  ok("the login page shows the mask", html.includes("re***@e***.com"));
-  ok("the login page offers email", html.includes('data-channel="email"'));
-  ok("the login page still hides the address", !html.includes(ADDRESS));
+  ok("fallback login hides the address", !html.includes(ADDRESS));
   react = await reactLogin(server.base);
   equal("React verified login shows the mask", react?.recoveryEmail, "re***@e***.com");
   equal("React verified login offers email", react?.recoveryEmailVerified, true);
@@ -1108,9 +1105,8 @@ try {
   const fresh = httpClient(server2.base);
   res = await fresh.call("/login");
   html = await res.text();
-  ok("email leaves the login page with the address", !html.includes('data-channel="email"'));
-  ok("WhatsApp remains", html.includes('data-channel="whatsapp"'));
-  ok("the mask is gone", !html.includes("re***@e***.com"));
+  ok("fallback login remains available", html.includes('<form action="/login" method="post">'));
+  ok("fallback login has no recovery mask", !html.includes("re***@e***.com"));
   react = await reactLogin(server2.base);
   equal("React deleted-email login remains available", react?.page, "login");
   equal("React deleted-email login hides email", react?.recoveryEmail, null);
@@ -1154,9 +1150,8 @@ for (const state of ["legacy", "revoked"]) {
   try {
     const anon = httpClient(fixture.base);
     const login = await (await anon.call("/login")).text();
-    ok(`${state}: login hides unusable email option`, !login.includes('data-channel="email"'));
-    ok(`${state}: login keeps WhatsApp`, login.includes('data-channel="whatsapp"'));
-    ok(`${state}: login hides saved mask`, !login.includes("re***@e***.com"));
+    ok(`${state}: fallback login remains available`, login.includes('<form action="/login" method="post">'));
+    ok(`${state}: fallback login hides saved mask`, !login.includes("re***@e***.com"));
     let react = await reactLogin(fixture.base);
     equal(`${state}: React login keeps the page`, react?.page, "login");
     equal(`${state}: React login hides unusable email`, react?.recoveryEmail, null);
@@ -1181,11 +1176,6 @@ for (const state of ["legacy", "revoked"]) {
       `${state}: re-verification succeeds`,
       (await operator.json("/dashboard/api/recovery-email/verify", { code: lastCode() })).status,
       200,
-    );
-    const verifiedLogin = await (await anon.call("/login")).text();
-    ok(
-      `${state}: verified address restores Email option`,
-      verifiedLogin.includes('data-channel="email"'),
     );
     react = await reactLogin(fixture.base);
     equal(`${state}: React verified address restores mask`, react?.recoveryEmail, "re***@e***.com");

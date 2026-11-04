@@ -73,6 +73,10 @@ it off anywhere.
 
 That's the whole setup. Keep the terminal open, or see *Keeping it running*.
 
+If the panel files are missing, the basic English setup and login forms still work.
+Run `npm run build:frontend` from a source checkout or reinstall Levix to restore
+the full panel and QR screen.
+
 ---
 
 ## With Docker instead

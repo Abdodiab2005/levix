@@ -32,7 +32,6 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY bin ./bin
 COPY src ./src
-COPY views ./views
 COPY public ./public
 COPY --from=frontend-builder /app/public/dashboard ./public/dashboard
 COPY app.cjs scheduler.cjs ./

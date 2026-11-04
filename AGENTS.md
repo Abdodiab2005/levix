@@ -288,7 +288,6 @@ Outside `src/`:
 ```
 frontend/         # React 19 + Vite + TypeScript dashboard SPA. Locale rule: frontend/src/i18n/locale.ts.
                   # UI primitives live in frontend/src/components/ui/ — see "Design system — STRICT RULES"
-views/            # Gateway pages (login.ejs · setup.ejs · qr.ejs) + fallback dashboard.ejs
 public/           # Static assets (socket.io.min.js, qrcode.min.js) and public/dashboard/ (built SPA)
 public/brand/     # Generated logo and branding files (committed)
 android/          # Android companion app (Kotlin, Gradle, embedded Node 24 ARM64 + ARMv7, FFmpeg; API 36, per-ABI APKs + Play AAB)
@@ -339,7 +338,7 @@ install keeps `registered: false` for good.
   contention message only. A sudo CLI command requires an existing real data
   directory, accesses its database and lock as that directory's owner, and
   runs web server setup as root.
-- `src/bootstrap/panel.js` — Express, sessions, EJS, socket.io, routes, listen.
+- `src/bootstrap/panel.js` — Express, sessions, socket.io, routes, listen.
   Requiring `app.cjs` is what *constructs* the panel, so it happens here and
   nowhere else; headless never imports this file.
 - `src/bootstrap/events.cjs` — the hub the bot reports into. The session
@@ -646,7 +645,7 @@ temp `media/`. Order:
 reads — Docker has no other way to point at its volume), then `<repo>/data`
 when running from a clone, then `~/.levix`.
 
-`assetPath()` is the read-only counterpart: `views/`, `public/`, the persona
+`assetPath()` is the read-only counterpart: `public/` and the persona
 template. A packaged build unpacks those and calls
 `setAssetRoot()`.
 
@@ -711,7 +710,7 @@ the setting per message.
   the operating rules (tools, memory, chats and groups, boundaries) are
   prepended above the persona on every request, so a rewritten persona or a
   crafted message can't change them. It is imported by the agent and by nothing
-  else — deliberately not on `brand.cjs`, which every EJS template can render.
+  else — deliberately not on `brand.cjs`, which the panel and gateway can render.
 
 The final system instruction is, in order:
 
@@ -1218,7 +1217,7 @@ panel socket. Upload is pinned to `POST /dashboard/api/backup/restore/uploads`;
 save is pinned to `GET /dashboard/api/backup/exports/<64 lowercase hex>`.
 Only small results and progress cross the JavaScript bridge.
 
-## Dashboard (`views/` + `public/` + `src/routes/dashboard.api.esm.js`)
+## Dashboard (`frontend/` + `public/` + `src/routes/dashboard.api.esm.js`)
 
 A password-gated control panel at `/`. It is not a viewer — almost everything
 the bot does can be changed from it, live:
@@ -1257,9 +1256,11 @@ drift apart.
 The main dashboard is the React 19 + Vite + TypeScript SPA in `frontend/`,
 compiled to `public/dashboard/`. Screens are built only from the design system
 in `frontend/src/components/ui/` (barrel import, catalogue in
-`frontend/src/components/ui/README.md`). The EJS files in `views/` are the login,
-setup, QR and fallback gateway pages. Runtime browser dependencies are served
-locally—there is no CDN dependency.
+`frontend/src/components/ui/README.md`). The React gateway in
+`frontend/src/gateway/` handles login, setup and QR.
+When the frontend build is missing, `src/panel/fallback-page.cjs` serves native
+login and setup forms and a repair notice for QR and the signed-in panel.
+Runtime browser dependencies are served locally—there is no CDN dependency.
 
 **First run.** With no password set, `/` redirects to `/setup`. From localhost
 that page just asks for a password; from anywhere else it also asks for the
@@ -1285,14 +1286,10 @@ which accepts those four language codes and `light` or `dark`
 `levix-ui-prefs` event and never call the setter again. Android keeps the
 language in AppCompat's application locales and the theme in `UiPrefs`;
 `PanelActivity` handles locale, layoutDirection and uiMode itself so the
-WebView never reloads. The gateway pages use the same four locales as the SPA:
-English is the default markup, `data-i18n*` attributes carry the keys, and
-`public/gateway-i18n.js` applies the dictionary for the language `ui-boot.js`
-resolved (server-rendered errors travel as a stable code the script translates).
-They follow the shared language and theme, with RTL only for `ar`: the gateway
-CSS reads `--gateway-*` tokens defined for both themes, and a `levix-ui-prefs`
-event or a `storage` change from another tab repaints them, JavaScript-built
-text included, without a reload.
+WebView never reloads. The React gateway uses the same four locales as the SPA,
+with its dictionary in `frontend/src/i18n/gateway.generated.ts`. Server errors
+travel as stable codes for React to translate. A `levix-ui-prefs` or `storage` event updates its
+language without reloading. The static missing-build page is English only.
 
 **Diagnostics and crash reports.** Nothing leaves the device without a distinct
 action, and the two consents are separate.

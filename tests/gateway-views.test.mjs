@@ -2,60 +2,89 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { finish, ok, ROOT, section } from "./harness.mjs";
 
-function read(...parts) {
-  return readFileSync(join(ROOT, ...parts), "utf8");
-}
+const read = (path) => readFileSync(join(ROOT, path), "utf8");
+const main = read("frontend/src/gateway/main.tsx");
+const login = read("frontend/src/gateway/login.tsx");
+const qr = read("frontend/src/gateway/qr.tsx");
+const shell = read("frontend/gateway.html");
+const dictionary = read("frontend/src/i18n/gateway.generated.ts");
+const locale = read("frontend/src/i18n/locale.ts");
+const boot = read("public/ui-boot.js");
 
-section("dashboard.css fixes");
-
-const css = read("public/dashboard.css");
-ok("the hidden rule exists for .gateway-back-btn", css.includes(".gateway-back-btn[hidden] {"));
+section("React gateway and translations");
+ok("ui-boot runs first in the head", /<head>\s*<script src="\/ui-boot\.js"><\/script>/.test(shell));
 ok(
-  "directional icons flip under RTL",
-  css.includes('html[dir="rtl"] .gateway-back-btn svg') &&
-    css.includes('html[dir="rtl"] .qr-back svg') &&
-    css.includes('html[dir="rtl"] .auth-submit svg'),
+  "gateway shell mounts React",
+  shell.includes('id="root"') && shell.includes("/src/gateway/main.tsx"),
 );
-ok("the password field keeps a LTR box for its eye button", css.includes("direction: ltr;"));
-
-section("gateway i18n");
-
-const i18n = read("public/gateway-i18n.js");
-ok("the dictionary carries both languages", i18n.includes("  en: {") && i18n.includes("  ar: {"));
+ok("brand name comes from server state", main.includes("state.brand.name"));
+ok("brand tagline is translated", main.includes('t("tagline")'));
 ok(
-  "the dictionary exposes the applier",
-  i18n.includes("window.LevixGatewayI18n = { lang: lang, t: t, apply: apply }"),
+  "login, setup and QR have translated document titles",
+  ["titleLogin", "titleSetup", "titleQr"].every((key) => main.includes(`"${key}"`)),
 );
-for (const code of [
-  "tooManyAttempts",
-  "incorrectPassword",
-  "wrongSetupCode",
-  "passwordMismatch",
-  "invalidPassword",
-]) {
-  ok(`error code ${code} has Arabic text`, i18n.includes(`${code}:`));
-}
+ok(
+  "gateway text uses resolved locale",
+  main.includes("resolveLocale(document.documentElement.lang)"),
+);
+ok(
+  "gateway responds to host and storage language changes",
+  main.includes("levix-ui-prefs") && main.includes("storage"),
+);
+ok("Arabic alone is RTL", locale.includes('lang === "ar" ? "rtl" : "ltr"'));
+ok(
+  "password control is shared across login and setup",
+  main.includes("PasswordInput") && login.includes("<PasswordField"),
+);
+ok(
+  "password field keeps LTR direction for its eye button",
+  read("frontend/src/components/ui/password-input.tsx").includes('dir = "ltr"'),
+);
+ok(
+  "React renders translated reset text",
+  login.includes('error.key === "resetErrWrongCode"') && login.includes('t("resetErrAttemptsLeft"'),
+);
+ok("QR has a translated back control", qr.includes('t("backToDashboard")'));
 
-section("gateway templates");
-
-const views = {
-  "login.ejs": read("views", "login.ejs"),
-  "setup.ejs": read("views", "setup.ejs"),
-  "qr.ejs": read("views", "qr.ejs"),
-};
-for (const [name, html] of Object.entries(views)) {
-  ok(`${name} loads the i18n script`, html.includes('src="/gateway-i18n.js"'));
-  ok(`${name} marks translated nodes`, html.includes("data-i18n"));
-  ok(`${name} carries the brand placeholder`, html.includes("data-brand="));
-  ok(`${name} no longer forces a page language`, !html.includes("data-page-lang"));
-  ok(`${name} translates its document title`, html.includes("<title data-i18n="));
+for (const language of ["en", "ar", "pt-BR", "es-419"]) {
+  const label = language.includes("-") ? JSON.stringify(language) : language;
+  const start = dictionary.indexOf(`  ${label}: {`);
+  const end = dictionary.indexOf("\n  },", start);
+  const entries = dictionary.slice(start, end);
+  ok(`${language} dictionary exists`, start >= 0 && end > start);
+  for (const code of [
+    "tooManyAttempts",
+    "incorrectPassword",
+    "wrongSetupCode",
+    "passwordMismatch",
+    "invalidPassword",
+  ]) {
+    ok(`${language} has ${code}`, entries.includes(`    ${code}:`));
+  }
+  ok(
+    `${language} has title translations`,
+    ["titleLogin", "titleSetup", "titleQr"].every((key) => entries.includes(`    ${key}:`)),
+  );
 }
+ok("unknown locale falls back to English", locale.includes('normalizeLocale(value) ?? "en"'));
+ok(
+  "boot maps all four locales",
+  ["ar", "en", "pt-BR", "es-419"].every((code) => boot.includes(code)),
+);
+ok(
+  "login sends the selected page language on reset",
+  login.includes("lang: document.documentElement.lang"),
+);
+ok(
+  "server errors use translated codes",
+  login.includes("loginError.code in gatewayTranslations.en") &&
+    login.includes("useState(state.error)"),
+);
 
 section("gateway routes");
-
 const app = read("app.cjs");
 ok(
-  "login passes an error code beside the English text",
+  "login passes an error code beside English text",
   app.includes('code: "incorrectPassword"') &&
     app.includes('message: "Incorrect Password"') &&
     app.includes("errorCode: error.code"),
@@ -64,44 +93,4 @@ ok(
   "setup errors travel as codes",
   app.includes('code: "wrongSetupCode"') && app.includes('code: "passwordMismatch"'),
 );
-
-section("four ui languages");
-
-ok("gateway accepts pt-BR", i18n.includes('"pt-BR"'));
-ok("gateway accepts es-419", i18n.includes('"es-419"'));
-ok("rtl is arabic only", i18n.includes('lang === "ar" ? "rtl" : "ltr"'));
-ok("storage normalizes a saved language", i18n.includes("normalizeLocale(event.newValue)"));
-ok(
-  "storage is not a two-code guard",
-  !i18n.includes('event.newValue === "ar" || event.newValue === "en"'),
-);
-ok("an unknown gateway language is ignored", i18n.includes("if (!resolved) return;"));
-
-const login = views["login.ejs"];
-ok("login does not force a non-arabic page to en", !login.includes('=== "ar" ? "ar" : "en"'));
-ok(
-  "login sends the page language",
-  /var lang = \(window\.LevixGatewayI18n && window\.LevixGatewayI18n\.lang\) \|\| "en";/.test(
-    login,
-  ),
-);
-ok(
-  "a non-english reset password uses the catalog",
-  login.includes('window.LevixGatewayI18n.lang !== "en"'),
-);
-
-const enStart = i18n.indexOf("\n    en: {");
-const arStart = i18n.indexOf("\n    ar: {");
-ok("the English dictionary is present", enStart >= 0 && arStart > enStart);
-const enDict = i18n.slice(enStart, arStart);
-for (const code of [
-  "tooManyAttempts",
-  "incorrectPassword",
-  "wrongSetupCode",
-  "passwordMismatch",
-  "invalidPassword",
-]) {
-  ok(`en dictionary has ${code}`, new RegExp(`\\n\\s+${code}:`).test(enDict));
-}
-
 finish();
