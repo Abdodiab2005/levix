@@ -1,15 +1,21 @@
 // The current Terms and Privacy release.
 //
-// Phase 04a ships one source: the release bundled with the app, trusted because
-// it ships inside the app package and pinned by a test (ADR-019). Phase 04c
-// adds verified remote releases; this module stays the one place that answers
-// "which document is current for this locale".
+// The bundled release ships inside the app package and is pinned by a test
+// (ADR-019). A verified remote release replaces it only when its version is
+// strictly newer. Equal versions keep the bundle. A broken bundle still fails
+// closed. A cache that cannot be read or verified falls back to the bundle.
 //
 // Validation is lazy and the result is memoized, so a broken bundle never
 // crashes a boot: consent fails closed instead (src/legal/consent.cjs).
 
 const brand = require("../config/brand.cjs");
-const { LOCALES, LegalDocumentError, documentHash, validateDocument } = require("./document.cjs");
+const {
+  LOCALES,
+  LegalDocumentError,
+  compareVersions,
+  documentHash,
+  validateDocument,
+} = require("./document.cjs");
 
 // Every bundled locale. One `require` per file so the single-executable build
 // bundles them (scripts/build-sea.mjs cannot read a directory at run time).
@@ -39,22 +45,54 @@ function loadBundled() {
     // A deep copy: the validated object is frozen, and require's cache keeps
     // the original untouched for anything else that reads it.
     const document = validateDocument(JSON.parse(JSON.stringify(load())));
-    if (document.locale !== locale) throw new LegalDocumentError(`bundled ${locale} declares ${document.locale}`);
+    if (document.locale !== locale) {
+      throw new LegalDocumentError(`bundled ${locale} declares ${document.locale}`);
+    }
     if (version !== null && document.version !== version) {
       throw new LegalDocumentError("bundled documents have different versions");
     }
     version = document.version;
     documents[locale] = Object.freeze({ document, sha256: documentHash(document) });
   }
-  if (!documents[DEFAULT_LOCALE]) throw new LegalDocumentError("the bundled release has no English document");
+  if (!documents[DEFAULT_LOCALE]) {
+    throw new LegalDocumentError("the bundled release has no English document");
+  }
   return Object.freeze({ version, source: "bundled", documents: Object.freeze(documents) });
 }
 
-/** The current release. Throws LegalDocumentError when it is not usable. */
+// Remote is loaded lazily so requiring this file does not open the cache, and
+// so remote.cjs can call back into invalidate() without a load cycle.
+function chooseRelease(bundled) {
+  let remote = null;
+  try {
+    remote = require("./remote.cjs").readCachedRelease();
+  } catch {
+    return bundled;
+  }
+  if (!remote) return bundled;
+  try {
+    if (compareVersions(remote.version, bundled.version) > 0) return remote;
+  } catch {
+    return bundled;
+  }
+  return bundled;
+}
+
+/** The bundled release, ignoring the cache. Throws LegalDocumentError when it is not usable. */
+function bundledRelease() {
+  return loadBundled();
+}
+
+/** Drop the memo so the next currentRelease() re-reads the bundle and the cache. */
+function invalidate() {
+  memo = null;
+}
+
+/** The current release. Throws LegalDocumentError when the bundle is not usable. */
 function currentRelease() {
   if (!memo) {
     try {
-      memo = { release: loadBundled() };
+      memo = { release: chooseRelease(loadBundled()) };
     } catch (error) {
       memo = { error };
     }
@@ -70,7 +108,8 @@ function availableLocales() {
 /** The locale itself when the release has it, otherwise English. */
 function resolveLocale(locale) {
   const release = currentRelease();
-  return typeof locale === "string" && Object.hasOwn(release.documents, locale) ? locale : DEFAULT_LOCALE;
+  if (typeof locale === "string" && Object.hasOwn(release.documents, locale)) return locale;
+  return DEFAULT_LOCALE;
 }
 
 /**
@@ -81,13 +120,21 @@ function documentFor(locale) {
   const release = currentRelease();
   if (typeof locale !== "string" || !Object.hasOwn(release.documents, locale)) return null;
   const entry = release.documents[locale];
-  return { version: release.version, locale, sha256: entry.sha256, document: entry.document, source: release.source };
+  return {
+    version: release.version,
+    locale,
+    sha256: entry.sha256,
+    document: entry.document,
+    source: release.source,
+  };
 }
 
 module.exports = {
   DEFAULT_LOCALE,
   LINKS,
   LOCALES,
+  bundledRelease,
+  invalidate,
   currentRelease,
   availableLocales,
   resolveLocale,

@@ -37,8 +37,16 @@ function short(path) {
 }
 
 // The session manager, so the shutdown handler can cancel its timers. Set as
-// soon as the core is up.
+// soon as the core is up. `stopRemoteTerms` cancels the remote Terms schedule
+// started by bootstrapCore (a no-op while the trusted key list is empty).
 let liveSession = null;
+let stopRemoteTerms = () => {};
+
+function adoptCore(core) {
+  liveSession = core.session;
+  if (typeof core.stopRemoteTerms === "function") stopRemoteTerms = core.stopRemoteTerms;
+  return core;
+}
 
 export function getLiveSession() {
   return liveSession;
@@ -175,8 +183,7 @@ async function startHeadless() {
   attachTerminalQr();
 
   // Headless has no Start button, so it starts itself.
-  const core = await bootstrapCore({ autoStart: true });
-  liveSession = core.session;
+  const core = adoptCore(await bootstrapCore({ autoStart: true }));
 
   if (announcedPairing) line("  Waiting for connection...");
 
@@ -201,8 +208,7 @@ async function startWithPanel({ open }) {
 
   // Nothing dials WhatsApp here. The panel comes up against an idle session and
   // the Connection screen offers a Start button.
-  const core = await bootstrapCore({ autoStart: false });
-  liveSession = core.session;
+  const core = adoptCore(await bootstrapCore({ autoStart: false }));
   const { bootstrapPanel, panelUrl } = await import("./bootstrap/panel.js");
   if (process.env.LEVIX_ANDROID === "1") {
     console.log("Database ready");
@@ -318,6 +324,14 @@ export function installShutdownHandlers() {
 
     // Before anything else: no reconnect may fire while we are going down, and
     // a pending retry timer must not outlive the process it was scheduled in.
+    // The remote Terms timer is not the session's; stop it here with the rest.
+    try {
+      stopRemoteTerms();
+    } catch (error) {
+      logger.warn({ err: error }, "[shutdown] stopping the remote terms schedule failed");
+    }
+    stopRemoteTerms = () => {};
+
     if (liveSession) {
       try {
         await liveSession.shutdown();
