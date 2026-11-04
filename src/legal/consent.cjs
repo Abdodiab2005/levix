@@ -140,6 +140,8 @@ function consentStatus() {
  */
 function recordAcceptance({ version, sha256, locale, via, now = new Date() } = {}) {
   if (!VIA.includes(via)) throw new ConsentError("CONSENT_BAD_REQUEST", "Unknown acceptance channel");
+  // This process may have shown an older memo while the bot cached a newer release.
+  terms.invalidate();
   const document = typeof locale === "string" ? terms.documentFor(locale) : null;
   if (!document) throw new ConsentError("CONSENT_BAD_LOCALE", "No Terms document in that language");
   if (version !== document.version || sha256 !== document.sha256) {
