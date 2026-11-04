@@ -6,8 +6,8 @@
     "sha256": "a3391ab8e8214fa4629fcf74e8becea94324365fa5431b9a040225dc5dd01759"
   },
   "pt-BR/gateway": {
-    "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19), including QR retry strings; not native-speaker certified",
+    "status": "draft",
+    "by": "ChatGPT targeted machine review (Q-19), including QR retry strings; not native-speaker certified; three Android recovery keys added on 2026-11-04 are not reviewed",
     "date": "2026-11-02",
     "sha256": "e2189af0dceb1a0eadc3655e245730231903cfcd4b13164b0d2389fbb89b3e9d"
   },
@@ -18,8 +18,8 @@
     "sha256": "56731a299d361ef5af92701f98ae234962c7b408f1bbf4ab2f12802ee24d594d"
   },
   "es-419/gateway": {
-    "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19), including QR retry strings; not native-speaker certified",
+    "status": "draft",
+    "by": "ChatGPT targeted machine review (Q-19), including QR retry strings; not native-speaker certified; three Android recovery keys added on 2026-11-04 are not reviewed",
     "date": "2026-11-02",
     "sha256": "c24b725238e74f640c016408de3fffd5c51e22c97982ddfeed4c479b73f904c2"
   },
