@@ -45,7 +45,7 @@ cd android
 
 The Gradle `stageLevixApp` task will:
 1. Automatically compile the React frontend (`frontend/`) into `public/dashboard`.
-2. Package server code (`src/`, `views/`, `public/`, and production `node_modules` minus build tooling) into `app/src/main/assets/levix-app.zip`.
+2. Package server code (`src/`, `public/`, and production `node_modules` minus build tooling) into `app/src/main/assets/levix-app.zip`.
 3. Assemble one APK per ABI in `app/build/outputs/apk/debug/`:
    - `levix-android-arm64.apk` (arm64-v8a)
    - `levix-android-armv7.apk` (armeabi-v7a)
