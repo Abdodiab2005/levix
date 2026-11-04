@@ -99,6 +99,7 @@ object WhatsAppStatusSheet {
             "disconnected" -> R.string.status_offline
             "retry_exhausted" -> R.string.status_failed
             "logged_out" -> R.string.status_expired
+            "consent_required" -> R.string.status_terms
             "error" -> R.string.wa_detail_error
             "paused" -> R.string.status_paused
             else -> null

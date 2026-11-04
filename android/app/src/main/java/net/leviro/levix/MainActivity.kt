@@ -455,6 +455,7 @@ class MainActivity : AppCompatActivity(), CoachMarkOverlay.Host {
         val color = ContextCompat.getColor(this, when {
             good -> R.color.levix_ok
             bad -> R.color.levix_danger
+            home.state == HomePresentation.State.ATTENTION -> R.color.levix_warn
             else -> R.color.levix_cyan
         })
         // The hero is the single summary. Detailed engine/session facts stay in their tiles.
@@ -510,6 +511,7 @@ class MainActivity : AppCompatActivity(), CoachMarkOverlay.Host {
             home.state == HomePresentation.State.FAILED -> R.string.status_failed
             home.state == HomePresentation.State.RECONNECTING -> R.string.status_reconnecting
             home.state == HomePresentation.State.PAUSED -> R.string.status_paused
+            home.state == HomePresentation.State.ATTENTION -> R.string.status_terms
             home.busy -> R.string.status_starting
             else -> R.string.status_unknown_short
         }

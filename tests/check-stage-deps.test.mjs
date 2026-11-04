@@ -54,6 +54,40 @@ try {
     passed.stdout.trim(),
     "Stage dependencies OK: 2 packages loaded by the app code, all present",
   );
+
+  section("browser bundles are outside Node dependency scanning");
+  const browserCode = ['require("not-installed");', 'import(",e),getCommands:()=>_.get(");'].join("\n");
+  const browserFile = join(stage, "public", "dashboard", "assets", "x.js");
+  mkdirSync(join(stage, "public", "dashboard", "assets"), { recursive: true });
+  writeFileSync(browserFile, browserCode);
+  const browserOnly = scanStage(stage);
+  equal("top-level public adds no missing Node packages", browserOnly.missing.length, 0);
+  equal("top-level public adds no scanned packages", browserOnly.count, 2);
+  equal("cli ignores the browser bundle", runCli().status, 0);
+
+  writeFileSync(join(stage, "src", "x.cjs"), browserCode);
+  const nodeSource = scanStage(stage);
+  ok(
+    "same require in src is reported",
+    nodeSource.missing.some(
+      (item) => item.name === "not-installed" && item.files.includes("src/x.cjs"),
+    ),
+  );
+  ok(
+    "same minified specifier in src is reported",
+    nodeSource.missing.some(
+      (item) => item.name === ",e),getCommands:()=>_.get(" && item.files.includes("src/x.cjs"),
+    ),
+  );
+
+  mkdirSync(join(stage, "src", "public"), { recursive: true });
+  writeFileSync(join(stage, "src", "public", "nested.cjs"), 'require("nested-missing");');
+  ok(
+    "nested public remains in the Node scan",
+    scanStage(stage).missing.some(
+      (item) => item.name === "nested-missing" && item.files.includes("src/public/nested.cjs"),
+    ),
+  );
 } finally {
   rmSync(stage, { recursive: true, force: true });
 }

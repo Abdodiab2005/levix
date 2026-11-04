@@ -8,7 +8,7 @@
 //   * starting Levix creates no Baileys socket, and the dashboard works anyway
 //   * pressing Start once — or three times at once — creates exactly one
 //
-// It stops at the pairing boundary. Whether the QR is accepted needs a phone.
+// The real session creates a fake Baileys socket and never contacts WhatsApp.
 
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -35,7 +35,11 @@ require("./src/db/db.cjs").checkpoint();
 const SOCKET_MARKER = "Initializing WhatsApp socket";
 
 function startLevix({ waitFor = "Ctrl+C", timeoutMs = 60000 } = {}) {
-  const child = spawn(process.execPath, [join(ROOT, "bin", "levix.js")], {
+  const child = spawn(process.execPath, [
+    "--import",
+    join(ROOT, "tests", "fixtures", "fake-whatsapp-loader.mjs"),
+    join(ROOT, "bin", "levix.js"),
+  ], {
     env: {
       ...process.env,
       LEVIX_DATA_DIR: dataDir,
@@ -148,7 +152,21 @@ try {
     [a, b, c].every((r) => r.status === 200),
   );
 
-  ok("a socket was created", await levix.waitForOutput(SOCKET_MARKER));
+  session = await (await http.call("/dashboard/api/bot/session")).json();
+  equal("the session is consent_required", session.session.state, "consent_required");
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  equal("no socket before acceptance", count(levix.output, SOCKET_MARKER), 0);
+
+  const current = require("./src/legal/terms.cjs").documentFor("en");
+  require("./src/legal/consent.cjs").recordAcceptance({
+    version: current.version,
+    sha256: current.sha256,
+    locale: "en",
+    via: "provision",
+  });
+  require("./src/db/db.cjs").checkpoint();
+
+  ok("a socket was created", await levix.waitForOutput(SOCKET_MARKER, 15000));
   equal("exactly one", count(levix.output, SOCKET_MARKER), 1);
 
   session = await (await http.call("/dashboard/api/bot/session")).json();

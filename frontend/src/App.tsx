@@ -1,6 +1,6 @@
 // file: frontend/src/App.tsx
 import type React from "react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 import { CrashBanner } from "./components/CrashBanner";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -18,6 +18,7 @@ import { CommandsView } from "./views/CommandsView";
 import { ConnectionView } from "./views/ConnectionView";
 import { GroupsView } from "./views/GroupsView";
 import { LogsView } from "./views/LogsView";
+import { TermsConsentDialog } from "./views/legal/TermsConsentDialog";
 // Views
 import { OverviewView } from "./views/OverviewView";
 import { SchedulesView } from "./views/SchedulesView";
@@ -63,22 +64,32 @@ const MainLayout: React.FC = () => {
   });
 
   const [initialStatus, setInitialStatus] = useState<Partial<SessionStatus> | null>(null);
+  const [acceptedStatus, setAcceptedStatus] = useState<SessionStatus | null>(null);
+  const socketAtAccept = useRef<SessionStatus | null>(null);
+  const statusRequestId = useRef(0);
+  const wasConsentRequired = useRef(false);
+  const [termsOpen, setTermsOpen] = useState(false);
 
   const refreshStatus = useCallback(async () => {
+    const request = ++statusRequestId.current;
     try {
       const res = await api.getSession();
+      if (request !== statusRequestId.current) return null;
       if (res?.session) {
         setInitialStatus({
           ...res.session,
           qr: res.qr ?? null,
           pairingCode: res.pairingCode ?? null,
         });
+        return res.session as SessionStatus;
       } else if (res?.status) {
         setInitialStatus(res.status);
+        return res.status as SessionStatus;
       }
     } catch {
       // ignore
     }
+    return null;
   }, []);
 
   useEffect(() => {
@@ -86,13 +97,34 @@ const MainLayout: React.FC = () => {
   }, [refreshStatus]);
 
   const activeStatus: SessionStatus | null =
-    initialStatus || socketStatus
+    initialStatus || socketStatus || acceptedStatus
       ? {
           state: (socketStatus?.state || initialStatus?.state || "idle") as SessionState,
           ...(initialStatus || {}),
           ...(socketStatus || {}),
+          // A queued consent snapshot can arrive after the acceptance response.
+          ...(acceptedStatus && (!socketStatus || socketStatus.state === "consent_required")
+            ? acceptedStatus
+            : {}),
         }
       : null;
+
+  useEffect(() => {
+    if (
+      acceptedStatus &&
+      socketStatus &&
+      socketStatus !== socketAtAccept.current &&
+      socketStatus.state !== "consent_required"
+    ) {
+      setAcceptedStatus(null);
+    }
+  }, [acceptedStatus, socketStatus]);
+
+  useEffect(() => {
+    const required = activeStatus?.state === "consent_required";
+    if (required && !wasConsentRequired.current) setTermsOpen(true);
+    wasConsentRequired.current = required;
+  }, [activeStatus?.state]);
 
   const isConnected = activeStatus?.connected === true || activeStatus?.state === "connected";
 
@@ -174,6 +206,7 @@ const MainLayout: React.FC = () => {
                 status={activeStatus}
                 onRefresh={refreshStatus}
                 onStatusUpdate={(s) => setInitialStatus((prev) => ({ ...(prev || {}), ...s }))}
+                onReviewTerms={() => setTermsOpen(true)}
               />
             )}
             {currentView === "ai" && <AIAssistantView />}
@@ -189,6 +222,19 @@ const MainLayout: React.FC = () => {
           </ErrorBoundary>
         </main>
       </div>
+      <TermsConsentDialog
+        isOpen={termsOpen}
+        onClose={() => setTermsOpen(false)}
+        onAccepted={(next) => {
+          socketAtAccept.current = socketStatus;
+          statusRequestId.current++;
+          setAcceptedStatus(next);
+          setInitialStatus((prev) => ({ ...(prev || {}), ...next }));
+          void refreshStatus().then((fresh) => {
+            if (fresh) setAcceptedStatus(fresh.state === "consent_required" ? null : fresh);
+          });
+        }}
+      />
     </div>
   );
 };

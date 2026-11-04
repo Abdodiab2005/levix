@@ -1194,5 +1194,22 @@
   "schedulesWeekly": "Cada {days} a las {time} ({zone})",
   "schedulesMonthly": "Todos los meses el día {day} a las {time} ({zone})",
   "aiPersonaUpdated": "¡Personalidad actualizada correctamente!",
-  "aiMemoryUpdated": "¡Archivo de memoria actualizado!"
+  "aiMemoryUpdated": "¡Archivo de memoria actualizado!",
+  "consent_required": "Se requiere aceptar los términos",
+  "legalConsentTitle": "Términos de Uso y Aviso de Privacidad",
+  "legalReasonNotAccepted": "Acepta los Términos de Uso y el Aviso de Privacidad antes de conectar WhatsApp.",
+  "legalReasonChanged": "Los Términos de Uso o el Aviso de Privacidad cambiaron. Revísalos y acéptalos de nuevo.",
+  "legalReasonUpdated": "Levix se actualizó. Revisa y acepta los Términos de nuevo.",
+  "legalReasonUnreadable": "No se pudo leer el registro de aceptación anterior. Revisa y acepta los Términos de nuevo.",
+  "legalChangedReview": "Los Términos cambiaron mientras los revisabas. Lee la versión actual y vuelve a marcar la casilla.",
+  "legalEnglishFallback": "Este documento se muestra en inglés.",
+  "legalVersionEffective": "Versión {version} · Vigente desde {date}",
+  "legalFullPrivacy": "Política de privacidad completa",
+  "legalLicense": "Licencia",
+  "legalWebsite": "Sitio web",
+  "legalReadAccept": "He leído y acepto los Términos de Uso y el Aviso de Privacidad",
+  "legalAccept": "Aceptar",
+  "legalLoadError": "No se pudieron cargar los Términos. Inténtalo de nuevo.",
+  "legalAcceptError": "No se pudo guardar tu aceptación. Inténtalo de nuevo.",
+  "legalReviewTerms": "Revisar Términos"
 }

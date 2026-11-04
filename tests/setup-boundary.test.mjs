@@ -17,18 +17,24 @@
 //   3. the same over a real non-loopback interface, when the machine has one
 
 import os from "node:os";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   equal,
   finish,
   httpClient,
   ok,
   require,
+  ROOT,
   section,
   startServer,
   useTempDataDir,
 } from "./harness.mjs";
+import { gatewayAssets, gatewayState } from "./fixtures/gateway-assets.mjs";
 
 const dataDir = useTempDataDir("levix-setup");
+const assets = gatewayAssets();
+assets.ejs();
 
 const {
   isLoopbackAddress,
@@ -151,32 +157,49 @@ async function claimAttempt(base, headers, { code } = {}) {
   const http = httpClient(base);
   const page = await (await http.call("/setup", { headers })).text();
   const asksForCode = page.includes("Setup code");
+  assets.react();
+  let react;
+  try {
+    react = gatewayState(await (await http.call("/setup", { headers })).text());
+  } finally {
+    assets.ejs();
+  }
   const response = await http.form(
     "/setup",
     { password: "a-good-password", confirm: "a-good-password", ...(code ? { code } : {}) },
     headers,
   );
-  return { asksForCode, status: response.status };
+  return {
+    asksForCode,
+    reactPage: react?.page,
+    reactNeedsCode: react?.needsCode,
+    status: response.status,
+  };
 }
 
 section("no proxy configured: loopback claims it, a forged header does not");
 
 {
-  const server = await startServer({ dataDir, trust: "" });
+  const server = await startServer({ dataDir, trust: "", assetRoot: assets.root });
   try {
     const forgedXff = await claimAttempt(server.base, { "x-forwarded-for": "127.0.0.1" });
     ok("a forged X-Forwarded-For is asked for the code", forgedXff.asksForCode === true);
+    equal("React forged X-Forwarded-For is setup", forgedXff.reactPage, "setup");
+    equal("React forged X-Forwarded-For needs code", forgedXff.reactNeedsCode, true);
     equal("…and is refused without one", forgedXff.status, 401);
 
     const forgedReal = await claimAttempt(server.base, { "x-real-ip": "127.0.0.1" });
     ok("a forged X-Real-IP is asked for the code", forgedReal.asksForCode === true);
+    equal("React forged X-Real-IP needs code", forgedReal.reactNeedsCode, true);
     equal("…and is refused without one", forgedReal.status, 401);
 
     const forgedFwd = await claimAttempt(server.base, { forwarded: "for=127.0.0.1" });
+    equal("React forged Forwarded needs code", forgedFwd.reactNeedsCode, true);
     equal("a forged Forwarded header is refused", forgedFwd.status, 401);
 
     const honest = await claimAttempt(server.base, {});
     ok("a plain loopback request is not asked for a code", honest.asksForCode === false);
+    equal("React plain loopback needs no code", honest.reactNeedsCode, false);
     equal("…and claims the bot", honest.status, 303);
   } finally {
     server.stop();
@@ -188,30 +211,47 @@ section("proxy configured: nobody skips the code, however they ask");
 {
   // A second data directory: the first one has a password now.
   const proxied = useTempDataDir("levix-setup-proxy");
-  const server = await startServer({ dataDir: proxied, trust: "1" });
+  const server = await startServer({ dataDir: proxied, trust: "1", assetRoot: assets.root });
   try {
     // This is the exact request that used to win.
     const forged = await claimAttempt(server.base, { "x-forwarded-for": "127.0.0.1" });
     ok("the old attack is asked for the code", forged.asksForCode === true);
+    equal("React old attack needs code", forged.reactNeedsCode, true);
     equal("the old attack is refused", forged.status, 401);
 
     const chained = await claimAttempt(server.base, {
       "x-forwarded-for": "127.0.0.1, 127.0.0.1",
     });
+    equal("React forged chain needs code", chained.reactNeedsCode, true);
     equal("a two-hop forged chain is refused", chained.status, 401);
 
     const v6 = await claimAttempt(server.base, { "x-forwarded-for": "::1" });
+    equal("React forged IPv6 needs code", v6.reactNeedsCode, true);
     equal("a forged IPv6 loopback is refused", v6.status, 401);
 
     // Even the operator at the keyboard uses the code once a proxy is declared.
     const local = await claimAttempt(server.base, {});
     ok("a direct request is asked for the code too", local.asksForCode === true);
+    equal("React proxied direct request needs code", local.reactNeedsCode, true);
     equal("…and refused without it", local.status, 401);
 
     // And the code still works, so a real reverse-proxy deployment is usable.
     const setupCode = require("./src/config/secrets.cjs");
     const codeFromServer = await (await fetch(`${server.base}/setup`)).text();
     ok("the page explains where the code comes from", codeFromServer.includes("terminal"));
+    const reactSource = readFileSync(join(ROOT, "frontend/src/gateway/main.tsx"), "utf8");
+    const gatewayEnglish = JSON.parse(readFileSync(join(ROOT, "i18n/en/gateway.json"), "utf8"));
+    ok(
+      "React code field explains the terminal",
+      reactSource.includes('t("setupCodePlaceholder")') && gatewayEnglish.setupCodePlaceholder.includes("terminal"),
+    );
+    assets.react();
+    try {
+      const react = gatewayState(await (await fetch(`${server.base}/setup`)).text());
+      equal("React setup page still needs code", react?.needsCode, true);
+    } finally {
+      assets.ejs();
+    }
 
     const wrongCode = await claimAttempt(server.base, {}, { code: "DEADBEEF" });
     equal("a wrong code is refused", wrongCode.status, 401);
@@ -229,15 +269,31 @@ section("a legitimate reverse-proxy deployment still works");
   // so req.ip resolves to the client the proxy reports for logging and
   // rate-limiting elsewhere in the app.
   const proxied = useTempDataDir("levix-setup-trust");
-  const server = await startServer({ dataDir: proxied, trust: "1" });
+  const server = await startServer({ dataDir: proxied, trust: "1", assetRoot: assets.root });
   try {
     equal("Express trusts exactly one hop", server.trustProxy, 1);
+    assets.react();
+    try {
+      const response = await httpClient(server.base).form("/setup", {
+        password: "a-good-password",
+        confirm: "a-good-password",
+        code: "DEADBEEF",
+      });
+      equal("React wrong setup code stays 401", response.status, 401);
+      equal(
+        "React wrong setup code is named",
+        gatewayState(await response.text())?.error?.code,
+        "wrongSetupCode",
+      );
+    } finally {
+      assets.ejs();
+    }
   } finally {
     server.stop();
   }
 
   const direct = useTempDataDir("levix-setup-direct");
-  const plain = await startServer({ dataDir: direct, trust: "" });
+  const plain = await startServer({ dataDir: direct, trust: "", assetRoot: assets.root });
   try {
     ok(
       "with no proxy configured, Express trusts nothing",
@@ -261,11 +317,17 @@ if (!lan) {
   console.log("    SKIP  no non-loopback IPv4 interface on this machine");
 } else {
   const remoteData = useTempDataDir("levix-setup-remote");
-  const server = await startServer({ dataDir: remoteData, trust: "1", host: "0.0.0.0" });
+  const server = await startServer({
+    dataDir: remoteData,
+    trust: "1",
+    host: "0.0.0.0",
+    assetRoot: assets.root,
+  });
   try {
     const base = `http://${lan}:${server.address.split(":").pop()}`;
     const attack = await claimAttempt(base, { "x-forwarded-for": "127.0.0.1" });
     ok(`a real remote client at ${lan} is asked for the code`, attack.asksForCode === true);
+    equal(`React real remote client at ${lan} needs code`, attack.reactNeedsCode, true);
     equal("…and cannot claim the bot", attack.status, 401);
   } finally {
     server.stop();

@@ -79,6 +79,29 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   );
 });
 
+export interface LinkButtonProps extends ComponentPropsWithoutRef<"a"> {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+}
+
+export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(function LinkButton(
+  { variant = "secondary", size = "md", className, ...props },
+  ref,
+) {
+  return (
+    <a
+      ref={ref}
+      className={cn(
+        buttonVariants.base,
+        buttonVariants.variant[variant],
+        buttonVariants.size[size],
+        className,
+      )}
+      {...props}
+    />
+  );
+});
+
 export interface IconButtonProps
   extends Omit<ComponentPropsWithoutRef<"button">, "children" | "aria-label"> {
   /** Required. Used as aria-label and as the tooltip. */

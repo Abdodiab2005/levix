@@ -1,0 +1,102 @@
+{
+  "schema": 1,
+  "version": "2026-11-02",
+  "locale": "pt-BR",
+  "effective": "2026-11-02",
+  "terms": {
+    "title": "Termos de Uso do Levix",
+    "sections": [
+      {
+        "heading": "1. O que é o Levix",
+        "paragraphs": [
+          "O Levix é um software de código aberto para executar um bot pessoal de WhatsApp. Ele roda em um dispositivo que você controla: seu celular, seu computador ou seu servidor. Abdelrhman Diab (Leviro) o desenvolve e publica as versões oficiais.",
+          "O código-fonte é licenciado sob a Licença MIT (MIT License). Nada nestes termos limita os direitos que essa licença concede a você. Estes termos definem as condições para usar as versões oficiais do Levix e os serviços que o desenvolvedor mantém para elas: o retransmissor de e-mail de recuperação de conta, o feedback e os relatórios de falha.",
+          "Você aceita estes termos uma vez para cada instalação. O Levix pergunta de novo depois que estes termos ou o Aviso de Privacidade mudam, e depois que o Levix é atualizado para uma nova versão. Desvincular ou trocar a conta do WhatsApp, reconectar, reiniciar e redefinir a senha do painel não geram uma nova pergunta."
+        ]
+      },
+      {
+        "heading": "2. O Levix não é o WhatsApp",
+        "paragraphs": [
+          "O Levix não é criado, endossado nem apoiado pelo WhatsApp ou pela Meta. Ele se conecta à sua conta do WhatsApp como um dispositivo vinculado, por meio de uma implementação de código aberto não oficial do protocolo do WhatsApp.",
+          "Os próprios termos do WhatsApp restringem clientes não oficiais e automatizados. O WhatsApp ou a Meta podem limitar, suspender ou banir permanentemente uma conta que use o Levix, sem aviso e sem que o desenvolvedor tenha como reverter a medida. Você aceita esse risco para cada conta que vincular. Não vincule uma conta que você não pode se dar ao luxo de perder.",
+          "O WhatsApp pode alterar seu serviço a qualquer momento. O Levix pode deixar de funcionar, parcial ou totalmente, até que uma atualização seja publicada, e nenhuma atualização é prometida."
+        ]
+      },
+      {
+        "heading": "3. Suas responsabilidades",
+        "paragraphs": [
+          "Você é o operador da sua instalação. Você decide o que o bot faz, em quais conversas ele atua e o que ele envia.",
+          "Use o Levix de forma lícita. Não o use para spam, mensagens em massa ou não solicitadas, assédio ou fraude, nem para se passar por outra pessoa ou coletar dados de outras pessoas sem base legal. Siga os termos do WhatsApp e as leis que se aplicam a você e às pessoas das suas conversas.",
+          "Mensagens de outras pessoas chegam ao seu bot, e os recursos que você ativa, como respostas de IA, tradução ou moderação, podem processá-las. Você é responsável por ter o direito de processá-las dessa forma.",
+          "Mantenha seguros o seu dispositivo, a senha do painel e as suas chaves de API. Qualquer pessoa que controle a sua instalação pode agir como a sua conta do WhatsApp."
+        ]
+      },
+      {
+        "heading": "4. Serviços que você conecta",
+        "paragraphs": [
+          "Provedores de IA, mecanismos de busca, tradução, voz e outros serviços que você configura ou usa por meio do Levix são operados por terceiros, de acordo com os termos, as políticas de privacidade, os preços e os limites deles. Quando um serviço exige uma conta ou uma chave de API, você a fornece e paga os custos dele. O desenvolvedor não os controla e não é responsável por eles."
+        ]
+      },
+      {
+        "heading": "5. Sem garantia",
+        "paragraphs": [
+          "O Levix é fornecido no estado em que se encontra e conforme a disponibilidade, sem garantia de qualquer tipo, na medida permitida por lei. O desenvolvedor não promete que o Levix esteja livre de erros, sempre disponível, compatível com o WhatsApp ou adequado a uma finalidade específica. Mantenha os seus próprios backups de tudo o que você precisa."
+        ]
+      },
+      {
+        "heading": "6. Limitação de responsabilidade",
+        "paragraphs": [
+          "Na medida permitida pela lei que se aplica a você, o desenvolvedor não responde por danos indiretos, incidentais ou consequenciais, nem pela perda de uma conta do WhatsApp, de mensagens, de dados, de lucros ou de negócios, que resultem do uso ou da impossibilidade de uso do Levix.",
+          "Algumas leis não permitem essas exclusões ou limites, e alguns direitos do consumidor não podem ser renunciados. Nesse caso, estes termos se aplicam somente até onde essa lei permitir, e os seus direitos previstos nela não são afetados."
+        ]
+      },
+      {
+        "heading": "7. Alterações e contato",
+        "paragraphs": [
+          "O desenvolvedor pode alterar estes termos. Uma alteração passa a valer para a sua instalação quando você a aceita. Uma conexão do WhatsApp que já esteja aberta permanece aberta; o Levix pede o novo aceite antes de se conectar de novo. Se essa conexão cair, por exemplo depois de uma mudança de rede, o Levix fica offline até que os novos termos sejam aceitos. Se você não aceitar, o Levix não se conecta ao WhatsApp, e você pode parar de usá-lo.",
+          "Dúvidas e pedidos vão para o Suporte da Leviro (Leviro Support) por Configurações, depois Feedback e Suporte, no painel de controle do Levix, ou pelas opções de contato no site do Levix."
+        ]
+      }
+    ]
+  },
+  "privacy": {
+    "title": "Aviso de Privacidade do Levix",
+    "sections": [
+      {
+        "heading": "1. Armazenado no seu dispositivo",
+        "paragraphs": [
+          "O Levix guarda os seus dados no dispositivo em que roda: o pareamento do WhatsApp, as configurações, as chaves de API, a senha do painel, dados do bot como agendamentos, notas e memória da IA, logs e relatórios de falha ainda não enviados. As chaves de API e o endereço de e-mail de recuperação são armazenados criptografados.",
+          "Não existe conta Levix. O Levix não tem análise de uso, nem publicidade, nem telemetria automática."
+        ]
+      },
+      {
+        "heading": "2. O que sai do seu dispositivo",
+        "paragraphs": [
+          "O WhatsApp (Meta) recebe as suas mensagens, as mídias que o bot envia e os seus dados de pareamento enquanto uma conta estiver vinculada, porque o Levix é um cliente do WhatsApp.",
+          "Quando você usa um recurso de IA, o prompt e o seu contexto vão para o provedor de IA que você configurou. Esse contexto pode incluir nomes, identificadores do WhatsApp, texto de mensagens, histórico da IA, memória e mídias que você pede para processar. Com o Gemini, o embasamento no Google Search (Google Search grounding) vem ativado por padrão: o Gemini decide a cada resposta se pesquisa na web, e você pode desativar isso nas configurações.",
+          "Outros recursos só contatam outros serviços quando são executados. A IA pode enviar consultas de busca extraídas das suas conversas para a busca na web e para a Wikipédia, e pode abrir páginas da web. Outros recursos usam o Google Translate, a conversão de texto em fala do Google e serviços de clima, horários de oração e encurtadores de links. Consultar os modelos de um provedor de IA envia a sua chave de API a esse provedor, e configurar um domínio com o comando levix domain pede a um serviço de consulta de IP o endereço público do servidor. As prévias de links e as miniaturas remotas vêm desativadas por padrão.",
+          "Se você definir um proxy, o tráfego do WhatsApp passa por ele."
+        ]
+      },
+      {
+        "heading": "3. O que chega ao desenvolvedor",
+        "paragraphs": [
+          "O desenvolvedor só recebe dados depois de uma ação na sua instalação. O feedback que você envia em Configurações, depois Feedback e Suporte, leva a sua mensagem, o assunto dela, uma avaliação opcional, um contato opcional e um arquivo opcional, além da versão do Levix e da plataforma; diagnósticos do dispositivo e um log de depuração higienizado só são adicionados se você marcar essa caixa. O Suporte da Leviro recebe o feedback pelo Telegram, que o armazena. Um relatório de falha, com os detalhes do dispositivo e o log de depuração higienizado, só é enviado quando você escolhe enviá-lo. O retransmissor de e-mail de recuperação recebe um endereço e um código quando você verifica um e-mail de recuperação ou quando um código de redefinição é solicitado na página de login. O retransmissor guarda apenas hashes com chave e o estado de autorização."
+        ]
+      },
+      {
+        "heading": "4. O seu aceite destes termos",
+        "paragraphs": [
+          "O Levix registra o seu aceite neste dispositivo: a versão do Levix, a versão e o hash SHA-256 destes documentos, o idioma, o horário e a forma do aceite (o painel de controle ou a linha de comando). Esse registro não é enviado e não é incluído em backups nem em exportações de configurações feitos em Configurações. A cópia local do banco de dados que o Levix guarda antes de uma atualização contém esse registro. O registro não contém nenhum identificador seu, do seu dispositivo ou da sua conta do WhatsApp."
+        ]
+      },
+      {
+        "heading": "5. Suas escolhas",
+        "paragraphs": [
+          "Você pode desvincular o WhatsApp, apagar o histórico e a memória da IA e apagar relatórios de falha não enviados. No Android, desinstalar o Levix remove os dados dele do dispositivo. Em um computador ou servidor, apague a pasta de dados que o comando levix where mostra, ou o volume do Docker. Os dados já enviados ao WhatsApp, a um provedor de IA ou a outro serviço são regidos pela política desse serviço. Para apagar um feedback ou um relatório de falha que você enviou, peça ao Suporte da Leviro.",
+          "A Política de Privacidade completa, vinculada a estes documentos, lista cada destino, o que é enviado e por quanto tempo o desenvolvedor mantém os dados que recebe."
+        ]
+      }
+    ]
+  }
+}

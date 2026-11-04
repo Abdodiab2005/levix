@@ -82,6 +82,7 @@
     <string name="status_stopped">Detenido</string>
     <string name="status_pairing">Vinculación necesaria</string>
     <string name="status_paused">En pausa</string>
+    <string name="status_terms">Términos necesarios</string>
     <string name="status_reconnecting">Reconectando</string>
     <string name="status_operational">Operativo</string>
     <string name="status_protected">Protegido</string>
@@ -103,6 +104,8 @@
     <string name="notif_offline_title">Levix está sin conexión</string>
     <string name="notif_offline_network">Sin conexión a internet. El bot de WhatsApp está en pausa.</string>
     <string name="notif_offline_wa">Falló la conexión de WhatsApp: %1$s</string>
+    <string name="notif_terms_title">Revisa los Términos</string>
+    <string name="notif_terms_text">Abre Levix y acepta los Términos de Uso y el Aviso de Privacidad para que WhatsApp pueda conectarse.</string>
     <string name="notif_wa_connected">WhatsApp: Conectado</string>
     <string name="notif_wa_offline">WhatsApp: Sin conexión</string>
     <string name="notif_wa_paused">WhatsApp: ⏸️ En pausa (sin internet)</string>
@@ -285,6 +288,9 @@
     <string name="home_connection_error_body">El motor está listo, pero WhatsApp está sin conexión. Abre Conexión para revisar el problema y reanudar la sesión.</string>
     <string name="home_unknown">Verificando el estado del asistente</string>
     <string name="home_unknown_body">El motor está listo, pero el estado de WhatsApp no está confirmado. Abre Conexión para comprobarlo.</string>
+    <string name="home_terms">Acepta los Términos para conectar</string>
+    <string name="home_terms_body">Levix espera que aceptes los Términos de Uso y el Aviso de Privacidad. Aparece en el primer uso, cuando cambian los Términos y después de una actualización de la app. WhatsApp se conecta al aceptar.</string>
+    <string name="home_review_terms">Revisar Términos</string>
     <string name="home_linking">Conectando WhatsApp…</string>
     <string name="home_linking_body">El motor está listo. Esperando a que WhatsApp confirme la conexión.</string>
     <string name="home_step_start">Paso 1 de 3 · Iniciar Levix</string>

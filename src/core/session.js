@@ -73,6 +73,14 @@ import { createWhatsAppSocket, groupMetadataCache } from "./socket.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
+const consent = require("../legal/consent.cjs");
+
+/**
+ * How often a session waiting for the Terms re-reads the acceptance record.
+ * `levix terms` writes it from another process, and this is how a running
+ * Levix notices without a restart.
+ */
+const CONSENT_POLL_MS = 5000;
 
 function clearAccountScopedState() {
   clearWhatsAppDirectory();
@@ -174,6 +182,8 @@ export const SESSION_STATES = Object.freeze({
   RETRY_EXHAUSTED: "retry_exhausted",
   LOGGED_OUT: "logged_out",
   ERROR: "error",
+  // The installation has no valid Terms acceptance. No socket exists.
+  CONSENT_REQUIRED: "consent_required",
 });
 
 const S = SESSION_STATES;
@@ -246,6 +256,11 @@ export class WhatsAppSession {
   #isOnline = true;
   #wasActiveBeforeOffline = false;
 
+  // Re-reads the acceptance record while the session waits in
+  // consent_required. Deliberately ref'd, like the retry timer: in headless it
+  // is the only thing keeping the process up until somebody accepts.
+  #consentTimer = null;
+
   constructor({
     createSocket = createWhatsAppSocket,
     attachListeners = setupEventListeners,
@@ -270,6 +285,11 @@ export class WhatsAppSession {
     pairingCodeDelayMs = 1500,
     isLinked = isPairedSession,
     clearDirectory = clearAccountScopedState,
+    // Asked before every socket. `{ ok, reason }`; anything but ok === true
+    // keeps the session in consent_required. Injectable so the state machine
+    // can be tested without a database.
+    checkConsent = () => consent.consentStatus(),
+    consentPollMs = CONSENT_POLL_MS,
   } = {}) {
     this.createSocket = createSocket;
     this.attachListeners = attachListeners;
@@ -286,6 +306,8 @@ export class WhatsAppSession {
     this.log = log;
     this.debugLog = debugLog;
     this.pairingCodeDelayMs = pairingCodeDelayMs;
+    this.checkConsent = checkConsent;
+    this.consentPollMs = consentPollMs;
   }
 
   // -------------------------------------------------------------------------
@@ -347,6 +369,7 @@ export class WhatsAppSession {
       // answer crosses the wire, never the fingerprint it was computed from.
       proxyChanged: this.#proxyIsStale(),
       connected: this.#state === S.CONNECTED,
+      consentRequired: this.#state === S.CONSENT_REQUIRED,
       isOnline: this.#isOnline,
       terminal,
       hasQr: !!this.#qr,
@@ -431,7 +454,9 @@ export class WhatsAppSession {
     // A known pairing reuses the stored session. Do not request a pairing code.
     if (this.isLinked()) {
       this.#pairingIntent = { method: "qr", phone: null };
-    } else {
+    } else if (this.#state !== S.CONSENT_REQUIRED || method != null) {
+      // A Start pressed while waiting for consent must not replace an earlier
+      // pairing-code request with the default QR choice.
       this.#pairingIntent = parseStartOptions({ method, phone });
     }
 
@@ -455,6 +480,7 @@ export class WhatsAppSession {
    */
   async stop({ reason = "manual", state = S.IDLE, detail = null } = {}) {
     this.#cancelRetry();
+    this.#stopConsentWatch();
     this.#attempt = 0;
 
     // Wait for an in-flight start, or we would tear down a socket that has not
@@ -483,6 +509,7 @@ export class WhatsAppSession {
     // session logged out, and the account is unlinked with a connection still
     // running.
     this.#cancelRetry();
+    this.#stopConsentWatch();
     if (this.#starting) await this.#starting.catch(() => {});
 
     const sock = this.#socket;
@@ -555,6 +582,7 @@ export class WhatsAppSession {
   async shutdown() {
     this.#shuttingDown = true;
     this.#cancelRetry();
+    this.#stopConsentWatch();
     if (this.#starting) await this.#starting.catch(() => {});
     this.#cancelRetry();
     await this.#destroySocket();
@@ -569,6 +597,12 @@ export class WhatsAppSession {
   // -------------------------------------------------------------------------
 
   async #open({ reason }) {
+    // The Terms gate (ADR-006). First, before the offline check and before any
+    // socket: start(), the retry timer, network restore, !restart and the
+    // panel all arrive here, so this is the one place a missing acceptance can
+    // be enforced on every path. Pairing credentials are not touched.
+    if (!this.#consentAllows()) return;
+
     if (!this.#isOnline) {
       this.#wasActiveBeforeOffline = true;
       this.#transition(S.PAUSED, {
@@ -987,6 +1021,74 @@ export class WhatsAppSession {
   }
 
   // -------------------------------------------------------------------------
+  // Terms consent
+  // -------------------------------------------------------------------------
+
+  /**
+   * Continue a start that the Terms gate held back, if the installation now
+   * has a valid acceptance. The panel calls this right after recording one;
+   * the poll below calls it for an acceptance written by `levix terms`.
+   */
+  async recheckConsent() {
+    if (this.#state !== S.CONSENT_REQUIRED || this.#shuttingDown) return this.getState();
+    if (!this.#consentAllows()) return this.getState();
+    this.#stopConsentWatch();
+    const { method, phone } = this.#pairingIntent || {};
+    return this.start({ reason: "consent_accepted", method, phone });
+  }
+
+  #readConsent() {
+    try {
+      const status = this.checkConsent();
+      if (status !== null && typeof status === "object" && !Array.isArray(status)) return status;
+    } catch (error) {
+      this.log.error({ err: error }, "[Session] the Terms acceptance check failed");
+    }
+    // Fail closed: an answer we cannot read is not an acceptance.
+    return { ok: false, reason: consent.REASONS.UNREADABLE };
+  }
+
+  #consentAllows() {
+    const status = this.#readConsent();
+    if (status.ok === true) return true;
+
+    const reason =
+      typeof status.reason === "string" && status.reason
+        ? status.reason
+        : consent.REASONS.NOT_ACCEPTED;
+    if (this.#state !== S.CONSENT_REQUIRED) {
+      this.log.warn(`[Session] WhatsApp waits for the Terms to be accepted (${reason})`);
+      this.#clearQr();
+      this.#pairing = false;
+    }
+    if (this.#state !== S.CONSENT_REQUIRED || this.#reason !== reason) {
+      this.#transition(S.CONSENT_REQUIRED, { reason, detail: consent.describeReason(reason) });
+    }
+    this.#watchConsent();
+    return false;
+  }
+
+  #watchConsent() {
+    if (this.#consentTimer || this.#shuttingDown) return;
+    this.#consentTimer = setInterval(() => {
+      if (this.#state !== S.CONSENT_REQUIRED || this.#shuttingDown) {
+        this.#stopConsentWatch();
+        return;
+      }
+      this.recheckConsent().catch((error) =>
+        this.log.error({ err: error }, "[Session] start after the Terms acceptance failed"),
+      );
+    }, this.consentPollMs);
+  }
+
+  #stopConsentWatch() {
+    if (this.#consentTimer) {
+      clearInterval(this.#consentTimer);
+      this.#consentTimer = null;
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // retries
   // -------------------------------------------------------------------------
 
@@ -1092,6 +1194,7 @@ export class WhatsAppSession {
   }
 
   #transition(state, { reason = null, detail = null } = {}) {
+    if (state !== S.CONSENT_REQUIRED) this.#stopConsentWatch();
     const changed = state !== this.#state;
     this.#state = state;
     this.#reason = reason;

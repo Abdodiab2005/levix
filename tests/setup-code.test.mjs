@@ -24,8 +24,11 @@ import {
   section,
   useTempDataDir,
 } from "./harness.mjs";
+import { gatewayAssets, gatewayState } from "./fixtures/gateway-assets.mjs";
 
 const dataDir = useTempDataDir("levix-setupcode");
+const assets = gatewayAssets();
+assets.ejs();
 
 const PANEL_PORT = 34121;
 const settings = require("./src/config/settings.cjs");
@@ -47,10 +50,14 @@ const DOC_PIPELINE = `grep -F '${PREFIX}' | tail -1`;
  * below has to talk to the running panel.
  */
 async function boot({ data = dataDir, waitFor = "Ctrl+C", timeoutMs = 60000 } = {}) {
-  const child = spawn(process.execPath, [join(ROOT, "bin", "levix.js")], {
-    env: { ...process.env, LEVIX_DATA_DIR: data, LEVIX_OPEN_BROWSER: "0" },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const child = spawn(
+    process.execPath,
+    ["--require", assets.preload, join(ROOT, "bin", "levix.js")],
+    {
+      env: { ...process.env, LEVIX_DATA_DIR: data, LEVIX_OPEN_BROWSER: "0" },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
 
   let output = "";
   const stop = async () => {
@@ -140,6 +147,16 @@ section("…and that code actually claims the panel from another machine");
 
   let res = await http.call("/setup", { headers: remote });
   ok("a remote first run is asked for a code", (await res.text()).includes("Setup code"));
+  assets.react();
+  try {
+    res = await http.call("/setup", { headers: remote });
+    const react = gatewayState(await res.text());
+    equal("React remote first run is setup", react?.page, "setup");
+    equal("React remote first run needs code", react?.needsCode, true);
+    equal("React remote first run has no error", react?.error, null);
+  } finally {
+    assets.ejs();
+  }
 
   res = await http.form(
     "/setup",
@@ -147,6 +164,23 @@ section("…and that code actually claims the panel from another machine");
     remote,
   );
   equal("a wrong code is refused", res.status, 401);
+
+  assets.react();
+  try {
+    res = await http.form(
+      "/setup",
+      { password: "a-good-password", confirm: "a-good-password", code: "DEADBEEF" },
+      remote,
+    );
+    equal("React wrong code is refused", res.status, 401);
+    equal(
+      "React wrong code error is named",
+      gatewayState(await res.text())?.error?.code,
+      "wrongSetupCode",
+    );
+  } finally {
+    assets.ejs();
+  }
 
   res = await http.form(
     "/setup",

@@ -74,3 +74,25 @@
   Android unit tests and debug and release builds PASS. Phase 03 COMPLETE for automated gates;
   device QA NOT RUN; 10 translation files marked draft for keys added after the review.
 
+## Phase 04: React gateway and Terms consent (started 2026-11-02)
+
+- Started on the owner's request on 2026-11-02, `main` 407bf1e.
+- Owner decisions: Q-03 option (a), Ed25519-signed remote Terms with a bundled offline fallback
+  (ADR-019); Q-04 options (a) and (c), interactive `levix terms` and a provisioning command, no
+  start flag (ADR-006); Q-05 option (a), a live connection stays up and the next start asks
+  (ADR-006); Q-17 overridden, consent belongs to the installation and is asked again after a
+  document change or an app update, never after unlink, relink, restart or password reset
+  (ADR-020).
+- Re-audit and plan in `PHASE-04-RESULTS.md`; contract in `LEGAL_CONSENT_CONTRACT.md`. Slices 04a
+  to 04e; 04a and 04b merge together; 04c is BLOCKED on the owner's signing key and the `levix-ui`
+  endpoint.
+- 2026-11-02: 04a (consent gate, record, `levix terms`) and 04b (panel dialog, Android state, the
+  documents in four locales) implemented by Codex, Grok, OpenCode and Antigravity from an
+  orchestrator draft. Codex review: 0 P1, 3 P2, 3 P3, all fixed. Local gates PASS. CI PASS 7/7
+  on #125 32a4b59, #126 f34a2bd and #127 65b793e. Device QA NOT RUN.
+- 2026-11-02, owner review: release identity per platform (an Android `versionCode` bump asks
+  again), dialog retry and fresh state, Android alerts posted once per condition, factual
+  corrections to the four documents, and corrected results records. CI PASS 7/7 on #126 51d0051
+  and #127 898193f. 04c (signed remote Terms, shipped off, BLOCKED on the owner's key) in #128;
+  levix-ui endpoint in levix-ui #23 (draft); 04d React gateway and 04e EJS removal in their own
+  PRs. Nothing in Phase 04 is merged (`PHASE-04-RESULTS.md` section 3).

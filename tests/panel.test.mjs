@@ -7,8 +7,11 @@
 // scripts/validate-sea.mjs starting a real process.
 
 import { equal, finish, httpClient, ok, section, startServer, useTempDataDir } from "./harness.mjs";
+import { gatewayAssets, gatewayState } from "./fixtures/gateway-assets.mjs";
 
 const dataDir = useTempDataDir("levix-panel");
+const assets = gatewayAssets();
+assets.ejs();
 const { saveSchedule } = await import("../src/utils/storage.esm.js");
 saveSchedule({
   id: "panel-weekly",
@@ -22,7 +25,7 @@ saveSchedule({
   lastDeliveryStatus: "failed",
   lastError: "offline",
 });
-const server = await startServer({ dataDir, trust: "", routes: true });
+const server = await startServer({ dataDir, trust: "", routes: true, assetRoot: assets.root });
 const http = httpClient(server.base);
 
 try {
@@ -34,6 +37,16 @@ try {
   res = await http.call("/setup");
   equal("the setup page renders", res.status, 200);
   ok("a local first run is not asked for a code", !(await res.text()).includes("Setup code"));
+  assets.react();
+  try {
+    res = await http.call("/setup");
+    const react = gatewayState(await res.text());
+    equal("React local first run is setup", react?.page, "setup");
+    equal("React local first run needs no code", react?.needsCode, false);
+    equal("React local first run has no error", react?.error, null);
+  } finally {
+    assets.ejs();
+  }
 
   res = await http.call("/dashboard/api/stats");
   equal("the API is locked before there is a password", res.status, 401);

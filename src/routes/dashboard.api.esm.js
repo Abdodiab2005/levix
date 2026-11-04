@@ -106,6 +106,8 @@ const {
 const { discoverProviderModels, DiscoveryError } = require("../services/llmDiscovery.cjs");
 const settingsTransfer = require("../services/settingsTransfer.cjs");
 const autoDelete = require("../services/autoDelete.cjs");
+const legalTerms = require("../legal/terms.cjs");
+const legalConsent = require("../legal/consent.cjs");
 const cron = require("node-cron");
 
 const router = Router();
@@ -1723,11 +1725,77 @@ router.post(
 );
 
 // ===========================================================================
+// Legal consent
+// ===========================================================================
+
+function legalTermsResponse(requestedLocale) {
+  const locale = legalTerms.resolveLocale(requestedLocale);
+  const { document, sha256, version } = legalTerms.documentFor(locale);
+  const { ok, reason, accepted } = legalConsent.consentStatus();
+  return {
+    version,
+    locale,
+    requestedLocale,
+    sha256,
+    effective: document.effective,
+    terms: document.terms,
+    privacy: document.privacy,
+    links: legalTerms.LINKS,
+    locales: legalTerms.availableLocales(),
+    consent: {
+      ok,
+      reason,
+      accepted: accepted
+        ? {
+            termsVersion: accepted.termsVersion,
+            locale: accepted.locale,
+            acceptedAt: accepted.acceptedAt,
+            appVersion: accepted.appVersion,
+          }
+        : null,
+    },
+  };
+}
+
+router.get(
+  "/legal/terms",
+  asyncRoute(async (req, res) => {
+    const requestedLocale = typeof req.query.locale === "string" ? req.query.locale : null;
+    res.json({ success: true, ...legalTermsResponse(requestedLocale) });
+  }),
+);
+
+router.post(
+  "/legal/accept",
+  asyncRoute(async (req, res) => {
+    const { version, sha256, locale } = req.body || {};
+    if ([version, sha256, locale].some((value) => typeof value !== "string" || !value)) {
+      return badRequest(res, "version, sha256 and locale are required strings");
+    }
+    try {
+      legalConsent.recordAcceptance({ version, sha256, locale, via: "panel" });
+    } catch (error) {
+      if (error.code === "CONSENT_BAD_LOCALE") return badRequest(res, "Unknown Terms locale");
+      if (error.code === "TERMS_MISMATCH") {
+        return res.status(409).json({
+          success: false,
+          code: "TERMS_CHANGED",
+          ...legalTermsResponse(locale),
+        });
+      }
+      throw error;
+    }
+    await session?.recheckConsent();
+    res.json({ success: true, session: sessionState() });
+  }),
+);
+
+// ===========================================================================
 // Bot control
 // ===========================================================================
 
 // The WhatsApp session. These four routes are the only way a browser can
-// influence it, and each is a request to the backend's state machine rather
+// directly control it, and each is a request to the backend's state machine rather
 // than an instruction to make or break a socket. Everything under
 // /dashboard/api is already behind the panel session and the cross-origin
 // check in app.cjs, so no new surface is exposed here.

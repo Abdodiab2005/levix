@@ -5,11 +5,10 @@
 // proves it two ways — by looking at what the process loaded, and by binding
 // the panel port itself, which only works if nothing else has it.
 //
-// WhatsApp is not stubbed. The bot creates its socket and starts connecting;
-// the test waits for the point just before pairing and stops there. A real
-// pairing needs a phone and is not something CI can do.
+// A fake Baileys socket emits a deterministic QR; the real session, auth and
+// CLI paths still run. An install with no acceptance stays in consent_required.
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import net from "node:net";
 import { tmpdir } from "node:os";
@@ -41,6 +40,8 @@ function startLevix(args, { waitFor, timeoutMs = 60000, data = dataDir } = {}) {
     [
       "--require",
       join(ROOT, "tests", "fixtures", "probe.cjs"),
+      "--import",
+      join(ROOT, "tests", "fixtures", "fake-whatsapp-loader.mjs"),
       join(ROOT, "bin", "levix.js"),
       ...args,
     ],
@@ -98,6 +99,50 @@ function startLevix(args, { waitFor, timeoutMs = 60000, data = dataDir } = {}) {
       return existsSync(probeOut) ? readFileSync(probeOut, "utf8").split("\n") : [];
     },
   };
+}
+
+function acceptTerms(data) {
+  const current = require("./src/legal/terms.cjs").documentFor("en");
+  return spawnSync(
+    process.execPath,
+    [
+      join(ROOT, "bin", "levix.js"),
+      "terms",
+      "accept",
+      "--terms-version",
+      current.version,
+      "--sha256",
+      current.sha256,
+    ],
+    { encoding: "utf8", env: { ...process.env, LEVIX_DATA_DIR: data } },
+  );
+}
+
+// --- headless without acceptance ------------------------------------------
+
+section("headless without acceptance waits for the Terms");
+
+{
+  const fresh = mkdtempSync(join(tmpdir(), "levix-headless-consent-"));
+  const levix = startLevix(["headless"], {
+    waitFor: "levix terms accept",
+    timeoutMs: 60000,
+    data: fresh,
+  });
+  await levix.seen;
+
+  ok("it prints levix terms", levix.output.includes("levix terms"));
+  ok("it prints levix terms accept", levix.output.includes("levix terms accept"));
+  ok("it does not print the unpaired QR banner", !/No WhatsApp session found/.test(levix.output));
+  ok("it prints no QR glyph", !/[█▄▀]/.test(levix.output));
+
+  const exited = await Promise.race([
+    new Promise((resolve) => levix.child.once("exit", (code) => resolve({ code }))),
+    new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
+  ]);
+  ok("it does not exit within 8 seconds", exited === null);
+
+  await levix.stop();
 }
 
 // --- headless -------------------------------------------------------------
@@ -176,6 +221,8 @@ section("an unpaired install shows the pairing instructions");
 {
   // A fresh directory has no credentials, so the first QR triggers the banner.
   const fresh = mkdtempSync(join(tmpdir(), "levix-unpaired-"));
+  const provisioned = acceptTerms(fresh);
+  ok("provisioning accept for the unpaired directory", provisioned.status === 0, provisioned.stderr);
   // The QR glyph itself is the last thing printed, so waiting for it avoids
   // reading the output while it is still arriving.
   const levix = startLevix(["headless"], {
@@ -184,22 +231,10 @@ section("an unpaired install shows the pairing instructions");
     data: fresh,
   });
 
-  let reached = true;
-  try {
-    await levix.seen;
-  } catch (error) {
-    // No network in this environment means no QR is ever issued. That is a
-    // real limitation of the test host, not a failure of the bot — say so
-    // rather than pretending the path was covered.
-    reached = false;
-    console.log("    SKIP  no QR arrived (WhatsApp unreachable from here)");
-  }
-
-  if (reached) {
-    ok("it says there is no session yet", /No WhatsApp session found/.test(levix.output));
-    ok("it says where to scan from", /Linked devices/.test(levix.output));
-    ok("it prints a QR in the terminal", /█|▄|▀/.test(levix.output));
-  }
+  await levix.seen;
+  ok("it says there is no session yet", /No WhatsApp session found/.test(levix.output));
+  ok("it says where to scan from", /Linked devices/.test(levix.output));
+  ok("it prints a QR in the terminal", /█|▄|▀/.test(levix.output));
 
   await levix.stop();
 }

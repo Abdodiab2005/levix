@@ -22,6 +22,7 @@ import {
   startServer,
   useTempDataDir,
 } from "./harness.mjs";
+import { gatewayAssets, gatewayState } from "./fixtures/gateway-assets.mjs";
 
 const ADDRESS = "recover.me@example.com";
 const OTHER = "other.box@gmail.com";
@@ -873,11 +874,21 @@ section("the panel routes and the login page");
 
 received.length = 0;
 mailed.length = 0;
+const assets = gatewayAssets();
+assets.ejs();
+async function reactLogin(base) {
+  assets.react();
+  try {
+    return gatewayState(await (await httpClient(base).call("/login")).text());
+  } finally {
+    assets.ejs();
+  }
+}
 const webDir = useTempDataDir("levix-recovery-http");
 let server;
 let server2;
 try {
-  server = await startServer({ dataDir: webDir, trust: "", routes: true });
+  server = await startServer({ dataDir: webDir, trust: "", routes: true, assetRoot: assets.root });
   const http = httpClient(server.base);
   const anon = httpClient(server.base);
 
@@ -890,6 +901,11 @@ try {
   ok("WhatsApp is offered", html.includes('data-channel="whatsapp"'));
   ok("email is hidden until an address exists", !html.includes('data-channel="email"'));
   ok("the page has no address", !html.includes(ADDRESS));
+  let react = await reactLogin(server.base);
+  equal("React login starts on the login page", react?.page, "login");
+  equal("React login starts without recovery email", react?.recoveryEmail, null);
+  equal("React login starts without verified email", react?.recoveryEmailVerified, false);
+  equal("React login starts without error", react?.error, null);
 
   res = await anon.call("/dashboard/api/recovery-email");
   equal("the status route requires the session", res.status, 401);
@@ -999,6 +1015,10 @@ try {
   ok("the login page shows the mask", html.includes("re***@e***.com"));
   ok("the login page offers email", html.includes('data-channel="email"'));
   ok("the login page still hides the address", !html.includes(ADDRESS));
+  react = await reactLogin(server.base);
+  equal("React verified login shows the mask", react?.recoveryEmail, "re***@e***.com");
+  equal("React verified login offers email", react?.recoveryEmailVerified, true);
+  ok("React verified login hides the address", !JSON.stringify(react).includes(ADDRESS));
 
   const resetsBefore = received.length;
   res = await anon.json("/reset/request", { channel: "email", lang: "ar" });
@@ -1038,7 +1058,7 @@ try {
   server = null;
   await sleep(400);
 
-  server2 = await startServer({ dataDir: webDir, trust: "", routes: true });
+  server2 = await startServer({ dataDir: webDir, trust: "", routes: true, assetRoot: assets.root });
   const again = httpClient(server2.base);
   res = await again.form("/login", { password: NEXT_PASSWORD });
   equal("the new password survives a restart", res.status, 303);
@@ -1091,6 +1111,10 @@ try {
   ok("email leaves the login page with the address", !html.includes('data-channel="email"'));
   ok("WhatsApp remains", html.includes('data-channel="whatsapp"'));
   ok("the mask is gone", !html.includes("re***@e***.com"));
+  react = await reactLogin(server2.base);
+  equal("React deleted-email login remains available", react?.page, "login");
+  equal("React deleted-email login hides email", react?.recoveryEmail, null);
+  equal("React deleted-email login marks email unverified", react?.recoveryEmailVerified, false);
 } catch (error) {
   ok("http section ran", false, error?.stack || String(error));
 } finally {
@@ -1121,13 +1145,22 @@ for (const state of ["legacy", "revoked"]) {
     { env: { ...process.env, LEVIX_DATA_DIR: dir }, encoding: "utf8" },
   );
   equal(`${state}: seed saved record`, seed.status, 0);
-  const fixture = await startServer({ dataDir: dir, trust: "", routes: true });
+  const fixture = await startServer({
+    dataDir: dir,
+    trust: "",
+    routes: true,
+    assetRoot: assets.root,
+  });
   try {
     const anon = httpClient(fixture.base);
     const login = await (await anon.call("/login")).text();
     ok(`${state}: login hides unusable email option`, !login.includes('data-channel="email"'));
     ok(`${state}: login keeps WhatsApp`, login.includes('data-channel="whatsapp"'));
     ok(`${state}: login hides saved mask`, !login.includes("re***@e***.com"));
+    let react = await reactLogin(fixture.base);
+    equal(`${state}: React login keeps the page`, react?.page, "login");
+    equal(`${state}: React login hides unusable email`, react?.recoveryEmail, null);
+    equal(`${state}: React login marks email unverified`, react?.recoveryEmailVerified, false);
     const operator = httpClient(fixture.base);
     equal(
       `${state}: operator signs in`,
@@ -1153,6 +1186,13 @@ for (const state of ["legacy", "revoked"]) {
     ok(
       `${state}: verified address restores Email option`,
       verifiedLogin.includes('data-channel="email"'),
+    );
+    react = await reactLogin(fixture.base);
+    equal(`${state}: React verified address restores mask`, react?.recoveryEmail, "re***@e***.com");
+    equal(
+      `${state}: React verified address restores email option`,
+      react?.recoveryEmailVerified,
+      true,
     );
   } finally {
     fixture.stop();

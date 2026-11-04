@@ -181,23 +181,19 @@
 
   if (window.__levixSubmit) return;
   window.__levixSubmit = true;
-  document.addEventListener(
+  window.addEventListener(
     "submit",
     function (e) {
+      if (e.defaultPrevented) return;
       var form = e.target;
       if (!form || form.tagName !== "FORM") return;
+      var method = (form.getAttribute("method") || "GET").toUpperCase();
+      if (method !== "POST") return;
       var action = form.getAttribute("action") || location.href;
       var abs = new URL(action, location.href).href;
       if (!isLocal(abs)) return;
       e.preventDefault();
-      var method = (form.getAttribute("method") || "GET").toUpperCase();
       var data = new URLSearchParams(new FormData(form));
-      if (method === "GET") {
-        var u = new URL(abs);
-        data.forEach(function (v, k) { u.searchParams.append(k, v); });
-        location.href = u.href;
-        return;
-      }
       try {
         var res = hostRequest(
           abs,
@@ -207,6 +203,7 @@
         );
         if (res.status >= 400) {
           var html = new TextDecoder("utf-8").decode(b64ToBytes(res.body));
+          // Only for classic-script pages: an already-run ES module will not rerun after document.write.
           document.open();
           document.write(html);
           document.close();
@@ -217,7 +214,7 @@
         navigateAfterAuth(null, abs);
       }
     },
-    true
+    false
   );
 
   // After a successful login/setup submit, land on the panel with the
