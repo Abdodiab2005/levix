@@ -434,3 +434,39 @@ Android retest checklist for the owner (isolated `.dev` build from these heads, 
 
 Still NOT RUN: password reset keeping consent on the device, pairing a real account, the oldest
 supported WebView (R-27), and the human legal review.
+
+CI on the pushed heads, 2026-11-03: PASS 7/7 on #127 `6bfb019` (run 41905762409), #128 `2f02bb2`
+(run 41905767325), #129 `23b9f5e` (run 41905775090) and #130 `12f2a2a` (run 41905776405).
+
+### 3.12 Android device retest of D-1 to D-4 (2026-11-04)
+
+Owner-connected device: Redmi 9 (`lancelot`), LineageOS, Android 14, system WebView
+`com.android.webview` 120.0.6099.230. Build: isolated debug APK `net.leviro.levix.dev` from
+integration commit `8aacfd5` (`-PlevixIsolatedDebug=true`, arm64, versionCode 69). The previous
+`.dev` QA install (never paired) was uninstalled first so first-run setup could be tested; the
+production `net.leviro.levix` was not touched. UI language Arabic. Steps were driven over the
+WebView DevTools socket and `adb`; screen capture was checked with `adb shell screencap -p`, which
+exits 1 with an empty file while `FLAG_SECURE` is set. Terms were never accepted, so no WhatsApp
+connection was made.
+
+| Check | Result |
+| --- | --- |
+| D-2: first-run setup at `/setup/#connection`: window flags include `SECURE`; `screencap` exit 1 | PASS |
+| D-1: setup with two different passwords: page stays, inline "كلمتا المرور غير متطابقتين.", password cleared and focused | PASS |
+| D-1: setup with a 5-character password: inline "يجب ألا تقل كلمة المرور عن 8 خانات" | PASS |
+| D-1: valid setup opens the dashboard at `/#connection` | PASS |
+| D-2: signed-in dashboard capturable (`screencap` exit 0), also after a hash move to `#settings/security` | PASS |
+| D-7: Settings password form submit with a mismatched confirmation: same document, URL unchanged | PASS |
+| D-2: after sign-out, login at `/`: `screencap` exit 1 | PASS |
+| D-1: wrong password at `/`: page stays, inline "كلمة المرور غير صحيحة", field cleared and focused; `screencap` exit 1 | PASS |
+| D-2: reload of the login page: `screencap` exit 1 | PASS |
+| D-1: sign-in returns to `/#settings/security` | PASS once the guided tour is done. On the first sign-in the tour (`levix_tour_v1_done` unset) moves the hash to its first step, `#connection`; that is the tour's behaviour, not the gateway's |
+| D-2: signed-in `/qr` capturable; Back to the dashboard capturable | PASS |
+| D-3: Arabic Terms dialog after Start: 0 `dir="auto"`; the paragraph starting with "Levix" computes `direction: rtl` and renders right-aligned in RTL word order | PASS |
+| D-4: header reads `الإصدار 2026-11-02.1 · ساري المفعول من 2026-11-02`; `2026` at 249.4 px, `.1` at 319.2 px (left to right) | PASS |
+| Session stays `consent_required`; the dialog closes without accepting | PASS |
+| Host log: 10 panel URL lines, none with a query or fragment, no password text, no screen guard timeout | PASS |
+| Recovery with no WhatsApp session: inline 409 message (it still names `levix reset-password`, D-5) | PASS |
+| English and `es-419` dialogs on the device; accepting Terms and the QR after it; recents thumbnail inspected by eye | NOT RUN (accepting would contact WhatsApp) |
+
+D-1 to D-4 and D-7 pass on the device. D-5 and D-6 stay open.
