@@ -45,7 +45,12 @@ class LevixHostService : Service() {
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
     private var isNetworkOnline = true
-    private var offlineAlertPosted = false
+    // The alert AlertPolicy decided to keep on screen, or null. It is the state
+    // that makes "post once per entry" work: an equal alert is kept, so a
+    // dismissed one stays dismissed across heartbeats, and it is cancelled when
+    // the condition ends without passing through "connected" (accepted but
+    // unpaired, network back while idle, or Stop).
+    private var postedAlert: AlertPolicy.Alert? = null
     private var powerReceiver: BroadcastReceiver? = null
 
     private val retryNode = Runnable {
@@ -366,7 +371,7 @@ class LevixHostService : Service() {
         }
     }
 
-    private fun postOfflineAlert(title: String, message: String) {
+    private fun postAlert(alert: AlertPolicy.Alert, title: String, message: String) {
         val openIntent = PendingIntent.getActivity(
             this,
             3,
@@ -394,48 +399,64 @@ class LevixHostService : Service() {
 
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(NOTIFICATION_ALERT_ID, builder.build())
-        offlineAlertPosted = true
+        postedAlert = alert
     }
 
     private fun cancelOfflineAlert() {
         val manager = getSystemService(NotificationManager::class.java)
         manager.cancel(NOTIFICATION_ALERT_ID)
-        offlineAlertPosted = false
+        postedAlert = null
     }
 
     private fun checkStateAndNotify() {
         if (!running || tornDown) return
         val snap = HostState.snapshot
 
-        if (!isNetworkOnline || snap.whatsAppState == "paused") {
-            postOfflineAlert(
-                localizedString(R.string.notif_offline_title),
-                localizedString(R.string.notif_offline_network),
-            )
-        } else if (snap.whatsAppState in listOf("retry_exhausted", "error", "logged_out")) {
-            val detail = when (snap.whatsAppState) {
-                "logged_out" -> localizedString(R.string.card_whatsapp_desc_expired_long)
-                else -> {
-                    val codeStr = snap.whatsAppCode?.let { "$it: " } ?: ""
-                    val reasonStr = snap.whatsAppReason ?: localizedString(R.string.card_whatsapp_desc_failed)
-                    "$codeStr$reasonStr"
-                }
-            }
-            postOfflineAlert(
-                localizedString(R.string.notif_offline_title),
-                localizedString(R.string.notif_offline_wa, detail),
-            )
-        } else if (snap.whatsAppState == "connected") {
-            cancelOfflineAlert()
+        val desired = AlertPolicy.desired(isNetworkOnline, snap.whatsAppState)
+        when (val decision = AlertPolicy.decide(postedAlert, desired)) {
+            is AlertPolicy.Decision.Post -> showAlert(decision.alert, snap)
+            AlertPolicy.Decision.Cancel -> cancelOfflineAlert()
+            AlertPolicy.Decision.Keep -> Unit
         }
 
         updateNotification()
+    }
+
+    private fun showAlert(alert: AlertPolicy.Alert, snap: HostState.Snapshot) {
+        when (alert.kind) {
+            AlertPolicy.Kind.TERMS -> postAlert(
+                alert,
+                localizedString(R.string.notif_terms_title),
+                localizedString(R.string.notif_terms_text),
+            )
+            AlertPolicy.Kind.OFFLINE -> postAlert(
+                alert,
+                localizedString(R.string.notif_offline_title),
+                localizedString(R.string.notif_offline_network),
+            )
+            AlertPolicy.Kind.WHATSAPP -> {
+                val detail = when (alert.state) {
+                    "logged_out" -> localizedString(R.string.card_whatsapp_desc_expired_long)
+                    else -> {
+                        val codeStr = snap.whatsAppCode?.let { "$it: " } ?: ""
+                        val reasonStr = snap.whatsAppReason ?: localizedString(R.string.card_whatsapp_desc_failed)
+                        "$codeStr$reasonStr"
+                    }
+                }
+                postAlert(
+                    alert,
+                    localizedString(R.string.notif_offline_title),
+                    localizedString(R.string.notif_offline_wa, detail),
+                )
+            }
+        }
     }
 
     private fun updateNotification() {
         val snap = HostState.snapshot
 
         val statusLabel = when {
+            snap.whatsAppState == "consent_required" -> R.string.status_terms
             !isNetworkOnline || snap.whatsAppState == "paused" -> R.string.status_paused
             snap.whatsAppState == "connected" -> R.string.status_connected
             snap.whatsAppState == "waiting_for_qr" -> R.string.status_pairing

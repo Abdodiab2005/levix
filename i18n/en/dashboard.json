@@ -1194,5 +1194,22 @@
   "schedulesWeekly": "Every {days} at {time} ({zone})",
   "schedulesMonthly": "Every month on day {day} at {time} ({zone})",
   "aiPersonaUpdated": "Persona updated successfully!",
-  "aiMemoryUpdated": "Memory file updated!"
+  "aiMemoryUpdated": "Memory file updated!",
+  "consent_required": "Terms acceptance required",
+  "legalConsentTitle": "Terms of Use and Privacy Notice",
+  "legalReasonNotAccepted": "Accept the Terms of Use and Privacy Notice before connecting WhatsApp.",
+  "legalReasonChanged": "The Terms of Use or Privacy Notice changed. Please review and accept them again.",
+  "legalReasonUpdated": "Levix was updated. Please review and accept the Terms again.",
+  "legalReasonUnreadable": "The previous acceptance could not be read. Please review and accept the Terms again.",
+  "legalChangedReview": "The Terms changed while you were reviewing them. Please read the current version and check the box again.",
+  "legalEnglishFallback": "This document is shown in English.",
+  "legalVersionEffective": "Version {version} · Effective {date}",
+  "legalFullPrivacy": "Full privacy policy",
+  "legalLicense": "License",
+  "legalWebsite": "Website",
+  "legalReadAccept": "I have read and accept the Terms of Use and the Privacy Notice",
+  "legalAccept": "Accept",
+  "legalLoadError": "Could not load the Terms. Please try again.",
+  "legalAcceptError": "Could not save your acceptance. Please try again.",
+  "legalReviewTerms": "Review Terms"
 }

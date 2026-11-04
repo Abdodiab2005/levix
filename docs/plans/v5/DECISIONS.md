@@ -94,23 +94,41 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
 
 ## ADR-006: Terms consent is enforced where the WhatsApp socket is created
 
-- Status: PROPOSED.
+- Status: ACCEPTED (owner, 2026-11-02: Q-04, Q-05, Q-17).
 - Context: the only function that builds a socket is `WhatsAppSession.#open()`
   (`src/core/session.js:571`), which calls `createWhatsAppSocket()` (`src/core/socket.js:101`).
   `start()` is not the only caller: the retry timer calls `#open()` directly
-  (`src/core/session.js:1033`). Paths that reach it include panel Start and Reconnect
-  (`src/routes/dashboard.api.esm.js:1745`, `:1786`), `resume-paired` and headless `autostart`
-  (`src/bootstrap/session-startup-policy.js:22`), network restoration (`src/core/session.js:400`),
-  `!restart` (`src/commands/restart.cjs:44`) and the Android service restart
-  (`android/app/src/main/java/net/leviro/levix/LevixHostService.kt:139`). No Terms or consent code
-  exists today.
-- Decision (PROPOSED): one consent check runs inside `WhatsAppSession` before `#open()` creates a
-  socket, so every path above passes through it. A missing or outdated acceptance leaves the session
-  in a new `consent_required` state and creates no socket. The acceptance record (Terms version,
-  content hash, accepted-at time, locale) is stored locally outside the `setting:*` namespace, so
-  settings export and import never carry it (`src/services/settingsTransfer.cjs:42`).
-- Consequences: headless installs need an explicit acceptance path that does not exist yet (Q-04).
-  The behaviour of an already connected socket when new Terms arrive is Q-05.
+  (`src/core/session.js:1045`). Paths that reach it include panel Start and Reconnect
+  (`src/routes/dashboard.api.esm.js:1773`, `:1799`), `resume-paired` and headless `autostart`
+  (`src/bootstrap/session-startup-policy.js:22`), network restoration (`src/core/session.js:405`),
+  `!restart` (`src/commands/restart.cjs:33`), restore activation (`src/backup/jobs.cjs:17`) and the
+  Android service restart, which reboots Node in panel mode
+  (`android/app/src/main/java/net/leviro/levix/LevixHostService.kt:139`, `android/host-boot.mjs:91`).
+  No Terms or consent code exists on `main` 407bf1e.
+- Decision: one consent check runs at the top of `WhatsAppSession.#open()`, before the offline
+  check and before a socket exists, so every path above passes through it. A missing or outdated
+  acceptance leaves the session in a new `consent_required` state, creates no socket and keeps the
+  pairing credentials untouched. An unreadable record counts as missing (fail closed).
+- Decision (resume after acceptance): a start that the gate blocked continues by itself once a
+  valid acceptance exists. The session re-reads the local record every 5 seconds while it is in
+  `consent_required`, so an acceptance written by the CLI in another process applies without a
+  restart, and the panel route asks for an immediate re-check. Stop, unlink and shutdown cancel
+  that wait.
+- Decision (Q-05, a live connection): a connected socket is never closed because the Terms or the
+  app version changed. The next `#open()`, including an automatic reconnect, needs the new
+  acceptance first.
+- Decision (Q-04, headless and unattended installs): `levix terms` prints the documents and asks the
+  operator to type a confirmation; it refuses when stdin or stdout is not a terminal. `levix terms
+  accept --terms-version <v> --sha256 <hash>` is the provisioning command for Docker and
+  unattended installs: it records an acceptance only when both values match the current document
+  for the chosen locale, and refuses otherwise. `levix terms show` prints the documents with
+  their version and hash for that step. No start-command flag and no environment variable can
+  accept the Terms. A headless process in `consent_required` stays up, prints these commands and
+  starts WhatsApp as soon as the record is valid.
+- Decision (record location): the acceptance record lives in `bot_settings` under
+  `legal:acceptance`, outside the `setting:*` namespace. Settings export reads only `setting:*`
+  keys (`src/services/settingsTransfer.cjs`), and backups read and restore only
+  `RESTORABLE_BOT_KEYS` (`src/backup/content.cjs`), so neither carries it (ADR-020).
 
 ## ADR-007: Reply Router defaults to the same chat
 
@@ -308,3 +326,50 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
   build from the release asset is required before merge; its result is recorded in the pull
   request.
 
+## ADR-019: Remote Terms are Ed25519-signed; the bundled copy is the offline fallback
+
+- Status: ACCEPTED (owner, 2026-11-02, Q-03 option a).
+- Context: `levix-ui` serves `/terms` and `/privacy` as HTML pages only (origin/main f2ca096,
+  `src/app/terms/page.tsx`, `src/app/privacy/page.tsx`). No versioned legal API exists.
+- Decision: the app accepts a remote Terms and Privacy release only when its Ed25519 signature
+  verifies against a public key bundled in the app. The signed bytes are the canonical JSON of the
+  release, and the content hash the operator accepts is the sha256 of the same bytes for one
+  locale. Remote content is plain text in a fixed structure (titles, headings, paragraphs) with
+  size, count and character limits. It carries no HTML, no script, no link and no instruction that
+  the app follows; links in the consent UI come from code (`brand.cjs`). A remote release older
+  than the bundled one or than the newest cached release is ignored (no downgrade).
+- Decision (offline): the app bundles one complete release. It is trusted because it ships inside
+  the signed app package; a test pins its hash, so a change to it is deliberate. First acceptance
+  works offline from the bundled copy, and a Leviro outage never blocks an acceptance or a start.
+- Decision (keys): the private signing key never enters this repository, CI logs, the npm tarball,
+  Docker images or app bundles. The owner generates and holds it. Until the owner provides the
+  public key and `levix-ui` serves the endpoint in `LEGAL_CONSENT_CONTRACT.md`, the remote client
+  stays off and the bundled release is the only source (PR 04c is BLOCKED on that, not the gate).
+- Consequences: new Terms between app releases need a signed release on the Leviro endpoint. A
+  stolen signing key needs a new app release that drops the old public key.
+
+## ADR-020: Consent belongs to the installation
+
+- Status: ACCEPTED (owner, 2026-11-02, Q-17). Replaces the earlier recommendation that an unlink
+  needs a new acceptance.
+- Decision: the operator accepts once per installation. Acceptance is required again only when
+  the Terms or the Privacy Notice change (version or content hash) or when Levix runs a different
+  application version than the one recorded, even with unchanged documents.
+- Decision: unlink, relink, a different WhatsApp account, a reconnect, a process, service or device
+  restart without a version change, and a panel password reset keep the acceptance. Unlink does
+  not clear `legal:acceptance`; `levix reset-password` deletes only `auth:password`.
+- Decision (privacy): the record holds the app version, the Terms version, the content hash, the
+  locale, the time and how it was given (`panel`, `cli` or `provision`). It holds no device, account
+  or user identifier. It is not uploaded, not sent to Leviro and not carried by settings export,
+  backup or restore. The pre-migration copy keeps it, because that copy stays on the device and
+  holds every non-secret row (ADR-016).
+- Consequences: every Levix update stops WhatsApp at the next start until the operator accepts
+  again. Android and Docker installs that update while unattended stay offline until somebody
+  accepts; the Android notification and the panel say so.
+- Implementation note (2026-11-02, review fix): "application version" is the release identity in
+  `src/config/release.cjs`. npm, Docker, the single executable and headless use the
+  `package.json` version. An Android build adds `+android.<versionCode>` from `levix-build.json`,
+  which the stage script writes into the app archive from Gradle's `versionCode`. A Google Play
+  update that keeps `package.json` but changes `versionCode` therefore asks again. A restart or a
+  reinstall of the same APK keeps the acceptance. Two non-Android builds with the same
+  `package.json` version share one identity; `release.yml` makes every official release bump it.

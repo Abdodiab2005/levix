@@ -82,6 +82,7 @@
     <string name="status_stopped">Parado</string>
     <string name="status_pairing">Vinculação necessária</string>
     <string name="status_paused">Pausado</string>
+    <string name="status_terms">Termos necessários</string>
     <string name="status_reconnecting">Reconectando</string>
     <string name="status_operational">Operacional</string>
     <string name="status_protected">Protegido</string>
@@ -103,6 +104,8 @@
     <string name="notif_offline_title">O Levix está offline</string>
     <string name="notif_offline_network">Sem conexão com a internet. O bot do WhatsApp está pausado.</string>
     <string name="notif_offline_wa">Falha na conexão do WhatsApp: %1$s</string>
+    <string name="notif_terms_title">Revise os Termos</string>
+    <string name="notif_terms_text">Abra o Levix e aceite os Termos de Uso e o Aviso de Privacidade para que o WhatsApp possa conectar.</string>
     <string name="notif_wa_connected">WhatsApp: Conectado</string>
     <string name="notif_wa_offline">WhatsApp: Offline</string>
     <string name="notif_wa_paused">WhatsApp: ⏸️ Pausado (sem internet)</string>
@@ -285,6 +288,9 @@
     <string name="home_connection_error_body">O motor está pronto, mas o WhatsApp está offline. Abra Conexão para verificar o problema e retomar a sessão.</string>
     <string name="home_unknown">Verificando status do assistente</string>
     <string name="home_unknown_body">O motor está pronto, mas o status do WhatsApp não foi confirmado. Abra Conexão para verificar.</string>
+    <string name="home_terms">Aceite os Termos para conectar</string>
+    <string name="home_terms_body">O Levix aguarda você aceitar os Termos de Uso e o Aviso de Privacidade. Isso aparece no primeiro uso, quando os Termos mudam e após uma atualização do app. O WhatsApp conecta depois do aceite.</string>
+    <string name="home_review_terms">Revisar Termos</string>
     <string name="home_linking">Conectando o WhatsApp…</string>
     <string name="home_linking_body">O motor está pronto. Aguardando o WhatsApp confirmar a conexão.</string>
     <string name="home_step_start">Passo 1 de 3 · Iniciar o Levix</string>

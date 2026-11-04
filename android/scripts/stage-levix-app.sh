@@ -26,9 +26,9 @@ fi
 
 DASHBOARD="$ROOT/public/dashboard"
 
-# Every /dashboard/assets file index.html pulls in, as a path under public/.
+# Every /dashboard/assets file either HTML entry pulls in, as a path under public/.
 dashboard_assets() {
-  grep -o '/dashboard/assets/[A-Za-z0-9._-]*' "$DASHBOARD/index.html" | sort -u
+  grep -oh '/dashboard/assets/[A-Za-z0-9._-]*' "$DASHBOARD/index.html" "$DASHBOARD/gateway.html" | sort -u
 }
 
 # The panel is a Vite build: index.html carries no styling of its own and only
@@ -39,9 +39,17 @@ if [ ! -f "$DASHBOARD/index.html" ]; then
   echo "missing $DASHBOARD/index.html — the frontend build did not produce a dashboard" >&2
   exit 1
 fi
+if [ ! -f "$DASHBOARD/gateway.html" ]; then
+  echo "missing $DASHBOARD/gateway.html — the frontend build did not produce a gateway" >&2
+  exit 1
+fi
 
-if [ -z "$(dashboard_assets | grep '\.css$' || true)" ]; then
+if ! grep -q '/dashboard/assets/[A-Za-z0-9._-]*\.css' "$DASHBOARD/index.html"; then
   echo "$DASHBOARD/index.html links no stylesheet — refusing to package a styleless panel" >&2
+  exit 1
+fi
+if ! grep -q '/dashboard/assets/[A-Za-z0-9._-]*\.css' "$DASHBOARD/gateway.html"; then
+  echo "$DASHBOARD/gateway.html links no stylesheet — refusing to package a styleless gateway" >&2
   exit 1
 fi
 
@@ -91,6 +99,27 @@ find "$STAGE/node_modules" -name '*.map' -delete
 rm -f "$STAGE/node_modules/.package-lock.json"
 
 node "$ROOT/android/scripts/check-stage-deps.mjs" "$STAGE"
+
+# Consent binds an acceptance to this versionCode. Gradle is the only writer
+# of LEVIX_ANDROID_VERSION_CODE. A missing or padded value must not produce an
+# archive that would keep an acceptance from another build.
+version_code="${LEVIX_ANDROID_VERSION_CODE-}"
+if [ -z "$version_code" ]; then
+  echo "LEVIX_ANDROID_VERSION_CODE is missing" >&2
+  exit 1
+fi
+if [[ ! "$version_code" =~ ^[1-9][0-9]*$ ]]; then
+  echo "LEVIX_ANDROID_VERSION_CODE must be a positive integer without leading zeros" >&2
+  exit 1
+fi
+# Play's ceiling, and the maximum parseBuildInfo accepts. Longer digit strings
+# are rejected before the arithmetic test, which cannot hold them.
+if [ "${#version_code}" -gt 10 ] || [ "$version_code" -gt 2100000000 ]; then
+  echo "LEVIX_ANDROID_VERSION_CODE must be from 1 to 2100000000" >&2
+  exit 1
+fi
+printf '%s\n' '{"schema":1,"platform":"android","versionCode":'"${version_code}"'}' > "$STAGE/levix-build.json"
+
 node "$ROOT/android/scripts/zip-tree.mjs" "$STAGE" "$OUT"
 
 # The panel's HTML, JS and CSS have to be inside the archive the APK ships,
@@ -98,12 +127,16 @@ node "$ROOT/android/scripts/zip-tree.mjs" "$STAGE" "$OUT"
 # sed both trims that and drains the pipe — piping into `grep -q` instead would
 # hand zip a SIGPIPE on the first match and, under pipefail, read as a failure.
 listing="$(zip -sf "$OUT" | sed 's/^[[:space:]]*//')"
-for ref in /dashboard/index.html $(dashboard_assets); do
+for ref in /dashboard/index.html /dashboard/gateway.html $(dashboard_assets); do
   if ! grep -qxF "public$ref" <<<"$listing"; then
     echo "$OUT is missing public$ref" >&2
     exit 1
   fi
 done
+if ! grep -qxF "levix-build.json" <<<"$listing"; then
+  echo "$OUT is missing levix-build.json" >&2
+  exit 1
+fi
 
 ls -lh "$OUT"
 echo "Wrote $OUT ($(dashboard_assets | wc -l) dashboard assets verified inside)"

@@ -1194,5 +1194,22 @@
   "schedulesWeekly": "كل يوم {days} الساعة {time} ({zone})",
   "schedulesMonthly": "كل شهر في اليوم {day} الساعة {time} ({zone})",
   "aiPersonaUpdated": "تم تحديث توجيه الشخصية بنجاح!",
-  "aiMemoryUpdated": "تم حفظ ملف الذاكرة بنجاح!"
+  "aiMemoryUpdated": "تم حفظ ملف الذاكرة بنجاح!",
+  "consent_required": "يلزم قبول الشروط",
+  "legalConsentTitle": "شروط الاستخدام وإشعار الخصوصية",
+  "legalReasonNotAccepted": "اقبل شروط الاستخدام وإشعار الخصوصية قبل الاتصال بواتساب.",
+  "legalReasonChanged": "تغيّرت شروط الاستخدام أو إشعار الخصوصية. يُرجى مراجعتهما وقبولهما مجددًا.",
+  "legalReasonUpdated": "تم تحديث Levix. يُرجى مراجعة الشروط وقبولها مجددًا.",
+  "legalReasonUnreadable": "تعذّرت قراءة سجل القبول السابق. يُرجى مراجعة الشروط وقبولها مجددًا.",
+  "legalChangedReview": "تغيّرت الشروط أثناء مراجعتها. يُرجى قراءة النسخة الحالية وتحديد مربع الاختيار مجددًا.",
+  "legalEnglishFallback": "يُعرض هذا المستند باللغة الإنجليزية.",
+  "legalVersionEffective": "الإصدار {version} · ساري المفعول من {date}",
+  "legalFullPrivacy": "سياسة الخصوصية الكاملة",
+  "legalLicense": "الترخيص",
+  "legalWebsite": "الموقع الإلكتروني",
+  "legalReadAccept": "قرأت شروط الاستخدام وإشعار الخصوصية وأوافق عليهما",
+  "legalAccept": "أوافق",
+  "legalLoadError": "تعذّر تحميل الشروط. يُرجى المحاولة مجددًا.",
+  "legalAcceptError": "تعذّر حفظ موافقتك. يُرجى المحاولة مجددًا.",
+  "legalReviewTerms": "مراجعة الشروط"
 }

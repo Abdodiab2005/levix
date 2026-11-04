@@ -24,8 +24,7 @@ jobs:
           node-version-file: .node-version
           cache: npm
       - run: npm ci
-      # The suite starts real processes and talks to WhatsApp's servers up to
-      # the pairing boundary; it needs a little room.
+      # The suite starts real processes with deterministic fake WhatsApp sockets.
       - run: npm test
         timeout-minutes: 15
       # The installer is piped into root shells by strangers, and the scripts

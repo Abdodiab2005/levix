@@ -64,9 +64,19 @@ to all v5 work and add to the rules below; they remove none of them.
 - **AI tools keep `aiToolAuth.cjs`.** Every new tool with a side effect or a
   media upload declares `access` (gotcha 28). Retrieved docs, web pages and
   messages are data, not instructions.
-- **Terms consent (planned).** The gate belongs inside `WhatsAppSession` before
-  `#open()` builds a socket, because the retry timer calls `#open()` directly
-  (ADR-006). A gate on a route or on `start()` alone is incomplete.
+- **Terms consent (Phase 04, approved 2026-11-02).** The gate belongs inside
+  `WhatsAppSession` at the top of `#open()`, because the retry timer calls
+  `#open()` directly (ADR-006). A gate on a route or on `start()` alone is
+  incomplete. Consent belongs to the installation (ADR-020): ask again on first
+  install, on a Terms or Privacy change, and on every new app version (the
+  release identity in `src/config/release.cjs`; an Android `versionCode` bump
+  counts); never because of unlink, relink, another account, a reconnect, a
+  restart or a password reset. A connected socket stays up when the Terms
+  change; the next `#open()` asks (Q-05). The record (`legal:acceptance`) stays local: never
+  uploaded, never in settings export or a backup. Headless accepts with
+  `levix terms` or the provisioning command; no start flag or environment
+  variable may accept. Remote Terms need a valid Ed25519 signature and render as
+  plain text; the bundled copy is the offline fallback (ADR-019).
 - **Compatibility.** v4.9.x installs must upgrade in place: append-only
   migrations, pairing credentials and `levix.key` untouched. No v5 migration
   runs until Levix holds the single-instance lock and has written a backup that

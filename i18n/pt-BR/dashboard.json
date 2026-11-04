@@ -1194,5 +1194,22 @@
   "schedulesWeekly": "A cada {days} às {time} ({zone})",
   "schedulesMonthly": "Todo mês no dia {day} às {time} ({zone})",
   "aiPersonaUpdated": "Persona atualizada com sucesso!",
-  "aiMemoryUpdated": "Arquivo de memória atualizado!"
+  "aiMemoryUpdated": "Arquivo de memória atualizado!",
+  "consent_required": "Aceite dos termos necessário",
+  "legalConsentTitle": "Termos de Uso e Aviso de Privacidade",
+  "legalReasonNotAccepted": "Aceite os Termos de Uso e o Aviso de Privacidade antes de conectar o WhatsApp.",
+  "legalReasonChanged": "Os Termos de Uso ou o Aviso de Privacidade mudaram. Revise e aceite novamente.",
+  "legalReasonUpdated": "O Levix foi atualizado. Revise e aceite os Termos novamente.",
+  "legalReasonUnreadable": "Não foi possível ler o registro de aceite anterior. Revise e aceite os Termos novamente.",
+  "legalChangedReview": "Os Termos mudaram enquanto você os revisava. Leia a versão atual e marque a caixa novamente.",
+  "legalEnglishFallback": "Este documento é exibido em inglês.",
+  "legalVersionEffective": "Versão {version} · Vigência em {date}",
+  "legalFullPrivacy": "Política de privacidade completa",
+  "legalLicense": "Licença",
+  "legalWebsite": "Site",
+  "legalReadAccept": "Li e aceito os Termos de Uso e o Aviso de Privacidade",
+  "legalAccept": "Aceitar",
+  "legalLoadError": "Não foi possível carregar os Termos. Tente novamente.",
+  "legalAcceptError": "Não foi possível salvar seu aceite. Tente novamente.",
+  "legalReviewTerms": "Revisar Termos"
 }

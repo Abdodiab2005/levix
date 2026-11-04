@@ -9,6 +9,8 @@ export {
   type ButtonVariant,
   buttonVariants,
   IconButton,
+  LinkButton,
+  type LinkButtonProps,
   type IconButtonProps,
 } from "./button";
 export { Card, CardHeader, type CardProps, PageHeader, Panel, Section } from "./card";

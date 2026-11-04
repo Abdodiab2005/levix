@@ -89,6 +89,7 @@
     <string name="status_stopped">Stopped</string>
     <string name="status_pairing">Pairing Needed</string>
     <string name="status_paused">Paused</string>
+    <string name="status_terms">Terms needed</string>
     <string name="status_reconnecting">Reconnecting</string>
     <string name="status_operational">Operational</string>
     <string name="status_protected">Protected</string>
@@ -111,6 +112,8 @@
     <string name="notif_offline_title">Levix is Offline</string>
     <string name="notif_offline_network">No internet connection. WhatsApp bot is paused.</string>
     <string name="notif_offline_wa">WhatsApp connection failed: %1$s</string>
+    <string name="notif_terms_title">Review the Terms</string>
+    <string name="notif_terms_text">Open Levix and accept the Terms of Use and Privacy Notice so WhatsApp can connect.</string>
     <string name="notif_wa_connected">WhatsApp: Connected</string>
     <string name="notif_wa_offline">WhatsApp: Offline</string>
     <string name="notif_wa_paused">WhatsApp: ⏸️ Paused (No Internet)</string>
@@ -288,6 +291,9 @@
     <string name="home_connection_error_body">The engine is ready, but WhatsApp is offline. Open Connection to review the issue and resume the session.</string>
     <string name="home_unknown">Checking assistant status</string>
     <string name="home_unknown_body">The engine is ready, but WhatsApp status is not confirmed. Open Connection to check it.</string>
+    <string name="home_terms">Accept the Terms to connect</string>
+    <string name="home_terms_body">Levix is waiting for you to accept the Terms of Use and Privacy Notice. This appears on first use, when the Terms change, and after an app update. WhatsApp connects once you accept.</string>
+    <string name="home_review_terms">Review Terms</string>
     <string name="home_linking">Connecting WhatsApp…</string>
     <string name="home_linking_body">The engine is ready. Waiting for WhatsApp to confirm the connection.</string>
     <string name="home_step_start">Step 1 of 3 · Start Levix</string>

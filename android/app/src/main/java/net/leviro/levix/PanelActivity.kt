@@ -10,6 +10,7 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Looper
 import android.provider.ContactsContract
 import android.view.Gravity
 import android.view.View
@@ -42,6 +43,8 @@ import androidx.core.view.WindowInsetsCompat
 import java.io.File
 import java.net.URI
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.json.JSONObject
 
 /**
@@ -59,6 +62,7 @@ class PanelActivity : AppCompatActivity() {
     private val stickerSources = StickerSources()
     private val stickerPickerIds = ArrayDeque<String>()
     private val backupSaveIds = ArrayDeque<String>()
+    private val guard = ScreenCaptureGuard { secure -> commitScreenCapture(secure) }
 
     private val createBackup = registerForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
@@ -99,6 +103,8 @@ class PanelActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Before the first frame. A URL cannot tell login from the dashboard.
+        guard.start()
         savedInstanceState?.getString(BACKUP_SAVE_ID)?.let { backupSaveIds.addLast(it) }
         applySystemBars()
         sock = File(HostState.dataDir(this), "panel.sock")
@@ -280,39 +286,67 @@ class PanelActivity : AppCompatActivity() {
                 view: WebView,
                 request: WebResourceRequest,
             ): WebResourceResponse? {
-                val url = request.url?.toString() ?: return null
-                if (!isLoopback(url)) return blockedResponse()
+                val url = request.url?.toString()
+                if (url == null) {
+                    if (request.isForMainFrame) failMainFrame()
+                    return null
+                }
+                if (!isLoopback(url)) {
+                    if (request.isForMainFrame) failMainFrame()
+                    return blockedResponse()
+                }
                 if (request.url.path?.startsWith("/__levix-host/source/") == true) {
                     val token = request.url.path!!.removePrefix("/__levix-host/source/")
                     val source = stickerSources.get(token)
-                    if (request.method != "GET" || source == null) return sourceNotFound()
+                    if (request.method != "GET" || source == null) {
+                        if (request.isForMainFrame) failMainFrame()
+                        return sourceNotFound()
+                    }
                     return try {
-                        val input = contentResolver.openInputStream(source.uri.toUri()) ?: return sourceNotFound()
-                        WebResourceResponse(source.mime.substringBefore(';'), null, 200, "OK",
-                            mapOf("Content-Type" to source.mime, "Cache-Control" to "no-store"), input)
-                    } catch (_: Exception) { sourceNotFound() }
+                        val input = contentResolver.openInputStream(source.uri.toUri())
+                        if (input == null) {
+                            if (request.isForMainFrame) failMainFrame()
+                            sourceNotFound()
+                        } else {
+                            WebResourceResponse(source.mime.substringBefore(';'), null, 200, "OK",
+                                mapOf("Content-Type" to source.mime, "Cache-Control" to "no-store"), input)
+                        }
+                    } catch (_: Exception) {
+                        if (request.isForMainFrame) failMainFrame()
+                        sourceNotFound()
+                    }
                 }
                 return try {
-                    PanelHttp.intercept(sock, request, bridgeJs)
+                    val response = PanelHttp.intercept(sock, request, bridgeJs)
+                    if (request.isForMainFrame) {
+                        // Applies the flag on the main thread and waits before
+                        // this response can paint.
+                        guard.onMainFrameResponse(url, response.responseHeaders)
+                    }
+                    response
                 } catch (error: Throwable) {
                     HostLog.event("panel intercept ${error.message}")
+                    if (request.isForMainFrame) failMainFrame()
                     null
                 }
             }
 
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                HostLog.event("panel loading ${url ?: ""}")
+                HostLog.event("panel loading ${panelLogTarget(url)}")
+                // Every start is secure before the next document can paint,
+                // including a load this host refuses.
+                guard.onPageStarted(url ?: "")
                 if (url == null || !isLoopback(url)) {
                     view?.stopLoading()
                     return
                 }
-                applyScreenCaptureGuard(url)
                 if (!bridgeJs.isEmpty()) {
                     view?.evaluateJavascript(bridgeJs, null)
                 }
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
+                guard.onPageFinished(url ?: "")
                 loadingScreen.visibility = View.GONE
                 pushUiPrefs()
             }
@@ -323,12 +357,22 @@ class PanelActivity : AppCompatActivity() {
                 error: WebResourceError,
             ) {
                 if (!request.isForMainFrame) return
+                guard.onMainFrameError()
                 HostLog.event("panel webview error ${error.errorCode} ${error.description}")
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView,
+                request: WebResourceRequest,
+                errorResponse: WebResourceResponse,
+            ) {
+                if (!request.isForMainFrame) return
+                guard.onMainFrameError()
             }
         }
 
         val url = loopbackUrl(intent.getStringExtra(EXTRA_URL))
-        HostLog.event("panel open $url")
+        HostLog.event("panel open ${panelLogTarget(url)}")
         web.loadUrl(url)
 
         onBackPressedDispatcher.addCallback(
@@ -360,24 +404,53 @@ class PanelActivity : AppCompatActivity() {
     }
 
     /**
-     * The password screens (login, first-run setup) must not leak into a
-     * screenshot or the recents thumbnail: FLAG_SECURE blanks them out at the
-     * compositor, which the web platform cannot do. It follows the URL, so it
-     * lifts again once the panel is signed in.
+     * Window flags belong on the main thread. [shouldInterceptRequest] runs on
+     * a WebView thread and waits, bounded, for the flag update. Already on
+     * the main thread: set it and return.
      */
-    private fun applyScreenCaptureGuard(rawUrl: String?) {
-        val path = rawUrl?.let {
+    private fun commitScreenCapture(secure: Boolean) {
+        val update = Runnable {
+            if (secure) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+        if (Looper.getMainLooper().isCurrentThread) {
+            update.run()
+            return
+        }
+        val latch = CountDownLatch(1)
+        runOnUiThread {
             try {
-                URI(it).path
-            } catch (_: Exception) {
-                null
+                update.run()
+            } finally {
+                latch.countDown()
             }
-        } ?: ""
-        val onPasswordScreen = path == "/login" || path == "/setup"
-        if (onPasswordScreen) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        } else {
-            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+        try {
+            // The update is queued before the response exists; the WebView can
+            // draw the new document only in a later main-thread traversal.
+            if (!latch.await(SCREEN_CAPTURE_WAIT_MS, TimeUnit.MILLISECONDS)) {
+                HostLog.event("panel screen guard wait timed out")
+            }
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+    }
+
+    private fun failMainFrame() {
+        guard.onMainFrameError()
+    }
+
+    /** Scheme, host, port, and path. Query and fragment stay out of the host log. */
+    private fun panelLogTarget(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        return try {
+            val uri = URI(raw)
+            val scheme = uri.scheme ?: return ""
+            val host = uri.host ?: return ""
+            val port = if (uri.port >= 0) ":${uri.port}" else ""
+            "$scheme://$host$port${uri.rawPath ?: ""}"
+        } catch (_: Exception) {
+            ""
         }
     }
 
@@ -491,6 +564,7 @@ class PanelActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_URL = "url"
         private const val BACKUP_SAVE_ID = "backupSaveCallId"
+        private const val SCREEN_CAPTURE_WAIT_MS = 2000L
 
         /**
          * The one place a panel URL with a screen hash is built, so the app has

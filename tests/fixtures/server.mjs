@@ -31,6 +31,8 @@ process.env.LEVIX_DATA_DIR = dataDir;
 // Written before app.cjs is loaded: it reads the proxy setting once, at import.
 const trust = arg("trust");
 if (trust !== null) require(`${ROOT}/src/config/settings.cjs`).set("trust_proxy", trust);
+const assetRoot = arg("asset-root");
+if (assetRoot) require(`${ROOT}/src/config/paths.cjs`).setAssetRoot(assetRoot);
 
 const { app, server, dashboardJson, requireLoginApi, noStore, installFinalHandlers } =
   require(`${ROOT}/app.cjs`);

@@ -229,8 +229,10 @@ site moves to a keyed call such as `msg("moderation.warn", { count })`.
 
 React renders login, setup, QR and recovery. All checks in section 7 stay in the server. The session
 gains a `consent_required` state: `WhatsAppSession` checks the local acceptance record before
-`#open()` and creates no socket without it (ADR-006). Terms come from a versioned Leviro source,
-are cached with version and hash, and fall back to a bundled copy offline.
+`#open()` and creates no socket without it (ADR-006). Consent belongs to the installation and is
+asked again after a document or app version change (ADR-020). Terms come from a versioned,
+Ed25519-signed Leviro source, are cached with version and hash, and fall back to a bundled copy
+offline (ADR-019).
 
 ### 10.5 Message pipeline (Phase 05)
 

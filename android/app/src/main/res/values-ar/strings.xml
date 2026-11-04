@@ -82,6 +82,7 @@
     <string name="status_stopped">متوقف</string>
     <string name="status_pairing">يلزم الربط</string>
     <string name="status_paused">متوقف مؤقتاً</string>
+    <string name="status_terms">الشروط مطلوبة</string>
     <string name="status_reconnecting">إعادة الاتصال…</string>
     <string name="status_operational">جاهز للعمل</string>
     <string name="status_protected">محمي</string>
@@ -103,6 +104,8 @@
     <string name="notif_offline_title">Levix غير متصل</string>
     <string name="notif_offline_network">لا يوجد اتصال بالإنترنت. بوت واتساب متوقف مؤقتاً.</string>
     <string name="notif_offline_wa">تعذر اتصال واتساب: %1$s</string>
+    <string name="notif_terms_title">راجع الشروط</string>
+    <string name="notif_terms_text">افتح Levix واقبل شروط الاستخدام وإشعار الخصوصية ليتصل واتساب.</string>
     <string name="notif_wa_connected">واتساب: متصل</string>
     <string name="notif_wa_offline">واتساب: غير متصل</string>
     <string name="notif_wa_paused">واتساب: ⏸️ متوقف مؤقتاً (لا يوجد إنترنت)</string>
@@ -309,6 +312,9 @@
     <string name="home_connection_error_body">المحرك جاهز لكن واتساب غير متصل. افتح الاتصال لمراجعة المشكلة واستئناف الجلسة.</string>
     <string name="home_unknown">التحقق من حالة المساعد</string>
     <string name="home_unknown_body">المحرك جاهز لكن حالة واتساب غير مؤكدة. افتح الاتصال للتحقق منها.</string>
+    <string name="home_terms">اقبل الشروط للاتصال</string>
+    <string name="home_terms_body">ينتظر Levix موافقتك على شروط الاستخدام وإشعار الخصوصية. يظهر هذا عند أول استخدام، وعند تغيّر الشروط، وبعد تحديث التطبيق. يتصل واتساب بعد الموافقة.</string>
+    <string name="home_review_terms">مراجعة الشروط</string>
     <string name="home_linking">جارٍ الاتصال بواتساب…</string>
     <string name="home_linking_body">المحرك جاهز. ننتظر تأكيد الاتصال من واتساب.</string>
     <string name="home_step_start">الخطوة ١ من ٣ · تشغيل Levix</string>

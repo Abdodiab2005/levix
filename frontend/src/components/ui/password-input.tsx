@@ -5,7 +5,10 @@ import { cn } from "../../utils/cn";
 import { IconButton } from "./button";
 import { Input, type InputProps } from "./field";
 
-export interface PasswordInputProps extends Omit<InputProps, "type" | "technical"> {}
+export interface PasswordInputProps extends Omit<InputProps, "type" | "technical"> {
+  showLabel?: string;
+  hideLabel?: string;
+}
 
 export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
   function PasswordInput(
@@ -16,6 +19,8 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
       autoCapitalize = "off",
       autoCorrect = "off",
       disabled,
+      showLabel,
+      hideLabel,
       ...props
     },
     ref,
@@ -54,7 +59,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
           className={cn("col-start-1 row-start-1 pe-12 text-start", className)}
         />
         <IconButton
-          label={visible ? t("hideSecret") : t("showSecret")}
+          label={visible ? (hideLabel ?? t("hideSecret")) : (showLabel ?? t("showSecret"))}
           icon={visible ? <EyeOff size={18} /> : <Eye size={18} />}
           pressed={visible}
           variant="ghost"

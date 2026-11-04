@@ -18,6 +18,8 @@ npm package, the Docker image, the SEA binaries or the Android bundle.
 | `RISKS.md` | risk register and threat notes |
 | `OPEN_QUESTIONS.md` | decisions the owner still has to make |
 | `CHANGELOG.md` | dated log of each phase |
+| `PHASE-04-RESULTS.md` | Phase 04 re-audit, plan and results |
+| `LEGAL_CONSENT_CONTRACT.md` | Terms document, hash, acceptance record, consent states, CLI, panel and remote contracts |
 
 Labels used throughout: `SHIPPED`, `PLANNED`, `PENDING REVIEW` for features; `PASS`, `FAIL`,
 `NOT RUN`, `BLOCKED` for test results; ADR status `ACCEPTED`, `PROPOSED`, `SUPERSEDED`.

@@ -40,6 +40,17 @@ class HomePresentationTest {
         for (wa in listOf("disconnected", "retry_exhausted", "error")) check(ready(wa), State.FAILED, Action.CONNECTION)
     }
     @Test fun loggedOutNeedsPairing() = check(ready("logged_out"), State.EXPIRED, Action.CONNECTION)
+    @Test fun termsConsentAsksForTermsBeforeWhatsApp() {
+        val home = HomePresentation.from(ready("consent_required"), now)
+        assertEquals(State.ATTENTION, home.state)
+        assertEquals(Action.CONNECTION, home.action)
+        assertEquals(R.string.home_terms, home.title)
+        assertEquals(R.string.home_review_terms, home.actionLabel)
+        assertFalse(home.busy)
+        val unknown = HomePresentation.from(ready("future_state"), now)
+        assertEquals(State.UNKNOWN, unknown.state)
+        assertEquals(R.string.home_unknown, unknown.title)
+    }
     @Test fun startupFailureOpensDiagnostics() = check(ready("connected").copy(nodeError = "failed"), State.FAILED, Action.DIAGNOSTICS)
     @Test fun unknownIsNeverReady() {
         for (wa in listOf(null, "future_state", "")) check(ready(wa), State.UNKNOWN, Action.CONNECTION)

@@ -83,6 +83,8 @@
   "qrLinked": "Vinculado ✓",
   "qrNotStarted": "No iniciado — inícialo desde el panel",
   "qrConnecting": "Conectando…",
+  "qrLoadError": "No se pudieron cargar las herramientas del código QR. Inténtalo de nuevo.",
+  "qrRetry": "Reintentar",
   "tooManyAttempts": "Demasiados intentos. Inténtalo de nuevo más tarde.",
   "incorrectPassword": "Contraseña incorrecta",
   "wrongSetupCode": "Código de configuración incorrecto.",
