@@ -1,10 +1,8 @@
 # Phase 04: React gateway and Terms consent
 
-Status: IN REVIEW, NOT MERGED. Slices 04a and 04b are implemented in open PRs #126 and #127, which
-were updated after the owner's review on 2026-11-02 (section 3). Slices 04c (#128) and 04d
-(#129) are implemented in new open PRs; 04e (#130) is a draft. No Phase 04 PR is merged, so nothing in this phase
-ships on `main` (407bf1e). Owner decisions Q-03, Q-04, Q-05 and Q-17 are recorded in ADR-006,
-ADR-019 and ADR-020. The contract lives in `LEGAL_CONSENT_CONTRACT.md`.
+Status: 04a to 04d MERGED to `main` on 2026-11-04 through #131 (merge commit `0fff4ca`), which
+integrates #125 to #129 in one merge (section 3.13). 04e (#130) is open as a draft and is not merged.
+Owner decisions Q-03, Q-04, Q-05 and Q-17 are recorded in ADR-006, ADR-019 and ADR-020. The contract lives in `LEGAL_CONSENT_CONTRACT.md`.
 
 ## 1. Re-audit of the current tree (main 407bf1e, 2026-11-02)
 
@@ -470,3 +468,57 @@ connection was made.
 | English and `es-419` dialogs on the device; accepting Terms and the QR after it; recents thumbnail inspected by eye | NOT RUN (accepting would contact WhatsApp) |
 
 D-1 to D-4 and D-7 pass on the device. D-5 and D-6 stay open.
+
+### 3.13 Merge of #125 to #129 and #130 reconciliation (2026-11-04)
+
+The owner authorized merging #125 to #129 and keeping #130 a draft.
+
+Integration. `integration/phase-04` was branched from `main` `0089a6a` (after dependabot #124),
+merged #129 `23b9f5e` (which contains #125 `32a4b59`, #126 `51d0051` and #127 `6bfb019`), then #128
+`2f02bb2`. Both merges were clean (`1b63fda`). #126 and #127 were never merged on their own: their
+trees still hold the older tests that could reach WhatsApp's servers, while the integrated tree has
+the fake sockets and preloads `tests/fixtures/no-external-network.cjs` into every test process
+through `NODE_OPTIONS`. `levix headless` on a fresh data directory under that guard stopped at
+`terms_not_accepted` and opened no socket, which covers the headless steps of `validate:tarball`,
+`validate:sea` and `validate:docker`.
+
+| Gate on `1b63fda` | Result |
+| --- | --- |
+| `npm test`, Linux x64, Node 24.22.2 | PASS: 9,416 checks, 0 failed, 0 crashed; no guard refusal in the log |
+| `npm run lint`, `npm run i18n:check`, `npm run build:frontend` | PASS (lint 0 errors) |
+| GitHub CI on #131 (7 jobs: tests, tarball, SEA on ubuntu, macos and windows, Docker, Android) | PASS 7/7 |
+
+#131 was merged with a merge commit: `main` is `0fff4ca`. GitHub marked #125 merged. It cannot mark
+a stacked PR merged when its base is another PR branch and refuses to retarget a PR with no new
+commits, so #126, #127, #128 and #129 were closed with a comment naming #131, `0fff4ca` and their
+own head commit. Their branches are kept.
+
+#130 (`feat/04e-ejs-removal`) merged `main` cleanly (`c0565ed`), now based on `main`, and gained:
+
+| Change | Commit | Implementer |
+| --- | --- | --- |
+| D-5: in the Android app (`window.LevixHost`), the `no_session`, `unverified` and `locked` recovery errors use Android messages (restart the assistant so a linked WhatsApp reconnects, use the recovery email, or try later) instead of `levix reset-password`; desktop keeps the CLI fallback; no server or throttle change. `pt-BR/gateway` and `es-419/gateway` go back to `draft` in `i18n/review.json` | `6ea8032` | Codex |
+| D-6: the battery card badge moves under the title inside the text column; title and hint set `hyphenationFrequency="none"` and `breakStrategy="simple"` | `832e135` | Grok |
+| `android/README.md` no longer lists `views/` | `90b0545` | Codex |
+
+A read-only Codex review of `git diff 0fff4ca HEAD` found no defect: no `res.render`, `ejs` or
+packaging reference to `views/` or the removed scripts, escaped values and credit links in the
+static fallback, no remote font reference, OFL licences shipped, D-5 and D-6 as described, the lock
+retry bounded and failing closed, nothing dropped by the merge with `main`. Its one note was the
+README line above.
+
+| Gate on #130 `ab1e364` (Linux x64, Node 24.22.2, 2026-11-04) | Result |
+| --- | --- |
+| `npm ci` from the merged lockfile | PASS, no `ejs` |
+| `npm test` | PASS: 9,536 checks, 0 failed, 0 crashed (`recovery-ui` 198, i18n 1,802) |
+| `npm run lint`, `npm run i18n:check`, `npm run build:frontend` | PASS (lint 0 errors; i18n prints the two expected draft hash notes) |
+| Android `:app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:bundleRelease`, offline | PASS: 110 unit tests (2 new in `BatteryCardLayoutTest`), 4 APKs, 1 AAB |
+| `npm run build:sea`, `npm run validate:sea` | PASS: 51 checks |
+| `npm run validate:tarball` (FFmpeg from a loopback mirror) | PASS: 36 checks |
+| `npm run validate:docker` | BLOCKED locally (Docker socket permission); GitHub CI runs it |
+
+Not run: D-5 and D-6 on the device (both need the Redmi 9 again), the recents thumbnail inspected by
+eye, accepting Terms on the device, the oldest supported WebView (R-27), the ChatGPT review of the
+three new `pt-BR` and `es-419` gateway strings, and the human legal review. Remote Terms fetching
+stays disabled. Release blockers: human legal approval and the R-27 WebView test.
+
