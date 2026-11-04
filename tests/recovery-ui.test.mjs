@@ -158,6 +158,55 @@ for (const [reason, key] of Object.entries(expectedReasons)) {
     );
   }
 }
+
+section("Android recovery errors");
+const androidMappingSource =
+  /const RESET_ANDROID_KEYS: Record<string, GatewayKey> = (\{[\s\S]*?\});/.exec(reactSource);
+const androidKeys = runInNewContext(`(${androidMappingSource?.[1] || "{}"})`);
+const androidReasons = ["no_session", "unverified", "locked"];
+equal(
+  "Android overrides only three errors",
+  Object.keys(androidKeys).length,
+  androidReasons.length,
+);
+for (const locale of ["en", "ar", "pt-BR", "es-419"]) {
+  const catalog = JSON.parse(read(`i18n/${locale}/gateway.json`));
+  for (const reason of androidReasons) {
+    const desktopKey = expectedReasons[reason];
+    const androidKey = `${desktopKey}Android`;
+    const copy = catalog[androidKey];
+    equal(`${reason} maps to ${androidKey}`, androidKeys[desktopKey], androidKey);
+    ok(`${locale} has ${androidKey}`, typeof copy === "string" && copy.length > 0);
+    ok(
+      `${locale} ${androidKey} has no terminal or server instruction`,
+      typeof copy === "string" && !/levix reset-password|server|servidor|الخادم|`/i.test(copy),
+    );
+    ok(
+      `${locale} ${desktopKey} keeps the offline command`,
+      catalog[desktopKey]?.includes("levix reset-password"),
+    );
+  }
+}
+const androidSelection =
+  /key: \(window as Window & \{ LevixHost\?: object \}\)\.LevixHost\s*\? (RESET_ANDROID_KEYS\[key\] \|\| key)\s*: (key)/.exec(
+    reactSource,
+  );
+ok("error display selects Android copy only with LevixHost", Boolean(androidSelection));
+for (const reason of [...androidReasons, "wrong_code"]) {
+  const key = expectedReasons[reason];
+  const select = (host) =>
+    runInNewContext(
+      `window.LevixHost ? ${androidSelection?.[1] || "key"} : ${androidSelection?.[2] || "key"}`,
+      { window: { LevixHost: host }, RESET_ANDROID_KEYS: androidKeys, key },
+    );
+  equal(`${reason} uses desktop copy without host`, select(undefined), key);
+  equal(`${reason} uses Android copy with host`, select({}), androidKeys[key] || key);
+}
+ok(
+  "request and confirmation errors use the shared selector",
+  reactSource.includes('showError(RESET_REASON_KEYS[result.reason || ""] || "resetErrStart")') &&
+    reactSource.includes("showError(RESET_REASON_KEYS.locked)"),
+);
 ok(
   "React wrong code shows attempts left",
   reactSource.includes("result.attemptsLeft") && reactSource.includes('t("resetErrAttemptsLeft"'),
