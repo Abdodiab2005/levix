@@ -334,3 +334,103 @@ Defects found:
 Observation: the production app on the device logged `state=logged_out code=401` at 00:08:43 when
 the phone's Wi-Fi came back. The QA build has its own data and never paired, so the test did not
 cause it; the owner should check that install.
+
+D-1 to D-4 are fixed in section 3.11. D-5 and D-6 are still open.
+
+### 3.11 Defect fixes D-1 to D-4 (2026-11-03)
+
+The owner approved fixing D-1 to D-4 on 2026-11-03. D-5 and D-6 stay open and tracked as
+non-blocking UI issues; nothing here changes them. No PR is merged. #130 stays a draft.
+
+| Defect | Cause | Fix | PR and commits | Implementer | Regression tests |
+| --- | --- | --- | --- | --- | --- |
+| D-1 (P1) | `panel-bridge.js` rendered a 4xx POST answer with `document.write`; the gateway ES module does not run again, so `#root` stayed empty | The React gateway posts login and setup itself with `fetch` and `Accept: application/json`. `POST /login` and `POST /setup` then answer JSON: 200 `{ok, redirect}`, 401, 400 or 429 `{error}` (429 keeps `Retry-After`), 409 `{redirect}`, never 3xx, `no-store`. Errors render inline; the deep link hash is kept. HTML answers, throttling, failure counting and session regeneration are unchanged. | #129 `b0bc38f`, `23b9f5e` | Codex | `gateway-react` (JSON contract, throttle, cross-origin 403), `gateway-auth-submit`, `panel-bridge` |
+| D-7 (P1, privacy, new) | Found while auditing D-1. The bridge's submit listener ran in the capture phase on `document`, before React. Every `onSubmit` form without `method="post"` became a GET navigation built from its named fields: the password reset form (`code`, `password`, `confirm`) would put the new password in the URL, and the host logged that URL. Dashboard forms reloaded the page. | The listener is on `window` in the bubble phase, skips events the page already handled (`defaultPrevented`), and intercepts only POST forms. `window` listeners survive `document.open()`, so a classic-script page can submit again after a 4xx render. The host log records panel URLs without query or fragment. | #129 `b0bc38f`, `b35e173`, `23b9f5e` | Codex, Grok | `panel-bridge` (prevented event, GET form, form without method, second POST after a 4xx render) |
+| D-2 (P1) | The guard compared the URL path with `/login` and `/setup`; setup shows at `/` or `/setup/`, and login at `/` because `PanelHttp` follows redirects natively | `FLAG_SECURE` is set in `onCreate` before `setContentView`. Every main-frame response, page start and main-frame error sets it again; the intercept thread waits for the flag update (bounded, 2000 ms, logged on timeout) before it returns the response. `ScreenCaptureGuard` clears it only when the document's own response carried `X-Levix-Screen-Capture: allow`, that document's `onPageStarted` committed the decision, and its `onPageFinished` follows. The server sends the header only on the signed-in dashboard (`GET /`) and the signed-in QR page, which was capturable before. Any other callback order stays secure. A fragment-only finish changes nothing. | #129 `b35e173`, `23b9f5e` | Grok, then Codex (review fix) | `ScreenCaptureGuardTest` (21), `screen-capture-header` (40 checks) |
+| D-3 (P2) | `dir="auto"` on every legal block | Blocks inherit the document locale direction (`rtl` for `ar`) | #127 `6bfb019` | Grok | `legal-dialog`, `legal-bidi` |
+| D-4 (P3) | Unicode bidi rule W2 turns digits after Arabic letters into Arabic numbers; the hyphen between them stays neutral | ISO dates, dotted versions, URLs and e-mail addresses in the legal text, and the version and date values in the dialog header, render in `<bdi dir="ltr">`. Plain Latin words stay with the bidi algorithm. | #127 `6bfb019` | Grok | `legal-bidi` (all paragraphs of the four bundled documents round-trip) |
+
+Stack updates. #127 `feat/04b-consent-ui` is `6bfb019`. #128 `feat/04c-remote-terms` merges #127
+(`2f02bb2`), so the sibling keeps its signed remote Terms work. #129 `feat/04d-react-gateway` is
+`23b9f5e` with merges `e27e3c7` and `d163a92` and the source-check update `a25ac3d`. #130
+`feat/04e-ejs-removal` merges #129 (`2097849`, `43d7c0a`, `bf34db3`) and updates its own source
+checks (`5b67818`). Merge conflicts: the signed-in fallback in `GET /` keeps `sendFallback` and gains
+the header; the gateway and header tests use the static fallback.
+
+Who did what. Codex implemented D-1, the review fixes and one source check, and did the read-only
+review. Grok implemented D-2, D-3 and D-4. Antigravity (Gemini 3.8 Flash) updated two source checks;
+two other Antigravity runs were blocked by the local permission classifier. OpenCode
+(`deepseek-v4.1-flash-free`) hit `FreeUsageLimitError` before any edit. The orchestrator wrote the
+briefs, reviewed every diff, resolved the merges, and ran every gate.
+
+Read-only Codex review on integration `76fc27f` (0 findings on throttling, failure counting, session
+regeneration, the origin check, open redirects, secrets in URLs, desktop login, recovery, logout,
+and the D-3/D-4 tokenizer):
+
+| Finding | Disposition |
+| --- | --- |
+| P1: a pending allow matched by URL alone could be applied by a late finish of the previous document at the same URL | Fixed in `23b9f5e`: the decision needs its own `onPageStarted` |
+| P1: the 300 ms wait returned the response even if the flag update had not run | Bound raised to 2000 ms with a log line. The update is queued on the main looper before the response exists, and the WebView draws the new document only in a later main-thread traversal. |
+| P2: after a 4xx render on a classic-script page, the next POST was not intercepted | Fixed in `23b9f5e` (listener on `window`) |
+| P2: a dashboard restored from history without a new response stays secure | Accepted: fails closed; a reload restores capture |
+| P2: the 20 s `fetch` timeout cannot fire while the synchronous native request blocks JavaScript | Accepted: older than Phase 04; the native socket timeout (60 s) still ends the request |
+| P3: tests did not model `document.open()` or overlapping navigations | Fixed in `23b9f5e` |
+
+Gates on integration commit `8aacfd5` (#130 `bf34db3` merged with #128 `2f02bb2`), Linux x64, Node
+24.22.2, npm 11.19.1, 2026-11-03:
+
+| Gate | Result |
+| --- | --- |
+| `npm test`, external network guard preloaded | PASS: 9,477 checks, 0 failed, 0 crashed (`76fc27f` before the source-check updates: FAIL, 3 source checks) |
+| `npm run lint` | PASS: 0 errors (196 warnings, 67 infos) |
+| `npm run i18n:check`, `npm run build:frontend` (`tsc -b`, Vite) | PASS |
+| Android `:app:testDebugUnitTest :app:assembleDebug :app:assembleRelease :app:bundleRelease`, offline | PASS: 108 unit tests, 0 failures; arm64 and armv7 APKs, debug and release; local AAB; `levix-build.json` versionCode 69 |
+| `npm run build:sea` and `npm run validate:sea` | PASS: 51 checks, 0 failed |
+| `npm run validate:tarball` (FFmpeg from a loopback mirror of the cached binary) | PASS: 36 checks, 0 failed |
+| `npm run validate:docker` | BLOCKED locally (Docker socket permission); CI runs it |
+| Headless Chrome with the Android bridge emulated (below) | PASS: 18/18 on `8aacfd5`; the same script on the pre-fix `25764aa` gives 8/16 |
+| Android device retest of D-1 to D-4 | NOT RUN: waits for the owner to reconnect the Redmi 9 |
+
+Headless check: `/usr/bin/google-chrome` (puppeteer-core) against a scratch Levix with a fresh data
+directory and the WhatsApp proxy set to `socks5://127.0.0.1:9` before boot. A fake `LevixHost`
+(synchronous XHR captured before `panel-bridge.js` runs) sends every local POST through the real
+bridge, as on Android. Start only reached `consent_required`; Terms were never accepted, and no
+WhatsApp connection was attempted.
+
+| Check | `25764aa` (pre-fix) | `8aacfd5` |
+| --- | --- | --- |
+| Setup mismatch: page rendered, inline error | FAIL: `#root` empty | PASS: "The two passwords don't match.", fields cleared and focused |
+| Wrong password at `/`: page rendered, inline error | FAIL: `#root` empty | PASS: "Incorrect Password", field cleared and focused |
+| Setup and login success reach the dashboard with the deep link (`#connection`, `#settings/security`) | PASS | PASS |
+| Settings password form submit (React `onSubmit`) | FAIL: the bridge navigated | PASS: no navigation |
+| No navigation URL holds a password | PASS (that form's inputs have no `name`) | PASS |
+| Arabic Terms dialog: no `dir="auto"`, paragraph starting with "Levix" | FAIL: 40 `dir="auto"`, `ltr` | PASS: 0, `rtl` |
+| Arabic header: `2026` left of `.1` in `2026-11-02.1` | FAIL: 653.7 px vs 626.3 px | PASS: 608.5 px vs 675.5 px |
+| Capture header on documents | absent everywhere | `allow` on the signed-in `/` only; absent on `/setup`, login at `/` |
+
+Android retest checklist for the owner (isolated `.dev` build from these heads, Redmi 9):
+
+1. D-1 setup: fresh data. Enter two different passwords: inline mismatch error, fields cleared, no
+   blank page. A too-short password: inline error. Then a valid password: the dashboard opens.
+2. D-1 login: sign out, then one wrong password at `/`: inline "Incorrect Password", field cleared
+   and focused, no blank page. Then the right password: the dashboard opens.
+3. D-1 deep link: open the panel signed out from the home "Review terms" or Connection entry, sign
+   in, and land on that screen.
+4. D-7: Settings, Security, change password with a mismatched confirmation: no reload, inline error.
+   Share the host log: panel URLs carry no `?` query.
+5. D-2: `adb exec-out screencap -p` (and the recents thumbnail) on first-run setup, login at `/`,
+   login after a wrong password, after a reload, and after Back from the dashboard to login: all
+   blocked.
+6. D-2: signed-in dashboard, then switch to Settings and Connection: screencap works. The signed-in
+   QR page: works (unchanged). Sign out: the login screen is blocked at once. If the dashboard stays
+   blocked, the WebView reported callbacks in another order; that fails closed, and the order must
+   be recorded.
+7. D-3: Arabic UI, Start, Terms dialog: the paragraph starting with "Levix" is right-aligned and its
+   words read right to left; WhatsApp, Android and SHA-256 read correctly.
+8. D-4: the Arabic header shows `2026-11-02.1` and `2026-11-02` with digits in order; English and
+   `es-419` dialogs unchanged.
+9. Regression: accept in Arabic records the version and the QR follows; force-stop and relaunch gives
+   no new prompt; recovery with no session shows the 409 message inline.
+
+Still NOT RUN: password reset keeping consent on the device, pairing a real account, the oldest
+supported WebView (R-27), and the human legal review.
