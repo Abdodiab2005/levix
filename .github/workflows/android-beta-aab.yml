@@ -194,7 +194,7 @@ jobs:
             echo "- versionCode: \`$BETA_VERSION_CODE\`"
             echo "- Source commit: \`${GITHUB_SHA}\`"
             echo "- SHA-256: \`$HASH\`"
-            echo "- Selected Closed Testing track: `$CLOSED_TRACK`"
+            echo "- Selected Closed Testing track: \`$CLOSED_TRACK\`"
             echo "- **Google Play upload follows after successful tests and signing; no Production, GitHub Release or deployment**"
             echo
             echo "Compare the upload certificate SHA-256 with Play Console → App signing:"
