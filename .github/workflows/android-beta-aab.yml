@@ -1,7 +1,7 @@
-# Build a signed, Play-ready beta AAB without tagging, publishing, or deploying.
-# Manual only: version inputs change the runner checkout, never the repository.
-# The workflow must first exist on main to be available under Actions > Run workflow.
-name: Android Beta AAB (build only)
+# On manual dispatch: build and sign a beta AAB, then publish to CLOSED TESTING only.
+# Never tag, publish npm/GitHub Release, deploy servers, or touch Production/Open Testing.
+# Version inputs change the runner checkout only; the repository stays unchanged.
+name: Android Beta → Closed Testing (automatic)
 
 on:
   workflow_dispatch:
@@ -15,6 +15,12 @@ on:
         description: "Next unused Play Console versionCode (greater than every track)"
         required: true
         type: string
+        default: "70"
+      closed_track:
+        description: "Existing CLOSED testing track ID (alpha = default Closed track). Never beta/open/production."
+        required: true
+        type: string
+        default: "alpha"
 
 permissions:
   contents: read
@@ -25,13 +31,16 @@ concurrency:
 
 jobs:
   build:
-    name: Build signed AAB (no publication)
+    name: Test, sign and publish to CLOSED testing
     if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # Reuse the existing Play environment and its protection rules, if configured.
+    environment: google-play
     env:
       BETA_VERSION_NAME: ${{ inputs.version_name }}
       BETA_VERSION_CODE: ${{ inputs.version_code }}
+      CLOSED_TRACK: ${{ inputs.closed_track }}
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
@@ -71,6 +80,17 @@ jobs:
             echo "::error::version_code must be an integer from 70 to 2100000000. Check the highest code in Play Console first."
             exit 1
           fi
+          # Only an existing Closed Testing track is allowed. In Google's API,
+          # beta is OPEN testing and production is public. Do not accept either.
+          if [[ ! "$CLOSED_TRACK" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,49}$ ]]; then
+            echo "::error::closed_track must be a valid existing Closed Testing track name."
+            exit 1
+          fi
+          case "${CLOSED_TRACK,,}" in
+            production|beta|internal|qa)
+              echo "::error::Closed Testing only; refusing reserved track '$CLOSED_TRACK'."
+              exit 1 ;;
+          esac
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           const name = process.env.BETA_VERSION_NAME;
@@ -168,13 +188,14 @@ jobs:
           cp "$AAB" levix-android.aab
           HASH="$(sha256sum levix-android.aab | cut -d ' ' -f 1)"
           {
-            echo "## Signed beta AAB — build only"
+            echo "## Signed beta AAB — Closed Testing delivery"
             echo
             echo "- Version: \`$BETA_VERSION_NAME\`"
             echo "- versionCode: \`$BETA_VERSION_CODE\`"
             echo "- Source commit: \`${GITHUB_SHA}\`"
             echo "- SHA-256: \`$HASH\`"
-            echo "- **No upload to Google Play, no GitHub Release, no deployment**"
+            echo "- Selected Closed Testing track: `$CLOSED_TRACK`"
+            echo "- **Google Play upload follows after successful tests and signing; no Production, GitHub Release or deployment**"
             echo
             echo "Compare the upload certificate SHA-256 with Play Console → App signing:"
             grep -m 1 "SHA256:" "$RUNNER_TEMP/levix-upload-cert.txt" || true
@@ -187,6 +208,52 @@ jobs:
           path: levix-android.aab
           if-no-files-found: error
           retention-days: 14
+
+      - name: Verify Google Play service account is configured
+        shell: bash
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
+            echo "::error::PLAY_SERVICE_ACCOUNT_JSON is missing. Add it as a Repository or google-play Environment secret with Closed Testing release access."
+            exit 1
+          fi
+
+      - name: Prepare beta release notes
+        shell: bash
+        run: |
+          mkdir -p dist/whatsnew
+          cat > dist/whatsnew/whatsnew-en-US <<'EOF'
+          Levix 5.0.0 beta: New command parser, safer reply routing, improved message handling, simpler status, and updated setup and translations. Closed testing build. Please report any issues.
+          EOF
+          cp levix-android.aab dist/levix-android.aab
+
+      # Google Play API commits a completed release on the SELECTED CLOSED track.
+      # Play review/managed publishing may still affect when testers can download.
+      - name: Publish automatically to CLOSED Testing
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: net.leviro.levix
+          releaseFiles: dist/levix-android.aab
+          tracks: ${{ inputs.closed_track }}
+          status: completed
+          releaseName: ${{ inputs.version_name }}
+          whatsNewDirectory: dist/whatsnew
+
+      - name: Report submitted Closed Testing release
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo
+            echo "## Google Play submission succeeded"
+            echo
+            echo "- Track: \`$CLOSED_TRACK\` (Closed Testing only)"
+            echo "- Version: \`$BETA_VERSION_NAME\`, code \`$BETA_VERSION_CODE\`"
+            echo "- Google Play review and Managed publishing, if enabled, can still delay availability."
+            echo "- No Production release was created."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove decoded upload key
         if: always()
