@@ -2,6 +2,7 @@
 const { downloadMediaMessage } = require("@whiskeysockets/baileys");
 const logger = require("../../utils/logger.cjs");
 const { t } = require("../../utils/i18n.cjs");
+const { createStatus } = require("../../utils/statusMessage.cjs");
 
 module.exports = {
   name: "setpp", // pp = profile picture
@@ -20,11 +21,10 @@ module.exports = {
       });
     }
 
+    const status = await createStatus(sock, groupId, t("bot.group.setpp.changing"), {
+      replyTo: msg,
+    });
     try {
-      await sock.sendMessage(groupId, {
-        text: t("bot.group.setpp.changing"),
-      });
-
       // Download the image from the quoted message
       const imageBuffer = await downloadMediaMessage(
         {
@@ -39,14 +39,10 @@ module.exports = {
       // Update the group's profile picture using the downloaded image buffer
       await sock.updateProfilePicture(groupId, imageBuffer);
 
-      await sock.sendMessage(groupId, {
-        text: t("bot.group.setpp.done"),
-      });
+      await status.finish(t("bot.group.setpp.done"));
     } catch (error) {
       logger.error({ err: error }, "Error in !group setpp command");
-      await sock.sendMessage(groupId, {
-        text: t("bot.group.setpp.failed"),
-      });
+      await status.finish(t("bot.group.setpp.failed"));
     }
   },
 };

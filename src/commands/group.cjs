@@ -13,8 +13,10 @@ const {
   isOwnerJidSync,
   isAdminInGroupSync,
   isBotAdminInGroupSync,
+  isBotAdminUserSync,
   getSenderCandidatesSync,
 } = require("../utils/permissions.cjs");
+const { evaluatePermissionLevel } = require("../utils/permissionLevel.cjs");
 const normalizeJid = require("../utils/normalizeJid.cjs");
 const { langForCommand, withLang, t } = require("../utils/i18n.cjs");
 const { attachCommandDocs } = require("../utils/commandDocs.cjs");
@@ -65,9 +67,40 @@ if (manifest) {
   }
 }
 
+/**
+ * Who is asking, in the shape `evaluatePermissionLevel` already understands.
+ * Bot-admin is honored inside a group (the direct command does the same) and
+ * ignored in a private chat so a private `!group` does not widen.
+ */
+function senderFor(msg, sock, groupMetadata) {
+  const remote = msg?.key?.remoteJid || "";
+  const isGroup = remote.endsWith("@g.us");
+  const senderId = normalizeJid(msg?.key?.participant || remote);
+  const senderIds = getSenderCandidatesSync(msg, sock);
+  const senderCandidates = senderIds.length ? senderIds : [senderId].filter(Boolean);
+  const isOwner = Boolean(msg?.key?.fromMe) || senderCandidates.some((id) => isOwnerJidSync(id));
+  const groupAdmin =
+    isGroup && senderCandidates.some((id) => isAdminInGroupSync(groupMetadata, id));
+  const isBotAdmin = isGroup && !isOwner && senderCandidates.some((id) => isBotAdminUserSync(id));
+  return {
+    isGroup,
+    isOwner,
+    isBotAdmin,
+    isSenderAdmin: Boolean(isBotAdmin || groupAdmin),
+  };
+}
+
+/** The level check for one group sub-command. Exported for the permission matrix. */
+function subCommandAccess(subCommandName, sender) {
+  const level = runtimeConfig.getPermission(`group:${subCommandName}`);
+  return { ...evaluatePermissionLevel(level, sender), level };
+}
+
 module.exports = {
   name: "group",
   chat: "group",
+  subCommandAccess,
+  senderFor,
 
   async execute(sock, msg, args, body, groupMetadata) {
     const subCommandName = args.shift()?.toLowerCase();
@@ -81,7 +114,10 @@ module.exports = {
     const subCommand = subCommands.get(subCommandName);
     if (!subCommand) {
       return await sock.sendMessage(msg.key.remoteJid, {
-        text: t("bot.group.group.unknownSubCommand", { name: subCommandName }),
+        text: t("bot.group.group.unknownSubCommand", {
+          name: subCommandName,
+          prefix: runtimeConfig.getPrefix(),
+        }),
       });
     }
 
@@ -104,47 +140,25 @@ async function runSubCommand(sock, msg, args, body, groupMetadata, subCommand) {
     });
   }
 
-  const senderId = normalizeJid(msg.key.participant || msg.key.remoteJid);
-  const senderIds = getSenderCandidatesSync(msg, sock);
-  const senderCandidates = senderIds.length ? senderIds : [senderId].filter(Boolean);
-  // Centralized owner check — covers the bot itself, LID<->PN,
-  // and the user_metadata table.
-  const isOwner = msg.key.fromMe || senderCandidates.some(isOwnerJidSync);
-  const isSenderAdmin = senderCandidates.some((id) => isAdminInGroupSync(groupMetadata, id));
-
-  // "group:kick" — the flat key runtime-config uses for sub-commands, so a
-  // level changed from the dashboard applies here too.
-  const permissionLevel = runtimeConfig.getPermission(`group:${subCommand.name}`);
-
-  let hasPermission = false;
-  switch (permissionLevel) {
-    case "MEMBERS":
-    case "ALL":
-      hasPermission = true;
-      break;
-    case "OWNER_ONLY":
-      hasPermission = isOwner;
-      break;
-    case "ADMINS_ONLY":
-      hasPermission = isSenderAdmin || isOwner;
-      break;
-    case "ADMINS_OWNER":
-      hasPermission = isOwner || isSenderAdmin;
-      break;
-    default:
-      logger.warn(
-        `[group] Unknown permission level "${permissionLevel}" for sub-command "${subCommand.name}"`,
-      );
+  const sender = senderFor(msg, sock, groupMetadata);
+  // The same level check the direct `!kick` path uses. A bot admin in the
+  // group is included. A bot admin in a private chat is not, so this door
+  // does not open a private chat the direct command already refuses.
+  const permission = subCommandAccess(subCommand.name, sender);
+  if (permission.unknownLevel) {
+    logger.warn(
+      `[group] Unknown permission level "${permission.level}" for sub-command "${subCommand.name}"`,
+    );
   }
 
-  if (!hasPermission) {
+  if (!permission.hasPermission) {
     return await sock.sendMessage(msg.key.remoteJid, {
-      text: t("bot.group.group.noPermission"),
+      text: permission.reason || t("bot.group.group.noPermission"),
     });
   }
 
   const isBotAdmin = isBotAdminInGroupSync(groupMetadata, sock);
-  if (subCommand.userAdminRequired && !isSenderAdmin && !isOwner) {
+  if (subCommand.userAdminRequired && !sender.isSenderAdmin && !sender.isOwner) {
     return await sock.sendMessage(msg.key.remoteJid, {
       text: t("bot.group.group.userAdminRequired"),
     });

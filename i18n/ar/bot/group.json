@@ -1,6 +1,6 @@
 {
   "group.missingSubCommand": "يرجى تحديد أمر فرعي بعد `!group`.",
-  "group.unknownSubCommand": "الأمر الفرعي `{name}` غير معروف.",
+  "group.unknownSubCommand": "أمر فرعي غير معروف `{name}`.\nمثال: `{prefix}group kick @member`",
   "group.disabled": "⛔ هذا الأمر معطّل حاليًا.",
   "group.noPermission": "🚫 ليس لديك الصلاحية لاستخدام هذا الأمر.",
   "group.userAdminRequired": "⚠️ هذا الأمر يتطلب أن تكون مشرفًا.",

@@ -9,6 +9,7 @@
 const { getSession } = require("../core/session-holder.cjs");
 const logger = require("../utils/logger.cjs");
 const { t } = require("../utils/i18n.cjs");
+const { createStatus } = require("../utils/statusMessage.cjs");
 
 module.exports = {
   name: "restart",
@@ -23,9 +24,11 @@ module.exports = {
       });
     }
 
-    // Goes out while the current socket is still alive.
-    await sock.sendMessage(chatId, {
-      text: t("bot.core.restart.reconnecting"),
+    // Goes out while the current socket is still alive. This line is the
+    // result of asking for a restart, so hiding progress cannot swallow it.
+    const status = await createStatus(sock, chatId, t("bot.core.restart.reconnecting"), {
+      replyTo: msg,
+      category: "system",
     });
 
     let state = null;
@@ -36,21 +39,12 @@ module.exports = {
       logger.error({ err: error, command: "restart" }, "Failed to reconnect WhatsApp");
     }
 
-    if (state?.connected) {
-      await sock.sendMessage(chatId, {
-        text: t("bot.core.restart.backOnline"),
-      });
-    } else {
-      // Not connected (a QR wait, a retry, a failure) — say where things
-      // stand instead of claiming success. The old socket is gone either way,
-      // so this send is best-effort.
-      await sock
-        .sendMessage(chatId, {
-          text: t("bot.core.restart.stateNow", {
-            status: state?.status || t("bot.core.restart.unknownState"),
-          }),
-        })
-        .catch(() => {});
-    }
+    const done = state?.connected
+      ? t("bot.core.restart.backOnline")
+      : t("bot.core.restart.stateNow", {
+          status: state?.status || t("bot.core.restart.unknownState"),
+        });
+    // The socket may already be gone. The edit is best-effort.
+    await status.finish(done).catch(() => {});
   },
 };

@@ -1211,5 +1211,22 @@
   "legalAccept": "Aceptar",
   "legalLoadError": "No se pudieron cargar los Términos. Inténtalo de nuevo.",
   "legalAcceptError": "No se pudo guardar tu aceptación. Inténtalo de nuevo.",
-  "legalReviewTerms": "Revisar Términos"
+  "legalReviewTerms": "Revisar Términos",
+  "replyRoute": "Destino de la respuesta",
+  "replyRouteDesc": "Adónde van las respuestas de los comandos. El predeterminado es el mismo chat.",
+  "replyRouteSame": "Mismo chat",
+  "replyRouteOwner": "Chat privado del dueño",
+  "replyRouteAuthorized": "Un chat autorizado",
+  "replyRouteChat": "Chat autorizado",
+  "replyRouteChatDesc": "Un id de chat de WhatsApp, no un enlace. El servidor lo comprueba antes de enviar.",
+  "replyRouteOverrides": "Excepciones de ruta",
+  "replyRouteOverridesDesc": "JSON opcional para un comando o una categoría. Los valores inválidos se rechazan.",
+  "replyHideProgress": "Ocultar mensajes de progreso",
+  "replyHideProgressDesc": "Oculta las líneas de progreso. Los resultados, los errores y los avisos de seguridad siguen apareciendo.",
+  "messageWatermark": "Con tecnología Levix",
+  "messageWatermarkDesc": "Agrega una marca corta a los resultados de texto que corresponden.",
+  "commandParser": "Analizador de comandos",
+  "commandParserDesc": "La v2 entiende un salto de línea entre el comando y el subcomando. La v1 es el analizador anterior.",
+  "commandParserV2": "v2",
+  "commandParserV1": "v1"
 }

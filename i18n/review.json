@@ -1,9 +1,9 @@
 {
   "pt-BR/dashboard": {
-    "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified",
-    "date": "2026-11-02",
-    "sha256": "a3391ab8e8214fa4629fcf74e8becea94324365fa5431b9a040225dc5dd01759"
+    "status": "draft",
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
+    "date": "2026-11-05",
+    "sha256": "0eb2c729c8f889fb9aa3799aaf2b11a9b2f7d304c26cb123adbcc8189e8f55a7"
   },
   "pt-BR/gateway": {
     "status": "draft",
@@ -12,10 +12,10 @@
     "sha256": "e2189af0dceb1a0eadc3655e245730231903cfcd4b13164b0d2389fbb89b3e9d"
   },
   "es-419/dashboard": {
-    "status": "reviewed",
-    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified",
-    "date": "2026-11-02",
-    "sha256": "56731a299d361ef5af92701f98ae234962c7b408f1bbf4ab2f12802ee24d594d"
+    "status": "draft",
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
+    "date": "2026-11-05",
+    "sha256": "ffcdce560748945b3142373dab72ba77732c1b187a473f6c9de42fa9e6937635"
   },
   "es-419/gateway": {
     "status": "draft",
@@ -36,10 +36,10 @@
     "sha256": "1d392cbcbdfe2ceafd3664155532322059526f306f8d65c110dd9f53ed447d14"
   },
   "pt-BR/commands": {
-    "status": "reviewed",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
-    "date": "2026-11-02",
-    "sha256": "5706ddd6ccf01fbfa8f27b8aee6cc12eb8d1278463094b87dbdcfc3dc7d63744"
+    "status": "draft",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
+    "date": "2026-11-05",
+    "sha256": "afa348ecb3e99641d049892440b47899bd1c3ac085b4975cddbe2a6834868f9e"
   },
   "pt-BR/bot/ai": {
     "status": "reviewed",
@@ -49,15 +49,15 @@
   },
   "pt-BR/bot/core": {
     "status": "draft",
-    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review",
-    "date": "2026-11-02",
-    "sha256": "c94e263041e2b0a1238439bcdad218d407df3cf24b4c85b51de47582f258cdc9"
+    "by": "ChatGPT targeted machine review of Phase 05 status.short and message.routeFailed only; other Phase 05 strings remain draft; not native-speaker certified",
+    "date": "2026-11-05",
+    "sha256": "367cc8c27a6478660b74c46590fe45f57e87ba8e39d69e7281e5a4fb0f983560"
   },
   "pt-BR/bot/group": {
-    "status": "reviewed",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
-    "date": "2026-11-02",
-    "sha256": "8d0a50ae379ebfd430a64a7f7fd933f2e9ea52192966c4a2d6b9e65a20ebb12c"
+    "status": "draft",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
+    "date": "2026-11-05",
+    "sha256": "9cfbaa4dc9e080a54dd8f74a734c8989b09711bb6bf95836dfda874bb4836317"
   },
   "pt-BR/bot/help": {
     "status": "reviewed",
@@ -96,10 +96,10 @@
     "sha256": "776a56dc49dc17496e9718f99f2197dc1c5cfc642cecaba7e3b66d965bc247c7"
   },
   "es-419/commands": {
-    "status": "reviewed",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
-    "date": "2026-11-02",
-    "sha256": "4b8dbbd472d71af03f38a2b5e8f40881d9ce7ba147f3507a274184d1f3f1718b"
+    "status": "draft",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
+    "date": "2026-11-05",
+    "sha256": "6cea0c08f677beea73cabeab59da942db714294f3497e620f48e7a816a275e05"
   },
   "es-419/bot/ai": {
     "status": "reviewed",
@@ -109,15 +109,15 @@
   },
   "es-419/bot/core": {
     "status": "draft",
-    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review",
-    "date": "2026-11-02",
-    "sha256": "06e5d6b3b33516b8dcda5fba0c4f9c632712f60722f8f8c164e511e1e9f820b2"
+    "by": "ChatGPT targeted machine review of Phase 05 status.short and message.routeFailed only; other Phase 05 strings remain draft; not native-speaker certified",
+    "date": "2026-11-05",
+    "sha256": "b70b6bc6d82578c729d69235fa2c95fba178131ba234374d35b9ddd64ccab5c5"
   },
   "es-419/bot/group": {
-    "status": "reviewed",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
-    "date": "2026-11-02",
-    "sha256": "bf7751c0e06a962a29245a75529d42192789bd882cee44947febe4df6915f6ef"
+    "status": "draft",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
+    "date": "2026-11-05",
+    "sha256": "fae758b047460846a836743e528b1dbf5d2d3b87abde4323cec36a5edf29be45"
   },
   "es-419/bot/help": {
     "status": "reviewed",

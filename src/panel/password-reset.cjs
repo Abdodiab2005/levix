@@ -35,6 +35,7 @@ const brand = require("../config/brand.cjs");
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 const { withLang, detectLang, t } = require("../utils/i18n.cjs");
 const normalizeJid = require("../utils/normalizeJid.esm.js").default;
+const { assertSelfDelivery } = require("../messaging/router.cjs");
 const recoveryEmail = require("./recovery-email.cjs");
 const {
   CODE_TTL_MS,
@@ -180,9 +181,10 @@ async function requestResetCode(peer, options = {}) {
     logger.info({ channel }, "[reset] Reset code sent by email");
   } else {
     try {
+      const self = assertSelfDelivery(normalizeJid(sock.user.id), normalizeJid(sock.user.id));
       await sendBotMessage(
         sock,
-        normalizeJid(sock.user.id),
+        self,
         { text: codeMessage(generated.code) },
         { typing: false, delayMs: 0 },
       );
@@ -198,7 +200,10 @@ async function requestResetCode(peer, options = {}) {
   // any previous code in place. A newer request, or an address change while
   // this send was in flight, owns the slot instead.
   if (generation !== resetGeneration) return { ok: false, reason: "throttled" };
-  if (channel === "email" && (emailGen !== emailGeneration || recoveryEmail.getAddress() !== address)) {
+  if (
+    channel === "email" &&
+    (emailGen !== emailGeneration || recoveryEmail.getAddress() !== address)
+  ) {
     return { ok: false, reason: "no_email" };
   }
   pending = {

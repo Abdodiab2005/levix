@@ -1,19 +1,20 @@
 // file: /commands/members.js
 const logger = require("../../utils/logger.cjs");
 const { t } = require("../../utils/i18n.cjs");
+const { createStatus } = require("../../utils/statusMessage.cjs");
 
 module.exports = {
   name: "members",
   chat: "group", // This command only works in groups
 
   async execute(sock, msg) {
+    let status = null;
     try {
       // Get the group ID from the message
       const groupId = msg.key.remoteJid;
 
-      // Send a temporary message to let the user know we're working on it
-      await sock.sendMessage(groupId, {
-        text: t("bot.group.members.fetching"),
+      status = await createStatus(sock, groupId, t("bot.group.members.fetching"), {
+        replyTo: msg,
       });
 
       // Fetch the group's metadata
@@ -44,16 +45,17 @@ module.exports = {
         mentions.push(member.id);
       });
 
-      // Send the final message with the list and mentions
-      await sock.sendMessage(groupId, {
-        text: replyText,
-        mentions: mentions, // This makes the @ tags clickable
-      });
+      // Rewrite the progress line. Mentions stay on the same message.
+      await status.finish(replyText, { mentions });
     } catch (error) {
       logger.error(error, "[Error] in !members command:");
-      await sock.sendMessage(msg.key.remoteJid, {
-        text: t("bot.group.members.failed"),
-      });
+      const failed = t("bot.group.members.failed");
+      if (status) await status.finish(failed);
+      else {
+        await sock.sendMessage(msg.key.remoteJid, {
+          text: failed,
+        });
+      }
     }
   },
 };

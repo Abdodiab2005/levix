@@ -102,6 +102,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
+| Status | IMPLEMENTED 2026-11-05 on `feat/v5-phase-05` from `main` `2682a09`. PR #132 covers 05a–05f. Results in `PHASE-05-RESULTS.md`. Not merged. Q-06 stays open; the code follows recommendation (a). |
 | Goal | One `parse, authorize, execute, render, route, send` path; same-chat default; v2 parser; short `!status`; owner health check. |
 | Files | `src/handlers/command.handler.js`, `src/commands/group.cjs`, `src/middleware/permissions.middleware.js`, `src/utils/statusMessage.cjs`, `src/utils/sendBotMessage.esm.js`, new `src/messaging/` (templates, router), `src/commands/status.cjs`, new health module, `src/config/defaults.cjs` (Q-08), `src/config/runtime-config.cjs`, dashboard routing settings, the six commands in AUDIT C-07. |
 | Migrations | Additive routing settings. |

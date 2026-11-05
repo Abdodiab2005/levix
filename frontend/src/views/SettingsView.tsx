@@ -41,16 +41,17 @@ import {
   Select,
   Spinner,
   Tabs,
+  Textarea,
   Toggle,
   UserText,
   useDirtyForm,
   useSavedValue,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
-import { LOCALES, type Language, translations } from "../i18n/translations";
+import { type Language, LOCALES, type translations } from "../i18n/translations";
 import { fill } from "../utils/fill";
-import { DiagnosticsView } from "./DiagnosticsView";
 import { BackupView } from "./BackupView";
+import { DiagnosticsView } from "./DiagnosticsView";
 
 type SettingsTab =
   | "general"
@@ -489,6 +490,10 @@ export const SettingsView: React.FC = () => {
   const botLang = useSavedValue(String(settings["bot_language"] || "auto"));
   const aiReplyLang = useSavedValue(String(settings["ai_reply_language"] || "follow_bot"));
   const timezone = useSavedValue(String(settings["bot_timezone"] || "Africa/Cairo"));
+  const replyRoute = useSavedValue(String(settings["reply_route"] || "same_chat"));
+  const replyChat = useSavedValue(String(settings["reply_route_chat"] || ""));
+  const replyOverrides = useSavedValue(String(settings["reply_route_overrides"] || ""));
+  const commandParser = useSavedValue(String(settings["command_parser"] || "v2"));
   const connectionLogLevel = useSavedValue(String(settings["connection_log_level"] || "info"));
   const weatherKey = useSavedValue(String(settings["openweathermap_api_key"] || ""));
   const forwardTtl = useSavedValue(Number(settings["forward_score_ttl_days"] || 30));
@@ -781,9 +786,7 @@ export const SettingsView: React.FC = () => {
           </Card>
 
           <Card className="flex flex-col gap-4">
-            <CardHeader
-              title={t("settingsBehaviorTitle")}
-            />
+            <CardHeader title={t("settingsBehaviorTitle")} />
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <SaveField
@@ -935,6 +938,129 @@ export const SettingsView: React.FC = () => {
                 {...formLabels}
               />
             </form>
+          </Card>
+
+          <Card className="flex flex-col gap-4">
+            <CardHeader
+              icon={<MessageSquareHeart size={20} />}
+              title={t("replyRoute")}
+              description={t("replyRouteDesc")}
+            />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <SaveField
+                label={t("replyRoute")}
+                htmlFor="reply-route"
+                dirty={replyRoute.dirty}
+                saving={replyRoute.status === "saving"}
+                justSaved={replyRoute.status === "saved"}
+                error={replyRoute.error}
+                onSave={() => replyRoute.save((next) => persistSetting("reply_route", next))}
+                onRevert={replyRoute.revert}
+                {...saveLabels}
+              >
+                <Select
+                  id="reply-route"
+                  value={replyRoute.value}
+                  onChange={(e) => replyRoute.setValue(e.target.value)}
+                >
+                  <option value="same_chat">{t("replyRouteSame")}</option>
+                  <option value="owner_private">{t("replyRouteOwner")}</option>
+                  <option value="authorized_chat">{t("replyRouteAuthorized")}</option>
+                </Select>
+              </SaveField>
+              <SaveField
+                label={t("replyRouteChat")}
+                description={t("replyRouteChatDesc")}
+                htmlFor="reply-route-chat"
+                dirty={replyChat.dirty}
+                saving={replyChat.status === "saving"}
+                justSaved={replyChat.status === "saved"}
+                error={replyChat.error}
+                onSave={() =>
+                  replyChat.save((next) => persistSetting("reply_route_chat", next.trim()))
+                }
+                onRevert={replyChat.revert}
+                {...saveLabels}
+              >
+                <Input
+                  id="reply-route-chat"
+                  type="text"
+                  technical
+                  dir="auto"
+                  className="font-mono"
+                  value={replyChat.value}
+                  onChange={(e) => replyChat.setValue(e.target.value)}
+                />
+              </SaveField>
+              <SaveField
+                label={t("commandParser")}
+                description={t("commandParserDesc")}
+                htmlFor="command-parser"
+                dirty={commandParser.dirty}
+                saving={commandParser.status === "saving"}
+                justSaved={commandParser.status === "saved"}
+                error={commandParser.error}
+                onSave={() => commandParser.save((next) => persistSetting("command_parser", next))}
+                onRevert={commandParser.revert}
+                {...saveLabels}
+              >
+                <Select
+                  id="command-parser"
+                  value={commandParser.value}
+                  onChange={(e) => commandParser.setValue(e.target.value)}
+                >
+                  <option value="v2">{t("commandParserV2")}</option>
+                  <option value="v1">{t("commandParserV1")}</option>
+                </Select>
+              </SaveField>
+            </div>
+            <SaveField
+              label={t("replyRouteOverrides")}
+              description={t("replyRouteOverridesDesc")}
+              htmlFor="reply-route-overrides"
+              dirty={replyOverrides.dirty}
+              saving={replyOverrides.status === "saving"}
+              justSaved={replyOverrides.status === "saved"}
+              error={replyOverrides.error}
+              onSave={() =>
+                replyOverrides.save((next) => persistSetting("reply_route_overrides", next.trim()))
+              }
+              onRevert={replyOverrides.revert}
+              {...saveLabels}
+            >
+              <Textarea
+                id="reply-route-overrides"
+                dir="auto"
+                rows={3}
+                className="font-mono"
+                value={replyOverrides.value}
+                onChange={(e) => replyOverrides.setValue(e.target.value)}
+              />
+            </SaveField>
+            <div className="flex items-center justify-between gap-3">
+              <CardHeader
+                className="min-w-0 flex-1"
+                title={t("replyHideProgress")}
+                description={t("replyHideProgressDesc")}
+              />
+              <Toggle
+                className="shrink-0"
+                checked={Boolean(settings["reply_hide_progress"])}
+                onChange={(val) => persistToggle("reply_hide_progress", val)}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <CardHeader
+                className="min-w-0 flex-1"
+                title={t("messageWatermark")}
+                description={t("messageWatermarkDesc")}
+              />
+              <Toggle
+                className="shrink-0"
+                checked={Boolean(settings["message_watermark"])}
+                onChange={(val) => persistToggle("message_watermark", val)}
+              />
+            </div>
           </Card>
 
           <Card className="flex flex-col gap-4">
