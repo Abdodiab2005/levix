@@ -239,6 +239,12 @@ src/
 │   ├── message.handler.js  # Main message router
 │   ├── command.handler.js  # Command dispatcher + loader
 │   └── group.handler.js    # Group events (join/leave)
+├── messaging/        # parse, render, route, health (CommonJS)
+│   ├── parser.cjs    # Command Engine v2, with v1 behind command_parser
+│   ├── message.cjs   # canonical message envelope, escape, watermark hook
+│   ├── router.cjs    # Reply Router: same chat unless a destination is allowed
+│   ├── identity.cjs  # linked-account JIDs from creds, never from a typed number
+│   └── health.cjs    # pure ok/degraded/down/unknown report
 ├── middleware/       # Message filtering (ESM)
 │   ├── antispam.middleware.js
 │   ├── blacklist.middleware.js
@@ -476,10 +482,18 @@ session records the proxy the live socket was built with and reports
    - Forward tracking → `src/middleware/forward-tracking.middleware.js`
    - Check blacklist → `src/middleware/blacklist.middleware.js`
    - Anti-spam → `src/middleware/antispam.middleware.js`
-5. **Command Detection** → `src/handlers/command.handler.js:44` (handleCommand)
-   - Parse prefix (default: `!`)
-   - Match command name or alias
-   - Execute command with context
+5. **Command Detection** → `src/handlers/command.handler.js` (`handleCommand`)
+   - Parse prefix (default: `!`) with Command Engine v2 (`src/messaging/parser.cjs`).
+     A newline between a command and its sub-command counts. A URL or a fenced
+     block that does not start with a real command name is not a command.
+     `command_parser=v1` restores the previous splitter for one release.
+   - Match command name or alias. A real command name wins over a duplicate alias.
+   - Authorize with `evaluatePermissionLevel` (group sub-commands included)
+   - Execute, then render and route. The Reply Router (`src/messaging/router.cjs`)
+     sends to the source chat unless Settings names the linked account's own
+     chat or an authorized chat the backend has checked. A refused destination
+     gets a neutral notice in the source chat and never falls back to a group.
+     `!schedule` / `!autoschedule` errors still go to the creator's private chat.
 6. **Group Moderation** (if in group):
    - `handleGroupModeration` collects forbidden-word, anti-link, media, and anti-spam hits, then `enforceHits` applies them in one transaction. A message with no id is skipped.
    - Detectors stay separate from auto-delete: `src/commands/mod.cjs`, `src/commands/group/antilink.cjs`, `src/commands/group/media.cjs`, `src/middleware/antispam.middleware.js`.
@@ -1032,7 +1046,12 @@ await status.remove();                        // delete it (when media IS the an
 Everything is best-effort: if the edit is rejected (message too old, not ours)
 it falls back to a normal send.
 
-Already wired: `!gemini`, `!weather`, `!shortlink`, `!stt`, `!tts`, `!translate`.
+Already wired: `!gemini`, `!weather`, `!shortlink`, `!stt`, `!tts`, `!translate`,
+`!prayer`, `!members`, `!add`, `!setpp`, `!restart`, and `!stopbot`.
+`reply_hide_progress` hides a progress line only. The result, the error, and a
+security notice still go out. `!status` is a short owner line (running,
+connection, uptime, OS family). `!status debug` is owner-only even if the
+command permission is lowered, and it does not print paths or the kernel.
 
 ### 7. Text decoding (`src/utils/textDecode.cjs`)
 

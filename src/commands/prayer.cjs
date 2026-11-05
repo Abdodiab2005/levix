@@ -11,6 +11,7 @@ const axios = require("axios");
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
 const { t } = require("../utils/i18n.cjs");
+const { createStatus } = require("../utils/statusMessage.cjs");
 
 // The one HTTP GET the command performs. Exposed so tests can stub the network.
 const http = {
@@ -64,10 +65,10 @@ module.exports = {
     // 4. Today's date in the bot timezone, with the city encoded as a query value.
     const API_URL = buildPrayerUrl(city);
 
+    const status = await createStatus(sock, msg.key.remoteJid, t("bot.tools.prayer.fetching"), {
+      replyTo: msg,
+    });
     try {
-      await sock.sendMessage(msg.key.remoteJid, {
-        text: t("bot.tools.prayer.fetching"),
-      });
       // 5. We will make the API call using axios
       const response = await http.get(API_URL);
       // 6. We will parse the prayer timings from the response data
@@ -83,16 +84,12 @@ module.exports = {
         `${t("bot.tools.prayer.maghrib")}: ${formatTime12Hour(timings.Maghrib)}\n` +
         `${t("bot.tools.prayer.isha")}: ${formatTime12Hour(timings.Isha)}`;
 
-      // 8. Send the formatted message
-      await sock.sendMessage(msg.key.remoteJid, {
-        text: reply,
-      });
+      // 8. Rewrite the progress line into the times.
+      await status.finish(reply);
     } catch (error) {
       logger.error(error.message, "[Error] in Prayer API:");
       // 9. Handle errors, like city not found or API failure
-      await sock.sendMessage(msg.key.remoteJid, {
-        text: t("bot.tools.prayer.cityNotFound", { city }),
-      });
+      await status.finish(t("bot.tools.prayer.cityNotFound", { city }));
     }
   },
 

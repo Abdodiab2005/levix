@@ -1211,5 +1211,22 @@
   "legalAccept": "Accept",
   "legalLoadError": "Could not load the Terms. Please try again.",
   "legalAcceptError": "Could not save your acceptance. Please try again.",
-  "legalReviewTerms": "Review Terms"
+  "legalReviewTerms": "Review Terms",
+  "replyRoute": "Reply destination",
+  "replyRouteDesc": "Where command replies go. The default is the same chat.",
+  "replyRouteSame": "Same chat",
+  "replyRouteOwner": "Owner's private chat",
+  "replyRouteAuthorized": "An authorized chat",
+  "replyRouteChat": "Authorized chat",
+  "replyRouteChatDesc": "A WhatsApp chat id, not a link. The backend checks it before anything is sent.",
+  "replyRouteOverrides": "Route overrides",
+  "replyRouteOverridesDesc": "Optional JSON for one command or one category. Invalid values are refused.",
+  "replyHideProgress": "Hide progress messages",
+  "replyHideProgressDesc": "Hides progress lines. Results, errors and security notices still appear.",
+  "messageWatermark": "Powered by Levix",
+  "messageWatermarkDesc": "Adds a short watermark to eligible text results.",
+  "commandParser": "Command parser",
+  "commandParserDesc": "v2 understands a newline between a command and its sub-command. v1 is the previous parser.",
+  "commandParserV2": "v2",
+  "commandParserV1": "v1"
 }

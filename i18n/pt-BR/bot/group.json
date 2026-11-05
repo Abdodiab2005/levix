@@ -1,6 +1,6 @@
 {
   "group.missingSubCommand": "Diga um subcomando depois de `!group`.",
-  "group.unknownSubCommand": "Subcomando desconhecido `{name}`.",
+  "group.unknownSubCommand": "Subcomando desconhecido `{name}`.\nExemplo: `{prefix}group kick @member`",
   "group.disabled": "⛔ Este comando está desativado agora.",
   "group.noPermission": "🚫 Você não tem permissão para usar este comando.",
   "group.userAdminRequired": "⚠️ Você precisa ser admin do grupo para usar este comando.",

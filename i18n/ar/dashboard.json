@@ -1211,5 +1211,22 @@
   "legalAccept": "أوافق",
   "legalLoadError": "تعذّر تحميل الشروط. يُرجى المحاولة مجددًا.",
   "legalAcceptError": "تعذّر حفظ موافقتك. يُرجى المحاولة مجددًا.",
-  "legalReviewTerms": "مراجعة الشروط"
+  "legalReviewTerms": "مراجعة الشروط",
+  "replyRoute": "وجهة الرد",
+  "replyRouteDesc": "إلى أين تذهب ردود الأوامر. الافتراضي هو نفس المحادثة.",
+  "replyRouteSame": "نفس المحادثة",
+  "replyRouteOwner": "المحادثة الخاصة لصاحب البوت",
+  "replyRouteAuthorized": "محادثة مصرح بها",
+  "replyRouteChat": "المحادثة المصرح بها",
+  "replyRouteChatDesc": "معرّف محادثة واتساب، وليس رابطًا. يتحقق الخادم منه قبل الإرسال.",
+  "replyRouteOverrides": "استثناءات التوجيه",
+  "replyRouteOverridesDesc": "JSON اختياري لأمر واحد أو فئة واحدة. القيم غير الصالحة تُرفض.",
+  "replyHideProgress": "إخفاء رسائل التقدم",
+  "replyHideProgressDesc": "يخفي سطور التقدم. النتائج والأخطاء وتنبيهات الأمان تبقى ظاهرة.",
+  "messageWatermark": "مدعوم من Levix",
+  "messageWatermarkDesc": "يضيف علامة قصيرة إلى النتائج النصية المؤهلة.",
+  "commandParser": "محلل الأوامر",
+  "commandParserDesc": "يفهم الإصدار 2 سطرًا جديدًا بين الأمر والأمر الفرعي. الإصدار 1 هو المحلل السابق.",
+  "commandParserV2": "v2",
+  "commandParserV1": "v1"
 }

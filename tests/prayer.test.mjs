@@ -116,7 +116,11 @@ section("buildPrayerUrl");
     new URL(again).searchParams.get("timezonestring"),
     "UTC",
   );
-  equal("the date follows the new timezone", new URL(again).pathname, "/v1/timingsByCity/15-01-2026");
+  equal(
+    "the date follows the new timezone",
+    new URL(again).pathname,
+    "/v1/timingsByCity/15-01-2026",
+  );
 }
 
 {
@@ -150,14 +154,19 @@ section("execute");
     "success: path is today's Cairo date",
     requested.pathname.endsWith(`/${before}`) || requested.pathname.endsWith(`/${after}`),
   );
-  equal("success: timezone is Africa/Cairo", requested.searchParams.get("timezonestring"), "Africa/Cairo");
+  equal(
+    "success: timezone is Africa/Cairo",
+    requested.searchParams.get("timezonestring"),
+    "Africa/Cairo",
+  );
   equal("success: city query", requested.searchParams.get("city"), "Cairo");
   equal("success: method stays 5", requested.searchParams.get("method"), "5");
   equal("fetching notice", sent[0]?.content?.text, "Fetching the times...");
   equal("fetching goes to the source chat", sent[0]?.jid, CHAT);
   equal("the six times", lastText(sent), TIMES_FOR_CAIRO);
   equal("times go to the source chat", sent[sent.length - 1]?.jid, CHAT);
-  equal("two messages on success", sent.length, 2);
+  equal("progress then one edit", sent.length, 2);
+  ok("the times replace the progress line", Boolean(sent[1]?.content?.edit));
 }
 
 {

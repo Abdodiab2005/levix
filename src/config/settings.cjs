@@ -88,6 +88,65 @@ const SETTINGS = [
     group: "general",
     label: "Max reply delay (ms)",
   },
+  {
+    key: "command_parser",
+    type: "string",
+    default: "v2",
+    choices: ["v1", "v2"],
+    choiceLabels: {
+      v2: "v2 (newline between a command and its sub-command)",
+      v1: "v1 (previous parser)",
+    },
+    group: "general",
+    label: "Command parser",
+    hint: "v2 is the current parser. v1 is the previous one, kept for one release. Both still send through the reply router.",
+  },
+  {
+    key: "reply_route",
+    type: "string",
+    default: "same_chat",
+    choices: ["same_chat", "owner_private", "authorized_chat"],
+    choiceLabels: {
+      same_chat: "Same chat",
+      owner_private: "Owner's private chat",
+      authorized_chat: "An authorized chat",
+    },
+    group: "general",
+    label: "Reply destination",
+    hint: "Where command replies go. The default is the chat the command was typed in. Another chat is used only after the backend checks it. A refused destination never falls back to a group.",
+  },
+  {
+    key: "reply_route_chat",
+    type: "string",
+    default: "",
+    group: "general",
+    label: "Authorized reply chat",
+    hint: "A WhatsApp chat id (phone, LID, or group). Not a link. Used only when the reply destination is an authorized chat.",
+  },
+  {
+    key: "reply_route_overrides",
+    type: "string",
+    default: "",
+    group: "general",
+    label: "Reply route overrides",
+    hint: 'Optional JSON, for example {"commands":{"ping":"same_chat"},"categories":{"progress":"same_chat"}}. Invalid JSON is refused.',
+  },
+  {
+    key: "reply_hide_progress",
+    type: "bool",
+    default: false,
+    group: "general",
+    label: "Hide progress messages",
+    hint: "Hides progress lines. Results, errors and security notices still appear.",
+  },
+  {
+    key: "message_watermark",
+    type: "bool",
+    default: false,
+    group: "general",
+    label: "Powered by Levix watermark",
+    hint: "Adds a short watermark to eligible text results. Security notices, errors, files and exact-output commands stay clean.",
+  },
 
   // --- AI ----------------------------------------------------------------
   //
@@ -537,6 +596,56 @@ const SECRET_SETTING_KEYS = SETTINGS.filter((definition) => definition.type === 
   (definition) => definition.key,
 );
 
+const ROUTE_MODES = ["same_chat", "owner_private", "authorized_chat"];
+const ROUTE_CATEGORIES = ["progress", "result", "error", "security", "system"];
+const ROUTE_JID = /^[0-9]{1,30}@(s\.whatsapp\.net|lid|g\.us)$/;
+
+function validateRouteChat(text) {
+  if (!text) return "";
+  if (!ROUTE_JID.test(text)) {
+    throw new Error("Authorized reply chat must be a WhatsApp chat id, not a link");
+  }
+  return text;
+}
+
+function validateRouteOverrides(text) {
+  if (!text) return "";
+  if (text.length > 2000) throw new Error("Reply route overrides are too long");
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error("Reply route overrides must be JSON");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Reply route overrides must be a JSON object");
+  }
+  for (const key of Object.keys(parsed)) {
+    if (key !== "commands" && key !== "categories") {
+      throw new Error("Reply route overrides only accept commands and categories");
+    }
+  }
+  const commands = parsed.commands || {};
+  const categories = parsed.categories || {};
+  if (typeof commands !== "object" || Array.isArray(commands)) {
+    throw new Error("Reply route command overrides must be an object");
+  }
+  if (typeof categories !== "object" || Array.isArray(categories)) {
+    throw new Error("Reply route category overrides must be an object");
+  }
+  for (const [name, mode] of Object.entries(commands)) {
+    if (!/^[a-z0-9_-]{1,32}$/.test(name) || !ROUTE_MODES.includes(mode)) {
+      throw new Error("A command route override is not allowed");
+    }
+  }
+  for (const [name, mode] of Object.entries(categories)) {
+    if (!ROUTE_CATEGORIES.includes(name) || !ROUTE_MODES.includes(mode)) {
+      throw new Error("A category route override is not allowed");
+    }
+  }
+  return JSON.stringify({ commands, categories });
+}
+
 const GROUP_LABELS = {
   general: "General",
   ai: "AI",
@@ -623,6 +732,8 @@ function validate(definition, value) {
     throw new Error(`${definition.label} must be one of: ${definition.choices.join(", ")}`);
   }
 
+  if (definition.key === "reply_route_chat") return validateRouteChat(text);
+  if (definition.key === "reply_route_overrides") return validateRouteOverrides(text);
   if (text.length > 500) throw new Error(`${definition.label} is too long`);
   if (definition.key === "bot_timezone" && text) {
     try {

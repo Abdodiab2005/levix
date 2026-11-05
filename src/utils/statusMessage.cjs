@@ -16,6 +16,7 @@
 const logger = require("./logger.cjs");
 const { sendBotMessage } = require("./sendBotMessage.cjs");
 const { t } = require("./i18n.cjs");
+const settings = require("../config/settings.cjs");
 
 // WhatsApp tolerates a few edits per message; spacing them out keeps the
 // server happy and the animation readable.
@@ -32,23 +33,33 @@ class StatusMessage {
     this.jid = jid;
     this.replyTo = options.replyTo || null;
     this.quote = options.quote !== false;
+    this.category = options.category || "progress";
+    this.sensitivity = options.sensitivity || "source";
+    this.mentions = Array.isArray(options.mentions) ? options.mentions : null;
     this.key = null;
     this.text = "";
     this.lastEditAt = 0;
     this.closed = false;
+    this.suppressed = false;
   }
 
   async start(text) {
     this.text = text;
+    // Hiding progress never hides a later result, error, or security notice.
+    if (this.category === "progress" && settings.get("reply_hide_progress")) {
+      this.suppressed = true;
+      this.text = "";
+      return this;
+    }
     try {
-      const sent = await sendBotMessage(
-        this.sock,
-        this.jid,
-        { text },
-        { replyTo: this.replyTo, quote: this.quote, typing: false, delayMs: 0 },
-      );
-      this.key = sent?.key || null;
-      this.lastEditAt = Date.now();
+      const sent = await sendBotMessage(this.sock, this.jid, this.payload(text, this.mentions), {
+        replyTo: this.replyTo,
+        quote: this.quote,
+        typing: false,
+        delayMs: 0,
+        levix: { category: this.category, sensitivity: this.sensitivity },
+      });
+      this.adopt(sent, text);
     } catch (err) {
       logger.warn({ err: err?.message }, "[status] initial send failed");
       this.key = null;
@@ -56,14 +67,33 @@ class StatusMessage {
     return this;
   }
 
+  payload(text, mentions) {
+    const content = { text };
+    if (mentions?.length) content.mentions = mentions;
+    return content;
+  }
+
+  adopt(sent, text) {
+    this.key = sent?.key || null;
+    if (sent?.key?.remoteJid) this.jid = sent.key.remoteJid;
+    this.text = text;
+    this.lastEditAt = Date.now();
+  }
+
   /** Rewrite the line. Identical text is skipped so we don't burn an edit. */
-  async update(text, { force = false } = {}) {
+  async update(
+    text,
+    { force = false, mentions = undefined, category = undefined, sensitivity = undefined } = {},
+  ) {
     if (this.closed && !force) return false;
     const next = String(text || "").trim();
     if (!next || next === this.text) return false;
+    if (category) this.category = category;
+    if (sensitivity) this.sensitivity = sensitivity;
+    const mentionList = mentions === undefined ? this.mentions : mentions;
 
-    // No message to edit (initial send failed) — send one and adopt it.
-    if (!this.key) return this._sendFresh(next);
+    // No message to edit (hidden progress, or the first send failed).
+    if (!this.key) return this._sendFresh(next, mentionList);
 
     const wait = MIN_EDIT_GAP_MS - (Date.now() - this.lastEditAt);
     if (wait > 0) await sleep(wait);
@@ -72,27 +102,36 @@ class StatusMessage {
       // `quoted: null` on purpose: the command handler wraps sock.sendMessage
       // and auto-quotes anything that doesn't set it, and an edit/delete is a
       // protocolMessage — there is nowhere to hang a contextInfo.
-      await this.sock.sendMessage(this.jid, { text: next, edit: this.key }, { quoted: null });
+      const sent = await this.sock.sendMessage(
+        this.jid,
+        { ...this.payload(next, mentionList), edit: this.key },
+        { quoted: null },
+      );
       this.text = next;
+      this.mentions = mentionList;
       this.lastEditAt = Date.now();
+      if (sent?.key?.remoteJid) this.jid = sent.key.remoteJid;
       return true;
     } catch (err) {
       logger.debug({ err: err?.message }, "[status] edit failed — sending instead");
-      return this._sendFresh(next);
+      return this._sendFresh(next, mentionList);
     }
   }
 
-  async _sendFresh(text) {
+  async _sendFresh(text, mentions) {
     try {
-      const sent = await sendBotMessage(
-        this.sock,
-        this.jid,
-        { text },
-        { replyTo: this.replyTo, quote: this.quote, typing: false, delayMs: 0 },
-      );
-      this.key = sent?.key || null;
-      this.text = text;
-      this.lastEditAt = Date.now();
+      const sent = await sendBotMessage(this.sock, this.jid, this.payload(text, mentions), {
+        replyTo: this.replyTo,
+        quote: this.quote,
+        typing: false,
+        delayMs: 0,
+        levix: {
+          category: this.category === "progress" ? "result" : this.category,
+          sensitivity: this.sensitivity,
+        },
+      });
+      this.adopt(sent, text);
+      this.mentions = mentions;
       return true;
     } catch (err) {
       logger.warn({ err: err?.message }, "[status] fallback send failed");
@@ -101,8 +140,12 @@ class StatusMessage {
   }
 
   /** Last update for this run. Always delivered, even if an edit is refused. */
-  async finish(text) {
-    const ok = await this.update(text, { force: true });
+  async finish(text, options = {}) {
+    const ok = await this.update(text, {
+      ...options,
+      force: true,
+      category: options.category || "result",
+    });
     this.closed = true;
     return ok;
   }

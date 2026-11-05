@@ -9,6 +9,7 @@
 const { getSession } = require("../core/session-holder.cjs");
 const logger = require("../utils/logger.cjs");
 const { t } = require("../utils/i18n.cjs");
+const { createStatus } = require("../utils/statusMessage.cjs");
 
 module.exports = {
   name: "stopbot",
@@ -33,8 +34,10 @@ module.exports = {
 
     // The goodbye goes out before the socket comes down: once stop() runs,
     // nothing can be sent through this chat until the session starts again.
-    await sock.sendMessage(chatId, {
-      text: t("bot.core.stopbot.pausing"),
+    // It is the result, not a progress line, so it is never hidden.
+    const status = await createStatus(sock, chatId, t("bot.core.stopbot.pausing"), {
+      replyTo: msg,
+      category: "system",
     });
 
     try {
@@ -43,9 +46,7 @@ module.exports = {
     } catch (error) {
       logger.error({ err: error, command: "stopbot" }, "Failed to pause the WhatsApp connection");
       // The socket may still be up, so the operator can actually read this.
-      await sock.sendMessage(chatId, {
-        text: t("bot.core.stopbot.pauseFailed"),
-      });
+      await status.finish(t("bot.core.stopbot.pauseFailed")).catch(() => {});
     }
   },
 };

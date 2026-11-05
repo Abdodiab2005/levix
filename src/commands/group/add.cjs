@@ -1,6 +1,7 @@
 // file: /commands/add.js (Upgraded with Invite Fallback)
 const logger = require("../../utils/logger.cjs");
 const { t } = require("../../utils/i18n.cjs");
+const { createStatus } = require("../../utils/statusMessage.cjs");
 const normalizeJid = require("../../utils/normalizeJid.esm.js").default;
 
 module.exports = {
@@ -15,6 +16,7 @@ module.exports = {
     const groupId = msg.key.remoteJid;
     const senderId = msg.key.participant; // The admin who is running the command
     let targetJid;
+    let statusLine = null;
     let shouldPromote = false;
 
     try {
@@ -73,10 +75,12 @@ module.exports = {
         });
       }
 
-      await sock.sendMessage(groupId, {
-        text: t("bot.group.add.trying", { number: targetJid.split("@")[0] }),
-        mentions: [targetJid],
-      });
+      statusLine = await createStatus(
+        sock,
+        groupId,
+        t("bot.group.add.trying", { number: targetJid.split("@")[0] }),
+        { replyTo: msg, mentions: [targetJid] },
+      );
       const response = await sock.groupParticipantsUpdate(groupId, [targetJid], "add");
       const status = response[0].status;
 
@@ -86,15 +90,12 @@ module.exports = {
           await sock.groupParticipantsUpdate(groupId, [targetJid], "promote");
           successMsg += t("bot.group.add.madeAdmin");
         }
-        await sock.sendMessage(groupId, {
-          text: successMsg,
-          mentions: [targetJid],
-        });
+        await statusLine.finish(successMsg, { mentions: [targetJid] });
       } else if (status === "403") {
-        await sock.sendMessage(groupId, {
-          text: t("bot.group.add.privacyBlocked", { number: targetJid.split("@")[0] }),
-          mentions: [targetJid],
-        });
+        await statusLine.finish(
+          t("bot.group.add.privacyBlocked", { number: targetJid.split("@")[0] }),
+          { mentions: [targetJid] },
+        );
 
         confirmationSessions.set(senderId, {
           command: "send_invite",
@@ -110,15 +111,17 @@ module.exports = {
           }
         }, 30000);
       } else {
-        await sock.sendMessage(groupId, {
-          text: t("bot.group.add.failedStatus", { status }),
-        });
+        await statusLine.finish(t("bot.group.add.failedStatus", { status }));
       }
     } catch (error) {
       logger.error({ err: error, command: "add" }, "Error in !add command");
-      await sock.sendMessage(groupId, {
-        text: t("bot.group.add.failed"),
-      });
+      const failed = t("bot.group.add.failed");
+      if (statusLine) await statusLine.finish(failed);
+      else {
+        await sock.sendMessage(groupId, {
+          text: failed,
+        });
+      }
     }
   },
 };

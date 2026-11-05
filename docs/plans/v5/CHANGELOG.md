@@ -96,3 +96,15 @@
   and #127 898193f. 04c (signed remote Terms, shipped off, BLOCKED on the owner's key) in #128;
   levix-ui endpoint in levix-ui #23 (draft); 04d React gateway and 04e EJS removal in their own
   PRs. Nothing in Phase 04 is merged (`PHASE-04-RESULTS.md` section 3).
+
+## Phase 05: message engine, Reply Router, commands, health (2026-11-05)
+
+- Started on the owner's request on 2026-11-05. Base is `main` `2682a09` (Phase 04e merged).
+  Branch `feat/v5-phase-05`. One pull request covers the planned slices 05a–05f.
+- Audit of the current tree is in `PHASE-05-RESULTS.md`. Permission levels for all 69 commands
+  are unchanged. `!group` now uses `evaluatePermissionLevel`. A bot admin who can already run
+  `!kick` can run `!group kick`. A private chat does not gain that door.
+- Q-06 stays open. The short `!status` stays `OWNER_ONLY` (recommendation (a)). `!status debug`
+  is hard-gated to the owner role.
+- The watermark hook exists and defaults off, so existing replies do not change until the
+  operator turns `message_watermark` on.

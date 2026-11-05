@@ -113,7 +113,10 @@ function withOutboundSavers(sock) {
     payload = withoutUnwantedLinkPreview(payload);
     // Put the hook last so callers cannot accidentally restore Baileys's unsafe
     // downloader. Explicit linkPreview objects/null are still handled by Baileys.
-    return original(jid, payload, { ...options, getUrlInfo });
+    // `levix` is a routing hint for the command proxy. It is not a Baileys field.
+    const wireOptions = { ...(options || {}), getUrlInfo };
+    delete wireOptions.levix;
+    return original(jid, payload, wireOptions);
   };
 
   return sock;

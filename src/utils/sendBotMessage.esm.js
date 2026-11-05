@@ -100,6 +100,8 @@ export async function sendBotMessage(sock, jid, content, options = {}) {
     const quotedMsg = quoted || replyTo;
     if (quotedMsg) opts.quoted = quotedMsg;
   }
+  // The command proxy reads this and strips it before Baileys sees the call.
+  if (options.levix) opts.levix = options.levix;
 
   // Link previews are opt-in (default off, see `link_previews_enabled`):
   // without an explicit `linkPreview`, Baileys fetches the page behind any URL

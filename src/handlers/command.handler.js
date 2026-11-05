@@ -11,8 +11,12 @@ const __dirname = dirname(__filename);
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
+const settings = require("../config/settings.cjs");
 const { localize, allLanguages, attachCommandDocs } = require("../utils/commandDocs.cjs");
 const { langForCommand, withLang, t } = require("../utils/i18n.cjs");
+const { parseCommandText, parseCommandTextV1 } = require("../messaging/parser.cjs");
+const { createMessage, renderMessage, stampWatermark } = require("../messaging/message.cjs");
+const { routeSend, canonicalJid } = require("../messaging/router.cjs");
 
 // Commands collection (keyed by both names and aliases)
 const commands = new Map();
@@ -66,50 +70,123 @@ const EDIT_IN_PLACE_EXCLUDE = new Set([
 //   * everything else: `sock.sendMessage(jid, content)` automatically adds
 //     `quoted: msg` so the reply threads under the command.
 // Every other method (groupMetadata, etc.) is forwarded untouched.
-function wrapSockWithReply(sock, originalMsg, editInPlace = false) {
+function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName = "") {
   const chatJid = originalMsg.key.remoteJid;
+  const source = canonicalJid(chatJid) || chatJid;
+  const allowed = new Set([source]);
   let editUsed = false;
+  let noticeSent = false;
 
   return new Proxy(sock, {
     get(target, prop, receiver) {
       if (prop === "sendMessage") {
         return async (jid, content, options) => {
-          // Try to edit the trigger message in place for the first eligible
-          // text reply. We can only edit messages we sent ourselves.
+          const opts = options ? { ...options } : {};
+          const levix = opts.levix || null;
+          delete opts.levix;
+
+          const requested = canonicalJid(jid) || source;
+          const protocol = Boolean(content && (content.edit || content.delete || content.react));
+          if (protocol) {
+            // An edit stays on a chat this command already sent to. It cannot
+            // open a new destination.
+            if (!allowed.has(requested)) return { key: null, refused: true };
+            return target.sendMessage.call(target, jid, content, opts);
+          }
+
+          const plan = routeSend({
+            sourceJid: chatJid,
+            requestedJid: jid,
+            senderJid: originalMsg.key.participant || originalMsg.key.remoteJid,
+            commandName,
+            category: levix?.category || "result",
+            sensitivity: levix?.sensitivity || "source",
+            terminal: levix?.terminal === true,
+          });
+
+          if (!plan.allow) {
+            if (!noticeSent) {
+              noticeSent = true;
+              const notice = renderMessage(
+                createMessage({
+                  messageKey: plan.noticeKey,
+                  category: "system",
+                  context: { sourceChat: chatJid, command: commandName },
+                  sensitivity: "operational",
+                  deliveryPolicy: { terminal: true },
+                }),
+              );
+              try {
+                await target.sendMessage.call(
+                  target,
+                  chatJid,
+                  { text: notice, linkPreview: null },
+                  { quoted: originalMsg },
+                );
+              } catch (error) {
+                logger.warn({ err: error?.message }, "[router] refusal notice failed");
+              }
+            }
+            return { key: null, refused: true };
+          }
+
+          allowed.add(plan.destination);
+          const outgoing = stampText(content, commandName, levix);
+          const sameChat = plan.destination === source;
+
+          // Edit the trigger only when the reply stays in this chat. A routed
+          // reply must not rewrite the group message it is leaving.
           const eligibleForEdit =
             editInPlace &&
+            sameChat &&
             !editUsed &&
             originalMsg.key.fromMe &&
-            jid === chatJid &&
-            content &&
-            typeof content === "object" &&
-            typeof content.text === "string" &&
-            !content.edit;
+            requested === source &&
+            outgoing &&
+            typeof outgoing === "object" &&
+            typeof outgoing.text === "string" &&
+            !outgoing.edit;
 
           if (eligibleForEdit) {
             editUsed = true;
             try {
-              return await target.sendMessage.call(target, jid, {
-                ...content,
+              return await target.sendMessage.call(target, chatJid, {
+                ...outgoing,
                 edit: originalMsg.key,
               });
             } catch {
-              // Editing failed (too old, not ours after all, …) — fall through
-              // to a normal quoted send so the user still gets a reply.
+              // Editing failed — fall through to a normal send.
             }
           }
 
-          const opts = options ? { ...options } : {};
-          if (opts.quoted === undefined) {
-            opts.quoted = originalMsg;
+          if (sameChat) {
+            if (opts.quoted === undefined) opts.quoted = originalMsg;
+          } else if ("quoted" in opts) {
+            delete opts.quoted;
           }
-          return target.sendMessage.call(target, jid, content, opts);
+          const sent = await target.sendMessage.call(target, plan.destination, outgoing, opts);
+          if (sent?.key && !sent.key.remoteJid) sent.key.remoteJid = plan.destination;
+          return sent;
         };
       }
       const value = Reflect.get(target, prop, receiver);
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
+}
+
+function stampText(content, commandName, levix) {
+  if (!content || typeof content !== "object" || typeof content.text !== "string") return content;
+  if (content.image || content.video || content.audio || content.document || content.sticker) {
+    return content;
+  }
+  const text = stampWatermark(content.text, {
+    commandName,
+    category: levix?.category || "result",
+    exact: levix?.exact === true,
+  });
+  if (text === content.text) return content;
+  return { ...content, text };
 }
 
 /**
@@ -218,6 +295,10 @@ export async function loadCommands() {
     }
   }
 
+  // Names are registered in directory order, so an alias of an earlier file
+  // can occupy a later command's name. Rebuild once names all exist: a real
+  // command keeps its name, and the conflicting alias is dropped.
+  rebuildCommandIndex();
   logger.info(
     `[Commands] Loaded ${commandList.size} commands (${commands.size} entries with aliases)`,
   );
@@ -280,26 +361,56 @@ export function getAliasIndex() {
 }
 
 // Handle command execution
+function parseBody(body) {
+  const prefix = runtimeConfig.getPrefix();
+  const useV1 = settings.get("command_parser") === "v1";
+  const parse = useV1 ? parseCommandTextV1 : parseCommandText;
+  return { prefix, useV1, parsed: parse(body, { prefix }) };
+}
+
 export async function handleCommand(sock, msg, body) {
   const isGroup = msg.key.remoteJid.endsWith("@g.us");
+  const { prefix, useV1, parsed } = parseBody(body);
+  if (parsed.kind !== "command") return false;
 
-  const prefix = runtimeConfig.getPrefix();
-  if (!body.startsWith(prefix)) return false;
-
-  const args = body.slice(prefix.length).trim().split(/\s+/);
-  const invokedName = args.shift().toLowerCase();
+  const args = parsed.args;
+  const invokedName = parsed.name;
   const command = commands.get(invokedName);
-  if (!command) return false;
+  if (!command) {
+    // v1 stayed silent, and a token that is not a command name never reaches
+    // here. v2 answers a real typo so the person gets an example.
+    if (useV1) return false;
+    const text = renderMessage(
+      createMessage({
+        messageKey: "bot.core.commandHandler.unknown",
+        category: "error",
+        parameters: { name: invokedName, prefix },
+        context: { sourceChat: msg.key.remoteJid },
+        sensitivity: "operational",
+        deliveryPolicy: { terminal: true },
+      }),
+    );
+    await sendBotMessage(sock, msg.key.remoteJid, { text }, { replyTo: msg });
+    return true;
+  }
 
   // Everything this command sends goes out in one language: the bot's, or in
   // "auto" the one this message is written in — judged on the arguments, not
   // on the command's own keywords (see utils/i18n.cjs).
   const aliases = runtimeConfig.getAliases(command.name, command.__declaredAliases || []);
   const lang = langForCommand(command, args, aliases);
-  return withLang(lang, () => runCommand(sock, msg, body, { command, args, invokedName, isGroup }));
+  return withLang(lang, () =>
+    runCommand(sock, msg, body, {
+      command,
+      args,
+      invokedName,
+      isGroup,
+      rawRemainder: parsed.rawRemainder,
+    }),
+  );
 }
 
-async function runCommand(sock, msg, body, { command, args, invokedName, isGroup }) {
+async function runCommand(sock, msg, body, { command, args, invokedName, isGroup, rawRemainder }) {
   // Turned off from the dashboard. Answered rather than ignored so the user
   // knows the command exists and isn't broken.
   if (runtimeConfig.isDisabled(command.name)) {
@@ -394,6 +505,7 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
       canonicalName: command.name,
       isAlias: invokedName !== command.name,
       groupMetadata,
+      rawRemainder: rawRemainder || "",
     };
 
     // Wrap the socket so legacy commands that still call sock.sendMessage
@@ -403,7 +515,7 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
     // Action/confirmation commands additionally edit the trigger message in
     // place instead of posting a second message (see EDIT_IN_PLACE_EXCLUDE).
     const editInPlace = !EDIT_IN_PLACE_EXCLUDE.has(command.name);
-    const proxiedSock = wrapSockWithReply(sock, msg, editInPlace);
+    const proxiedSock = wrapSockWithReply(sock, msg, editInPlace, command.name);
     await command.execute(proxiedSock, msg, args, body, groupMetadata, ctx);
     return true;
   } catch (error) {
