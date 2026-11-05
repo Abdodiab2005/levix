@@ -1,0 +1,194 @@
+# Build a signed, Play-ready beta AAB without tagging, publishing, or deploying.
+# Manual only: version inputs change the runner checkout, never the repository.
+# The workflow must first exist on main to be available under Actions > Run workflow.
+name: Android Beta AAB (build only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "Beta versionName, e.g. 5.0.0-beta.1"
+        required: true
+        type: string
+        default: "5.0.0-beta.1"
+      version_code:
+        description: "Next unused Play Console versionCode (greater than every track)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: levix-android-beta-aab
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build signed AAB (no publication)
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      BETA_VERSION_NAME: ${{ inputs.version_name }}
+      BETA_VERSION_CODE: ${{ inputs.version_code }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Cache Android build cache and pinned Node runtime
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/levix-android
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: android-${{ runner.os }}-v2-${{ hashFiles('android/scripts/fetch-node-android.sh', 'android/scripts/build-ffmpeg-android.sh', 'android/scripts/termux-packages.lock', 'android/scripts/node-runtime.lock', 'android/scripts/node-runtime-archive.py', 'android/gradle/wrapper/gradle-wrapper.properties', 'package-lock.json', 'frontend/package-lock.json') }}
+          restore-keys: |
+            android-${{ runner.os }}-v2-
+
+      - name: Validate inputs and set beta version in runner only
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$BETA_VERSION_NAME" =~ ^5\.0\.0-beta\.[1-9][0-9]*$ ]]; then
+            echo "::error::version_name must be 5.0.0-beta.N (N >= 1)"
+            exit 1
+          fi
+          if [[ ! "$BETA_VERSION_CODE" =~ ^[1-9][0-9]*$ ]] ||
+             [[ "${#BETA_VERSION_CODE}" -gt 10 ]] ||
+             (( BETA_VERSION_CODE <= 69 || BETA_VERSION_CODE > 2100000000 )); then
+            echo "::error::version_code must be an integer from 70 to 2100000000. Check the highest code in Play Console first."
+            exit 1
+          fi
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const name = process.env.BETA_VERSION_NAME;
+          const code = process.env.BETA_VERSION_CODE;
+          for (const path of ['package.json', 'package-lock.json']) {
+            const data = JSON.parse(fs.readFileSync(path, 'utf8'));
+            data.version = name;
+            if (path.endsWith('package-lock.json')) {
+              if (data.packages?.['']?.name !== 'levix-bot') throw new Error('unexpected lockfile shape');
+              data.packages[''].version = name;
+            }
+            fs.writeFileSync(path, JSON.stringify(data, null, 2) + '\n');
+          }
+          const file = 'android/app/build.gradle.kts';
+          let gradle = fs.readFileSync(file, 'utf8');
+          const rules = [
+            [/^(\s*versionCode\s*=\s*)\d+(?=\s*$)/gm, '$1' + code],
+            [/^(\s*versionName\s*=\s*)"[^"]+"(?=\s*$)/gm, '$1"' + name + '"'],
+          ];
+          for (const [pattern, replacement] of rules) {
+            const matches = [...gradle.matchAll(pattern)];
+            if (matches.length !== 1) throw new Error('expected exactly one Android version field');
+            gradle = gradle.replace(pattern, replacement);
+          }
+          fs.writeFileSync(file, gradle);
+          console.log('Runner-only build identity: ' + name + ' (versionCode ' + code + ')');
+          NODE
+          git diff --stat
+
+      - name: Install dependencies and run source checks
+        run: |
+          npm ci
+          npm --prefix frontend ci
+          npm run i18n:check
+          npm run lint
+          npm test
+
+      - name: Set up Android SDK 36 and pinned NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(command -v sdkmanager)"
+          fi
+          NDK_VERSION="$(sed -n 's/^NDK_VERSION="\(.*\)"$/\1/p' android/scripts/build-ffmpeg-android.sh)"
+          PACKAGES=()
+          [ -d "$ANDROID_HOME/platforms/android-36" ] || PACKAGES+=("platforms;android-36")
+          [ -f "$ANDROID_HOME/ndk/$NDK_VERSION/source.properties" ] || PACKAGES+=("ndk;$NDK_VERSION")
+          if [ "${#PACKAGES[@]}" -gt 0 ]; then
+            yes | "$SDKMANAGER" --licenses >/dev/null || true
+            "$SDKMANAGER" "${PACKAGES[@]}" >/dev/null
+          fi
+          command -v pkg-config >/dev/null || sudo apt-get install -y pkg-config
+
+      - name: Prepare Android runtimes for both ABIs
+        run: bash android/scripts/fetch-node-android.sh
+
+      - name: Load signing key from GitHub Secrets
+        shell: bash
+        env:
+          LEVIX_KEYSTORE_BASE64: ${{ secrets.LEVIX_KEYSTORE_BASE64 }}
+          LEVIX_KEYSTORE_PASSWORD: ${{ secrets.LEVIX_KEYSTORE_PASSWORD }}
+          LEVIX_KEY_ALIAS: ${{ secrets.LEVIX_KEY_ALIAS }}
+          LEVIX_KEY_PASSWORD: ${{ secrets.LEVIX_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for variable in LEVIX_KEYSTORE_BASE64 LEVIX_KEYSTORE_PASSWORD LEVIX_KEY_ALIAS LEVIX_KEY_PASSWORD; do
+            if [ -z "${!variable:-}" ]; then
+              echo "::error::$variable is missing. Configure the existing Play upload key in Actions secrets."
+              exit 1
+            fi
+          done
+          umask 077
+          printf '%s' "$LEVIX_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/levix-upload.jks"
+          test -s "$RUNNER_TEMP/levix-upload.jks"
+          echo "LEVIX_KEYSTORE_FILE=$RUNNER_TEMP/levix-upload.jks" >> "$GITHUB_ENV"
+
+      - name: Test Android and build signed release AAB
+        working-directory: android
+        env:
+          LEVIX_KEYSTORE_PASSWORD: ${{ secrets.LEVIX_KEYSTORE_PASSWORD }}
+          LEVIX_KEY_ALIAS: ${{ secrets.LEVIX_KEY_ALIAS }}
+          LEVIX_KEY_PASSWORD: ${{ secrets.LEVIX_KEY_PASSWORD }}
+        run: ./gradlew :app:testDebugUnitTest :app:stageLevixBundle --stacktrace
+
+      - name: Verify and stage Play bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAB=android/app/build/outputs/bundle/release/levix-android.aab
+          test -s "$AAB"
+          unzip -tq "$AAB" >/dev/null
+          keytool -printcert -jarfile "$AAB" > "$RUNNER_TEMP/levix-upload-cert.txt"
+          cp "$AAB" levix-android.aab
+          HASH="$(sha256sum levix-android.aab | cut -d ' ' -f 1)"
+          {
+            echo "## Signed beta AAB — build only"
+            echo
+            echo "- Version: \`$BETA_VERSION_NAME\`"
+            echo "- versionCode: \`$BETA_VERSION_CODE\`"
+            echo "- Source commit: \`${GITHUB_SHA}\`"
+            echo "- SHA-256: \`$HASH\`"
+            echo "- **No upload to Google Play, no GitHub Release, no deployment**"
+            echo
+            echo "Compare the upload certificate SHA-256 with Play Console → App signing:"
+            grep -m 1 "SHA256:" "$RUNNER_TEMP/levix-upload-cert.txt" || true
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Downloadable signed AAB artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: levix-beta-${{ inputs.version_name }}-code-${{ inputs.version_code }}
+          path: levix-android.aab
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove decoded upload key
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/levix-upload.jks" "$RUNNER_TEMP/levix-upload-cert.txt"
