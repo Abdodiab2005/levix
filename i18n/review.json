@@ -49,9 +49,9 @@
   },
   "pt-BR/bot/core": {
     "status": "draft",
-    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
+    "by": "ChatGPT targeted machine review of Phase 05 status.short and message.routeFailed only; other Phase 05 strings remain draft; not native-speaker certified",
     "date": "2026-11-05",
-    "sha256": "3ffa76c5e49df9aaae5a4659c068af7965ce7460f3288544cc783ff243b4f959"
+    "sha256": "367cc8c27a6478660b74c46590fe45f57e87ba8e39d69e7281e5a4fb0f983560"
   },
   "pt-BR/bot/group": {
     "status": "draft",
@@ -109,9 +109,9 @@
   },
   "es-419/bot/core": {
     "status": "draft",
-    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
+    "by": "ChatGPT targeted machine review of Phase 05 status.short and message.routeFailed only; other Phase 05 strings remain draft; not native-speaker certified",
     "date": "2026-11-05",
-    "sha256": "b5d1db8484c442f8500e462a3c4f43640f0efe55f7a9ca70a6f415319faa053b"
+    "sha256": "b70b6bc6d82578c729d69235fa2c95fba178131ba234374d35b9ddd64ccab5c5"
   },
   "es-419/bot/group": {
     "status": "draft",

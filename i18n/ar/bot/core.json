@@ -51,7 +51,7 @@
   "socket.remoteMediaFailed": "تعذّر تحميل الوسائط بأمان. استخدم رابط HTTPS عامًا ضمن حدود الوسائط البعيدة، أو أرسل ملفًا محليًا.",
   "passwordReset.codeMessage": "🔐 *{brandName} — كود إعادة تعيين كلمة السر: {code}*\n\nادخل الكود في لوحة التحكم خلال ١٠ دقائق. إذا لم تطلب هذا الرمز، فتجاهل الرسالة — لا يمكن لأحد سواك استخدامه.",
   "setprefix.current": "البادئة الحالية للبوت: `{prefix}`\n\nلتغيير البادئة، استخدم:\n`{prefix}setprefix <البادئة_الجديدة>`\n\nمثال: `{prefix}setprefix /`\n\n⚠️ ملاحظة: يمكن للمالك فقط تغيير البادئة.",
-  "status.short": "*حالة Levix*\n{running}\n{connection}\nمدة التشغيل: {uptime}\nالنظام: {osFamily}",
+  "status.short": "مدة التشغيل: {uptime} | النظام: {osFamily}",
   "status.running": "يعمل",
   "status.connectionOn": "واتساب: متصل",
   "status.connectionOff": "واتساب: غير متصل",
@@ -76,5 +76,5 @@
   "status.state.unknown": "غير معروف",
   "commandHandler.unknown": "أمر غير معروف `{name}`.\nمثال: `{prefix}help`",
   "message.watermark": "مدعوم من Levix",
-  "message.routeFailed": "بقي الرد في هذه المحادثة لأن المحادثة الأخرى غير متاحة."
+  "message.routeFailed": "تعذّر إرسال الرد إلى المحادثة المحددة."
 }

@@ -193,13 +193,7 @@ module.exports = {
         return await send(debugText(report));
       }
 
-      const state = sessionState();
-      const connected = state?.connected === true && state?.state === "connected";
       const reply = t("bot.core.status.short", {
-        running: t("bot.core.status.running"),
-        connection: connected
-          ? t("bot.core.status.connectionOn")
-          : t("bot.core.status.connectionOff"),
         uptime: formatUptime(process.uptime()),
         osFamily: osFamily(),
       });

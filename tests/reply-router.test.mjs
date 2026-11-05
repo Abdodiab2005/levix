@@ -60,6 +60,13 @@ section("leaving the chat");
   });
   equal("same-chat mode refuses another jid", leak.allow, false);
   equal("no destination", leak.destination, null);
+  const { createMessage, renderMessage } = require("./src/messaging/message.cjs");
+  const refusalText = renderMessage(createMessage({
+    messageKey: leak.noticeKey,
+    category: "system",
+  }));
+  equal("refusal notice does not claim the reply was delivered", refusalText,
+    "The reply couldn't be delivered to the selected chat.");
 
   const owner = planDelivery({
     sourceJid: GROUP,
