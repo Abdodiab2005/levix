@@ -100,7 +100,7 @@
 ## Phase 05: message engine, Reply Router, commands, health (2026-11-05)
 
 - Started on the owner's request on 2026-11-05. Base is `main` `2682a09` (Phase 04e merged).
-  Branch `feat/v5-phase-05`. One pull request covers the planned slices 05a–05f.
+  Branch `feat/v5-phase-05`. Pull request: https://github.com/Abdodiab2005/levix/pull/132 (slices 05a–05f).
 - Audit of the current tree is in `PHASE-05-RESULTS.md`. Permission levels for all 69 commands
   are unchanged. `!group` now uses `evaluatePermissionLevel`. A bot admin who can already run
   `!kick` can run `!group kick`. A private chat does not gain that door.

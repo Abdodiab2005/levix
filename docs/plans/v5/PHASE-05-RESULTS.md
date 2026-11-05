@@ -1,7 +1,7 @@
 # Phase 05 results
 
 Date: 2026-11-05. Base: `main` `2682a09` (Phase 04e). Branch: `feat/v5-phase-05`.
-Status: `IMPLEMENTED`, not merged. One pull request covers the planned slices 05a–05f.
+Status: `IMPLEMENTED`, not merged. Pull request: https://github.com/Abdodiab2005/levix/pull/132 (slices 05a–05f).
 
 ## 1. Audit of the current tree
 
