@@ -163,8 +163,8 @@ android {
         applicationId = "net.leviro.levix"
         minSdk = 29
         targetSdk = 36
-        versionCode = 69
-        versionName = "4.9.2"
+        versionCode = 71
+        versionName = "5.0.0-beta.1"
     }
 
     // App languages ship whole. enableSplit = false keeps the translations in
