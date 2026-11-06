@@ -130,6 +130,12 @@ When importing:
 
 ## Commands to Run
 
+### Local tooling and downloads
+
+Use installed local tools and existing local caches. Ask the owner before
+downloading dependencies, tools, runtimes, artifacts, models or other files.
+Do not let a build or validation command download them implicitly.
+
 ### Development
 ```bash
 npm run build:frontend # compile React dashboard to public/dashboard

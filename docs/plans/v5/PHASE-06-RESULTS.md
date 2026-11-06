@@ -231,12 +231,14 @@ or arbitrary file is indexed. No consent record, pairing, vault key or backup
 format changes. The bundled Privacy Notice already covers configured AI context,
 media, speech services and provider costs and was not changed in this phase.
 
-The new `pt-BR`/`es-419` text is marked **draft**, with targeted Codex machine
-review recorded and ChatGPT approval under Q-19 pending. The gateway digest
-notices are pre-existing and were not re-labelled as newly reviewed.
+The new `pt-BR`/`es-419` text is marked **draft**, with targeted ChatGPT Q-19 approval now recorded for the new Phase 06 strings
+only (owner confirmed 2026-11-06). Older or otherwise unreviewed strings remain
+draft. There is no blanket locale or native-speaker certification. Gateway
+digests were refreshed without changing their existing draft review scope.
 
-Before merge: owner review of #134, ChatGPT approval of the draft text under
-Q-19 and review of CI on the official Node patch/platform matrix. Android and
+Before merge: owner review of #134 and review of final-head CI on the official
+Node patch/platform matrix. The targeted Phase 06 Q-19 review is approved;
+remaining draft scope is retained in `i18n/review.json`. Android and
 live-provider behavior remain manual QA limits; a device pairing needs the
 owner's authorization. Before a later Play release, reconcile the updated
 Data safety mapping in Play Console. No Play form was changed here.
@@ -245,3 +247,87 @@ Rollback is a revert of the Phase 06 commits; no stored-data migration needs
 undoing. Keep caller authorization and the Phase 05 router. No merge, tag,
 release, Play upload or push to `main` was performed. Phase 07 has not started
 and waits for the owner's approval.
+
+## Final review plan (2026-11-06, before corrective application edits)
+
+Trace media deadlines through the CommonJS/ESM send helper, command reply
+proxy and socket media preparation. Reproduce cancellation while generating,
+waiting for cooldown/typing, and preparing the final send with deterministic
+mocks; also cover refusal, rejected sends, non-cancellable providers and repeated
+requests. Propagate an optional AbortSignal to the final socket boundary and
+remove unsafe raw-send retries if confirmed. Ordinary commands without a signal
+retain their successful send behavior. An already initiated send cannot be
+retracted by this cancellation contract.
+
+Files expected: `src/services/aiTools.cjs`, `src/utils/sendBotMessage.cjs`,
+`src/utils/sendBotMessage.esm.js`, `src/handlers/command.handler.js`,
+`src/core/socket.js`, focused regression tests, `i18n/review.json`, this report
+and tool-contract documentation. No migration, permission widening, new provider,
+website retrieval, media archive or live endpoint test. Read-only delegates audit
+remaining media/auth and documentation boundaries; the orchestrator verifies
+findings and runs all gates. Rollback is reverting the corrective commit with
+its regression tests, or reverting all Phase 06 commits for a full rollback.
+
+The owner confirms ChatGPT completed the targeted Q-19 semantic review of new
+Phase 06 `pt-BR` and `es-419` text in `bot/ai.json` and `commands.json`, with no
+material errors. Record that scope while retaining draft status for older or
+otherwise unreviewed strings; no blanket or native-speaker certification.
+
+### Confirmed final-review findings and corrections
+
+1. **Late media send after expiry (confirmed).** The original media code checked
+   cancellation before calling the send helper, which then waited for cooldown
+   without the signal. Socket media/thumbnail preparation added another async
+   gap. Propagate the signal from `speak`/`generate_image`, make cooldown/typing
+   waits abortable, preserve it through the reply proxy (including refusal
+   notices and edits), and check it immediately before Baileys is invoked.
+   The socket consumes the signal rather than passing it to Baileys. No await
+   separates the final cancellation check and the send invocation.
+2. **Unsafe CommonJS retry (confirmed).** Both CommonJS helpers retried an
+   import/send error as a raw send, dropping safety metadata and potentially
+   duplicating delivery. Errors now propagate, including failed ESM imports;
+   refused results remain refusals. Ordinary successful calls without signals
+   keep their quoting, typing, cooldown and routing behavior.
+3. **Repeated tool IDs during provider switch (confirmed).** Canonical Gemini
+   history has id-less tool calls. Name-to-single-ID maps paired repeated calls
+   to the last ID when replayed to OpenAI/Anthropic. Per-name pending ID queues
+   now consume results in order, or by exact explicit ID for reordered results.
+   Tests cover repeated docs calls, other interleaved tools, multiple rounds,
+   and Gemini/explicit/mixed IDs on both adapters.
+4. **Open-section integration coverage (gap closed).** The three provider-wire
+   fixtures now execute `open_levix_doc_section` after search and verify bounded
+   untrusted text, the actual requested source ID and its backend citation.
+
+The original cancellation regression suite failed 14 checks before application
+changes (21 passed); it now passes 44 checks. This uses fake timers, deferred
+providers and socket preparation, and fake Baileys only. It covers generation
+expiry, cooldown/typing expiry, cancellation immediately before a send,
+providers ignoring cancellation, busy/repeated calls, refusal/rejection, import
+failure, an edit fallback, and the complete dispatcher/socket path. A send
+already initiated is not necessarily retractable; cancellation only prohibits
+initiating a new WhatsApp message after cancellation. Non-cancellable provider
+or thumbnail work can finish locally, while the sender remains busy until
+that work settles. No live account or paid provider was invoked.
+
+Read-only agy/Gemini independently identified the cancellation/fallback gaps;
+OpenCode GLM free identified the repeated-ID defect and the open-section test
+gap. The orchestrator reproduced, reviewed and corrected them and runs all
+checks. Grok's read-only audit timed out without a substantive final review;
+no clean Grok review is claimed. No delegate made application edits or ran gates.
+The orchestrator also audited real-sender permissions, backing-command disabled
+checks/overrides, source-sensitive routing, selected-provider failure behavior,
+image/audio validation, quotas, temp-file cleanup, invoking/quoted audio binding,
+argument filtering, prompt/data separation and bundled-docs bounds/integrity.
+No additional confirmed security defect or default permission widening was found.
+
+Q-19 approval covers `aiTools.searchDocs`, `aiTools.openDoc` in `bot/ai.json`,
+and the updated `gemini.description` in `commands.json`, for `pt-BR` and
+`es-419` only. The owner reports ChatGPT found no material semantic errors.
+Current file digests are recorded; older/unreviewed content stays draft. Q-18
+is resolved with public repository documentation only, with no website retrieval.
+
+Final gates will be recorded below against the corrective implementation commit
+and rerun on the final documentation commit. Local tools/cache only applies to
+all new validation: npm runs offline, an external-network test guard is
+preloaded, and the installed `/usr/bin/ffmpeg` supplies the tarball install's
+FFmpeg binary. No new tool, dependency, runtime, artifact or model is downloaded.

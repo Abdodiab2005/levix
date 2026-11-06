@@ -20,6 +20,9 @@ const { TOOLS } = require("./src/services/aiTools.cjs");
 const { resolveCaller } = require("./src/services/aiToolAuth.cjs");
 const { runAgent, formatSources } = require("./src/services/aiAgent.cjs");
 const version = require("./package.json").version;
+const sectionId = require("./src/services/aiDocs.cjs").searchDocs({ query: "backup restore" })
+  .results[0].id;
+const openCall = { name: "open_levix_doc_section", args: { id: sectionId } };
 const member = "201000000004@s.whatsapp.net";
 const group = "120363000000000001@g.us";
 const sent = [];
@@ -85,17 +88,24 @@ try {
     const path = provider === "openai" ? OPENAI_PATH : ANTHROPIC_PATH;
     const fake =
       provider === "gemini"
-        ? await startGenaiServer([geminiCall(searchCall), geminiCall(roleCall), geminiText])
+        ? await startGenaiServer([
+            geminiCall(searchCall),
+            geminiCall(openCall),
+            geminiCall(roleCall),
+            geminiText,
+          ])
         : await startProviderServer({
             [path]:
               provider === "openai"
                 ? [
                     openaiToolCall([searchCall]),
+                    openaiToolCall([openCall]),
                     openaiToolCall([roleCall]),
                     openaiText("See the bundled backup guide."),
                   ]
                 : [
                     anthropicToolCall([searchCall]),
+                    anthropicToolCall([openCall]),
                     anthropicToolCall([roleCall]),
                     anthropicText("See the bundled backup guide."),
                   ],
@@ -163,6 +173,18 @@ try {
       ok(
         "a privileged call following the injected reference is refused",
         responses.some((item) => item.name === "grant_role" && item.response?.denied === true),
+      );
+      const opened = responses.find((item) => item.name === "open_levix_doc_section")?.response;
+      ok(
+        "opened section stays bounded untrusted tool data",
+        opened?.untrustedData === true && opened.text.length <= 4000,
+      );
+      equal("opened section is the actual requested public source", opened?.id, sectionId);
+      ok(
+        "opened section citation reaches the answer",
+        result.sources.some(
+          (source) => source.id === sectionId && source.citation === opened?.citation,
+        ),
       );
       ok("the reference did not grant the reader a role", !(await permissions.isOwnerJid(member)));
       equal("documentation did not send to any chat", sent.length, 0);

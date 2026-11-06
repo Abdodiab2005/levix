@@ -37,7 +37,13 @@ Model-initiated media shares a limit of three attempts per sender per minute
 and one in-flight operation per sender. Audio and image bytes are capped at
 8 MiB. The deadline follows `ai_tool_timeout_ms`, with a 120-second ceiling;
 provider requests and FFmpeg also have their own deadlines. A timed-out
-non-cancellable operation stays busy until it finishes and cannot send later.
+non-cancellable operation stays busy until it finishes. Cancellation propagates
+through cooldown/typing waits, the command reply proxy and socket media/thumbnail
+preparation, with a final check immediately before initiating the WhatsApp send.
+An expired/cancelled operation cannot initiate a new message. A send already
+initiated cannot necessarily be retracted or cancelled by this contract. The
+CommonJS helper propagates import/send errors without a raw-send retry; callers
+without an AbortSignal retain ordinary successful delivery behavior.
 The reply router still checks delivery; refusal is an error, never success or
 a fallback to a different group. Shared explicit STT/TTS paths also enforce
 their byte/text limits. General AI media downloads are capped at 64 MiB.

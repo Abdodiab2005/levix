@@ -9,7 +9,7 @@
     "status": "draft",
     "by": "ChatGPT targeted machine review (Q-19), including QR retry strings; not native-speaker certified; three Android recovery keys added on 2026-11-04 are not reviewed",
     "date": "2026-11-02",
-    "sha256": "e2189af0dceb1a0eadc3655e245730231903cfcd4b13164b0d2389fbb89b3e9d"
+    "sha256": "4fa1d3ba480fc748e6a23584f8ce2bd571fce3d18a4e938585899984e40cfd57"
   },
   "es-419/dashboard": {
     "status": "draft",
@@ -21,7 +21,7 @@
     "status": "draft",
     "by": "ChatGPT targeted machine review (Q-19), including QR retry strings; not native-speaker certified; three Android recovery keys added on 2026-11-04 are not reviewed",
     "date": "2026-11-02",
-    "sha256": "c24b725238e74f640c016408de3fffd5c51e22c97982ddfeed4c479b73f904c2"
+    "sha256": "2e9f4a33979fecaca64db521a747b85c884547eadb159ca7e0b6a0220ddd081d"
   },
   "pt-BR/android": {
     "status": "reviewed",
@@ -37,13 +37,13 @@
   },
   "pt-BR/commands": {
     "status": "draft",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 06 help/media text: targeted OpenAI Codex machine review, pending ChatGPT approval under Q-19; not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; ChatGPT targeted Q-19 semantic review approved the new Phase 06 help/media strings only (owner confirmed 2026-11-06), no material translation errors; older or otherwise unreviewed strings remain draft; not blanket locale approval or native-speaker certification",
     "date": "2026-11-06",
     "sha256": "cf993d6acbce384b4f733eaf132fa0ae375d7fe48d41780e0dc9c9a1713ac39e"
   },
   "pt-BR/bot/ai": {
     "status": "draft",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 06 help/media text: targeted OpenAI Codex machine review, pending ChatGPT approval under Q-19; not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; ChatGPT targeted Q-19 semantic review approved the new Phase 06 help/media strings only (owner confirmed 2026-11-06), no material translation errors; older or otherwise unreviewed strings remain draft; not blanket locale approval or native-speaker certification",
     "date": "2026-11-06",
     "sha256": "e9194207b33a0a0f2ce2b9b676e76f20093b78a87d4bfb09f569191cc0152424"
   },
@@ -97,13 +97,13 @@
   },
   "es-419/commands": {
     "status": "draft",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 06 help/media text: targeted OpenAI Codex machine review, pending ChatGPT approval under Q-19; not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; ChatGPT targeted Q-19 semantic review approved the new Phase 06 help/media strings only (owner confirmed 2026-11-06), no material translation errors; older or otherwise unreviewed strings remain draft; not blanket locale approval or native-speaker certification",
     "date": "2026-11-06",
     "sha256": "cd6b605812f7eb03bb9f742f8fa03845dc5f58215629ff8257bb2e9ce6ad54eb"
   },
   "es-419/bot/ai": {
     "status": "draft",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 06 help/media text: targeted OpenAI Codex machine review, pending ChatGPT approval under Q-19; not native-speaker certified",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; ChatGPT targeted Q-19 semantic review approved the new Phase 06 help/media strings only (owner confirmed 2026-11-06), no material translation errors; older or otherwise unreviewed strings remain draft; not blanket locale approval or native-speaker certification",
     "date": "2026-11-06",
     "sha256": "f5699c57fa2e8b02b9e07a85b2ec46fdc4f16dc786ff834c6f5a29b98372c47d"
   },

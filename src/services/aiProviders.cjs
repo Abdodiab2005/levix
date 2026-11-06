@@ -344,6 +344,21 @@ function safeJsonArgs(raw) {
   }
 }
 
+function rememberToolCall(callIds, call, id) {
+  const pending = callIds.get(call.name) || [];
+  pending.push(id);
+  callIds.set(call.name, pending);
+}
+
+function toolResponseId(callIds, response, fallback) {
+  const pending = callIds.get(response.name);
+  // Gemini results have no id and follow call order. Other providers may
+  // return explicit ids out of order; consume that exact id from the queue.
+  const index = response.id ? (pending?.indexOf(response.id) ?? -1) : 0;
+  const matched = index >= 0 ? pending?.splice(index, 1)[0] : undefined;
+  return response.id || matched || fallback;
+}
+
 /**
  * Canonical -> chat-completions.
  *
@@ -368,7 +383,7 @@ function historyToOpenAI(history) {
     if (calls.length) {
       const toolCalls = calls.map((call, i) => {
         const id = call.id || `call_${turnIndex}_${i}`;
-        if (call.name) callIds.set(call.name, id);
+        rememberToolCall(callIds, call, id);
         return {
           id,
           type: "function",
@@ -410,7 +425,7 @@ function historyToOpenAI(history) {
       for (const response of responses) {
         messages.push({
           role: "tool",
-          tool_call_id: response.id || callIds.get(response.name) || `call_${turnIndex}`,
+          tool_call_id: toolResponseId(callIds, response, `call_${turnIndex}`),
           content: JSON.stringify(response.response ?? {}),
         });
       }
@@ -451,7 +466,7 @@ function historyToAnthropic(history) {
         blocks.push({ type: "text", text: part.text });
       } else if (part?.functionCall) {
         const id = part.functionCall.id || `call_${turnIndex}_${blocks.length}`;
-        if (part.functionCall.name) callIds.set(part.functionCall.name, id);
+        rememberToolCall(callIds, part.functionCall, id);
         blocks.push({
           type: "tool_use",
           id,
@@ -461,10 +476,7 @@ function historyToAnthropic(history) {
       } else if (part?.functionResponse) {
         blocks.push({
           type: "tool_result",
-          tool_use_id:
-            part.functionResponse.id ||
-            callIds.get(part.functionResponse.name) ||
-            `call_${turnIndex}`,
+          tool_use_id: toolResponseId(callIds, part.functionResponse, `call_${turnIndex}`),
           content: JSON.stringify(part.functionResponse.response ?? {}),
         });
       } else if (part?.fileData || part?.inlineData) {

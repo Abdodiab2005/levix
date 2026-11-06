@@ -987,7 +987,7 @@ const TOOLS = {
             sock,
             caller.chatId,
             { audio: voice.audio, mimetype: voice.mimetype, ptt: voice.ptt },
-            { typing: false, levix: { sensitivity: "source" } },
+            { typing: false, signal, levix: { sensitivity: "source" } },
           );
           if (sent?.refused) throw new Error("MEDIA_DELIVERY_REFUSED");
           return {
@@ -1030,7 +1030,7 @@ const TOOLS = {
             sock,
             caller.chatId,
             { image: result.image },
-            { typing: false, levix: { sensitivity: "source" } },
+            { typing: false, signal, levix: { sensitivity: "source" } },
           );
           if (sent?.refused) throw new Error("MEDIA_DELIVERY_REFUSED");
           return {
