@@ -19,6 +19,7 @@ const { evaluatePermissionLevel } = require("../utils/permissionLevel.cjs");
 
 /** Every caller this module has resolved from a real message. */
 const minted = new WeakSet();
+const audioByCaller = new WeakMap();
 
 /**
  * Roles some commands demand on top of their permission level, named the way
@@ -73,7 +74,16 @@ async function resolveCaller({ msg, sock, groupMetadata = null, text = "" }) {
     text: String(text || ""),
   });
   minted.add(caller);
+  const { unwrapMessage, quotedOf } = require("../utils/messageContent.cjs");
+  const own = unwrapMessage(msg.message);
+  const audio = own.audioMessage || unwrapMessage(quotedOf(msg)).audioMessage;
+  if (audio) audioByCaller.set(caller, structuredClone(audio));
   return caller;
+}
+
+function callerAudio(caller) {
+  const audio = isTrustedCaller(caller) && audioByCaller.get(caller);
+  return audio ? structuredClone(audio) : null;
 }
 
 /** True only for a caller resolveCaller() produced. */
@@ -94,6 +104,10 @@ function authorize(access, caller) {
     return { allowed: false, error: "this action needs a verified sender, and there is none" };
   }
 
+  if (runtimeConfig.isDisabled(access.command)) {
+    return { allowed: false, error: `the backing command !${access.command} is disabled` };
+  }
+
   const level = runtimeConfig.getPermission(access.command);
   const { hasPermission } = evaluatePermissionLevel(level, caller);
   if (!hasPermission) {
@@ -111,4 +125,4 @@ function authorize(access, caller) {
   return { allowed: true };
 }
 
-module.exports = { resolveCaller, isTrustedCaller, authorize, ROLES };
+module.exports = { resolveCaller, isTrustedCaller, callerAudio, authorize, ROLES };

@@ -88,7 +88,7 @@ section("speak tool");
   const original = tts._synthesizeVoice;
   tts._synthesizeVoice = async (text, lang) => {
     tts.lastCall = { text, lang };
-    return { audio: Buffer.from("ogg-bytes"), mimetype: "audio/ogg; codecs=opus", ptt: true };
+    return { audio: Buffer.from("OggS-test-voice-bytes"), mimetype: "audio/ogg; codecs=opus", ptt: true };
   };
   try {
     const result = await runTool("speak", { text: "مرحبا بيك", language: "ar" }, { caller, sock: sentSock });

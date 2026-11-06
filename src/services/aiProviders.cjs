@@ -31,6 +31,7 @@
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
 const { toolDeclarations, describeCall, runTool } = require("./aiTools.cjs");
+const { docSourcesFromTool } = require("./aiDocs.cjs");
 const { assertProviderBaseUrl, safeProviderFetch } = require("../utils/providerUrl.cjs");
 const { baseMimeType, downloadMedia } = require("../utils/geminiMedia.cjs");
 
@@ -564,12 +565,16 @@ async function callApi({ url, headers, body, label }) {
 
   let response;
   try {
-    response = await safeProviderFetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    }, { allowLoopback: true });
+    response = await safeProviderFetch(
+      url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      },
+      { allowLoopback: true },
+    );
   } catch (err) {
     throw new Error(
       err?.name === "AbortError"
@@ -711,6 +716,7 @@ async function runProviderAgent(
 
   const tools = useTools ? adapter.tools() : [];
   const toolCalls = [];
+  const sources = [];
   let steps = 0;
 
   const send = () => {
@@ -749,17 +755,16 @@ async function runProviderAgent(
     messages.push(parsed.assistantMessage);
 
     if (!parsed.calls.length) {
-      return finish({ text: parsed.text, canonical, toolCalls, steps });
+      return finish({ text: parsed.text, canonical, toolCalls, steps, sources });
     }
     if (steps >= stepBudget) {
       // Same contract as the Gemini loop: the budget answer, not a lie.
       return finish({
-        text:
-          parsed.text ||
-          t("bot.ai.aiProviders.toolBudget"),
+        text: parsed.text || t("bot.ai.aiProviders.toolBudget"),
         canonical,
         toolCalls,
         steps,
+        sources,
       });
     }
 
@@ -785,6 +790,7 @@ async function runProviderAgent(
       } catch (err) {
         toolResult = { error: err?.message || String(err) };
       }
+      sources.push(...docSourcesFromTool(call.name, toolResult));
       results.push(toolResult);
     }
 
@@ -808,14 +814,14 @@ async function runProviderAgent(
   }
 }
 
-function finish({ text, canonical, toolCalls, steps }) {
+function finish({ text, canonical, toolCalls, steps, sources }) {
   return {
     text,
     history: canonical,
     toolCalls,
     steps,
-    // Grounding is a Gemini feature; these providers never have sources.
-    sources: [],
+    // Public bundled doc citations are available independently of web grounding.
+    sources,
     searchOffered: false,
   };
 }

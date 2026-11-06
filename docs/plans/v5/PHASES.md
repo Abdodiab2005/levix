@@ -102,7 +102,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
-| Status | IMPLEMENTED 2026-11-05 on `feat/v5-phase-05` from `main` `2682a09`. PR #132 covers 05a–05f. Results in `PHASE-05-RESULTS.md`. Not merged. Q-06 stays open; the code follows recommendation (a). |
+| Status | MERGED in `3aee413` via PR #132. Results in `PHASE-05-RESULTS.md`. Q-06 stays open; the code follows recommendation (a). |
 | Goal | One `parse, authorize, execute, render, route, send` path; same-chat default; v2 parser; short `!status`; owner health check. |
 | Files | `src/handlers/command.handler.js`, `src/commands/group.cjs`, `src/middleware/permissions.middleware.js`, `src/utils/statusMessage.cjs`, `src/utils/sendBotMessage.esm.js`, new `src/messaging/` (templates, router), `src/commands/status.cjs`, new health module, `src/config/defaults.cjs` (Q-08), `src/config/runtime-config.cjs`, dashboard routing settings, the six commands in AUDIT C-07. |
 | Migrations | Additive routing settings. |
@@ -116,6 +116,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
+| Status | IN PROGRESS on `feat/v5-phase-06`, authorized 2026-11-06. Audit, plan and gates in `PHASE-06-RESULTS.md`. |
 | Goal | Answers about Levix cite bundled, versioned user docs; image, TTS and STT reachable from natural language through existing code paths. |
 | Files | `src/services/aiTools.cjs`, `src/services/aiToolAuth.cjs`, `src/services/aiAgent.cjs`, new docs index generator and generated index, `src/commands/gemini.cjs`, `src/commands/tts.cjs`, `src/commands/stt.cjs` (exports reused). |
 | Migrations | None. |

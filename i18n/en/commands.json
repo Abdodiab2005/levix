@@ -15,7 +15,7 @@
   "deleteschedule.usage": "deleteschedule <id>",
   "digit.description": "Converts numbers between Arabic-Indic (٠١٢) and English (012) digits.",
   "digit.usage": "digit [en|ar] [number/text]   (or reply to a message)",
-  "gemini.description": "AI assistant with tools (web search, reading links, long-term memory). Sub-commands: add/send/clear/show for context, generate for images, del/delall to clear the conversation.",
+  "gemini.description": "AI assistant with web search, memory and help from this version's bundled Levix docs. Ask to create an image, read text aloud or transcribe a quoted voice note. Examples: !ai How do I back up Levix?; !ai Read this aloud. Sub-commands: add/send/clear/show for context, generate for images, del/delall to clear the conversation.",
   "gemini.usage": "gemini <text>\ngemini add <text>\ngemini send\ngemini show\ngemini clear\ngenerate <image description>\ndel   (clear this chat's conversation)\ndelall   (clear every conversation)",
   "group.description": "Main command for all group management actions.",
   "group.usage": "group <sub-command> [arguments]",

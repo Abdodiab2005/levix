@@ -27,11 +27,9 @@ const { t, tr } = require("../utils/i18n.cjs");
 const aiIdentity = require("../config/ai-identity.cjs");
 const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
-const {
-  assertProviderBaseUrl,
-  assertProviderRequestUrl,
-} = require("../utils/providerUrl.cjs");
+const { assertProviderBaseUrl, assertProviderRequestUrl } = require("../utils/providerUrl.cjs");
 const { toolDeclarations, describeCall, runTool } = require("./aiTools.cjs");
+const { docSourcesFromTool } = require("./aiDocs.cjs");
 const {
   BaseAIProvider,
   registerProvider,
@@ -99,7 +97,14 @@ use your tools instead of guessing when something needs to be looked up.`;
 // A copy of ai-persona.md from before that split still carries them, and an
 // operator can type one back in: both are dropped here, so the rules are stated
 // once, from code, and no edit of the persona can weaken them.
-const SEALED_HEADINGS = new Set(["tools", "memory", "chats and groups", "boundaries"]);
+const SEALED_HEADINGS = new Set([
+  "tools",
+  "levix help",
+  "media",
+  "memory",
+  "chats and groups",
+  "boundaries",
+]);
 
 function stripSealedSections(text) {
   const kept = [];
@@ -423,7 +428,18 @@ const MAX_SOURCES = 5;
 function formatSources(sources) {
   const seen = new Set();
   const lines = [];
-  for (const source of sources || []) {
+  const ordered = [
+    ...(sources || []).filter((source) => source?.kind === "levix-doc"),
+    ...(sources || []).filter((source) => source?.kind !== "levix-doc"),
+  ];
+  for (const source of ordered) {
+    if (source?.kind === "levix-doc") {
+      if (seen.has(source.id)) continue;
+      seen.add(source.id);
+      lines.push(`• ${source.citation}`);
+      if (lines.length >= MAX_SOURCES) break;
+      continue;
+    }
     if (!source?.uri || seen.has(source.uri)) continue;
     seen.add(source.uri);
     const label = String(source.title || hostOf(source.uri) || "source").trim();
@@ -622,6 +638,7 @@ async function runGeminiTurn({
       } catch (err) {
         toolResult = { error: err?.message || String(err) };
       }
+      sources.push(...docSourcesFromTool(call.name, toolResult));
       responses.push({
         functionResponse: {
           // Echoed back when the model supplied one: with several calls in a

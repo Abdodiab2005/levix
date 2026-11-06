@@ -10,8 +10,8 @@
 //
 // The active provider itself (gemini / openai / anthropic) is a setting, and
 // the loop it dispatches to lives in services/aiAgent.cjs +
-// services/aiProviders.cjs. Media and !generate/!stt stay Gemini-only — the
-// other providers have no Files API to upload to.
+// services/aiProviders.cjs. Images use the dedicated Gemini model; ordinary
+// voice attachments are read lazily by the authorized transcription tool.
 //
 // What moved out:
 //   * the system prompt          -> config/ai-persona.md (editable, hot-reloaded)
@@ -37,6 +37,7 @@ const { createStatus } = require("../utils/statusMessage.cjs");
 const { formatMarkdownForWhatsApp } = require("../utils/markdownParser.cjs");
 const { isOwnerJidSync } = require("../utils/permissions.cjs");
 const { resolveCaller } = require("../services/aiToolAuth.cjs");
+const { generateImage } = require("../services/aiImage.cjs");
 const {
   runAgent,
   formatSources,
@@ -46,11 +47,8 @@ const {
 } = require("../services/aiAgent.cjs");
 const { getProvider } = require("../services/aiRouter.cjs");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
-const { unwrapMessage, visibleText } = require("../utils/messageContent.cjs");
-const {
-  assertProviderBaseUrl,
-  assertProviderRequestUrl,
-} = require("../utils/providerUrl.cjs");
+const { unwrapMessage, visibleText, quotedOf } = require("../utils/messageContent.cjs");
+const { assertProviderBaseUrl, assertProviderRequestUrl } = require("../utils/providerUrl.cjs");
 const { t } = require("../utils/i18n.cjs");
 
 // Per-(chat, sender) explicit context buffer for the multi-message workflow.
@@ -338,50 +336,38 @@ module.exports = {
       });
 
       try {
-        // Image generation needs a model that returns image bytes, which only
-        // the Gemini image models do — it stays on Gemini whatever the chat
-        // provider is.
-        if (!geminiClients().genAI) {
-          throw new Error(t("bot.ai.gemini.noGeminiKeyImages"));
-        }
-        await assertProviderRequestUrl(settings.get("gemini_base_url"), {
-          allowLoopback: true,
-        });
+        // Image generation stays on the dedicated Gemini image model, whatever
+        // ai_provider is. generateImage owns the request, the byte checks, and
+        // the fixed error codes.
         const fullPrompt =
           imagePrompt && quotedMsg
             ? `Prompt: ${imagePrompt} ,using quote: ${quotedMsg}`
             : imagePrompt
               ? `Prompt: ${imagePrompt}`
               : `Prompt: ${quotedMsg}`;
-        const response = await geminiClients().genAI.models.generateContent({
-          model: settings.get("gemini_image_model"),
-          contents: `Generate an image using this prompt: ${fullPrompt}`,
-        });
-
-        // The bytes come back as an inlineData part. (The previous code read
-        // `fileData.data`, which is not a field that exists on either SDK —
-        // this path could never have produced an image.)
-        const image = (response.candidates?.[0]?.content?.parts || []).find(
-          (part) => part?.inlineData?.data,
-        );
-        if (!image) {
-          throw new Error(t("bot.ai.gemini.noImageInAnswer"));
-        }
-        const imageBuffer = Buffer.from(image.inlineData.data, "base64");
-
+        const generated = await generateImage(fullPrompt);
         await status.remove();
         await sendBotMessage(
           sock,
           chatId,
           {
-            image: imageBuffer,
+            image: generated.image,
             caption: t("bot.ai.gemini.imageCaption", { prompt: imagePrompt }),
           },
           { replyTo: msg },
         );
       } catch (error) {
-        logger.error({ err: error }, `Error in !generate command`);
-        await status.fail(error, t("bot.ai.gemini.imageFailed"));
+        const code = error?.code || error?.message;
+        const shown =
+          code === "IMAGE_KEY_REQUIRED"
+            ? t("bot.ai.gemini.noGeminiKeyImages")
+            : code === "IMAGE_OUTPUT_INVALID"
+              ? t("bot.ai.gemini.noImageInAnswer")
+              : code === "IMAGE_QUOTA"
+                ? t("bot.ai.stt.quota")
+                : t("bot.ai.gemini.imageFailed");
+        logger.error({ code: code || "IMAGE_FAILED" }, "Error in !generate command");
+        await status.fail(new Error(shown), t("bot.ai.gemini.imageFailed"));
       }
       return;
     }
@@ -506,39 +492,20 @@ module.exports = {
           msg.message.imageMessage ? "image" : "video",
         );
         parts.push({
-          text:
-            prompt ||
-            mediaMessage.caption ||
-            t("bot.ai.gemini.mediaPrompt"),
+          text: prompt || mediaMessage.caption || t("bot.ai.gemini.mediaPrompt"),
         });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload media to Gemini.");
-        return sendBotError(
-          sock,
-          chatId,
-          error,
-          t("bot.ai.gemini.uploadMediaFailed"),
-          {
-            replyTo: msg,
-          },
-        );
+        return sendBotError(sock, chatId, error, t("bot.ai.gemini.uploadMediaFailed"), {
+          replyTo: msg,
+        });
       }
-    } else if (!parts.length && msg.message?.audioMessage) {
-      try {
-        await processIncomingMedia(parts, msg.message.audioMessage, "audio");
-        parts.push({ text: prompt || t("bot.ai.gemini.analyzeRecording") });
-      } catch (error) {
-        logger.error({ err: error }, "Failed to upload audio to Gemini.");
-        return sendBotError(
-          sock,
-          chatId,
-          error,
-          t("bot.ai.gemini.uploadRecordingFailed"),
-          {
-            replyTo: msg,
-          },
-        );
-      }
+    } else if (!parts.length && unwrapMessage(msg.message).audioMessage) {
+      // i18n-exception: attachment metadata sent only to the model, not a reply.
+      parts.push({
+        text: "[Audio attached to this turn; transcribe_audio can read it when requested.]",
+      });
+      parts.push({ text: prompt || t("bot.ai.gemini.analyzeRecording") });
     } else if (!parts.length && msg.message?.documentMessage) {
       try {
         await processIncomingMedia(parts, msg.message.documentMessage, "document");
@@ -551,15 +518,9 @@ module.exports = {
         });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload document to Gemini.");
-        return sendBotError(
-          sock,
-          chatId,
-          error,
-          t("bot.ai.gemini.uploadFileFailed"),
-          {
-            replyTo: msg,
-          },
-        );
+        return sendBotError(sock, chatId, error, t("bot.ai.gemini.uploadFileFailed"), {
+          replyTo: msg,
+        });
       }
     } else if (!parts.length && prompt) {
       parts.push({ text: prompt });
@@ -578,8 +539,7 @@ module.exports = {
 
     // Quoted message context. Skipped for `!gemini send` — those entries
     // captured their own quotes at `add` time.
-    const quotedMsg =
-      subCommand === "send" ? null : msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+    const quotedMsg = subCommand === "send" ? null : quotedOf(msg);
 
     if (quotedMsg) {
       let quotedMediaPart = null;
@@ -587,7 +547,12 @@ module.exports = {
       const quotedText = visibleText(quotedMsg);
       const mediaInQuote = pickMedia(quotedMsg);
 
-      if (mediaInQuote) {
+      if (mediaInQuote?.type === "audio") {
+        // i18n-exception: attachment metadata sent only to the model.
+        quotedMediaPart = {
+          text: "[Quoted audio is available to transcribe_audio when requested.]",
+        };
+      } else if (mediaInQuote) {
         try {
           const probeParts = [];
           await processIncomingMedia(probeParts, mediaInQuote.media, mediaInQuote.type);
@@ -597,15 +562,9 @@ module.exports = {
           // AND a second reply from a model that had never seen the photo
           // ("I can't see any image") — two messages, the second one wrong.
           logger.error({ err: mediaError }, "Failed to process quoted media");
-          return sendBotError(
-            sock,
-            chatId,
-            mediaError,
-            t("bot.ai.gemini.quotedProblem"),
-            {
-              replyTo: msg,
-            },
-          );
+          return sendBotError(sock, chatId, mediaError, t("bot.ai.gemini.quotedProblem"), {
+            replyTo: msg,
+          });
         }
       }
 
@@ -705,9 +664,7 @@ module.exports = {
         result = await attempt(cleaned);
       }
 
-      const text =
-        result.text?.trim() ||
-        t("bot.ai.gemini.noAnswer");
+      const text = result.text?.trim() || t("bot.ai.gemini.noAnswer");
       // Appended only when Gemini really grounded the answer on a search —
       // formatSources() returns "" for an answer the model gave from its own
       // knowledge, so there is never a Sources block with nothing behind it.
@@ -715,10 +672,7 @@ module.exports = {
       await status.finish(responseText);
     } catch (error) {
       logger.error({ err: error }, "Error in !gemini command");
-      await status.fail(
-        error,
-        t("bot.ai.gemini.chatFailed"),
-      );
+      await status.fail(error, t("bot.ai.gemini.chatFailed"));
     }
   },
 };
