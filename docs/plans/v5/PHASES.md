@@ -11,9 +11,9 @@ replaces them in its own plan before writing code.
                                                                           |
                                                           06 AI docs + media tools
                                                                           |
-                                                          07 reactions + auto reply
+                                                          07 Free reactions -> 07.5 stabilization (proposed)
                                                                           |
-                                                 08 Plus (needs 03, 05, 07) -> 09 UX -> 10 release audit
+                                                 08 Plus + Auto Reply (needs 03, 05, 07) -> 09 UX -> 10 release audit
 ```
 
 - Critical path: 01, 02, 03, 04, 05, 06, 07, 08, 09, 10. No phase is skipped or reordered without an
@@ -116,7 +116,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
-| Status | IMPLEMENTED, PENDING OWNER REVIEW on `feat/v5-phase-06` (corrections `d602671`), draft PR #134, 2026-11-06. 10002 automated checks pass; targeted Phase 06 Q-19 approved. Final-head CI and manual QA limits are tracked in the PR and `PHASE-06-RESULTS.md`. Not merged. Phase 07 awaits owner approval. |
+| Status | IMPLEMENTED, PENDING OWNER REVIEW on `feat/v5-phase-06` (corrections `d602671`), draft PR #134, 2026-11-06. 10002 automated checks pass; targeted Phase 06 Q-19 approved. Final-head CI and manual QA limits are tracked in the PR and `PHASE-06-RESULTS.md`. Merged as `f04ce30` through PR #134 on 2026-11-06; owner authorized Phase 07. |
 | Goal | Answers about Levix cite bundled, versioned user docs; image, TTS and STT reachable from natural language through existing code paths. |
 | Files | `src/services/aiTools.cjs`, `src/services/aiToolAuth.cjs`, `src/services/aiAgent.cjs`, new docs index generator and generated index, `src/commands/gemini.cjs`, `src/commands/tts.cjs`, `src/commands/stt.cjs` (exports reused). |
 | Migrations | None. |
@@ -126,28 +126,38 @@ replaces them in its own plan before writing code.
 | Rollback | Remove the tool declarations. |
 | PRs | 06a docs index and two doc tools. 06b media tools. |
 
-### Phase 07: reaction automation and AI Auto Reply
+### Phase 07: Free Core Reaction Automation
 
 | Item | Plan |
 | --- | --- |
-| Goal | One reaction rules engine and an opt-in prefix-free AI reply, both on the 05 router and the existing permission checks. |
-| Files | `src/core/events.js`, `src/handlers/message.handler.js`, new automation modules, `src/db/db.cjs` (new migration), `src/db/store.cjs`, dashboard API and a rule builder view. |
-| Migrations | New tables for rules, processed-event keys and a bounded message lookup; additive. |
-| Compliance | No archive of unrelated messages; visible notices; anti-spam limits. |
-| Tests | fake Baileys event streams; added, changed and removed reactions; redelivery; owner, admin and member reactors; missing media; restart; loops; rate and cost limits; four locales in the builder. |
-| Gate | Auto Reply off by default; one action per event; kill switch works. |
-| Rollback | Kill switches; tables stay unused. |
-| PRs | 07a event intake, idempotency, lookup. 07b engine and actions. 07c dashboard builder. 07d Auto Reply. |
+| Status | 07a IMPLEMENTED, PENDING OWNER REVIEW on `feat/v5-phase-07a`, merged Phase 06 baseline `f04ce30`. Audit, plan and evidence: `PHASE-07-RESULTS.md`. No 07b/07c implementation yet. |
+| Goal | One generic reaction engine, existing capabilities and Rule Builder in Free Core; no artificial tier rule cap or subscription check. |
+| Files | `src/automation/reactions.js`, core event/socket/session boundaries, additive DB/store, backup classification; later dashboard API and React builder. |
+| Migrations | Schema 11: disabled rule records and bounded hashed replay/transition metadata; original lookup stays in RAM, never a message table. |
+| Compliance | Capture only live originals in enabled-rule chats, bounded TTL/bytes; no unrelated archive; no action in 07a. |
+| Tests | fake Baileys streams; add/change/remove; replay/restart; exact actor/target; stale/deleted/hidden originals; alias, bounds and lifecycle tests. 07b adds role/action/routing/rate/cancel tests; 07c adds auth/CSRF/four-language UI tests. |
+| Gate | No action for unknown originals or duplicate events; rules off until explicitly enabled; existing commands and AI tools unchanged. |
+| Rollback | Disable rules, keep schema 11 unused; schema downgrade requires the verified pre-migration copy. |
+| PRs | Independently reviewed 07a intake/idempotency/lookup, then 07b rules/safe actions, then 07c Rule Builder. No merge without owner approval. No Auto Reply in this phase. |
+
+### Phase 07.5: Architecture Stabilization & Refactor (PROPOSED)
+
+| Item | Plan |
+| --- | --- |
+| Status | PROPOSED ONLY; requires a separate audit, plan and owner authorization after 07. Not started. |
+| Scope | Behavior-preserving cleanup of messaging, AI tool and automation boundaries, cancellation ownership, duplication and legacy code. |
+| Gate | Preserve permissions, privacy, routing, cancellation, command/API compatibility and all functional behavior; before/after regression proof. No feature expansion. |
+| Rollback | Small independently reviewable commits/PRs, each reversible; no schema change without its own migration plan. |
 
 ### Phase 08: Levix Plus
 
 | Item | Plan |
 | --- | --- |
-| Goal | Public extension contract with Free defaults; Android Play Billing client; server-verified entitlements; message personalization in Plus. |
-| Files (public) | new `src/extensions/` contract, message-engine hooks, Android billing client, CI scan of public artifacts. Plus code lives only in the private repository. |
+| Goal | Public extension contract with Free defaults; Android Play Billing client; server-verified entitlements; message personalization and paid prefix-free AI Auto Reply in Plus. |
+| Files (public) | new `src/extensions/` contract, message-engine hooks, Android billing client, CI scan of public artifacts. Plus code lives only in the private repository, including Auto Reply runtime and per-contact/group configuration (ADR-009). |
 | Migrations | Entitlement cache and template overrides, additive. |
 | Compliance | Play billing policy; `PRIVACY.md` and Data safety rows for billing data before release. |
-| Tests | Free build without Plus; forged token; wrong account; revoked and expired states; outage with Core still working; template placeholders across four locales. |
+| Tests | Free Reaction Automation without Plus; opt-in Auto Reply with rate limits, loop protection, kill switch and real-sender tool authorization; forged token; wrong account; revoked and expired states; outage with Core still working; template placeholders across four locales. |
 | Gate | Core fully works without Plus and offline. |
 | Rollback | Plus disabled; Free defaults return. |
 | Blockers | private repository access, Leviro verification service, Play Console product setup. |

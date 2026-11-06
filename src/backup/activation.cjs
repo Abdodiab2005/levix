@@ -122,6 +122,8 @@ function replaceTables(id) {
       const names = columns(db, "main", table).map(({ name }) => `"${name.replaceAll('"', '""')}"`).join(", ");
       db.exec(`INSERT INTO main."${table}" (${names}) SELECT ${names} FROM pending."${table}"`);
     }
+    // Replay metadata is not in backups. Require fresh operator opt-in after restore.
+    db.exec("UPDATE reaction_rules SET enabled = 0");
     db.prepare("INSERT OR REPLACE INTO bot_settings (key, value) VALUES ('restore:activated', ?)")
       .run(JSON.stringify({ id }));
     fault("db-before-commit");

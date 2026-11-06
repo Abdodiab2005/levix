@@ -1,4 +1,5 @@
 import { createRequire } from "module";
+import { attachReactionIntake } from "../automation/reactions.js";
 import {
   handleGroupJoinRequests,
   handleGroupParticipantsUpdate,
@@ -31,7 +32,8 @@ export function setupEventListeners(
   sock,
   { saveCreds, onConnectionUpdate, onHandshakeRejected } = {},
 ) {
-  // Every listener below goes through this. A bare `async` listener hands its
+  const reactions = attachReactionIntake(sock);
+  // Async listeners go through this. A bare `async` listener hands its
   // promise to Baileys' emitter, which drops it — so one rejection anywhere in
   // the message pipeline becomes an unhandledRejection, and src/index.js turns
   // that into a process exit. A group lookup failing mid-disconnect is exactly
@@ -41,10 +43,24 @@ export function setupEventListeners(
       .then(() => handler(payload))
       .catch((err) => logger.error({ err }, `[Events] ${label} handler failed`));
   };
+  // Intake is synchronous and bounded; do not queue a payload-capturing
+  // microtask per reaction in a storm. Keep existing async routing contained.
+  const intake = (label, handler) => (payload) => {
+    try { return handler(payload); }
+    catch {
+      reactions.close();
+      logger.warn({ event: label }, "[Events] reaction intake failed; paused until reconnect");
+    }
+  };
+  const connectionUpdate = contained("connection.update", (update) => onConnectionUpdate?.(update));
 
   sock.ev.on(
     "connection.update",
-    contained("connection.update", (update) => onConnectionUpdate?.(update)),
+    (update) => {
+      if (update?.connection === "open") reactions.open();
+      if (update?.connection === "close") reactions.close();
+      connectionUpdate(update);
+    },
   );
 
   // A handshake the server answered with an HTTP status instead of an upgrade.
@@ -118,8 +134,15 @@ export function setupEventListeners(
   // Incoming messages
   sock.ev.on(
     "messages.upsert",
-    contained("messages.upsert", (m) => handleIncomingMessage(sock, m)),
+    (m) => {
+      intake("messages.upsert", (payload) => reactions.observeUpsert(payload))(m);
+      contained("messages.upsert", (payload) => handleIncomingMessage(sock, payload))(m);
+    },
   );
+
+  sock.ev.on("messages.reaction", intake("messages.reaction", (entries) => reactions.observeReactions(entries)));
+  sock.ev.on("messages.update", intake("messages.update", (entries) => reactions.observeUpdates(entries)));
+  sock.ev.on("messages.delete", intake("messages.delete", (payload) => reactions.observeDeletes(payload)));
 
   // Group participant updates
   sock.ev.on(

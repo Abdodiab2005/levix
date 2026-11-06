@@ -712,6 +712,35 @@ const MIGRATIONS = [
       UPDATE moderation_flags SET last_notified_at = flagged_at WHERE last_notified_at IS NULL;
     `);
   },
+  // v11 — Free reaction automation. Original messages are NEVER stored here.
+  (database) => {
+    database.exec(`
+      CREATE TABLE reaction_rules (
+        id TEXT PRIMARY KEY,
+        chat_jid TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+        definition TEXT NOT NULL DEFAULT '{}'
+      );
+      CREATE INDEX idx_reaction_rules_chat ON reaction_rules (chat_jid, enabled);
+      CREATE TABLE reaction_events (
+        event_key TEXT PRIMARY KEY,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_reaction_events_expiry ON reaction_events (expires_at);
+      CREATE TABLE reaction_state (
+        slot_key TEXT PRIMARY KEY,
+        timestamp_ms INTEGER NOT NULL,
+        emoji TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_reaction_state_expiry ON reaction_state (expires_at);
+      CREATE TABLE reaction_invalidations (
+        invalidation_key TEXT PRIMARY KEY,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_reaction_invalidations_expiry ON reaction_invalidations (expires_at);
+    `);
+  },
 ];
 
 function migrate(database, migrations = MIGRATIONS) {
@@ -868,6 +897,13 @@ function parseJson(text, fallback) {
 
 /** Delete whatever has aged out. Cheap; called at boot and on a timer. */
 function sweepExpired() {
+  try {
+    q("DELETE FROM reaction_events WHERE expires_at <= ?").run(Date.now());
+    q("DELETE FROM reaction_state WHERE expires_at <= ?").run(Date.now());
+    q("DELETE FROM reaction_invalidations WHERE expires_at <= ?").run(Date.now());
+  } catch {
+    logger.warn("[DB] reaction metadata sweep failed");
+  }
   try {
     const { changes } = q("DELETE FROM forward_scores WHERE expires_at < ?").run(Date.now());
     if (changes) logger.debug(`[DB] Swept ${changes} expired forward score(s)`);

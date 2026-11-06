@@ -128,3 +128,12 @@
 - Targeted ChatGPT Q-19 approval covers new Phase 06 pt-BR/es-419 strings only;
   older/unreviewed content remains draft. No migration/dependency/release.
   Device/live-provider QA remains NOT RUN. No merge or Phase 07 start.
+
+## 2026-11-06/07 — Phase 07a intake (pending owner review)
+
+- Verified Phase 06 merge #134 at `f04ce30`, audited and recorded the plan before code.
+- Owner decision: Reaction Automation/rules/builder are Free Core without tier rule limits;
+  prefix-free per-chat AI Auto Reply is paid private Plus in Phase 08 (ADR-009).
+- Proposed behavior-preserving stabilization Phase 07.5, not started.
+- 07a adds bounded opt-in RAM lookup and hash-only replay/invalidation state, no actions or UI.
+  Evidence, final PR/commit verification record and rollback: `PHASE-07-RESULTS.md`.

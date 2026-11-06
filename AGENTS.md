@@ -617,17 +617,25 @@ and blacklist middleware, the prefix lookup, every permission check) with no
 | `auto_delete_log` | opt-in text/caption copies of messages an auto-delete rule actually deleted (never media bytes) | `auto_delete_keep_days` (30), also capped at 5000 newest; wiped on unlink |
 | `moderation_flags` | members waiting for admin review after warn-limit FLAG (or a KICK the bot could not perform): canonical id, effective points (`warn_count`), last rule, time, reasons, `last_notified_at`, `repeat_points` | wiped on unlink |
 | `moderation_applied` | one row per moderated message id (`outcome`, `kicked`, `notified`) so a WhatsApp redelivery is applied once. Rows older than 7 days are swept | wiped on unlink |
+| `reaction_rules` | Free Core reaction rule configuration; disabled by default, no tier rule-count cap; no management API/UI until Phase 07c | disabled on unlink and restore |
+| `reaction_events` / `reaction_state` / `reaction_invalidations` | bounded hashed transport claims, latest emoji transitions and deletion/edit markers; no original payload | short TTL, wiped on unlink, excluded from backups |
 
 `forward_scores` gains a row per forwarded message, so it expires; the sweep
 runs at boot and every six hours (`sweepExpired()` in `db.cjs`). Sticker files
 live under `<data>/stickers/<sha[0..2]>/` and are removed with the rows on
 unlink (`library.clearAll()`). `auto_delete_log` is swept on the same timer.
 
-The bot does **not** archive other people's messages. Nothing incoming is
+The bot does **not** permanently archive other people's messages. Nothing incoming is
 written beyond the forward counter, the sender's last-seen row, and — only
 when an auto-delete rule with `keepCopy` actually deletes a message — a
 text/caption copy in `auto_delete_log`. Deleted and edited messages are not
 captured otherwise.
+
+Phase 07a adds an opt-in RAM-only exception: enabled reaction-rule chats have a
+30-minute lookup capped at 500 sanitized originals and 8 MiB/64 KiB per entry.
+It downloads no media, strips quoted context and thumbnails, excludes hidden or
+disappearing content, and invalidates observed edits/deletes. Disconnect clears
+it. No original payload enters SQLite, logs or backups; 07a runs no actions.
 
 Long-term AI memory is **not** in the database — it lives in `memory/*.md`
 inside the data directory.
@@ -1646,6 +1654,8 @@ logger.debug('Debug info');
     Opt-in exception: an auto-delete rule with `keepCopy` stores the
     text/caption (never media bytes) of messages that rule actually deleted, in
     `auto_delete_log`, swept by `auto_delete_keep_days`.
+    Phase 07a adds a separate bounded RAM lookup only for enabled-rule chats;
+    see the database section above. It never writes original payloads to disk.
 14. **Don't add third-party media downloaders**: downloading from YouTube /
     TikTok / Facebook / Instagram violates those platforms' terms, so those
     commands were removed on purpose.

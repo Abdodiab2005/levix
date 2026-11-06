@@ -86,6 +86,10 @@ writeFileSync(join(data, "ai-persona.md"), "persona text");
 db.prepare("INSERT INTO qr_codes (id, qr_string) VALUES (1,'qr')").run();
 db.prepare("INSERT INTO forward_scores (message_id, group_id, original_sender, first_forwarded_at, last_forwarded_at, expires_at) VALUES ('m','g','u',1,1,9999999999999)").run();
 db.prepare("INSERT INTO moderation_applied (group_id, message_id, outcome, applied_at) VALUES ('g','m','warned',1)").run();
+db.prepare("INSERT INTO reaction_rules (id,chat_jid,enabled) VALUES ('backup-rule','120363000000001@g.us',1)").run();
+db.prepare("INSERT INTO reaction_events VALUES ('event-sentinel',9999999999999)").run();
+db.prepare("INSERT INTO reaction_state VALUES ('state-sentinel',1,'😀',9999999999999)").run();
+db.prepare("INSERT INTO reaction_invalidations VALUES ('delete-sentinel',9999999999999)").run();
 const preview = describeBackupContents();
 equal("preview keys", preview.apiKeys.join(","), "gemini_api_key,openai_api_key");
 equal("preview account mask", preview.maskedAccount, "+20 ••• ••• ••12");
@@ -105,6 +109,9 @@ equal("stage contains only filtered database and selected files", stagedFiles?.j
   `stickers/cd/${shaB}.thumb.webp`, `stickers/cd/${shaB}.webp`,
 ].sort().join(","));
 const first = await unpack(file);
+for (const table of ["reaction_events", "reaction_state", "reaction_invalidations"])
+  equal(`${table} excluded`, first.copy.prepare(`SELECT count(*) AS n FROM ${table}`).get().n, 0);
+equal("reaction configuration backed up", first.copy.prepare("SELECT id FROM reaction_rules").get().id, "backup-rule");
 equal("account LID", first.manifest.account.lid, "123456789@lid");
 equal("account phone", first.manifest.account.pn, "201000000012@s.whatsapp.net");
 equal("manifest keys", first.manifest.apiKeys.join(","), "gemini_api_key,openai_api_key");

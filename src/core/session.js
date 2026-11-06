@@ -62,6 +62,7 @@ import {
 } from "../utils/storage.esm.js";
 import { classifyDisconnect, describeCloseError, handleConnectionOpen } from "./connection.js";
 import { setupEventListeners } from "./events.js";
+import { disposeReactionIntake } from "../automation/reactions.js";
 import {
   createProxyAgents,
   describeProxyFailure,
@@ -738,6 +739,7 @@ export class WhatsAppSession {
 
   /** Cut every wire back from a socket we are done with. */
   #detach(sock) {
+    disposeReactionIntake(sock);
     for (const event of ["connection.update", "creds.update"]) {
       try {
         sock?.ev?.removeAllListeners?.(event);

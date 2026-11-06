@@ -48,6 +48,7 @@ function fixture(account = backupAccount) {
   const copy = new DatabaseSync(join(pendingRoot, "levix.db"));
   try {
     migrate(copy);
+    copy.prepare("INSERT INTO reaction_rules (id, chat_jid, enabled) VALUES ('restored-rule', '120363000000001@g.us', 1)").run();
     copy.prepare("INSERT INTO ai_history (chat_id, history, updated_at) VALUES ('backup', '[]', 1)").run();
     copy.prepare("INSERT INTO schedules (id,type,target_jid,message,status,created_at) VALUES ('backup', 'once', 'chat@g.us', 'backup', 'pending', 1)").run();
     copy.prepare("INSERT INTO user_metadata (user_jid, is_owner, is_admin, first_seen, last_seen) VALUES (?, 1, 0, 1, 1)").run(lid);
@@ -73,6 +74,7 @@ pair(); fixture();
 let scheduledRows = null;
 await handleConnectionOpen(sock, () => { scheduledRows = currentRows(); });
 equal("account tables replaced", currentRows(), "backup");
+equal("restored reaction rules require fresh opt-in", db.prepare("SELECT enabled FROM reaction_rules WHERE id='restored-rule'").get().enabled, 0);
 equal("scheduler sees backup rows", scheduledRows, "backup");
 equal("schedule replaced", db.prepare("SELECT id FROM schedules").get().id, "backup");
 equal("sticker rows replaced", db.prepare("SELECT id FROM stickers").get().id, "4".repeat(16));
