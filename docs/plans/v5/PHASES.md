@@ -116,7 +116,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
-| Status | IN PROGRESS on `feat/v5-phase-06`, authorized 2026-11-06. Audit, plan and gates in `PHASE-06-RESULTS.md`. |
+| Status | IMPLEMENTED, PENDING REVIEW on `feat/v5-phase-06` (`bb69ea6`), draft PR #134, 2026-11-06. 9919 automated checks pass; manual and translation-review limits in `PHASE-06-RESULTS.md`. Not merged. Phase 07 awaits owner approval. |
 | Goal | Answers about Levix cite bundled, versioned user docs; image, TTS and STT reachable from natural language through existing code paths. |
 | Files | `src/services/aiTools.cjs`, `src/services/aiToolAuth.cjs`, `src/services/aiAgent.cjs`, new docs index generator and generated index, `src/commands/gemini.cjs`, `src/commands/tts.cjs`, `src/commands/stt.cjs` (exports reused). |
 | Migrations | None. |

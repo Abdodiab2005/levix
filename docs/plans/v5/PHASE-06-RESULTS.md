@@ -1,7 +1,10 @@
 # Phase 06: documentation-aware AI and media tools
 
 Date: 2026-11-06. Base: `release/5.0.0-beta.1` `a68696d` (Phase 05 merged in
-`3aee413`). Branch: `feat/v5-phase-06`. Status: `IN PROGRESS`, not merged.
+`3aee413`). Branch: `feat/v5-phase-06`. Status: `IMPLEMENTED — PENDING REVIEW`, not merged.
+Implementation commit: `bb69ea6d1ddea3dd9e15908bcbe035d482e7bdce`.
+Draft PR: https://github.com/Abdodiab2005/levix/pull/134, targeting
+`release/5.0.0-beta.1` so the owner's version preparation stays separate.
 The owner authorized Phase 06 and delegation to agy, OpenCode free models and
 Grok on 2026-11-06. No Phase 07 work is included.
 
@@ -120,4 +123,125 @@ fallback. Keep caller authorization and the Phase 05 reply router on every send.
 
 ## Implementation and gate results
 
-PENDING. No implementation or final validation is claimed by this plan.
+Implemented 06a and 06b. The final source matches the plan above, with image
+generation owned by the shared `src/services/aiImage.cjs` helper and media
+limits in `src/services/aiMedia.cjs`. Tool contracts are in `docs/AI_TOOLS.md`.
+
+### Resulting behavior and architecture
+
+- `search_levix_docs` and `open_levix_doc_section` use a statically required
+  index: 360 sections, schema 1, release `5.0.0-beta.1`, 189709 bytes of JSON.
+  The generator checks the exact public allowlist, version and source digests.
+  Search returns at most five bounded excerpts; open returns at most 4000
+  characters. Localized command docs and a small topic bridge support the
+  four locales, with explicit English fallback. No embedding or external
+  retrieval service, runtime directory scan or invented deep documentation URL.
+- Gemini, OpenAI-compatible and Anthropic offer the same declarations and
+  collect citations from actual indexed section IDs. `formatSources()` appends
+  the source, section and bundled version independently of model phrasing.
+  Retrieved excerpts/transcripts remain tool data, outside system instructions.
+- `generate_image` shares Gemini image generation with `!generate`; `speak`
+  shares TTS; `transcribe_audio` shares STT. Chat selection stays on
+  `ai_provider`. The image helper requires canonical base64 and a supported
+  raster container/header. Transcription and TTS check audio MIME/header/bytes.
+  These are bounded container checks, not a new full codec decoder.
+- Media tools require the real minted caller, live command permission and an
+  enabled backing command. `generate` uses the `gemini` permission, matching its
+  alias. The disabled-command check also closes the pre-existing AI-tool bypass
+  for memory, schedules, polls and roles. No default permission is widened;
+  the 69-command matrix and existing authorization tests pass.
+- Private audio selection is snapshotted in a WeakMap at `resolveCaller()`.
+  Ordinary AI audio turns are now lazy transcription; audio is not eagerly
+  sent to an unrelated chat provider. The explicit `add`/`send` batch retains
+  its existing native media behavior. The new tool is speech transcription,
+  not a general non-speech sound-analysis or music-generation interface.
+- Model-initiated media shares three attempts per sender per minute, one
+  concurrent operation, 8 MiB byte limits, 3000-character speech/image input,
+  12000-character transcript output and the configured tool deadline capped
+  at 120 seconds. A timed-out non-cancellable operation stays busy; late
+  completion cannot send. Refused routing is an error. STT/TTS share their
+  input/output limits with explicit commands; other AI downloads cap at 64 MiB.
+- Explicit STT provider choices now fail closed when that provider lacks a key,
+  instead of silently uploading to the other provider. `auto` keeps the prior
+  available-key fallback. The transcript can then reach the chat provider and
+  AI history; the Privacy table and Play Data safety mapping document that path.
+  TTS temporary files use random names/private permissions and are cleaned on
+  normal success/failure/abort. No database migration or new dependency.
+
+Existing ADRs apply: ADR-003 (offline-first), ADR-004 (locales), ADR-007
+(routing), ADR-011 (permissions), ADR-014 (evidence), ADR-015 (phase/release
+control). Phase 06 follows Q-18 recommendation (a), public repository docs
+only; website retrieval remains outside this implementation. No new product
+or billing decision is assumed.
+
+### Test evidence
+
+Date for every row: **2026-11-06**. Platform: **Linux x64, Node v24.19.0**.
+Implementation: **`bb69ea6`**. Official builds remain pinned to v24.22.2;
+the local SEA correctly warns that it embeds v24.19.0.
+
+| Command / proof | Outcome |
+| --- | --- |
+| `npm test` on `bb69ea6` | **PASS**, 9919 checks, 0 failed, 0 crashed files, 161.9 seconds |
+| `npm run lint` on `bb69ea6` | **PASS**, 0 errors; 196 warnings and 73 informational diagnostics remain |
+| `npm run build:frontend` (also invoked by `build:sea` on `bb69ea6`) | **PASS**, TypeScript and Vite; existing chunk-size warning |
+| `npm run i18n:check` on `bb69ea6` | **PASS**; two gateway review-digest notices are already present in base `a68696d`, verified against its files |
+| `npm run docs:check` on `bb69ea6` | **PASS**, exact generated-file/version/source freshness |
+| `npm run validate:tarball` | **PASS**, 36 checks, packed/installed/booted artifact; ran immediately before the implementation commit against the same packaged source inputs |
+| `npm run build:sea` on `bb69ea6` | **PASS**, Linux executable built; local embedded Node v24.19.0 |
+| `npm run validate:sea` on `bb69ea6` | **PASS**, 51 checks, executable copied away from source and dependencies |
+| esbuild docs-module bundle, executed with cwd `/tmp` | **PASS**, bundled JSON present in the metafile; Arabic backup search works without source-tree reads |
+| Docker runtime validation | **NOT RUN**; the existing `COPY src ./src` includes the committed index |
+| Android ARM64/ARMv7 build and device QA | **NOT RUN**; the existing staging copies `src/`; no native/Gradle change in Phase 06 |
+| macOS/Windows SEA, live provider and live WhatsApp media QA | **NOT RUN** |
+
+Focused cases are included in the full passing suite: docs integration 45,
+docs retrieval 79, image 18, media tools 63, prompt policy 141, existing AI
+authorization 108, existing AI features 46, Gemini media 60, providers 104,
+command matrix 106, reply router 24, package 62, release identity 42 and Node
+policy 48 checks. Fakes verify image/audio/transcript results, unsupported or
+malformed responses, missing keys, quota, forged callers, disabled commands,
+URL rejection, byte/rate/concurrency/deadline limits, late-send suppression and
+actual dispatcher routing. No real recipient, recovery mail or production
+feedback/telemetry endpoint was used.
+
+The first full run was **FAIL**: a late output from the interrupted broad
+OpenCode session replaced the docs test with incompatible imports, and the
+local `ffmpeg-static` binary was absent. The exact server session was then
+interrupted with `resume=false`, its late outputs preserved outside the repo,
+the reviewed test restored, and `npm rebuild ffmpeg-static` restored the locked
+dependency's binary. Focused failures and the entire suite subsequently pass.
+No assertion was skipped or relaxed to hide these failures.
+
+### Delegation and review
+
+Requested CLIs were used through their platform-specific delegate skills:
+agy/Gemini audited docs; OpenCode free models audited packaging and authored
+the docs test; Grok audited authorization/media and implemented the image helper
+and its tests. The orchestrator reviewed/reconciled the source, implemented the
+shared safety and provider integration, ran every gate and made the commits.
+Implementers ran no tests/builds. A later optional agy security review timed out;
+there is no claim of a completed independent clean review.
+
+### Privacy, compatibility and approval handoff
+
+`PRIVACY.md` records the natural-language image path, selected speech provider,
+transcript-to-chat/history flow, and local docs retrieval. No secret, user memory
+or arbitrary file is indexed. No consent record, pairing, vault key or backup
+format changes. The bundled Privacy Notice already covers configured AI context,
+media, speech services and provider costs and was not changed in this phase.
+
+The new `pt-BR`/`es-419` text is marked **draft**, with targeted Codex machine
+review recorded and ChatGPT approval under Q-19 pending. The gateway digest
+notices are pre-existing and were not re-labelled as newly reviewed.
+
+Before merge: owner review of #134, ChatGPT approval of the draft text under
+Q-19 and review of CI on the official Node patch/platform matrix. Android and
+live-provider behavior remain manual QA limits; a device pairing needs the
+owner's authorization. Before a later Play release, reconcile the updated
+Data safety mapping in Play Console. No Play form was changed here.
+
+Rollback is a revert of the Phase 06 commits; no stored-data migration needs
+undoing. Keep caller authorization and the Phase 05 router. No merge, tag,
+release, Play upload or push to `main` was performed. Phase 07 has not started
+and waits for the owner's approval.
