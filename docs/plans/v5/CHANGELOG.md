@@ -122,5 +122,9 @@
   tarball 36 checks and Linux SEA 51 checks. Local Node v24.19.0; official pin
   v24.22.2 unchanged. Full evidence and initial failure corrections are in
   `PHASE-06-RESULTS.md`; tool contracts in `docs/AI_TOOLS.md`.
-- No migration/dependency/release. Android/live-provider QA and Q-19 translation
-  approval remain pending. No merge or Phase 07 start.
+- Final review `d602671` fixes cancellation through cooldown/thumbnail waits,
+  removes unsafe raw-send retries and preserves repeated tool/result IDs across
+  provider switches. 10002 checks pass; final-head gates/CI are rerun for handoff.
+- Targeted ChatGPT Q-19 approval covers new Phase 06 pt-BR/es-419 strings only;
+  older/unreviewed content remains draft. No migration/dependency/release.
+  Device/live-provider QA remains NOT RUN. No merge or Phase 07 start.

@@ -326,8 +326,59 @@ and the updated `gemini.description` in `commands.json`, for `pt-BR` and
 Current file digests are recorded; older/unreviewed content stays draft. Q-18
 is resolved with public repository documentation only, with no website retrieval.
 
-Final gates will be recorded below against the corrective implementation commit
-and rerun on the final documentation commit. Local tools/cache only applies to
+Final gates below cover the corrective implementation commit and are rerun on
+the final evidence commit (which removes one unused test import, without runtime
+changes). The final immutable PR-head SHA and its rerun/CI results are recorded
+in the PR verification record, avoiding a self-referential commit hash here. Local tools/cache only applies to
 all new validation: npm runs offline, an external-network test guard is
 preloaded, and the installed `/usr/bin/ffmpeg` supplies the tarball install's
 FFmpeg binary. No new tool, dependency, runtime, artifact or model is downloaded.
+
+### Final verification evidence
+
+Corrective implementation: **`d602671a40b341d72f08f68f17470ebe42f4da83`**.
+Environment for every local gate: **Linux x64, Node v24.19.0, 2026-11-06**.
+The local SEA embeds that installed Node and emits the expected warning;
+official CI stays pinned to **24.22.2**. All commands below ran with
+`npm_config_offline=true`, the external-network guard preloaded through
+`NODE_OPTIONS`, and installed system `FFMPEG_BIN=/usr/bin/ffmpeg`. This tests
+a real clean-prefix tarball installation using cached dependencies and the
+existing system executable; it does not skip install scripts or gates.
+
+| Verification | Status and evidence |
+| --- | --- |
+| `npm test` | **PASS**, 10002 checks, 0 failed, 0 crashed; 331.8 seconds (44 cancellation, 134 provider and 54 docs integration checks included) |
+| `npm run lint` | **PASS**, 0 errors; existing warning/info diagnostics remain. One unused test import was subsequently removed; lint is rerun on the evidence commit. |
+| `npm run i18n:check` | **PASS**, no review-digest mismatch notices; refreshed gateway digests retain draft status |
+| `npm run docs:check` | **PASS**, bundled version/source/index freshness |
+| `npm run build:frontend` | **PASS**, TypeScript and Vite; existing chunk/script warnings |
+| `npm run validate:tarball` | **PASS**, 36 checks, real offline-cache clean-prefix installation and boot |
+| `npm run build:sea` | **PASS**, rebuilt executable from corrected source with installed tools |
+| `npm run validate:sea` | **PASS**, 51 checks, executable run away from checkout/dependencies |
+| Final-head GitHub Android and Docker checks, plus complete 7-job CI | **NOT RUN at report commit time**; the final run is triggered by pushing this evidence commit. Its exact head SHA, job conclusions and URL must be recorded in PR #134 before owner handoff; the earlier 7/7 result is historical only. |
+| Local Android ARM64/ARMv7/device QA, local Docker validation, local Windows/macOS SEA | **NOT RUN**; final-head CI supplies build/artifact coverage, not live device QA |
+| Actual image generation, Google TTS, STT and WhatsApp delivery | **NOT RUN**, no explicitly authorized provider credentials and test device/account available |
+| Play Console Data safety update, Play delivery/update measurements, publishing | **NOT RUN**, owner release prerequisites; no Play access or upload |
+
+All requested local commands are rerun on the final evidence commit; the PR
+verification record is the final-head evidence and contains its immutable SHA.
+No failure is waived: the initial race regression failed before the fix, and
+the repeated-call fixture was corrected to include the initial user turn that
+Anthropic requires before final proof. No assertions were disabled. The final
+local suite passes without live services or downloaded dependencies.
+
+The owner explicitly authorized dependency downloads on GitHub-hosted CI
+runners only after adding the local-only rule. No workstation download was
+performed after that rule. No merge, tag, release, deploy, Play upload or
+Phase 07 work is authorized. Owner review of the completed PR remains required.
+Older/unreviewed translation scope remains draft for its later review/release
+gate. Before live QA, authorize a dedicated WhatsApp test account/device and
+provider use; before Play release, reconcile Data safety and measure actual
+artifacts with Play Console or bundletool. Do not label build checks as device
+or live-provider tests.
+
+Rollback: remove/disable the new media tool entry points first; reverting only
+the cancellation fix reintroduces the confirmed late-send bug. For a complete
+Phase 06 rollback, revert its implementation and evidence commits together,
+keeping the caller authorization, Phase 05 Reply Router and final send guards.
+No database, pairing, credentials or vault-key migration needs reversal.

@@ -11,7 +11,7 @@ await require("./src/utils/permissions.cjs").primePermissions();
 const { resolveCaller } = require("./src/services/aiToolAuth.cjs");
 const { runTool } = require("./src/services/aiTools.cjs");
 const cjs = require("./src/utils/sendBotMessage.cjs");
-const { sendBotMessage, timing } = await import("../src/utils/sendBotMessage.esm.js");
+const { timing } = await import("../src/utils/sendBotMessage.esm.js");
 const tts = require("./src/commands/tts.cjs");
 const image = require("./src/services/aiImage.cjs");
 const thumbnail = require("./src/utils/thumbnail.cjs");

@@ -135,6 +135,8 @@ When importing:
 Use installed local tools and existing local caches. Ask the owner before
 downloading dependencies, tools, runtimes, artifacts, models or other files.
 Do not let a build or validation command download them implicitly.
+The owner has authorized dependency downloads on GitHub-hosted CI runners;
+workstation verification must remain offline.
 
 ### Development
 ```bash
