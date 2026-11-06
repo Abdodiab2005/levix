@@ -117,5 +117,7 @@
   "aiTools.createPoll": "📊 Creating a poll: {question}",
   "aiTools.summarizeChat": "🧠 Summarizing the chat and saving what matters...",
   "aiTools.running": "⚙️ Running: {name}",
+  "aiTools.searchDocs": "📚 Searching the bundled Levix docs...",
+  "aiTools.openDoc": "📖 Reading a Levix documentation section...",
   "memoryStore.nothingToSave": "There is nothing to save"
 }

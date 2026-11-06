@@ -15,6 +15,7 @@
 // message itself is still sent.
 
 import { createRequire } from "module";
+import { setTimeout as delay } from "node:timers/promises";
 
 const require = createRequire(import.meta.url);
 const logger = require("./logger.cjs");
@@ -34,9 +35,9 @@ function jitter(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function sleep(ms) {
+function sleep(ms, signal) {
   if (!ms || ms <= 0) return Promise.resolve();
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return delay(ms, undefined, { signal });
 }
 
 // Tests replace timing.sleep to skip the real wait; the bot still computes and
@@ -71,10 +72,12 @@ async function safePresence(sock, jid, presence) {
  * @param {boolean} [options.quote=true]  - Set false to skip auto-quoting.
  * @param {boolean} [options.typing=true] - Set false to skip typing presence.
  * @param {number}  [options.delayMs]     - Override the inter-message gap.
+ * @param {AbortSignal} [options.signal] - Cancel before initiating delivery.
  * @returns {Promise<object>} Baileys send result
  */
 export async function sendBotMessage(sock, jid, content, options = {}) {
-  const { replyTo = null, quoted = null, quote = true, typing = true, delayMs } = options;
+  const { replyTo = null, quoted = null, quote = true, typing = true, delayMs, signal } = options;
+  signal?.throwIfAborted();
 
   // Respect the per-chat cooldown so multiple replies don't pile up instantly.
   const now = Date.now();
@@ -87,11 +90,14 @@ export async function sendBotMessage(sock, jid, content, options = {}) {
     const { min, max } = sendGap();
     targetGap = jitter(min, max);
   }
-  if (elapsed < targetGap) await timing.sleep(targetGap - elapsed);
+  if (elapsed < targetGap) await timing.sleep(targetGap - elapsed, signal);
+  signal?.throwIfAborted();
 
   if (typing) {
     await safePresence(sock, jid, "composing");
-    await timing.sleep(typingDelayFor(content));
+    signal?.throwIfAborted();
+    await timing.sleep(typingDelayFor(content), signal);
+    signal?.throwIfAborted();
     await safePresence(sock, jid, "paused");
   }
 
@@ -102,6 +108,8 @@ export async function sendBotMessage(sock, jid, content, options = {}) {
   }
   // The command proxy reads this and strips it before Baileys sees the call.
   if (options.levix) opts.levix = options.levix;
+  // The socket consumes this after its asynchronous media preparation.
+  if (signal) opts.signal = signal;
 
   // Link previews are opt-in (default off, see `link_previews_enabled`):
   // without an explicit `linkPreview`, Baileys fetches the page behind any URL
@@ -117,6 +125,7 @@ export async function sendBotMessage(sock, jid, content, options = {}) {
     content = { ...content, linkPreview: null };
   }
 
+  signal?.throwIfAborted();
   try {
     const sent = await sock.sendMessage(jid, content, opts);
     lastSendTime.set(jid, Date.now());

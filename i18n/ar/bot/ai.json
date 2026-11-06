@@ -117,5 +117,7 @@
   "aiTools.createPoll": "📊 جارٍ إنشاء الاستفتاء: {question}",
   "aiTools.summarizeChat": "🧠 جارٍ تلخيص المحادثة وحفظ المهم...",
   "aiTools.running": "⚙️ جارٍ تشغيل: {name}",
+  "aiTools.searchDocs": "📚 جارٍ البحث في وثائق Levix المرفقة...",
+  "aiTools.openDoc": "📖 جارٍ قراءة قسم من وثائق Levix...",
   "memoryStore.nothingToSave": "لا يوجد محتوى لحفظه"
 }

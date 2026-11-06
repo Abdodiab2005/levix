@@ -38,7 +38,13 @@ decides whether to search for each answer.
    media or files you ask the AI to process. Supported images can be sent to
    OpenAI-compatible or Anthropic providers; Gemini can additionally receive
    supported video, audio and documents. Speech-to-text can send audio to
-   Gemini or an OpenAI-compatible provider.
+   Gemini or an OpenAI-compatible provider. Natural-language `generate_image`
+   requests use the dedicated Gemini image endpoint/key/model, including when
+   chat uses OpenAI-compatible or Anthropic. `transcribe_audio` uploads only
+   audio attached to or quoted by the invoking message, after checking the
+   sender's transcription permission. Its transcript is returned to the chat
+   provider to prepare the answer and can be stored in local AI conversation
+   history. That chat provider can differ from the transcription provider.
 3. **Search and web pages:** Gemini can run Google Search grounding inside
    its request when it decides current information is needed. The AI's
    `web_search` and `search_news` tools send queries to `html.duckduckgo.com`,
@@ -182,6 +188,9 @@ Notes:
 | **Google Cloud Translation** (`translation.googleapis.com`) | Text to translate and the configured Google Translation API key | When you use `!translate google` with a key | Translating text through the official API |
 | **Google's public Translate endpoint** (`translate.googleapis.com/translate_a/single`) | Text to translate | When you use `!translate google` without a key | Translating text without an API key |
 | **Google TTS** (`translate.google.com`) | Text to speak | When you use `!tts` or the AI uses `speak` | Generating speech |
+| **Configured Gemini image endpoint** | The image prompt | When you use `!generate` or explicitly request an image through the AI `generate_image` tool, with the same command permission | Generating image bytes; it does not change the chat provider |
+| **Configured Gemini/OpenAI-compatible transcription endpoint, then your selected chat provider** | The selected attached/quoted voice audio goes to the transcription endpoint; the transcript goes to the chat provider and local AI history | When you request transcription through `transcribe_audio`, with the `stt` permission | Preparing a transcription and the AI answer; no unrelated chat audio is collected |
+| **Local bundled documentation index** | No network request for retrieval; the returned public excerpts join the current AI request | When the AI uses `search_levix_docs` or `open_levix_doc_section` | Versioned product help; the index excludes agent instructions, private memories, settings and arbitrary files |
 | **OpenWeatherMap** (`api.openweathermap.org`) | The city name and configured API key | When you use `!weather` with `openweathermap_api_key` set | Getting weather for the named city |
 | **Aladhan** (`api.aladhan.com`) | The city name | When you use `!prayer` | Getting prayer times for the named city |
 | **URL shorteners** (`is.gd`, then `v.gd` on fallback) | The URL to shorten | When you use `!shortlink` | Creating a short link |
@@ -484,6 +493,8 @@ the AI agent or an optional setting chose without the user naming it is
 | AI `search_wikipedia` (Arabic or English Wikipedia) | Yes | **Yes** | The AI chooses the lookup; declared as **In-app search history** shared |
 | AI `fetch_url` to a page host | Yes | **Yes** | The AI chooses the page; declared as **Web browsing history** shared |
 | AI `speak` through Google TTS | Yes | **Yes** | The AI chooses to answer as speech; the spoken text is declared as **Other user-generated content** shared |
+| AI `generate_image` through the dedicated Gemini endpoint | Yes | **Yes** | The AI composes the image prompt for the requested action; declared as **Other user-generated content** shared |
+| AI `transcribe_audio` through a configured speech endpoint, with transcript returned to the chat provider | Yes | **Yes** | The requested voice audio is transcribed and the transcript becomes AI context; declare **Voice or sound recordings** and **Other user-generated content** shared for this model-mediated path |
 | `!tts` through Google TTS | Yes | No | User-initiated: the user asks for speech of the text they gave |
 | `!translate google`, with or without a Google key | Yes | No | User-initiated: the command names Google translation; the key is the operator's own credential |
 | `!weather` to OpenWeatherMap, `!prayer` to Aladhan | Yes, the typed city | No | User-initiated: the user types a city name for that lookup. Declared as **Approximate location** because a city can describe where the user is; Levix never reads device location |

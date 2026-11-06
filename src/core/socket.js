@@ -104,7 +104,10 @@ function withOutboundSavers(sock) {
   const getUrlInfo = (text) => getHttpsUrlInfo(text, { dispatcher: socketDispatchers.get(sock) });
 
   sock.sendMessage = async function sendMessageWithOutboundSavers(jid, content, options) {
+    const signal = options?.signal;
+    signal?.throwIfAborted();
     let payload = await withHttpsMedia(sock, content);
+    signal?.throwIfAborted();
     try {
       payload = await withMediaThumbnail(payload);
     } catch (err) {
@@ -116,6 +119,10 @@ function withOutboundSavers(sock) {
     // `levix` is a routing hint for the command proxy. It is not a Baileys field.
     const wireOptions = { ...(options || {}), getUrlInfo };
     delete wireOptions.levix;
+    delete wireOptions.signal;
+    // No await between this check and Baileys: cancellation cannot retract a
+    // send already initiated, but must prevent a new one after preparation.
+    signal?.throwIfAborted();
     return original(jid, payload, wireOptions);
   };
 

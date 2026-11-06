@@ -135,6 +135,31 @@ Existing WhatsApp `*bold*` and `_italic_` text keeps its formatting.
 
 AI is optional. The rest of Levix works without an AI key.
 
+#### Ask about Levix or request media
+
+Ask `!ai How do I back up Levix?` for help grounded in this release's bundled
+README, setup, Android, privacy and four-language command reference. The AI can
+search those documents offline and cite the source section and version. Prose
+guides are English; Arabic, Brazilian Portuguese and Latin American Spanish
+queries can fall back to them. Missing evidence is reported instead of treating
+future plans as installed features. Only the retrieval is offline: an AI answer
+still uses your configured chat provider.
+
+- `!ai Create an image of a cat on the moon` uses the same dedicated Gemini
+  image key and model as `!generate`.
+- Reply to text with `!ai Read this aloud` for Google TTS, the same synthesizer
+  as `!tts`. FFmpeg makes a voice note; MP3 is the fallback.
+- Reply to a voice message with `!ai Transcribe this voice note` for the same
+  Gemini/OpenAI-compatible transcription policy as `!stt`. The transcript then
+  becomes context for the selected chat provider's answer.
+
+These actions retain the backing command's live permission and enabled state,
+and results follow the configured reply router. They do not change your chat
+provider. Image and transcription providers may charge against your own key;
+Google TTS has no API-key charge. There is no music or sound-effect generator.
+Natural-language media tools have bounded input, output, time and request rates;
+a missing key, unsupported response or refused delivery is a failure.
+
 ### Persistent schedules and memory
 
 One-off and recurring schedules survive restarts and record their latest

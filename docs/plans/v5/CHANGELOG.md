@@ -108,3 +108,23 @@
   is hard-gated to the owner role.
 - The watermark hook exists and defaults off, so existing replies do not change until the
   operator turns `message_watermark` on.
+
+## Phase 06: bundled docs and media tools (2026-11-06)
+
+- Preserved the owner's beta version edits in `a68696d` and pushed
+  `release/5.0.0-beta.1`; Phase 06 is on `feat/v5-phase-06`, draft PR #134.
+- Implementation `bb69ea6` adds offline, versioned public-doc search/open and
+  backend citations across all three chat providers. No private/planning index.
+- Natural-language image, speech and transcription reuse existing commands,
+  with real-caller authorization, live disabled-command checks, lazy audio,
+  bounded bytes/rate/concurrency/deadlines and fail-closed delivery.
+- PASS: full suite 9919 checks, lint, frontend, i18n, docs freshness, installed
+  tarball 36 checks and Linux SEA 51 checks. Local Node v24.19.0; official pin
+  v24.22.2 unchanged. Full evidence and initial failure corrections are in
+  `PHASE-06-RESULTS.md`; tool contracts in `docs/AI_TOOLS.md`.
+- Final review `d602671` fixes cancellation through cooldown/thumbnail waits,
+  removes unsafe raw-send retries and preserves repeated tool/result IDs across
+  provider switches. 10002 checks pass; final-head gates/CI are rerun for handoff.
+- Targeted ChatGPT Q-19 approval covers new Phase 06 pt-BR/es-419 strings only;
+  older/unreviewed content remains draft. No migration/dependency/release.
+  Device/live-provider QA remains NOT RUN. No merge or Phase 07 start.

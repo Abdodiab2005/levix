@@ -117,5 +117,7 @@
   "aiTools.createPoll": "📊 Criando uma enquete: {question}",
   "aiTools.summarizeChat": "🧠 Resumindo a conversa e salvando o que importa...",
   "aiTools.running": "⚙️ Executando: {name}",
+  "aiTools.searchDocs": "📚 Buscando na documentação do Levix incluída no app...",
+  "aiTools.openDoc": "📖 Lendo uma seção da documentação do Levix...",
   "memoryStore.nothingToSave": "Não há nada para salvar"
 }

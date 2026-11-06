@@ -31,6 +31,7 @@
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
 const { toolDeclarations, describeCall, runTool } = require("./aiTools.cjs");
+const { docSourcesFromTool } = require("./aiDocs.cjs");
 const { assertProviderBaseUrl, safeProviderFetch } = require("../utils/providerUrl.cjs");
 const { baseMimeType, downloadMedia } = require("../utils/geminiMedia.cjs");
 
@@ -343,6 +344,21 @@ function safeJsonArgs(raw) {
   }
 }
 
+function rememberToolCall(callIds, call, id) {
+  const pending = callIds.get(call.name) || [];
+  pending.push(id);
+  callIds.set(call.name, pending);
+}
+
+function toolResponseId(callIds, response, fallback) {
+  const pending = callIds.get(response.name);
+  // Gemini results have no id and follow call order. Other providers may
+  // return explicit ids out of order; consume that exact id from the queue.
+  const index = response.id ? (pending?.indexOf(response.id) ?? -1) : 0;
+  const matched = index >= 0 ? pending?.splice(index, 1)[0] : undefined;
+  return response.id || matched || fallback;
+}
+
 /**
  * Canonical -> chat-completions.
  *
@@ -367,7 +383,7 @@ function historyToOpenAI(history) {
     if (calls.length) {
       const toolCalls = calls.map((call, i) => {
         const id = call.id || `call_${turnIndex}_${i}`;
-        if (call.name) callIds.set(call.name, id);
+        rememberToolCall(callIds, call, id);
         return {
           id,
           type: "function",
@@ -409,7 +425,7 @@ function historyToOpenAI(history) {
       for (const response of responses) {
         messages.push({
           role: "tool",
-          tool_call_id: response.id || callIds.get(response.name) || `call_${turnIndex}`,
+          tool_call_id: toolResponseId(callIds, response, `call_${turnIndex}`),
           content: JSON.stringify(response.response ?? {}),
         });
       }
@@ -450,7 +466,7 @@ function historyToAnthropic(history) {
         blocks.push({ type: "text", text: part.text });
       } else if (part?.functionCall) {
         const id = part.functionCall.id || `call_${turnIndex}_${blocks.length}`;
-        if (part.functionCall.name) callIds.set(part.functionCall.name, id);
+        rememberToolCall(callIds, part.functionCall, id);
         blocks.push({
           type: "tool_use",
           id,
@@ -460,10 +476,7 @@ function historyToAnthropic(history) {
       } else if (part?.functionResponse) {
         blocks.push({
           type: "tool_result",
-          tool_use_id:
-            part.functionResponse.id ||
-            callIds.get(part.functionResponse.name) ||
-            `call_${turnIndex}`,
+          tool_use_id: toolResponseId(callIds, part.functionResponse, `call_${turnIndex}`),
           content: JSON.stringify(part.functionResponse.response ?? {}),
         });
       } else if (part?.fileData || part?.inlineData) {
@@ -564,12 +577,16 @@ async function callApi({ url, headers, body, label }) {
 
   let response;
   try {
-    response = await safeProviderFetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    }, { allowLoopback: true });
+    response = await safeProviderFetch(
+      url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      },
+      { allowLoopback: true },
+    );
   } catch (err) {
     throw new Error(
       err?.name === "AbortError"
@@ -711,6 +728,7 @@ async function runProviderAgent(
 
   const tools = useTools ? adapter.tools() : [];
   const toolCalls = [];
+  const sources = [];
   let steps = 0;
 
   const send = () => {
@@ -749,17 +767,16 @@ async function runProviderAgent(
     messages.push(parsed.assistantMessage);
 
     if (!parsed.calls.length) {
-      return finish({ text: parsed.text, canonical, toolCalls, steps });
+      return finish({ text: parsed.text, canonical, toolCalls, steps, sources });
     }
     if (steps >= stepBudget) {
       // Same contract as the Gemini loop: the budget answer, not a lie.
       return finish({
-        text:
-          parsed.text ||
-          t("bot.ai.aiProviders.toolBudget"),
+        text: parsed.text || t("bot.ai.aiProviders.toolBudget"),
         canonical,
         toolCalls,
         steps,
+        sources,
       });
     }
 
@@ -785,6 +802,7 @@ async function runProviderAgent(
       } catch (err) {
         toolResult = { error: err?.message || String(err) };
       }
+      sources.push(...docSourcesFromTool(call.name, toolResult));
       results.push(toolResult);
     }
 
@@ -808,14 +826,14 @@ async function runProviderAgent(
   }
 }
 
-function finish({ text, canonical, toolCalls, steps }) {
+function finish({ text, canonical, toolCalls, steps, sources }) {
   return {
     text,
     history: canonical,
     toolCalls,
     steps,
-    // Grounding is a Gemini feature; these providers never have sources.
-    sources: [],
+    // Public bundled doc citations are available independently of web grounding.
+    sources,
     searchOffered: false,
   };
 }

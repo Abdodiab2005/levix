@@ -130,6 +130,14 @@ When importing:
 
 ## Commands to Run
 
+### Local tooling and downloads
+
+Use installed local tools and existing local caches. Ask the owner before
+downloading dependencies, tools, runtimes, artifacts, models or other files.
+Do not let a build or validation command download them implicitly.
+The owner has authorized dependency downloads on GitHub-hosted CI runners;
+workstation verification must remain offline.
+
 ### Development
 ```bash
 npm run build:frontend # compile React dashboard to public/dashboard
@@ -267,6 +275,9 @@ src/
 │   ├── aiAgent.cjs   # The Gemini agent loop + provider dispatch (tools, memory, live status)
 │   ├── aiProviders.cjs # The openai/anthropic loops over their own wire formats
 │   ├── aiTools.cjs   # The tools the agent can call
+│   ├── aiDocs.cjs    # bounded search/open over the versioned public docs index
+│   ├── aiImage.cjs   # dedicated Gemini image bytes, shared by !generate and the image tool
+│   ├── aiMedia.cjs   # byte checks and per-sender rate/concurrency/deadline limits
 │   ├── aiToolAuth.cjs # who a tool call acts for, and whether they may
 │   ├── llmDiscovery.cjs # live, credential-scoped model discovery
 │   └── modelRegistry.cjs # model catalog and capability lookup
@@ -748,6 +759,9 @@ memory/*.md                   (long-term memory, capped)
 | `create_reminder` / `cancel_reminder` | a one-off message into this chat, through the scheduler — gated like `!schedule` / `!deleteschedule` |
 | `calculate` | the `!calc` parser (never `eval`) |
 | `speak` | the reply as a WhatsApp voice note, through the `!tts` synthesizer — gated like `!tts` |
+| `search_levix_docs` / `open_levix_doc_section` | local retrieval from the generated public docs index; all three providers cite the source section and version. No plans, agent instructions, arbitrary paths or private data |
+| `generate_image` | same dedicated Gemini image helper as `!generate`; gated by `gemini`, since `generate` is its alias |
+| `transcribe_audio` | this turn's direct/quoted audio through `stt.transcribe`; gated by `stt` and `ai_stt_enabled`; the transcript becomes chat-provider context |
 | `create_poll` | a native WhatsApp poll, through `!poll`'s builder (same 2-12 option limits) — gated like `!poll` |
 | `summarize_chat` | one-shot, tool-less model call over the stored conversation window, then up to 8 short facts into long-term memory — saves to a chat gated like `!memory add`, global scope needs the owner/admin role. Runs only when the user asks; the model cannot choose the saved text, only request the summary |
 | `get_datetime` | current time in `BOT_TIMEZONE` |
@@ -838,6 +852,29 @@ what says no:
 
 A new tool that writes, sends, schedules, or reads owner/admin data needs an
 `access` entry; `tests/ai-tool-authz.test.mjs` pins the rules.
+
+The backing command's disabled state also applies to tools. Audio is snapshotted
+inside `resolveCaller()` and held in a private WeakMap; no tool argument can pick
+a URL, message, caller or destination. Ordinary AI turns expose attached/quoted
+audio lazily to the transcription tool; the explicit `add`/`send` batch retains
+its existing media behavior. Speech output is Google TTS, image output is the
+dedicated Gemini model, and transcription follows `ai_stt_provider` (explicit
+choices fail closed on a missing key; `auto` retains its existing fallback).
+
+`aiMedia.cjs` limits model-initiated media to three attempts per sender per
+minute, one operation at a time, 8 MiB binary input/output, 3000-character
+speech/image prompts and a 12000-character transcript. The deadline follows
+`ai_tool_timeout_ms` up to 120 seconds. Abort checks prevent late sends; a
+non-cancellable operation stays busy until it finishes. Refused routing is
+never `sent: true`. Shared STT and TTS enforce their byte/text limits for
+explicit commands too; other AI media downloads are bounded at 64 MiB.
+
+`npm run docs:build` regenerates `src/services/levix-docs.generated.json` from
+README, SETUP, ANDROID, PRIVACY and the four command catalogs. Never edit it by
+hand. Run it after a source or package-version change; `npm run docs:check`
+and `tests/ai-docs.test.mjs` detect drift. The JSON is statically required so
+npm, Docker, Android and SEA carry the same offline index. Retrieved prose
+remains tool data; only fixed documentation policy belongs in the system prompt.
 
 **Sub-commands**
 - `!gemini <text>` / `!ask` / `!ai` — ask the agent

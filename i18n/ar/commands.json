@@ -15,7 +15,7 @@
   "deleteschedule.usage": "deleteschedule <id>",
   "digit.description": "يحوّل الأرقام بين الأرقام العربية (٠١٢) والإنجليزية (012).",
   "digit.usage": "digit [en|ar] [رقم/نص]   (أو رد على رسالة)",
-  "gemini.description": "مساعد ذكي بأدوات (بحث في الويب، قراءة الروابط، ذاكرة دائمة). أوامر فرعية: add/send/clear/show للسياق، وgenerate للصور، وdel/delall لمسح المحادثة.",
+  "gemini.description": "مساعد ذكي للبحث والذاكرة والمساعدة من وثائق Levix المرفقة بهذا الإصدار. اطلب إنشاء صورة أو قراءة نص بصوت أو تفريغ رسالة صوتية ترد عليها. مثال: !ai كيف أنشئ نسخة احتياطية؟ أو !ai اقرأ هذا بصوت. أوامر فرعية: add/send/clear/show للسياق، وgenerate للصور، وdel/delall لمسح المحادثة.",
   "gemini.usage": "gemini <النص>\ngemini add <النص>\ngemini send\ngemini show\ngemini clear\ngenerate <وصف الصورة>\ndel   (مسح سجل هذه المحادثة)\ndelall   (مسح كل المحادثات)",
   "group.description": "الأمر الرئيسي لكل إجراءات إدارة المجموعة.",
   "group.usage": "group <أمر فرعي> [المعاملات]",

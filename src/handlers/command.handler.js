@@ -82,6 +82,8 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName =
       if (prop === "sendMessage") {
         return async (jid, content, options) => {
           const opts = options ? { ...options } : {};
+          const signal = opts.signal;
+          signal?.throwIfAborted();
           const levix = opts.levix || null;
           delete opts.levix;
 
@@ -121,7 +123,7 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName =
                   target,
                   chatJid,
                   { text: notice, linkPreview: null },
-                  { quoted: originalMsg },
+                  { quoted: originalMsg, ...(signal ? { signal } : {}) },
                 );
               } catch (error) {
                 logger.warn({ err: error?.message }, "[router] refusal notice failed");
@@ -150,10 +152,12 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName =
           if (eligibleForEdit) {
             editUsed = true;
             try {
-              return await target.sendMessage.call(target, chatJid, {
-                ...outgoing,
-                edit: originalMsg.key,
-              });
+              return await target.sendMessage.call(
+                target,
+                chatJid,
+                { ...outgoing, edit: originalMsg.key },
+                signal ? { signal } : undefined,
+              );
             } catch {
               // Editing failed — fall through to a normal send.
             }
@@ -164,6 +168,7 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName =
           } else if ("quoted" in opts) {
             delete opts.quoted;
           }
+          signal?.throwIfAborted();
           const sent = await target.sendMessage.call(target, plan.destination, outgoing, opts);
           if (sent?.key && !sent.key.remoteJid) sent.key.remoteJid = plan.destination;
           return sent;

@@ -1,0 +1,2560 @@
+{
+  "schema": 1,
+  "version": "5.0.0-beta.1",
+  "sources": [
+    {
+      "file": "README.md",
+      "sha256": "8e74dfce7e2a963e3cfee7590c7480d8b4d7a5f0440bd819021de0acfbe5d4d6"
+    },
+    {
+      "file": "SETUP.md",
+      "sha256": "eb54f5bd1bbf005827df95a30b3103d358fe5904b5a0720cbec8b385e2fba113"
+    },
+    {
+      "file": "ANDROID.md",
+      "sha256": "612a28511c2e7970fb6c45fdbe2741c60318d9ba48a33115aafe2b0cb2641e10"
+    },
+    {
+      "file": "PRIVACY.md",
+      "sha256": "a212f47494f113ac22191e27f53843f69a10dec8d3d8191ff1072b3a2d793774"
+    },
+    {
+      "file": "i18n/en/commands.json",
+      "sha256": "68bc651ea84a07bb4fa5a15eccf5264dc173a89c0eabf55d45c10819d8d6369e"
+    },
+    {
+      "file": "i18n/ar/commands.json",
+      "sha256": "d07bb9c150b9c2ca826fa036553b63c592b2c7c37447c7c47569dd4f8a4297d5"
+    },
+    {
+      "file": "i18n/pt-BR/commands.json",
+      "sha256": "cf993d6acbce384b4f733eaf132fa0ae375d7fe48d41780e0dc9c9a1713ac39e"
+    },
+    {
+      "file": "i18n/es-419/commands.json",
+      "sha256": "cd6b605812f7eb03bb9f742f8fa03845dc5f58215629ff8257bb2e9ce6ad54eb"
+    }
+  ],
+  "sections": [
+    {
+      "id": "README.md#introduction",
+      "source": "README.md",
+      "title": "Introduction",
+      "locale": "en",
+      "text": "Free, open-source, self-hosted WhatsApp automation that stays under your control.\n\n\n\n\n\n\n\n\n\n\nLevix is a personal WhatsApp bot with a growing command catalog, group moderation, scheduled\nmessages, an AI agent, media tools, and a web control panel. You run it on your\nown computer or server, keep its database and session files yourself, and can\nchange almost everything while it is running.\n\nThere is no paid tier, hosted account, external database, or configuration file\nto maintain. Levix is released under the MIT License.\n\n> [!WARNING]\n> Levix uses Baileys, an unofficial\n> WhatsApp Web client, and is not affiliated with or endorsed by WhatsApp or\n> Meta. Unofficial automation can lead to temporary restrictions or an account\n> ban. Do not use Levix for spam or unsolicited bulk messaging. If an outage or\n> account restriction is unacceptable, use the official WhatsApp Business\n> Platform instead."
+    },
+    {
+      "id": "README.md#linux-server",
+      "source": "README.md",
+      "title": "Linux server",
+      "locale": "en",
+      "text": "The public installer installs the latest stable release and configures Levix as\na service:\n\n```bash\ncurl -fsSL https://levix.leviro.net/install.sh | bash\n```\n\nYou can read the installer before running it."
+    },
+    {
+      "id": "README.md#npm",
+      "source": "README.md",
+      "title": "npm",
+      "locale": "en",
+      "text": "Requires Node.js 24 or newer:\n\n```bash\nnpm install -g levix-bot\nlevix\n```"
+    },
+    {
+      "id": "README.md#docker",
+      "source": "README.md",
+      "title": "Docker",
+      "locale": "en",
+      "text": "```bash\ngit clone https://github.com/Abdodiab2005/levix\ncd levix\ndocker compose up -d\ndocker compose logs levix\n```"
+    },
+    {
+      "id": "README.md#android-phone-no-server-required",
+      "source": "README.md",
+      "title": "Android phone (No server required)",
+      "locale": "en",
+      "text": "Run Levix directly on an Android device (Android 10+, ARM64 or ARMv7) as a self-contained background companion:\n\n1. Download **`levix-android-arm64.apk`** (64-bit phones) or **`levix-android-armv7.apk`** (32-bit phones) from Releases.\n2. Install the APK and tap **Start Assistant** — the big circle on the home screen.\n3. Tap **Connect WhatsApp** to set your panel password and link WhatsApp via an 8-character pairing code.\n\nSee ANDROID.md for full instructions, OEM battery optimizations (Xiaomi, Samsung, OnePlus), and offline handling.\n\n---\n\nStandalone Linux, macOS ARM64, and Windows binaries are available from the\nlatest GitHub release.\n\nWhen Levix starts:\n\n1. Open the panel URL printed in the terminal.\n2. Choose a panel password. A remote first-time setup also asks for the printed\n   setup code.\n3. Open **Connection**, press **Start session**, and scan the QR from WhatsApp.\n4. Send `!ping` in a chat.\n\nA successfully linked WhatsApp session resumes automatically after a process,\nDocker, or systemd restart. See SETUP.md for domains, reverse\nproxies, headless mode, backups, and troubleshooting."
+    },
+    {
+      "id": "README.md#what-you-get",
+      "source": "README.md",
+      "title": "What you get",
+      "locale": "en",
+      "text": "| Area | What Levix provides |\n| --- | --- |\n| Commands | Utilities, notes, reminders, polls, media, speech, weather, prayer times, and more — configurable from the panel |\n| Translation | `!translate` between Arabic and English, or into a language you name, with your active AI provider or Google translation (the official API with a key, or Google's public endpoint without one), plus summary, tone, explain, and detect options |\n| Group moderation | Welcome messages, anti-link, anti-spam, media rules, and forbidden words in one linked pipeline with a shared warning counter per member — at the limit the group removes the member automatically or flags them for admin review, guided by a per-group policy (Relaxed / Standard / Strict presets, warning limit, per-feature actions, warning expiry); warnings, roles, rules, and notes too |\n| AI agent | Pick Google Gemini, OpenAI / any OpenAI-compatible server, or Anthropic from the panel; each provider has its own endpoint, API key, and model, with tools for web search, page reading, memory, and role management |\n| Scheduling | One-off, daily, and weekly messages with durable jobs, delivery status, and manual retry |\n| Control panel | Live connection state, command settings, roles, permissions, keys, memory, schedules, and logs |\n| Media | Text, images, video, audio, QR codes, text-to-speech, and speech-to-text |\n| Stickers | Turn a photo, GIF, or short video into a sticker, and keep a personal library and packs from chat or the panel |\n| Deployment | Android APK, npm, Docker, systemd installer, standalone binaries, headless mode, and safe domain setup |\n| Storage | One SQLite database and one data directory for settings, sessions, memory, and logs |\n\nEvery command can be enabled, disabled, renamed, and assigned permissions from\nthe panel without restarting the bot."
+    },
+    {
+      "id": "README.md#ai-that-can-act",
+      "source": "README.md",
+      "title": "AI that can act",
+      "locale": "en",
+      "text": "The `!gemini` command is an agent rather than a plain chat box. It can run\nseveral tool rounds, search the web, read a page, save long-term memories, and\nmanage bot roles. It narrates progress by editing one WhatsApp message and lists\nsources when it uses web search.\n\nAI answers are formatted for WhatsApp automatically: `**bold**` becomes `*bold*`,\n`__italic__` becomes `_italic_`, and tables become named entries with labeled\nbullet points. Headings, lists, checkboxes, strikethrough and links are converted;\ncode contents and URLs are preserved.\n\nReplies follow the language and dialect you write in — Egyptian Arabic in,\nEgyptian Arabic out.\n\nUse `!md` (or `!markdown`) to convert text from any other AI or message, without\nan AI key. Reply to that message with `!md`, or paste Markdown after the command,\nincluding multiline tables and code. For example: `!md **Bold** and __italic__`.\nExisting WhatsApp `*bold*` and `_italic_` text keeps its formatting.\n\nAI is optional. The rest of Levix works without an AI key."
+    },
+    {
+      "id": "README.md#ask-about-levix-or-request-media",
+      "source": "README.md",
+      "title": "Ask about Levix or request media",
+      "locale": "en",
+      "text": "Ask `!ai How do I back up Levix?` for help grounded in this release's bundled\nREADME, setup, Android, privacy and four-language command reference. The AI can\nsearch those documents offline and cite the source section and version. Prose\nguides are English; Arabic, Brazilian Portuguese and Latin American Spanish\nqueries can fall back to them. Missing evidence is reported instead of treating\nfuture plans as installed features. Only the retrieval is offline: an AI answer\nstill uses your configured chat provider.\n\n- `!ai Create an image of a cat on the moon` uses the same dedicated Gemini\n  image key and model as `!generate`.\n- Reply to text with `!ai Read this aloud` for Google TTS, the same synthesizer\n  as `!tts`. FFmpeg makes a voice note; MP3 is the fallback.\n- Reply to a voice message with `!ai Transcribe this voice note` for the same\n  Gemini/OpenAI-compatible transcription policy as `!stt`. The transcript then\n  becomes context for the selected chat provider's answer.\n\nThese actions retain the backing command's live permission and enabled state,\nand results follow the configured reply router. They do not change your chat\nprovider. Image and transcription providers may charge against your own key;\nGoogle TTS has no API-key charge. There is no music or sound-effect generator.\nNatural-language media tools have bounded input, output, time and request rates;\na missing key, unsupported response or refused delivery is a failure."
+    },
+    {
+      "id": "README.md#persistent-schedules-and-memory",
+      "source": "README.md",
+      "title": "Persistent schedules and memory",
+      "locale": "en",
+      "text": "One-off and recurring schedules survive restarts and record their latest\ndelivery outcome. Long-term memory is stored as plain Markdown in\n`memory/global.md` or per-chat files, so it remains readable and editable\noutside the panel."
+    },
+    {
+      "id": "README.md#a-connection-you-control",
+      "source": "README.md",
+      "title": "A connection you control",
+      "locale": "en",
+      "text": "The panel can start, stop, reconnect, and unlink WhatsApp while showing the\nactual state: idle, waiting for a scan, connected, reconnecting, or stopped.\nReconnect attempts continue inside the bot even when no browser is open.\n\nAn optional HTTP, HTTPS, or SOCKS5 proxy can route WhatsApp traffic, including\nmedia, without changing how the panel or AI connects."
+    },
+    {
+      "id": "README.md#cli",
+      "source": "README.md",
+      "title": "CLI",
+      "locale": "en",
+      "text": "```text\nlevix                    start Levix with the web panel\nlevix headless           start Levix with no web UI or open port\nlevix where              print the data directory\nlevix reset-password     reset the panel password\nlevix domain [name]      configure a domain safely (may need sudo)\n```\n\nA fresh panel install waits for you to start the first WhatsApp pairing.\n`levix headless` has no button to press, so it starts the session itself and\nprints the QR in the terminal when needed."
+    },
+    {
+      "id": "README.md#data-and-configuration",
+      "source": "README.md",
+      "title": "Data and configuration",
+      "locale": "en",
+      "text": "Everything mutable lives in one data directory:\n\n- npm installation: `~/.levix`\n- source checkout: `./data`\n- Docker: the `levix-data` volume\n\nCopying this directory is a full backup, including the SQLite database, WhatsApp\nsession, memory, and logs.\n\nThe database is the source of truth. The prefix, permissions, API keys, server\nsettings, and feature options are stored in `bot_settings` and read at use\ntime. There is no `.env` or application configuration file to keep in sync.\n\nSecrets are generated rather than shipped with defaults. The panel password is\nstored as an scrypt hash, and the session-signing key is generated on first\nstart."
+    },
+    {
+      "id": "README.md#architecture",
+      "source": "README.md",
+      "title": "Architecture",
+      "locale": "en",
+      "text": "- **Node.js 24** with ES modules and CommonJS where needed. A newer Node starts with a warning that it\n  is not officially supported.\n- **Baileys v7** for the WhatsApp protocol engine, LID support, and phone pairing codes.\n- **`node:sqlite`** for a zero-dependency, single-file datastore.\n- **React + Vite Control Panel** (`frontend/`) with TypeScript, native RTL Arabic / English internationalization, Lucide icons, responsive drawer, modal dialogs, and real-time Socket.IO synchronization.\n- **Express + EJS Gateways** for lightweight setup, login, and pairing QR gateway screens.\n- **Pluggable AI providers** — Google Gemini, OpenAI / any OpenAI-compatible endpoint, or\n  Anthropic — each with its own endpoint, API key, and model in the control panel, no env file.\n- **Biome** for fast formatting and linting across the codebase.\n- **GitHub Actions** validation for tests, npm packaging, Docker persistence,\n  Android APK packaging, and standalone executables on Linux, macOS, and Windows.\n\nAGENTS.md documents the module layout, message flow, storage API,\nand architectural constraints. PACKAGING.md covers npm, Docker,\nsystemd, installers, and single-executable releases."
+    },
+    {
+      "id": "README.md#development",
+      "source": "README.md",
+      "title": "Development",
+      "locale": "en",
+      "text": "```bash\ngit clone https://github.com/Abdodiab2005/levix\ncd levix\nnpm ci\ncd frontend && npm ci && cd ..\nnpm run build        # compiles the React frontend to public/dashboard\nnpm run lint         # runs Biome linter across the project\nnpm test             # runs the full test suite\nnpm start            # starts Levix\n```\n\nRead the contributor walkthrough for the fork-to-pull-request workflow, then check CONTRIBUTING.md for the official repository rules. Bug reports and focused pull requests are welcome.\n\nFor security issues, follow SECURITY.md and report them\nprivately rather than opening a public issue."
+    },
+    {
+      "id": "README.md#sending-feedback",
+      "source": "README.md",
+      "title": "Sending feedback",
+      "locale": "en",
+      "text": "**Settings → Feedback** in the control panel writes straight to the developer.\nThe bot forwards it server-side to `levix.leviro.net/api/feedback`, which\ndelivers it as a Telegram message; the same form is on the web at\nlevix.leviro.net/feedback. It carries your\nmessage, the topic, an optional rating, an optional contact and one optional\nfile you attach (a screenshot or a log, up to 20 MB), plus the version and\nplatform — and nothing from WhatsApp. Nothing leaves until you press Send.\n\nPrefer a public, trackable bug report with logs attached? Open an\nissue instead."
+    },
+    {
+      "id": "README.md#license",
+      "source": "README.md",
+      "title": "License",
+      "locale": "en",
+      "text": "Levix is free and open source under the MIT License.\n\nBuilt by Abdelrhman Diab under\nLeviro."
+    },
+    {
+      "id": "SETUP.md#setting-up-levix",
+      "source": "SETUP.md",
+      "title": "Setting up Levix",
+      "locale": "en",
+      "text": "Levix is a WhatsApp bot you run yourself. It links to your own WhatsApp account\nby scanning a QR code, exactly like WhatsApp Web, and everything after that is\nconfigured from a control panel in your browser.\n\nThere is no configuration file to edit. There are no keys to generate. If a\nguide anywhere tells you to create a `.env` file, it is out of date.\n\n---"
+    },
+    {
+      "id": "SETUP.md#what-you-need",
+      "source": "SETUP.md",
+      "title": "What you need",
+      "locale": "en",
+      "text": "- A computer or a small server that stays on. A Raspberry Pi is enough.\n- **Node.js 24** — nodejs.org, pick the Node 24 LTS\n  build. A newer Node also starts, with a warning that only Node 24 is\n  supported. (Or skip Node entirely and use Docker, below.)\n- A phone with WhatsApp, to scan the QR once.\n\nLevix stores everything in one file using SQLite, which Node 24 includes.\nNothing is compiled, nothing else is installed, no database server is needed.\n\n---"
+    },
+    {
+      "id": "SETUP.md#the-quickest-way",
+      "source": "SETUP.md",
+      "title": "The quickest way",
+      "locale": "en",
+      "text": "```bash\nnpm install -g levix-bot\nlevix\n```\n\n`levix-bot` is the npm package name. The command you run after installing it is\nstill just `levix`.\n\nThe terminal prints something like:\n\n```\n  Levix is running\n\n  Panel: http://localhost:3001/setup\n  Data:  ~/.levix\n\n  First run — that link asks you to pick a password.\n  Opening it from another machine also needs this code:\n\n  [Setup] Setup code: 43CB5162\n\n  Opening Levix in your browser...\n\n  Not linked to WhatsApp yet? Open the panel, go to Connection and\n  press Start session.\n\n  Press Ctrl+C to stop.\n```\n\n1. On a desktop the browser opens by itself. Otherwise open that address.\n2. Choose a password. (Opening the page from a *different* machine also asks\n   for the setup code above — that's what stops a stranger from claiming your\n   bot before you do.)\n3. You land on the control panel. Go to **Connection**, press **Start session**,\n   and scan the QR with WhatsApp → Settings → Linked devices → Link a device.\n   A brand-new install does not begin pairing until you press Start.\n4. Send `!ping` in any chat. The bot answers.\n\nAfter that first successful pairing, the saved WhatsApp session resumes\nautomatically after a Levix, Docker or systemd restart. You only need the\nConnection screen again if you deliberately stop/unlink the session or WhatsApp\nrequires a new link.\n\nLevix only opens a browser when there is one to open: over SSH, under systemd,\nin Docker or in CI it just prints the address and says why. `--no-open` turns\nit off anywhere.\n\nThat's the whole setup. Keep the terminal open, or see *Keeping it running*.\n\nIf the panel files are missing, the basic English setup and login forms still work.\nRun `npm run build:frontend` from a source checkout or reinstall Levix to restore\nthe full panel and QR screen.\n\n---"
+    },
+    {
+      "id": "SETUP.md#with-docker-instead",
+      "source": "SETUP.md",
+      "title": "With Docker instead",
+      "locale": "en",
+      "text": "No Node install, nothing on your system but the container:\n\n```bash\ngit clone https://github.com/Abdodiab2005/levix\ncd levix\ndocker compose up -d\n```\n\nThen open <http://localhost:3001>. The setup code is in the logs:\n\n```bash\ndocker compose logs levix | grep -F '[Setup] Setup code:' | tail -1\n```\n\nEverything the bot owns lives in the `levix-data` volume. Once WhatsApp has\nbeen paired, restarting the container reuses that saved session automatically.\n\n---"
+    },
+    {
+      "id": "SETUP.md#running-it-without-the-web-panel",
+      "source": "SETUP.md",
+      "title": "Running it without the web panel",
+      "locale": "en",
+      "text": "On a server you may not want a panel at all:\n\n```bash\nlevix headless\n```\n\nThat starts the bot and nothing else — no web interface, no port opened. If the\nbot has never been paired it prints the QR straight into the terminal:\n\n```\n  Levix — headless\n\n  No WhatsApp session found.\n\n  Scan this QR from:\n  WhatsApp -> Linked devices -> Link a device\n\n  [ the QR ]\n\n  ✓ WhatsApp connected\n  ✓ Levix is ready\n\n  [command count] commands loaded\n```\n\nYou can switch modes freely: the data directory is the same either way.\n\n---"
+    },
+    {
+      "id": "SETUP.md#putting-it-on-a-domain",
+      "source": "SETUP.md",
+      "title": "Putting it on a domain",
+      "locale": "en",
+      "text": "```bash\nsudo levix domain bot.example.com\n```\n\nLevix looks at what the server already runs and fits in with it:\n\n| What it finds | What it does |\n| --- | --- |\n| nginx (+ certbot) | adds one nginx site, runs `nginx -t`, reloads, offers HTTPS |\n| Caddy | adds one site file to the existing Caddy |\n| Apache | prints the reverse-proxy settings; changes nothing |\n| a hosting panel (Plesk, cPanel, CloudPanel, …) | prints the settings and where to enter them; changes nothing |\n| nothing at all | offers to install Caddy, which handles HTTPS by itself |\n| something unrecognised on :80/:443 | stops and tells you what is there |\n\nIt never edits another site, never overwrites `nginx.conf`, and never reloads a\nconfiguration that failed validation. Running it twice does not create a second\ncopy of anything.\n\nThe bot itself never needs root — only this command does, and only when it is\nactually going to write to `/etc`.\n\n---"
+    },
+    {
+      "id": "SETUP.md#turning-on-the-parts-that-need-a-key",
+      "source": "SETUP.md",
+      "title": "Turning on the parts that need a key",
+      "locale": "en",
+      "text": "The bot works out of the box. Two features need a free key, and both are set in\n**Settings** in the panel — never in a file:\n\n| Feature | Where to get the key |\n| --- | --- |\n| AI replies (`!gemini`, `!ai`) | aistudio.google.com/apikey |\n| Weather (`!weather`) | openweathermap.org/api |\n\nPaste the key, press Save. It applies to the next message — no restart.\n\n---"
+    },
+    {
+      "id": "SETUP.md#keeping-it-running",
+      "source": "SETUP.md",
+      "title": "Keeping it running",
+      "locale": "en",
+      "text": "Closing the terminal stops the bot. Pick one:\n\n**Docker** — already handled; the container restarts by itself.\n\n**A Linux server** — the installer sets up a service that starts on boot:\n\n```bash\ncurl -fsSL https://levix.leviro.net/install.sh | bash\n```\n\nOpening the panel from your laptop counts as another machine, so it asks for\nthe setup code. Print it with:\n\n```bash\njournalctl -u levix --no-pager | grep -F '[Setup] Setup code:' | tail -1\n```\n\nRead the script first if you like — it is short, and it explains each step.\n\nThat always installs the newest stable Levix. To stay on this release — the\nsame script, pinned — use its own URL:\n\n```bash\ncurl -fsSL https://levix.leviro.net/install/v4.9.0.sh | bash\n```\n\n**Behind a proxy** — if this server reaches the internet through a proxy, the\npanel has a **WhatsApp proxy** section under Settings: protocol (HTTP, HTTPS or\nSOCKS5), host, port, and a username and password if yours needs them. It applies\nto the WhatsApp connection only — the panel itself and the AI keep connecting\ndirectly. Saving it never interrupts a working session; the Connection screen\noffers **Reconnect to apply** when a change is waiting.\n\n**Your own machine** — `pm2` works well:\n\n```bash\nnpm install -g pm2\npm2 start levix --name levix\npm2 save && pm2 startup\n```\n\n---"
+    },
+    {
+      "id": "SETUP.md#where-your-data-is",
+      "source": "SETUP.md",
+      "title": "Where your data is",
+      "locale": "en",
+      "text": "One directory holds all of it: the database, the WhatsApp session, the bot's\nlong-term memory, the logs.\n\n```bash\nlevix where\n```\n\n- installed with npm: `~/.levix`\n- running from a git clone: `./data` inside the clone\n- Docker: the `levix-data` volume\n\nA copy of this directory, taken while Levix is stopped, is a full copy: it holds\nthe WhatsApp pairing and the encryption key, so keep it private. On another\ndevice WhatsApp may still ask you to pair again. For an encrypted backup without\nthe pairing, use **Settings → Backup** (below)."
+    },
+    {
+      "id": "SETUP.md#back-up-and-restore",
+      "source": "SETUP.md",
+      "title": "Back up and restore",
+      "locale": "en",
+      "text": "Open **Settings → Backup**. Create a backup with a password of at least 12\ncharacters and save the `.levixbak` file. Keep the password safe: Levix cannot\nrecover it. To restore, upload the file, enter its backup password, review the\npreview, then confirm with your panel password.\n\nThe preview lists what the restore changes: settings and API keys that are\nadded, replaced or unchanged, the ones the backup does not hold (they stay as\nthey are), the AI persona, and the WhatsApp account data. When the restore would\nreplace or remove something this install already has, tick the confirmation\nbefore **Confirm restore** is enabled. Restore writes only what the backup\nholds: a setting, an API key or a persona missing from the backup keeps its\ncurrent value. It keeps this install's panel password, recovery email, session\nkey, device settings and encryption key. WhatsApp pairing is never in the backup;\npair the account again by hand. Conversations, AI memory, stickers, schedules,\nroles and group data activate only when the same WhatsApp account connects.\nIf a different account connects, the Backup screen shows **waiting account\ndata**. You can later pair the matching account or choose **Discard** to remove\nthe waiting data.\n\n---"
+    },
+    {
+      "id": "SETUP.md#when-something-goes-wrong",
+      "source": "SETUP.md",
+      "title": "When something goes wrong",
+      "locale": "en",
+      "text": "**\"Port 3001 is already taken\"** — Levix is already running, or something else\nholds that port. Open <http://localhost:3001> and see. To move it: Settings →\nServer → Control panel port, then restart.\n\n**Forgot the panel password**\n\nTwo ways to get a one-time reset code without touching the terminal:\n\n- **WhatsApp code** — on the login screen, choose **WhatsApp**; the code arrives\n  in your own chat with the bot. Needs the WhatsApp session up.\n- **Recovery email** — if you added and verified an address under **Settings**,\n  the same screen offers **Email**, and the code goes to that address. It is\n  delivered by a Levix mail relay, which emails the code and keeps neither the\n  address nor the code in readable form. Adding the address in Settings asks\n  for the panel password. Ten wrong codes in a day pause reset for a day.\n  If email recovery needs verification again, sign in using WhatsApp recovery or\n  the CLI alternative below, then verify the address in Settings. Older saved\n  addresses also need this one-time verification after upgrading. Verifying an\n  address again disables email recovery on other installations using that address.\n  Authorization expires after 365 days without an accepted email-reset request;\n  network and mail-service outages do not remove your saved recovery settings.\n\nIf the session is down and neither can arrive, `levix reset-password` still\nworks from the terminal:\n\n```bash\nlevix reset-password\n```\n\nThen start it again and pick a new one. The WhatsApp link is untouched.\n\n**The bot stopped answering** — WhatsApp dropped the link, usually because the\nphone was offline for a long time. Open the panel; if it asks for a QR, scan it\nagain.\n\n**\"levix-bot needs Node 24\"** — your Node is older. Install the Node 24 LTS\nbuild from nodejs.org and try again.\n\n**\"Warning: Node 26… is newer than Node 24\"** — Levix still runs. Only Node 24\nis built and tested, so help with problems on a newer Node is best effort.\nInstall Node 24 LTS for a supported setup.\n\n**Start over completely** — stop the bot, delete the data directory\n(`levix where` prints it), start it again. That wipes everything: settings,\nmemory, the WhatsApp link.\n\n---"
+    },
+    {
+      "id": "SETUP.md#two-things-worth-knowing",
+      "source": "SETUP.md",
+      "title": "Two things worth knowing",
+      "locale": "en",
+      "text": "**Whoever scans the QR owns the bot.** That account is the owner and can run\nevery command. You can add more owners and admins from **Roles** in the panel.\n\n**The panel has no HTTPS of its own.** On your own machine that's fine. On a\nserver reachable from the internet, run `sudo levix domain bot.example.com` —\nit puts a reverse proxy with a certificate in front, sets the proxy-hop count\nfor you, and stops the panel listening publicly on its raw port."
+    },
+    {
+      "id": "ANDROID.md#levix-for-android",
+      "source": "ANDROID.md",
+      "title": "Levix for Android",
+      "locale": "en",
+      "text": "Run **Levix** directly on your Android phone as an autonomous background companion — **no VPS, no Termux at runtime, no cloud server, and no subscription fees**.\n\nLevix for Android packages the complete Levix stack into a standalone Android APK:\n- **Node.js 24 LTS** compiled for Android Bionic (ARM64 **and** ARMv7)\n- **SQLite** datastore powered by Node's built-in `node:sqlite`\n- **Baileys v7** WhatsApp protocol engine with local LID mapping\n- **AI Agent** with multi-provider support (Gemini, OpenAI, Anthropic)\n- **All 69 commands** & group moderation tools\n- **Embedded FFmpeg** for native WhatsApp voice notes (`!tts`) and video/image preview thumbnails\n- **Local Web Control Panel** accessible only inside the app's built-in WebView; a phone browser cannot open it\n\n---"
+    },
+    {
+      "id": "ANDROID.md#requirements",
+      "source": "ANDROID.md",
+      "title": "Requirements",
+      "locale": "en",
+      "text": "| Requirement | Specification |\n| --- | --- |\n| **Architecture** | **ARM64** (`levix-android-arm64.apk` — almost all phones since 2016) or **ARMv7 32-bit** (`levix-android-armv7.apk` — remaining 32-bit-only devices). |\n| **Android Version** | **Android 10** or newer (API level 29+; the app targets API 36). |\n| **Free Storage** | ~400 MB (APK ~100–110 MB per ABI + unpacked app bundle + SQLite database). |\n| **WhatsApp Account** | An active WhatsApp account to link with via pairing code or QR. |\n\n---"
+    },
+    {
+      "id": "ANDROID.md#installation",
+      "source": "ANDROID.md",
+      "title": "Installation",
+      "locale": "en",
+      "text": "1. Go to the Levix Releases page on GitHub.\n2. Download the APK that matches your device:\n   - **`levix-android-arm64.apk`** — 64-bit devices (almost all phones since 2016).\n   - **`levix-android-armv7.apk`** — 32-bit-only devices.\n   - Not sure? Install the AIDA64 app or check your phone's specs; if it says `arm64-v8a` / `aarch64` / \"64-bit\", use the arm64 build.\n3. Open the downloaded APK on your device and tap **Install**.\n   - If prompted by Android, enable **\"Install unknown apps\"** for your browser or file manager.\n4. Open the **Levix Host** app from your home screen or app drawer.\n\n---"
+    },
+    {
+      "id": "ANDROID.md#step-1-grant-permissions-start-the-host",
+      "source": "ANDROID.md",
+      "title": "Step 1: Grant Permissions & Start the Host",
+      "locale": "en",
+      "text": "1. Launch **Levix Host**. The first launch runs a short guided tour over the home screen: it dims the page, highlights one real button at a time and explains it in a card. **Back**, **Next**, **Done** and **Skip** are on the card, so the tour never leaves you stuck. **Show guide again** on the home screen replays it.\n2. Tap the big circle (**Start Assistant**).\n3. When prompted, grant **Notification** permissions so the host can maintain an ongoing foreground service and keep the bot running while the screen is off.\n4. When prompted, tap **Allow** to disable battery optimization for Levix.\n\nThe circle becomes a progress state while the engine starts. Once ready, **Connect WhatsApp** opens the secure Connection workflow. Engine readiness and WhatsApp connectivity are shown separately, and the ongoing notification reports the session state."
+    },
+    {
+      "id": "ANDROID.md#step-2-set-admin-password",
+      "source": "ANDROID.md",
+      "title": "Step 2: Set Admin Password",
+      "locale": "en",
+      "text": "1. Tap **Connect WhatsApp** in the app to open the panel on Connection. Once fully connected, the home action becomes **Open Control Panel**.\n2. The initial setup screen will appear (`/setup`). Choose a secure master password for your web control panel and submit."
+    },
+    {
+      "id": "ANDROID.md#step-3-link-whatsapp-via-pairing-code-recommended",
+      "source": "ANDROID.md",
+      "title": "Step 3: Link WhatsApp via Pairing Code (Recommended)",
+      "locale": "en",
+      "text": "Because you are running the bot on a phone, scanning a QR code on the same screen is difficult. Levix provides a direct **Pairing Code** option:\n1. In the Web Control Panel, navigate to **Connection**.\n2. Select **Pairing Code** (selected by default on Android).\n3. Enter your WhatsApp phone number with international country code (e.g. `201012345678` — do **not** include `+`, `-`, or leading `0`).\n4. Tap **Request Pairing Code**.\n5. An 8-character code will be generated (e.g., `ABCD-1234`).\n6. On your phone, open **WhatsApp**:\n   - Tap **Settings** (or the three dots menu `⋮`).\n   - Tap **Linked Devices**.\n   - Tap **Link a Device**.\n   - Tap **Link with phone number instead** at the bottom of the screen.\n   - Enter the 8-character code displayed in your Levix panel.\n7. WhatsApp will complete the handshake. Within a few seconds, the connection status will turn green: **Connected**."
+    },
+    {
+      "id": "ANDROID.md#the-home-screen",
+      "source": "ANDROID.md",
+      "title": "The home screen",
+      "locale": "en",
+      "text": "- **Header** — the Levix mark and app name stay on the left; the language and appearance controls stay on the right in both languages. Tap the globe to switch **العربية** / **English**, and the sun/moon to switch Light / Dark.\n- **Start Assistant** — the large power circle is the primary action while stopped. Startup shows progress, pairing offers **Connect WhatsApp**, and a connected assistant shows a compact ready card with **Open Control Panel**. **Stop Assistant** is a separate action. Contextual guidance also explains reconnecting, offline pauses, expired sessions, and engine errors.\n- **Battery Guard** — appears below activation guidance. Restrictions show a warning and **Enable Battery Guard**; an exemption shows a compact healthy card. Android or device restrictions can still interrupt background operation.\n- **WhatsApp & Bot Engine tiles** — tap the WhatsApp tile for the read-only connection sheet: state, since when, error, network and engine.\n- **Media Hub** — browses the statuses and WhatsApp media stored on this phone.\n- **Show guide again** — replays the guided tour, highlighting each control on the home screen in turn. Controls that are hidden in the current state are skipped.\n- **Diagnostics** — tap the card for **Save & open** (writes `Downloads/Levix/levix-host-<timestamp>.log` and opens it in your viewer) or **Share logs** (Android's share sheet). Nothing leaves the phone until you pick one.\n\n---"
+    },
+    {
+      "id": "ANDROID.md#keeping-levix-running-in-the-background",
+      "source": "ANDROID.md",
+      "title": "Keeping Levix Running in the Background",
+      "locale": "en",
+      "text": "Android manufacturers apply aggressive battery-saving algorithms that kill background processes. To keep Levix connected 24/7 with the screen locked:"
+    },
+    {
+      "id": "ANDROID.md#xiaomi-redmi-poco-hyperos-miui",
+      "source": "ANDROID.md",
+      "title": "Xiaomi / Redmi / POCO (HyperOS / MIUI)",
+      "locale": "en",
+      "text": "1. Open **Settings** → **Apps** → **Manage apps** → **Levix**.\n2. Enable **Autostart** (or **Background autostart**).\n3. Tap **Battery saver** → select **No restrictions**.\n4. Open the Android **Recents** screen (app switcher), press and hold the **Levix** card, and tap the **Lock icon** to lock it in memory."
+    },
+    {
+      "id": "ANDROID.md#samsung-galaxy-one-ui",
+      "source": "ANDROID.md",
+      "title": "Samsung Galaxy (One UI)",
+      "locale": "en",
+      "text": "1. Open **Settings** → **Apps** → **Levix**.\n2. Tap **Battery** → select **Unrestricted**.\n3. Open **Settings** → **Battery** → **Background usage limits** → **Never sleeping apps** → tap `+` and add **Levix**."
+    },
+    {
+      "id": "ANDROID.md#oneplus-oppo-realme-oxygenos-coloros",
+      "source": "ANDROID.md",
+      "title": "OnePlus / OPPO / Realme (OxygenOS / ColorOS)",
+      "locale": "en",
+      "text": "1. Open **Settings** → **Apps** → **App management** → **Levix**.\n2. Tap **Battery usage** → enable:\n   - **Allow foreground activity**\n   - **Allow background activity**\n   - **Allow auto-launch**"
+    },
+    {
+      "id": "ANDROID.md#google-pixel-motorola-lineageos-stock-android",
+      "source": "ANDROID.md",
+      "title": "Google Pixel / Motorola / LineageOS / Stock Android",
+      "locale": "en",
+      "text": "1. Open **Settings** → **Apps** → **Levix**.\n2. Tap **App battery usage** (or **Battery**) → select **Unrestricted**.\n\n---"
+    },
+    {
+      "id": "ANDROID.md#real-time-notifications-offline-handling",
+      "source": "ANDROID.md",
+      "title": "Real-Time Notifications & Offline Handling",
+      "locale": "en",
+      "text": "Levix includes intelligent network and connection lifecycle handling:\n\n- **Ongoing Foreground Notification**:\n  The notification drawer displays the live state of both the host service and WhatsApp:\n  - `WhatsApp: Connected`\n  - `WhatsApp: ⏳ Reconnecting (code: reason)`\n  - `WhatsApp: ⏸️ Paused (No Internet)`\n- **Offline Alerts (`levix-alerts`)**:\n  If your phone loses Wi-Fi and mobile data or WhatsApp disconnects, Levix posts a high-priority alert. When internet returns, the alert automatically dismisses.\n- **Smart Pause & Auto-Reconnect**:\n  When you enter airplane mode or lose connectivity, Levix immediately pauses retries instead of burning your 5 retry attempts. As soon as connectivity is restored, Levix resets the retry counter and automatically reconnects within 2 seconds.\n\n---"
+    },
+    {
+      "id": "ANDROID.md#media-hub",
+      "source": "ANDROID.md",
+      "title": "Media Hub",
+      "locale": "en",
+      "text": "Open **Media Hub** from the native host screen to browse WhatsApp and WhatsApp Business statuses, photos, videos, voice notes, audio, documents, and stickers. Search, filter, favorite, share, and save copies to user-visible Levix folders. Storage Insights shows local totals and large files. Only copies saved by Levix can be deleted in the hub.\n\nThe header has compact source, media-type, filter, sort, and Storage Insights icons. Tap a choice icon to see its options. Long-press a card to select it; its border covers the whole preview. The selection bar keeps Save, Share, and Delete as icons, with Select all, Favorite, sticker actions, and Clear selection in the three-dot menu.\n\nThe hub asks for media permission when you open it, after an explanation. Android 14's selected-media permission shows only the items you selected; you can select more or allow full access in system settings. Hidden `.Statuses` folders and some documents may not appear in MediaStore. In that case, use **Enable status access** to grant read-only access to the WhatsApp Media folder through Android's folder picker. Levix remembers the grant and asks again only if access is removed. Media Hub never uploads files, names, thumbnails, or folder details.\n\nLevix bundles a native build of **FFmpeg** (`libffmpeg.so` — ARM64 or ARMv7, matching the APK) inside the APK, compiled from source with NDK r29 so it is safe on 16 KB-page devices.\n- **Voice Notes (`!tts`)**: The Text-to-Speech command automatically transcodes Google TTS MP3 audio into true WhatsApp PTT voice notes (`audio/ogg; codecs=opus`).\n- **Media Previews**: Video and picture thumbnails (`jpegThumbnail`) are generated locally on the phone before sending, ensuring crisp previews in chat bubbles and quotes.\n- **Stickers**: The WebP encode, animation and muxing that Sticker Studio needs (see below).\n- No external packages or Termux setup are required.\n\n---"
+    },
+    {
+      "id": "ANDROID.md#sticker-studio",
+      "source": "ANDROID.md",
+      "title": "Sticker Studio",
+      "locale": "en",
+      "text": "Sticker Studio is the panel's sticker screen. It is reached from the native side rather than opened by hand, because the panel runs in a WebView with no file picker of its own and no way to reach a `content://` URI belonging to the Media Hub."
+    },
+    {
+      "id": "ANDROID.md#the-two-actions-in-the-media-hub",
+      "source": "ANDROID.md",
+      "title": "The two actions in the Media Hub",
+      "locale": "en",
+      "text": "Any single item in **Media Hub** can be turned into a sticker, in two places:\n\n- the **viewer**, on the action row under the picture — hidden for items with no sticker form;\n- the **selection bar’s three-dot menu**, on **Make sticker** — offered only when exactly one stickerable file is selected, since Sticker Studio takes one file at a time.\n\nThe label follows the file:\n\n| Label | When | What the panel does |\n| --- | --- | --- |\n| **Make sticker** | an image, GIF or video | opens the converter: trim, frame, and re-encode to WebP |\n| **Add to stickers** | a WhatsApp sticker (`.webp`) | keeps the file as it is and only adds it to your library |\n\nVoice notes, audio and documents get no action at all — they have no sticker form, so nothing is shown rather than something that would always refuse.\n\nTapping either one opens the panel on its Sticker Studio screen. Nothing is read on the phone at that moment: the app records the URI it already has permission to read, and the panel picks it up from there. If the file is over the cap, or Android never reported its size, you get a message instead of a screen."
+    },
+    {
+      "id": "ANDROID.md#source-and-export-transfers",
+      "source": "ANDROID.md",
+      "title": "Source and export transfers",
+      "locale": "en",
+      "text": "The Media Hub offers files up to 16 MB, mirroring Sticker Studio's server upload limit (`src/stickers/limits.cjs`, `UPLOAD_MAX_BYTES`). It still rejects items with unknown size before opening the panel. This is an offer rule, not a WebView bridge limit: Android streams the selected `content://` URI to Node over the local unix socket, and Node enforces the upload limit again while reading. The panel receives a short-lived token and a loopback preview URL. A preview GET opens the URI as a stream in `shouldInterceptRequest`; no source file is copied into the bridge."
+    },
+    {
+      "id": "ANDROID.md#sticker-studio-host-methods",
+      "source": "ANDROID.md",
+      "title": "Sticker Studio host methods",
+      "locale": "en",
+      "text": "| Method | What it does |\n| --- | --- |\n| `takePendingSticker()` | One-shot Media Hub hand-off; returns `intent`, `token`, `url`, `name`, `mime`, and `size`, with no bytes |\n| `pickStickerSource(callId)` | Opens Android's image/video picker, then returns source metadata through `window.__levixHostDone` |\n| `uploadSource(callId, token, fileName, maxBytes)` | Streams the selected URI to the local Sticker Studio upload route |\n| `exportFile(callId, action, path, method, jsonBody, fileName, mime)` | Streams an export from Node to the share cache or Downloads/Levix |\n| `cancel(callId)` | Closes an active transfer and returns a cancelled result |\n| `pickFile(callId)` | Opens an openable document and returns a source token and metadata |\n| `uploadBackup(callId, token, maxBytes)` | Streams the picked document to `POST /dashboard/api/backup/restore/uploads` with exact length |\n| `saveBackup(callId, token, fileName)` | Opens Create Document and streams `GET /dashboard/api/backup/exports/<64 lowercase hex>` to it |\n\nThe asynchronous methods acknowledge immediately and deliver small JSON through `window.__levixHostDone(callId, result)`. Tokens expire after one hour; the activity keeps at most eight and clears them when it closes. Share files are written to `cache/shared/` and swept after 24 hours. Save writes a pending MediaStore Downloads row and publishes it only after the stream finishes. Both export destinations enforce the Sticker Studio MIME allowlist and sanitize the file name.\n\nBackup bytes never enter JavaScript. Backup upload reports progress through\n`window.__levixHostProgress(callId, bytes, total)` and requires a known size up\nto 16 GiB. Backup save uses Android's document picker; cancellation or transfer\nfailure deletes a created partial document where the provider permits it.\n\nThe ordinary `request()` bridge still carries other panel POST bodies; the small settings JSON export still uses `saveExportFile()`.\nRe-editing a sticker from the library creates its upload on the server, so its preview Blob is never posted through the bridge."
+    },
+    {
+      "id": "ANDROID.md#the-ffmpeg-components-this-needs",
+      "source": "ANDROID.md",
+      "title": "The FFmpeg components this needs",
+      "locale": "en",
+      "text": "`android/scripts/build-ffmpeg-android.sh` builds **libwebp 1.6.0** (with a pinned SHA-256) and adds these components:\n\n| Kind | Components | Why |\n| --- | --- | --- |\n| libraries | `libwebp` + `libwebpmux` + `libsharpyuv` | WebP encode/decode, animation, and muxing; libwebp's own sharp/colour-space helpers |\n| encoders | `libwebp`, `libwebp_anim`, `rawvideo` | still stickers, animated stickers, and raw frames |\n| demuxers | `rawvideo`, `image_gif_pipe` | reading GIF frames to animate them |\n| muxers | `webp`, `rawvideo` | writing a `.webp` container |\n\nStatic and PIC, `CC`/`AR`/`RANLIB` supplied by the cross toolchain, so the result stays position-independent and safe on 16 KB-page devices. The ARM64 binary grows by roughly 5% against the build without it.\n\nThe filters FFmpeg already enables at defaults are what the studio's own pipeline needs — `pad`, `fps`, `scale`, `crop`, `trim`, `transpose`, `split`, `colorkey`, `overlay`, `palettegen`, `paletteuse` — so nothing was added or removed there.\n\n---"
+    },
+    {
+      "id": "ANDROID.md#data-management-backups",
+      "source": "ANDROID.md",
+      "title": "Data Management & Backups",
+      "locale": "en",
+      "text": "All state is stored in your device's private app storage:\n```text\n/data/data/net.leviro.levix/files/data/\n├── levix.db           # SQLite database (settings, auth creds, notes, schedules)\n├── levix.key          # Key for sealed API keys and WhatsApp session data\n├── logs/              # Bot activity logs\n└── memory/            # AI long-term memory markdown files\n```"
+    },
+    {
+      "id": "ANDROID.md#backing-up-your-data",
+      "source": "ANDROID.md",
+      "title": "Backing Up Your Data",
+      "locale": "en",
+      "text": "- **Settings → Backup (recommended)**: create an encrypted `.levixbak` file with\n  a password of at least 12 characters, then save it with Android's save picker\n  (Download, Drive or any document provider you choose). It holds bot settings,\n  command setup, API keys, the AI persona, conversations, memory, schedules,\n  group data, roles and stickers. It never holds the WhatsApp pairing, the panel\n  password, the recovery email, `levix.key` or Android preferences. To restore,\n  open the file with the Android picker, enter its password, review what the\n  restore adds or replaces, confirm, and link the same WhatsApp account by hand.\n  Settings, API keys and a persona the backup does not hold keep their values.\n  Levix never uploads a backup anywhere. See SETUP.md.\n- **Via Root / File Manager** (full copy, including the WhatsApp session):\n  Copy the whole `/data/data/net.leviro.levix/files/data/` folder to private storage.\n  `levix.db` alone cannot restore API keys or the WhatsApp session: both are\n  sealed with `levix.key` in the same folder. Anyone holding both files can\n  read those secrets, so keep the copy private.\n\n---"
+    },
+    {
+      "id": "ANDROID.md#upgrading",
+      "source": "ANDROID.md",
+      "title": "Upgrading",
+      "locale": "en",
+      "text": "To update Levix to a newer version:\n1. Download the new APK from Releases — `levix-android-arm64.apk` or `levix-android-armv7.apk`, whichever you installed before.\n2. Install it directly over the existing app.\n3. Your database, WhatsApp pairing, settings, and passwords will remain completely intact.\n4. On first launch after updating, Levix automatically detects the version upgrade and refreshes the application bundle in the background.\n\n---"
+    },
+    {
+      "id": "ANDROID.md#building-the-apk-from-source",
+      "source": "ANDROID.md",
+      "title": "Building the APK from Source",
+      "locale": "en",
+      "text": "If you prefer to compile Levix Host from source:"
+    },
+    {
+      "id": "ANDROID.md#1-prerequisites",
+      "source": "ANDROID.md",
+      "title": "1. Prerequisites",
+      "locale": "en",
+      "text": "- **JDK 17** & **Android SDK 36** (`$ANDROID_HOME` configured)\n- **Node.js 24** on your development machine (the version in `.node-version`)\n- Tools: `zip`, `unzip`, `rsync`, `curl`, `python3`, `make` and `pkg-config` (for building FFmpeg). `dpkg-deb` is needed only for `--build-archive`, not for a default build. `--update-pins` needs `curl` and `python3`."
+    },
+    {
+      "id": "ANDROID.md#2-fetch-the-embedded-node-js-runtimes-arm64-armv7",
+      "source": "ANDROID.md",
+      "title": "2. Fetch the Embedded Node.js Runtimes (ARM64 + ARMv7)",
+      "locale": "en",
+      "text": "Download and unpack the Node.js 24 binaries for Android and build FFmpeg for each ABI (the first run downloads NDK r29 unless `$ANDROID_HOME/ndk/29.0.14206865` exists):\n```bash\nandroid/scripts/fetch-node-android.sh                 # both ABIs\nandroid/scripts/fetch-node-android.sh arm64-v8a       # one ABI only\n```\nThe runtime comes from `levix-node-runtime-24.22.1-android.tar.xz`, a release asset pinned by sha256 in `android/scripts/node-runtime.lock`. The script downloads that one file, checks its sha256 and size, then extracts the ABI through `node-runtime-archive.py`, which checks `MANIFEST.json`: schema 1, Node 24, the package rows in `termux-packages.lock` (package, version, sha256, url), every file sha256, and every symlink target. It never contacts Termux and never falls back to another Node.\n\nThe script verifies every 64-bit ELF is safe on 16 KB-page devices — 16 KB aligned, RELRO not sharing a page with writable data, built with NDK r28+ — as Google Play requires for apps targeting API 35+, and fails the build otherwise.\n\nEach staged runtime is stamped (`~/.cache/levix-android/node-runtime/<abi>/.levix-stamp`) with the sha256 prefixes of `build-ffmpeg-android.sh`, `fetch-node-android.sh`, `termux-packages.lock`, `node-runtime.lock` and `node-runtime-archive.py`. Gradle recomputes the stamp and refuses to package a runtime staged from older recipes or pins, one whose `libffmpeg.so` lacks the `libwebp`/`libwebp_anim` sticker encoders, or one whose `libnode.so` is not the Node version in the lock, and prints the command that refreshes it (`LEVIX_ANDROID_ABIS=<abi> bash android/scripts/fetch-node-android.sh`). Re-run the script whenever a recipe or a lock changes; Gradle will not run it for you."
+    },
+    {
+      "id": "ANDROID.md#rebuilding-the-runtime-archive",
+      "source": "ANDROID.md",
+      "title": "Rebuilding the runtime archive",
+      "locale": "en",
+      "text": "Maintainers refresh the deb pins with `bash android/scripts/fetch-node-android.sh --update-pins` while Termux still serves Node 24, then build the archive with `bash android/scripts/fetch-node-android.sh --build-archive`. Publishing the new release asset needs the owner's approval; after it is published, put its file name, sha256, size and URL in `android/scripts/node-runtime.lock`. The archive build is deterministic, so a rebuild from the same pinned debs gives the same sha256 with the same Python and liblzma. Every file is checked against the manifest either way.\n\nA default build uses the cached copy when its sha256 matches `node-runtime.lock`, and otherwise downloads the release asset. If that download fails it prints the URL and stops. It never rebuilds the archive by itself. Maintainers rebuild with `bash android/scripts/fetch-node-android.sh --build-archive`. The recovery order for them is: the release asset; any cached copy with the pinned sha256; that rebuild from the pinned debs; otherwise an owner decision, because Termux may stop shipping Node 24."
+    },
+    {
+      "id": "ANDROID.md#3-build-the-apks",
+      "source": "ANDROID.md",
+      "title": "3. Build the APKs",
+      "locale": "en",
+      "text": "Run Gradle to assemble one APK per ABI:\n```bash\ncd android\n./gradlew :app:assembleDebug\n```\n> The Gradle `stageLevixApp` task automatically runs `npm run build:frontend` to compile the React dashboard into `public/dashboard`, stages the production server bundle into `levix-app.zip`, and embeds it inside the APK assets. Staging fails rather than packaging an APK whose panel would render unstyled: it checks that `public/dashboard/index.html` exists, links a stylesheet, and that every asset it references is present both on disk and inside `levix-app.zip`.\n\nThe archive holds production dependencies only. They are installed from `package-lock.json` into a separate directory, checked by `check-stage-deps.mjs`, and written by `zip-tree.mjs` as a byte-reproducible zip. `node scripts/size-report.mjs <apk|aab>` prints the component sizes, and CI adds that table to each run's summary.\n\n> The panel's CSS is built for the system WebView, which on the 32-bit (`armeabi-v7a`) devices the APK supports is far behind current desktop browsers. `frontend/vite.config.ts` flattens Tailwind's `@layer` blocks — a WebView without cascade layers (pre-Chrome 99) drops them wholesale and renders the panel with no styling at all — and downlevels `oklch()` through Lightning CSS.\n\n> It also re-states Tailwind's `translate`/`rotate`/`scale` utilities as `transform` behind `@supports not (translate: 0px)`. Those standalone properties need Chrome 104, and a WebView that drops them leaves the mobile sidebar parked over the page (its `-translate-x-full` never moves it off-screen), the settings toggles stuck showing \"off\", and the RTL icon flips dead. The build fails rather than emit a transform it cannot downlevel, so a Tailwind upgrade that uses a new shape is caught here instead of on someone's phone.\n\nOutputs land in `android/app/build/outputs/apk/<buildType>/` as `levix-android-arm64.apk` and `levix-android-armv7.apk`."
+    },
+    {
+      "id": "ANDROID.md#4-install-onto-device",
+      "source": "ANDROID.md",
+      "title": "4. Install onto Device",
+      "locale": "en",
+      "text": "```bash\nadb install -r app/build/outputs/apk/debug/levix-android-arm64.apk\n```"
+    },
+    {
+      "id": "ANDROID.md#5-build-the-google-play-bundle-aab",
+      "source": "ANDROID.md",
+      "title": "5. Build the Google Play bundle (AAB)",
+      "locale": "en",
+      "text": "Google Play requires an **AAB**, not an APK:\n```bash\ncd android\n./gradlew :app:stageLevixBundle\n# -> app/build/outputs/bundle/release/levix-android.aab\n```\nThe AAB contains both ABIs; Play generates the right per-device APK from it. Sign with your upload keystore via `LEVIX_KEYSTORE_FILE` / `LEVIX_KEYSTORE_PASSWORD` / `LEVIX_KEY_ALIAS` / `LEVIX_KEY_PASSWORD` (`stageLevixBundle` refuses to run without them — Play rejects debug-signed bundles; release APKs from `assembleRelease` still fall back to the debug keystore for local testing). Before submitting, fill the Play Console **Data safety** form from `PRIVACY.md` and host that policy at a public URL.\n\n---"
+    },
+    {
+      "id": "ANDROID.md#sending-feedback-reaching-the-developer",
+      "source": "ANDROID.md",
+      "title": "Sending Feedback & Reaching the Developer",
+      "locale": "en",
+      "text": "Levix has no support desk, and nothing about your installation is reported\nautomatically. When something is wrong — or right — the panel is where you say so:\n\n1. Tap **Open Control Panel** in the app.\n2. Go to **Settings → Feedback**.\n3. Pick what it is about (a bug, an idea, a question, or how it is going), write\n   the message, and press **Send**.\n\nThe message goes to the developer directly. What travels with it: your text, the\ntopic, an optional 1–5 rating, an optional way to reach you, one optional file\nyou attach yourself (a screenshot or a log, up to 20 MB), and the Levix version\nand platform so a bug report says which build it came from. Nothing from\nWhatsApp is attached — no message, chat, contact, credential or key — and nothing\nis sent until you press Send. The same form is on the web at\nlevix.leviro.net/feedback if the host will\nnot start at all.\n\nLeave the contact field empty and nothing you send names you; fill it in if you\nwant an answer. For a bug you would rather see tracked in public with logs\nattached, open a GitHub issue\nand use **Diagnostics → Share logs** in the app to attach the host log.\n\n---"
+    },
+    {
+      "id": "ANDROID.md#why-did-whatsapp-show-couldn-t-link-device-when-using-a-pairing-code",
+      "source": "ANDROID.md",
+      "title": "Why did WhatsApp show \"Couldn't link device\" when using a pairing code?",
+      "locale": "en",
+      "text": "Make sure you enter your phone number with the international country code and without leading zeroes or symbols (e.g. `2010XXXXXXXX` for Egypt, `1XXXXXXXXXX` for USA). Do **not** enter `010...` or `+20...`."
+    },
+    {
+      "id": "ANDROID.md#why-does-the-web-control-panel-say-connection-refused",
+      "source": "ANDROID.md",
+      "title": "Why does the Web Control Panel say \"Connection Refused\"?",
+      "locale": "en",
+      "text": "Make sure the host service is running. Open the Levix Host app and verify the Bot Engine card shows that the engine is operational. If it is stopped, tap the big circle (**Start Assistant**)."
+    },
+    {
+      "id": "ANDROID.md#can-i-access-the-web-control-panel-from-my-pc-on-the-same-wi-fi",
+      "source": "ANDROID.md",
+      "title": "Can I access the Web Control Panel from my PC on the same Wi-Fi?",
+      "locale": "en",
+      "text": "No. The Android panel listens on a private socket file, not a TCP port. By\ndesign, it is reachable only inside the Levix app; other devices and other\napps cannot reach it."
+    },
+    {
+      "id": "ANDROID.md#does-levix-work-on-32-bit-armv7-phones",
+      "source": "ANDROID.md",
+      "title": "Does Levix work on 32-bit (armv7) phones?",
+      "locale": "en",
+      "text": "Yes — install **`levix-android-armv7.apk`**. (Most phones from 2016 onward are 64-bit and should use `levix-android-arm64.apk` instead; the 64-bit build is the one Google Play serves by default.)"
+    },
+    {
+      "id": "ANDROID.md#how-do-i-report-a-bug-or-ask-for-a-feature",
+      "source": "ANDROID.md",
+      "title": "How do I report a bug or ask for a feature?",
+      "locale": "en",
+      "text": "**Settings → Feedback** in the control panel — see \"Sending Feedback & Reaching\nthe Developer\" above. It reaches the developer directly, and the app version and\nplatform travel with it so nothing has to be guessed."
+    },
+    {
+      "id": "ANDROID.md#will-levix-drain-my-battery",
+      "source": "ANDROID.md",
+      "title": "Will Levix drain my battery?",
+      "locale": "en",
+      "text": "Levix is optimized to idle at negligible CPU usage (~0.1% - 0.5% CPU when no messages are being processed). RAM usage typically hovers around 90–140 MB."
+    },
+    {
+      "id": "PRIVACY.md#levix-privacy-policy-google-play-data-safety",
+      "source": "PRIVACY.md",
+      "title": "Levix Privacy Policy & Google Play Data Safety",
+      "locale": "en",
+      "text": "> **Effective date:** 2026-11-02\n> **Applies to:** the Levix Android app (`net.leviro.levix`) and the Levix\n> self-hosted server distributed from this repository.\n> **Product:** Levix, built by Abdelrhman Diab, Leviro.\n\n---"
+    },
+    {
+      "id": "PRIVACY.md#plain-language-summary",
+      "source": "PRIVACY.md",
+      "title": "Plain-language summary",
+      "locale": "en",
+      "text": "Levix is a **self-hosted** personal WhatsApp bot. The Android app runs the\nentire bot **on your device** — there is no Levix cloud, no Levix account, and\nno Levix server. The developer does **not** receive any data from your\ninstallation on its own: no analytics, no telemetry, no ads, and no automatic\ncrash reporting. The only things that ever reach **Leviro Support** (the\ndeveloper's support channel) are the ones **you** choose to send: a message in\n**Settings → Feedback** (and the optional diagnostics block you can tick on that\nform), and a crash report you press Send on in the panel. Nothing is transmitted until you do. A Levix-operated mail\nrelay delivers a recovery code only when you ask for one. It keeps keyed hashes\nfor verification, authorization and rate limiting, never the readable address,\ncode or token, and it does not send the address to the developer.\n\nData leaves your device while WhatsApp is linked, when a command or AI feature\nruns, or when you enable an optional setting or take a panel action. Gemini's\nGoogle Search grounding is enabled by default for Gemini AI requests; Gemini\ndecides whether to search for each answer.\n\n1. **WhatsApp** — Levix is a WhatsApp client; your messages, pairing data and\n   WhatsApp account credentials necessarily travel to WhatsApp (Meta) so the\n   product can function.\n2. **Your chosen AI provider** — when you use an AI feature, the prompt and\n   relevant context are sent to the provider you configured with **your own API\n   key** (Google Gemini, any OpenAI-compatible server, or Anthropic). Depending\n   on the feature and provider, that context can include your display name,\n   WhatsApp user/phone identifiers, group name, message text, quoted or\n   mentioned participant identifiers, AI history or long-term memory, and\n   media or files you ask the AI to process. Supported images can be sent to\n   OpenAI-compatible or Anthropic providers; Gemini can additionally receive\n   supported video, audio and documents. Speech-to-text can send audio to\n   Gemini or an OpenAI-compatible provider. Natural-language `generate_image`\n   requests use the dedicated Gemini image endpoint/key/model, including when\n   chat uses OpenAI-compatible or Anthropic. `transcribe_audio` uploads only\n   audio attached to or quoted by the invoking message, after checking the\n   sender's transcription permission. Its transcript is returned to the chat\n   provider to prepare the answer and can be stored in local AI conversation\n   history. That chat provider can differ from the transcription provider.\n3. **Search and web pages:** Gemini can run Google Search grounding inside\n   its request when it decides current information is needed. The AI's\n   `web_search` and `search_news` tools send queries to `html.duckduckgo.com`,\n   or Google Programmable Search when configured. `search_wikipedia` sends a\n   query and matching page titles to `ar.wikipedia.org` or `en.wikipedia.org`.\n   `fetch_url` requests the HTTPS page the AI opens from that page's host.\n4. **Leviro Support, if you send feedback** — the panel's **Settings → Feedback**\n   form sends what you typed (your message, the topic, an optional 1–5 rating,\n   an optional contact), one optional file you pick yourself (a screenshot or a\n   log, up to 20 MB), plus the Levix version and the platform it runs on. If —\n   and only if — you also tick **Attach device & technical diagnostics**, it\n   additionally sends the diagnostics listed in section 2a. It travels through\n   `levix.leviro.net/api/feedback`. Leviro Support currently receives it through\n   Telegram, as a Telegram message, or as a Telegram document when a file is\n   attached, so Telegram carries and stores that message. A private Leviro\n   Support dashboard is planned to replace the Telegram delivery; this policy\n   will change with a new effective date when it does. Nothing\n   is attached from WhatsApp — no message, chat, contact, credential or key —\n   and nothing is sent unless you press Send."
+    },
+    {
+      "id": "PRIVACY.md#plain-language-summary-part2",
+      "source": "PRIVACY.md",
+      "title": "Plain-language summary",
+      "locale": "en",
+      "text": "5. **Leviro Support, if you send a crash report** — a crash or a web error is\n   written to a report file inside the app's own data directory, where it stays\n   until **you** open the panel and press Send on that one report. Nothing is\n   sent automatically and nothing is retried on its own. A report holds the\n   error type, a sanitized message and stack, an optional screen id, the app and\n   device fields listed in section 2a, and a few navigation breadcrumbs. It goes\n   to Leviro Support through `levix.leviro.net/api/crash-reports`, a\n   Levix-operated server; it is not forwarded to Telegram or any other service.\n6. **The Levix mail relay, if you set a recovery email** — verifying the address\n   in **Settings**, or choosing **Email** on **Forgot password**, posts the\n   address and UI language (one of `en`, `ar`, `pt-BR`, `es-419`) to\n   `levix.leviro.net/api/recovery-email`.\n   The relay generates the verification code; confirming it sends the verification\n   ID and your code and returns an address-bound recovery token. Password-reset\n   requests send the address, locally generated code, token and language. The relay\n   sends fixed code messages. It stores only keyed hashes and authorization state,\n   never readable addresses, codes or tokens, and does not forward the address to\n   the developer. Authorization expires after 365 days without an accepted reset;\n   re-verifying the address revokes its previous authorization.\n7. **Your own Levix instance, for a sticker** — when you tap **Make sticker** or\n   **Add to stickers** on a file in Media Hub, that one file is uploaded to the\n   Levix server running on this phone, because that is what does the conversion.\n   It goes nowhere else. Browsing Media Hub uploads nothing.\n8. **Translation and speech:** `!translate google` sends the text to\n   `translation.googleapis.com` with your Google Translation API key, or to\n   Google's public `translate.googleapis.com/translate_a/single` endpoint\n   without a key. `!tts` and the AI `speak` tool send text to\n   `translate.google.com` for speech generation.\n9. **Weather, prayer times and short links:** `!weather` sends the city name\n   you type to `api.openweathermap.org` when you configured its API key.\n   `!prayer` sends the city name you type to `api.aladhan.com`. Levix never\n   reads the device's location and requests no location permission; the only\n   place information is the city name you type into these two commands. `!shortlink` sends the URL to\n   `is.gd`, then to `v.gd` if the first service fails.\n10. **Optional page and media fetches:** enabling link previews lets Levix\n    request the host of a URL in an outgoing message to build a preview.\n    Enabling remote thumbnails lets Levix download a remote media URL from its\n    host to build a thumbnail. Both settings are off by default. These requests\n    accept public HTTPS URLs only; every redirect is validated, and HTTP,\n    credentials in URLs and private/loopback destinations are refused. A refused\n    preview does not prevent sending the text message. Actual remote media sends\n    use the same validation and the configured remote media size/time limits;\n    the downloaded bytes are reused for the send and thumbnail.\n11. **Model discovery and domain setup:** when you request live model\n    discovery in the panel, the chosen provider's models endpoint receives\n    your API key. On a desktop or server, `levix domain` requests\n    `api.ipify.org` to check the server's public IP. If you approve installing\n    Caddy, the installation may contact `dl.cloudsmith.io` and your system's\n    package repositories. This command is not part of the Android app.\n\nThe database, settings, API keys, memory files and control panel are stored in\nthe app's private storage on Android. An API key also goes to its configured\nprovider when you use that provider or request live model discovery.\n\n**Backups** (Settings → Backup) are local files created only when you ask. Every"
+    },
+    {
+      "id": "PRIVACY.md#plain-language-summary-part3",
+      "source": "PRIVACY.md",
+      "title": "Plain-language summary",
+      "locale": "en",
+      "text": "exported backup is encrypted with a password you choose (scrypt and\nAES-256-GCM); Levix cannot recover that password.\nLevix never uploads a backup to the developer or a cloud service. A backup can\ncontain bot settings, command setup, API keys, AI persona, conversations,\nmemory, schedules and their media, group data, roles and stickers. It never\ncontains WhatsApp pairing credentials, the panel password or session key,\nrecovery email, the install encryption key, device settings, logs, crash\nreports or Android preferences. You control where the exported file is saved;\non Android it goes through the system's save and open pickers. A restore first\nshows what it changes and asks you to confirm before it overwrites anything.\nIt writes only what the backup holds: settings, API keys or a persona the\nbackup lacks keep their current values, and it never changes the panel\npassword, the recovery email or the WhatsApp pairing. Conversations, memory and\nother account data wait until the same WhatsApp account is linked.\n\n---"
+    },
+    {
+      "id": "PRIVACY.md#1-data-stored-locally",
+      "source": "PRIVACY.md",
+      "title": "1. Data stored locally",
+      "locale": "en",
+      "text": "| Data | Where it lives | Purpose |\n| --- | --- | --- |\n| WhatsApp pairing credentials | App-private SQLite DB + files | Linking to your WhatsApp account |\n| Control-panel password | scrypt hash in the local DB | Logging into the local panel |\n| Recovery email and authorization token | Sealed with AES-256-GCM in the local DB (`auth:recovery-email`) | A verified address for the panel's forgot-password email code. The panel shows a mask. Settings export does not include it. Unlink does not remove it |\n| AI provider API keys & endpoints | Local DB, sealed with AES-256-GCM | Calling the provider you chose |\n| Bot configuration (prefix, permissions, group settings) | Local DB | Running the bot |\n| AI conversation history | Local DB (`ai_history`) | Conversational context; wiped with `!del` / `!delall` |\n| Long-term AI memory | `memory/*.md` files in app storage | Facts you asked the bot to remember |\n| Todos, notes, debts, schedules, warnings, user roles | Local DB | The bot's own features |\n| Auto-delete rules | Local DB (`auto_delete_rules`) | Keyword auto-delete configuration |\n| Opt-in copies of auto-deleted messages (text/caption only) | Local DB (`auto_delete_log`, auto-expiring) | Only when a rule with keep-copy on actually deletes a message |\n| Forward counters and sender last-seen metadata | Local DB (auto-expiring) | The anti-forward feature |\n| Crash reports (not yet sent) | App-private `crash-reports/*.json` (auto-expiring) | Optional diagnostics you can review and send; nothing leaves until you press Send |\n| Logs (including the 14-day technical debug log) | App-private `logs/` + Android Logcat | Debugging |\n\nNotes:\n\n- The bot does **not** archive other people's messages by default. Nothing\n  incoming is stored beyond the metadata rows listed above; deleted/edited\n  messages are not captured. The one exception is an auto-delete rule with\n  keep-copy turned on: it stores the text or caption (never media bytes) of\n  messages that rule actually deleted, and those rows expire.\n- Some data stored locally — especially AI conversation history, long-term\n  memory, names and WhatsApp identifiers — can be included as context in a\n  later AI request when you choose to use an AI feature. Local storage does\n  not mean that this context can never leave the device.\n- Android backup of app data is **disabled** (`allowBackup=\"false\"`), so none\n  of this is copied to Google's device backup.\n- On Android, the embedded panel listens on a private socket file in app\n  storage; only the app's WebView reaches it through the Android host. It does\n  not open a TCP port. On desktop, server and Docker installs, the panel\n  listens on every interface (`0.0.0.0`) by default unless `bind_address` is\n  set. `levix domain` sets that address to `127.0.0.1` behind its reverse\n  proxy. Android permits cleartext traffic only for the built-in panel origin;\n  external endpoints use HTTPS."
+    },
+    {
+      "id": "PRIVACY.md#2-data-that-leaves-the-device-and-to-whom",
+      "source": "PRIVACY.md",
+      "title": "2. Data that leaves the device, and to whom",
+      "locale": "en",
+      "text": "| Recipient | What is sent | When | Why |\n| --- | --- | --- | --- |\n| **WhatsApp (Meta)** | Your messages, media you send through the bot, your phone number / pairing credentials, group metadata | Continuously while the bot is linked | Levix is a WhatsApp client; this is the product's core function |\n| **Your configured AI provider** (Google, OpenAI-compatible server, or Anthropic — chosen by you, using your own API key) | The AI prompt and relevant context, which can include display name, WhatsApp user/phone identifiers, group name, messages, quoted/mentioned participant identifiers, AI history or memory, and supported media/files | Only when you invoke an AI feature (`!gemini`, `!ask`, `!ai`, `!generate`, `!stt`, …) | To generate or process the result you asked for |\n| **Google Search grounding within Gemini** | A search Gemini chooses from the prompt already sent to Gemini | When Gemini decides to search during an AI request; `ai_google_search` is on by default for Gemini and can be turned off | Grounding an answer in current information |\n| **DuckDuckGo** (`html.duckduckgo.com`) or **Google Programmable Search** (if you configured it) | The search query | When an AI answer uses `web_search` or `search_news`; the latter uses the same search path | Web-grounded answers and news |\n| **Wikipedia** (`ar.wikipedia.org` or `en.wikipedia.org`) | The search query and matching page titles requested for summaries | When an AI answer uses `search_wikipedia` | Finding and reading articles |\n| **Web pages the AI opens** | HTTPS request for the page to its host | When an AI answer uses `fetch_url` | Reading a page you asked about |\n| **Google Cloud Translation** (`translation.googleapis.com`) | Text to translate and the configured Google Translation API key | When you use `!translate google` with a key | Translating text through the official API |\n| **Google's public Translate endpoint** (`translate.googleapis.com/translate_a/single`) | Text to translate | When you use `!translate google` without a key | Translating text without an API key |\n| **Google TTS** (`translate.google.com`) | Text to speak | When you use `!tts` or the AI uses `speak` | Generating speech |\n| **Configured Gemini image endpoint** | The image prompt | When you use `!generate` or explicitly request an image through the AI `generate_image` tool, with the same command permission | Generating image bytes; it does not change the chat provider |\n| **Configured Gemini/OpenAI-compatible transcription endpoint, then your selected chat provider** | The selected attached/quoted voice audio goes to the transcription endpoint; the transcript goes to the chat provider and local AI history | When you request transcription through `transcribe_audio`, with the `stt` permission | Preparing a transcription and the AI answer; no unrelated chat audio is collected |\n| **Local bundled documentation index** | No network request for retrieval; the returned public excerpts join the current AI request | When the AI uses `search_levix_docs` or `open_levix_doc_section` | Versioned product help; the index excludes agent instructions, private memories, settings and arbitrary files |\n| **OpenWeatherMap** (`api.openweathermap.org`) | The city name and configured API key | When you use `!weather` with `openweathermap_api_key` set | Getting weather for the named city |\n| **Aladhan** (`api.aladhan.com`) | The city name | When you use `!prayer` | Getting prayer times for the named city |\n| **URL shorteners** (`is.gd`, then `v.gd` on fallback) | The URL to shorten | When you use `!shortlink` | Creating a short link |\n| **Host of a URL in an outgoing message** | Request for the linked page | When `link_previews_enabled` is on and an outgoing message contains a previewable link; off by default | Building a link preview |"
+    },
+    {
+      "id": "PRIVACY.md#2-data-that-leaves-the-device-and-to-whom-part2",
+      "source": "PRIVACY.md",
+      "title": "2. Data that leaves the device, and to whom",
+      "locale": "en",
+      "text": "| **Host of a remote media URL** | Request to download the media | When remote media is sent, or when `thumbnail_remote` is enabled for a thumbnail | Sending media or building a thumbnail |\n| **Configured AI provider's models endpoint** | The operator's API key | When the operator requests live model discovery in the panel | Listing available models |\n| **IP lookup service** (`api.ipify.org`) | An IP lookup request, exposing the server's source IP | When the operator runs `levix domain` on a desktop or server; not an Android flow | Checking the server's public IP |\n| **Caddy package sources** (`dl.cloudsmith.io` and system package repositories) | Package and repository requests, exposing the server's source IP | If the operator approves installing Caddy through `levix domain` | Installing the reverse proxy |\n| **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |\n| **Leviro Support** (via `levix.leviro.net/api/feedback`; currently delivered to Leviro Support through **Telegram**, which carries and stores the message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact, an optional file you attach yourself — plus the Levix version, the platform, and the sending app's user-agent. If you tick the diagnostics box, the section 2a diagnostics object and the sanitized technical debug log in section 2b as well | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |\n| **Leviro Support** (via `levix.leviro.net/api/crash-reports`, a Levix-operated server) | One crash report: category, sanitized error type/message/stack, an optional screen id, the app + section 2a device fields, the sanitized technical debug log in section 2b, and a few navigation breadcrumbs. Never a phone number, JID, chat/message body or media file | Only when **you** open the panel and press Send on one report; never automatically | Support: so a crash can be grouped and fixed |\n| **Levix mail relay** (`levix.leviro.net/api/recovery-email`) | The recovery address and UI language; verification ID and entered verification code on confirmation; address, reset code, recovery token and language on reset. No free text | When you verify an address in **Settings**, or when you choose **Email** on **Forgot password** | To verify address ownership and authorize delivery. Only keyed hashes and authorization state persist, never readable addresses, codes or tokens; the address is not forwarded to the developer |\n| **Your own Levix instance** (on Android, reached inside the app through a private socket; never the developer or an AI provider) | The one image, GIF or video you picked in Sticker Studio or the Media Hub, as a single upload | Only when you choose it in Sticker Studio or tap **Make sticker** / **Add to stickers** | Sticker Studio works in the local host, so it has to receive the file you chose |\n\nApart from feedback and crash reports you deliberately send to Leviro Support,\nthe developer of Levix is **not** a recipient of any of the above. The recovery-email relay\nreceives the fixed verification and reset fields described above. It stores only\nkeyed hashes and authorization state, never readable addresses, codes or tokens. The AI provider's use of the content you send\nit is governed by that provider's own privacy policy."
+    },
+    {
+      "id": "PRIVACY.md#2a-optional-feedback-diagnostics-and-crash-reports",
+      "source": "PRIVACY.md",
+      "title": "2a. Optional feedback diagnostics and crash reports",
+      "locale": "en",
+      "text": "Neither of these carries an identifier that follows your device. Report ids are\nrandom, generated per report, and mean nothing outside that one report.\n\n**Feedback diagnostics** — optional, with its own checkbox on the feedback\nform. When you tick **Attach device & technical diagnostics**, the panel sends\nexactly the object below, after the server has validated and trimmed it, plus\nthe technical debug log in section 2b. The panel shows this same list — field\nand value — and the log under **See exactly what is sent** before you press\nSend, so what you see is what is sent.\n\n| Field | Example | Source |\n| --- | --- | --- |\n| `schema` | `1` | the server, always |\n| `levix` | `4.9.0` | the server, always |\n| `node` | `v24.19.0` | the server, always |\n| `platform` | `android` / `docker` / `node-linux` / `sea-linux` | the server, always |\n| `nativeApp` | `4.9.0 (67)` | the Android app |\n| `android` | `15 (API 35)` | the Android app |\n| `device` | `samsung SM-A556E` | the Android app |\n| `abi` | `arm64-v8a` | the Android app |\n| `webview` | `131.0.6778.135` | the Android app |\n| `screen` | `412x915@2.63` | the panel page |\n| `language` | `ar` / `en` / `pt-BR` / `es-419` | the panel page |\n| `theme` | `light` / `dark` | the panel page |\n| `connectivity` | `wifi` / `cellular` / `ethernet` / `vpn` / `none` / `unknown` | the Android app |\n| `memory` | `ok` / `low` / `unknown` | the Android app |\n| `storage` | `ok` / `low` / `unknown` | the Android app |\n\nUnknown values are the string `unknown`. A standalone browser has no Android\nfields at all; they are simply not sent. Unticking the box means the request\ncarries no diagnostics key. It never contains your phone number, IMEI, Android\nID, advertising ID, IP address, location, Wi-Fi SSID, contacts, chat or message\ntext, JIDs, API keys, tokens or passwords. The one extra thing that accompanies\na ticked box is the sanitized technical debug log described in section 2b,\nwhen the preview that froze it is still valid.\n\n**Crash reports** — optional, one Send per report. A crash report is written\nlocally when the Node server dies on a fatal error, when the Android app\ncrashes, or when the panel hits a web error, and it holds:\n\n- the schema version, a random per-report id, and a fingerprint used only to\n  group reports that share a cause (not to identify a device);\n- the timestamp and category (`node-uncaught`, `node-rejection`,\n  `android-crash`, `android-anr`, `android-native`, `web-error`,\n  `web-rejection`, `react-render`);\n- the error type, a sanitized message, and up to 20 sanitized stack frames;\n- an optional screen id — a route name only, never a URL or a query;\n- the app fields (`levix`, `node`, `platform`, and `nativeApp` when known) and\n  the same device fields as the diagnostics table above;\n- up to 20 navigation breadcrumbs, each a kind, a time and an identifier.\n\nA report's message, every stack frame and every breadcrumb name is scrubbed the\nsame way when the report is written and again before it is sent: WhatsApp JIDs\nbecome `<jid>`, e-mail addresses `<email>`, runs of 7 or more digits `<number>`,\na URL keeps only its scheme and host, a 24+ character key-like run becomes\n`<secret>`, and absolute paths under the data directory or your home become\n`<data>` / `~`.\nNo phone number, IMEI, Android ID, advertising ID, IP address, location,\nWi-Fi SSID, contacts, chat or message bodies, JIDs, screenshots, API keys,\ntokens or passwords are ever included. A Send carries the sanitized\ntechnical debug log the preview froze (section 2b). The report's preview shows\nthat exact upload — log included — before you press Send. A missing or expired\npreview sends the report with no debug log."
+    },
+    {
+      "id": "PRIVACY.md#2b-technical-debug-log",
+      "source": "PRIVACY.md",
+      "title": "2b. Technical debug log",
+      "locale": "en",
+      "text": "Levix keeps an internal, detailed debug log on the device to make a problem\ndiagnosable. It is one JSON-lines file per day in the app's private storage\n(`logs/debug/`). Both previews in the panel show it under its own collapsed\nheading before anything is sent.\n\n**What it records:** the application's own operational events — connection and\nsession transitions, scheduled work, HTTP route activity, errors and stack\nframes, with timestamps and levels. **What it never records:** message content,\nmedia, WhatsApp JIDs, phone numbers, e-mail addresses, API keys, tokens,\npasswords, cookies, session values or paths that name your install or home\ndirectory. Every record is rebuilt before it is written: a secret-shaped field\nname keeps only `[redacted]`, a message-content field keeps only its length (for\nexample `[redacted 42 chars]`), and every other string is scrubbed with the same\nrules as a crash report (`<jid>`, `<email>`, `<number>`, `<secret>`, `<data>`,\n`~`) and capped at 2000 characters. A day's file stops at 5 MB.\n\n**Retention and deletion:** the device keeps 14 days, then the file is deleted\nautomatically. **Clear logs** in the panel deletes the debug log together with\nthe normal logs.\n\n**When it leaves the device:** only in the two situations you start — feedback\nsent with **Attach device & technical diagnostics** ticked, or a crash report\nyou press Send on. It is never sent on its own. The preview freezes the exact\nstring for 15 minutes. Send attaches that frozen copy. A missing or expired\npreview attaches no debug log, never a newer one written after the preview."
+    },
+    {
+      "id": "PRIVACY.md#3-permissions-the-android-app-requests",
+      "source": "PRIVACY.md",
+      "title": "3. Permissions the Android app requests",
+      "locale": "en",
+      "text": "| Permission | Why |\n| --- | --- |\n| `INTERNET`, `ACCESS_NETWORK_STATE` | WhatsApp connection and the local panel |\n| `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_SPECIAL_USE` | Keep the bot host running so the bot stays connected (special-use subtype: persistent personal WhatsApp bot host) |\n| `POST_NOTIFICATIONS` | The ongoing connection-status notification |\n| `WAKE_LOCK` | Keep the CPU awake while processing in the background |\n| `RECEIVE_BOOT_COMPLETED` | Resume the host after device reboot |\n| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | Offer (never silently apply) a battery-optimization exemption so Android doesn't kill the host |\n| `READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`, `READ_MEDIA_AUDIO` (Android 13+) | Discover and display WhatsApp media in the native Media Hub, only after you choose to grant access there |\n| `READ_MEDIA_VISUAL_USER_SELECTED` (Android 14+) | Allow the Media Hub to show only photos and videos you select |\n| `READ_EXTERNAL_STORAGE` (Android 12 and earlier) | Discover WhatsApp media in the native Media Hub on older Android versions |\n\nThe Media Hub can also request read-only access to a WhatsApp Media folder through Android's folder picker when hidden statuses or documents are unavailable through MediaStore. It retains that local grant until you revoke it. Browsing, search, thumbnails, favorites, Storage Insights, saving copies, and deleting Levix-saved copies are all local to the device. The Media Hub makes no network requests and does not send media, file names, or folder structure to Levix or to an AI provider. Sharing a file happens only when you explicitly choose an app in Android's share sheet."
+    },
+    {
+      "id": "PRIVACY.md#sticker-studio",
+      "source": "PRIVACY.md",
+      "title": "Sticker Studio",
+      "locale": "en",
+      "text": "**A file you pick stays on the device.** Browsing Media Hub, and having an item\noffered as a sticker, are entirely local: nothing is uploaded just because you\nscrolled past a photo or long-pressed it.\n\nA file is handed over when you choose it in Sticker Studio or tap **Make sticker** or\n**Add to stickers** for that one file. It then goes to **your own Levix server**\n(the instance running on this phone), and nowhere else: not to the developer, not\nto an AI provider, not to any third-party service. Sticker Studio needs the file\nserver-side to convert and to send, and your instance is the server. From there\nthe sticker goes to WhatsApp only if you send it, which is the same as any\nmessage you send through Levix.\n\nTwo smaller points about the file while it is being handled:\n\n- The handover is **one-shot and in memory**. The app records only a reference to\n  the file it already has permission to read; it is not copied or cached, and it\n  is streamed to the local server only when you upload it. A preview reads it\n  through a short-lived local URL. Nothing about your photo is written to an\n  app staging area, and the reference disappears when the app process ends.\n- Files you **share out** of Sticker Studio are temporary copies in the app's\n  private cache, and only of the formats Sticker Studio produces (WebP, PNG,\n  GIF, MP4, or a pack ZIP). They are deleted automatically after a day. Choosing\n  where a shared file goes is the share sheet's job — the app grants a read\n  permission to the app *you* pick and nothing more.\n\nNo location, camera, microphone, contacts, SMS, or unrestricted storage permissions are\nrequested. Levix never collects the device's location. The in-app WebView loads only the local control panel\n(`http://127.0.0.1:3001`); it does not load third-party web content."
+    },
+    {
+      "id": "PRIVACY.md#4-data-retention-and-deletion",
+      "source": "PRIVACY.md",
+      "title": "4. Data retention and deletion",
+      "locale": "en",
+      "text": "- **AI conversation history** — delete per chat with `!del` (or all chats with\n  `!delall`, owner only), or from the panel.\n- **Long-term memory** — `!memory forget` / `!memory clear`, or from the panel.\n- **Unlink WhatsApp** (Connection → Unlink) — clears the WhatsApp credentials,\n  roles, AI history, long-term memory and buffered context, and pauses the old\n  account's schedules. The panel password and the recovery email are panel\n  security, not WhatsApp data, and stay in place.\n- **Recovery email** — removed from the device with **Remove** in **Settings**.\n  It is sealed locally. The mail relay does not keep the address beyond rate\n  limiting. `levix reset-password` does not remove it either.\n- **Uninstall the app** — removes everything; there is no server-side copy of\n  any of your data to survive deletion.\n- **Feedback you chose to send** — it is a message in Leviro Support's Telegram\n  chat, not a record in a Levix database, and the app has no copy of it. Ask\n  Leviro Support to delete it (section 9) and it will be deleted from that chat.\n- **Crash reports** — an unsent report stays on your device and is deleted\n  automatically seven days after it is created (at most the 20 newest are kept);\n  you can also delete any report, or all of them, from the panel at any time.\n  A report you send is kept on the Levix crash-report server for at most 30 days\n  and then deleted; ask Leviro Support to delete a sent one by its report id\n  (section 9) and it will be deleted.\n- **A file picked for a sticker** — the handover is in-memory and one-shot, so\n  nothing to delete: once the panel reads it, the app has no copy left. It lives\n  on afterwards only inside your own Levix server's data directory, alongside\n  your other Levix data, and goes when you unlink WhatsApp or uninstall.\n- **A sticker you shared out** — a temporary copy in the app's private cache,\n  swept automatically once it is more than a day old."
+    },
+    {
+      "id": "PRIVACY.md#5-security",
+      "source": "PRIVACY.md",
+      "title": "5. Security",
+      "locale": "en",
+      "text": "- API keys and auth blobs are sealed at rest with AES-256-GCM under an\n  install-local key; the panel only ever reports whether a key is configured,\n  never its value.\n- The panel password is stored as a scrypt hash; login is throttled.\n- The recovery email and its authorization token are sealed together with the\n  same install key. The panel and login page show only a mask, never the address\n  or token. Settings exports exclude both.\n- Provider base URLs are validated on save and on use: public endpoints must\n  be HTTPS, and private/reserved/metadata addresses are rejected (explicit\n  loopback is allowed for local Ollama/LM Studio servers).\n- Levix-owned fetch clients pin the validated DNS answer to the socket and\n  follow redirects manually. The AI `fetch_url` tool accepts HTTPS only, and\n  redirects are re-validated so a page cannot downgrade the request to HTTP."
+    },
+    {
+      "id": "PRIVACY.md#6-children",
+      "source": "PRIVACY.md",
+      "title": "6. Children",
+      "locale": "en",
+      "text": "Levix is not directed at children. The Levix Android app is intended for users\naged **16 and over**. In Google Play Console, the target audience should be\ndeclared as **16–17** and **18 and over**; age groups under 16 should not be\nselected. Users must also meet WhatsApp's minimum-age requirements applicable\nin their country or region."
+    },
+    {
+      "id": "PRIVACY.md#7-google-play-data-safety-form-answer-map",
+      "source": "PRIVACY.md",
+      "title": "7. Google Play Data Safety form — answer map",
+      "locale": "en",
+      "text": "Fill the Play Console **App content → Data safety** form as follows. This\nmapping reflects the Android app's current behavior and the categories used by\nGoogle Play.\nThis file is the answer map; it does not change the Play Console, and the owner\nupdates the Console after review.\n\n**Q: Does your app collect or share any of the required user data types?**\n→ **Yes**\n\n**Q: Is all of the user data collected by your app encrypted in transit?**\n→ **Keep the existing No answer pending the final v5.0.0 transit audit.** The\nprevious HTTP paths in link previews and remote thumbnails are now blocked,\nincluding redirects from HTTPS to HTTP. Outbound remote media URLs use the same\nHTTPS-only boundary. These fixes alone do not establish an app-wide Yes: the\nrelease audit must still examine other clients, redirects and supported local\nprovider/panel connections. This PR does not change the Play Console answer;\nthe owner reviews it before publishing v5.0.0.\n\n**Account creation**\n→ **My app does not allow users to create an account**\n\n**Can users log in with accounts created outside of the app?**\n→ **No**\n\n**Q: Do you provide a way for users to request that their data is deleted?**\n→ **No**. Levix has no developer-operated account or cloud copy to delete.\nUsers can still delete locally stored data with the in-app controls described\nin section 4, unlink WhatsApp, or uninstall the app. Remove in Settings deletes\nthe recovery email and token from the device. The relay retains only keyed\nhashes and authorization state subject to expiry, never the readable address.\nFeedback a user chose to send is held in Leviro Support's Telegram chat; crash\nreports a user chose to send are held for at most 30 days and then deleted. Both\nare deleted on request through the contact in section 9.\n\nDeclare these data types:\n\n| Data type | Collected? | Shared? | Required? | Purpose |\n| --- | --- | --- | --- | --- |\n| Personal info → **Name** | Yes | No | Optional | App functionality |\n| Personal info → **User IDs / personal identifiers** | Yes | No | Required | App functionality |\n| Personal info → **Phone number** | Yes | No | Required | App functionality |\n| Personal info → **Email address** | Yes | No | Optional | App functionality, Customer support |\n| Location → **Approximate location** | Yes | No | Optional | App functionality |\n| Messages → **Other in-app messages** | Yes | No | Optional | App functionality, Customer support |\n| Photos and videos → **Photos** | Yes | No | Optional | App functionality, Customer support |\n| Photos and videos → **Videos** | Yes | No | Optional | App functionality, Customer support |\n| Audio files → **Voice or sound recordings** | Yes | No | Optional | App functionality |\n| Audio files → **Other audio files** | Yes | No | Optional | App functionality, Customer support |\n| Files and docs → **Files and docs** | Yes | No | Optional | App functionality, Customer support |\n| Contacts → **Contacts** | Yes | No | Optional | App functionality |\n| App activity → **In-app search history** | Yes | **Yes** | Optional | App functionality |\n| App activity → **Other user-generated content** | Yes | **Yes** | Optional | App functionality |\n| Web browsing → **Web browsing history** | Yes | **Yes** | Optional | App functionality |\n| App info and performance → **Crash logs** | Yes | No | Optional | App functionality, Analytics |\n| App info and performance → **Diagnostics** | Yes | No | Optional | App functionality, Analytics |"
+    },
+    {
+      "id": "PRIVACY.md#how-each-outbound-flow-maps-to-the-data-safety-definitions",
+      "source": "PRIVACY.md",
+      "title": "How each outbound flow maps to the Data safety definitions",
+      "locale": "en",
+      "text": "Google Play calls transmission off the device **collection**, including by a\nlibrary or SDK and regardless of who receives it. Its end-to-end encryption\nexclusion applies only to content unreadable by anyone except sender and\nrecipient, not to metadata. Processing is **ephemeral** only if the recipient\nkeeps the data in memory no longer than the real-time request; Levix cannot\nshow that for any recipient, so no row claims it. **Sharing** means a transfer\nof collected user data to a third party. It is not sharing when the transfer is\nto a service provider that processes the data on the developer's behalf, when a\nuser action in the app initiates the transfer and the user reasonably expects\nit (the user-initiated exception), when the law requires it, or when the data\nis fully anonymized. See Google Play's definitions.\n\nThe rule applied below: a transfer whose destination the user chose with the\ncommand or setting they used is **user-initiated**. A transfer whose destination\nthe AI agent or an optional setting chose without the user naming it is\n**shared**, so it is declared.\n\n| Flow | Collected? | Shared? | Rule applied |\n| --- | --- | --- | --- |\n| WhatsApp message and media content | No | No | End-to-end encrypted between WhatsApp users; Levix is the user's own client |\n| WhatsApp pairing, phone number, user IDs, names and group metadata | Yes | No | User-initiated: the user links their own WhatsApp account, and Levix works only as that account's client |\n| Configured AI provider: prompts, context, supported media | Yes | No | User-initiated: the operator picks the provider and its API key, then invokes an AI command |\n| Gemini Google Search grounding | Yes, as part of the Gemini request | No | Same recipient as the Gemini request (Google, the configured provider); on by default and can be turned off with `ai_google_search` |\n| AI `web_search` and `search_news` (DuckDuckGo, or Google Programmable Search when configured) | Yes | **Yes** | The AI chooses the search and the query; declared as **In-app search history** shared |\n| AI `search_wikipedia` (Arabic or English Wikipedia) | Yes | **Yes** | The AI chooses the lookup; declared as **In-app search history** shared |\n| AI `fetch_url` to a page host | Yes | **Yes** | The AI chooses the page; declared as **Web browsing history** shared |\n| AI `speak` through Google TTS | Yes | **Yes** | The AI chooses to answer as speech; the spoken text is declared as **Other user-generated content** shared |\n| AI `generate_image` through the dedicated Gemini endpoint | Yes | **Yes** | The AI composes the image prompt for the requested action; declared as **Other user-generated content** shared |\n| AI `transcribe_audio` through a configured speech endpoint, with transcript returned to the chat provider | Yes | **Yes** | The requested voice audio is transcribed and the transcript becomes AI context; declare **Voice or sound recordings** and **Other user-generated content** shared for this model-mediated path |\n| `!tts` through Google TTS | Yes | No | User-initiated: the user asks for speech of the text they gave |\n| `!translate google`, with or without a Google key | Yes | No | User-initiated: the command names Google translation; the key is the operator's own credential |\n| `!weather` to OpenWeatherMap, `!prayer` to Aladhan | Yes, the typed city | No | User-initiated: the user types a city name for that lookup. Declared as **Approximate location** because a city can describe where the user is; Levix never reads device location |\n| `!shortlink` to `is.gd`, then `v.gd` on failure | Yes, the URL | No | User-initiated: the user asks for a short link; both services are named in the command help |\n| Optional outgoing link preview | Yes, the linked URL | **Yes** | The page host is chosen by a link, not by the user's request for a preview; declared as **Web browsing history** shared |"
+    },
+    {
+      "id": "PRIVACY.md#how-each-outbound-flow-maps-to-the-data-safety-definitions-part2",
+      "source": "PRIVACY.md",
+      "title": "How each outbound flow maps to the Data safety definitions",
+      "locale": "en",
+      "text": "| Optional remote thumbnail | Yes, the media URL | **Yes** | The media host receives a download request the user did not name; declared as **Other user-generated content** shared |\n| Live model discovery | Yes, the operator's API key | No | User-initiated: the operator asks the configured provider for its models |\n| Optional WhatsApp outbound proxy | Yes, WhatsApp traffic | No | User-initiated: the operator sets their own proxy; WhatsApp content stays end-to-end encrypted |\n| Feedback to Leviro Support, delivered through Telegram | Yes | No | Service provider: Telegram delivers and stores the message for Leviro Support. Disclosed by name in sections 2 and 4 |\n| Crash report to Leviro Support | Yes | No | The developer's own server is the only recipient |\n| Recovery email relay | Yes | No | The developer's own relay is the only recipient; it keeps keyed hashes and authorization state only |\n| Sticker upload to the Android host | No | No | The WebView reaches the app's private socket on the device; nothing leaves the device |\n| Encrypted backup file | No | No | Created and saved on the device where the user chooses; Levix never transmits it |\n| `levix domain` IP lookup | Outside the Play form | Outside the Play form | A desktop or server command, not part of the Android app |\n\nFor every data type in the declaration table above:\n\n- **Processed ephemerally:** No.\n- **Collection purpose:** App functionality, plus **Customer support** for the\n  rows the feedback form touches — the message text (Messages → Other in-app\n  messages), the contact you may optionally leave (Personal info → Email\n  address), and the one file you may optionally attach (Photos, Videos, Other\n  audio files, Files and docs). The contact and the file are optional, and\n  nothing is sent until you press Send. The same Email address row also covers\n  the recovery address, which is **App functionality**: it leaves the device\n  only when you verify it or request a reset code. The **Crash logs** and **Diagnostics**\n  rows are likewise optional and user-initiated: a crash report leaves only when\n  you press Send on it, and the feedback diagnostics leave only when you tick\n  their checkbox. Their purpose is **Analytics** in Google Play's sense —\n  grouping and fixing crashes and faults.\n- **Sharing purpose:** **App functionality** for the three shared rows (In-app\n  search history, Other user-generated content, Web browsing history): the AI\n  agent's searches, page reads and spoken answers, and the optional link\n  previews and remote thumbnails. Every other row is collected, not shared,\n  under the rule above.\n\nThe **Email address** declaration covers the optional contact field in the\nfeedback form and, when you choose it, the recovery address you type in\nSettings for panel-password reset. Neither is read from the device. The\nfeedback contact can be left empty. The recovery address is stored sealed on\nthe device and is sent to the Levix mail relay only when you verify it or\nrequest a reset code. The relay does not store it beyond rate limiting.\n\nThe **Contacts** declaration does not mean Levix requests Android's Contacts\npermission. It covers WhatsApp participant identifiers (for example mentioned\nor quoted participants) that can be included in an AI request.\n\nThe **Approximate location** declaration covers only a city name the user types\ninto `!weather` or `!prayer`. Levix does not request a location permission and\nnever reads the device's location, so **Precise location** is not declared.\n\nDo **not** declare precise location, financial info, health/fitness, calendar,\ninstalled apps, or device/other identifiers. Levix contains no analytics,\nadvertising, or crash-reporting SDK: the **Crash logs** and **Diagnostics** rows\nabove are the user-initiated reports described in sections 2a and 4, which the\napp writes locally and sends only when the user presses Send. There is no\ndevice-following identifier anywhere in them."
+    },
+    {
+      "id": "PRIVACY.md#other-play-console-declarations",
+      "source": "PRIVACY.md",
+      "title": "Other Play Console declarations",
+      "locale": "en",
+      "text": "- **Privacy policy URL** — use the public Levix privacy page.\n- **App access** — the local control panel is gated by a user-chosen password.\n- **Ads** — no ads.\n- **News app / government app / COVID-19 app** — No.\n- **Financial features** — the `!debt` command is a personal note-taking\n  ledger stored locally only; no financial services are offered.\n- **AI-generated content** — Levix can generate content through user-configured\n  AI providers.\n- **Foreground service (special use)** — declared as `specialUse` with\n  subtype \"Persistent personal WhatsApp bot host\".\n- **16 KB page size** — all shipped 64-bit native libraries are expected to be\n  ≥ 16 KB aligned and built with NDK r28+; the Android build/release checks\n  (`verify_elfs` in `android/scripts/fetch-node-android.sh`) should remain\n  enabled.\n- **64-bit** — the AAB includes `arm64-v8a` plus `armeabi-v7a`."
+    },
+    {
+      "id": "PRIVACY.md#8-changes-to-this-policy",
+      "source": "PRIVACY.md",
+      "title": "8. Changes to this policy",
+      "locale": "en",
+      "text": "Material changes will be published in this repository with a new effective\ndate. Levix asks for explicit acceptance of the updated Terms and Privacy\nNotice for each installation before its next WhatsApp connection. A connection\nalready open remains open until it disconnects. Levix also asks again after an\napp update; unlinking or changing the WhatsApp account, reconnecting, restarting\nor resetting the panel password does not by itself require acceptance again.\nThe acceptance record stays on the device and is excluded from settings exports\nand backups; the local pre-upgrade database copy retains it."
+    },
+    {
+      "id": "PRIVACY.md#9-contact",
+      "source": "PRIVACY.md",
+      "title": "9. Contact",
+      "locale": "en",
+      "text": "- In the app: **Settings → Feedback** in the control panel — it reaches Leviro\n  Support, and is the fastest route for a bug or a request.\n- On the web: levix.leviro.net/feedback\n- Issues & security reports: github.com/Abdodiab2005/levix\n- Product: Levix, built by Abdelrhman Diab, Leviro."
+    },
+    {
+      "id": "i18n/en/commands.json#autodelete",
+      "source": "i18n/en/commands.json",
+      "title": "!autodelete",
+      "locale": "en",
+      "text": "Manages keyword auto-delete rules: add, remove, enable, disable, and counters.\nautodelete list\nautodelete add <word> [| <word> ...]\nautodelete remove <id>\nautodelete on <id>\nautodelete off <id>\nautodelete stats [id]\nautodelete reset <id>"
+    },
+    {
+      "id": "i18n/en/commands.json#autoschedule",
+      "source": "i18n/en/commands.json",
+      "title": "!autoschedule",
+      "locale": "en",
+      "text": "Schedules a recurring message (daily or weekly).\nautoschedule daily <HH:mm> <message>\nautoschedule weekly <day> <HH:mm> <message>"
+    },
+    {
+      "id": "i18n/en/commands.json#blacklist",
+      "source": "i18n/en/commands.json",
+      "title": "!blacklist",
+      "locale": "en",
+      "text": "Manages the group's user blacklist.\nblacklist [add|remove|list] [@member|number]"
+    },
+    {
+      "id": "i18n/en/commands.json#block",
+      "source": "i18n/en/commands.json",
+      "title": "!block",
+      "locale": "en",
+      "text": "Blocks a user from contacting the bot on WhatsApp.\nblock [@member|number]   (or reply to their message)"
+    },
+    {
+      "id": "i18n/en/commands.json#calc",
+      "source": "i18n/en/commands.json",
+      "title": "!calc",
+      "locale": "en",
+      "text": "Calculator: arithmetic, percentages, powers and math functions.\ncalc <expression>"
+    },
+    {
+      "id": "i18n/en/commands.json#debt",
+      "source": "i18n/en/commands.json",
+      "title": "!debt",
+      "locale": "en",
+      "text": "Private debt tracker.\ndebt add <amount> [description]\ndebt del <id>\ndebt list"
+    },
+    {
+      "id": "i18n/en/commands.json#deleteschedule",
+      "source": "i18n/en/commands.json",
+      "title": "!deleteschedule",
+      "locale": "en",
+      "text": "Deletes a scheduled message by its ID.\ndeleteschedule <id>"
+    },
+    {
+      "id": "i18n/en/commands.json#digit",
+      "source": "i18n/en/commands.json",
+      "title": "!digit",
+      "locale": "en",
+      "text": "Converts numbers between Arabic-Indic (٠١٢) and English (012) digits.\ndigit [en|ar] [number/text]   (or reply to a message)"
+    },
+    {
+      "id": "i18n/en/commands.json#gemini",
+      "source": "i18n/en/commands.json",
+      "title": "!gemini",
+      "locale": "en",
+      "text": "AI assistant with web search, memory and help from this version's bundled Levix docs. Ask to create an image, read text aloud or transcribe a quoted voice note. Examples: !ai How do I back up Levix?; !ai Read this aloud. Sub-commands: add/send/clear/show for context, generate for images, del/delall to clear the conversation.\ngemini <text>\ngemini add <text>\ngemini send\ngemini show\ngemini clear\ngenerate <image description>\ndel   (clear this chat's conversation)\ndelall   (clear every conversation)"
+    },
+    {
+      "id": "i18n/en/commands.json#group-add",
+      "source": "i18n/en/commands.json",
+      "title": "!group.add",
+      "locale": "en",
+      "text": "Adds a member to the group, or sends an invite if their privacy settings block it.\nadd [admin] <phone number>"
+    },
+    {
+      "id": "i18n/en/commands.json#group-all",
+      "source": "i18n/en/commands.json",
+      "title": "!group.all",
+      "locale": "en",
+      "text": "Mentions every member of the group.\nall [message]"
+    },
+    {
+      "id": "i18n/en/commands.json#group-antilink",
+      "source": "i18n/en/commands.json",
+      "title": "!group.antilink",
+      "locale": "en",
+      "text": "Advanced control of the anti-link protection.\nantilink [status]\nantilink <on|off>\nantilink mode <ALL|WHITELIST|BLACKLIST>\nantilink action <DELETE|WARN|KICK>\nantilink <allow|disallow> <domain>"
+    },
+    {
+      "id": "i18n/en/commands.json#group-antispam",
+      "source": "i18n/en/commands.json",
+      "title": "!group.antispam",
+      "locale": "en",
+      "text": "Controls anti-spam in the group.\nantispam [status]\nantispam <on|off>\nantispam action <WARN|KICK>\nantispam window <seconds>\nantispam count <number>"
+    },
+    {
+      "id": "i18n/en/commands.json#group-approveall",
+      "source": "i18n/en/commands.json",
+      "title": "!group.approveall",
+      "locale": "en",
+      "text": "Manages automatic approval of join requests.\napproveall <on|off>"
+    },
+    {
+      "id": "i18n/en/commands.json#group-clearwarns",
+      "source": "i18n/en/commands.json",
+      "title": "!group.clearwarns",
+      "locale": "en",
+      "text": "Clears all of a member's warnings and dismisses their flag.\nclearwarns @member"
+    },
+    {
+      "id": "i18n/en/commands.json#group-deletenote",
+      "source": "i18n/en/commands.json",
+      "title": "!group.deletenote",
+      "locale": "en",
+      "text": "Deletes a saved note.\ndeletenote #keyword"
+    },
+    {
+      "id": "i18n/en/commands.json#group-demote",
+      "source": "i18n/en/commands.json",
+      "title": "!group.demote",
+      "locale": "en",
+      "text": "Demotes an admin to a regular member.\ndemote @member"
+    },
+    {
+      "id": "i18n/en/commands.json#group",
+      "source": "i18n/en/commands.json",
+      "title": "!group",
+      "locale": "en",
+      "text": "Main command for all group management actions.\ngroup <sub-command> [arguments]"
+    },
+    {
+      "id": "i18n/en/commands.json#group-flagged",
+      "source": "i18n/en/commands.json",
+      "title": "!group.flagged",
+      "locale": "en",
+      "text": "Lists members waiting for admin review.\nflagged"
+    },
+    {
+      "id": "i18n/en/commands.json#group-kick",
+      "source": "i18n/en/commands.json",
+      "title": "!group.kick",
+      "locale": "en",
+      "text": "Removes a member from the group.\nkick @member [reason]"
+    },
+    {
+      "id": "i18n/en/commands.json#group-media",
+      "source": "i18n/en/commands.json",
+      "title": "!group.media",
+      "locale": "en",
+      "text": "Controls which message types are allowed in the group.\nmedia [status]\nmedia <on|off>\nmedia action <DELETE|WARN|KICK>\nmedia <block|unblock> <image|video|sticker|audio>"
+    },
+    {
+      "id": "i18n/en/commands.json#group-members",
+      "source": "i18n/en/commands.json",
+      "title": "!group.members",
+      "locale": "en",
+      "text": "Lists every member of the group with their number.\nmembers"
+    },
+    {
+      "id": "i18n/en/commands.json#group-note",
+      "source": "i18n/en/commands.json",
+      "title": "!group.note",
+      "locale": "en",
+      "text": "Shows a saved note.\nnote #keyword"
+    },
+    {
+      "id": "i18n/en/commands.json#group-policy",
+      "source": "i18n/en/commands.json",
+      "title": "!group.policy",
+      "locale": "en",
+      "text": "Shows and changes this group's moderation policy.\npolicy\npolicy set <field> <value>\npolicy reset"
+    },
+    {
+      "id": "i18n/en/commands.json#group-promote",
+      "source": "i18n/en/commands.json",
+      "title": "!group.promote",
+      "locale": "en",
+      "text": "Promotes a member to admin.\npromote @member"
+    },
+    {
+      "id": "i18n/en/commands.json#group-removeall",
+      "source": "i18n/en/commands.json",
+      "title": "!group.removeall",
+      "locale": "en",
+      "text": "Removes every non-admin member from the group, after confirmation.\nremoveall"
+    },
+    {
+      "id": "i18n/en/commands.json#group-rules",
+      "source": "i18n/en/commands.json",
+      "title": "!group.rules",
+      "locale": "en",
+      "text": "Shows the group rules.\nrules"
+    },
+    {
+      "id": "i18n/en/commands.json#group-save",
+      "source": "i18n/en/commands.json",
+      "title": "!group.save",
+      "locale": "en",
+      "text": "Saves a new note for the group.\nsave #keyword <note text>"
+    },
+    {
+      "id": "i18n/en/commands.json#group-setname",
+      "source": "i18n/en/commands.json",
+      "title": "!group.setname",
+      "locale": "en",
+      "text": "Changes the group's name.\nsetname <new name>"
+    },
+    {
+      "id": "i18n/en/commands.json#group-setpp",
+      "source": "i18n/en/commands.json",
+      "title": "!group.setpp",
+      "locale": "en",
+      "text": "Changes the group's profile picture.\nsetpp   (reply to an image)"
+    },
+    {
+      "id": "i18n/en/commands.json#group-setrules",
+      "source": "i18n/en/commands.json",
+      "title": "!group.setrules",
+      "locale": "en",
+      "text": "Sets the rules for this group.\nsetrules <rules>"
+    },
+    {
+      "id": "i18n/en/commands.json#group-setwarn",
+      "source": "i18n/en/commands.json",
+      "title": "!group.setwarn",
+      "locale": "en",
+      "text": "Configures the automatic warning system.\nsetwarn max <count>\nsetwarn action <KICK|FLAG>"
+    },
+    {
+      "id": "i18n/en/commands.json#group-tagadmins",
+      "source": "i18n/en/commands.json",
+      "title": "!group.tagadmins",
+      "locale": "en",
+      "text": "Mentions every admin in the group.\ntagadmins [message]"
+    },
+    {
+      "id": "i18n/en/commands.json#group-warn",
+      "source": "i18n/en/commands.json",
+      "title": "!group.warn",
+      "locale": "en",
+      "text": "Warns a member, and takes action once the limit is reached.\nwarn @member [reason]"
+    },
+    {
+      "id": "i18n/en/commands.json#group-warns",
+      "source": "i18n/en/commands.json",
+      "title": "!group.warns",
+      "locale": "en",
+      "text": "Shows a member's warnings.\nwarns @member"
+    },
+    {
+      "id": "i18n/en/commands.json#group-welcome",
+      "source": "i18n/en/commands.json",
+      "title": "!group.welcome",
+      "locale": "en",
+      "text": "Manages the group's welcome messages.\nwelcome [status]\nwelcome <on|off>\nwelcome add <welcome text>\nwelcome list\nwelcome delete <number>"
+    },
+    {
+      "id": "i18n/en/commands.json#help",
+      "source": "i18n/en/commands.json",
+      "title": "!help",
+      "locale": "en",
+      "text": "Lists every command, or shows the details of one — in Arabic or English.\nhelp [ar|en]\nhelp <command> [ar|en]"
+    },
+    {
+      "id": "i18n/en/commands.json#lang",
+      "source": "i18n/en/commands.json",
+      "title": "!lang",
+      "locale": "en",
+      "text": "Shows or changes the bot's language.\nlang [en|ar|pt-BR|es-419|auto]"
+    },
+    {
+      "id": "i18n/en/commands.json#listschedules",
+      "source": "i18n/en/commands.json",
+      "title": "!listschedules",
+      "locale": "en",
+      "text": "Lists all active and pending scheduled messages.\nlistschedules"
+    },
+    {
+      "id": "i18n/en/commands.json#loop",
+      "source": "i18n/en/commands.json",
+      "title": "!loop",
+      "locale": "en",
+      "text": "Repeats text or numbers — in one message or as separate messages.\nloop <count|from-to[:step]> [text] [-s separate messages] [-n no numbering]"
+    },
+    {
+      "id": "i18n/en/commands.json#md",
+      "source": "i18n/en/commands.json",
+      "title": "!md",
+      "locale": "en",
+      "text": "Converts Markdown from any AI or message into WhatsApp formatting, with tables as labeled bullet lists.\nmd <markdown text> | reply to a message with md"
+    },
+    {
+      "id": "i18n/en/commands.json#memory",
+      "source": "i18n/en/commands.json",
+      "title": "!memory",
+      "locale": "en",
+      "text": "The bot's long-term memory (.md files): add, list, search, forget, or export the file.\nmemory\nmemory add <fact>\nmemory add global <fact>\nmemory search <word>\nmemory forget <number|part of the text>\nmemory clear [global]\nmemory file [global]"
+    },
+    {
+      "id": "i18n/en/commands.json#mod",
+      "source": "i18n/en/commands.json",
+      "title": "!mod",
+      "locale": "en",
+      "text": "Controls the group's moderation settings.\nmod status\nmod <enable|disable> <antiLink|antiSpam|forbiddenWords>\nmod action <antiLink|forbiddenWords> <DELETE|WARN|KICK>\nmod action antiSpam <WARN|KICK>\nmod words <add|remove> <word>\nmod words list"
+    },
+    {
+      "id": "i18n/en/commands.json#notes",
+      "source": "i18n/en/commands.json",
+      "title": "!notes",
+      "locale": "en",
+      "text": "Lists all saved note keywords for the group.\nnotes"
+    },
+    {
+      "id": "i18n/en/commands.json#pack",
+      "source": "i18n/en/commands.json",
+      "title": "!pack",
+      "locale": "en",
+      "text": "Create, fill and manage your sticker packs.\npack <name> (reply to media to add)\npack <name> (show without a reply)\npack create <name>\npack add <name>\npack remove <name>\npack rename <old> | <new>\npack delete <name>\npack show <name>"
+    },
+    {
+      "id": "i18n/en/commands.json#packs",
+      "source": "i18n/en/commands.json",
+      "title": "!packs",
+      "locale": "en",
+      "text": "List your sticker packs and library total.\npacks"
+    },
+    {
+      "id": "i18n/en/commands.json#perm",
+      "source": "i18n/en/commands.json",
+      "title": "!perm",
+      "locale": "en",
+      "text": "Manages bot roles: add or remove an owner or admin, and list the current ones.\nperm list\nperm add admin @member\nperm add owner <number>\nperm remove admin @member"
+    },
+    {
+      "id": "i18n/en/commands.json#ping",
+      "source": "i18n/en/commands.json",
+      "title": "!ping",
+      "locale": "en",
+      "text": "Checks that the bot is responding.\nping"
+    },
+    {
+      "id": "i18n/en/commands.json#poll",
+      "source": "i18n/en/commands.json",
+      "title": "!poll",
+      "locale": "en",
+      "text": "Creates a poll in the chat.\npoll <question> | <option 1> | <option 2> [| ...] [--multi]"
+    },
+    {
+      "id": "i18n/en/commands.json#prayer",
+      "source": "i18n/en/commands.json",
+      "title": "!prayer",
+      "locale": "en",
+      "text": "Shows prayer times for a city.\nprayer <city in English>"
+    },
+    {
+      "id": "i18n/en/commands.json#qr",
+      "source": "i18n/en/commands.json",
+      "title": "!qr",
+      "locale": "en",
+      "text": "Generates a QR code from text.\nqr <text|link>"
+    },
+    {
+      "id": "i18n/en/commands.json#rand",
+      "source": "i18n/en/commands.json",
+      "title": "!rand",
+      "locale": "en",
+      "text": "Random numbers, dice, a coin flip, or a pick from a list.\nrand [<max> | <min> <max> | dice [2d6] | coin | pick a | b | c]"
+    },
+    {
+      "id": "i18n/en/commands.json#restart",
+      "source": "i18n/en/commands.json",
+      "title": "!restart",
+      "locale": "en",
+      "text": "Reconnects WhatsApp (the process and panel stay up).\nrestart"
+    },
+    {
+      "id": "i18n/en/commands.json#schedule",
+      "source": "i18n/en/commands.json",
+      "title": "!schedule",
+      "locale": "en",
+      "text": "Schedules a message to be sent later.\nschedule \"HH:mm DD-MM-YYYY\" \"message\""
+    },
+    {
+      "id": "i18n/en/commands.json#score",
+      "source": "i18n/en/commands.json",
+      "title": "!score",
+      "locale": "en",
+      "text": "Shows how many times a message has been forwarded.\nscore   (reply to the message)"
+    },
+    {
+      "id": "i18n/en/commands.json#send",
+      "source": "i18n/en/commands.json",
+      "title": "!send",
+      "locale": "en",
+      "text": "Re-sends the replied message here: a status/story, photo, video, voice note, sticker, document or text.\nsend   (reply to a status or any message with it)"
+    },
+    {
+      "id": "i18n/en/commands.json#setprefix",
+      "source": "i18n/en/commands.json",
+      "title": "!setprefix",
+      "locale": "en",
+      "text": "Sets the bot's command prefix (owner only).\nsetprefix <new prefix>"
+    },
+    {
+      "id": "i18n/en/commands.json#shortlink",
+      "source": "i18n/en/commands.json",
+      "title": "!shortlink",
+      "locale": "en",
+      "text": "Shortens up to 5 links with is.gd, falling back to v.gd. Reads a URL from the command or a replied message.\nshortlink <url> | reply to a message containing a link"
+    },
+    {
+      "id": "i18n/en/commands.json#status",
+      "source": "i18n/en/commands.json",
+      "title": "!status",
+      "locale": "en",
+      "text": "Shows whether Levix is running.\nstatus\nstatus debug"
+    },
+    {
+      "id": "i18n/en/commands.json#sticker",
+      "source": "i18n/en/commands.json",
+      "title": "!sticker",
+      "locale": "en",
+      "text": "Create a sticker from an image, GIF or video.\nsticker [crop] [nobg] (attach an image, GIF or video)\nsticker [crop] [nobg] (reply to media)\nsticker (reply to a sticker for PNG)"
+    },
+    {
+      "id": "i18n/en/commands.json#stickers",
+      "source": "i18n/en/commands.json",
+      "title": "!stickers",
+      "locale": "en",
+      "text": "Browse your recent, favorite or packed stickers.\nstickers [page]\nstickers recent [page]\nstickers favorites [page]\nstickers pack <name> [page]"
+    },
+    {
+      "id": "i18n/en/commands.json#stopbot",
+      "source": "i18n/en/commands.json",
+      "title": "!stopbot",
+      "locale": "en",
+      "text": "Pauses the WhatsApp connection (the bot process and panel keep running).\nstopbot"
+    },
+    {
+      "id": "i18n/en/commands.json#stt",
+      "source": "i18n/en/commands.json",
+      "title": "!stt",
+      "locale": "en",
+      "text": "Converts speech/audio to text (Gemini or Groq/OpenAI Whisper).\nstt   (reply to a voice note, or send one with the command)"
+    },
+    {
+      "id": "i18n/en/commands.json#todo",
+      "source": "i18n/en/commands.json",
+      "title": "!todo",
+      "locale": "en",
+      "text": "Manages your personal to-do list.\ntodo list\ntodo add <task>\ntodo del <task number>"
+    },
+    {
+      "id": "i18n/en/commands.json#toimage",
+      "source": "i18n/en/commands.json",
+      "title": "!toimage",
+      "locale": "en",
+      "text": "Turn a replied sticker into a PNG or animated video.\ntoimage (reply to a sticker)\ntoimage doc (reply to a sticker)\ntoimage gif (reply to an animated sticker)"
+    },
+    {
+      "id": "i18n/en/commands.json#translate",
+      "source": "i18n/en/commands.json",
+      "title": "!translate",
+      "locale": "en",
+      "text": "Translates text. Arabic ↔ English by default, or into a chosen language. AI (default) or Google Translate.\ntranslate <text>\ntranslate <language> <text>\ntranslate google <text>\ntranslate ai <text>\ntranslate summary <text>\ntranslate explain <text>\ntranslate detect [text]\ntranslate formal <text>\ntranslate casual <text>\ntranslate (reply to a message)"
+    },
+    {
+      "id": "i18n/en/commands.json#tts",
+      "source": "i18n/en/commands.json",
+      "title": "!tts",
+      "locale": "en",
+      "text": "Converts text to speech (free — no API costs).\ntts <text>   (or reply to a text message)"
+    },
+    {
+      "id": "i18n/en/commands.json#unblock",
+      "source": "i18n/en/commands.json",
+      "title": "!unblock",
+      "locale": "en",
+      "text": "Unblocks a user.\nunblock [@member|number]   (or reply to their message)"
+    },
+    {
+      "id": "i18n/en/commands.json#weather",
+      "source": "i18n/en/commands.json",
+      "title": "!weather",
+      "locale": "en",
+      "text": "Shows the current weather for a city.\nweather <city in English>"
+    },
+    {
+      "id": "i18n/ar/commands.json#autodelete",
+      "source": "i18n/ar/commands.json",
+      "title": "!autodelete",
+      "locale": "ar",
+      "text": "يدير قواعد الحذف التلقائي حسب الكلمات: إضافة وإزالة وتشغيل وإيقاف والعداد.\nautodelete list\nautodelete add <كلمة> [| <كلمة> ...]\nautodelete remove <id>\nautodelete on <id>\nautodelete off <id>\nautodelete stats [id]\nautodelete reset <id>"
+    },
+    {
+      "id": "i18n/ar/commands.json#autoschedule",
+      "source": "i18n/ar/commands.json",
+      "title": "!autoschedule",
+      "locale": "ar",
+      "text": "يجدول رسالة متكررة (يومية أو أسبوعية).\nautoschedule daily <HH:mm> <الرسالة>\nautoschedule weekly <اليوم> <HH:mm> <الرسالة>"
+    },
+    {
+      "id": "i18n/ar/commands.json#blacklist",
+      "source": "i18n/ar/commands.json",
+      "title": "!blacklist",
+      "locale": "ar",
+      "text": "يدير القائمة السوداء لأعضاء المجموعة.\nblacklist [add|remove|list] [@عضو|رقم]"
+    },
+    {
+      "id": "i18n/ar/commands.json#block",
+      "source": "i18n/ar/commands.json",
+      "title": "!block",
+      "locale": "ar",
+      "text": "يحظر مستخدمًا من التواصل مع البوت على واتساب.\nblock [@عضو|رقم]   (أو رد على رسالته)"
+    },
+    {
+      "id": "i18n/ar/commands.json#calc",
+      "source": "i18n/ar/commands.json",
+      "title": "!calc",
+      "locale": "ar",
+      "text": "آلة حاسبة: عمليات حسابية، ونِسب مئوية، وأُسس، ودوال رياضية.\ncalc <معادلة>"
+    },
+    {
+      "id": "i18n/ar/commands.json#debt",
+      "source": "i18n/ar/commands.json",
+      "title": "!debt",
+      "locale": "ar",
+      "text": "نظام خاص لتتبّع الديون.\ndebt add <المبلغ> [الوصف]\ndebt del <id>\ndebt list"
+    },
+    {
+      "id": "i18n/ar/commands.json#deleteschedule",
+      "source": "i18n/ar/commands.json",
+      "title": "!deleteschedule",
+      "locale": "ar",
+      "text": "يحذف رسالة مجدولة برقمها التعريفي (ID).\ndeleteschedule <id>"
+    },
+    {
+      "id": "i18n/ar/commands.json#digit",
+      "source": "i18n/ar/commands.json",
+      "title": "!digit",
+      "locale": "ar",
+      "text": "يحوّل الأرقام بين الأرقام العربية (٠١٢) والإنجليزية (012).\ndigit [en|ar] [رقم/نص]   (أو رد على رسالة)"
+    },
+    {
+      "id": "i18n/ar/commands.json#gemini",
+      "source": "i18n/ar/commands.json",
+      "title": "!gemini",
+      "locale": "ar",
+      "text": "مساعد ذكي للبحث والذاكرة والمساعدة من وثائق Levix المرفقة بهذا الإصدار. اطلب إنشاء صورة أو قراءة نص بصوت أو تفريغ رسالة صوتية ترد عليها. مثال: !ai كيف أنشئ نسخة احتياطية؟ أو !ai اقرأ هذا بصوت. أوامر فرعية: add/send/clear/show للسياق، وgenerate للصور، وdel/delall لمسح المحادثة.\ngemini <النص>\ngemini add <النص>\ngemini send\ngemini show\ngemini clear\ngenerate <وصف الصورة>\ndel   (مسح سجل هذه المحادثة)\ndelall   (مسح كل المحادثات)"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-add",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.add",
+      "locale": "ar",
+      "text": "يضيف عضوًا إلى المجموعة، أو يرسل له دعوة إذا منعت إعدادات الخصوصية إضافته.\nadd [admin] <رقم الهاتف>"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-all",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.all",
+      "locale": "ar",
+      "text": "يذكر (منشن) جميع أعضاء المجموعة.\nall [رسالة التنبيه]"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-antilink",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.antilink",
+      "locale": "ar",
+      "text": "تحكم متقدم في ميزة منع الروابط.\nantilink [status]\nantilink <on|off>\nantilink mode <ALL|WHITELIST|BLACKLIST>\nantilink action <DELETE|WARN|KICK>\nantilink <allow|disallow> <النطاق>"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-antispam",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.antispam",
+      "locale": "ar",
+      "text": "يتحكم في مكافحة الإزعاج في المجموعة.\nantispam [status]\nantispam <on|off>\nantispam action <WARN|KICK>\nantispam window <ثوان>\nantispam count <عدد>"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-approveall",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.approveall",
+      "locale": "ar",
+      "text": "يدير الموافقة التلقائية على طلبات الانضمام.\napproveall <on|off>"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-clearwarns",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.clearwarns",
+      "locale": "ar",
+      "text": "يمسح كل تحذيرات عضو معيّن ويلغي تعليمه للمراجعة.\nclearwarns @عضو"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-deletenote",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.deletenote",
+      "locale": "ar",
+      "text": "يحذف ملاحظة محفوظة.\ndeletenote #الكلمة-المفتاحية"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-demote",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.demote",
+      "locale": "ar",
+      "text": "يحوّل مشرفًا إلى عضو عادي.\ndemote @عضو"
+    },
+    {
+      "id": "i18n/ar/commands.json#group",
+      "source": "i18n/ar/commands.json",
+      "title": "!group",
+      "locale": "ar",
+      "text": "الأمر الرئيسي لكل إجراءات إدارة المجموعة.\ngroup <أمر فرعي> [المعاملات]"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-flagged",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.flagged",
+      "locale": "ar",
+      "text": "يعرض الأعضاء بانتظار مراجعة المشرف.\nflagged"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-kick",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.kick",
+      "locale": "ar",
+      "text": "يطرد عضوًا من المجموعة.\nkick @عضو [السبب]"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-media",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.media",
+      "locale": "ar",
+      "text": "يتحكم في أنواع الرسائل المسموح بها في المجموعة.\nmedia [status]\nmedia <on|off>\nmedia action <DELETE|WARN|KICK>\nmedia <block|unblock> <image|video|sticker|audio>"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-members",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.members",
+      "locale": "ar",
+      "text": "يعرض كل أعضاء المجموعة مع أرقامهم.\nmembers"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-note",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.note",
+      "locale": "ar",
+      "text": "يعرض ملاحظة محفوظة.\nnote #الكلمة-المفتاحية"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-policy",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.policy",
+      "locale": "ar",
+      "text": "يعرض سياسة إشراف المجموعة ويغيّرها.\npolicy\npolicy set <حقل> <قيمة>\npolicy reset"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-promote",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.promote",
+      "locale": "ar",
+      "text": "يرقّي عضوًا إلى مشرف.\npromote @عضو"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-removeall",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.removeall",
+      "locale": "ar",
+      "text": "يطرد كل الأعضاء غير المشرفين من المجموعة بعد التأكيد.\nremoveall"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-rules",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.rules",
+      "locale": "ar",
+      "text": "يعرض قواعد المجموعة.\nrules"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-save",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.save",
+      "locale": "ar",
+      "text": "يحفظ ملاحظة جديدة للمجموعة.\nsave #الكلمة-المفتاحية <نص الملاحظة>"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-setname",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.setname",
+      "locale": "ar",
+      "text": "يغيّر اسم المجموعة.\nsetname <الاسم الجديد>"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-setpp",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.setpp",
+      "locale": "ar",
+      "text": "يغيّر صورة المجموعة.\nsetpp   (رد على صورة)"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-setrules",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.setrules",
+      "locale": "ar",
+      "text": "يضبط قواعد هذه المجموعة.\nsetrules <القواعد>"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-setwarn",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.setwarn",
+      "locale": "ar",
+      "text": "يضبط نظام التحذيرات التلقائي.\nsetwarn max <عدد>\nsetwarn action <KICK|FLAG>"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-tagadmins",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.tagadmins",
+      "locale": "ar",
+      "text": "يذكر (منشن) جميع مشرفي المجموعة.\ntagadmins [رسالة]"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-warn",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.warn",
+      "locale": "ar",
+      "text": "يوجّه تحذيرًا لعضو، ويتخذ إجراءً عند بلوغ الحد.\nwarn @عضو [السبب]"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-warns",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.warns",
+      "locale": "ar",
+      "text": "يعرض تحذيرات عضو معيّن.\nwarns @عضو"
+    },
+    {
+      "id": "i18n/ar/commands.json#group-welcome",
+      "source": "i18n/ar/commands.json",
+      "title": "!group.welcome",
+      "locale": "ar",
+      "text": "يدير رسائل الترحيب في المجموعة.\nwelcome [status]\nwelcome <on|off>\nwelcome add <نص الترحيب>\nwelcome list\nwelcome delete <رقم>"
+    },
+    {
+      "id": "i18n/ar/commands.json#help",
+      "source": "i18n/ar/commands.json",
+      "title": "!help",
+      "locale": "ar",
+      "text": "يعرض كل الأوامر أو تفاصيل أمر واحد — بالعربية أو الإنجليزية.\nhelp [ar|en]\nhelp <اسم الأمر> [ar|en]"
+    },
+    {
+      "id": "i18n/ar/commands.json#lang",
+      "source": "i18n/ar/commands.json",
+      "title": "!lang",
+      "locale": "ar",
+      "text": "يعرض لغة البوت أو يغيّرها.\nlang [en|ar|pt-BR|es-419|auto]"
+    },
+    {
+      "id": "i18n/ar/commands.json#listschedules",
+      "source": "i18n/ar/commands.json",
+      "title": "!listschedules",
+      "locale": "ar",
+      "text": "يعرض كل الرسائل المجدولة النشطة والمعلّقة.\nlistschedules"
+    },
+    {
+      "id": "i18n/ar/commands.json#loop",
+      "source": "i18n/ar/commands.json",
+      "title": "!loop",
+      "locale": "ar",
+      "text": "يكرر نصًا أو أرقامًا — في رسالة واحدة أو في رسائل منفصلة.\nloop <عدد|من-إلى[:خطوة]> [النص] [-s رسائل منفصلة] [-n بدون ترقيم]"
+    },
+    {
+      "id": "i18n/ar/commands.json#md",
+      "source": "i18n/ar/commands.json",
+      "title": "!md",
+      "locale": "ar",
+      "text": "يحوّل ماركداون من أي ذكاء اصطناعي أو رسالة إلى تنسيق واتساب، مع عرض الجداول كقوائم نقطية منظمة.\nmd <نص ماركداون> | أو رد على رسالة باستخدام md"
+    },
+    {
+      "id": "i18n/ar/commands.json#memory",
+      "source": "i18n/ar/commands.json",
+      "title": "!memory",
+      "locale": "ar",
+      "text": "الذاكرة الدائمة للبوت (ملفات .md): إضافة، أو عرض، أو بحث، أو حذف، أو تصدير الملف.\nmemory\nmemory add <المعلومة>\nmemory add global <المعلومة>\nmemory search <كلمة>\nmemory forget <رقم|جزء من النص>\nmemory clear [global]\nmemory file [global]"
+    },
+    {
+      "id": "i18n/ar/commands.json#mod",
+      "source": "i18n/ar/commands.json",
+      "title": "!mod",
+      "locale": "ar",
+      "text": "يتحكم في إعدادات الإشراف على المجموعة.\nmod status\nmod <enable|disable> <antiLink|antiSpam|forbiddenWords>\nmod action <antiLink|forbiddenWords> <DELETE|WARN|KICK>\nmod action antiSpam <WARN|KICK>\nmod words <add|remove> <الكلمة>\nmod words list"
+    },
+    {
+      "id": "i18n/ar/commands.json#notes",
+      "source": "i18n/ar/commands.json",
+      "title": "!notes",
+      "locale": "ar",
+      "text": "يعرض الكلمات المفتاحية لكل الملاحظات المحفوظة في المجموعة.\nnotes"
+    },
+    {
+      "id": "i18n/ar/commands.json#pack",
+      "source": "i18n/ar/commands.json",
+      "title": "!pack",
+      "locale": "ar",
+      "text": "ينشئ حزم الملصقات ويديرها ويضيف إليها.\npack <الاسم> (رد على وسائط للإضافة)\npack <الاسم> (عرض بلا رد)\npack إنشاء <الاسم>\npack إضافة <الاسم>\npack إزالة <الاسم>\npack تسمية <القديم> | <الجديد>\npack حذف <الاسم>\npack عرض <الاسم>"
+    },
+    {
+      "id": "i18n/ar/commands.json#packs",
+      "source": "i18n/ar/commands.json",
+      "title": "!packs",
+      "locale": "ar",
+      "text": "يعرض حزم ملصقاتك وإجمالي المكتبة.\npacks"
+    },
+    {
+      "id": "i18n/ar/commands.json#perm",
+      "source": "i18n/ar/commands.json",
+      "title": "!perm",
+      "locale": "ar",
+      "text": "يدير صلاحيات البوت: إضافة مالك أو أدمن أو إزالته، وعرض القائمة الحالية.\nperm list\nperm add admin @عضو\nperm add owner <رقم>\nperm remove admin @عضو"
+    },
+    {
+      "id": "i18n/ar/commands.json#ping",
+      "source": "i18n/ar/commands.json",
+      "title": "!ping",
+      "locale": "ar",
+      "text": "يتحقق من أن البوت يستجيب.\nping"
+    },
+    {
+      "id": "i18n/ar/commands.json#poll",
+      "source": "i18n/ar/commands.json",
+      "title": "!poll",
+      "locale": "ar",
+      "text": "ينشئ استفتاءً (تصويتًا) داخل المحادثة.\npoll <السؤال> | <خيار1> | <خيار2> [| ...] [--multi]"
+    },
+    {
+      "id": "i18n/ar/commands.json#prayer",
+      "source": "i18n/ar/commands.json",
+      "title": "!prayer",
+      "locale": "ar",
+      "text": "يعرض مواقيت الصلاة لمدينة معيّنة.\nprayer <اسم المدينة بالإنجليزية>"
+    },
+    {
+      "id": "i18n/ar/commands.json#qr",
+      "source": "i18n/ar/commands.json",
+      "title": "!qr",
+      "locale": "ar",
+      "text": "ينشئ رمز QR من نص.\nqr <نص|رابط>"
+    },
+    {
+      "id": "i18n/ar/commands.json#rand",
+      "source": "i18n/ar/commands.json",
+      "title": "!rand",
+      "locale": "ar",
+      "text": "أرقام عشوائية، أو نرد، أو رمي عملة، أو اختيار من قائمة.\nrand [<أقصى> | <أدنى> <أقصى> | dice [2d6] | coin | pick أ | ب | ج]"
+    },
+    {
+      "id": "i18n/ar/commands.json#restart",
+      "source": "i18n/ar/commands.json",
+      "title": "!restart",
+      "locale": "ar",
+      "text": "يعيد تشغيل اتصال واتساب (مع استمرار تشغيل البوت ولوحة التحكم).\nrestart"
+    },
+    {
+      "id": "i18n/ar/commands.json#schedule",
+      "source": "i18n/ar/commands.json",
+      "title": "!schedule",
+      "locale": "ar",
+      "text": "يجدول رسالة لتُرسل في وقت لاحق.\nschedule \"HH:mm DD-MM-YYYY\" \"الرسالة\""
+    },
+    {
+      "id": "i18n/ar/commands.json#score",
+      "source": "i18n/ar/commands.json",
+      "title": "!score",
+      "locale": "ar",
+      "text": "يعرض عدد مرات إعادة توجيه رسالة معيّنة.\nscore   (رد على الرسالة)"
+    },
+    {
+      "id": "i18n/ar/commands.json#send",
+      "source": "i18n/ar/commands.json",
+      "title": "!send",
+      "locale": "ar",
+      "text": "يعيد إرسال الرسالة الموجّه لها الرد هنا: استوري، صورة، فيديو، رسالة صوتية، ستيكر، مستند أو نص.\nsend   (اعمل رد على استوري أو أي رسالة بالأمر)"
+    },
+    {
+      "id": "i18n/ar/commands.json#setprefix",
+      "source": "i18n/ar/commands.json",
+      "title": "!setprefix",
+      "locale": "ar",
+      "text": "يغيّر بادئة أوامر البوت (للمالك فقط).\nsetprefix <البادئة الجديدة>"
+    },
+    {
+      "id": "i18n/ar/commands.json#shortlink",
+      "source": "i18n/ar/commands.json",
+      "title": "!shortlink",
+      "locale": "ar",
+      "text": "يختصر حتى 5 روابط باستخدام is.gd مع التحويل إلى v.gd عند الحاجة، من الأمر أو من رسالة موجّه لها الرد.\nshortlink <الرابط> | اعمل رد على رسالة تحتوي رابطًا"
+    },
+    {
+      "id": "i18n/ar/commands.json#status",
+      "source": "i18n/ar/commands.json",
+      "title": "!status",
+      "locale": "ar",
+      "text": "يعرض هل يعمل Levix.\nstatus\nstatus debug"
+    },
+    {
+      "id": "i18n/ar/commands.json#sticker",
+      "source": "i18n/ar/commands.json",
+      "title": "!sticker",
+      "locale": "ar",
+      "text": "ينشئ ملصقًا من صورة أو صورة متحركة أو فيديو.\nsticker [قص] [بدون-خلفية] (أرفق صورة أو صورة متحركة أو فيديو)\nsticker [قص] [بدون-خلفية] (رد على وسائط)\nsticker (رد على ملصق لصورة PNG)"
+    },
+    {
+      "id": "i18n/ar/commands.json#stickers",
+      "source": "i18n/ar/commands.json",
+      "title": "!stickers",
+      "locale": "ar",
+      "text": "يعرض ملصقاتك الحديثة أو المفضلة أو الموجودة في حزمة.\nstickers [الصفحة]\nstickers الأحدث [الصفحة]\nstickers المفضلة [الصفحة]\nstickers حزمة <الاسم> [الصفحة]"
+    },
+    {
+      "id": "i18n/ar/commands.json#stopbot",
+      "source": "i18n/ar/commands.json",
+      "title": "!stopbot",
+      "locale": "ar",
+      "text": "يوقف اتصال واتساب مؤقتًا (مع استمرار تشغيل البوت ولوحة التحكم).\nstopbot"
+    },
+    {
+      "id": "i18n/ar/commands.json#stt",
+      "source": "i18n/ar/commands.json",
+      "title": "!stt",
+      "locale": "ar",
+      "text": "يحوّل الكلام/الصوت إلى نص (عبر Gemini أو Groq/OpenAI Whisper).\nstt   (رد على رسالة صوتية أو أرسلها مع الأمر)"
+    },
+    {
+      "id": "i18n/ar/commands.json#todo",
+      "source": "i18n/ar/commands.json",
+      "title": "!todo",
+      "locale": "ar",
+      "text": "يدير قائمة مهامك الشخصية.\ntodo list\ntodo add <المهمة>\ntodo del <رقم المهمة>"
+    },
+    {
+      "id": "i18n/ar/commands.json#toimage",
+      "source": "i18n/ar/commands.json",
+      "title": "!toimage",
+      "locale": "ar",
+      "text": "يحوّل الملصق المردود عليه إلى صورة PNG أو فيديو متحرك.\ntoimage (رد على ملصق)\ntoimage ملف (رد على ملصق)\ntoimage متحرك (رد على ملصق متحرك)"
+    },
+    {
+      "id": "i18n/ar/commands.json#translate",
+      "source": "i18n/ar/commands.json",
+      "title": "!translate",
+      "locale": "ar",
+      "text": "يترجم النص. العربية ↔ الإنجليزية تلقائياً، أو إلى لغة تختارها. المحرك الافتراضي الذكاء الاصطناعي أو Google Translate.\ntranslate <النص>\ntranslate <اللغة> <النص>\ntranslate google <النص>\ntranslate ai <النص>\ntranslate summary <النص>\ntranslate explain <النص>\ntranslate detect [النص]\ntranslate formal <النص>\ntranslate casual <النص>\ntranslate (رد على رسالة)"
+    },
+    {
+      "id": "i18n/ar/commands.json#tts",
+      "source": "i18n/ar/commands.json",
+      "title": "!tts",
+      "locale": "ar",
+      "text": "يحوّل النص إلى كلام مسموع (مجاني — بدون تكلفة API).\ntts <النص>   (أو ردّ على رسالة نصية)"
+    },
+    {
+      "id": "i18n/ar/commands.json#unblock",
+      "source": "i18n/ar/commands.json",
+      "title": "!unblock",
+      "locale": "ar",
+      "text": "يلغي حظر مستخدم.\nunblock [@عضو|رقم]   (أو رد على رسالته)"
+    },
+    {
+      "id": "i18n/ar/commands.json#weather",
+      "source": "i18n/ar/commands.json",
+      "title": "!weather",
+      "locale": "ar",
+      "text": "يعرض حالة الطقس الحالية لمدينة معيّنة.\nweather <اسم المدينة بالإنجليزية>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#autodelete",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!autodelete",
+      "locale": "pt-BR",
+      "text": "Gerencia regras de exclusão automática por palavra: adicionar, remover, ativar, desativar e contadores.\nautodelete list\nautodelete add <palavra> [| <palavra> ...]\nautodelete remove <id>\nautodelete on <id>\nautodelete off <id>\nautodelete stats [id]\nautodelete reset <id>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#autoschedule",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!autoschedule",
+      "locale": "pt-BR",
+      "text": "Agenda uma mensagem recorrente (diária ou semanal).\nautoschedule daily <HH:mm> <mensagem>\nautoschedule weekly <dia> <HH:mm> <mensagem>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#blacklist",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!blacklist",
+      "locale": "pt-BR",
+      "text": "Gerencia a lista negra de usuários do grupo.\nblacklist [add|remove|list] [@membro|número]"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#block",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!block",
+      "locale": "pt-BR",
+      "text": "Bloqueia um usuário de falar com o bot no WhatsApp.\nblock [@membro|número]   (ou responda à mensagem da pessoa)"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#calc",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!calc",
+      "locale": "pt-BR",
+      "text": "Calculadora: aritmética, porcentagens, potências e funções matemáticas.\ncalc <expressão>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#debt",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!debt",
+      "locale": "pt-BR",
+      "text": "Controle privado de dívidas.\ndebt add <valor> [descrição]\ndebt del <id>\ndebt list"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#deleteschedule",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!deleteschedule",
+      "locale": "pt-BR",
+      "text": "Apaga uma mensagem agendada pelo ID.\ndeleteschedule <id>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#digit",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!digit",
+      "locale": "pt-BR",
+      "text": "Converte números entre dígitos arábico-índicos (٠١٢) e ingleses (012).\ndigit [en|ar] [número/texto]   (ou responda a uma mensagem)"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#gemini",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!gemini",
+      "locale": "pt-BR",
+      "text": "Assistente de IA com busca, memória e ajuda baseada na documentação do Levix incluída nesta versão. Peça para criar uma imagem, ler um texto em voz alta ou transcrever um áudio ao responder a ele. Exemplos: !ai Como faço um backup?; !ai Leia isto em voz alta. Subcomandos: add/send/clear/show para o contexto, generate para imagens, del/delall para limpar a conversa.\ngemini <texto>\ngemini add <texto>\ngemini send\ngemini show\ngemini clear\ngenerate <descrição da imagem>\ndel   (limpar a conversa deste chat)\ndelall   (limpar todas as conversas)"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-add",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.add",
+      "locale": "pt-BR",
+      "text": "Adiciona um membro ao grupo ou envia um convite se as configurações de privacidade impedirem a adição.\nadd [admin] <número de telefone>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-all",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.all",
+      "locale": "pt-BR",
+      "text": "Menciona todos os membros do grupo.\nall [mensagem]"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-antilink",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.antilink",
+      "locale": "pt-BR",
+      "text": "Controle avançado da proteção contra links.\nantilink [status]\nantilink <on|off>\nantilink mode <ALL|WHITELIST|BLACKLIST>\nantilink action <DELETE|WARN|KICK>\nantilink <allow|disallow> <domínio>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-antispam",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.antispam",
+      "locale": "pt-BR",
+      "text": "Controla o antispam no grupo.\nantispam [status]\nantispam <on|off>\nantispam action <WARN|KICK>\nantispam window <segundos>\nantispam count <número>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-approveall",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.approveall",
+      "locale": "pt-BR",
+      "text": "Gerencia a aprovação automática de pedidos de entrada.\napproveall <on|off>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-clearwarns",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.clearwarns",
+      "locale": "pt-BR",
+      "text": "Limpa todos os avisos de um membro e remove a marcação de revisão.\nclearwarns @membro"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-deletenote",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.deletenote",
+      "locale": "pt-BR",
+      "text": "Apaga uma nota salva.\ndeletenote #palavra-chave"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-demote",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.demote",
+      "locale": "pt-BR",
+      "text": "Rebaixa um admin a membro comum.\ndemote @membro"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group",
+      "locale": "pt-BR",
+      "text": "Comando principal para todas as ações de gerenciamento do grupo.\ngroup <subcomando> [argumentos]"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-flagged",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.flagged",
+      "locale": "pt-BR",
+      "text": "Lista os membros que aguardam revisão de um admin.\nflagged"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-kick",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.kick",
+      "locale": "pt-BR",
+      "text": "Remove um membro do grupo.\nkick @membro [motivo]"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-media",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.media",
+      "locale": "pt-BR",
+      "text": "Controla quais tipos de mensagem são permitidos no grupo.\nmedia [status]\nmedia <on|off>\nmedia action <DELETE|WARN|KICK>\nmedia <block|unblock> <image|video|sticker|audio>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-members",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.members",
+      "locale": "pt-BR",
+      "text": "Lista todos os membros do grupo com o número.\nmembers"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-note",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.note",
+      "locale": "pt-BR",
+      "text": "Mostra uma nota salva.\nnote #palavra-chave"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-policy",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.policy",
+      "locale": "pt-BR",
+      "text": "Mostra e altera a política de moderação deste grupo.\npolicy\npolicy set <campo> <valor>\npolicy reset"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-promote",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.promote",
+      "locale": "pt-BR",
+      "text": "Promove um membro a admin.\npromote @membro"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-removeall",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.removeall",
+      "locale": "pt-BR",
+      "text": "Remove todos os membros que não são admin do grupo, após confirmação.\nremoveall"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-rules",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.rules",
+      "locale": "pt-BR",
+      "text": "Mostra as regras do grupo.\nrules"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-save",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.save",
+      "locale": "pt-BR",
+      "text": "Salva uma nota nova para o grupo.\nsave #palavra-chave <texto da nota>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-setname",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.setname",
+      "locale": "pt-BR",
+      "text": "Muda o nome do grupo.\nsetname <novo nome>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-setpp",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.setpp",
+      "locale": "pt-BR",
+      "text": "Muda a foto do grupo.\nsetpp   (responda a uma imagem)"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-setrules",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.setrules",
+      "locale": "pt-BR",
+      "text": "Define as regras deste grupo.\nsetrules <regras>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-setwarn",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.setwarn",
+      "locale": "pt-BR",
+      "text": "Configura o sistema automático de avisos.\nsetwarn max <quantidade>\nsetwarn action <KICK|FLAG>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-tagadmins",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.tagadmins",
+      "locale": "pt-BR",
+      "text": "Menciona todos os admins do grupo.\ntagadmins [mensagem]"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-warn",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.warn",
+      "locale": "pt-BR",
+      "text": "Dá um aviso a um membro e age quando o limite é atingido.\nwarn @membro [motivo]"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-warns",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.warns",
+      "locale": "pt-BR",
+      "text": "Mostra os avisos de um membro.\nwarns @membro"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#group-welcome",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!group.welcome",
+      "locale": "pt-BR",
+      "text": "Gerencia as mensagens de boas-vindas do grupo.\nwelcome [status]\nwelcome <on|off>\nwelcome add <texto de boas-vindas>\nwelcome list\nwelcome delete <número>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#help",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!help",
+      "locale": "pt-BR",
+      "text": "Lista todos os comandos ou mostra os detalhes de um — em árabe ou inglês.\nhelp [ar|en]\nhelp <comando> [ar|en]"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#lang",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!lang",
+      "locale": "pt-BR",
+      "text": "Mostra ou muda o idioma do bot.\nlang [en|ar|pt-BR|es-419|auto]"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#listschedules",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!listschedules",
+      "locale": "pt-BR",
+      "text": "Lista todas as mensagens agendadas ativas e pendentes.\nlistschedules"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#loop",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!loop",
+      "locale": "pt-BR",
+      "text": "Repete texto ou números — em uma mensagem ou em mensagens separadas.\nloop <quantidade|de-até[:passo]> [texto] [-s mensagens separadas] [-n sem numeração]"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#md",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!md",
+      "locale": "pt-BR",
+      "text": "Converte Markdown de qualquer IA ou mensagem para a formatação do WhatsApp, com tabelas como listas com marcadores rotuladas.\nmd <texto Markdown> | responda a uma mensagem com md"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#memory",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!memory",
+      "locale": "pt-BR",
+      "text": "Memória de longo prazo do bot (arquivos .md): adicionar, listar, buscar, esquecer ou exportar o arquivo.\nmemory\nmemory add <fato>\nmemory add global <fato>\nmemory search <palavra>\nmemory forget <número|parte do texto>\nmemory clear [global]\nmemory file [global]"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#mod",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!mod",
+      "locale": "pt-BR",
+      "text": "Controla as configurações de moderação do grupo.\nmod status\nmod <enable|disable> <antiLink|antiSpam|forbiddenWords>\nmod action <antiLink|forbiddenWords> <DELETE|WARN|KICK>\nmod action antiSpam <WARN|KICK>\nmod words <add|remove> <palavra>\nmod words list"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#notes",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!notes",
+      "locale": "pt-BR",
+      "text": "Lista todas as palavras-chave das notas salvas do grupo.\nnotes"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#pack",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!pack",
+      "locale": "pt-BR",
+      "text": "Cria, preenche e gerencia seus pacotes de figurinhas.\npack <nome> (responda a uma mídia para adicionar)\npack <nome> (mostra sem resposta)\npack create <nome>\npack add <nome>\npack remove <nome>\npack rename <antigo> | <novo>\npack delete <nome>\npack show <nome>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#packs",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!packs",
+      "locale": "pt-BR",
+      "text": "Lista seus pacotes de figurinhas e o total da biblioteca.\npacks"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#perm",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!perm",
+      "locale": "pt-BR",
+      "text": "Gerencia os papéis do bot: adiciona ou remove um dono ou admin e lista os atuais.\nperm list\nperm add admin @membro\nperm add owner <número>\nperm remove admin @membro"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#ping",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!ping",
+      "locale": "pt-BR",
+      "text": "Verifica se o bot está respondendo.\nping"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#poll",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!poll",
+      "locale": "pt-BR",
+      "text": "Cria uma enquete na conversa.\npoll <pergunta> | <opção 1> | <opção 2> [| ...] [--multi]"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#prayer",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!prayer",
+      "locale": "pt-BR",
+      "text": "Mostra os horários de oração de uma cidade.\nprayer <cidade em inglês>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#qr",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!qr",
+      "locale": "pt-BR",
+      "text": "Gera um código QR a partir de texto.\nqr <texto|link>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#rand",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!rand",
+      "locale": "pt-BR",
+      "text": "Números aleatórios, dados, cara ou coroa ou uma escolha de uma lista.\nrand [<máximo> | <mínimo> <máximo> | dice [2d6] | coin | pick a | b | c]"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#restart",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!restart",
+      "locale": "pt-BR",
+      "text": "Reconecta o WhatsApp (o processo e o painel continuam ativos).\nrestart"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#schedule",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!schedule",
+      "locale": "pt-BR",
+      "text": "Agenda uma mensagem para enviar mais tarde.\nschedule \"HH:mm DD-MM-YYYY\" \"mensagem\""
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#score",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!score",
+      "locale": "pt-BR",
+      "text": "Mostra quantas vezes uma mensagem foi encaminhada.\nscore   (responda à mensagem)"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#send",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!send",
+      "locale": "pt-BR",
+      "text": "Reenvia aqui a mensagem respondida: status, foto, vídeo, mensagem de voz, figurinha, documento ou texto.\nsend   (responda a um status ou a qualquer mensagem com ele)"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#setprefix",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!setprefix",
+      "locale": "pt-BR",
+      "text": "Define o prefixo de comandos do bot (só o dono).\nsetprefix <novo prefixo>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#shortlink",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!shortlink",
+      "locale": "pt-BR",
+      "text": "Encurta até 5 links com is.gd e, se falhar, usa v.gd. Lê uma URL do comando ou de uma mensagem respondida.\nshortlink <url> | responda a uma mensagem que contenha um link"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#status",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!status",
+      "locale": "pt-BR",
+      "text": "Mostra se o Levix está em execução.\nstatus\nstatus debug"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#sticker",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!sticker",
+      "locale": "pt-BR",
+      "text": "Cria uma figurinha a partir de uma imagem, GIF ou vídeo.\nsticker [crop] [nobg] (anexe uma imagem, GIF ou vídeo)\nsticker [crop] [nobg] (responda a uma mídia)\nsticker (responda a uma figurinha para PNG)"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#stickers",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!stickers",
+      "locale": "pt-BR",
+      "text": "Mostra suas figurinhas recentes, favoritas ou de um pacote.\nstickers [página]\nstickers recent [página]\nstickers favorites [página]\nstickers pack <nome> [página]"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#stopbot",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!stopbot",
+      "locale": "pt-BR",
+      "text": "Pausa a conexão do WhatsApp (o processo do bot e o painel continuam em execução).\nstopbot"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#stt",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!stt",
+      "locale": "pt-BR",
+      "text": "Converte fala ou áudio em texto (Gemini ou Groq/OpenAI Whisper).\nstt   (responda a um áudio ou envie um com o comando)"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#todo",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!todo",
+      "locale": "pt-BR",
+      "text": "Gerencia sua lista de tarefas pessoal.\ntodo list\ntodo add <tarefa>\ntodo del <número da tarefa>"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#toimage",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!toimage",
+      "locale": "pt-BR",
+      "text": "Converte uma figurinha respondida em PNG ou vídeo animado.\ntoimage (responda a uma figurinha)\ntoimage doc (responda a uma figurinha)\ntoimage gif (responda a uma figurinha animada)"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#translate",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!translate",
+      "locale": "pt-BR",
+      "text": "Traduz texto. Árabe ↔ inglês por padrão, ou para um idioma escolhido. IA (padrão) ou Google Translate.\ntranslate <texto>\ntranslate <idioma> <texto>\ntranslate google <texto>\ntranslate ai <texto>\ntranslate summary <texto>\ntranslate explain <texto>\ntranslate detect [texto]\ntranslate formal <texto>\ntranslate casual <texto>\ntranslate (responda a uma mensagem)"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#tts",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!tts",
+      "locale": "pt-BR",
+      "text": "Converte texto em fala (grátis — sem custos de API).\ntts <texto>   (ou responda a uma mensagem de texto)"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#unblock",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!unblock",
+      "locale": "pt-BR",
+      "text": "Desbloqueia um usuário.\nunblock [@membro|número]   (ou responda à mensagem da pessoa)"
+    },
+    {
+      "id": "i18n/pt-BR/commands.json#weather",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!weather",
+      "locale": "pt-BR",
+      "text": "Mostra o clima atual de uma cidade.\nweather <cidade em inglês>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#autodelete",
+      "source": "i18n/es-419/commands.json",
+      "title": "!autodelete",
+      "locale": "es-419",
+      "text": "Administra reglas de borrado automático por palabra: agregar, quitar, activar, desactivar y contadores.\nautodelete list\nautodelete add <palabra> [| <palabra> ...]\nautodelete remove <id>\nautodelete on <id>\nautodelete off <id>\nautodelete stats [id]\nautodelete reset <id>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#autoschedule",
+      "source": "i18n/es-419/commands.json",
+      "title": "!autoschedule",
+      "locale": "es-419",
+      "text": "Programa un mensaje recurrente (diario o semanal).\nautoschedule daily <HH:mm> <mensaje>\nautoschedule weekly <día> <HH:mm> <mensaje>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#blacklist",
+      "source": "i18n/es-419/commands.json",
+      "title": "!blacklist",
+      "locale": "es-419",
+      "text": "Administra la lista negra de usuarios del grupo.\nblacklist [add|remove|list] [@miembro|número]"
+    },
+    {
+      "id": "i18n/es-419/commands.json#block",
+      "source": "i18n/es-419/commands.json",
+      "title": "!block",
+      "locale": "es-419",
+      "text": "Bloquea a un usuario para que no contacte al bot en WhatsApp.\nblock [@miembro|número]   (o responde a su mensaje)"
+    },
+    {
+      "id": "i18n/es-419/commands.json#calc",
+      "source": "i18n/es-419/commands.json",
+      "title": "!calc",
+      "locale": "es-419",
+      "text": "Calculadora: aritmética, porcentajes, potencias y funciones matemáticas.\ncalc <expresión>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#debt",
+      "source": "i18n/es-419/commands.json",
+      "title": "!debt",
+      "locale": "es-419",
+      "text": "Control privado de deudas.\ndebt add <monto> [descripción]\ndebt del <id>\ndebt list"
+    },
+    {
+      "id": "i18n/es-419/commands.json#deleteschedule",
+      "source": "i18n/es-419/commands.json",
+      "title": "!deleteschedule",
+      "locale": "es-419",
+      "text": "Elimina un mensaje programado por su ID.\ndeleteschedule <id>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#digit",
+      "source": "i18n/es-419/commands.json",
+      "title": "!digit",
+      "locale": "es-419",
+      "text": "Convierte números entre dígitos arábigo-índicos (٠١٢) e ingleses (012).\ndigit [en|ar] [número/texto]   (o responde a un mensaje)"
+    },
+    {
+      "id": "i18n/es-419/commands.json#gemini",
+      "source": "i18n/es-419/commands.json",
+      "title": "!gemini",
+      "locale": "es-419",
+      "text": "Asistente de IA con búsqueda, memoria y ayuda basada en la documentación de Levix incluida en esta versión. Pide crear una imagen, leer un texto en voz alta o transcribir una nota de voz al responder a ella. Ejemplos: !ai ¿Cómo hago una copia de seguridad?; !ai Lee esto en voz alta. Subcomandos: add/send/clear/show para el contexto, generate para imágenes, del/delall para borrar la conversación.\ngemini <texto>\ngemini add <texto>\ngemini send\ngemini show\ngemini clear\ngenerate <descripción de la imagen>\ndel   (borrar la conversación de este chat)\ndelall   (borrar todas las conversaciones)"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-add",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.add",
+      "locale": "es-419",
+      "text": "Agrega un miembro al grupo, o envía una invitación si su configuración de privacidad lo impide.\nadd [admin] <número de teléfono>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-all",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.all",
+      "locale": "es-419",
+      "text": "Menciona a todos los miembros del grupo.\nall [mensaje]"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-antilink",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.antilink",
+      "locale": "es-419",
+      "text": "Control avanzado de la protección contra enlaces.\nantilink [status]\nantilink <on|off>\nantilink mode <ALL|WHITELIST|BLACKLIST>\nantilink action <DELETE|WARN|KICK>\nantilink <allow|disallow> <dominio>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-antispam",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.antispam",
+      "locale": "es-419",
+      "text": "Controla el antispam en el grupo.\nantispam [status]\nantispam <on|off>\nantispam action <WARN|KICK>\nantispam window <segundos>\nantispam count <número>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-approveall",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.approveall",
+      "locale": "es-419",
+      "text": "Administra la aprobación automática de solicitudes para unirse.\napproveall <on|off>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-clearwarns",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.clearwarns",
+      "locale": "es-419",
+      "text": "Borra todas las advertencias de un miembro y quita la marca de revisión.\nclearwarns @miembro"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-deletenote",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.deletenote",
+      "locale": "es-419",
+      "text": "Elimina una nota guardada.\ndeletenote #palabra-clave"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-demote",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.demote",
+      "locale": "es-419",
+      "text": "Degrada a un admin a miembro normal.\ndemote @miembro"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group",
+      "locale": "es-419",
+      "text": "Comando principal para todas las acciones de administración del grupo.\ngroup <subcomando> [argumentos]"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-flagged",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.flagged",
+      "locale": "es-419",
+      "text": "Lista a los miembros que esperan revisión de un admin.\nflagged"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-kick",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.kick",
+      "locale": "es-419",
+      "text": "Quita a un miembro del grupo.\nkick @miembro [motivo]"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-media",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.media",
+      "locale": "es-419",
+      "text": "Controla qué tipos de mensaje se permiten en el grupo.\nmedia [status]\nmedia <on|off>\nmedia action <DELETE|WARN|KICK>\nmedia <block|unblock> <image|video|sticker|audio>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-members",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.members",
+      "locale": "es-419",
+      "text": "Lista a todos los miembros del grupo con su número.\nmembers"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-note",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.note",
+      "locale": "es-419",
+      "text": "Muestra una nota guardada.\nnote #palabra-clave"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-policy",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.policy",
+      "locale": "es-419",
+      "text": "Muestra y cambia la política de moderación de este grupo.\npolicy\npolicy set <campo> <valor>\npolicy reset"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-promote",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.promote",
+      "locale": "es-419",
+      "text": "Promueve a un miembro a admin.\npromote @miembro"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-removeall",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.removeall",
+      "locale": "es-419",
+      "text": "Quita del grupo a todos los miembros que no son admin, después de confirmar.\nremoveall"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-rules",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.rules",
+      "locale": "es-419",
+      "text": "Muestra las reglas del grupo.\nrules"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-save",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.save",
+      "locale": "es-419",
+      "text": "Guarda una nota nueva para el grupo.\nsave #palabra-clave <texto de la nota>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-setname",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.setname",
+      "locale": "es-419",
+      "text": "Cambia el nombre del grupo.\nsetname <nuevo nombre>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-setpp",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.setpp",
+      "locale": "es-419",
+      "text": "Cambia la foto del grupo.\nsetpp   (responde a una imagen)"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-setrules",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.setrules",
+      "locale": "es-419",
+      "text": "Define las reglas de este grupo.\nsetrules <reglas>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-setwarn",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.setwarn",
+      "locale": "es-419",
+      "text": "Configura el sistema automático de advertencias.\nsetwarn max <cantidad>\nsetwarn action <KICK|FLAG>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-tagadmins",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.tagadmins",
+      "locale": "es-419",
+      "text": "Menciona a todos los admins del grupo.\ntagadmins [mensaje]"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-warn",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.warn",
+      "locale": "es-419",
+      "text": "Advierte a un miembro y actúa cuando se llega al límite.\nwarn @miembro [motivo]"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-warns",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.warns",
+      "locale": "es-419",
+      "text": "Muestra las advertencias de un miembro.\nwarns @miembro"
+    },
+    {
+      "id": "i18n/es-419/commands.json#group-welcome",
+      "source": "i18n/es-419/commands.json",
+      "title": "!group.welcome",
+      "locale": "es-419",
+      "text": "Administra los mensajes de bienvenida del grupo.\nwelcome [status]\nwelcome <on|off>\nwelcome add <texto de bienvenida>\nwelcome list\nwelcome delete <número>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#help",
+      "source": "i18n/es-419/commands.json",
+      "title": "!help",
+      "locale": "es-419",
+      "text": "Lista todos los comandos o muestra los detalles de uno — en árabe o inglés.\nhelp [ar|en]\nhelp <comando> [ar|en]"
+    },
+    {
+      "id": "i18n/es-419/commands.json#lang",
+      "source": "i18n/es-419/commands.json",
+      "title": "!lang",
+      "locale": "es-419",
+      "text": "Muestra o cambia el idioma del bot.\nlang [en|ar|pt-BR|es-419|auto]"
+    },
+    {
+      "id": "i18n/es-419/commands.json#listschedules",
+      "source": "i18n/es-419/commands.json",
+      "title": "!listschedules",
+      "locale": "es-419",
+      "text": "Lista todos los mensajes programados activos y pendientes.\nlistschedules"
+    },
+    {
+      "id": "i18n/es-419/commands.json#loop",
+      "source": "i18n/es-419/commands.json",
+      "title": "!loop",
+      "locale": "es-419",
+      "text": "Repite texto o números — en un mensaje o en mensajes separados.\nloop <cantidad|de-a[:paso]> [texto] [-s mensajes separados] [-n sin numeración]"
+    },
+    {
+      "id": "i18n/es-419/commands.json#md",
+      "source": "i18n/es-419/commands.json",
+      "title": "!md",
+      "locale": "es-419",
+      "text": "Convierte Markdown de cualquier IA o mensaje al formato de WhatsApp, con tablas como listas con viñetas etiquetadas.\nmd <texto Markdown> | responde a un mensaje con md"
+    },
+    {
+      "id": "i18n/es-419/commands.json#memory",
+      "source": "i18n/es-419/commands.json",
+      "title": "!memory",
+      "locale": "es-419",
+      "text": "Memoria a largo plazo del bot (archivos .md): agregar, listar, buscar, olvidar o exportar el archivo.\nmemory\nmemory add <dato>\nmemory add global <dato>\nmemory search <palabra>\nmemory forget <número|parte del texto>\nmemory clear [global]\nmemory file [global]"
+    },
+    {
+      "id": "i18n/es-419/commands.json#mod",
+      "source": "i18n/es-419/commands.json",
+      "title": "!mod",
+      "locale": "es-419",
+      "text": "Controla la configuración de moderación del grupo.\nmod status\nmod <enable|disable> <antiLink|antiSpam|forbiddenWords>\nmod action <antiLink|forbiddenWords> <DELETE|WARN|KICK>\nmod action antiSpam <WARN|KICK>\nmod words <add|remove> <palabra>\nmod words list"
+    },
+    {
+      "id": "i18n/es-419/commands.json#notes",
+      "source": "i18n/es-419/commands.json",
+      "title": "!notes",
+      "locale": "es-419",
+      "text": "Lista todas las palabras clave de las notas guardadas del grupo.\nnotes"
+    },
+    {
+      "id": "i18n/es-419/commands.json#pack",
+      "source": "i18n/es-419/commands.json",
+      "title": "!pack",
+      "locale": "es-419",
+      "text": "Crea, llena y administra tus paquetes de stickers.\npack <nombre> (responde a un archivo multimedia para agregar)\npack <nombre> (muestra sin respuesta)\npack create <nombre>\npack add <nombre>\npack remove <nombre>\npack rename <anterior> | <nuevo>\npack delete <nombre>\npack show <nombre>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#packs",
+      "source": "i18n/es-419/commands.json",
+      "title": "!packs",
+      "locale": "es-419",
+      "text": "Lista tus paquetes de stickers y el total de la biblioteca.\npacks"
+    },
+    {
+      "id": "i18n/es-419/commands.json#perm",
+      "source": "i18n/es-419/commands.json",
+      "title": "!perm",
+      "locale": "es-419",
+      "text": "Administra los roles del bot: agrega o quita un propietario o admin, y lista los actuales.\nperm list\nperm add admin @miembro\nperm add owner <número>\nperm remove admin @miembro"
+    },
+    {
+      "id": "i18n/es-419/commands.json#ping",
+      "source": "i18n/es-419/commands.json",
+      "title": "!ping",
+      "locale": "es-419",
+      "text": "Comprueba que el bot responde.\nping"
+    },
+    {
+      "id": "i18n/es-419/commands.json#poll",
+      "source": "i18n/es-419/commands.json",
+      "title": "!poll",
+      "locale": "es-419",
+      "text": "Crea una encuesta en el chat.\npoll <pregunta> | <opción 1> | <opción 2> [| ...] [--multi]"
+    },
+    {
+      "id": "i18n/es-419/commands.json#prayer",
+      "source": "i18n/es-419/commands.json",
+      "title": "!prayer",
+      "locale": "es-419",
+      "text": "Muestra los horarios de oración de una ciudad.\nprayer <ciudad en inglés>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#qr",
+      "source": "i18n/es-419/commands.json",
+      "title": "!qr",
+      "locale": "es-419",
+      "text": "Genera un código QR a partir de texto.\nqr <texto|enlace>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#rand",
+      "source": "i18n/es-419/commands.json",
+      "title": "!rand",
+      "locale": "es-419",
+      "text": "Números al azar, dados, cara o cruz, o una elección de una lista.\nrand [<máximo> | <mínimo> <máximo> | dice [2d6] | coin | pick a | b | c]"
+    },
+    {
+      "id": "i18n/es-419/commands.json#restart",
+      "source": "i18n/es-419/commands.json",
+      "title": "!restart",
+      "locale": "es-419",
+      "text": "Reconecta WhatsApp (el proceso y el panel siguen activos).\nrestart"
+    },
+    {
+      "id": "i18n/es-419/commands.json#schedule",
+      "source": "i18n/es-419/commands.json",
+      "title": "!schedule",
+      "locale": "es-419",
+      "text": "Programa un mensaje para enviarlo más tarde.\nschedule \"HH:mm DD-MM-YYYY\" \"mensaje\""
+    },
+    {
+      "id": "i18n/es-419/commands.json#score",
+      "source": "i18n/es-419/commands.json",
+      "title": "!score",
+      "locale": "es-419",
+      "text": "Muestra cuántas veces se reenvió un mensaje.\nscore   (responde al mensaje)"
+    },
+    {
+      "id": "i18n/es-419/commands.json#send",
+      "source": "i18n/es-419/commands.json",
+      "title": "!send",
+      "locale": "es-419",
+      "text": "Reenvía aquí el mensaje respondido: estado, foto, video, nota de voz, sticker, documento o texto.\nsend   (responde a un estado o a cualquier mensaje con él)"
+    },
+    {
+      "id": "i18n/es-419/commands.json#setprefix",
+      "source": "i18n/es-419/commands.json",
+      "title": "!setprefix",
+      "locale": "es-419",
+      "text": "Define el prefijo de comandos del bot (solo el propietario).\nsetprefix <nuevo prefijo>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#shortlink",
+      "source": "i18n/es-419/commands.json",
+      "title": "!shortlink",
+      "locale": "es-419",
+      "text": "Acorta hasta 5 enlaces con is.gd y, si falla, usa v.gd. Lee una URL del comando o de un mensaje respondido.\nshortlink <url> | responde a un mensaje que contenga un enlace"
+    },
+    {
+      "id": "i18n/es-419/commands.json#status",
+      "source": "i18n/es-419/commands.json",
+      "title": "!status",
+      "locale": "es-419",
+      "text": "Muestra si Levix está en ejecución.\nstatus\nstatus debug"
+    },
+    {
+      "id": "i18n/es-419/commands.json#sticker",
+      "source": "i18n/es-419/commands.json",
+      "title": "!sticker",
+      "locale": "es-419",
+      "text": "Crea un sticker a partir de una imagen, un GIF o un video.\nsticker [crop] [nobg] (adjunta una imagen, un GIF o un video)\nsticker [crop] [nobg] (responde a un archivo multimedia)\nsticker (responde a un sticker para PNG)"
+    },
+    {
+      "id": "i18n/es-419/commands.json#stickers",
+      "source": "i18n/es-419/commands.json",
+      "title": "!stickers",
+      "locale": "es-419",
+      "text": "Muestra tus stickers recientes, favoritos o de un paquete.\nstickers [página]\nstickers recent [página]\nstickers favorites [página]\nstickers pack <nombre> [página]"
+    },
+    {
+      "id": "i18n/es-419/commands.json#stopbot",
+      "source": "i18n/es-419/commands.json",
+      "title": "!stopbot",
+      "locale": "es-419",
+      "text": "Pausa la conexión de WhatsApp (el proceso del bot y el panel siguen en ejecución).\nstopbot"
+    },
+    {
+      "id": "i18n/es-419/commands.json#stt",
+      "source": "i18n/es-419/commands.json",
+      "title": "!stt",
+      "locale": "es-419",
+      "text": "Convierte voz o audio a texto (Gemini o Groq/OpenAI Whisper).\nstt   (responde a una nota de voz, o envía una con el comando)"
+    },
+    {
+      "id": "i18n/es-419/commands.json#todo",
+      "source": "i18n/es-419/commands.json",
+      "title": "!todo",
+      "locale": "es-419",
+      "text": "Administra tu lista personal de tareas.\ntodo list\ntodo add <tarea>\ntodo del <número de la tarea>"
+    },
+    {
+      "id": "i18n/es-419/commands.json#toimage",
+      "source": "i18n/es-419/commands.json",
+      "title": "!toimage",
+      "locale": "es-419",
+      "text": "Convierte un sticker respondido en PNG o video animado.\ntoimage (responde a un sticker)\ntoimage doc (responde a un sticker)\ntoimage gif (responde a un sticker animado)"
+    },
+    {
+      "id": "i18n/es-419/commands.json#translate",
+      "source": "i18n/es-419/commands.json",
+      "title": "!translate",
+      "locale": "es-419",
+      "text": "Traduce texto. Árabe ↔ inglés de forma predeterminada, o a un idioma elegido. IA (predeterminada) o Google Translate.\ntranslate <texto>\ntranslate <idioma> <texto>\ntranslate google <texto>\ntranslate ai <texto>\ntranslate summary <texto>\ntranslate explain <texto>\ntranslate detect [texto]\ntranslate formal <texto>\ntranslate casual <texto>\ntranslate (responde a un mensaje)"
+    },
+    {
+      "id": "i18n/es-419/commands.json#tts",
+      "source": "i18n/es-419/commands.json",
+      "title": "!tts",
+      "locale": "es-419",
+      "text": "Convierte texto a voz (gratis — sin costos de API).\ntts <texto>   (o responde a un mensaje de texto)"
+    },
+    {
+      "id": "i18n/es-419/commands.json#unblock",
+      "source": "i18n/es-419/commands.json",
+      "title": "!unblock",
+      "locale": "es-419",
+      "text": "Desbloquea a un usuario.\nunblock [@miembro|número]   (o responde a su mensaje)"
+    },
+    {
+      "id": "i18n/es-419/commands.json#weather",
+      "source": "i18n/es-419/commands.json",
+      "title": "!weather",
+      "locale": "es-419",
+      "text": "Muestra el clima actual de una ciudad.\nweather <ciudad en inglés>"
+    }
+  ]
+}
