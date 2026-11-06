@@ -130,7 +130,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
-| Status | 07a IMPLEMENTED, PENDING OWNER REVIEW on `feat/v5-phase-07a`, merged Phase 06 baseline `f04ce30`. Audit, plan and evidence: `PHASE-07-RESULTS.md`. No 07b/07c implementation yet. |
+| Status | 07a IMPLEMENTED, PENDING OWNER REVIEW on `feat/v5-phase-07a`, draft [PR #135](https://github.com/Abdodiab2005/levix/pull/135), merged Phase 06 baseline `f04ce30`. Audit, plan and evidence: `PHASE-07-RESULTS.md`. No 07b/07c implementation yet. |
 | Goal | One generic reaction engine, existing capabilities and Rule Builder in Free Core; no artificial tier rule cap or subscription check. |
 | Files | `src/automation/reactions.js`, core event/socket/session boundaries, additive DB/store, backup classification; later dashboard API and React builder. |
 | Migrations | Schema 11: disabled rule records and bounded hashed replay/transition metadata; original lookup stays in RAM, never a message table. |

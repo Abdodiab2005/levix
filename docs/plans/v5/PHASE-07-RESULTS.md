@@ -143,6 +143,14 @@ orchestrator fixed them with regression coverage.
 
 ## Evidence and handoff
 
+Status: **07a IMPLEMENTED, PENDING OWNER REVIEW**.
+[Draft PR #135](https://github.com/Abdodiab2005/levix/pull/135) targets
+`release/5.0.0-beta.1`. Verified implementation commit:
+[`eed262184396b243ea54ea41cd90bb331e201d15`](https://github.com/Abdodiab2005/levix/commit/eed262184396b243ea54ea41cd90bb331e201d15).
+The final documentation commit changes no runtime source or tests. Its immutable
+SHA and rerun/CI results live in the PR verification record, avoiding a
+self-referential commit hash or a claim about CI that has not run yet.
+
 Environment: local Linux x64, installed Node **24.19.0**, 2026-11-06 UTC /
 2026-11-07 Cairo. Official CI uses pinned Node **24.22.2**. Workstation gates
 use `npm_config_offline=true`, `FFMPEG_BIN=/usr/bin/ffmpeg` and
@@ -155,24 +163,25 @@ commits; no workstation dependency, runtime, tool or artifact downloads occurred
 | Baseline `npm test` on `f04ce30` | PASS: 10002 checks, 0 failures/crashes, 353.4 s |
 | Focused intake regressions | PASS: 150 checks; fake Baileys sockets/event buffer, fake clock, fresh process, isolated DB |
 | Focused schema-10/legacy upgrade, backup-before-migration and rollback | PASS: 25 checks (`reaction-migration.test.mjs`), including a contained metadata sweep failure |
-| Pre-commit full suite | PASS: 10192 checks, 0 failures/crashes, 327.5 s; the last metadata-sweep guard is additionally covered by the 25-check focused migration run. Final-head rerun belongs to the PR record. |
-| Lint | PASS, existing 196 warnings / 73 infos, no errors |
-| i18n validation and docs freshness | PASS; no new UI strings or locale approval claims |
-| Frontend TypeScript/Vite build | PASS; existing bundle warnings |
-| Tarball installation and boot | PASS: 36 checks, installed FFmpeg and offline npm cache |
-| SEA build / artifact validation | PASS: 51 artifact checks; local executable embeds installed 24.19.0 |
-| Final-head GitHub CI, Android and Docker | NOT RUN at this report's preparation; final head, run URL and job conclusions must be recorded in the PR before handoff |
+| `npm test` on implementation `eed2621` | PASS: **10194 checks**, 0 failures/crashes, **323.6 s** |
+| `npm run lint` | PASS, existing 196 warnings / 73 infos, no errors |
+| `npm run i18n:check` / `npm run docs:check` | PASS; no new UI strings or locale approval claims |
+| `npm run build:frontend` | PASS; existing bundle warnings |
+| `npm run validate:tarball` | PASS: 36 checks, installed FFmpeg and offline npm cache |
+| `npm run build:sea` / `npm run validate:sea` | PASS: 51 artifact checks; local executable embeds installed 24.19.0 |
+| Implementation GitHub CI, including Android and Docker | **PASS 7/7** on `eed2621`: [run 42302901593](https://github.com/Abdodiab2005/levix/actions/runs/42302901593). Tests, npm, Linux/macOS/Windows SEA, Docker persistence/upgrade, Android units/APKs/release AAB. Build checks are not device QA. |
+| Final documentation-head rerun / CI | NOT RUN at this documentation commit's preparation; immutable final head, exact local results and final CI run must be recorded in PR #135 before handoff |
 | Local Docker, Windows/macOS SEA and Android builds/device QA | NOT RUN locally; applicable artifact/build coverage belongs to final-head CI |
 | Live dedicated-account WhatsApp/reaction/provider QA | NOT RUN; not authorized |
 | 07b roles/disabled commands/cross-chat delivery/STT/action dedupe/rates/cancel/kill switch | NOT RUN: no action executor in 07a; required in 07b |
 | 07c authenticated/CSRF-protected four-language accessible Rule Builder | NOT RUN: no management API or UI in 07a; required in 07c |
 
-Local pre-commit evidence is `/tmp/levix-p07a-reviewed-*-results.json` and its
-referenced logs. Those runs name the baseline HEAD plus the reviewed working
-changes, not an immutable implementation commit. After committing, rerun the
-gates on the immutable final head and put that SHA, exact results and CI run
-in the PR verification record. This avoids embedding a commit's own hash or
-claiming future CI results in a committed file.
+All local implementation gates above were rerun on immutable `eed2621`:
+`/tmp/levix-p07a-head-{tests,fast,artifacts}-results.json` and referenced logs.
+The final documentation-head reruns use `/tmp/levix-p07a-final-*-results.json`;
+the PR verification record names their final commit and CI run. No gate is
+inferred from an earlier head. The pre-commit logs remain historical evidence.
+
 
 Remaining work: **07b** implements matching/conditions, command-backed safe
 actions (including verified voice-to-STT), real-sender live permissions,
