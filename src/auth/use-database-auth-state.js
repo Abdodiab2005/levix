@@ -6,12 +6,45 @@ const require = createRequire(import.meta.url);
 const { createAuthStorage } = require("./auth-storage.cjs");
 const logger = require("../utils/logger.cjs");
 
+// Baileys' typed shape is `{ [type]: { [id]: value } }`. The untyped shape is
+// a flat id → value map left over from older sessions; the key names stay.
+function collectKeyEntries(data) {
+  const entries = [];
+  const topKeys = Object.keys(data);
+  const looksLikeTyped = topKeys.some((key) => typeof data[key] === "object" && data[key] !== null);
+
+  if (looksLikeTyped) {
+    for (const type of topKeys) {
+      const typed = data[type];
+      if (typeof typed !== "object" || typed === null) continue;
+      for (const id of Object.keys(typed)) {
+        entries.push({ key: `${type}-${id}`, value: typed[id] });
+      }
+    }
+    return entries;
+  }
+
+  for (const id of topKeys) {
+    let keyName = id;
+    const base64Id = id.length > 20 && /^[A-Za-z0-9+/=]+$/.test(id);
+    if (id.includes("@")) keyName = `session-${id}`;
+    else if (/^\d+$/.test(id)) keyName = `pre-key-${id}`;
+    else if (base64Id) keyName = `app-state-sync-key-${id}`;
+    entries.push({ key: keyName, value: data[id] });
+  }
+  return entries;
+}
+
 export async function useDatabaseAuthState(storageType = null) {
   // SQLite unless the caller explicitly asks for the throwaway memory store.
   const resolvedType = storageType || "sqlite";
   const storage = createAuthStorage(resolvedType);
   logger.info(`[Auth] Using ${resolvedType} storage backend`);
 
+  // Creds only. The first load runs while the socket is built, and saveCreds
+  // is the `creds.update` listener (src/core/events.js). A rejection there is
+  // an unhandled exception, so these three helpers still swallow. keys.get
+  // and keys.set do not use them.
   const writeData = async (key, data) => {
     try {
       await storage.writeData(key, data);
@@ -52,8 +85,7 @@ export async function useDatabaseAuthState(storageType = null) {
       const out = {};
       await Promise.all(
         ids.map(async (id) => {
-          const key = `${type}-${id}`;
-          const val = await readData(key);
+          const val = await storage.readData(`${type}-${id}`);
           if (val !== null && val !== undefined) out[id] = val;
         }),
       );
@@ -61,41 +93,9 @@ export async function useDatabaseAuthState(storageType = null) {
     },
 
     set: async (data) => {
-      try {
-        const topKeys = Object.keys(data);
-        const looksLikeTyped = topKeys.some((k) => typeof data[k] === "object" && data[k] !== null);
-
-        if (looksLikeTyped) {
-          for (const type of topKeys) {
-            const typed = data[type];
-            if (typeof typed !== "object" || typed === null) continue;
-            for (const id of Object.keys(typed)) {
-              const key = `${type}-${id}`;
-              await writeData(key, typed[id]);
-            }
-          }
-          return;
-        }
-
-        for (const id of topKeys) {
-          const val = data[id];
-          let keyName = id;
-
-          if (id.includes("@")) {
-            keyName = `session-${id}`;
-          } else if (/^\d+$/.test(id)) {
-            keyName = `pre-key-${id}`;
-          } else if (id.length > 20 && /^[A-Za-z0-9+/=]+$/.test(id)) {
-            keyName = `app-state-sync-key-${id}`;
-          } else {
-            keyName = id;
-          }
-
-          await writeData(keyName, val);
-        }
-      } catch (err) {
-        logger.error({ err }, "[Auth] keys.set failed");
-      }
+      const entries = collectKeyEntries(data);
+      if (entries.length === 0) return;
+      await storage.apply(entries);
     },
   };
 
