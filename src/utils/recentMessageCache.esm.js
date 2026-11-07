@@ -31,6 +31,7 @@ const KEY_SEPARATOR = "\u0000";
 
 const recent = new Map(); // "${chatJid}\u0000${id}" -> { chatJid, id, message, bytes, expiresAt }
 let totalBytes = 0;
+let accountEpoch = 0;
 let ttlMs = DEFAULT_TTL_MS;
 let maxItems = DEFAULT_MAX_ITEMS;
 let maxBytes = DEFAULT_MAX_BYTES;
@@ -87,30 +88,74 @@ export function configureRecentCache({
   gc();
 }
 
+export function getRecentCacheEpoch() {
+  return accountEpoch;
+}
+
 export function clearRecentMessages() {
+  accountEpoch += 1;
   recent.clear();
   totalBytes = 0;
+  return accountEpoch;
 }
 
-function extractOutboundArgs(arg1, arg2, arg3) {
+function normalizeEpochArg(candidate) {
+  if (typeof candidate === "number" && Number.isInteger(candidate)) return candidate;
+  if (
+    candidate &&
+    typeof candidate === "object" &&
+    typeof candidate.epoch === "number" &&
+    Number.isInteger(candidate.epoch)
+  ) {
+    return candidate.epoch;
+  }
+  return undefined;
+}
+
+function extractOutboundArgs(arg1, arg2, arg3, arg4) {
   if (typeof arg1 === "string" && typeof arg2 === "string") {
-    return { remoteJid: arg1, id: arg2, message: arg3 };
+    return {
+      remoteJid: arg1,
+      id: arg2,
+      message: arg3,
+      expectedEpoch: normalizeEpochArg(arg4),
+    };
   }
   if (arg1 && typeof arg1 === "object") {
-    if (arg1.key && typeof arg1.key === "object" && arg2 === undefined) {
-      return { remoteJid: arg1.key.remoteJid, id: arg1.key.id, message: arg1.message };
+    if (
+      arg1.key &&
+      typeof arg1.key === "object" &&
+      (arg2 === undefined || normalizeEpochArg(arg2) !== undefined)
+    ) {
+      return {
+        remoteJid: arg1.key.remoteJid,
+        id: arg1.key.id,
+        message: arg1.message,
+        expectedEpoch: normalizeEpochArg(arg2),
+      };
     }
-    return { remoteJid: arg1.remoteJid, id: arg1.id, message: arg2 };
+    return {
+      remoteJid: arg1.remoteJid,
+      id: arg1.id,
+      message: arg2,
+      expectedEpoch: normalizeEpochArg(arg3),
+    };
   }
   if (typeof arg1 === "string" && arg2 && typeof arg2 === "object" && arg2.key?.remoteJid) {
-    return { remoteJid: arg2.key.remoteJid, id: arg1 || arg2.key.id, message: arg2.message };
+    return {
+      remoteJid: arg2.key.remoteJid,
+      id: arg1 || arg2.key.id,
+      message: arg2.message,
+      expectedEpoch: normalizeEpochArg(arg3),
+    };
   }
-  return { remoteJid: null, id: null, message: null };
+  return { remoteJid: null, id: null, message: null, expectedEpoch: undefined };
 }
 
-export function rememberMessage(arg1, arg2, arg3) {
+export function rememberMessage(arg1, arg2, arg3, arg4) {
   try {
-    const { remoteJid, id, message } = extractOutboundArgs(arg1, arg2, arg3);
+    const { remoteJid, id, message, expectedEpoch } = extractOutboundArgs(arg1, arg2, arg3, arg4);
+    if (expectedEpoch !== undefined && expectedEpoch !== accountEpoch) return false;
     if (typeof id !== "string" || !id) return false;
     if (!message || typeof message !== "object") return false;
     const chatJid = normalizeChatJid(remoteJid);

@@ -58,6 +58,7 @@ function makeHarness({ paired = false, retryDelaysMs, clearAll, isLinked, realCl
       user: null,
       ended: 0,
       loggedOut: 0,
+      fenced: 0,
       ev: new EventEmitter(),
       async end() {
         this.ended += 1;
@@ -73,7 +74,15 @@ function makeHarness({ paired = false, retryDelaysMs, clearAll, isLinked, realCl
       updates: null,
     };
     sockets.push(sock);
-    return { sock, saveCreds: async () => {}, clearAll, isPaired: paired };
+    return {
+      sock,
+      saveCreds: async () => {},
+      clearAll,
+      fence: () => {
+        sock.fenced += 1;
+      },
+      isPaired: paired,
+    };
   };
 
   const attachListeners = (sock, { onConnectionUpdate }) => {
@@ -914,6 +923,200 @@ section("internet state: pausing when offline and restarting when online");
   equal("new socket created", h.sockets.length, 2);
   await h.push({ connection: "open" });
   equal("connected again", h.session.state, S.CONNECTED);
+}
+
+section(
+  "auth fence closes before clearing credentials and on socket teardown, without affecting reconnect",
+);
+
+{
+  // 1. logout() fences the old auth state before clearAll and clearDirectory run.
+  const order = [];
+  const h = makeHarness({
+    paired: true,
+    clearAll: async () => {
+      order.push(`clearAll:fenced=${h.sockets[0].fenced}`);
+    },
+  });
+  const realCreate = h.session.createSocket;
+  h.session.createSocket = async (...args) => {
+    const created = await realCreate(...args);
+    const origFence = created.fence;
+    created.fence = () => {
+      order.push("fence");
+      origFence();
+    };
+    return created;
+  };
+  h.session.clearDirectory = () => {
+    order.push(`clearDirectory:fenced=${h.sockets[0].fenced}`);
+  };
+
+  await h.session.start();
+  await h.push({ connection: "open" });
+  equal("active socket is not fenced while connected", h.sockets[0].fenced, 0);
+
+  await h.session.logout();
+  equal("logout fenced the socket auth state", h.sockets[0].fenced, 1);
+  equal(
+    "logout fenced before clearAll and clearDirectory",
+    order.join(","),
+    "fence,clearAll:fenced=1,clearDirectory:fenced=1",
+  );
+}
+
+{
+  // 2. DisconnectReason.loggedOut close fences before clearAll and clearDirectory.
+  const order = [];
+  const h = makeHarness({
+    paired: true,
+    clearAll: async () => {
+      order.push(`clearAll:fenced=${h.sockets[0].fenced}`);
+    },
+  });
+  const realCreate = h.session.createSocket;
+  h.session.createSocket = async (...args) => {
+    const created = await realCreate(...args);
+    const origFence = created.fence;
+    created.fence = () => {
+      order.push("fence");
+      origFence();
+    };
+    return created;
+  };
+  h.session.clearDirectory = () => {
+    order.push(`clearDirectory:fenced=${h.sockets[0].fenced}`);
+  };
+
+  await h.session.start();
+  await h.push({ connection: "open" });
+  await h.push({ connection: "close", lastDisconnect: closedWith(DisconnectReason.loggedOut) });
+
+  equal("loggedOut close fenced the socket auth state", h.sockets[0].fenced, 1);
+  equal(
+    "loggedOut close fenced before clearAll and clearDirectory",
+    order.join(","),
+    "fence,clearAll:fenced=1,clearDirectory:fenced=1",
+  );
+}
+
+{
+  // 3. Reconnect and stop fence the old socket without fencing the new socket.
+  const h = makeHarness({ paired: true, retryDelaysMs: [20, 40] });
+  await h.session.start();
+  await h.push({ connection: "open" });
+  equal("first socket starts unfenced", h.sockets[0].fenced, 0);
+
+  await h.session.reconnect();
+  equal("reconnect created second socket", h.sockets.length, 2);
+  equal("first socket was fenced on teardown", h.sockets[0].fenced, 1);
+  equal("second socket auth state is unfenced", h.sockets[1].fenced, 0);
+
+  await h.session.stop();
+  equal("stop fenced the second socket", h.sockets[1].fenced, 1);
+}
+
+{
+  // 4. Overtaken start fences the discarded socket.
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const h = makeHarness({ paired: true });
+  const realCreate = h.session.createSocket;
+  h.session.createSocket = async (...args) => {
+    await gate;
+    return realCreate(...args);
+  };
+
+  const starting = h.session.start();
+  const stopping = h.session.stop();
+  release();
+  await Promise.all([starting, stopping]);
+  equal("overtaken socket auth state was fenced when discarded", h.sockets[0].fenced, 1);
+}
+
+{
+  // 5. Real useDatabaseAuthState wired into WhatsAppSession: a pending Baileys
+  // commitWithRetry from the old socket is blocked when session.logout() runs.
+  const { addTransactionCapability } = await import("@whiskeysockets/baileys");
+  const { AUTH_STORE_FENCED, useDatabaseAuthState } = await import(
+    "../src/auth/use-database-auth-state.js"
+  );
+  const store = harnessRequire("./src/db/store.cjs");
+  store.authClearAll();
+
+  const authStates = [];
+  const session = new WhatsAppSession({
+    createSocket: async () => {
+      const auth = await useDatabaseAuthState();
+      authStates.push(auth);
+      const sock = {
+        user: { id: "1@s.whatsapp.net" },
+        ev: new EventEmitter(),
+        async end() {},
+        async logout() {},
+      };
+      return {
+        sock,
+        saveCreds: auth.saveCreds,
+        clearAll: auth.clearAll,
+        fence: auth.fence,
+        isPaired: true,
+      };
+    },
+    attachListeners: (sock, { onConnectionUpdate }) => {
+      sock.updates = onConnectionUpdate;
+    },
+    onOpen: async () => {},
+    checkConsent: () => ({ ok: true }),
+    log: silent,
+    isLinked: () => true,
+    clearDirectory: () => {},
+  });
+
+  await session.start();
+  equal("session starts in starting state", session.state, S.STARTING);
+  equal("one real auth state created", authStates.length, 1);
+  const oldAuth = authStates[0];
+  const txKeys = addTransactionCapability(oldAuth.state.keys, silent, {
+    maxCommitRetries: 4,
+    delayBetweenTriesMs: 25,
+  });
+
+  let attempts = 0;
+  let logoutPromise = null;
+  const originalApply = store.authApply;
+  store.authApply = (entries) => {
+    attempts += 1;
+    if (attempts === 1) {
+      setTimeout(() => {
+        logoutPromise = session.logout();
+      }, 5);
+      throw new Error("sqlite-busy-before-logout");
+    }
+    return originalApply(entries);
+  };
+
+  let commitErr = null;
+  try {
+    await txKeys.transaction(async () => {
+      await txKeys.set({ session: { "stale-peer@s.whatsapp.net": { v: 1 } } });
+    }, "send-before-logout");
+  } catch (err) {
+    commitErr = err;
+  } finally {
+    store.authApply = originalApply;
+  }
+
+  if (logoutPromise) await logoutPromise;
+  equal("session is logged out", session.state, S.LOGGED_OUT);
+  equal("commitWithRetry rejected with AUTH_STORE_FENCED", commitErr?.code, AUTH_STORE_FENCED);
+  equal(
+    "stale key was not written after session.logout()",
+    store.authRead("session-stale-peer@s.whatsapp.net"),
+    null,
+  );
 }
 
 finish();

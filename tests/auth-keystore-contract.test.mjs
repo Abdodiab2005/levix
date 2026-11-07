@@ -12,8 +12,11 @@ useTempDataDir("levix-auth-keystore");
 
 const store = require("./src/db/store.cjs");
 const vault = require("./src/config/vault.cjs");
+const logger = require("./src/utils/logger.cjs");
 const { createAuthStorage } = require("./src/auth/auth-storage.cjs");
-const { useDatabaseAuthState } = await import("../src/auth/use-database-auth-state.js");
+const { AUTH_STORE_FENCED, useDatabaseAuthState } = await import(
+  "../src/auth/use-database-auth-state.js"
+);
 
 function canon(value) {
   return JSON.stringify(value, BufferJSON.replacer);
@@ -375,6 +378,193 @@ section("creds load and saveCreds still swallow");
   const loadedError = await catchError(() => useDatabaseAuthState());
   store.authRead = originalRead;
   ok("initial creds load does not reject", loadedError === null);
+}
+
+section(
+  "fence() rejects keys.set and keys.get, writes nothing, and makes saveCreds a log-once no-op",
+);
+
+{
+  store.authClearAll();
+  const auth = await useDatabaseAuthState();
+  equal("fence is exposed as a function", typeof auth.fence, "function");
+
+  await auth.state.keys.set({ session: { "before-fence@s.whatsapp.net": sessionValue } });
+  const beforeFence = await auth.state.keys.get("session", ["before-fence@s.whatsapp.net"]);
+  sameValue("reads work before fence", beforeFence["before-fence@s.whatsapp.net"], sessionValue);
+
+  auth.fence();
+
+  let readCalls = 0;
+  let applyCalls = 0;
+  let writeCalls = 0;
+  const originalRead = store.authRead;
+  const originalApply = store.authApply;
+  const originalWrite = store.authWrite;
+  store.authRead = (key) => {
+    readCalls += 1;
+    return originalRead(key);
+  };
+  store.authApply = (entries) => {
+    applyCalls += 1;
+    return originalApply(entries);
+  };
+  store.authWrite = (key, value) => {
+    writeCalls += 1;
+    return originalWrite(key, value);
+  };
+
+  let setErr;
+  let emptySetErr;
+  let getErr;
+  const debugCalls = [];
+  const originalDebug = logger.debug;
+  logger.debug = (...args) => {
+    debugCalls.push(args);
+  };
+  try {
+    setErr = await catchError(() =>
+      auth.state.keys.set({
+        session: { "after-fence@s.whatsapp.net": sessionValue },
+        "pre-key": { 77: preKeyValue },
+      }),
+    );
+    emptySetErr = await catchError(() => auth.state.keys.set({}));
+    getErr = await catchError(() =>
+      auth.state.keys.get("session", ["before-fence@s.whatsapp.net"]),
+    );
+
+    auth.state.creds.me = { id: "111@s.whatsapp.net", name: "Fenced" };
+    await auth.saveCreds();
+    await auth.saveCreds();
+    await auth.saveCreds();
+  } finally {
+    logger.debug = originalDebug;
+    store.authRead = originalRead;
+    store.authApply = originalApply;
+    store.authWrite = originalWrite;
+  }
+
+  equal("fenced keys.set rejects with AUTH_STORE_FENCED", setErr?.code, AUTH_STORE_FENCED);
+  equal(
+    "fenced keys.set({}) also rejects with AUTH_STORE_FENCED",
+    emptySetErr?.code,
+    AUTH_STORE_FENCED,
+  );
+  equal("fenced keys.get rejects with AUTH_STORE_FENCED", getErr?.code, AUTH_STORE_FENCED);
+  equal("fenced keys.get performs no storage read", readCalls, 0);
+  equal("fenced keys.set performs no storage apply", applyCalls, 0);
+  equal("fenced saveCreds performs no storage write", writeCalls, 0);
+  equal("fenced saveCreds logs once at debug", debugCalls.length, 1);
+  equal(
+    "fenced keys.set wrote nothing to sqlite",
+    store.authRead("session-after-fence@s.whatsapp.net"),
+    null,
+  );
+  equal("fenced pre-key write did not land", store.authRead("pre-key-77"), null);
+  ok(
+    "existing row before fence is untouched",
+    store.authRead("session-before-fence@s.whatsapp.net") !== null,
+  );
+
+  // A new auth state instance created for a reconnect or next account is unfenced.
+  const nextAuth = await useDatabaseAuthState();
+  await nextAuth.state.keys.set({ session: { "next-instance@s.whatsapp.net": sessionValue } });
+  const nextRead = await nextAuth.state.keys.get("session", ["next-instance@s.whatsapp.net"]);
+  sameValue(
+    "new auth state instance is unaffected by old fence",
+    nextRead["next-instance@s.whatsapp.net"],
+    sessionValue,
+  );
+
+  // Memory backend also supports fence().
+  const memAuth = await useDatabaseAuthState("memory");
+  memAuth.fence();
+  const memSetErr = await catchError(() =>
+    memAuth.state.keys.set({ session: { m1: sessionValue } }),
+  );
+  const memGetErr = await catchError(() => memAuth.state.keys.get("session", ["m1"]));
+  equal("memory fenced keys.set rejects", memSetErr?.code, AUTH_STORE_FENCED);
+  equal("memory fenced keys.get rejects", memGetErr?.code, AUTH_STORE_FENCED);
+}
+
+section(
+  "pending Baileys commitWithRetry after fence writes nothing into cleared or next account state",
+);
+
+{
+  store.authClearAll();
+  const oldAccount = await useDatabaseAuthState();
+  const txKeys = addTransactionCapability(oldAccount.state.keys, txLogger, {
+    maxCommitRetries: 4,
+    delayBetweenTriesMs: 25,
+  });
+
+  let applyAttempts = 0;
+  const originalApply = store.authApply;
+  let nextAccount;
+  store.authApply = (entries) => {
+    // Count only the old account's commits; the next account's own write is legitimate.
+    const fromOldAccount = entries.some((entry) => /old-account|::old@/.test(entry.key));
+    if (!fromOldAccount) return originalApply(entries);
+    applyAttempts += 1;
+    if (applyAttempts === 1) {
+      // Simulate a transient SQLite failure on the first commit attempt, then
+      // the operator unlinks and pairs a new account while Baileys waits to retry.
+      setTimeout(async () => {
+        oldAccount.fence();
+        await oldAccount.clearAll();
+        nextAccount = await useDatabaseAuthState();
+        await nextAccount.state.keys.set({
+          session: { "new-account@s.whatsapp.net": { n: 200 } },
+        });
+      }, 5);
+      throw new Error("transient-before-unlink");
+    }
+    return originalApply(entries);
+  };
+
+  let txError;
+  try {
+    txError = await catchError(() =>
+      txKeys.transaction(async () => {
+        await txKeys.set({
+          session: { "old-account@s.whatsapp.net": sessionValue },
+          "sender-key": { "120363001@g.us::old@lid::0": senderKeyValue },
+        });
+      }, "old-account-send"),
+    );
+  } finally {
+    store.authApply = originalApply;
+  }
+
+  equal(
+    "pending commit retry rejects with AUTH_STORE_FENCED after fence",
+    txError?.code,
+    AUTH_STORE_FENCED,
+  );
+  equal("storage apply was only called once before fence blocked retries", applyAttempts, 1);
+  equal(
+    "old account session key is absent from baileys_auth",
+    store.authRead("session-old-account@s.whatsapp.net"),
+    null,
+  );
+  equal(
+    "old account sender-key is absent from baileys_auth",
+    store.authRead("sender-key-120363001@g.us::old@lid::0"),
+    null,
+  );
+  ok("next account auth state was created during retry window", Boolean(nextAccount));
+  const nextCheck = await nextAccount.state.keys.get("session", [
+    "new-account@s.whatsapp.net",
+    "old-account@s.whatsapp.net",
+  ]);
+  equal("next account keeps its own key", nextCheck["new-account@s.whatsapp.net"]?.n, 200);
+  equal(
+    "old account key did not leak into next account",
+    nextCheck["old-account@s.whatsapp.net"],
+    undefined,
+  );
 }
 
 finish();

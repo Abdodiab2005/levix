@@ -6,6 +6,14 @@ const require = createRequire(import.meta.url);
 const { createAuthStorage } = require("./auth-storage.cjs");
 const logger = require("../utils/logger.cjs");
 
+export const AUTH_STORE_FENCED = "AUTH_STORE_FENCED";
+
+function fencedError() {
+  const err = new Error("Auth store is fenced");
+  err.code = AUTH_STORE_FENCED;
+  return err;
+}
+
 // Baileys' typed shape is `{ [type]: { [id]: value } }`. The untyped shape is
 // a flat id → value map left over from older sessions; the key names stay.
 function collectKeyEntries(data) {
@@ -80,21 +88,33 @@ export async function useDatabaseAuthState(storageType = null) {
     logger.info("[Auth] Loaded existing credentials from database");
   }
 
+  let fenced = false;
+  let fencedSaveLogged = false;
+  const fence = () => {
+    fenced = true;
+  };
+
   const keys = {
     get: async (type, ids) => {
+      if (fenced) throw fencedError();
       const out = {};
       await Promise.all(
         ids.map(async (id) => {
+          if (fenced) throw fencedError();
           const val = await storage.readData(`${type}-${id}`);
+          if (fenced) throw fencedError();
           if (val !== null && val !== undefined) out[id] = val;
         }),
       );
+      if (fenced) throw fencedError();
       return out;
     },
 
     set: async (data) => {
+      if (fenced) throw fencedError();
       const entries = collectKeyEntries(data);
       if (entries.length === 0) return;
+      if (fenced) throw fencedError();
       await storage.apply(entries);
     },
   };
@@ -102,6 +122,13 @@ export async function useDatabaseAuthState(storageType = null) {
   const state = { creds, keys };
 
   const saveCreds = async () => {
+    if (fenced) {
+      if (!fencedSaveLogged) {
+        fencedSaveLogged = true;
+        logger.debug("[Auth] Ignoring saveCreds on fenced auth state");
+      }
+      return;
+    }
     try {
       await writeData("creds", state.creds);
     } catch (err) {
@@ -110,6 +137,7 @@ export async function useDatabaseAuthState(storageType = null) {
   };
 
   const clearAll = async () => {
+    fenced = true;
     try {
       if (storage.clearAll) {
         await storage.clearAll();
@@ -122,7 +150,7 @@ export async function useDatabaseAuthState(storageType = null) {
     }
   };
 
-  return { state, saveCreds, clearAll };
+  return { state, saveCreds, clearAll, fence };
 }
 
 export default useDatabaseAuthState;

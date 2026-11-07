@@ -3,7 +3,11 @@ import { createRequire } from "module";
 import { invalidateReactionMessage } from "../automation/reactions.js";
 import { useDatabaseAuthState } from "../auth/use-database-auth-state.js";
 import { getBaileysConfig, setRecentMessageGetter } from "../config/baileys.config.js";
-import { getMessageFromRecent, rememberMessage } from "../utils/recentMessageCache.esm.js";
+import {
+  getMessageFromRecent,
+  getRecentCacheEpoch,
+  rememberMessage,
+} from "../utils/recentMessageCache.esm.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -105,6 +109,7 @@ export function withOutboundSavers(sock) {
   const getUrlInfo = (text) => getHttpsUrlInfo(text, { dispatcher: socketDispatchers.get(sock) });
 
   sock.sendMessage = async function sendMessageWithOutboundSavers(jid, content, options) {
+    const sendEpoch = getRecentCacheEpoch();
     if (content?.delete) invalidateReactionMessage(sock, { ...content.delete, remoteJid: jid });
     const signal = options?.signal;
     signal?.throwIfAborted();
@@ -127,8 +132,13 @@ export function withOutboundSavers(sock) {
     signal?.throwIfAborted();
     const result = await original(jid, payload, wireOptions);
     try {
-      if (result?.key?.id && result?.key?.remoteJid && result?.message) {
-        rememberMessage(result.key, result.message);
+      if (
+        getRecentCacheEpoch() === sendEpoch &&
+        result?.key?.id &&
+        result?.key?.remoteJid &&
+        result?.message
+      ) {
+        rememberMessage(result.key, result.message, sendEpoch);
       }
     } catch (err) {
       logger.debug({ err: err?.message }, "[Socket] recent message cache step skipped");
@@ -155,7 +165,7 @@ export async function createWhatsAppSocket({ proxy = null, pairingCode = false }
       : "[Socket] Initializing WhatsApp socket with database auth",
   );
 
-  const { state, saveCreds, clearAll } = await useDatabaseAuthState();
+  const { state, saveCreds, clearAll, fence = () => {} } = await useDatabaseAuthState();
 
   // Whether this install is already paired. NOT `store.hasCredentials()`: the
   // auth state writes a `creds` row on its very first call, paired or not. See
@@ -190,5 +200,5 @@ export async function createWhatsAppSocket({ proxy = null, pairingCode = false }
   liveSock = sock;
   socketDispatchers.set(sock, config.options?.dispatcher ?? null);
 
-  return { sock, saveCreds, clearAll, isPaired };
+  return { sock, saveCreds, clearAll, fence, isPaired };
 }

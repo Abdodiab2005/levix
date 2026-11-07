@@ -646,4 +646,99 @@ section("message.handler no longer stores incoming notify fromMe messages");
   );
 }
 
+section("in-flight send resolving after clearRecentMessages or session.logout is not cached");
+{
+  recentCache.clearRecentMessages?.();
+  const epochBefore = recentCache.getRecentCacheEpoch?.();
+  equal("getRecentCacheEpoch returns a number", typeof epochBefore, "number");
+
+  let resolveSlowSend;
+  let notifyEnteredOriginal;
+  let enteredOriginal = new Promise((resolve) => {
+    notifyEnteredOriginal = resolve;
+  });
+  const slowRaw = {
+    user: { id: "15550001111:1@s.whatsapp.net", lid: "100000000000001:1@lid" },
+    sendMessage: async (jid, content, options = {}) => {
+      const id = options.messageId || `slow-${++seq}`;
+      const message = buildProtoMessage(content, options);
+      if (options.slow) {
+        notifyEnteredOriginal?.();
+        await new Promise((resolve) => {
+          resolveSlowSend = resolve;
+        });
+      }
+      return proto.WebMessageInfo.fromObject({
+        key: { remoteJid: jid, fromMe: true, id },
+        message,
+        messageTimestamp: 1_700_000_000,
+        status: proto.WebMessageInfo.Status.PENDING,
+      });
+    },
+  };
+  const slowSock = socketModule.withOutboundSavers(slowRaw);
+
+  // 1. Send starts before clearRecentMessages(), resolves after.
+  const pendingSend = slowSock.sendMessage(
+    GROUP_A,
+    { text: "in-flight before clear" },
+    { messageId: "inflight-clear-1", slow: true },
+  );
+  await enteredOriginal;
+  ok("slow send is waiting in original()", typeof resolveSlowSend === "function");
+
+  recentCache.clearRecentMessages();
+  const epochAfter = recentCache.getRecentCacheEpoch?.();
+  equal("clearRecentMessages bumps account epoch", epochAfter, epochBefore + 1);
+
+  resolveSlowSend();
+  const lateResult = await pendingSend;
+  equal("late send still returns its WAMessage to caller", lateResult?.key?.id, "inflight-clear-1");
+  equal(
+    "late send resolving after clearRecentMessages is not cached",
+    await config.getMessage({ remoteJid: GROUP_A, id: "inflight-clear-1" }),
+    undefined,
+  );
+
+  // 2. Send starts before session.logout(), resolves after unlink.
+  resolveSlowSend = null;
+  enteredOriginal = new Promise((resolve) => {
+    notifyEnteredOriginal = resolve;
+  });
+  const pendingUnlinkSend = slowSock.sendMessage(
+    GROUP_A,
+    { text: "in-flight before logout" },
+    { messageId: "inflight-unlink-1", slow: true },
+  );
+  await enteredOriginal;
+  ok("second slow send is waiting in original()", typeof resolveSlowSend === "function");
+
+  const session = new WhatsAppSession({
+    clearCredentials: async () => store.authClearAll(),
+    isLinked: () => false,
+    log: { info() {}, warn() {}, error() {}, debug() {} },
+  });
+  await session.logout();
+
+  resolveSlowSend();
+  await pendingUnlinkSend;
+  equal(
+    "late send resolving after session.logout() is not cached",
+    await config.getMessage({ remoteJid: GROUP_A, id: "inflight-unlink-1" }),
+    undefined,
+  );
+
+  // 3. A new send started in the new epoch caches normally.
+  const freshSent = await slowSock.sendMessage(
+    GROUP_A,
+    { text: "fresh epoch send" },
+    { messageId: "fresh-epoch-1" },
+  );
+  equal(
+    "send started after clearRecentMessages is cached in the new epoch",
+    await config.getMessage({ remoteJid: GROUP_A, id: "fresh-epoch-1" }),
+    freshSent.message,
+  );
+}
+
 finish();
