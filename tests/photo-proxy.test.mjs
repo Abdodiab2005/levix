@@ -20,7 +20,10 @@ useTempDataDir("levix-photo-proxy");
 process.env.LEVIX_ANDROID = "1";
 const source = (path) => pathToFileURL(join(ROOT, path)).href;
 mock.module(require.resolve("@whiskeysockets/baileys"), {
-  namedExports: { makeWASocket: () => ({ sendMessage: async () => {} }) },
+  namedExports: {
+    makeWASocket: () => ({ sendMessage: async () => {} }),
+    proto: { Message: { encode: () => ({ finish: () => new Uint8Array(0) }) } },
+  },
 });
 mock.module(source("src/auth/use-database-auth-state.js"), {
   namedExports: {

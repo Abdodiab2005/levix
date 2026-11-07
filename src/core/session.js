@@ -50,6 +50,7 @@ import { DisconnectReason } from "@whiskeysockets/baileys";
 import { createRequire } from "module";
 import { RETRY_SCHEDULE_MS } from "../config/constants.js";
 import { bootstrapAdmins, bootstrapOwners } from "../utils/permissions.esm.js";
+import { clearRecentMessages } from "../utils/recentMessageCache.esm.js";
 import {
   clearAuthState,
   clearAutoDeleteOnUnlink,
@@ -109,6 +110,9 @@ function clearAccountScopedState() {
   }
   try {
     groupMetadataCache.flushAll();
+  } catch {}
+  try {
+    clearRecentMessages();
   } catch {}
   try {
     // Copies of deleted messages and the counters are account-derived; the

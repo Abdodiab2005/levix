@@ -3,7 +3,7 @@ import { createRequire } from "module";
 import { invalidateReactionMessage } from "../automation/reactions.js";
 import { useDatabaseAuthState } from "../auth/use-database-auth-state.js";
 import { getBaileysConfig, setRecentMessageGetter } from "../config/baileys.config.js";
-import { getMessageFromRecent } from "../utils/recentMessageCache.esm.js";
+import { getMessageFromRecent, rememberMessage } from "../utils/recentMessageCache.esm.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -100,7 +100,7 @@ function withoutUnwantedLinkPreview(content) {
  * sendBotMessage and the handful of legacy commands still calling
  * sock.sendMessage directly.
  */
-function withOutboundSavers(sock) {
+export function withOutboundSavers(sock) {
   const original = sock.sendMessage.bind(sock);
   const getUrlInfo = (text) => getHttpsUrlInfo(text, { dispatcher: socketDispatchers.get(sock) });
 
@@ -125,7 +125,15 @@ function withOutboundSavers(sock) {
     // No await between this check and Baileys: cancellation cannot retract a
     // send already initiated, but must prevent a new one after preparation.
     signal?.throwIfAborted();
-    return original(jid, payload, wireOptions);
+    const result = await original(jid, payload, wireOptions);
+    try {
+      if (result?.key?.id && result?.key?.remoteJid && result?.message) {
+        rememberMessage(result.key, result.message);
+      }
+    } catch (err) {
+      logger.debug({ err: err?.message }, "[Socket] recent message cache step skipped");
+    }
+    return result;
   };
 
   return sock;

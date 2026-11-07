@@ -4,7 +4,6 @@ import { checkBlacklist } from "../middleware/blacklist.middleware.js";
 import { trackForwardedMessage } from "../middleware/forward-tracking.middleware.js";
 import normalizeJid from "../utils/normalizeJid.esm.js";
 import { getSenderCandidates, isBotAdminInGroup, sameUser } from "../utils/permissions.esm.js";
-import { rememberMessage } from "../utils/recentMessageCache.esm.js";
 import { saveUserMetadata, updateUserLastSeen } from "../utils/storage.esm.js";
 import { handleCommand } from "./command.handler.js";
 
@@ -52,13 +51,6 @@ export async function handleIncomingMessage(sock, m) {
   if (msg?.messageStubParameters?.[0] === "Message absent from node") {
     logger.debug("[Message] Skipping undecryptable/absent message stub");
     return;
-  }
-
-  // Baileys' getMessage hook needs to hand back messages WE sent when a peer
-  // asks for a retry (see utils/recentMessageCache.esm.js). Only our own
-  // outgoing messages are kept, in memory, and only for that purpose.
-  if (msg.key?.fromMe && msg.key.id && msg.message) {
-    rememberMessage(msg.key.id, msg);
   }
 
   if (!hasUserContent(msg.message)) return;
