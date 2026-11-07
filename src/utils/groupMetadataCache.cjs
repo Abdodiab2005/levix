@@ -21,6 +21,13 @@
 // last known entry so the Reply Router can check membership during a refresh.
 // A failed refresh keeps that entry. It does not delete it.
 //
+// A bulk answer (cacheAllGroups) and a full roster whose request start is
+// unknown (groups.upsert, groups.update with participants) must not overwrite
+// a group that had a roster event after that answer was requested. Those
+// paths use captureRosterCursor / storeBulkGroupMetadata and
+// storeUnsolicitedFullRoster. storeFullGroupMetadata itself stays the
+// "this roster is current" writer.
+//
 // CommonJS on purpose: the consumers are the CJS command files and the ESM
 // handlers/ middleware, and this module must be loadable from both.
 
@@ -43,6 +50,21 @@ const state = new Map();
 // Follow one coalesced refetch, then stop. A burst schedules at most one more
 // fetch; this cap only bounds a pathological chain of events across fetches.
 const MAX_FETCH_CHAIN = 8;
+
+// An unsolicited full roster is stored only when the group has been quiet.
+// Event records older than the retain window are dropped. No timer: prune
+// runs when an event is recorded, when a bulk cursor is captured, and on flush.
+const ROSTER_EVENT_QUIET_MS = 60 * 1000;
+const ROSTER_EVENT_RETAIN_MS = 10 * 60 * 1000;
+
+// Monotonic count of roster events. A bulk fetch captures the value before
+// its request and stores a group only when that group is still at or below it.
+let rosterEventSeq = 0;
+// Bumped on flush so an in-flight bulk answer cannot refill a cleared cache.
+let rosterEpoch = 0;
+// jid -> { seq, at }. Survives a finished refresh so a late bulk answer still
+// sees the event. Separate from `state`, which only tracks stale fetches.
+const rosterEvents = new Map();
 
 function isGroupJid(jid) {
   return String(jid || "").endsWith("@g.us");
@@ -89,6 +111,8 @@ function dropIdleState(jid) {
 // (session.js, connection.js). Bump gen first so an in-flight answer cannot
 // write the roster back after the cache was cleared.
 function dropAllRosterState() {
+  rosterEpoch += 1;
+  rosterEvents.clear();
   for (const entry of state.values()) {
     entry.gen += 1;
     entry.again = false;
@@ -96,6 +120,37 @@ function dropAllRosterState() {
     entry.inflight = null;
   }
   state.clear();
+}
+
+function pruneRosterEvents(now = Date.now()) {
+  for (const [jid, record] of rosterEvents) {
+    if (!record || now - record.at > ROSTER_EVENT_RETAIN_MS) rosterEvents.delete(jid);
+  }
+}
+
+function noteRosterEvent(jid, now = Date.now()) {
+  rosterEventSeq += 1;
+  rosterEvents.set(jid, { seq: rosterEventSeq, at: now });
+  pruneRosterEvents(now);
+}
+
+function hadRosterEventSince(jid, seq) {
+  const record = rosterEvents.get(jid);
+  return Boolean(record && record.seq > seq);
+}
+
+function hadRosterEventWithin(jid, withinMs, now = Date.now()) {
+  const record = rosterEvents.get(jid);
+  return Boolean(record && now - record.at < withinMs);
+}
+
+/**
+ * Sequence and flush epoch at the moment a bulk roster request starts.
+ * `now` is only for pruning; production passes the clock cacheAllGroups uses.
+ */
+function captureRosterCursor(now = Date.now()) {
+  pruneRosterEvents(now);
+  return { seq: rosterEventSeq, epoch: rosterEpoch };
 }
 
 cache.on("del", (key) => dropIdleState(key));
@@ -141,6 +196,36 @@ function setCached(jid, metadata) {
     return;
   }
   cache.set(jid, metadata);
+}
+
+/**
+ * Store one group from a bulk fetch that captured `cursor` before the request.
+ * A later roster event, an open refresh, or a flush wins. The bulk answer is
+ * left unused for that group so it cannot mark an older roster fresh.
+ */
+function storeBulkGroupMetadata(jid, metadata, cursor) {
+  if (!cursor || cursor.epoch !== rosterEpoch) return null;
+  const entry = state.get(jid);
+  if (entry?.stale || entry?.inflight) return null;
+  if (hadRosterEventSince(jid, cursor.seq)) return null;
+  return storeFullGroupMetadata(jid, metadata);
+}
+
+/**
+ * Full roster whose request started at an unknown time (groups.upsert, or
+ * groups.update that carries participants). Store it only when this group is
+ * quiet. Otherwise leave any in-flight refresh alone, or start one, so a live
+ * groupMetadata answer decides.
+ */
+function storeUnsolicitedFullRoster(sock, jid, metadata, now = Date.now()) {
+  if (!isGroupJid(jid) || !metadata || !Array.isArray(metadata.participants)) return null;
+  pruneRosterEvents(now);
+  const entry = state.get(jid);
+  const quiet =
+    !entry?.stale && !entry?.inflight && !hadRosterEventWithin(jid, ROSTER_EVENT_QUIET_MS, now);
+  if (quiet) return storeFullGroupMetadata(jid, metadata);
+  if (!entry?.inflight && canFetch(sock)) beginRosterRefresh(sock, jid);
+  return null;
 }
 
 function fetchRoster(sock, jid, entry) {
@@ -196,10 +281,13 @@ function canFetch(sock) {
 }
 
 /**
- * Roster event. Bumps gen and sets stale synchronously, then starts or
- * coalesces one shared groupMetadata fetch. No await before the flag.
+ * Mark the roster stale and start or coalesce one shared groupMetadata fetch.
+ * Does not record a roster event. markRosterChanged does that first.
+ * A second call while a fetch is open bumps gen so the older answer is dropped
+ * and one follow-up runs. storeUnsolicitedFullRoster does not call this while
+ * a fetch is already open, so a late full roster cannot discard that refresh.
  */
-function markRosterChanged(sock, jid) {
+function beginRosterRefresh(sock, jid) {
   if (!isGroupJid(jid)) return null;
   const entry = ensureState(jid);
   entry.gen += 1;
@@ -213,6 +301,16 @@ function markRosterChanged(sock, jid) {
     return null;
   }
   return fetchRoster(sock, jid, entry);
+}
+
+/**
+ * Roster event. Records the event and sets stale synchronously, before any
+ * await, then starts or coalesces one shared groupMetadata fetch.
+ */
+function markRosterChanged(sock, jid) {
+  if (!isGroupJid(jid)) return null;
+  noteRosterEvent(jid);
+  return beginRosterRefresh(sock, jid);
 }
 
 async function drainFetches(sock, jid) {
@@ -253,9 +351,14 @@ async function groupMetadataForSend(sock, jid) {
  * Group metadata, cache-first. A fresh hit costs nothing. A miss or a stale
  * entry joins the shared fetch. A failing fetch returns the last known entry
  * (stale) or null when there is none.
+ *
+ * `{ fresh: true }` is the authorization read. It returns a fresh cache hit
+ * or a live answer, and null when the only roster left is a stale one.
+ * Display, moderation protection and the Reply Router omit the option.
  */
-async function resolveGroupMetadata(sock, jid) {
+async function resolveGroupMetadata(sock, jid, options) {
   if (!isGroupJid(jid)) return null;
+  const fresh = Boolean(options && options.fresh);
   const ready = freshEntry(jid);
   if (ready) return ready;
   let last;
@@ -271,6 +374,7 @@ async function resolveGroupMetadata(sock, jid) {
   // A live answer with no participants array is not stored. Callers that
   // already accept that shape (the low-data retry) still receive it.
   if (acceptedLive(jid, last)) return last.live;
+  if (fresh) return null;
   return cache.get(jid) || null;
 }
 
@@ -302,6 +406,9 @@ module.exports = {
   groupMetadataForSend,
   storeFullGroupMetadata,
   mergePartialGroupMetadata,
+  captureRosterCursor,
+  storeBulkGroupMetadata,
+  storeUnsolicitedFullRoster,
   markRosterChanged,
   isRosterStale,
   rosterStateSize,

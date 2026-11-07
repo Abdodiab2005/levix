@@ -22,7 +22,10 @@ import { groupMetadataCache } from "./socket.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
-const { storeFullGroupMetadata } = require("../utils/groupMetadataCache.cjs");
+const {
+  captureRosterCursor,
+  storeBulkGroupMetadata,
+} = require("../utils/groupMetadataCache.cjs");
 const { primePermissions } = require("../utils/permissions.cjs");
 const { activatePendingIfMatching } = require("../backup/activation.cjs");
 const { maskAccount } = require("../backup/account.cjs");
@@ -262,15 +265,20 @@ export async function cacheAllGroups(sock, { force = false, now = Date.now() } =
 
   logger.info("[Cache] Fetching and caching metadata for all groups...");
 
+  // Captured before the request. A roster event during the round-trip keeps
+  // that group's newer refresh; this answer must not mark the old roster fresh.
+  const cursor = captureRosterCursor(now);
+
   try {
     const groups = await sock.groupFetchAllParticipating();
     let cachedCount = 0;
 
     for (const jid in groups) {
-      storeFullGroupMetadata(jid, groups[jid]);
+      const stored = storeBulkGroupMetadata(jid, groups[jid], cursor);
+      if (!stored) continue;
       upsertGroupDirectory(jid, {
-        subject: groups[jid]?.subject || null,
-        participantCount: groups[jid]?.participants?.length ?? null,
+        subject: stored.subject || null,
+        participantCount: stored.participants?.length ?? null,
       });
       cachedCount++;
     }

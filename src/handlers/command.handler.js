@@ -3,7 +3,7 @@ import { createRequire } from "module";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { checkBotAdmin, checkCommandPermission } from "../middleware/permissions.middleware.js";
-import { resolveGroupMetadata } from "../utils/groupMetadataCache.cjs";
+import { getCached, resolveGroupMetadata } from "../utils/groupMetadataCache.cjs";
 import { sendBotMessage } from "../utils/sendBotMessage.esm.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -429,10 +429,12 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
   }
 
   try {
-    // Cache-first: a live query only when no cached metadata exists yet (see
-    // utils/groupMetadataCache.cjs — this used to be one network round-trip
-    // per command attempt in every group).
-    const groupMetadata = isGroup ? await resolveGroupMetadata(sock, msg.key.remoteJid) : null;
+    // One read. Authorization uses a fresh or live roster and denies when the
+    // only copy is stale. The command body keeps the last known roster so a
+    // failed refresh still protects the last-known admins.
+    const jid = msg.key.remoteJid;
+    const authMetadata = isGroup ? await resolveGroupMetadata(sock, jid, { fresh: true }) : null;
+    const groupMetadata = isGroup ? authMetadata || getCached(jid) || null : null;
 
     if (command.name !== "group") {
       // Enforce the `chat` constraint declared by the command. Until now this
@@ -466,7 +468,7 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
       // `!kick` directly is gated exactly like running `!group kick`.
       const permissionKey = command.__category === "group" ? `group:${command.name}` : command.name;
 
-      const permissionCheck = checkCommandPermission(permissionKey, msg, groupMetadata, sock);
+      const permissionCheck = checkCommandPermission(permissionKey, msg, authMetadata, sock);
 
       if (!permissionCheck.hasPermission) {
         await sendBotMessage(
@@ -490,7 +492,7 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
         return true;
       }
 
-      if (command.botAdminRequired && !checkBotAdmin(groupMetadata, sock)) {
+      if (command.botAdminRequired && !checkBotAdmin(authMetadata, sock)) {
         await sendBotMessage(
           sock,
           msg.key.remoteJid,
@@ -510,6 +512,7 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
       canonicalName: command.name,
       isAlias: invokedName !== command.name,
       groupMetadata,
+      authGroupMetadata: authMetadata,
       rawRemainder: rawRemainder || "",
     };
 

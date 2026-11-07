@@ -13,12 +13,18 @@ const settings = require("./src/config/settings.cjs");
 const store = require("./src/db/store.cjs");
 const storage = require("./src/utils/storage.cjs");
 const { setupEventListeners } = await import("../src/core/events.js");
+const { cacheAllGroups } = await import("../src/core/connection.js");
+const { handleCommand, loadCommands } = await import("../src/handlers/command.handler.js");
+const { timing } = await import("../src/utils/sendBotMessage.esm.js");
 const { routeSend } = require("./src/messaging/router.cjs");
+const permissions = require("./src/utils/permissions.cjs");
+const { handleAntiLink } = require("./src/commands/group/antilink.cjs");
 
 const G = "120363000000000101@g.us";
 const OUT = "120363000000000102@g.us";
 const SHARE = "120363000000000103@g.us";
 const ROUTE = "120363000000000104@g.us";
+const QUIET = "120363000000000105@g.us";
 const GHOST = "120363000000000188@g.us";
 const OWNER = "201555000111@s.whatsapp.net";
 const SOURCE = "201555000999@s.whatsapp.net";
@@ -417,6 +423,364 @@ section("the reply router still sees the linked account during a refresh");
   await tick();
   settings.set("reply_route", "same_chat");
   settings.set("reply_route_chat", "");
+}
+
+section("a bulk answer started before a join does not replace the refresh");
+
+{
+  groupMetadataCache.flushAll();
+  store.upsertGroupDirectory(G, { subject: "Kept", participantCount: 1 });
+  groupMetadataCache.setCached(G, roster(G, [ADMIN], { subject: "Before" }));
+  groupMetadataCache.setCached(QUIET, roster(QUIET, [ADMIN], { subject: "Quiet before" }));
+  const bulkBox = defer();
+  const refreshBox = defer();
+  let refreshCalls = 0;
+  let bulkStarted = false;
+  sock.groupMetadata = () => {
+    refreshCalls += 1;
+    return refreshBox.promise;
+  };
+  const pending = cacheAllGroups(
+    {
+      groupFetchAllParticipating() {
+        bulkStarted = true;
+        return bulkBox.promise;
+      },
+    },
+    { force: true },
+  );
+  await tick();
+  ok("the bulk request is in flight before the join", bulkStarted);
+  emit(G, "add", [MEMBER]);
+  ok("the join is stale while the bulk request is open", stale(G) === true);
+  equal("the join starts one refresh", refreshCalls, 1);
+  bulkBox.resolve({
+    [G]: roster(G, [ADMIN], { subject: "Old bulk" }),
+    [QUIET]: roster(QUIET, [ADMIN, MEMBER], { subject: "Quiet bulk" }),
+  });
+  await pending;
+  await tick();
+  equal("the raced group keeps the pre-join roster", ids(groupMetadataCache.getCached(G)), ADMIN.id);
+  equal("the raced subject stays", groupMetadataCache.getCached(G)?.subject, "Before");
+  ok("the raced group stays stale", stale(G) === true);
+  equal("the bulk does not start a second refresh", refreshCalls, 1);
+  equal("the raced directory row stays", store.getGroupDirectory(G)?.subject, "Kept");
+  equal(
+    "a quiet group stores the bulk roster",
+    ids(groupMetadataCache.getCached(QUIET)),
+    `${ADMIN.id},${MEMBER.id}`,
+  );
+  equal("a quiet group stores the bulk subject", groupMetadataCache.getCached(QUIET)?.subject, "Quiet bulk");
+  equal("a quiet group updates the directory", store.getGroupDirectory(QUIET)?.subject, "Quiet bulk");
+  refreshBox.resolve(roster(G, [ADMIN, MEMBER], { subject: "Joined" }));
+  await tick();
+  equal(
+    "the refresh roster is stored",
+    ids(groupMetadataCache.getCached(G)),
+    `${ADMIN.id},${MEMBER.id}`,
+  );
+  equal("the refresh subject is stored", groupMetadataCache.getCached(G)?.subject, "Joined");
+  ok("the refresh clears stale", stale(G) === false);
+  equal("the refresh stayed the only query", refreshCalls, 1);
+}
+
+section("a bulk answer that arrives after the refresh finished does not overwrite it");
+
+{
+  groupMetadataCache.flushAll();
+  store.upsertGroupDirectory(G, { subject: "Kept", participantCount: 1 });
+  groupMetadataCache.setCached(G, roster(G, [ADMIN], { subject: "Before" }));
+  const bulkBox = defer();
+  let bulkStarted = false;
+  const pending = cacheAllGroups(
+    {
+      groupFetchAllParticipating() {
+        bulkStarted = true;
+        return bulkBox.promise;
+      },
+    },
+    { force: true },
+  );
+  await tick();
+  ok("the second bulk request is in flight", bulkStarted);
+  sock.groupMetadata = async () => roster(G, [ADMIN, MEMBER], { subject: "Joined" });
+  emit(G, "add", [MEMBER]);
+  await tick();
+  equal(
+    "the refresh lands before the bulk answer",
+    ids(groupMetadataCache.getCached(G)),
+    `${ADMIN.id},${MEMBER.id}`,
+  );
+  ok("the finished refresh is fresh", stale(G) === false);
+  bulkBox.resolve({
+    [G]: roster(G, [ADMIN], { subject: "Old bulk" }),
+    [QUIET]: roster(QUIET, [MEMBER], { subject: "Quiet again" }),
+  });
+  await pending;
+  equal("the finished refresh stays", ids(groupMetadataCache.getCached(G)), `${ADMIN.id},${MEMBER.id}`);
+  equal("the old bulk subject is not stored", groupMetadataCache.getCached(G)?.subject, "Joined");
+  ok("the finished refresh stays fresh", stale(G) === false);
+  equal("the raced directory row still stays", store.getGroupDirectory(G)?.subject, "Kept");
+  equal("the quiet group still accepts its own bulk row", groupMetadataCache.getCached(QUIET)?.subject, "Quiet again");
+}
+
+section("a flush drops an in-flight bulk answer");
+
+{
+  groupMetadataCache.flushAll();
+  groupMetadataCache.setCached(G, roster(G, [ADMIN]));
+  const bulkBox = defer();
+  const pending = cacheAllGroups(
+    {
+      groupFetchAllParticipating() {
+        return bulkBox.promise;
+      },
+    },
+    { force: true },
+  );
+  await tick();
+  groupMetadataCache.flushAll();
+  bulkBox.resolve({ [G]: roster(G, [LATE], { subject: "After flush" }) });
+  await pending;
+  equal("a flushed bulk does not refill the group", groupMetadataCache.getCached(G), undefined);
+}
+
+section("a late full groups.update does not discard a newer refresh");
+
+{
+  groupMetadataCache.flushAll();
+  store.upsertGroupDirectory(G, { subject: "Kept", participantCount: 1 });
+  groupMetadataCache.setCached(G, roster(G, [ADMIN], { subject: "Before" }));
+  const refreshBox = defer();
+  let calls = 0;
+  sock.groupMetadata = () => {
+    calls += 1;
+    return refreshBox.promise;
+  };
+  emit(G, "add", [MEMBER]);
+  equal("the join refresh is the first query", calls, 1);
+  sock.ev.emit("groups.update", [roster(G, [LATE], { subject: "Late update" })]);
+  sock.ev.emit("groups.upsert", [roster(G, [LATE], { subject: "Late upsert" })]);
+  await tick();
+  equal("a late full payload does not start another fetch", calls, 1);
+  equal("the late full payload is not stored", ids(groupMetadataCache.getCached(G)), ADMIN.id);
+  equal("the late subject is not stored", groupMetadataCache.getCached(G)?.subject, "Before");
+  ok("the join stays stale", stale(G) === true);
+  equal("the late payload does not rewrite the directory", store.getGroupDirectory(G)?.subject, "Kept");
+  refreshBox.resolve(roster(G, [ADMIN, MEMBER], { subject: "Joined" }));
+  await tick();
+  equal("still one fetch after the late payloads", calls, 1);
+  equal(
+    "the join refresh is the stored roster",
+    ids(groupMetadataCache.getCached(G)),
+    `${ADMIN.id},${MEMBER.id}`,
+  );
+  equal("the join refresh subject is stored", groupMetadataCache.getCached(G)?.subject, "Joined");
+  ok("the join refresh clears stale", stale(G) === false);
+}
+
+section("a late full groups.update after the refresh starts a live fetch");
+
+{
+  groupMetadataCache.flushAll();
+  groupMetadataCache.setCached(G, roster(G, [ADMIN], { subject: "Before" }));
+  sock.groupMetadata = async () => roster(G, [ADMIN, MEMBER], { subject: "Joined" });
+  emit(G, "add", [MEMBER]);
+  await tick();
+  equal("the first refresh stored the member", ids(groupMetadataCache.getCached(G)), `${ADMIN.id},${MEMBER.id}`);
+  const liveBox = defer();
+  let calls = 0;
+  sock.groupMetadata = () => {
+    calls += 1;
+    return liveBox.promise;
+  };
+  sock.ev.emit("groups.update", [roster(G, [LATE], { subject: "Late update" })]);
+  await tick();
+  equal("the late full update is not stored over the refresh", ids(groupMetadataCache.getCached(G)), `${ADMIN.id},${MEMBER.id}`);
+  equal("the late full update starts one live fetch", calls, 1);
+  ok("that live fetch is stale until it answers", stale(G) === true);
+  liveBox.resolve(roster(G, [ADMIN, MEMBER, LATE], { subject: "Live" }));
+  await tick();
+  equal("the live answer is stored", groupMetadataCache.getCached(G)?.subject, "Live");
+  equal(
+    "the live answer keeps the member and the late id",
+    ids(groupMetadataCache.getCached(G)),
+    `${ADMIN.id},${MEMBER.id},${LATE.id}`,
+  );
+  ok("the live answer clears stale", stale(G) === false);
+
+  sock.groupMetadata = async () => roster(G, [ADMIN], { subject: "Demoted" });
+  emit(G, "demote", [ADMIN]);
+  await tick();
+  const after = Date.now();
+  const boundary = groupMetadataCache.storeUnsolicitedFullRoster(
+    sock,
+    G,
+    roster(G, [LATE], { subject: "Boundary" }),
+    after + 60_000,
+  );
+  equal("exactly 60 seconds after the event is quiet", boundary?.subject, "Boundary");
+  equal("the boundary roster replaces the group", ids(groupMetadataCache.getCached(G)), LATE.id);
+  ok("the boundary store is fresh", stale(G) === false);
+}
+
+section("roster event records older than 10 minutes no longer block a bulk store");
+
+{
+  groupMetadataCache.flushAll();
+  const before = Date.now();
+  groupMetadataCache.setCached(G, roster(G, [ADMIN], { subject: "Before" }));
+  const cursor = groupMetadataCache.captureRosterCursor(before);
+  sock.groupMetadata = async () => roster(G, [ADMIN, MEMBER], { subject: "Joined" });
+  emit(G, "add", [MEMBER]);
+  await tick();
+  const after = Date.now();
+  equal("the prune fixture stored the member", ids(groupMetadataCache.getCached(G)), `${ADMIN.id},${MEMBER.id}`);
+  ok("the prune fixture is fresh", stale(G) === false);
+  const blocked = groupMetadataCache.storeBulkGroupMetadata(
+    G,
+    roster(G, [ADMIN], { subject: "Old bulk" }),
+    cursor,
+  );
+  equal("a cursor from before the join cannot store", blocked, null);
+  equal("the member stays while the record is inside 10 minutes", ids(groupMetadataCache.getCached(G)), `${ADMIN.id},${MEMBER.id}`);
+  groupMetadataCache.captureRosterCursor(before + 10 * 60 * 1000);
+  const still = groupMetadataCache.storeBulkGroupMetadata(
+    G,
+    roster(G, [ADMIN], { subject: "Old bulk" }),
+    cursor,
+  );
+  equal("a record exactly 10 minutes old still blocks", still, null);
+  groupMetadataCache.captureRosterCursor(after + 10 * 60 * 1000 + 1);
+  const stored = groupMetadataCache.storeBulkGroupMetadata(
+    G,
+    roster(G, [LATE], { subject: "Pruned bulk" }),
+    cursor,
+  );
+  equal("a record older than 10 minutes no longer blocks", stored?.subject, "Pruned bulk");
+  equal("the pruned bulk replaces the roster", ids(groupMetadataCache.getCached(G)), LATE.id);
+
+  const flushed = groupMetadataCache.captureRosterCursor();
+  groupMetadataCache.flushAll();
+  const rejected = groupMetadataCache.storeBulkGroupMetadata(
+    G,
+    roster(G, [ADMIN], { subject: "After flush" }),
+    flushed,
+  );
+  equal("a flush rejects that bulk cursor", rejected, null);
+  equal("the flush leaves the group empty", groupMetadataCache.getCached(G), undefined);
+}
+
+section("authorization uses a fresh roster; moderation keeps the last known admin");
+
+{
+  // On b383ed1 a cached admin is already allowed and already protected.
+  // Those two checks pass before this fix. The stale deny and the live allow do not.
+  settings.set("bot_language", "en");
+  settings.set("bot_min_delay_ms", 0);
+  settings.set("bot_max_delay_ms", 0);
+  settings.set("reply_route", "same_chat");
+  timing.sleep = async () => {};
+  await permissions.primePermissions();
+  await loadCommands();
+
+  function commandSock() {
+    const sent = [];
+    return {
+      sent,
+      user: { id: "209999999999@s.whatsapp.net" },
+      async sendMessage(jid, content) {
+        sent.push({ jid, content });
+        return { key: { id: `out-${sent.length}`, remoteJid: jid } };
+      },
+      async sendPresenceUpdate() {},
+      async groupMetadata() {
+        throw new Error("offline");
+      },
+    };
+  }
+
+  function commandMessage(text, participant = ADMIN.id) {
+    return {
+      key: { remoteJid: G, fromMe: false, id: `cmd-${text.length}`, participant },
+      message: { conversation: text },
+      pushName: "Admin",
+    };
+  }
+
+  function sentText(fake) {
+    return fake.sent.map((row) => row.content?.text || "").join("\n");
+  }
+
+  function linkMessage(participant, id) {
+    return {
+      key: { remoteJid: G, fromMe: false, id, participant },
+      message: { conversation: "https://spam.example/now" },
+      pushName: "Sender",
+    };
+  }
+
+  groupMetadataCache.flushAll();
+  const known = roster(G, [ADMIN, MEMBER], { subject: "Known" });
+  groupMetadataCache.setCached(G, known);
+  sock.groupMetadata = async () => {
+    throw new Error("offline");
+  };
+  emit(G, "demote", [ADMIN]);
+  await tick();
+  ok("the failed refresh is stale", stale(G) === true);
+  equal("the failed refresh keeps the admin flag", groupMetadataCache.getCached(G)?.participants?.[0]?.admin, "admin");
+  equal(
+    "a display read still returns the last roster",
+    ids(await groupMetadataCache.resolveGroupMetadata(sock, G)),
+    `${ADMIN.id},${MEMBER.id}`,
+  );
+  equal("a fresh read is null when the refresh failed", await groupMetadataCache.resolveGroupMetadata(sock, G, { fresh: true }), null);
+
+  const directDeny = commandSock();
+  await handleCommand(directDeny, commandMessage("!setrules"), "!setrules");
+  ok("a stale roster denies the direct admin command", /Only group admins/.test(sentText(directDeny)));
+  ok("the direct command does not run", !/Write the rules/.test(sentText(directDeny)));
+
+  const groupDeny = commandSock();
+  await handleCommand(groupDeny, commandMessage("!group setrules"), "!group setrules");
+  ok("a stale roster denies the group form", /Only group admins/.test(sentText(groupDeny)));
+  ok("the group form does not run", !/Write the rules/.test(sentText(groupDeny)));
+
+  store.saveGroupSettings(G, {
+    antilink: { enabled: true, mode: "ALL", allowed_domains: [], blocked_domains: [], action: "DELETE" },
+  });
+  ok(
+    "moderation still protects the last-known admin",
+    (await handleAntiLink(sock, linkMessage(ADMIN.id, "link-admin"))) === false,
+  );
+  ok(
+    "moderation still acts on the last-known member",
+    (await handleAntiLink(sock, linkMessage(MEMBER.id, "link-member"))) === true,
+  );
+
+  groupMetadataCache.flushAll();
+  groupMetadataCache.setCached(G, roster(G, [{ ...ADMIN, admin: null }, MEMBER], { subject: "Member" }));
+  sock.groupMetadata = async () => roster(G, [{ ...ADMIN, admin: "admin" }, MEMBER], { subject: "Promoted" });
+  emit(G, "promote", [ADMIN]);
+  await tick();
+  const promoted = groupMetadataCache.getCached(G)?.participants?.find((participant) => participant.id === ADMIN.id);
+  equal("the live refresh stores the admin flag", promoted?.admin, "admin");
+  ok("the live refresh is fresh", stale(G) === false);
+  const directAllow = commandSock();
+  await handleCommand(directAllow, commandMessage("!setrules"), "!setrules");
+  ok("a fresh roster allows the direct admin command", /Write the rules/.test(sentText(directAllow)));
+  const groupAllow = commandSock();
+  await handleCommand(groupAllow, commandMessage("!group setrules"), "!group setrules");
+  ok("a fresh roster allows the group form", /Write the rules/.test(sentText(groupAllow)));
+
+  groupMetadataCache.flushAll();
+  groupMetadataCache.setCached(G, roster(G, [ADMIN, MEMBER], { subject: "Fresh" }));
+  ok("the seeded roster is fresh", stale(G) === false);
+  const seeded = commandSock();
+  await handleCommand(seeded, commandMessage("!setrules"), "!setrules");
+  ok("a fresh cache hit allows the admin command", /Write the rules/.test(sentText(seeded)));
+  ok("the fresh cache hit does not query", seeded.sent.length > 0);
 }
 
 finish();
