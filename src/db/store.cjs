@@ -221,11 +221,83 @@ function clearLidMappings() {
 
 /** Drop WhatsApp-derived directory data after unlink / logged-out. */
 function clearWhatsAppDirectory() {
+  clearReactionAccountState();
   clearGroupDirectory();
   clearGroupSettings();
   clearUserMetadata();
   clearLidMappings();
   clearAllModerationFlags();
+}
+
+// Reaction intake claims contain hashes/times/emoji only, never message bodies.
+const REACTION_LEDGER_CAP = 10_000;
+
+function isReactionChatEnabled(chatJid) {
+  return Boolean(q("SELECT 1 FROM reaction_rules WHERE chat_jid = ? AND enabled = 1 LIMIT 1").get(chatJid));
+}
+function isReactionChatConfigured(chatJid) {
+  return Boolean(q("SELECT 1 FROM reaction_rules WHERE chat_jid = ? LIMIT 1").get(chatJid));
+}
+
+// Bound trusted alias expansion. Excess/ambiguous aliases fail closed at intake.
+function reactionIdentityAliases(jid) {
+  if (jid.endsWith("@g.us")) return [jid];
+  const pn = jid.endsWith("@lid") ? getPnForLid(jid) : jid;
+  if (!pn) return [jid];
+  const rows = q("SELECT lid FROM lid_mapping WHERE pn = ? LIMIT 4").all(pn);
+  return [...new Set([jid, pn, ...rows.map((row) => normalizeJid(row.lid))])];
+}
+
+// Hash-only negative lookup state survives restart. Saturation replaces markers
+// with one conservative global block, never with a revived original.
+function invalidateReactionLookup(keys, expiresAt, now, cap = 500) {
+  return withImmediateTransaction(() => {
+    q("DELETE FROM reaction_invalidations WHERE expires_at <= ?").run(now);
+    const global = q("SELECT expires_at FROM reaction_invalidations WHERE invalidation_key='*'").get();
+    const existing = q("SELECT COUNT(*) AS n, MAX(expires_at) AS expiry FROM reaction_invalidations").get();
+    if (!keys || global || existing.n + keys.length > cap) {
+      q("DELETE FROM reaction_invalidations").run();
+      q("INSERT INTO reaction_invalidations VALUES ('*', ?)").run(Math.max(expiresAt, existing.expiry || 0));
+      return true;
+    } else {
+      for (const key of keys) q(`INSERT INTO reaction_invalidations VALUES (?, ?)
+        ON CONFLICT(invalidation_key) DO UPDATE SET expires_at=MAX(expires_at, excluded.expires_at)`).run(key, expiresAt);
+    }
+    return false;
+  });
+}
+function isReactionLookupInvalidated(keys, now) {
+  return Boolean(q(`SELECT 1 FROM reaction_invalidations WHERE expires_at > ?
+    AND invalidation_key IN (${sqlIn(["*", ...keys])}) LIMIT 1`).get(now, "*", ...keys));
+}
+
+function clearReactionAccountState() {
+  withImmediateTransaction(() => {
+    q("UPDATE reaction_rules SET enabled = 0").run();
+    q("DELETE FROM reaction_events").run();
+    q("DELETE FROM reaction_state").run();
+    q("DELETE FROM reaction_invalidations").run();
+  });
+}
+
+/** Claim before handoff. Saturation never deletes a live replay key. */
+function claimReactionEvent({ eventKey, slotKeys, timestampMs, emoji, expiresAt }, now) {
+  return withImmediateTransaction(() => {
+    q("DELETE FROM reaction_events WHERE expires_at <= ?").run(now);
+    q("DELETE FROM reaction_state WHERE expires_at <= ?").run(now);
+    if (q("SELECT 1 FROM reaction_events WHERE event_key = ?").get(eventKey)) return null;
+    const previous = q(`SELECT slot_key, timestamp_ms, emoji FROM reaction_state
+      WHERE slot_key IN (${sqlIn(slotKeys)}) ORDER BY timestamp_ms DESC LIMIT 1`).get(...slotKeys);
+    if (previous && timestampMs <= previous.timestamp_ms) return null;
+    if (q("SELECT COUNT(*) AS n FROM reaction_events").get().n >= REACTION_LEDGER_CAP) return null;
+    if (!previous && q("SELECT COUNT(*) AS n FROM reaction_state").get().n >= REACTION_LEDGER_CAP) return null;
+    q("INSERT INTO reaction_events (event_key, expires_at) VALUES (?, ?)").run(eventKey, expiresAt);
+    q(`INSERT INTO reaction_state (slot_key, timestamp_ms, emoji, expires_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(slot_key) DO UPDATE SET timestamp_ms=excluded.timestamp_ms,
+       emoji=excluded.emoji, expires_at=excluded.expires_at`).run(previous?.slot_key || slotKeys[0], timestampMs, emoji, expiresAt);
+    if (previous?.emoji === emoji) return null;
+    return !emoji ? "remove" : previous?.emoji ? "change" : "add";
+  });
 }
 
 // ===================================================================
@@ -2072,6 +2144,14 @@ function clearAutoDeleteOnUnlink() {
 }
 
 module.exports = {
+  isReactionChatEnabled,
+  isReactionChatConfigured,
+  reactionIdentityAliases,
+  invalidateReactionLookup,
+  isReactionLookupInvalidated,
+  clearReactionAccountState,
+  claimReactionEvent,
+  REACTION_LEDGER_CAP,
   // Lifecycle
   initStore,
   flushStore,

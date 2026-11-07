@@ -158,9 +158,20 @@ Notes:
 
 - The bot does **not** archive other people's messages by default. Nothing
   incoming is stored beyond the metadata rows listed above; deleted/edited
-  messages are not captured. The one exception is an auto-delete rule with
+  messages are not archived. An exception is an auto-delete rule with
   keep-copy turned on: it stores the text or caption (never media bytes) of
   messages that rule actually deleted, and those rows expire.
+- Reaction Automation keeps a temporary lookup only in chats with an enabled
+  reaction rule: at most 30 minutes, 500 sanitized messages and 8 MiB total
+  (64 KiB per entry). It holds text or media download metadata in memory,
+  without downloading media, quoted context or thumbnails. Hidden/disappearing
+  messages are excluded; observed edits/deletes invalidate entries and
+  disconnect clears the lookup. Original payloads never enter the database,
+  logs or backups. Bounded replay/deletion hashes, timestamps and the latest emoji stay
+  locally for the eligibility window; they are excluded from backups and
+  cleared on unlink. Rules default disabled and require re-enabling after
+  unlink or restore. Phase 07a supplies intake only: no automatic action,
+  provider upload or reply is executed by that groundwork.
 - Some data stored locally — especially AI conversation history, long-term
   memory, names and WhatsApp identifiers — can be included as context in a
   later AI request when you choose to use an AI feature. Local storage does

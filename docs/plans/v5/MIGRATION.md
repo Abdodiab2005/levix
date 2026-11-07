@@ -49,8 +49,8 @@ installs, SEA binaries, Docker volumes, headless servers and the Android app.
 | 04 | local Terms acceptance record `legal:acceptance` in `bot_settings`, outside `setting:*` | additive key, no migration | v4 users accept once; credentials untouched |
 | 05 | `reply_route` (`same_chat`), `reply_route_chat`, `reply_route_overrides`, `reply_hide_progress` (off), `message_watermark` (off), `command_parser` (`v2`) | additive settings | defaults reproduce v4 routing and replies; `command_parser=v1` is the previous splitter |
 | 05 | permission keys aligned with command files (Q-08) | no default-level change in this phase | unknown keys keep falling back; widening still needs the owner's approval |
-| 07 | rules, processed-event keys, bounded message lookup | new tables | empty on upgrade; features off |
-| 08 | entitlement cache, template overrides | new tables or keys | empty on upgrade; Free defaults |
+| 07a | schema 11: reaction rules, hashed processed-event keys, transition state and invalidations; originals in RAM only | additive tables | empty on upgrade; rules disabled by default; claim-first dedupe; rules disabled on unlink and restore; replay tables excluded from export |
+| 08 | entitlement cache, template overrides and private Plus Auto Reply state | new tables or keys | empty on upgrade; Free defaults |
 | 09 | update-check cache, prompt dismissals | additive keys | none |
 
 ## 4. First start after upgrading to v5

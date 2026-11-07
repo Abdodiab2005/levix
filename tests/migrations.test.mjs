@@ -14,6 +14,10 @@ useTempDataDir("levix-migrations");
 const { db, migrate, MIGRATIONS } = require("./src/db/db.cjs");
 
 const EXPECTED_TABLES = [
+  "reaction_rules",
+  "reaction_events",
+  "reaction_state",
+  "reaction_invalidations",
   "ai_history",
   "baileys_auth",
   "bot_settings",

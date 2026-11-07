@@ -256,8 +256,14 @@ in for.
 ### 10.7 Automation (Phase 07)
 
 A reaction rules engine subscribed to Baileys reaction events, with a bounded message lookup only
-for chats that have an enabled rule (ADR-008). AI Auto Reply reuses the agent with the real sender
-as caller, per-chat opt-in, rate limits and a kill switch (ADR-009).
+for chats that have an enabled rule (ADR-008). This engine, safe existing-capability actions
+and the Rule Builder are Free Core without an artificial tier rule cap. 07a only admits
+verified transitions and retains no original content on disk; details in `PHASE-07-RESULTS.md`.
+Prefix-free AI Auto Reply is paid private Plus in Phase 08, with real-sender tool authorization,
+per-chat opt-in, rate limits, loop protection and a kill switch (ADR-009).
+
+Proposed Phase 07.5 stabilizes messaging, AI tool, automation and cancellation ownership and
+removes duplication/legacy code while preserving behavior. It is not part of Phase 07 execution.
 
 ### 10.8 Plus boundary (Phase 08)
 

@@ -1,5 +1,6 @@
 import { makeWASocket } from "@whiskeysockets/baileys";
 import { createRequire } from "module";
+import { invalidateReactionMessage } from "../automation/reactions.js";
 import { useDatabaseAuthState } from "../auth/use-database-auth-state.js";
 import { getBaileysConfig, setRecentMessageGetter } from "../config/baileys.config.js";
 import { getMessageFromRecent } from "../utils/recentMessageCache.esm.js";
@@ -104,6 +105,7 @@ function withOutboundSavers(sock) {
   const getUrlInfo = (text) => getHttpsUrlInfo(text, { dispatcher: socketDispatchers.get(sock) });
 
   sock.sendMessage = async function sendMessageWithOutboundSavers(jid, content, options) {
+    if (content?.delete) invalidateReactionMessage(sock, { ...content.delete, remoteJid: jid });
     const signal = options?.signal;
     signal?.throwIfAborted();
     let payload = await withHttpsMedia(sock, content);
