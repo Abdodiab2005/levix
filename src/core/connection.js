@@ -22,6 +22,7 @@ import { groupMetadataCache } from "./socket.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
+const { storeFullGroupMetadata } = require("../utils/groupMetadataCache.cjs");
 const { primePermissions } = require("../utils/permissions.cjs");
 const { activatePendingIfMatching } = require("../backup/activation.cjs");
 const { maskAccount } = require("../backup/account.cjs");
@@ -266,7 +267,7 @@ export async function cacheAllGroups(sock, { force = false, now = Date.now() } =
     let cachedCount = 0;
 
     for (const jid in groups) {
-      groupMetadataCache.set(jid, groups[jid]);
+      storeFullGroupMetadata(jid, groups[jid]);
       upsertGroupDirectory(jid, {
         subject: groups[jid]?.subject || null,
         participantCount: groups[jid]?.participants?.length ?? null,

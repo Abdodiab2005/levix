@@ -10,10 +10,14 @@ import {
   storeLidPnMappings,
   upsertGroupDirectory,
 } from "../utils/storage.esm.js";
-import { groupMetadataCache } from "./socket.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
+const {
+  markRosterChanged,
+  mergePartialGroupMetadata,
+  storeFullGroupMetadata,
+} = require("../utils/groupMetadataCache.cjs");
 
 /**
  * Wire one socket up.
@@ -106,11 +110,13 @@ export function setupEventListeners(
     }
   });
 
-  // Group metadata updates
+  // Group metadata updates. A participants array is a full roster (Baileys
+  // emits that from its groups dirty refresh). Anything else is a partial
+  // patch: merge it, keep the remaining TTL, and never invent an entry.
   sock.ev.on("groups.upsert", (updates) => {
     for (const group of updates) {
       logger.info(`[Cache] Caching metadata for group: ${group.id}`);
-      groupMetadataCache.set(group.id, group);
+      storeFullGroupMetadata(group.id, group);
       upsertGroupDirectory(group.id, {
         subject: group.subject || null,
         participantCount: group.participants?.length ?? null,
@@ -121,9 +127,9 @@ export function setupEventListeners(
   sock.ev.on("groups.update", (updates) => {
     for (const group of updates || []) {
       if (!group?.id) continue;
-      const current = groupMetadataCache.get(group.id) || {};
-      const next = { ...current, ...group };
-      groupMetadataCache.set(group.id, next);
+      const next = Array.isArray(group.participants)
+        ? storeFullGroupMetadata(group.id, group) || group
+        : mergePartialGroupMetadata(group.id, group) || group;
       upsertGroupDirectory(group.id, {
         subject: next.subject || null,
         participantCount: next.participants?.length ?? null,
@@ -144,11 +150,17 @@ export function setupEventListeners(
   sock.ev.on("messages.update", intake("messages.update", (entries) => reactions.observeUpdates(entries)));
   sock.ev.on("messages.delete", intake("messages.delete", (payload) => reactions.observeDeletes(payload)));
 
-  // Group participant updates
-  sock.ev.on(
-    "group-participants.update",
-    contained("group-participants.update", (update) => handleGroupParticipantsUpdate(sock, update)),
-  );
+  // Group participant updates. Mark the roster stale in this turn, before the
+  // contained handler's microtask and before any await. Every action (add,
+  // remove, promote, demote, modify, leave) can change who must receive a
+  // sender key.
+  sock.ev.on("group-participants.update", (update) => {
+    markRosterChanged(sock, update?.id);
+    contained(
+      "group-participants.update",
+      (payload) => handleGroupParticipantsUpdate(sock, payload),
+    )(update);
+  });
 
   // Group join requests
   sock.ev.on(

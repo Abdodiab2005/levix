@@ -162,7 +162,10 @@ export async function createWhatsAppSocket({ proxy = null, pairingCode = false }
   // linkedCreds.cjs for what counts as a finished link.
   const isPaired = isLinkedCreds(state?.creds);
 
-  const cachedGroupMetadata = (jid) => groupMetadataCache.get(jid);
+  // The hook is built before makeWASocket returns, so the socket it fetches
+  // with is filled in immediately after. A stale roster is never returned.
+  let liveSock = null;
+  const cachedGroupMetadata = (jid) => groupMetadataCacheModule.groupMetadataForSend(liveSock, jid);
 
   const config = getBaileysConfig(cachedGroupMetadata, { pairingCode });
 
@@ -184,6 +187,7 @@ export async function createWhatsAppSocket({ proxy = null, pairingCode = false }
       ...config,
     }),
   );
+  liveSock = sock;
   socketDispatchers.set(sock, config.options?.dispatcher ?? null);
 
   return { sock, saveCreds, clearAll, isPaired };
