@@ -51,11 +51,13 @@ const state = new Map();
 // fetch; this cap only bounds a pathological chain of events across fetches.
 const MAX_FETCH_CHAIN = 8;
 
-// An unsolicited full roster is stored only when the group has been quiet.
-// Event records older than the retain window are dropped. No timer: prune
-// runs when an event is recorded, when a bulk cursor is captured, and on flush.
-const ROSTER_EVENT_QUIET_MS = 60 * 1000;
-const ROSTER_EVENT_RETAIN_MS = 10 * 60 * 1000;
+// Unknown-start full rosters are stored only when this group had no roster
+// event in this window. Baileys can deliver that payload long after its query:
+// rc14 times the query out at 60s and the event buffer can hold the update
+// about 30s more. Records stay at least this long, so the gate and the prune
+// cannot drift. No timer: prune runs when an event is recorded, when a bulk
+// cursor is captured, and on flush.
+const ROSTER_EVENT_WINDOW_MS = 10 * 60 * 1000;
 
 // Monotonic count of roster events. A bulk fetch captures the value before
 // its request and stores a group only when that group is still at or below it.
@@ -124,7 +126,7 @@ function dropAllRosterState() {
 
 function pruneRosterEvents(now = Date.now()) {
   for (const [jid, record] of rosterEvents) {
-    if (!record || now - record.at > ROSTER_EVENT_RETAIN_MS) rosterEvents.delete(jid);
+    if (!record || now - record.at > ROSTER_EVENT_WINDOW_MS) rosterEvents.delete(jid);
   }
 }
 
@@ -213,16 +215,16 @@ function storeBulkGroupMetadata(jid, metadata, cursor) {
 
 /**
  * Full roster whose request started at an unknown time (groups.upsert, or
- * groups.update that carries participants). Store it only when this group is
- * quiet. Otherwise leave any in-flight refresh alone, or start one, so a live
- * groupMetadata answer decides.
+ * groups.update that carries participants). Store it only when this group had
+ * no roster event in the last 10 minutes. Otherwise leave any in-flight
+ * refresh alone, or start one, so a live groupMetadata answer decides.
  */
 function storeUnsolicitedFullRoster(sock, jid, metadata, now = Date.now()) {
   if (!isGroupJid(jid) || !metadata || !Array.isArray(metadata.participants)) return null;
   pruneRosterEvents(now);
   const entry = state.get(jid);
   const quiet =
-    !entry?.stale && !entry?.inflight && !hadRosterEventWithin(jid, ROSTER_EVENT_QUIET_MS, now);
+    !entry?.stale && !entry?.inflight && !hadRosterEventWithin(jid, ROSTER_EVENT_WINDOW_MS, now);
   if (quiet) return storeFullGroupMetadata(jid, metadata);
   if (!entry?.inflight && canFetch(sock)) beginRosterRefresh(sock, jid);
   return null;

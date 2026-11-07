@@ -112,8 +112,9 @@ export function setupEventListeners(
 
   // Group metadata updates. A participants array is a full roster (Baileys
   // emits that from its groups dirty refresh). The request that produced it
-  // started at an unknown time, so it is stored only while the group has been
-  // quiet. Anything else is a partial patch: merge it, keep the remaining
+  // started at an unknown time, so it is stored only when this group had no
+  // roster event in the last 10 minutes. A newer event makes it a refresh
+  // hint. Anything else is a partial patch: merge it, keep the remaining
   // TTL, and never invent an entry.
   sock.ev.on("groups.upsert", (updates) => {
     for (const group of updates || []) {
