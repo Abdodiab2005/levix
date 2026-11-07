@@ -1119,4 +1119,117 @@ section(
   );
 }
 
+{
+  // 6. Pairing-code failure leaves socket A in ERROR; calling start() while
+  // logout() awaits A's teardown must not leave an unfenced socket B or
+  // repopulate auth after unlink.
+  const { AUTH_STORE_FENCED, useDatabaseAuthState } = await import(
+    "../src/auth/use-database-auth-state.js"
+  );
+  const store = harnessRequire("./src/db/store.cjs");
+  store.authClearAll();
+
+  let notifyEnteredTeardown;
+  const enteredTeardown = new Promise((resolve) => {
+    notifyEnteredTeardown = resolve;
+  });
+  let releaseTeardown;
+  const teardownGate = new Promise((resolve) => {
+    releaseTeardown = resolve;
+  });
+
+  const sockets = [];
+  const authStates = [];
+  const session = new WhatsAppSession({
+    createSocket: async () => {
+      const auth = await useDatabaseAuthState();
+      const idx = sockets.length;
+      const sock = {
+        index: idx,
+        user: null,
+        ended: 0,
+        loggedOut: 0,
+        fenced: 0,
+        ev: new EventEmitter(),
+        async logout() {
+          this.loggedOut += 1;
+          if (idx === 0) {
+            notifyEnteredTeardown();
+            await teardownGate;
+          }
+        },
+        async end() {
+          this.ended += 1;
+        },
+        async requestPairingCode() {
+          throw new Error("pairing code rejected");
+        },
+        updates: null,
+      };
+      sockets.push(sock);
+      authStates.push(auth);
+      return {
+        sock,
+        saveCreds: auth.saveCreds,
+        clearAll: auth.clearAll,
+        fence: () => {
+          sock.fenced += 1;
+          auth.fence();
+        },
+        isPaired: false,
+      };
+    },
+    attachListeners: (sock, { onConnectionUpdate }) => {
+      sock.updates = onConnectionUpdate;
+    },
+    onOpen: async () => {},
+    checkConsent: () => ({ ok: true }),
+    log: silent,
+    pairingCodeDelayMs: 0,
+    isLinked: () => false,
+    clearDirectory: () => {},
+  });
+
+  await session.start({ method: "pairing", phone: "201012345678" });
+  await sockets[0].updates({ qr: "pair-device-stanza" });
+  equal("pairing failure puts session in ERROR", session.state, S.ERROR);
+  equal("socket A is still present in ERROR", session.socket, sockets[0]);
+  ok("creds row exists before unlink", store.authRead("creds") !== null);
+
+  const unlinking = session.logout();
+  await enteredTeardown;
+  equal("socket A is fenced as soon as logout starts", sockets[0].fenced, 1);
+  equal("canStart is false while logout is in flight", session.getState().canStart, false);
+  equal("canUnlink is false while logout is in flight", session.getState().canUnlink, false);
+
+  // Attempt to start while logout() is still awaiting socket A's teardown.
+  const overlappingStart = session.start();
+  releaseTeardown();
+  const [logoutState, startState] = await Promise.all([unlinking, overlappingStart]);
+
+  equal("logout finishes in LOGGED_OUT", logoutState.state, S.LOGGED_OUT);
+  equal("overlapping start resolves to LOGGED_OUT", startState.state, S.LOGGED_OUT);
+  equal("no live socket remains on session", session.socket, null);
+  ok(
+    "every created socket was ended and fenced",
+    sockets.every((s) => s.ended >= 1 && s.fenced >= 1),
+  );
+  for (const auth of authStates) {
+    await auth.saveCreds();
+    let setCode = null;
+    try {
+      await auth.state.keys.set({ session: { "after-overlap@s.whatsapp.net": { v: 1 } } });
+    } catch (err) {
+      setCode = err?.code;
+    }
+    equal("fenced auth state rejects keys.set after overlap", setCode, AUTH_STORE_FENCED);
+  }
+  equal("auth creds stay cleared after overlapping start", store.authRead("creds"), null);
+  equal(
+    "no session key written after overlapping start",
+    store.authRead("session-after-overlap@s.whatsapp.net"),
+    null,
+  );
+}
+
 finish();
