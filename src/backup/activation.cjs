@@ -124,6 +124,9 @@ function replaceTables(id) {
     }
     // Replay metadata is not in backups. Require fresh operator opt-in after restore.
     db.exec("UPDATE reaction_rules SET enabled = 0");
+    db.prepare("INSERT OR REPLACE INTO bot_settings(key,value) VALUES('reaction:enabled','false')").run();
+    for (const table of ["reaction_events", "reaction_state", "reaction_invalidations", "reaction_executions", "reaction_budgets"])
+      db.exec(`DELETE FROM ${table}`);
     db.prepare("INSERT OR REPLACE INTO bot_settings (key, value) VALUES ('restore:activated', ?)")
       .run(JSON.stringify({ id }));
     fault("db-before-commit");

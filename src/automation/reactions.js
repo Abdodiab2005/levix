@@ -1,4 +1,4 @@
-// Phase 07a: transport intake only. No command, provider, download or send path.
+// Bounded verified transport intake. Execution belongs to engine.js.
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { deserialize, serialize } from "node:v8";
@@ -71,6 +71,8 @@ function safeContent(message) {
   if (keys.length !== 1) return null;
   const key = keys[0];
   const source = inner[key];
+  if (inner.messageContextInfo?.botMetadata || inner.messageContextInfo?.botMessageSecret ||
+    source?.contextInfo?.botMessageSharingInfo || source?.contextInfo?.botMessageInvokerJid) return null;
   if (source?.viewOnce || source?.contextInfo?.expiration || inner.messageContextInfo?.expiration) return null;
   if (key === "conversation") return typeof source === "string" && source.length <= 65536 ? { conversation: source } : null;
   if (key === "extendedTextMessage") {
@@ -100,13 +102,17 @@ function safeContent(message) {
 }
 
 /** One bounded lookup per live socket. Timers/closures are disposed with it. */
-export function createReactionIntake(sock, { now = Date.now, limits = REACTION_LIMITS } = {}) {
+export function createReactionIntake(sock, { now = Date.now, limits = REACTION_LIMITS,
+  onTransition = () => {}, onInvalidate = () => {}, onClose = () => {} } = {}) {
   const cache = new Map();
+  const verified = new WeakMap();
   let bytes = 0;
   let active = false;
   let closed = false;
+  let connectionAt = Infinity;
   function block() {
     cache.clear(); bytes = 0;
+    onInvalidate();
     store.invalidateReactionLookup(null, now() + limits.ttlMs + limits.futureSkewMs, now());
   }
   const self = () => [user(sock?.user?.id), user(sock?.user?.lid)].filter(Boolean);
@@ -117,8 +123,9 @@ export function createReactionIntake(sock, { now = Date.now, limits = REACTION_L
 
   function drop(key) {
     const entry = cache.get(key);
-    if (entry) bytes -= entry.data.byteLength;
+    if (entry) bytes -= entry.size;
     cache.delete(key);
+    if (entry) onInvalidate(entry.chat, entry.id);
   }
   function sweep() {
     const time = now();
@@ -137,6 +144,7 @@ export function createReactionIntake(sock, { now = Date.now, limits = REACTION_L
   function invalidate(chatValue, id) {
     const chat = jid(chatValue);
     if (!active || !chat) return;
+    onInvalidate(chat, id);
     // A configured but disabled chat still needs negative lookup state: a
     // delete during disablement must not revive when the rule is re-enabled.
     const tracked = [...cache.values()].some((entry) => sameIdentity(entry.chat, chat));
@@ -174,10 +182,14 @@ export function createReactionIntake(sock, { now = Date.now, limits = REACTION_L
     const index = lookupKey(key);
     // Redelivery never extends retention or replaces a verified snapshot.
     if (findOriginal(key)) return false;
-    while (cache.size >= limits.maxItems || bytes + data.byteLength > limits.maxBytes) drop(cache.keys().next().value);
+    const configurationRevision = store.getBotSetting("reaction:revision", "");
+    const size = data.byteLength + serialize(configurationRevision).byteLength;
+    if (size > limits.maxEntryBytes || size > limits.maxBytes) return false;
+    while (cache.size >= limits.maxItems || bytes + size > limits.maxBytes) drop(cache.keys().next().value);
     cache.set(index, { chat: key.remoteJid, id: key.id, author: key.participant || key.remoteJid, data,
+      receivedAt: time, configurationRevision, size,
       expiresAt: Math.min(time, numberOf(msg.messageTimestamp) * 1000) + limits.ttlMs });
-    bytes += data.byteLength;
+    bytes += size;
     return true;
   }
   function observeUpsert(payload) {
@@ -245,12 +257,15 @@ export function createReactionIntake(sock, { now = Date.now, limits = REACTION_L
       }
     }
     if (!slotKeys.length) return null;
-    const type = store.claimReactionEvent({ eventKey, slotKeys, timestampMs, emoji,
-      expiresAt: timestampMs + limits.ttlMs + limits.futureSkewMs }, time);
-    if (!type) return null;
-    // Data only. Future 07b must resolve current reactor permissions afresh.
-    return { eventKey, type, emoji, timestampMs, actorKey,
-      original: deserialize(stored.data) };
+    const transition = store.claimReactionEvent({ eventKey, slotKeys, timestampMs, emoji,
+      expiresAt: timestampMs + limits.ttlMs + limits.futureSkewMs }, time, true);
+    if (!transition) return null;
+    const value = { eventKey, ...transition, emoji, timestampMs, actorKey,
+      original: deserialize(stored.data), receivedAt: stored.receivedAt, configurationRevision: stored.configurationRevision,
+      connectionAt };
+    verified.set(value, { stored, data: serialize(value) });
+    onTransition(value);
+    return value;
   }
   function observeReactions(entries) {
     if (!Array.isArray(entries)) return [];
@@ -260,6 +275,7 @@ export function createReactionIntake(sock, { now = Date.now, limits = REACTION_L
   function close() {
     closed = true; active = false;
     cache.clear(); bytes = 0;
+    onClose();
     clearInterval(timer);
   }
   const timer = setInterval(() => {
@@ -271,16 +287,24 @@ export function createReactionIntake(sock, { now = Date.now, limits = REACTION_L
   }, 60_000);
   timer.unref?.();
   return {
-    open() { if (!closed) active = true; },
+    open() { if (!closed && !active) { active = true; connectionAt = now(); } },
     close, observeUpsert, observeUpdates, observeDeletes, observeReactions,
+    resetLookup() { for (const key of cache.keys()) drop(key); },
+    resolveTransition(value) {
+      const record = verified.get(value);
+      if (!active || !record || record.stored.expiresAt <= now() ||
+        !enabled(record.stored.chat) || invalidated(record.stored.chat, record.stored.id) ||
+        findOriginal(deserialize(record.stored.data).key) !== record.stored) return null;
+      return deserialize(record.data);
+    },
     // Resource counters only; no private cache contents in diagnostics.
     stats() { sweep(); return { items: cache.size, bytes }; },
   };
 }
 
-export function attachReactionIntake(sock) {
+export function attachReactionIntake(sock, options) {
   disposeReactionIntake(sock);
-  const intake = createReactionIntake(sock);
+  const intake = createReactionIntake(sock, options);
   sockets.set(sock, intake);
   return intake;
 }

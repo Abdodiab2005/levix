@@ -276,3 +276,23 @@ every interface returns the Free default.
 Update checks per install channel with allowlisted HTTPS origins and a local cache. `!update`
 reports status and a release link. Official links open in the system browser from the Android
 WebView. Rating and star prompts are user actions with local dismiss flags only.
+
+
+### Phase 07b — Free reaction execution
+
+`src/automation/engine.js` consumes only intake-minted transition tokens, whose
+immutable actor/original snapshots are privately retained by the intake. Unknown
+or mutated lookalikes cannot authorize execution. `rules.cjs` validates versioned
+JSON with fixed capability/destination allowlists. SQL prefiltering and strict
+live reactor conditions select a single deterministic winner. No queue/API/UI,
+arbitrary command arguments, code evaluation or subscription branch exists.
+
+The store owns rule lifecycle and schema-12 claim/rate queries. Configuration
+revision snapshots are constant-sized; rule changes invalidate RAM instead of
+copying an unbounded rules list into each original. Existing STT services and
+ping execute the action. The existing send helper carries a private delivery
+guard through `core/socket.js`: fresh remote membership after preparation,
+then synchronous live authorization/routing and AbortSignal check before Baileys.
+Explicit role writes use primary identities plus authoritative mappings; legacy
+contact metadata aliases do not grant reaction permissions. Rules and runtime
+start disabled; restore/unlink require opt-in again. See `PHASE-07-RESULTS.md`.

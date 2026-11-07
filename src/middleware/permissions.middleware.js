@@ -13,6 +13,37 @@ const require = createRequire(import.meta.url);
 const runtimeConfig = require("../config/runtime-config.cjs");
 const { evaluatePermissionLevel } = require("../utils/permissionLevel.cjs");
 const logger = require("../utils/logger.cjs");
+const store = require("../db/store.cjs");
+const { canonicalJid } = require("../messaging/router.cjs");
+
+// Transport-verified automation cannot use the legacy digit-only LID/PN
+// fallback. Roles still use the same backend roster and level evaluator.
+export function verifiedIdentityAliases(value) {
+  const jid = canonicalJid(value);
+  if (!jid || jid.endsWith("@g.us")) return [];
+  const ids = store.reactionIdentityAliases(jid);
+  return ids.length <= 4 ? ids : [];
+}
+export function verifiedParticipant(metadata, value) {
+  const ids = verifiedIdentityAliases(value);
+  return metadata?.participants?.find((p) =>
+    [p.id, p.lid, p.phoneNumber, p.jid].some((id) => ids.includes(canonicalJid(id)))) || null;
+}
+export function resolveVerifiedSender(msg, groupMetadata, sock) {
+  const key = msg?.key;
+  if (key?.fromMe !== false) throw new Error("REACTION_IDENTITY_INVALID");
+  const isGroup = Boolean(key.remoteJid?.endsWith("@g.us"));
+  const senderId = canonicalJid(isGroup ? key.participant : key.remoteJid);
+  const candidates = verifiedIdentityAliases(senderId);
+  if (!candidates.length) throw new Error("REACTION_IDENTITY_INVALID");
+  const roles = store.verifiedUserRoles(candidates);
+  const self = [sock?.user?.id, sock?.user?.lid].some((id) => candidates.includes(canonicalJid(id)));
+  const isOwner = roles.isOwner || self;
+  const isBotAdmin = !isOwner && roles.isBotAdmin;
+  const isGroupAdmin = isGroup && ["admin", "superadmin"].includes(verifiedParticipant(groupMetadata, senderId)?.admin);
+  return { isGroup, senderId, candidates, isOwner, isBotAdmin, isGroupAdmin,
+    isSenderAdmin: isBotAdmin || isGroupAdmin };
+}
 
 /**
  * Resolves the permission level in force for a command name — the dashboard

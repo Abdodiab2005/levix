@@ -47,7 +47,8 @@ output.
 | 05 | core gates | parser matrix; permission matrix for 69 commands; routing privacy; status editing; health without network |
 | 06 | core gates | mocked providers; tool authorization; docs retrieval and injection; four-locale queries |
 | 07a | core gates, i18n/docs checks, tarball/SEA, Android/Docker CI | fake add/change/remove streams; durable replay claims; exact identity; opt-in TTL/bytes; deletes/edits; disconnect/restart; migration and backup/unlink |
-| 07b/07c | core gates, packaging and CI | roles/permissions per reactor; command enablement; destination privacy; reaction-to-STT; action dedupe; loops/rates/concurrency/cancel/kill switch; management auth/CSRF and four-language accessible builder |
+| 07b | core gates, i18n/docs, packaging and final-head CI | reaction-engine and execution-migration regressions: strict roles/aliases/revocation; epochs/priority; voice-STT; admission/action claims; restart; bounded rates/concurrency; kill/disable/invalidation/deadline; final delivery guard; existing Phase 05/06 gates |
+| 07c | core gates, packaging and CI | authenticated/CSRF management over 07b interfaces; validation; explicit enablement; four-language responsive accessible Rule Builder; no backend bypass |
 | 07.5 | proposed, not started | behavior-preserving regression proof only after owner approval |
 | 08 | core gates plus Free-only build | no Plus code in public artifacts; forged and revoked entitlements; offline Core |
 | 09 | core gates | semver and channel matrix; link scheme abuse; review prompt declined; watermark exclusions |
