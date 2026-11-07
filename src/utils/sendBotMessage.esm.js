@@ -110,6 +110,7 @@ export async function sendBotMessage(sock, jid, content, options = {}) {
   if (options.levix) opts.levix = options.levix;
   // The socket consumes this after its asynchronous media preparation.
   if (signal) opts.signal = signal;
+  if (options.deliveryGuard) opts.deliveryGuard = options.deliveryGuard;
 
   // Link previews are opt-in (default off, see `link_previews_enabled`):
   // without an explicit `linkPreview`, Baileys fetches the page behind any URL

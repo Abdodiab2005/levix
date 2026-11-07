@@ -183,6 +183,30 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
   concurrency/rates and a global kill switch. Rules default disabled; unlink
   and backup restore require fresh enablement. No original-message archive.
 
+- 07b implementation: strict versioned declarative definitions; initial existing
+  capabilities are voice STT and ping. Add/change matches the new emoji, removal
+  matches the previous emoji. Lower numeric priority then binary lexical id
+  selects one matching rule; failure never selects another action.
+- Rule/global switches default off. Enablement records an epoch and rotates a
+  revision; edits disable rules. Originals must be received and timestamped
+  strictly after enablement and this socket's connection, with the same captured
+  configuration revision. Configuration changes clear lookup conservatively.
+- Matching work has two global slots across socket generations, one per proven
+  reactor and no waiting queue. Persistent fixed 60-second admission windows
+  allow 3/reactor and 10/chat attempts; selected-rule actions allow 5/rule.
+  SQL prefilters emoji/transition/type before processing at most 100 matching
+  candidates; overload fails closed. There is no total/tier rule-count cap.
+- Schema 12 preserves hash-only event/rule/action claims and budgets, each ledger
+  bounded at 10,000 live rows. A crash/refusal/cancellation consumes the attempt;
+  no automatic retry. This is at-most-once execution, never exactly-once delivery.
+  External work that ignores cancellation retains its slot until settled.
+- Fresh remote group membership plus strict authoritative identity/role checks
+  precede actions/provider submission and final send. A synchronous final guard
+  follows all async preparation. Rule disable/edit/delete, global kill, original
+  invalidation, group changes and disconnect abort pending work. An initiated
+  send cannot be retracted. Only source and linked-owner-private destinations
+  are supported initially, through the Phase 05 router; there is no fallback.
+
 ## ADR-009: Prefix-free AI Auto Reply is opt-in, limited and paid Plus
 
 - Status: ACCEPTED (owner, 2026-11-06); supersedes this ADR's earlier Free scope.

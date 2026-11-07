@@ -1,5 +1,5 @@
 import { createRequire } from "module";
-import { attachReactionIntake } from "../automation/reactions.js";
+import { createReactionAutomation } from "../automation/engine.js";
 import {
   handleGroupJoinRequests,
   handleGroupParticipantsUpdate,
@@ -32,7 +32,8 @@ export function setupEventListeners(
   sock,
   { saveCreds, onConnectionUpdate, onHandshakeRejected } = {},
 ) {
-  const reactions = attachReactionIntake(sock);
+  const automation = createReactionAutomation(sock);
+  const reactions = automation.intake;
   // Async listeners go through this. A bare `async` listener hands its
   // promise to Baileys' emitter, which drops it — so one rejection anywhere in
   // the message pipeline becomes an unhandledRejection, and src/index.js turns
@@ -119,6 +120,7 @@ export function setupEventListeners(
   });
 
   sock.ev.on("groups.update", (updates) => {
+    for (const group of updates || []) if (group?.id) automation.cancelChat(group.id);
     for (const group of updates || []) {
       if (!group?.id) continue;
       const current = groupMetadataCache.get(group.id) || {};
@@ -147,7 +149,10 @@ export function setupEventListeners(
   // Group participant updates
   sock.ev.on(
     "group-participants.update",
-    contained("group-participants.update", (update) => handleGroupParticipantsUpdate(sock, update)),
+    (update) => {
+      if (update?.id) automation.cancelChat(update.id);
+      contained("group-participants.update", (value) => handleGroupParticipantsUpdate(sock, value))(update);
+    },
   );
 
   // Group join requests
