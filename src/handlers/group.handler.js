@@ -23,7 +23,10 @@ function participantIdentities(participant) {
 // Handle group participant updates (join/leave)
 export async function handleGroupParticipantsUpdate(sock, update) {
   const { id, participants, action } = update;
-  logger.info({ update }, "Received group participants update");
+  logger.info(
+    { group: id, action, count: Array.isArray(participants) ? participants.length : 0 },
+    "Received group participants update",
+  );
 
   if (action === "remove" || action === "leave") {
     try {
