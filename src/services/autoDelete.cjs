@@ -193,7 +193,9 @@ async function isManagementCommand(body, msg, sock) {
     const { evaluatePermissionLevel } = require("../utils/permissionLevel.cjs");
     const resolveSender = await loadResolveSender();
     const isGroup = Boolean(msg?.key?.remoteJid?.endsWith("@g.us"));
-    const groupMetadata = isGroup ? await resolveGroupMetadata(sock, msg.key.remoteJid) : null;
+    const groupMetadata = isGroup
+      ? await resolveGroupMetadata(sock, msg.key.remoteJid, { fresh: true })
+      : null;
     const sender = resolveSender(msg, groupMetadata, sock);
     const level = runtimeConfig.getPermission("autodelete");
     return Boolean(evaluatePermissionLevel(level, sender).hasPermission);

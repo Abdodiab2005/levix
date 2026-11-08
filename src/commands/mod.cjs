@@ -68,13 +68,17 @@ module.exports = {
   chat: "group", // يعمل في الجروبات فقط
   botAdminRequired: false, // لا يتطلب أن يكون البوت مشرفًا لتغيير الإعدادات
 
-  async execute(sock, msg, args) {
+  async execute(sock, msg, args, _body, _handed, ctx) {
     const groupId = msg.key.remoteJid;
     const senderIds = senderCandidates(msg, sock);
 
-    // التحقق من صلاحيات المشرف (LID-aware via central module). Owners can
-    // also drive moderation settings.
-    const groupMetadata = await resolveGroupMetadata(sock, groupId);
+    // The dispatcher already read a fresh roster. A direct call reads with
+    // `{ fresh: true }` so a stale admin flag cannot open this command.
+    // Owners still pass below. Forbidden-word protection keeps last-known data.
+    const groupMetadata =
+      ctx && Object.prototype.hasOwnProperty.call(ctx, "authGroupMetadata")
+        ? ctx.authGroupMetadata
+        : await resolveGroupMetadata(sock, groupId, { fresh: true });
     const senderIsAdmin = senderIds.some((id) => isAdminInGroupSync(groupMetadata, id));
     const isOwner = msg.key.fromMe || senderIds.some(isOwnerJidSync);
     if (!senderIsAdmin && !isOwner) {

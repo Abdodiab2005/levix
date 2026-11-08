@@ -3,7 +3,11 @@ import { createRequire } from "module";
 import { invalidateReactionMessage } from "../automation/reactions.js";
 import { useDatabaseAuthState } from "../auth/use-database-auth-state.js";
 import { getBaileysConfig, setRecentMessageGetter } from "../config/baileys.config.js";
-import { getMessageFromRecent } from "../utils/recentMessageCache.esm.js";
+import {
+  getMessageFromRecent,
+  getRecentCacheEpoch,
+  rememberMessage,
+} from "../utils/recentMessageCache.esm.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -100,11 +104,12 @@ function withoutUnwantedLinkPreview(content) {
  * sendBotMessage and the handful of legacy commands still calling
  * sock.sendMessage directly.
  */
-function withOutboundSavers(sock) {
+export function withOutboundSavers(sock) {
   const original = sock.sendMessage.bind(sock);
   const getUrlInfo = (text) => getHttpsUrlInfo(text, { dispatcher: socketDispatchers.get(sock) });
 
   sock.sendMessage = async function sendMessageWithOutboundSavers(jid, content, options) {
+    const sendEpoch = getRecentCacheEpoch();
     if (content?.delete) invalidateReactionMessage(sock, { ...content.delete, remoteJid: jid });
     const signal = options?.signal;
     signal?.throwIfAborted();
@@ -125,7 +130,20 @@ function withOutboundSavers(sock) {
     // No await between this check and Baileys: cancellation cannot retract a
     // send already initiated, but must prevent a new one after preparation.
     signal?.throwIfAborted();
-    return original(jid, payload, wireOptions);
+    const result = await original(jid, payload, wireOptions);
+    try {
+      if (
+        getRecentCacheEpoch() === sendEpoch &&
+        result?.key?.id &&
+        result?.key?.remoteJid &&
+        result?.message
+      ) {
+        rememberMessage(result.key, result.message, sendEpoch);
+      }
+    } catch (err) {
+      logger.debug({ err: err?.message }, "[Socket] recent message cache step skipped");
+    }
+    return result;
   };
 
   return sock;
@@ -147,14 +165,17 @@ export async function createWhatsAppSocket({ proxy = null, pairingCode = false }
       : "[Socket] Initializing WhatsApp socket with database auth",
   );
 
-  const { state, saveCreds, clearAll } = await useDatabaseAuthState();
+  const { state, saveCreds, clearAll, fence = () => {} } = await useDatabaseAuthState();
 
   // Whether this install is already paired. NOT `store.hasCredentials()`: the
   // auth state writes a `creds` row on its very first call, paired or not. See
   // linkedCreds.cjs for what counts as a finished link.
   const isPaired = isLinkedCreds(state?.creds);
 
-  const cachedGroupMetadata = (jid) => groupMetadataCache.get(jid);
+  // The hook is built before makeWASocket returns, so the socket it fetches
+  // with is filled in immediately after. A stale roster is never returned.
+  let liveSock = null;
+  const cachedGroupMetadata = (jid) => groupMetadataCacheModule.groupMetadataForSend(liveSock, jid);
 
   const config = getBaileysConfig(cachedGroupMetadata, { pairingCode });
 
@@ -176,7 +197,8 @@ export async function createWhatsAppSocket({ proxy = null, pairingCode = false }
       ...config,
     }),
   );
+  liveSock = sock;
   socketDispatchers.set(sock, config.options?.dispatcher ?? null);
 
-  return { sock, saveCreds, clearAll, isPaired };
+  return { sock, saveCreds, clearAll, fence, isPaired };
 }
