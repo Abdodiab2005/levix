@@ -1,5 +1,5 @@
 import { createRequire } from "module";
-import { attachReactionIntake } from "../automation/reactions.js";
+import { createReactionAutomation } from "../automation/engine.js";
 import {
   handleGroupJoinRequests,
   handleGroupParticipantsUpdate,
@@ -36,7 +36,8 @@ export function setupEventListeners(
   sock,
   { saveCreds, onConnectionUpdate, onHandshakeRejected } = {},
 ) {
-  const reactions = attachReactionIntake(sock);
+  const automation = createReactionAutomation(sock);
+  const reactions = automation.intake;
   // Async listeners go through this. A bare `async` listener hands its
   // promise to Baileys' emitter, which drops it — so one rejection anywhere in
   // the message pipeline becomes an unhandledRejection, and src/index.js turns
@@ -130,6 +131,7 @@ export function setupEventListeners(
   });
 
   sock.ev.on("groups.update", (updates) => {
+    for (const group of updates || []) if (group?.id) automation.cancelChat(group.id);
     for (const group of updates || []) {
       if (!group?.id) continue;
       if (Array.isArray(group.participants)) {
@@ -165,9 +167,11 @@ export function setupEventListeners(
   // Group participant updates. Mark the roster stale in this turn, before the
   // contained handler's microtask and before any await. Every action (add,
   // remove, promote, demote, modify, leave) can change who must receive a
-  // sender key.
+  // sender key. Pending reaction actions for the group are cancelled in the
+  // same turn, because membership and roles may have changed.
   sock.ev.on("group-participants.update", (update) => {
     markRosterChanged(sock, update?.id);
+    if (update?.id) automation.cancelChat(update.id);
     contained(
       "group-participants.update",
       (payload) => handleGroupParticipantsUpdate(sock, payload),

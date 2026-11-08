@@ -20,7 +20,7 @@ database.guardStartup();
 lock.acquireSingleInstanceLock();
 const report = await database.prepareDatabase();
 equal("migration starts at schema 10", report.from, 10);
-equal("migration reaches schema 11", report.to, 11);
+equal("migration reaches current schema", report.to, database.MIGRATIONS.length);
 ok("verified backup exists", existsSync(report.copyPath));
 const copy = new DatabaseSync(report.copyPath, { readOnly: true });
 equal("backup retains source schema", database.schemaVersion(copy), 10);
@@ -53,7 +53,7 @@ for (const from of [1, 8, 10]) {
   database.migrate(scratch, database.MIGRATIONS.slice(0, from));
   scratch.prepare("INSERT INTO bot_settings (key,value) VALUES ('fixture','kept')").run();
   database.migrate(scratch);
-  equal(`schema ${from} reaches 11`, database.schemaVersion(scratch), 11);
+  equal(`schema ${from} reaches current schema`, database.schemaVersion(scratch), database.MIGRATIONS.length);
   equal(`schema ${from} preserves data`, scratch.prepare("SELECT value FROM bot_settings WHERE key='fixture'").get().value, "kept");
   database.migrate(scratch);
   equal(`schema ${from} repeat safe`, scratch.prepare("SELECT COUNT(*) AS n FROM reaction_rules").get().n, 0);

@@ -8,7 +8,7 @@ const normalizeJid = require("../utils/normalizeJid.cjs");
 
 function readCreds() {
   try {
-    const storage = require("../utils/storage.cjs");
+    const storage = require("../db/store.cjs");
     if (!storage.isPairedSession()) return null;
     const creds = JSON.parse(storage.authRead("creds") || "");
     return creds && typeof creds === "object" ? creds : null;

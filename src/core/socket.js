@@ -127,6 +127,13 @@ export function withOutboundSavers(sock) {
     const wireOptions = { ...(options || {}), getUrlInfo };
     delete wireOptions.levix;
     delete wireOptions.signal;
+    delete wireOptions.deliveryGuard;
+    // Automation refreshes remote membership after preparation, then checks
+    // local policy synchronously. Nothing can interleave with the final send.
+    if (options?.deliveryGuard) {
+      await options.deliveryGuard.refresh();
+      options.deliveryGuard.assert();
+    }
     // No await between this check and Baileys: cancellation cannot retract a
     // send already initiated, but must prevent a new one after preparation.
     signal?.throwIfAborted();

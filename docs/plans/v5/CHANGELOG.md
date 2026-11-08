@@ -138,3 +138,16 @@
 - Proposed behavior-preserving stabilization Phase 07.5, not started.
 - 07a adds bounded opt-in RAM lookup and hash-only replay/invalidation state, no actions or UI.
   Evidence, final PR/commit verification record and rollback: `PHASE-07-RESULTS.md`.
+
+
+## 2026-11-07 — Phase 07b rules and safe actions (pending owner review)
+
+- Verified merged #135 at `b383ed1`; dedicated `feat/v5-phase-07b` branch.
+- Added Free declarative matching, deterministic single winner, existing voice
+  STT/ping actions, strict reactor roles, source/linked-owner routing and final
+  cancellation/authorization guards. No Rule Builder/API, Plus or refactor.
+- Append-only schema 12 adds epochs/revisions, durable execution claims and
+  bounded rate budgets. Global kill and rules default off; no total rule cap.
+- Fixed numeric identity contamination/role-write and mapped revocation edges,
+  unmatched metadata storms, pre-provider role refresh and broken credential
+  lookup for linked-owner routing. Evidence/limits/rollback: `PHASE-07-RESULTS.md`.
