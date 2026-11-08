@@ -140,6 +140,11 @@ function toggleList<T extends string>(list: T[], value: T): T[] {
   return list.includes(value) ? list.filter((item) => item !== value) : [...list, value];
 }
 
+function describedBy(...ids: Array<string | undefined>): string | undefined {
+  const next = ids.filter((id): id is string => Boolean(id));
+  return next.length ? next.join(" ") : undefined;
+}
+
 export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
   open,
   rule,
@@ -331,14 +336,21 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
               {formError}
             </p>
           )}
-          <Field label={t("reactionChat")} error={fieldErrors.chatJid}>
+          <Field label={t("reactionChat")} htmlFor="rx-chat" error={fieldErrors.chatJid}>
             <div className="flex flex-col gap-2">
               {draft.chatJid ? (
                 <UserText className="text-sm font-semibold">
                   {draft.chatName || draft.chatJid}
                 </UserText>
               ) : null}
-              <Button type="button" variant="secondary" onClick={() => setChatPickerOpen(true)}>
+              <Button
+                id="rx-chat"
+                type="button"
+                variant="secondary"
+                aria-invalid={fieldErrors.chatJid ? true : undefined}
+                aria-describedby={describedBy(fieldErrors.chatJid ? "rx-chat-message" : undefined)}
+                onClick={() => setChatPickerOpen(true)}
+              >
                 {draft.chatJid ? t("reactionChangeChat") : t("reactionChooseChat")}
               </Button>
             </div>
@@ -356,6 +368,7 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
               value={draft.emoji}
               maxLength={32}
               aria-invalid={fieldErrors.emoji ? true : undefined}
+              aria-describedby={describedBy("rx-emoji-message")}
               onChange={(event) => setField("emoji", event.target.value)}
             />
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -370,13 +383,21 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
               ))}
             </div>
           </Field>
-          <Field label={t("reactionTransitions")} error={fieldErrors.transitions}>
-            <div className="flex flex-col">
+          <Field
+            label={t("reactionTransitions")}
+            htmlFor="rx-transitions"
+            error={fieldErrors.transitions}
+          >
+            <div id="rx-transitions" className="flex flex-col" role="group">
               {TRANSITIONS.map((value) => (
                 <Checkbox
                   key={value}
                   label={transitionLabel(t, value)}
                   checked={draft.transitions.includes(value)}
+                  aria-invalid={fieldErrors.transitions ? true : undefined}
+                  aria-describedby={describedBy(
+                    fieldErrors.transitions ? "rx-transitions-message" : undefined,
+                  )}
                   onChange={() => setField("transitions", toggleList(draft.transitions, value))}
                 />
               ))}
@@ -384,16 +405,21 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
           </Field>
           <Field
             label={t("reactionTypes")}
+            htmlFor="rx-types"
             error={fieldErrors.originalTypes}
             description={typesLocked ? t("reactionSttVoiceOnly") : undefined}
           >
-            <div className="flex flex-col">
+            <div id="rx-types" className="flex flex-col" role="group">
               {ORIGINAL_TYPES.map((value) => (
                 <Checkbox
                   key={value}
                   label={typeLabel(t, value)}
                   checked={shownTypes.includes(value)}
                   disabled={typesLocked}
+                  aria-invalid={fieldErrors.originalTypes ? true : undefined}
+                  aria-describedby={describedBy(
+                    fieldErrors.originalTypes || typesLocked ? "rx-types-message" : undefined,
+                  )}
                   onChange={() => setField("originalTypes", toggleList(draft.originalTypes, value))}
                 />
               ))}
@@ -403,6 +429,8 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
             <Select
               id="rx-role"
               value={draft.role}
+              aria-invalid={fieldErrors.senders ? true : undefined}
+              aria-describedby={describedBy(fieldErrors.senders ? "rx-role-message" : undefined)}
               onChange={(event) => setField("role", event.target.value as ReactionDraft["role"])}
             >
               {SENDER_ROLES.map((value) => (
@@ -414,6 +442,7 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
           </Field>
           <Field
             label={t("reactionSendersIds")}
+            htmlFor="rx-senders"
             description={t("reactionSendersIdsHint")}
             error={fieldErrors.senders}
           >
@@ -439,46 +468,67 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
                   })}
                 </div>
               )}
-              <Button type="button" variant="secondary" onClick={() => setSenderPickerOpen(true)}>
+              <Button
+                id="rx-senders"
+                type="button"
+                variant="secondary"
+                aria-invalid={fieldErrors.senders ? true : undefined}
+                aria-describedby={describedBy("rx-senders-message")}
+                onClick={() => setSenderPickerOpen(true)}
+              >
                 {t("reactionChooseSenders")}
               </Button>
             </div>
           </Field>
-          <Field label={t("reactionAction")} error={fieldErrors.action}>
-            <SegmentedControl
-              aria-label={t("reactionAction")}
-              className="flex w-full flex-wrap"
-              value={draft.action}
-              onChange={(action) => {
-                setDraft((prev) => ({
-                  ...prev,
-                  action,
-                  originalTypes:
-                    action === "stt"
-                      ? ["voice"]
-                      : prev.originalTypes.length === 1 && prev.originalTypes[0] === "voice"
-                        ? [...ORIGINAL_TYPES]
-                        : prev.originalTypes,
-                }));
-                if (fieldErrors.action || fieldErrors.originalTypes) {
-                  setFieldErrors((prev) => {
-                    const next = { ...prev };
-                    delete next.action;
-                    delete next.originalTypes;
-                    return next;
-                  });
-                }
-              }}
-              options={[
-                { value: "stt", label: t("reactionActionStt") },
-                { value: "ping", label: t("reactionActionPing") },
-              ]}
-            />
+          <Field label={t("reactionAction")} htmlFor="rx-action" error={fieldErrors.action}>
+            <div
+              id="rx-action"
+              role="group"
+              aria-describedby={describedBy(fieldErrors.action ? "rx-action-message" : undefined)}
+            >
+              <SegmentedControl
+                aria-label={t("reactionAction")}
+                className="flex w-full flex-wrap"
+                value={draft.action}
+                onChange={(action) => {
+                  setDraft((prev) => ({
+                    ...prev,
+                    action,
+                    originalTypes:
+                      action === "stt"
+                        ? ["voice"]
+                        : prev.originalTypes.length === 1 && prev.originalTypes[0] === "voice"
+                          ? [...ORIGINAL_TYPES]
+                          : prev.originalTypes,
+                  }));
+                  if (fieldErrors.action || fieldErrors.originalTypes) {
+                    setFieldErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.action;
+                      delete next.originalTypes;
+                      return next;
+                    });
+                  }
+                }}
+                options={[
+                  { value: "stt", label: t("reactionActionStt") },
+                  { value: "ping", label: t("reactionActionPing") },
+                ]}
+              />
+            </div>
           </Field>
-          <Field label={t("reactionDestination")} error={fieldErrors.destination}>
+          <Field
+            label={t("reactionDestination")}
+            htmlFor="rx-destination"
+            error={fieldErrors.destination}
+          >
             <RadioGroup
+              id="rx-destination"
               name="rx-destination"
               value={draft.destination}
+              aria-describedby={describedBy(
+                fieldErrors.destination ? "rx-destination-message" : undefined,
+              )}
               onChange={(mode) => {
                 if (mode === "owner_private" && !ownerLinked) return;
                 setField("destination", mode);
@@ -508,6 +558,8 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
               step={1}
               technical
               value={Number.isFinite(draft.priority) ? draft.priority : 100}
+              aria-invalid={fieldErrors.priority ? true : undefined}
+              aria-describedby={describedBy("rx-priority-message")}
               onChange={(event) => setField("priority", clampPriority(Number(event.target.value)))}
             />
           </Field>

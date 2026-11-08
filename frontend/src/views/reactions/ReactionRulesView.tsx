@@ -274,11 +274,13 @@ export const ReactionRulesView: React.FC = () => {
     const seen = written.current;
     try {
       const res = await api.getReactions();
-      if (!alive.current || listSeq.current !== token || written.current !== seen) return;
+      if (!alive.current || listSeq.current !== token || written.current !== seen) return false;
       applyOverview(res);
       setError(null);
+      return true;
     } catch {
       // A background refresh must not toast or replace the list with an error.
+      return false;
     }
   }, [applyOverview]);
 
@@ -372,17 +374,7 @@ export const ReactionRulesView: React.FC = () => {
       setRules((list) => list.map((item) => (item.id === rule.id ? res.rule : item)));
     } catch (err) {
       inflight.current.delete(rule.id);
-      let applied = false;
-      try {
-        const res = await api.getReactions();
-        if (alive.current) {
-          applyOverview(res);
-          setError(null);
-          applied = true;
-        }
-      } catch {
-        // Overview reload failed; fall back to the last known server value.
-      }
+      const applied = await refresh();
       if (!applied) {
         setRules((list) =>
           list.map((item) => (item.id === rule.id ? { ...item, enabled: previous } : item)),
