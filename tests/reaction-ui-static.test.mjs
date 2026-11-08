@@ -50,11 +50,7 @@ for (const file of files) {
   for (const match of text.matchAll(importPattern)) {
     const source = match[1];
     if (!source.includes("components/ui")) continue;
-    equal(
-      `${relative} UI import ${source}`,
-      source,
-      "../../components/ui",
-    );
+    equal(`${relative} UI import ${source}`, source, "../../components/ui");
   }
 }
 

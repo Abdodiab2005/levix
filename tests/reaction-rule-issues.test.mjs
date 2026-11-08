@@ -110,14 +110,23 @@ function parity(label, value) {
 section("07b validator vectors");
 const group = "120363700000001@g.us";
 const vectors = [
-  { version: 2 }, { emoji: "hello" }, { emoji: "😀😀" }, { transitions: [] },
-  { transitions: ["add", "add"] }, { transitions: ["execute"] },
-  { originalTypes: ["unknown"] }, { action: "shell" }, { action: "gemini" },
-  { action: "stt" }, { destination: { mode: "authorized_chat", jid: group } },
+  { version: 2 },
+  { emoji: "hello" },
+  { emoji: "😀😀" },
+  { transitions: [] },
+  { transitions: ["add", "add"] },
+  { transitions: ["execute"] },
+  { originalTypes: ["unknown"] },
+  { action: "shell" },
+  { action: "gemini" },
+  { action: "stt" },
+  { destination: { mode: "authorized_chat", jid: group } },
   { destination: { mode: "same_chat", url: "https://example.invalid" } },
   { senders: { role: "owner", ids: ["201070000002"] } },
-  { senders: { role: "any", ids: [group] } }, { senders: { role: "root", ids: [] } },
-  { code: "process.exit()" }, { arguments: "!kick @all" },
+  { senders: { role: "any", ids: [group] } },
+  { senders: { role: "root", ids: [] } },
+  { code: "process.exit()" },
+  { arguments: "!kick @all" },
 ];
 parity("base", definition());
 for (const [index, patch] of vectors.entries()) parity(`07b rejected ${index}`, definition(patch));
@@ -131,18 +140,55 @@ for (const value of [null, undefined, 1, true, "rule", [], {}]) parity(`root ${v
 
 section("generated definition mutations");
 const paths = [
-  ["version"], ["emoji"], ["transitions"], ["originalTypes"], ["senders"],
-  ["senders", "role"], ["senders", "ids"], ["action"], ["destination"],
-  ["destination", "mode"], ["unknown"],
+  ["version"],
+  ["emoji"],
+  ["transitions"],
+  ["originalTypes"],
+  ["senders"],
+  ["senders", "role"],
+  ["senders", "ids"],
+  ["action"],
+  ["destination"],
+  ["destination", "mode"],
+  ["unknown"],
 ];
 const values = [
-  undefined, null, false, 0, 1, 2, "", "😀", "😀😀", "x".repeat(33),
-  "ping", "stt", "any", "owner", "same_chat", "owner_private", [], {},
-  ["add"], ["change", "remove"], ["add", "add"], ["add", "change", "remove", "extra"],
-  ["text"], ["voice"], ["voice", "audio"], TYPES, ["text", "text"],
-  ["1001@lid"], ["1001@lid", "1001@lid"], [group], ["1:7@s.whatsapp.net"],
-  ["1@newsletter"], ["1@lid@evil"], ["1".repeat(31) + "@lid"],
-  { role: "any", ids: [] }, { mode: "same_chat" },
+  undefined,
+  null,
+  false,
+  0,
+  1,
+  2,
+  "",
+  "😀",
+  "😀😀",
+  "x".repeat(33),
+  "ping",
+  "stt",
+  "any",
+  "owner",
+  "same_chat",
+  "owner_private",
+  [],
+  {},
+  ["add"],
+  ["change", "remove"],
+  ["add", "add"],
+  ["add", "change", "remove", "extra"],
+  ["text"],
+  ["voice"],
+  ["voice", "audio"],
+  TYPES,
+  ["text", "text"],
+  ["1001@lid"],
+  ["1001@lid", "1001@lid"],
+  [group],
+  ["1:7@s.whatsapp.net"],
+  ["1@newsletter"],
+  ["1@lid@evil"],
+  ["1".repeat(31) + "@lid"],
+  { role: "any", ids: [] },
+  { mode: "same_chat" },
   Array.from({ length: 100 }, (_, i) => `${i + 1}@lid`),
   Array.from({ length: 101 }, (_, i) => `${i + 1}@lid`),
 ];
@@ -153,7 +199,7 @@ function random(max) {
 }
 for (let index = 0; index < 768; index++) {
   const value = definition(index % 2 ? { action: "stt", originalTypes: ["voice"] } : {});
-  for (let mutation = 0; mutation < 1 + index % 3; mutation++) {
+  for (let mutation = 0; mutation < 1 + (index % 3); mutation++) {
     const path = paths[random(paths.length)];
     const target = path.length === 1 ? value : value[path[0]];
     if (target && typeof target === "object" && !Array.isArray(target)) {
@@ -177,23 +223,46 @@ const cases = [
   [definition({ emoji: "x" }), "definition.emoji", "invalid"],
   [definition({ transitions: [] }), "definition.transitions", "invalid"],
   [definition({ transitions: ["add", "add"] }), "definition.transitions", "duplicate"],
-  [definition({ transitions: ["add", "change", "remove", "extra"] }), "definition.transitions", "too_many"],
+  [
+    definition({ transitions: ["add", "change", "remove", "extra"] }),
+    "definition.transitions",
+    "too_many",
+  ],
   [definition({ originalTypes: [] }), "definition.originalTypes", "invalid"],
   [definition({ action: "stt" }), "definition.originalTypes", "voice_only"],
   [definition({ senders: null }), "definition.senders", "invalid"],
   [definition({ senders: { role: "root", ids: [] } }), "definition.senders.role", "invalid"],
   [definition({ senders: { role: "any", ids: [group] } }), "definition.senders.ids", "invalid"],
-  [definition({ senders: { role: "any", ids: ["1@lid", "1@lid"] } }), "definition.senders.ids", "duplicate"],
-  [definition({ senders: { role: "any", ids: values.at(-1) } }), "definition.senders.ids", "too_many"],
+  [
+    definition({ senders: { role: "any", ids: ["1@lid", "1@lid"] } }),
+    "definition.senders.ids",
+    "duplicate",
+  ],
+  [
+    definition({ senders: { role: "any", ids: values.at(-1) } }),
+    "definition.senders.ids",
+    "too_many",
+  ],
   [definition({ action: "shell" }), "definition.action", "invalid"],
   [definition({ destination: null }), "definition.destination", "invalid"],
   [definition({ destination: { mode: "group" } }), "definition.destination.mode", "invalid"],
   [definition({ code: "arbitrary" }), "definition.code", "unknown_field"],
-  [definition({ destination: { mode: "same_chat", url: "arbitrary" } }), "definition.destination.url", "unknown_field"],
+  [
+    definition({ destination: { mode: "same_chat", url: "arbitrary" } }),
+    "definition.destination.url",
+    "unknown_field",
+  ],
 ];
 for (const [value, field, code] of cases) {
-  ok(`${field}/${code}`, definitionIssues(value).some((issue) => issue.field === field && issue.code === code));
-  equal("invalid validator error stays fixed", throws(field, () => validateDefinition(value))?.message, "REACTION_RULE_INVALID");
+  ok(
+    `${field}/${code}`,
+    definitionIssues(value).some((issue) => issue.field === field && issue.code === code),
+  );
+  equal(
+    "invalid validator error stays fixed",
+    throws(field, () => validateDefinition(value))?.message,
+    "REACTION_RULE_INVALID",
+  );
 }
 const input = definition();
 const before = JSON.stringify(input);

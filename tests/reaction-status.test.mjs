@@ -63,12 +63,30 @@ equal("reset removes global", status.global(), null);
 equal("reset removes rules", status.get("rule-1"), null);
 
 const allowed = [
-  "REACTION_CANCELLED", "REACTION_TIMEOUT", "REACTION_STALE", "REACTION_INACCESSIBLE",
-  "REACTION_FORBIDDEN", "REACTION_STT_DISABLED", "REACTION_DELIVERY_REFUSED",
-  "REACTION_CAPACITY", "REACTION_IDENTITY_INVALID", "REACTION_VOICE_REQUIRED",
-  "STT_KEY_REQUIRED", "STT_OUTPUT_INVALID", "MEDIA_AUDIO_INVALID", "MEDIA_TOO_LARGE",
-  "MEDIA_NOT_AVAILABLE", "MEDIA_URL_INVALID", "DELIVERED", "NO_MATCH", "BUSY",
-  "ACTION_FAILED", "RATE_LIMIT", "CAPACITY", "EVENT_MISSING", "DUPLICATE",
+  "REACTION_CANCELLED",
+  "REACTION_TIMEOUT",
+  "REACTION_STALE",
+  "REACTION_INACCESSIBLE",
+  "REACTION_FORBIDDEN",
+  "REACTION_STT_DISABLED",
+  "REACTION_DELIVERY_REFUSED",
+  "REACTION_CAPACITY",
+  "REACTION_IDENTITY_INVALID",
+  "REACTION_VOICE_REQUIRED",
+  "STT_KEY_REQUIRED",
+  "STT_OUTPUT_INVALID",
+  "MEDIA_AUDIO_INVALID",
+  "MEDIA_TOO_LARGE",
+  "MEDIA_NOT_AVAILABLE",
+  "MEDIA_URL_INVALID",
+  "DELIVERED",
+  "NO_MATCH",
+  "BUSY",
+  "ACTION_FAILED",
+  "RATE_LIMIT",
+  "CAPACITY",
+  "EVENT_MISSING",
+  "DUPLICATE",
 ];
 for (const code of allowed) {
   status.record("codes", code, 1);
@@ -80,7 +98,10 @@ for (const code of [privateText, "__proto__", "toString", {}, null, undefined])
 entry = status.get("codes");
 equal("unknown codes become ACTION_FAILED", entry.lastCode, "ACTION_FAILED");
 equal("only public record fields", Object.keys(entry).sort().join(","), "counts,lastAt,lastCode");
-ok("only allowlisted count keys", Object.keys(entry.counts).every((code) => allowed.includes(code)));
+ok(
+  "only allowlisted count keys",
+  Object.keys(entry.counts).every((code) => allowed.includes(code)),
+);
 ok("record contains no private error text", !JSON.stringify(entry).includes(privateText));
 status.record("codes", "DELIVERED", { text: privateText });
 equal("invalid timestamp is not stored", typeof status.get("codes").lastAt, "number");
@@ -92,7 +113,8 @@ store.saveReactionRule({ id: "editable", chatJid: group, priority: 0, definition
 status.record("unrelated", "BUSY", 1);
 for (const action of ["edit", "enable", "disable", "delete"]) {
   status.record("editable", "DELIVERED", 1);
-  if (action === "edit") store.saveReactionRule({ id: "editable", chatJid: group, priority: 1, definition });
+  if (action === "edit")
+    store.saveReactionRule({ id: "editable", chatJid: group, priority: 1, definition });
   if (action === "enable") store.setReactionRuleEnabled("editable", true);
   if (action === "disable") store.setReactionRuleEnabled("editable", false);
   if (action === "delete") store.deleteReactionRule("editable");
@@ -102,25 +124,49 @@ for (const action of ["edit", "enable", "disable", "delete"]) {
 
 section("status never persists and restart starts empty");
 const before = db.prepare("SELECT total_changes() AS n").get().n;
-const schemaBefore = JSON.stringify(db.prepare("SELECT name,sql FROM sqlite_master ORDER BY name").all());
+const schemaBefore = JSON.stringify(
+  db.prepare("SELECT name,sql FROM sqlite_master ORDER BY name").all(),
+);
 status.record("ram-only", "DELIVERED", 123);
 status.record(null, "BUSY", 124);
 status.get("ram-only");
 status.global();
-equal("recording and reading write no SQLite rows", db.prepare("SELECT total_changes() AS n").get().n, before);
-equal("schema unchanged", JSON.stringify(db.prepare("SELECT name,sql FROM sqlite_master ORDER BY name").all()), schemaBefore);
+equal(
+  "recording and reading write no SQLite rows",
+  db.prepare("SELECT total_changes() AS n").get().n,
+  before,
+);
+equal(
+  "schema unchanged",
+  JSON.stringify(db.prepare("SELECT name,sql FROM sqlite_master ORDER BY name").all()),
+  schemaBefore,
+);
 equal("schema remains 12", db.prepare("PRAGMA user_version").get().user_version, 12);
-const child = spawnSync(process.execPath, ["--input-type=module", "-e", `
+const child = spawnSync(
+  process.execPath,
+  [
+    "--input-type=module",
+    "-e",
+    `
   import { createRequire } from 'node:module';
   const require = createRequire(process.cwd() + '/package.json');
   const status = require('./src/automation/status.cjs');
   console.log('RESULT ' + JSON.stringify({ rule: status.get('ram-only'), global: status.global() }));
-`], { env: { ...process.env, LEVIX_DATA_DIR: dataDir }, encoding: "utf8" });
+`,
+  ],
+  { env: { ...process.env, LEVIX_DATA_DIR: dataDir }, encoding: "utf8" },
+);
 equal("fresh process exits", child.status, 0);
-equal("fresh process has no runtime records", /^RESULT (.*)$/m.exec(child.stdout)?.[1], '{"rule":null,"global":null}');
+equal(
+  "fresh process has no runtime records",
+  /^RESULT (.*)$/m.exec(child.stdout)?.[1],
+  '{"rule":null,"global":null}',
+);
 
 section("engine records selected and unselected outcomes without message data");
-db.exec("DELETE FROM reaction_rules; DELETE FROM reaction_budgets; DELETE FROM reaction_events; DELETE FROM reaction_state; DELETE FROM reaction_executions;");
+db.exec(
+  "DELETE FROM reaction_rules; DELETE FROM reaction_budgets; DELETE FROM reaction_events; DELETE FROM reaction_state; DELETE FROM reaction_executions;",
+);
 store.saveBotSetting("command_permissions", {});
 store.saveBotSetting("disabled_commands", []);
 settings.set("bot_language", "en");
@@ -135,7 +181,9 @@ const sock = {
   async groupMetadata(jid) {
     return { id: jid, participants: [{ id: bot }, { id: author }, { id: reactor }] };
   },
-  sendMessage() { throw new Error("all sends must use fake helper"); },
+  sendMessage() {
+    throw new Error("all sends must use fake helper");
+  },
 };
 const engine = createReactionAutomation(sock, { now: () => clock });
 engine.intake.open();
@@ -147,13 +195,16 @@ function receive(emoji = "😀") {
     messageTimestamp: Math.floor(clock / 1000),
   };
   engine.intake.observeUpsert({ type: "notify", messages: [original] });
-  engine.intake.observeReactions([{
-    key: original.key,
-    reaction: {
-      key: { remoteJid: group, participant: reactor, id: `event-${++sequence}`, fromMe: false },
-      text: emoji, senderTimestampMs: ++clock,
+  engine.intake.observeReactions([
+    {
+      key: original.key,
+      reaction: {
+        key: { remoteJid: group, participant: reactor, id: `event-${++sequence}`, fromMe: false },
+        text: emoji,
+        senderTimestampMs: ++clock,
+      },
     },
-  }]);
+  ]);
 }
 try {
   receive();
@@ -166,11 +217,20 @@ try {
   await engine.settled();
   equal("unmatched engine outcome", status.global()?.lastCode, "NO_MATCH");
   equal("unmatched leaves winner count unchanged", status.get("engine-rule").counts.DELIVERED, 1);
-  send = async () => { throw new Error(privateText); };
+  send = async () => {
+    throw new Error(privateText);
+  };
   receive();
   await engine.settled();
-  equal("unexpected action failure recorded safely", status.get("engine-rule").lastCode, "ACTION_FAILED");
-  ok("engine status contains no message or exception", !JSON.stringify(status.get("engine-rule")).includes(privateText));
+  equal(
+    "unexpected action failure recorded safely",
+    status.get("engine-rule").lastCode,
+    "ACTION_FAILED",
+  );
+  ok(
+    "engine status contains no message or exception",
+    !JSON.stringify(status.get("engine-rule")).includes(privateText),
+  );
   receive();
   await engine.settled();
   receive();
@@ -182,7 +242,9 @@ try {
   let entered = false;
   send = async (_sock, _jid, _content, options) => {
     entered = true;
-    await new Promise((resolve) => { release = resolve; });
+    await new Promise((resolve) => {
+      release = resolve;
+    });
     options.signal.throwIfAborted();
     return { key: { id: "late" } };
   };
@@ -195,9 +257,16 @@ try {
   store.setReactionAutomationEnabled(false);
   release();
   await engine.settled();
-  equal("selected cancellation recorded by id", status.get("engine-rule").lastCode, "REACTION_CANCELLED");
+  equal(
+    "selected cancellation recorded by id",
+    status.get("engine-rule").lastCode,
+    "REACTION_CANCELLED",
+  );
 
-  ok("all runtime data remains code-only", !JSON.stringify(status.get("engine-rule")).includes(privateText));
+  ok(
+    "all runtime data remains code-only",
+    !JSON.stringify(status.get("engine-rule")).includes(privateText),
+  );
 } finally {
   engine.close();
   sender.sendBotMessage = savedSend;

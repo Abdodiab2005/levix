@@ -124,8 +124,7 @@ function previewText(t: TFn, draft: ReactionDraft): string {
         .map((item) => typeLabel(t, item))
         .join(t("reactionListJoin")) || t("reactionTypes"),
     chat: draft.chatName.trim() || t("reactionPreviewChat"),
-    action:
-      draft.action === "stt" ? t("reactionPreviewActionStt") : t("reactionPreviewActionPing"),
+    action: draft.action === "stt" ? t("reactionPreviewActionStt") : t("reactionPreviewActionPing"),
     destination:
       draft.destination === "owner_private" ? t("reactionDestOwner") : t("reactionDestSame"),
     n: draft.senderIds.length,
@@ -379,9 +378,7 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
             <Select
               id="rx-role"
               value={draft.role}
-              onChange={(event) =>
-                setField("role", event.target.value as ReactionDraft["role"])
-              }
+              onChange={(event) => setField("role", event.target.value as ReactionDraft["role"])}
             >
               {SENDER_ROLES.map((value) => (
                 <option key={value} value={value}>

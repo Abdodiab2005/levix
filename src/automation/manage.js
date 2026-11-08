@@ -125,13 +125,15 @@ function ruleView(item, items, context) {
       statuses.push("OWNER_NOT_LINKED");
   }
   const related = items.filter((other) => sharesTrigger(item, other));
-  if (related.filter((other) => other.row.enabled).length > 100) statuses.push("CANDIDATE_LIMIT");
+  if (related.filter((other) => other.row.enabled).length > REACTION_ACTION_LIMITS.candidateLimit)
+    statuses.push("CANDIDATE_LIMIT");
   if (!statuses.length) statuses.push("READY");
   const overlaps = related
-    .filter((other) =>
-      other.row.priority < row.priority ||
-      (other.row.priority === row.priority &&
-        Buffer.compare(Buffer.from(other.row.id), Buffer.from(row.id)) < 0),
+    .filter(
+      (other) =>
+        other.row.priority < row.priority ||
+        (other.row.priority === row.priority &&
+          Buffer.compare(Buffer.from(other.row.id), Buffer.from(row.id)) < 0),
     )
     .slice(0, 20)
     .map((other) => other.row.id);
@@ -161,7 +163,11 @@ function context() {
 
 function view(id) {
   const items = store.listReactionRules().map(parsedRule);
-  return ruleView(items.find((item) => item.row.id === id), items, context());
+  return ruleView(
+    items.find((item) => item.row.id === id),
+    items,
+    context(),
+  );
 }
 
 export function overview() {

@@ -25,9 +25,18 @@ function route(handler, status = 200) {
   };
 }
 
-router.get("/reactions", route(() => manage.overview()));
-router.post("/reactions/rules/check", route((req) => manage.checkDraft(req.body)));
-router.post("/reactions/rules", route((req) => ({ rule: manage.createRule(req.body) }), 201));
+router.get(
+  "/reactions",
+  route(() => manage.overview()),
+);
+router.post(
+  "/reactions/rules/check",
+  route((req) => manage.checkDraft(req.body)),
+);
+router.post(
+  "/reactions/rules",
+  route((req) => ({ rule: manage.createRule(req.body) }), 201),
+);
 router.put(
   "/reactions/rules/:id",
   route((req) => ({ rule: manage.updateRule(req.params.id, req.body) })),

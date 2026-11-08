@@ -55,6 +55,8 @@ export const REACTION_ACTION_LIMITS = Object.freeze({
   perRule: 5,
   globalJobs: 2,
   windowMs: 60_000,
+  // Per-event work bound (store query LIMIT 101); not a rule-count cap.
+  candidateLimit: 100,
 });
 
 // Read-only checks shared with management; authorization still belongs to the job.
@@ -240,7 +242,7 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
         originalType: originalType(event.original),
       },
     );
-    if (rows.length > 100) fail("REACTION_CAPACITY");
+    if (rows.length > REACTION_ACTION_LIMITS.candidateLimit) fail("REACTION_CAPACITY");
     for (const row of rows) {
       let definition;
       try {

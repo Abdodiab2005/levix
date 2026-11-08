@@ -30,10 +30,7 @@ const entries = new Map();
 let globalEntry = null;
 
 function record(ruleId, code, at = Date.now()) {
-  if (
-    ruleId !== null &&
-    (typeof ruleId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(ruleId))
-  )
+  if (ruleId !== null && (typeof ruleId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(ruleId)))
     return;
   const safeCode = CODES.has(code) ? code : "ACTION_FAILED";
   const entry = (ruleId === null ? globalEntry : entries.get(ruleId)) || {

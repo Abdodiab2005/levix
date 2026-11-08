@@ -293,4 +293,3 @@ export function reactionApiIssues(err: unknown): ReactionIssue[] {
       typeof (item as ReactionIssue).code === "string",
   );
 }
-

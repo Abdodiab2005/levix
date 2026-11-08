@@ -49,9 +49,11 @@ async function invalid(label, path, body, method = "POST", field, code = "invali
   equal(`${label}: HTTP 400`, result.status, 400);
   equal(`${label}: fixed error`, result.body.error, "REACTION_RULE_INVALID");
   equal(`${label}: failure`, result.body.success, false);
-  if (field) ok(`${label}: field issue`, result.body.issues?.some((issue) =>
-    issue.field === field && issue.code === code,
-  ));
+  if (field)
+    ok(
+      `${label}: field issue`,
+      result.body.issues?.some((issue) => issue.field === field && issue.code === code),
+    );
 }
 
 try {
@@ -59,15 +61,23 @@ try {
   for (const [method, path] of endpoints) {
     const response = await http.call(prefix + path, {
       method,
-      ...(method === "GET" ? {} : {
-        headers: { "content-type": "application/json" }, body: JSON.stringify(draft()),
-      }),
+      ...(method === "GET"
+        ? {}
+        : {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(draft()),
+          }),
     });
     equal(`${method} ${path}: no session`, response.status, 401);
   }
-  const setup = await http.form("/setup", {
-    password: "a-good-password", confirm: "a-good-password",
-  }, { origin: server.base });
+  const setup = await http.form(
+    "/setup",
+    {
+      password: "a-good-password",
+      confirm: "a-good-password",
+    },
+    { origin: server.base },
+  );
   equal("setup signs in", setup.status, 303);
 
   section("origin guard on every mutation");
@@ -93,30 +103,73 @@ try {
   let result = await json("/rules/check", draft());
   equal("valid draft check succeeds", result.status, 200);
   equal("valid draft issues empty", result.body.issues.length, 0);
-  result = await json("/rules/check", draft({ priority: -1, definition: definition({ action: "shell" }) }));
+  result = await json(
+    "/rules/check",
+    draft({ priority: -1, definition: definition({ action: "shell" }) }),
+  );
   equal("invalid draft check is read-only feedback", result.status, 200);
-  ok("draft identifies priority", result.body.issues.some((issue) => issue.field === "priority"));
-  ok("draft identifies action", result.body.issues.some((issue) => issue.field === "definition.action"));
+  ok(
+    "draft identifies priority",
+    result.body.issues.some((issue) => issue.field === "priority"),
+  );
+  ok(
+    "draft identifies action",
+    result.body.issues.some((issue) => issue.field === "definition.action"),
+  );
   response = await http.call(prefix);
   equal("draft checks write no rules", (await response.json()).rules.length, 0);
 
-  await invalid("missing definition", "/rules", { chatJid: chat, priority: 0 }, "POST", "definition");
+  await invalid(
+    "missing definition",
+    "/rules",
+    { chatJid: chat, priority: 0 },
+    "POST",
+    "definition",
+  );
   for (const chatJid of ["", "123", "1:7@lid", "status@broadcast", "1@newsletter"])
     await invalid(`chat ${chatJid}`, "/rules", draft({ chatJid }), "POST", "chatJid");
   for (const priority of [-1, 1001, 1.5, "0", null])
     await invalid(`priority ${priority}`, "/rules", draft({ priority }), "POST", "priority");
   await invalid("non-object body", "/rules", []);
   for (const key of ["id", "enabled", "enabledAt", "revision", "code", "__proto__", "constructor"])
-    await invalid(`smuggled ${key}`, "/rules", { ...draft(), [key]: true }, "POST", "body", "unknown_field");
-  await invalid("definition arguments", "/rules", draft({
-    definition: definition({ arguments: "!kick @all" }),
-  }), "POST", "definition.arguments", "unknown_field");
-  await invalid("destination JID", "/rules", draft({
-    definition: definition({ destination: { mode: "same_chat", jid: chat } }),
-  }), "POST", "definition.destination.jid", "unknown_field");
-  await invalid("STT requires voice only", "/rules", draft({
-    definition: definition({ action: "stt" }),
-  }), "POST", "definition.originalTypes", "voice_only");
+    await invalid(
+      `smuggled ${key}`,
+      "/rules",
+      { ...draft(), [key]: true },
+      "POST",
+      "body",
+      "unknown_field",
+    );
+  await invalid(
+    "definition arguments",
+    "/rules",
+    draft({
+      definition: definition({ arguments: "!kick @all" }),
+    }),
+    "POST",
+    "definition.arguments",
+    "unknown_field",
+  );
+  await invalid(
+    "destination JID",
+    "/rules",
+    draft({
+      definition: definition({ destination: { mode: "same_chat", jid: chat } }),
+    }),
+    "POST",
+    "definition.destination.jid",
+    "unknown_field",
+  );
+  await invalid(
+    "STT requires voice only",
+    "/rules",
+    draft({
+      definition: definition({ action: "stt" }),
+    }),
+    "POST",
+    "definition.originalTypes",
+    "voice_only",
+  );
 
   section("create, revisions, edits, switches and deletion");
   result = await json("/rules", draft());
@@ -140,15 +193,30 @@ try {
   equal("stale edit code", result.body.error, "REACTION_RULE_CHANGED");
   result = await json(`/rules/${id}/enabled`, { revision: createdRevision, enabled: false });
   equal("stale toggle conflicts", result.status, 409);
-  response = await http.call(`${prefix}/rules/${id}?revision=${createdRevision}`, { method: "DELETE" });
+  response = await http.call(`${prefix}/rules/${id}?revision=${createdRevision}`, {
+    method: "DELETE",
+  });
   equal("stale delete conflicts", response.status, 409);
   equal("stale delete code", (await response.json()).error, "REACTION_RULE_CHANGED");
   const enabledRevision = rule.revision;
-  await invalid("edit cannot set enabled", `/rules/${id}`, {
-    ...draft(), revision: rule.revision, enabled: true,
-  }, "PUT", "body", "unknown_field");
+  await invalid(
+    "edit cannot set enabled",
+    `/rules/${id}`,
+    {
+      ...draft(),
+      revision: rule.revision,
+      enabled: true,
+    },
+    "PUT",
+    "body",
+    "unknown_field",
+  );
   await invalid("edit requires revision", `/rules/${id}`, draft(), "PUT", "revision");
-  result = await json(`/rules/${id}`, { ...draft({ priority: 20 }), revision: rule.revision }, "PUT");
+  result = await json(
+    `/rules/${id}`,
+    { ...draft({ priority: 20 }), revision: rule.revision },
+    "PUT",
+  );
   equal("edit succeeds", result.status, 200);
   rule = result.body.rule;
   equal("edit disables rule", rule.enabled, false);
@@ -163,22 +231,47 @@ try {
     equal(`toggle ${enabled} saved`, rule.enabled, enabled);
     ok("toggle rotates revision", rule.revision !== prior);
   }
-  await invalid("toggle needs boolean", `/rules/${id}/enabled`, {
-    revision: rule.revision, enabled: "true",
-  }, "POST", "enabled");
-  await invalid("toggle rejects extras", `/rules/${id}/enabled`, {
-    revision: rule.revision, enabled: true, definition: definition(),
-  }, "POST", "body", "unknown_field");
+  await invalid(
+    "toggle needs boolean",
+    `/rules/${id}/enabled`,
+    {
+      revision: rule.revision,
+      enabled: "true",
+    },
+    "POST",
+    "enabled",
+  );
+  await invalid(
+    "toggle rejects extras",
+    `/rules/${id}/enabled`,
+    {
+      revision: rule.revision,
+      enabled: true,
+      definition: definition(),
+    },
+    "POST",
+    "body",
+    "unknown_field",
+  );
   for (const enabled of [true, false]) {
     result = await json("/automation", { enabled }, "PUT");
     equal(`automation ${enabled} succeeds`, result.status, 200);
     equal(`automation ${enabled} saved`, result.body.automation.enabled, enabled);
   }
   await invalid("automation boolean", "/automation", { enabled: 1 }, "PUT", "enabled");
-  await invalid("automation extras", "/automation", { enabled: true, revision: "fake" }, "PUT", "body", "unknown_field");
+  await invalid(
+    "automation extras",
+    "/automation",
+    { enabled: true, revision: "fake" },
+    "PUT",
+    "body",
+    "unknown_field",
+  );
   response = await http.call(`${prefix}/rules/${id}`, { method: "DELETE" });
   equal("delete requires revision", response.status, 400);
-  response = await http.call(`${prefix}/rules/${id}?revision=${rule.revision}`, { method: "DELETE" });
+  response = await http.call(`${prefix}/rules/${id}?revision=${rule.revision}`, {
+    method: "DELETE",
+  });
   equal("delete succeeds", response.status, 200);
   equal("delete body", JSON.stringify(await response.json()), JSON.stringify({ success: true }));
   for (const [method, path, body] of [
@@ -186,30 +279,49 @@ try {
     ["POST", `/rules/${id}/enabled`, { revision: rule.revision, enabled: true }],
     ["DELETE", `/rules/${id}?revision=${rule.revision}`, undefined],
   ]) {
-    response = method === "DELETE"
-      ? await http.call(prefix + path, { method })
-      : await http.json(prefix + path, body, method);
+    response =
+      method === "DELETE"
+        ? await http.call(prefix + path, { method })
+        : await http.json(prefix + path, body, method);
     equal(`${method} missing rule`, response.status, 404);
     equal("missing rule code", (await response.json()).error, "REACTION_RULE_MISSING");
   }
 
   section("150 rules have no tier cap and unpaired destinations explain refusal");
   for (let index = 0; index < 150; index++) {
-    result = await json("/rules", draft({ priority: index % 3, definition: definition({
-      destination: { mode: index === 0 ? "owner_private" : "same_chat" },
-    }) }));
+    result = await json(
+      "/rules",
+      draft({
+        priority: index % 3,
+        definition: definition({
+          destination: { mode: index === 0 ? "owner_private" : "same_chat" },
+        }),
+      }),
+    );
     equal(`create rule ${index}`, result.status, 201);
-    if (index === 0) ok("unpaired owner destination status", result.body.rule.statuses.includes("OWNER_NOT_LINKED"));
+    if (index === 0)
+      ok(
+        "unpaired owner destination status",
+        result.body.rule.statuses.includes("OWNER_NOT_LINKED"),
+      );
   }
   response = await http.call(prefix);
   overview = await response.json();
   equal("list all 150", overview.rules.length, 150);
-  ok("all are disabled", overview.rules.every((item) => !item.enabled));
+  ok(
+    "all are disabled",
+    overview.rules.every((item) => !item.enabled),
+  );
   const ids = overview.rules.map((item) => item.id);
   equal("list has distinct ids", new Set(ids).size, 150);
-  const sorted = [...overview.rules].sort((a, b) => a.priority - b.priority ||
-    Buffer.compare(Buffer.from(a.id), Buffer.from(b.id)));
-  equal("list uses priority then binary id", JSON.stringify(ids), JSON.stringify(sorted.map((item) => item.id)));
+  const sorted = [...overview.rules].sort(
+    (a, b) => a.priority - b.priority || Buffer.compare(Buffer.from(a.id), Buffer.from(b.id)),
+  );
+  equal(
+    "list uses priority then binary id",
+    JSON.stringify(ids),
+    JSON.stringify(sorted.map((item) => item.id)),
+  );
   equal("overlaps capped", overview.rules.at(-1).overlaps.length, 20);
 } finally {
   server.stop();
@@ -222,7 +334,9 @@ const settings = require("./src/config/settings.cjs");
 const runtime = require("./src/config/runtime-config.cjs");
 const groups = require("./src/utils/groupMetadataCache.cjs");
 const manage = await import("../src/automation/manage.js");
-const { createReactionAutomation, REACTION_ACTION_LIMITS } = await import("../src/automation/engine.js");
+const { createReactionAutomation, REACTION_ACTION_LIMITS } = await import(
+  "../src/automation/engine.js"
+);
 db.exec("DELETE FROM reaction_rules");
 store.saveBotSetting("disabled_commands", []);
 store.saveBotSetting("command_permissions", {});
@@ -253,9 +367,16 @@ equal("unpaired same-chat ping is ready", local.statuses.join(","), "READY");
 runtime.setEnabled("ping", false);
 ok("disabled command reported", manage.overview().rules[0].statuses.includes("ACTION_DISABLED"));
 runtime.setEnabled("ping", true);
-const voice = manage.createRule(draft({ priority: 2, definition: definition({
-  action: "stt", originalTypes: ["voice"], destination: { mode: "owner_private" },
-}) }));
+const voice = manage.createRule(
+  draft({
+    priority: 2,
+    definition: definition({
+      action: "stt",
+      originalTypes: ["voice"],
+      destination: { mode: "owner_private" },
+    }),
+  }),
+);
 settings.set("ai_stt_enabled", false);
 settings.set("ai_stt_provider", "openai");
 settings.set("openai_api_key", "");
@@ -270,7 +391,11 @@ equal("configured owner STT ready", voiceView.statuses.join(","), "READY");
 equal("owner linked from credentials", manage.overview().owner.linked, true);
 const privateRule = manage.createRule(draft({ chatJid: author }));
 store.saveUserMetadata({ jid: author, displayName: "Known contact" });
-equal("contact label uses describePeer", manage.overview().rules.find((item) => item.id === privateRule.id).chatName, store.describePeer(author).label);
+equal(
+  "contact label uses describePeer",
+  manage.overview().rules.find((item) => item.id === privateRule.id).chatName,
+  store.describePeer(author).label,
+);
 db.prepare("UPDATE reaction_rules SET definition='not-json' WHERE id=?").run(privateRule.id);
 const corrupt = manage.overview().rules.find((item) => item.id === privateRule.id);
 equal("corrupt rule remains visible", corrupt.valid, false);
@@ -279,22 +404,50 @@ ok("corrupt rule explains invalidity", corrupt.statuses.includes("RULE_INVALID")
 section("candidate warning and binary overlap precedence");
 for (const id of ["a", "A", "z"]) store.saveReactionRule({ id, ...draft({ priority: 5 }) });
 let views = manage.overview().rules;
-equal("uppercase id sorts before lowercase", views.find((item) => item.id === "a").overlaps.includes("A"), true);
-equal("later lowercase id is not earlier", views.find((item) => item.id === "A").overlaps.includes("a"), false);
+equal(
+  "uppercase id sorts before lowercase",
+  views.find((item) => item.id === "a").overlaps.includes("A"),
+  true,
+);
+equal(
+  "later lowercase id is not earlier",
+  views.find((item) => item.id === "A").overlaps.includes("a"),
+  false,
+);
 const nonoverlap = manage.createRule(draft({ definition: definition({ emoji: "👍" }) }));
-ok("different emoji never overlaps", manage.overview().rules.find((item) => item.id === "z").overlaps.every((id) => id !== nonoverlap.id));
+ok(
+  "different emoji never overlaps",
+  manage
+    .overview()
+    .rules.find((item) => item.id === "z")
+    .overlaps.every((id) => id !== nonoverlap.id),
+);
 for (let index = 0; index < 100; index++) {
   const rule = store.saveReactionRule({ id: `candidate-${index}`, ...draft() });
   store.setReactionRuleEnabled(rule.id, true);
   if (index === 98)
-    ok("100 candidates do not warn", !manage.overview().rules.find((item) => item.id === local.id).statuses.includes("CANDIDATE_LIMIT"));
+    ok(
+      "100 candidates do not warn",
+      !manage
+        .overview()
+        .rules.find((item) => item.id === local.id)
+        .statuses.includes("CANDIDATE_LIMIT"),
+    );
 }
 views = manage.overview().rules;
-ok("101 shared enabled candidates warn", views.find((item) => item.id === local.id).statuses.includes("CANDIDATE_LIMIT"));
-ok("warning is per trigger", !views.find((item) => item.id === nonoverlap.id).statuses.includes("CANDIDATE_LIMIT"));
+ok(
+  "101 shared enabled candidates warn",
+  views.find((item) => item.id === local.id).statuses.includes("CANDIDATE_LIMIT"),
+);
+ok(
+  "warning is per trigger",
+  !views.find((item) => item.id === nonoverlap.id).statuses.includes("CANDIDATE_LIMIT"),
+);
 
 section("every facade write notifies a running engine and cancels pending work");
-db.exec("DELETE FROM reaction_rules; DELETE FROM reaction_events; DELETE FROM reaction_state; DELETE FROM reaction_budgets;");
+db.exec(
+  "DELETE FROM reaction_rules; DELETE FROM reaction_events; DELETE FROM reaction_state; DELETE FROM reaction_budgets;",
+);
 let clock = Date.now() + 10_000;
 let sequence = 0;
 let release;
@@ -303,16 +456,28 @@ const sock = {
   user: { id: bot },
   groupMetadata() {
     entered = true;
-    return new Promise((resolve) => { release = resolve; });
+    return new Promise((resolve) => {
+      release = resolve;
+    });
   },
-  sendMessage() { throw new Error("cancelled job must not send"); },
+  sendMessage() {
+    throw new Error("cancelled job must not send");
+  },
 };
 const changes = [];
 const unsubscribe = store.subscribeReactionChanges((change) => changes.push(change));
 const engine = createReactionAutomation(sock, { now: () => clock });
 engine.intake.open();
 try {
-  for (const operation of ["create", "update", "enable", "disable", "delete", "automation-on", "automation-off"]) {
+  for (const operation of [
+    "create",
+    "update",
+    "enable",
+    "disable",
+    "delete",
+    "automation-on",
+    "automation-off",
+  ]) {
     let rule = manage.createRule(draft());
     store.setReactionRuleEnabled(rule.id, true, clock);
     manage.setAutomation({ enabled: true });
@@ -326,20 +491,25 @@ try {
     engine.intake.observeUpsert({ type: "notify", messages: [original] });
     equal(`${operation}: lookup retained`, engine.intake.stats().items, 1);
     entered = false;
-    engine.intake.observeReactions([{
-      key: original.key,
-      reaction: {
-        key: { remoteJid: chat, participant: reactor, id: `event-${++sequence}`, fromMe: false },
-        text: "😀", senderTimestampMs: ++clock,
+    engine.intake.observeReactions([
+      {
+        key: original.key,
+        reaction: {
+          key: { remoteJid: chat, participant: reactor, id: `event-${++sequence}`, fromMe: false },
+          text: "😀",
+          senderTimestampMs: ++clock,
+        },
       },
-    }]);
+    ]);
     equal(`${operation}: job entered fake metadata`, entered, true);
     equal(`${operation}: running job`, engine.stats().active, 1);
     const before = changes.length;
     if (operation === "create") manage.createRule(draft({ priority: 1 }));
     if (operation === "update") manage.updateRule(rule.id, { ...draft(), revision: rule.revision });
-    if (operation === "enable") manage.setRuleEnabled(rule.id, { revision: rule.revision, enabled: true });
-    if (operation === "disable") manage.setRuleEnabled(rule.id, { revision: rule.revision, enabled: false });
+    if (operation === "enable")
+      manage.setRuleEnabled(rule.id, { revision: rule.revision, enabled: true });
+    if (operation === "disable")
+      manage.setRuleEnabled(rule.id, { revision: rule.revision, enabled: false });
     if (operation === "delete") manage.deleteRule(rule.id, rule.revision);
     if (operation === "automation-on") manage.setAutomation({ enabled: true });
     if (operation === "automation-off") manage.setAutomation({ enabled: false });
@@ -357,7 +527,9 @@ try {
 }
 
 section("typed errors and internal error response");
-const error = throws("facade rejects invalid create", () => manage.createRule(draft({ priority: -1 })));
+const error = throws("facade rejects invalid create", () =>
+  manage.createRule(draft({ priority: -1 })),
+);
 ok("facade error type", error instanceof manage.ReactionManageError);
 equal("facade status", error?.status, 400);
 const router = (await import("../src/routes/reactions.api.esm.js")).default;
@@ -368,17 +540,33 @@ let logged;
 let payload;
 let statusCode;
 try {
-  store.listReactionRules = () => { throw new Error("isolated storage failure"); };
-  logger.error = (...args) => { logged = args; };
-  const handler = router.stack.find((layer) => layer.route?.path === "/reactions").route.stack[0].handle;
-  handler({ body: { secret: "must-not-be-logged" } }, {
-    status(code) { statusCode = code; return this; },
-    json(body) { payload = body; },
-  });
+  store.listReactionRules = () => {
+    throw new Error("isolated storage failure");
+  };
+  logger.error = (...args) => {
+    logged = args;
+  };
+  const handler = router.stack.find((layer) => layer.route?.path === "/reactions").route.stack[0]
+    .handle;
+  handler(
+    { body: { secret: "must-not-be-logged" } },
+    {
+      status(code) {
+        statusCode = code;
+        return this;
+      },
+      json(body) {
+        payload = body;
+      },
+    },
+  );
   equal("unexpected failure uses 500", statusCode, 500);
   equal("unexpected failure uses INTERNAL", payload?.error, "INTERNAL");
   equal("unexpected failure is unsuccessful", payload?.success, false);
-  ok("unexpected failure logged without body", logged && !JSON.stringify(logged).includes("must-not-be-logged"));
+  ok(
+    "unexpected failure logged without body",
+    logged && !JSON.stringify(logged).includes("must-not-be-logged"),
+  );
 } finally {
   store.listReactionRules = savedList;
   logger.error = savedError;
