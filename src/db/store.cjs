@@ -343,6 +343,9 @@ function saveReactionRule(input) {
 function getReactionRule(id) {
   return q("SELECT * FROM reaction_rules WHERE id=?").get(id) || null;
 }
+function listReactionRules() {
+  return q("SELECT * FROM reaction_rules ORDER BY chat_jid, priority, id COLLATE BINARY").all();
+}
 function setReactionRuleEnabled(id, enabled, now = Date.now()) {
   if (typeof enabled !== "boolean" || !Number.isSafeInteger(now) || now < 0) throw new Error("REACTION_RULE_INVALID");
   const rule = getReactionRule(id);
@@ -2308,6 +2311,7 @@ module.exports = {
   claimReactionEvent,
   subscribeReactionChanges,
   saveReactionRule,
+  listReactionRules,
   getReactionRule,
   setReactionRuleEnabled,
   deleteReactionRule,

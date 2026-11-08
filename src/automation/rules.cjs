@@ -5,15 +5,6 @@ const TYPES = ["text", "voice", "audio", "image", "video", "document", "sticker"
 function invalid() {
   throw new Error("REACTION_RULE_INVALID");
 }
-function object(value, keys) {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    Array.isArray(value) ||
-    Object.keys(value).some((key) => !keys.includes(key))
-  )
-    invalid();
-}
 function exactJid(value, userOnly = false) {
   if (
     typeof value !== "string" ||
@@ -36,43 +27,82 @@ function emoji(value) {
     [...segmenter.segment(value)].length === 1
   );
 }
-function list(value, allowed) {
+function definitionIssues(value) {
+  const issues = [];
+  const add = (field, code = "invalid") => issues.push({ field, code });
+  const object = (item, field, keys) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      add(field);
+      return false;
+    }
+    for (const key of Object.keys(item))
+      if (!keys.includes(key)) add(`${field}.${key}`, "unknown_field");
+    return true;
+  };
+  const list = (item, field, allowed) => {
+    if (!Array.isArray(item)) return add(field);
+    if (!item.length || item.some((entry) => !allowed.includes(entry))) add(field);
+    if (item.length > allowed.length) add(field, "too_many");
+    if (new Set(item).size !== item.length) add(field, "duplicate");
+  };
   if (
-    !Array.isArray(value) ||
-    !value.length ||
-    value.length > allowed.length ||
-    new Set(value).size !== value.length ||
-    value.some((item) => !allowed.includes(item))
+    !object(value, "definition", [
+      "version",
+      "emoji",
+      "transitions",
+      "originalTypes",
+      "senders",
+      "action",
+      "destination",
+    ])
   )
-    invalid();
+    return issues;
+  if (value.version !== 1) add("definition.version");
+  if (!emoji(value.emoji)) add("definition.emoji");
+  list(value.transitions, "definition.transitions", ["add", "change", "remove"]);
+  list(value.originalTypes, "definition.originalTypes", TYPES);
+  if (object(value.senders, "definition.senders", ["role", "ids"])) {
+    if (!["any", "owner", "bot_admin", "group_admin", "member"].includes(value.senders.role))
+      add("definition.senders.role");
+    const ids = value.senders.ids;
+    if (!Array.isArray(ids)) add("definition.senders.ids");
+    else {
+      if (ids.length > 100) add("definition.senders.ids", "too_many");
+      if (new Set(ids).size !== ids.length) add("definition.senders.ids", "duplicate");
+      for (const id of ids) {
+        try {
+          exactJid(id, true);
+        } catch {
+          add("definition.senders.ids");
+          break;
+        }
+      }
+    }
+  }
+  if (!["stt", "ping"].includes(value.action)) add("definition.action");
+  if (
+    value.action === "stt" &&
+    (!Array.isArray(value.originalTypes) ||
+      value.originalTypes.length !== 1 ||
+      value.originalTypes[0] !== "voice")
+  )
+    add("definition.originalTypes", "voice_only");
+  if (
+    object(value.destination, "definition.destination", ["mode"]) &&
+    !["same_chat", "owner_private"].includes(value.destination.mode)
+  )
+    add("definition.destination.mode");
+  if (!issues.length) {
+    try {
+      structuredClone(value);
+    } catch {
+      add("definition");
+    }
+  }
+  return issues;
 }
 function validateDefinition(value) {
-  object(value, [
-    "version",
-    "emoji",
-    "transitions",
-    "originalTypes",
-    "senders",
-    "action",
-    "destination",
-  ]);
-  if (value.version !== 1 || !emoji(value.emoji)) invalid();
-  list(value.transitions, ["add", "change", "remove"]);
-  list(value.originalTypes, TYPES);
-  object(value.senders, ["role", "ids"]);
-  if (!["any", "owner", "bot_admin", "group_admin", "member"].includes(value.senders.role))
-    invalid();
-  const ids = value.senders.ids;
-  if (!Array.isArray(ids) || ids.length > 100 || new Set(ids).size !== ids.length) invalid();
-  for (const id of ids) exactJid(id, true);
-  if (
-    !["stt", "ping"].includes(value.action) ||
-    (value.action === "stt" &&
-      (value.originalTypes.length !== 1 || value.originalTypes[0] !== "voice"))
-  )
-    invalid();
-  object(value.destination, ["mode"]);
-  if (!["same_chat", "owner_private"].includes(value.destination.mode)) invalid();
+  if (definitionIssues(value).length) invalid();
   return structuredClone(value);
 }
 function originalType(original) {
@@ -81,4 +111,4 @@ function originalType(original) {
   if (msg.conversation != null || msg.extendedTextMessage) return "text";
   return ["image", "video", "document", "sticker"].find((type) => msg[`${type}Message`]) || null;
 }
-module.exports = { validateDefinition, exactJid, originalType };
+module.exports = { definitionIssues, validateDefinition, exactJid, originalType };
