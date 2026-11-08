@@ -333,6 +333,14 @@ function acceptedLive(jid, result) {
   );
 }
 
+/** Live-only authorization read. Joins an open fetch; never falls back to cache. */
+async function readLiveGroupMetadata(sock, jid) {
+  if (!isGroupJid(jid) || !canFetch(sock)) return null;
+  const last = await drainFetches(sock, jid);
+  if (acceptedLive(jid, last) && Array.isArray(last.live.participants)) return last.live;
+  return null;
+}
+
 /**
  * Baileys send-path hook. A fresh roster, or the shared fetch's answer.
  * Never a stale roster. Undefined on failure so Baileys queries itself.
@@ -405,6 +413,7 @@ module.exports = {
   flushAll,
   keys,
   resolveGroupMetadata,
+  readLiveGroupMetadata,
   groupMetadataForSend,
   storeFullGroupMetadata,
   mergePartialGroupMetadata,

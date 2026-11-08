@@ -22,6 +22,17 @@ const { db, q, parseJson, sweepExpired, checkpoint, DB_PATH } = require("./db.cj
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_FORWARD_TTL_DAYS = 30;
+const reactionListeners = new Set();
+function notifyReactionChange(change) {
+  for (const listener of reactionListeners) {
+    try { listener(change); }
+    catch { logger.warn("[Reactions] policy listener failed"); }
+  }
+}
+function subscribeReactionChanges(listener) {
+  reactionListeners.add(listener);
+  return () => reactionListeners.delete(listener);
+}
 
 // ===================================================================
 // --- Lifecycle ---
@@ -136,10 +147,13 @@ function saveBotSetting(key, value) {
     `INSERT INTO bot_settings (key, value) VALUES (?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
   ).run(key, JSON.stringify(value ?? null));
+  if (["reaction:enabled", "command_permissions", "disabled_commands"].includes(key))
+    notifyReactionChange({ type: "policy", key });
 }
 
 function deleteBotSetting(key) {
   q("DELETE FROM bot_settings WHERE key = ?").run(key);
+  notifyReactionChange({ type: "policy" });
 }
 
 // ===================================================================
@@ -156,6 +170,7 @@ function saveGroupSettings(groupId, settings) {
     `INSERT INTO group_settings (group_id, settings) VALUES (?, ?)
      ON CONFLICT(group_id) DO UPDATE SET settings = excluded.settings`,
   ).run(groupId, JSON.stringify(settings || {}));
+  notifyReactionChange({ type: "chat", chat: groupId });
 }
 
 function getAllGroupSettings() {
@@ -277,11 +292,15 @@ function clearReactionAccountState() {
     q("DELETE FROM reaction_events").run();
     q("DELETE FROM reaction_state").run();
     q("DELETE FROM reaction_invalidations").run();
+    q("DELETE FROM reaction_executions").run();
+    q("DELETE FROM reaction_budgets").run();
+    saveBotSetting("reaction:enabled", false);
   });
+  notifyReactionChange({ type: "policy" });
 }
 
 /** Claim before handoff. Saturation never deletes a live replay key. */
-function claimReactionEvent({ eventKey, slotKeys, timestampMs, emoji, expiresAt }, now) {
+function claimReactionEvent({ eventKey, slotKeys, timestampMs, emoji, expiresAt }, now, details = false) {
   return withImmediateTransaction(() => {
     q("DELETE FROM reaction_events WHERE expires_at <= ?").run(now);
     q("DELETE FROM reaction_state WHERE expires_at <= ?").run(now);
@@ -296,7 +315,103 @@ function claimReactionEvent({ eventKey, slotKeys, timestampMs, emoji, expiresAt 
        ON CONFLICT(slot_key) DO UPDATE SET timestamp_ms=excluded.timestamp_ms,
        emoji=excluded.emoji, expires_at=excluded.expires_at`).run(previous?.slot_key || slotKeys[0], timestampMs, emoji, expiresAt);
     if (previous?.emoji === emoji) return null;
-    return !emoji ? "remove" : previous?.emoji ? "change" : "add";
+    const type = !emoji ? "remove" : previous?.emoji ? "change" : "add";
+    return details ? { type, previousEmoji: previous?.emoji || "" } : type;
+  });
+}
+
+// Internal rule writes only; Phase 07c must put authenticated management over
+// these methods. Every edit disables execution and rotates the revision.
+function saveReactionRule(input) {
+  const { validateDefinition, exactJid } = require("../automation/rules.cjs");
+  if (!input || Object.keys(input).some((key) => !["id", "chatJid", "priority", "definition"].includes(key)))
+    throw new Error("REACTION_RULE_INVALID");
+  const id = input.id || crypto.randomUUID();
+  if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error("REACTION_RULE_INVALID");
+  const chat = exactJid(input.chatJid);
+  const priority = input.priority ?? 0;
+  if (!Number.isInteger(priority) || priority < 0 || priority > 1000) throw new Error("REACTION_RULE_INVALID");
+  const definition = validateDefinition(input.definition);
+  q(`INSERT INTO reaction_rules(id,chat_jid,definition,revision,priority) VALUES(?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET chat_jid=excluded.chat_jid,definition=excluded.definition,
+     revision=excluded.revision,priority=excluded.priority,enabled=0,enabled_at=NULL`)
+    .run(id, chat, JSON.stringify(definition), crypto.randomUUID(), priority);
+  saveBotSetting("reaction:revision", crypto.randomUUID());
+  notifyReactionChange({ type: "rule", id });
+  return getReactionRule(id);
+}
+function getReactionRule(id) {
+  return q("SELECT * FROM reaction_rules WHERE id=?").get(id) || null;
+}
+function setReactionRuleEnabled(id, enabled, now = Date.now()) {
+  if (typeof enabled !== "boolean" || !Number.isSafeInteger(now) || now < 0) throw new Error("REACTION_RULE_INVALID");
+  const rule = getReactionRule(id);
+  if (!rule) throw new Error("REACTION_RULE_MISSING");
+  require("../automation/rules.cjs").validateDefinition(JSON.parse(rule.definition));
+  q("UPDATE reaction_rules SET enabled=?,enabled_at=?,revision=? WHERE id=?")
+    .run(enabled ? 1 : 0, enabled ? now : null, crypto.randomUUID(), id);
+  saveBotSetting("reaction:revision", crypto.randomUUID());
+  notifyReactionChange({ type: "rule", id });
+  return getReactionRule(id);
+}
+function deleteReactionRule(id) {
+  q("DELETE FROM reaction_rules WHERE id=?").run(id);
+  saveBotSetting("reaction:revision", crypto.randomUUID());
+  notifyReactionChange({ type: "rule", id });
+}
+function setReactionAutomationEnabled(enabled) {
+  if (typeof enabled !== "boolean") throw new Error("REACTION_SWITCH_INVALID");
+  saveBotSetting("reaction:enabled", enabled);
+}
+function reactionRulesForChats(chats, { emoji, type, originalType }) {
+  if (!chats.length || chats.length > 4) return [];
+  return q(`WITH rules AS (
+      SELECT *, CASE WHEN json_valid(definition) THEN definition ELSE '{}' END AS config
+      FROM reaction_rules WHERE enabled=1 AND chat_jid IN (${sqlIn(chats)})
+    ) SELECT id,chat_jid,enabled,definition,revision,enabled_at,priority FROM rules
+    WHERE json_extract(config,'$.emoji')=?
+      AND EXISTS (SELECT 1 FROM json_each(config,'$.transitions') WHERE value=?)
+      AND EXISTS (SELECT 1 FROM json_each(config,'$.originalTypes') WHERE value=?)
+    ORDER BY priority ASC,id COLLATE BINARY ASC LIMIT 101`).all(...chats, emoji, type, originalType);
+}
+// Strict role lookup deliberately never converts LID digits into phone digits.
+function verifiedUserRoles(ids) {
+  if (!ids.length || ids.length > 4) return { isOwner: false, isBotAdmin: false };
+  // Legacy contact merging can populate user_lid/phone_number by matching
+  // numeric digits alone. Only the role row's primary JID and authoritative
+  // lid_mapping expansion above may establish automation privileges.
+  const rows = q(`SELECT is_owner,is_admin FROM user_metadata WHERE user_jid IN (${sqlIn(ids)})`).all(...ids);
+  return { isOwner: rows.some((row) => row.is_owner === 1), isBotAdmin: rows.some((row) => row.is_admin === 1) };
+}
+// Nonmatching reactions never perform remote authorization. Matching attempts
+// spend reactor/chat budgets before metadata reads; rule budgets precede actions.
+function spendReactionBudgets(budgets, now) {
+  q("DELETE FROM reaction_budgets WHERE expires_at<=?").run(now);
+  let added = 0;
+  for (const budget of budgets) {
+    const row = q("SELECT attempts FROM reaction_budgets WHERE budget_key=?").get(budget.key);
+    if (row && row.attempts >= budget.limit) return "RATE_LIMIT";
+    if (!row) added++;
+  }
+  if (q("SELECT COUNT(*) AS n FROM reaction_budgets").get().n + added > REACTION_LEDGER_CAP) return "CAPACITY";
+  for (const budget of budgets) q(`INSERT INTO reaction_budgets VALUES(?,1,?)
+    ON CONFLICT(budget_key) DO UPDATE SET attempts=attempts+1`).run(budget.key, now + 60_000);
+  return "ADMITTED";
+}
+function admitReactionAttempt(budgets, now) {
+  return withImmediateTransaction(() => spendReactionBudgets(budgets, now));
+}
+function claimReactionExecution({ eventKey, ruleKey, actionKey, expiresAt, budgets }, now) {
+  return withImmediateTransaction(() => {
+    q("DELETE FROM reaction_executions WHERE expires_at<=?").run(now);
+    q("DELETE FROM reaction_budgets WHERE expires_at<=?").run(now);
+    if (!q("SELECT 1 FROM reaction_events WHERE event_key=? AND expires_at>?").get(eventKey, now)) return "EVENT_MISSING";
+    if (q("SELECT 1 FROM reaction_executions WHERE event_key=? OR rule_key=? OR action_key=?").get(eventKey, ruleKey, actionKey)) return "DUPLICATE";
+    if (q("SELECT COUNT(*) AS n FROM reaction_executions").get().n >= REACTION_LEDGER_CAP) return "CAPACITY";
+    const admitted = spendReactionBudgets(budgets, now);
+    if (admitted !== "ADMITTED") return admitted;
+    q("INSERT INTO reaction_executions VALUES(?,?,?,?)").run(eventKey, ruleKey, actionKey, expiresAt);
+    return "CLAIMED";
   });
 }
 
@@ -844,6 +959,19 @@ function userRow(jid) {
   return q("SELECT * FROM user_metadata WHERE user_jid = ?").get(jid);
 }
 
+// Privilege writes must not follow the legacy contact digit-merging path.
+function resolveRoleUser(identifier) {
+  const jid = normalizeJid(identifier);
+  if (!jid) return null;
+  const ids = reactionIdentityAliases(jid);
+  if (ids.length > 4) throw new Error("AMBIGUOUS_ROLE_IDENTITY");
+  for (const id of ids) {
+    const row = userRow(id);
+    if (row) return rowToUser(row);
+  }
+  return null;
+}
+
 /**
  * Save or update user metadata.
  *
@@ -858,7 +986,8 @@ function userRow(jid) {
 function saveUserMetadata(userData) {
   if (!userData?.jid) return;
   const now = Date.now();
-  const resolved = resolveExistingUser(userData);
+  const writesRole = userData.isOwner !== undefined || userData.isAdmin !== undefined;
+  const resolved = writesRole ? resolveRoleUser(userData.jid) : resolveExistingUser(userData);
   const jid =
     resolved?.jid ||
     (isLidJid(userData.jid) ? userData.jid : asPnJid(userData.jid) || userData.jid);
@@ -911,6 +1040,16 @@ function saveUserMetadata(userData) {
     row.display_name,
     row.saved_name,
   );
+  if (writesRole) {
+    // Separate PN/LID rows can predate a learned mapping. A revocation must
+    // cover every proven primary alias, or the other row would retain access.
+    const ids = reactionIdentityAliases(normalizeJid(userData.jid));
+    for (const [field, column] of [["isOwner", "is_owner"], ["isAdmin", "is_admin"]]) {
+      if (userData[field] !== undefined)
+        q(`UPDATE user_metadata SET ${column}=? WHERE user_jid IN (${sqlIn(ids)})`).run(bool(userData[field]), ...ids);
+    }
+    notifyReactionChange({ type: "policy" });
+  }
 }
 
 /**
@@ -1049,7 +1188,7 @@ function setUserRole(identifier, role, enabled = true) {
   if (!identifier) return null;
 
   const wanted = String(role).toLowerCase() === "owner" ? "isOwner" : "isAdmin";
-  const existing = getUserMetadata(identifier);
+  const existing = resolveRoleUser(identifier);
 
   // Keep LIDs as LIDs; anything else becomes a PN JID so the roster stays
   // comparable with what the permission checks resolve senders to.
@@ -2167,6 +2306,16 @@ module.exports = {
   isReactionLookupInvalidated,
   clearReactionAccountState,
   claimReactionEvent,
+  subscribeReactionChanges,
+  saveReactionRule,
+  getReactionRule,
+  setReactionRuleEnabled,
+  deleteReactionRule,
+  setReactionAutomationEnabled,
+  reactionRulesForChats,
+  verifiedUserRoles,
+  claimReactionExecution,
+  admitReactionAttempt,
   REACTION_LEDGER_CAP,
   // Lifecycle
   initStore,

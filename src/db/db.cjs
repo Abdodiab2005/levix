@@ -741,6 +741,28 @@ const MIGRATIONS = [
       CREATE INDEX idx_reaction_invalidations_expiry ON reaction_invalidations (expires_at);
     `);
   },
+  // v12 — enablement epochs and claim-first execution. v11 is immutable.
+  (database) => {
+    database.exec(`
+      ALTER TABLE reaction_rules ADD COLUMN revision TEXT NOT NULL DEFAULT '';
+      ALTER TABLE reaction_rules ADD COLUMN enabled_at INTEGER;
+      ALTER TABLE reaction_rules ADD COLUMN priority INTEGER NOT NULL DEFAULT 0;
+      UPDATE reaction_rules SET enabled = 0;
+      CREATE TABLE reaction_executions (
+        event_key TEXT PRIMARY KEY,
+        rule_key TEXT NOT NULL UNIQUE,
+        action_key TEXT NOT NULL UNIQUE,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_reaction_executions_expiry ON reaction_executions(expires_at);
+      CREATE TABLE reaction_budgets (
+        budget_key TEXT PRIMARY KEY,
+        attempts INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_reaction_budgets_expiry ON reaction_budgets(expires_at);
+    `);
+  },
 ];
 
 function migrate(database, migrations = MIGRATIONS) {
@@ -901,6 +923,8 @@ function sweepExpired() {
     q("DELETE FROM reaction_events WHERE expires_at <= ?").run(Date.now());
     q("DELETE FROM reaction_state WHERE expires_at <= ?").run(Date.now());
     q("DELETE FROM reaction_invalidations WHERE expires_at <= ?").run(Date.now());
+    q("DELETE FROM reaction_executions WHERE expires_at <= ?").run(Date.now());
+    q("DELETE FROM reaction_budgets WHERE expires_at <= ?").run(Date.now());
   } catch {
     logger.warn("[DB] reaction metadata sweep failed");
   }

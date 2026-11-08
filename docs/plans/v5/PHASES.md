@@ -130,14 +130,14 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
-| Status | 07a IMPLEMENTED, PENDING OWNER REVIEW on `feat/v5-phase-07a`, draft [PR #135](https://github.com/Abdodiab2005/levix/pull/135), merged Phase 06 baseline `f04ce30`. Audit, plan and evidence: `PHASE-07-RESULTS.md`. No 07b/07c implementation yet. |
+| Status | 07a [PR #135](https://github.com/Abdodiab2005/levix/pull/135) merged at `b383ed1`. 07b integrated locally with `release/5.0.0-beta.1` (`b555014`), reviewed, all local gates PASS, waiting for owner approval to update and merge PR #136. 07c not started. Audit, plan and evidence: `PHASE-07-RESULTS.md`. |
 | Goal | One generic reaction engine, existing capabilities and Rule Builder in Free Core; no artificial tier rule cap or subscription check. |
 | Files | `src/automation/reactions.js`, core event/socket/session boundaries, additive DB/store, backup classification; later dashboard API and React builder. |
-| Migrations | Schema 11: disabled rule records and bounded hashed replay/transition metadata; original lookup stays in RAM, never a message table. |
+| Migrations | Immutable schema 11 intake; append-only schema 12 adds rule epoch/revision/priority and bounded hashed execution claims/rate budgets. Original lookup stays in RAM. |
 | Compliance | Capture only live originals in enabled-rule chats, bounded TTL/bytes; no unrelated archive; no action in 07a. |
 | Tests | fake Baileys streams; add/change/remove; replay/restart; exact actor/target; stale/deleted/hidden originals; alias, bounds and lifecycle tests. 07b adds role/action/routing/rate/cancel tests; 07c adds auth/CSRF/four-language UI tests. |
-| Gate | No action for unknown originals or duplicate events; rules off until explicitly enabled; existing commands and AI tools unchanged. |
-| Rollback | Disable rules, keep schema 11 unused; schema downgrade requires the verified pre-migration copy. |
+| Gate | No action for unknown/pre-enable/pre-connection originals or duplicate events. Rule/global opt-in; strict live reactor permissions, source-sensitive routing, cancellation at final send. STT and ping reuse existing capabilities; no API/UI in 07b. |
+| Rollback | Kill global runtime and disable rules, keep schema 12 unused; binary downgrade requires the verified schema-11 pre-migration copy. |
 | PRs | Independently reviewed 07a intake/idempotency/lookup, then 07b rules/safe actions, then 07c Rule Builder. No merge without owner approval. No Auto Reply in this phase. |
 
 ### Phase 07.5: Architecture Stabilization & Refactor (PROPOSED)

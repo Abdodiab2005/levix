@@ -102,3 +102,22 @@ phase or reverts a change. Owners are phases; the release owner is the project o
   unsafe URLs; provider output treated as instructions.
 - Controls: `access` entries checked against the minted caller; identities taken from the caller,
   never from arguments; `fetch_url` HTTPS and private-range checks stay.
+
+
+### Phase 07b controls and residual limits
+
+Numeric LID/PN alias contamination cannot grant a reaction role: read primary
+role rows through authoritative mapping only; explicit grants/revocations use
+that same identity boundary and update all proven primary aliases. Group roles
+are refreshed before provider work and final send, with synchronous cancellation
+on membership changes. Matching authorization attempts consume budgets before
+remote metadata reads; unrelated triggers perform no network work.
+
+Execution claims precede side effects, and failed/cancelled attempts are never
+retried. An external send already initiated may finish; delivery is not exactly
+once. A provider ignoring cancellation occupies one of two cross-generation
+slots until settled. Resource saturation fails closed, potentially reducing
+availability. Unknown external bots cannot always be identified from ordinary
+WhatsApp envelopes; recognized bot metadata and all linked-self output are
+rejected, and rates bound other-client storms. Live provider/device QA remains
+a separately authorized release prerequisite.

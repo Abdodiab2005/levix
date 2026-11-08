@@ -195,3 +195,358 @@ Phase 07.5 and 08 have not started. No unresolved product choice is needed for
 07a's fail-closed, disabled-by-default intake. No merge, release, tag, deploy
 or Play upload was performed. Runtime permissions and existing explicit
 commands/AI tools remain unchanged.
+
+
+## Phase 07b audit and implementation plan (2026-11-07, before code)
+
+PR #135 is merged into `release/5.0.0-beta.1` at
+`b383ed1b000da0ec6227d6195e6a03a5fd775a4f` (11:53:14 UTC).
+The clean `feat/v5-phase-07b` branch starts from that actual merge. The owner
+approved this specific release-branch fetch. Installed local Node: 24.19.0,
+Linux x64. Baseline full tests are running offline; results will be recorded
+below before application changes. Existing behavior is intake only, with no
+executor or supported management interface.
+
+Audit: 07a supplies bounded originals, durable transitions and invalidation,
+but has no enablement epoch or rule/action claims. Removal currently loses the
+previous emoji. Existing STT already owns provider selection, audio validation
+and transcription; reuse it, never implement another provider. Phase 05 owns
+routing and Phase 06 checks signals immediately before Baileys. Reaction roles
+must use exact JIDs plus trusted aliases: legacy numeric LID/PN fallback is not
+adequate proof of reactor privileges. Cache-first group roles can be stale;
+fetch current membership for reaction authorization. Reject recognized bot
+metadata before the intake strips context.
+
+Plan and acceptance:
+
+1. Add a strict, bounded internal rule definition validator and engine in
+   `src/automation/`. Initial allowlist: existing `stt.transcribe` for verified
+   voice notes and existing `ping.execute`. Match emoji, add/change/remove,
+   exact chat, original type and reactor role/allowlist. Removal matches the
+   previous emoji. Lower numeric priority then lexical rule id wins; exactly
+   one winning rule per event, with no fallback to a lower rule on failure.
+   Destinations initially support source chat and linked-owner private chat
+   through the Phase 05 router. No raw destination, URL, code, shell, arbitrary
+   command arguments, subscription dependency, API or UI.
+2. Append schema 12; do not edit schema 11. Add rule revision, priority and
+   enablement time; disable legacy seam-only rows on upgrade. Durable bounded
+   event/rule/action claims and per-reactor/chat/rule rate budgets precede side
+   effects. Saturation rejects work and never evicts live claims. Originals
+   must be received AND timestamped strictly after enablement, in the same
+   observed revision; no restart/reconnect recovery. Edits/re-enable rotate
+   revision/epoch. Internal writes notify active sockets synchronously.
+3. Reuse shared backend permission evaluation with a strict identity option,
+   minting callers only from intake actor keys. Fetch live group membership,
+   verify actor/original author/bot access, blacklist and disabled-command
+   policy before actions and again at delivery. Extend the existing final
+   socket boundary with an optional internal pre-send authorization callback;
+   strip it before Baileys. Preserve ordinary commands without the option.
+4. Two concurrent actions globally, one per reactor, zero waiting queue;
+   persistent attempt limits: 3/reactor, 10/chat, 5/rule per minute. A global
+   off-by-default switch and rule disable/edit/delete abort pending operations.
+   Disconnect, original invalidation and membership changes cancel work.
+   Providers ignoring cancellation retain their occupied slot until settled;
+   deadlines prevent late sends. Check signal and live state after every await
+   and immediately before the final send. Errors are explicit internal outcome
+   codes; refused sends never count as delivered or use a fallback.
+5. Preserve bounded intake/storage and backup-before-migration. Classify new
+   transient tables as excluded, disable restored/unlinked rules and global
+   runtime, clear account data, and contain cleanup errors. Log fixed outcome
+   codes only, without original content, provider output, JIDs or rule args.
+6. Deterministic isolated tests cover schema 11/legacy upgrade and rollback,
+   matching/priority/epochs, roles and LID/PN collisions, real voice-STT reuse,
+   replay/restart claims, rates/concurrency, disable/kill/disconnect, stale or
+   invalidated originals, timeout/ignored cancellation/refused send and final
+   asynchronous preparation. Rerun existing Phase 05/06 regressions and full
+   offline gates; use final-head GitHub CI for Android/Docker/platform builds.
+7. Update phase/ADR/migration/test evidence, commit/push this feature branch,
+   open a Draft PR targeting the release branch and verify final head. No live
+   WhatsApp/provider/device test, merge, release, tag, deployment, 07c, 07.5 or
+   Phase 08.
+
+Privacy: only 07a bounded RAM originals; persistent execution/rate keys are
+hashes and timing metadata. No transcripts/media archive or historical lookup.
+At-most-once attempts may be lost after a crash or cancellation, and an already
+initiated external send cannot be retracted; never promise exactly-once delivery.
+Rollback: turn the global switch off and disable rules, retaining schema 12.
+For binary downgrade stop Levix and restore the verified schema-11 pre-migration
+copy under `MIGRATION.md`; credentials/API keys are intentionally omitted.
+
+Baseline `npm test` on `b383ed1`: **PASS**, 10194 checks, zero failures/crashes, 181.0 s; Linux x64 / Node 24.19.0, 2026-11-07. Log: `/tmp/levix-p07b/baseline-tests.log`.
+
+
+## Phase 07b implementation, review and verification
+
+Status: **IMPLEMENTED, PENDING FINAL-HEAD VERIFICATION / OWNER REVIEW** on
+`feat/v5-phase-07b`, based on merged `b383ed1`. The immutable final commit,
+Draft PR URL, final-head gate results and GitHub CI run are recorded in the PR
+verification record after this report is committed. The historical 07a evidence
+above is not a claim about 07b.
+
+### Architecture and observable contract
+
+- `automation/rules.cjs` validates a strict version-1 definition: one emoji;
+  add/change/remove transitions; original types; reactor role and optional exact
+  sender allowlist; `ping` or `stt`; source or linked-owner-private destination.
+  Unknown fields/actions/destinations, arbitrary arguments, URLs and executable
+  expressions are rejected. Removal matches the previous emoji; change/add the
+  new emoji. Lower priority number then binary lexical id selects one winner.
+  A refused/failed/unauthorized winner never falls through to another action.
+- `automation/engine.js` accepts only tokens minted by the verified intake;
+  actor/original data comes from a private serialized snapshot. An original
+  must be received and timestamped strictly after its rule's enablement and
+  this connection, with no future original timestamp relative to receipt.
+  Reconnect starts empty and old catch-up originals cannot execute.
+- Appended schema **12**, preserving every schema-11 migration byte: rule
+  revision, enablement timestamp and priority, `reaction_executions` and
+  `reaction_budgets`. Schema-11 seam rows become disabled. New rules and the
+  `reaction:enabled` global runtime default off. All edits disable the rule;
+  enablement rotates revision even within one millisecond. Internal
+  save/enable/delete/switch methods notify active engines synchronously.
+  Rule configuration changes rotate a constant-sized global configuration
+  revision and clear RAM conservatively, rather than copying every rule into
+  every original. Rule/configuration state is never provided by a model.
+- SQL prefilters trigger/transition/type. At most 100 matching candidates are
+  processed; overload fails closed without a metadata request. This is a
+  per-event work bound, not a total rule-count restriction: a regression enables
+  151 rules and successfully executes the selected trigger. Original retention
+  remains 30 minutes, 500 entries, 8 MiB / 64 KiB, including revision metadata.
+- Reactor/chat admission budgets are written before live group metadata reads:
+  **3/reactor and 10/chat attempts per fixed 60-second window**, starting on the
+  first attempt. Selected rules have **5 action attempts/window**. Trusted
+  aliases share budgets; learning an alias cannot reset an existing budget.
+  Nonmatching reactions perform no metadata/provider work. Two global jobs
+  across socket generations, one per proven reactor, **zero waiting queue**.
+  A cancelled provider ignoring its signal occupies its slot until it settles.
+- Before provider submission and final delivery, refresh source-group
+  membership and resolve the actual reactor through primary role records and
+  bounded authoritative LID mappings. Verify reactor, original author and bot
+  still have source access. Apply live command permission, disabled-command,
+  blacklist, sender-filter and STT capability checks. No permission default or
+  command-level requirement changed; the original author supplies no authority.
+- STT requires a verified PTT original. It reuses `downloadMedia`,
+  `assertWhatsAppAudio`, `assertAudio` and the existing `stt.transcribe`, including
+  provider selection/key checks, byte/output limits and cancellation. There is
+  no historical/quoted-audio search, new provider implementation, media archive
+  or temporary media file. Ping executes the existing command behind the same
+  validated delivery adapter. Replies use existing four-language strings.
+- Delivery uses Phase 05 `planDelivery`, with source sensitivity and only the
+  two supported rule destinations. Owner identity comes from paired credentials,
+  never a configured number. Cross-chat replies omit the original quote.
+  `sendBotMessage` propagates a private guard to `core/socket.js`: after all
+  async preparation and remote membership refresh, a synchronous live local
+  rule/permission/destination guard and AbortSignal check immediately precede
+  Baileys. Normal callers without the optional guard keep their behavior.
+- Kill, rule edit/disable/delete, group changes, original edit/delete/eviction,
+  disconnect and deadlines cancel pending work. Refused/rejected sends remain
+  failures and never get a raw-send retry. Fixed outcome codes contain no
+  transcript, private original, event args or provider error details.
+
+### Confirmed findings and fixes
+
+1. Removal dropped the previous emoji, preventing specific removal rules.
+   Return it from the atomic intake transition without changing the legacy
+   string-return contract used by existing claim callers.
+2. Legacy digit-only identity lookup and normal contact metadata merging could
+   make a coincident LID appear on an owner/admin record. Strict reaction roles
+   read only primary JIDs expanded through authoritative mappings, ignoring
+   mutable contact aliases. Recognized bot metadata is rejected before intake
+   sanitation; self originals/reactions and generated bot output are excluded.
+3. Explicit role writes (including linked-owner bootstrap) could grant a role
+   to the wrong same-digit primary record. A deterministic regression failed
+   four checks before the fix. Role writes now use exact/proven identities.
+   Separate mapped PN/LID records also exposed incomplete revocation; explicit
+   role updates now cover all proven primary aliases. Exact owners/admins keep
+   their permission levels; unrelated numeric collisions are denied, and
+   revocations remove every alias's grant. Ordinary no-role contact updates do
+   not change permission defaults or grant new roles.
+4. Cache-first group roles could remain valid after demotion. Refresh membership
+   before action/provider work, after download, and after final preparation;
+   group events synchronously cancel affected jobs. A final synchronous guard
+   catches local policy changes after asynchronous work.
+5. Unmatched reactions initially reached remote metadata without spending an
+   admission budget. Data-only filtering now precedes admission/RPC, and
+   unauthorized matching attempts spend persistent reactor/chat budgets first.
+   Regression storms make zero unmatched RPCs and stop matching spam at budget.
+6. Per-socket concurrency would free capacity on reconnect while old ignored
+   cancellations still ran. Slots now span all socket generations, remaining
+   occupied until actual settlement; late old work cannot send.
+7. Real owner-private delivery was always refused because `identity.cjs` called
+   `authRead` on a facade that does not export it. It now reads the existing
+   credential API directly from the DB store. A real wrapped-socket regression
+   verifies linked-account delivery and removed cross-chat quoting; missing
+   credentials still refuse without fallback.
+
+The orchestrator reviewed every diff and ran all gates. Read-only Codex review
+identified the role-write/revocation and metadata-storm issues. A delegated
+implementer wrote only `reaction-engine.test.mjs` and ran no tests/builds.
+Installed OpenCode free `opencode/glm-5.3-flash-free` and agy Gemini supplied
+read-only audit notes. Their unsupported alias/asymmetry and clock/budget design
+claims were checked against source rather than adopted blindly. Grok timed out
+with partial source-location notes; no completed independent Grok review is
+claimed. Read-only relay changed-file warnings reflect concurrent orchestrator
+edits; no delegated application changes or test/build claims were adopted.
+
+### Evidence and environment
+
+All workstation verification uses installed Node **24.19.0**, Linux x64,
+2026-11-07 UTC/Cairo, `npm_config_offline=true`, system
+`FFMPEG_BIN=/usr/bin/ffmpeg`, and the external-network guard in
+`tests/fixtures/no-external-network.cjs`. Only the owner-approved Git fetch
+obtained repository commits. No dependencies, tools, runtimes, models or
+artifacts were downloaded to the workstation. Official CI uses the repository's
+pinned Node **24.22.2**; runner dependency downloads are owner-authorized.
+
+| Gate at report preparation | Status and evidence |
+| --- | --- |
+| Baseline `npm test` on merged `b383ed1` | PASS: 10194 checks, 0 failures/crashes, 181.0 s |
+| Focused final working-tree reaction suites | PASS: **449 checks** = 223 engine + 51 execution/migration + 150 intake + 25 legacy migration; deterministic fake sockets/providers, real outbound guard, fake timers and fresh processes |
+| Existing `ai-media-cancellation` regressions | PASS: 44 checks, before full gate rerun |
+| Pre-commit full `npm test` | PASS: **10467 checks**, 0 failures/crashes, 190.0 s; final five candidate-bound assertions were subsequently added and pass in the 449-check focused run |
+| Pre-commit `npm run lint` | PASS: no errors; existing 196 warnings / 73 infos |
+| Pre-commit `npm run i18n:check` / `npm run docs:check` | PASS; existing strings reused, no new translation certification |
+| Pre-commit `npm run build:frontend` | PASS |
+| Pre-commit `npm run validate:tarball` | PASS: 36 checks; offline cache install and real artifact boot |
+| Pre-commit `npm run build:sea` / `npm run validate:sea` | PASS: 51 checks; executable embeds installed local Node |
+| Final immutable PR-head reruns / GitHub CI | NOT RUN at this report's preparation; must be recorded in the PR verification record before owner handoff, with commit SHA, actual results and run URL |
+| Local Docker/Android/macOS/Windows artifact builds | NOT RUN locally; applicable final-head GitHub CI must cover these builds |
+| Live WhatsApp/reaction/STT/provider/device delivery | NOT RUN: no separately authorized dedicated accounts/credentials; mocks/builds are not device QA |
+| 07c management API / four-language Rule Builder | NOT RUN, outside this slice |
+
+Pre-commit JSON/logs: `/tmp/levix-p07b/precommit-results.json` (its `head` is
+**the base of the dirty tested tree**, not a claim that those changes existed on
+that base commit). Focused logs: `reaction-final-focused.log`,
+`role-write-before.log`, `role-write-after.log`, `cancellation.log`. Final immutable
+reruns use `/tmp/levix-p07b/final-results.json` and referenced logs; those results,
+not the preliminary counts, determine the PR handoff status.
+
+### Limits, rollback and exact 07c prerequisites
+
+The contract is **at most one attempt per eligible event**, including one chosen
+rule/action claim, within the bounded eligibility/retention window. Claims commit
+before side effects. A crash after claiming, cancellation, saturation, refusal or
+provider failure can lose an action; no automatic retry or lower-rule fallback.
+An already initiated send can finish after cancellation and cannot necessarily
+be retracted. Remote delivery is not exactly once. Unknown/deleted/stale originals
+are skipped; unrelated external bots without recognizable metadata cannot always
+be identified, so rate limits also bound other-client storms. Live dedicated-account
+QA remains required before release claims about device/provider delivery.
+
+Rollback without downgrade: stop Levix, set `reaction:enabled` to JSON `false`
+in local `bot_settings` and disable `reaction_rules`, then restart. Keep schema
+12 intact. There is no temporary management API. For an actual binary downgrade,
+stop Levix and restore the verified schema-11 pre-migration copy per
+`MIGRATION.md`; do not edit schema stamps or run an older binary on schema 12.
+That secret-free copy requires re-entering API keys and pairing credentials.
+
+07c may start only after owner review/merge of this 07b Draft PR and separate
+owner authorization. Audit the merged release baseline, then build authenticated,
+same-origin/CSRF-protected management over these internal methods; never expose
+raw SQL/config writes. Validate definitions and show actionable statuses/operational
+limits; preserve explicit disabled-by-default enablement/epochs and global kill.
+Provide accessible responsive ar/en/pt-BR/es-419 controls using existing primitives,
+with matching backend validation and deterministic auth/CSRF/four-language tests.
+Any extra action/destination requires its own validation, authorization, routing
+and cancellation coverage. No additional product decision is required for 07b's
+initial allowlist. Phase 07.5, Phase 08, release/deploy/Play work have not started.
+
+## Phase 07b integration with release/5.0.0-beta.1 (2026-11-08)
+
+### Why
+
+PR #136 (`feat/v5-phase-07b`, head `cc6a259`) was based on `b383ed1`. The
+release branch moved to `4d6d191` with the Phase 07.5 E2EE work (PR #137),
+Signal session console protection (#140), debug-log name redaction (#139) and
+the dashboard polling fallback (#138). GitHub reported PR #136 as conflicting.
+
+### Merge
+
+Local merge `39f2f7a` of `cc6a259` into `4d6d191`. One textual conflict,
+`src/core/events.js` `group-participants.update`. Resolution order:
+`markRosterChanged(sock, id)` first (07.5, before any await), then
+`automation.cancelChat(id)` (07b), then the contained participants handler.
+`src/core/socket.js` and `src/db/store.cjs` merged without conflict; the final
+send path is delivery guard refresh and assert, abort check, Baileys send, then
+the 07.5 recent-message cache step.
+
+No dependency change. Release adds no migration; schema 12 stays the last
+migration, appended after 11.
+
+Preservation audit (agy, Gemini 3.8 Flash, read-only): every 07.5 hunk in 21
+source files and 11 test files is present unchanged in `39f2f7a`; the only
+combined hunk is the events.js conflict above.
+
+### Review findings and fixes
+
+Read-only Codex review of `39f2f7a` found two interaction defects. Both are
+fixed with regression tests.
+
+1. `8f6e409` fix(session): logout fenced the old auth store and then awaited
+   `sock.logout()` for up to `SOCKET_CLOSE_TIMEOUT_MS` before `#detach` closed
+   the socket's reaction engine. A job paused on a media download could resume
+   and start a paid transcription in that window. The reaction intake is now
+   disposed synchronously before the fence, like every other teardown path.
+   Test: `tests/session.test.mjs`, section "logout closes reaction automation
+   before it waits for the socket"; on the unfixed code the assertion "reaction
+   intake closed while socket logout() is pending" fails (expected 1, got 0).
+   Implemented by agy (Claude Sonnet 5.5).
+2. `b555014` fix(automation): the engine read rosters with a direct
+   `sock.groupMetadata()`. The live answer never reached the 07.5 shared roster
+   that Baileys uses to choose sender-key recipients, did not coalesce with a
+   concurrent roster refresh and skipped the generation check. New
+   `readLiveGroupMetadata()` in `src/utils/groupMetadataCache.cjs` joins or
+   starts the shared fetch, follows supersession, writes the accepted answer
+   back and never returns a cached or stale roster. A failed or superseded read
+   now ends the job as `REACTION_INACCESSIBLE` (it was `ACTION_FAILED`). Tests:
+   6 new cases in `tests/group-roster-sync.test.mjs` and 2 in
+   `tests/reaction-engine.test.mjs`; on the unfixed code 6 and 2 fail.
+   Implemented by Codex.
+
+Codex delta review of `b555014`: READY, no new findings. Joining an in-flight
+fetch is accepted because the shared fetch only returns an answer from the
+current roster generation and participant changes cancel jobs synchronously.
+
+Other review answers, all OK: send boundary ordering, key-store errors become
+`ACTION_FAILED` with no retry or fallback send and slots released in `finally`,
+unlink disables rules and clears the five transient reaction tables, backup
+classification and disabled restore, `identity.cjs` credential reads after the
+fence, the rewritten recent-message cache, permission composition, and logging
+(fixed outcome codes only).
+
+### Owner decision carried by 07b
+
+`src/messaging/identity.cjs` in 07b reads the linked-account credentials from
+the database store directly. Before, it called `authRead` on a module that does
+not export it, so the Reply Router refused every linked-owner-private
+destination (Phase 07.5 finding C-11, left open for the owner). With 07b, an
+ordinary command reply can reach the linked account's own chat when Settings
+`reply_route` names it. This is the documented Reply Router behavior. It needs
+the owner's explicit approval as part of the 07b merge.
+
+### Verification
+
+Linux x64, Node 24.19.0, offline: `npm_config_offline=true`,
+`FFMPEG_BIN=/usr/bin/ffmpeg`,
+`NODE_OPTIONS=--require=<repo>/tests/fixtures/no-external-network.cjs`.
+
+| Gate | Status |
+| --- | --- |
+| `npm test` on merge `39f2f7a` | PASS: 10890 checks, 0 failed, 361.6 s |
+| `npm test` on final head `b555014` | PASS: 10945 checks, 0 failed, 333.9 s |
+| Focused: `session.test` / `group-roster-sync` / `reaction-engine` on `b555014` | PASS: 196 / 183 / 235 checks |
+| `npm run lint` on `b555014` | PASS: 0 errors, 208 warnings (same as release `4d6d191`), 80 infos (74 on release; 6 new lone-block infos in the new roster tests) |
+| `npm run i18n:check`, `npm run docs:check` | PASS |
+| `npm run build:frontend` | PASS |
+| `npm run validate:tarball` | PASS: 36 checks |
+| `npm run build:sea`, `npm run validate:sea` | PASS: 51 checks |
+| GitHub CI (Android, Docker, macOS, Windows) on the updated PR head | NOT RUN: waits for owner approval to push |
+| Live WhatsApp, reaction, STT or provider QA | NOT RUN: not authorized |
+
+### Status
+
+Integration branch `integration/v5-phase-07b` (local only). Updating PR #136 is
+a fast-forward of `feat/v5-phase-07b` (no force push), after owner approval. No
+merge, release or Play upload.
+
+Phase 07c (Rule Builder) starts only after PR #136 is merged and the owner
+approves.
