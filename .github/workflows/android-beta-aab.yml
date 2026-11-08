@@ -1,0 +1,400 @@
+name: Android Closed Testing (verify, then publish)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Verify a new AAB, or publish an existing verified artifact
+        type: choice
+        options: [verify, publish]
+        default: verify
+        required: true
+      source_sha:
+        description: Approved release head to build (40 lowercase hex characters)
+        type: string
+        required: true
+      version_name:
+        description: Committed Android and npm version
+        type: string
+        default: 5.0.0-beta.1
+        required: true
+      version_code:
+        description: Committed Android versionCode
+        type: string
+        default: '71'
+        required: true
+      closed_track:
+        description: Existing Closed testing track (production, beta, internal and qa forbidden)
+        type: string
+        default: alpha
+        required: true
+      verify_run_id:
+        description: Successful verify run ID (required for publish)
+        type: string
+        required: false
+      aab_sha256:
+        description: Verified AAB SHA-256 (required for publish, 64 lowercase hex characters)
+        type: string
+        required: false
+
+jobs:
+  closed-testing:
+    if: github.ref == 'refs/heads/ci/play-closed-5.0.0-beta.1'
+    runs-on: ubuntu-latest
+    environment: google-play
+    permissions:
+      contents: read
+      actions: read
+    concurrency:
+      # Share the existing Play publisher's lock, across tracks and modes.
+      group: google-play
+      cancel-in-progress: false
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      MODE: ${{ inputs.mode }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      VERSION_NAME: ${{ inputs.version_name }}
+      VERSION_CODE: ${{ inputs.version_code }}
+      CLOSED_TRACK: ${{ inputs.closed_track }}
+      VERIFY_RUN_ID: ${{ inputs.verify_run_id }}
+      AAB_SHA256: ${{ inputs.aab_sha256 }}
+      PACKAGE_NAME: net.leviro.levix
+      LEVIX_ANDROID_ABIS: arm64-v8a,armeabi-v7a
+
+    steps:
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          [[ "$MODE" == verify || "$MODE" == publish ]]
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$VERSION_NAME" =~ ^5\.0\.0-beta\.[1-9][0-9]*$ ]]
+          [[ "$VERSION_CODE" =~ ^[1-9][0-9]{1,9}$ ]]
+          (( VERSION_CODE >= 70 && VERSION_CODE <= 2100000000 ))
+          [[ "$CLOSED_TRACK" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,49}$ ]]
+          case "${CLOSED_TRACK,,}" in production|beta|internal|qa) exit 1 ;; esac
+          if [[ "$MODE" == publish ]]; then
+            [[ "$VERIFY_RUN_ID" =~ ^[0-9]{1,20}$ ]]
+            [[ "$AAB_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          fi
+          umask 077
+          mkdir -p "$RUNNER_TEMP/play-closed"
+
+      - name: Check out workflow helpers
+        uses: actions/checkout@v7.0.1
+        with:
+          # The dispatched commit on the allowed branch, not a moving main.
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Check out approved source
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require the current approved release head
+        run: |
+          set -euo pipefail
+          [[ "$(git -C source rev-parse HEAD)" == "$SOURCE_SHA" ]]
+          approved_sha="$(git -C source ls-remote --exit-code origin refs/heads/release/5.0.0-beta.1 | awk '{print $1}')"
+          [[ "$approved_sha" == "$SOURCE_SHA" ]]
+
+      - name: Require committed versions and package
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const gradle = readFileSync('source/android/app/build.gradle.kts', 'utf8');
+          for (const [key, expected] of [
+            ['versionCode', process.env.VERSION_CODE],
+            ['versionName', JSON.stringify(process.env.VERSION_NAME)],
+            ['applicationId', '"net.leviro.levix"'],
+          ]) {
+            const lines = gradle.split(/\r?\n/).filter(line => new RegExp(`^\\s*${key}\\s*=`).test(line));
+            if (lines.length !== 1 || lines[0].trim() !== `${key} = ${expected}`) {
+              throw new Error(`Expected exactly one committed ${key} assignment matching this run`);
+            }
+          }
+          if (JSON.parse(readFileSync('source/package.json', 'utf8')).version !== process.env.VERSION_NAME) {
+            throw new Error('Committed package.json version does not match this run');
+          }
+          NODE
+
+      - name: Set up Node 24 from approved source
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: source/.node-version
+          cache: ${{ inputs.mode == 'verify' && 'npm' || '' }}
+          cache-dependency-path: |
+            source/package-lock.json
+            source/frontend/package-lock.json
+
+      - name: Play preflight
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          umask 077
+          export OUT="$RUNNER_TEMP/play-before.json"
+          node scripts/play-closed-testing.mjs preflight
+
+      - name: Set up Java 17
+        if: inputs.mode == 'verify'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache Android build cache and Node runtime
+        if: inputs.mode == 'verify'
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/levix-android
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: android-${{ runner.os }}-v2-${{ hashFiles('source/android/scripts/fetch-node-android.sh', 'source/android/scripts/build-ffmpeg-android.sh', 'source/android/scripts/termux-packages.lock', 'source/android/scripts/node-runtime.lock', 'source/android/scripts/node-runtime-archive.py', 'source/android/gradle/wrapper/gradle-wrapper.properties', 'source/package-lock.json', 'source/frontend/package-lock.json') }}
+          restore-keys: |
+            android-${{ runner.os }}-v2-
+
+      - name: Set up Android SDK 36 and pinned NDK
+        if: inputs.mode == 'verify'
+        working-directory: source
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER="$(command -v sdkmanager)"
+          fi
+          NDK_VERSION="$(sed -n 's/^NDK_VERSION="\(.*\)"$/\1/p' android/scripts/build-ffmpeg-android.sh)"
+          [[ -n "$NDK_VERSION" ]]
+          PACKAGES=()
+          [ -d "$ANDROID_HOME/platforms/android-36" ] || PACKAGES+=("platforms;android-36")
+          [ -f "$ANDROID_HOME/ndk/$NDK_VERSION/source.properties" ] || PACKAGES+=("ndk;$NDK_VERSION")
+          if [ "${#PACKAGES[@]}" -gt 0 ]; then
+            yes | "$SDKMANAGER" --licenses > /dev/null || true
+            "$SDKMANAGER" "${PACKAGES[@]}" > /dev/null
+          fi
+          command -v pkg-config > /dev/null || sudo apt-get install -y pkg-config
+
+      - name: Fetch Node runtimes and build FFmpeg for both ABIs
+        if: inputs.mode == 'verify'
+        working-directory: source
+        run: bash android/scripts/fetch-node-android.sh
+
+      - name: Install dependencies and run source gates
+        if: inputs.mode == 'verify'
+        working-directory: source
+        run: |
+          set -euo pipefail
+          npm ci
+          npm --prefix frontend ci
+          npm run i18n:check
+          npm run lint
+          npm test
+
+      - name: Decode upload signing key
+        if: inputs.mode == 'verify'
+        env:
+          LEVIX_KEYSTORE_BASE64: ${{ secrets.LEVIX_KEYSTORE_BASE64 }}
+          LEVIX_KEYSTORE_PASSWORD: ${{ secrets.LEVIX_KEYSTORE_PASSWORD }}
+          LEVIX_KEY_ALIAS: ${{ secrets.LEVIX_KEY_ALIAS }}
+          LEVIX_KEY_PASSWORD: ${{ secrets.LEVIX_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          for name in LEVIX_KEYSTORE_BASE64 LEVIX_KEYSTORE_PASSWORD LEVIX_KEY_ALIAS LEVIX_KEY_PASSWORD; do
+            [[ -n "${!name}" ]] || { printf 'Missing signing secret: %s\n' "$name" >&2; exit 1; }
+          done
+          printf '%s' "$LEVIX_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/levix-upload.jks"
+          test -s "$RUNNER_TEMP/levix-upload.jks"
+          printf 'LEVIX_KEYSTORE_FILE=%s/levix-upload.jks\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+
+      - name: Run Android unit tests and stage signed AAB
+        if: inputs.mode == 'verify'
+        working-directory: source/android
+        env:
+          LEVIX_KEYSTORE_PASSWORD: ${{ secrets.LEVIX_KEYSTORE_PASSWORD }}
+          LEVIX_KEY_ALIAS: ${{ secrets.LEVIX_KEY_ALIAS }}
+          LEVIX_KEY_PASSWORD: ${{ secrets.LEVIX_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          ./gradlew :app:testDebugUnitTest :app:stageLevixBundle --stacktrace --no-daemon --no-configuration-cache
+
+      - name: Verify AAB signature, ABIs and manifest
+        if: inputs.mode == 'verify'
+        working-directory: source/android/app/build/outputs/bundle/release
+        run: |
+          set -euo pipefail
+          umask 077
+          aab=levix-android.aab
+          test -s "$aab"
+          unzip -tq "$aab"
+          jarsigner -verify "$aab" > /dev/null
+          keytool -J-Duser.language=en -J-Duser.country=US -printcert -jarfile "$aab" \
+            | grep -E '^[[:space:]]*SHA256: ([0-9A-F]{2}:){31}[0-9A-F]{2}[[:space:]]*$' \
+            | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' > upload-cert-sha256.txt
+          [[ "$(wc -l < upload-cert-sha256.txt)" -eq 1 ]]
+          unzip -Z1 "$aab" > "$RUNNER_TEMP/play-closed/aab-entries.txt"
+          for abi in arm64-v8a armeabi-v7a; do
+            grep -E "^base/lib/$abi/[^/]+\.so$" "$RUNNER_TEMP/play-closed/aab-entries.txt"
+            grep -Fx "base/lib/$abi/libnode.so" "$RUNNER_TEMP/play-closed/aab-entries.txt"
+          done
+          bundletool="$RUNNER_TEMP/play-closed/bundletool.jar"
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+            https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar \
+            --output "$bundletool"
+          printf 'a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29  %s\n' "$bundletool" | sha256sum --check --status
+          java -jar "$bundletool" dump manifest --bundle "$aab" > manifest.txt
+          python3 - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          root = ET.parse('manifest.txt').getroot()
+          android = '{http://schemas.android.com/apk/res/android}'
+          assert root.tag == 'manifest'
+          assert root.get('package') == 'net.leviro.levix'
+          assert root.get(android + 'versionCode') == os.environ['VERSION_CODE']
+          assert root.get(android + 'versionName') == os.environ['VERSION_NAME']
+          assert all(element.get(android + 'debuggable') != 'true' for element in root.iter())
+          PY
+          # Bind the four-file artifact to the approved source without a fifth file.
+          printf '\n<!-- source_sha: %s -->\n' "$SOURCE_SHA" >> manifest.txt
+          sha256sum "$aab" > levix-android.aab.sha256
+
+      - name: Upload verified Closed testing artifact
+        if: inputs.mode == 'verify'
+        uses: actions/upload-artifact@v7
+        with:
+          name: levix-closed-${{ inputs.version_name }}-code-${{ inputs.version_code }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            source/android/app/build/outputs/bundle/release/levix-android.aab
+            source/android/app/build/outputs/bundle/release/levix-android.aab.sha256
+            source/android/app/build/outputs/bundle/release/upload-cert-sha256.txt
+            source/android/app/build/outputs/bundle/release/manifest.txt
+
+      - name: Verify-only summary
+        if: inputs.mode == 'verify'
+        run: |
+          set -euo pipefail
+          artifact=source/android/app/build/outputs/bundle/release
+          {
+            printf '\n### Verified AAB\n- Source SHA: %s\n- Version: %s (%s)\n' "$SOURCE_SHA" "$VERSION_NAME" "$VERSION_CODE"
+            printf -- '- AAB SHA-256: %s\n' "$(cut -d ' ' -f 1 "$artifact/levix-android.aab.sha256")"
+            printf -- '- Upload certificate %s\n' "$(cat "$artifact/upload-cert-sha256.txt")"
+            printf -- '- Both ABIs present: arm64-v8a and armeabi-v7a (including libnode.so).\n'
+            printf -- '- Preflight summary appears above.\n- Verify only; nothing uploaded to Google Play.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Require a successful verify run from this workflow
+        if: inputs.mode == 'publish'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          umask 077
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VERIFY_RUN_ID" > "$RUNNER_TEMP/play-closed/verify-run.json"
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const run = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/play-closed/verify-run.json`, 'utf8'));
+          if (String(run.id) !== process.env.VERIFY_RUN_ID
+            || run.repository?.full_name !== process.env.GITHUB_REPOSITORY
+            || run.path !== '.github/workflows/android-beta-aab.yml'
+            || run.head_branch !== 'ci/play-closed-5.0.0-beta.1'
+            || run.event !== 'workflow_dispatch' || run.status !== 'completed' || run.conclusion !== 'success') {
+            throw new Error('Verify run provenance or conclusion does not match');
+          }
+          NODE
+
+      - name: Download verified AAB artifact
+        if: inputs.mode == 'publish'
+        uses: actions/download-artifact@v8
+        with:
+          name: levix-closed-${{ inputs.version_name }}-code-${{ inputs.version_code }}
+          run-id: ${{ inputs.verify_run_id }}
+          github-token: ${{ github.token }}
+          path: dist/verified
+
+      - name: Require matching AAB checksums, source and version
+        if: inputs.mode == 'publish'
+        working-directory: dist/verified
+        run: |
+          set -euo pipefail
+          test -s levix-android.aab
+          [[ "$(sha256sum levix-android.aab | cut -d ' ' -f 1)" == "$AAB_SHA256" ]]
+          [[ "$(cat levix-android.aab.sha256)" == "$AAB_SHA256  levix-android.aab" ]]
+          grep -Fx -- "<!-- source_sha: $SOURCE_SHA -->" manifest.txt > /dev/null
+          python3 - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          root = ET.parse('manifest.txt').getroot()
+          android = '{http://schemas.android.com/apk/res/android}'
+          assert root.tag == 'manifest'
+          assert root.get('package') == 'net.leviro.levix'
+          assert root.get(android + 'versionCode') == os.environ['VERSION_CODE']
+          assert root.get(android + 'versionName') == os.environ['VERSION_NAME']
+          assert all(element.get(android + 'debuggable') != 'true' for element in root.iter())
+          PY
+
+      - name: Write Closed beta release notes
+        if: inputs.mode == 'publish'
+        run: |
+          set -euo pipefail
+          mkdir -p dist/whatsnew
+          cat > dist/whatsnew/whatsnew-en-US <<'NOTES'
+          Levix v5 closed beta: improvements to WhatsApp group message reliability, connection recovery, security, and overall stability. Please report any issues with pairing, message delivery, or backup and restore.
+          NOTES
+          cat > dist/whatsnew/whatsnew-ar <<'NOTES'
+          نسخة Levix v5 التجريبية: تحسينات في موثوقية رسائل المجموعات، واستعادة الاتصال، والأمان، واستقرار التطبيق. نرجو الإبلاغ عن أي مشاكل في الربط أو الرسائل أو النسخ الاحتياطي والاستعادة.
+          NOTES
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          for (const locale of ['en-US', 'ar']) {
+            if ([...readFileSync(`dist/whatsnew/whatsnew-${locale}`, 'utf8')].length > 500) {
+              throw new Error(`Release notes exceed 500 characters: ${locale}`);
+            }
+          }
+          NODE
+
+      - name: Publish verified AAB to Closed testing
+        id: publish
+        if: inputs.mode == 'publish'
+        uses: r0adkll/upload-google-play@v1
+        env:
+          # Confine any action-created credential temp files to the private directory.
+          TMPDIR: ${{ runner.temp }}/play-closed
+          TMP: ${{ runner.temp }}/play-closed
+          TEMP: ${{ runner.temp }}/play-closed
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: net.leviro.levix
+          releaseFiles: dist/verified/levix-android.aab
+          tracks: ${{ inputs.closed_track }}
+          status: completed
+          releaseName: ${{ inputs.version_name }} (${{ inputs.version_code }})
+          whatsNewDirectory: dist/whatsnew
+
+      - name: Play postflight
+        # Check the final state even if the uploader failed after committing.
+        if: always() && inputs.mode == 'publish' && steps.publish.outcome != 'skipped'
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          export BEFORE="$RUNNER_TEMP/play-before.json"
+          node scripts/play-closed-testing.mjs postflight
+
+      - name: Remove signing key and temporary files
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -f -- "$RUNNER_TEMP/levix-upload.jks" "$RUNNER_TEMP/play-before.json"
+          rm -f -- "$GITHUB_WORKSPACE/serviceAccountJson.json"
+          rm -rf -- "$RUNNER_TEMP/play-closed"
