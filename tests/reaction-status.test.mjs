@@ -122,6 +122,45 @@ for (const action of ["edit", "enable", "disable", "delete"]) {
   equal(`${action} preserves unrelated status`, status.get("unrelated").lastCode, "BUSY");
 }
 
+section("account clearing resets status without resetting on the global switch");
+store.saveReactionRule({ id: "account-rule", chatJid: group, priority: 0, definition });
+store.setReactionRuleEnabled("account-rule", true);
+const accountRevision = store.getReactionRule("account-rule").revision;
+const oldEpoch = status.epoch();
+status.record("account-rule", "DELIVERED", 1);
+status.record(null, "NO_MATCH", 2);
+for (const enabled of [true, false]) {
+  store.setReactionAutomationEnabled(enabled);
+  equal("global switch preserves rule history", status.get("account-rule").lastCode, "DELIVERED");
+  equal("global switch preserves global history", status.global().lastCode, "NO_MATCH");
+  equal("global switch preserves epoch", status.epoch(), oldEpoch);
+}
+store.clearReactionAccountState();
+equal("account clearing disables rules", store.getReactionRule("account-rule").enabled, 0);
+equal(
+  "account clearing leaves revisions unchanged",
+  store.getReactionRule("account-rule").revision,
+  accountRevision,
+);
+equal("account clearing removes rule history", status.get("account-rule"), null);
+equal("account clearing removes unrelated history", status.get("unrelated"), null);
+equal("account clearing removes global history", status.global(), null);
+ok("account clearing advances epoch", status.epoch() !== oldEpoch);
+status.record("account-rule", "REACTION_CANCELLED", 3, oldEpoch);
+status.record(null, "REACTION_CANCELLED", 3, oldEpoch);
+equal("old epoch cannot restore rule history", status.get("account-rule"), null);
+equal("old epoch cannot restore global history", status.global(), null);
+status.record("new-account-rule", "DELIVERED", 4);
+status.record(null, "BUSY", 4);
+status.record("new-account-rule", "ACTION_FAILED", 5, oldEpoch);
+status.record(null, "ACTION_FAILED", 5, oldEpoch);
+equal(
+  "old epoch cannot overwrite current rule history",
+  status.get("new-account-rule").lastCode,
+  "DELIVERED",
+);
+equal("old epoch cannot overwrite current global history", status.global().lastCode, "BUSY");
+
 section("status never persists and restart starts empty");
 const before = db.prepare("SELECT total_changes() AS n").get().n;
 const schemaBefore = JSON.stringify(
@@ -267,6 +306,150 @@ try {
     "all runtime data remains code-only",
     !JSON.stringify(status.get("engine-rule")).includes(privateText),
   );
+
+  section("late selected jobs cannot restore edited, disabled or deleted rule status");
+  for (const change of ["edit", "disable", "delete"]) {
+    for (const completion of ["cancelled", "late-success"]) {
+      clock += 60_001;
+      store.saveReactionRule({ id: "engine-rule", chatJid: group, priority: 0, definition });
+      store.setReactionRuleEnabled("engine-rule", true, clock);
+      store.setReactionAutomationEnabled(true);
+      status.reset();
+      clock += 2000;
+      entered = false;
+      release = null;
+      send = async (_sock, _jid, _content, options) => {
+        entered = true;
+        await new Promise((resolve) => {
+          release = resolve;
+        });
+        if (completion === "cancelled") options.signal.throwIfAborted();
+        return { key: { id: "late" } };
+      };
+      receive();
+      for (let turn = 0; turn < 100 && !entered; turn++)
+        await new Promise((resolve) => setImmediate(resolve));
+      ok(`${change}/${completion}: job selected rule`, entered);
+      if (change === "edit")
+        store.saveReactionRule({ id: "engine-rule", chatJid: group, priority: 1, definition });
+      if (change === "disable") store.setReactionRuleEnabled("engine-rule", false);
+      if (change === "delete") store.deleteReactionRule("engine-rule");
+      equal(`${change}/${completion}: history cleared`, status.get("engine-rule"), null);
+      if (completion === "late-success") {
+        if (change === "delete")
+          store.saveReactionRule({ id: "engine-rule", chatJid: group, priority: 0, definition });
+        status.record("engine-rule", "BUSY", clock);
+      }
+      release?.();
+      await engine.settled();
+      equal(
+        `${change}/${completion}: old outcome goes global`,
+        status.global()?.lastCode,
+        completion === "cancelled" ? "REACTION_CANCELLED" : "DELIVERED",
+      );
+      if (completion === "cancelled")
+        equal(`${change}: stale status stays cleared`, status.get("engine-rule"), null);
+      else {
+        equal(
+          `${change}: current history survives late success`,
+          status.get("engine-rule").lastCode,
+          "BUSY",
+        );
+        equal(
+          `${change}: current counts stay unchanged`,
+          JSON.stringify(status.get("engine-rule").counts),
+          '{"BUSY":1}',
+        );
+      }
+    }
+  }
+
+  section("old-account jobs cannot restore rule or global status after reset");
+  const savedMetadata = sock.groupMetadata;
+  for (const stage of ["metadata", "send"]) {
+    clock += 60_001;
+    store.saveReactionRule({ id: "engine-rule", chatJid: group, priority: 0, definition });
+    store.setReactionRuleEnabled("engine-rule", true, clock);
+    store.setReactionAutomationEnabled(true);
+    status.reset();
+    const revision = store.getReactionRule("engine-rule").revision;
+    clock += 2000;
+    entered = false;
+    release = null;
+    if (stage === "metadata") {
+      sock.groupMetadata = async (jid) => {
+        entered = true;
+        await new Promise((resolve) => {
+          release = resolve;
+        });
+        return savedMetadata(jid);
+      };
+    } else {
+      send = async (_sock, _jid, _content, options) => {
+        entered = true;
+        await new Promise((resolve) => {
+          release = resolve;
+        });
+        options.signal.throwIfAborted();
+        return { key: { id: "late" } };
+      };
+    }
+    receive();
+    for (let turn = 0; turn < 100 && !entered; turn++)
+      await new Promise((resolve) => setImmediate(resolve));
+    ok(`${stage}: old-account work is pending`, entered);
+    status.record("engine-rule", "DELIVERED", clock);
+    status.record(null, "NO_MATCH", clock);
+    store.clearReactionAccountState();
+    equal(
+      `${stage}: clearing does not rotate revision`,
+      store.getReactionRule("engine-rule").revision,
+      revision,
+    );
+    equal(`${stage}: rule history reset`, status.get("engine-rule"), null);
+    equal(`${stage}: global history reset`, status.global(), null);
+    if (stage === "metadata") {
+      store.setReactionRuleEnabled("engine-rule", true, clock);
+      store.setReactionAutomationEnabled(true);
+      status.record("engine-rule", "BUSY", clock);
+      status.record(null, "BUSY", clock);
+    }
+    release?.();
+    await engine.settled();
+    sock.groupMetadata = savedMetadata;
+    equal(`${stage}: old-account job was cancelled`, engine.stats().lastCode, "REACTION_CANCELLED");
+    if (stage === "send") {
+      equal(
+        "selected old-account job cannot resurrect rule history",
+        status.get("engine-rule"),
+        null,
+      );
+      equal("selected old-account job cannot resurrect global history", status.global(), null);
+    } else {
+      equal(
+        "unselected old-account job cannot overwrite current rule history",
+        status.get("engine-rule").lastCode,
+        "BUSY",
+      );
+      equal(
+        "unselected old-account job cannot overwrite current global history",
+        status.global().lastCode,
+        "BUSY",
+      );
+    }
+  }
+  clock += 60_001;
+  store.setReactionRuleEnabled("engine-rule", true, clock);
+  store.setReactionAutomationEnabled(true);
+  clock += 2000;
+  send = async (_sock, _jid, _content, options) => {
+    options.signal.throwIfAborted();
+    options.deliveryGuard.assert();
+    return { key: { id: "new-account-sent" } };
+  };
+  receive();
+  await engine.settled();
+  equal("current-account jobs still record outcomes", status.get("engine-rule")?.lastCode, "DELIVERED");
 } finally {
   engine.close();
   sender.sendBotMessage = savedSend;

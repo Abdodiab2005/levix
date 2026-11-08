@@ -90,10 +90,15 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
   let closed = false;
   let lastCode = null;
   let completed = 0;
-  const outcome = (code, ruleId = null) => {
+  const outcome = (code, job = null) => {
     lastCode = code;
     completed++;
-    status.record(ruleId, code, now());
+    const ruleId =
+      job?.rule && store.getReactionRule(job.rule.id)?.revision === job.rule.revision
+        ? job.rule.id
+        : null;
+    // Account clearing disables rows without rotating their revisions.
+    status.record(ruleId, code, now(), job?.statusEpoch ?? status.epoch());
     logger.debug({ code }, "[Reactions] action outcome");
   };
   const cancel = (predicate = () => true) => {
@@ -360,7 +365,14 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
       outcome(admission);
       return;
     }
-    const job = { token, event, candidates, controller: new AbortController(), rule: null };
+    const job = {
+      token,
+      event,
+      candidates,
+      controller: new AbortController(),
+      rule: null,
+      statusEpoch: status.epoch(),
+    };
     active.add(job);
     inFlight.add(job);
     const timeout = Math.max(
@@ -370,11 +382,11 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
     const timer = setTimeout(() => job.controller.abort(new Error("REACTION_TIMEOUT")), timeout);
     job.work = execute(job)
       .then(
-        (code) => outcome(code, job.rule?.id ?? null),
+        (code) => outcome(code, job),
         (error) => {
           const message = String(job.controller.signal.reason?.message || error?.message || "");
           const code = OUTCOMES.has(message) ? message : "ACTION_FAILED";
-          outcome(code, job.rule?.id ?? null);
+          outcome(code, job);
         },
       )
       .finally(() => {

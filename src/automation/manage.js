@@ -98,21 +98,64 @@ function parsedRule(row) {
   };
 }
 
-function sharesTrigger(a, b) {
-  return (
-    a.row.chat_jid === b.row.chat_jid &&
-    typeof a.definition?.emoji === "string" &&
-    a.definition.emoji === b.definition?.emoji &&
-    Array.isArray(a.definition.transitions) &&
-    Array.isArray(b.definition.transitions) &&
-    Array.isArray(a.definition.originalTypes) &&
-    Array.isArray(b.definition.originalTypes) &&
-    a.definition.transitions.some((item) => b.definition.transitions.includes(item)) &&
-    a.definition.originalTypes.some((item) => b.definition.originalTypes.includes(item))
-  );
+function compareRules(a, b) {
+  return a.priority - b.priority || Buffer.compare(Buffer.from(a.id), Buffer.from(b.id));
 }
 
-function ruleView(item, items, context) {
+function triggerKeys(definition) {
+  if (typeof definition?.emoji !== "string") return [];
+  // SQL prefiltering runs before definition validation and uses json_each.
+  const values = (value) =>
+    new Set(
+      (value && typeof value === "object" ? Object.values(value) : [value]).filter(
+        (item) => typeof item === "string",
+      ),
+    );
+  const keys = [];
+  const types = values(definition.originalTypes);
+  for (const transition of values(definition.transitions))
+    for (const type of types)
+      keys.push(JSON.stringify([definition.emoji, transition, type]));
+  return keys;
+}
+
+function triggerIndex(items) {
+  const byChat = new Map();
+  for (const item of items) {
+    const chat = item.row.chat_jid;
+    if (!byChat.has(chat)) byChat.set(chat, []);
+    byChat.get(chat).push(item);
+  }
+  const byAliases = new Map();
+  const index = new Map();
+  for (const chat of byChat.keys()) {
+    const aliases = store.reactionIdentityAliases(chat);
+    const aliasKey = JSON.stringify([...aliases].sort());
+    let buckets = byAliases.get(aliasKey);
+    if (!buckets) {
+      buckets = new Map();
+      // reactionRulesForChats refuses an alias expansion above four chats.
+      for (const alias of aliases.length <= 4 ? aliases : []) {
+        for (const item of byChat.get(alias) || []) {
+          for (const key of triggerKeys(item.definition)) {
+            if (!buckets.has(key)) buckets.set(key, { enabled: 0, first: [] });
+            const bucket = buckets.get(key);
+            if (item.row.enabled === 1) bucket.enabled++;
+            // Later rows cannot enter the capped list of earlier overlaps.
+            bucket.first.push(item.row);
+            bucket.first.sort(compareRules);
+            if (bucket.first.length > 20) bucket.first.pop();
+          }
+        }
+      }
+      byAliases.set(aliasKey, buckets);
+    }
+    index.set(chat, buckets);
+  }
+  return index;
+}
+
+function ruleView(item, index, context) {
   const { row, definition, valid } = item;
   const statuses = [];
   if (!context.automation.enabled) statuses.push("AUTOMATION_OFF");
@@ -124,19 +167,20 @@ function ruleView(item, items, context) {
     if (definition.destination.mode === "owner_private" && !context.owner.linked)
       statuses.push("OWNER_NOT_LINKED");
   }
-  const related = items.filter((other) => sharesTrigger(item, other));
-  if (related.filter((other) => other.row.enabled).length > REACTION_ACTION_LIMITS.candidateLimit)
+  const buckets = triggerKeys(definition)
+    .map((key) => index.get(row.chat_jid).get(key))
+    .filter(Boolean);
+  if (buckets.some((bucket) => bucket.enabled > REACTION_ACTION_LIMITS.candidateLimit))
     statuses.push("CANDIDATE_LIMIT");
   if (!statuses.length) statuses.push("READY");
-  const overlaps = related
-    .filter(
-      (other) =>
-        other.row.priority < row.priority ||
-        (other.row.priority === row.priority &&
-          Buffer.compare(Buffer.from(other.row.id), Buffer.from(row.id)) < 0),
-    )
+  const earlier = new Map();
+  for (const bucket of buckets)
+    for (const other of bucket.first)
+      if (compareRules(other, row) < 0) earlier.set(other.id, other);
+  const overlaps = [...earlier.values()]
+    .sort(compareRules)
     .slice(0, 20)
-    .map((other) => other.row.id);
+    .map((other) => other.id);
   return {
     id: row.id,
     revision: row.revision,
@@ -165,7 +209,7 @@ function view(id) {
   const items = store.listReactionRules().map(parsedRule);
   return ruleView(
     items.find((item) => item.row.id === id),
-    items,
+    triggerIndex(items),
     context(),
   );
 }
@@ -173,10 +217,11 @@ function view(id) {
 export function overview() {
   const state = context();
   const items = store.listReactionRules().map(parsedRule);
+  const index = triggerIndex(items);
   return {
     ...state,
     limits: { ...REACTION_LIMITS, ...REACTION_ACTION_LIMITS },
-    rules: items.map((item) => ruleView(item, items, state)),
+    rules: items.map((item) => ruleView(item, index, state)),
   };
 }
 

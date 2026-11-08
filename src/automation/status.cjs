@@ -28,8 +28,10 @@ const CODES = new Set([
 ]);
 const entries = new Map();
 let globalEntry = null;
+let accountEpoch = 0;
 
-function record(ruleId, code, at = Date.now()) {
+function record(ruleId, code, at = Date.now(), expectedEpoch = accountEpoch) {
+  if (expectedEpoch !== accountEpoch) return;
   if (ruleId !== null && (typeof ruleId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(ruleId)))
     return;
   const safeCode = CODES.has(code) ? code : "ACTION_FAILED";
@@ -58,12 +60,17 @@ function clear(ruleId) {
   entries.delete(ruleId);
 }
 function reset() {
+  accountEpoch++;
   entries.clear();
   globalEntry = null;
+}
+function epoch() {
+  return accountEpoch;
 }
 
 store.subscribeReactionChanges((change) => {
   if (change.type === "rule") clear(change.id);
+  if (change.type === "policy" && change.key === undefined) reset();
 });
 
-module.exports = { record, get, global, clear, reset };
+module.exports = { record, get, global, clear, reset, epoch };

@@ -444,6 +444,173 @@ ok(
   !views.find((item) => item.id === nonoverlap.id).statuses.includes("CANDIDATE_LIMIT"),
 );
 
+section("candidate warnings count concrete event pairs, not their union");
+db.exec("DELETE FROM reaction_rules");
+function addEnabled(id, chatJid, priority, patch = {}, enabled = true) {
+  const row = store.saveReactionRule({
+    id,
+    chatJid,
+    priority,
+    definition: definition(patch),
+  });
+  if (enabled) store.setReactionRuleEnabled(id, true);
+  return row;
+}
+addEnabled("broad-target", chat, 5, { originalTypes: ["text", "voice"] });
+for (const [transition, type] of [
+  ["add", "text"], ["change", "voice"], ["remove", "text"],
+]) {
+  for (let index = 0; index < 60; index++) {
+    addEnabled(`${transition}-${index}`, chat, 10, {
+      transitions: [transition],
+      originalTypes: [type],
+    });
+  }
+}
+let eventViews = manage.overview().rules;
+ok(
+  "181 overlapping enabled rules do not exceed any event's limit",
+  !eventViews.find((item) => item.id === "broad-target").statuses.includes("CANDIDATE_LIMIT"),
+);
+equal(
+  "engine prefilter sees only 61 add/text candidates",
+  store.reactionRulesForChats([chat], { emoji: "😀", type: "add", originalType: "text" }).length,
+  61,
+);
+for (let index = 0; index < 39; index++)
+  addEnabled(`boundary-${index}`, chat, 10, { transitions: ["add"], originalTypes: ["text"] });
+ok(
+  "exactly 100 candidates for a concrete event do not warn",
+  !manage
+    .overview()
+    .rules.find((item) => item.id === "broad-target")
+    .statuses.includes("CANDIDATE_LIMIT"),
+);
+addEnabled("event-101", chat, 10, { transitions: ["add"], originalTypes: ["text"] });
+eventViews = manage.overview().rules;
+ok(
+  "101 candidates for one concrete event warn",
+  eventViews.find((item) => item.id === "broad-target").statuses.includes("CANDIDATE_LIMIT"),
+);
+ok(
+  "a disjoint transition/type pair does not warn",
+  !eventViews.find((item) => item.id === "change-0").statuses.includes("CANDIDATE_LIMIT"),
+);
+addEnabled("multi-pair-overlap", chat, 1, { originalTypes: ["text", "voice"] }, false);
+const pairOverlap = manage.overview().rules.find((item) => item.id === "broad-target").overlaps;
+equal("shared multiple pairs contribute one overlap id", pairOverlap.join(","), "multi-pair-overlap");
+
+section("candidate warnings and overlaps share PN/LID alias scope");
+db.exec("DELETE FROM reaction_rules");
+const pnChat = "201070000123@s.whatsapp.net";
+const lidChat = "700000123@lid";
+store.storeLidPnMapping(lidChat, pnChat);
+const onePair = { transitions: ["add"], originalTypes: ["text"] };
+addEnabled("pn-target", pnChat, 5, onePair);
+for (let index = 0; index < 50; index++) {
+  addEnabled(index === 0 ? "Z-pn" : `pn-${index}`, pnChat, index === 0 ? 1 : 10, onePair);
+  addEnabled(index === 0 ? "A-lid" : `lid-${index}`, lidChat, index === 0 ? 1 : 10, onePair);
+}
+let aliasViews = manage.overview().rules;
+for (const id of ["pn-target", "A-lid"]) {
+  ok(
+    `${id}: 101 candidates across aliases warn`,
+    aliasViews.find((item) => item.id === id).statuses.includes("CANDIDATE_LIMIT"),
+  );
+}
+equal(
+  "engine prefilter counts the same alias candidates",
+  store.reactionRulesForChats(store.reactionIdentityAliases(pnChat), {
+    emoji: "😀",
+    type: "add",
+    originalType: "text",
+  }).length,
+  101,
+);
+equal(
+  "overlaps sort priority and binary id across aliases",
+  aliasViews.find((item) => item.id === "pn-target").overlaps.join(","),
+  "A-lid,Z-pn",
+);
+equal(
+  "overlaps across aliases are capped at 20",
+  aliasViews.find((item) => item.id === "pn-49").overlaps.length,
+  20,
+);
+store.setReactionRuleEnabled("lid-49", false);
+for (let index = 0; index < 5; index++) {
+  addEnabled(`disabled-${index}`, pnChat, 10, onePair, false);
+  addEnabled(`wrong-emoji-${index}`, pnChat, 10, { ...onePair, emoji: "👍" });
+  addEnabled(`other-chat-${index}`, chat, 10, onePair);
+}
+aliasViews = manage.overview().rules;
+ok(
+  "disabled, other emoji and unrelated chat rules do not push an event above 100",
+  !aliasViews.find((item) => item.id === "pn-target").statuses.includes("CANDIDATE_LIMIT"),
+);
+
+section("overview builds each alias index once and avoids cross-chat pairwise scans");
+const savedAliasLookup = store.reactionIdentityAliases;
+const savedRuleList = store.listReactionRules;
+let aliasCalls = 0;
+let enabledReads = 0;
+try {
+  const aliasRows = savedRuleList().filter((row) => [pnChat, lidChat].includes(row.chat_jid));
+  store.listReactionRules = () =>
+    aliasRows.map((row) => ({
+      ...row,
+      get enabled() {
+        enabledReads++;
+        return row.enabled;
+      },
+    }));
+  store.reactionIdentityAliases = (jid) => {
+    aliasCalls++;
+    return savedAliasLookup(jid);
+  };
+  manage.overview();
+  equal("alias lookup cached per distinct chat", aliasCalls, 2);
+  ok("equivalent aliases build enabled counts once", enabledReads <= aliasRows.length * 3);
+} finally {
+  store.listReactionRules = savedRuleList;
+  store.reactionIdentityAliases = savedAliasLookup;
+}
+db.exec("DELETE FROM reaction_rules");
+for (let chatIndex = 0; chatIndex < 50; chatIndex++) {
+  const jid = `${120363800000000 + chatIndex}@g.us`;
+  for (let index = 0; index < 3; index++)
+    addEnabled(`isolated-${chatIndex}-${index}`, jid, index, onePair);
+}
+let chatReads = 0;
+aliasCalls = 0;
+try {
+  const rows = savedRuleList();
+  store.listReactionRules = () =>
+    rows.map((row) => ({
+      ...row,
+      get chat_jid() {
+        chatReads++;
+        return row.chat_jid;
+      },
+    }));
+  store.reactionIdentityAliases = (jid) => {
+    aliasCalls++;
+    return savedAliasLookup(jid);
+  };
+  const isolatedViews = manage.overview().rules;
+  equal("each chat's aliases resolved once per overview", aliasCalls, 50);
+  ok("chat reads stay linear in rule count", chatReads < rows.length * 30);
+  ok(
+    "overlaps stay within their chat group",
+    isolatedViews.every((item) =>
+      item.overlaps.every((id) => id.split("-")[1] === item.id.split("-")[1]),
+    ),
+  );
+} finally {
+  store.listReactionRules = savedRuleList;
+  store.reactionIdentityAliases = savedAliasLookup;
+}
+
 section("every facade write notifies a running engine and cancels pending work");
 db.exec(
   "DELETE FROM reaction_rules; DELETE FROM reaction_events; DELETE FROM reaction_state; DELETE FROM reaction_budgets;",
