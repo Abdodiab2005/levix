@@ -27,6 +27,9 @@ const { release: releaseLock } = require("./config/lock.cjs");
 const { close: closeDatabase } = require("./db/db.cjs");
 const { attach } = require("./bootstrap/events.cjs");
 const { openBrowser } = require("./utils/openBrowser.cjs");
+const { installSignalSessionInspect } = require("./diagnostics/signalSessionInspect.cjs");
+
+installSignalSessionInspect();
 
 const line = (text = "") => console.log(text);
 
