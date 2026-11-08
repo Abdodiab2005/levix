@@ -35,6 +35,7 @@ import {
   emptyReactionDraft,
   isReactionEmoji,
   issueBucket,
+  issueFieldName,
   peerLabel,
   reactionApiCode,
   reactionApiIssues,
@@ -64,7 +65,7 @@ function errorMessage(t: TFn, err: unknown, fallback: string): string {
 }
 
 function issueMessage(t: TFn, field: string, code: string): string {
-  const root = field.split(".")[0];
+  const root = issueFieldName(field).split(".")[0];
   if (code === "voice_only") return t("reactionIssueVoiceOnly");
   if (code === "too_many") {
     if (root === "senders") return t("reactionIssueSendersTooMany");
@@ -150,9 +151,13 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
 }) => {
   const { t: tKey } = useI18n();
   const t = tKey as TFn;
-  const sourceRef = useRef(rule);
-  sourceRef.current = rule;
   const ruleId = rule?.id ?? null;
+  const openRef = useRef(open);
+  openRef.current = open;
+  const latestRuleRef = useRef(rule);
+  latestRuleRef.current = rule;
+  const frozenSourceRef = useRef<ReactionRule | null>(null);
+  const submitGen = useRef(0);
 
   const [draft, setDraft] = useState<ReactionDraft>(emptyReactionDraft);
   const [chatPickerOpen, setChatPickerOpen] = useState(false);
@@ -162,15 +167,24 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (!open) return;
-    const source = sourceRef.current;
-    if ((source?.id ?? null) !== ruleId) return;
+    if (!open) {
+      submitGen.current += 1;
+      frozenSourceRef.current = null;
+      return;
+    }
+    // Freeze id+revision at open / target change; polling must not refresh them.
+    submitGen.current += 1;
+    const source = latestRuleRef.current ?? null;
+    frozenSourceRef.current = source;
     setDraft(source ? draftFromRule(source) : emptyReactionDraft());
     setChatPickerOpen(false);
     setSenderPickerOpen(false);
     setBusy(false);
     setFormError(null);
     setFieldErrors({});
+    return () => {
+      submitGen.current += 1;
+    };
   }, [open, ruleId]);
 
   const setField = <K extends keyof ReactionDraft>(key: K, value: ReactionDraft[K]) => {
@@ -218,7 +232,7 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
     if (
       draft.destination === "owner_private" &&
       !ownerLinked &&
-      sourceRef.current?.definition?.destination?.mode !== "owner_private"
+      frozenSourceRef.current?.definition?.destination?.mode !== "owner_private"
     ) {
       nextErrors.destination = t("reactionDestOwnerDisabled");
     }
@@ -233,20 +247,30 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
       emoji: draft.emoji.trim(),
       priority: clampPriority(draft.priority),
     });
+    const token = ++submitGen.current;
+    const target = frozenSourceRef.current;
+    const targetId = target?.id ?? null;
+    const targetRevision = target?.revision;
+    const stale = () =>
+      token !== submitGen.current ||
+      !openRef.current ||
+      (frozenSourceRef.current?.id ?? null) !== targetId;
     setBusy(true);
     setFormError(null);
     try {
       const checked = await api.checkReactionRule(body);
+      if (stale()) return;
       if (checked.issues?.length) {
         applyIssues(checked.issues);
         return;
       }
-      const source = sourceRef.current;
-      const res = source
-        ? await api.updateReactionRule(source.id, { ...body, revision: source.revision })
+      const res = targetId
+        ? await api.updateReactionRule(targetId, { ...body, revision: targetRevision as string })
         : await api.createReactionRule(body);
-      onSaved(res.rule, Boolean(source));
+      if (stale()) return;
+      onSaved(res.rule, Boolean(targetId));
     } catch (err) {
+      if (stale()) return;
       if (reactionApiCode(err) === "REACTION_RULE_CHANGED") {
         onConflict();
         return;
@@ -258,7 +282,7 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
       }
       setFormError(errorMessage(t, err, t("reactionSaveFailed")));
     } finally {
-      setBusy(false);
+      if (token === submitGen.current) setBusy(false);
     }
   };
 
@@ -486,7 +510,9 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
               onChange={(event) => setField("priority", clampPriority(Number(event.target.value)))}
             />
           </Field>
-          <p className="text-sm text-muted">{previewText(t, draft)}</p>
+          <UserText as="p" className="text-sm text-muted">
+            {previewText(t, draft)}
+          </UserText>
         </form>
       </Dialog>
       <RecipientPicker

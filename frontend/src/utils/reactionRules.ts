@@ -116,19 +116,67 @@ export function emptyReactionDraft(): ReactionDraft {
   };
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+/** Untrusted stored definition: never throw, give Edit a replaceable draft. */
 export function draftFromRule(rule: ReactionRule): ReactionDraft {
-  const definition = rule.definition;
+  const definition = asRecord(rule.definition);
+  const senders = asRecord(definition?.senders);
+  const destination = asRecord(definition?.destination);
+  const transitions = stringList(definition?.transitions).filter((item): item is ReactionTransition =>
+    (TRANSITIONS as readonly string[]).includes(item),
+  );
+  const originalTypes = stringList(definition?.originalTypes).filter(
+    (item): item is ReactionOriginalType => (ORIGINAL_TYPES as readonly string[]).includes(item),
+  );
+  const role = senders?.role;
+  const action = definition?.action;
+  const mode = destination?.mode;
   return {
-    chatJid: rule.chatJid,
-    chatName: rule.chatName || rule.chatJid,
-    emoji: definition?.emoji ?? "",
-    transitions: definition?.transitions?.length ? [...definition.transitions] : ["add"],
-    originalTypes: definition?.originalTypes?.length ? [...definition.originalTypes] : ["voice"],
-    role: definition?.senders?.role ?? "owner",
-    senderIds: definition?.senders?.ids ? [...definition.senders.ids] : [],
-    action: definition?.action ?? "stt",
-    destination: definition?.destination?.mode ?? "same_chat",
+    chatJid: typeof rule.chatJid === "string" ? rule.chatJid : "",
+    chatName:
+      (typeof rule.chatName === "string" && rule.chatName) ||
+      (typeof rule.chatJid === "string" ? rule.chatJid : ""),
+    emoji: typeof definition?.emoji === "string" ? definition.emoji : "",
+    transitions: transitions.length ? transitions : ["add"],
+    originalTypes: originalTypes.length ? originalTypes : ["voice"],
+    role: (SENDER_ROLES as readonly string[]).includes(role as string)
+      ? (role as ReactionSenderRole)
+      : "owner",
+    senderIds: stringList(senders?.ids).slice(0, SENDERS_MAX),
+    action: action === "ping" || action === "stt" ? action : "stt",
+    destination: mode === "owner_private" || mode === "same_chat" ? mode : "same_chat",
     priority: Number.isInteger(rule.priority) ? rule.priority : PRIORITY_DEFAULT,
+  };
+}
+
+/** Card/title fallbacks when `valid` is false or `definition` is malformed. */
+export function displayRuleMeta(rule: ReactionRule): {
+  emoji: string;
+  action: string;
+  destination: string;
+  role: string;
+} {
+  const definition = asRecord(rule.definition);
+  const senders = asRecord(definition?.senders);
+  const destination = asRecord(definition?.destination);
+  const emoji = definition?.emoji;
+  const action = definition?.action;
+  const mode = destination?.mode;
+  const role = senders?.role;
+  return {
+    emoji: typeof emoji === "string" && emoji ? emoji : rule.valid === false ? "?" : "—",
+    action: typeof action === "string" ? action : "",
+    destination: typeof mode === "string" ? mode : "",
+    role: typeof role === "string" ? role : "",
   };
 }
 
@@ -186,8 +234,8 @@ export function statusTone(code: string): "ok" | "warn" | "danger" | "neutral" {
 }
 
 export function ruleMatchesFilters(rule: ReactionRule, filters: ReactionFilters): boolean {
-  if (filters.action !== "any" && rule.definition?.action !== filters.action) return false;
-  const statuses = rule.statuses ?? [];
+  if (filters.action !== "any" && asRecord(rule.definition)?.action !== filters.action) return false;
+  const statuses = Array.isArray(rule.statuses) ? rule.statuses : [];
   if (filters.status === "ready") return statuses.includes("READY");
   if (filters.status === "off") return statuses.some((code) => OFF_STATUS.has(code));
   if (filters.status === "attention") return statuses.some((code) => ATTENTION_STATUS.has(code));
@@ -223,8 +271,14 @@ export function activeFilterCount(filters: ReactionFilters): number {
   return [filters.status, filters.action].filter((value) => value !== "any").length;
 }
 
+/** Backend paths like `definition.emoji` bucket as `emoji`; `chatJid` / `priority` / `body` stay. */
+export function issueFieldName(field: string): string {
+  const raw = String(field ?? "");
+  return raw.startsWith("definition.") ? raw.slice("definition.".length) : raw;
+}
+
 export function issueBucket(field: string): string {
-  const root = String(field ?? "").split(".")[0];
+  const root = issueFieldName(field).split(".")[0];
   if (
     root === "chatJid" ||
     root === "priority" ||
