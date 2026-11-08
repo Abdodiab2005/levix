@@ -248,19 +248,22 @@ tests 110, 0 failed. `levix-app.zip` holds the merged `signalSessionInspect.cjs`
 | J-02 | Update in place | PASS (device) | `install -r`; `firstInstallTime` unchanged; schema 11, 852 auth rows and the password, session-secret and persona fingerprints identical before and after |
 | J-03 | A-04: paired session kept across the update | PASS (device) | Before the update the old build sat in `retry_exhausted` since 11:04 (408 handshake timeouts while the phone was away). After Start: bundle unpacked, `connected` at 12:34:22 from saved credentials, no re-pair |
 | J-04 | #140 hook in the Android bundle | PASS (device) | The app's own Node and the unpacked bundle: `installSignalSessionInspect()` returned true; real libsignal `closeSession`/`openSession` with random keys printed the placeholder, no `<Buffer`, neither key as hex |
-| J-05 | #140 live logs | PASS (device), partial | After the live events: host log, its mirror and logcat 0 key or `<Buffer` lines. No libsignal session open or close was printed in this run, so the live close path was not exercised; J-04 covers it |
+| J-05 | #140 live logs after the live events | PASS (device) | Host log, its mirror and logcat: 0 key lines and 0 `<Buffer` lines. This shows no new dump; it does not show the close path, see J-11 |
 | J-06 | #139 names in the debug log | PASS (device) | Remove and re-add in "Testing" by the owner: both participant records carry only `group`, `action`, `count`. Records after the update: 3 name fields, all `[redacted]`, 0 raw; 0 raw JIDs; 0 key material. The 10-digit numbers left are WhatsApp's `appVersion.tertiary`, not phone numbers |
 | J-07 | #138 transport | PASS (device) | Page reload with tracing: 1 refused WebSocket attempt, then polling (3 requests in 25 s). Before the fix: 8 refused attempts, 0 polling |
 | J-08 | #138 live Connection screen and Reconnect | PASS (device) | Panel Reconnect in the same document (no reload): connected, then "saved session, resuming / connecting", then connected again within 2.8 s |
 | J-09 | Recipients after the update | PASS (recipient) | `!ping` after the re-add and the member's message: readable on every phone (owner) |
 | J-10 | Cleanup | PASS (device) | The 15 QA helper files from this QA run removed from `/data/local/tmp`; 2 older files from 2026-09-10 (`listen-probe*.mjs`) were not created by this QA and were left |
+| J-11 | Live libsignal session close on the phone | NOT RUN | No session open or close happened during the live events. Forcing one means tampering with Signal keys; the owner decided it is not required now. J-04 runs the same close path with real libsignal inside the Android bundle |
+| J-12 | QR to connected transition on the Connection screen | NOT RUN | Needs a new pairing, which means unlinking the test account; the owner decided it is not required. J-08 shows the same push path delivering each state change |
 
-Not re-run: the QR to connected transition itself. It needs a new pairing, which means unlinking the
-test account; J-08 shows the same push path delivering every state change.
+Neither J-11 nor J-12 counts as PASS.
 
-Still on the phone, outside QA temp files: the debug logs written by the previous build keep raw
-WhatsApp names (3 fields on 2026-11-08 before 12:31 UTC, more in `debug-2026-11-07.log`). They expire
-after 14 days; Settings, Logs, Clear removes them now. That is the owner's call; nothing was deleted.
+The debug logs written by the previous build kept raw WhatsApp names (3 fields on 2026-11-08 before
+12:31 UTC, more in `debug-2026-11-07.log`). On the owner's instruction they were removed with the
+panel's log Clear (`DELETE /dashboard/api/logs`), which truncates `combined.log` and `error.log` and
+deletes `logs/debug/`; it does not touch the database, the WhatsApp credentials or the session. The
+sanitized evidence was saved first.
 
 Phase 07.5 is closed for the Levix fixes. The upstream Baileys fixes B1 to B4 stay on their own track.
 Draft PR #141 (release into main) exists for CI only and is not to be merged.
