@@ -1,7 +1,7 @@
 # Phase 07.5: Android Device QA and E2EE Validation Results
 
-Status: **ANDROID DEVICE QA COMPLETED. AWAITING OWNER MERGE DECISION.** Fix verification on the
-phone and the final smoke test are BLOCKED until the phone is connected again (section E).
+Status: **PHASE 07.5 FIXES MERGED; MERGED-BUILD SMOKE TEST ON THE PHONE PASSED (section J).** The four
+PRs are on `release/5.0.0-beta.1` at `65c85ab`; the rows marked BLOCKED below were closed by section J.
 
 PR under test: #137 (`fix/v5-phase-07.5-e2ee` into `release/5.0.0-beta.1`), head
 `9fb43db8d2308cdc9140e86ffa8a003ab522aefe`. Date: 2026-11-07 (UTC), from 21:38 to 22:45.
@@ -10,8 +10,9 @@ PR under test: #137 (`fix/v5-phase-07.5-e2ee` into `release/5.0.0-beta.1`), head
 ("Levix QA"). It is **not** the Google Play build. The Play package `net.leviro.levix` (4.8.0) on the
 same phone was not updated, opened or read, and no result here applies to it.
 
-Summary by table row in section C: 28 PASS, 2 FAIL (A-06 and A-12, both pre-existing, fixed in
-PRs #138 to #140), 2 NOT RUN (A-04, E7), and 4 BLOCKED (listed in section C, "Blocked on the phone").
+Summary by table row in section C, after the final smoke test: 33 PASS, 2 FAIL on the original
+build (A-06 and A-12, both pre-existing, fixed in PRs #138 to #140 and passing in section J), 1 NOT RUN
+(E7: no failure occurred), 0 BLOCKED.
 
 Result labels: **PASS (device)** was observed on the Android phone by Claude through ADB, logs and
 the panel; **PASS (recipient)** was confirmed by the owner on the recipient phones; **PASS (offline)**
@@ -65,7 +66,7 @@ is an automated test on Linux; **FAIL**, **BLOCKED** and **NOT RUN** mean what t
 | A-01 | App launch | PASS (device) | Cold start 2.3 s, no crash |
 | A-02 | Dashboard and gateway | PASS (device) | Gateway login page loads; after sign-in 11 dashboard API endpoints answer 200 |
 | A-03 | Existing settings kept | PASS (device) | Fingerprints identical before and after (section B.4) |
-| A-04 | Existing WhatsApp session kept across install | NOT RUN | The QA package had no pairing before install; covered by E5 for a restart |
+| A-04 | Existing WhatsApp session kept across install | PASS (device), section J | Not possible on 2026-11-07 (no pairing before install); passed on the merged build |
 | A-05 | Node runtime startup | PASS (device) | Bundle unpacked in 13 s, `Database ready`, 69 commands, panel on the unix socket |
 | A-06 | Connection status | FAIL (device), pre-existing | Home screen and API correct. The panel's Connection screen stayed on "waiting for QR" after pairing until a reload: QA-D1 |
 | A-07 | Reconnect keeps credentials | PASS (device) | 515 restart during pairing, network drop (F-02) and engine restart (E5) all reconnected without a new pairing |
@@ -113,17 +114,17 @@ on a separate phone (owner's confirmation).
 | F-04 | Memory | PASS (device) | App process total PSS 330 MB with the WebView; Node process RSS 81 MB |
 | F-05 | Baileys app-state sync | PASS (device), note | Two app-state warnings right after pairing (`failed to find key ... to decode mutation`, a RangeError), attempt 2, no disconnect |
 
-### Blocked on the phone
+### Blocked on the phone (closed on 2026-11-08)
 
-The phone was disconnected at about 23:05 UTC. One install of the combined build (section E) closes
-all four rows and A-04.
+The phone was disconnected at about 23:05 UTC on 2026-11-07. The merged-build install in section J
+closed all four rows and A-04.
 
 | ID | Test | Result | What closes it |
 | --- | --- | --- | --- |
-| X-01 | PR #138: Connection screen updates live | BLOCKED | Panel Reconnect shows each state without a reload; socket.io polling requests appear |
-| X-02 | PR #139: names redacted in the debug log | BLOCKED | One remove and re-add in "Testing"; the debug log shows `[redacted]` for `username` and `notify` |
-| X-03 | PR #140: no Signal keys in any log | BLOCKED | The hook installs in the Android bundle; host log, its mirror and logcat hold no new key dump |
-| X-04 | Cleanup and exposure checks (section I) | BLOCKED | Helper files removed; `Download/Levix/` and logcat checked |
+| X-01 | PR #138: Connection screen updates live | PASS (device), section J | Panel Reconnect shows each state without a reload; socket.io polling requests appear |
+| X-02 | PR #139: names redacted in the debug log | PASS (device), section J | One remove and re-add in "Testing"; the debug log shows `[redacted]` for `username` and `notify` |
+| X-03 | PR #140: no Signal keys in any log | PASS (device), section J; live session close not observed | The hook installs in the Android bundle; host log, its mirror and logcat hold no new key dump |
+| X-04 | Cleanup and exposure checks (section I) | PASS (device), section J | Helper files removed; `Download/Levix/` and logcat checked |
 
 ## D. Actual WhatsApp results
 
@@ -230,3 +231,36 @@ Play package's external host-log mirror showed 0 key lines; its private log was 
 Owner options, none applied: (a) treat the closed session as exposed and accept the narrow impact
 above; (b) unlink and re-pair the QA test number, which replaces every session and key for that
 account; (c) clear logcat (`adb logcat -c`, device-wide) at the next connection.
+
+## J. Final smoke test on the merged build (2026-11-08)
+
+Build: `65c85ab0b7a7c374e2469822e38bf4b236d045a9` (`release/5.0.0-beta.1` after #140, #137, #139 and #138),
+built offline with `-PlevixIsolatedDebug=true`, arm64. APK SHA-256
+`52747086c6597981fafcca85e9cd9450e00037a5694ec16e021d334909cbb1d6` (65,058,654 bytes),
+`net.leviro.levix.dev`, versionCode 71, the same debug certificate (`4c976246…353476`). Android unit
+tests 110, 0 failed. `levix-app.zip` holds the merged `signalSessionInspect.cjs`, `debugLog.cjs`,
+`index.js` and `groupMetadataCache.cjs` byte for byte, and the dashboard bundle contains
+`tryAllTransports`. Same phone, Wi-Fi on. Again **not** the Google Play build.
+
+| ID | Check | Result | Evidence |
+| --- | --- | --- | --- |
+| J-01 | Exposure before install | PASS (device) | `Download/Levix/` holds one settings export from 2026-10-10 (424 bytes) and no saved host log. Logcat 0 key lines (the 2 old lines rotated out). Host log and its mirror 0 key lines |
+| J-02 | Update in place | PASS (device) | `install -r`; `firstInstallTime` unchanged; schema 11, 852 auth rows and the password, session-secret and persona fingerprints identical before and after |
+| J-03 | A-04: paired session kept across the update | PASS (device) | Before the update the old build sat in `retry_exhausted` since 11:04 (408 handshake timeouts while the phone was away). After Start: bundle unpacked, `connected` at 12:34:22 from saved credentials, no re-pair |
+| J-04 | #140 hook in the Android bundle | PASS (device) | The app's own Node and the unpacked bundle: `installSignalSessionInspect()` returned true; real libsignal `closeSession`/`openSession` with random keys printed the placeholder, no `<Buffer`, neither key as hex |
+| J-05 | #140 live logs | PASS (device), partial | After the live events: host log, its mirror and logcat 0 key or `<Buffer` lines. No libsignal session open or close was printed in this run, so the live close path was not exercised; J-04 covers it |
+| J-06 | #139 names in the debug log | PASS (device) | Remove and re-add in "Testing" by the owner: both participant records carry only `group`, `action`, `count`. Records after the update: 3 name fields, all `[redacted]`, 0 raw; 0 raw JIDs; 0 key material. The 10-digit numbers left are WhatsApp's `appVersion.tertiary`, not phone numbers |
+| J-07 | #138 transport | PASS (device) | Page reload with tracing: 1 refused WebSocket attempt, then polling (3 requests in 25 s). Before the fix: 8 refused attempts, 0 polling |
+| J-08 | #138 live Connection screen and Reconnect | PASS (device) | Panel Reconnect in the same document (no reload): connected, then "saved session, resuming / connecting", then connected again within 2.8 s |
+| J-09 | Recipients after the update | PASS (recipient) | `!ping` after the re-add and the member's message: readable on every phone (owner) |
+| J-10 | Cleanup | PASS (device) | The 15 QA helper files from this QA run removed from `/data/local/tmp`; 2 older files from 2026-09-10 (`listen-probe*.mjs`) were not created by this QA and were left |
+
+Not re-run: the QR to connected transition itself. It needs a new pairing, which means unlinking the
+test account; J-08 shows the same push path delivering every state change.
+
+Still on the phone, outside QA temp files: the debug logs written by the previous build keep raw
+WhatsApp names (3 fields on 2026-11-08 before 12:31 UTC, more in `debug-2026-11-07.log`). They expire
+after 14 days; Settings, Logs, Clear removes them now. That is the owner's call; nothing was deleted.
+
+Phase 07.5 is closed for the Levix fixes. The upstream Baileys fixes B1 to B4 stay on their own track.
+Draft PR #141 (release into main) exists for CI only and is not to be merged.
