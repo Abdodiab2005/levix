@@ -449,3 +449,104 @@ with matching backend validation and deterministic auth/CSRF/four-language tests
 Any extra action/destination requires its own validation, authorization, routing
 and cancellation coverage. No additional product decision is required for 07b's
 initial allowlist. Phase 07.5, Phase 08, release/deploy/Play work have not started.
+
+## Phase 07b integration with release/5.0.0-beta.1 (2026-11-08)
+
+### Why
+
+PR #136 (`feat/v5-phase-07b`, head `cc6a259`) was based on `b383ed1`. The
+release branch moved to `4d6d191` with the Phase 07.5 E2EE work (PR #137),
+Signal session console protection (#140), debug-log name redaction (#139) and
+the dashboard polling fallback (#138). GitHub reported PR #136 as conflicting.
+
+### Merge
+
+Local merge `39f2f7a` of `cc6a259` into `4d6d191`. One textual conflict,
+`src/core/events.js` `group-participants.update`. Resolution order:
+`markRosterChanged(sock, id)` first (07.5, before any await), then
+`automation.cancelChat(id)` (07b), then the contained participants handler.
+`src/core/socket.js` and `src/db/store.cjs` merged without conflict; the final
+send path is delivery guard refresh and assert, abort check, Baileys send, then
+the 07.5 recent-message cache step.
+
+No dependency change. Release adds no migration; schema 12 stays the last
+migration, appended after 11.
+
+Preservation audit (agy, Gemini 3.8 Flash, read-only): every 07.5 hunk in 21
+source files and 11 test files is present unchanged in `39f2f7a`; the only
+combined hunk is the events.js conflict above.
+
+### Review findings and fixes
+
+Read-only Codex review of `39f2f7a` found two interaction defects. Both are
+fixed with regression tests.
+
+1. `8f6e409` fix(session): logout fenced the old auth store and then awaited
+   `sock.logout()` for up to `SOCKET_CLOSE_TIMEOUT_MS` before `#detach` closed
+   the socket's reaction engine. A job paused on a media download could resume
+   and start a paid transcription in that window. The reaction intake is now
+   disposed synchronously before the fence, like every other teardown path.
+   Test: `tests/session.test.mjs`, section "logout closes reaction automation
+   before it waits for the socket"; on the unfixed code the assertion "reaction
+   intake closed while socket logout() is pending" fails (expected 1, got 0).
+   Implemented by agy (Claude Sonnet 5.5).
+2. `b555014` fix(automation): the engine read rosters with a direct
+   `sock.groupMetadata()`. The live answer never reached the 07.5 shared roster
+   that Baileys uses to choose sender-key recipients, did not coalesce with a
+   concurrent roster refresh and skipped the generation check. New
+   `readLiveGroupMetadata()` in `src/utils/groupMetadataCache.cjs` joins or
+   starts the shared fetch, follows supersession, writes the accepted answer
+   back and never returns a cached or stale roster. A failed or superseded read
+   now ends the job as `REACTION_INACCESSIBLE` (it was `ACTION_FAILED`). Tests:
+   6 new cases in `tests/group-roster-sync.test.mjs` and 2 in
+   `tests/reaction-engine.test.mjs`; on the unfixed code 6 and 2 fail.
+   Implemented by Codex.
+
+Codex delta review of `b555014`: READY, no new findings. Joining an in-flight
+fetch is accepted because the shared fetch only returns an answer from the
+current roster generation and participant changes cancel jobs synchronously.
+
+Other review answers, all OK: send boundary ordering, key-store errors become
+`ACTION_FAILED` with no retry or fallback send and slots released in `finally`,
+unlink disables rules and clears the five transient reaction tables, backup
+classification and disabled restore, `identity.cjs` credential reads after the
+fence, the rewritten recent-message cache, permission composition, and logging
+(fixed outcome codes only).
+
+### Owner decision carried by 07b
+
+`src/messaging/identity.cjs` in 07b reads the linked-account credentials from
+the database store directly. Before, it called `authRead` on a module that does
+not export it, so the Reply Router refused every linked-owner-private
+destination (Phase 07.5 finding C-11, left open for the owner). With 07b, an
+ordinary command reply can reach the linked account's own chat when Settings
+`reply_route` names it. This is the documented Reply Router behavior. It needs
+the owner's explicit approval as part of the 07b merge.
+
+### Verification
+
+Linux x64, Node 24.19.0, offline: `npm_config_offline=true`,
+`FFMPEG_BIN=/usr/bin/ffmpeg`,
+`NODE_OPTIONS=--require=<repo>/tests/fixtures/no-external-network.cjs`.
+
+| Gate | Status |
+| --- | --- |
+| `npm test` on merge `39f2f7a` | PASS: 10890 checks, 0 failed, 361.6 s |
+| `npm test` on final head `b555014` | PASS: 10945 checks, 0 failed, 333.9 s |
+| Focused: `session.test` / `group-roster-sync` / `reaction-engine` on `b555014` | PASS: 196 / 183 / 235 checks |
+| `npm run lint` on `b555014` | PASS: 0 errors, 208 warnings (same as release `4d6d191`), 80 infos (74 on release; 6 new lone-block infos in the new roster tests) |
+| `npm run i18n:check`, `npm run docs:check` | PASS |
+| `npm run build:frontend` | PASS |
+| `npm run validate:tarball` | PASS: 36 checks |
+| `npm run build:sea`, `npm run validate:sea` | PASS: 51 checks |
+| GitHub CI (Android, Docker, macOS, Windows) on the updated PR head | NOT RUN: waits for owner approval to push |
+| Live WhatsApp, reaction, STT or provider QA | NOT RUN: not authorized |
+
+### Status
+
+Integration branch `integration/v5-phase-07b` (local only). Updating PR #136 is
+a fast-forward of `feat/v5-phase-07b` (no force push), after owner approval. No
+merge, release or Play upload.
+
+Phase 07c (Rule Builder) starts only after PR #136 is merged and the owner
+approves.
