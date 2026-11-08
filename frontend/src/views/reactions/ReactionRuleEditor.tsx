@@ -388,10 +388,9 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
             htmlFor="rx-transitions"
             error={fieldErrors.transitions}
           >
-            <div
+            <fieldset
               id="rx-transitions"
-              className="flex flex-col"
-              role="group"
+              className="flex min-w-0 flex-col"
               aria-label={t("reactionTransitions")}
             >
               {TRANSITIONS.map((value) => (
@@ -406,7 +405,7 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
                   onChange={() => setField("transitions", toggleList(draft.transitions, value))}
                 />
               ))}
-            </div>
+            </fieldset>
           </Field>
           <Field
             label={t("reactionTypes")}
@@ -414,10 +413,9 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
             error={fieldErrors.originalTypes}
             description={typesLocked ? t("reactionSttVoiceOnly") : undefined}
           >
-            <div
+            <fieldset
               id="rx-types"
-              className="flex flex-col"
-              role="group"
+              className="flex min-w-0 flex-col"
               aria-label={t("reactionTypes")}
             >
               {ORIGINAL_TYPES.map((value) => (
@@ -433,7 +431,7 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
                   onChange={() => setField("originalTypes", toggleList(draft.originalTypes, value))}
                 />
               ))}
-            </div>
+            </fieldset>
           </Field>
           <Field label={t("reactionSendersRole")} htmlFor="rx-role" error={fieldErrors.senders}>
             <Select
@@ -491,9 +489,9 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
             </div>
           </Field>
           <Field label={t("reactionAction")} htmlFor="rx-action" error={fieldErrors.action}>
-            <div
+            <fieldset
               id="rx-action"
-              role="group"
+              className="min-w-0"
               aria-describedby={describedBy(fieldErrors.action ? "rx-action-message" : undefined)}
             >
               <SegmentedControl
@@ -525,7 +523,7 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
                   { value: "ping", label: t("reactionActionPing") },
                 ]}
               />
-            </div>
+            </fieldset>
           </Field>
           <Field
             label={t("reactionDestination")}
