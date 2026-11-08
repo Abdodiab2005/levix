@@ -1232,4 +1232,36 @@ section(
   );
 }
 
+section("logout closes reaction automation before it waits for the socket");
+
+{
+  const { attachReactionIntake } = await import("../src/automation/reactions.js");
+  const h = makeHarness({ paired: true });
+  await h.session.start();
+  await h.push({ connection: "open" });
+  const sock = h.sockets[0];
+
+  let reactionCloses = 0;
+  attachReactionIntake(sock, { onClose: () => (reactionCloses += 1) });
+
+  let resolveLogout;
+  sock.logout = () => {
+    sock.loggedOut += 1;
+    return new Promise((resolve) => {
+      resolveLogout = resolve;
+    });
+  };
+
+  const unlinking = h.session.logout();
+  await sleep(10);
+  equal("logout() was called on the socket and is still pending", sock.loggedOut, 1);
+  equal("reaction intake closed while socket logout() is pending", reactionCloses, 1);
+
+  resolveLogout();
+  const state = await unlinking;
+  equal("logout finishes in LOGGED_OUT", state.state, S.LOGGED_OUT);
+  equal("reaction intake closed exactly once", reactionCloses, 1);
+  equal("no live socket remains on session", h.session.socket, null);
+}
+
 finish();

@@ -554,6 +554,8 @@ export class WhatsAppSession {
     this.#generation += 1;
     this.#cancelRetry();
     this.#attempt = 0;
+    // Reaction work for this socket must stop now, not after the logout wait below.
+    if (sock) disposeReactionIntake(sock);
     this.#fence(fence);
 
     if (sock) {
