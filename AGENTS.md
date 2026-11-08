@@ -260,7 +260,8 @@ src/
 │   └── forward-tracking.middleware.js
 ├── routes/
 │   ├── dashboard.api.esm.js # everything the control panel reads/writes
-│   └── stickers.api.esm.js  # Sticker Studio library, packs, upload, and jobs
+│   ├── stickers.api.esm.js  # Sticker Studio library, packs, upload, and jobs
+│   └── reactions.api.esm.js # reaction rule management over src/automation/manage.js
 ├── panel/            # login throttling, session epochs, bounded session store
 │   ├── feedback.cjs  # validates + forwards Settings → Feedback to the developer
 │   ├── one-time-code.cjs # hashed 6-digit code, attempts, and the send throttle
@@ -617,7 +618,7 @@ and blacklist middleware, the prefix lookup, every permission check) with no
 | `auto_delete_log` | opt-in text/caption copies of messages an auto-delete rule actually deleted (never media bytes) | `auto_delete_keep_days` (30), also capped at 5000 newest; wiped on unlink |
 | `moderation_flags` | members waiting for admin review after warn-limit FLAG (or a KICK the bot could not perform): canonical id, effective points (`warn_count`), last rule, time, reasons, `last_notified_at`, `repeat_points` | wiped on unlink |
 | `moderation_applied` | one row per moderated message id (`outcome`, `kicked`, `notified`) so a WhatsApp redelivery is applied once. Rows older than 7 days are swept | wiped on unlink |
-| `reaction_rules` | Free Core reaction rule configuration; disabled by default, no tier rule-count cap; no management API/UI until Phase 07c | disabled on unlink and restore |
+| `reaction_rules` | Free Core reaction rule configuration; disabled by default, no tier rule-count cap; managed only through `src/automation/manage.js` (panel Reaction rules screen, `/dashboard/api/reactions*`) | disabled on unlink and restore |
 | `reaction_events` / `reaction_state` / `reaction_invalidations` | bounded hashed transport claims, latest emoji transitions and deletion/edit markers; no original payload | short TTL, wiped on unlink, excluded from backups |
 
 `forward_scores` gains a row per forwarded message, so it expires; the sweep
@@ -1296,6 +1297,7 @@ the bot does can be changed from it, live:
 | Roles | bot owner / admin | `user_metadata` (same path as `!perm`) |
 | Tables | debts · warnings · notes · todos · users · schedules | read-only (schedules can be deleted) |
 | Auto-delete (JSON API; UI later) | keyword rules, counters, opt-in kept copies | `auto_delete_rules` / `auto_delete_log` via `/dashboard/api/auto-delete/*` |
+| Reaction rules (`#reactions`) | global reaction switch; create, edit, delete, enable and disable rules; statuses and the last outcome since start | `reaction_rules` and `reaction:enabled` via `/dashboard/api/reactions*` (`src/automation/manage.js`); outcomes stay in RAM (`src/automation/status.cjs`) |
 | Settings | API keys, model, timezone, delays, thumbnails, port, proxy | `bot_settings` (`setting:*`) |
 | Settings → password | the panel's own password | `bot_settings` (scrypt hash) |
 | Settings → recovery email | verified address for the forgot-password email code | `bot_settings` key `auth:recovery-email`, sealed with `vault.cjs`; masked in the API; never in settings export |

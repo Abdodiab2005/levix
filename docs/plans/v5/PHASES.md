@@ -130,7 +130,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
-| Status | 07a [PR #135](https://github.com/Abdodiab2005/levix/pull/135) merged at `b383ed1`. 07b integrated locally with `release/5.0.0-beta.1` (`b555014`), reviewed, all local gates PASS, waiting for owner approval to update and merge PR #136. 07c not started. Audit, plan and evidence: `PHASE-07-RESULTS.md`. |
+| Status | 07a [PR #135](https://github.com/Abdodiab2005/levix/pull/135) merged at `b383ed1`. 07b [PR #136](https://github.com/Abdodiab2005/levix/pull/136) merged into `release/5.0.0-beta.1` at `ba7ef44`. 07c Rule Builder implemented on `feat/v5-phase-07c`, PR against `release/5.0.0-beta.1`, pending owner review. Audit, plan and evidence: `PHASE-07-RESULTS.md`. |
 | Goal | One generic reaction engine, existing capabilities and Rule Builder in Free Core; no artificial tier rule cap or subscription check. |
 | Files | `src/automation/reactions.js`, core event/socket/session boundaries, additive DB/store, backup classification; later dashboard API and React builder. |
 | Migrations | Immutable schema 11 intake; append-only schema 12 adds rule epoch/revision/priority and bounded hashed execution claims/rate budgets. Original lookup stays in RAM. |

@@ -1,9 +1,9 @@
 {
   "pt-BR/dashboard": {
     "status": "draft",
-    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex), pending ChatGPT review under Q-19",
     "date": "2026-11-05",
-    "sha256": "0eb2c729c8f889fb9aa3799aaf2b11a9b2f7d304c26cb123adbcc8189e8f55a7"
+    "sha256": "9f1692b142f7d1c3f00a60bc96c8d543ae38e3c0aa16b21c609b65f6925ca642"
   },
   "pt-BR/gateway": {
     "status": "draft",
@@ -13,9 +13,9 @@
   },
   "es-419/dashboard": {
     "status": "draft",
-    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex), pending ChatGPT review under Q-19",
     "date": "2026-11-05",
-    "sha256": "ffcdce560748945b3142373dab72ba77732c1b187a473f6c9de42fa9e6937635"
+    "sha256": "667075539e6e35f3086640beeaaa686e39d8a603227c4081cf04f8cd41b0956a"
   },
   "es-419/gateway": {
     "status": "draft",
