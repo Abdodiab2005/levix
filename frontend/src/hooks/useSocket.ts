@@ -2,17 +2,13 @@
 import { useEffect, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import type { SessionStatus } from "../types";
+import { dashboardSocketOptions } from "./socket-options.mjs";
 
 let socketInstance: Socket | null = null;
 
 function getSocket(): Socket {
   if (!socketInstance) {
-    socketInstance = io(window.location.origin, {
-      path: "/socket.io",
-      transports: ["websocket", "polling"],
-      reconnectionAttempts: 10,
-      reconnectionDelay: 2000,
-    });
+    socketInstance = io(window.location.origin, dashboardSocketOptions());
   }
   return socketInstance;
 }
