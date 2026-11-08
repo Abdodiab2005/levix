@@ -277,13 +277,15 @@ export const ReactionRulesView: React.FC = () => {
     const seen = written.current;
     try {
       const res = await api.getReactions();
-      if (!alive.current || listSeq.current !== token || written.current !== seen) return "discarded";
+      if (!alive.current || listSeq.current !== token || written.current !== seen)
+        return "discarded";
       applyOverview(res);
       setError(null);
       return "applied";
     } catch {
       // A background refresh must not toast or replace the list with an error.
-      if (!alive.current || listSeq.current !== token || written.current !== seen) return "discarded";
+      if (!alive.current || listSeq.current !== token || written.current !== seen)
+        return "discarded";
       return "failed";
     }
   }, [applyOverview]);
