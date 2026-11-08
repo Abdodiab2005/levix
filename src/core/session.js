@@ -50,6 +50,7 @@ import { DisconnectReason } from "@whiskeysockets/baileys";
 import { createRequire } from "module";
 import { RETRY_SCHEDULE_MS } from "../config/constants.js";
 import { bootstrapAdmins, bootstrapOwners } from "../utils/permissions.esm.js";
+import { clearRecentMessages } from "../utils/recentMessageCache.esm.js";
 import {
   clearAuthState,
   clearAutoDeleteOnUnlink,
@@ -109,6 +110,9 @@ function clearAccountScopedState() {
   }
   try {
     groupMetadataCache.flushAll();
+  } catch {}
+  try {
+    clearRecentMessages();
   } catch {}
   try {
     // Copies of deleted messages and the counters are account-derived; the
@@ -221,6 +225,7 @@ export class WhatsAppSession {
   #since = Date.now();
   #socket = null;
   #clearAll = null;
+  #fenceAuth = null;
 
   // Bumped for every socket. Events carrying an older number are ignored, which
   // is how a replaced socket stops being able to affect anything.
@@ -233,6 +238,10 @@ export class WhatsAppSession {
   // A start() already in flight. Concurrent callers await it instead of
   // creating a second socket.
   #starting = null;
+
+  // A logout() already in flight. Refuses concurrent start() calls and
+  // deduplicates concurrent unlinks while teardown is awaited.
+  #loggingOut = null;
 
   // True while this attempt is an unpaired pairing attempt that has not yet
   // been scanned. Its closes are terminal by design.
@@ -355,12 +364,12 @@ export class WhatsAppSession {
       attempt: this.#attempt,
       maxAttempts: this.retryDelaysMs.length,
       nextRetryAt: this.#nextRetryAt,
-      canStart: !BUSY_STATES.has(this.#state) && !this.#shuttingDown,
+      canStart: !BUSY_STATES.has(this.#state) && !this.#loggingOut && !this.#shuttingDown,
       canStop: BUSY_STATES.has(this.#state),
       // Not "is it connected": a pairing that WhatsApp has refused (403, 405)
       // leaves dead credentials behind, and unlinking is the only way out of
       // it. The one state with nothing to unlink is the one that just did.
-      canUnlink: this.#state !== S.LOGGED_OUT && !this.#shuttingDown,
+      canUnlink: this.#state !== S.LOGGED_OUT && !this.#loggingOut && !this.#shuttingDown,
       // Finished WhatsApp pairing — resume/connect, do not offer QR/pair.
       linked: this.#state !== S.LOGGED_OUT && this.isLinked(),
       // Redacted — never the password. Null when the socket is direct.
@@ -442,6 +451,11 @@ export class WhatsAppSession {
   async start({ reason = "manual", method, phone } = {}) {
     if (this.#shuttingDown) return this.getState();
 
+    if (this.#loggingOut) {
+      await this.#loggingOut.catch(() => {});
+      return this.getState();
+    }
+
     if (this.#state === S.PAUSED && !this.#isOnline) {
       return this.getState();
     }
@@ -487,6 +501,7 @@ export class WhatsAppSession {
     // Wait for an in-flight start, or we would tear down a socket that has not
     // been assigned yet and then have it appear behind us.
     if (this.#starting) await this.#starting.catch(() => {});
+    if (this.#loggingOut) await this.#loggingOut.catch(() => {});
 
     // Again after the await: a close that landed while we were waiting is
     // entitled to schedule a retry, and it would outlive this stop.
@@ -505,6 +520,19 @@ export class WhatsAppSession {
    * then clear the credentials whether or not that call got through.
    */
   async logout() {
+    if (this.#loggingOut) {
+      await this.#loggingOut.catch(() => {});
+      return this.getState();
+    }
+    this.#loggingOut = this.#runLogout();
+    try {
+      return await this.#loggingOut;
+    } finally {
+      this.#loggingOut = null;
+    }
+  }
+
+  async #runLogout() {
     // A start that is still creating its socket has to finish first: otherwise
     // #open() assigns a live socket after this method has already declared the
     // session logged out, and the account is unlinked with a connection still
@@ -515,12 +543,18 @@ export class WhatsAppSession {
 
     const sock = this.#socket;
     const clearAll = this.#clearAll;
+    const fence = this.#fenceAuth;
+    this.#socket = null;
+    this.#clearAll = null;
+    this.#fenceAuth = null;
+    this.#pairing = false;
 
     // Stale from here on: whatever the socket emits while logging out is not
     // allowed to schedule anything.
     this.#generation += 1;
     this.#cancelRetry();
     this.#attempt = 0;
+    this.#fence(fence);
 
     if (sock) {
       try {
@@ -538,6 +572,13 @@ export class WhatsAppSession {
       } catch {}
     }
 
+    // If any socket was installed while teardown was awaited, fence and tear
+    // it down before and after wiping credentials.
+    if (this.#starting) await this.#starting.catch(() => {});
+    if (this.#socket || this.#fenceAuth) {
+      await this.#destroySocket();
+    }
+
     // clearAll() belongs to the socket that was alive; when there wasn't one,
     // the store-level wipe does the same job.
     try {
@@ -546,8 +587,14 @@ export class WhatsAppSession {
       this.log.error({ err: error }, "[Session] failed to clear credentials");
     }
 
+    if (this.#starting) await this.#starting.catch(() => {});
+    if (this.#socket || this.#fenceAuth) {
+      await this.#destroySocket();
+    }
+
     this.#socket = null;
     this.#clearAll = null;
+    this.#fenceAuth = null;
     this.#pairing = false;
     this.#clearQr();
     this.#stopJobs();
@@ -585,6 +632,7 @@ export class WhatsAppSession {
     this.#cancelRetry();
     this.#stopConsentWatch();
     if (this.#starting) await this.#starting.catch(() => {});
+    if (this.#loggingOut) await this.#loggingOut.catch(() => {});
     this.#cancelRetry();
     await this.#destroySocket();
     // A code left in the database would be served by GET /qr on the next boot,
@@ -669,6 +717,7 @@ export class WhatsAppSession {
       // Overtaken. Throw the socket away rather than adopt it, or we would end
       // up with a live connection nobody asked for and no state pointing at it.
       this.log.warn("[Session] discarding a socket whose start was overtaken");
+      this.#fence(created.fence);
       this.#detach(created.sock);
       try {
         await withTimeout(created.sock?.end?.(undefined), SOCKET_CLOSE_TIMEOUT_MS);
@@ -676,11 +725,13 @@ export class WhatsAppSession {
       return;
     }
 
-    const { sock, saveCreds, clearAll, isPaired } = created;
+    const { sock, saveCreds, clearAll, fence, isPaired } = created;
 
+    this.#fence();
     const generation = (this.#generation += 1);
     this.#socket = sock;
     this.#clearAll = clearAll;
+    this.#fenceAuth = typeof fence === "function" ? fence : null;
     // An install with no pairing yet is on a pairing attempt: its closes are
     // terminal until a phone has actually scanned the code.
     this.#pairing = !isPaired;
@@ -737,6 +788,19 @@ export class WhatsAppSession {
     Promise.resolve(sock?.end?.(error)).catch(() => {});
   }
 
+  /** Close the auth-store fence for a socket we are tearing down or unlinking. */
+  #fence(fence = this.#fenceAuth) {
+    if (fence === this.#fenceAuth) {
+      this.#fenceAuth = null;
+    }
+    if (typeof fence !== "function") return;
+    try {
+      fence();
+    } catch (error) {
+      this.log.debug({ err: error?.message }, "[Session] auth fence threw");
+    }
+  }
+
   /** Cut every wire back from a socket we are done with. */
   #detach(sock) {
     disposeReactionIntake(sock);
@@ -749,6 +813,7 @@ export class WhatsAppSession {
 
   /** End the current socket without letting its close event mean anything. */
   async #destroySocket() {
+    this.#fence();
     const sock = this.#socket;
     if (!sock) return;
 
@@ -925,6 +990,7 @@ export class WhatsAppSession {
     // stop from `reconnecting` would leave the dead socket's generation current
     // and anything it emitted afterwards would still be believed.
     this.#generation += 1;
+    this.#fence();
     this.#detach(closedSocket);
     // The scheduled jobs were armed with that socket. Leaving them running
     // means a daily message firing into a closed connection, failing, and
@@ -996,6 +1062,7 @@ export class WhatsAppSession {
     // so there is normally nothing left to hear from. Being explicit costs
     // nothing and closes the one window where a late creds.update could write
     // the dead credentials back over the wipe below.
+    this.#fence();
     this.#detach(closedSocket);
 
     const clearAll = this.#clearAll;
@@ -1144,6 +1211,7 @@ export class WhatsAppSession {
       this.#retryTimer = null;
       this.#nextRetryAt = null;
       if (this.#shuttingDown) return;
+      if (this.#loggingOut) return;
       if (this.#starting) return;
 
       this.#starting = this.#open({ reason: "reconnect" })

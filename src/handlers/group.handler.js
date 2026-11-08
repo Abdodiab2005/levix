@@ -20,10 +20,46 @@ function participantIdentities(participant) {
   return ids;
 }
 
+// Baileys rc14 sends group-participants.update participants as objects
+// ({ id, phoneNumber?, lid?, username?, admin }, Socket/messages-recv.js:637);
+// older builds sent the bare JID string. The welcome path only needs the JID,
+// and calling .split() on the object is what used to throw inside the try/catch
+// and swallow every welcome message.
+function participantJid(participant) {
+  if (typeof participant === "string") return participant || null;
+  if (!participant || typeof participant !== "object") return null;
+  const { id } = participant;
+  return typeof id === "string" && id ? id : null;
+}
+
+// rc14 emits 'group.join-request' with { id, participant, participantPn,
+// action: "created" | "revoked" | "rejected", method }
+// (Utils/process-message.js:496). Older builds passed
+// { type: "request", jid, from }. Both shapes are read here, and the requester
+// is resolved through participantJid() so an object and a string behave alike.
+function joinRequestFields(request) {
+  if (!request || typeof request !== "object") return null;
+  const legacy = request.type === "request";
+  const pending = legacy || request.action === "created";
+  if (!pending) return null;
+
+  const groupId = request.jid || request.id;
+  const participantId =
+    participantJid(request.from) ||
+    participantJid(request.participant) ||
+    participantJid(request.participantPn);
+  if (!groupId || !participantId) return null;
+
+  return { groupId, participantId };
+}
+
 // Handle group participant updates (join/leave)
 export async function handleGroupParticipantsUpdate(sock, update) {
   const { id, participants, action } = update;
-  logger.info({ update }, "Received group participants update");
+  logger.info(
+    { group: id, action, count: Array.isArray(participants) ? participants.length : 0 },
+    "Received group participants update",
+  );
 
   if (action === "remove" || action === "leave") {
     try {
@@ -55,18 +91,24 @@ export async function handleGroupParticipantsUpdate(sock, update) {
     }
 
     // Send welcome message to each new participant
-    for (const participant of participants) {
+    for (const participant of participants || []) {
+      const participantId = participantJid(participant);
+      if (!participantId) {
+        logger.warn({ group: id }, "[Group] Welcome skipped: participant has no JID");
+        continue;
+      }
+
       const randomIndex = Math.floor(Math.random() * welcomeConfig.messages.length);
       const welcomeMessage = welcomeConfig.messages[randomIndex];
 
-      const welcomeText = welcomeMessage.replace(/\${user}/g, `@${participant.split("@")[0]}`);
+      const welcomeText = welcomeMessage.replace(/\${user}/g, `@${participantId.split("@")[0]}`);
       const summary = buildModerationSummary(settings);
       const finalMessage = summary ? `${welcomeText}\n\n${summary}` : welcomeText;
 
       await delay(1000);
       await sock.sendMessage(id, {
         text: finalMessage,
-        mentions: [participant],
+        mentions: [participantId],
       });
     }
   } catch (error) {
@@ -78,11 +120,15 @@ export async function handleGroupParticipantsUpdate(sock, update) {
 export async function handleGroupJoinRequests(sock, events) {
   logger.info({ events }, "Received group join request update");
 
-  for (const request of events) {
-    if (request.type !== "request") continue;
+  // rc14 emits one object per 'group.join-request' event, while the older
+  // 'group-requests.update' delivered an array. Accept either.
+  const requests = Array.isArray(events) ? events : events ? [events] : [];
 
-    const groupId = request.jid;
-    const participantId = request.from;
+  for (const request of requests) {
+    const fields = joinRequestFields(request);
+    if (!fields) continue;
+
+    const { groupId, participantId } = fields;
 
     try {
       const settings = getGroupSettings(groupId);
@@ -90,11 +136,20 @@ export async function handleGroupJoinRequests(sock, events) {
       if (settings?.join_requests?.auto_approve_enabled) {
         logger.info(`[Auto-Approve] Approving ${participantId} for group ${groupId}`);
 
-        await sock.groupRequestUpdate(groupId, participantId, "approve");
+        // rc14 names the action groupRequestParticipantsUpdate(jid, users,
+        // action); the older single-participant method is kept as a fallback
+        // for a socket that still exposes it.
+        if (typeof sock.groupRequestParticipantsUpdate === "function") {
+          await sock.groupRequestParticipantsUpdate(groupId, [participantId], "approve");
+        } else {
+          await sock.groupRequestUpdate(groupId, participantId, "approve");
+        }
 
         await delay(500);
         await sock.sendMessage(groupId, {
-          text: t("bot.moderation.groupHandler.joinRequestApproved", { member: participantId.split("@")[0] }),
+          text: t("bot.moderation.groupHandler.joinRequestApproved", {
+            member: participantId.split("@")[0],
+          }),
           mentions: [participantId],
         });
       }

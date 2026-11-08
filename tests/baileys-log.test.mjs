@@ -39,6 +39,26 @@ log.warn(
 log.info({ operation: "set", data: { contacts: [{ fullName: NAME }] } }, "app state");
 log.trace({ xml: `<iq type="result"><group subject="${SUBJECT}"/></iq>` }, "recv xml");
 log.error({ err: new Error("stream errored") }, "socket failed");
+log.debug(
+  {
+    recv: {
+      tag: "message",
+      attrs: { notify: NAME, participant_username: "layla_h", type: "text" },
+    },
+  },
+  "recv",
+);
+log.error(
+  {
+    key: {
+      remoteJid: "120363000000000000@g.us",
+      participantUsername: "layla_h",
+      fromMe: false,
+    },
+    err: new Error("No session found to decrypt message"),
+  },
+  "failed to decrypt message",
+);
 
 const file = readDebugTail();
 
@@ -47,12 +67,14 @@ ok("no display name", !file.includes(NAME));
 ok("no group subject", !file.includes(SUBJECT));
 ok("no message text", !file.includes(TEXT));
 ok("no phone number", !file.includes("201001234567"));
+ok("no username", !file.includes("layla_h"));
 
 section("the failure facts survive");
 ok("node tag kept", file.includes('"tag":"notification"'));
 ok("protocol type kept", file.includes('"type":"w:gp2"'));
 ok("node string keeps its outer tag", file.includes("<message>"));
 ok("error message kept", file.includes("stream errored"));
+ok("decrypt failure kept", file.includes("No session found to decrypt message"));
 ok("records are tagged", file.includes('"module":"baileys"'));
 
 section("Baileys never writes the operational logs");
