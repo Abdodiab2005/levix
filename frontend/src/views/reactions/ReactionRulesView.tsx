@@ -43,6 +43,7 @@ import {
 import { ReactionRuleEditor } from "./ReactionRuleEditor";
 
 type TFn = (key: string) => string;
+type RefreshOutcome = "applied" | "discarded" | "failed";
 
 function failureMessage(t: TFn, err: unknown, fallback: string): string {
   const code = reactionApiCode(err);
@@ -199,6 +200,7 @@ export const ReactionRulesView: React.FC = () => {
   const inflight = useRef(new Set<string>());
   const [toggling, setToggling] = useState<ReadonlySet<string>>(() => new Set());
   const listSeq = useRef(0);
+  const appliedSeq = useRef(0);
   const alive = useRef(true);
   const written = useRef(0);
   const autoGen = useRef(0);
@@ -233,6 +235,7 @@ export const ReactionRulesView: React.FC = () => {
           return local ? { ...rule, enabled: local.enabled } : rule;
         }),
       );
+      appliedSeq.current += 1;
     },
     [t],
   );
@@ -269,18 +272,19 @@ export const ReactionRulesView: React.FC = () => {
     };
   }, []);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (): Promise<RefreshOutcome> => {
     const token = ++listSeq.current;
     const seen = written.current;
     try {
       const res = await api.getReactions();
-      if (!alive.current || listSeq.current !== token || written.current !== seen) return false;
+      if (!alive.current || listSeq.current !== token || written.current !== seen) return "discarded";
       applyOverview(res);
       setError(null);
-      return true;
+      return "applied";
     } catch {
       // A background refresh must not toast or replace the list with an error.
-      return false;
+      if (!alive.current || listSeq.current !== token || written.current !== seen) return "discarded";
+      return "failed";
     }
   }, [applyOverview]);
 
@@ -361,6 +365,8 @@ export const ReactionRulesView: React.FC = () => {
   const toggleRule = async (rule: ReactionRule, enabled: boolean) => {
     if (inflight.current.has(rule.id)) return;
     written.current += 1;
+    const startedWritten = written.current;
+    const startedApplied = appliedSeq.current;
     const previous = rule.enabled;
     inflight.current.add(rule.id);
     setToggling((prev) => {
@@ -374,8 +380,12 @@ export const ReactionRulesView: React.FC = () => {
       setRules((list) => list.map((item) => (item.id === rule.id ? res.rule : item)));
     } catch (err) {
       inflight.current.delete(rule.id);
-      const applied = await refresh();
-      if (!applied) {
+      const outcome = await refresh();
+      if (
+        outcome === "failed" &&
+        written.current === startedWritten &&
+        appliedSeq.current === startedApplied
+      ) {
         setRules((list) =>
           list.map((item) => (item.id === rule.id ? { ...item, enabled: previous } : item)),
         );

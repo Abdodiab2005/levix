@@ -388,7 +388,12 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
             htmlFor="rx-transitions"
             error={fieldErrors.transitions}
           >
-            <div id="rx-transitions" className="flex flex-col" role="group">
+            <div
+              id="rx-transitions"
+              className="flex flex-col"
+              role="group"
+              aria-label={t("reactionTransitions")}
+            >
               {TRANSITIONS.map((value) => (
                 <Checkbox
                   key={value}
@@ -409,7 +414,12 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
             error={fieldErrors.originalTypes}
             description={typesLocked ? t("reactionSttVoiceOnly") : undefined}
           >
-            <div id="rx-types" className="flex flex-col" role="group">
+            <div
+              id="rx-types"
+              className="flex flex-col"
+              role="group"
+              aria-label={t("reactionTypes")}
+            >
               {ORIGINAL_TYPES.map((value) => (
                 <Checkbox
                   key={value}
@@ -525,6 +535,7 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
             <RadioGroup
               id="rx-destination"
               name="rx-destination"
+              label={t("reactionDestination")}
               value={draft.destination}
               aria-describedby={describedBy(
                 fieldErrors.destination ? "rx-destination-message" : undefined,
