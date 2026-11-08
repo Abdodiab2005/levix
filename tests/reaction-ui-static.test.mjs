@@ -1,5 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { equal, finish, ok, ROOT, section } from "./harness.mjs";
 
 const viewsDir = join(ROOT, "frontend/src/views/reactions");
@@ -13,6 +13,7 @@ function filesUnder(dir) {
 }
 
 const files = filesUnder(viewsDir);
+const relativePath = (file) => relative(ROOT, file);
 ok("reaction view files exist", files.length > 0, files.join(", "));
 
 const keyPattern = /\bt\(\s*(["'])([A-Za-z][A-Za-z0-9]*)\1/g;
@@ -36,7 +37,7 @@ for (const key of [...used].sort()) {
 section("no physical-direction classes, hex colours, or one-off palettes");
 for (const file of files) {
   const text = readFileSync(file, "utf8");
-  const relative = file.slice(ROOT.length + 1);
+  const relative = relativePath(file);
   ok(`${relative} has no ml/mr/pl/pr/left/right layout classes`, !layoutPattern.test(text));
   ok(`${relative} has no raw hex colours`, !hexPattern.test(text));
   ok(`${relative} has no text-red/bg-slate palettes`, !palettePattern.test(text));
@@ -45,13 +46,13 @@ for (const file of files) {
 section("UI primitives import from the barrel");
 for (const file of files) {
   const text = readFileSync(file, "utf8");
-  const relative = file.slice(ROOT.length + 1);
+  const relative = relativePath(file);
   for (const match of text.matchAll(importPattern)) {
     const source = match[1];
     if (!source.includes("components/ui")) continue;
     equal(
       `${relative} UI import ${source}`,
-      source === "../../components/ui",
+      source,
       "../../components/ui",
     );
   }
