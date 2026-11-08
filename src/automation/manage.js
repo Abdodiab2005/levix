@@ -114,8 +114,7 @@ function triggerKeys(definition) {
   const keys = [];
   const types = values(definition.originalTypes);
   for (const transition of values(definition.transitions))
-    for (const type of types)
-      keys.push(JSON.stringify([definition.emoji, transition, type]));
+    for (const type of types) keys.push(JSON.stringify([definition.emoji, transition, type]));
   return keys;
 }
 

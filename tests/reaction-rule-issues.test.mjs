@@ -186,7 +186,7 @@ const values = [
   ["1:7@s.whatsapp.net"],
   ["1@newsletter"],
   ["1@lid@evil"],
-  ["1".repeat(31) + "@lid"],
+  [`${"1".repeat(31)}@lid`],
   { role: "any", ids: [] },
   { mode: "same_chat" },
   Array.from({ length: 100 }, (_, i) => `${i + 1}@lid`),

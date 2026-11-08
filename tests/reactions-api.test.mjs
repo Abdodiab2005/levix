@@ -458,7 +458,9 @@ function addEnabled(id, chatJid, priority, patch = {}, enabled = true) {
 }
 addEnabled("broad-target", chat, 5, { originalTypes: ["text", "voice"] });
 for (const [transition, type] of [
-  ["add", "text"], ["change", "voice"], ["remove", "text"],
+  ["add", "text"],
+  ["change", "voice"],
+  ["remove", "text"],
 ]) {
   for (let index = 0; index < 60; index++) {
     addEnabled(`${transition}-${index}`, chat, 10, {
@@ -498,7 +500,11 @@ ok(
 );
 addEnabled("multi-pair-overlap", chat, 1, { originalTypes: ["text", "voice"] }, false);
 const pairOverlap = manage.overview().rules.find((item) => item.id === "broad-target").overlaps;
-equal("shared multiple pairs contribute one overlap id", pairOverlap.join(","), "multi-pair-overlap");
+equal(
+  "shared multiple pairs contribute one overlap id",
+  pairOverlap.join(","),
+  "multi-pair-overlap",
+);
 
 section("candidate warnings and overlaps share PN/LID alias scope");
 db.exec("DELETE FROM reaction_rules");

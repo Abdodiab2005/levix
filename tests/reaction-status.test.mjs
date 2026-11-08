@@ -449,7 +449,11 @@ try {
   };
   receive();
   await engine.settled();
-  equal("current-account jobs still record outcomes", status.get("engine-rule")?.lastCode, "DELIVERED");
+  equal(
+    "current-account jobs still record outcomes",
+    status.get("engine-rule")?.lastCode,
+    "DELIVERED",
+  );
 } finally {
   engine.close();
   sender.sendBotMessage = savedSend;

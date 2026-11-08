@@ -123,7 +123,9 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 function stringList(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 /** Untrusted stored definition: never throw, give Edit a replaceable draft. */
@@ -131,8 +133,8 @@ export function draftFromRule(rule: ReactionRule): ReactionDraft {
   const definition = asRecord(rule.definition);
   const senders = asRecord(definition?.senders);
   const destination = asRecord(definition?.destination);
-  const transitions = stringList(definition?.transitions).filter((item): item is ReactionTransition =>
-    (TRANSITIONS as readonly string[]).includes(item),
+  const transitions = stringList(definition?.transitions).filter(
+    (item): item is ReactionTransition => (TRANSITIONS as readonly string[]).includes(item),
   );
   const originalTypes = stringList(definition?.originalTypes).filter(
     (item): item is ReactionOriginalType => (ORIGINAL_TYPES as readonly string[]).includes(item),
@@ -234,7 +236,8 @@ export function statusTone(code: string): "ok" | "warn" | "danger" | "neutral" {
 }
 
 export function ruleMatchesFilters(rule: ReactionRule, filters: ReactionFilters): boolean {
-  if (filters.action !== "any" && asRecord(rule.definition)?.action !== filters.action) return false;
+  if (filters.action !== "any" && asRecord(rule.definition)?.action !== filters.action)
+    return false;
   const statuses = Array.isArray(rule.statuses) ? rule.statuses : [];
   if (filters.status === "ready") return statuses.includes("READY");
   if (filters.status === "off") return statuses.some((code) => OFF_STATUS.has(code));

@@ -166,6 +166,7 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ruleId re-freezes the target when the editor switches rules.
   useEffect(() => {
     if (!open) {
       submitGen.current += 1;
