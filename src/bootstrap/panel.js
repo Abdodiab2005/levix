@@ -48,6 +48,7 @@ export async function bootstrapPanel({ core } = {}) {
   );
   const stickerApi = await import("../routes/stickers.api.esm.js");
   const backupApi = await import("../routes/backup.api.esm.js");
+  const reactionsApi = await import("../routes/reactions.api.esm.js");
   require("../backup/jobs.cjs").sweepBackupTemp();
   require("../backup/uploads.cjs").sweepUploads(true);
 
@@ -61,6 +62,7 @@ export async function bootstrapPanel({ core } = {}) {
     stickerApi.jsonUnlessStickerUpload(backupApi.jsonUnlessBackupUpload(dashboardJson)),
     stickerApi.default,
     backupApi.default,
+    reactionsApi.default,
     dashboardApiRoutes,
   );
   logger.info("Dashboard API routes registered");
@@ -81,6 +83,7 @@ export async function bootstrapPanel({ core } = {}) {
   if (core?.session) {
     setSession(core.session);
     stickerApi.setSession(core.session);
+    reactionsApi.setSession(core.session);
     require("../backup/jobs.cjs").setSession(core.session);
   }
   // The WhatsApp-code password reset talks to the same session manager.

@@ -12,6 +12,7 @@ const require = createRequire(import.meta.url);
 const store = require("../db/store.cjs");
 const runtime = require("../config/runtime-config.cjs");
 const settings = require("../config/settings.cjs");
+const status = require("./status.cjs");
 const { evaluatePermissionLevel } = require("../utils/permissionLevel.cjs");
 const { planDelivery, canonicalJid } = require("../messaging/router.cjs");
 const { linkedIdentity } = require("../messaging/identity.cjs");
@@ -48,6 +49,28 @@ const OUTCOMES = new Set([
   "MEDIA_URL_INVALID",
 ]);
 
+export const REACTION_ACTION_LIMITS = Object.freeze({
+  perReactor: 3,
+  perChat: 10,
+  perRule: 5,
+  globalJobs: 2,
+  windowMs: 60_000,
+});
+
+// Read-only checks shared with management; authorization still belongs to the job.
+export function reactionActionReadiness(action, { checkKey = true } = {}) {
+  const statuses = [];
+  if (runtime.isDisabled(action)) statuses.push("ACTION_DISABLED");
+  if (action === "stt") {
+    if (!settings.get("ai_stt_enabled")) statuses.push("STT_DISABLED");
+    if (checkKey) {
+      const stt = require("../commands/stt.cjs");
+      if (!settings.get(`${stt.resolveSttProvider()}_api_key`)) statuses.push("STT_KEY_MISSING");
+    }
+  }
+  return statuses;
+}
+
 function senderMatches(definition, sender) {
   const { role, ids } = definition.senders;
   if (ids.length && !ids.some((id) => same(sender.senderId, id))) return false;
@@ -65,9 +88,10 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
   let closed = false;
   let lastCode = null;
   let completed = 0;
-  const outcome = (code) => {
+  const outcome = (code, ruleId = null) => {
     lastCode = code;
     completed++;
+    status.record(ruleId, code, now());
     logger.debug({ code }, "[Reactions] action outcome");
   };
   const cancel = (predicate = () => true) => {
@@ -161,14 +185,14 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
   }
   function authorize(job) {
     const subject = sender(job);
+    const readiness = reactionActionReadiness(job.definition.action, { checkKey: false });
     if (
       !senderMatches(job.definition, subject) ||
-      runtime.isDisabled(job.definition.action) ||
+      readiness.includes("ACTION_DISABLED") ||
       !evaluatePermissionLevel(runtime.getPermission(job.definition.action), subject).hasPermission
     )
       fail("REACTION_FORBIDDEN");
-    if (job.definition.action === "stt" && !settings.get("ai_stt_enabled"))
-      fail("REACTION_STT_DISABLED");
+    if (readiness.includes("STT_DISABLED")) fail("REACTION_STT_DISABLED");
     return subject;
   }
   function delivery(job) {
@@ -253,7 +277,7 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
     if (!job.rule) return "NO_MATCH";
     authorize(job);
     delivery(job);
-    const budgets = [{ key: hash("rule", job.rule.id), limit: 5 }];
+    const budgets = [{ key: hash("rule", job.rule.id), limit: REACTION_ACTION_LIMITS.perRule }];
     const claimed = store.claimReactionExecution(
       {
         eventKey: event.eventKey,
@@ -282,7 +306,7 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
         assertWhatsAppAudio(audio);
         if (audio.ptt !== true) fail("REACTION_VOICE_REQUIRED");
         const stt = require("../commands/stt.cjs");
-        if (!settings.get(`${stt.resolveSttProvider()}_api_key`)) fail("STT_KEY_REQUIRED");
+        if (reactionActionReadiness("stt").includes("STT_KEY_MISSING")) fail("STT_KEY_REQUIRED");
         const bytes = await require("../utils/geminiMedia.cjs").downloadMedia(
           require("@whiskeysockets/baileys").downloadContentFromMessage,
           audio,
@@ -316,7 +340,7 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
       return;
     }
     if (
-      inFlight.size >= 2 ||
+      inFlight.size >= REACTION_ACTION_LIMITS.globalJobs ||
       [...inFlight].some((job) => same(actorOf(job.event.actorKey), actorOf(event.actorKey)))
     ) {
       outcome("BUSY");
@@ -324,10 +348,10 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
     }
     const actor = verifiedIdentityAliases(actorOf(event.actorKey));
     const budgets = [
-      ...actor.map((id) => ({ key: hash("actor", id), limit: 3 })),
+      ...actor.map((id) => ({ key: hash("actor", id), limit: REACTION_ACTION_LIMITS.perReactor })),
       ...store
         .reactionIdentityAliases(event.original.key.remoteJid)
-        .map((id) => ({ key: hash("chat", id), limit: 10 })),
+        .map((id) => ({ key: hash("chat", id), limit: REACTION_ACTION_LIMITS.perChat })),
     ];
     const admission = store.admitReactionAttempt(budgets, now());
     if (admission !== "ADMITTED") {
@@ -343,11 +367,14 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
     );
     const timer = setTimeout(() => job.controller.abort(new Error("REACTION_TIMEOUT")), timeout);
     job.work = execute(job)
-      .then(outcome, (error) => {
-        const message = String(job.controller.signal.reason?.message || error?.message || "");
-        const code = OUTCOMES.has(message) ? message : "ACTION_FAILED";
-        outcome(code);
-      })
+      .then(
+        (code) => outcome(code, job.rule?.id ?? null),
+        (error) => {
+          const message = String(job.controller.signal.reason?.message || error?.message || "");
+          const code = OUTCOMES.has(message) ? message : "ACTION_FAILED";
+          outcome(code, job.rule?.id ?? null);
+        },
+      )
       .finally(() => {
         clearTimeout(timer);
         active.delete(job);
