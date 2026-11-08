@@ -11,6 +11,7 @@ const database = require("./src/db/db.cjs");
 const { db } = database;
 const settings = require("./src/config/settings.cjs");
 const runtime = require("./src/config/runtime-config.cjs");
+const groupMetadataCache = require("./src/utils/groupMetadataCache.cjs");
 const media = require("./src/utils/geminiMedia.cjs");
 const stt = require("./src/commands/stt.cjs");
 const thumbnail = require("./src/utils/thumbnail.cjs");
@@ -158,6 +159,53 @@ async function completed(f) { await f.engine.settled(); return f.engine.stats().
 const count = (table) => db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
 
 try {
+  section("reaction live authorization updates the shared send roster");
+  groupMetadataCache.flushAll();
+  try {
+    const newMember = "201070000003@s.whatsapp.net";
+    const f = await fixture({ participants: [{ id: newMember }] });
+    groupMetadataCache.setCached(group, {
+      id: group,
+      participants: structuredClone(f.state.participants.filter((p) => p.id !== newMember)),
+    });
+    receive(f, remember(f), "😀", newMember);
+    equal("the new member's matching reaction delivers", await completed(f), "DELIVERED");
+    equal("the matching reaction sends once", f.state.sent.length, 1);
+    const calls = f.state.metadataCalls;
+    const forSend = await groupMetadataCache.groupMetadataForSend(f.socket, group);
+    ok("the shared send roster includes the new member", forSend?.participants?.some((p) => p.id === newMember));
+    equal("the send hook uses the roster written by the engine", f.state.metadataCalls, calls);
+    equal("the live roster is fresh after delivery", groupMetadataCache.isRosterStale(group), false);
+  } finally {
+    groupMetadataCache.flushAll();
+  }
+
+  section("reaction live roster rejection fails closed and preserves the cache");
+  groupMetadataCache.flushAll();
+  try {
+    const f = await fixture();
+    groupMetadataCache.setCached(group, {
+      id: group,
+      participants: structuredClone(f.state.participants),
+    });
+    const before = JSON.stringify(groupMetadataCache.getCached(group));
+    const ttl = groupMetadataCache.cache.getTtl(group);
+    f.socket.groupMetadata = async () => {
+      f.state.metadataCalls++;
+      throw new Error("injected roster rejection");
+    };
+    receive(f, remember(f));
+    equal("a rejected live roster is inaccessible", await completed(f), "REACTION_INACCESSIBLE");
+    equal("a rejected live roster makes one request", f.state.metadataCalls, 1);
+    equal("a rejected live roster initiates no send", f.state.attempts.length, 0);
+    equal("a rejected live roster delivers nothing", f.state.sent.length, 0);
+    equal("a rejected live roster leaves the cached entry unchanged", JSON.stringify(groupMetadataCache.getCached(group)), before);
+    equal("a rejected live roster keeps the cached TTL", groupMetadataCache.cache.getTtl(group), ttl);
+    equal("a rejected live roster keeps the fresh flag", groupMetadataCache.isRosterStale(group), false);
+  } finally {
+    groupMetadataCache.flushAll();
+  }
+
   section("strict declarative configuration and disabled defaults");
   const valid = definition();
   for (const patch of [

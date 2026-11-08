@@ -18,6 +18,7 @@ const { linkedIdentity } = require("../messaging/identity.cjs");
 const { validateDefinition, originalType } = require("./rules.cjs");
 const { assertWhatsAppAudio, assertAudio, MAX_MEDIA_BYTES } = require("../services/aiMedia.cjs");
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
+const { readLiveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
 const { withLang, langForCommand, t } = require("../utils/i18n.cjs");
 const logger = require("../utils/logger.cjs");
 const hash = (...values) => createHash("sha256").update(JSON.stringify(values)).digest("hex");
@@ -127,7 +128,7 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
     available(job);
     const chat = job.event.original.key.remoteJid;
     if (chat.endsWith("@g.us")) {
-      const metadata = await sock.groupMetadata(chat);
+      const metadata = await readLiveGroupMetadata(sock, chat);
       available(job);
       if (
         canonicalJid(metadata?.id) !== chat ||

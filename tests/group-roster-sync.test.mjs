@@ -108,6 +108,154 @@ function emit(id, action, participants = [MEMBER]) {
   sock.ev.emit("group-participants.update", { id, action, participants });
 }
 
+section("live roster read replaces a fresh cache entry for sending");
+
+{
+  groupMetadataCache.flushAll();
+  if (ok("live roster reader is exported", typeof groupMetadataCache.readLiveGroupMetadata === "function")) {
+    const oldRoster = roster(G, [ADMIN]);
+    const live = roster(G, [ADMIN, MEMBER]);
+    groupMetadataCache.setCached(G, oldRoster);
+    let calls = 0;
+    sock.groupMetadata = async () => {
+      calls += 1;
+      return live;
+    };
+    equal("live read ignores the fresh cache", await groupMetadataCache.readLiveGroupMetadata(sock, G), live);
+    equal("a fresh cache still requires one live query", calls, 1);
+    equal("the send hook sees the live roster", ids(await sendHook(sock, G)), ids(live));
+    equal("the send hook needs no additional query", calls, 1);
+    ok("the live roster stays fresh", !stale(G));
+  }
+  groupMetadataCache.flushAll();
+}
+
+section("concurrent live roster reads share one request");
+
+{
+  groupMetadataCache.flushAll();
+  if (ok("live roster reader is exported", typeof groupMetadataCache.readLiveGroupMetadata === "function")) {
+    groupMetadataCache.setCached(G, roster(G, [ADMIN]));
+    const box = defer();
+    const live = roster(G, [ADMIN, MEMBER]);
+    let calls = 0;
+    sock.groupMetadata = () => {
+      calls += 1;
+      return box.promise;
+    };
+    const first = groupMetadataCache.readLiveGroupMetadata(sock, G);
+    const second = groupMetadataCache.readLiveGroupMetadata(sock, G);
+    equal("two live readers start one query", calls, 1);
+    box.resolve(live);
+    const [left, right] = await Promise.all([first, second]);
+    equal("the first live reader gets the answer", left, live);
+    equal("the second live reader joins the answer", right, live);
+    equal("joining does not schedule a follow-up", calls, 1);
+  }
+  groupMetadataCache.flushAll();
+}
+
+section("live roster read drains the follow-up after a roster event");
+
+{
+  groupMetadataCache.flushAll();
+  if (ok("live roster reader is exported", typeof groupMetadataCache.readLiveGroupMetadata === "function")) {
+    const oldRoster = roster(G, [ADMIN]);
+    const superseded = roster(G, [LATE]);
+    const live = roster(G, [ADMIN, MEMBER]);
+    groupMetadataCache.setCached(G, oldRoster);
+    const first = defer();
+    const followUp = defer();
+    let calls = 0;
+    sock.groupMetadata = () => {
+      calls += 1;
+      return calls === 1 ? first.promise : followUp.promise;
+    };
+    let settled = false;
+    const pending = groupMetadataCache.readLiveGroupMetadata(sock, G).then((value) => {
+      settled = true;
+      return value;
+    });
+    groupMetadataCache.markRosterChanged(sock, G);
+    equal("the event joins the pending live query", calls, 1);
+    first.resolve(superseded);
+    await tick();
+    equal("the event starts one follow-up", calls, 2);
+    ok("the superseded answer does not settle the live read", !settled);
+    equal("the superseded answer does not replace the cache", ids(groupMetadataCache.getCached(G)), ids(oldRoster));
+    followUp.resolve(live);
+    equal("the live reader returns the follow-up", await pending, live);
+    equal("the cache holds the follow-up", ids(groupMetadataCache.getCached(G)), ids(live));
+    ok("the follow-up clears stale", !stale(G));
+  }
+  groupMetadataCache.flushAll();
+}
+
+section("failed live roster reads preserve cached entries and stale flags");
+
+{
+  groupMetadataCache.flushAll();
+  if (ok("live roster reader is exported", typeof groupMetadataCache.readLiveGroupMetadata === "function")) {
+    for (const wasStale of [false, true]) {
+      groupMetadataCache.flushAll();
+      const oldRoster = roster(G, [ADMIN]);
+      groupMetadataCache.setCached(G, oldRoster);
+      sock.groupMetadata = async () => { throw new Error("offline"); };
+      if (wasStale) {
+        groupMetadataCache.markRosterChanged(sock, G);
+        await tick();
+      }
+      const before = JSON.stringify(groupMetadataCache.getCached(G));
+      const ttl = groupMetadataCache.cache.getTtl(G);
+      equal(`failed live read returns null (stale=${wasStale})`, await groupMetadataCache.readLiveGroupMetadata(sock, G), null);
+      equal(`failure keeps the cached roster (stale=${wasStale})`, JSON.stringify(groupMetadataCache.getCached(G)), before);
+      equal(`failure keeps the cache TTL (stale=${wasStale})`, groupMetadataCache.cache.getTtl(G), ttl);
+      equal(`failure keeps the stale flag (stale=${wasStale})`, stale(G), wasStale);
+    }
+  }
+  groupMetadataCache.flushAll();
+}
+
+section("live roster read ignores non-group jids");
+
+{
+  groupMetadataCache.flushAll();
+  if (ok("live roster reader is exported", typeof groupMetadataCache.readLiveGroupMetadata === "function")) {
+    let calls = 0;
+    sock.groupMetadata = async () => {
+      calls += 1;
+      return roster(G, [ADMIN]);
+    };
+    equal("a private jid has no live roster", await groupMetadataCache.readLiveGroupMetadata(sock, OWNER), null);
+    equal("a private jid makes no query", calls, 0);
+  }
+  groupMetadataCache.flushAll();
+}
+
+section("live roster read refuses unavailable, participant-less and superseded answers");
+
+{
+  groupMetadataCache.flushAll();
+  if (ok("live roster reader is exported", typeof groupMetadataCache.readLiveGroupMetadata === "function")) {
+    const oldRoster = roster(G, [ADMIN]);
+    groupMetadataCache.setCached(G, oldRoster);
+    equal("a missing socket cannot use the fresh cache", await groupMetadataCache.readLiveGroupMetadata(null, G), null);
+    equal("a socket without groupMetadata returns null", await groupMetadataCache.readLiveGroupMetadata({}, G), null);
+    sock.groupMetadata = async () => ({ id: G });
+    equal("a participant-less live answer returns null", await groupMetadataCache.readLiveGroupMetadata(sock, G), null);
+    equal("a participant-less answer leaves the cache alone", ids(groupMetadataCache.getCached(G)), ids(oldRoster));
+    const box = defer();
+    sock.groupMetadata = () => box.promise;
+    const pending = groupMetadataCache.readLiveGroupMetadata(sock, G);
+    const replacement = roster(G, [ADMIN, MEMBER]);
+    groupMetadataCache.storeFullGroupMetadata(G, replacement);
+    box.resolve(roster(G, [LATE]));
+    equal("supersession without a follow-up returns null", await pending, null);
+    equal("supersession preserves the replacement cache", ids(groupMetadataCache.getCached(G)), ids(replacement));
+  }
+  groupMetadataCache.flushAll();
+}
+
 section("roster event hides the old roster from the send hook");
 
 {
