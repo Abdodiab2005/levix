@@ -686,3 +686,80 @@ UI (view, editor, client, types, navigation, en and ar strings) run in parallel
 in separate worktrees against the contract above. 07c-3 adds pt-BR and es-419
 strings. Agents do not run gates; the orchestrator runs every test, build and
 review, then commits.
+
+## Phase 07c implementation, review and verification (2026-11-09)
+
+Status: **IMPLEMENTED, PENDING OWNER REVIEW** on `feat/v5-phase-07c`, based on
+`ba7ef44`. No merge, release, tag, deployment or Google Play upload.
+
+### What shipped
+
+- `src/automation/rules.cjs`: `definitionIssues()` returns field issues;
+  `validateDefinition()` throws when the list is non-empty. A parity test runs a
+  frozen copy of the 07b validator over its vectors and 768 mutated definitions.
+- `src/db/store.cjs`: `listReactionRules()`. `clearReactionAccountState()` now
+  emits `{ type: "policy", account: true }`; existing listeners still see a
+  `policy` event.
+- `src/automation/engine.js`: exports `REACTION_ACTION_LIMITS` (3 per reactor,
+  10 per chat, 5 per rule per 60 s, 2 global jobs, 100 candidates per event) and
+  `reactionActionReadiness()`, which the engine itself uses for the disabled
+  command, `ai_stt_enabled` and STT key checks. Outcomes are recorded against a
+  rule only while the rule still has the revision the job selected.
+- `src/automation/status.cjs`: RAM-only outcome record per rule (last code, time,
+  per-code counts), at most 1,000 rules, fixed code allowlist, cleared on any
+  change to that rule and fully reset with an epoch on account clearing.
+- `src/automation/manage.js` and `src/routes/reactions.api.esm.js`: the seven
+  routes of the plan, strict body allowlists, revision checks (409), fixed error
+  and issue codes, statuses, alias-aware overlaps and per-event candidate count.
+- React screen `#reactions` with the global switch, rule cards, statuses, last
+  outcome, filter, sort, pagination, delete confirmation and the rule editor.
+  The shared `Field` primitive now gives its message an id
+  (`${htmlFor}-message`); `RadioGroup` accepts `id` and `aria-describedby`.
+- 164 strings in each of `en`, `ar`, `pt-BR`, `es-419`. pt-BR and es-419 are a
+  machine draft pending ChatGPT review (Q-19), recorded in `i18n/review.json`.
+
+### Reviews and fixes
+
+Codex (read-only) reviewed four rounds.
+
+| round | findings | fixed |
+| --- | --- | --- |
+| 1 | 2 P1 (editor could save one rule's draft onto another; polling refreshed the revision under an open draft), 8 P2 (issue fields, untrusted stored rows, toggle race, stale status after edit, status kept across unlink, candidate count semantics, two misleading strings), 1 P3 (preview wrapping) | all |
+| 2 | 2 P2 (conflict reload overwrote newer state; every keyless policy event wiped status) | all |
+| 3 | 2 P2 (discarded reload still rolled back; unnamed radio and checkbox groups) | all |
+| 4 | 1 P2 (action group unnamed) | fixed in `af647d0` |
+
+The orchestrator's own QA found one more: error text was not linked to its
+control (`aria-describedby`); fixed in the shared `Field` primitive.
+
+### Evidence (local, Linux, Node v24.22.2)
+
+| gate | commit | result |
+| --- | --- | --- |
+| `npm test` | `88f5ed2` | PASS, 13380 checks, 0 failed |
+| `node tests/run.mjs reaction-ui-static` | `af647d0` | PASS, 174 checks |
+| `npm run lint` | `af647d0` | PASS (exit 0) |
+| `npm run i18n:check` | `af647d0` | PASS |
+| `npm run build:frontend` | `af647d0` | PASS |
+| `npm run docs:check` | `88f5ed2` | PASS |
+| `npm run validate:tarball` | `88f5ed2` | PASS, 36 checks |
+| `npm run build:sea` + `validate:sea` | `af647d0` | PASS, 51 checks |
+| headless Chrome QA, 4 languages x (1280 px light, 360 px dark) | `88f5ed2` build | PASS, 46/46: lang and dir, no horizontal overflow, no raw keys or codes, editor focus |
+| headless edit flow: field issue, 409 on concurrent change, saved edit returns off | `88f5ed2` build | PASS, 9/9 |
+| `validate:docker` | — | NOT RUN locally (Docker socket permission, as in Phase 04); CI runs it |
+| GitHub CI | final head | recorded in the PR |
+| Android WebView on a device | — | NOT RUN |
+| live WhatsApp reaction with a paired test account | — | NOT RUN (no live side effects; the 07b engine is unchanged) |
+
+`af647d0` differs from `88f5ed2` only by one `aria-label` in the editor.
+
+### Limits and rollback
+
+- Outcome counts live in RAM and reset on restart, unlink and account activation.
+  More than 1,000 rules keep status only for the 1,000 most recently recorded.
+- The overview returns every rule in one response; there is no server paging.
+- Rollback: revert the PR. No migration was added (schema 12). Rules and the
+  switch stay in the database; turn the switch off before reverting.
+
+Phase 07.5 (architecture stabilization) waits for the owner's approval of this
+phase's merge.
