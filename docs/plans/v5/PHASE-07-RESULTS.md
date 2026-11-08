@@ -550,3 +550,139 @@ merge, release or Play upload.
 
 Phase 07c (Rule Builder) starts only after PR #136 is merged and the owner
 approves.
+
+## Phase 07c audit and implementation plan (2026-11-08, before code)
+
+Baseline: `release/5.0.0-beta.1` at `ba7ef44` (PR #136 merged 2026-11-08 21:21 UTC).
+Branch: `feat/v5-phase-07c`. The owner authorized 07c in the session prompt of
+2026-11-08 and asked for a PR against `release/5.0.0-beta.1`, with no merge.
+
+### Google Play Closed Testing status
+
+The latest run of "Android Beta → Closed Testing (automatic)" is
+42074694325, from `main`, on 2026-11-05, conclusion `success`. No run exists for
+`release/5.0.0-beta.1`. The owner's 2026-11-08 rules forbid another Google Play
+publication, so 07c triggers none. Play Console state beyond the workflow result
+was not checked (no console access in this session).
+
+### Audit
+
+| id | finding | evidence |
+| --- | --- | --- |
+| A-1 | Internal writes exist and notify running engines. There is no list query and no field-level validation: every defect throws one `REACTION_RULE_INVALID`. | `src/db/store.cjs:325-365`, `src/automation/rules.cjs:49-77` |
+| A-2 | Every non-GET request already passes the global same-origin guard; `/dashboard/api` sits behind `requireLoginApi`; the session cookie is `SameSite=lax`. New routes inherit all three. | `app.cjs:57-78`, `app.cjs:126-138`, `app.cjs:180`, `src/bootstrap/panel.js:57-65` |
+| A-3 | Action outcomes exist only in RAM, per socket (`stats()`), with no rule id. Nothing persisted can show execution status. | `src/automation/engine.js:63-72`, `:363-365` |
+| A-4 | Rate limits are literals in the engine (3 per reactor, 10 per chat, 5 per rule per 60 s, 2 global jobs). Lookup limits are exported as `REACTION_LIMITS`. | `src/automation/engine.js:256`, `:319-330`, `src/automation/reactions.js:12-17` |
+| A-5 | The Auto-delete screen is the closest UI pattern: hash route, sidebar entry, card list, Dialog editor, `RecipientPicker` over `GET /recipients` (groups and contacts). There is no emoji picker and no frontend unit-test runner. | `frontend/src/views/autoDelete/`, `frontend/src/components/RecipientPicker.tsx`, `src/routes/dashboard.api.esm.js:1259` |
+| A-6 | Backups already classify `reaction_rules` as account data; the global switch is not restorable and activation resets rules. 07c changes nothing here. | `src/backup/content.cjs:9-23`, `src/backup/activation.cjs:126-128` |
+| A-7 | More than 100 enabled rules matching one event fail closed with `REACTION_CAPACITY`. This is a per-event work bound, not a rule cap. The UI must warn about it. | `src/automation/engine.js:220`, `src/db/store.cjs:366-376` |
+
+### Design
+
+1. `rules.cjs` gains `definitionIssues(value)`, which returns `[{ field, code }]`.
+   `validateDefinition` throws when that list is non-empty. Accepted and rejected
+   inputs stay identical; a parity test pins it. This gives the UI field errors
+   without a second validator.
+2. `store.cjs` gains `listReactionRules()` (ordered by chat, priority, id). No other
+   store change. No migration: schema stays 12.
+3. New `src/automation/status.cjs`: process-local RAM record per rule id of the
+   last outcome code, its time and per-code counts since start, plus one global
+   record for outcomes with no selected rule. At most 1,000 rule entries; an edit,
+   disable or delete clears that rule's entry. Codes only, never payloads. The
+   engine records into it; nothing writes it to disk.
+4. The engine exports its action limits (`REACTION_ACTION_LIMITS`) and one pure
+   readiness helper for the command and STT checks it already performs, so the
+   management layer reports the same conditions without copying them.
+5. New `src/automation/manage.js`, the only management facade: overview, create,
+   update, enable/disable, delete, global switch and draft check. It calls the
+   store methods above, computes statuses, and maps store errors to typed errors
+   (400, 404, 409). Optimistic concurrency: update, enable/disable and delete
+   carry the rule `revision` the client read; a mismatch returns 409
+   `REACTION_RULE_CHANGED`.
+6. New `src/routes/reactions.api.esm.js`, mounted with the other panel routers:
+
+   | method and path | body | result |
+   | --- | --- | --- |
+   | `GET /dashboard/api/reactions` | — | `{ success, automation: { enabled }, connection: { connected }, owner: { linked }, limits, rules: [RuleView] }` |
+   | `POST /dashboard/api/reactions/rules/check` | `{ chatJid, priority, definition }` | `{ success, issues: [{ field, code }] }` (no write) |
+   | `POST /dashboard/api/reactions/rules` | `{ chatJid, priority, definition }` | `201 { success, rule }`, always disabled |
+   | `PUT /dashboard/api/reactions/rules/:id` | `{ revision, chatJid, priority, definition }` | `{ success, rule }`; an edit disables the rule (07b contract) |
+   | `POST /dashboard/api/reactions/rules/:id/enabled` | `{ revision, enabled }` | `{ success, rule }` |
+   | `DELETE /dashboard/api/reactions/rules/:id?revision=` | — | `{ success }` |
+   | `PUT /dashboard/api/reactions/automation` | `{ enabled }` | `{ success, automation }` |
+
+   `RuleView` is `{ id, revision, chatJid, chatName, priority, enabled, enabledAt,
+   definition, valid, statuses: [code], overlaps: [ruleId], runtime: { lastCode,
+   lastAt, counts } }`. Status codes: `AUTOMATION_OFF`, `RULE_OFF`,
+   `RULE_INVALID`, `NOT_CONNECTED`, `ACTION_DISABLED`, `STT_DISABLED`,
+   `STT_KEY_MISSING`, `OWNER_NOT_LINKED`, `CANDIDATE_LIMIT`, `READY`. Overlaps
+   list rules in the same chat with the same emoji and shared transitions and
+   types that run first (lower priority number, then id). Errors are
+   `{ success: false, error: CODE, issues? }` with fixed codes that the UI
+   translates. Unknown body keys are rejected; a client cannot set `id`,
+   `enabled` on create, `enabledAt` or `revision` values.
+7. React screen `#reactions` ("Reaction rules"), built only from
+   `frontend/src/components/ui`: a global automation `Toggle` with the opt-in
+   notice and the limits; an Add rule button; rule cards with emoji, chat,
+   action, destination, sender role, priority, status pills and the last outcome;
+   a per-rule `Toggle`; an `OverflowMenu` with Edit and Delete; `FilterButton` and
+   `SortMenu`; pagination at 20 per page. The editor `Dialog` uses
+   `RecipientPicker` for the chat and for specific senders, an emoji field with a
+   short palette, checkboxes for transitions and message types, a role select, a
+   segmented action control (STT locks types to voice notes), destination radios,
+   a priority number and a live sentence preview. Server issues appear under their
+   fields. Saving tells the user that an edited rule starts off.
+8. Strings: `i18n/<locale>/dashboard.json` in `en`, `ar`, `pt-BR`, `es-419`, then
+   `npm run i18n:build`. pt-BR and es-419 follow the Q-19 ChatGPT review rule.
+
+### Tests
+
+- `tests/reactions-api.test.mjs`: 401 without a session on every route; 403 for
+  cross-origin and opaque-origin mutations; 400 with field issues; created rules
+  start disabled; edits disable and rotate the revision; stale revision 409;
+  enable, disable, delete, global switch; unknown and smuggled keys rejected; 150
+  rules create and list (no tier cap); `OWNER_NOT_LINKED` while unpaired; running
+  engines are notified on every write.
+- `tests/reaction-rule-issues.test.mjs`: parity of `definitionIssues` with the
+  old accept/reject results over the 07b vectors and a generated corpus.
+- `tests/reaction-status.test.mjs`: bounded RAM status, cleared on edit and delete,
+  codes only, never persisted.
+- `tests/reaction-ui-static.test.mjs`: every `t()` key in `views/reactions/` exists
+  in all four catalogs; no physical-direction classes, raw hex colours or one-off
+  palettes; imports come from the UI barrel.
+- Existing i18n catalog, dashboard locale, headless and backup tests stay green.
+- Manual headless browser run of the screen in all four languages, desktop and
+  360 px width, light and dark (puppeteer-core, scratch data directory, no
+  WhatsApp pairing).
+
+### Threats and privacy
+
+- CSRF and auth: inherited guards, proven per route by tests.
+- Mass assignment: strict key allowlists in the facade and the 07b validator.
+- Stored XSS: React escaping; chat and sender names through `UserText`.
+- Lost updates: revision check, 409.
+- Information exposure: status codes and counts only; no message text, transcript
+  or provider detail.
+- Privacy impact: no new persistence. Outcome counts live in RAM and reset on
+  restart. Chat names come from the same directory the panel already shows.
+
+### Compatibility, rollback and acceptance
+
+- No migration; schema 12. Headless never imports the route. The SEA bundle,
+  tarball, Docker and Android WebView carry the new route and view like the
+  other panel routes.
+- Rollback: revert the PR. Rules and the switch stay in the database; turn the
+  global switch off before downgrading. No data conversion is needed.
+- Acceptance: owner can create, edit, delete, enable and disable rules and flip the
+  global switch from the panel in four languages; every mutation is authenticated
+  and same-origin; validation errors name the field; statuses explain why a rule
+  will not run; no rule-count cap; 07b engine, limits, kill switch and opt-in
+  unchanged; no Plus code and no AI Auto Reply.
+
+### Delegation
+
+07c-1 backend (rules issues, list query, status, facade, routes, tests) and 07c-2
+UI (view, editor, client, types, navigation, en and ar strings) run in parallel
+in separate worktrees against the contract above. 07c-3 adds pt-BR and es-419
+strings. Agents do not run gates; the orchestrator runs every test, build and
+review, then commits.
