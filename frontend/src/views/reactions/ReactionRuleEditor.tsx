@@ -492,6 +492,7 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
             <fieldset
               id="rx-action"
               className="min-w-0"
+              aria-label={t("reactionAction")}
               aria-describedby={describedBy(fieldErrors.action ? "rx-action-message" : undefined)}
             >
               <SegmentedControl
