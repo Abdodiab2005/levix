@@ -1365,6 +1365,22 @@ function authClearAll() {
   q("DELETE FROM baileys_auth").run();
 }
 
+// One keys.set is one IMMEDIATE transaction. `value == null` deletes the row
+// (Baileys passes null to remove a key). A throw rolls the whole batch back
+// and is rethrown unchanged; nothing here logs the key or the payload.
+function authApply(entries) {
+  if (!Array.isArray(entries)) throw new TypeError("authApply expects an array");
+  return withImmediateTransaction(() => {
+    for (const entry of entries) {
+      if (!entry || typeof entry.key !== "string") {
+        throw new TypeError("authApply entry needs a string key");
+      }
+      if (entry.value == null) authRemove(entry.key);
+      else authWrite(entry.key, entry.value);
+    }
+  });
+}
+
 function hasCredentials() {
   return !!q("SELECT 1 AS x FROM baileys_auth WHERE key = 'creds'").get();
 }
@@ -2258,6 +2274,7 @@ module.exports = {
   authWrite,
   authRemove,
   authClearAll,
+  authApply,
   hasCredentials,
   isPairedSession,
   resolveUserPhone,

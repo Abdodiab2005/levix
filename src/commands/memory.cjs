@@ -20,6 +20,7 @@ const {
 } = require("../utils/permissions.cjs");
 const logger = require("../utils/logger.cjs");
 const { t } = require("../utils/i18n.cjs");
+const { resolveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
 
 const GLOBAL_WORDS = new Set(["global", "-g", "--global", "عام", "العام", "الكل"]);
 
@@ -64,14 +65,22 @@ module.exports = {
   aliases: ["mem", "ذاكرة", "remember"],
   chat: "all",
 
-  async execute(sock, msg, args, body, groupMetadata) {
+  async execute(sock, msg, args, body, groupMetadata, ctx) {
     const chatId = msg.key.remoteJid;
     const isGroup = chatId.endsWith("@g.us");
     const senderId = isGroup ? msg.key.participant : msg.key.remoteJid;
 
     const isOwner = msg.key.fromMe || isOwnerJidSync(senderId);
     const botPrivileged = isOwner || isBotAdminUserSync(senderId);
-    const groupAdmin = Boolean(isGroup && isAdminInGroupSync(groupMetadata, senderId));
+    // Chat forget/clear/export is a grant. A stale roster must not provide it.
+    // The subject on `groupMetadata` stays the last-known display name.
+    const authMetadata =
+      ctx && Object.prototype.hasOwnProperty.call(ctx, "authGroupMetadata")
+        ? ctx.authGroupMetadata
+        : isGroup
+          ? await resolveGroupMetadata(sock, chatId, { fresh: true })
+          : null;
+    const groupAdmin = Boolean(isGroup && isAdminInGroupSync(authMetadata, senderId));
 
     const action = String(args[0] || "").toLowerCase();
     const { scope, rest } = extractScope(args.slice(1));

@@ -37,6 +37,7 @@ const { createStatus } = require("../utils/statusMessage.cjs");
 const { formatMarkdownForWhatsApp } = require("../utils/markdownParser.cjs");
 const { isOwnerJidSync } = require("../utils/permissions.cjs");
 const { resolveCaller } = require("../services/aiToolAuth.cjs");
+const { resolveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
 const { generateImage } = require("../services/aiImage.cjs");
 const {
   runAgent,
@@ -601,7 +602,21 @@ module.exports = {
     // way the command dispatcher resolves them, and frozen. The tools
     // authorize against it and nothing else — not the quoted message's author,
     // not a name in a web page, not anything the model writes into arguments.
-    const caller = await resolveCaller({ msg, sock, groupMetadata, text: body || "" });
+    // Group-admin tools follow the dispatcher's fresh roster. A stale copy
+    // keeps its subject for the prompt and loses the admin flags.
+    let callerRoster = groupMetadata;
+    if (ctx && Object.prototype.hasOwnProperty.call(ctx, "authGroupMetadata")) {
+      callerRoster = ctx.authGroupMetadata;
+    } else if (isGroup) {
+      callerRoster = await resolveGroupMetadata(sock, chatId, { fresh: true });
+    }
+    if (!callerRoster && groupMetadata?.subject) callerRoster = { subject: groupMetadata.subject };
+    const caller = await resolveCaller({
+      msg,
+      sock,
+      groupMetadata: callerRoster,
+      text: body || "",
+    });
     const agentContext = {
       caller,
       // Infrastructure, not identity: tools that post media (speak, poll)
