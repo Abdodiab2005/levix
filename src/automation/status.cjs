@@ -70,7 +70,7 @@ function epoch() {
 
 store.subscribeReactionChanges((change) => {
   if (change.type === "rule") clear(change.id);
-  if (change.type === "policy" && change.key === undefined) reset();
+  if (change.account === true) reset();
 });
 
 module.exports = { record, get, global, clear, reset, epoch };

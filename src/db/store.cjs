@@ -296,7 +296,7 @@ function clearReactionAccountState() {
     q("DELETE FROM reaction_budgets").run();
     saveBotSetting("reaction:enabled", false);
   });
-  notifyReactionChange({ type: "policy" });
+  notifyReactionChange({ type: "policy", account: true });
 }
 
 /** Claim before handoff. Saturation never deletes a live replay key. */

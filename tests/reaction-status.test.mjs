@@ -122,20 +122,48 @@ for (const action of ["edit", "enable", "disable", "delete"]) {
   equal(`${action} preserves unrelated status`, status.get("unrelated").lastCode, "BUSY");
 }
 
-section("account clearing resets status without resetting on the global switch");
+section("only account clearing resets status and advances its epoch");
 store.saveReactionRule({ id: "account-rule", chatJid: group, priority: 0, definition });
 store.setReactionRuleEnabled("account-rule", true);
 const accountRevision = store.getReactionRule("account-rule").revision;
 const oldEpoch = status.epoch();
 status.record("account-rule", "DELIVERED", 1);
+status.record("account-rule", "DELIVERED", 2);
 status.record(null, "NO_MATCH", 2);
-for (const enabled of [true, false]) {
-  store.setReactionAutomationEnabled(enabled);
-  equal("global switch preserves rule history", status.get("account-rule").lastCode, "DELIVERED");
-  equal("global switch preserves global history", status.global().lastCode, "NO_MATCH");
-  equal("global switch preserves epoch", status.epoch(), oldEpoch);
+status.record(null, "NO_MATCH", 3);
+store.saveBotSetting("reaction-status-test", "temporary");
+const ruleHistory = JSON.stringify(status.get("account-rule"));
+const globalHistory = JSON.stringify(status.global());
+const policyChanges = [];
+const unsubscribePolicy = store.subscribeReactionChanges((change) => policyChanges.push(change));
+for (const [label, update] of [
+  ["owner role write", () => store.saveUserMetadata({ jid: bot, isOwner: true })],
+  ["reconnect owner refresh", () => store.saveUserMetadata({ jid: bot, isOwner: true })],
+  ["setting deletion", () => store.deleteBotSetting("reaction-status-test")],
+  ["global switch on", () => store.setReactionAutomationEnabled(true)],
+  ["global switch off", () => store.setReactionAutomationEnabled(false)],
+]) {
+  const beforeChanges = policyChanges.length;
+  update();
+  equal(`${label}: emits a policy notification`, policyChanges.length, beforeChanges + 1);
+  equal(`${label}: keeps policy type`, policyChanges.at(-1)?.type, "policy");
+  ok(`${label}: has no account marker`, policyChanges.at(-1)?.account !== true);
+  equal(
+    `${label}: preserves rule outcome, time and counts`,
+    JSON.stringify(status.get("account-rule")),
+    ruleHistory,
+  );
+  equal(
+    `${label}: preserves global outcome, time and counts`,
+    JSON.stringify(status.global()),
+    globalHistory,
+  );
+  equal(`${label}: preserves epoch`, status.epoch(), oldEpoch);
 }
 store.clearReactionAccountState();
+unsubscribePolicy();
+equal("account clearing retains policy notification type", policyChanges.at(-1)?.type, "policy");
+equal("account clearing marks its notification", policyChanges.at(-1)?.account, true);
 equal("account clearing disables rules", store.getReactionRule("account-rule").enabled, 0);
 equal(
   "account clearing leaves revisions unchanged",
