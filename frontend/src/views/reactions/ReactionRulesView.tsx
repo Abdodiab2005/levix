@@ -31,6 +31,7 @@ import { fill } from "../../utils/fill";
 import {
   EMPTY_REACTION_FILTERS,
   activeFilterCount,
+  displayRuleMeta,
   reactionApiCode,
   readLimits,
   ruleMatchesFilters,
@@ -151,11 +152,15 @@ function outcomeLabel(t: TFn, code: string | null | undefined): string {
 }
 
 function actionLabel(t: TFn, action: string): string {
-  return action === "stt" ? t("reactionActionStt") : t("reactionActionPing");
+  if (action === "stt") return t("reactionActionStt");
+  if (action === "ping") return t("reactionActionPing");
+  return "?";
 }
 
 function destinationLabel(t: TFn, mode: string): string {
-  return mode === "owner_private" ? t("reactionDestOwner") : t("reactionDestSame");
+  if (mode === "owner_private") return t("reactionDestOwner");
+  if (mode === "same_chat") return t("reactionDestSame");
+  return "?";
 }
 
 function roleLabel(t: TFn, role: string): string {
@@ -163,11 +168,13 @@ function roleLabel(t: TFn, role: string): string {
   if (role === "owner") return t("reactionRoleOwner");
   if (role === "bot_admin") return t("reactionRoleBotAdmin");
   if (role === "group_admin") return t("reactionRoleGroupAdmin");
-  return t("reactionRoleMember");
+  if (role === "member") return t("reactionRoleMember");
+  return "?";
 }
 
 function ruleTitle(rule: ReactionRule): string {
-  return `${rule.definition?.emoji ?? ""} ${rule.chatName || rule.chatJid}`.trim();
+  const meta = displayRuleMeta(rule);
+  return `${meta.emoji} ${rule.chatName || rule.chatJid}`.trim();
 }
 
 export const ReactionRulesView: React.FC = () => {
@@ -190,7 +197,7 @@ export const ReactionRulesView: React.FC = () => {
   const [pendingDelete, setPendingDelete] = useState<ReactionRule | null>(null);
   const [deleting, setDeleting] = useState(false);
   const inflight = useRef(new Set<string>());
-  const generation = useRef(new Map<string, number>());
+  const [toggling, setToggling] = useState<ReadonlySet<string>>(() => new Set());
   const listSeq = useRef(0);
   const alive = useRef(true);
   const written = useRef(0);
@@ -350,30 +357,51 @@ export const ReactionRulesView: React.FC = () => {
   };
 
   const toggleRule = async (rule: ReactionRule, enabled: boolean) => {
+    if (inflight.current.has(rule.id)) return;
     written.current += 1;
     const previous = rule.enabled;
-    const gen = (generation.current.get(rule.id) ?? 0) + 1;
-    generation.current.set(rule.id, gen);
     inflight.current.add(rule.id);
+    setToggling((prev) => {
+      const next = new Set(prev);
+      next.add(rule.id);
+      return next;
+    });
     setRules((list) => list.map((item) => (item.id === rule.id ? { ...item, enabled } : item)));
     try {
       const res = await api.setReactionRuleEnabled(rule.id, { revision: rule.revision, enabled });
-      if (generation.current.get(rule.id) !== gen) return;
       setRules((list) => list.map((item) => (item.id === rule.id ? res.rule : item)));
     } catch (err) {
-      if (generation.current.get(rule.id) !== gen) return;
+      inflight.current.delete(rule.id);
+      let applied = false;
+      try {
+        const res = await api.getReactions();
+        if (alive.current) {
+          applyOverview(res);
+          setError(null);
+          applied = true;
+        }
+      } catch {
+        // Overview reload failed; fall back to the last known server value.
+      }
+      if (!applied) {
+        setRules((list) =>
+          list.map((item) => (item.id === rule.id ? { ...item, enabled: previous } : item)),
+        );
+      }
       if (reactionApiCode(err) === "REACTION_RULE_CHANGED") {
         toast(t("reactionErrorRuleChanged"), "warning");
-        await refresh();
-        return;
+      } else {
+        toast(failureMessage(t, err, t("reactionToggleFailed")), "error");
       }
-      setRules((list) =>
-        list.map((item) => (item.id === rule.id ? { ...item, enabled: previous } : item)),
-      );
-      toast(failureMessage(t, err, t("reactionToggleFailed")), "error");
     } finally {
       written.current += 1;
-      if (generation.current.get(rule.id) === gen) inflight.current.delete(rule.id);
+      inflight.current.delete(rule.id);
+      setToggling((prev) => {
+        if (!prev.has(rule.id)) return prev;
+        const next = new Set(prev);
+        next.delete(rule.id);
+        return next;
+      });
     }
   };
 
@@ -557,20 +585,23 @@ export const ReactionRulesView: React.FC = () => {
           <>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {pageItems.map((rule) => {
-                const statuses = (rule.statuses ?? []) as string[];
+                const statuses = Array.isArray(rule.statuses) ? (rule.statuses as string[]) : [];
                 const lastCode = rule.runtime?.lastCode ?? null;
                 const lastAt = rule.runtime?.lastAt ?? null;
+                const meta = displayRuleMeta(rule);
+                const overlaps = Array.isArray(rule.overlaps) ? rule.overlaps : [];
                 return (
                   <Card key={rule.id} className="flex flex-col gap-3">
                     <div className="flex items-start gap-2">
                       <span className="text-2xl leading-none" aria-hidden>
-                        {rule.definition?.emoji || "—"}
+                        {meta.emoji}
                       </span>
                       <UserText as="strong" className="min-w-0 flex-1 text-sm font-bold">
                         {rule.chatName || rule.chatJid}
                       </UserText>
                       <Toggle
                         checked={rule.enabled}
+                        disabled={toggling.has(rule.id)}
                         aria-label={t("reactionEnabled")}
                         onChange={(enabled) => void toggleRule(rule, enabled)}
                       />
@@ -595,9 +626,9 @@ export const ReactionRulesView: React.FC = () => {
                     </div>
 
                     <div className="flex flex-wrap gap-1.5">
-                      <Badge>{actionLabel(t, rule.definition?.action)}</Badge>
-                      <Badge>{destinationLabel(t, rule.definition?.destination?.mode)}</Badge>
-                      <Badge>{roleLabel(t, rule.definition?.senders?.role)}</Badge>
+                      <Badge>{actionLabel(t, meta.action)}</Badge>
+                      <Badge>{destinationLabel(t, meta.destination)}</Badge>
+                      <Badge>{roleLabel(t, meta.role)}</Badge>
                       <Badge>{fill(t("reactionPriorityBadge"), { n: rule.priority })}</Badge>
                     </div>
 
@@ -617,9 +648,9 @@ export const ReactionRulesView: React.FC = () => {
                       </div>
                     )}
 
-                    {rule.overlaps?.length > 0 && (
+                    {overlaps.length > 0 && (
                       <p className="text-xs text-muted">
-                        {fill(t("reactionOverlaps"), { n: rule.overlaps.length })}
+                        {fill(t("reactionOverlaps"), { n: overlaps.length })}
                       </p>
                     )}
 
