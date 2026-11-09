@@ -302,6 +302,10 @@ function isReactionLookupInvalidated(keys, now) {
     AND invalidation_key IN (${sqlIn(["*", ...keys])}) LIMIT 1`).get(now, "*", ...keys));
 }
 
+// Cross-tab guard for the global switch. Never in backups or settings export. A
+// missing row on an existing install reads as "0" until the first write.
+const REACTION_AUTOMATION_REVISION_KEY = "reaction:automation-revision";
+
 function clearReactionAccountState() {
   withImmediateTransaction(() => {
     q("UPDATE reaction_rules SET enabled = 0").run();
@@ -311,6 +315,7 @@ function clearReactionAccountState() {
     q("DELETE FROM reaction_executions").run();
     q("DELETE FROM reaction_budgets").run();
     saveBotSetting("reaction:enabled", false);
+    saveBotSetting(REACTION_AUTOMATION_REVISION_KEY, crypto.randomUUID());
   });
   notifyReactionChange({ type: "policy", account: true });
 }
@@ -378,9 +383,28 @@ function deleteReactionRule(id) {
   saveBotSetting("reaction:revision", crypto.randomUUID());
   notifyReactionChange({ type: "rule", id });
 }
-function setReactionAutomationEnabled(enabled) {
+function getReactionAutomation() {
+  const revision = getBotSetting(REACTION_AUTOMATION_REVISION_KEY, "0");
+  return {
+    enabled: getBotSetting("reaction:enabled", false) === true,
+    revision: typeof revision === "string" && revision ? revision : "0",
+  };
+}
+/**
+ * Set the global switch and rotate its revision in one transaction. With
+ * `expectedRevision` the compare and the write share that transaction; a stale
+ * value throws REACTION_AUTOMATION_CHANGED and writes nothing. Without it the
+ * write is unconditional (internal callers).
+ */
+function setReactionAutomationEnabled(enabled, expectedRevision) {
   if (typeof enabled !== "boolean") throw new Error("REACTION_SWITCH_INVALID");
-  saveBotSetting("reaction:enabled", enabled);
+  return withImmediateTransaction(() => {
+    if (expectedRevision !== undefined && getReactionAutomation().revision !== expectedRevision)
+      throw new Error("REACTION_AUTOMATION_CHANGED");
+    saveBotSetting("reaction:enabled", enabled);
+    saveBotSetting(REACTION_AUTOMATION_REVISION_KEY, crypto.randomUUID());
+    return getReactionAutomation();
+  });
 }
 function reactionRulesForChats(chats, { emoji, type, originalType }) {
   if (!chats.length || chats.length > MAX_IDENTITY_ALIASES) return [];
@@ -2388,6 +2412,7 @@ module.exports = {
   invalidateReactionLookup,
   isReactionLookupInvalidated,
   clearReactionAccountState,
+  getReactionAutomation,
   claimReactionEvent,
   subscribeReactionChanges,
   saveReactionRule,

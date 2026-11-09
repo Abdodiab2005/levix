@@ -1087,6 +1087,7 @@
   "reactionEditTitle": "Edit reaction rule",
   "reactionAutomation": "Run reaction rules",
   "reactionAutomationHint": "Off until you turn this on. A rule only runs in the chat you pick, for the emoji, people and message types you set. Nothing is sent until you enable both this switch and the rule.",
+  "reactionAutomationChanged": "Automation was changed in another tab or window. The switch now shows the current setting.",
   "reactionLimits": "At most {perReactor} actions per person, {perChat} per chat and {perRule} per rule every {windowSeconds} seconds. At most {globalJobs} actions run at once. If more than {candidateLimit} rules match one reaction, none of them run.",
   "reactionEmptyTitle": "No reaction rules yet",
   "reactionEmptyBody": "Add a rule to transcribe a voice note or send a ping when someone reacts with an emoji you choose.",

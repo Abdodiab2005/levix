@@ -62,10 +62,16 @@ section("automation toggle is single-flight; sort is recent activity");
   ok("automation Toggle does not pass disabled=", !/disabled=/.test(autoToggle));
   ok("view has no reactionSortNewest", !view.includes("reactionSortNewest"));
   ok('view has no "newest" sort value', !view.includes('"newest"'));
+  ok("view toasts reactionAutomationChanged", view.includes('"reactionAutomationChanged"'));
   for (const locale of ["en", "ar", "pt-BR", "es-419"]) {
     const json = JSON.parse(readFileSync(join(ROOT, "i18n", locale, "dashboard.json"), "utf8"));
     ok(`${locale} has reactionSortRecent`, Object.hasOwn(json, "reactionSortRecent"));
     ok(`${locale} has no reactionSortNewest`, !Object.hasOwn(json, "reactionSortNewest"));
+    ok(
+      `${locale} has reactionAutomationChanged`,
+      typeof json.reactionAutomationChanged === "string" &&
+        json.reactionAutomationChanged.length > 0,
+    );
   }
 }
 

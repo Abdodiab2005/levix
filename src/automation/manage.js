@@ -77,6 +77,8 @@ function write(fn) {
     if (error instanceof ReactionManageError) throw error;
     if (error.message === "REACTION_RULE_MISSING")
       throw new ReactionManageError(404, "REACTION_RULE_MISSING");
+    if (error.message === "REACTION_AUTOMATION_CHANGED")
+      throw new ReactionManageError(409, "REACTION_AUTOMATION_CHANGED");
     if (["REACTION_RULE_INVALID", "REACTION_SWITCH_INVALID"].includes(error.message))
       throw new ReactionManageError(400, "REACTION_RULE_INVALID", [
         { field: "definition", code: "invalid" },
@@ -199,7 +201,7 @@ function ruleView(item, index, context) {
 
 function context() {
   return {
-    automation: { enabled: store.getBotSetting("reaction:enabled", false) === true },
+    automation: store.getReactionAutomation(),
     connection: { connected: session?.getState().connected === true },
     owner: { linked: linkedIdentity().selfJids.length > 0 },
   };
@@ -280,11 +282,9 @@ export function deleteRule(id, revision) {
 }
 
 export function setAutomation(body) {
-  const issues = bodyIssues(body, ["enabled"]);
+  const issues = bodyIssues(body, ["enabled", "revision"]);
   if (typeof body?.enabled !== "boolean") issues.push({ field: "enabled", code: "invalid" });
+  issues.push(...revisionIssues(body?.revision));
   assertValid(issues);
-  return write(() => {
-    store.setReactionAutomationEnabled(body.enabled);
-    return { enabled: store.getBotSetting("reaction:enabled", false) === true };
-  });
+  return write(() => store.setReactionAutomationEnabled(body.enabled, body.revision));
 }

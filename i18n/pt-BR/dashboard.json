@@ -1087,6 +1087,7 @@
   "reactionEditTitle": "Editar regra de reação",
   "reactionAutomation": "Executar regras de reação",
   "reactionAutomationHint": "Desativada até você ativá-la. Uma regra só é executada na conversa que você escolher, para o emoji, as pessoas e os tipos de mensagem definidos por você. Nada é enviado até você ativar este interruptor e a regra.",
+  "reactionAutomationChanged": "A automação foi alterada em outra aba ou janela. O botão agora mostra a configuração atual.",
   "reactionLimits": "No máximo {perReactor} ações por pessoa, {perChat} por conversa e {perRule} por regra a cada {windowSeconds} segundos. No máximo {globalJobs} ações são executadas simultaneamente. Se mais de {candidateLimit} regras corresponderem a uma reação, nenhuma delas será executada.",
   "reactionEmptyTitle": "Nenhuma regra de reação ainda",
   "reactionEmptyBody": "Adicione uma regra para transcrever uma mensagem de voz ou enviar um ping quando alguém reagir com um emoji escolhido por você.",

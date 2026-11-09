@@ -1,3 +1,6 @@
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import {
   equal,
   finish,
@@ -55,6 +58,11 @@ async function invalid(label, path, body, method = "POST", field, code = "invali
       result.body.issues?.some((issue) => issue.field === field && issue.code === code),
     );
 }
+async function savedAutomation() {
+  const response = await http.call(prefix);
+  const body = await response.json();
+  return { status: response.status, automation: body.automation };
+}
 
 try {
   section("authentication on all seven routes");
@@ -97,6 +105,7 @@ try {
   let overview = await response.json();
   equal("initial overview succeeds", response.status, 200);
   equal("automation starts off", overview.automation.enabled, false);
+  equal("automation revision starts at 0", overview.automation.revision, "0");
   equal("no session is disconnected", overview.connection.connected, false);
   equal("unpaired owner is not linked", overview.owner.linked, false);
   equal("initial rules empty", overview.rules.length, 0);
@@ -253,20 +262,108 @@ try {
     "body",
     "unknown_field",
   );
+  let automation = (await savedAutomation()).automation;
+  equal("revision 0 is still current", automation.revision, "0");
   for (const enabled of [true, false]) {
-    result = await json("/automation", { enabled }, "PUT");
+    const sent = automation.revision;
+    result = await json("/automation", { enabled, revision: sent }, "PUT");
     equal(`automation ${enabled} succeeds`, result.status, 200);
     equal(`automation ${enabled} saved`, result.body.automation.enabled, enabled);
+    ok(
+      `automation ${enabled} rotates revision`,
+      typeof result.body.automation.revision === "string" &&
+        result.body.automation.revision !== sent,
+    );
+    automation = result.body.automation;
   }
-  await invalid("automation boolean", "/automation", { enabled: 1 }, "PUT", "enabled");
+  equal("default returns to off", automation.enabled, false);
+  await invalid(
+    "automation boolean",
+    "/automation",
+    { enabled: 1, revision: automation.revision },
+    "PUT",
+    "enabled",
+  );
   await invalid(
     "automation extras",
     "/automation",
-    { enabled: true, revision: "fake" },
+    { enabled: true, revision: automation.revision, extra: 1 },
     "PUT",
     "body",
     "unknown_field",
   );
+
+  section("stale automation revision conflicts and writes nothing");
+  {
+    const shared = automation.revision;
+    const winner = await json("/automation", { enabled: true, revision: shared }, "PUT");
+    const loser = await json("/automation", { enabled: false, revision: shared }, "PUT");
+    equal("first client wins", winner.status, 200);
+    equal("first client turns on", winner.body.automation.enabled, true);
+    ok("first client rotates revision", winner.body.automation.revision !== shared);
+    equal("second client conflicts", loser.status, 409);
+    equal("second client code", loser.body.error, "REACTION_AUTOMATION_CHANGED");
+    equal("second client unsuccessful", loser.body.success, false);
+    equal("conflict has no field issues", loser.body.issues, undefined);
+    let current = await savedAutomation();
+    equal("conflict leaves the winner", current.automation.enabled, true);
+    equal(
+      "conflict leaves the winner revision",
+      current.automation.revision,
+      winner.body.automation.revision,
+    );
+    const held = current.automation.revision;
+    const newer = await json("/automation", { enabled: false, revision: held }, "PUT");
+    equal("newer write succeeds", newer.status, 200);
+    equal("newer write turns off", newer.body.automation.enabled, false);
+    const delayed = await json("/automation", { enabled: true, revision: held }, "PUT");
+    equal("delayed stale request conflicts", delayed.status, 409);
+    equal("delayed stale code", delayed.body.error, "REACTION_AUTOMATION_CHANGED");
+    current = await savedAutomation();
+    equal("delayed stale leaves enabled", current.automation.enabled, false);
+    equal(
+      "delayed stale leaves revision",
+      current.automation.revision,
+      newer.body.automation.revision,
+    );
+    const unchanged = current.automation;
+    await invalid(
+      "automation missing revision",
+      "/automation",
+      { enabled: true },
+      "PUT",
+      "revision",
+    );
+    await invalid(
+      "automation empty revision",
+      "/automation",
+      { enabled: true, revision: "" },
+      "PUT",
+      "revision",
+    );
+    await invalid(
+      "automation revision type",
+      "/automation",
+      { enabled: true, revision: 0 },
+      "PUT",
+      "revision",
+    );
+    await invalid(
+      "automation revision length",
+      "/automation",
+      { enabled: false, revision: "x".repeat(129) },
+      "PUT",
+      "revision",
+    );
+    const staleZero = await json("/automation", { enabled: true, revision: "0" }, "PUT");
+    equal("literal 0 is a valid stale revision", staleZero.status, 409);
+    equal("literal 0 uses the conflict code", staleZero.body.error, "REACTION_AUTOMATION_CHANGED");
+    current = await savedAutomation();
+    equal("invalid revisions write nothing", current.automation.enabled, unchanged.enabled);
+    equal("invalid revisions keep revision", current.automation.revision, unchanged.revision);
+    equal("switch stays off", current.automation.enabled, false);
+    automation = current.automation;
+  }
   response = await http.call(`${prefix}/rules/${id}`, { method: "DELETE" });
   equal("delete requires revision", response.status, 400);
   response = await http.call(`${prefix}/rules/${id}?revision=${rule.revision}`, {
@@ -334,6 +431,8 @@ const settings = require("./src/config/settings.cjs");
 const runtime = require("./src/config/runtime-config.cjs");
 const groups = require("./src/utils/groupMetadataCache.cjs");
 const manage = await import("../src/automation/manage.js");
+const setSwitch = (enabled) =>
+  manage.setAutomation({ enabled, revision: store.getReactionAutomation().revision });
 const { createReactionAutomation, REACTION_ACTION_LIMITS } = await import(
   "../src/automation/engine.js"
 );
@@ -694,7 +793,7 @@ try {
   ]) {
     let rule = manage.createRule(draft());
     store.setReactionRuleEnabled(rule.id, true, clock);
-    manage.setAutomation({ enabled: true });
+    setSwitch(true);
     rule = store.getReactionRule(rule.id);
     clock += 2000;
     const original = {
@@ -725,8 +824,8 @@ try {
     if (operation === "disable")
       manage.setRuleEnabled(rule.id, { revision: rule.revision, enabled: false });
     if (operation === "delete") manage.deleteRule(rule.id, rule.revision);
-    if (operation === "automation-on") manage.setAutomation({ enabled: true });
-    if (operation === "automation-off") manage.setAutomation({ enabled: false });
+    if (operation === "automation-on") setSwitch(true);
+    if (operation === "automation-off") setSwitch(false);
     ok(`${operation}: store notification`, changes.length > before);
     equal(`${operation}: lookup reset immediately`, engine.intake.stats().items, 0);
     release({ id: chat, participants: [{ id: bot }, { id: author }, { id: reactor }] });
@@ -784,5 +883,72 @@ try {
 } finally {
   store.listReactionRules = savedList;
   logger.error = savedError;
+}
+
+section("account clear and backup activation rotate the automation revision");
+{
+  const { RESTORABLE_BOT_KEYS } = require("./src/backup/content.cjs");
+  const transfer = require("./src/services/settingsTransfer.cjs");
+  const { migrate } = require("./src/db/db.cjs");
+  const { activatePendingIfMatching } = require("./src/backup/activation.cjs");
+  const key = "reaction:automation-revision";
+  ok("backup allowlist omits the automation revision", !RESTORABLE_BOT_KEYS.includes(key));
+  const prior = store.getReactionAutomation();
+  const opted = store.setReactionAutomationEnabled(true, prior.revision);
+  equal("explicit opt-in turns the switch on", opted.enabled, true);
+  equal("opt-in writes reaction:enabled", store.getBotSetting("reaction:enabled"), true);
+  ok("opt-in rotates the revision", opted.revision !== prior.revision);
+  const exported = JSON.stringify(transfer.exportSettings());
+  ok("settings export omits the revision key", !exported.includes(key));
+  ok("settings export omits the revision value", !exported.includes(opted.revision));
+  transfer.applyImport({
+    format: "levix-settings",
+    version: 1,
+    settings: { [key]: "planted-revision" },
+  });
+  equal("import cannot plant the revision", store.getReactionAutomation().revision, opted.revision);
+  store.clearReactionAccountState();
+  const cleared = store.getReactionAutomation();
+  equal("unlink forces the switch off", cleared.enabled, false);
+  equal("unlink writes reaction:enabled false", store.getBotSetting("reaction:enabled"), false);
+  ok(
+    "unlink rotates the revision",
+    cleared.revision !== opted.revision && cleared.revision !== "0",
+  );
+  equal(
+    "unlink stores JSON text",
+    db.prepare("SELECT value FROM bot_settings WHERE key = ?").get(key).value,
+    JSON.stringify(cleared.revision),
+  );
+  const again = store.setReactionAutomationEnabled(true, cleared.revision);
+  equal("opt-in still works after unlink", again.enabled, true);
+  store.authWrite("creds", JSON.stringify({ me: { id: bot }, registered: true }));
+  const pendingRoot = join(dataDir, "restore", "pending");
+  rmSync(pendingRoot, { recursive: true, force: true });
+  mkdirSync(join(pendingRoot, "files"), { recursive: true });
+  const copy = new DatabaseSync(join(pendingRoot, "levix.db"));
+  try {
+    migrate(copy);
+  } finally {
+    copy.close();
+  }
+  writeFileSync(
+    join(pendingRoot, "pending.json"),
+    JSON.stringify({ id: "c".repeat(32), account: { pn: bot } }),
+  );
+  ok("matching activation runs", activatePendingIfMatching());
+  const activated = store.getReactionAutomation();
+  equal("activation forces the switch off", activated.enabled, false);
+  equal("activation writes reaction:enabled false", store.getBotSetting("reaction:enabled"), false);
+  ok("activation rotates the revision", activated.revision !== again.revision);
+  ok("activation revision is a plain uuid", /^[0-9a-f-]{36}$/.test(activated.revision));
+  equal(
+    "activation stores JSON text",
+    db.prepare("SELECT value FROM bot_settings WHERE key = ?").get(key).value,
+    JSON.stringify(activated.revision),
+  );
+  const internal = store.setReactionAutomationEnabled(false);
+  equal("internal write keeps the switch off", internal.enabled, false);
+  ok("internal write rotates without a client revision", internal.revision !== activated.revision);
 }
 finish();

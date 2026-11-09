@@ -439,7 +439,7 @@ export interface ReactionRuleWrite {
 
 export interface ReactionOverview {
   success: boolean;
-  automation: { enabled: boolean };
+  automation: { enabled: boolean; revision: string };
   connection: { connected: boolean };
   owner: { linked: boolean };
   limits: ReactionLimits;

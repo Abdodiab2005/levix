@@ -271,13 +271,31 @@ export function sortReactionRules(
 }
 
 export interface AutomationWriteDeps {
-  send: (enabled: boolean) => Promise<{ automation?: { enabled?: boolean } }>;
+  send: (
+    enabled: boolean,
+    revision: string,
+  ) => Promise<{ automation?: { enabled?: boolean; revision?: string } }>;
+  revision: () => string;
+  remember?: (revision: string) => void;
   reconcile: () => Promise<unknown>;
   show: (enabled: boolean) => void;
   busy: (pending: boolean) => void;
   failed: (err: unknown) => void;
+  conflict?: (err: unknown) => void;
   alive: () => boolean;
   written: () => void;
+}
+
+function readAutomationEnabled(value: unknown): boolean | undefined {
+  if (!value || typeof value !== "object" || !("automation" in value)) return undefined;
+  const enabled = (value as { automation?: { enabled?: unknown } }).automation?.enabled;
+  return typeof enabled === "boolean" ? enabled : undefined;
+}
+
+function readAutomationRevision(value: unknown): string | undefined {
+  if (!value || typeof value !== "object" || !("automation" in value)) return undefined;
+  const revision = (value as { automation?: { revision?: unknown } }).automation?.revision;
+  return typeof revision === "string" && revision ? revision : undefined;
 }
 
 /** Returns a toggle handler that allows one automation write at a time. */
@@ -290,11 +308,18 @@ export function createAutomationWriter(
     pending = true;
     deps.written();
     if (deps.alive()) deps.busy(true);
+    let conflict: unknown = null;
     try {
-      const res = await deps.send(enabled);
+      const res = await deps.send(enabled, deps.revision());
+      const next = res.automation?.revision;
+      if (typeof next === "string" && next) deps.remember?.(next);
       if (deps.alive()) deps.show(Boolean(res.automation?.enabled));
       return true;
     } catch (err) {
+      if (reactionApiCode(err) === "REACTION_AUTOMATION_CHANGED") {
+        conflict = err;
+        return true;
+      }
       if (deps.alive()) {
         deps.show(previous);
         deps.failed(err);
@@ -305,7 +330,14 @@ export function createAutomationWriter(
       deps.written();
       if (deps.alive()) {
         deps.busy(false);
-        await deps.reconcile();
+        const fresh = await deps.reconcile();
+        if (conflict) {
+          const server = readAutomationEnabled(fresh);
+          if (server !== undefined) deps.show(server);
+          const revision = readAutomationRevision(fresh);
+          if (revision) deps.remember?.(revision);
+          deps.conflict?.(conflict);
+        }
       }
     }
   };
