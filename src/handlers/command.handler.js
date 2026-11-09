@@ -533,6 +533,10 @@ async function runCommand(
     // place instead of posting a second message (see EDIT_IN_PLACE_EXCLUDE).
     const editInPlace = !EDIT_IN_PLACE_EXCLUDE.has(command.name);
     const proxiedSock = wrapSockWithReply(sock, msg, editInPlace, command.name);
+    if (readAccountEpoch() !== accountEpoch) {
+      logger.debug("[Command] skipped account work after account change");
+      return true;
+    }
     await command.execute(proxiedSock, msg, args, body, groupMetadata, ctx);
     return true;
   } catch (error) {
