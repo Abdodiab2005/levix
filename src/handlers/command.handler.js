@@ -3,7 +3,7 @@ import { createRequire } from "module";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { checkBotAdmin, checkCommandPermission } from "../middleware/permissions.middleware.js";
-import { getCached, resolveGroupMetadata } from "../utils/groupMetadataCache.cjs";
+import { getCached, getRosterVersion, resolveGroupMetadata } from "../utils/groupMetadataCache.cjs";
 import { sendBotMessage } from "../utils/sendBotMessage.esm.js";
 import { accountEpoch as readAccountEpoch } from "../utils/storage.esm.js";
 
@@ -443,6 +443,7 @@ async function runCommand(
     const jid = msg.key.remoteJid;
     const authMetadata = isGroup ? await resolveGroupMetadata(sock, jid, { fresh: true }) : null;
     const groupMetadata = isGroup ? authMetadata || getCached(jid) || null : null;
+    const rosterVersion = isGroup ? getRosterVersion(jid) : undefined;
 
     if (command.name !== "group") {
       // Enforce the `chat` constraint declared by the command. Until now this
@@ -523,6 +524,7 @@ async function runCommand(
       authGroupMetadata: authMetadata,
       rawRemainder: rawRemainder || "",
       accountEpoch,
+      ...(isGroup ? { rosterVersion } : {}),
     };
 
     // Wrap the socket so legacy commands that still call sock.sendMessage

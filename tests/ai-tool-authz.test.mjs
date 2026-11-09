@@ -610,6 +610,46 @@ try {
   );
   groupCache.setCached(GROUP, groupMetadata);
 
+  section("dispatch roster version stays paired with its snapshot until caller minting");
+  groupCache.cache.del(GROUP);
+  const dispatchSnapshot = groupMetadata;
+  const dispatchVersion = groupCache.getRosterVersion(GROUP);
+  const unchanged = await resolveCaller({
+    msg: groupMsg(MOD),
+    sock,
+    groupMetadata: dispatchSnapshot,
+    rosterVersion: dispatchVersion,
+  });
+  ok(
+    "unchanged dispatch marker allows the admin snapshot fallback",
+    authorize({ command: "memory", role: "chatModerator" }, unchanged).allowed,
+  );
+  mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  try {
+    groupCache.cache.set(
+      GROUP,
+      {
+        ...groupMetadata,
+        participants: groupMetadata.participants.map((p) => ({ ...p, admin: null })),
+      },
+      1,
+    );
+    mock.timers.tick(1001);
+    equal("demoted roster expires before caller minting", groupCache.getCached(GROUP), undefined);
+    const delayedSnapshot = await resolveCaller({
+      msg: groupMsg(MOD),
+      sock,
+      groupMetadata: dispatchSnapshot,
+      rosterVersion: dispatchVersion,
+    });
+    ok(
+      "demotion and expiry before mint cannot revive the dispatch snapshot",
+      !authorize({ command: "memory", role: "chatModerator" }, delayedSnapshot).allowed,
+    );
+  } finally {
+    mock.timers.reset();
+  }
+
   section("roster versions stay group-scoped and survive deletions and flushes");
   groupCache.cache.del(GROUP);
   const untouchedMod = await inGroup(MOD);

@@ -58,6 +58,7 @@ const ROLE_ERRORS = Object.freeze({
  * @param {object} options.sock            - Baileys socket (fromMe resolves to its account)
  * @param {object} [options.groupMetadata] - for group-admin detection
  * @param {number} [options.accountEpoch] - epoch captured when the message arrived
+ * @param {string} [options.rosterVersion] - marker captured alongside groupMetadata
  * @param {string} [options.text]          - what the sender typed (role tools bind targets to it)
  */
 async function resolveCaller({
@@ -66,10 +67,11 @@ async function resolveCaller({
   groupMetadata = null,
   text = "",
   accountEpoch: receivedEpoch,
+  rosterVersion: receivedRosterVersion,
 }) {
   if (!msg?.key?.remoteJid) throw new Error("resolveCaller needs the incoming message");
   const epoch = receivedEpoch ?? accountEpoch();
-  const rosterVersion = getRosterVersion(msg.key.remoteJid);
+  const rosterVersion = receivedRosterVersion ?? getRosterVersion(msg.key.remoteJid);
   await primePermissions();
   const { resolveSender } = await import("../middleware/permissions.middleware.js");
   const sender = resolveSender(msg, groupMetadata, sock);

@@ -625,6 +625,7 @@ module.exports = {
       sock,
       groupMetadata: callerRoster,
       accountEpoch: epoch,
+      rosterVersion: ctx?.rosterVersion,
       text: body || "",
     });
     const agentContext = {
