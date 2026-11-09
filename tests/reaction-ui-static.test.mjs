@@ -57,10 +57,9 @@ for (const file of files) {
 section("automation toggle is single-flight; sort is recent activity");
 {
   const view = readFileSync(join(viewsDir, "ReactionRulesView.tsx"), "utf8");
-  ok(
-    "automation Toggle passes disabled=",
-    /<Toggle\s+checked=\{automation\}[\s\S]*?disabled=\{[^}]+\}[\s\S]*?\/>/.test(view),
-  );
+  const autoToggle = view.match(/<Toggle\s+checked=\{automation\}[\s\S]*?\/>/)?.[0] || "";
+  ok("automation Toggle passes aria-busy=", /aria-busy=\{[^}]+\}/.test(autoToggle));
+  ok("automation Toggle does not pass disabled=", !/disabled=/.test(autoToggle));
   ok("view has no reactionSortNewest", !view.includes("reactionSortNewest"));
   ok('view has no "newest" sort value', !view.includes('"newest"'));
   for (const locale of ["en", "ar", "pt-BR", "es-419"]) {

@@ -472,7 +472,7 @@ export const ReactionRulesView: React.FC = () => {
         <Card className="flex flex-col gap-3">
           <Toggle
             checked={automation}
-            disabled={automationBusy}
+            aria-busy={automationBusy}
             onChange={(enabled) => void toggleAutomation(enabled, automation)}
             label={t("reactionAutomation")}
             description={t("reactionAutomationHint")}
