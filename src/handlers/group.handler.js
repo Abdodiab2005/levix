@@ -57,7 +57,7 @@ function joinRequestFields(request) {
 export async function handleGroupParticipantsUpdate(sock, update) {
   const { id, participants, action } = update;
   logger.info(
-    { group: id, action, count: Array.isArray(participants) ? participants.length : 0 },
+    { action, count: Array.isArray(participants) ? participants.length : 0 },
     "Received group participants update",
   );
 
@@ -72,12 +72,12 @@ export async function handleGroupParticipantsUpdate(sock, update) {
         }
       }
     } catch (error) {
-      logger.error({ err: error, update }, "Error clearing moderation on leave");
+      logger.error({ err: error }, "Error clearing moderation on leave");
     }
   }
 
   if (action !== "add") {
-    logger.info(`[Group] ${action} action for ${id}`);
+    logger.info(`[Group] ${action} action handled`);
     return;
   }
 
@@ -86,7 +86,7 @@ export async function handleGroupParticipantsUpdate(sock, update) {
     const welcomeConfig = settings?.welcome_system;
 
     if (!welcomeConfig || !welcomeConfig.enabled || welcomeConfig.messages.length === 0) {
-      logger.warn(`[Group] Welcome system disabled or no messages for ${id}`);
+      logger.warn("[Group] Welcome system disabled or no messages");
       return;
     }
 
@@ -94,7 +94,7 @@ export async function handleGroupParticipantsUpdate(sock, update) {
     for (const participant of participants || []) {
       const participantId = participantJid(participant);
       if (!participantId) {
-        logger.warn({ group: id }, "[Group] Welcome skipped: participant has no JID");
+        logger.warn("[Group] Welcome skipped: participant has no JID");
         continue;
       }
 
@@ -112,7 +112,7 @@ export async function handleGroupParticipantsUpdate(sock, update) {
       });
     }
   } catch (error) {
-    logger.error({ err: error, update }, "Error in group-participants.update event");
+    logger.error({ err: error }, "Error in group-participants.update event");
   }
 }
 

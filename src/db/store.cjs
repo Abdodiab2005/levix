@@ -802,7 +802,8 @@ function storeLidPnMapping(lid, pn, deviceIndex = 0) {
        device_index = excluded.device_index,
        updated_at = excluded.updated_at`,
   ).run(lid, pn, deviceIndex, Date.now());
-  logger.debug(`[LID] Stored mapping: ${lid} <-> ${pn}`);
+  // The pair is an identifier: sanitized debug log only, never combined.log.
+  logger.debugOnly.debug({ lid, pn }, "[LID] Stored mapping");
 }
 
 function storeLidPnMappings(mappings) {
