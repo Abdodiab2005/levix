@@ -27,6 +27,7 @@ const {
   hasBotPrivilegesSync,
   isAdminInGroupSync,
   isBotAdminInGroupSync,
+  isBotAdminUserSync,
   isOwnerJidSync,
   primePermissions,
   rosterJidForSync,
@@ -218,23 +219,50 @@ function dismissMemberFlag(groupId, userId) {
 }
 
 /**
+ * The dispatcher's `userAdminRequired` rule (resolveSender in
+ * middleware/permissions.middleware.js), on a roster the caller picks: a bot
+ * admin who is not an owner, or an admin of this group. `fromMe` makes the
+ * sender an owner there, which is why an owner needs the group role.
+ */
+function requesterStillAdmin(meta, candidates, fromMe) {
+  const isOwner = Boolean(fromMe) || candidates.some((candidate) => isOwnerJidSync(candidate));
+  const isBotAdmin = !isOwner && candidates.some((candidate) => isBotAdminUserSync(candidate));
+  const isGroupAdmin = candidates.some((candidate) => isAdminInGroupSync(meta, candidate));
+  return isBotAdmin || isGroupAdmin;
+}
+
+/**
  * Remove a member on WhatsApp and drop their warnings + flag.
- * Used by !kick and the panel.
+ * Used by !kick, the panel and automatic enforcement.
+ *
+ * The roster is re-read fresh right before the checks and the remove call, never
+ * taken from the caller's earlier snapshot: a member promoted since then stays,
+ * and a requester demoted since then cannot kick. No fresh roster, no kick.
+ * `opts.requesterCandidates` (manual !kick only) re-checks the requester on that
+ * same roster; `opts.requesterFromMe` carries the command's `key.fromMe`.
  */
 async function kickGroupMember(sock, opts) {
   await primePermissions();
   const groupId = opts.groupId;
   if (!groupId?.endsWith("@g.us")) return { kicked: false, error: "not-group" };
-  const meta = opts.groupMetadata || (await resolveGroupMetadata(sock, groupId));
   const candidates = (opts.targetCandidates || []).filter(Boolean);
   if (!candidates.length) return { kicked: false, error: "no-target" };
+  const meta = await resolveGroupMetadata(sock, groupId, { fresh: true });
+  if (!meta) return { kicked: false, error: "metadata-unavailable" };
+  if (opts.requesterCandidates) {
+    const requester = opts.requesterCandidates.filter(Boolean);
+    if (!requester.length || !requesterStillAdmin(meta, requester, opts.requesterFromMe)) {
+      return { kicked: false, error: "requester-not-admin" };
+    }
+  }
   if (isProtectedMember(sock, meta, candidates)) return { kicked: false, error: "protected" };
   if (!isBotAdminInGroupSync(meta, sock)) return { kicked: false, error: "bot-not-admin" };
   const kickJid = rosterJidForSync(meta, candidates) || candidates[0];
   const updated = await sock.groupParticipantsUpdate(groupId, [kickJid], "remove");
   if (!removalSucceeded(updated)) return { kicked: false, error: "rejected", kickJid };
   clearMemberModeration(groupId, candidates[0]);
-  logger.info({ group: groupId, user: kickJid }, "moderation kicked member");
+  logger.info("moderation kicked member");
+  logger.debugOnly.info({ group: groupId, user: kickJid }, "moderation kicked member");
   return { kicked: true, kickJid };
 }
 
