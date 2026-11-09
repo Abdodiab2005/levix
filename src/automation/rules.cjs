@@ -15,7 +15,7 @@ function exactJid(value, userOnly = false) {
     invalid();
   return value;
 }
-function emoji(value) {
+function isReactionEmoji(value) {
   return (
     typeof value === "string" &&
     value.length > 0 &&
@@ -58,7 +58,7 @@ function definitionIssues(value) {
   )
     return issues;
   if (value.version !== 1) add("definition.version");
-  if (!emoji(value.emoji)) add("definition.emoji");
+  if (!isReactionEmoji(value.emoji)) add("definition.emoji");
   list(value.transitions, "definition.transitions", ["add", "change", "remove"]);
   list(value.originalTypes, "definition.originalTypes", TYPES);
   if (object(value.senders, "definition.senders", ["role", "ids"])) {
@@ -111,4 +111,4 @@ function originalType(original) {
   if (msg.conversation != null || msg.extendedTextMessage) return "text";
   return ["image", "video", "document", "sticker"].find((type) => msg[`${type}Message`]) || null;
 }
-module.exports = { definitionIssues, validateDefinition, exactJid, originalType };
+module.exports = { definitionIssues, validateDefinition, exactJid, originalType, isReactionEmoji };

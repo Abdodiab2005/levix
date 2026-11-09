@@ -1773,4 +1773,28 @@ section("panel presets use the backend membership default");
   }
 }
 
+section("a late account epoch skips moderation writes");
+
+{
+  const groupId = "120363-epoch@g.us";
+  const { sock } = makeSock();
+  const pending = enforceHits(sock, {
+    msg: withId(groupId, "epoch-msg", { text: "hello" }),
+    hits: [{ rule: "link", reason: "antilink", detail: "https://example.com/epoch" }],
+  });
+  store.advanceAccountEpoch();
+  const result = await pending;
+  equal("stale moderation does not act", result.acted, false);
+  const warnings =
+    store.getUserWarnings(groupId, USER_PN).length +
+    store.getUserWarnings(groupId, USER_LID).length;
+  equal("stale moderation stores no warning", warnings, 0);
+  equal("stale moderation stores no flag", store.listModerationFlags(groupId).length, 0);
+  equal(
+    "stale moderation stores no applied row",
+    store.getModerationApplied(groupId, "epoch-msg"),
+    null,
+  );
+}
+
 finish();

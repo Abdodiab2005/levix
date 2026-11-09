@@ -72,7 +72,9 @@ function pendingExists() { return existsSync(pendingRoot); }
 section("matching LID activates before rosters and schedules");
 pair(); fixture();
 let scheduledRows = null;
+const epochBefore = store.accountEpoch();
 await handleConnectionOpen(sock, () => { scheduledRows = currentRows(); });
+equal("activation advances the account epoch", store.accountEpoch(), epochBefore + 1);
 equal("account tables replaced", currentRows(), "backup");
 equal("restored reaction rules require fresh opt-in", db.prepare("SELECT enabled FROM reaction_rules WHERE id='restored-rule'").get().enabled, 0);
 equal("scheduler sees backup rows", scheduledRows, "backup");

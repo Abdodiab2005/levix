@@ -15,6 +15,7 @@ const { evaluatePermissionLevel } = require("../utils/permissionLevel.cjs");
 const logger = require("../utils/logger.cjs");
 const store = require("../db/store.cjs");
 const { canonicalJid } = require("../messaging/router.cjs");
+const { MAX_IDENTITY_ALIASES } = require("../automation/limits.cjs");
 
 // Transport-verified automation cannot use the legacy digit-only LID/PN
 // fallback. Roles still use the same backend roster and level evaluator.
@@ -22,7 +23,7 @@ export function verifiedIdentityAliases(value) {
   const jid = canonicalJid(value);
   if (!jid || jid.endsWith("@g.us")) return [];
   const ids = store.reactionIdentityAliases(jid);
-  return ids.length <= 4 ? ids : [];
+  return ids.length <= MAX_IDENTITY_ALIASES ? ids : [];
 }
 export function verifiedParticipant(metadata, value) {
   const ids = verifiedIdentityAliases(value);

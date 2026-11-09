@@ -479,6 +479,7 @@ function keepCopyText(body) {
  * (caller must stop the rest of the pipeline). Never throws.
  */
 async function handleIncoming(sock, msg, body, helpers) {
+  const epoch = store.accountEpoch();
   try {
     const enabled = store.listEnabledAutoDeleteRules();
     if (!enabled.length) return false;
@@ -526,6 +527,11 @@ async function handleIncoming(sock, msg, body, helpers) {
     } catch (error) {
       logger.error({ err: error, ruleId: matched.id }, "[auto-delete] delete failed");
       return false;
+    }
+
+    if (store.accountEpoch() !== epoch) {
+      logger.debug("[auto-delete] skipped account write after account change");
+      return true;
     }
 
     store.incrementAutoDeleteCounter(matched.id);

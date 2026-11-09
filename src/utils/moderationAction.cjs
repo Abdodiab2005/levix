@@ -13,6 +13,7 @@ const {
   clearModerationFlag,
   listModerationFlags,
   getModerationFlag,
+  accountEpoch,
   commitModerationDecision,
   markModerationNotice,
   markModerationKicked,
@@ -214,6 +215,12 @@ function clearMemberModeration(groupId, userId) {
   clearModerationFlag(groupId, userId);
 }
 
+function accountEpochMoved(epoch) {
+  if (epoch === accountEpoch()) return false;
+  logger.debug("[Moderation] skipped account write after account change");
+  return true;
+}
+
 function dismissMemberFlag(groupId, userId) {
   clearModerationFlag(groupId, userId);
 }
@@ -251,6 +258,7 @@ function requesterStillAdmin(meta, candidates, fromMe, rule = "direct") {
  * owner). Anything else is treated as "direct".
  */
 async function kickGroupMember(sock, opts) {
+  const epoch = opts.epoch ?? accountEpoch();
   await primePermissions();
   const groupId = opts.groupId;
   if (!groupId?.endsWith("@g.us")) return { kicked: false, error: "not-group" };
@@ -275,6 +283,7 @@ async function kickGroupMember(sock, opts) {
   const kickJid = rosterJidForSync(meta, candidates) || candidates[0];
   const updated = await sock.groupParticipantsUpdate(groupId, [kickJid], "remove");
   if (!removalSucceeded(updated)) return { kicked: false, error: "rejected", kickJid };
+  if (accountEpochMoved(epoch)) return { kicked: true, kickJid };
   clearMemberModeration(groupId, candidates[0]);
   logger.info("moderation kicked member");
   logger.debugOnly.info({ group: groupId, user: kickJid }, "moderation kicked member");
@@ -357,12 +366,15 @@ function decideOutcome({ policy, immediate, effective, flagWasOpen, repeatPoints
 }
 
 async function performKick(sock, ctx) {
+  const epoch = ctx.epoch ?? accountEpoch();
   try {
     const result = await kickGroupMember(sock, {
       groupId: ctx.groupId,
       groupMetadata: ctx.meta,
       targetCandidates: ctx.candidates,
+      epoch,
     });
+    if (accountEpochMoved(epoch)) return Boolean(result.kicked);
     if (result.kicked) {
       markModerationKicked(ctx.groupId, ctx.messageId);
       return true;
@@ -385,12 +397,14 @@ async function performKick(sock, ctx) {
       { err, group: ctx.groupId, user: ctx.mentionJid, rule: ctx.rule },
       "moderation kick failed",
     );
-    flagMemberForReview(ctx.groupId, ctx.mentionJid, {
-      warnCount: ctx.effective,
-      lastRule: ctx.rule,
-      reasons: ctx.reasons,
-      repeatPoints: ctx.repeatPoints,
-    });
+    if (!accountEpochMoved(epoch)) {
+      flagMemberForReview(ctx.groupId, ctx.mentionJid, {
+        warnCount: ctx.effective,
+        lastRule: ctx.rule,
+        reasons: ctx.reasons,
+        repeatPoints: ctx.repeatPoints,
+      });
+    }
     try {
       await sock.sendMessage(ctx.groupId, {
         text: t("bot.moderation.moderationAction.iTriedToRemoveThe"),
@@ -407,6 +421,7 @@ async function performKick(sock, ctx) {
  * Returns { acted, duplicate, points, effective, decision, kicked, flagged }.
  */
 async function enforceHits(sock, opts) {
+  const epoch = accountEpoch();
   const msg = opts.msg;
   const groupId = opts.groupId || msg?.key?.remoteJid;
   if (!groupId?.endsWith("@g.us")) return idleResult();
@@ -436,6 +451,8 @@ async function enforceHits(sock, opts) {
   const shouldDelete = hits.some(
     (hit) => hit.rule === "link" || hit.rule === "media" || hit.rule === "forbidden",
   );
+
+  if (accountEpochMoved(epoch)) return idleResult();
 
   const committed = commitModerationDecision(groupId, messageId, () => {
     const existingEvents = getUserWarnings(groupId, mentionJid);
@@ -526,6 +543,7 @@ async function enforceHits(sock, opts) {
         effective: flag?.warn_count || effectivePoints(events, policy, now),
         reasons: events.map((event) => event?.reason).filter(Boolean),
         repeatPoints: flag?.repeat_points || 0,
+        epoch,
       });
     }
     return {
@@ -585,10 +603,12 @@ async function enforceHits(sock, opts) {
     });
     try {
       await sock.sendMessage(groupId, { text, mentions: [committed.mentionJid, ...adminJids] });
-      markModerationNotice(groupId, messageId, committed.mentionJid, {
-        flagNotice: announceFlag,
-        at: now,
-      });
+      if (!accountEpochMoved(epoch)) {
+        markModerationNotice(groupId, messageId, committed.mentionJid, {
+          flagNotice: announceFlag,
+          at: now,
+        });
+      }
     } catch (err) {
       logger.error({ err, group: groupId, rule: committed.rule }, "moderation notice failed");
     }
@@ -616,6 +636,7 @@ async function enforceHits(sock, opts) {
       effective: committed.effective,
       reasons: committed.reasons,
       repeatPoints: committed.repeatPoints,
+      epoch,
     });
   }
 

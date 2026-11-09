@@ -628,4 +628,49 @@ section("the panel exposes delivery state and manual retry");
   ok("the retry control calls the protected API", source.includes("await api.retrySchedule(id)"));
 }
 
+section("unlink during a running one-off leaves it paused");
+
+{
+  let release;
+  let started = false;
+  const job = {
+    id: "one-off-unlink",
+    type: "once",
+    targetJid: "201000000000@s.whatsapp.net",
+    creatorJid: "201000000000@s.whatsapp.net",
+    message: "still paused",
+    date: new Date(Date.now() + 40).toISOString(),
+    status: "pending",
+  };
+  scheduler.saveScheduledJob(job);
+  scheduler.scheduleNewJob(
+    {
+      async sendMessage() {
+        started = true;
+        await new Promise((resolve) => {
+          release = resolve;
+        });
+        throw new Error("unlinked");
+      },
+    },
+    job,
+  );
+  try {
+    ok("the one-off send started", await waitUntil(() => started));
+    const { WhatsAppSession } = await import("../src/core/session.js");
+    const session = new WhatsAppSession({
+      checkConsent: () => ({ ok: true }),
+      log: { info() {}, warn() {}, error() {}, debug() {}, trace() {} },
+    });
+    await session.logout();
+  } finally {
+    if (release) release();
+    scheduler.stopAllScheduledJobs();
+  }
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const stored = storage.getSchedule(job.id);
+  equal("unlink leaves the one-off paused", stored.status, "paused");
+  equal("stale delivery does not record failure", stored.lastDeliveryStatus, null);
+}
+
 finish();

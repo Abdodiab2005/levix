@@ -19,6 +19,7 @@ const crypto = require("node:crypto");
 const logger = require("../utils/logger.cjs");
 const normalizeJid = require("../utils/normalizeJid.cjs");
 const { db, q, parseJson, sweepExpired, checkpoint, DB_PATH } = require("./db.cjs");
+const { candidateLimit, MAX_IDENTITY_ALIASES } = require("../automation/limits.cjs");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_FORWARD_TTL_DAYS = 30;
@@ -272,7 +273,9 @@ function reactionIdentityAliases(jid) {
   if (jid.endsWith("@g.us")) return [jid];
   const pn = jid.endsWith("@lid") ? getPnForLid(jid) : jid;
   if (!pn) return [jid];
-  const rows = q("SELECT lid FROM lid_mapping WHERE pn = ? LIMIT 4").all(pn);
+  const rows = q(
+    `SELECT lid FROM lid_mapping WHERE pn = ? LIMIT ${MAX_IDENTITY_ALIASES}`,
+  ).all(pn);
   return [...new Set([jid, pn, ...rows.map((row) => normalizeJid(row.lid))])];
 }
 
@@ -380,7 +383,7 @@ function setReactionAutomationEnabled(enabled) {
   saveBotSetting("reaction:enabled", enabled);
 }
 function reactionRulesForChats(chats, { emoji, type, originalType }) {
-  if (!chats.length || chats.length > 4) return [];
+  if (!chats.length || chats.length > MAX_IDENTITY_ALIASES) return [];
   return q(`WITH rules AS (
       SELECT *, CASE WHEN json_valid(definition) THEN definition ELSE '{}' END AS config
       FROM reaction_rules WHERE enabled=1 AND chat_jid IN (${sqlIn(chats)})
@@ -388,11 +391,17 @@ function reactionRulesForChats(chats, { emoji, type, originalType }) {
     WHERE json_extract(config,'$.emoji')=?
       AND EXISTS (SELECT 1 FROM json_each(config,'$.transitions') WHERE value=?)
       AND EXISTS (SELECT 1 FROM json_each(config,'$.originalTypes') WHERE value=?)
-    ORDER BY priority ASC,id COLLATE BINARY ASC LIMIT 101`).all(...chats, emoji, type, originalType);
+    ORDER BY priority ASC,id COLLATE BINARY ASC LIMIT ?`).all(
+    ...chats,
+    emoji,
+    type,
+    originalType,
+    candidateLimit + 1,
+  );
 }
 // Strict role lookup deliberately never converts LID digits into phone digits.
 function verifiedUserRoles(ids) {
-  if (!ids.length || ids.length > 4) return { isOwner: false, isBotAdmin: false };
+  if (!ids.length || ids.length > MAX_IDENTITY_ALIASES) return { isOwner: false, isBotAdmin: false };
   // Legacy contact merging can populate user_lid/phone_number by matching
   // numeric digits alone. Only the role row's primary JID and authoritative
   // lid_mapping expansion above may establish automation privileges.

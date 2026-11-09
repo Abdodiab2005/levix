@@ -416,4 +416,27 @@ equal("unlink clears transitions", db.prepare("SELECT COUNT(*) AS n FROM reactio
 equal("unlink clears invalidation hashes", db.prepare("SELECT COUNT(*) AS n FROM reaction_invalidations").get().n, 0);
 equal("unlink retains configuration disabled", db.prepare("SELECT COUNT(*) AS n FROM reaction_rules WHERE enabled=1").get().n, 0);
 ok("unlink retains rules", db.prepare("SELECT COUNT(*) AS n FROM reaction_rules").get().n > 0);
+
+section("intake and rules agree on emoji samples");
+{
+  const { isReactionEmoji } = require("./src/automation/rules.cjs");
+  enable();
+  const checker = fresh();
+  const samples = ["", "😀", "1\uFE0F\u20E3", "nope", "👍"];
+  const got = [];
+  const want = [];
+  try {
+    for (const sample of samples) {
+      const msg = original();
+      remember(checker, msg);
+      if (sample === "") receive(checker, event(msg, "😀"));
+      got.push(receive(checker, event(msg, sample))[0]?.type || "none");
+      want.push(sample === "" ? "remove" : isReactionEmoji(sample) ? "add" : "none");
+    }
+  } finally {
+    checker.close();
+  }
+  equal("intake matches the shared emoji rule", got.join("|"), want.join("|"));
+}
+
 finish();

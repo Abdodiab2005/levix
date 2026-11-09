@@ -7,6 +7,8 @@ import { sameUser } from "../utils/permissions.esm.js";
 const require = createRequire(import.meta.url);
 const store = require("../db/store.cjs");
 const { canonicalJid } = require("../messaging/router.cjs");
+const { isReactionEmoji } = require("./rules.cjs");
+const { MAX_IDENTITY_ALIASES } = require("./limits.cjs");
 const logger = require("../utils/logger.cjs");
 
 export const REACTION_LIMITS = Object.freeze({
@@ -26,7 +28,6 @@ const mediaFields = [
 ];
 const contentKeys = ["conversation", "extendedTextMessage", "audioMessage", "imageMessage",
   "videoMessage", "documentMessage", "stickerMessage"];
-const graphemes = new Intl.Segmenter("en", { granularity: "grapheme" });
 const hash = (parts) => createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 const numberOf = (value) => value == null ? NaN : Number(String(value));
 
@@ -38,7 +39,7 @@ function jid(value) {
 }
 function aliases(value) {
   const ids = store.reactionIdentityAliases(value);
-  return ids.length <= 4 && ids.every((id) => jid(id)) ? ids : [];
+  return ids.length <= MAX_IDENTITY_ALIASES && ids.every((id) => jid(id)) ? ids : [];
 }
 function sameIdentity(a, b) {
   if (a === b) return true;
@@ -236,9 +237,7 @@ export function createReactionIntake(sock, { now = Date.now, limits = REACTION_L
     const timestampMs = numberOf(entry?.reaction?.senderTimestampMs);
     if (!originalKey || !actorKey || !sameIdentity(originalKey.remoteJid, actorKey.remoteJid) ||
       typeof emoji !== "string" || emoji.length > 32 ||
-      (emoji && (!/^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|\p{Emoji_Modifier}|\uFE0F|\u200D|\u20E3|[#*0-9])+$/u.test(emoji) ||
-        !/\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20e3/u.test(emoji) ||
-        [...graphemes.segment(emoji)].length !== 1)) ||
+      (emoji && !isReactionEmoji(emoji)) ||
       !fresh(timestampMs, time) || !enabled(originalKey.remoteJid)) return null;
     const actor = actorKey.participant || actorKey.remoteJid;
     if (isSelf(actor) || isSelf(originalKey.participant || originalKey.remoteJid)) return null;

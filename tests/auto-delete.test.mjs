@@ -797,4 +797,36 @@ section("API validation");
 
 ok("auto_delete_keep_days setting exists", settings.get("auto_delete_keep_days") === 30);
 
+section("account epoch skips late auto-delete and metadata writes");
+
+{
+  wipeRules();
+  const rule = autoDelete.createRule({ keywords: ["epochword"], keepCopy: true });
+  const sock = fakeSock();
+  const msg = makeMsg({ chat: DM, text: "epochword please" });
+  const pending = runHook(sock, msg, "epochword please");
+  store.advanceAccountEpoch();
+  const deleted = await pending;
+  ok("the delete still stops the pipeline", deleted === true);
+  equal("counter stays 0", autoDelete.getRule(rule.id).deletedCount, 0);
+  equal(
+    "keepCopy was not stored",
+    store.listAutoDeleteLog({ ruleId: rule.id, limit: 5 }).length,
+    0,
+  );
+}
+
+{
+  wipeRules();
+  const sender = "201777777777@s.whatsapp.net";
+  const sock = fakeSock();
+  const pending = handleIncomingMessage(sock, {
+    type: "notify",
+    messages: [makeMsg({ chat: sender, text: "plain hello" })],
+  });
+  store.advanceAccountEpoch();
+  await pending;
+  equal("metadata was not written", store.getUserMetadata(sender), null);
+}
+
 finish();
