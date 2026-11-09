@@ -1119,7 +1119,7 @@
   "reactionSort": "Ordenar",
   "reactionSortPriority": "Prioridade",
   "reactionSortChat": "Conversa",
-  "reactionSortNewest": "Mais recentes",
+  "reactionSortRecent": "Atividade recente",
   "reactionOverlaps": "{n} regra(s) com o mesmo gatilho têm precedência. Apenas uma regra é executada por reação.",
   "reactionLastOutcome": "Última execução:",
   "reactionNeverRan": "Ainda não foi executada",

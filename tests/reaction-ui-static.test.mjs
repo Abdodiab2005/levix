@@ -54,4 +54,20 @@ for (const file of files) {
   }
 }
 
+section("automation toggle is single-flight; sort is recent activity");
+{
+  const view = readFileSync(join(viewsDir, "ReactionRulesView.tsx"), "utf8");
+  ok(
+    "automation Toggle passes disabled=",
+    /<Toggle\s+checked=\{automation\}[\s\S]*?disabled=\{[^}]+\}[\s\S]*?\/>/.test(view),
+  );
+  ok("view has no reactionSortNewest", !view.includes("reactionSortNewest"));
+  ok('view has no "newest" sort value', !view.includes('"newest"'));
+  for (const locale of ["en", "ar", "pt-BR", "es-419"]) {
+    const json = JSON.parse(readFileSync(join(ROOT, "i18n", locale, "dashboard.json"), "utf8"));
+    ok(`${locale} has reactionSortRecent`, Object.hasOwn(json, "reactionSortRecent"));
+    ok(`${locale} has no reactionSortNewest`, !Object.hasOwn(json, "reactionSortNewest"));
+  }
+}
+
 finish();

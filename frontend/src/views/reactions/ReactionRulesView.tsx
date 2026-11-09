@@ -31,6 +31,7 @@ import { fill } from "../../utils/fill";
 import {
   EMPTY_REACTION_FILTERS,
   activeFilterCount,
+  createAutomationWriter,
   displayRuleMeta,
   reactionApiCode,
   readLimits,
@@ -184,6 +185,7 @@ export const ReactionRulesView: React.FC = () => {
   const { toast } = useToast();
   const [rules, setRules] = useState<ReactionRule[]>([]);
   const [automation, setAutomation] = useState(false);
+  const [automationBusy, setAutomationBusy] = useState(false);
   const [connected, setConnected] = useState(true);
   const [ownerLinked, setOwnerLinked] = useState(false);
   const [limitsText, setLimitsText] = useState("");
@@ -203,7 +205,11 @@ export const ReactionRulesView: React.FC = () => {
   const appliedSeq = useRef(0);
   const alive = useRef(true);
   const written = useRef(0);
-  const autoGen = useRef(0);
+  const refreshRef = useRef<() => Promise<RefreshOutcome>>(async () => "discarded");
+  const tRef = useRef(t);
+  const toastRef = useRef(toast);
+  tRef.current = t;
+  toastRef.current = toast;
 
   const applyOverview = useCallback(
     (res: {
@@ -242,6 +248,7 @@ export const ReactionRulesView: React.FC = () => {
 
   useEffect(() => {
     const token = ++listSeq.current;
+    const seenWritten = written.current;
     void reloadToken;
     setLoading(true);
     api
@@ -250,6 +257,9 @@ export const ReactionRulesView: React.FC = () => {
         if (!alive.current || listSeq.current !== token) return;
         applyOverview(res);
         setError(null);
+        if (written.current === seenWritten) return;
+        setLoading(false);
+        void refreshRef.current();
       })
       .catch((err) => {
         if (!alive.current || listSeq.current !== token) return;
@@ -289,6 +299,26 @@ export const ReactionRulesView: React.FC = () => {
       return "failed";
     }
   }, [applyOverview]);
+  refreshRef.current = refresh;
+
+  const toggleAutomation = useMemo(
+    () =>
+      createAutomationWriter({
+        send: (enabled) => api.setReactionAutomation(enabled),
+        reconcile: () => refreshRef.current(),
+        show: (enabled) => setAutomation(enabled),
+        busy: (pending) => setAutomationBusy(pending),
+        failed: (err) => {
+          const tNow = tRef.current;
+          toastRef.current(failureMessage(tNow, err, tNow("reactionSwitchFailed")), "error");
+        },
+        alive: () => alive.current,
+        written: () => {
+          written.current += 1;
+        },
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (loading) return;
@@ -346,22 +376,6 @@ export const ReactionRulesView: React.FC = () => {
     setEditorOpen(false);
     setPendingDelete(null);
     await refresh();
-  };
-
-  const toggleAutomation = async (enabled: boolean) => {
-    const previous = automation;
-    const gen = ++autoGen.current;
-    setAutomation(enabled);
-    try {
-      const res = await api.setReactionAutomation(enabled);
-      if (autoGen.current !== gen) return;
-      setAutomation(Boolean(res.automation?.enabled));
-      await refresh();
-    } catch (err) {
-      if (autoGen.current !== gen) return;
-      setAutomation(previous);
-      toast(failureMessage(t, err, t("reactionSwitchFailed")), "error");
-    }
   };
 
   const toggleRule = async (rule: ReactionRule, enabled: boolean) => {
@@ -458,7 +472,8 @@ export const ReactionRulesView: React.FC = () => {
         <Card className="flex flex-col gap-3">
           <Toggle
             checked={automation}
-            onChange={(enabled) => void toggleAutomation(enabled)}
+            disabled={automationBusy}
+            onChange={(enabled) => void toggleAutomation(enabled, automation)}
             label={t("reactionAutomation")}
             description={t("reactionAutomationHint")}
           />
@@ -487,7 +502,7 @@ export const ReactionRulesView: React.FC = () => {
               options={[
                 { value: "priority", label: t("reactionSortPriority") },
                 { value: "chat", label: t("reactionSortChat") },
-                { value: "newest", label: t("reactionSortNewest") },
+                { value: "recent", label: t("reactionSortRecent") },
               ]}
             />
             <FilterButton

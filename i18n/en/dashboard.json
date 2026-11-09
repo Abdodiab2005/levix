@@ -1119,7 +1119,7 @@
   "reactionSort": "Sort",
   "reactionSortPriority": "Priority",
   "reactionSortChat": "Chat",
-  "reactionSortNewest": "Newest",
+  "reactionSortRecent": "Recent activity",
   "reactionOverlaps": "{n} rule(s) with the same trigger take precedence. Only one rule runs per reaction.",
   "reactionLastOutcome": "Last run:",
   "reactionNeverRan": "Has not run yet",

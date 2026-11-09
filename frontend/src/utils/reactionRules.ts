@@ -62,7 +62,7 @@ const ATTENTION_STATUS = new Set<string>([
 
 const OFF_STATUS = new Set<string>(["AUTOMATION_OFF", "RULE_OFF"]);
 
-export type ReactionSort = "priority" | "chat" | "newest";
+export type ReactionSort = "priority" | "chat" | "recent";
 
 export interface ReactionFilters {
   status: "any" | "ready" | "off" | "attention";
@@ -261,13 +261,54 @@ export function sortReactionRules(
         a.priority - b.priority ||
         byId(a, b),
     );
-  } else if (sort === "newest") {
+  } else if (sort === "recent") {
     const stamp = (rule: ReactionRule) => rule.runtime?.lastAt ?? rule.enabledAt ?? 0;
     list.sort((a, b) => stamp(b) - stamp(a) || byId(b, a));
   } else {
     list.sort((a, b) => a.priority - b.priority || byId(a, b));
   }
   return list;
+}
+
+export interface AutomationWriteDeps {
+  send: (enabled: boolean) => Promise<{ automation?: { enabled?: boolean } }>;
+  reconcile: () => Promise<unknown>;
+  show: (enabled: boolean) => void;
+  busy: (pending: boolean) => void;
+  failed: (err: unknown) => void;
+  alive: () => boolean;
+  written: () => void;
+}
+
+/** Returns a toggle handler that allows one automation write at a time. */
+export function createAutomationWriter(
+  deps: AutomationWriteDeps,
+): (enabled: boolean, previous: boolean) => Promise<boolean> {
+  let pending = false;
+  return async (enabled, previous) => {
+    if (pending) return false;
+    pending = true;
+    deps.written();
+    if (deps.alive()) deps.busy(true);
+    try {
+      const res = await deps.send(enabled);
+      if (deps.alive()) deps.show(Boolean(res.automation?.enabled));
+      return true;
+    } catch (err) {
+      if (deps.alive()) {
+        deps.show(previous);
+        deps.failed(err);
+      }
+      return true;
+    } finally {
+      pending = false;
+      deps.written();
+      if (deps.alive()) {
+        deps.busy(false);
+        await deps.reconcile();
+      }
+    }
+  };
 }
 
 export function activeFilterCount(filters: ReactionFilters): number {

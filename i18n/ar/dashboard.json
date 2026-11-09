@@ -1119,7 +1119,7 @@
   "reactionSort": "ترتيب",
   "reactionSortPriority": "الأولوية",
   "reactionSortChat": "المحادثة",
-  "reactionSortNewest": "الأحدث",
+  "reactionSortRecent": "النشاط الأخير",
   "reactionOverlaps": "{n} قاعدة بنفس المشغّل لها الأسبقية. لا تعمل سوى قاعدة واحدة لكل تفاعل.",
   "reactionLastOutcome": "آخر تشغيل:",
   "reactionNeverRan": "لم تُشغَّل بعد",
