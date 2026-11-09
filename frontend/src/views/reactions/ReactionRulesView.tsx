@@ -44,7 +44,8 @@ import {
 import { ReactionRuleEditor } from "./ReactionRuleEditor";
 
 type TFn = (key: string) => string;
-type RefreshOutcome = "applied" | "discarded" | "failed";
+type RefreshOutcome = "discarded" | "failed";
+type AutomationSnapshot = { automation?: { enabled?: boolean; revision?: string } };
 
 function failureMessage(t: TFn, err: unknown, fallback: string): string {
   const code = reactionApiCode(err);
@@ -205,7 +206,10 @@ export const ReactionRulesView: React.FC = () => {
   const appliedSeq = useRef(0);
   const alive = useRef(true);
   const written = useRef(0);
-  const refreshRef = useRef<() => Promise<RefreshOutcome>>(async () => "discarded");
+  const automationRevision = useRef("0");
+  const refreshRef = useRef<() => Promise<AutomationSnapshot | RefreshOutcome>>(
+    async () => "discarded",
+  );
   const tRef = useRef(t);
   const toastRef = useRef(toast);
   tRef.current = t;
@@ -213,12 +217,16 @@ export const ReactionRulesView: React.FC = () => {
 
   const applyOverview = useCallback(
     (res: {
-      automation?: { enabled?: boolean };
+      automation?: { enabled?: boolean; revision?: string };
       connection?: { connected?: boolean };
       owner?: { linked?: boolean };
       limits?: unknown;
       rules?: ReactionRule[];
     }) => {
+      const nextRevision = res.automation?.revision;
+      if (typeof nextRevision === "string" && nextRevision) {
+        automationRevision.current = nextRevision;
+      }
       setAutomation(Boolean(res.automation?.enabled));
       setConnected(Boolean(res.connection?.connected));
       setOwnerLinked(Boolean(res.owner?.linked));
@@ -282,7 +290,7 @@ export const ReactionRulesView: React.FC = () => {
     };
   }, []);
 
-  const refresh = useCallback(async (): Promise<RefreshOutcome> => {
+  const refresh = useCallback(async (): Promise<AutomationSnapshot | RefreshOutcome> => {
     const token = ++listSeq.current;
     const seen = written.current;
     try {
@@ -291,7 +299,7 @@ export const ReactionRulesView: React.FC = () => {
         return "discarded";
       applyOverview(res);
       setError(null);
-      return "applied";
+      return res;
     } catch {
       // A background refresh must not toast or replace the list with an error.
       if (!alive.current || listSeq.current !== token || written.current !== seen)
@@ -304,13 +312,20 @@ export const ReactionRulesView: React.FC = () => {
   const toggleAutomation = useMemo(
     () =>
       createAutomationWriter({
-        send: (enabled) => api.setReactionAutomation(enabled),
+        send: (enabled, revision) => api.setReactionAutomation(enabled, revision),
+        revision: () => automationRevision.current,
+        remember: (revision) => {
+          automationRevision.current = revision;
+        },
         reconcile: () => refreshRef.current(),
         show: (enabled) => setAutomation(enabled),
         busy: (pending) => setAutomationBusy(pending),
         failed: (err) => {
           const tNow = tRef.current;
           toastRef.current(failureMessage(tNow, err, tNow("reactionSwitchFailed")), "error");
+        },
+        conflict: () => {
+          toastRef.current(tRef.current("reactionAutomationChanged"), "warning");
         },
         alive: () => alive.current,
         written: () => {

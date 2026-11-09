@@ -1,6 +1,6 @@
 # Phase 07.5: Architecture Stabilization Results
 
-Status: **READY FOR OWNER REVIEW.** Nothing is merged, released, deployed or uploaded.
+Status: **READY FOR OWNER MERGE REVIEW.** Nothing is merged, released, deployed or uploaded.
 Phase 08 does not start without the owner's approval.
 
 Two different pieces of work carry the "07.5" number:
@@ -54,8 +54,8 @@ path, or a duplication that already drifted; P3 maintainability.
 | D-4 | P2 | `logger.cjs` sinks + 12 call sites | Raw LID/PN pairs, phone numbers, JIDs in `combined.log` and stdout. | Personal identifiers in an unsanitized log the panel serves. | Identifier fields removed or moved to the sanitized debug log. | Support loses raw ids from `combined.log`. | Fixed, 07.5a + 07.5c |
 | C-2 | P3 | `engine.js`, `store.cjs`, `reactions.js`, `manage.js` | Candidate limit and alias cap duplicated as literals. | Raising one silently disables the capacity check. | One `src/automation/limits.cjs`; store queries `limit + 1`. | Low. | Fixed, 07.5b |
 | C-3 | P3 | `reactions.js` vs `rules.cjs` | Emoji validator copied. | Panel could save a rule intake never matches. | One `isReactionEmoji()`; intake keeps the empty-removal case. | Low. | Fixed, 07.5b |
-| A-6 | P2 (Codex) / P3 | `permissions.esm.js:identityForms`, `sameUser`, `store.cjs` role reads | LID digits equal to PN digits count as the same user without a mapping. | Wrong authority only if an unrelated LID's digits equal a privileged phone number; not attacker-choosable. | Proven mappings only. | The digit walk exists to match legacy role rows; strict rules can lock real owners out. | **Owner decision** |
-| D-3 | P2 | `src/auth/use-database-auth-state.js:clearAll`, `session.js` logout | A failed `DELETE FROM baileys_auth` (disk full, busy) is swallowed; unlink reports success. | Pairing data can survive an unlink that said it succeeded. | Propagate the failure; report unlink failure. | Changes credential-lifecycle failure handling. | **Owner decision** |
+| A-6 | P2 (Codex) / P3 | `permissions.esm.js:identityForms`, `sameUser`, `store.cjs` role reads | LID digits equal to PN digits count as the same user without a mapping. | Wrong authority only if an unrelated LID's digits equal a privileged phone number; not attacker-choosable. | Proven mappings only. | Legacy rows matched only by digits fail closed; re-grant by phone. | **Fixed, 07.5d** (owner-approved) |
+| D-3 | P2 | `src/auth/use-database-auth-state.js:clearAll`, `session.js` logout | A failed `DELETE FROM baileys_auth` (disk full, busy) is swallowed; unlink reports success. | Pairing data can survive an unlink that said it succeeded. | Propagate the failure; report unlink failure. | Changes credential-lifecycle failure handling. | **Fixed, 07.5e** (owner-approved) |
 | A-7 | P3 | `runtime-config.cjs:setAliases`, `group.cjs` | Dashboard accepts aliases the v2 parser rejects; `!group <alias>` ignores overrides. | Alias silently does nothing. | Shared validation. | Low. | Defer |
 | B-3 | P2 | provider loops | Two tool loops. | Proven drifts (deadline, history) fixed by B-1/B-2. | Full merge. | Large. | Defer |
 | B-4 | P3 | `aiMedia.cjs` | Busy slot held until a hung op settles. | Documented design; network timeouts bound it. | — | — | No change |
@@ -148,19 +148,116 @@ and timing on slow devices. No test touched a real account, key or production en
 
 ## 4. Disagreements and owner decisions
 
-- A-6: Codex recommends fixing now (P2). The orchestrator holds it for the owner: matching by
-  digits is deliberate (`hasRole` comment: "covers rows saved with only a phone or only a LID"),
-  so a strict rule first needs an inventory of stored role rows. No attacker can choose LID digits.
-- D-3: Codex recommends fixing before Phase 08. It changes how a failed credential wipe is
-  reported, which `AGENTS.md` lists for owner escalation.
+- A-6, D-3 and 07c R-3 were held for the owner and then approved on 2026-11-09; see section 6.
 - A-2 group admin source: Codex asked for a fresh, fail-closed roster fetch on every tool call.
   The orchestrator kept dispatcher parity (cache, kept current by participant events, denied while
   marked stale) and added the recheck before deferred effects.
-- 07c R-3: cross-tab switch race needs an optimistic revision on `PUT /reactions/automation`
-  (API body change).
 
 ## 5. Rollback
 
-Each PR reverts on its own in reverse merge order (c, then b, then a). No migration, no stored
-format change; reverting restores the previous code paths. The account epoch, history revisions
-and listener disposers are in memory only.
+Each PR reverts on its own in reverse merge order (f, e, d, c, b, a). No migration and no schema
+change. The account epoch, history revisions and listener disposers are in memory only. Two
+bot_settings keys are new: `auth:unlink-pending` (07.5e) and `reaction:automation-revision` (07.5f);
+older code ignores both. Revert 07.5e only when no unlink is pending (the panel shows the
+"unlink did not finish" notice while one is).
+
+## 6. Owner decisions resolved (2026-11-09)
+
+The owner accepted the stack conditionally and approved fixing A-6, D-3 and R-3 before merge.
+Three follow-up PRs stack on #148 so no published history is rewritten.
+
+### A-6: LID/PN privilege ambiguity (07.5d, `arch/07.5d-identity`)
+
+- Equivalence for roles, admins, kicks and AI tools comes only from: the exact normalized
+  identity (device suffix stripped); the current `lid_mapping` pair, verified in both directions
+  (newest `updated_at`; a stale historical LID does not inherit the phone's role; tied conflicting
+  rows fail closed); the transport pair on the message (`participantAlt`, `remoteJidAlt`); a roster
+  participant that carries both forms; and the paired account's own `sock.user.id`/`sock.user.lid`.
+  A bare phone and a PN JID are one namespace. LID digits never become a phone.
+- Role reads use strict primary-identity rows; the digit fallback in `getUserMetadata` no longer
+  decides privileges. Bootstrap sets keep verified forms only. `setUserRole` no longer stores LID
+  digits as a phone, and contact merging cannot move a role flag.
+- The linked account (`sock.user.id`/`sock.user.lid`, set on every connection, cleared on unlink)
+  is always an owner. Revoking its owner role is refused with no change (`!perm`, AI tool, panel).
+- A grant stays on the identity it was given to. A revocation clears the DB grants and bootstrap
+  entries of every identity the caller can prove for the target, including roster participant forms.
+- `!perm`, `!memory`, `!gemini` (del/delall), `!lang` and `!status debug` use every transport
+  candidate and the roster, like the dispatcher.
+- No stored row is rewritten. Recovery for a legacy role that can no longer be verified: re-grant it
+  by phone number from the panel Roles screen or with `!perm add`. The paired account is recorded as
+  owner again on every connection (AGENTS.md gotcha 27).
+- Tests: `tests/identity-strict.test.mjs` (242 checks) covers both collision directions, mapped
+  and roster-proven equivalence, device suffixes, stale and tied mappings, legacy contamination,
+  owner and bot-admin roles, kicks, the five local gates, `!perm remove` and the AI
+  `revoke_role`; `ai-tool-authz`, `moderation` and `reaction-engine` carry A-6 sections.
+
+### D-3: failed credential deletion (07.5e, `arch/07.5e-unlink-cleanup`)
+
+- `clearAll` rejects (the fence stays set); `authClearAll` is one transaction, so a failed delete
+  leaves the rows intact.
+- The session writes `auth:unlink-pending` before deleting. A failed marker write, credential wipe
+  or required account cleanup (directory and role data, AI history, schedule pausing, role roster,
+  AI memory files, sticker rows/files/uploads, auto-delete copies and counters) leaves the session in
+  ERROR `unlink_incomplete`. The old socket stays fenced and stopped. `start()`, the retry timer,
+  network restore and the boot policy refuse to open a socket; `linked` is false; Unlink stays
+  available. `sock.logout()` still runs first, including for a connecting socket.
+- A later Unlink (with or without a socket) or a boot with the marker repeats the wipe and the whole
+  cleanup, which are idempotent, then removes the marker and reports LOGGED_OUT.
+- Order (owner review): the marker is written before anything irreversible, then epoch and timers,
+  teardown, `sock.logout()`, the wipe, the cleanup, marker removal. If the first marker write fails,
+  the unlink does not start (no server logout, nothing changed; HTTP 503 `UNLINK_NOT_STARTED`), so a
+  restart correctly resumes a pairing that is still valid. A marker read error counts as pending
+  everywhere: start refuses, and boot neither crashes nor resumes. On the WhatsApp logged-out path a
+  failed marker write keeps the in-process error; after a restart the rejected credentials get 401
+  again and return to the wipe.
+- The Connection screen no longer reports success for an incomplete unlink: it shows an error toast,
+  a notice and "Unlink again" (four locales; pt-BR and es-419 machine draft).
+- Tests: `tests/session.test.mjs` (failure injection, rollback, concurrent logout, logged-out close,
+  restart with the marker, successful retry, cleanup failure and repeated failure),
+  `auth-keystore-contract`, `session-startup-policy`, `memory-root`, `sticker-library`,
+  `connection-unlink-ui`. Disposable data directories only; no real account was touched.
+
+### R-3: cross-tab automation switch race (07.5f, `arch/07.5f-automation-revision`)
+
+- `reaction:automation-revision` (bot_settings, no migration; missing reads as "0"; not in backups
+  or settings export). `GET /reactions` returns `automation: { enabled, revision }`;
+  `PUT /reactions/automation` requires both and compares and writes in one transaction. A stale
+  revision returns 409 `REACTION_AUTOMATION_CHANGED` and writes nothing. Unlink and backup
+  activation rotate it when they force the switch off.
+- The panel sends the last applied revision; on 409 it refetches, shows the server value and warns
+  once (four locales). The engine still reads `reaction:enabled`: default-off, opt-in and the kill
+  switch are unchanged.
+- Tests: `reactions-api` (two clients, delayed stale request, invalid revision, unlink and
+  activation rotation, default off), `reaction-ui-logic` (409 reconcile without resend),
+  `reaction-ui-static`.
+
+### Review
+
+| round | reviewer | findings | disposition |
+|---|---|---|---|
+| security review | OpenAI Codex | 2 P1 (cleanup failure reported as success; revocation missed roster-proven aliases), 2 P2 (linked LID dropped from bootstrap; command-local gates ignored sender proof); R-3 ready | fixed in `67fc973`, `6bc0dd7` |
+| gate | orchestrator | D-3 returned `canUnlink: false`; panel toasted success on an incomplete unlink; a test called a missing store export; `!perm` logged JIDs | fixed |
+| verification 1 | OpenAI Codex | 4 findings fixed; new P2: the linked account could revoke its own owner role until reconnect | fixed in `55ce7b8` (refused; linked identities in their own set) |
+| verification 2 | OpenAI Codex | P2 fixed; no new defect; nothing but the paired `sock.user.id`/`lid` can enter the linked set, and unlink clears it | `55ce7b8` and stack top ready |
+| owner review | owner | P1: `sock.logout()` ran before the marker was saved, so a restart after a failed marker write resumed a server-logged-out pairing; a marker read error was not fail-closed | fixed in `3b6c6c7` (merged forward into 07.5f) |
+| verification 3 | OpenAI Codex | owner P1 fixed: marker first on every path that logs out or deletes; failed first write leaves the session untouched; reads fail closed in start, #open, retry, network restore, getState and boot | `3b6c6c7` ready |
+
+### Evidence (local, Linux, Node v24.22.2)
+
+| gate | 07.5d `55ce7b8` | 07.5e `3b6c6c7` | 07.5f code `79e7520` |
+|---|---|---|---|
+| `npm test` | PASS, 14102 checks, 0 failed | PASS, 14365, 0 failed | PASS, 14445, 0 failed |
+| lint, `i18n:check`, `docs:check`, `build:frontend` | PASS | PASS | PASS |
+| `validate:tarball` | — | — | PASS, 36 checks |
+| `build:sea` + `validate:sea` | — | — | PASS, 51 checks |
+| `validate:docker` | BLOCKED locally (no socket permission); CI runs it | BLOCKED | BLOCKED |
+| GitHub CI | recorded in the PR | recorded in the PR | recorded in the PR |
+| Android device, real WhatsApp account, live providers | NOT RUN | NOT RUN | NOT RUN |
+
+No test unlinked or modified a real WhatsApp account; D-3 failure injection used disposable data
+directories. pt-BR and es-419 strings added by 07.5a, 07.5d, 07.5e and 07.5f are a machine draft
+pending the ChatGPT review (Q-19); no native speaker has verified them.
+
+Remaining risks: live WhatsApp behavior of LID/PN mapping updates is covered only by fakes; a role
+granted before this phase and reachable only by digit equality now fails closed until re-granted
+(by design); Android WebView rendering of the new Connection notice is NOT RUN.

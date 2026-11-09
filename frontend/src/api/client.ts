@@ -599,8 +599,9 @@ export const api = {
     api.delete<{ success: boolean }>(
       `/reactions/rules/${encodeURIComponent(id)}?revision=${encodeURIComponent(revision)}`,
     ),
-  setReactionAutomation: (enabled: boolean) =>
-    api.put<{ success: boolean; automation: { enabled: boolean } }>("/reactions/automation", {
-      enabled,
-    }),
+  setReactionAutomation: (enabled: boolean, revision: string) =>
+    api.put<{ success: boolean; automation: ReactionOverview["automation"] }>(
+      "/reactions/automation",
+      { enabled, revision },
+    ),
 };

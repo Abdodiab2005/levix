@@ -144,7 +144,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
-| Status | IMPLEMENTED, PENDING OWNER REVIEW (2026-11-09). Audit, findings matrix, decisions and evidence: `PHASE-07.5-ARCHITECTURE-RESULTS.md`. Three stacked PRs on `feat/v5-phase-07c` (07.5a messaging, 07.5b account boundary, 07.5c AI tools). Not to be confused with the group E2EE incident remediation, which also carries the 07.5 number and is merged (`PHASE-07.5-E2EE-REMEDIATION-RESULTS.md`). |
+| Status | IMPLEMENTED, PENDING OWNER REVIEW (2026-11-09). Audit, findings matrix, decisions and evidence: `PHASE-07.5-ARCHITECTURE-RESULTS.md`. Six stacked PRs on `feat/v5-phase-07c`: 07.5a messaging, 07.5b account boundary, 07.5c AI tools, then the owner-approved follow-ups 07.5d A-6 identity, 07.5e D-3 unlink cleanup and 07.5f R-3 automation revision (2026-11-09). Not to be confused with the group E2EE incident remediation, which also carries the 07.5 number and is merged (`PHASE-07.5-E2EE-REMEDIATION-RESULTS.md`). |
 | Scope | Behavior-preserving cleanup of messaging, AI tool and automation boundaries, cancellation ownership, duplication and legacy code. |
 | Gate | Preserve permissions, privacy, routing, cancellation, command/API compatibility and all functional behavior; before/after regression proof. No feature expansion. |
 | Rollback | Small independently reviewable commits/PRs, each reversible; no schema change without its own migration plan. |

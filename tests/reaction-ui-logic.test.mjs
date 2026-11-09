@@ -12,25 +12,36 @@ function deferred() {
 function track(opts) {
   const calls = {
     send: [],
+    revisions: [],
+    remembered: [],
     show: [],
     busy: [],
     failed: [],
+    conflict: [],
     reconcile: 0,
     written: 0,
   };
   let living = true;
+  let revision = opts.revision ?? "0";
   return {
     calls,
     die() {
       living = false;
     },
     deps: {
-      send: async (enabled) => {
+      send: async (enabled, rev) => {
         calls.send.push(enabled);
-        return opts.send(enabled);
+        calls.revisions.push(rev);
+        return opts.send(enabled, rev);
+      },
+      revision: () => revision,
+      remember: (next) => {
+        revision = next;
+        calls.remembered.push(next);
       },
       reconcile: async () => {
         calls.reconcile += 1;
+        return opts.reconcile ? await opts.reconcile() : undefined;
       },
       show: (enabled) => {
         calls.show.push(enabled);
@@ -40,6 +51,9 @@ function track(opts) {
       },
       failed: (err) => {
         calls.failed.push(err);
+      },
+      conflict: (err) => {
+        calls.conflict.push(err);
       },
       alive: () => living,
       written: () => {
@@ -158,12 +172,14 @@ section("failure restores previous");
 section("success reconciles and bumps written");
 {
   const { deps, calls } = track({
-    send: async () => ({ automation: { enabled: true } }),
+    send: async () => ({ automation: { enabled: true, revision: "rev-next" } }),
   });
   const write = createAutomationWriter(deps);
   await write(true, false);
   equal("reconcile once", calls.reconcile, 1);
   equal("written at start and settle", calls.written, 2);
+  equal("writer passes the revision", calls.revisions[0], "0");
+  equal("success remembers the new revision", calls.remembered[0], "rev-next");
 }
 
 section("unmount during pending write");
@@ -194,6 +210,32 @@ section("after a settled write a new toggle is accepted");
   equal("first accepted", await write(true, false), true);
   equal("second accepted", await write(false, true), true);
   equal("two sends", calls.send.join(","), "true,false");
+}
+
+section("409 reconciles the server value once and does not resend");
+{
+  const err = Object.assign(new Error("REACTION_AUTOMATION_CHANGED"), {
+    status: 409,
+    data: { success: false, error: "REACTION_AUTOMATION_CHANGED" },
+  });
+  const { deps, calls } = track({
+    revision: "rev-a",
+    send: () => Promise.reject(err),
+    reconcile: async () => ({ automation: { enabled: true, revision: "rev-b" } }),
+  });
+  const write = createAutomationWriter(deps);
+  equal("conflict settles", await write(true, false), true);
+  equal("one send", calls.send.length, 1);
+  equal("send was the clicked value", calls.send[0], true);
+  equal("writer passed revision rev-a", calls.revisions[0], "rev-a");
+  equal("reconcile once", calls.reconcile, 1);
+  equal("shows the server value", calls.show.at(-1), true);
+  equal("conflict reported once", calls.conflict.length, 1);
+  equal("conflict is the 409", calls.conflict[0], err);
+  equal("no error toast path", calls.failed.length, 0);
+  equal("remembers the server revision", calls.remembered[0], "rev-b");
+  equal("busy cleared", calls.busy.join(","), "true,false");
+  equal("no automatic resend", calls.send.length, 1);
 }
 
 section("sortReactionRules recent / priority / chat");

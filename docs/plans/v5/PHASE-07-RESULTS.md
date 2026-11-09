@@ -776,13 +776,9 @@ items in 07c scope. All were fixed on `feat/v5-phase-07c`; nothing was merged.
 | R-1 | Independent read-only review of the fixes (OpenCode deepseek-v4.1-flash): a natively disabled switch drops keyboard focus when a write starts. | The switch announces `aria-busy` and the writer's guard ignores clicks; focus stays. | `f3f6ef9` |
 | R-2 | Same review: `i18n/review.json` hashed the pre-fix pt-BR and es-419 catalogs, so `i18n:check` warned. | Hashes refreshed; review status text unchanged. | `f3f6ef9` |
 
-Concurrent browser tabs remain a residual risk (R-3, not fixed). Each tab
-serializes its own writes, but the server applies requests from different tabs
-in arrival order. If tab A's ON stalls, tab B's later OFF commits first, and A's
-ON then lands, the server ends ON while tab B shows OFF until its next poll
-(30 s, or on focus; a hidden tab does not poll). The fix is an optimistic
-revision on `PUT /reactions/automation` with 409 on a stale write, like rules
-already have. That changes the API body, so it is left for the owner to decide.
+R-3 fixed. The global switch has its own revision (`reaction:automation-revision`,
+missing reads as `"0"`). A stale `PUT /reactions/automation` returns 409
+`REACTION_AUTOMATION_CHANGED`; the panel refetches and does not retry the write.
 
 Phase 07.5 (architecture stabilization) runs on a stack based on this branch;
 see `PHASE-07.5-ARCHITECTURE-RESULTS.md`.
