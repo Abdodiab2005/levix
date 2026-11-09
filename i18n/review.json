@@ -1,7 +1,7 @@
 {
   "pt-BR/dashboard": {
     "status": "draft",
-    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex), pending ChatGPT review under Q-19",
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex; terminology pass over all 164 pt-BR and es-419 reaction strings by OpenCode deepseek-v4.1-flash on 2026-11-09, 5 es-419 fixes), pending ChatGPT review under Q-19; not native-speaker verified",
     "date": "2026-11-05",
     "sha256": "9f1692b142f7d1c3f00a60bc96c8d543ae38e3c0aa16b21c609b65f6925ca642"
   },
@@ -13,7 +13,7 @@
   },
   "es-419/dashboard": {
     "status": "draft",
-    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex), pending ChatGPT review under Q-19",
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex; terminology pass over all 164 pt-BR and es-419 reaction strings by OpenCode deepseek-v4.1-flash on 2026-11-09, 5 es-419 fixes), pending ChatGPT review under Q-19; not native-speaker verified",
     "date": "2026-11-05",
     "sha256": "667075539e6e35f3086640beeaaa686e39d8a603227c4081cf04f8cd41b0956a"
   },
