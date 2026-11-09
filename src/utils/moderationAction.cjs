@@ -352,7 +352,8 @@ async function performKick(sock, ctx) {
       markModerationKicked(ctx.groupId, ctx.messageId);
       return true;
     }
-    logger.warn(
+    logger.warn({ rule: ctx.rule, error: result.error }, "moderation kick skipped");
+    logger.debugOnly.warn(
       { group: ctx.groupId, user: ctx.mentionJid, rule: ctx.rule, error: result.error },
       "moderation kick skipped",
     );
@@ -364,7 +365,8 @@ async function performKick(sock, ctx) {
     });
     return false;
   } catch (err) {
-    logger.error(
+    logger.error({ err, rule: ctx.rule }, "moderation kick failed");
+    logger.debugOnly.error(
       { err, group: ctx.groupId, user: ctx.mentionJid, rule: ctx.rule },
       "moderation kick failed",
     );
@@ -578,6 +580,10 @@ async function enforceHits(sock, opts) {
   }
   if (converted) {
     logger.warn(
+      { rule: committed.rule },
+      "moderation kick skipped: bot is not a group admin; flagged instead",
+    );
+    logger.debugOnly.warn(
       { group: groupId, user: mentionJid, rule: committed.rule },
       "moderation kick skipped: bot is not a group admin; flagged instead",
     );

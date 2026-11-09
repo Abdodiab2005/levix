@@ -23,6 +23,11 @@ const GROUP_A = "120363111@g.us";
 const GROUP_B = "120363222@g.us";
 const PRIVATE = "201000000000@s.whatsapp.net";
 const PRIVATE_LID = "201000000000@lid";
+const USER_PN = "201555000001@s.whatsapp.net";
+const USER_LID = "111111111111@lid";
+const OTHER_USER_PN = "201555000099@s.whatsapp.net";
+const OTHER_USER_LID = "333333333333@lid";
+const DIGIT_MATCH_LID = "201555000001@lid";
 const OWNER = "201000000000@s.whatsapp.net";
 const ONCE_DATE = "2030-06-15T12:00:00.000Z";
 
@@ -42,6 +47,7 @@ scheduler.saveScheduledJob(recurring("scope-a", GROUP_A, "ALPHA-secret"));
 scheduler.saveScheduledJob(recurring("scope-b", GROUP_B, "BRAVO-note"));
 scheduler.saveScheduledJob(recurring("scope-p", PRIVATE, "PRIVATE-note"));
 scheduler.saveScheduledJob(recurring("scope-p-lid", PRIVATE_LID, "LID-note"));
+scheduler.saveScheduledJob(recurring("scope-user-pn", USER_PN, "USER-PN-note"));
 scheduler.saveScheduledJob({
   id: "scope-b-once",
   type: "once",
@@ -63,28 +69,35 @@ function fakeSock() {
   };
 }
 
-function msgFrom(chat) {
-  return { key: { remoteJid: chat, participant: "201111111111@s.whatsapp.net", fromMe: false } };
+function msgFrom(chat, alt) {
+  return {
+    key: {
+      remoteJid: chat,
+      ...(alt ? { remoteJidAlt: alt } : {}),
+      participant: "201111111111@s.whatsapp.net",
+      fromMe: false,
+    },
+  };
 }
 
-async function runList(chat) {
+async function runList(chat, alt) {
   const sock = fakeSock();
-  await listschedules.execute(sock, msgFrom(chat), []);
+  await listschedules.execute(sock, msgFrom(chat, alt), []);
   return sock.sent;
 }
 
-async function runDelete(chat, id) {
+async function runDelete(chat, id, alt) {
   const sock = fakeSock();
-  await deleteschedule.execute(sock, msgFrom(chat), id ? [id] : []);
+  await deleteschedule.execute(sock, msgFrom(chat, alt), id ? [id] : []);
   return sock.sent;
 }
 
 section("the chat filter matches the exact chat only");
 
 {
-  const ids = (chat) =>
+  const ids = (chat, alt) =>
     scheduler
-      .getScheduledJobsForChat(chat)
+      .getScheduledJobsForChat(chat, alt)
       .map((job) => job.id)
       .sort();
   equal("group A has its own job", ids(GROUP_A).join(","), "scope-a");
@@ -101,12 +114,28 @@ section("the chat filter matches the exact chat only");
     "scope-p-lid",
   );
   equal(
-    "a private JID with a device suffix is not the same chat",
-    ids("201000000000:5@s.whatsapp.net").length,
-    0,
+    "a private JID is compared after normalization",
+    ids("201000000000:5@s.whatsapp.net").join(","),
+    "scope-p",
   );
   equal("a bare number is not a chat", ids("201000000000").length, 0);
   equal("no chat lists nothing", ids(undefined).length, 0);
+  equal(
+    "a LID chat with remoteJidAlt matching PN matches the job",
+    ids(USER_LID, USER_PN).join(","),
+    "scope-user-pn",
+  );
+  equal("same LID chat without remoteJidAlt does not match", ids(USER_LID).length, 0);
+  equal(
+    "another contact's LID chat with different PN alt does not match",
+    ids(OTHER_USER_LID, OTHER_USER_PN).length,
+    0,
+  );
+  equal(
+    "a LID whose digits equal the PN digits without alt does not match",
+    ids(DIGIT_MATCH_LID).length,
+    0,
+  );
 }
 
 section("!listschedules from group B shows only B's jobs");
@@ -202,6 +231,55 @@ section("!deleteschedule treats another chat's id as unknown");
     missing[0].content.text,
     t("bot.schedules.deleteschedule.missingId"),
   );
+}
+
+section("private chats match across LID and PN when remoteJidAlt is present");
+
+{
+  const noAltList = await runList(USER_LID);
+  equal(
+    "without remoteJidAlt, no jobs are listed",
+    noAltList[0].content.text,
+    t("bot.schedules.listschedules.none"),
+  );
+
+  const foreignAltList = await runList(OTHER_USER_LID, OTHER_USER_PN);
+  equal(
+    "with different PN alt, no jobs are listed",
+    foreignAltList[0].content.text,
+    t("bot.schedules.listschedules.none"),
+  );
+
+  const digitMatchList = await runList(DIGIT_MATCH_LID);
+  equal(
+    "with matching digits but no alt, no jobs are listed",
+    digitMatchList[0].content.text,
+    t("bot.schedules.listschedules.none"),
+  );
+
+  const noAltDelete = await runDelete(USER_LID, "scope-user-pn");
+  equal(
+    "without remoteJidAlt, deleteschedule answers notFound",
+    noAltDelete[0].content.text,
+    t("bot.schedules.deleteschedule.notFound", { id: "scope-user-pn" }),
+  );
+  ok("job survives delete attempt without alt", Boolean(storage.getSchedule("scope-user-pn")));
+
+  const altList = await runList(USER_LID, USER_PN);
+  equal("one reply", altList.length, 1);
+  const text = altList[0].content.text;
+  ok(
+    "job is listed when remoteJidAlt matches PN",
+    text.includes("USER-PN-note") && text.includes("scope-user-pn"),
+  );
+
+  const altDelete = await runDelete(USER_LID, "scope-user-pn", USER_PN);
+  equal(
+    "deleteschedule removes the job when remoteJidAlt matches PN",
+    altDelete[0].content.text,
+    t("bot.schedules.deleteschedule.deleted", { id: "scope-user-pn" }),
+  );
+  ok("the job is gone from storage", !storage.getSchedule("scope-user-pn"));
 }
 
 finish();

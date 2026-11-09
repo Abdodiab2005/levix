@@ -47,17 +47,23 @@ function getScheduledJobs() {
 
 /**
  * The jobs that belong to one chat. A group matches its normalized JID exactly;
- * a private chat matches the exact JID. Never compared by digits, so another
- * chat's reminders cannot be read or removed through this list.
+ * a private chat matches when its normalized target JID equals the normalized
+ * chat JID or the normalized alt JID (only when altJid is a non-empty string).
+ * Never compared by digits, so another chat's reminders cannot be read or
+ * removed through this list.
  */
-function getScheduledJobsForChat(chatJid) {
+function getScheduledJobsForChat(chatJid, altJid) {
   if (!chatJid || typeof chatJid !== "string") return [];
   const inGroup = chatJid.endsWith("@g.us");
-  const wanted = inGroup ? normalizeJid(chatJid) : chatJid;
+  const wanted = normalizeJid(chatJid);
+  const hasAlt = typeof altJid === "string" && altJid.length > 0;
+  const wantedAlt = hasAlt ? normalizeJid(altJid) : null;
   return getScheduledJobs().filter((job) => {
     const target = job?.targetJid;
     if (!target || typeof target !== "string") return false;
-    return inGroup ? normalizeJid(target) === wanted : target === wanted;
+    const norm = normalizeJid(target);
+    if (inGroup) return norm === wanted;
+    return norm === wanted || (hasAlt && norm === wantedAlt);
   });
 }
 

@@ -60,6 +60,10 @@ export async function handleGroupParticipantsUpdate(sock, update) {
     { action, count: Array.isArray(participants) ? participants.length : 0 },
     "Received group participants update",
   );
+  logger.debugOnly.info(
+    { group: id, action, count: Array.isArray(participants) ? participants.length : 0 },
+    "Received group participants update",
+  );
 
   if (action === "remove" || action === "leave") {
     try {
@@ -73,11 +77,13 @@ export async function handleGroupParticipantsUpdate(sock, update) {
       }
     } catch (error) {
       logger.error({ err: error }, "Error clearing moderation on leave");
+      logger.debugOnly.error({ err: error, update }, "Error clearing moderation on leave");
     }
   }
 
   if (action !== "add") {
     logger.info(`[Group] ${action} action handled`);
+    logger.debugOnly.info({ group: id }, `[Group] ${action} action handled`);
     return;
   }
 
@@ -87,6 +93,7 @@ export async function handleGroupParticipantsUpdate(sock, update) {
 
     if (!welcomeConfig || !welcomeConfig.enabled || welcomeConfig.messages.length === 0) {
       logger.warn("[Group] Welcome system disabled or no messages");
+      logger.debugOnly.warn({ group: id }, "[Group] Welcome system disabled or no messages");
       return;
     }
 
@@ -113,6 +120,7 @@ export async function handleGroupParticipantsUpdate(sock, update) {
     }
   } catch (error) {
     logger.error({ err: error }, "Error in group-participants.update event");
+    logger.debugOnly.error({ err: error, update }, "Error in group-participants.update event");
   }
 }
 

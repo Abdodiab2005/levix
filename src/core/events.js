@@ -123,6 +123,7 @@ export function setupEventListeners(
       const stored = storeUnsolicitedFullRoster(sock, group.id, group);
       if (!stored) continue;
       logger.info("[Cache] Caching group metadata");
+      logger.debugOnly.info({ group: group.id }, "[Cache] Caching group metadata");
       upsertGroupDirectory(group.id, {
         subject: stored.subject || null,
         participantCount: stored.participants?.length ?? null,

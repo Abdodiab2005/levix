@@ -17,7 +17,7 @@ module.exports = {
     }
 
     // A job of another chat answers like an unknown id, so existence never leaks.
-    const jobs = getScheduledJobsForChat(msg.key.remoteJid);
+    const jobs = getScheduledJobsForChat(msg.key.remoteJid, msg.key.remoteJidAlt);
     const jobExists = jobs.some((job) => job.id === jobIdToDelete);
 
     if (!jobExists) {

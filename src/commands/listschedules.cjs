@@ -10,7 +10,7 @@ module.exports = {
 
   async execute(sock, msg) {
     // Only this chat's jobs: another chat's reminders are never listed here.
-    const jobs = getScheduledJobsForChat(msg.key.remoteJid);
+    const jobs = getScheduledJobsForChat(msg.key.remoteJid, msg.key.remoteJidAlt);
     const activeJobs = jobs.filter((job) => job.status === "pending" || job.status === "active");
 
     if (activeJobs.length === 0) {
