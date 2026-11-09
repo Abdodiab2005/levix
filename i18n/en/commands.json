@@ -115,7 +115,7 @@
   "group.policy.usage": "policy\npolicy set <field> <value>\npolicy reset",
   "group.promote.description": "Promotes a member to admin.",
   "group.promote.usage": "promote @member",
-  "group.removeall.description": "Removes every non-admin member from the group, after confirmation.",
+  "group.removeall.description": "Not available: removing every member at once is disabled.",
   "group.removeall.usage": "removeall",
   "group.rules.description": "Shows the group rules.",
   "group.rules.usage": "rules",

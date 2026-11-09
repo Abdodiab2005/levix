@@ -1,5 +1,4 @@
 // file: /commands/removeall.js
-const logger = require("../../utils/logger.cjs");
 const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
@@ -8,31 +7,11 @@ module.exports = {
   userAdminRequired: true,
   botAdminRequired: true,
 
-  async execute(sock, msg, args, body, groupMetadata, confirmationSessions) {
-    // This command's only job is to start the confirmation process.
-    // The main logic is in index.js
-
-    const senderId = msg.key.participant || msg.key.remoteJid;
-    const groupId = msg.key.remoteJid;
-
-    // Ask for confirmation
-    await sock.sendMessage(groupId, {
-      text: t("bot.group.removeall.confirm"),
+  // Removing every member at once is disabled. The old confirmation flow had no
+  // consumer, so the command only says so and removes nobody.
+  async execute(sock, msg) {
+    await sock.sendMessage(msg.key.remoteJid, {
+      text: t("bot.group.removeall.unavailable"),
     });
-
-    // Store the confirmation request
-    confirmationSessions.set(senderId, {
-      command: "removeall",
-      groupId: groupId,
-      timestamp: Date.now(),
-    });
-
-    // Set a timeout to delete the confirmation request after 30 seconds
-    setTimeout(() => {
-      if (confirmationSessions.has(senderId)) {
-        confirmationSessions.delete(senderId);
-        logger.info(`[Confirmation] Timed out for ${senderId} on command removeall.`);
-      }
-    }, 30000); // 30 seconds
   },
 };

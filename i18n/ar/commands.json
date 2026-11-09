@@ -115,7 +115,7 @@
   "group.policy.usage": "policy\npolicy set <حقل> <قيمة>\npolicy reset",
   "group.promote.description": "يرقّي عضوًا إلى مشرف.",
   "group.promote.usage": "promote @عضو",
-  "group.removeall.description": "يطرد كل الأعضاء غير المشرفين من المجموعة بعد التأكيد.",
+  "group.removeall.description": "غير متاح: إزالة كل الأعضاء دفعة واحدة معطّلة.",
   "group.removeall.usage": "removeall",
   "group.rules.description": "يعرض قواعد المجموعة.",
   "group.rules.usage": "rules",
