@@ -234,6 +234,19 @@ function clearLidMappings() {
   q("DELETE FROM lid_mapping").run();
 }
 
+// Account lifetime (Phase 07.5). Work that started for one linked account
+// captures accountEpoch() and must not write account-scoped state once it has
+// moved. Unlink, logout and backup activation advance it synchronously, before
+// their first await, so a late completion from the previous account is dropped.
+let accountEpochValue = 0;
+function accountEpoch() {
+  return accountEpochValue;
+}
+function advanceAccountEpoch() {
+  accountEpochValue += 1;
+  return accountEpochValue;
+}
+
 /** Drop WhatsApp-derived directory data after unlink / logged-out. */
 function clearWhatsAppDirectory() {
   clearReactionAccountState();
@@ -2343,6 +2356,8 @@ module.exports = {
   clearGroupSettings,
   clearUserMetadata,
   clearLidMappings,
+  accountEpoch,
+  advanceAccountEpoch,
   clearWhatsAppDirectory,
   // Warnings
   getUserWarnings,
