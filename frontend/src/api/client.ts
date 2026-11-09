@@ -17,6 +17,10 @@ import type {
   ModerationPolicyFieldError,
   ModerationPolicyVisibility,
   Pack,
+  ReactionIssue,
+  ReactionOverview,
+  ReactionRule,
+  ReactionRuleWrite,
   SentCrashReportItem,
   Sticker,
   StickerBulkResult,
@@ -575,4 +579,28 @@ export const api = {
     api.delete<{ success: boolean; cleared: number }>(
       ruleId ? `/auto-delete/log?ruleId=${encodeURIComponent(ruleId)}` : "/auto-delete/log",
     ),
+
+  getReactions: () => api.get<ReactionOverview>("/reactions"),
+  checkReactionRule: (body: ReactionRuleWrite) =>
+    api.post<{ success: boolean; issues: ReactionIssue[] }>("/reactions/rules/check", body),
+  createReactionRule: (body: ReactionRuleWrite) =>
+    api.post<{ success: boolean; rule: ReactionRule }>("/reactions/rules", body),
+  updateReactionRule: (id: string, body: ReactionRuleWrite & { revision: string }) =>
+    api.put<{ success: boolean; rule: ReactionRule }>(
+      `/reactions/rules/${encodeURIComponent(id)}`,
+      body,
+    ),
+  setReactionRuleEnabled: (id: string, body: { revision: string; enabled: boolean }) =>
+    api.post<{ success: boolean; rule: ReactionRule }>(
+      `/reactions/rules/${encodeURIComponent(id)}/enabled`,
+      body,
+    ),
+  deleteReactionRule: (id: string, revision: string) =>
+    api.delete<{ success: boolean }>(
+      `/reactions/rules/${encodeURIComponent(id)}?revision=${encodeURIComponent(revision)}`,
+    ),
+  setReactionAutomation: (enabled: boolean) =>
+    api.put<{ success: boolean; automation: { enabled: boolean } }>("/reactions/automation", {
+      enabled,
+    }),
 };

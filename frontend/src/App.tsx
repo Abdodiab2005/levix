@@ -14,6 +14,7 @@ import type { SessionState, SessionStatus } from "./types";
 import { initWindowErrorHandlers } from "./utils/errorCapture";
 import { AIAssistantView } from "./views/AIAssistantView";
 import { AutoDeleteView } from "./views/autoDelete/AutoDeleteView";
+import { ReactionRulesView } from "./views/reactions/ReactionRulesView";
 import { CommandsView } from "./views/CommandsView";
 import { ConnectionView } from "./views/ConnectionView";
 import { GroupsView } from "./views/GroupsView";
@@ -32,6 +33,7 @@ const VALID_VIEWS: ViewTab[] = [
   "ai",
   "groups",
   "autodelete",
+  "reactions",
   "schedules",
   "settings",
   "logs",
@@ -167,6 +169,7 @@ const MainLayout: React.FC = () => {
     ai: t("ai"),
     groups: t("groups"),
     autodelete: t("autoDelete"),
+    reactions: t("reaction"),
     schedules: t("schedules"),
     settings: t("settings"),
     logs: t("logs"),
@@ -216,6 +219,7 @@ const MainLayout: React.FC = () => {
             )}
             {currentView === "groups" && <GroupsView />}
             {currentView === "autodelete" && <AutoDeleteView />}
+            {currentView === "reactions" && <ReactionRulesView />}
             {currentView === "settings" && <SettingsView />}
             {currentView === "stickers" && <StickerStudioView isConnected={isConnected} />}
             {currentView === "logs" && <LogsView />}

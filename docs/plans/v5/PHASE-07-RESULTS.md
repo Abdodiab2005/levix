@@ -550,3 +550,239 @@ merge, release or Play upload.
 
 Phase 07c (Rule Builder) starts only after PR #136 is merged and the owner
 approves.
+
+## Phase 07c audit and implementation plan (2026-11-08, before code)
+
+Baseline: `release/5.0.0-beta.1` at `ba7ef44` (PR #136 merged 2026-11-08 21:21 UTC).
+Branch: `feat/v5-phase-07c`. The owner authorized 07c in the session prompt of
+2026-11-08 and asked for a PR against `release/5.0.0-beta.1`, with no merge.
+
+### Google Play Closed Testing status
+
+The latest run of "Android Beta → Closed Testing (automatic)" is
+42074694325, from `main`, on 2026-11-05, conclusion `success`. No run exists for
+`release/5.0.0-beta.1`. The owner's 2026-11-08 rules forbid another Google Play
+publication, so 07c triggers none. Play Console state beyond the workflow result
+was not checked (no console access in this session).
+
+### Audit
+
+| id | finding | evidence |
+| --- | --- | --- |
+| A-1 | Internal writes exist and notify running engines. There is no list query and no field-level validation: every defect throws one `REACTION_RULE_INVALID`. | `src/db/store.cjs:325-365`, `src/automation/rules.cjs:49-77` |
+| A-2 | Every non-GET request already passes the global same-origin guard; `/dashboard/api` sits behind `requireLoginApi`; the session cookie is `SameSite=lax`. New routes inherit all three. | `app.cjs:57-78`, `app.cjs:126-138`, `app.cjs:180`, `src/bootstrap/panel.js:57-65` |
+| A-3 | Action outcomes exist only in RAM, per socket (`stats()`), with no rule id. Nothing persisted can show execution status. | `src/automation/engine.js:63-72`, `:363-365` |
+| A-4 | Rate limits are literals in the engine (3 per reactor, 10 per chat, 5 per rule per 60 s, 2 global jobs). Lookup limits are exported as `REACTION_LIMITS`. | `src/automation/engine.js:256`, `:319-330`, `src/automation/reactions.js:12-17` |
+| A-5 | The Auto-delete screen is the closest UI pattern: hash route, sidebar entry, card list, Dialog editor, `RecipientPicker` over `GET /recipients` (groups and contacts). There is no emoji picker and no frontend unit-test runner. | `frontend/src/views/autoDelete/`, `frontend/src/components/RecipientPicker.tsx`, `src/routes/dashboard.api.esm.js:1259` |
+| A-6 | Backups already classify `reaction_rules` as account data; the global switch is not restorable and activation resets rules. 07c changes nothing here. | `src/backup/content.cjs:9-23`, `src/backup/activation.cjs:126-128` |
+| A-7 | More than 100 enabled rules matching one event fail closed with `REACTION_CAPACITY`. This is a per-event work bound, not a rule cap. The UI must warn about it. | `src/automation/engine.js:220`, `src/db/store.cjs:366-376` |
+
+### Design
+
+1. `rules.cjs` gains `definitionIssues(value)`, which returns `[{ field, code }]`.
+   `validateDefinition` throws when that list is non-empty. Accepted and rejected
+   inputs stay identical; a parity test pins it. This gives the UI field errors
+   without a second validator.
+2. `store.cjs` gains `listReactionRules()` (ordered by chat, priority, id). No other
+   store change. No migration: schema stays 12.
+3. New `src/automation/status.cjs`: process-local RAM record per rule id of the
+   last outcome code, its time and per-code counts since start, plus one global
+   record for outcomes with no selected rule. At most 1,000 rule entries; an edit,
+   disable or delete clears that rule's entry. Codes only, never payloads. The
+   engine records into it; nothing writes it to disk.
+4. The engine exports its action limits (`REACTION_ACTION_LIMITS`) and one pure
+   readiness helper for the command and STT checks it already performs, so the
+   management layer reports the same conditions without copying them.
+5. New `src/automation/manage.js`, the only management facade: overview, create,
+   update, enable/disable, delete, global switch and draft check. It calls the
+   store methods above, computes statuses, and maps store errors to typed errors
+   (400, 404, 409). Optimistic concurrency: update, enable/disable and delete
+   carry the rule `revision` the client read; a mismatch returns 409
+   `REACTION_RULE_CHANGED`.
+6. New `src/routes/reactions.api.esm.js`, mounted with the other panel routers:
+
+   | method and path | body | result |
+   | --- | --- | --- |
+   | `GET /dashboard/api/reactions` | — | `{ success, automation: { enabled }, connection: { connected }, owner: { linked }, limits, rules: [RuleView] }` |
+   | `POST /dashboard/api/reactions/rules/check` | `{ chatJid, priority, definition }` | `{ success, issues: [{ field, code }] }` (no write) |
+   | `POST /dashboard/api/reactions/rules` | `{ chatJid, priority, definition }` | `201 { success, rule }`, always disabled |
+   | `PUT /dashboard/api/reactions/rules/:id` | `{ revision, chatJid, priority, definition }` | `{ success, rule }`; an edit disables the rule (07b contract) |
+   | `POST /dashboard/api/reactions/rules/:id/enabled` | `{ revision, enabled }` | `{ success, rule }` |
+   | `DELETE /dashboard/api/reactions/rules/:id?revision=` | — | `{ success }` |
+   | `PUT /dashboard/api/reactions/automation` | `{ enabled }` | `{ success, automation }` |
+
+   `RuleView` is `{ id, revision, chatJid, chatName, priority, enabled, enabledAt,
+   definition, valid, statuses: [code], overlaps: [ruleId], runtime: { lastCode,
+   lastAt, counts } }`. Status codes: `AUTOMATION_OFF`, `RULE_OFF`,
+   `RULE_INVALID`, `NOT_CONNECTED`, `ACTION_DISABLED`, `STT_DISABLED`,
+   `STT_KEY_MISSING`, `OWNER_NOT_LINKED`, `CANDIDATE_LIMIT`, `READY`. Overlaps
+   list rules in the same chat with the same emoji and shared transitions and
+   types that run first (lower priority number, then id). Errors are
+   `{ success: false, error: CODE, issues? }` with fixed codes that the UI
+   translates. Unknown body keys are rejected; a client cannot set `id`,
+   `enabled` on create, `enabledAt` or `revision` values.
+7. React screen `#reactions` ("Reaction rules"), built only from
+   `frontend/src/components/ui`: a global automation `Toggle` with the opt-in
+   notice and the limits; an Add rule button; rule cards with emoji, chat,
+   action, destination, sender role, priority, status pills and the last outcome;
+   a per-rule `Toggle`; an `OverflowMenu` with Edit and Delete; `FilterButton` and
+   `SortMenu`; pagination at 20 per page. The editor `Dialog` uses
+   `RecipientPicker` for the chat and for specific senders, an emoji field with a
+   short palette, checkboxes for transitions and message types, a role select, a
+   segmented action control (STT locks types to voice notes), destination radios,
+   a priority number and a live sentence preview. Server issues appear under their
+   fields. Saving tells the user that an edited rule starts off.
+8. Strings: `i18n/<locale>/dashboard.json` in `en`, `ar`, `pt-BR`, `es-419`, then
+   `npm run i18n:build`. pt-BR and es-419 follow the Q-19 ChatGPT review rule.
+
+### Tests
+
+- `tests/reactions-api.test.mjs`: 401 without a session on every route; 403 for
+  cross-origin and opaque-origin mutations; 400 with field issues; created rules
+  start disabled; edits disable and rotate the revision; stale revision 409;
+  enable, disable, delete, global switch; unknown and smuggled keys rejected; 150
+  rules create and list (no tier cap); `OWNER_NOT_LINKED` while unpaired; running
+  engines are notified on every write.
+- `tests/reaction-rule-issues.test.mjs`: parity of `definitionIssues` with the
+  old accept/reject results over the 07b vectors and a generated corpus.
+- `tests/reaction-status.test.mjs`: bounded RAM status, cleared on edit and delete,
+  codes only, never persisted.
+- `tests/reaction-ui-static.test.mjs`: every `t()` key in `views/reactions/` exists
+  in all four catalogs; no physical-direction classes, raw hex colours or one-off
+  palettes; imports come from the UI barrel.
+- Existing i18n catalog, dashboard locale, headless and backup tests stay green.
+- Manual headless browser run of the screen in all four languages, desktop and
+  360 px width, light and dark (puppeteer-core, scratch data directory, no
+  WhatsApp pairing).
+
+### Threats and privacy
+
+- CSRF and auth: inherited guards, proven per route by tests.
+- Mass assignment: strict key allowlists in the facade and the 07b validator.
+- Stored XSS: React escaping; chat and sender names through `UserText`.
+- Lost updates: revision check, 409.
+- Information exposure: status codes and counts only; no message text, transcript
+  or provider detail.
+- Privacy impact: no new persistence. Outcome counts live in RAM and reset on
+  restart. Chat names come from the same directory the panel already shows.
+
+### Compatibility, rollback and acceptance
+
+- No migration; schema 12. Headless never imports the route. The SEA bundle,
+  tarball, Docker and Android WebView carry the new route and view like the
+  other panel routes.
+- Rollback: revert the PR. Rules and the switch stay in the database; turn the
+  global switch off before downgrading. No data conversion is needed.
+- Acceptance: owner can create, edit, delete, enable and disable rules and flip the
+  global switch from the panel in four languages; every mutation is authenticated
+  and same-origin; validation errors name the field; statuses explain why a rule
+  will not run; no rule-count cap; 07b engine, limits, kill switch and opt-in
+  unchanged; no Plus code and no AI Auto Reply.
+
+### Delegation
+
+07c-1 backend (rules issues, list query, status, facade, routes, tests) and 07c-2
+UI (view, editor, client, types, navigation, en and ar strings) run in parallel
+in separate worktrees against the contract above. 07c-3 adds pt-BR and es-419
+strings. Agents do not run gates; the orchestrator runs every test, build and
+review, then commits.
+
+## Phase 07c implementation, review and verification (2026-11-09)
+
+Status: **IMPLEMENTED, PENDING OWNER REVIEW** on `feat/v5-phase-07c`, based on
+`ba7ef44`. No merge, release, tag, deployment or Google Play upload.
+
+### What shipped
+
+- `src/automation/rules.cjs`: `definitionIssues()` returns field issues;
+  `validateDefinition()` throws when the list is non-empty. A parity test runs a
+  frozen copy of the 07b validator over its vectors and 768 mutated definitions.
+- `src/db/store.cjs`: `listReactionRules()`. `clearReactionAccountState()` now
+  emits `{ type: "policy", account: true }`; existing listeners still see a
+  `policy` event.
+- `src/automation/engine.js`: exports `REACTION_ACTION_LIMITS` (3 per reactor,
+  10 per chat, 5 per rule per 60 s, 2 global jobs, 100 candidates per event) and
+  `reactionActionReadiness()`, which the engine itself uses for the disabled
+  command, `ai_stt_enabled` and STT key checks. Outcomes are recorded against a
+  rule only while the rule still has the revision the job selected.
+- `src/automation/status.cjs`: RAM-only outcome record per rule (last code, time,
+  per-code counts), at most 1,000 rules, fixed code allowlist, cleared on any
+  change to that rule and fully reset with an epoch on account clearing.
+- `src/automation/manage.js` and `src/routes/reactions.api.esm.js`: the seven
+  routes of the plan, strict body allowlists, revision checks (409), fixed error
+  and issue codes, statuses, alias-aware overlaps and per-event candidate count.
+- React screen `#reactions` with the global switch, rule cards, statuses, last
+  outcome, filter, sort, pagination, delete confirmation and the rule editor.
+  The shared `Field` primitive now gives its message an id
+  (`${htmlFor}-message`); `RadioGroup` accepts `id` and `aria-describedby`.
+- 164 strings in each of `en`, `ar`, `pt-BR`, `es-419`. pt-BR and es-419 are a
+  machine draft pending ChatGPT review (Q-19), recorded in `i18n/review.json`.
+
+### Reviews and fixes
+
+Codex (read-only) reviewed four rounds.
+
+| round | findings | fixed |
+| --- | --- | --- |
+| 1 | 2 P1 (editor could save one rule's draft onto another; polling refreshed the revision under an open draft), 8 P2 (issue fields, untrusted stored rows, toggle race, stale status after edit, status kept across unlink, candidate count semantics, two misleading strings), 1 P3 (preview wrapping) | all |
+| 2 | 2 P2 (conflict reload overwrote newer state; every keyless policy event wiped status) | all |
+| 3 | 2 P2 (discarded reload still rolled back; unnamed radio and checkbox groups) | all |
+| 4 | 1 P2 (action group unnamed) | fixed in `af647d0` |
+
+The orchestrator's own QA found one more: error text was not linked to its
+control (`aria-describedby`); fixed in the shared `Field` primitive.
+
+### Evidence (local, Linux, Node v24.22.2)
+
+| gate | commit | result |
+| --- | --- | --- |
+| `npm test` | `88f5ed2` | PASS, 13380 checks, 0 failed |
+| `node tests/run.mjs reaction-ui-static` | `af647d0` | PASS, 174 checks |
+| `npm run lint` | `af647d0` | PASS (exit 0) |
+| `npm run i18n:check` | `af647d0` | PASS |
+| `npm run build:frontend` | `af647d0` | PASS |
+| `npm run docs:check` | `88f5ed2` | PASS |
+| `npm run validate:tarball` | `88f5ed2` | PASS, 36 checks |
+| `npm run build:sea` + `validate:sea` | `af647d0` | PASS, 51 checks |
+| headless Chrome QA, 4 languages x (1280 px light, 360 px dark) | `88f5ed2` build | PASS, 46/46: lang and dir, no horizontal overflow, no raw keys or codes, editor focus |
+| headless edit flow: field issue, 409 on concurrent change, saved edit returns off | `88f5ed2` build | PASS, 9/9 |
+| `validate:docker` | — | NOT RUN locally (Docker socket permission, as in Phase 04); CI runs it |
+| GitHub CI | final head | recorded in the PR |
+| Android WebView on a device | — | NOT RUN |
+| live WhatsApp reaction with a paired test account | — | NOT RUN (no live side effects; the 07b engine is unchanged) |
+
+`af647d0` differs from `88f5ed2` only by one `aria-label` in the editor.
+
+### Limits and rollback
+
+- Outcome counts live in RAM and reset on restart, unlink and account activation.
+  More than 1,000 rules keep status only for the 1,000 most recently recorded.
+- The overview returns every rule in one response; there is no server paging.
+- Rollback: revert the PR. No migration was added (schema 12). Rules and the
+  switch stay in the database; turn the switch off before reverting.
+
+### Final review round (2026-11-09, before owner review)
+
+An owner-requested pass on head `31ef4f9` confirmed two findings and three audit
+items in 07c scope. All were fixed on `feat/v5-phase-07c`; nothing was merged.
+
+| id | finding | fix | commit |
+| --- | --- | --- | --- |
+| A | Global switch race: a second PUT could be sent while the first was in flight. An older ON committing after a newer OFF left the server ON while the panel showed OFF, which defeats the kill switch. Ignoring the older response in the UI did not stop the older server write. Polls overlapping the write could also flip the switch to a stale value. | One automation write at a time; further clicks are ignored until it settles (the switch reports `aria-busy`). The write counter is bumped at start and settle, so overlapping polls and an overlapping initial load are discarded or followed by a reconcile. A failed write shows the previous value and reconciles with the server. `createAutomationWriter` is React-free; `tests/reaction-ui-logic.test.mjs` drives it with deferred and out-of-order requests. | `e4e1d12` |
+| B | "Newest" sorted by last run, else last enable time. Rules have no creation timestamp. | The option is "Recent activity" (`reactionSortRecent`) in all four locales; ties stay ordered by id. No migration. | `e4e1d12` |
+| C-5 | A stored rule that no longer validates could not be turned off (400); only delete worked. | The stored definition is validated only when enabling, in `manage.js` and the store. Enabling an invalid rule is still refused. | `62fb948` |
+| C-1 | The overlap note said earlier rules "take precedence"; the engine runs the first enabled rule whose sender filter matches. | Copy now says that, in four locales. | `62fb948` |
+| T-1 | Machine terminology pass over all 164 pt-BR and es-419 reaction strings (OpenCode deepseek-v4.1-flash). | 5 es-419 strings aligned on activada/desactivada and "dispararla"; pt-BR had none. Still a machine draft pending the ChatGPT review (Q-19); no native speaker has verified it. | `2bafc41` |
+| R-1 | Independent read-only review of the fixes (OpenCode deepseek-v4.1-flash): a natively disabled switch drops keyboard focus when a write starts. | The switch announces `aria-busy` and the writer's guard ignores clicks; focus stays. | `f3f6ef9` |
+| R-2 | Same review: `i18n/review.json` hashed the pre-fix pt-BR and es-419 catalogs, so `i18n:check` warned. | Hashes refreshed; review status text unchanged. | `f3f6ef9` |
+
+Concurrent browser tabs remain a residual risk (R-3, not fixed). Each tab
+serializes its own writes, but the server applies requests from different tabs
+in arrival order. If tab A's ON stalls, tab B's later OFF commits first, and A's
+ON then lands, the server ends ON while tab B shows OFF until its next poll
+(30 s, or on focus; a hidden tab does not poll). The fix is an optimistic
+revision on `PUT /reactions/automation` with 409 on a stale write, like rules
+already have. That changes the API body, so it is left for the owner to decide.
+
+Phase 07.5 (architecture stabilization) runs on a stack based on this branch;
+see `PHASE-07.5-ARCHITECTURE-RESULTS.md`.

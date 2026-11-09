@@ -296,7 +296,7 @@ function clearReactionAccountState() {
     q("DELETE FROM reaction_budgets").run();
     saveBotSetting("reaction:enabled", false);
   });
-  notifyReactionChange({ type: "policy" });
+  notifyReactionChange({ type: "policy", account: true });
 }
 
 /** Claim before handoff. Saturation never deletes a live replay key. */
@@ -343,11 +343,14 @@ function saveReactionRule(input) {
 function getReactionRule(id) {
   return q("SELECT * FROM reaction_rules WHERE id=?").get(id) || null;
 }
+function listReactionRules() {
+  return q("SELECT * FROM reaction_rules ORDER BY chat_jid, priority, id COLLATE BINARY").all();
+}
 function setReactionRuleEnabled(id, enabled, now = Date.now()) {
   if (typeof enabled !== "boolean" || !Number.isSafeInteger(now) || now < 0) throw new Error("REACTION_RULE_INVALID");
   const rule = getReactionRule(id);
   if (!rule) throw new Error("REACTION_RULE_MISSING");
-  require("../automation/rules.cjs").validateDefinition(JSON.parse(rule.definition));
+  if (enabled) require("../automation/rules.cjs").validateDefinition(JSON.parse(rule.definition));
   q("UPDATE reaction_rules SET enabled=?,enabled_at=?,revision=? WHERE id=?")
     .run(enabled ? 1 : 0, enabled ? now : null, crypto.randomUUID(), id);
   saveBotSetting("reaction:revision", crypto.randomUUID());
@@ -2308,6 +2311,7 @@ module.exports = {
   claimReactionEvent,
   subscribeReactionChanges,
   saveReactionRule,
+  listReactionRules,
   getReactionRule,
   setReactionRuleEnabled,
   deleteReactionRule,

@@ -11,6 +11,7 @@ import {
   Radio,
   Settings,
   Shield,
+  SmilePlus,
   Sticker,
   Terminal,
   Users,
@@ -28,6 +29,7 @@ export type ViewTab =
   | "ai"
   | "groups"
   | "autodelete"
+  | "reactions"
   | "schedules"
   | "settings"
   | "logs"
@@ -68,6 +70,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "ai", label: t("ai"), icon: Bot },
     { id: "groups", label: t("groups"), icon: Users },
     { id: "autodelete", label: t("autoDelete"), icon: MessageSquareX },
+    { id: "reactions", label: t("reaction"), icon: SmilePlus },
     { id: "schedules", label: t("schedules"), icon: Calendar },
     { id: "stickers", label: t("stickers"), icon: Sticker },
     { labelCategory: t("settings") },

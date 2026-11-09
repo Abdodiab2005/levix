@@ -90,6 +90,11 @@ equal("edit disables rule", edited.enabled, 0);
 ok("edit rotates revision", edited.revision !== twice.revision);
 throws("invalid switch rejected", () => store.setReactionAutomationEnabled("true"));
 throws("invalid rule cannot be enabled", () => store.setReactionRuleEnabled("legacy", true, 1000));
+const legacy = store.getReactionRule("legacy");
+const disabledLegacy = store.setReactionRuleEnabled("legacy", false);
+equal("invalid rule can be disabled", disabledLegacy.enabled, 0);
+equal("invalid disable clears epoch", disabledLegacy.enabled_at, null);
+ok("invalid disable rotates revision", disabledLegacy.revision !== legacy.revision);
 
 section("explicit role writes cannot confuse LID and phone digits");
 for (const [number, throughSetter] of [["800000123", true], ["800000124", false]]) {
