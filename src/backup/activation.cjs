@@ -115,6 +115,9 @@ function replaceTables(id) {
     db.exec("BEGIN IMMEDIATE");
     begun = true;
     db.exec("PRAGMA defer_foreign_keys = ON");
+    // Before the first account-table write, so in-flight work from the previous
+    // account cannot commit into the rows this transaction is about to replace.
+    require("../db/store.cjs").advanceAccountEpoch();
     // Delete children first, then insert parents first. Deferred constraints
     // cover references between account tables until COMMIT.
     for (const table of [...ACCOUNT_TABLES].reverse()) db.exec(`DELETE FROM main."${table}"`);

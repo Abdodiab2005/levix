@@ -22,6 +22,7 @@ const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 const { readLiveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
 const { withLang, langForCommand, t } = require("../utils/i18n.cjs");
 const logger = require("../utils/logger.cjs");
+const { candidateLimit } = require("./limits.cjs");
 const hash = (...values) => createHash("sha256").update(JSON.stringify(values)).digest("hex");
 const fail = (code) => {
   throw new Error(code);
@@ -55,8 +56,8 @@ export const REACTION_ACTION_LIMITS = Object.freeze({
   perRule: 5,
   globalJobs: 2,
   windowMs: 60_000,
-  // Per-event work bound (store query LIMIT 101); not a rule-count cap.
-  candidateLimit: 100,
+  // Per-event work bound (store query LIMIT candidateLimit + 1); not a rule-count cap.
+  candidateLimit,
 });
 
 // Read-only checks shared with management; authorization still belongs to the job.

@@ -20,6 +20,8 @@ module.exports = {
   upsertGroupDirectory: store.upsertGroupDirectory,
   getGroupDirectory: store.getGroupDirectory,
   getAllGroupDirectory: store.getAllGroupDirectory,
+  accountEpoch: store.accountEpoch,
+  advanceAccountEpoch: store.advanceAccountEpoch,
   clearWhatsAppDirectory: store.clearWhatsAppDirectory,
   isPairedSession: store.isPairedSession,
   resolveUserPhone: store.resolveUserPhone,

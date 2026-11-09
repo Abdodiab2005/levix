@@ -797,4 +797,101 @@ section("API validation");
 
 ok("auto_delete_keep_days setting exists", settings.get("auto_delete_keep_days") === 30);
 
+section("account epoch skips late auto-delete and metadata writes");
+
+{
+  wipeRules();
+  const rule = autoDelete.createRule({ keywords: ["epochword"], keepCopy: true });
+  const sock = fakeSock();
+  const msg = makeMsg({ chat: DM, text: "epochword please" });
+  const pending = runHook(sock, msg, "epochword please");
+  store.advanceAccountEpoch();
+  const deleted = await pending;
+  ok("the delete still stops the pipeline", deleted === true);
+  equal("counter stays 0", autoDelete.getRule(rule.id).deletedCount, 0);
+  equal(
+    "keepCopy was not stored",
+    store.listAutoDeleteLog({ ruleId: rule.id, limit: 5 }).length,
+    0,
+  );
+}
+
+{
+  wipeRules();
+  const sender = "201777777777@s.whatsapp.net";
+  const sock = fakeSock();
+  const pending = handleIncomingMessage(sock, {
+    type: "notify",
+    messages: [makeMsg({ chat: sender, text: "plain hello" })],
+  });
+  store.advanceAccountEpoch();
+  await pending;
+  equal("metadata was not written", store.getUserMetadata(sender), null);
+}
+
+section("an old account epoch does not dispatch or moderate");
+
+{
+  const ping = require("./src/commands/ping.cjs");
+  const moderation = require("./src/utils/moderationAction.cjs");
+  const realExecute = ping.execute;
+  const realEnforce = moderation.enforceHits;
+  let executed = 0;
+  let enforced = 0;
+  let seenEpoch;
+  ping.execute = async (...args) => {
+    executed += 1;
+    seenEpoch = args[5] && args[5].accountEpoch;
+  };
+  moderation.enforceHits = async (...args) => {
+    enforced += 1;
+    return realEnforce.apply(moderation, args);
+  };
+  const groupId = "120363000000777@g.us";
+  store.saveGroupSettings(groupId, {
+    antilink: { enabled: true, mode: "ALL", allowed_domains: [], blocked_domains: [] },
+  });
+  const sock = fakeSock();
+  sock.groupMetadata = async () => ({
+    id: groupId,
+    subject: "Epoch",
+    participants: [{ id: "201333333333@s.whatsapp.net", admin: null }],
+  });
+  try {
+    const pending = handleIncomingMessage(sock, {
+      type: "notify",
+      messages: [makeMsg({ chat: DM, text: "!ping" })],
+    });
+    store.advanceAccountEpoch();
+    await pending;
+    equal("a moved epoch executes no command", executed, 0);
+
+    const pendingMod = handleIncomingMessage(sock, {
+      type: "notify",
+      messages: [
+        makeMsg({
+          chat: groupId,
+          text: "https://example.com/old",
+          participant: "201333333333@s.whatsapp.net",
+        }),
+      ],
+    });
+    store.advanceAccountEpoch();
+    await pendingMod;
+    equal("a moved epoch does not moderate", enforced, 0);
+
+    const entry = store.accountEpoch();
+    const pendingCtx = handleIncomingMessage(sock, {
+      type: "notify",
+      messages: [makeMsg({ chat: DM, text: "!ping" })],
+    });
+    await pendingCtx;
+    equal("ctx.accountEpoch is the entry epoch", seenEpoch, entry);
+    equal("the live command ran", executed, 1);
+  } finally {
+    ping.execute = realExecute;
+    moderation.enforceHits = realEnforce;
+  }
+}
+
 finish();

@@ -57,6 +57,7 @@ import {
   clearWhatsAppDirectory,
   deleteAllChatHistories,
   deleteQrCode,
+  advanceAccountEpoch,
   isPairedSession,
   pauseAllSchedules,
   saveQrCode,
@@ -85,6 +86,9 @@ const consent = require("../legal/consent.cjs");
 const CONSENT_POLL_MS = 5000;
 
 function clearAccountScopedState() {
+  // In-flight one-off deliveries compare this generation and leave a paused
+  // job paused instead of writing sent or failed after the account is gone.
+  require("../../scheduler.cjs").bumpScheduleGeneration();
   clearWhatsAppDirectory();
   deleteAllChatHistories();
   pauseAllSchedules();
@@ -121,6 +125,10 @@ function clearAccountScopedState() {
   } catch (error) {
     logger.warn({ err: error }, "[Session] failed to clear auto-delete copies after unlink");
   }
+  // Second advance. Logout and a logged-out close already moved the epoch
+  // before their first await. Work that sampled that value during the logout
+  // wait, then finishes after this wipe, must still drop its write.
+  advanceAccountEpoch();
 }
 
 // Baileys' `end()` awaits `ws.close()`, which waits for the socket's own
@@ -238,6 +246,18 @@ export class WhatsAppSession {
   // A start() already in flight. Concurrent callers await it instead of
   // creating a second socket.
   #starting = null;
+
+  // Set when an in-flight #open was overtaken and the latest intent is still
+  // "be running". The start() that was waiting on that attempt consumes it.
+  #resumeAfterStart = false;
+
+  // Generation at which stop or shutdown recorded intent. A resume must not
+  // start when this is newer than the overtaken attempt.
+  #terminalGeneration = 0;
+
+  // Per-socket disposer from setupEventListeners. A test fake may return
+  // undefined; only a function is stored.
+  #listenerDisposers = new WeakMap();
 
   // A logout() already in flight. Refuses concurrent start() calls and
   // deduplicates concurrent unlinks while teardown is awaited.
@@ -420,8 +440,13 @@ export class WhatsAppSession {
       this.#wasActiveBeforeOffline = BUSY_STATES.has(this.#state) || this.#state === S.PAUSED;
       this.#cancelRetry();
 
+      // #destroySocket() bumps the generation only when a socket exists.
+      // createSocket can still be in flight with #socket null; that attempt
+      // has to become stale too, or #open would adopt it after the pause.
       if (this.#socket) {
         await this.#destroySocket();
+      } else {
+        this.#generation += 1;
       }
       this.#transition(S.PAUSED, {
         reason: "offline",
@@ -445,8 +470,9 @@ export class WhatsAppSession {
   }
 
   /**
-   * Bring the session up. Idempotent: if a socket exists or is being made, this
-   * returns the state it is already in and creates nothing.
+   * Bring the session up. Idempotent while a socket exists or one is being
+   * made, except when that attempt was overtaken and the session should still
+   * be running: then this opens one replacement.
    */
   async start({ reason = "manual", method, phone } = {}) {
     if (this.#shuttingDown) return this.getState();
@@ -460,11 +486,16 @@ export class WhatsAppSession {
       return this.getState();
     }
 
+    let resume = false;
     if (this.#starting) {
       await this.#starting.catch(() => {});
-      return this.getState();
+      resume = this.#resumeAfterStart;
+      this.#resumeAfterStart = false;
+      if (!resume || this.#shuttingDown || this.#loggingOut || !this.#isOnline) {
+        return this.getState();
+      }
     }
-    if (BUSY_STATES.has(this.#state) && this.#state !== S.PAUSED) return this.getState();
+    if (!resume && BUSY_STATES.has(this.#state) && this.#state !== S.PAUSED) return this.getState();
 
     // A known pairing reuses the stored session. Do not request a pairing code.
     if (this.isLinked()) {
@@ -498,9 +529,9 @@ export class WhatsAppSession {
     this.#stopConsentWatch();
     this.#attempt = 0;
 
-    // Wait for an in-flight start, or we would tear down a socket that has not
-    // been assigned yet and then have it appear behind us.
-    if (this.#starting) await this.#starting.catch(() => {});
+    // Intent before the wait. Otherwise a resume waiting on the same attempt
+    // can install a socket after stop has already looked and found none.
+    await this.#settleStarts();
     if (this.#loggingOut) await this.#loggingOut.catch(() => {});
 
     // Again after the await: a close that landed while we were waiting is
@@ -533,10 +564,11 @@ export class WhatsAppSession {
   }
 
   async #runLogout() {
-    // A start that is still creating its socket has to finish first: otherwise
-    // #open() assigns a live socket after this method has already declared the
-    // session logged out, and the account is unlinked with a connection still
-    // running.
+    // Before the first await, so work already running for this account drops
+    // its account-scoped writes. Wait for an in-flight start without bumping
+    // the generation, so that start adopts its socket and logout tears it down.
+    this.#resumeAfterStart = false;
+    advanceAccountEpoch();
     this.#cancelRetry();
     this.#stopConsentWatch();
     if (this.#starting) await this.#starting.catch(() => {});
@@ -633,7 +665,7 @@ export class WhatsAppSession {
     this.#shuttingDown = true;
     this.#cancelRetry();
     this.#stopConsentWatch();
-    if (this.#starting) await this.#starting.catch(() => {});
+    await this.#settleStarts();
     if (this.#loggingOut) await this.#loggingOut.catch(() => {});
     this.#cancelRetry();
     await this.#destroySocket();
@@ -667,9 +699,9 @@ export class WhatsAppSession {
     this.#clearQr();
     this.#transition(S.STARTING, { reason });
 
-    // Anything that invalidates this attempt — stop, logout, shutdown — bumps
-    // the generation. Creating a socket is asynchronous, so the attempt has to
-    // recheck that it is still the current one when it comes back.
+    // Stop and shutdown bump the generation before they wait. Offline does too.
+    // Logout does not: it adopts this socket, then tears it down. Creating a
+    // socket is asynchronous, so the attempt rechecks when it comes back.
     const startedAt = this.#generation;
 
     // Read per attempt, so changing the proxy and pressing Reconnect is all it
@@ -698,32 +730,41 @@ export class WhatsAppSession {
     this.#proxyConfig = proxyConfig;
 
     let created;
+    let createError = null;
     try {
       created = await this.createSocket({
         proxy,
         pairingCode: !this.isLinked() && this.#pairingIntent.method === "pairing",
       });
     } catch (error) {
-      this.log.error({ err: error }, "[Session] failed to create the WhatsApp socket");
-      this.#transition(S.ERROR, {
-        reason: "socket_failed",
-        detail:
-          describeProxyFailure(error, proxyConfig) ||
-          error?.message ||
-          "Could not create the WhatsApp socket",
-      });
-      return;
+      createError = error;
     }
 
     if (this.#shuttingDown || this.#generation !== startedAt) {
-      // Overtaken. Throw the socket away rather than adopt it, or we would end
-      // up with a live connection nobody asked for and no state pointing at it.
-      this.log.warn("[Session] discarding a socket whose start was overtaken");
-      this.#fence(created.fence);
-      this.#detach(created.sock);
-      try {
-        await withTimeout(created.sock?.end?.(undefined), SOCKET_CLOSE_TIMEOUT_MS);
-      } catch {}
+      // Overtaken, including by offline while createSocket was still running.
+      // Adopt nothing and do not turn a pause into ERROR. A rejection has no
+      // socket to throw away.
+      if (created?.sock) {
+        this.log.warn("[Session] discarding a socket whose start was overtaken");
+        this.#fence(created.fence);
+        this.#detach(created.sock);
+        try {
+          await withTimeout(created.sock?.end?.(undefined), SOCKET_CLOSE_TIMEOUT_MS);
+        } catch {}
+      }
+      this.#noteOvertakenStart(startedAt);
+      return;
+    }
+
+    if (createError) {
+      this.log.error({ err: createError }, "[Session] failed to create the WhatsApp socket");
+      this.#transition(S.ERROR, {
+        reason: "socket_failed",
+        detail:
+          describeProxyFailure(createError, proxyConfig) ||
+          createError?.message ||
+          "Could not create the WhatsApp socket",
+      });
       return;
     }
 
@@ -738,11 +779,12 @@ export class WhatsAppSession {
     // terminal until a phone has actually scanned the code.
     this.#pairing = !isPaired;
 
-    this.attachListeners(sock, {
+    const disposeListeners = this.attachListeners(sock, {
       saveCreds,
       onConnectionUpdate: (update) => this.#onConnectionUpdate(generation, update),
       onHandshakeRejected: (response) => this.#onHandshakeRejected(generation, sock, response),
     });
+    if (typeof disposeListeners === "function") this.#listenerDisposers.set(sock, disposeListeners);
 
     const waitingForCode = this.#pairing && this.#pairingIntent.method === "pairing";
     this.#transition(this.#pairing ? S.WAITING_FOR_QR : S.STARTING, {
@@ -803,9 +845,52 @@ export class WhatsAppSession {
     }
   }
 
+  /**
+   * The attempt that just returned was no longer current. If the device is
+   * online again and the session should be running, the start() waiting on
+   * this attempt opens one replacement. Same condition as setInternetOnline(true).
+   */
+  #noteOvertakenStart(startedAt) {
+    const stopped = this.#terminalGeneration > startedAt;
+    this.#resumeAfterStart =
+      !stopped &&
+      !this.#shuttingDown &&
+      !this.#loggingOut &&
+      this.#isOnline &&
+      (this.#wasActiveBeforeOffline || this.#state === S.PAUSED);
+  }
+
+  // stop and shutdown. Bump before waiting so an attempt already in
+  // createSocket cannot adopt, and so a resume queued on that attempt cannot
+  // open a replacement. Then wait out any replacement that still appeared.
+  #markTerminalIntent() {
+    this.#resumeAfterStart = false;
+    this.#generation += 1;
+    this.#terminalGeneration = this.#generation;
+  }
+
+  async #settleStarts() {
+    this.#markTerminalIntent();
+    let pending = this.#starting;
+    while (pending) {
+      await pending.catch(() => {});
+      pending = this.#starting;
+      if (pending) this.#markTerminalIntent();
+    }
+  }
+
   /** Cut every wire back from a socket we are done with. */
   #detach(sock) {
     disposeReactionIntake(sock);
+    const dispose = sock ? this.#listenerDisposers.get(sock) : undefined;
+    if (sock) this.#listenerDisposers.delete(sock);
+    if (typeof dispose === "function") {
+      try {
+        dispose();
+      } catch (error) {
+        this.log.debug({ err: error?.message }, "[Session] listener dispose threw");
+      }
+    }
     for (const event of ["connection.update", "creds.update"]) {
       try {
         sock?.ev?.removeAllListeners?.(event);
@@ -1059,6 +1144,9 @@ export class WhatsAppSession {
 
   async #handleLoggedOut(verdict, closedSocket) {
     this.log.error("[Session] WhatsApp logged this device out. Clearing the stored credentials.");
+    // Before clearAll(), which is the first await on this path.
+    this.#resumeAfterStart = false;
+    advanceAccountEpoch();
 
     // Baileys destroys its emitter inside end() before this close is reported,
     // so there is normally nothing left to hear from. Being explicit costs

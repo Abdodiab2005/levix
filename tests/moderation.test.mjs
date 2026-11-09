@@ -1607,6 +1607,7 @@ section("kickGroupMember re-reads the roster; the caller's snapshot does not dec
     const run = makeSock();
     cache(groupId, roster);
     const args = [kickMsg(groupId, participant, fromMe), ["@member", "spam"], "", memberRoster()];
+    if (path === "nested") args.push({ nested: true });
     if (path === "direct") args.push({ invokedName: "kick" });
     await kickCommand.execute(run.sock, ...args);
     return run;
@@ -1770,6 +1771,143 @@ section("panel presets use the backend membership default");
       ).membership,
       "clear",
     );
+  }
+}
+
+section("a late account epoch skips moderation writes");
+
+{
+  const groupId = "120363-epoch@g.us";
+  const { sock } = makeSock();
+  const pending = enforceHits(sock, {
+    msg: withId(groupId, "epoch-msg", { text: "hello" }),
+    hits: [{ rule: "link", reason: "antilink", detail: "https://example.com/epoch" }],
+  });
+  store.advanceAccountEpoch();
+  const result = await pending;
+  equal("stale moderation does not act", result.acted, false);
+  const warnings =
+    store.getUserWarnings(groupId, USER_PN).length +
+    store.getUserWarnings(groupId, USER_LID).length;
+  equal("stale moderation stores no warning", warnings, 0);
+  equal("stale moderation stores no flag", store.listModerationFlags(groupId).length, 0);
+  equal(
+    "stale moderation stores no applied row",
+    store.getModerationApplied(groupId, "epoch-msg"),
+    null,
+  );
+}
+
+section("kick refuses when the epoch moves while metadata is awaited");
+
+{
+  const { kickGroupMember } = require("./src/utils/moderationAction.cjs");
+  const groupId = "120363-kick-epoch@g.us";
+  const { sock, kicks } = makeSock();
+  let releaseMeta;
+  sock.groupMetadata = () =>
+    new Promise((resolve) => {
+      releaseMeta = resolve;
+    });
+  const epoch = store.accountEpoch();
+  const pending = kickGroupMember(sock, {
+    groupId,
+    targetCandidates: [USER_PN],
+    accountEpoch: epoch,
+  });
+  const started = Date.now();
+  while (!releaseMeta) {
+    if (Date.now() - started > 1000) throw new Error("kick did not await metadata");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  store.advanceAccountEpoch();
+  releaseMeta(memberRoster());
+  const result = await pending;
+  equal("a stale kick does not remove", result.kicked, false);
+  equal("a stale kick reports stale", result.error, "stale");
+  equal("no groupParticipantsUpdate while metadata was in flight", kicks.length, 0);
+}
+
+section("manual kick keeps the admitting gate and the entry epoch");
+
+{
+  const moderation = require("./src/utils/moderationAction.cjs");
+  const realKick = moderation.kickGroupMember;
+  const seen = [];
+  moderation.kickGroupMember = async (sock, opts) => {
+    seen.push(opts);
+    return realKick(sock, opts);
+  };
+  const kickMsg = (groupId, participant) => ({
+    key: { remoteJid: groupId, participant, fromMe: false },
+    message: { extendedTextMessage: { contextInfo: { mentionedJid: [USER_PN] } } },
+    pushName: "Requester",
+  });
+  try {
+    const entry = store.accountEpoch();
+    const directId = "120363-kick-epoch-direct@g.us";
+    const direct = makeSock();
+    cache(directId, direct.meta);
+    await kickCommand.execute(
+      direct.sock,
+      kickMsg(directId, ADMIN_PN),
+      ["@member", "spam"],
+      "",
+      direct.meta,
+      { invokedName: "kick", accountEpoch: entry },
+    );
+    equal("direct kick passes the direct rule", seen[0]?.requesterRule, "direct");
+    equal("direct kick passes the entry epoch", seen[0]?.accountEpoch, entry);
+
+    const nestedId = "120363-kick-epoch-nested@g.us";
+    const nested = makeSock();
+    cache(nestedId, nested.meta);
+    await kickCommand.execute(
+      nested.sock,
+      kickMsg(nestedId, ADMIN_PN),
+      ["@member", "spam"],
+      "",
+      nested.meta,
+      { nested: true, accountEpoch: entry },
+    );
+    equal("nested kick passes the nested rule", seen[1]?.requesterRule, "nested");
+    equal("nested kick passes the entry epoch", seen[1]?.accountEpoch, entry);
+
+    const announceId = "120363-kick-announce-epoch@g.us";
+    const hung = makeSock();
+    cache(announceId, hung.meta);
+    let releaseAnnounce;
+    let announcements = 0;
+    hung.sock.sendMessage = (_jid, payload) => {
+      announcements += 1;
+      if (announcements === 1) {
+        return new Promise((resolve) => {
+          releaseAnnounce = () => resolve({ key: { id: "ann" } });
+        });
+      }
+      hung.sent.push(payload);
+      return { key: { id: `out-${announcements}` } };
+    };
+    const before = store.accountEpoch();
+    const pending = kickCommand.execute(
+      hung.sock,
+      kickMsg(announceId, ADMIN_PN),
+      ["@member", "spam"],
+      "",
+      hung.meta,
+      { invokedName: "kick", accountEpoch: before },
+    );
+    const started = Date.now();
+    while (!releaseAnnounce) {
+      if (Date.now() - started > 1000) throw new Error("kick did not await the announcement");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    store.advanceAccountEpoch();
+    releaseAnnounce();
+    await pending;
+    equal("a kick announced across an epoch change does not remove", hung.kicks.length, 0);
+  } finally {
+    moderation.kickGroupMember = realKick;
   }
 }
 

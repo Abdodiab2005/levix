@@ -25,6 +25,7 @@ useTempDataDir("levix-session");
 const { WhatsAppSession, SESSION_STATES, parseStartOptions, normalizePairingPhone } = await import(
   "../src/core/session.js"
 );
+const { accountEpoch } = await import("../src/utils/storage.esm.js");
 const { RETRY_SCHEDULE_MS, MAX_RETRIES } = await import("../src/config/constants.js");
 const { classifyDisconnect, CONNECTION_FAILURE_405 } = await import("../src/core/connection.js");
 const { DisconnectReason } = await import("@whiskeysockets/baileys");
@@ -196,8 +197,8 @@ section("a command that overtakes a start in flight wins cleanly");
 }
 
 {
-  // The same window, but the operator unlinks instead of stopping. Unlinking
-  // while a socket is being created must not leave that socket alive.
+  // The same window, but the operator unlinks instead of stopping. The
+  // in-flight create adopts its socket; logout() and clearAll() each run once.
   let release;
   const gate = new Promise((resolve) => {
     release = resolve;
@@ -223,7 +224,8 @@ section("a command that overtakes a start in flight wins cleanly");
 
   equal("the account is unlinked", h.session.state, S.LOGGED_OUT);
   equal("no live socket survived the unlink", h.session.socket, null);
-  equal("the credentials were cleared", cleared, 1);
+  equal("the adopted socket logged out once", h.sockets[0].loggedOut, 1);
+  equal("the credentials were cleared once", cleared, 1);
   await sleep(60);
   equal("and nothing came back", h.sockets.length, 1);
 }
@@ -1262,6 +1264,292 @@ section("logout closes reaction automation before it waits for the socket");
   equal("logout finishes in LOGGED_OUT", state.state, S.LOGGED_OUT);
   equal("reaction intake closed exactly once", reactionCloses, 1);
   equal("no live socket remains on session", h.session.socket, null);
+}
+
+section("logout advances accountEpoch before its first await");
+
+{
+  const before = accountEpoch();
+  let atLogout = null;
+  const h = makeHarness({ paired: true });
+  await h.session.start();
+  await h.push({ connection: "open" });
+  h.sockets[0].logout = async () => {
+    h.sockets[0].loggedOut += 1;
+    atLogout = accountEpoch();
+  };
+  await h.session.logout();
+  equal("epoch advanced before socket logout", atLogout, before + 1);
+}
+
+section("a logged-out close advances accountEpoch before clearAll");
+
+{
+  const before = accountEpoch();
+  let atClear = null;
+  const h = makeHarness({
+    paired: true,
+    clearAll: async () => {
+      atClear = accountEpoch();
+    },
+  });
+  await h.session.start();
+  await h.push({ connection: "open" });
+  // #onConnectionUpdate only closes on connection === "close".
+  await h.push({
+    connection: "close",
+    lastDisconnect: closedWith(DisconnectReason.loggedOut, "logged out"),
+  });
+  equal("epoch advanced before clearAll", atClear, before + 1);
+}
+
+section("work started after the first epoch advance writes nothing after the wipe");
+
+{
+  const { handleIncomingMessage } = await import("../src/handlers/message.handler.js");
+  const { getUserMetadata, listAutoDeleteLog } = await import("../src/utils/storage.esm.js");
+  const autoDelete = harnessRequire("./src/services/autoDelete.cjs");
+  const realIncoming = autoDelete.handleIncoming;
+  const matchSender = "201888888889@s.whatsapp.net";
+  const plainSender = "201888888888@s.whatsapp.net";
+  let rule;
+  let releaseLogout;
+  let releaseDelete;
+  let releasePlain;
+  let plainWaiting = false;
+  const plainGate = new Promise((resolve) => {
+    releasePlain = resolve;
+  });
+  autoDelete.handleIncoming = async function (...args) {
+    if (String(args[2]).includes("plain hello")) {
+      plainWaiting = true;
+      await plainGate;
+      return false;
+    }
+    return realIncoming.apply(this, args);
+  };
+
+  try {
+    rule = autoDelete.createRule({ keywords: ["epochword"], keepCopy: true });
+    const before = accountEpoch();
+    const h = makeHarness({
+      paired: true,
+      realClear: true,
+      clearAll: async () => {},
+    });
+    await h.session.start();
+    await h.push({ connection: "open" });
+    const sock = h.sockets[0];
+    sock.logout = () =>
+      new Promise((resolve) => {
+        releaseLogout = resolve;
+      });
+    sock.chatModify = () =>
+      new Promise((resolve) => {
+        releaseDelete = resolve;
+      });
+
+    const unlinking = h.session.logout();
+    equal("first advance is before the wipe", accountEpoch(), before + 1);
+
+    const matchPending = handleIncomingMessage(sock, {
+      type: "notify",
+      messages: [
+        {
+          key: { remoteJid: matchSender, fromMe: false, id: "epoch-late-match" },
+          messageTimestamp: 1_700_000_000,
+          message: { conversation: "epochword please" },
+          pushName: "Match",
+        },
+      ],
+    });
+    const plainPending = handleIncomingMessage(sock, {
+      type: "notify",
+      messages: [
+        {
+          key: { remoteJid: plainSender, fromMe: false, id: "epoch-late-plain" },
+          messageTimestamp: 1_700_000_000,
+          message: { conversation: "plain hello" },
+          pushName: "Plain",
+        },
+      ],
+    });
+
+    const started = Date.now();
+    while (!releaseDelete || !plainWaiting) {
+      if (Date.now() - started > 1000) throw new Error("late work did not park before the wipe");
+      await sleep(5);
+    }
+    equal("both handlers sampled the post-advance epoch", accountEpoch(), before + 1);
+
+    releaseLogout();
+    await unlinking;
+    equal("clearAccountScopedState advances the epoch again", accountEpoch(), before + 2);
+    equal("logout finished", h.session.state, S.LOGGED_OUT);
+
+    releaseDelete();
+    releasePlain();
+    await matchPending;
+    await plainPending;
+
+    equal("late counter write did not land", autoDelete.getRule(rule.id).deletedCount, 0);
+    equal("late keepCopy did not land", listAutoDeleteLog({ ruleId: rule.id, limit: 5 }).length, 0);
+    equal("late metadata write did not land", getUserMetadata(plainSender), null);
+    equal("match sender metadata did not land", getUserMetadata(matchSender), null);
+  } finally {
+    autoDelete.handleIncoming = realIncoming;
+    if (rule) autoDelete.deleteRule(rule.id);
+  }
+}
+
+section("offline during socket creation discards the socket and stays paused");
+
+{
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const h = makeHarness({ paired: true });
+  const real = h.session.createSocket;
+  h.session.createSocket = async (opts) => {
+    await gate;
+    return real(opts);
+  };
+  const starting = h.session.start();
+  await h.session.setInternetOnline(false);
+  release();
+  await starting;
+  equal("state stays paused", h.session.state, S.PAUSED);
+  equal("the late socket was ended", h.sockets[0].ended, 1);
+  equal("no socket was adopted", h.session.socket, null);
+  equal("only the discarded socket exists", h.sockets.length, 1);
+  ok("offline creation does not become ERROR", h.session.state !== S.ERROR);
+}
+
+section("a late createSocket rejection during offline does not become ERROR");
+
+{
+  let rejectGate;
+  const gate = new Promise((_, reject) => {
+    rejectGate = reject;
+  });
+  const h = makeHarness({ paired: true });
+  h.session.createSocket = () => gate;
+  const starting = h.session.start();
+  await h.session.setInternetOnline(false);
+  rejectGate(new Error("late failure"));
+  await starting;
+  equal("rejection while offline stays paused", h.session.state, S.PAUSED);
+  equal("no socket was created", h.sockets.length, 0);
+  equal("the reason stays offline", h.session.getState().reason, "offline");
+}
+
+section("offline then online during creation starts exactly one replacement");
+
+{
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  let creates = 0;
+  const h = makeHarness({ paired: true });
+  const real = h.session.createSocket;
+  h.session.createSocket = async (opts) => {
+    creates += 1;
+    if (creates === 1) await gate;
+    return real(opts);
+  };
+  const starting = h.session.start();
+  await h.session.setInternetOnline(false);
+  const restored = h.session.setInternetOnline(true);
+  release();
+  await starting;
+  await restored;
+  equal("exactly one replacement socket", h.sockets.length, 2);
+  equal("the overtaken socket was ended", h.sockets[0].ended, 1);
+  equal("the replacement is the live socket", h.session.socket, h.sockets[1]);
+  equal("the replacement is starting", h.session.state, S.STARTING);
+}
+
+section("stop during a resume leaves no socket installed");
+
+{
+  // A blocks in createSocket. Offline invalidates A. Online starts waiter B.
+  // Stop starts waiter C. A must not let B install a socket after Stop.
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  let creates = 0;
+  const h = makeHarness({ paired: true });
+  const real = h.session.createSocket;
+  h.session.createSocket = async (opts) => {
+    creates += 1;
+    if (creates === 1) await gate;
+    return real(opts);
+  };
+  const starting = h.session.start();
+  await h.session.setInternetOnline(false);
+  const restored = h.session.setInternetOnline(true);
+  const stopping = h.session.stop();
+  release();
+  await starting;
+  await restored;
+  await stopping;
+  equal("stop leaves no socket", h.session.socket, null);
+  equal("stop leaves the session idle", h.session.state, S.IDLE);
+  equal("the blocked attempt was ended", h.sockets[0].ended, 1);
+  equal("no replacement socket was created", h.sockets.length, 1);
+}
+
+section("detach disposes listeners and a queued contained callback does not run");
+
+{
+  let disposed = 0;
+  const h = makeHarness({ paired: true });
+  h.session.attachListeners = () => () => {
+    disposed += 1;
+  };
+  await h.session.start();
+  await h.session.stop();
+  equal("stop calls the disposer", disposed, 1);
+}
+
+{
+  const h = makeHarness({ paired: true });
+  await h.session.start();
+  await h.session.stop();
+  equal("a listener factory that returns undefined still reaches idle", h.session.state, S.IDLE);
+}
+
+{
+  const { setupEventListeners } = await import("../src/core/events.js");
+  const { disposeReactionIntake } = await import("../src/automation/reactions.js");
+  const ev = new EventEmitter();
+  const ws = new EventEmitter();
+  const sock = { ev, ws, user: { id: "201000000099@s.whatsapp.net" } };
+  let updates = 0;
+  let handshake = null;
+  const dispose = setupEventListeners(sock, {
+    onConnectionUpdate: () => {
+      updates += 1;
+    },
+    onHandshakeRejected: (response) => {
+      handshake = response;
+    },
+  });
+  try {
+    ws.emit("unexpected-response", { url: "https://example.invalid" }, { statusCode: 407 });
+    await Promise.resolve();
+    equal("407 reaches onHandshakeRejected", handshake?.statusCode, 407);
+    ev.emit("connection.update", { connection: "close" });
+    dispose();
+    await Promise.resolve();
+    equal("a disposed connection update does not run", updates, 0);
+  } finally {
+    dispose();
+    disposeReactionIntake(sock);
+  }
 }
 
 finish();

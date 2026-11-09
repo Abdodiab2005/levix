@@ -18,6 +18,7 @@ const {
 } = require("../utils/permissions.cjs");
 const { evaluatePermissionLevel } = require("../utils/permissionLevel.cjs");
 const { resolveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
+const { accountEpoch } = require("../utils/storage.cjs");
 const normalizeJid = require("../utils/normalizeJid.cjs");
 const { langForCommand, withLang, t } = require("../utils/i18n.cjs");
 const { attachCommandDocs } = require("../utils/commandDocs.cjs");
@@ -185,7 +186,15 @@ async function runSubCommand(sock, msg, args, body, groupMetadata, subCommand, c
   }
 
   try {
-    await subCommand.execute(sock, msg, args, body, groupMetadata);
+    const entryEpoch = ctx?.accountEpoch;
+    if (Number.isInteger(entryEpoch) && entryEpoch !== accountEpoch()) {
+      logger.debug("[group] skipped account work after account change");
+      return;
+    }
+    await subCommand.execute(sock, msg, args, body, groupMetadata, {
+      nested: true,
+      accountEpoch: ctx?.accountEpoch,
+    });
   } catch (error) {
     logger.error({ err: error, subCommand: subCommandName }, "Error executing a group sub-command");
     await sock.sendMessage(msg.key.remoteJid, {

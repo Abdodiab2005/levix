@@ -4,6 +4,7 @@ import { REACTION_LIMITS } from "./reactions.js";
 
 const require = createRequire(import.meta.url);
 const store = require("../db/store.cjs");
+const { MAX_IDENTITY_ALIASES } = require("./limits.cjs");
 const { definitionIssues, exactJid } = require("./rules.cjs");
 const { linkedIdentity } = require("../messaging/identity.cjs");
 const { getCached } = require("../utils/groupMetadataCache.cjs");
@@ -134,7 +135,7 @@ function triggerIndex(items) {
     if (!buckets) {
       buckets = new Map();
       // reactionRulesForChats refuses an alias expansion above four chats.
-      for (const alias of aliases.length <= 4 ? aliases : []) {
+      for (const alias of aliases.length <= MAX_IDENTITY_ALIASES ? aliases : []) {
         for (const item of byChat.get(alias) || []) {
           for (const key of triggerKeys(item.definition)) {
             if (!buckets.has(key)) buckets.set(key, { enabled: 0, first: [] });

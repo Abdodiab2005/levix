@@ -4,7 +4,7 @@ import { checkBlacklist } from "../middleware/blacklist.middleware.js";
 import { trackForwardedMessage } from "../middleware/forward-tracking.middleware.js";
 import normalizeJid from "../utils/normalizeJid.esm.js";
 import { getSenderCandidates, isBotAdminInGroup, sameUser } from "../utils/permissions.esm.js";
-import { saveUserMetadata, updateUserLastSeen } from "../utils/storage.esm.js";
+import { accountEpoch, saveUserMetadata, updateUserLastSeen } from "../utils/storage.esm.js";
 import { handleCommand } from "./command.handler.js";
 
 const require = createRequire(import.meta.url);
@@ -55,6 +55,10 @@ export async function handleIncomingMessage(sock, m) {
 
   if (!hasUserContent(msg.message)) return;
 
+  // Captured before the first await. A later unlink, logout or activation
+  // advances the epoch and the metadata write below is skipped.
+  const epoch = accountEpoch();
+
   // Track forwarded messages
   await trackForwardedMessage(msg);
 
@@ -88,25 +92,29 @@ export async function handleIncomingMessage(sock, m) {
   // Everything the bot says about this message — a moderation warning, a
   // command's reply — goes out in one language (see utils/i18n.cjs). A
   // command narrows this down to its own arguments.
-  return withLang(detectLang(body), () => processMessage(sock, msg, body));
+  return withLang(detectLang(body), () => processMessage(sock, msg, body, epoch));
 }
 
-async function processMessage(sock, msg, body) {
+async function processMessage(sock, msg, body, epoch) {
   const isGroup = msg.key.remoteJid.endsWith("@g.us");
 
   // Update user metadata (last seen)
   const senderId = normalizeJid(msg.key.participant || msg.key.remoteJid);
   if (senderId && !senderId.includes("@broadcast") && !senderId.includes("@newsletter")) {
-    try {
-      saveUserMetadata({
-        jid: senderId,
-        lid: null,
-        phone: senderId.split("@")[0],
-        displayName: msg.pushName || null,
-      });
-      updateUserLastSeen(senderId);
-    } catch (err) {
-      logger.error({ err }, "Failed to update user metadata");
+    if (accountEpoch() !== epoch) {
+      logger.debug("[Message] skipped account metadata write after account change");
+    } else {
+      try {
+        saveUserMetadata({
+          jid: senderId,
+          lid: null,
+          phone: senderId.split("@")[0],
+          displayName: msg.pushName || null,
+        });
+        updateUserLastSeen(senderId);
+      } catch (err) {
+        logger.error({ err }, "Failed to update user metadata");
+      }
     }
   }
 
@@ -115,9 +123,17 @@ async function processMessage(sock, msg, body) {
     if (isBlacklisted) return;
   }
 
+  // The epoch from message entry is this message's account lifetime. A command
+  // or a moderation pass that samples accountEpoch() later would otherwise act
+  // for the account that paired while this message was still in flight.
+  if (accountEpoch() !== epoch) {
+    logger.debug("[Message] skipped account work after account change");
+    return;
+  }
+
   // Try to handle as command
   try {
-    const wasCommand = await handleCommand(sock, msg, body);
+    const wasCommand = await handleCommand(sock, msg, body, epoch);
     if (wasCommand) {
       const text = typeof body === "string" ? body : "";
       const command = text.trim().split(/\s+/, 1)[0] || "";
@@ -133,14 +149,18 @@ async function processMessage(sock, msg, body) {
 
   // Handle regular group messages (moderation)
   if (isGroup) {
-    await handleGroupModeration(sock, msg);
+    if (accountEpoch() !== epoch) {
+      logger.debug("[Message] skipped account work after account change");
+      return;
+    }
+    await handleGroupModeration(sock, msg, epoch);
   }
 }
 
 // One message, one decision. Detectors only report hits; enforceHits applies
 // them. A missing id is refused here so a live redelivery cannot be guessed.
 // Direct detector calls used by older tests still enforce without an id.
-export async function handleGroupModeration(sock, msg) {
+export async function handleGroupModeration(sock, msg, accountEpoch) {
   try {
     if (!msg?.key?.id) {
       logger.warn(
@@ -184,7 +204,12 @@ export async function handleGroupModeration(sock, msg) {
       logger.error({ err: error, detector: "spam" }, "moderation detector failed");
     }
     if (!hits.length) return;
-    return await enforceHits(sock, { msg, groupMetadata, hits });
+    return await enforceHits(sock, {
+      msg,
+      groupMetadata,
+      hits,
+      ...(Number.isInteger(accountEpoch) ? { accountEpoch } : {}),
+    });
   } catch (error) {
     logger.error({ err: error }, "Error in group moderation");
   }
