@@ -200,7 +200,7 @@ async function finishConnectionOpen(sock, initializeScheduledJobs) {
     .flatMap((user) => [user.jid, user.lid])
     .filter(Boolean);
 
-  bootstrapOwners(ownersRoster);
+  bootstrapOwners(ownersRoster, [sock?.user?.id, sock?.user?.lid].filter(Boolean));
   bootstrapAdmins(adminsRoster);
 
   await primePermissions();

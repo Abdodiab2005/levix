@@ -41,7 +41,7 @@ module.exports = {
 
     // Bot owners/admins are privileged across chats and cannot be removed by
     // a group-only admin through an alternate LID/PN representation.
-    if (targetCandidates.some((candidate) => hasBotPrivilegesSync(candidate))) {
+    if (targetCandidates.some((candidate) => hasBotPrivilegesSync(candidate, groupMetadata))) {
       return await sock.sendMessage(groupId, {
         text: t("bot.group.kick.botPrivileged"),
       });

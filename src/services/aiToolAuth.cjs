@@ -135,9 +135,6 @@ function authorize(access, caller) {
   if (authority.epoch !== accountEpoch()) {
     return { allowed: false, error: "the linked WhatsApp account changed during this request" };
   }
-  // Identity is frozen; privileges come from the dispatcher's live predicates.
-  const isOwner = authority.fromMe || caller.candidates.some(isOwnerJidSync);
-  const isBotAdmin = !isOwner && caller.candidates.some(isBotAdminUserSync);
   // Expiry must not revive an admin snapshot after a newer roster was observed.
   let metadata = null;
   if (!isRosterStale(caller.chatId)) {
@@ -147,6 +144,9 @@ function authorize(access, caller) {
       metadata = authority.groupMetadata;
     }
   }
+  // Identity is frozen; roles and roster pairs use the dispatcher's live predicates.
+  const isOwner = authority.fromMe || caller.candidates.some((id) => isOwnerJidSync(id, metadata));
+  const isBotAdmin = !isOwner && caller.candidates.some((id) => isBotAdminUserSync(id, metadata));
   const isGroupAdmin =
     caller.isGroup && caller.candidates.some((id) => isAdminInGroupSync(metadata, id));
   const roles = {

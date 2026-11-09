@@ -80,10 +80,12 @@ function senderFor(msg, sock, groupMetadata) {
   const senderId = normalizeJid(msg?.key?.participant || remote);
   const senderIds = getSenderCandidatesSync(msg, sock);
   const senderCandidates = senderIds.length ? senderIds : [senderId].filter(Boolean);
-  const isOwner = Boolean(msg?.key?.fromMe) || senderCandidates.some((id) => isOwnerJidSync(id));
+  const isOwner =
+    Boolean(msg?.key?.fromMe) || senderCandidates.some((id) => isOwnerJidSync(id, groupMetadata));
   const groupAdmin =
     isGroup && senderCandidates.some((id) => isAdminInGroupSync(groupMetadata, id));
-  const isBotAdmin = isGroup && !isOwner && senderCandidates.some((id) => isBotAdminUserSync(id));
+  const isBotAdmin =
+    isGroup && !isOwner && senderCandidates.some((id) => isBotAdminUserSync(id, groupMetadata));
   return {
     isGroup,
     isOwner,

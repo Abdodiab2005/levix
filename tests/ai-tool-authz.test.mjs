@@ -107,6 +107,37 @@ const adminDm = await inDm(ADMIN);
 const memberDm = await inDm(MEMBER);
 
 try {
+  section("A-6 AI identity gates");
+  for (const [holder, role] of [
+    [OWNER, "owner"],
+    [ADMIN, "botPrivileged"],
+  ]) {
+    const lid = `${holder.split("@")[0]}@lid`;
+    const collision = await inGroup(lid);
+    equal(
+      `${role}: unrelated LID cannot use role tool`,
+      authorize({ command: "memory", role }, collision).allowed,
+      false,
+    );
+    equal(`${role}: unrelated LID holds no owner role`, collision.isOwner, false);
+    equal(`${role}: unrelated LID holds no bot admin role`, collision.isBotAdmin, false);
+    const paired = groupMsg(lid);
+    paired.key.participantAlt = holder;
+    const caller = await resolveCaller({ msg: paired, sock, groupMetadata });
+    equal(
+      `${role}: transport alternate preserves role tool`,
+      authorize({ command: "memory", role }, caller).allowed,
+      true,
+    );
+    const dm = dmMsg(lid);
+    dm.key.remoteJidAlt = holder;
+    const privateCaller = await resolveCaller({ msg: dm, sock });
+    equal(
+      `${role}: private transport alternate preserves role tool`,
+      authorize({ command: "memory", role }, privateCaller).allowed,
+      true,
+    );
+  }
   // -------------------------------------------------------------------------
   section("the AI caller is the command dispatcher's sender, check for check");
 

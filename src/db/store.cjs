@@ -947,38 +947,89 @@ function lidLocalPart(value) {
   return String(value).split("@")[0].split(":")[0];
 }
 
-/**
- * Find the existing user_metadata row for a person named by any mix of JID,
- * LID and phone, including the lid_mapping table, so a LID and a phone JID
- * of the same person land on one record.
- */
+// Contact writes may reuse a proven primary alias, never a numeric contact match.
 function resolveExistingUser(userData) {
-  const candidates = [];
-  const add = (value) => {
-    if (value && !candidates.includes(value)) candidates.push(value);
-  };
-  add(userData?.jid);
-  add(userData?.lid);
-  add(userData?.phone);
-  if (userData?.jid) {
-    add(getPnForLid(userData.jid));
-    add(getLidForPn(userData.jid));
-    if (!isLidJid(userData.jid)) add(asPnJid(userData.jid));
+  return resolveRoleUser(userData?.jid);
+}
+
+// Bare phones and PN JIDs share a namespace. LID digits never enter it.
+function roleJid(identifier) {
+  if (typeof identifier !== "string") return null;
+  const raw = identifier.trim();
+  if (!raw) return null;
+  if (!raw.includes("@")) {
+    if (!/^\+?[\d ()-]+$/.test(raw)) return null;
+    const phone = raw.replace(/\D/g, "");
+    return phone ? `${phone}@s.whatsapp.net` : null;
   }
-  if (userData?.lid) {
-    add(getPnForLid(userData.lid));
-    add(asLidJid(userData.lid));
+  return normalizeJid(raw);
+}
+
+// Mapping writers retain historical rows. Only the newest pair for a PN is
+// current. Tied conflicting pairs fail closed. Device suffixes are the only
+// aliases accepted when reading either indexed column.
+function roleMappingRows(column, jid) {
+  const local = jid.split("@")[0];
+  return q(`SELECT lid, pn, updated_at FROM lid_mapping
+    WHERE ${column} IN (?, ?) OR (${column} >= ? AND ${column} < ?)
+    ORDER BY updated_at DESC`).all(
+    jid, column === "pn" ? local : jid, `${local}:`, `${local};`,
+  ).filter((row) => roleJid(row[column]) === jid);
+}
+
+function currentRoleMapping(pn) {
+  const rows = roleMappingRows("pn", pn);
+  const newest = rows[0];
+  if (!newest) return null;
+  const lid = roleJid(newest.lid);
+  if (!lid?.endsWith("@lid")) return null;
+  if (rows.some((row) => row.updated_at === newest.updated_at && roleJid(row.lid) !== lid)) {
+    return null;
   }
-  if (userData?.phone) {
-    const pnJid = asPnJid(userData.phone);
-    add(pnJid);
-    if (pnJid) add(getLidForPn(pnJid));
+  // The normalized LID may itself have device-suffixed historical rows.
+  // Accept the pair only when its latest reverse link agrees as well.
+  const reverse = roleMappingRows("lid", lid);
+  const latest = reverse[0];
+  if (!latest || roleJid(latest.pn) !== pn || reverse.some((row) =>
+    row.updated_at === latest.updated_at && roleJid(row.pn) !== pn)) return null;
+  return newest;
+}
+
+// Shared by role reads/writes and the permission helpers. Secondary contact
+// columns are deliberately excluded: old digit merges could have populated them.
+function roleIdentityAliases(identifier) {
+  const jid = roleJid(identifier);
+  if (!jid) return [];
+  if (!jid.endsWith("@lid") && !jid.endsWith("@s.whatsapp.net")) return [jid];
+  if (jid.endsWith("@s.whatsapp.net")) {
+    const pair = currentRoleMapping(jid);
+    const lid = pair && roleJid(pair.lid);
+    return lid?.endsWith("@lid") ? [jid, lid] : [jid];
   }
-  for (const identifier of candidates) {
-    const found = getUserMetadata(identifier);
-    if (found) return found;
+  const pair = roleMappingRows("lid", jid)[0];
+  const pn = pair && roleJid(pair.pn);
+  if (!pn?.endsWith("@s.whatsapp.net")) return [jid];
+  const current = currentRoleMapping(pn);
+  return current && roleJid(current.lid) === jid ? [jid, pn] : [jid];
+}
+
+function roleUserRows(identifier) {
+  const rows = [];
+  for (const jid of roleIdentityAliases(identifier)) {
+    const exact = userRow(jid);
+    if (exact) rows.push(exact);
+    if (jid.endsWith("@s.whatsapp.net")) {
+      const bare = userRow(jid.split("@")[0]);
+      if (bare) rows.push(bare);
+    }
+    if (!jid.includes("@")) continue;
+    const local = jid.split("@")[0];
+    for (const row of q(`SELECT * FROM user_metadata
+      WHERE user_jid >= ? AND user_jid < ?`).all(`${local}:`, `${local};`)) {
+      if (roleJid(row.user_jid) === jid) rows.push(row);
+    }
   }
-  return null;
+  return rows;
 }
 
 function userRow(jid) {
@@ -987,15 +1038,7 @@ function userRow(jid) {
 
 // Privilege writes must not follow the legacy contact digit-merging path.
 function resolveRoleUser(identifier) {
-  const jid = normalizeJid(identifier);
-  if (!jid) return null;
-  const ids = reactionIdentityAliases(jid);
-  if (ids.length > 4) throw new Error("AMBIGUOUS_ROLE_IDENTITY");
-  for (const id of ids) {
-    const row = userRow(id);
-    if (row) return rowToUser(row);
-  }
-  return null;
+  return rowToUser(roleUserRows(identifier)[0]);
 }
 
 /**
@@ -1013,10 +1056,9 @@ function saveUserMetadata(userData) {
   if (!userData?.jid) return;
   const now = Date.now();
   const writesRole = userData.isOwner !== undefined || userData.isAdmin !== undefined;
-  const resolved = writesRole ? resolveRoleUser(userData.jid) : resolveExistingUser(userData);
-  const jid =
-    resolved?.jid ||
-    (isLidJid(userData.jid) ? userData.jid : asPnJid(userData.jid) || userData.jid);
+  const resolved = writesRole ? null : resolveExistingUser(userData);
+  const jid = resolved?.jid || roleJid(userData.jid);
+  if (!jid) return;
   const existing = userRow(jid) || (resolved ? userRow(resolved.jid) : null);
 
   let phone = userData.phone || existing?.phone_number || null;
@@ -1069,10 +1111,13 @@ function saveUserMetadata(userData) {
   if (writesRole) {
     // Separate PN/LID rows can predate a learned mapping. A revocation must
     // cover every proven primary alias, or the other row would retain access.
-    const ids = reactionIdentityAliases(normalizeJid(userData.jid));
+    const ids = roleUserRows(userData.jid).map((entry) => entry.user_jid);
     for (const [field, column] of [["isOwner", "is_owner"], ["isAdmin", "is_admin"]]) {
-      if (userData[field] !== undefined)
-        q(`UPDATE user_metadata SET ${column}=? WHERE user_jid IN (${sqlIn(ids)})`).run(bool(userData[field]), ...ids);
+      // A grant belongs to the requested primary identity. Copying it to a
+      // mapped LID would leave an independent grant when that mapping changes.
+      if (userData[field] !== undefined && !bool(userData[field]) && ids.length) {
+        q(`UPDATE user_metadata SET ${column}=0 WHERE user_jid IN (${sqlIn(ids)})`).run(...ids);
+      }
     }
     notifyReactionChange({ type: "policy" });
   }
@@ -1175,7 +1220,7 @@ function getUserMetadata(identifier) {
 }
 
 function isUserOwner(identifier) {
-  return getUserMetadata(identifier)?.isOwner === true;
+  return roleUserRows(identifier).some((row) => row.is_owner === 1);
 }
 
 /**
@@ -1183,7 +1228,7 @@ function isUserOwner(identifier) {
  * an admin of a WhatsApp group).
  */
 function isUserBotAdmin(identifier) {
-  return getUserMetadata(identifier)?.isAdmin === true;
+  return roleUserRows(identifier).some((row) => row.is_admin === 1);
 }
 
 function getAllOwners() {
@@ -1214,28 +1259,19 @@ function setUserRole(identifier, role, enabled = true) {
   if (!identifier) return null;
 
   const wanted = String(role).toLowerCase() === "owner" ? "isOwner" : "isAdmin";
-  const existing = resolveRoleUser(identifier);
-
-  // Keep LIDs as LIDs; anything else becomes a PN JID so the roster stays
-  // comparable with what the permission checks resolve senders to.
-  let jid = existing?.jid;
-  if (!jid) {
-    if (String(identifier).includes("@")) jid = identifier;
-    else {
-      const phone = digitsOf(identifier);
-      jid = phone ? `${phone}@s.whatsapp.net` : identifier;
-    }
-  }
+  const jid = roleJid(identifier);
+  if (!jid) return null;
+  const existing = rowToUser(userRow(jid));
 
   saveUserMetadata({
     jid,
-    lid: existing?.lid || (String(identifier).endsWith("@lid") ? identifier : null),
-    phone: existing?.phone || digitsOf(identifier),
+    lid: existing?.lid || (jid.endsWith("@lid") ? jid : null),
+    phone: existing?.phone || (jid.endsWith("@s.whatsapp.net") ? digitsOf(jid) : null),
     displayName: existing?.displayName || null,
     [wanted]: !!enabled,
   });
 
-  return getUserMetadata(jid);
+  return rowToUser(userRow(jid));
 }
 
 function updateUserLastSeen(jid) {
@@ -2408,6 +2444,7 @@ module.exports = {
   getPnForLid,
   getAllLidMappings,
   // User metadata & roles
+  roleIdentityAliases,
   saveUserMetadata,
   rememberSavedName,
   applyContactRecord,

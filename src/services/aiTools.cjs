@@ -706,7 +706,7 @@ const TOOLS = {
     describe: (args) => t("bot.ai.aiTools.revokeRole", { target: preview(args?.target, 25) }),
     // `!perm remove`, gated exactly like grant_role.
     access: (args) => ({ command: "perm", role: roleOf(args) === "owner" ? "owner" : undefined }),
-    async run(args, { caller, signal }) {
+    async run(args, { caller, sock, signal }) {
       if (!roleTargetBound(args?.target, caller)) {
         return {
           error: "mention, quote, or type the target phone number in your own request",
@@ -714,12 +714,26 @@ const TOOLS = {
         };
       }
       const role = roleOf(args);
-      const { revokeRole } = await import("../utils/permissions.esm.js");
+      const { revokeRole, participantIds, findGroupParticipant } = await import(
+        "../utils/permissions.esm.js"
+      );
+      const { resolveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
+      const metadata = caller.isGroup
+        ? await resolveGroupMetadata(sock, caller.chatId, { fresh: true })
+        : null;
+      const aliases = participantIds(findGroupParticipant(metadata, args?.target));
       signal?.throwIfAborted();
       const verdict = authorize(TOOLS.revoke_role.access(args), caller);
       if (!verdict.allowed) return { error: verdict.error, denied: true };
-      const record = revokeRole(args?.target, role);
-      return { revoked: true, role, user: record ? record.jid : args?.target };
+      try {
+        const record = revokeRole(args?.target, role, aliases);
+        return { revoked: true, role, user: record ? record.jid : args?.target };
+      } catch (error) {
+        if (error?.code === "LINKED_ACCOUNT_OWNER") {
+          return { revoked: false, error: error.message };
+        }
+        throw error;
+      }
     },
   },
 
