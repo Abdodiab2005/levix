@@ -8,6 +8,7 @@ const settings = require("./src/config/settings.cjs");
 const { ensureDataDir } = require("./src/config/paths.cjs");
 const storage = require("./src/utils/storage.cjs");
 const { detectLang, withLang, t } = require("./src/utils/i18n.cjs");
+const normalizeJid = require("./src/utils/normalizeJid.cjs");
 
 // الجدولة كانت في config/schedule.json: الداشبورد مش شايفاه، وكراش وسط
 // الكتابة كان ممكن يقصّه. دلوقتي جدول في نفس قاعدة البيانات زي أي حاجة تانية.
@@ -44,6 +45,22 @@ function getScheduledJobs() {
   }
 }
 
+/**
+ * The jobs that belong to one chat. A group matches its normalized JID exactly;
+ * a private chat matches the exact JID. Never compared by digits, so another
+ * chat's reminders cannot be read or removed through this list.
+ */
+function getScheduledJobsForChat(chatJid) {
+  if (!chatJid || typeof chatJid !== "string") return [];
+  const inGroup = chatJid.endsWith("@g.us");
+  const wanted = inGroup ? normalizeJid(chatJid) : chatJid;
+  return getScheduledJobs().filter((job) => {
+    const target = job?.targetJid;
+    if (!target || typeof target !== "string") return false;
+    return inGroup ? normalizeJid(target) === wanted : target === wanted;
+  });
+}
+
 function saveScheduledJob(job) {
   return storage.saveSchedule(job);
 }
@@ -57,8 +74,11 @@ function staleDelivery(jobId, generation) {
   logger.debug({ jobId }, "[Scheduler] Stale delivery stopped after account activation");
   return true;
 }
-// The socket the jobs were last armed with. Callers that don't hold a socket
-// themselves (the AI agent's reminder tool) arm new jobs through it.
+// The scheduler's own live raw socket: set by initializeScheduledJobs(), cleared
+// by stopAllScheduledJobs(). Every delivery goes out through it — never through
+// a socket a caller handed to scheduleNewJob(), which may be a per-command reply
+// proxy. Callers that don't hold a socket themselves (the AI agent's reminder
+// tool) arm new jobs through its presence.
 let currentSock = null;
 let cleanupScheduled = false;
 
@@ -135,12 +155,11 @@ function scheduleAt(whenMs, run) {
 }
 
 /**
- * Stop every running task.
+ * Stop every running task and drop the live socket.
  *
- * Each task closes over the socket it was armed with (see scheduleNewJob), so
- * once that socket is gone the task can only fail. The connection handler calls
- * initializeScheduledJobs() again on the next open, which re-arms every job
- * against the socket that is actually alive.
+ * With no socket a delivery can only fail, so nothing stays armed. The
+ * connection handler calls initializeScheduledJobs() again on the next open,
+ * which sets the new socket and re-arms every job.
  */
 function stopAllScheduledJobs() {
   currentSock = null;
@@ -212,8 +231,11 @@ function buildScheduledPayloads(job) {
   }
 }
 
-async function deliverScheduledJob(sock, job) {
+async function deliverScheduledJob(job) {
   const generation = scheduleGeneration;
+  // Captured once: every payload of this attempt goes through the same socket,
+  // even if a reconnect swaps currentSock while a send is awaited.
+  const sock = currentSock;
   if (deliveriesInFlight.get(job.id) === generation) {
     logger.warn(`[Scheduler] Job ${job.id} is already being delivered — skipping overlap`);
     return { ok: false, reason: "in_flight", skipped: true };
@@ -224,6 +246,7 @@ async function deliverScheduledJob(sock, job) {
 
   try {
     if (staleDelivery(job.id, generation)) return { ok: false, reason: "stale", skipped: true };
+    if (!sock) throw new Error("No live WhatsApp connection");
     // No message is being answered here, so the header follows the scheduled
     // text itself (in "auto"), or the bot's language.
     const payloads = withLang(detectLang(job.message || " "), () => buildScheduledPayloads(job));
@@ -233,7 +256,7 @@ async function deliverScheduledJob(sock, job) {
     }
     if (staleDelivery(job.id, generation)) return { ok: false, reason: "stale", skipped: true };
     recordDelivery(job.id, "sent", runAt);
-    logger.info(`[Scheduler] Executed job ${job.id} -> ${job.targetJid}`);
+    logger.info(`[Scheduler] Executed job ${job.id}`);
     return { ok: true, reason: "sent" };
   } catch (error) {
     if (staleDelivery(job.id, generation)) return { ok: false, reason: "stale", skipped: true };
@@ -246,9 +269,9 @@ async function deliverScheduledJob(sock, job) {
   }
 }
 
-async function executeScheduledJob(sock, job) {
+async function executeScheduledJob(job) {
   const generation = scheduleGeneration;
-  const result = await deliverScheduledJob(sock, job);
+  const result = await deliverScheduledJob(job);
   if (result.reason === "stale") return result;
   if (staleDelivery(job.id, generation)) return { ok: false, reason: "stale", skipped: true };
 
@@ -269,7 +292,13 @@ async function executeScheduledJob(sock, job) {
   return result;
 }
 
-function scheduleNewJob(sock, job) {
+/**
+ * Arm one job. `_sock` is only here so callers keep their signature: it is not
+ * used to deliver. Delivery always goes through the scheduler's own live raw
+ * socket (`currentSock`, see deliverScheduledJob), so a per-command reply proxy
+ * passed here is never kept.
+ */
+function scheduleNewJob(_sock, job) {
   stopTask(job.id);
 
   if (job.type === "recurring") {
@@ -283,7 +312,7 @@ function scheduleNewJob(sock, job) {
 
     runningTasks.set(
       job.id,
-      cron.schedule(job.cronString, () => executeScheduledJob(sock, job), {
+      cron.schedule(job.cronString, () => executeScheduledJob(job), {
         timezone: settings.get("bot_timezone"),
       }),
     );
@@ -307,7 +336,7 @@ function scheduleNewJob(sock, job) {
       job.id,
       scheduleAt(when, async () => {
         try {
-          await executeScheduledJob(sock, job);
+          await executeScheduledJob(job);
         } finally {
           runningTasks.delete(job.id);
         }
@@ -319,7 +348,8 @@ function scheduleNewJob(sock, job) {
   return true;
 }
 
-async function retryScheduledJob(sock, jobId) {
+/** Retry a failed job now. `_sock` is unused: delivery goes through `currentSock`. */
+async function retryScheduledJob(_sock, jobId) {
   const job = storage.getSchedule(jobId);
   if (!job) return { ok: false, reason: "not_found" };
 
@@ -328,7 +358,7 @@ async function retryScheduledJob(sock, jobId) {
     (job.type === "recurring" && job.status === "active" && job.lastDeliveryStatus === "failed");
   if (!retryable) return { ok: false, reason: "not_failed", job };
 
-  const result = await executeScheduledJob(sock, job);
+  const result = await executeScheduledJob(job);
   return { ...result, job: storage.getSchedule(jobId) };
 }
 
@@ -366,6 +396,7 @@ module.exports = {
   scheduleJobNow,
   retryScheduledJob,
   getScheduledJobs,
+  getScheduledJobsForChat,
   saveScheduledJob,
   deleteScheduledJob,
   scheduleMediaPath,
