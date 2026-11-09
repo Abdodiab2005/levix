@@ -10,7 +10,7 @@ let fetchFake;
 transport.safeProviderFetch = (...args) => fetchFake(...args);
 const { runProviderAgent, historyToOpenAI } = require("./src/services/aiProviders.cjs");
 const agent = require("./src/services/aiAgent.cjs");
-const { TOOLS, runToolWithDeadline } = require("./src/services/aiTools.cjs");
+const { TOOLS, runTool, runToolWithDeadline } = require("./src/services/aiTools.cjs");
 const { resolveCaller } = require("./src/services/aiToolAuth.cjs");
 const permissions = require("./src/utils/permissions.cjs");
 await permissions.primePermissions();
@@ -231,7 +231,7 @@ try {
 
   section("secret redaction at provider and error-card boundaries");
   {
-    const key = "configured-key-123456789";
+    const key = "abc123";
     settings.set("openai_api_key", key);
     fetchFake = async () =>
       response(
@@ -245,12 +245,13 @@ try {
     const error = await runProviderAgent("openai", { parts: [{ text: "hi" }] }).catch((e) => e);
     ok(
       "provider error removes configured and patterned secrets",
-      !/configured-key|remote-token|query-token/.test(error.message),
+      !/abc123|remote-token|query-token/.test(error.message),
     );
     equal("provider status is preserved", error.status, 401);
     const { redactSecrets } = require("./src/config/settings.cjs");
-    settings.set("gemini_api_key", "short");
-    equal("short values are ignored", redactSecrets("short"), "short");
+    settings.set("gemini_api_key", "abc");
+    equal("values below four characters are ignored", redactSecrets("abc"), "abc");
+    equal("six-character keys are redacted", redactSecrets(key), "[redacted]");
     settings.set("whatsapp_proxy_password", "a-different-secret-password");
     ok(
       "every secret setting is read live",
@@ -284,7 +285,7 @@ try {
       );
       ok(
         `${surface}: card hides secrets`,
-        text.includes("[redacted]") && !/configured-key|token-value|query-value/.test(text),
+        text.includes("[redacted]") && !/abc123|token-value|query-value/.test(text),
       );
     }
   }
@@ -327,6 +328,48 @@ try {
       ok("context buffer stays empty", /empty|nothing|add/i.test(text));
     } finally {
       pending.resolve();
+      router.registerProvider("openai", realProvider);
+    }
+  }
+
+  section("delayed command dispatch cannot adopt a fresh account epoch");
+  {
+    const router = require("./src/services/aiRouter.cjs");
+    const realProvider = router.getProvider("openai");
+    const command = require("./src/commands/gemini.cjs");
+    const out = socket();
+    const jid = "201000003002@s.whatsapp.net";
+    const receivedEpoch = store.accountEpoch();
+    store.advanceAccountEpoch();
+    let toolResult;
+    router.registerProvider(
+      "openai",
+      Object.assign(Object.create(realProvider), {
+        async runTurn({ context }) {
+          toolResult = await runTool(
+            "save_memory",
+            {
+              scope: "chat",
+              content: "old account request",
+            },
+            context,
+          );
+          return { text: "done", history: [{ role: "user", parts: [{ text: "stale" }] }] };
+        },
+      }),
+    );
+    try {
+      await command.execute(out, message(jid), ["hello"], "!ai hello", null, {
+        accountEpoch: receivedEpoch,
+      });
+      equal("old dispatch epoch reaches tool authorization", toolResult?.denied, true);
+      equal("delayed dispatch cannot save history", (await hub.getChatHistoryAsync(jid)).length, 0);
+      equal(
+        "delayed dispatch cannot write memory",
+        require("./src/utils/memory.cjs").listMemory({ scope: "chat", chatId: jid }).length,
+        0,
+      );
+    } finally {
       router.registerProvider("openai", realProvider);
     }
   }

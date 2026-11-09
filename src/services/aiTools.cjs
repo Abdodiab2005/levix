@@ -968,7 +968,7 @@ const TOOLS = {
     describe: (args) => t("bot.ai.aiTools.speak", { text: preview(args?.text, 40) }),
     // Posting a voice note into this chat is what `!tts` does, so its level.
     access: { command: "tts" },
-    async run(args, { caller, sock, signal: turnSignal }) {
+    async run(args, { caller, sock, signal: turnSignal, deliveryGuard }) {
       const text = typeof args?.text === "string" ? args.text.trim() : "";
       if (!text) return { error: "text is required" };
       if (text.length > 3000) {
@@ -1003,7 +1003,7 @@ const TOOLS = {
             sock,
             caller.chatId,
             { audio: voice.audio, mimetype: voice.mimetype, ptt: voice.ptt },
-            { typing: false, signal, levix: { sensitivity: "source" } },
+            { typing: false, signal, deliveryGuard, levix: { sensitivity: "source" } },
           );
           if (sent?.refused) throw new Error("MEDIA_DELIVERY_REFUSED");
           return {
@@ -1013,6 +1013,7 @@ const TOOLS = {
           };
         });
       } catch (error) {
+        if (error?.code === "DENIED") throw error;
         return mediaFailure(error);
       }
     },
@@ -1033,7 +1034,7 @@ const TOOLS = {
     },
     access: { command: "gemini" },
     describe: () => t("bot.ai.gemini.makingImage"),
-    async run(args, { caller, sock, signal: turnSignal }) {
+    async run(args, { caller, sock, signal: turnSignal, deliveryGuard }) {
       if (typeof args?.prompt !== "string" || !args.prompt.trim() || args.prompt.length > 3000) {
         return { error: "an image prompt of 1–3000 characters is required" };
       }
@@ -1052,7 +1053,7 @@ const TOOLS = {
             sock,
             caller.chatId,
             { image: result.image },
-            { typing: false, signal, levix: { sensitivity: "source" } },
+            { typing: false, signal, deliveryGuard, levix: { sensitivity: "source" } },
           );
           if (sent?.refused) throw new Error("MEDIA_DELIVERY_REFUSED");
           return {
@@ -1063,6 +1064,7 @@ const TOOLS = {
           };
         });
       } catch (error) {
+        if (error?.code === "DENIED") throw error;
         return mediaFailure(error);
       }
     },
@@ -1188,7 +1190,7 @@ const TOOLS = {
     describe: (args) => t("bot.ai.aiTools.createPoll", { question: preview(args?.question, 40) }),
     // A poll is a group message like any other, so `!poll`'s level.
     access: { command: "poll" },
-    async run(args, { caller, sock, signal: turnSignal }) {
+    async run(args, { caller, sock, signal: turnSignal, deliveryGuard }) {
       if (!sock) return { error: "no WhatsApp connection is attached to this turn" };
       // Same builder the !poll command uses: dedupes, caps lengths, enforces
       // WhatsApp's 2-12 option ceiling, and throws the user-facing Arabic
@@ -1197,7 +1199,14 @@ const TOOLS = {
       const content = poll._buildPollContent(args?.question, args?.options, {
         multi: Boolean(args?.multi),
       });
-      await sendBotMessage(sock, caller.chatId, content, { typing: false, signal: turnSignal });
+      const sent = await sendBotMessage(sock, caller.chatId, content, {
+        typing: false,
+        signal: turnSignal,
+        deliveryGuard,
+      });
+      if (sent?.refused) {
+        return { error: "tool delivery was refused", code: "DENIED", denied: true, sent: false };
+      }
       return {
         sent: true,
         question: content.poll.name,
@@ -1413,9 +1422,34 @@ async function runTool(name, args, ctx) {
     }
 
     ctx?.signal?.throwIfAborted();
-    const result = await tool.run(input, { caller, sock: ctx?.sock, signal: ctx?.signal });
+    // The socket asserts this after all asynchronous send preparation, with
+    // no await between authorization and the underlying WhatsApp send.
+    const deliveryGuard = {
+      async refresh() {},
+      assert() {
+        const current = authorize(access || null, caller);
+        if (!current.allowed) {
+          throw Object.assign(new Error(current.error), { code: "DENIED" });
+        }
+      },
+    };
+    const result = await tool.run(input, {
+      caller,
+      sock: ctx?.sock,
+      signal: ctx?.signal,
+      deliveryGuard,
+    });
     return result && typeof result === "object" ? result : { result };
   } catch (err) {
+    if (err?.code === "DENIED") {
+      logger.info({ tool: name }, "[aiTools] tool delivery refused");
+      return {
+        error: settings.redactSecrets(err.message),
+        code: "DENIED",
+        denied: true,
+        sent: false,
+      };
+    }
     logger.warn({ err: err?.message, tool: name }, "[aiTools] tool call failed");
     return { error: `${err?.name || "Error"}: ${err?.message || err}` };
   }

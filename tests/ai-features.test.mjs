@@ -147,6 +147,13 @@ section("create_poll tool");
   ok("model args went through the same caps", sentSock.sent[0]?.content?.poll?.values.length === 2);
   equal("tool reports the question", result.question, "نروح فين؟");
 
+  const routeRefusal = await runTool(
+    "create_poll",
+    { question: "q", options: ["a", "b"] },
+    { caller, sock: { async sendMessage() { return { refused: true }; } } },
+  );
+  equal("a refused poll is reported as not sent", routeRefusal.sent, false);
+
   runtimeConfig.setPermission("poll", "OWNER_ONLY");
   const refused = await runTool(
     "create_poll",

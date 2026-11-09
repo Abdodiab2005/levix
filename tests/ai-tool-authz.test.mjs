@@ -9,6 +9,7 @@
 // whoever invoked the AI — not of whoever wrote it.
 
 import http from "node:http";
+import { mock } from "node:test";
 
 import { equal, finish, ok, require, section, useTempDataDir } from "./harness.mjs";
 
@@ -588,6 +589,19 @@ try {
     "cached demotion removes moderator authority",
     !authorize({ command: "memory", role: "chatModerator" }, snapshotMod).allowed,
   );
+  section("expired demotion cannot revive the caller snapshot");
+  mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  try {
+    groupCache.cache.ttl(GROUP, 1);
+    mock.timers.tick(1001);
+    ok(
+      "expired demotion still denies the old admin snapshot",
+      !authorize({ command: "memory", role: "chatModerator" }, snapshotMod).allowed,
+    );
+    equal("demoted roster has expired", groupCache.getCached(GROUP), undefined);
+  } finally {
+    mock.timers.reset();
+  }
   groupCache.setCached(GROUP, groupMetadata);
   groupCache.markRosterChanged(null, GROUP);
   ok(
@@ -596,8 +610,51 @@ try {
   );
   groupCache.setCached(GROUP, groupMetadata);
 
+  section("roster versions stay group-scoped and survive deletions and flushes");
+  groupCache.cache.del(GROUP);
+  const untouchedMod = await inGroup(MOD);
+  groupCache.setCached(OTHER_GROUP, { ...groupMetadata, id: OTHER_GROUP });
+  ok(
+    "another group's cache write does not invalidate this snapshot",
+    authorize({ command: "memory", role: "chatModerator" }, untouchedMod).allowed,
+  );
+  groupCache.setCached(GROUP, groupMetadata);
+  groupCache.cache.del(GROUP);
+  ok(
+    "deleting a newer roster cannot restore the old snapshot",
+    !authorize({ command: "memory", role: "chatModerator" }, untouchedMod).allowed,
+  );
+  const beforeFlush = await inGroup(MOD);
+  groupCache.flushAll();
+  ok(
+    "flush invalidates snapshots even when their cache entry was absent",
+    !authorize({ command: "memory", role: "chatModerator" }, beforeFlush).allowed,
+  );
+  groupCache.setCached(GROUP, groupMetadata);
+
+  section("delayed callers retain the epoch captured at message arrival");
+  const store = require("./src/db/store.cjs");
+  const receivedEpoch = store.accountEpoch();
+  store.advanceAccountEpoch();
+  const delayed = await resolveCaller({
+    msg: groupMsg(OWNER),
+    sock,
+    groupMetadata,
+    accountEpoch: receivedEpoch,
+  });
+  equal(
+    "late resolution cannot adopt the new account",
+    authorize({ command: "memory" }, delayed).error,
+    "the linked WhatsApp account changed during this request",
+  );
+  const current = await inGroup(OWNER);
+  equal(
+    "omitted epoch still samples the current account",
+    authorize({ command: "memory" }, current).allowed,
+    true,
+  );
+
   section("account changes invalidate every access tool");
-  require("./src/db/store.cjs").advanceAccountEpoch();
   for (const [name, tool] of Object.entries(TOOLS)) {
     if (!tool.access) continue;
     const result = await runTool(name, {}, { caller: owner, sock });

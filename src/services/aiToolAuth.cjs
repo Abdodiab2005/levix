@@ -16,7 +16,7 @@
 
 const runtimeConfig = require("../config/runtime-config.cjs");
 const { accountEpoch } = require("../db/store.cjs");
-const { getCached, isRosterStale } = require("../utils/groupMetadataCache.cjs");
+const { getCached, getRosterVersion, isRosterStale } = require("../utils/groupMetadataCache.cjs");
 const {
   primePermissions,
   isOwnerJidSync,
@@ -57,11 +57,19 @@ const ROLE_ERRORS = Object.freeze({
  * @param {object} options.msg             - the Baileys message that invoked the AI
  * @param {object} options.sock            - Baileys socket (fromMe resolves to its account)
  * @param {object} [options.groupMetadata] - for group-admin detection
+ * @param {number} [options.accountEpoch] - epoch captured when the message arrived
  * @param {string} [options.text]          - what the sender typed (role tools bind targets to it)
  */
-async function resolveCaller({ msg, sock, groupMetadata = null, text = "" }) {
+async function resolveCaller({
+  msg,
+  sock,
+  groupMetadata = null,
+  text = "",
+  accountEpoch: receivedEpoch,
+}) {
   if (!msg?.key?.remoteJid) throw new Error("resolveCaller needs the incoming message");
-  const epoch = accountEpoch();
+  const epoch = receivedEpoch ?? accountEpoch();
+  const rosterVersion = getRosterVersion(msg.key.remoteJid);
   await primePermissions();
   const { resolveSender } = await import("../middleware/permissions.middleware.js");
   const sender = resolveSender(msg, groupMetadata, sock);
@@ -85,7 +93,12 @@ async function resolveCaller({ msg, sock, groupMetadata = null, text = "" }) {
     text: String(text || ""),
   });
   minted.add(caller);
-  authorityByCaller.set(caller, { epoch, fromMe: Boolean(msg.key.fromMe), groupMetadata });
+  authorityByCaller.set(caller, {
+    epoch,
+    fromMe: Boolean(msg.key.fromMe),
+    groupMetadata,
+    rosterVersion,
+  });
   const { unwrapMessage, quotedOf } = require("../utils/messageContent.cjs");
   const own = unwrapMessage(msg.message);
   const audio = own.audioMessage || unwrapMessage(quotedOf(msg)).audioMessage;
@@ -123,10 +136,15 @@ function authorize(access, caller) {
   // Identity is frozen; privileges come from the dispatcher's live predicates.
   const isOwner = authority.fromMe || caller.candidates.some(isOwnerJidSync);
   const isBotAdmin = !isOwner && caller.candidates.some(isBotAdminUserSync);
-  // A newer cache entry wins; stale rosters never fall back to message-time data.
-  const metadata = isRosterStale(caller.chatId)
-    ? null
-    : (getCached(caller.chatId) ?? authority.groupMetadata);
+  // Expiry must not revive an admin snapshot after a newer roster was observed.
+  let metadata = null;
+  if (!isRosterStale(caller.chatId)) {
+    metadata = getCached(caller.chatId);
+    // getCached may itself expire an entry, so compare the version after reading it.
+    if (metadata === undefined && getRosterVersion(caller.chatId) === authority.rosterVersion) {
+      metadata = authority.groupMetadata;
+    }
+  }
   const isGroupAdmin =
     caller.isGroup && caller.candidates.some((id) => isAdminInGroupSync(metadata, id));
   const roles = {

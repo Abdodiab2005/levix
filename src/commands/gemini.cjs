@@ -253,7 +253,7 @@ module.exports = {
   chat: "all",
 
   async execute(sock, msg, args, body, groupMetadata, ctx = {}) {
-    const epoch = accountEpoch();
+    const epoch = ctx?.accountEpoch ?? accountEpoch();
     const chatId = msg.key.remoteJid;
     const userName = msg.pushName;
     const isGroup = chatId.endsWith("@g.us");
@@ -624,6 +624,7 @@ module.exports = {
       msg,
       sock,
       groupMetadata: callerRoster,
+      accountEpoch: epoch,
       text: body || "",
     });
     const agentContext = {
