@@ -304,4 +304,186 @@ reset();
 const lidRecord = store.setUserRole(LID, "admin");
 equal("LID grant stores no invented phone", lidRecord.phone, null);
 
+section("delta roster-proven revocation clears DB and bootstrap grants");
+const permCommand = require("./src/commands/perm.cjs");
+const { runTool } = require("./src/services/aiTools.cjs");
+const { timing } = await import("../src/utils/sendBotMessage.esm.js");
+const originalSleep = timing.sleep;
+timing.sleep = async () => {};
+const sent = [];
+const commandSock = {
+  ...sock,
+  async sendMessage(jid, payload) {
+    sent.push({ jid, ...payload });
+    return { key: { remoteJid: jid, id: `reply-${sent.length}` } };
+  },
+};
+const ACTOR = "202000000075@s.whatsapp.net";
+const targetLid = "700000075@lid";
+for (const via of ["command", "AI"]) {
+  reset();
+  await perms.grantRole(ACTOR, "owner");
+  await perms.grantRole(PN, "admin");
+  store.saveUserMetadata({ jid: targetLid });
+  metadata = { participants: [{ id: ACTOR }, { id: targetLid, phoneNumber: PN }] };
+  rosterCache.setCached(GROUP, metadata);
+  ok(`${via}: roster pair initially has admin`, perms.isBotAdminUser(targetLid, metadata));
+  const request = msg(ACTOR);
+  request.message = {
+    extendedTextMessage: {
+      text: "!perm remove admin @target",
+      contextInfo: { mentionedJid: [targetLid] },
+    },
+  };
+  if (via === "command") {
+    await permCommand.execute(commandSock, request, ["remove", "admin", "@target"], "", metadata);
+  } else {
+    const caller = await resolveCaller({
+      msg: request,
+      sock: commandSock,
+      groupMetadata: metadata,
+    });
+    const result = await runTool(
+      "revoke_role",
+      { target: targetLid, role: "admin" },
+      {
+        caller,
+        sock: commandSock,
+      },
+    );
+    equal("AI reports completed revocation", result.revoked, true);
+  }
+  for (const id of [PN, targetLid]) {
+    equal(`${via}: ${id} no longer privileged`, perms.isBotAdminUser(id, metadata), false);
+    equal(
+      `${via}: ${id} DB grant cleared`,
+      db.prepare("SELECT is_admin FROM user_metadata WHERE user_jid=?").get(id)?.is_admin,
+      0,
+    );
+    equal(`${via}: ${id} bootstrap grant cleared`, perms.getBootstrapAdmins().includes(id), false);
+  }
+}
+
+section("delta bootstrap retains only verified linked-self secondary identities");
+reset();
+const selfLid = "700000076@lid";
+store.saveUserMetadata({ jid: PN, lid: selfLid, isOwner: true });
+store.saveUserMetadata({ jid: ACTOR, lid: targetLid, isOwner: true });
+const selfSocket = { user: { id: PN.replace("@", ":4@"), lid: selfLid.replace("@", ":4@") } };
+await sync.bootstrapOwners(
+  store.getAllOwners().flatMap((row) => [row.jid, row.lid]),
+  [selfSocket.user.id, selfSocket.user.lid],
+);
+ok("verified self LID remains owner without mapping", perms.isOwnerJid(selfLid));
+equal("same-digit unrelated LID is not self owner", perms.isOwnerJid(LID), false);
+equal("other secondary columns remain filtered", perms.isOwnerJid(targetLid), false);
+equal(
+  "bootstrap does not create mapping rows",
+  db.prepare("SELECT COUNT(*) AS count FROM lid_mapping").get().count,
+  0,
+);
+
+section("delta five local gates preserve transport and roster proof");
+const memoryCommand = require("./src/commands/memory.cjs");
+const geminiCommand = require("./src/commands/gemini.cjs");
+const langCommand = require("./src/commands/lang.cjs");
+const statusCommand = require("./src/commands/status.cjs");
+const memoryStore = require("./src/utils/memory.cjs");
+const settings = require("./src/config/settings.cjs");
+const { withLang } = require("./src/utils/i18n.cjs");
+const originalAdd = memoryStore.addMemory;
+const originalProbes = statusCommand.probes.gather;
+let memoryWrites = 0;
+let probeCalls = 0;
+memoryStore.addMemory = () => {
+  memoryWrites++;
+  return { id: "isolated-entry" };
+};
+statusCommand.probes.gather = async () => {
+  probeCalls++;
+  return {};
+};
+try {
+  settings.set("bot_language", "ar");
+  await langCommand.execute(commandSock, msg(selfLid), ["en"]);
+  equal("verified self LID passes lang without fromMe", settings.get("bot_language"), "en");
+  for (const name of ["perm", "memory", "gemini", "lang", "status"]) {
+    const proofs = ["group alternate", "private alternate", "roster", "collision", "stale roster"];
+    for (const proof of proofs) {
+      reset();
+      await perms.grantRole(PN, "owner");
+      const accepted = proof !== "collision" && proof !== "stale roster";
+      const sender = proof === "collision" ? LID : "700000077@lid";
+      const dm = proof === "private alternate";
+      const alternate = proof.includes("alternate") ? PN : undefined;
+      const request = msg(sender, alternate, dm);
+      metadata = {
+        participants: [
+          { id: sender, ...(proof.endsWith("roster") ? { phoneNumber: PN } : {}) },
+          { id: MEMBER },
+        ],
+      };
+      rosterCache.setCached(GROUP, metadata);
+      const ctx = { authGroupMetadata: dm || proof === "stale roster" ? null : metadata };
+      sent.length = 0;
+      if (name === "perm") {
+        request.message = {
+          extendedTextMessage: {
+            text: "!perm add owner @member",
+            contextInfo: { mentionedJid: [MEMBER] },
+          },
+        };
+        await permCommand.execute(
+          commandSock,
+          request,
+          ["add", "owner", "@member"],
+          "",
+          metadata,
+          ctx,
+        );
+        equal(`${name} ${proof}: owner grant gate`, store.isUserOwner(MEMBER), accepted);
+      } else if (name === "memory") {
+        const before = memoryWrites;
+        await memoryCommand.execute(
+          commandSock,
+          request,
+          ["add", "global", "fact"],
+          "",
+          metadata,
+          ctx,
+        );
+        equal(`${name} ${proof}: global write gate`, memoryWrites - before, accepted ? 1 : 0);
+      } else if (name === "gemini") {
+        store.saveChatHistory(request.key.remoteJid, [
+          { role: "user", parts: [{ text: "sentinel" }] },
+        ]);
+        await geminiCommand.execute(commandSock, request, ["del"], "", metadata, ctx);
+        equal(
+          `${name} ${proof}: history deletion gate`,
+          store.getChatHistory(request.key.remoteJid).length,
+          accepted ? 0 : 1,
+        );
+      } else if (name === "lang") {
+        settings.set("bot_language", "ar");
+        await langCommand.execute(commandSock, request, ["en"], "", metadata, ctx);
+        equal(
+          `${name} ${proof}: setting gate`,
+          settings.get("bot_language"),
+          accepted ? "en" : "ar",
+        );
+      } else {
+        const before = probeCalls;
+        await withLang("en", () =>
+          statusCommand.execute(commandSock, request, ["debug"], "", metadata, ctx),
+        );
+        equal(`${name} ${proof}: debug gate`, probeCalls - before, accepted ? 1 : 0);
+      }
+    }
+  }
+} finally {
+  timing.sleep = originalSleep;
+  memoryStore.addMemory = originalAdd;
+  statusCommand.probes.gather = originalProbes;
+}
+
 finish();

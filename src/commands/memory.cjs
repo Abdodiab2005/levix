@@ -15,6 +15,7 @@ const memory = require("../utils/memory.cjs");
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 const {
   isOwnerJidSync,
+  getSenderCandidatesSync,
   isBotAdminUserSync,
   isAdminInGroupSync,
 } = require("../utils/permissions.cjs");
@@ -70,8 +71,6 @@ module.exports = {
     const isGroup = chatId.endsWith("@g.us");
     const senderId = isGroup ? msg.key.participant : msg.key.remoteJid;
 
-    const isOwner = msg.key.fromMe || isOwnerJidSync(senderId);
-    const botPrivileged = isOwner || isBotAdminUserSync(senderId);
     // Chat forget/clear/export is a grant. A stale roster must not provide it.
     // The subject on `groupMetadata` stays the last-known display name.
     const authMetadata =
@@ -80,7 +79,12 @@ module.exports = {
         : isGroup
           ? await resolveGroupMetadata(sock, chatId, { fresh: true })
           : null;
-    const groupAdmin = Boolean(isGroup && isAdminInGroupSync(authMetadata, senderId));
+    const candidates = getSenderCandidatesSync(msg, sock);
+    const isOwner = msg.key.fromMe || candidates.some((id) => isOwnerJidSync(id, authMetadata));
+    const botPrivileged = isOwner || candidates.some((id) => isBotAdminUserSync(id, authMetadata));
+    const groupAdmin = Boolean(
+      isGroup && candidates.some((id) => isAdminInGroupSync(authMetadata, id)),
+    );
 
     const action = String(args[0] || "").toLowerCase();
     const { scope, rest } = extractScope(args.slice(1));

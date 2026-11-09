@@ -36,7 +36,7 @@ const {
 const { sendBotMessage, sendBotError } = require("../utils/sendBotMessage.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const { formatMarkdownForWhatsApp } = require("../utils/markdownParser.cjs");
-const { isOwnerJidSync } = require("../utils/permissions.cjs");
+const { isOwnerJidSync, getSenderCandidatesSync } = require("../utils/permissions.cjs");
 const { resolveCaller } = require("../services/aiToolAuth.cjs");
 const { resolveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
 const { generateImage } = require("../services/aiImage.cjs");
@@ -259,7 +259,11 @@ module.exports = {
     const isGroup = chatId.endsWith("@g.us");
 
     const senderId = msg.key.fromMe ? null : isGroup ? msg.key.participant : msg.key.remoteJid;
-    const isOwner = msg.key.fromMe || isOwnerJidSync(senderId);
+    const authMetadata =
+      ctx && Object.hasOwn(ctx, "authGroupMetadata") ? ctx.authGroupMetadata : groupMetadata;
+    const isOwner =
+      msg.key.fromMe ||
+      getSenderCandidatesSync(msg, sock).some((id) => isOwnerJidSync(id, authMetadata));
 
     // Resolve sub-command. Aliases like !del arrive via ctx.invokedName, while
     // `!gemini del ...` arrives as args[0].

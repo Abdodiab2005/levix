@@ -11,7 +11,7 @@ import {
 } from "./storage.esm.js";
 
 const require = createRequire(import.meta.url);
-const { roleIdentityAliases } = require("../db/store.cjs");
+const { roleIdentityAliases, withImmediateTransaction } = require("../db/store.cjs");
 
 // Two rosters, same mechanics:
 //   owners      — full access, including OWNER_ONLY commands
@@ -57,10 +57,12 @@ function pushBootstrap(value) {
 
 /**
  * Replace the bootstrap owner set. Pass an array of JIDs/LIDs/phones; we
- * normalize and de-dupe them.
+ * normalize and de-dupe them. verifiedSelf contains only paired credentials.
  */
-export function bootstrapOwners(values) {
+export function bootstrapOwners(values, verifiedSelf = []) {
   replaceBootstrap(bootstrap, values, getAllOwners);
+  // Supplied only from paired credentials, never from contact metadata.
+  for (const value of verifiedSelf) pushBootstrap(value);
 }
 
 /** Add an owner to the bootstrap set (does not touch the DB). */
@@ -160,15 +162,23 @@ export function grantRole(target, role = "admin") {
 
 /**
  * Revoke a bot-level role and remove its proven aliases from the bootstrap
- * set so the revocation takes effect without a restart.
+ * set so the revocation takes effect without a restart. verifiedAliases must
+ * come from trusted target participant metadata.
  *
  * @returns {object|null} the stored user record
  */
-export function revokeRole(target, role = "admin") {
+export function revokeRole(target, role = "admin", verifiedAliases = []) {
   const wanted = String(role).toLowerCase() === "owner" ? "owner" : "admin";
-  const record = setUserRole(target, wanted, false);
-
-  const forms = identityForms(target);
+  // Extra identities come from the target's trusted roster participant, never
+  // from model arguments or secondary user_metadata columns.
+  const forms = new Set([target, ...verifiedAliases].flatMap(identityForms));
+  const record = withImmediateTransaction(() => {
+    const result = setUserRole(target, wanted, false);
+    for (const form of forms) {
+      if (form !== result?.jid) setUserRole(form, wanted, false);
+    }
+    return result;
+  });
   const set = wanted === "owner" ? bootstrap : bootstrapAdminSet;
   for (const form of forms) {
     set.delete(form);

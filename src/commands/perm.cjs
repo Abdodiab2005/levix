@@ -12,7 +12,15 @@
 // Roles live in `user_metadata` (is_owner / is_admin) and in the in-memory
 // roster, so a grant is effective on the very next message — no restart.
 
-const { grantRole, revokeRole, listRoles, isOwnerJidSync } = require("../utils/permissions.cjs");
+const {
+  grantRole,
+  revokeRole,
+  listRoles,
+  isOwnerJidSync,
+  getSenderCandidatesSync,
+  findGroupParticipantSync,
+  participantIdsSync,
+} = require("../utils/permissions.cjs");
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 const normalizeJid = require("../utils/normalizeJid.cjs");
 const logger = require("../utils/logger.cjs");
@@ -107,8 +115,12 @@ module.exports = {
   // Accepted but not in the usage — syntax, not English (see utils/i18n.cjs).
   keywords: [...ADD_WORDS, ...DEL_WORDS, ...LIST_WORDS, ...Object.keys(ROLE_WORDS), "me"],
 
-  async execute(sock, msg, args) {
+  async execute(sock, msg, args, body, groupMetadata, ctx) {
     const jid = msg.key.remoteJid;
+    const authMetadata =
+      ctx && Object.hasOwn(ctx, "authGroupMetadata")
+        ? ctx.authGroupMetadata
+        : groupMetadata;
     const action = String(args[0] || "").toLowerCase();
 
     if (!action || LIST_WORDS.has(action)) {
@@ -155,7 +167,10 @@ module.exports = {
     // already requires OWNER_ONLY by default — this is the belt to that
     // brace, and it also guards direct calls from elsewhere.)
     const sender = senderOf(msg);
-    if (role === "owner" && !msg.key.fromMe && !isOwnerJidSync(sender)) {
+    const isOwner = msg.key.fromMe || getSenderCandidatesSync(msg, sock).some(
+      (id) => isOwnerJidSync(id, authMetadata),
+    );
+    if (role === "owner" && !isOwner) {
       return sendBotMessage(
         sock,
         jid,
@@ -165,12 +180,18 @@ module.exports = {
     }
 
     try {
-      const record = isAdd ? await grantRole(target, role) : await revokeRole(target, role);
+      const aliases = isRemove
+        ? participantIdsSync(findGroupParticipantSync(authMetadata, target))
+        : [];
+      const record = isAdd
+        ? await grantRole(target, role)
+        : await revokeRole(target, role, aliases);
       const who = record ? labelFor(record) : target;
       const roleLabel =
         role === "owner" ? t("bot.tools.perm.ownerLabel") : t("bot.tools.perm.adminLabel");
 
-      logger.info({ target, role, granted: isAdd, by: sender }, "[perm] role change");
+      logger.info({ role, granted: isAdd }, "[perm] role change");
+      logger.debugOnly.info({ target, role, granted: isAdd, by: sender }, "[perm] role change");
 
       return sendBotMessage(
         sock,

@@ -123,6 +123,14 @@ function getSenderCandidatesSync(msg, sock) {
   return collectNormalized(raw);
 }
 
+function participantIdsSync(participant) {
+  if (mod?.participantIds) return mod.participantIds(participant);
+  if (!participant) return [];
+  return [participant.id, participant.lid, participant.phoneNumber, participant.jid].filter(
+    Boolean,
+  );
+}
+
 function findGroupParticipantSync(groupMetadata, jidOrList) {
   if (mod?.findGroupParticipant) {
     try {
@@ -171,9 +179,9 @@ async function isBotAdminInGroup(groupMetadata, sock) {
   return m.isBotAdminInGroup(groupMetadata, sock);
 }
 
-async function bootstrapOwners(values) {
+async function bootstrapOwners(values, verifiedSelf) {
   const m = await getMod();
-  return m.bootstrapOwners(values);
+  return m.bootstrapOwners(values, verifiedSelf);
 }
 
 async function addBootstrapOwner(value) {
@@ -191,9 +199,9 @@ async function grantRole(target, role) {
   return m.grantRole(target, role);
 }
 
-async function revokeRole(target, role) {
+async function revokeRole(target, role, verifiedAliases) {
   const m = await getMod();
-  return m.revokeRole(target, role);
+  return m.revokeRole(target, role, verifiedAliases);
 }
 
 async function listRoles() {
@@ -220,5 +228,6 @@ module.exports = {
   sameUserSync,
   getSenderCandidatesSync,
   findGroupParticipantSync,
+  participantIdsSync,
   rosterJidForSync,
 };
