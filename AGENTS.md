@@ -1732,6 +1732,9 @@ logger.debug('Debug info');
     JIDs and device suffixes can name the same user. Moderation and role gates
     must use `sameUser()`, `getSenderCandidates()` and `isAdminInGroup()` rather
     than exact string equality.
+    **Role recovery:** roles match exact identity or a verified current mapping.
+    An unverifiable legacy row needs a re-grant by phone number from the Roles
+    screen (or `!perm add`). The paired account is re-recorded on connection open.
 28. **An AI tool with a side effect declares `access`.** Name the command it
     stands in for (`{ command: "schedule" }`) and let `runTool()` enforce it
     against `ctx.caller`. Never read who is calling from the tool's arguments,

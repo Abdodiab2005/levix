@@ -17,12 +17,8 @@ const {
   commitModerationDecision,
   markModerationNotice,
   markModerationKicked,
-  getPnForLid,
-  getLidForPn,
-  getLidsForPn,
 } = require("./storage.cjs");
-const normalizeJid = require("./normalizeJid.cjs");
-const { isLidJid } = normalizeJid;
+const { roleIdentityAliases } = require("../db/store.cjs");
 const {
   getSenderCandidatesSync,
   hasBotPrivilegesSync,
@@ -64,28 +60,7 @@ function commandContextInfo(msg) {
 }
 
 function identityAliases(jid) {
-  const ids = [];
-  const add = (value) => {
-    const norm = normalizeJid(value);
-    if (norm && !ids.includes(norm)) ids.push(norm);
-  };
-  add(jid);
-  const norm = ids[0];
-  if (!norm) return ids;
-  const phones = [];
-  const addPhone = (value) => {
-    const phone = normalizeJid(value);
-    if (!phone || isLidJid(phone) || phones.includes(phone)) return;
-    phones.push(phone);
-  };
-  if (isLidJid(norm)) addPhone(getPnForLid(norm));
-  else addPhone(norm);
-  for (const phone of phones) {
-    add(phone);
-    add(getLidForPn(phone));
-    for (const lid of getLidsForPn(phone) || []) add(lid);
-  }
-  return ids;
+  return roleIdentityAliases(jid);
 }
 
 function targetFromCommand(msg) {
@@ -120,8 +95,8 @@ function isProtectedMember(sock, groupMetadata, candidates) {
   const botIds = [sock?.user?.id, sock?.user?.lid].filter(Boolean);
   return (candidates || []).some(
     (candidate) =>
-      isOwnerJidSync(candidate) ||
-      hasBotPrivilegesSync(candidate) ||
+      isOwnerJidSync(candidate, groupMetadata) ||
+      hasBotPrivilegesSync(candidate, groupMetadata) ||
       isAdminInGroupSync(groupMetadata, candidate) ||
       botIds.some((botId) => sameUserSync(candidate, botId)),
   );
@@ -238,8 +213,8 @@ function dismissMemberFlag(groupId, userId) {
  * an owner (`fromMe` or the owner roster).
  */
 function requesterStillAdmin(meta, candidates, fromMe, rule = "direct") {
-  const isOwner = Boolean(fromMe) || candidates.some((candidate) => isOwnerJidSync(candidate));
-  const isBotAdmin = !isOwner && candidates.some((candidate) => isBotAdminUserSync(candidate));
+  const isOwner = Boolean(fromMe) || candidates.some((candidate) => isOwnerJidSync(candidate, meta));
+  const isBotAdmin = !isOwner && candidates.some((candidate) => isBotAdminUserSync(candidate, meta));
   const isGroupAdmin = candidates.some((candidate) => isAdminInGroupSync(meta, candidate));
   return isBotAdmin || isGroupAdmin || (rule === "nested" && isOwner);
 }

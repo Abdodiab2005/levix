@@ -1911,4 +1911,31 @@ section("manual kick keeps the admitting gate and the entry epoch");
   }
 }
 
+section("A-6 kick identities");
+{
+  const moderation = require("./src/utils/moderationAction.cjs");
+  const pn = "201555000075@s.whatsapp.net";
+  const lid = "201555000075@lid";
+  const groupId = "120363075005@g.us";
+  await permissions.grantRole(pn, "owner");
+  const meta = {
+    participants: [
+      { id: BOT_LID, phoneNumber: BOT_PN, admin: "admin" },
+      { id: lid, admin: null },
+      { id: USER_LID, phoneNumber: USER_PN, admin: null },
+    ],
+  };
+  const { sock, kicks } = makeSock({ metadata: meta });
+  equal("same-digit LID is not owner-protected",
+    moderation.isProtectedMember(sock, meta, [lid]), false);
+  const refused = await moderation.kickGroupMember(sock, {
+    groupId, targetCandidates: [USER_LID], requesterCandidates: [lid], requesterRule: "nested",
+  });
+  equal("same-digit LID cannot request owner kick", refused.error, "requester-not-admin");
+  const removed = await moderation.kickGroupMember(sock, { groupId, targetCandidates: [lid] });
+  equal("same-digit LID can be removed", removed.kicked, true);
+  equal("remove call targets exact LID", kicks[0]?.users[0], lid);
+  await permissions.revokeRole(pn, "owner");
+}
+
 finish();

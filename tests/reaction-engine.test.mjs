@@ -356,11 +356,12 @@ try {
   equal("numeric LID is not coincident phone owner", resolveVerifiedSender(senderKey, { participants: f.state.participants }, f.socket).isOwner, false);
   receive(f, remember(f), "😀", lid);
   equal("numeric LID collision cannot execute owner action", await completed(f), "REACTION_FORBIDDEN");
-  // Normal-message contact merging is legacy behavior: it can contaminate
-  // user_lid on a privileged PN row solely because the digits happen to match.
+  // New contact writes must not recreate the old numeric merge. Inject a
+  // pre-existing contaminated column to retain coverage of legacy databases.
   store.saveUserMetadata({ jid: lid, phone: "700000123" });
-  equal("legacy normal-message merge actually contaminates alias field",
-    db.prepare("SELECT user_lid FROM user_metadata WHERE user_jid=?").get(collision).user_lid, lid);
+  equal("normal-message write leaves privileged row separate",
+    db.prepare("SELECT user_lid FROM user_metadata WHERE user_jid=?").get(collision).user_lid, null);
+  db.prepare("UPDATE user_metadata SET user_lid=? WHERE user_jid=?").run(lid, collision);
   equal("contaminated user_lid cannot confer owner authority",
     resolveVerifiedSender(senderKey, { participants: f.state.participants }, f.socket).isOwner, false);
   equal("contaminated user_lid cannot confer bot-admin authority",
