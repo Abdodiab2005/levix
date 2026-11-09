@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { equal, finish, ok, require, section, useTempDataDir } from "./harness.mjs";
+import { equal, finish, ok, require, section, throws, useTempDataDir } from "./harness.mjs";
 
 const dataDir = useTempDataDir("memory-root");
 const memory = require("./src/utils/memory.cjs");
@@ -424,6 +424,45 @@ section("marker never appears in listMemory / memoryStats / buildMemoryContext")
     "clearAllMemoryFiles removes the chat file",
     !existsSync(memory.memoryFilePath("chat", "120363-test@g.us")),
   );
+}
+
+section("unlink memory failures propagate and the whole wipe can be retried");
+
+{
+  const fs = require("node:fs");
+  const chatFile = join(memory.CHATS_DIR, "unlink-failure@g.us.md");
+  for (const [method, target] of [
+    ["writeFileSync", join(memory.ROOT, memory.LEGACY_COPY_MARKER)],
+    ["unlinkSync", memory.GLOBAL_FILE],
+    ["readdirSync", memory.CHATS_DIR],
+    ["unlinkSync", chatFile],
+  ]) {
+    mkdirSync(memory.CHATS_DIR, { recursive: true });
+    writeFileSync(memory.GLOBAL_FILE, "old global fact");
+    writeFileSync(chatFile, "old chat fact");
+    const original = fs[method];
+    const failure = Object.assign(new Error("memory cleanup denied"), { code: "EACCES" });
+    fs[method] = (file, ...args) => {
+      if (file === target) throw failure;
+      return original(file, ...args);
+    };
+    try {
+      const error = throws(`${method} failure reaches the caller`, () =>
+        memory.clearAllMemoryFiles(),
+      );
+      equal("the original storage failure propagates", error, failure);
+    } finally {
+      fs[method] = original;
+    }
+    memory.clearAllMemoryFiles();
+    equal("retry removes global memory", existsSync(memory.GLOBAL_FILE), false);
+    equal("retry removes chat memory", existsSync(chatFile), false);
+    equal("a repeated wipe succeeds with no files", memory.clearAllMemoryFiles(), 0);
+    ok(
+      "retry retains the legacy import fence",
+      existsSync(join(memory.ROOT, memory.LEGACY_COPY_MARKER)),
+    );
+  }
 }
 
 finish();

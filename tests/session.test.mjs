@@ -1762,6 +1762,150 @@ section("a failed credential wipe is not a successful unlink");
   }
 }
 
+section("account cleanup failure keeps unlink pending until a successful retry");
+
+{
+  const store = harnessRequire("./src/db/store.cjs");
+  const { db } = harnessRequire("./src/db/db.cjs");
+  const memory = harnessRequire("./src/utils/memory.cjs");
+  const jid = "2015550110@s.whatsapp.net";
+  store.clearUnlinkPending();
+  store.authWrite("creds", JSON.stringify({ me: { id: jid }, registered: true }));
+  store.saveUserMetadata({ jid, isOwner: true });
+  store.saveChatHistory(jid, [{ role: "user", content: "old account" }]);
+  store.saveSchedule({
+    id: "cleanup-retry",
+    type: "once",
+    targetJid: jid,
+    creatorJid: jid,
+    message: "old account",
+    status: "pending",
+  });
+  mkdirSync(memory.CHATS_DIR, { recursive: true });
+  writeFileSync(memory.GLOBAL_FILE, "old account memory");
+
+  // Fail after directory deletion, so retry must tolerate partially cleared data.
+  db.exec(`CREATE TEMP TRIGGER fail_unlink_history BEFORE DELETE ON ai_history
+    BEGIN SELECT RAISE(FAIL, 'account cleanup failed'); END`);
+  let socketWipes = 0;
+  let retryWipes = 0;
+  let cleanupCalls = 0;
+  const h = makeHarness({
+    paired: true,
+    realClear: true,
+    clearAll: async () => {
+      socketWipes += 1;
+      store.authClearAll();
+    },
+  });
+  const clearDirectory = h.session.clearDirectory;
+  h.session.clearDirectory = () => {
+    cleanupCalls += 1;
+    clearDirectory();
+  };
+  h.session.clearCredentials = () => {
+    retryWipes += 1;
+    store.authClearAll();
+  };
+  try {
+    await h.session.start();
+    await h.push({ connection: "open" });
+    const failed = await h.session.logout();
+    equal("socket credentials were wiped once", socketWipes, 1);
+    equal("credentials are gone despite cleanup failure", store.authRead("creds"), null);
+    equal("cleanup failure is ERROR", failed.state, S.ERROR);
+    equal("cleanup failure uses unlink_incomplete", failed.reason, "unlink_incomplete");
+    equal("cleanup failure keeps the existing detail", failed.detail, UNLINK_INCOMPLETE_DETAIL);
+    ok("cleanup failure keeps the marker", store.isUnlinkPending());
+    equal("linked stays false", failed.linked, false);
+    equal("start is unavailable", failed.canStart, false);
+    equal("unlink remains available", failed.canUnlink, true);
+    equal("old history remains behind the gate", store.getChatHistory(jid).length, 1);
+    equal("later cleanup has not run", store.getSchedule("cleanup-retry").status, "pending");
+    const refused = await h.session.start();
+    equal("start stays ERROR", refused.state, S.ERROR);
+    equal("start creates no replacement socket", h.sockets.length, 1);
+
+    const retryFailed = await h.session.logout();
+    equal("retry wipes already empty credentials", retryWipes, 1);
+    equal("retry runs the whole cleanup again", cleanupCalls, 2);
+    equal("a second cleanup failure stays ERROR", retryFailed.state, S.ERROR);
+    equal("retry keeps unlink_incomplete", retryFailed.reason, "unlink_incomplete");
+    ok("failed retry keeps the marker", store.isUnlinkPending());
+
+    db.exec("DROP TRIGGER fail_unlink_history");
+    const done = await h.session.logout();
+    equal("successful retry wipes credentials again", retryWipes, 2);
+    equal("successful retry repeats cleanup", cleanupCalls, 3);
+    equal("successful retry is LOGGED_OUT", done.state, S.LOGGED_OUT);
+    equal("successful cleanup removes the marker", store.isUnlinkPending(), false);
+    equal("the old role is gone", store.getUserMetadata(jid), null);
+    equal("the old history is gone", store.getChatHistory(jid).length, 0);
+    equal("the old schedule is paused", store.getSchedule("cleanup-retry").status, "paused");
+    equal("the old memory file is gone", existsSync(memory.GLOBAL_FILE), false);
+    equal("successful retry creates no socket", h.sockets.length, 1);
+  } finally {
+    db.exec("DROP TRIGGER IF EXISTS fail_unlink_history");
+    store.clearUnlinkPending();
+    store.deleteSchedule("cleanup-retry");
+    await h.session.shutdown();
+  }
+}
+
+section("boot retries account cleanup with already empty credentials");
+
+{
+  const store = harnessRequire("./src/db/store.cjs");
+  const { sessionStartupPolicy } = await import("../src/bootstrap/session-startup-policy.js");
+  const jid = "2015550111@s.whatsapp.net";
+  store.clearUnlinkPending();
+  store.authClearAll();
+  store.saveUserMetadata({ jid, isOwner: true });
+  store.saveChatHistory(jid, [{ role: "user", content: "old boot account" }]);
+  store.markUnlinkPending();
+  const failedBoot = makeHarness({ realClear: true });
+  const clearDirectory = failedBoot.session.clearDirectory;
+  failedBoot.session.clearDirectory = () => {
+    throw sqliteFull();
+  };
+  const boot = makeHarness({ realClear: true });
+  let wipes = 0;
+  boot.session.clearCredentials = () => {
+    wipes += 1;
+    store.authClearAll();
+  };
+  try {
+    const failed = await failedBoot.session.logout();
+    equal("failed boot cleanup stays ERROR", failed.state, S.ERROR);
+    equal("failed boot cleanup reason", failed.reason, "unlink_incomplete");
+    equal("failed boot cleanup detail", failed.detail, UNLINK_INCOMPLETE_DETAIL);
+    ok("failed boot cleanup keeps the marker", store.isUnlinkPending());
+    await failedBoot.session.start();
+    equal("failed boot cannot open a socket", failedBoot.sockets.length, 0);
+    equal("failed boot keeps account data", store.getUserMetadata(jid)?.isOwner, true);
+
+    const policy = sessionStartupPolicy({
+      autoStart: true,
+      wasPaired: false,
+      unlinkPending: store.isUnlinkPending(),
+    });
+    equal("boot policy refuses start while cleanup is pending", policy.start, false);
+    // bootstrapCore calls logout once when it finds the marker, before any start.
+    const done = await boot.session.logout();
+    equal("boot wipes empty credentials once", wipes, 1);
+    equal("working boot cleanup completes unlink", done.state, S.LOGGED_OUT);
+    equal("boot cleanup removes the marker", store.isUnlinkPending(), false);
+    equal("boot cleanup removes old roles", store.getUserMetadata(jid), null);
+    equal("boot cleanup removes old history", store.getChatHistory(jid).length, 0);
+    equal("boot cleanup never opens a socket", boot.sockets.length, 0);
+  } finally {
+    failedBoot.session.clearDirectory = clearDirectory;
+    store.clearUnlinkPending();
+    await failedBoot.session.shutdown();
+    await boot.session.shutdown();
+  }
+}
+
 section("concurrent logout calls share one credential wipe");
 
 {

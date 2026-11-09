@@ -30,8 +30,8 @@
 //   disconnected      closed and not retrying. Startable again by hand.
 //   retry_exhausted   the retry schedule ran out. Levix keeps running.
 //   logged_out        WhatsApp dropped the pairing; credentials were cleared.
-//   error             starting the socket threw, or an unlink could not delete
-//                     the stored credentials (reason `unlink_incomplete`).
+//   error             starting the socket threw, or an unlink could not clear
+//                     credentials or account data (reason `unlink_incomplete`).
 //
 // THE RECONNECT POLICY
 // --------------------
@@ -100,36 +100,26 @@ function clearAccountScopedState() {
   bootstrapOwners([]);
   bootstrapAdmins([]);
 
-  try {
-    require("../utils/memory.cjs").clearAllMemoryFiles();
-  } catch (error) {
-    logger.warn({ err: error }, "[Session] failed to clear AI memory after unlink");
-  }
+  // Persistent account data is required cleanup. Any failure keeps unlink
+  // pending so the next attempt repeats the whole cleanup before pairing.
+  require("../utils/memory.cjs").clearAllMemoryFiles();
   try {
     require("../commands/gemini.cjs").clearAllContextBuffers();
   } catch (error) {
     logger.warn({ err: error }, "[Session] failed to clear AI context buffers after unlink");
   }
-  try {
-    // Same boundary as the memory wipe above: the next phone that pairs must
-    // not inherit this account's stickers, packs, or files.
-    require("../stickers/library.cjs").clearAll();
-  } catch (error) {
-    logger.warn({ err: error }, "[Session] failed to clear the sticker library after unlink");
-  }
+  // Same boundary as the memory wipe above: the next phone that pairs must
+  // not inherit this account's stickers, packs, or files.
+  require("../stickers/library.cjs").clearAll();
   try {
     groupMetadataCache.flushAll();
   } catch {}
   try {
     clearRecentMessages();
   } catch {}
-  try {
-    // Copies of deleted messages and the counters are account-derived; the
-    // rules themselves are operator configuration and stay.
-    clearAutoDeleteOnUnlink();
-  } catch (error) {
-    logger.warn({ err: error }, "[Session] failed to clear auto-delete copies after unlink");
-  }
+  // Copies of deleted messages and the counters are account-derived; the
+  // rules themselves are operator configuration and stay.
+  clearAutoDeleteOnUnlink();
   // Second advance. Logout and a logged-out close already moved the epoch
   // before their first await. Work that sampled that value during the logout
   // wait, then finishes after this wipe, must still drop its write.
@@ -1277,14 +1267,15 @@ export class WhatsAppSession {
     return true;
   }
 
-  // Directory clear runs only once the credentials are gone. The marker is
-  // removed after that, so a crash before the removal retries the directory
-  // clear on the next boot instead of resuming a half-cleared account.
+  // Account cleanup runs only once the credentials are gone. Keep the marker
+  // on any cleanup failure or crash, so retry repeats the whole cleanup before
+  // a new account can pair.
   #finishUnlink({ reason, detail }) {
     try {
-      this.clearDirectory?.();
+      this.clearDirectory();
     } catch (error) {
-      this.log.warn({ err: error }, "[Session] failed to clear WhatsApp directory after unlink");
+      this.log.error({ err: error }, "[Session] failed to clear account data after unlink");
+      return this.#failUnlink();
     }
     if (!this.#dropUnlinkMarker()) return this.#failUnlink();
     this.#unlinkFailed = false;
