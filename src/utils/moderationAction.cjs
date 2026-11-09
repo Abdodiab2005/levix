@@ -219,16 +219,22 @@ function dismissMemberFlag(groupId, userId) {
 }
 
 /**
- * The dispatcher's `userAdminRequired` rule (resolveSender in
- * middleware/permissions.middleware.js), on a roster the caller picks: a bot
- * admin who is not an owner, or an admin of this group. `fromMe` makes the
- * sender an owner there, which is why an owner needs the group role.
+ * The `userAdminRequired` rule of the gate that admitted this invocation, on a
+ * roster the caller picks.
+ *
+ * "direct" (default): the dispatcher's rule (resolveSender in
+ * middleware/permissions.middleware.js). A bot admin who is not an owner, or an
+ * admin of this group. `fromMe` makes the sender an owner there, which is why
+ * an owner needs the group role.
+ *
+ * "nested": the `!group <sub-command>` gate (commands/group.cjs): the same, or
+ * an owner (`fromMe` or the owner roster).
  */
-function requesterStillAdmin(meta, candidates, fromMe) {
+function requesterStillAdmin(meta, candidates, fromMe, rule = "direct") {
   const isOwner = Boolean(fromMe) || candidates.some((candidate) => isOwnerJidSync(candidate));
   const isBotAdmin = !isOwner && candidates.some((candidate) => isBotAdminUserSync(candidate));
   const isGroupAdmin = candidates.some((candidate) => isAdminInGroupSync(meta, candidate));
-  return isBotAdmin || isGroupAdmin;
+  return isBotAdmin || isGroupAdmin || (rule === "nested" && isOwner);
 }
 
 /**
@@ -240,6 +246,9 @@ function requesterStillAdmin(meta, candidates, fromMe) {
  * and a requester demoted since then cannot kick. No fresh roster, no kick.
  * `opts.requesterCandidates` (manual !kick only) re-checks the requester on that
  * same roster; `opts.requesterFromMe` carries the command's `key.fromMe`.
+ * `opts.requesterRule` is the gate that admitted the command: "direct" (the
+ * dispatcher, the default) or "nested" (`!group kick`, which also admits an
+ * owner). Anything else is treated as "direct".
  */
 async function kickGroupMember(sock, opts) {
   await primePermissions();
@@ -251,7 +260,13 @@ async function kickGroupMember(sock, opts) {
   if (!meta) return { kicked: false, error: "metadata-unavailable" };
   if (opts.requesterCandidates) {
     const requester = opts.requesterCandidates.filter(Boolean);
-    if (!requester.length || !requesterStillAdmin(meta, requester, opts.requesterFromMe)) {
+    const rule = opts.requesterRule === "nested" ? "nested" : "direct";
+    // `!group` admits its own account (fromMe) with no identity to match.
+    const ownAccount = rule === "nested" && Boolean(opts.requesterFromMe);
+    if (
+      !ownAccount &&
+      (!requester.length || !requesterStillAdmin(meta, requester, opts.requesterFromMe, rule))
+    ) {
       return { kicked: false, error: "requester-not-admin" };
     }
   }

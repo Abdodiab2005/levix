@@ -18,7 +18,10 @@ module.exports = {
   userAdminRequired: true,
   botAdminRequired: true,
 
-  async execute(sock, msg, args, body, groupMetadata) {
+  // `ctx` is passed only by the direct dispatcher (command.handler.js); the nested
+  // `!group kick` (group.cjs) calls with five arguments. Each path was admitted
+  // by a different gate, and the re-check below must apply the same one.
+  async execute(sock, msg, args, body, groupMetadata, ctx) {
     const groupId = msg.key.remoteJid;
     const target = targetFromCommand(msg);
     const targetJid = target?.jid;
@@ -81,6 +84,7 @@ module.exports = {
         targetCandidates,
         requesterCandidates: senderCandidates(msg, sock),
         requesterFromMe: Boolean(msg.key?.fromMe),
+        requesterRule: ctx === undefined ? "nested" : "direct",
       });
       if (!result.kicked) {
         await sock.sendMessage(groupId, {

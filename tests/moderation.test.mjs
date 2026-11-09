@@ -1596,6 +1596,107 @@ section("kickGroupMember re-reads the roster; the caller's snapshot does not dec
   });
   equal("an empty requester is refused", anonymous.error, "requester-not-admin");
 
+  // The re-check applies the gate that admitted the command: the dispatcher
+  // ("direct") or `!group kick` ("nested", which also admits an owner).
+  const kickMsg = (groupId, participant, fromMe = false) => ({
+    key: { remoteJid: groupId, participant, fromMe },
+    message: { extendedTextMessage: { contextInfo: { mentionedJid: [USER_PN] } } },
+    pushName: "Requester",
+  });
+  const runKick = async (groupId, roster, participant, path, fromMe = false) => {
+    const run = makeSock();
+    cache(groupId, roster);
+    const args = [kickMsg(groupId, participant, fromMe), ["@member", "spam"], "", memberRoster()];
+    if (path === "direct") args.push({ invokedName: "kick" });
+    await kickCommand.execute(run.sock, ...args);
+    return run;
+  };
+
+  // An owner who is not a group admin.
+  await permissions.grantRole(OTHER_PN, "owner");
+  try {
+    const ownerNested = await runKick("120363-kick-owner-nested@g.us", memberRoster(), OTHER_PN, "nested");
+    equal("a non-admin owner kicks through !group kick", ownerNested.kicks.length, 1);
+    equal("the owner's kick removes the roster id", ownerNested.kicks[0]?.users[0], USER_LID);
+    ok("the owner's kick has no failure line", !texts(ownerNested.sent).includes(failedLine));
+
+    const ownerDirect = await runKick("120363-kick-owner-direct@g.us", memberRoster(), OTHER_PN, "direct");
+    equal("a non-admin owner is refused at the re-check on the direct path", ownerDirect.kicks.length, 0);
+    ok("the direct refusal keeps the failure line", texts(ownerDirect.sent).includes(failedLine));
+
+    const ownerRuleId = "120363-kick-owner-rule@g.us";
+    const ownerRule = makeSock();
+    cache(ownerRuleId, memberRoster());
+    const base = { groupId: ownerRuleId, targetCandidates: [USER_PN], requesterCandidates: [OTHER_PN] };
+    equal(
+      "kickGroupMember defaults to the direct rule",
+      (await kickGroupMember(ownerRule.sock, base)).error,
+      "requester-not-admin",
+    );
+    equal(
+      "an unknown rule is the direct rule",
+      (await kickGroupMember(ownerRule.sock, { ...base, requesterRule: "owner" })).error,
+      "requester-not-admin",
+    );
+    equal(
+      "the direct rule refuses an owner who is not a group admin",
+      (await kickGroupMember(ownerRule.sock, { ...base, requesterRule: "direct" })).error,
+      "requester-not-admin",
+    );
+    equal("no remove call for the refused owner", ownerRule.kicks.length, 0);
+    equal(
+      "the nested rule admits the owner roster",
+      (await kickGroupMember(ownerRule.sock, { ...base, requesterRule: "nested" })).kicked,
+      true,
+    );
+
+    // fromMe is an owner on the nested gate even with no identity to match.
+    const fromMeSock = makeSock();
+    cache("120363-kick-fromme@g.us", memberRoster());
+    const fromMeBase = {
+      groupId: "120363-kick-fromme@g.us",
+      targetCandidates: [USER_PN],
+      requesterCandidates: [],
+      requesterFromMe: true,
+    };
+    equal(
+      "the direct rule refuses fromMe with no group role",
+      (await kickGroupMember(fromMeSock.sock, { ...fromMeBase, requesterRule: "direct" })).error,
+      "requester-not-admin",
+    );
+    equal(
+      "the nested rule admits fromMe",
+      (await kickGroupMember(fromMeSock.sock, { ...fromMeBase, requesterRule: "nested" })).kicked,
+      true,
+    );
+  } finally {
+    await permissions.revokeRole(OTHER_PN, "owner");
+  }
+
+  // A non-owner, non-admin member is refused on both paths.
+  for (const path of ["nested", "direct"]) {
+    const member = await runKick(`120363-kick-member-${path}@g.us`, memberRoster(), OTHER_PN, path);
+    equal(`a plain member is refused on the ${path} path`, member.kicks.length, 0);
+  }
+
+  // A group admin works on both paths.
+  for (const path of ["nested", "direct"]) {
+    const admin = await runKick(`120363-kick-admin-${path}@g.us`, memberRoster(), ADMIN_PN, path);
+    equal(`a group admin kicks on the ${path} path`, admin.kicks.length, 1);
+  }
+
+  // A group admin demoted after the gate is refused on both paths.
+  for (const path of ["nested", "direct"]) {
+    const gone = await runKick(
+      `120363-kick-gone-${path}@g.us`,
+      rosterWith({ [ADMIN_LID]: null }),
+      ADMIN_PN,
+      path,
+    );
+    equal(`a demoted group admin is refused on the ${path} path`, gone.kicks.length, 0);
+    ok(`the ${path} refusal keeps the failure line`, texts(gone.sent).includes(failedLine));
+  }
+
   // Normal paths still kick once.
   const okId = "120363-kick-normal@g.us";
   const normal = makeSock();
