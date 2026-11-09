@@ -1,4 +1,4 @@
-import { equal, finish, ok, require, section, useTempDataDir } from "./harness.mjs";
+import { equal, finish, ok, require, section, throws, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("levix-identity-strict");
 const store = require("./src/db/store.cjs");
@@ -407,6 +407,110 @@ try {
   settings.set("bot_language", "ar");
   await langCommand.execute(commandSock, msg(selfLid), ["en"]);
   equal("verified self LID passes lang without fromMe", settings.get("bot_language"), "en");
+  section("delta linked-self owner revocation is refused without changes");
+  const selfOwnerMessage = "The linked account is always an owner. Unlink WhatsApp to change it.";
+  const { default: dashboardApi } = await import("../src/routes/dashboard.api.esm.js");
+  const panelRoleWrite = dashboardApi.stack.find(
+    (layer) => layer.route?.path === "/roles" && layer.route.methods.post,
+  ).route.stack[0].handle;
+  for (const via of ["command", "AI", "panel", "direct"]) {
+    reset();
+    store.saveUserMetadata({ jid: PN, lid: selfLid, isOwner: true, isAdmin: true });
+    store.saveUserMetadata({ jid: selfLid, isAdmin: true });
+    await perms.grantRole(ACTOR, "owner");
+    await sync.bootstrapOwners(
+      store.getAllOwners().flatMap((row) => [row.jid, row.lid]),
+      [selfSocket.user.id, selfSocket.user.lid],
+    );
+    metadata = { participants: [{ id: selfLid, phoneNumber: PN }, { id: ACTOR }] };
+    rosterCache.setCached(GROUP, metadata);
+    const request = msg(ACTOR);
+    request.message = {
+      extendedTextMessage: {
+        text: "!perm remove owner @self",
+        contextInfo: { mentionedJid: [selfLid] },
+      },
+    };
+    const rows = () =>
+      JSON.stringify(db.prepare("SELECT * FROM user_metadata ORDER BY user_jid").all());
+    const beforeRows = rows();
+    const beforeRoles = JSON.stringify(perms.listRoles());
+    sent.length = 0;
+    if (via === "command") {
+      await withLang("en", () =>
+        permCommand.execute(commandSock, request, ["remove", "owner", "@self"], "", metadata),
+      );
+      equal("command replies with perm.selfOwner", sent.at(-1)?.text, `🚫 ${selfOwnerMessage}`);
+    } else if (via === "AI") {
+      const caller = await resolveCaller({
+        msg: request,
+        sock: commandSock,
+        groupMetadata: metadata,
+      });
+      const result = await runTool(
+        "revoke_role",
+        { target: selfLid, role: "owner" },
+        {
+          caller,
+          sock: commandSock,
+        },
+      );
+      equal("AI refuses linked-self owner revocation", result.revoked, false);
+      equal("AI explains permanent ownership", result.error, selfOwnerMessage);
+    } else if (via === "panel") {
+      const response = {
+        status(code) {
+          this.code = code;
+          return this;
+        },
+        json(body) {
+          this.body = body;
+          return this;
+        },
+      };
+      panelRoleWrite(
+        { body: { target: PN.split("@")[0], role: "owner", action: "revoke" } },
+        response,
+      );
+      equal("panel refuses linked-self owner revocation", response.code, 400);
+      equal("panel retains error shape", response.body?.success, false);
+      equal("panel explains permanent ownership", response.body?.error, selfOwnerMessage);
+    } else {
+      const error = throws("shared revocation refuses verified self", () =>
+        perms.revokeRole(selfLid, "owner", perms.participantIds(metadata.participants[0])),
+      );
+      const deviceError = throws("device-suffixed self PN is protected", () =>
+        perms.revokeRole(selfSocket.user.id, "owner"),
+      );
+      equal("device-suffixed refusal has a stable code", deviceError?.code, "LINKED_ACCOUNT_OWNER");
+      equal("shared refusal has a stable code", error?.code, "LINKED_ACCOUNT_OWNER");
+    }
+    equal(`${via}: role rows unchanged`, rows(), beforeRows);
+    equal(`${via}: bootstrap rosters unchanged`, JSON.stringify(perms.listRoles()), beforeRoles);
+    ok(`${via}: linked-self PN remains owner`, perms.isOwnerJid(PN));
+    ok(`${via}: linked-self LID remains owner`, perms.isOwnerJid(selfLid));
+    equal(`${via}: numeric collision is not an owner`, perms.isOwnerJid(LID), false);
+    settings.set("bot_language", "ar");
+    await langCommand.execute(commandSock, msg(selfLid), ["en"]);
+    equal(`${via}: linked-self lang access survives`, settings.get("bot_language"), "en");
+    await perms.grantRole(MEMBER, "owner");
+    await sync.revokeRole(MEMBER, "owner");
+    equal(`${via}: another owner's grant remains revocable`, perms.isOwnerJid(MEMBER), false);
+    await perms.revokeRole(selfLid, "admin", perms.participantIds(metadata.participants[0]));
+    equal(`${via}: linked-self PN admin grant remains revocable`, store.isUserBotAdmin(PN), false);
+    equal(
+      `${via}: linked-self LID admin grant remains revocable`,
+      store.isUserBotAdmin(selfLid),
+      false,
+    );
+    ok(`${via}: admin revocation preserves self ownership`, perms.isOwnerJid(selfLid));
+  }
+
+  perms.bootstrapOwners([]);
+  store.clearUserMetadata();
+  equal("unlink bootstrap clears protected self PN", perms.isOwnerJid(PN), false);
+  equal("unlink bootstrap clears protected self LID", perms.isOwnerJid(selfLid), false);
+
   for (const name of ["perm", "memory", "gemini", "lang", "status"]) {
     const proofs = ["group alternate", "private alternate", "roster", "collision", "stale roster"];
     for (const proof of proofs) {

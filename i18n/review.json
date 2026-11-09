@@ -91,7 +91,7 @@
   },
   "pt-BR/bot/tools": {
     "status": "draft",
-    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review",
+    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review; Phase 07.5d perm.selfOwner is a machine draft, pending Q-19 review",
     "date": "2026-11-02",
     "sha256": "776a56dc49dc17496e9718f99f2197dc1c5cfc642cecaba7e3b66d965bc247c7"
   },
@@ -151,7 +151,7 @@
   },
   "es-419/bot/tools": {
     "status": "draft",
-    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review",
+    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review; Phase 07.5d perm.selfOwner is a machine draft, pending Q-19 review",
     "date": "2026-11-02",
     "sha256": "7b59cfcbd43fe5db630173c23a6a4d60428d200ceea3073206a9e5ebc770fc9c"
   }

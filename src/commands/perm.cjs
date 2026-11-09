@@ -205,6 +205,14 @@ module.exports = {
         { replyTo: msg },
       );
     } catch (error) {
+      if (error?.code === "LINKED_ACCOUNT_OWNER") {
+        return sendBotMessage(
+          sock,
+          jid,
+          { text: t("bot.tools.perm.selfOwner") },
+          { replyTo: msg },
+        );
+      }
       logger.error({ err: error }, "[perm] role change failed");
       return sendBotMessage(
         sock,

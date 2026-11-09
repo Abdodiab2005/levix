@@ -725,8 +725,15 @@ const TOOLS = {
       signal?.throwIfAborted();
       const verdict = authorize(TOOLS.revoke_role.access(args), caller);
       if (!verdict.allowed) return { error: verdict.error, denied: true };
-      const record = revokeRole(args?.target, role, aliases);
-      return { revoked: true, role, user: record ? record.jid : args?.target };
+      try {
+        const record = revokeRole(args?.target, role, aliases);
+        return { revoked: true, role, user: record ? record.jid : args?.target };
+      } catch (error) {
+        if (error?.code === "LINKED_ACCOUNT_OWNER") {
+          return { revoked: false, error: error.message };
+        }
+        throw error;
+      }
     },
   },
 

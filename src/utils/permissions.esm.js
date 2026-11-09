@@ -19,6 +19,7 @@ const { roleIdentityAliases, withImmediateTransaction } = require("../db/store.c
 //                 satisfies ADMINS_ONLY / ADMINS_OWNER), but not OWNER_ONLY
 const bootstrap = new Set();
 const bootstrapAdminSet = new Set();
+const linkedSelf = new Set();
 
 function pushInto(set, value) {
   const norm = identityForms(value)[0];
@@ -61,8 +62,10 @@ function pushBootstrap(value) {
  */
 export function bootstrapOwners(values, verifiedSelf = []) {
   replaceBootstrap(bootstrap, values, getAllOwners);
+  // Cleared by lifecycle bootstrap (including unlink), never by revocation.
   // Supplied only from paired credentials, never from contact metadata.
-  for (const value of verifiedSelf) pushBootstrap(value);
+  linkedSelf.clear();
+  for (const value of verifiedSelf) pushInto(linkedSelf, value);
 }
 
 /** Add an owner to the bootstrap set (does not touch the DB). */
@@ -71,7 +74,7 @@ export function addBootstrapOwner(value) {
 }
 
 export function getBootstrapOwners() {
-  return [...bootstrap];
+  return [...new Set([...bootstrap, ...linkedSelf])];
 }
 
 /** Same as bootstrapOwners, for the bot-admin roster. */
@@ -99,7 +102,7 @@ function identityForms(jid) {
   }
 }
 
-function hasRole(jid, { set, dbCheck }, groupMetadata) {
+function hasRole(jid, { set, dbCheck, permanent }, groupMetadata) {
   const forms = new Set(identityForms(jid));
   // A transport roster object carrying both forms is proof even before the
   // mapping table learns the pair. Never consult user_metadata aliases here.
@@ -108,7 +111,7 @@ function hasRole(jid, { set, dbCheck }, groupMetadata) {
     for (const form of identityForms(id)) forms.add(form);
   }
   for (const form of forms) {
-    if (set.has(form)) return true;
+    if (set.has(form) || permanent?.has(form)) return true;
     try {
       if (dbCheck(form)) return true;
     } catch {}
@@ -118,7 +121,7 @@ function hasRole(jid, { set, dbCheck }, groupMetadata) {
 
 /** Owner check by exact primary identity or verified current mapping. */
 export function isOwnerJid(jid, groupMetadata) {
-  return hasRole(jid, { set: bootstrap, dbCheck: dbIsOwner }, groupMetadata);
+  return hasRole(jid, { set: bootstrap, dbCheck: dbIsOwner, permanent: linkedSelf }, groupMetadata);
 }
 
 /**
@@ -172,6 +175,12 @@ export function revokeRole(target, role = "admin", verifiedAliases = []) {
   // Extra identities come from the target's trusted roster participant, never
   // from model arguments or secondary user_metadata columns.
   const forms = new Set([target, ...verifiedAliases].flatMap(identityForms));
+  if (wanted === "owner" && [...forms].some((form) => linkedSelf.has(form))) {
+    throw Object.assign(
+      new Error("The linked account is always an owner. Unlink WhatsApp to change it."),
+      { code: "LINKED_ACCOUNT_OWNER" },
+    );
+  }
   const record = withImmediateTransaction(() => {
     const result = setUserRole(target, wanted, false);
     for (const form of forms) {

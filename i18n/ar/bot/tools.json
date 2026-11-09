@@ -47,6 +47,7 @@
   "perm.envOnly": "_من الإعدادات (env/config): {count} إدخال._",
   "perm.missingTarget": "محتاج تحدد الشخص: منشن (@) أو رد على رسالته أو اكتب رقمه.\nمثال: `!perm add admin @عضو`",
   "perm.ownerOnly": "🚫 تعيين مالك جديد للمالك فقط.",
+  "perm.selfOwner": "🚫 الحساب المرتبط مالك دائمًا. افصل واتساب لتغيير ذلك.",
   "perm.ownerLabel": "مالك 👑",
   "perm.adminLabel": "أدمن 🛡️",
   "perm.granted": "✅ تم تعيين *{who}* كـ *{role}*.",

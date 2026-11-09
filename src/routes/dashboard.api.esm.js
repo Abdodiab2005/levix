@@ -1221,6 +1221,7 @@ router.post("/roles", (req, res) => {
     logger.debugOnly.info({ phone }, `[Dashboard] ${action} ${role}`);
     res.json({ success: true, roles: listRoles() });
   } catch (error) {
+    if (error?.code === "LINKED_ACCOUNT_OWNER") return badRequest(res, error.message);
     fail(res, error, "Error changing a role");
   }
 });
