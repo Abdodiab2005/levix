@@ -642,19 +642,15 @@ section("unlink during a running one-off leaves it paused");
     date: new Date(Date.now() + 40).toISOString(),
     status: "pending",
   };
+  bindRaw(async () => {
+    started = true;
+    await new Promise((resolve) => {
+      release = resolve;
+    });
+    throw new Error("unlinked");
+  });
   scheduler.saveScheduledJob(job);
-  scheduler.scheduleNewJob(
-    {
-      async sendMessage() {
-        started = true;
-        await new Promise((resolve) => {
-          release = resolve;
-        });
-        throw new Error("unlinked");
-      },
-    },
-    job,
-  );
+  scheduler.scheduleNewJob({ async sendMessage() {} }, job);
   try {
     ok("the one-off send started", await waitUntil(() => started));
     const { WhatsAppSession } = await import("../src/core/session.js");
