@@ -567,4 +567,64 @@ section(
   );
 }
 
+section("clearAll rejects a failed wipe and keeps the fence");
+
+{
+  store.authClearAll();
+  const creds = '{"me":{"id":"2015550199:1@s.whatsapp.net"},"registered":true}';
+  store.authWrite("creds", creds);
+  store.authWrite("session-fence-keep", "stay");
+  const auth = await useDatabaseAuthState();
+  const original = store.authClearAll;
+  store.authClearAll = () => {
+    const error = new Error("database or disk is full");
+    error.code = "SQLITE_FULL";
+    throw error;
+  };
+  const error = await catchError(() => auth.clearAll());
+  store.authClearAll = original;
+  equal("clearAll rejects SQLITE_FULL", error?.code, "SQLITE_FULL");
+  const setErr = await catchError(() =>
+    auth.state.keys.set({ session: { "after-failed-wipe": { n: 1 } } }),
+  );
+  equal("fence stays set after the rejected wipe", setErr?.code, AUTH_STORE_FENCED);
+  equal("creds row was not deleted", store.authRead("creds"), creds);
+  equal("session row was not deleted", store.authRead("session-fence-keep"), "stay");
+  await auth.saveCreds();
+  equal("fenced saveCreds did not rewrite creds", store.authRead("creds"), creds);
+}
+
+section("authClearAll rolls back and leaves rows when the delete aborts");
+
+{
+  store.authClearAll();
+  store.clearUnlinkPending();
+  const creds = '{"keep":true}';
+  const sessionKey = '{"chain":1}';
+  store.authWrite("creds", creds);
+  store.authWrite("session-rollback", sessionKey);
+  store.markUnlinkPending();
+  const { db } = require("./src/db/db.cjs");
+  db.exec(
+    `CREATE TEMP TRIGGER unlink_wipe_abort BEFORE DELETE ON baileys_auth
+     BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END`,
+  );
+  let error = null;
+  try {
+    store.authClearAll();
+  } catch (err) {
+    error = err;
+  } finally {
+    db.exec("DROP TRIGGER IF EXISTS unlink_wipe_abort");
+  }
+  ok("aborted delete throws", error instanceof Error);
+  equal("creds row survived the rollback", store.authRead("creds"), creds);
+  equal("session row survived the rollback", store.authRead("session-rollback"), sessionKey);
+  ok("pending marker is outside the credential transaction", store.isUnlinkPending());
+  store.clearUnlinkPending();
+  store.authClearAll();
+  equal("a later clear removes the rows", store.authRead("creds"), null);
+  ok("the marker clear removes the row", !store.isUnlinkPending());
+}
+
 finish();

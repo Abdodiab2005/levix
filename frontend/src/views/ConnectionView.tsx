@@ -83,6 +83,15 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
   const isLoggedOut = state === "logged_out";
   const linked = Boolean(status?.linked) && !isLoggedOut;
   const needsPairing = !linked;
+  const unlinkIncomplete = state === "error" && status?.reason === "unlink_incomplete";
+  const showPairing =
+    !isConnected &&
+    !isStarting &&
+    !isWaitingQr &&
+    !isReconnecting &&
+    !isConsentRequired &&
+    needsPairing &&
+    !unlinkIncomplete;
   const canUnlink = Boolean(status?.canUnlink);
   const isOnline = status?.isOnline !== false;
   const resumeLabel =
@@ -165,17 +174,11 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
   };
 
   const handleStartQr = async () => {
-    await handleAction(
-      () => api.startSession({ method: "qr" }),
-      t("connectionStartingQr"),
-    );
+    await handleAction(() => api.startSession({ method: "qr" }), t("connectionStartingQr"));
   };
 
   const handleSwitchToPhone = async () => {
-    await handleAction(
-      api.stopSession,
-      t("connectionCancelledEnterPhone"),
-    );
+    await handleAction(api.stopSession, t("connectionCancelledEnterPhone"));
     setPairingMethod("pairing");
   };
 
@@ -190,10 +193,25 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
 
   const confirmUnlink = async () => {
     setShowUnlinkModal(false);
-    await handleAction(
-      api.unlinkSession,
-      t("connectionUnlinked"),
-    );
+    setActing(true);
+    try {
+      const res = await api.unlinkSession();
+      const session =
+        res && typeof res === "object" && "session" in res
+          ? (res.session as Partial<SessionStatus>)
+          : null;
+      if (session) onStatusUpdate?.(session);
+      if (session?.state === "error" && session.reason === "unlink_incomplete") {
+        toast(t("connectionUnlinkIncomplete"), "error");
+      } else {
+        toast(t("connectionUnlinked"), "success");
+      }
+      await onRefresh?.();
+    } catch (err: unknown) {
+      toast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setActing(false);
+    }
   };
 
   const rawPhone = status?.user?.id ? status.user.id.split("@")[0].split(":")[0] : null;
@@ -313,9 +331,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
             <AlertCircle size={20} className="shrink-0" />
             <div className="text-xs sm:text-sm">
               <span className="font-bold">{t("connectionReconnectingSoon")}</span> &bull;{" "}
-              <span>
-                {fill(t("connectionNextAttempt"), { seconds: status.retryInSeconds })}
-              </span>
+              <span>{fill(t("connectionNextAttempt"), { seconds: status.retryInSeconds })}</span>
             </div>
           </div>
         ) : null}
@@ -375,31 +391,36 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
           )}
 
           {/* 3a. Known session (paused / idle / disconnected): resume, never QR or pairing codes */}
-          {!isConnected && !isStarting && !isWaitingQr && !isReconnecting && !isConsentRequired && linked && (
-            <div className="flex flex-col gap-3 w-full max-w-xl">
-              {isPaused && (
-                <p className="text-xs sm:text-sm text-muted leading-relaxed">
-                  {isOnline ? t("connectionPausedResume") : t("connectionPausedOffline")}
-                </p>
-              )}
-              <div className="flex items-center gap-2.5">
-                <Button
-                  variant="primary"
-                  icon={<Radio size={16} />}
-                  onClick={() => handleAction(api.startSession, resumeLabel)}
-                  disabled={acting}
-                  className="flex-1 sm:flex-none"
-                  data-tour="connection-start"
-                >
-                  {resumeLabel}
-                </Button>
-                {renderSecondary(pairedSecondary)}
+          {!isConnected &&
+            !isStarting &&
+            !isWaitingQr &&
+            !isReconnecting &&
+            !isConsentRequired &&
+            linked && (
+              <div className="flex flex-col gap-3 w-full max-w-xl">
+                {isPaused && (
+                  <p className="text-xs sm:text-sm text-muted leading-relaxed">
+                    {isOnline ? t("connectionPausedResume") : t("connectionPausedOffline")}
+                  </p>
+                )}
+                <div className="flex items-center gap-2.5">
+                  <Button
+                    variant="primary"
+                    icon={<Radio size={16} />}
+                    onClick={() => handleAction(api.startSession, resumeLabel)}
+                    disabled={acting}
+                    className="flex-1 sm:flex-none"
+                    data-tour="connection-start"
+                  >
+                    {resumeLabel}
+                  </Button>
+                  {renderSecondary(pairedSecondary)}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* 3b. No saved session / logged out: QR or pairing code */}
-          {!isConnected && !isStarting && !isWaitingQr && !isReconnecting && !isConsentRequired && needsPairing && (
+          {showPairing && (
             <div className="flex flex-col gap-4 w-full" data-tour="connection-pairing">
               <SegmentedControl
                 aria-label={t("connection")}
@@ -432,9 +453,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
                       type="tel"
                       value={phoneNumber}
                       onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder={
-                        t("connectionPhonePlaceholder")
-                      }
+                      placeholder={t("connectionPhonePlaceholder")}
                       dir="ltr"
                       className="ps-10"
                     />
@@ -452,9 +471,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
                     </Button>
                     {renderSecondary(pairedSecondary)}
                   </div>
-                  <p className="text-xs text-muted leading-relaxed">
-                    {t("connectionPairingHint")}
-                  </p>
+                  <p className="text-xs text-muted leading-relaxed">{t("connectionPairingHint")}</p>
                 </form>
               )}
 
@@ -481,6 +498,15 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
           )}
         </div>
       </Card>
+
+      {unlinkIncomplete && (
+        <Card className="flex flex-col items-start gap-4">
+          <p className="text-sm text-text-main">{t("connectionUnlinkIncompleteHint")}</p>
+          <Button variant="primary" onClick={() => setShowUnlinkModal(true)} disabled={acting}>
+            {t("connectionUnlinkRetry")}
+          </Button>
+        </Card>
+      )}
 
       {isConsentRequired && (
         <Card className="flex flex-col items-start gap-4">
@@ -577,9 +603,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
 
               {/* Helper for users on mobile who can't scan their own screen */}
               <div className="mt-6 pt-5 border-t border-line w-full max-w-md flex flex-col items-center gap-2.5">
-                <p className="text-xs text-muted text-center">
-                  {t("connectionSamePhone")}
-                </p>
+                <p className="text-xs text-muted text-center">{t("connectionSamePhone")}</p>
                 <Button
                   variant="secondary"
                   icon={<Smartphone size={16} />}

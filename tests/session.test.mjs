@@ -9,7 +9,7 @@
 // handler: the rules can be stated as facts instead of hoped for.
 
 import { EventEmitter } from "node:events";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   equal,
@@ -1549,6 +1549,324 @@ section("detach disposes listeners and a queued contained callback does not run"
   } finally {
     dispose();
     disposeReactionIntake(sock);
+  }
+}
+
+const UNLINK_INCOMPLETE_DETAIL =
+  "Unlink did not finish: the stored WhatsApp credentials could not be deleted. " +
+  "Press Unlink again to retry.";
+
+function sqliteFull() {
+  const error = new Error("database or disk is full");
+  error.code = "SQLITE_FULL";
+  return error;
+}
+
+section("a failed credential wipe is not a successful unlink");
+
+{
+  const { AUTH_STORE_FENCED, useDatabaseAuthState } = await import(
+    "../src/auth/use-database-auth-state.js"
+  );
+  const store = harnessRequire("./src/db/store.cjs");
+  const ownerJid = "2015550199@s.whatsapp.net";
+  const credsText = JSON.stringify({
+    me: { id: "2015550199:1@s.whatsapp.net" },
+    registered: true,
+  });
+  const sessionKey = JSON.stringify({ chain: 1 });
+  store.authClearAll();
+  store.clearUnlinkPending();
+  store.authWrite("creds", credsText);
+  store.authWrite("session-2015550199@s.whatsapp.net", sessionKey);
+  store.saveUserMetadata({ jid: ownerJid, isOwner: true, displayName: "Owner" });
+
+  const originalClear = store.authClearAll;
+  let wipes = 0;
+  store.authClearAll = () => {
+    wipes += 1;
+    throw sqliteFull();
+  };
+
+  const sockets = [];
+  let directoryCalls = 0;
+  let heldAuth = null;
+  const epochBefore = accountEpoch();
+  const session = new WhatsAppSession({
+    createSocket: async () => {
+      const auth = await useDatabaseAuthState();
+      heldAuth = auth;
+      const sock = {
+        user: { id: "2015550199@s.whatsapp.net" },
+        ended: 0,
+        loggedOut: 0,
+        fenced: 0,
+        ev: new EventEmitter(),
+        async logout() {
+          this.loggedOut += 1;
+        },
+        async end() {
+          this.ended += 1;
+        },
+        updates: null,
+      };
+      sockets.push(sock);
+      return {
+        sock,
+        saveCreds: auth.saveCreds,
+        clearAll: auth.clearAll,
+        fence: () => {
+          sock.fenced += 1;
+          auth.fence();
+        },
+        isPaired: true,
+      };
+    },
+    attachListeners: (sock, { onConnectionUpdate }) => {
+      sock.updates = onConnectionUpdate;
+    },
+    onOpen: async () => {},
+    checkConsent: () => ({ ok: true }),
+    log: silent,
+    isLinked: () => true,
+    clearDirectory: () => {
+      directoryCalls += 1;
+    },
+  });
+
+  try {
+    await session.start();
+    await sockets[0].updates({ connection: "open" });
+    const failed = await session.logout();
+
+    equal("WhatsApp was asked to drop the device", sockets[0].loggedOut, 1);
+    equal("the socket was fenced", sockets[0].fenced >= 1, true);
+    equal("the socket is stopped", session.socket, null);
+    equal("one wipe was attempted", wipes, 1);
+    equal("the state is error", failed.state, S.ERROR);
+    equal("the reason is unlink_incomplete", failed.reason, "unlink_incomplete");
+    equal("the detail tells the operator to retry", failed.detail, UNLINK_INCOMPLETE_DETAIL);
+    ok("the pending marker is set", store.isUnlinkPending());
+    equal("creds row is still there", store.authRead("creds"), credsText);
+    equal(
+      "session key row is still there",
+      store.authRead("session-2015550199@s.whatsapp.net"),
+      sessionKey,
+    );
+    equal("account directory was not cleared", directoryCalls, 0);
+    equal("owner role remains", store.getUserMetadata(ownerJid)?.isOwner, true);
+    ok("epoch still advanced so in-flight writes drop", accountEpoch() > epochBefore);
+    equal("linked does not claim the surviving credentials", failed.linked, false);
+    equal("start is refused", failed.canStart, false);
+    equal("unlink stays available", failed.canUnlink, true);
+    const logoutRoute = readFileSync(
+      new URL("../src/routes/dashboard.api.esm.js", import.meta.url),
+      "utf8",
+    );
+    ok(
+      "the panel unlink route is gated on canUnlink, which stays true in ERROR",
+      logoutRoute.includes("if (!sessionState().canUnlink)"),
+    );
+
+    let setCode = null;
+    try {
+      await heldAuth.state.keys.set({ session: { "late-after-failed-wipe": { n: 1 } } });
+    } catch (error) {
+      setCode = error?.code;
+    }
+    equal("fenced auth state rejects keys.set", setCode, AUTH_STORE_FENCED);
+    equal(
+      "the late key was not written",
+      store.authRead("session-late-after-failed-wipe"),
+      null,
+    );
+
+    const started = await session.start();
+    equal("start stays in unlink_incomplete", started.state, S.ERROR);
+    equal("start does not change the reason", started.reason, "unlink_incomplete");
+    equal("start created no socket", sockets.length, 1);
+
+    // No live socket: the same session's second logout retries through the store.
+    const retryFailed = await session.logout();
+    equal("the no-socket retry attempted the store wipe", wipes, 2);
+    equal("a failed retry stays unlink_incomplete", retryFailed.state, S.ERROR);
+    equal("creds survive the failed retry", store.authRead("creds"), credsText);
+    equal("roles survive the failed retry", store.getUserMetadata(ownerJid)?.isOwner, true);
+    equal("directory still not cleared", directoryCalls, 0);
+    equal("still no socket", session.socket, null);
+
+    // A new instance on the same data dir retries once and, while the wipe
+    // still fails, does not resume.
+    const { hasPairedCredentials, sessionStartupPolicy } = await import(
+      "../src/bootstrap/session-startup-policy.js"
+    );
+    let bootSockets = 0;
+    const boot = new WhatsAppSession({
+      createSocket: async () => {
+        bootSockets += 1;
+        throw new Error("must not connect");
+      },
+      attachListeners: () => {},
+      onOpen: async () => {},
+      checkConsent: () => ({ ok: true }),
+      log: silent,
+      isLinked: () => true,
+      clearDirectory: () => {
+        directoryCalls += 1;
+      },
+    });
+    const pendingPolicy = sessionStartupPolicy({
+      autoStart: true,
+      wasPaired: hasPairedCredentials(store.authRead("creds")),
+      unlinkPending: store.isUnlinkPending(),
+    });
+    equal("boot policy does not start while the marker exists", pendingPolicy.start, false);
+    equal("boot policy reason is unlink_incomplete", pendingPolicy.reason, "unlink_incomplete");
+    const bootFailed = await boot.logout();
+    equal("boot retry ran once", wipes, 3);
+    equal("boot retry failure stays unlink_incomplete", bootFailed.state, S.ERROR);
+    equal("boot retry created no socket", bootSockets, 0);
+    equal("boot retry did not clear the account", directoryCalls, 0);
+    ok("marker remains after the failed boot retry", store.isUnlinkPending());
+
+    store.authClearAll = originalClear;
+    const epochBeforeSuccess = accountEpoch();
+    const restarted = new WhatsAppSession({
+      createSocket: async () => {
+        bootSockets += 1;
+        throw new Error("must not connect");
+      },
+      attachListeners: () => {},
+      onOpen: async () => {},
+      checkConsent: () => ({ ok: true }),
+      log: silent,
+      isLinked: () => true,
+    });
+    const done = await restarted.logout();
+    equal("a successful retry is logged out", done.state, S.LOGGED_OUT);
+    equal("the marker is gone", store.isUnlinkPending(), false);
+    equal("creds are gone", store.authRead("creds"), null);
+    equal("the session key is gone", store.authRead("session-2015550199@s.whatsapp.net"), null);
+    equal("the owner role was cleared", store.getUserMetadata(ownerJid), null);
+    ok("epoch advanced again when the unlink finished", accountEpoch() >= epochBeforeSuccess + 2);
+    equal("the successful retry did not open a socket", bootSockets, 0);
+    const after = sessionStartupPolicy({
+      autoStart: false,
+      wasPaired: hasPairedCredentials(store.authRead("creds")),
+      unlinkPending: store.isUnlinkPending(),
+    });
+    equal("boot will not resume after the wipe", after.start, false);
+  } finally {
+    store.authClearAll = originalClear;
+    store.clearUnlinkPending();
+  }
+}
+
+section("concurrent logout calls share one credential wipe");
+
+{
+  let wipes = 0;
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const h = makeHarness({
+    paired: true,
+    clearAll: async () => {
+      wipes += 1;
+      await gate;
+      throw sqliteFull();
+    },
+  });
+  await h.session.start();
+  await h.push({ connection: "open" });
+  const first = h.session.logout();
+  const second = h.session.logout();
+  await sleep(20);
+  equal("the second logout waited on the first wipe", wipes, 1);
+  release();
+  const [a, b] = await Promise.all([first, second]);
+  equal("both callers see unlink_incomplete", a.state, S.ERROR);
+  equal("the shared attempt has one reason", b.reason, "unlink_incomplete");
+  equal("the wipe ran once", wipes, 1);
+  equal("a is the error state", a.reason, "unlink_incomplete");
+}
+
+section("a logged-out close that cannot delete credentials stays unlink_incomplete");
+
+{
+  const store = harnessRequire("./src/db/store.cjs");
+  store.clearUnlinkPending();
+  const credsText = JSON.stringify({ me: { id: "2015550101:1@s.whatsapp.net" }, registered: true });
+  store.authWrite("creds", credsText);
+  let directoryCalls = 0;
+  const h = makeHarness({
+    paired: true,
+    clearAll: async () => {
+      throw sqliteFull();
+    },
+  });
+  h.session.clearDirectory = () => {
+    directoryCalls += 1;
+  };
+  await h.session.start();
+  await h.push({ connection: "open" });
+  await h.push({ connection: "close", lastDisconnect: closedWith(DisconnectReason.loggedOut) });
+  equal("the close is unlink_incomplete", h.session.state, S.ERROR);
+  equal("the reason is unlink_incomplete", h.session.getState().reason, "unlink_incomplete");
+  equal("the detail names the retry", h.session.getState().detail, UNLINK_INCOMPLETE_DETAIL);
+  equal("the socket was fenced", h.sockets[0].fenced >= 1, true);
+  equal("no socket remains", h.session.socket, null);
+  ok("the marker is set", store.isUnlinkPending());
+  equal("creds remain", store.authRead("creds"), credsText);
+  equal("the account directory was not cleared", directoryCalls, 0);
+  equal("linked is false", h.session.getState().linked, false);
+  await h.session.start();
+  equal("start does not reconnect that account", h.sockets.length, 1);
+  store.clearUnlinkPending();
+}
+
+section("a marker that cannot be written aborts the unlink before any delete");
+
+{
+  const store = harnessRequire("./src/db/store.cjs");
+  store.clearUnlinkPending();
+  const credsText = JSON.stringify({ me: { id: "2015550102:1@s.whatsapp.net" }, registered: true });
+  store.authWrite("creds", credsText);
+  store.authWrite("session-marker-fail", "stay");
+  const original = store.markUnlinkPending;
+  let wipes = 0;
+  let directoryCalls = 0;
+  store.markUnlinkPending = () => {
+    throw sqliteFull();
+  };
+  const h = makeHarness({
+    paired: true,
+    clearAll: async () => {
+      wipes += 1;
+      store.authClearAll();
+    },
+  });
+  h.session.clearDirectory = () => {
+    directoryCalls += 1;
+  };
+  try {
+    await h.session.start();
+    await h.push({ connection: "open" });
+    const failed = await h.session.logout();
+    equal("WhatsApp logout still ran", h.sockets[0].loggedOut, 1);
+    equal("the socket was fenced", h.sockets[0].fenced >= 1, true);
+    equal("no credential delete ran", wipes, 0);
+    equal("the state is unlink_incomplete", failed.state, S.ERROR);
+    equal("the reason is unlink_incomplete", failed.reason, "unlink_incomplete");
+    ok("no marker was stored", !store.isUnlinkPending());
+    equal("creds were not deleted", store.authRead("creds"), credsText);
+    equal("the session key was not deleted", store.authRead("session-marker-fail"), "stay");
+    equal("the account directory was not cleared", directoryCalls, 0);
+    equal("linked is false in this process", failed.linked, false);
+  } finally {
+    store.markUnlinkPending = original;
+    store.clearUnlinkPending();
   }
 }
 
