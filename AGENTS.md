@@ -959,6 +959,13 @@ sent. Audio and stickers take no caption, so their text follows separately.
 stops the previous timer for the same id first, or a weekly message would be
 sent twice after the first reconnect.
 
+**Delivery socket**: a job is always delivered through the scheduler's own live
+raw socket (`currentSock`, set by `initializeScheduledJobs()`, cleared by
+`stopAllScheduledJobs()`), captured once per attempt. The socket a caller passes
+to `scheduleNewJob()` only arms the job: a command's socket is a per-command
+reply proxy and must never deliver a later reminder. `!listschedules` and
+`!deleteschedule` act only on the current chat's jobs.
+
 ### 3. Group Moderation
 
 One policy object, `settings.moderationPolicy`, is resolved by `src/services/moderationPolicy.cjs`. Absent keys keep the defaults: simple mode, limit **3**, limit action **KICK**, feature actions **WARN** (anti-spam cannot be DELETE). Legacy `warn_system`, `antilink.action`, `media_control.action`, `antispam.action`, and `moderation.forbiddenWords.action` still apply when the policy field is absent. A write through `applyModerationPolicy` mirrors those legacy keys in the same `saveGroupSettings` call. `!setwarn max` writes the limit only and does not stamp an action.
@@ -1715,7 +1722,12 @@ logger.debug('Debug info');
     active for the next phone that pairs. The panel password and the recovery
     email are not WhatsApp state, and unlink does not clear them. Sticker unlink
     deletes the `sticker_owners` rows as well as the stickers, packs and files,
-    so the next pairing starts a new `self` library.
+    so the next pairing starts a new `self` library. Work already running when
+    the account changes must not write afterwards: capture `accountEpoch()`
+    (`src/db/store.cjs`) when the work starts and skip account-scoped writes
+    once it moved. Unlink, logged-out and backup activation advance it; AI tools
+    refuse through `aiToolAuth.authorize()`. Socket listeners come from
+    `setupEventListeners()`, whose disposer `#detach` calls.
 27. **Compare WhatsApp identities with the shared helpers.** LIDs, phone-number
     JIDs and device suffixes can name the same user. Moderation and role gates
     must use `sameUser()`, `getSenderCandidates()` and `isAdminInGroup()` rather
