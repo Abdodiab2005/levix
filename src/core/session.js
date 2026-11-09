@@ -251,6 +251,10 @@ export class WhatsAppSession {
   // "be running". The start() that was waiting on that attempt consumes it.
   #resumeAfterStart = false;
 
+  // Generation at which stop or shutdown recorded intent. A resume must not
+  // start when this is newer than the overtaken attempt.
+  #terminalGeneration = 0;
+
   // Per-socket disposer from setupEventListeners. A test fake may return
   // undefined; only a function is stored.
   #listenerDisposers = new WeakMap();
@@ -525,10 +529,9 @@ export class WhatsAppSession {
     this.#stopConsentWatch();
     this.#attempt = 0;
 
-    // Wait for an in-flight start, or we would tear down a socket that has not
-    // been assigned yet and then have it appear behind us.
-    if (this.#starting) await this.#starting.catch(() => {});
-    this.#resumeAfterStart = false;
+    // Intent before the wait. Otherwise a resume waiting on the same attempt
+    // can install a socket after stop has already looked and found none.
+    await this.#settleStarts();
     if (this.#loggingOut) await this.#loggingOut.catch(() => {});
 
     // Again after the await: a close that landed while we were waiting is
@@ -562,14 +565,10 @@ export class WhatsAppSession {
 
   async #runLogout() {
     // Before the first await, so work already running for this account drops
-    // its account-scoped writes. The generation stays put until the socket
-    // that is still being created has been adopted and torn down.
+    // its account-scoped writes. Wait for an in-flight start without bumping
+    // the generation, so that start adopts its socket and logout tears it down.
     this.#resumeAfterStart = false;
     advanceAccountEpoch();
-    // A start that is still creating its socket has to finish first: otherwise
-    // #open() assigns a live socket after this method has already declared the
-    // session logged out, and the account is unlinked with a connection still
-    // running.
     this.#cancelRetry();
     this.#stopConsentWatch();
     if (this.#starting) await this.#starting.catch(() => {});
@@ -664,10 +663,9 @@ export class WhatsAppSession {
   /** Process shutdown: cancel everything and never reconnect again. */
   async shutdown() {
     this.#shuttingDown = true;
-    this.#resumeAfterStart = false;
     this.#cancelRetry();
     this.#stopConsentWatch();
-    if (this.#starting) await this.#starting.catch(() => {});
+    await this.#settleStarts();
     if (this.#loggingOut) await this.#loggingOut.catch(() => {});
     this.#cancelRetry();
     await this.#destroySocket();
@@ -701,9 +699,9 @@ export class WhatsAppSession {
     this.#clearQr();
     this.#transition(S.STARTING, { reason });
 
-    // Anything that invalidates this attempt — stop, logout, shutdown — bumps
-    // the generation. Creating a socket is asynchronous, so the attempt has to
-    // recheck that it is still the current one when it comes back.
+    // Stop and shutdown bump the generation before they wait. Offline does too.
+    // Logout does not: it adopts this socket, then tears it down. Creating a
+    // socket is asynchronous, so the attempt rechecks when it comes back.
     const startedAt = this.#generation;
 
     // Read per attempt, so changing the proxy and pressing Reconnect is all it
@@ -754,7 +752,7 @@ export class WhatsAppSession {
           await withTimeout(created.sock?.end?.(undefined), SOCKET_CLOSE_TIMEOUT_MS);
         } catch {}
       }
-      this.#noteOvertakenStart();
+      this.#noteOvertakenStart(startedAt);
       return;
     }
 
@@ -852,12 +850,33 @@ export class WhatsAppSession {
    * online again and the session should be running, the start() waiting on
    * this attempt opens one replacement. Same condition as setInternetOnline(true).
    */
-  #noteOvertakenStart() {
+  #noteOvertakenStart(startedAt) {
+    const stopped = this.#terminalGeneration > startedAt;
     this.#resumeAfterStart =
+      !stopped &&
       !this.#shuttingDown &&
       !this.#loggingOut &&
       this.#isOnline &&
       (this.#wasActiveBeforeOffline || this.#state === S.PAUSED);
+  }
+
+  // stop and shutdown. Bump before waiting so an attempt already in
+  // createSocket cannot adopt, and so a resume queued on that attempt cannot
+  // open a replacement. Then wait out any replacement that still appeared.
+  #markTerminalIntent() {
+    this.#resumeAfterStart = false;
+    this.#generation += 1;
+    this.#terminalGeneration = this.#generation;
+  }
+
+  async #settleStarts() {
+    this.#markTerminalIntent();
+    let pending = this.#starting;
+    while (pending) {
+      await pending.catch(() => {});
+      pending = this.#starting;
+      if (pending) this.#markTerminalIntent();
+    }
   }
 
   /** Cut every wire back from a socket we are done with. */

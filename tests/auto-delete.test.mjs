@@ -829,4 +829,69 @@ section("account epoch skips late auto-delete and metadata writes");
   equal("metadata was not written", store.getUserMetadata(sender), null);
 }
 
+section("an old account epoch does not dispatch or moderate");
+
+{
+  const ping = require("./src/commands/ping.cjs");
+  const moderation = require("./src/utils/moderationAction.cjs");
+  const realExecute = ping.execute;
+  const realEnforce = moderation.enforceHits;
+  let executed = 0;
+  let enforced = 0;
+  let seenEpoch;
+  ping.execute = async (...args) => {
+    executed += 1;
+    seenEpoch = args[5] && args[5].accountEpoch;
+  };
+  moderation.enforceHits = async (...args) => {
+    enforced += 1;
+    return realEnforce.apply(moderation, args);
+  };
+  const groupId = "120363000000777@g.us";
+  store.saveGroupSettings(groupId, {
+    antilink: { enabled: true, mode: "ALL", allowed_domains: [], blocked_domains: [] },
+  });
+  const sock = fakeSock();
+  sock.groupMetadata = async () => ({
+    id: groupId,
+    subject: "Epoch",
+    participants: [{ id: "201333333333@s.whatsapp.net", admin: null }],
+  });
+  try {
+    const pending = handleIncomingMessage(sock, {
+      type: "notify",
+      messages: [makeMsg({ chat: DM, text: "!ping" })],
+    });
+    store.advanceAccountEpoch();
+    await pending;
+    equal("a moved epoch executes no command", executed, 0);
+
+    const pendingMod = handleIncomingMessage(sock, {
+      type: "notify",
+      messages: [
+        makeMsg({
+          chat: groupId,
+          text: "https://example.com/old",
+          participant: "201333333333@s.whatsapp.net",
+        }),
+      ],
+    });
+    store.advanceAccountEpoch();
+    await pendingMod;
+    equal("a moved epoch does not moderate", enforced, 0);
+
+    const entry = store.accountEpoch();
+    const pendingCtx = handleIncomingMessage(sock, {
+      type: "notify",
+      messages: [makeMsg({ chat: DM, text: "!ping" })],
+    });
+    await pendingCtx;
+    equal("ctx.accountEpoch is the entry epoch", seenEpoch, entry);
+    equal("the live command ran", executed, 1);
+  } finally {
+    ping.execute = realExecute;
+    moderation.enforceHits = realEnforce;
+  }
+}
+
 finish();

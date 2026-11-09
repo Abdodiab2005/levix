@@ -197,8 +197,8 @@ section("a command that overtakes a start in flight wins cleanly");
 }
 
 {
-  // The same window, but the operator unlinks instead of stopping. Unlinking
-  // while a socket is being created must not leave that socket alive.
+  // The same window, but the operator unlinks instead of stopping. The
+  // in-flight create adopts its socket; logout() and clearAll() each run once.
   let release;
   const gate = new Promise((resolve) => {
     release = resolve;
@@ -224,7 +224,8 @@ section("a command that overtakes a start in flight wins cleanly");
 
   equal("the account is unlinked", h.session.state, S.LOGGED_OUT);
   equal("no live socket survived the unlink", h.session.socket, null);
-  equal("the credentials were cleared", cleared, 1);
+  equal("the adopted socket logged out once", h.sockets[0].loggedOut, 1);
+  equal("the credentials were cleared once", cleared, 1);
   await sleep(60);
   equal("and nothing came back", h.sockets.length, 1);
 }
@@ -1468,6 +1469,37 @@ section("offline then online during creation starts exactly one replacement");
   equal("the overtaken socket was ended", h.sockets[0].ended, 1);
   equal("the replacement is the live socket", h.session.socket, h.sockets[1]);
   equal("the replacement is starting", h.session.state, S.STARTING);
+}
+
+section("stop during a resume leaves no socket installed");
+
+{
+  // A blocks in createSocket. Offline invalidates A. Online starts waiter B.
+  // Stop starts waiter C. A must not let B install a socket after Stop.
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  let creates = 0;
+  const h = makeHarness({ paired: true });
+  const real = h.session.createSocket;
+  h.session.createSocket = async (opts) => {
+    creates += 1;
+    if (creates === 1) await gate;
+    return real(opts);
+  };
+  const starting = h.session.start();
+  await h.session.setInternetOnline(false);
+  const restored = h.session.setInternetOnline(true);
+  const stopping = h.session.stop();
+  release();
+  await starting;
+  await restored;
+  await stopping;
+  equal("stop leaves no socket", h.session.socket, null);
+  equal("stop leaves the session idle", h.session.state, S.IDLE);
+  equal("the blocked attempt was ended", h.sockets[0].ended, 1);
+  equal("no replacement socket was created", h.sockets.length, 1);
 }
 
 section("detach disposes listeners and a queued contained callback does not run");

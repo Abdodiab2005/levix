@@ -258,7 +258,11 @@ function requesterStillAdmin(meta, candidates, fromMe, rule = "direct") {
  * owner). Anything else is treated as "direct".
  */
 async function kickGroupMember(sock, opts) {
-  const epoch = opts.epoch ?? accountEpoch();
+  const epoch = Number.isInteger(opts.accountEpoch)
+    ? opts.accountEpoch
+    : Number.isInteger(opts.epoch)
+      ? opts.epoch
+      : accountEpoch();
   await primePermissions();
   const groupId = opts.groupId;
   if (!groupId?.endsWith("@g.us")) return { kicked: false, error: "not-group" };
@@ -281,6 +285,7 @@ async function kickGroupMember(sock, opts) {
   if (isProtectedMember(sock, meta, candidates)) return { kicked: false, error: "protected" };
   if (!isBotAdminInGroupSync(meta, sock)) return { kicked: false, error: "bot-not-admin" };
   const kickJid = rosterJidForSync(meta, candidates) || candidates[0];
+  if (accountEpoch() !== epoch) return { kicked: false, error: "stale" };
   const updated = await sock.groupParticipantsUpdate(groupId, [kickJid], "remove");
   if (!removalSucceeded(updated)) return { kicked: false, error: "rejected", kickJid };
   if (accountEpochMoved(epoch)) return { kicked: true, kickJid };
@@ -366,13 +371,18 @@ function decideOutcome({ policy, immediate, effective, flagWasOpen, repeatPoints
 }
 
 async function performKick(sock, ctx) {
-  const epoch = ctx.epoch ?? accountEpoch();
+  const epoch = Number.isInteger(ctx.accountEpoch)
+    ? ctx.accountEpoch
+    : Number.isInteger(ctx.epoch)
+      ? ctx.epoch
+      : accountEpoch();
   try {
     const result = await kickGroupMember(sock, {
       groupId: ctx.groupId,
       groupMetadata: ctx.meta,
       targetCandidates: ctx.candidates,
       epoch,
+      accountEpoch: epoch,
     });
     if (accountEpochMoved(epoch)) return Boolean(result.kicked);
     if (result.kicked) {
@@ -421,7 +431,11 @@ async function performKick(sock, ctx) {
  * Returns { acted, duplicate, points, effective, decision, kicked, flagged }.
  */
 async function enforceHits(sock, opts) {
-  const epoch = accountEpoch();
+  const epoch = Number.isInteger(opts.accountEpoch)
+    ? opts.accountEpoch
+    : Number.isInteger(opts.epoch)
+      ? opts.epoch
+      : accountEpoch();
   const msg = opts.msg;
   const groupId = opts.groupId || msg?.key?.remoteJid;
   if (!groupId?.endsWith("@g.us")) return idleResult();
@@ -544,6 +558,7 @@ async function enforceHits(sock, opts) {
         reasons: events.map((event) => event?.reason).filter(Boolean),
         repeatPoints: flag?.repeat_points || 0,
         epoch,
+        accountEpoch: epoch,
       });
     }
     return {
@@ -637,6 +652,7 @@ async function enforceHits(sock, opts) {
       reasons: committed.reasons,
       repeatPoints: committed.repeatPoints,
       epoch,
+      accountEpoch: epoch,
     });
   }
 

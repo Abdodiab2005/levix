@@ -1797,4 +1797,34 @@ section("a late account epoch skips moderation writes");
   );
 }
 
+section("kick refuses when the epoch moves while metadata is awaited");
+
+{
+  const { kickGroupMember } = require("./src/utils/moderationAction.cjs");
+  const groupId = "120363-kick-epoch@g.us";
+  const { sock, kicks } = makeSock();
+  let releaseMeta;
+  sock.groupMetadata = () =>
+    new Promise((resolve) => {
+      releaseMeta = resolve;
+    });
+  const epoch = store.accountEpoch();
+  const pending = kickGroupMember(sock, {
+    groupId,
+    targetCandidates: [USER_PN],
+    accountEpoch: epoch,
+  });
+  const started = Date.now();
+  while (!releaseMeta) {
+    if (Date.now() - started > 1000) throw new Error("kick did not await metadata");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  store.advanceAccountEpoch();
+  releaseMeta(memberRoster());
+  const result = await pending;
+  equal("a stale kick does not remove", result.kicked, false);
+  equal("a stale kick reports stale", result.error, "stale");
+  equal("no groupParticipantsUpdate while metadata was in flight", kicks.length, 0);
+}
+
 finish();

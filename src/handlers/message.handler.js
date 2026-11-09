@@ -123,9 +123,17 @@ async function processMessage(sock, msg, body, epoch) {
     if (isBlacklisted) return;
   }
 
+  // The epoch from message entry is this message's account lifetime. A command
+  // or a moderation pass that samples accountEpoch() later would otherwise act
+  // for the account that paired while this message was still in flight.
+  if (accountEpoch() !== epoch) {
+    logger.debug("[Message] skipped account work after account change");
+    return;
+  }
+
   // Try to handle as command
   try {
-    const wasCommand = await handleCommand(sock, msg, body);
+    const wasCommand = await handleCommand(sock, msg, body, epoch);
     if (wasCommand) {
       const text = typeof body === "string" ? body : "";
       const command = text.trim().split(/\s+/, 1)[0] || "";
@@ -141,14 +149,18 @@ async function processMessage(sock, msg, body, epoch) {
 
   // Handle regular group messages (moderation)
   if (isGroup) {
-    await handleGroupModeration(sock, msg);
+    if (accountEpoch() !== epoch) {
+      logger.debug("[Message] skipped account work after account change");
+      return;
+    }
+    await handleGroupModeration(sock, msg, epoch);
   }
 }
 
 // One message, one decision. Detectors only report hits; enforceHits applies
 // them. A missing id is refused here so a live redelivery cannot be guessed.
 // Direct detector calls used by older tests still enforce without an id.
-export async function handleGroupModeration(sock, msg) {
+export async function handleGroupModeration(sock, msg, accountEpoch) {
   try {
     if (!msg?.key?.id) {
       logger.warn(
@@ -192,7 +204,12 @@ export async function handleGroupModeration(sock, msg) {
       logger.error({ err: error, detector: "spam" }, "moderation detector failed");
     }
     if (!hits.length) return;
-    return await enforceHits(sock, { msg, groupMetadata, hits });
+    return await enforceHits(sock, {
+      msg,
+      groupMetadata,
+      hits,
+      ...(Number.isInteger(accountEpoch) ? { accountEpoch } : {}),
+    });
   } catch (error) {
     logger.error({ err: error }, "Error in group moderation");
   }

@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { checkBotAdmin, checkCommandPermission } from "../middleware/permissions.middleware.js";
 import { getCached, resolveGroupMetadata } from "../utils/groupMetadataCache.cjs";
 import { sendBotMessage } from "../utils/sendBotMessage.esm.js";
+import { accountEpoch as readAccountEpoch } from "../utils/storage.esm.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -373,7 +374,8 @@ function parseBody(body) {
   return { prefix, useV1, parsed: parse(body, { prefix }) };
 }
 
-export async function handleCommand(sock, msg, body) {
+export async function handleCommand(sock, msg, body, accountEpoch) {
+  const epoch = Number.isInteger(accountEpoch) ? accountEpoch : readAccountEpoch();
   const isGroup = msg.key.remoteJid.endsWith("@g.us");
   const { prefix, useV1, parsed } = parseBody(body);
   if (parsed.kind !== "command") return false;
@@ -411,11 +413,17 @@ export async function handleCommand(sock, msg, body) {
       invokedName,
       isGroup,
       rawRemainder: parsed.rawRemainder,
+      accountEpoch: epoch,
     }),
   );
 }
 
-async function runCommand(sock, msg, body, { command, args, invokedName, isGroup, rawRemainder }) {
+async function runCommand(
+  sock,
+  msg,
+  body,
+  { command, args, invokedName, isGroup, rawRemainder, accountEpoch },
+) {
   // Turned off from the dashboard. Answered rather than ignored so the user
   // knows the command exists and isn't broken.
   if (runtimeConfig.isDisabled(command.name)) {
@@ -514,6 +522,7 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
       groupMetadata,
       authGroupMetadata: authMetadata,
       rawRemainder: rawRemainder || "",
+      accountEpoch,
     };
 
     // Wrap the socket so legacy commands that still call sock.sendMessage
