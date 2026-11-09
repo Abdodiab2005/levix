@@ -801,7 +801,21 @@ function describe() {
   });
 }
 
+// Error surfaces need secret redaction without diagnostics' identity/path filtering.
+// Read current values here so key rotation takes effect on the next error.
+function redactSecrets(text) {
+  let out = String(text ?? "");
+  const secrets = SECRET_SETTING_KEYS.map((key) => get(key))
+    .filter((value) => typeof value === "string" && value.length >= 8)
+    .sort((a, b) => b.length - a.length);
+  for (const secret of secrets) out = out.split(secret).join("[redacted]");
+  return out
+    .replace(/\bBearer\s+[^\s"'<>`,;]+/gi, "Bearer [redacted]")
+    .replace(/(\bkey=)[^\s&#"'<>`]+/gi, "$1[redacted]");
+}
+
 module.exports = {
+  redactSecrets,
   get,
   set,
   describe,

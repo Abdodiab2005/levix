@@ -27,7 +27,6 @@ const axios = require("axios");
 const logger = require("../utils/logger.cjs");
 const memory = require("../utils/memory.cjs");
 const { decodeBuffer, stripHtml, decodeText } = require("../utils/textDecode.cjs");
-const { grantRole, revokeRole, listRoles } = require("../utils/permissions.cjs");
 const { authorize, callerAudio } = require("./aiToolAuth.cjs");
 const {
   withMediaLimit,
@@ -62,7 +61,7 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 const settings = require("../config/settings.cjs");
-const { currentLang, t, withLang } = require("../utils/i18n.cjs");
+const { currentLang, t, tr, withLang } = require("../utils/i18n.cjs");
 
 const MAX_PAGE_CHARS = 6000;
 const MAX_FETCH_BYTES = 3 * 1024 * 1024;
@@ -669,7 +668,7 @@ const TOOLS = {
     // `!perm add`: that command's level (owner only unless the operator
     // changed it), and the owner role is always the owner's to hand out.
     access: (args) => ({ command: "perm", role: roleOf(args) === "owner" ? "owner" : undefined }),
-    async run(args, { caller }) {
+    async run(args, { caller, signal }) {
       if (!roleTargetBound(args?.target, caller)) {
         return {
           error: "mention, quote, or type the target phone number in your own request",
@@ -677,11 +676,12 @@ const TOOLS = {
         };
       }
       const role = roleOf(args);
-      const record = await grantRole(args?.target, role);
-      logger.info(
-        { target: args?.target, role, by: caller.senderId },
-        "[aiTools] role granted by the agent",
-      );
+      const { grantRole } = await import("../utils/permissions.esm.js");
+      signal?.throwIfAborted();
+      const verdict = authorize(TOOLS.grant_role.access(args), caller);
+      if (!verdict.allowed) return { error: verdict.error, denied: true };
+      const record = grantRole(args?.target, role);
+      logger.info({ role }, "[aiTools] role granted by the agent");
       return {
         granted: true,
         role,
@@ -706,7 +706,7 @@ const TOOLS = {
     describe: (args) => t("bot.ai.aiTools.revokeRole", { target: preview(args?.target, 25) }),
     // `!perm remove`, gated exactly like grant_role.
     access: (args) => ({ command: "perm", role: roleOf(args) === "owner" ? "owner" : undefined }),
-    async run(args, { caller }) {
+    async run(args, { caller, signal }) {
       if (!roleTargetBound(args?.target, caller)) {
         return {
           error: "mention, quote, or type the target phone number in your own request",
@@ -714,7 +714,11 @@ const TOOLS = {
         };
       }
       const role = roleOf(args);
-      const record = await revokeRole(args?.target, role);
+      const { revokeRole } = await import("../utils/permissions.esm.js");
+      signal?.throwIfAborted();
+      const verdict = authorize(TOOLS.revoke_role.access(args), caller);
+      if (!verdict.allowed) return { error: verdict.error, denied: true };
+      const record = revokeRole(args?.target, role);
       return { revoked: true, role, user: record ? record.jid : args?.target };
     },
   },
@@ -729,8 +733,12 @@ const TOOLS = {
     describe: () => t("bot.ai.aiTools.listRoles"),
     // `!perm list` — the roster is `!perm`'s to show.
     access: { command: "perm" },
-    async run() {
-      const { owners, admins } = await listRoles();
+    async run(_args, { caller, signal }) {
+      const { listRoles } = await import("../utils/permissions.esm.js");
+      signal?.throwIfAborted();
+      const verdict = authorize(TOOLS.list_roles.access, caller);
+      if (!verdict.allowed) return { error: verdict.error, denied: true };
+      const { owners, admins } = listRoles();
       const shape = (user) => ({
         id: user.jid,
         phone: user.phone,
@@ -835,7 +843,7 @@ const TOOLS = {
     // Posting into a chat at a later time is exactly what `!schedule` does, so
     // it takes `!schedule`'s permission level — whatever the dashboard sets.
     access: { command: "schedule" },
-    async run(args, { caller }) {
+    async run(args, { caller, signal }) {
       const message = String(args?.message || "")
         .trim()
         .slice(0, 500);
@@ -875,6 +883,7 @@ const TOOLS = {
         creatorJid: caller.senderId || caller.chatId,
         status: "pending",
       };
+      signal?.throwIfAborted();
       const result = scheduler.scheduleJobNow(job);
       if (!result.ok) {
         return result.reason === "no_connection"
@@ -917,7 +926,7 @@ const TOOLS = {
     describe: (args) => t("bot.ai.aiTools.cancelReminder", { id: preview(args?.id, 20) }),
     // Deleting a scheduled job is `!deleteschedule`'s job, so its level.
     access: { command: "deleteschedule" },
-    async run(args, { caller }) {
+    async run(args, { caller, signal }) {
       const id = String(args?.id || "").trim();
       if (!id) return { error: "id is required" };
 
@@ -930,6 +939,7 @@ const TOOLS = {
         .find((entry) => String(entry.id) === id && entry.targetJid === caller.chatId);
       if (!job) return { error: "no reminder with that id in this chat", cancelled: false };
 
+      signal?.throwIfAborted();
       scheduler.deleteScheduledJob(id);
       return { cancelled: true, id, message: job.message };
     },
@@ -958,7 +968,7 @@ const TOOLS = {
     describe: (args) => t("bot.ai.aiTools.speak", { text: preview(args?.text, 40) }),
     // Posting a voice note into this chat is what `!tts` does, so its level.
     access: { command: "tts" },
-    async run(args, { caller, sock }) {
+    async run(args, { caller, sock, signal: turnSignal }) {
       const text = typeof args?.text === "string" ? args.text.trim() : "";
       if (!text) return { error: "text is required" };
       if (text.length > 3000) {
@@ -971,7 +981,11 @@ const TOOLS = {
         return { error: "a valid speech language code is required" };
       }
       try {
-        return await withMediaLimit(caller, async (signal) => {
+        return await withMediaLimit(caller, async (mediaSignal) => {
+          const signal = turnSignal ? AbortSignal.any([turnSignal, mediaSignal]) : mediaSignal;
+          signal.throwIfAborted();
+          const before = authorize(TOOLS.speak.access, caller);
+          if (!before.allowed) return { error: before.error, denied: true };
           const voice = await require("../commands/tts.cjs")._synthesizeVoice(text, lang, {
             signal,
           });
@@ -983,6 +997,8 @@ const TOOLS = {
           ) {
             throw new Error("MEDIA_AUDIO_INVALID");
           }
+          const verdict = authorize(TOOLS.speak.access, caller);
+          if (!verdict.allowed) return { error: verdict.error, denied: true };
           const sent = await sendBotMessage(
             sock,
             caller.chatId,
@@ -1017,15 +1033,21 @@ const TOOLS = {
     },
     access: { command: "gemini" },
     describe: () => t("bot.ai.gemini.makingImage"),
-    async run(args, { caller, sock }) {
+    async run(args, { caller, sock, signal: turnSignal }) {
       if (typeof args?.prompt !== "string" || !args.prompt.trim() || args.prompt.length > 3000) {
         return { error: "an image prompt of 1–3000 characters is required" };
       }
       if (!sock) return { error: "no WhatsApp connection is attached to this turn" };
       try {
-        return await withMediaLimit(caller, async (signal) => {
+        return await withMediaLimit(caller, async (mediaSignal) => {
+          const signal = turnSignal ? AbortSignal.any([turnSignal, mediaSignal]) : mediaSignal;
+          signal.throwIfAborted();
+          const before = authorize(TOOLS.generate_image.access, caller);
+          if (!before.allowed) return { error: before.error, denied: true };
           const result = await require("./aiImage.cjs").generateImage(args.prompt, { signal });
           signal.throwIfAborted();
+          const verdict = authorize(TOOLS.generate_image.access, caller);
+          if (!verdict.allowed) return { error: verdict.error, denied: true };
           const sent = await sendBotMessage(
             sock,
             caller.chatId,
@@ -1055,13 +1077,17 @@ const TOOLS = {
     },
     access: { command: "stt" },
     describe: () => t("bot.ai.stt.transcribing"),
-    async run(_args, { caller }) {
+    async run(_args, { caller, signal: turnSignal }) {
       if (!settings.get("ai_stt_enabled"))
         return { error: "Speech-to-text is disabled", code: "MEDIA_DISABLED" };
       const audio = callerAudio(caller);
       try {
         assertWhatsAppAudio(audio);
-        return await withMediaLimit(caller, async (signal) => {
+        return await withMediaLimit(caller, async (mediaSignal) => {
+          const signal = turnSignal ? AbortSignal.any([turnSignal, mediaSignal]) : mediaSignal;
+          signal.throwIfAborted();
+          const before = authorize(TOOLS.transcribe_audio.access, caller);
+          if (!before.allowed) return { error: before.error, denied: true };
           const stt = require("../commands/stt.cjs");
           const provider = stt.resolveSttProvider();
           if (!settings.get(`${provider}_api_key`))
@@ -1076,6 +1102,9 @@ const TOOLS = {
             { maxBytes: MAX_MEDIA_BYTES, signal },
           );
           assertAudio(buffer, audio.mimetype);
+          signal.throwIfAborted();
+          const verdict = authorize(TOOLS.transcribe_audio.access, caller);
+          if (!verdict.allowed) return { error: verdict.error, denied: true };
           const transcript = await stt.transcribe(buffer, audio.mimetype, { signal });
           signal.throwIfAborted();
           if (typeof transcript !== "string" || !transcript.trim() || transcript.length > 12000)
@@ -1159,7 +1188,7 @@ const TOOLS = {
     describe: (args) => t("bot.ai.aiTools.createPoll", { question: preview(args?.question, 40) }),
     // A poll is a group message like any other, so `!poll`'s level.
     access: { command: "poll" },
-    async run(args, { caller, sock }) {
+    async run(args, { caller, sock, signal: turnSignal }) {
       if (!sock) return { error: "no WhatsApp connection is attached to this turn" };
       // Same builder the !poll command uses: dedupes, caps lengths, enforces
       // WhatsApp's 2-12 option ceiling, and throws the user-facing Arabic
@@ -1168,7 +1197,7 @@ const TOOLS = {
       const content = poll._buildPollContent(args?.question, args?.options, {
         multi: Boolean(args?.multi),
       });
-      await sendBotMessage(sock, caller.chatId, content, { typing: false });
+      await sendBotMessage(sock, caller.chatId, content, { typing: false, signal: turnSignal });
       return {
         sent: true,
         question: content.poll.name,
@@ -1201,7 +1230,7 @@ const TOOLS = {
       command: "memory",
       role: scopeOf(args) === "global" ? "botPrivileged" : undefined,
     }),
-    async run(args, { caller }) {
+    async run(args, { caller, signal }) {
       const scope = scopeOf(args);
       const { getChatHistoryAsync } = require("../utils/storage-hub.cjs");
       const history = await getChatHistoryAsync(caller.chatId);
@@ -1213,12 +1242,18 @@ const TOOLS = {
       // One-shot model call over the transcript with no tools: the facts come
       // from what was actually said, never from tool arguments — the model
       // cannot inject content into memory through this tool, only ask for it.
-      const summary = await summarizeWithProvider(transcript);
+      signal?.throwIfAborted();
+      const before = authorize(TOOLS.summarize_chat.access(args), caller);
+      if (!before.allowed) return { error: before.error, denied: true };
+      const summary = await summarizeWithProvider(transcript, { signal });
       const facts = factsFromSummary(summary);
       if (!facts.length) {
         return { saved: 0, note: "nothing durable enough to save came out of the summary" };
       }
 
+      signal?.throwIfAborted();
+      const verdict = authorize(TOOLS.summarize_chat.access(args), caller);
+      if (!verdict.allowed) return { error: verdict.error, denied: true };
       const ids = [];
       for (const fact of facts) {
         const entry = memory.addMemory({
@@ -1308,7 +1343,7 @@ function factsFromSummary(
  * search, no persona: a plain completion over the transcript so a summary
  * can't recurse into the agent loop or spend the caller's tool budget.
  */
-async function summarizeWithProvider(transcript) {
+async function summarizeWithProvider(transcript, { signal } = {}) {
   const { getProvider } = require("./aiRouter.cjs");
   const result = await getProvider().runTurn({
     parts: [{ text: transcript }],
@@ -1317,6 +1352,7 @@ async function summarizeWithProvider(transcript) {
     search: false,
     maxSteps: 1,
     systemInstruction: SUMMARIZER_PROMPT,
+    signal,
   });
   return result?.text || "";
 }
@@ -1372,14 +1408,12 @@ async function runTool(name, args, ctx) {
     const access = typeof tool.access === "function" ? tool.access(input) : tool.access;
     const verdict = authorize(access || null, caller);
     if (!verdict.allowed) {
-      logger.info(
-        { tool: name, chatId: caller?.chatId, senderId: caller?.senderId },
-        "[aiTools] tool call refused",
-      );
+      logger.info({ tool: name }, "[aiTools] tool call refused");
       return { error: verdict.error, denied: true };
     }
 
-    const result = await tool.run(input, { caller, sock: ctx?.sock });
+    ctx?.signal?.throwIfAborted();
+    const result = await tool.run(input, { caller, sock: ctx?.sock, signal: ctx?.signal });
     return result && typeof result === "object" ? result : { result };
   } catch (err) {
     logger.warn({ err: err?.message, tool: name }, "[aiTools] tool call failed");
@@ -1387,11 +1421,37 @@ async function runTool(name, args, ctx) {
   }
 }
 
+/** Deadline owns cancellation; non-cancellable work must settle before freeing its slot. */
+function runToolWithDeadline(name, args, context, ms) {
+  const controller = new AbortController();
+  const signal = context?.signal
+    ? AbortSignal.any([context.signal, controller.signal])
+    : controller.signal;
+  let timer;
+  const expired = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(
+        // i18n-exception: sent to the model
+        tr(
+          `${name} took longer than ${Math.round(ms / 1000)} seconds`,
+          `${name} تأخرت أكتر من ${Math.round(ms / 1000)} ثانية`,
+        ),
+      );
+      controller.abort(error);
+      reject(error);
+    }, ms);
+  });
+  return Promise.race([runTool(name, args, { ...context, signal }), expired]).finally(() =>
+    clearTimeout(timer),
+  );
+}
+
 module.exports = {
   TOOLS,
   toolDeclarations,
   describeCall,
   runTool,
+  runToolWithDeadline,
   transcriptFromHistory,
   factsFromSummary,
   summarizeWithProvider,

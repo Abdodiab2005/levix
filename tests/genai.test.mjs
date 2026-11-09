@@ -340,6 +340,15 @@ section("the tool budget still stops the loop");
         context: { chatId: "1@s.whatsapp.net" },
       });
       equal("it stopped at the budget", result.steps, 2);
+      ok(
+        "unanswered Gemini call is not persisted",
+        !result.history.at(-1)?.parts?.some((part) => part.functionCall),
+      );
+      equal(
+        "earlier Gemini call/response pairs survive",
+        result.history.filter((turn) => turn.parts?.some((part) => part.functionResponse)).length,
+        2,
+      );
       ok("and said something rather than nothing", result.text.length > 0);
     },
   );

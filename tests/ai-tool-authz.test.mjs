@@ -79,6 +79,8 @@ function dmMsg(from, text = "!ai hi") {
   };
 }
 
+require("./src/utils/groupMetadataCache.cjs").setCached(GROUP, groupMetadata);
+
 const inGroup = (from, opts = {}) =>
   resolveCaller({ msg: groupMsg(from, opts), sock, groupMetadata, text: opts.text });
 const inDm = (from, text = "!ai hi") => resolveCaller({ msg: dmMsg(from, text), sock, text });
@@ -541,6 +543,70 @@ try {
     );
   } finally {
     server.close();
+  }
+  section("roles are re-read after caller resolution");
+  await permissions.revokeRole(ADMIN, "admin");
+  ok(
+    "revoked bot admin loses global memory",
+    !authorize({ command: "memory", role: "botPrivileged" }, admin).allowed,
+  );
+  await permissions.grantRole(ADMIN, "admin");
+  await permissions.revokeRole(OWNER, "owner");
+  ok("revoked owner loses role grants", !authorize({ command: "perm" }, owner).allowed);
+  await permissions.grantRole(OWNER, "owner");
+
+  section("group metadata falls back only when the cache is empty");
+  const groupCache = require("./src/utils/groupMetadataCache.cjs");
+  groupCache.cache.del(GROUP);
+  const snapshotMod = await inGroup(MOD);
+  ok(
+    "snapshot admin is allowed when the cache is empty",
+    authorize({ command: "memory", role: "chatModerator" }, snapshotMod).allowed,
+  );
+  const saved = await runTool(
+    "save_memory",
+    {
+      scope: "chat",
+      content: "snapshot moderator removal",
+    },
+    { caller: member },
+  );
+  const removed = await runTool(
+    "forget_memory",
+    {
+      scope: "chat",
+      ref: saved.id,
+    },
+    { caller: snapshotMod },
+  );
+  equal("snapshot admin can remove this chat's memory", removed.removed, true);
+  groupCache.setCached(GROUP, {
+    ...groupMetadata,
+    participants: groupMetadata.participants.map((p) => ({ ...p, admin: null })),
+  });
+  ok(
+    "cached demotion removes moderator authority",
+    !authorize({ command: "memory", role: "chatModerator" }, snapshotMod).allowed,
+  );
+  groupCache.setCached(GROUP, groupMetadata);
+  groupCache.markRosterChanged(null, GROUP);
+  ok(
+    "stale metadata cannot restore moderator authority",
+    !authorize({ command: "memory", role: "chatModerator" }, snapshotMod).allowed,
+  );
+  groupCache.setCached(GROUP, groupMetadata);
+
+  section("account changes invalidate every access tool");
+  require("./src/db/store.cjs").advanceAccountEpoch();
+  for (const [name, tool] of Object.entries(TOOLS)) {
+    if (!tool.access) continue;
+    const result = await runTool(name, {}, { caller: owner, sock });
+    equal(`${name}: denied after epoch change`, result.denied, true);
+    equal(
+      `${name}: account boundary reason`,
+      result.error,
+      "the linked WhatsApp account changed during this request",
+    );
   }
 } finally {
   scheduler.stopAllScheduledJobs();
