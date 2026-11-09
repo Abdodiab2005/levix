@@ -85,4 +85,27 @@ equal("autostart does not override a pending unlink", policy.reason, "unlink_inc
 policy = sessionStartupPolicy({ autoStart: false, wasPaired: false, unlinkPending: false });
 equal("a finished wipe keeps the fresh-install policy", policy.start, false);
 
+section("restart after unlink could not start");
+
+policy = sessionStartupPolicy({
+  wasPaired: hasPairedCredentials({ me: { id: "2015550102@s.whatsapp.net" }, registered: true }),
+  unlinkPending: false,
+});
+equal("without persisted intent the valid pairing resumes", policy.start, true);
+equal("unstarted unlink retains the resume reason", policy.reason, "resume-paired");
+
+section("uncertain unlink progress blocks every boot mode");
+
+for (const autoStart of [false, true]) {
+  for (const wasPaired of [false, true]) {
+    policy = sessionStartupPolicy({ autoStart, wasPaired, unlinkPending: true });
+    equal(
+      `uncertain progress blocks autoStart=${autoStart}, paired=${wasPaired}`,
+      policy.start,
+      false,
+    );
+    equal("uncertain progress reports incomplete unlink", policy.reason, "unlink_incomplete");
+  }
+}
+
 finish();

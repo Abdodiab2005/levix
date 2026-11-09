@@ -84,9 +84,9 @@ export async function bootstrapCore({ autoStart = false } = {}) {
   // panel does — nothing here ever touches a socket directly.
   require("../core/session-holder.cjs").setSession(session);
 
-  // One wipe before any socket. Success finishes the unlink; failure leaves
-  // the session in ERROR unlink_incomplete and the policy below will not start.
-  if (store.isUnlinkPending()) await session.logout();
+  // One recovery before any socket. The session owns marker read/write errors:
+  // unreadable progress stays ERROR unlink_incomplete without crashing boot.
+  const unlinkPending = await session.recoverPendingUnlink();
 
   // A `creds` row alone is not enough: Baileys creates one before pairing.
   // `me.id` is the durable proof that this install was actually linked.
@@ -95,7 +95,7 @@ export async function bootstrapCore({ autoStart = false } = {}) {
   const startup = sessionStartupPolicy({
     autoStart,
     wasPaired,
-    unlinkPending: store.isUnlinkPending(),
+    unlinkPending,
   });
   if (startup.start) await session.start({ reason: startup.reason });
 

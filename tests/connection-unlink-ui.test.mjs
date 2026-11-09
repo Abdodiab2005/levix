@@ -54,6 +54,12 @@ ok(
   view.includes('t("connectionUnlinkIncompleteHint")'),
 );
 ok("the retry button uses connectionUnlinkRetry", view.includes('t("connectionUnlinkRetry")'));
+ok(
+  "a rejected unlink toasts the server's message",
+  view
+    .slice(view.indexOf("const confirmUnlink"), view.indexOf("const rawPhone"))
+    .includes('toast(err instanceof Error ? err.message : String(err), "error")'),
+);
 for (const key of keys) ok(`the view uses ${key}`, view.includes(`t("${key}")`));
 
 section("the three keys exist in all four catalogs");

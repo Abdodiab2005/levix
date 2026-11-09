@@ -566,18 +566,26 @@ export class WhatsAppSession {
    */
   async logout() {
     if (this.#loggingOut) {
-      await this.#loggingOut.catch(() => {});
+      await this.#loggingOut;
       return this.getState();
     }
     // The snapshot is taken after this promise settles. #runLogout resolves
     // while the flag is still set, and canUnlink is false for that whole time.
     let release = () => {};
-    const done = new Promise((resolve) => {
+    let reject = () => {};
+    const done = new Promise((resolve, fail) => {
       release = resolve;
+      reject = fail;
     });
+    // The initiating caller gets the rejection below; concurrent callers share
+    // it through done. A single caller must not leave an unhandled rejection.
+    done.catch(() => {});
     this.#loggingOut = done;
     try {
       await this.#runLogout();
+    } catch (error) {
+      reject(error);
+      throw error;
     } finally {
       this.#loggingOut = null;
       release();
@@ -585,7 +593,44 @@ export class WhatsAppSession {
     return this.getState();
   }
 
+  /** Boot recovery before any pairing is resumed. Returns whether unlink still blocks start. */
+  async recoverPendingUnlink() {
+    let pending;
+    try {
+      pending = store.isUnlinkPending();
+    } catch (error) {
+      this.log.error({ err: error }, "[Session] could not read the pending-unlink marker at boot");
+      this.#failUnlink();
+      return true;
+    }
+    if (!pending) return false;
+    try {
+      await this.logout();
+    } catch (error) {
+      if (error.code !== "UNLINK_NOT_STARTED") throw error;
+      // The saved intent still blocks pairing even if storage refuses this retry.
+      this.#failUnlink();
+    }
+    return this.#refuseIncompleteUnlink();
+  }
+
   async #runLogout() {
+    // Persist intent before changing the epoch, timers or socket. If this fails,
+    // restart may safely resume the pairing: WhatsApp was never asked to log out.
+    const retry = this.#incompleteUnlink();
+    try {
+      store.markUnlinkPending();
+    } catch (cause) {
+      this.log.error({ err: cause }, "[Session] could not start unlink");
+      const error = new Error(
+        "Unlink could not start: Levix could not save its progress. " +
+          "Check free storage and try again.",
+        { cause },
+      );
+      error.code = "UNLINK_NOT_STARTED";
+      throw error;
+    }
+
     // Before the first await, so work already running for this account drops
     // its account-scoped writes. Wait for an in-flight start without bumping
     // the generation, so that start adopts its socket and logout tears it down.
@@ -638,7 +683,7 @@ export class WhatsAppSession {
     // The marker commits before the credential transaction, so a rolled-back
     // delete cannot erase it. The first attempt uses the socket's clearAll.
     // A retry uses the store wipe: that clearAll belongs to a socket we stopped.
-    const wiped = await this.#wipeCredentials(clearAll);
+    const wiped = await this.#wipeCredentials(clearAll, { retry });
 
     if (this.#starting) await this.#starting.catch(() => {});
     if (this.#socket || this.#fenceAuth) {
@@ -1161,6 +1206,9 @@ export class WhatsAppSession {
 
   async #handleLoggedOut(verdict, closedSocket) {
     this.log.error("[Session] WhatsApp logged this device out. Clearing the stored credentials.");
+    // WhatsApp already dropped the pairing. If saving intent fails here, stay
+    // ERROR in this process. Restart may resume the surviving credentials, but
+    // WhatsApp rejects them with 401 and takes this cleanup path again.
     // Before clearAll(), which is the first await on this path.
     this.#resumeAfterStart = false;
     advanceAccountEpoch();
@@ -1187,8 +1235,8 @@ export class WhatsAppSession {
   }
 
   // True when this process saw a failed wipe, or the marker is on disk.
-  // A read error is not treated as pending: that must not turn a healthy
-  // session into an unlink. The wipe itself refuses to delete if the read throws.
+  // A read error blocks start as pending. It never authorizes a wipe: boot
+  // recovery and the wipe itself refuse to delete when the marker read throws.
   #incompleteUnlink() {
     return this.#unlinkFailed || this.#unlinkPending();
   }
@@ -1198,7 +1246,7 @@ export class WhatsAppSession {
       return store.isUnlinkPending();
     } catch (error) {
       this.log.error({ err: error }, "[Session] could not read the pending-unlink marker");
-      return false;
+      return true;
     }
   }
 
@@ -1232,7 +1280,7 @@ export class WhatsAppSession {
 
   // Account data is cleared only after this returns true. Epoch already moved
   // at the start of the unlink, so in-flight work drops its writes either way.
-  async #wipeCredentials(clearAll) {
+  async #wipeCredentials(clearAll, { retry = null } = {}) {
     let pendingBefore = false;
     try {
       pendingBefore = store.isUnlinkPending();
@@ -1241,17 +1289,21 @@ export class WhatsAppSession {
       this.#unlinkFailed = true;
       return false;
     }
-    try {
-      store.markUnlinkPending();
-    } catch (error) {
-      this.log.error({ err: error }, "[Session] failed to record the pending unlink");
-      this.#unlinkFailed = true;
-      return false;
+    if (!pendingBefore) {
+      try {
+        store.markUnlinkPending();
+      } catch (error) {
+        this.log.error({ err: error }, "[Session] failed to record the pending unlink");
+        this.#unlinkFailed = true;
+        return false;
+      }
     }
 
-    const retry = pendingBefore || this.#unlinkFailed;
+    // Manual unlink saved intent before teardown. Use its earlier snapshot so
+    // the first attempt still uses the live socket's clearAll, not the fallback.
+    const retryWipe = retry ?? (pendingBefore || this.#unlinkFailed);
     try {
-      if (retry || typeof clearAll !== "function") {
+      if (retryWipe || typeof clearAll !== "function") {
         if (typeof this.clearCredentials !== "function") {
           throw new Error("No credential wipe is available");
         }

@@ -1722,7 +1722,8 @@ section("a failed credential wipe is not a successful unlink");
     });
     equal("boot policy does not start while the marker exists", pendingPolicy.start, false);
     equal("boot policy reason is unlink_incomplete", pendingPolicy.reason, "unlink_incomplete");
-    const bootFailed = await boot.logout();
+    equal("boot recovery reports a pending unlink", await boot.recoverPendingUnlink(), true);
+    const bootFailed = boot.getState();
     equal("boot retry ran once", wipes, 3);
     equal("boot retry failure stays unlink_incomplete", bootFailed.state, S.ERROR);
     equal("boot retry created no socket", bootSockets, 0);
@@ -1970,7 +1971,7 @@ section("a logged-out close that cannot delete credentials stays unlink_incomple
   store.clearUnlinkPending();
 }
 
-section("a marker that cannot be written aborts the unlink before any delete");
+section("a marker write failure leaves manual unlink unstarted across restart");
 
 {
   const store = harnessRequire("./src/db/store.cjs");
@@ -1978,6 +1979,8 @@ section("a marker that cannot be written aborts the unlink before any delete");
   const credsText = JSON.stringify({ me: { id: "2015550102:1@s.whatsapp.net" }, registered: true });
   store.authWrite("creds", credsText);
   store.authWrite("session-marker-fail", "stay");
+  const jid = "2015550102@s.whatsapp.net";
+  store.saveUserMetadata({ jid, isOwner: true });
   const original = store.markUnlinkPending;
   let wipes = 0;
   let directoryCalls = 0;
@@ -1994,23 +1997,233 @@ section("a marker that cannot be written aborts the unlink before any delete");
   h.session.clearDirectory = () => {
     directoryCalls += 1;
   };
+  const restarted = makeHarness({ paired: true, realClear: true });
   try {
     await h.session.start();
     await h.push({ connection: "open" });
-    const failed = await h.session.logout();
-    equal("WhatsApp logout still ran", h.sockets[0].loggedOut, 1);
-    equal("the socket was fenced", h.sockets[0].fenced >= 1, true);
+    const before = JSON.stringify(h.session.getState());
+    const epoch = accountEpoch();
+    const results = await Promise.allSettled([h.session.logout(), h.session.logout()]);
+    for (const result of results) {
+      equal("each unlink caller rejects", result.status, "rejected");
+      equal("the rejection has a stable code", result.reason?.code, "UNLINK_NOT_STARTED");
+      equal(
+        "the rejection explains storage recovery",
+        result.reason?.message,
+        "Unlink could not start: Levix could not save its progress. " +
+          "Check free storage and try again.",
+      );
+    }
+    equal("WhatsApp logout did not run", h.sockets[0].loggedOut, 0);
+    equal("the socket was not fenced", h.sockets[0].fenced, 0);
+    equal("the socket was not ended", h.sockets[0].ended, 0);
+    equal("the socket is still installed", h.session.socket, h.sockets[0]);
+    equal("the epoch did not advance", accountEpoch(), epoch);
+    equal("the session state is unchanged", JSON.stringify(h.session.getState()), before);
     equal("no credential delete ran", wipes, 0);
-    equal("the state is unlink_incomplete", failed.state, S.ERROR);
-    equal("the reason is unlink_incomplete", failed.reason, "unlink_incomplete");
     ok("no marker was stored", !store.isUnlinkPending());
     equal("creds were not deleted", store.authRead("creds"), credsText);
     equal("the session key was not deleted", store.authRead("session-marker-fail"), "stay");
     equal("the account directory was not cleared", directoryCalls, 0);
-    equal("linked is false in this process", failed.linked, false);
+    equal("the old role stays intact", store.getUserMetadata(jid)?.isOwner, true);
+
+    await h.session.shutdown();
+    equal("restart has no unlink to recover", await restarted.session.recoverPendingUnlink(), false);
+    const { hasPairedCredentials, sessionStartupPolicy } = await import(
+      "../src/bootstrap/session-startup-policy.js"
+    );
+    const policy = sessionStartupPolicy({
+      wasPaired: hasPairedCredentials(store.authRead("creds")),
+      unlinkPending: store.isUnlinkPending(),
+    });
+    equal("restart resumes the still-valid pairing", policy.reason, "resume-paired");
+    if (policy.start) await restarted.session.start({ reason: policy.reason });
+    equal("restart opened one socket", restarted.sockets.length, 1);
+    store.markUnlinkPending = original;
+    const done = await restarted.session.logout();
+    equal("retry with healthy storage completes unlink", done.state, S.LOGGED_OUT);
+    equal("retry removes the credentials", store.authRead("creds"), null);
+    equal("retry clears the account", store.getUserMetadata(jid), null);
+    equal("retry removes the marker", store.isUnlinkPending(), false);
   } finally {
     store.markUnlinkPending = original;
     store.clearUnlinkPending();
+    await h.session.shutdown();
+    await restarted.session.shutdown();
+  }
+}
+
+section("manual unlink saves intent before epoch advance, fencing and server logout");
+
+{
+  const store = harnessRequire("./src/db/store.cjs");
+  store.clearUnlinkPending();
+  const original = store.markUnlinkPending;
+  const h = makeHarness({ paired: true, clearAll: async () => {} });
+  await h.session.start();
+  await h.push({ connection: "open" });
+  const epoch = accountEpoch();
+  const sock = h.sockets[0];
+  const order = [];
+  store.markUnlinkPending = () => {
+    equal("intent is saved before epoch advance", accountEpoch(), epoch);
+    equal("intent is saved before fencing", sock.fenced, 0);
+    equal("intent is saved before detaching the socket", h.session.socket, sock);
+    original();
+    order.push("intent");
+  };
+  sock.logout = async () => {
+    ok("server logout sees durable intent", store.isUnlinkPending());
+    order.push("server logout");
+  };
+  try {
+    equal("unlink completes", (await h.session.logout()).state, S.LOGGED_OUT);
+    equal("intent precedes server logout", order.join(","), "intent,server logout");
+  } finally {
+    store.markUnlinkPending = original;
+    store.clearUnlinkPending();
+    await h.session.shutdown();
+  }
+}
+
+section("marker read failures refuse start and boot recovery without deleting data");
+
+{
+  const store = harnessRequire("./src/db/store.cjs");
+  store.clearUnlinkPending();
+  const creds = JSON.stringify({ me: { id: "2015550103@s.whatsapp.net" }, registered: true });
+  store.authWrite("creds", creds);
+  const original = store.isUnlinkPending;
+  const h = makeHarness({ paired: true });
+  const boot = makeHarness({ paired: true });
+  store.isUnlinkPending = () => {
+    throw sqliteFull();
+  };
+  try {
+    const state = await h.session.start();
+    equal("start fails closed", state.state, S.ERROR);
+    equal("start reports incomplete unlink", state.reason, "unlink_incomplete");
+    equal("start reports unlinked", state.linked, false);
+    equal("start opens no socket", h.sockets.length, 0);
+    equal(
+      "boot recovery fails closed without throwing",
+      await boot.session.recoverPendingUnlink(),
+      true,
+    );
+    equal("boot is ERROR", boot.session.state, S.ERROR);
+    equal("boot reports incomplete unlink", boot.session.getState().reason, "unlink_incomplete");
+    equal("boot opens no socket", boot.sockets.length, 0);
+    equal("read failure leaves credentials intact", store.authRead("creds"), creds);
+  } finally {
+    store.isUnlinkPending = original;
+    store.clearUnlinkPending();
+    await h.session.shutdown();
+    await boot.session.shutdown();
+  }
+}
+
+section("a marker write failure after a WhatsApp 401 is retried after restart");
+
+{
+  const store = harnessRequire("./src/db/store.cjs");
+  store.clearUnlinkPending();
+  const creds = JSON.stringify({ me: { id: "2015550104@s.whatsapp.net" }, registered: true });
+  store.authWrite("creds", creds);
+  const original = store.markUnlinkPending;
+  let markerAttempts = 0;
+  let wipes = 0;
+  store.markUnlinkPending = () => {
+    markerAttempts += 1;
+    throw sqliteFull();
+  };
+  const h = makeHarness({ paired: true });
+  const restarted = makeHarness({
+    paired: true,
+    clearAll: async () => {
+      wipes += 1;
+      store.authClearAll();
+    },
+  });
+  try {
+    await h.session.start();
+    await h.push({ connection: "open" });
+    await h.push({ connection: "close", lastDisconnect: closedWith(DisconnectReason.loggedOut) });
+    equal(
+      "401 marker failure is incomplete unlink",
+      h.session.getState().reason,
+      "unlink_incomplete",
+    );
+    equal("401 marker failure is ERROR", h.session.state, S.ERROR);
+    equal("no intent was saved", store.isUnlinkPending(), false);
+    equal("credentials survived the failed marker", store.authRead("creds"), creds);
+    await h.session.shutdown();
+
+    equal("restart sees no saved intent", await restarted.session.recoverPendingUnlink(), false);
+    await restarted.session.start({ reason: "resume-paired" });
+    equal("restart attempts the surviving pairing", restarted.sockets.length, 1);
+    await restarted.push({
+      connection: "close",
+      lastDisconnect: closedWith(DisconnectReason.loggedOut),
+    });
+    equal("the resumed socket's 401 retries the marker", markerAttempts, 2);
+    equal("the repeated failure stays ERROR", restarted.session.state, S.ERROR);
+    equal("no wipe bypassed the failed marker", wipes, 0);
+    store.markUnlinkPending = original;
+    equal("a healthy retry completes unlink", (await restarted.session.logout()).state, S.LOGGED_OUT);
+    equal("the rejected credentials are gone", store.authRead("creds"), null);
+  } finally {
+    store.markUnlinkPending = original;
+    store.clearUnlinkPending();
+    await h.session.shutdown();
+    await restarted.session.shutdown();
+  }
+}
+
+section("the unlink route returns 503 when manual unlink could not start");
+
+{
+  const store = harnessRequire("./src/db/store.cjs");
+  const { default: router, setSession } = await import("../src/routes/dashboard.api.esm.js");
+  const original = store.markUnlinkPending;
+  const h = makeHarness({ paired: true });
+  store.clearUnlinkPending();
+  await h.session.start();
+  await h.push({ connection: "open" });
+  setSession(h.session);
+  store.markUnlinkPending = () => {
+    throw sqliteFull();
+  };
+  try {
+    const handler = router.stack.find((layer) => layer.route?.path === "/bot/logout").route.stack[0]
+      .handle;
+    let status = 200;
+    const body = await new Promise((resolve) => {
+      handler(
+        { method: "POST", path: "/bot/logout" },
+        {
+          status(code) {
+            status = code;
+            return this;
+          },
+          json: resolve,
+        },
+      );
+    });
+    equal("unstarted unlink returns HTTP 503", status, 503);
+    equal("the response is unsuccessful", body.success, false);
+    equal("the response preserves the error code", body.code, "UNLINK_NOT_STARTED");
+    equal(
+      "the response explains recovery",
+      body.error,
+      "Unlink could not start: Levix could not save its progress. " +
+        "Check free storage and try again.",
+    );
+    equal("the route leaves the socket running", h.session.socket, h.sockets[0]);
+  } finally {
+    store.markUnlinkPending = original;
+    setSession(null);
+    store.clearUnlinkPending();
+    await h.session.shutdown();
   }
 }
 
