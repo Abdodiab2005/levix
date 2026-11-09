@@ -1917,7 +1917,17 @@ router.post(
       return res.status(409).json({ success: false, error: "There is nothing linked to unlink" });
     }
 
-    const state = await session.logout();
+    let state;
+    try {
+      state = await session.logout();
+    } catch (error) {
+      if (error.code !== "UNLINK_NOT_STARTED") throw error;
+      return res.status(503).json({
+        success: false,
+        error: error.message,
+        code: error.code,
+      });
+    }
     logger.warn("[Dashboard] WhatsApp account unlinked from the dashboard");
     res.json({ success: true, session: state });
   }),

@@ -1562,8 +1562,29 @@ function authRemove(key) {
   q("DELETE FROM baileys_auth WHERE key = ?").run(key);
 }
 
+// One transaction. SQLITE_FULL / SQLITE_BUSY throw and the delete rolls back,
+// so the rows stay. The session writes `auth:unlink-pending` before calling
+// this; that row is outside this transaction and survives the rollback.
 function authClearAll() {
-  q("DELETE FROM baileys_auth").run();
+  return withImmediateTransaction(() => {
+    q("DELETE FROM baileys_auth").run();
+  });
+}
+
+// Set before the credential wipe. `auth:*` is already excluded from backups
+// (src/db/copy.cjs isSecretBotKey) and from settings export.
+const UNLINK_PENDING_KEY = "auth:unlink-pending";
+
+function isUnlinkPending() {
+  return !!q("SELECT 1 AS x FROM bot_settings WHERE key = ?").get(UNLINK_PENDING_KEY);
+}
+
+function markUnlinkPending() {
+  saveBotSetting(UNLINK_PENDING_KEY, Date.now());
+}
+
+function clearUnlinkPending() {
+  q("DELETE FROM bot_settings WHERE key = ?").run(UNLINK_PENDING_KEY);
 }
 
 // One keys.set is one IMMEDIATE transaction. `value == null` deletes the row
@@ -2490,6 +2511,10 @@ module.exports = {
   authRemove,
   authClearAll,
   authApply,
+  UNLINK_PENDING_KEY,
+  isUnlinkPending,
+  markUnlinkPending,
+  clearUnlinkPending,
   hasCredentials,
   isPairedSession,
   resolveUserPhone,

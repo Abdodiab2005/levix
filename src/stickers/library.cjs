@@ -779,6 +779,9 @@ function clearAll() {
   resetForActivation();
   store.stickerClearAll();
   try {
+    // discardAll() forgets upload ids even when file deletion fails. Unlink
+    // must also remove those bytes before a different account can pair.
+    fs.rmSync(dataPath("tmp", "stickers"), { recursive: true, force: true });
     fs.rmSync(dataPath("stickers"), { recursive: true, force: true });
   } catch (error) {
     logger.error({ err: error }, "[Stickers] failed to remove sticker files");

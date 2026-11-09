@@ -136,17 +136,20 @@ export async function useDatabaseAuthState(storageType = null) {
     }
   };
 
+  // Unlike saveCreds, a failed wipe must reject. The fence stays set so a
+  // later keys.set cannot write the credentials the delete did not remove.
   const clearAll = async () => {
     fenced = true;
     try {
       if (storage.clearAll) {
         await storage.clearAll();
       } else {
-        await removeData("creds");
+        await storage.removeData("creds");
       }
       logger.info("[Auth] Cleared all authentication data");
     } catch (err) {
       logger.error({ err }, "[Auth] Failed to clear all data");
+      throw err;
     }
   };
 

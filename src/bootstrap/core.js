@@ -63,10 +63,6 @@ export async function bootstrapCore({ autoStart = false } = {}) {
     logger.warn({ err: error }, "[crash-reports] boot sweep failed");
   }
 
-  // A `creds` row alone is not enough: Baileys creates one before pairing.
-  // `me.id` is the durable proof that this install was actually linked.
-  const wasPaired = hasPairedCredentials(store.authRead("creds"));
-
   await initStore();
   await loadCommands();
 
@@ -88,7 +84,19 @@ export async function bootstrapCore({ autoStart = false } = {}) {
   // panel does — nothing here ever touches a socket directly.
   require("../core/session-holder.cjs").setSession(session);
 
-  const startup = sessionStartupPolicy({ autoStart, wasPaired });
+  // One recovery before any socket. The session owns marker read/write errors:
+  // unreadable progress stays ERROR unlink_incomplete without crashing boot.
+  const unlinkPending = await session.recoverPendingUnlink();
+
+  // A `creds` row alone is not enough: Baileys creates one before pairing.
+  // `me.id` is the durable proof that this install was actually linked.
+  // Read after the retry so a wipe that just finished is not resumed.
+  const wasPaired = hasPairedCredentials(store.authRead("creds"));
+  const startup = sessionStartupPolicy({
+    autoStart,
+    wasPaired,
+    unlinkPending,
+  });
   if (startup.start) await session.start({ reason: startup.reason });
 
   // Remote Terms. An empty trusted-key list makes this a no-op: no timer and
