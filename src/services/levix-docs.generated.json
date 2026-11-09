@@ -20,19 +20,19 @@
     },
     {
       "file": "i18n/en/commands.json",
-      "sha256": "68bc651ea84a07bb4fa5a15eccf5264dc173a89c0eabf55d45c10819d8d6369e"
+      "sha256": "75db435bb2273bf424306d1fdb4acc85a4fae62d5e10a256f8e98174a7ea6872"
     },
     {
       "file": "i18n/ar/commands.json",
-      "sha256": "d07bb9c150b9c2ca826fa036553b63c592b2c7c37447c7c47569dd4f8a4297d5"
+      "sha256": "a3c9183fb54d69a93e44831cfe6d793b50d99ce5a11f082e295f38d12c9dae91"
     },
     {
       "file": "i18n/pt-BR/commands.json",
-      "sha256": "cf993d6acbce384b4f733eaf132fa0ae375d7fe48d41780e0dc9c9a1713ac39e"
+      "sha256": "d8830a79d578c8249328ed4748a8a39d134d6824fb566df171dc458da70ffa45"
     },
     {
       "file": "i18n/es-419/commands.json",
-      "sha256": "cd6b605812f7eb03bb9f742f8fa03845dc5f58215629ff8257bb2e9ce6ad54eb"
+      "sha256": "1c474349d3dcbbbc7bd73606d1d32435692e8246680942d8ac9c9299ee6b78b4"
     }
   ],
   "sections": [
@@ -804,7 +804,7 @@
       "source": "i18n/en/commands.json",
       "title": "!group.removeall",
       "locale": "en",
-      "text": "Removes every non-admin member from the group, after confirmation.\nremoveall"
+      "text": "Not available: removing every member at once is disabled.\nremoveall"
     },
     {
       "id": "i18n/en/commands.json#group-rules",
@@ -1287,7 +1287,7 @@
       "source": "i18n/ar/commands.json",
       "title": "!group.removeall",
       "locale": "ar",
-      "text": "يطرد كل الأعضاء غير المشرفين من المجموعة بعد التأكيد.\nremoveall"
+      "text": "غير متاح: إزالة كل الأعضاء دفعة واحدة معطّلة.\nremoveall"
     },
     {
       "id": "i18n/ar/commands.json#group-rules",
@@ -1770,7 +1770,7 @@
       "source": "i18n/pt-BR/commands.json",
       "title": "!group.removeall",
       "locale": "pt-BR",
-      "text": "Remove todos os membros que não são admin do grupo, após confirmação.\nremoveall"
+      "text": "Indisponível: remover todos os membros de uma vez está desativado.\nremoveall"
     },
     {
       "id": "i18n/pt-BR/commands.json#group-rules",
@@ -2253,7 +2253,7 @@
       "source": "i18n/es-419/commands.json",
       "title": "!group.removeall",
       "locale": "es-419",
-      "text": "Quita del grupo a todos los miembros que no son admin, después de confirmar.\nremoveall"
+      "text": "No disponible: eliminar a todos los miembros a la vez está deshabilitado.\nremoveall"
     },
     {
       "id": "i18n/es-419/commands.json#group-rules",

@@ -211,12 +211,21 @@ writeFileSync(join(pendingRoot, "files", "media", "schedules", "backup"), "resto
 let releaseSend;
 let signalSend;
 const sendStarted = new Promise((resolve) => { signalSend = resolve; });
-const delivery = scheduler.retryScheduledJob({
+// Delivery goes through the scheduler's own live socket, so bind it first. Cron is
+// stubbed while it binds: the cleanup task it registers must not outlive the test.
+const deliverySock = {
   sendMessage() {
     signalSend();
     return new Promise((resolve) => { releaseSend = resolve; });
   },
-}, "backup");
+};
+{
+  const cron = require("node-cron");
+  const realSchedule = cron.schedule;
+  cron.schedule = () => ({ stop() {} });
+  try { scheduler.initializeScheduledJobs(deliverySock); } finally { cron.schedule = realSchedule; }
+}
+const delivery = scheduler.retryScheduledJob(deliverySock, "backup");
 await sendStarted;
 ok("matching activation succeeds while send waits", activatePendingIfMatching());
 releaseSend();

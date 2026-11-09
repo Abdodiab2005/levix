@@ -29,6 +29,29 @@ async function waitUntil(predicate, timeoutMs = 1000) {
   return false;
 }
 
+// The scheduler delivers through its own live raw socket (set by
+// initializeScheduledJobs), never through the socket handed to scheduleNewJob.
+// One raw socket, with a handler each section swaps. cron is stubbed while the
+// stored jobs are re-armed, so no live cron timer is left behind.
+const rawSock = {
+  user: { id: "201000000001@s.whatsapp.net" },
+  handler: async () => {},
+  async sendMessage(jid, content) {
+    return this.handler(jid, content);
+  },
+};
+
+function bindRaw(handler) {
+  rawSock.handler = handler;
+  const realSchedule = cron.schedule;
+  cron.schedule = () => ({ stop() {} });
+  try {
+    scheduler.initializeScheduledJobs(rawSock);
+  } finally {
+    cron.schedule = realSchedule;
+  }
+}
+
 section("daily and weekly recurrence parsing");
 
 {
@@ -320,6 +343,9 @@ section("the autoschedule command persists a real weekly job");
 section("a failed one-off is never reported as sent");
 
 {
+  bindRaw(async () => {
+    throw new Error("network unavailable");
+  });
   const job = {
     id: "one-off-failure",
     type: "once",
@@ -330,14 +356,7 @@ section("a failed one-off is never reported as sent");
     status: "pending",
   };
   scheduler.saveScheduledJob(job);
-  scheduler.scheduleNewJob(
-    {
-      async sendMessage() {
-        throw new Error("network unavailable");
-      },
-    },
-    job,
-  );
+  scheduler.scheduleNewJob({ async sendMessage() {} }, job);
 
   ok(
     "the timer records the failure",
@@ -350,16 +369,12 @@ section("a failed one-off is never reported as sent");
   ok("the attempt time is retained", Number.isFinite(stored.lastRunAt));
 
   let sent = 0;
-  const retry = await scheduler.retryScheduledJob(
-    {
-      async sendMessage(jid, content) {
-        sent += 1;
-        equal("retry target", jid, job.targetJid);
-        ok("retry carries the message", content.text.includes(job.message));
-      },
-    },
-    job.id,
-  );
+  rawSock.handler = async (jid, content) => {
+    sent += 1;
+    equal("retry target", jid, job.targetJid);
+    ok("retry carries the message", content.text.includes(job.message));
+  };
+  const retry = await scheduler.retryScheduledJob({ async sendMessage() {} }, job.id);
   ok("manual retry succeeds", retry.ok);
   equal("manual retry sends once", sent, 1);
   stored = storage.getSchedule(job.id);
@@ -390,14 +405,10 @@ section("a scheduled file goes out with its text, then is cleaned up");
   equal("the media metadata round-trips", storage.getSchedule(job.id).media?.kind, "audio");
 
   const sentPayloads = [];
-  const result = await scheduler.retryScheduledJob(
-    {
-      async sendMessage(_jid, content) {
-        sentPayloads.push(content);
-      },
-    },
-    job.id,
-  );
+  rawSock.handler = async (_jid, content) => {
+    sentPayloads.push(content);
+  };
+  const result = await scheduler.retryScheduledJob({ async sendMessage() {} }, job.id);
   ok("the voice job is delivered", result.ok);
   ok("the audio goes first", Buffer.isBuffer(sentPayloads[0]?.audio));
   ok(
@@ -410,6 +421,9 @@ section("a scheduled file goes out with its text, then is cleaned up");
 section("recurring failures stay active and retries cannot overlap");
 
 {
+  bindRaw(async () => {
+    throw new Error("temporary outage");
+  });
   const realSchedule = cron.schedule;
   let tick = null;
   cron.schedule = (expression, callback) => {
@@ -429,14 +443,7 @@ section("recurring failures stay active and retries cannot overlap");
   scheduler.saveScheduledJob(recurring);
 
   try {
-    scheduler.scheduleNewJob(
-      {
-        async sendMessage() {
-          throw new Error("temporary outage");
-        },
-      },
-      recurring,
-    );
+    scheduler.scheduleNewJob({ async sendMessage() {} }, recurring);
     await tick();
 
     const failed = storage.getSchedule(recurring.id);
@@ -445,14 +452,13 @@ section("recurring failures stay active and retries cannot overlap");
 
     let release;
     let sends = 0;
-    const slowSocket = {
-      async sendMessage() {
-        sends += 1;
-        await new Promise((resolve) => {
-          release = resolve;
-        });
-      },
+    rawSock.handler = async () => {
+      sends += 1;
+      await new Promise((resolve) => {
+        release = resolve;
+      });
     };
+    const slowSocket = { async sendMessage() {} };
 
     const first = scheduler.retryScheduledJob(slowSocket, recurring.id);
     await Promise.resolve();
@@ -469,6 +475,145 @@ section("recurring failures stay active and retries cannot overlap");
     scheduler.stopAllScheduledJobs();
     cron.schedule = realSchedule;
   }
+}
+
+section("delivery uses the scheduler's raw socket, not the socket that armed the job");
+
+{
+  const rawCalls = [];
+  const proxyCalls = [];
+  bindRaw(async (jid, content) => {
+    rawCalls.push({ jid, content });
+  });
+  // What a command passes: a per-command reply proxy.
+  const proxy = {
+    async sendMessage(jid, content) {
+      proxyCalls.push({ jid, content });
+    },
+  };
+  const job = {
+    id: "proxy-capture",
+    type: "once",
+    targetJid: "120363@g.us",
+    creatorJid: "201000000000@s.whatsapp.net",
+    message: "pay the fee",
+    date: new Date(Date.now() + 40).toISOString(),
+    status: "pending",
+  };
+  scheduler.saveScheduledJob(job);
+  ok("scheduleNewJob arms the job", scheduler.scheduleNewJob(proxy, job));
+
+  ok(
+    "the reminder is delivered",
+    await waitUntil(() => storage.getSchedule(job.id)?.status === "sent"),
+  );
+  equal("the raw socket sent once", rawCalls.length, 1);
+  equal("the raw socket sent to the job's chat", rawCalls[0]?.jid, job.targetJid);
+  ok("the reminder carries the message", String(rawCalls[0]?.content?.text).includes(job.message));
+  equal("the proxy sent nothing", proxyCalls.length, 0);
+}
+
+section("one delivery attempt uses one socket for every payload");
+
+{
+  const { mkdirSync, writeFileSync } = await import("node:fs");
+  const { dirname } = await import("node:path");
+  const job = {
+    id: "one-socket-per-attempt",
+    type: "once",
+    targetJid: "201000000000@s.whatsapp.net",
+    creatorJid: "dashboard@levix",
+    message: "listen, then read",
+    date: new Date(Date.now() + 60_000).toISOString(),
+    status: "failed",
+    media: { kind: "audio", mimeType: "audio/mpeg", fileName: "note.mp3" },
+  };
+  const mediaPath = scheduler.scheduleMediaPath(job.id);
+  mkdirSync(dirname(mediaPath), { recursive: true });
+  writeFileSync(mediaPath, Buffer.from("ID3 fake mp3"));
+  scheduler.saveScheduledJob(job);
+
+  const rawCalls = [];
+  const lateCalls = [];
+  bindRaw(async (_jid, content) => {
+    rawCalls.push(content);
+    // The connection drops while the first payload is out: currentSock becomes null.
+    if (rawCalls.length === 1) scheduler.stopAllScheduledJobs();
+  });
+  const first = await scheduler.retryScheduledJob({ async sendMessage() {} }, job.id);
+  ok("the attempt finishes", first.ok);
+  equal("both payloads went through the captured socket", rawCalls.length, 2);
+  ok("the audio went first", Buffer.isBuffer(rawCalls[0]?.audio));
+  ok("the text followed", String(rawCalls[1]?.text).includes(job.message));
+
+  // A later swap of currentSock cannot redirect an attempt already running.
+  scheduler.saveScheduledJob({ ...job, status: "failed" });
+  writeFileSync(mediaPath, Buffer.from("ID3 fake mp3"));
+  const otherSock = {
+    user: { id: "201000000002@s.whatsapp.net" },
+    async sendMessage(jid, content) {
+      lateCalls.push({ jid, content });
+    },
+  };
+  rawCalls.length = 0;
+  bindRaw(async (_jid, content) => {
+    rawCalls.push(content);
+    if (rawCalls.length === 1) {
+      const realSchedule = cron.schedule;
+      cron.schedule = () => ({ stop() {} });
+      try {
+        scheduler.initializeScheduledJobs(otherSock);
+      } finally {
+        cron.schedule = realSchedule;
+      }
+    }
+  });
+  const second = await scheduler.retryScheduledJob({ async sendMessage() {} }, job.id);
+  ok("the second attempt finishes", second.ok);
+  equal("every payload stayed on the first socket", rawCalls.length, 2);
+  equal("the replacement socket got nothing from this attempt", lateCalls.length, 0);
+}
+
+section("with no live socket a delivery fails without sending");
+
+{
+  const rawCalls = [];
+  const proxyCalls = [];
+  bindRaw(async (jid, content) => {
+    rawCalls.push({ jid, content });
+  });
+  scheduler.stopAllScheduledJobs(); // clears currentSock
+  const proxy = {
+    async sendMessage(jid, content) {
+      proxyCalls.push({ jid, content });
+    },
+  };
+  const job = {
+    id: "no-live-socket",
+    type: "once",
+    targetJid: "201000000000@s.whatsapp.net",
+    creatorJid: "201000000000@s.whatsapp.net",
+    message: "nobody home",
+    date: new Date(Date.now() + 60_000).toISOString(),
+    status: "failed",
+  };
+  scheduler.saveScheduledJob(job);
+
+  const retry = await scheduler.retryScheduledJob(proxy, job.id);
+  equal("the retry is a delivery failure", retry.reason, "delivery_failed");
+  equal("the retry is not ok", retry.ok, false);
+  equal("the raw socket sent nothing", rawCalls.length, 0);
+  equal("the proxy sent nothing", proxyCalls.length, 0);
+  const stored = storage.getSchedule(job.id);
+  equal("the job stays failed", stored.status, "failed");
+  equal("the delivery is recorded as failed", stored.lastDeliveryStatus, "failed");
+  ok("the reason is recorded", String(stored.lastError || "").length > 0);
+
+  // Arming still works without a socket; the reconnect re-arms with the raw one.
+  const armed = { ...job, id: "armed-without-socket", status: "pending" };
+  scheduler.saveScheduledJob(armed);
+  ok("a command can still arm a job", scheduler.scheduleNewJob(proxy, armed));
+  scheduler.deleteScheduledJob(armed.id);
 }
 
 section("the panel exposes delivery state and manual retry");

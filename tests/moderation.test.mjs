@@ -11,7 +11,7 @@ const permissions = require("./src/utils/permissions.cjs");
 await permissions.primePermissions();
 
 const groupMetadataCache = require("./src/utils/groupMetadataCache.cjs");
-const { withLang } = require("./src/utils/i18n.cjs");
+const { t, withLang } = require("./src/utils/i18n.cjs");
 const {
   buildModerationSummary,
   buildModerationSummaryBoth,
@@ -1488,6 +1488,271 @@ section("a linked-account warn checks the target, not the sender");
   });
   equal("fromMe automatic moderation does not act", automatic.acted, false);
   equal("fromMe automatic moderation does not add a warning", store.getUserWarnings(groupId, USER_PN).length, 1);
+}
+
+section("kickGroupMember re-reads the roster; the caller's snapshot does not decide");
+{
+  const { kickGroupMember } = require("./src/utils/moderationAction.cjs");
+  const rosterWith = (changes) => {
+    const roster = memberRoster();
+    return {
+      ...roster,
+      participants: roster.participants.map((participant) =>
+        participant.id in changes ? { ...participant, admin: changes[participant.id] } : participant,
+      ),
+    };
+  };
+  const failedLine = t("bot.group.kick.failed");
+
+  // The target became admin after the caller took its snapshot.
+  const promotedId = "120363-kick-promoted@g.us";
+  const promoted = makeSock();
+  cache(promotedId, rosterWith({ [USER_LID]: "admin" }));
+  const promotedResult = await kickGroupMember(promoted.sock, {
+    groupId: promotedId,
+    groupMetadata: memberRoster(),
+    targetCandidates: [USER_PN],
+  });
+  equal("a member promoted since the snapshot is not kicked", promotedResult.kicked, false);
+  equal("the fresh roster protects the new admin", promotedResult.error, "protected");
+  equal("no remove call for the new admin", promoted.kicks.length, 0);
+
+  // No fresh roster: fail closed, whatever the caller passed.
+  const missingId = "120363-kick-nometa@g.us";
+  const missing = makeSock();
+  missing.sock.groupMetadata = async () => {
+    throw new Error("offline");
+  };
+  const missingResult = await kickGroupMember(missing.sock, {
+    groupId: missingId,
+    groupMetadata: memberRoster(),
+    targetCandidates: [USER_PN],
+  });
+  equal("an unreachable roster is not a kick", missingResult.kicked, false);
+  equal("an unreachable roster says so", missingResult.error, "metadata-unavailable");
+  equal("no remove call without a roster", missing.kicks.length, 0);
+
+  const noFetchId = "120363-kick-nofetch@g.us";
+  const noFetch = makeSock();
+  delete noFetch.sock.groupMetadata;
+  const noFetchResult = await kickGroupMember(noFetch.sock, {
+    groupId: noFetchId,
+    groupMetadata: memberRoster(),
+    targetCandidates: [USER_PN],
+  });
+  equal("a socket that cannot fetch gives no kick", noFetchResult.error, "metadata-unavailable");
+  equal("no remove call without a way to fetch", noFetch.kicks.length, 0);
+
+  // Only a stale roster is left: not good enough for a removal.
+  const staleId = "120363-kick-stale@g.us";
+  const stale = makeSock();
+  stale.sock.groupMetadata = async () => {
+    throw new Error("offline");
+  };
+  cache(staleId, memberRoster());
+  groupMetadataCache.markRosterChanged(stale.sock, staleId);
+  const staleResult = await kickGroupMember(stale.sock, {
+    groupId: staleId,
+    groupMetadata: memberRoster(),
+    targetCandidates: [USER_PN],
+  });
+  equal("a stale roster is not a kick", staleResult.error, "metadata-unavailable");
+  equal("no remove call on a stale roster", stale.kicks.length, 0);
+
+  // The requester lost admin after the dispatcher's check.
+  const demotedId = "120363-kick-demoted@g.us";
+  const demoted = makeSock();
+  cache(demotedId, rosterWith({ [ADMIN_LID]: null }));
+  const demotedResult = await kickGroupMember(demoted.sock, {
+    groupId: demotedId,
+    groupMetadata: memberRoster(),
+    targetCandidates: [USER_PN],
+    requesterCandidates: [ADMIN_PN],
+  });
+  equal("a demoted requester cannot kick", demotedResult.kicked, false);
+  equal("the demotion is the reason", demotedResult.error, "requester-not-admin");
+  equal("no remove call for a demoted requester", demoted.kicks.length, 0);
+
+  const demotedCommand = makeSock();
+  await kickCommand.execute(
+    demotedCommand.sock,
+    {
+      key: { remoteJid: demotedId, participant: ADMIN_PN },
+      message: { extendedTextMessage: { contextInfo: { mentionedJid: [USER_PN] } } },
+      pushName: "Admin",
+    },
+    ["@member", "spam"],
+    "",
+    memberRoster(),
+  );
+  equal("!kick from a demoted requester removes nobody", demotedCommand.kicks.length, 0);
+  ok("!kick keeps its failure line", texts(demotedCommand.sent).includes(failedLine));
+
+  // A requester with no identity at all is refused too.
+  const anonymous = await kickGroupMember(demoted.sock, {
+    groupId: demotedId,
+    targetCandidates: [USER_PN],
+    requesterCandidates: [],
+  });
+  equal("an empty requester is refused", anonymous.error, "requester-not-admin");
+
+  // The re-check applies the gate that admitted the command: the dispatcher
+  // ("direct") or `!group kick` ("nested", which also admits an owner).
+  const kickMsg = (groupId, participant, fromMe = false) => ({
+    key: { remoteJid: groupId, participant, fromMe },
+    message: { extendedTextMessage: { contextInfo: { mentionedJid: [USER_PN] } } },
+    pushName: "Requester",
+  });
+  const runKick = async (groupId, roster, participant, path, fromMe = false) => {
+    const run = makeSock();
+    cache(groupId, roster);
+    const args = [kickMsg(groupId, participant, fromMe), ["@member", "spam"], "", memberRoster()];
+    if (path === "direct") args.push({ invokedName: "kick" });
+    await kickCommand.execute(run.sock, ...args);
+    return run;
+  };
+
+  // An owner who is not a group admin.
+  await permissions.grantRole(OTHER_PN, "owner");
+  try {
+    const ownerNested = await runKick("120363-kick-owner-nested@g.us", memberRoster(), OTHER_PN, "nested");
+    equal("a non-admin owner kicks through !group kick", ownerNested.kicks.length, 1);
+    equal("the owner's kick removes the roster id", ownerNested.kicks[0]?.users[0], USER_LID);
+    ok("the owner's kick has no failure line", !texts(ownerNested.sent).includes(failedLine));
+
+    const ownerDirect = await runKick("120363-kick-owner-direct@g.us", memberRoster(), OTHER_PN, "direct");
+    equal("a non-admin owner is refused at the re-check on the direct path", ownerDirect.kicks.length, 0);
+    ok("the direct refusal keeps the failure line", texts(ownerDirect.sent).includes(failedLine));
+
+    const ownerRuleId = "120363-kick-owner-rule@g.us";
+    const ownerRule = makeSock();
+    cache(ownerRuleId, memberRoster());
+    const base = { groupId: ownerRuleId, targetCandidates: [USER_PN], requesterCandidates: [OTHER_PN] };
+    equal(
+      "kickGroupMember defaults to the direct rule",
+      (await kickGroupMember(ownerRule.sock, base)).error,
+      "requester-not-admin",
+    );
+    equal(
+      "an unknown rule is the direct rule",
+      (await kickGroupMember(ownerRule.sock, { ...base, requesterRule: "owner" })).error,
+      "requester-not-admin",
+    );
+    equal(
+      "the direct rule refuses an owner who is not a group admin",
+      (await kickGroupMember(ownerRule.sock, { ...base, requesterRule: "direct" })).error,
+      "requester-not-admin",
+    );
+    equal("no remove call for the refused owner", ownerRule.kicks.length, 0);
+    equal(
+      "the nested rule admits the owner roster",
+      (await kickGroupMember(ownerRule.sock, { ...base, requesterRule: "nested" })).kicked,
+      true,
+    );
+
+    // fromMe is an owner on the nested gate even with no identity to match.
+    const fromMeSock = makeSock();
+    cache("120363-kick-fromme@g.us", memberRoster());
+    const fromMeBase = {
+      groupId: "120363-kick-fromme@g.us",
+      targetCandidates: [USER_PN],
+      requesterCandidates: [],
+      requesterFromMe: true,
+    };
+    equal(
+      "the direct rule refuses fromMe with no group role",
+      (await kickGroupMember(fromMeSock.sock, { ...fromMeBase, requesterRule: "direct" })).error,
+      "requester-not-admin",
+    );
+    equal(
+      "the nested rule admits fromMe",
+      (await kickGroupMember(fromMeSock.sock, { ...fromMeBase, requesterRule: "nested" })).kicked,
+      true,
+    );
+  } finally {
+    await permissions.revokeRole(OTHER_PN, "owner");
+  }
+
+  // A non-owner, non-admin member is refused on both paths.
+  for (const path of ["nested", "direct"]) {
+    const member = await runKick(`120363-kick-member-${path}@g.us`, memberRoster(), OTHER_PN, path);
+    equal(`a plain member is refused on the ${path} path`, member.kicks.length, 0);
+  }
+
+  // A group admin works on both paths.
+  for (const path of ["nested", "direct"]) {
+    const admin = await runKick(`120363-kick-admin-${path}@g.us`, memberRoster(), ADMIN_PN, path);
+    equal(`a group admin kicks on the ${path} path`, admin.kicks.length, 1);
+  }
+
+  // A group admin demoted after the gate is refused on both paths.
+  for (const path of ["nested", "direct"]) {
+    const gone = await runKick(
+      `120363-kick-gone-${path}@g.us`,
+      rosterWith({ [ADMIN_LID]: null }),
+      ADMIN_PN,
+      path,
+    );
+    equal(`a demoted group admin is refused on the ${path} path`, gone.kicks.length, 0);
+    ok(`the ${path} refusal keeps the failure line`, texts(gone.sent).includes(failedLine));
+  }
+
+  // Normal paths still kick once.
+  const okId = "120363-kick-normal@g.us";
+  const normal = makeSock();
+  cache(okId, memberRoster());
+  const normalResult = await kickGroupMember(normal.sock, {
+    groupId: okId,
+    groupMetadata: memberRoster(),
+    targetCandidates: [USER_PN],
+    requesterCandidates: [ADMIN_PN],
+  });
+  equal("an admin requester kicks", normalResult.kicked, true);
+  equal("one remove call", normal.kicks.length, 1);
+  equal("the roster id is removed", normal.kicks[0].users[0], USER_LID);
+  equal("the action is remove", normal.kicks[0].action, "remove");
+
+  const panelId = "120363-kick-panel@g.us";
+  const panel = makeSock();
+  cache(panelId, memberRoster());
+  const panelResult = await kickGroupMember(panel.sock, {
+    groupId: panelId,
+    targetCandidates: [USER_PN],
+  });
+  equal("a caller with no requester still kicks", panelResult.kicked, true);
+  equal("one remove call for the panel path", panel.kicks.length, 1);
+
+  // A bot admin who is not a group admin passes the same rule as the dispatcher.
+  await permissions.grantRole(OTHER_PN, "admin");
+  try {
+    const botAdminId = "120363-kick-botadmin@g.us";
+    const botAdmin = makeSock();
+    cache(botAdminId, memberRoster());
+    const botAdminResult = await kickGroupMember(botAdmin.sock, {
+      groupId: botAdminId,
+      targetCandidates: [USER_PN],
+      requesterCandidates: [OTHER_PN],
+    });
+    equal("a bot admin requester kicks", botAdminResult.kicked, true);
+  } finally {
+    await permissions.revokeRole(OTHER_PN, "admin");
+  }
+
+  // The existing protections hold on the fresh roster.
+  const selfId = "120363-kick-self@g.us";
+  const self = makeSock();
+  cache(selfId, memberRoster());
+  const selfResult = await kickGroupMember(self.sock, {
+    groupId: selfId,
+    targetCandidates: [BOT_PN],
+  });
+  equal("the bot itself is protected", selfResult.error, "protected");
+  const adminResult = await kickGroupMember(self.sock, {
+    groupId: selfId,
+    targetCandidates: [ADMIN_PN],
+  });
+  equal("a group admin target is protected", adminResult.error, "protected");
+  equal("protected targets are never removed", self.kicks.length, 0);
 }
 
 section("panel presets use the backend membership default");

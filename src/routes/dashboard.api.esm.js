@@ -1217,7 +1217,8 @@ router.post("/roles", (req, res) => {
     const jid = `${phone}@s.whatsapp.net`;
     if (action === "grant") grantRole(jid, role);
     else revokeRole(jid, role);
-    logger.info(`[Dashboard] ${action} ${role}: ${phone}`);
+    logger.info(`[Dashboard] ${action} ${role}`);
+    logger.debugOnly.info({ phone }, `[Dashboard] ${action} ${role}`);
     res.json({ success: true, roles: listRoles() });
   } catch (error) {
     fail(res, error, "Error changing a role");

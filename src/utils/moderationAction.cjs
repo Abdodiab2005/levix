@@ -27,6 +27,7 @@ const {
   hasBotPrivilegesSync,
   isAdminInGroupSync,
   isBotAdminInGroupSync,
+  isBotAdminUserSync,
   isOwnerJidSync,
   primePermissions,
   rosterJidForSync,
@@ -218,23 +219,65 @@ function dismissMemberFlag(groupId, userId) {
 }
 
 /**
+ * The `userAdminRequired` rule of the gate that admitted this invocation, on a
+ * roster the caller picks.
+ *
+ * "direct" (default): the dispatcher's rule (resolveSender in
+ * middleware/permissions.middleware.js). A bot admin who is not an owner, or an
+ * admin of this group. `fromMe` makes the sender an owner there, which is why
+ * an owner needs the group role.
+ *
+ * "nested": the `!group <sub-command>` gate (commands/group.cjs): the same, or
+ * an owner (`fromMe` or the owner roster).
+ */
+function requesterStillAdmin(meta, candidates, fromMe, rule = "direct") {
+  const isOwner = Boolean(fromMe) || candidates.some((candidate) => isOwnerJidSync(candidate));
+  const isBotAdmin = !isOwner && candidates.some((candidate) => isBotAdminUserSync(candidate));
+  const isGroupAdmin = candidates.some((candidate) => isAdminInGroupSync(meta, candidate));
+  return isBotAdmin || isGroupAdmin || (rule === "nested" && isOwner);
+}
+
+/**
  * Remove a member on WhatsApp and drop their warnings + flag.
- * Used by !kick and the panel.
+ * Used by !kick, the panel and automatic enforcement.
+ *
+ * The roster is re-read fresh right before the checks and the remove call, never
+ * taken from the caller's earlier snapshot: a member promoted since then stays,
+ * and a requester demoted since then cannot kick. No fresh roster, no kick.
+ * `opts.requesterCandidates` (manual !kick only) re-checks the requester on that
+ * same roster; `opts.requesterFromMe` carries the command's `key.fromMe`.
+ * `opts.requesterRule` is the gate that admitted the command: "direct" (the
+ * dispatcher, the default) or "nested" (`!group kick`, which also admits an
+ * owner). Anything else is treated as "direct".
  */
 async function kickGroupMember(sock, opts) {
   await primePermissions();
   const groupId = opts.groupId;
   if (!groupId?.endsWith("@g.us")) return { kicked: false, error: "not-group" };
-  const meta = opts.groupMetadata || (await resolveGroupMetadata(sock, groupId));
   const candidates = (opts.targetCandidates || []).filter(Boolean);
   if (!candidates.length) return { kicked: false, error: "no-target" };
+  const meta = await resolveGroupMetadata(sock, groupId, { fresh: true });
+  if (!meta) return { kicked: false, error: "metadata-unavailable" };
+  if (opts.requesterCandidates) {
+    const requester = opts.requesterCandidates.filter(Boolean);
+    const rule = opts.requesterRule === "nested" ? "nested" : "direct";
+    // `!group` admits its own account (fromMe) with no identity to match.
+    const ownAccount = rule === "nested" && Boolean(opts.requesterFromMe);
+    if (
+      !ownAccount &&
+      (!requester.length || !requesterStillAdmin(meta, requester, opts.requesterFromMe, rule))
+    ) {
+      return { kicked: false, error: "requester-not-admin" };
+    }
+  }
   if (isProtectedMember(sock, meta, candidates)) return { kicked: false, error: "protected" };
   if (!isBotAdminInGroupSync(meta, sock)) return { kicked: false, error: "bot-not-admin" };
   const kickJid = rosterJidForSync(meta, candidates) || candidates[0];
   const updated = await sock.groupParticipantsUpdate(groupId, [kickJid], "remove");
   if (!removalSucceeded(updated)) return { kicked: false, error: "rejected", kickJid };
   clearMemberModeration(groupId, candidates[0]);
-  logger.info({ group: groupId, user: kickJid }, "moderation kicked member");
+  logger.info("moderation kicked member");
+  logger.debugOnly.info({ group: groupId, user: kickJid }, "moderation kicked member");
   return { kicked: true, kickJid };
 }
 
@@ -324,7 +367,8 @@ async function performKick(sock, ctx) {
       markModerationKicked(ctx.groupId, ctx.messageId);
       return true;
     }
-    logger.warn(
+    logger.warn({ rule: ctx.rule, error: result.error }, "moderation kick skipped");
+    logger.debugOnly.warn(
       { group: ctx.groupId, user: ctx.mentionJid, rule: ctx.rule, error: result.error },
       "moderation kick skipped",
     );
@@ -336,7 +380,8 @@ async function performKick(sock, ctx) {
     });
     return false;
   } catch (err) {
-    logger.error(
+    logger.error({ err, rule: ctx.rule }, "moderation kick failed");
+    logger.debugOnly.error(
       { err, group: ctx.groupId, user: ctx.mentionJid, rule: ctx.rule },
       "moderation kick failed",
     );
@@ -550,6 +595,10 @@ async function enforceHits(sock, opts) {
   }
   if (converted) {
     logger.warn(
+      { rule: committed.rule },
+      "moderation kick skipped: bot is not a group admin; flagged instead",
+    );
+    logger.debugOnly.warn(
       { group: groupId, user: mentionJid, rule: committed.rule },
       "moderation kick skipped: bot is not a group admin; flagged instead",
     );

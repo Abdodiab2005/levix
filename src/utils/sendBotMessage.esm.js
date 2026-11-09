@@ -56,7 +56,7 @@ async function safePresence(sock, jid, presence) {
   try {
     await sock.sendPresenceUpdate(presence, jid);
   } catch (err) {
-    logger.debug({ err: err?.message, jid, presence }, "[sendBotMessage] presence failed");
+    logger.debug({ err: err?.message, presence }, "[sendBotMessage] presence failed");
   }
 }
 

@@ -5,7 +5,11 @@ const {
   isAdminInGroupSync,
   sameUserSync,
 } = require("../../utils/permissions.cjs");
-const { kickGroupMember, targetFromCommand } = require("../../utils/moderationAction.cjs");
+const {
+  kickGroupMember,
+  senderCandidates,
+  targetFromCommand,
+} = require("../../utils/moderationAction.cjs");
 const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
@@ -14,7 +18,10 @@ module.exports = {
   userAdminRequired: true,
   botAdminRequired: true,
 
-  async execute(sock, msg, args, body, groupMetadata) {
+  // `ctx` is passed only by the direct dispatcher (command.handler.js); the nested
+  // `!group kick` (group.cjs) calls with five arguments. Each path was admitted
+  // by a different gate, and the re-check below must apply the same one.
+  async execute(sock, msg, args, body, groupMetadata, ctx) {
     const groupId = msg.key.remoteJid;
     const target = targetFromCommand(msg);
     const targetJid = target?.jid;
@@ -69,10 +76,15 @@ module.exports = {
         mentions: [targetJid],
       });
 
+      // The announcement above awaited, so the roster may have changed: the
+      // requester is re-checked on a fresh roster, as the dispatcher checked it.
       const result = await kickGroupMember(sock, {
         groupId,
         groupMetadata,
         targetCandidates,
+        requesterCandidates: senderCandidates(msg, sock),
+        requesterFromMe: Boolean(msg.key?.fromMe),
+        requesterRule: ctx === undefined ? "nested" : "direct",
       });
       if (!result.kicked) {
         await sock.sendMessage(groupId, {
