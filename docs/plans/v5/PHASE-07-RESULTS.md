@@ -761,5 +761,28 @@ control (`aria-describedby`); fixed in the shared `Field` primitive.
 - Rollback: revert the PR. No migration was added (schema 12). Rules and the
   switch stay in the database; turn the switch off before reverting.
 
-Phase 07.5 (architecture stabilization) waits for the owner's approval of this
-phase's merge.
+### Final review round (2026-11-09, before owner review)
+
+An owner-requested pass on head `31ef4f9` confirmed two findings and three audit
+items in 07c scope. All were fixed on `feat/v5-phase-07c`; nothing was merged.
+
+| id | finding | fix | commit |
+| --- | --- | --- | --- |
+| A | Global switch race: a second PUT could be sent while the first was in flight. An older ON committing after a newer OFF left the server ON while the panel showed OFF, which defeats the kill switch. Ignoring the older response in the UI did not stop the older server write. Polls overlapping the write could also flip the switch to a stale value. | One automation write at a time; further clicks are ignored until it settles (the switch reports `aria-busy`). The write counter is bumped at start and settle, so overlapping polls and an overlapping initial load are discarded or followed by a reconcile. A failed write shows the previous value and reconciles with the server. `createAutomationWriter` is React-free; `tests/reaction-ui-logic.test.mjs` drives it with deferred and out-of-order requests. | `e4e1d12` |
+| B | "Newest" sorted by last run, else last enable time. Rules have no creation timestamp. | The option is "Recent activity" (`reactionSortRecent`) in all four locales; ties stay ordered by id. No migration. | `e4e1d12` |
+| C-5 | A stored rule that no longer validates could not be turned off (400); only delete worked. | The stored definition is validated only when enabling, in `manage.js` and the store. Enabling an invalid rule is still refused. | `62fb948` |
+| C-1 | The overlap note said earlier rules "take precedence"; the engine runs the first enabled rule whose sender filter matches. | Copy now says that, in four locales. | `62fb948` |
+| T-1 | Machine terminology pass over all 164 pt-BR and es-419 reaction strings (OpenCode deepseek-v4.1-flash). | 5 es-419 strings aligned on activada/desactivada and "dispararla"; pt-BR had none. Still a machine draft pending the ChatGPT review (Q-19); no native speaker has verified it. | `2bafc41` |
+| R-1 | Independent read-only review of the fixes (OpenCode deepseek-v4.1-flash): a natively disabled switch drops keyboard focus when a write starts. | The switch announces `aria-busy` and the writer's guard ignores clicks; focus stays. | `f3f6ef9` |
+| R-2 | Same review: `i18n/review.json` hashed the pre-fix pt-BR and es-419 catalogs, so `i18n:check` warned. | Hashes refreshed; review status text unchanged. | `f3f6ef9` |
+
+Concurrent browser tabs remain a residual risk (R-3, not fixed). Each tab
+serializes its own writes, but the server applies requests from different tabs
+in arrival order. If tab A's ON stalls, tab B's later OFF commits first, and A's
+ON then lands, the server ends ON while tab B shows OFF until its next poll
+(30 s, or on focus; a hidden tab does not poll). The fix is an optimistic
+revision on `PUT /reactions/automation` with 409 on a stale write, like rules
+already have. That changes the API body, so it is left for the owner to decide.
+
+Phase 07.5 (architecture stabilization) runs on a stack based on this branch;
+see `PHASE-07.5-ARCHITECTURE-RESULTS.md`.
