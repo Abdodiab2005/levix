@@ -203,6 +203,13 @@ Three follow-up PRs stack on #148 so no published history is rewritten.
   available. `sock.logout()` still runs first, including for a connecting socket.
 - A later Unlink (with or without a socket) or a boot with the marker repeats the wipe and the whole
   cleanup, which are idempotent, then removes the marker and reports LOGGED_OUT.
+- Order (owner review): the marker is written before anything irreversible, then epoch and timers,
+  teardown, `sock.logout()`, the wipe, the cleanup, marker removal. If the first marker write fails,
+  the unlink does not start (no server logout, nothing changed; HTTP 503 `UNLINK_NOT_STARTED`), so a
+  restart correctly resumes a pairing that is still valid. A marker read error counts as pending
+  everywhere: start refuses, and boot neither crashes nor resumes. On the WhatsApp logged-out path a
+  failed marker write keeps the in-process error; after a restart the rejected credentials get 401
+  again and return to the wipe.
 - The Connection screen no longer reports success for an incomplete unlink: it shows an error toast,
   a notice and "Unlink again" (four locales; pt-BR and es-419 machine draft).
 - Tests: `tests/session.test.mjs` (failure injection, rollback, concurrent logout, logged-out close,
@@ -232,12 +239,14 @@ Three follow-up PRs stack on #148 so no published history is rewritten.
 | gate | orchestrator | D-3 returned `canUnlink: false`; panel toasted success on an incomplete unlink; a test called a missing store export; `!perm` logged JIDs | fixed |
 | verification 1 | OpenAI Codex | 4 findings fixed; new P2: the linked account could revoke its own owner role until reconnect | fixed in `55ce7b8` (refused; linked identities in their own set) |
 | verification 2 | OpenAI Codex | P2 fixed; no new defect; nothing but the paired `sock.user.id`/`lid` can enter the linked set, and unlink clears it | `55ce7b8` and stack top ready |
+| owner review | owner | P1: `sock.logout()` ran before the marker was saved, so a restart after a failed marker write resumed a server-logged-out pairing; a marker read error was not fail-closed | fixed in `3b6c6c7` (merged forward into 07.5f) |
+| verification 3 | OpenAI Codex | owner P1 fixed: marker first on every path that logs out or deletes; failed first write leaves the session untouched; reads fail closed in start, #open, retry, network restore, getState and boot | `3b6c6c7` ready |
 
 ### Evidence (local, Linux, Node v24.22.2)
 
-| gate | 07.5d `55ce7b8` | 07.5e `6bc0dd7` | 07.5f code `71025fc` |
+| gate | 07.5d `55ce7b8` | 07.5e `3b6c6c7` | 07.5f code `79e7520` |
 |---|---|---|---|
-| `npm test` | PASS, 14102 checks, 0 failed | PASS, 14284, 0 failed | PASS, 14364, 0 failed |
+| `npm test` | PASS, 14102 checks, 0 failed | PASS, 14365, 0 failed | PASS, 14445, 0 failed |
 | lint, `i18n:check`, `docs:check`, `build:frontend` | PASS | PASS | PASS |
 | `validate:tarball` | — | — | PASS, 36 checks |
 | `build:sea` + `validate:sea` | — | — | PASS, 51 checks |
