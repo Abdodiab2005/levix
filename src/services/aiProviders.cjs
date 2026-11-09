@@ -30,7 +30,7 @@
 
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
-const { toolDeclarations, describeCall, runTool } = require("./aiTools.cjs");
+const { toolDeclarations, describeCall, runToolWithDeadline } = require("./aiTools.cjs");
 const { docSourcesFromTool } = require("./aiDocs.cjs");
 const { assertProviderBaseUrl, safeProviderFetch } = require("../utils/providerUrl.cjs");
 const { baseMimeType, downloadMedia } = require("../utils/geminiMedia.cjs");
@@ -104,7 +104,7 @@ const {
   getProvider,
   detectModelCapabilities,
 } = require("./aiRouter.cjs");
-const { t, tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 function visionAllowed(providerId) {
   const id = providerId || settings.get("ai_provider");
@@ -571,48 +571,48 @@ function parseAnthropicResponse(payload) {
 // the wire
 // ===========================================================================
 
-async function callApi({ url, headers, body, label }) {
+async function callApi({ url, headers, body, label, signal: turnSignal }) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-
-  let response;
+  const timeoutError = new Error(`${label} API request timed out after ${API_TIMEOUT_MS / 1000}s`);
+  const timer = setTimeout(() => controller.abort(timeoutError), API_TIMEOUT_MS);
+  const signal = turnSignal ? AbortSignal.any([turnSignal, controller.signal]) : controller.signal;
   try {
-    response = await safeProviderFetch(
+    const response = await safeProviderFetch(
       url,
       {
         method: "POST",
         headers: { "Content-Type": "application/json", ...headers },
         body: JSON.stringify(body),
-        signal: controller.signal,
+        signal,
       },
       { allowLoopback: true },
     );
+    let payload = {};
+    try {
+      payload = await response.json();
+    } catch {
+      // Non-JSON proxy pages still use the status; cancellation must escape.
+      signal.throwIfAborted();
+    }
+    signal.throwIfAborted();
+    if (!response.ok) {
+      const message =
+        payload?.error?.message || payload?.error || response.statusText || "unknown error";
+      const error = new Error(
+        settings.redactSecrets(`${label} API request failed (${response.status}): ${message}`),
+      );
+      error.status = response.status;
+      throw error;
+    }
+    return payload;
   } catch (err) {
-    throw new Error(
-      err?.name === "AbortError"
-        ? `${label} API request timed out after ${API_TIMEOUT_MS / 1000}s`
-        : `${label} API request failed: ${err?.message || err}`,
-    );
+    if (controller.signal.aborted) throw timeoutError;
+    if (turnSignal?.aborted) throw turnSignal.reason;
+    if (err?.status) throw err;
+    throw new Error(settings.redactSecrets(`${label} API request failed: ${err?.message || err}`));
   } finally {
     clearTimeout(timer);
   }
-
-  let payload = {};
-  try {
-    payload = await response.json();
-  } catch {
-    // A non-JSON body (a proxy error page, say) still gets the status below.
-  }
-
-  if (!response.ok) {
-    const message =
-      payload?.error?.message || payload?.error || response.statusText || "unknown error";
-    const error = new Error(`${label} API request failed (${response.status}): ${message}`);
-    error.status = response.status;
-    throw error;
-  }
-
-  return payload;
 }
 
 function requestFor(
@@ -649,28 +649,6 @@ function requestFor(
   };
 }
 
-function withTimeout(promise, ms, label) {
-  let timer;
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => {
-      timer = setTimeout(
-        () =>
-          reject(
-            new Error(
-              // i18n-exception: sent to the model
-              tr(
-                `${label} took longer than ${Math.round(ms / 1000)} seconds`,
-                `${label} استغرقت العملية أكثر من ${Math.round(ms / 1000)} ثانية`,
-              ),
-            ),
-          ),
-        ms,
-      );
-    }),
-  ]).finally(() => clearTimeout(timer));
-}
-
 // ===========================================================================
 // the loop — same shape as aiAgent.runAgent, different wire format
 // ===========================================================================
@@ -698,6 +676,7 @@ async function runProviderAgent(
     context = {},
     useTools = true,
     maxSteps = null,
+    signal,
   } = {},
 ) {
   const adapter = adapterFor(provider);
@@ -740,7 +719,7 @@ async function runProviderAgent(
       messages,
       tools,
     });
-    return callApi({ ...request, label: adapter.label });
+    return callApi({ ...request, label: adapter.label, signal });
   };
 
   let response = await send();
@@ -790,14 +769,15 @@ async function runProviderAgent(
     const results = [];
     for (const call of parsed.calls) {
       toolCalls.push({ name: call.name, args: call.args });
-      logger.info({ tool: call.name, chatId: context.chatId }, "[aiAgent] tool call");
+      logger.info({ tool: call.name }, "[aiAgent] tool call");
 
       let toolResult;
       try {
-        toolResult = await withTimeout(
-          runTool(call.name, call.args, context),
-          settings.get("ai_tool_timeout_ms"),
+        toolResult = await runToolWithDeadline(
           call.name,
+          call.args,
+          context,
+          settings.get("ai_tool_timeout_ms"),
         );
       } catch (err) {
         toolResult = { error: err?.message || String(err) };

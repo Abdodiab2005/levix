@@ -26,6 +26,7 @@ const { GoogleGenAI } = require("@google/genai");
 
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
+const { accountEpoch } = require("../db/store.cjs");
 const {
   getChatHistoryAsync,
   saveChatHistoryAsync,
@@ -55,6 +56,8 @@ const { t } = require("../utils/i18n.cjs");
 // Per-(chat, sender) explicit context buffer for the multi-message workflow.
 // Entries accumulate until `!gemini send` flushes them into a single call.
 // Lives in memory only — short-lived by design.
+let historyRevision = 0;
+const chatHistoryRevisions = new Map();
 const contextBuffers = new Map(); // key: "<chatJid>::<senderJid>" -> { entries, at }
 const MAX_BUFFER_ENTRIES = 20;
 const MAX_BUFFER_CHARS = 32_000;
@@ -250,6 +253,7 @@ module.exports = {
   chat: "all",
 
   async execute(sock, msg, args, body, groupMetadata, ctx = {}) {
+    const epoch = ctx?.accountEpoch ?? accountEpoch();
     const chatId = msg.key.remoteJid;
     const userName = msg.pushName;
     const isGroup = chatId.endsWith("@g.us");
@@ -287,6 +291,7 @@ module.exports = {
           { text: t("bot.ai.gemini.ownerOnly") },
           { replyTo: msg },
         );
+      chatHistoryRevisions.set(chatId, (chatHistoryRevisions.get(chatId) || 0) + 1);
       await deleteChatHistoryAsync(chatId);
       return sendBotMessage(
         sock,
@@ -305,6 +310,8 @@ module.exports = {
           { text: t("bot.ai.gemini.ownerOnly") },
           { replyTo: msg },
         );
+      historyRevision += 1;
+      chatHistoryRevisions.clear();
       await deleteAllChatHistoriesAsync();
       return sendBotMessage(
         sock,
@@ -376,6 +383,7 @@ module.exports = {
     // --- multi-message context buffer ---
     if (subCommand === "add") {
       const entry = await captureContextEntry(msg, args);
+      if (epoch !== accountEpoch()) return;
       if (!entryHasContent(entry)) {
         return sendBotMessage(
           sock,
@@ -466,6 +474,7 @@ module.exports = {
     if (subCommand === "send") {
       const buf = getBuffer(msg);
       const finalEntry = await captureContextEntry(msg, args);
+      if (epoch !== accountEpoch()) return;
       const allEntries = [...buf];
       if (entryHasContent(finalEntry)) allEntries.push(finalEntry);
       if (!allEntries.length) {
@@ -615,6 +624,8 @@ module.exports = {
       msg,
       sock,
       groupMetadata: callerRoster,
+      accountEpoch: epoch,
+      rosterVersion: ctx?.rosterVersion,
       text: body || "",
     });
     const agentContext = {
@@ -647,6 +658,13 @@ module.exports = {
       replyTo: msg,
     });
 
+    const revision = historyRevision;
+    const chatRevision = chatHistoryRevisions.get(chatId) || 0;
+    const canSaveHistory = () =>
+      epoch === accountEpoch() &&
+      revision === historyRevision &&
+      chatRevision === (chatHistoryRevisions.get(chatId) || 0);
+
     async function attempt(historyOverride) {
       const history = historyOverride ?? ((await getChatHistoryAsync(chatId)) || []);
       const result = await runAgent({
@@ -655,7 +673,7 @@ module.exports = {
         status,
         context: agentContext,
       });
-      if (result.history?.length) {
+      if (canSaveHistory() && result.history?.length) {
         await saveChatHistoryAsync(chatId, result.history);
       }
       return result;
@@ -668,13 +686,14 @@ module.exports = {
       } catch (firstErr) {
         // A dead fileData URI in the history poisons every later call — scrub
         // it once and retry so the user never sees the expiry.
-        if (!isFileReferenceError(firstErr)) throw firstErr;
+        if (!isFileReferenceError(firstErr) || !canSaveHistory()) throw firstErr;
 
         const oldHistory = (await getChatHistoryAsync(chatId)) || [];
         const cleaned = sanitizeHistoryForFiles(oldHistory);
+        if (!canSaveHistory()) throw firstErr;
         await saveChatHistoryAsync(chatId, cleaned);
         logger.info(
-          `[Gemini] sanitized history for chat ${chatId}: ${oldHistory.length} -> ${cleaned.length}; retrying once`,
+          `[Gemini] sanitized history: ${oldHistory.length} -> ${cleaned.length}; retrying once`,
         );
         result = await attempt(cleaned);
       }

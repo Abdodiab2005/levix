@@ -67,6 +67,18 @@ let rosterEpoch = 0;
 // jid -> { seq, at }. Survives a finished refresh so a late bulk answer still
 // sees the event. Separate from `state`, which only tracks stale fetches.
 const rosterEvents = new Map();
+// Unlike refresh state and event retention, these versions survive cache expiry.
+// A caller may use its message-time roster only until newer information exists.
+const rosterVersions = new Map();
+
+function bumpRosterVersion(jid) {
+  if (isGroupJid(jid)) rosterVersions.set(jid, (rosterVersions.get(jid) || 0) + 1);
+}
+
+/** Read-only marker for writes, deletions, roster events and cache flushes. */
+function getRosterVersion(jid) {
+  return `${rosterEpoch}:${rosterVersions.get(jid) || 0}`;
+}
 
 function isGroupJid(jid) {
   return String(jid || "").endsWith("@g.us");
@@ -114,6 +126,7 @@ function dropIdleState(jid) {
 // write the roster back after the cache was cleared.
 function dropAllRosterState() {
   rosterEpoch += 1;
+  rosterVersions.clear();
   rosterEvents.clear();
   for (const entry of state.values()) {
     entry.gen += 1;
@@ -131,6 +144,7 @@ function pruneRosterEvents(now = Date.now()) {
 }
 
 function noteRosterEvent(jid, now = Date.now()) {
+  bumpRosterVersion(jid);
   rosterEventSeq += 1;
   rosterEvents.set(jid, { seq: rosterEventSeq, at: now });
   pruneRosterEvents(now);
@@ -155,8 +169,15 @@ function captureRosterCursor(now = Date.now()) {
   return { seq: rosterEventSeq, epoch: rosterEpoch };
 }
 
-cache.on("del", (key) => dropIdleState(key));
-cache.on("expired", (key) => dropIdleState(key));
+cache.on("set", (key) => bumpRosterVersion(key));
+cache.on("del", (key) => {
+  bumpRosterVersion(key);
+  dropIdleState(key);
+});
+cache.on("expired", (key) => {
+  bumpRosterVersion(key);
+  dropIdleState(key);
+});
 cache.on("flush", () => dropAllRosterState());
 
 /**
@@ -409,6 +430,7 @@ module.exports = {
   CACHE_CONFIG,
   isGroupJid,
   getCached,
+  getRosterVersion,
   setCached,
   flushAll,
   keys,

@@ -147,6 +147,13 @@ section("create_poll tool");
   ok("model args went through the same caps", sentSock.sent[0]?.content?.poll?.values.length === 2);
   equal("tool reports the question", result.question, "نروح فين؟");
 
+  const routeRefusal = await runTool(
+    "create_poll",
+    { question: "q", options: ["a", "b"] },
+    { caller, sock: { async sendMessage() { return { refused: true }; } } },
+  );
+  equal("a refused poll is reported as not sent", routeRefusal.sent, false);
+
   runtimeConfig.setPermission("poll", "OWNER_ONLY");
   const refused = await runTool(
     "create_poll",
@@ -219,6 +226,38 @@ section("summarize_chat tool");
     ok("member is refused global scope", denied.denied === true);
   } finally {
     require("./src/services/aiRouter.cjs").getProvider = originalGetProvider;
+  }
+}
+
+section("summarize_chat rechecks authority after the provider awaits");
+{
+  const router = require("./src/services/aiRouter.cjs");
+  const original = router.getProvider;
+  for (const boundary of ["role", "epoch", "abort"]) {
+    await permissions.grantRole(OWNER, "owner");
+    await saveChatHistoryAsync(OWNER, [{ role: "user", parts: [{ text: "remember this" }] }]);
+    const caller = await callerFor(OWNER);
+    const controller = new AbortController();
+    const before = memory.listMemory({ scope: "global" }).length;
+    router.getProvider = () => ({
+      async runTurn(options) {
+        equal("summary receives turn signal", options.signal, controller.signal);
+        if (boundary === "role") await permissions.revokeRole(OWNER, "owner");
+        if (boundary === "epoch") require("./src/db/store.cjs").advanceAccountEpoch();
+        if (boundary === "abort") controller.abort(new Error("expired"));
+        return { text: "- Must never be saved" };
+      },
+    });
+    try {
+      const result = await runTool("summarize_chat", { scope: "global" }, {
+        caller, sock, signal: controller.signal,
+      });
+      ok(`${boundary}: summary refused`, Boolean(result.error));
+      equal(`${boundary}: no memory write`, memory.listMemory({ scope: "global" }).length, before);
+    } finally {
+      router.getProvider = original;
+      await permissions.grantRole(OWNER, "owner");
+    }
   }
 }
 

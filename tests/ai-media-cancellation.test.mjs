@@ -362,6 +362,101 @@ try {
     }
   }
 
+  section("AI delivery guards survive cooldown, proxy routing and socket preparation");
+  {
+    const dispatcher = await import("../src/handlers/command.handler.js");
+    await dispatcher.loadCommands();
+    const command = dispatcher.getLoadedCommands().get("gemini");
+    const execute = command.execute;
+    const permissions = require("./src/utils/permissions.cjs");
+    const config = require("./src/config/runtime-config.cjs");
+    const store = require("./src/db/store.cjs");
+    for (const [tool, backing, args] of [
+      ["create_poll", "poll", { question: "Pick", options: ["one", "two"] }],
+      ["speak", "tts", { text: "hello" }],
+      ["generate_image", "gemini", { prompt: "cat" }],
+    ]) {
+      const previous = config.getPermission(backing);
+      config.setPermission(backing, "ADMINS_OWNER");
+      try {
+        for (const stage of ["cooldown", "thumbnail"]) {
+          for (const boundary of ["role", "epoch"]) {
+            const chat = jid();
+            await permissions.grantRole(chat, "admin");
+            const out = await wrappedSocket();
+            const wait = deferred();
+            const entered = deferred();
+            let result;
+            prepare = async (content) => content;
+            timing.sleep = async () => {};
+            settings.set("bot_min_delay_ms", 0);
+            settings.set("bot_max_delay_ms", 0);
+            if (stage === "cooldown") {
+              await cjs.sendBotMessage(out, chat, { text: "prime" }, { typing: false });
+              settings.set("bot_min_delay_ms", 1000);
+              settings.set("bot_max_delay_ms", 1000);
+              timing.sleep = () => {
+                entered.resolve();
+                return wait.promise;
+              };
+            } else {
+              prepare = async (content) => {
+                entered.resolve();
+                await wait.promise;
+                return content;
+              };
+            }
+            const before = out.sent.length;
+            command.execute = async (proxy, msg) => {
+              const real = await resolveCaller({ msg, sock: proxy });
+              result = await runTool(tool, args, { caller: real, sock: proxy });
+            };
+            mock.timers.enable({ apis: ["setTimeout"] });
+            try {
+              const work = dispatcher.handleCommand(
+                out,
+                {
+                  key: { remoteJid: chat, id: "in", fromMe: false },
+                  message: { conversation: "!ai test" },
+                },
+                "!ai test",
+              );
+              await entered.promise;
+              if (boundary === "role") await permissions.revokeRole(chat, "admin");
+              else store.advanceAccountEpoch();
+              wait.resolve();
+              await work;
+              const label = `${tool}/${stage}/${boundary}`;
+              equal(`${label}: final guard refuses`, result?.code, "DENIED");
+              equal(`${label}: reported as not sent`, result?.sent, false);
+              equal(`${label}: Baileys send never starts`, out.sent.length, before);
+            } finally {
+              wait.resolve();
+              mock.timers.reset();
+              prepare = async (content) => content;
+              timing.sleep = async () => {};
+              settings.set("bot_min_delay_ms", 0);
+              settings.set("bot_max_delay_ms", 0);
+            }
+          }
+        }
+        const chat = jid();
+        await permissions.grantRole(chat, "admin");
+        const out = await wrappedSocket();
+        const real = await caller(chat);
+        const result = await runTool(tool, args, { caller: real, sock: out });
+        equal(`${tool}: valid guarded send still succeeds`, result.sent, true);
+        ok(
+          `${tool}: guard is consumed before Baileys`,
+          !Object.hasOwn(out.sent.at(-1)?.options || {}, "deliveryGuard"),
+        );
+      } finally {
+        command.execute = execute;
+        config.setPermission(backing, previous);
+      }
+    }
+  }
+
   section("a cancelled edit cannot fall back to a fresh message");
   {
     const dispatcher = await import("../src/handlers/command.handler.js");

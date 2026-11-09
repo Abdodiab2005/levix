@@ -159,7 +159,9 @@ export async function sendBotError(
 ) {
   const name = err?.name || (typeof err === "string" ? "Error" : "Error");
   const message = err?.message || (typeof err === "string" ? err : JSON.stringify(err));
-  const text = t("bot.core.sendBotMessage.errorCard", { lead, name, message }).slice(0, 1500);
+  const text = settings
+    .redactSecrets(t("bot.core.sendBotMessage.errorCard", { lead, name, message }))
+    .slice(0, 1500);
   return sendBotMessage(sock, jid, { text }, options);
 }
 

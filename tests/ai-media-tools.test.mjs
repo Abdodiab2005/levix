@@ -1,4 +1,5 @@
 // Model-initiated media: identity, upload, cost, deadline and delivery boundaries.
+import { mock } from "node:test";
 import { Readable } from "node:stream";
 import { readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -15,7 +16,7 @@ const settings = require("./src/config/settings.cjs");
 const permissions = require("./src/utils/permissions.cjs");
 await permissions.primePermissions();
 const config = require("./src/config/runtime-config.cjs");
-const { runTool, TOOLS } = require("./src/services/aiTools.cjs");
+const { runTool, runToolWithDeadline, TOOLS } = require("./src/services/aiTools.cjs");
 const { resolveCaller, callerAudio } = require("./src/services/aiToolAuth.cjs");
 const media = require("./src/utils/geminiMedia.cjs");
 const safety = require("./src/services/aiMedia.cjs");
@@ -263,6 +264,62 @@ try {
   }
   equal("stream byte count is authoritative", boundedError?.message, "MEDIA_TOO_LARGE");
   ok("oversized stream is destroyed", stream.destroyed);
+
+  section("turn cancellation reaches every media tool and retains the busy slot");
+  for (const [name, args, value] of [
+    ["speak", { text: "hello" }, voice],
+    ["generate_image", { prompt: "cat" }, { image: png }],
+    ["transcribe_audio", {}, "late transcript"],
+  ]) {
+    let release;
+    let enter;
+    let operationSignal;
+    const entered = new Promise((resolve) => {
+      enter = resolve;
+    });
+    const pending = new Promise((resolve) => {
+      release = resolve;
+    });
+    const wait = (signal) => {
+      operationSignal = signal;
+      enter();
+      return pending;
+    };
+    tts._synthesizeVoice = (_text, _lang, { signal }) => wait(signal);
+    image.generateImage = (_prompt, { signal }) => wait(signal);
+    stt.transcribe = (_buffer, _mime, { signal }) => wait(signal);
+    media.downloadMedia = async () => voice.audio;
+    const real = await callerFor(message({ attached: audio }));
+    const out = socket();
+    mock.timers.enable({ apis: ["setTimeout"] });
+    try {
+      const work = runToolWithDeadline(name, args, { caller: real, sock: out }, 25).catch(
+        (error) => error,
+      );
+      await entered;
+      mock.timers.tick(25);
+      ok(`${name}: outer deadline expires`, (await work) instanceof Error);
+      equal(`${name}: combined signal is aborted`, operationSignal.aborted, true);
+      equal(
+        `${name}: underlying operation still owns its slot`,
+        (await runTool(name, args, { caller: real, sock: out })).code,
+        "MEDIA_BUSY",
+      );
+      release(value);
+      await new Promise((resolve) => setImmediate(resolve));
+      equal(`${name}: late completion sends nothing`, out.sent.length, 0);
+    } finally {
+      release(value);
+      mock.timers.reset();
+    }
+  }
+  tts._synthesizeVoice = async () => voice;
+  image.generateImage = async () => ({ image: png, provider: "gemini" });
+  stt.transcribe = async () => "a private transcript";
+  media.downloadMedia = async (_download, descriptor) => {
+    downloaded = descriptor;
+    return voice.audio;
+  };
 
   section("rate limits survive fresh callers and deadlines prevent late sends");
   const repeated = message();

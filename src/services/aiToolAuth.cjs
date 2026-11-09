@@ -15,11 +15,20 @@
 // to `!schedule` moves create_reminder with it.
 
 const runtimeConfig = require("../config/runtime-config.cjs");
+const { accountEpoch } = require("../db/store.cjs");
+const { getCached, getRosterVersion, isRosterStale } = require("../utils/groupMetadataCache.cjs");
+const {
+  primePermissions,
+  isOwnerJidSync,
+  isBotAdminUserSync,
+  isAdminInGroupSync,
+} = require("../utils/permissions.cjs");
 const { evaluatePermissionLevel } = require("../utils/permissionLevel.cjs");
 
 /** Every caller this module has resolved from a real message. */
 const minted = new WeakSet();
 const audioByCaller = new WeakMap();
+const authorityByCaller = new WeakMap();
 
 /**
  * Roles some commands demand on top of their permission level, named the way
@@ -48,10 +57,22 @@ const ROLE_ERRORS = Object.freeze({
  * @param {object} options.msg             - the Baileys message that invoked the AI
  * @param {object} options.sock            - Baileys socket (fromMe resolves to its account)
  * @param {object} [options.groupMetadata] - for group-admin detection
+ * @param {number} [options.accountEpoch] - epoch captured when the message arrived
+ * @param {string} [options.rosterVersion] - marker captured alongside groupMetadata
  * @param {string} [options.text]          - what the sender typed (role tools bind targets to it)
  */
-async function resolveCaller({ msg, sock, groupMetadata = null, text = "" }) {
+async function resolveCaller({
+  msg,
+  sock,
+  groupMetadata = null,
+  text = "",
+  accountEpoch: receivedEpoch,
+  rosterVersion: receivedRosterVersion,
+}) {
   if (!msg?.key?.remoteJid) throw new Error("resolveCaller needs the incoming message");
+  const epoch = receivedEpoch ?? accountEpoch();
+  const rosterVersion = receivedRosterVersion ?? getRosterVersion(msg.key.remoteJid);
+  await primePermissions();
   const { resolveSender } = await import("../middleware/permissions.middleware.js");
   const sender = resolveSender(msg, groupMetadata, sock);
   const contextInfo = msg.message?.extendedTextMessage?.contextInfo;
@@ -74,6 +95,12 @@ async function resolveCaller({ msg, sock, groupMetadata = null, text = "" }) {
     text: String(text || ""),
   });
   minted.add(caller);
+  authorityByCaller.set(caller, {
+    epoch,
+    fromMe: Boolean(msg.key.fromMe),
+    groupMetadata,
+    rosterVersion,
+  });
   const { unwrapMessage, quotedOf } = require("../utils/messageContent.cjs");
   const own = unwrapMessage(msg.message);
   const audio = own.audioMessage || unwrapMessage(quotedOf(msg)).audioMessage;
@@ -104,12 +131,38 @@ function authorize(access, caller) {
     return { allowed: false, error: "this action needs a verified sender, and there is none" };
   }
 
+  const authority = authorityByCaller.get(caller);
+  if (authority.epoch !== accountEpoch()) {
+    return { allowed: false, error: "the linked WhatsApp account changed during this request" };
+  }
+  // Identity is frozen; privileges come from the dispatcher's live predicates.
+  const isOwner = authority.fromMe || caller.candidates.some(isOwnerJidSync);
+  const isBotAdmin = !isOwner && caller.candidates.some(isBotAdminUserSync);
+  // Expiry must not revive an admin snapshot after a newer roster was observed.
+  let metadata = null;
+  if (!isRosterStale(caller.chatId)) {
+    metadata = getCached(caller.chatId);
+    // getCached may itself expire an entry, so compare the version after reading it.
+    if (metadata === undefined && getRosterVersion(caller.chatId) === authority.rosterVersion) {
+      metadata = authority.groupMetadata;
+    }
+  }
+  const isGroupAdmin =
+    caller.isGroup && caller.candidates.some((id) => isAdminInGroupSync(metadata, id));
+  const roles = {
+    ...caller,
+    isOwner,
+    isBotAdmin,
+    isGroupAdmin,
+    isSenderAdmin: isBotAdmin || isGroupAdmin,
+  };
+
   if (runtimeConfig.isDisabled(access.command)) {
     return { allowed: false, error: `the backing command !${access.command} is disabled` };
   }
 
   const level = runtimeConfig.getPermission(access.command);
-  const { hasPermission } = evaluatePermissionLevel(level, caller);
+  const { hasPermission } = evaluatePermissionLevel(level, roles);
   if (!hasPermission) {
     return {
       allowed: false,
@@ -120,7 +173,7 @@ function authorize(access, caller) {
   if (access.role) {
     const check = ROLES[access.role];
     if (!check) return { allowed: false, error: `unknown role requirement: ${access.role}` };
-    if (!check(caller)) return { allowed: false, error: ROLE_ERRORS[access.role] };
+    if (!check(roles)) return { allowed: false, error: ROLE_ERRORS[access.role] };
   }
   return { allowed: true };
 }

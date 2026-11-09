@@ -158,7 +158,9 @@ class StatusMessage {
     const name = err?.name || "Error";
     const message = err?.message || String(err || t("bot.core.statusMessage.unknownError"));
     return this.finish(
-      t("bot.core.statusMessage.errorCard", { lead, name, message }).slice(0, 1500),
+      settings
+        .redactSecrets(t("bot.core.statusMessage.errorCard", { lead, name, message }))
+        .slice(0, 1500),
     );
   }
 

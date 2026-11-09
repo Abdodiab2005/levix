@@ -9,6 +9,7 @@
 // whoever invoked the AI — not of whoever wrote it.
 
 import http from "node:http";
+import { mock } from "node:test";
 
 import { equal, finish, ok, require, section, useTempDataDir } from "./harness.mjs";
 
@@ -78,6 +79,8 @@ function dmMsg(from, text = "!ai hi") {
     message: { conversation: text },
   };
 }
+
+require("./src/utils/groupMetadataCache.cjs").setCached(GROUP, groupMetadata);
 
 const inGroup = (from, opts = {}) =>
   resolveCaller({ msg: groupMsg(from, opts), sock, groupMetadata, text: opts.text });
@@ -541,6 +544,166 @@ try {
     );
   } finally {
     server.close();
+  }
+  section("roles are re-read after caller resolution");
+  await permissions.revokeRole(ADMIN, "admin");
+  ok(
+    "revoked bot admin loses global memory",
+    !authorize({ command: "memory", role: "botPrivileged" }, admin).allowed,
+  );
+  await permissions.grantRole(ADMIN, "admin");
+  await permissions.revokeRole(OWNER, "owner");
+  ok("revoked owner loses role grants", !authorize({ command: "perm" }, owner).allowed);
+  await permissions.grantRole(OWNER, "owner");
+
+  section("group metadata falls back only when the cache is empty");
+  const groupCache = require("./src/utils/groupMetadataCache.cjs");
+  groupCache.cache.del(GROUP);
+  const snapshotMod = await inGroup(MOD);
+  ok(
+    "snapshot admin is allowed when the cache is empty",
+    authorize({ command: "memory", role: "chatModerator" }, snapshotMod).allowed,
+  );
+  const saved = await runTool(
+    "save_memory",
+    {
+      scope: "chat",
+      content: "snapshot moderator removal",
+    },
+    { caller: member },
+  );
+  const removed = await runTool(
+    "forget_memory",
+    {
+      scope: "chat",
+      ref: saved.id,
+    },
+    { caller: snapshotMod },
+  );
+  equal("snapshot admin can remove this chat's memory", removed.removed, true);
+  groupCache.setCached(GROUP, {
+    ...groupMetadata,
+    participants: groupMetadata.participants.map((p) => ({ ...p, admin: null })),
+  });
+  ok(
+    "cached demotion removes moderator authority",
+    !authorize({ command: "memory", role: "chatModerator" }, snapshotMod).allowed,
+  );
+  section("expired demotion cannot revive the caller snapshot");
+  mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  try {
+    groupCache.cache.ttl(GROUP, 1);
+    mock.timers.tick(1001);
+    ok(
+      "expired demotion still denies the old admin snapshot",
+      !authorize({ command: "memory", role: "chatModerator" }, snapshotMod).allowed,
+    );
+    equal("demoted roster has expired", groupCache.getCached(GROUP), undefined);
+  } finally {
+    mock.timers.reset();
+  }
+  groupCache.setCached(GROUP, groupMetadata);
+  groupCache.markRosterChanged(null, GROUP);
+  ok(
+    "stale metadata cannot restore moderator authority",
+    !authorize({ command: "memory", role: "chatModerator" }, snapshotMod).allowed,
+  );
+  groupCache.setCached(GROUP, groupMetadata);
+
+  section("dispatch roster version stays paired with its snapshot until caller minting");
+  groupCache.cache.del(GROUP);
+  const dispatchSnapshot = groupMetadata;
+  const dispatchVersion = groupCache.getRosterVersion(GROUP);
+  const unchanged = await resolveCaller({
+    msg: groupMsg(MOD),
+    sock,
+    groupMetadata: dispatchSnapshot,
+    rosterVersion: dispatchVersion,
+  });
+  ok(
+    "unchanged dispatch marker allows the admin snapshot fallback",
+    authorize({ command: "memory", role: "chatModerator" }, unchanged).allowed,
+  );
+  mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  try {
+    groupCache.cache.set(
+      GROUP,
+      {
+        ...groupMetadata,
+        participants: groupMetadata.participants.map((p) => ({ ...p, admin: null })),
+      },
+      1,
+    );
+    mock.timers.tick(1001);
+    equal("demoted roster expires before caller minting", groupCache.getCached(GROUP), undefined);
+    const delayedSnapshot = await resolveCaller({
+      msg: groupMsg(MOD),
+      sock,
+      groupMetadata: dispatchSnapshot,
+      rosterVersion: dispatchVersion,
+    });
+    ok(
+      "demotion and expiry before mint cannot revive the dispatch snapshot",
+      !authorize({ command: "memory", role: "chatModerator" }, delayedSnapshot).allowed,
+    );
+  } finally {
+    mock.timers.reset();
+  }
+
+  section("roster versions stay group-scoped and survive deletions and flushes");
+  groupCache.cache.del(GROUP);
+  const untouchedMod = await inGroup(MOD);
+  groupCache.setCached(OTHER_GROUP, { ...groupMetadata, id: OTHER_GROUP });
+  ok(
+    "another group's cache write does not invalidate this snapshot",
+    authorize({ command: "memory", role: "chatModerator" }, untouchedMod).allowed,
+  );
+  groupCache.setCached(GROUP, groupMetadata);
+  groupCache.cache.del(GROUP);
+  ok(
+    "deleting a newer roster cannot restore the old snapshot",
+    !authorize({ command: "memory", role: "chatModerator" }, untouchedMod).allowed,
+  );
+  const beforeFlush = await inGroup(MOD);
+  groupCache.flushAll();
+  ok(
+    "flush invalidates snapshots even when their cache entry was absent",
+    !authorize({ command: "memory", role: "chatModerator" }, beforeFlush).allowed,
+  );
+  groupCache.setCached(GROUP, groupMetadata);
+
+  section("delayed callers retain the epoch captured at message arrival");
+  const store = require("./src/db/store.cjs");
+  const receivedEpoch = store.accountEpoch();
+  store.advanceAccountEpoch();
+  const delayed = await resolveCaller({
+    msg: groupMsg(OWNER),
+    sock,
+    groupMetadata,
+    accountEpoch: receivedEpoch,
+  });
+  equal(
+    "late resolution cannot adopt the new account",
+    authorize({ command: "memory" }, delayed).error,
+    "the linked WhatsApp account changed during this request",
+  );
+  const current = await inGroup(OWNER);
+  equal(
+    "omitted epoch still samples the current account",
+    authorize({ command: "memory" }, current).allowed,
+    true,
+  );
+
+  section("account changes invalidate every access tool");
+  for (const [name, tool] of Object.entries(TOOLS)) {
+    if (!tool.access) continue;
+    const result = await runTool(name, {}, { caller: owner, sock });
+    equal(`${name}: denied after epoch change`, result.denied, true);
+    equal(
+      `${name}: account boundary reason`,
+      result.error,
+      "the linked WhatsApp account changed during this request",
+    );
   }
 } finally {
   scheduler.stopAllScheduledJobs();
