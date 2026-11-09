@@ -1120,7 +1120,7 @@
   "reactionSortPriority": "Prioridade",
   "reactionSortChat": "Conversa",
   "reactionSortRecent": "Atividade recente",
-  "reactionOverlaps": "{n} regra(s) com o mesmo gatilho têm precedência. Apenas uma regra é executada por reação.",
+  "reactionOverlaps": "{n} regra(s) anterior(es) compartilham este gatilho. Para cada reação, só é executada a primeira regra ativada cujo filtro de remetente corresponde.",
   "reactionLastOutcome": "Última execução:",
   "reactionNeverRan": "Ainda não foi executada",
   "reactionPriorityBadge": "Prioridade {n}",

@@ -1120,7 +1120,7 @@
   "reactionSortPriority": "الأولوية",
   "reactionSortChat": "المحادثة",
   "reactionSortRecent": "النشاط الأخير",
-  "reactionOverlaps": "{n} قاعدة بنفس المشغّل لها الأسبقية. لا تعمل سوى قاعدة واحدة لكل تفاعل.",
+  "reactionOverlaps": "{n} قاعدة سابقة تشترك في هذا المشغّل. لكل تفاعل، تعمل فقط أول قاعدة مفعّلة يطابق مرشّح المرسِل فيها.",
   "reactionLastOutcome": "آخر تشغيل:",
   "reactionNeverRan": "لم تُشغَّل بعد",
   "reactionPriorityBadge": "الأولوية {n}",

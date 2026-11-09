@@ -1120,7 +1120,7 @@
   "reactionSortPriority": "Priority",
   "reactionSortChat": "Chat",
   "reactionSortRecent": "Recent activity",
-  "reactionOverlaps": "{n} rule(s) with the same trigger take precedence. Only one rule runs per reaction.",
+  "reactionOverlaps": "{n} earlier rule(s) share this trigger. For each reaction, only the first enabled rule whose sender filter matches runs.",
   "reactionLastOutcome": "Last run:",
   "reactionNeverRan": "Has not run yet",
   "reactionPriorityBadge": "Priority {n}",

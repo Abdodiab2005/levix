@@ -401,6 +401,47 @@ const corrupt = manage.overview().rules.find((item) => item.id === privateRule.i
 equal("corrupt rule remains visible", corrupt.valid, false);
 ok("corrupt rule explains invalidity", corrupt.statuses.includes("RULE_INVALID"));
 
+section("invalid stored definition can be disabled, not enabled");
+const jsonRule = manage.createRule(draft({ priority: 3 }));
+const jsonOn = manage.setRuleEnabled(jsonRule.id, { revision: jsonRule.revision, enabled: true });
+db.prepare("UPDATE reaction_rules SET definition='not-json' WHERE id=?").run(jsonRule.id);
+const jsonOff = manage.setRuleEnabled(jsonRule.id, { revision: jsonOn.revision, enabled: false });
+equal("invalid JSON disable works", jsonOff.enabled, false);
+equal("invalid JSON disable clears epoch", jsonOff.enabledAt, null);
+ok("invalid JSON disable rotates revision", jsonOff.revision !== jsonOn.revision);
+const jsonEnable = throws("invalid JSON cannot be enabled", () =>
+  manage.setRuleEnabled(jsonRule.id, { revision: jsonOff.revision, enabled: true }),
+);
+equal("invalid JSON enable status", jsonEnable?.status, 400);
+equal("invalid JSON enable code", jsonEnable?.message, "REACTION_RULE_INVALID");
+equal("store disable invalid JSON", store.setReactionRuleEnabled(jsonRule.id, false).enabled, 0);
+throws("store cannot enable invalid JSON", () => store.setReactionRuleEnabled(jsonRule.id, true));
+
+const schemaRule = manage.createRule(draft({ priority: 4 }));
+const schemaOn = manage.setRuleEnabled(schemaRule.id, {
+  revision: schemaRule.revision,
+  enabled: true,
+});
+db.prepare("UPDATE reaction_rules SET definition=? WHERE id=?").run('{"version":2}', schemaRule.id);
+const schemaStoreOff = store.setReactionRuleEnabled(schemaRule.id, false);
+equal("store disable invalid definition", schemaStoreOff.enabled, 0);
+equal("store disable clears epoch", schemaStoreOff.enabled_at, null);
+ok("store disable rotates revision", schemaStoreOff.revision !== schemaOn.revision);
+const schemaStoreOn = throws("store cannot enable invalid definition", () =>
+  store.setReactionRuleEnabled(schemaRule.id, true),
+);
+equal("store enable throws REACTION_RULE_INVALID", schemaStoreOn?.message, "REACTION_RULE_INVALID");
+const schemaOff = manage.setRuleEnabled(schemaRule.id, {
+  revision: schemaStoreOff.revision,
+  enabled: false,
+});
+equal("invalid definition disable works", schemaOff.enabled, false);
+const schemaEnable = throws("invalid definition cannot be enabled", () =>
+  manage.setRuleEnabled(schemaRule.id, { revision: schemaOff.revision, enabled: true }),
+);
+equal("invalid definition enable status", schemaEnable?.status, 400);
+equal("invalid definition enable code", schemaEnable?.message, "REACTION_RULE_INVALID");
+
 section("candidate warning and binary overlap precedence");
 for (const id of ["a", "A", "z"]) store.saveReactionRule({ id, ...draft({ priority: 5 }) });
 let views = manage.overview().rules;

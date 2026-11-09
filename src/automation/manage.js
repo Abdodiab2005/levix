@@ -260,13 +260,15 @@ export function setRuleEnabled(id, body) {
   if (typeof body?.enabled !== "boolean") issues.push({ field: "enabled", code: "invalid" });
   assertValid(issues);
   const row = currentRule(id, body.revision);
-  assertValid(
-    draftIssues({
-      chatJid: row.chat_jid,
-      priority: row.priority,
-      definition: parsedRule(row).definition,
-    }),
-  );
+  if (body.enabled === true) {
+    assertValid(
+      draftIssues({
+        chatJid: row.chat_jid,
+        priority: row.priority,
+        definition: parsedRule(row).definition,
+      }),
+    );
+  }
   return write(() => view(store.setReactionRuleEnabled(id, body.enabled).id));
 }
 

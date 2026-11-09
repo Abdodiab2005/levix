@@ -350,7 +350,7 @@ function setReactionRuleEnabled(id, enabled, now = Date.now()) {
   if (typeof enabled !== "boolean" || !Number.isSafeInteger(now) || now < 0) throw new Error("REACTION_RULE_INVALID");
   const rule = getReactionRule(id);
   if (!rule) throw new Error("REACTION_RULE_MISSING");
-  require("../automation/rules.cjs").validateDefinition(JSON.parse(rule.definition));
+  if (enabled) require("../automation/rules.cjs").validateDefinition(JSON.parse(rule.definition));
   q("UPDATE reaction_rules SET enabled=?,enabled_at=?,revision=? WHERE id=?")
     .run(enabled ? 1 : 0, enabled ? now : null, crypto.randomUUID(), id);
   saveBotSetting("reaction:revision", crypto.randomUUID());
