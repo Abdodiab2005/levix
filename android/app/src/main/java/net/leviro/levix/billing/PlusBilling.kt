@@ -14,13 +14,14 @@ object PlusBilling {
 
         fun optIn() { optedIn = true }
 
-        fun record(products: List<String>, purchaseState: Int, purchaseToken: String) {
-            if (!optedIn || productId.isEmpty() || productId !in products || purchaseState != 1) return
-            val result = purchaseResult(0, purchaseState, purchaseToken, productId, packageName)
-            if (!result.getBoolean("ok")) return
+        fun record(products: List<String>, purchaseState: Int, purchaseToken: String, acknowledged: Boolean = false): Boolean {
+            if (!optedIn || productId.isEmpty() || productId !in products || purchaseState != 1) return false
+            val result = purchaseResult(0, purchaseState, purchaseToken, productId, packageName, acknowledged)
+            if (!result.getBoolean("ok")) return false
             result.remove("ok")
             purchases[purchaseToken] = result
             if (purchases.size > 16) purchases.remove(purchases.keys.first())
+            return true
         }
 
         fun drain(): JSONObject {
@@ -57,7 +58,7 @@ object PlusBilling {
 
     // PurchaseState values: UNSPECIFIED_STATE = 0, PURCHASED = 1, PENDING = 2.
     fun purchaseResult(responseCode: Int, purchaseState: Int = 0, purchaseToken: String? = null,
-        productId: String? = null, packageName: String? = null): JSONObject {
+        productId: String? = null, packageName: String? = null, acknowledged: Boolean = false): JSONObject {
         if (responseCode == 1) return JSONObject().put("ok", false)
             .put("status", "cancelled").put("code", responseName(responseCode))
         if (responseCode != 0) return failure(responseName(responseCode))
@@ -66,6 +67,7 @@ object PlusBilling {
             packageName.isNullOrBlank()) return failure("PURCHASE_INVALID")
         return JSONObject().put("ok", true).put("status", "purchased")
             .put("purchaseToken", purchaseToken).put("productId", productId).put("packageName", packageName)
+            .put("acknowledged", acknowledged)
     }
 
     fun manageUrl(productId: String, packageName: String): String =

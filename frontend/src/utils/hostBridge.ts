@@ -164,6 +164,7 @@ export type PlusPurchaseResult =
       purchaseToken: string;
       productId: string;
       packageName: string;
+      acknowledged: boolean;
     };
 export type PlusRestoreResult = PlusFailure | { ok: true; purchases: PlusPurchaseResult[] };
 export type PlusPendingPurchasesResult = PlusFailure | {

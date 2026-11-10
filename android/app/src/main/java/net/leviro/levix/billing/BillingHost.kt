@@ -21,7 +21,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** Activity-owned, lazy Play client. Every mutable field is confined to the main thread. */
-class BillingHost(context: Context, private val deliver: (String, JSONObject) -> Unit) {
+class BillingHost(
+    context: Context,
+    private val onPurchase: () -> Unit,
+    private val deliver: (String, JSONObject) -> Unit,
+) {
     private val context = context.applicationContext
     private val main = Handler(Looper.getMainLooper())
     private val productId = BuildConfig.PLUS_PRODUCT_ID
@@ -39,9 +43,13 @@ class BillingHost(context: Context, private val deliver: (String, JSONObject) ->
 
     private fun handlePurchases(result: BillingResult, purchases: List<Purchase>) {
         if (destroyed) return
+        var queued = false
         if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-            purchases.forEach { recovery.record(it.products, it.purchaseState, it.purchaseToken) }
+            purchases.forEach {
+                if (recovery.record(it.products, it.purchaseState, it.purchaseToken, it.isAcknowledged)) queued = true
+            }
         }
+        if (queued) onPurchase()
         val call = current
         if (call != null && call.purchasing) {
             val purchase = purchases.firstOrNull { productId in it.products }
@@ -99,9 +107,13 @@ class BillingHost(context: Context, private val deliver: (String, JSONObject) ->
     private fun queryPurchases(billing: BillingClient, done: ((BillingResult, List<Purchase>) -> Unit)? = null) {
         fun complete(result: BillingResult, purchases: List<Purchase>) {
             if (destroyed) return
+            var queued = false
             if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-                purchases.forEach { recovery.record(it.products, it.purchaseState, it.purchaseToken) }
+                purchases.forEach {
+                    if (recovery.record(it.products, it.purchaseState, it.purchaseToken, it.isAcknowledged)) queued = true
+                }
             }
+            if (queued && done == null) onPurchase()
             done?.invoke(result, purchases)
         }
         try {
@@ -225,7 +237,7 @@ class BillingHost(context: Context, private val deliver: (String, JSONObject) ->
 
     private fun purchaseJson(purchase: Purchase): JSONObject = PlusBilling.purchaseResult(
         BillingClient.BillingResponseCode.OK, purchase.purchaseState, purchase.purchaseToken,
-        productId, context.packageName,
+        productId, context.packageName, purchase.isAcknowledged,
     )
 
     fun restore(callId: String): String = submit(callId) { call, billing ->
