@@ -78,6 +78,10 @@ export type AutoReplyChat = {
   cooldownSeconds: number;
   perSenderPerHour: number;
   perChatPerHour: number;
+  globalMemory?: {
+    read: boolean;
+    write: boolean;
+  };
 };
 
 export type AutoReplyConfig = {

@@ -43,6 +43,9 @@ class PanelBridge(
     }
 
     @JavascriptInterface
+    fun plusConfigured(): Boolean = BuildConfig.PLUS_PRODUCT_ID.isNotEmpty()
+
+    @JavascriptInterface
     fun plusProduct(callId: String): String = plusRefusal(callId) ?: billingHost!!.productInfo(callId)
 
     @JavascriptInterface

@@ -42,6 +42,7 @@ type PlanSection = {
   unchanged: number;
   kept: string[];
 };
+type PlusItemState = "added" | "replaced" | "unchanged" | "none";
 type Plan = {
   exact: boolean;
   destructive: boolean;
@@ -49,6 +50,13 @@ type Plan = {
   apiKeys: PlanSection;
   persona: "added" | "replaced" | "unchanged" | "kept" | "none";
   accountData: { replacesCurrent: boolean; replacesWaiting: string | null } | null;
+  plus?: {
+    messages: { total: number; added: number; replaced: number; unchanged: number };
+    presets: PlusItemState;
+    visibility: PlusItemState;
+    autoReply: PlusItemState;
+    autoReplyWaits: boolean;
+  };
 };
 type Preview = {
   created: string;
@@ -515,7 +523,9 @@ export function BackupView() {
       {planNames("backupPlanReplaced", part.replaced)}
       {planNames("backupPlanRemoved", part.removed)}
       {part.unchanged > 0 && (
-        <p className="text-sm text-muted">{fill(t("backupPlanUnchanged"), { n: part.unchanged })}</p>
+        <p className="text-sm text-muted">
+          {fill(t("backupPlanUnchanged"), { n: part.unchanged })}
+        </p>
       )}
       {part.kept.length > 0 && (
         <Disclosure summary={fill(t("backupPlanKept"), { n: part.kept.length })}>
@@ -524,6 +534,43 @@ export function BackupView() {
       )}
     </div>
   );
+  const planPlus = (plus?: Plan["plus"]) => {
+    if (!plus) return null;
+    const hasItems =
+      plus.messages.total > 0 ||
+      plus.presets !== "none" ||
+      plus.visibility !== "none" ||
+      plus.autoReply !== "none";
+    if (!hasItems) return null;
+
+    return (
+      <div className="flex flex-col gap-1">
+        <h4 className="text-sm font-semibold">{t("backupPlanPlusTitle")}</h4>
+        {plus.messages.total > 0 && (
+          <p className="text-sm">
+            {fill(t("backupPlanPlusMessages"), {
+              total: plus.messages.total,
+              added: plus.messages.added,
+              replaced: plus.messages.replaced,
+              unchanged: plus.messages.unchanged,
+            })}
+          </p>
+        )}
+        {plus.presets !== "none" && (
+          <p className="text-sm">{t(`backupPlanPlusPresets${plus.presets}` as Key)}</p>
+        )}
+        {plus.visibility !== "none" && (
+          <p className="text-sm">{t(`backupPlanPlusVisibility${plus.visibility}` as Key)}</p>
+        )}
+        {plus.autoReply !== "none" && (
+          <p className="text-sm">{t(`backupPlanPlusAutoReply${plus.autoReply}` as Key)}</p>
+        )}
+        {plus.autoReplyWaits && (
+          <p className="text-sm text-muted">{t("backupPlanPlusAutoReplyWaits")}</p>
+        )}
+      </div>
+    );
+  };
   const planView = (plan: Plan) => (
     <div className="flex flex-col gap-3">
       <h3 className="font-semibold">{t("backupPlanTitle")}</h3>
@@ -531,6 +578,7 @@ export function BackupView() {
       {planSection("backupPlanSettings", plan.settings)}
       {planSection("backupPlanApiKeys", plan.apiKeys)}
       <p className="text-sm">{t(`backupPersona${plan.persona}` as Key)}</p>
+      {planPlus(plan.plus)}
       {plan.accountData?.replacesCurrent && (
         <p className="text-sm text-warn">{t("backupPlanReplacesCurrent")}</p>
       )}
@@ -571,7 +619,10 @@ export function BackupView() {
                 : t("backupUnpaired")}
             </p>
             <p className="text-sm text-muted">
-              {t("backupNeverIncludes")}: {t("backupExclusions")}
+              {t("backupIncludes")}: {t("backupIncludedPlus")}
+            </p>
+            <p className="text-sm text-muted">
+              {t("backupNeverIncludes")}: {t("backupExclusions")}, {t("backupPlusExclusions")}
             </p>
           </>
         ) : (
@@ -659,7 +710,7 @@ export function BackupView() {
           }}
         />
         <div className="flex items-center gap-2">
-            <Button type="button" variant="secondary" disabled={busy} onClick={() => void choose()}>
+          <Button type="button" variant="secondary" disabled={busy} onClick={() => void choose()}>
             {t("backupChooseFile")}
           </Button>
           {fileName && (
