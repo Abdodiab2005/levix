@@ -19,6 +19,7 @@ import {
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
 import { plusDelete, plusErrorCode, plusErrorKey, plusGet, plusPut } from "./plusApi";
+import { getDraftText, substitutePlaceholders } from "./plusUiLogic";
 import {
   LOCALE_NAMES,
   PLUS_LIMITS,
@@ -75,6 +76,12 @@ export function TemplateEditor({
   const [preview, setPreview] = useState<string | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [previewToken, setPreviewToken] = useState(0);
+  const savedBaselineRef = useRef<{
+    mode: PlusTemplateMode;
+    sourceLocale: PlusLocale;
+    text: string;
+    manual: Partial<Record<PlusLocale, string>>;
+  } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -82,15 +89,24 @@ export function TemplateEditor({
     if (!source) return;
     const override = source.override;
     const panel = isPlusLocale(language) ? language : "en";
-    setMode(override?.mode ?? "auto");
-    setSourceLocale(override?.source.locale ?? panel);
-    setText(override?.source.text ?? source.catalog[panel] ?? source.catalog.en ?? "");
+    const initialMode = override?.mode ?? "auto";
+    const initialSourceLocale = override?.source.locale ?? panel;
+    const initialText = override?.source.text ?? source.catalog[panel] ?? source.catalog.en ?? "";
+    setMode(initialMode);
+    setSourceLocale(initialSourceLocale);
+    setText(initialText);
     const manualValues: Partial<Record<PlusLocale, string>> = {};
     for (const locale of override?.manual ?? []) {
       const value = override?.values[locale];
       if (typeof value === "string") manualValues[locale] = value;
     }
     setManual(manualValues);
+    savedBaselineRef.current = {
+      mode: initialMode,
+      sourceLocale: initialSourceLocale,
+      text: initialText,
+      manual: manualValues,
+    };
     setFailed(override?.failed ?? []);
     setError(null);
     setWarn(null);
@@ -100,10 +116,25 @@ export function TemplateEditor({
     setPreviewToken((value) => value + 1);
   }, [open, item?.key, language]);
 
+  const isDirty = Boolean(
+    savedBaselineRef.current &&
+      (mode !== savedBaselineRef.current.mode ||
+        sourceLocale !== savedBaselineRef.current.sourceLocale ||
+        text !== savedBaselineRef.current.text ||
+        PLUS_LOCALES.some(
+          (loc) =>
+            (manual[loc] ?? "").trim() !== (savedBaselineRef.current?.manual[loc] ?? "").trim(),
+        )),
+  );
+  const hasDraft = isDirty && text.trim().length > 0;
+  const draftText = getDraftText(sourceLocale, mode, sourceLocale, text, manual);
+  const localPreview = substitutePlaceholders(draftText);
+
   useEffect(() => {
     if (!open) return;
     const key = itemRef.current?.key;
     if (!key) return;
+    if (hasDraft) return;
     let live = true;
     const timer = window.setTimeout(() => {
       setPreviewFailed(false);
@@ -125,7 +156,7 @@ export function TemplateEditor({
       live = false;
       window.clearTimeout(timer);
     };
-  }, [open, item?.key, sourceLocale, previewToken, onInactive]);
+  }, [open, item?.key, sourceLocale, previewToken, onInactive, hasDraft]);
 
   const key = item?.key ?? "";
   const catalog: Partial<Record<PlusLocale, string>> = item?.catalog ?? {};
@@ -173,6 +204,12 @@ export function TemplateEditor({
       );
       setFailed(result.override.failed ?? []);
       if ((result.override.failed ?? []).length > 0) setWarn(t("plusExtErrorTranslateFailed"));
+      savedBaselineRef.current = {
+        mode,
+        sourceLocale,
+        text: value,
+        manual: manualValues,
+      };
       onSaved(result.override);
       setPreviewToken((token) => token + 1);
     } catch (err) {
@@ -346,10 +383,12 @@ export function TemplateEditor({
               dir="auto"
               className="rounded-xl border border-line bg-panel-raised/50 p-3 text-sm text-text-main whitespace-pre-wrap break-words"
             >
-              {previewFailed ? (
+              {hasDraft ? (
+                localPreview
+              ) : previewFailed ? (
                 <span className="text-muted">{t("plusMessagesPreviewFailed")}</span>
               ) : (
-                (preview ?? catalog[sourceLocale] ?? item?.catalog.en ?? "")
+                (preview ?? localPreview)
               )}
             </p>
           </div>
