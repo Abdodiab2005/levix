@@ -1,8 +1,13 @@
 # Phase 08: Levix Plus — results
 
-Status: `PARTIALLY IMPLEMENTED / BLOCKED` (2026-11-10). Code, tests and four Codex review rounds for every
-slice that needs no external service are done; the final verification rated all eight slices ready. Live billing, the deployed verifier, the Play product and the signing key are
-blocked on owner decisions (section 7). Nothing is merged. Plan and contracts: `PHASE-08-PLAN.md`.
+Status: `READY FOR OWNER MERGE REVIEW` (2026-11-10, after the final security and integration corrections).
+Every slice is implemented, synchronized with `release/5.0.0-beta.1` at `1a071f3` (Q-19, #152), reviewed and
+re-verified; no P1 or P2 finding is open. Nothing is merged. Live billing, the paid build pipeline, the verifier
+deployment, the signing key, the Play product and RTDN are deliberately NOT executed and wait for explicit owner
+approval (section 7). Plan and contracts: `PHASE-08-PLAN.md`.
+
+This document separates three things: confirmed results with evidence (sections 3 to 5), decisions that are only
+proposed (section 7), and checks that need live services, devices or accounts (section 8).
 
 Evidence labels follow ADR-014. All local results: Linux x64, Node 24.22.2 (`~/.cache/levix-build`),
 offline installs from the npm cache, 2026-11-10.
@@ -11,18 +16,25 @@ offline installs from the npm cache, 2026-11-10.
 
 | Slice | Repository | Branch, head | Content |
 | --- | --- | --- | --- |
-| 08-0 | public | `feat/v5-phase-08` | plan, inert entitlement stub, wire-contract text |
-| 08a | public | `feat/08a-extension-host` `aaefd68` | extension contract v1, loader, host, ctx, Core hooks, Auto Reply intake and Core AI turn |
-| 08b | public | `feat/08b-entitlement` `9eeebc0` | installation key, token verifier, sealed rollback barrier, signed client, refresh, panel routes |
-| 08c | public | `feat/08c-billing-ui` `4a32dc9` | Android Play Billing 9.1.0 client, bridge, Settings > Levix Plus |
-| 08h | public | `feat/08h-plus-ui` `5051d48` (stacked on 08c) | Plus feature screens: messages, presets, visibility, Auto Reply |
-| 08e | public | `feat/08e-artifact-scan` `4f0435d` | public artifact scanner and CI steps (npm, SEA, Android zip, Docker) |
-| wiring | public | `integration/v5-phase-08` `27fe378` | merges of all slices, route mounting, log-leak and shutdown fixes |
+| 08-0 | public | `feat/v5-phase-08` `c38b787` + this document | plan, inert entitlement stub, wire-contract text |
+| 08a | public | `feat/08a-extension-host` `b280ad3` | extension contract v1, loader, host, ctx, Core hooks, Auto Reply intake and Core AI turn |
+| 08b | public | `feat/08b-entitlement` `6d6a3d9` | installation key, token verifier, sealed rollback barrier, signed client, refresh, panel routes |
+| 08c | public | `feat/08c-billing-ui` `942170f` | Android Play Billing 9.1.0 client, bridge, Settings > Levix Plus |
+| 08h | public | `feat/08h-plus-ui` `5fb8ee3` (stacked on 08c) | Plus feature screens: messages, presets, visibility, Auto Reply |
+| 08e | public | `feat/08e-artifact-scan` `8ccf398` | public artifact scanner and CI steps (npm, SEA, Android zip, Docker) |
+| wiring | public | `integration/v5-phase-08` `9e67758` + this document | merges of all slices, route mounting, log-leak and shutdown fixes |
 | 08d | private | `feat/08d-verifier` `43f64c7` | verification service: claim, refresh, RTDN, Play adapter, binding store, signer |
 | 08f | private | `feat/08f-runtime` `6f75c44` | Plus runtime: templates, presets, visibility, Auto Reply policy, panel API |
-| interop | private | `integration/phase-08` `4e20d10` | cross-repository tests Core ↔ verifier and Core host ↔ runtime |
+| interop | private | `integration/phase-08` `4a9f31f` | cross-repository tests Core ↔ verifier and Core host ↔ runtime; CI workflow pinned to a Core commit |
 
-Size: public 80 files, +14,099 / -64 lines against `c2473be`; private 43 files, +4,861 / -2 lines.
+Size: public 81 files, +14,650 / -62 lines against `release/5.0.0-beta.1` `1a071f3`; private 46 files, +4,926 / -2 lines.
+
+Release synchronization: `release/5.0.0-beta.1` (`1a071f3`, Q-19 #152) was merged into `feat/v5-phase-08` and from
+there into every slice and the integration branch, with merge commits only (no rebase, no force push). The only
+real conflict was `i18n/review.json` in 08c and 08h; it was resolved by keeping the Q-19 provenance and appending
+the Phase 08 notes, recomputing the file hashes and regenerating the generated catalogs. A check of all 14 strings
+that Q-19 changed confirmed none was lost. The earlier `mergeable=false` reports were stale: every PR reported
+`MERGEABLE CLEAN` against its base before the sync.
 
 ### 1.1 Free Core guarantees
 
@@ -90,29 +102,26 @@ Residual risks (documented, accepted for review):
 - R-08-2: JavaScript shipped to a device can be read and patched; repository privacy is not copy protection.
 - R-08-3: Auto Reply is stateless per message in v1 (no conversation history), which limits answer quality.
 
-## 3. Test results
+## 3. Confirmed results
 
 | Gate | Result | Command, where |
 | --- | --- | --- |
 | Baseline before Phase 08 | PASS 14,076 checks, 0 failed | `npm test` at `05e30e8`, ffmpeg-static binary linked locally |
-| Core unit and integration | PASS 15,329 checks, 0 failed | `npm test` at `27fe378` |
-| Lint | PASS (0 errors, 230 warnings; base 211) | `npm run lint` at `27fe378` |
-| i18n | PASS | `npm run i18n:check` at `27fe378` |
-| Docs index | PASS | `npm run docs:check` at `27fe378` |
-| Frontend build (tsc + vite) | PASS | `npm run build:frontend` at `27fe378` |
-| npm tarball | PASS 36 checks | `npm run validate:tarball` at `27fe378` |
-| SEA build and run | PASS 51 checks | `npm run build:sea && npm run validate:sea` at `27fe378` |
-| Artifact scan, SEA dir | PASS, 6 entries, 181.0 MiB | `node scripts/scan-public-artifacts.mjs build` at `27fe378` |
-| Artifact scan, npm tarball | PASS, 303 entries, 4.1 MiB | `npm pack` then scanner on the `.tgz`, at `e0602e7` |
-| Private verifier + runtime + interop | PASS 133 tests, 0 failed, 0 skipped | `LEVIX_CORE_DIR=<p08-int at 27fe378> npm test` at `4e20d10` |
-| Headless panel QA (scratch build) | PASS 26/26 | at `e0602e7` with runtime `4e20d10`; puppeteer-core 24.43.1 + Chrome; real claim → Core client → real verifier with fake Play on loopback; RTDN revoke; cache rollback refused; other-installation token; 360 px Arabic RTL; purchase token absent from logs |
-| Android build, unit tests, APKs and AAB with Billing 9.1.0 | PASS in CI | GitHub Actions "android apk builds" on `4a32dc9` (run 42848137680) and later heads; Kotlin 2.3.21 required (2.0.21 failed in run 42845608084) |
-| Docker validate and image scan | PASS in CI | "container persists its volume" on every slice head |
-| CI, all 7 jobs | PASS | see section 5 |
-| Live Play purchase, RTDN, real WhatsApp Auto Reply, device | NOT RUN | needs owner setup (section 8) |
-
-The headless QA build differed from the branch only in a throwaway trusted test key and a loopback verifier
-origin; both edits existed only in a scratch copy.
+| Core unit and integration | PASS 15,493 checks, 0 failed (1 flaky timeout, below) | `npm test` at `9e67758` |
+| `setup-code.test.mjs` | crashed once at its 10 s limit under load; PASS 3/3 reruns, 33 checks each | `node tests/run.mjs setup-code` at `9e67758`; Phase 08 does not touch setup |
+| Lint | PASS (0 errors, 230 warnings; base 211) | `npm run lint` at `9e67758` |
+| i18n | PASS; 14/14 Q-19 strings kept | `npm run i18n:check`, `check-q19` script at `9e67758` |
+| Docs index | PASS | `npm run docs:check` at `9e67758` |
+| Frontend build (tsc + vite) | PASS | `npm run build:frontend` at `9e67758` |
+| npm tarball | PASS 36 checks | `npm run validate:tarball` at `9e67758` |
+| SEA build and run | PASS 51 checks | `npm run build:sea && npm run validate:sea` at `9e67758` |
+| Artifact scan, SEA dir and npm tarball | PASS: 6 entries, 181.0 MiB; 303 entries, 4.1 MiB | scanner at `9e67758` |
+| Private verifier + runtime + Core interop | PASS 133 tests, 0 failed, 0 skipped | `LEVIX_CORE_DIR=<p08-int at 9e67758> npm test` at `4a9f31f` |
+| Private CI (new) | PASS: 130 tests without Core, then 133/133 against the pinned Core | levix-plus run 42854616171 (Core `27fe378`); re-pinned to the final integration commit |
+| Auto Reply memory isolation | PASS: owner DM, member DM and group turns get no global memory; global/all/aliases, missing chat id and `summarize_chat` refused; explicit `!ai` control keeps global memory | `extensions-autoreply` 113 checks, `extensions-tools` 271 checks at `b280ad3` |
+| Headless panel QA (scratch build) | PASS 26/26 | at `e0602e7`; real claim → Core client → real verifier with a fake Play API; RTDN revoke; cache rollback refused; other-installation token; 360 px Arabic RTL; purchase token absent from logs |
+| Android build, unit tests, APKs and AAB with Billing 9.1.0 | PASS in CI | "android apk builds" on 08c and 08h heads; Kotlin 2.3.21 required (2.0.21 failed in run 42845608084) |
+| Docker validate and image scan | PASS in CI | "container persists its volume" on every head |
 
 Mocked Billing and fake WhatsApp sockets do not validate production Google Play Billing or live accounts.
 
@@ -126,25 +135,27 @@ Mocked Billing and fake WhatsApp sockets do not validate production Google Play 
 | 3 | Codex verification of rounds 1 and 2 | all | 1 P1 left (RTDN writes), 7 P2 (partial fixes, regressions) | fixed in `43f64c7`, `ab6fae8`, `1040d47`, `4a32dc9`, `8662c6e`, `4f0435d` |
 | 4 | Codex verification | all | 2 P2 in 08a | fixed in `aaefd68` |
 | 5 | Codex final check | 08a | none | all eight slices ready |
+| 6 | ChatGPT inspection (owner) | Auto Reply memory | P1: owner DMs got global memory, contrary to Q-09 | fixed in `286df16` |
+| 7 | Independent Codex (fresh session) and agy Flash | P1 fix | Codex: P1 via stored history and `summarize_chat`; agy: P3 missing chat id | fixed in `b280ad3`; Codex re-verification: SAFE, no new P1/P2 |
 
 Headless QA independently found the round-2 P1 (cache rollback) before the review returned.
 
 ## 5. Pull requests and CI
 
-Nothing is merged. Public PRs target `feat/v5-phase-08`, which targets `release/5.0.0-beta.1`.
+Nothing is merged. CI for the final heads is listed in the PR checks; section 3 records the last local gates.
 
-| PR | Branch | CI (7 jobs: tests, package, 3 executables, container, Android) |
+| PR | Branch | Head |
 | --- | --- | --- |
-| #153 umbrella (draft) | `feat/v5-phase-08` → `release/5.0.0-beta.1` | PASS on the plan commit |
-| #154 08a | `feat/08a-extension-host` | PASS at `aaefd68` (run 42850567694) |
-| #155 08b | `feat/08b-entitlement` | PASS at `9eeebc0` (run 42845595502) |
-| #156 08c | `feat/08c-billing-ui` | PASS at `4a32dc9` (run 42848137680) |
-| #157 08h (stacked on 08c) | `feat/08h-plus-ui` | PASS at `5051d48` (run 42848414688) |
-| #158 08e | `feat/08e-artifact-scan` | PASS at `4f0435d` (run 42848402905) |
-| #159 integration (draft) | `integration/v5-phase-08` | PASS at `e0602e7` (run 42849940032); `27fe378` queued |
-
-Private (`Abdodiab2005/levix-plus`, no CI workflow yet): #1 `feat/08d-verifier`, #2 `feat/08f-runtime`,
-#3 `integration/phase-08` (draft). Local evidence only for the private repository.
+| #153 umbrella (draft) | `feat/v5-phase-08` → `release/5.0.0-beta.1` | this document on `c38b787` |
+| #154 08a | `feat/08a-extension-host` → `feat/v5-phase-08` | `b280ad3` |
+| #155 08b | `feat/08b-entitlement` → `feat/v5-phase-08` | `6d6a3d9` |
+| #156 08c | `feat/08c-billing-ui` → `feat/v5-phase-08` | `942170f` |
+| #157 08h | `feat/08h-plus-ui` → `feat/08c-billing-ui` | `5fb8ee3` |
+| #158 08e | `feat/08e-artifact-scan` → `feat/v5-phase-08` | `8ccf398` |
+| #159 integration (draft) | `integration/v5-phase-08` → `feat/v5-phase-08` | `9e67758` + this document |
+| levix-plus #1 | `feat/08d-verifier` → `main` | `43f64c7` |
+| levix-plus #2 | `feat/08f-runtime` → `main` | `6f75c44` |
+| levix-plus #3 (draft) | `integration/phase-08` → `main` | `4a9f31f` + Core re-pin |
 
 ## 6. Privacy and Data safety (draft, apply when billing ships)
 
@@ -160,21 +171,24 @@ Play Data safety: "Purchase history" collected, not shared, required for the sub
 "App activity" not collected for billing. Final wording needs the owner's review and the legal review that the
 v5 release already requires.
 
-## 7. External prerequisites and owner decisions
+## 7. Owner decisions (proposed, recorded for review) and external prerequisites
 
-| Id | Item | State |
+Proposed decisions recorded 2026-11-10 for owner review. "Implemented" means the code already behaves this way;
+it is still the owner's decision.
+
+| Id | Proposed decision | Code today |
 | --- | --- | --- |
-| D-08-1 | Paid artifact: Play AAB from a private pipeline with the runtime staged | OPEN |
-| D-08-2 | Verifier host name and deployment (plan uses `https://plus.leviro.net`) | OPEN, BLOCKED |
-| D-08-3 | One active installation per subscription, 3 moves per 30 days | IMPLEMENTED, needs approval |
-| D-08-4 | Play subscription product, monthly base plan USD 0.99, Egypt price 30% lower in Play Console | OPEN, BLOCKED |
-| D-08-5 | Entitlement signing key generated offline; public half added to `keys.cjs` | OPEN, BLOCKED |
-| D-08-6 | Plus customizations are not in backups in v1 | IMPLEMENTED, needs approval |
-| D-08-7 | Q-09: global memory excluded from Auto Reply, chat memory only for its tools | IMPLEMENTED, needs approval |
-| D-08-8 | RTDN Pub/Sub topic, push subscription and service account | OPEN, BLOCKED |
-| D-08-9 | Show Settings > Levix Plus in public builds ("not included in this build") or hide it | OPEN |
-| D-08-10 | Q-20: Plus on desktop and self-hosted installs | Android only in v5 (recommended) |
-| D-08-11 | Plus repository license and access list | private, UNLICENSED, owner only |
+| D-08-10 | Levix Plus is Android-only in v5 (Q-20 (a)); desktop, npm, SEA, Docker and self-hosted stay Free | implemented: only the Play client can buy; public builds ship no runtime |
+| D-08-3 | One active installation per subscription, at most 3 moves per 30 days; exception procedure: the owner (support) clears the move history of one purchase token in the verifier database after checking the Play order id the customer quotes, and records the action | implemented in the verifier; exception procedure is manual and not built |
+| D-08-7 | Auto Reply memory is strictly chat-scoped for every caller, including owner DMs; memory tools refuse global scope; summarize_chat is refused in Auto Reply turns | implemented (P1 fixes `286df16` and the summarize follow-up) |
+| D-08-12 | Plus subscription and installation secrets (`plus:installation-key`, `plus:entitlement`, `plus:entitlement-hw`) never enter backups, settings export or pre-migration copies | implemented |
+| D-08-6 | No Plus customizations (`ext:*`) in v1 backups, with an explicit user-facing warning in Settings > Backup and in the Plus screen | exclusion implemented; warning text NOT implemented (waits for approval) |
+| D-08-9 | Hide Settings > Levix Plus in public Free builds (extension absent) | NOT implemented: public builds show "Levix Plus is not included in this build" until approved |
+| D-08-11 | `levix-plus` stays private, owner-only, UNLICENSED | in effect |
+
+Not executed and waiting for explicit approval: production billing, the paid build pipeline (D-08-1), verifier
+deployment and host name (D-08-2), the Play subscription product with USD 0.99 and the Egypt price (D-08-4), the
+entitlement signing key (D-08-5) and RTDN (D-08-8).
 
 ## 8. Manual QA still required
 
@@ -188,10 +202,13 @@ v5 release already requires.
 
 ## 9. Merge order and rollback
 
-Merge order: (1) private `feat/08d-verifier`, `feat/08f-runtime`, then `integration/phase-08`; (2) public
-`feat/08a-extension-host`, `feat/08b-entitlement`, `feat/08e-artifact-scan`, `feat/08c-billing-ui`, then
-`feat/08h-plus-ui`, then `integration/v5-phase-08` (wiring and fixes), then `feat/v5-phase-08` into
-`release/5.0.0-beta.1`.
+Merge order, each step only after the owner's explicit instruction:
+1. levix-plus #1 (`feat/08d-verifier`), then #2 (`feat/08f-runtime`), then #3 (`integration/phase-08`, CI pinned
+   to the public integration commit).
+2. levix #154 (08a), #155 (08b), #158 (08e), #156 (08c), then #157 (08h, retarget to `feat/v5-phase-08` after
+   #156 merges), each into `feat/v5-phase-08`.
+3. levix #159 (`integration/v5-phase-08`: wiring, log-leak and shutdown fixes, release synchronization).
+4. levix #153 (`feat/v5-phase-08`) into `release/5.0.0-beta.1`.
 
 Rollback: turn `plus_enabled` off, or ship without the runtime. No database migration was added in Core (all
 state is `bot_settings` keys), so a downgrade needs no restore; unknown `plus:*` and `ext:*` keys are ignored by

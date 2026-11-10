@@ -199,7 +199,8 @@ Nothing else from the message is passed, and Core keeps no copy.
 same generation (Core keeps the original message in a bounded map: 50 entries, 2 minutes). Core
 then: fetches fresh group metadata, mints the caller with `resolveCaller` for the real sender,
 runs `runAgent` with a signal bounded by `ai_tool_timeout_ms` (≤ 120 s) and with global memory
-excluded unless the chat is the owner's own private chat (Q-09 (b), applied to Auto Reply only),
+excluded for every caller, owner DMs included (Q-09 / D-08-7: `includeGlobalMemory: false`, `memoryScope: "chat"`;
+memory tools refuse global scope and `summarize_chat` is refused; corrected 2026-11-10),
 and sends the answer to the source chat only with `sendBotMessage(..., { signal, deliveryGuard })`.
 The guard refreshes and asserts: same account epoch, same host generation, host still `active`,
 roster not stale. Core backstop limits regardless of the extension: 2 concurrent turns globally, 1
@@ -324,7 +325,7 @@ limiting). Retention: rows deleted 90 days after subscription expiry or on suppo
 | D-08-4 | Play product id and base plan id (Play Console), Egypt price | Owner creates; read from Play, not assumed |
 | D-08-5 | Entitlement signing key generation and custody | Owner generates offline like the Terms key |
 | D-08-6 | Plus customizations in backups (v1 excludes `ext:*`) | Exclude in v1, revisit |
-| D-08-7 | Q-09: global memory in Auto Reply prompts | (b) owner's own chat only, Auto Reply path |
+| D-08-7 | Q-09: global memory in Auto Reply prompts | chat-scoped only for every caller (corrected 2026-11-10) |
 | D-08-8 | RTDN: Pub/Sub topic and push auth | Owner creates in Google Cloud |
 
 ## 6. Implementation stages
