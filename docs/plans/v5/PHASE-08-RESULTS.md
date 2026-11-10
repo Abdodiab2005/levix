@@ -187,7 +187,7 @@ The owner decided D-08-2, D-08-3, D-08-6, D-08-7, D-08-8 and D-08-12 on 2026-11-
 | --- | --- | --- |
 | D-08-10 | Levix Plus is Android-only in v5 (Q-20 (a)); desktop, npm, SEA, Docker and self-hosted stay Free | implemented: only the Play client can buy; public builds ship no runtime |
 | D-08-3 | One active installation per subscription, at most 3 moves in any rolling 30 days, audited manual exceptions | **owner approved (#160)**; implemented in the verifier; exception procedure documented in levix-plus `service/README.md`; no move counter in the app |
-| D-08-7 | Auto Reply memory chat-scoped by default | **superseded by owner decision 1 (#160)**: per-chat global memory read and write, both off by default, writes only for a bot owner (section 10.2) |
+| D-08-7 | Auto Reply memory chat-scoped by default | **superseded by owner decision 1 (#160)**: per-chat global memory read, off by default; the write option was removed on 2026-11-10 because Auto Reply never answers the linked account (section 10.2) |
 | D-08-12 | Plus subscription and installation secrets never enter backups, settings export or pre-migration copies | **owner approved (#160)**; implemented and tested |
 | D-08-6 | No Plus customizations in v1 backups | **superseded by owner decision 3 (#160)**: nonsecret customizations are included (section 10.3) |
 | D-08-9 | Hide Settings > Levix Plus in public Free builds | implemented in 08k (hidden unless the runtime is installed or the build has a Plus product id); whether a Free build should advertise Plus stays an open product decision |
@@ -274,9 +274,15 @@ Plus Auto Reply (independent of the Free settings), per chat in the Auto Reply e
 | Setting | Default | Who it affects |
 | --- | --- | --- |
 | Use global memory in this chat (`globalMemory.read`) | off | prompt and `search_memory` for every sender in that chat; enabling asks for confirmation with a privacy warning |
-| Save to global memory from this chat (`globalMemory.write`) | off | only a bot owner as the real sender; external senders, bot admins and group admins never write |
 
-Stored configs without the field load with both off. Any Auto Reply config change aborts pending and in-flight
+Auto Reply never writes global memory. The first implementation had an owner-only write switch, but
+Auto Reply skips `fromMe` messages and every sender that names the linked account, so the paired owner
+is never the sender of an Auto Reply turn. Owner review on 2026-11-10 removed the switch from the panel,
+the runtime config (a stored boolean `write` is accepted and dropped) and Core (`globalMemoryAccess`
+returns `write: false` for every Auto Reply turn, whatever the decision carries). Global memory writes
+stay available through Free AI turns under the Free settings above.
+
+Stored configs without the field load with read off. Any Auto Reply config change aborts pending and in-flight
 Auto Reply turns. `summarize_chat` in Auto Reply needs read.
 
 ### 10.3 Backup inclusion and restore evidence
