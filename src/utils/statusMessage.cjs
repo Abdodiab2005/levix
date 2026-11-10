@@ -43,11 +43,17 @@ class StatusMessage {
     this.lastEditAt = 0;
     this.closed = false;
     this.suppressed = false;
+    this.plusSuppressed = false;
   }
 
   async start(text) {
     this.text = text;
     // Hiding progress never hides a later result, error, or security notice.
+    if (this.category === "progress" && settings.get("reply_hide_progress")) {
+      this.suppressed = true;
+      this.text = "";
+      return this;
+    }
     if (this.category === "progress") {
       let plusHide = false;
       try {
@@ -55,8 +61,9 @@ class StatusMessage {
           command: this.command,
         });
       } catch {}
-      if (settings.get("reply_hide_progress") || plusHide) {
+      if (plusHide) {
         this.suppressed = true;
+        this.plusSuppressed = true;
         this.text = "";
         return this;
       }
@@ -100,7 +107,7 @@ class StatusMessage {
     if (!next || next === this.text) return false;
     if (category) this.category = category;
     if (sensitivity) this.sensitivity = sensitivity;
-    if (this.suppressed && this.category === "progress") return false;
+    if (this.plusSuppressed && this.category === "progress") return false;
     const mentionList = mentions === undefined ? this.mentions : mentions;
 
     // No message to edit (hidden progress, or the first send failed).
