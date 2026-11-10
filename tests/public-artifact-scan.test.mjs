@@ -20,6 +20,7 @@ import {
   MAX_ENTRY_BYTES,
   MAX_TOTAL_BYTES,
   hasForbiddenPath,
+  hasTarChecksum,
   parsePax,
   scanArtifact,
   scanDirectory,
@@ -100,6 +101,39 @@ function tarBuffer(entries) {
 
 function tarGz(entries) {
   return gzipSync(tarBuffer(entries));
+}
+
+function v7TarHeader(name, size, type = "0") {
+  const buf = Buffer.alloc(512, 0);
+  buf.write(name, 0, 100, "utf8");
+  writeOctal(buf, 100, 8, 0o644);
+  writeOctal(buf, 108, 8, 0);
+  writeOctal(buf, 116, 8, 0);
+  writeOctal(buf, 124, 12, size);
+  writeOctal(buf, 136, 12, 0);
+  buf.fill(0x20, 148, 156);
+  buf.write(type, 156, 1, "ascii");
+
+  let sum = 0;
+  for (const byte of buf) sum += byte;
+  buf.write(sum.toString(8).padStart(6, "0"), 148, 6, "ascii");
+  buf[154] = 0;
+  buf[155] = 0x20;
+  return buf;
+}
+
+function v7TarBuffer(entries) {
+  const chunks = [];
+  for (const entry of entries) {
+    const data = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data ?? "", "utf8");
+    chunks.push(v7TarHeader(entry.name, data.length, entry.type ?? "0"), padded(data));
+  }
+  chunks.push(Buffer.alloc(1024));
+  return Buffer.concat(chunks);
+}
+
+function v7TarGz(entries) {
+  return gzipSync(v7TarBuffer(entries));
 }
 
 function makePax(records) {
@@ -239,6 +273,45 @@ try {
   ok(
     "…and detects canary in nested tgz",
     nestedTgzResult.findings.some((finding) => finding.path === "payload.tgz/src/secret.txt"),
+  );
+
+  const v7NestedDir = join(root, "v7-nested-dir");
+  const v7Payload = v7TarGz([
+    { name: "extensions/levix-plus/index.cjs", data: "module.exports = 1;\n" },
+  ]);
+  writeTree(v7NestedDir, { "clean.txt": "hello\n" });
+  writeFileSync(join(v7NestedDir, "payload.tgz"), v7Payload);
+  const v7NestedResult = scanDirectory(v7NestedDir);
+  ok("nested payload.tgz holding a V7 tar with private path fails", !v7NestedResult.ok);
+  ok(
+    "…and detects private path in nested V7 tar",
+    v7NestedResult.findings.some(
+      (finding) =>
+        finding.path === "payload.tgz/extensions/levix-plus/index.cjs" && finding.reason === "path",
+    ),
+  );
+
+  const plainCanaryGzDir = join(root, "plain-canary-gz-dir");
+  writeTree(plainCanaryGzDir, { "clean.txt": "hello\n" });
+  const canaryPlainGz = gzipSync(Buffer.from(`prefix ${CANARY} suffix\n`, "utf8"));
+  writeFileSync(join(plainCanaryGzDir, "notes.txt.gz"), canaryPlainGz);
+  const plainCanaryGzResult = scanDirectory(plainCanaryGzDir);
+  ok("nested gzip of plain text containing the canary fails", !plainCanaryGzResult.ok);
+  ok(
+    "…and detects canary in nested plain gzip",
+    plainCanaryGzResult.findings.some(
+      (finding) => finding.path === "notes.txt.gz" && finding.reason === "canary",
+    ),
+  );
+
+  const notTarDir = join(root, "not-tar-tgz-dir");
+  writeTree(notTarDir, { "clean.txt": "hello\n" });
+  const notTarGz = gzipSync(Buffer.from("just plain text, definitely not a tar\n", "utf8"));
+  writeFileSync(join(notTarDir, "broken.tgz"), notTarGz);
+  const notTarResult = scanDirectory(notTarDir);
+  ok(
+    "nested .tgz whose content is not a tar fails with a clear error",
+    !notTarResult.ok && /not a tar archive/.test(notTarResult.error ?? ""),
   );
 
   const innerZipDir = join(root, "inner-zip-tree");
