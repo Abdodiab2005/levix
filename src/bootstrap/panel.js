@@ -80,6 +80,17 @@ export async function bootstrapPanel({ core } = {}) {
     },
   );
 
+  app.use(
+    "/dashboard/api/plus",
+    requireLoginApi,
+    noStore,
+    express.json({ limit: "4kb" }),
+    (err, req, res, next) => {
+      if (res.headersSent) return next(err);
+      res.status(400).json({ ok: false, code: "BAD_REQUEST" });
+    },
+  );
+
   // Same session as the control panel. One chain and one JSON parser: the
   // sticker upload is raw bytes (any Content-Type, up to the upload cap) and
   // express.json would consume it before the route can enforce that cap.

@@ -94,7 +94,10 @@ export async function bootstrapCore({ autoStart = false } = {}) {
     const entitlement = require("../extensions/entitlement/index.cjs");
     await host.start();
     entitlement.start();
-    stopExtensions = () => host.stop();
+    stopExtensions = async () => {
+      await host.stop();
+      entitlement.stop();
+    };
   } catch (error) {
     logger.warn({ err: error }, "[extensions] host failed to start");
   }

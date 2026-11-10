@@ -560,9 +560,39 @@ function installFinalHandlers() {
 
   // eslint-disable-next-line no-unused-vars
   app.use((err, req, res, next) => {
-    logger.error({ err, method: req.method, path: req.path }, "[http] Unhandled error");
+    const status = err?.statusCode || err?.status || 500;
+    const isSyntax =
+      err instanceof SyntaxError ||
+      err?.name === "SyntaxError" ||
+      err?.type === "entity.parse.failed" ||
+      (typeof err?.message === "string" && err.message.includes("is not valid JSON"));
+
+    if (isSyntax) {
+      logger.error(
+        { type: err?.name || "SyntaxError", status, method: req.method, path: req.path },
+        "[http] Unhandled error",
+      );
+    } else {
+      if (err && typeof err === "object") {
+        if ("body" in err) {
+          try {
+            delete err.body;
+          } catch {
+            err.body = undefined;
+          }
+        }
+        if ("rawBody" in err) {
+          try {
+            delete err.rawBody;
+          } catch {
+            err.rawBody = undefined;
+          }
+        }
+      }
+      logger.error({ err, method: req.method, path: req.path }, "[http] Unhandled error");
+    }
     if (res.headersSent) return;
-    res.status(err.statusCode || 500).json({ error: "Internal server error" });
+    res.status(status).json({ error: "Internal server error" });
   });
 }
 
