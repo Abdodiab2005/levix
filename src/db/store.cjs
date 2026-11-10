@@ -157,6 +157,67 @@ function deleteBotSetting(key) {
   notifyReactionChange({ type: "policy" });
 }
 
+const EXT_VALUE_MAX_BYTES = 64 * 1024;
+const EXT_MAX_NAMES = 200;
+const EXT_NAME_RE = /^[A-Za-z][A-Za-z0-9._-]{0,63}$/;
+
+function extStoragePrefix(id, kind) {
+  return `ext:${id}:${kind}:`;
+}
+
+function listBotSettingsByPrefix(prefix) {
+  const rows = q("SELECT key, value FROM bot_settings WHERE key >= ? AND key < ?").all(
+    prefix,
+    `${prefix}\uFFFF`,
+  );
+  return rows.filter((row) => row.key.startsWith(prefix));
+}
+
+function getExtStorage(id, kind, name) {
+  if (typeof name !== "string" || !EXT_NAME_RE.test(name)) return undefined;
+  const row = q("SELECT value FROM bot_settings WHERE key = ?").get(
+    extStoragePrefix(id, kind) + name,
+  );
+  if (!row) return undefined;
+  return parseJson(row.value, null);
+}
+
+function setExtStorage(id, kind, name, value) {
+  if (typeof name !== "string" || !EXT_NAME_RE.test(name)) {
+    throw new Error("invalid extension storage name");
+  }
+  const encoded = JSON.stringify(value ?? null);
+  if (Buffer.byteLength(encoded, "utf8") > EXT_VALUE_MAX_BYTES) {
+    throw new Error("extension storage value too large");
+  }
+  const prefix = extStoragePrefix(id, kind);
+  const key = prefix + name;
+  const existing = q("SELECT 1 AS found FROM bot_settings WHERE key = ?").get(key);
+  if (!existing) {
+    if (listBotSettingsByPrefix(prefix).length >= EXT_MAX_NAMES) {
+      throw new Error("extension storage name limit");
+    }
+  }
+  saveBotSetting(key, value);
+}
+
+function deleteExtStorage(id, kind, name) {
+  if (typeof name !== "string" || !EXT_NAME_RE.test(name)) return;
+  q("DELETE FROM bot_settings WHERE key = ?").run(extStoragePrefix(id, kind) + name);
+}
+
+function listExtStorage(id, kind) {
+  const prefix = extStoragePrefix(id, kind);
+  return listBotSettingsByPrefix(prefix).map((row) => row.key.slice(prefix.length));
+}
+
+function wipeExtStorage(id, kind) {
+  const prefix = extStoragePrefix(id, kind);
+  for (const row of listBotSettingsByPrefix(prefix)) {
+    q("DELETE FROM bot_settings WHERE key = ?").run(row.key);
+  }
+}
+
 // ===================================================================
 // --- Group settings ---
 // ===================================================================
@@ -2435,6 +2496,12 @@ module.exports = {
   getBotSetting,
   saveBotSetting,
   deleteBotSetting,
+  listBotSettingsByPrefix,
+  getExtStorage,
+  setExtStorage,
+  deleteExtStorage,
+  listExtStorage,
+  wipeExtStorage,
   // Group settings
   getGroupSettings,
   saveGroupSettings,

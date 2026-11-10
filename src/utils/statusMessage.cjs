@@ -36,6 +36,7 @@ class StatusMessage {
     this.category = options.category || "progress";
     this.sensitivity = options.sensitivity || "source";
     this.mentions = Array.isArray(options.mentions) ? options.mentions : null;
+    this.command = options.command || null;
     this.key = null;
     this.text = "";
     this.lastEditAt = 0;
@@ -46,10 +47,18 @@ class StatusMessage {
   async start(text) {
     this.text = text;
     // Hiding progress never hides a later result, error, or security notice.
-    if (this.category === "progress" && settings.get("reply_hide_progress")) {
-      this.suppressed = true;
-      this.text = "";
-      return this;
+    if (this.category === "progress") {
+      let plusHide = false;
+      try {
+        plusHide = require("../extensions/host.cjs").host.hideProgress({
+          command: this.command,
+        });
+      } catch {}
+      if (settings.get("reply_hide_progress") || plusHide) {
+        this.suppressed = true;
+        this.text = "";
+        return this;
+      }
     }
     try {
       const sent = await sendBotMessage(this.sock, this.jid, this.payload(text, this.mentions), {

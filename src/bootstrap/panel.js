@@ -52,6 +52,28 @@ export async function bootstrapPanel({ core } = {}) {
   require("../backup/jobs.cjs").sweepBackupTemp();
   require("../backup/uploads.cjs").sweepUploads(true);
 
+  // Plus extension panel API. Same auth as the rest of the dashboard; a
+  // tighter JSON cap than the 2mb dashboard parser. 08b owns /plus/status.
+  const express = require("express");
+  const { host: plusHost } = require("../extensions/host.cjs");
+  app.use(
+    "/dashboard/api/plus/ext",
+    requireLoginApi,
+    noStore,
+    express.json({ limit: "64kb" }),
+    (req, res) => {
+      Promise.resolve(plusHost.handlePanel(req.method, req.path || "/", req.body, req.signal))
+        .then((result) => {
+          const status = result?.status || 404;
+          res.status(status).json(result?.body ?? { error: "not_found" });
+        })
+        .catch((error) => {
+          logger.error({ err: error }, "[plus] panelApi failed");
+          res.status(500).json({ error: "internal" });
+        });
+    },
+  );
+
   // Same session as the control panel. One chain and one JSON parser: the
   // sticker upload is raw bytes (any Content-Type, up to the upload cap) and
   // express.json would consume it before the route can enforce that cap.
