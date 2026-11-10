@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   CardHeader,
+  ConfirmDialog,
   IconButton,
   Spinner,
   StatusPill,
@@ -101,6 +102,7 @@ export function PlusSettings({
   const recoveredRequest = useRef(-1);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [confirmRestore, setConfirmRestore] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -204,28 +206,40 @@ export function PlusSettings({
 
   useEffect(() => {
     if (!android) return;
+    const trigger = () => setRecoveryRequest((value) => value + 1);
     const visible = () => {
-      if (document.visibilityState === "visible") setRecoveryRequest((value) => value + 1);
+      if (document.visibilityState === "visible") trigger();
     };
     document.addEventListener("visibilitychange", visible);
-    return () => document.removeEventListener("visibilitychange", visible);
+    window.addEventListener("levix-plus-purchase", trigger);
+    return () => {
+      document.removeEventListener("visibilitychange", visible);
+      window.removeEventListener("levix-plus-purchase", trigger);
+    };
   }, [android]);
 
   const recoveryAvailable = android && status?.configured && status.extension.state !== "absent";
   useEffect(() => {
     if (
-      !recoveryAvailable || loading || productLoading || busy ||
+      !recoveryAvailable ||
+      loading ||
+      productLoading ||
+      busy ||
       recoveredRequest.current === recoveryRequest
-    ) return;
+    )
+      return;
     recoveredRequest.current = recoveryRequest;
     void run("recover", async () => {
       const result = await plusPendingPurchases();
       if (!result.ok) failure(result.code);
-      if (result.purchases.length > 0) {
+      const fresh = result.purchases.filter(
+        (purchase) => purchase.status === "purchased" && !purchase.acknowledged,
+      );
+      if (fresh.length > 0) {
         setError(null);
         setNotice(null);
+        await claimPurchases(fresh.map((purchase) => ({ ok: true as const, ...purchase })));
       }
-      await claimPurchases(result.purchases.map((purchase) => ({ ok: true as const, ...purchase })));
     });
   }, [recoveryAvailable, loading, productLoading, busy, recoveryRequest, run, claimPurchases]);
 
@@ -298,28 +312,30 @@ export function PlusSettings({
     <Card className="flex flex-col gap-4">
       <CardHeader
         title={t("plusTitle")}
-        actions={android ? (
-          <>
-            <IconButton
-              label={t("plusManage")}
-              icon={<ExternalLink size={18} />}
-              disabled={disabled}
-              onClick={() =>
-                void run("manage", async () => {
-                  const result = plusManage();
-                  if (!result.ok) failure(result.code);
-                })
-              }
-            />
-            <IconButton
-              label={t("refresh")}
-              icon={<RefreshCw size={18} />}
-              disabled={disabled}
-              loading={busy === "refresh"}
-              onClick={refresh}
-            />
-          </>
-        ) : undefined}
+        actions={
+          android ? (
+            <>
+              <IconButton
+                label={t("plusManage")}
+                icon={<ExternalLink size={18} />}
+                disabled={disabled}
+                onClick={() =>
+                  void run("manage", async () => {
+                    const result = plusManage();
+                    if (!result.ok) failure(result.code);
+                  })
+                }
+              />
+              <IconButton
+                label={t("refresh")}
+                icon={<RefreshCw size={18} />}
+                disabled={disabled}
+                loading={busy === "refresh"}
+                onClick={refresh}
+              />
+            </>
+          ) : undefined
+        }
       />
       <div className="flex flex-wrap items-center gap-2" aria-live="polite">
         <span className="text-sm text-muted">{t("plusStatus")}</span>
@@ -377,7 +393,7 @@ export function PlusSettings({
             className="self-start"
             disabled={disabled}
             loading={busy === "restore"}
-            onClick={restore}
+            onClick={() => setConfirmRestore(true)}
           >
             {t("plusRestore")}
           </Button>
@@ -393,6 +409,22 @@ export function PlusSettings({
           {message}
         </p>
       )}
+      <ConfirmDialog
+        isOpen={confirmRestore}
+        onClose={() => {
+          if (!busy) setConfirmRestore(false);
+        }}
+        onConfirm={() => {
+          setConfirmRestore(false);
+          restore();
+        }}
+        title={t("plusRestoreConfirmTitle")}
+        description={t("plusRestoreConfirm")}
+        confirmLabel={t("plusRestore")}
+        cancelLabel={t("cancel")}
+        variant="primary"
+        loading={busy === "restore"}
+      />
       {status.extension.state === "active" && <PlusFeaturesView />}
     </Card>
   );

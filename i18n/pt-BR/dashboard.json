@@ -1424,6 +1424,8 @@
   "plusDisclosure": "{price}, com cobrança mensal. A assinatura é renovada automaticamente até ser cancelada no Google Play.",
   "plusSubscribe": "Assinar",
   "plusRestore": "Restaurar compras",
+  "plusRestoreConfirmTitle": "Restaurar compras",
+  "plusRestoreConfirm": "Restaurar compras move o Levix Plus para esta instalação.",
   "plusManage": "Gerenciar assinatura no Google Play",
   "plusPaymentPending": "Pagamento pendente. O Plus exige a conclusão do pagamento e a verificação do servidor.",
   "plusPurchaseCancelled": "Compra cancelada",
