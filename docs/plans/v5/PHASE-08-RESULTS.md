@@ -1,14 +1,16 @@
 # Phase 08: Levix Plus — results
 
-Status (2026-11-10, after the owner decisions in #160 and their implementation, section 10):
+Status (2026-11-11, after the owner's merge authorization of 2026-11-10):
 
-- **Code: `CODE READY FOR OWNER MERGE REVIEW`.** Every slice, including the completion slices 08i to 08l
-  and levix-plus 08g and the paid pipeline, is implemented, reviewed by an independent Codex session and
-  re-verified. No P1 or P2 finding is open (section 10.8). Nothing is merged.
-- **Production billing and live QA: `BLOCKED`.** They need owner credentials and actions that this work may
+- **Code: `PHASE 08 CODE MERGED`.** All twelve levix PRs (#153 to #164) and all five levix-plus PRs
+  (#1 to #5) are merged in the documented order. `release/5.0.0-beta.1` is at `1e0de07` (#153) and levix-plus
+  `main` is at `cc1e8e1` (#3). CI passed after every merge (section 5). No P1 or P2 finding is open
+  (section 10.8).
+- **Production billing and live QA: `PENDING`.** They need owner credentials and actions that this work may
   not perform: the verifier deployment and DNS for `levix-plus.leviro.net`, the entitlement signing key, the
   Play product, Google Cloud Pub/Sub and service accounts, the upload key, a license-tester device and a
-  WhatsApp test account (section 10.9). Phase 08 is not shipped and not production ready.
+  WhatsApp test account (section 10.9). Phase 08 is not shipped and not production ready. No tag, release,
+  Play upload, deployment, DNS change or cloud resource was made.
 
 Plan and contracts: `PHASE-08-PLAN.md`; completion contract: `PHASE-08-COMPLETION.md`.
 
@@ -147,22 +149,44 @@ Mocked Billing and fake WhatsApp sockets do not validate production Google Play 
 
 Headless QA independently found the round-2 P1 (cache rollback) before the review returned.
 
-## 5. Pull requests and CI
+## 5. Pull requests, merges and CI
 
-Nothing is merged. CI for the final heads is listed in the PR checks; section 3 records the last local gates.
+Merged on 2026-11-10 (UTC) with merge commits, in the order of section 9, with the owner's authorization. No
+force push. Each CI run is the full public `ci` workflow (7 jobs) or the private `ci` workflow, run on the
+branch that received the merge.
 
-| PR | Branch | Head |
-| --- | --- | --- |
-| #153 umbrella (draft) | `feat/v5-phase-08` → `release/5.0.0-beta.1` | this document on `c38b787` |
-| #154 08a | `feat/08a-extension-host` → `feat/v5-phase-08` | `b280ad3` |
-| #155 08b | `feat/08b-entitlement` → `feat/v5-phase-08` | `6d6a3d9` |
-| #156 08c | `feat/08c-billing-ui` → `feat/v5-phase-08` | `942170f` |
-| #157 08h | `feat/08h-plus-ui` → `feat/08c-billing-ui` | `5fb8ee3` |
-| #158 08e | `feat/08e-artifact-scan` → `feat/v5-phase-08` | `8ccf398` |
-| #159 integration (draft) | `integration/v5-phase-08` → `feat/v5-phase-08` | `9e67758` + this document |
-| levix-plus #1 | `feat/08d-verifier` → `main` | `43f64c7` |
-| levix-plus #2 | `feat/08f-runtime` → `main` | `6f75c44` |
-| levix-plus #3 (draft) | `integration/phase-08` → `main` | `4a9f31f` + Core re-pin |
+| Order | PR | Into | Merge commit | CI after the merge |
+| --- | --- | --- | --- | --- |
+| 1 | levix-plus #1 08d | `main` | `50bbbdc` | branch has no workflow; local `npm test` on `main` PASS 80/80 |
+| 2 | levix-plus #2 08f | `main` | `57753da` | branch has no workflow; local `npm test` on `main` PASS 131/131 |
+| 3 | levix-plus #4 08g | `integration/phase-08` | `e30a6e0` | `ci` run 42903610436 success |
+| 4 | levix-plus #5 paid | `integration/phase-08` | `ee25283` | `ci` run 42903778048 success |
+| 5 | levix-plus #3 integration | `main` | `cc1e8e1` | `ci` run 42904244248 success |
+| 6 | levix #154 08a | `feat/v5-phase-08` | `91070f4` | run 42904600896 7/7 |
+| 7 | levix #155 08b | `feat/v5-phase-08` | `84838ac` | run 42905427954 7/7 |
+| 8 | levix #158 08e | `feat/v5-phase-08` | `2b68cae` | run 42906190739 7/7 |
+| 9 | levix #156 08c | `feat/v5-phase-08` | `d54bfc7` | run 42906918903 7/7 |
+| 10 | levix #157 08h (retargeted) | `feat/v5-phase-08` | `0271097` | run 42907901307 7/7 |
+| 11 | levix #160 owner decisions | `integration/v5-phase-08` | `c6959a3` | run 42909757464 7/7 on `c8dbe23` (see below) |
+| 12 | levix #161 08i | `integration/v5-phase-08` | `9c52629` | run 42910495057 7/7 |
+| 13 | levix #162 08j (retargeted) | `integration/v5-phase-08` | `6c05d21` | run 42911179423 7/7 |
+| 14 | levix #163 08k (retargeted) | `integration/v5-phase-08` | `acd2052` | run 42911875920 7/7 |
+| 15 | levix #164 08l (retargeted) | `integration/v5-phase-08` | `166e845` | run 42912625218 7/7 |
+| 16 | levix #159 integration | `feat/v5-phase-08` | `50371d8` | run 42913335555 7/7 |
+| 17 | levix #153 umbrella | `release/5.0.0-beta.1` | `1e0de07` | #153 run 42913335555 7/7 on its final head; `release` head checked again by run 42914048270 (#141) |
+
+Conflicts and how they were resolved, each without losing an earlier fix:
+
+- levix-plus `package.json` scripts, twice: `0646c45` (main into `feat/08f-runtime`) kept the union of the
+  service and runtime test scripts; `24b2e3b` (main into `integration/phase-08`) kept the integration
+  scripts, a superset of `main`. Private tests passed 131/131 and 245/245 on those commits.
+- levix #159 reported a conflict after the slices reached `feat/v5-phase-08` directly. `c8dbe23` merged
+  `feat/v5-phase-08` into `integration/v5-phase-08` without a conflict and with a tree identical to `c6959a3`;
+  CI then ran on #159.
+
+Final trees: `feat/v5-phase-08` equals `integration/v5-phase-08`; `release/5.0.0-beta.1` equals
+`feat/v5-phase-08`; `src/`, `frontend/`, `i18n/` and `tests/` on `integration/v5-phase-08` equal the 08l head
+`02f7b78` that passed the full local suite.
 
 ## 6. Privacy and Data safety (draft, apply when billing ships)
 
@@ -212,7 +236,7 @@ resources (D-08-8).
 
 ## 9. Merge order and rollback
 
-Merge order, each step only after the owner's explicit instruction (completion PRs from section 10 included):
+Merge order, executed on 2026-11-10 after the owner's explicit authorization (merge commits in section 5):
 1. levix-plus #1 (`feat/08d-verifier`) and #2 (`feat/08f-runtime`) into `main`.
 2. levix-plus #4 (`feat/08g-completion`) into `integration/phase-08`, then #5 (`ci/paid-aab`, retarget to
    `integration/phase-08` after #4), then #3 (`integration/phase-08` into `main`).
@@ -239,12 +263,12 @@ Node 24.22.2, 2026-11-10.
 
 | Slice | Repository, PR | Branch, head | Content |
 | --- | --- | --- | --- |
-| 08i | levix #161 | `feat/08i-memory-policy` `4f63270` | Free global memory policy, Auto Reply per-chat global memory in Core, review fixes |
-| 08j | levix #162 | `feat/08j-plus-backup` `8848095` | nonsecret Plus customizations in encrypted backups |
-| 08k | levix #163 | `feat/08k-plus-ui-build` `02a3c17` | panel UI, move-denial text, public-build hiding, `LEVIX_EXTENSIONS_DIR` staging hook, verifier origin |
-| 08l | levix #164 | `feat/08l-legal-drafts` | four-locale Terms/Privacy drafts, Data safety draft, this section |
-| 08g | levix-plus #4 | `feat/08g-completion` `2b1358b` | runtime `globalMemory`, origin, RTDN audit and fix, `service/deploy/`, Core pin `02a3c17` |
-| paid | levix-plus #5 | `ci/paid-aab` `81dadb6` | non-production paid AAB pipeline and hardened AAB checker |
+| 08i | levix #161 | `feat/08i-memory-policy` `7f1a4d9` | Free global memory policy, Auto Reply per-chat global memory read in Core, review fixes |
+| 08j | levix #162 | `feat/08j-plus-backup` `5a44b30` | nonsecret Plus customizations in encrypted backups |
+| 08k | levix #163 | `feat/08k-plus-ui-build` `b742dba` | panel UI, move-denial text, public-build hiding, `LEVIX_EXTENSIONS_DIR` staging hook, verifier origin |
+| 08l | levix #164 | `feat/08l-legal-drafts` `02f7b78` | four-locale Terms/Privacy drafts, Data safety draft, this section |
+| 08g | levix-plus #4 | `feat/08g-completion` `e1932ef` | runtime `globalMemory.read`, origin, RTDN audit and fix, `service/deploy/`, Core pin `b742dba` |
+| paid | levix-plus #5 | `ci/paid-aab` `63592c5` | non-production paid AAB pipeline and hardened AAB checker |
 
 ### 10.2 Global memory permission matrix and defaults
 
@@ -317,7 +341,8 @@ backup-restore 344, backup-restore-merge 102, db-copy 150: all 0 failed.
   two-day throwaway key. `check-paid-aab.mjs` requires the paid zip to equal the baseline byte for byte plus only
   the manifest's runtime files, parses ZIPs strictly (central and local records), walks nested ZIP, gzip and tar
   members, and refuses service code, private keys and misplaced canaries. No artifact upload, no secret, no Play.
-- Evidence: CI run 42893041228 (Core `02a3c17`, final checker): AAB 1,032 entries, `levix-app.zip` 4,545
+- Evidence: final CI run 42901055458 (head `63592c5`, Core `b742dba`) passed with AAB sha256
+  `6590dd40…ef24`. CI run 42893041228 (Core `02a3c17`, same checker): AAB 1,032 entries, `levix-app.zip` 4,545
   entries, public baseline 4,539 entries scanned clean, 7 runtime files verified and every other entry
   byte-identical to the baseline, AAB sha256 `33912068…05ca`, two-day throwaway key. Earlier run 42889902273
   (Core `007c5c5`) also passed. Script tests 79/79 locally.
@@ -346,13 +371,15 @@ subscription and keep no cap.
 | Independent Codex review (fresh session) of 08i to 08k and 08g/paid | 1 P1, 7 P2 |
 | Fixes | `fd770d0`, `4f63270` (Core), `ee6b70b` (labels), `f445965`, `d004d26`, `ad2b120`, `3520d4e` (checker) |
 | Codex verification, two rounds | all 8 FIXED, no new P1/P2 |
-| `npm test` on the stack head `b160c9d` | PASS 57,304 checks, 0 failed; 14/14 Q-19 strings kept |
+| Owner review 2026-11-10: Auto Reply global memory write | confirmed nonfunctional (Auto Reply skips the linked account); removed in `7f1a4d9` (Core), `0110d66` (panel), `e1932ef` (runtime) with regression tests |
+| `npm test` on the final 08l head `02f7b78` | PASS 57,307 checks, 0 failed; 14/14 Q-19 strings kept |
+| `npm test` on the earlier stack head `b160c9d` | PASS 57,304 checks, 0 failed |
 | lint, i18n:check, docs:check, build:frontend | PASS (lint 231 warnings, base 230) |
 | build:sea, validate:sea | PASS 51 checks |
 | validate:tarball | NOT RUN locally (the workstation install hung on a dependency download); PASS in CI "package installs and boots" |
-| Private tests with Core `02a3c17` | PASS 244 tests (verifier, runtime, interop, scripts), 0 skipped |
-| Public CI | 7/7 on #161 `4f63270`, #162 `8848095`, #163 `02a3c17`, #164 `b160c9d` |
-| Private CI | `ci` success on #4 `2b1358b` and #5 `81dadb6`; `paid aab` success on `81dadb6` (run 42893041228) |
+| Private tests with Core `b742dba` | PASS 245 tests on `63592c5` (verifier, runtime, interop, scripts), 0 skipped |
+| Public CI | 7/7 on #161 `7f1a4d9`, #162 `5a44b30`, #163 `b742dba`, #164 `02f7b78`, and after every merge (section 5) |
+| Private CI | `ci` success on #4 `e1932ef` and #5 `63592c5`; `paid aab` success on `63592c5` (run 42901055458) and after every merge (section 5) |
 
 ### 10.9 Owner actions still required (credentials, consoles, devices)
 
@@ -368,4 +395,4 @@ subscription and keep no cap.
    WhatsApp test-account QA (Auto Reply with and without global memory, backup restore to the same and to
    another account).
 
-Remaining blockers: production billing and live QA are BLOCKED on items 1 to 8. No security P1/P2 is open.
+Remaining blockers: production billing and live QA are PENDING on items 1 to 8. No security P1/P2 is open.
