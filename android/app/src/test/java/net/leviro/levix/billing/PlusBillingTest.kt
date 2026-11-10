@@ -81,4 +81,73 @@ class PlusBillingTest {
         assertEquals("https://play.google.com/store/account/subscriptions?sku=a%26b&package=p%3Fq",
             PlusBilling.manageUrl("a&b", "p?q"))
     }
+
+    @Test fun recoveryRequiresProcessOptInAndKeepsItAfterDraining() {
+        val recovery = PlusBilling.PurchaseRecovery("plus.monthly", "net.leviro.levix")
+        assertFalse(recovery.optedIn)
+        recovery.record(listOf("plus.monthly"), 1, "before-opt-in")
+        assertEquals(0, recovery.drain().getJSONArray("purchases").length())
+        recovery.optIn()
+        assertTrue(recovery.optedIn)
+        recovery.record(listOf("plus.monthly"), 1, "after-opt-in")
+        assertEquals(1, recovery.drain().getJSONArray("purchases").length())
+        assertTrue(recovery.optedIn)
+        assertFalse(PlusBilling.PurchaseRecovery("plus.monthly", "net.leviro.levix").optedIn)
+    }
+
+    @Test fun pendingCanCompleteAfterTheInteractiveCallHasGone() {
+        val recovery = PlusBilling.PurchaseRecovery("plus.monthly", "net.leviro.levix")
+        recovery.optIn()
+        recovery.record(listOf("plus.monthly"), 2, "token\"\\")
+        assertEquals(0, recovery.drain().getJSONArray("purchases").length())
+        // No interactive call is needed to retain the later completed purchase.
+        recovery.record(listOf("other", "plus.monthly"), 1, "token\"\\")
+        recovery.record(listOf("plus.monthly"), 1, "token\"\\")
+        recovery.record(listOf("plus.monthly"), 2, "token\"\\")
+        recovery.record(listOf("plus.monthly"), 0, "token\"\\")
+        val result = JSONObject(recovery.drain().toString())
+        assertTrue(result.getBoolean("ok"))
+        val purchases = result.getJSONArray("purchases")
+        assertEquals(1, purchases.length())
+        val purchase = purchases.getJSONObject(0)
+        assertEquals(4, purchase.length())
+        assertEquals("token\"\\", purchase.getString("purchaseToken"))
+        assertEquals("plus.monthly", purchase.getString("productId"))
+        assertEquals("net.leviro.levix", purchase.getString("packageName"))
+        assertEquals("purchased", purchase.getString("status"))
+        assertEquals(0, recovery.drain().getJSONArray("purchases").length())
+        // A later Play reconciliation may offer the same token again for a failed claim.
+        recovery.record(listOf("plus.monthly"), 1, "token\"\\")
+        assertEquals(1, recovery.drain().getJSONArray("purchases").length())
+    }
+
+    @Test fun recoveryRejectsOtherProductsUnknownStatesAndInvalidClaimFields() {
+        val recovery = PlusBilling.PurchaseRecovery("plus.monthly", "net.leviro.levix")
+        recovery.optIn()
+        recovery.record(listOf("other"), 1, "other-token")
+        recovery.record(emptyList(), 1, "missing-product")
+        recovery.record(listOf("plus.monthly"), 0, "unknown-state")
+        recovery.record(listOf("plus.monthly"), 2, "pending")
+        recovery.record(listOf("plus.monthly"), 1, " ")
+        assertEquals(0, recovery.drain().getJSONArray("purchases").length())
+        for ((product, pkg) in listOf("" to "pkg", "plus.monthly" to "")) {
+            val invalid = PlusBilling.PurchaseRecovery(product, pkg)
+            invalid.optIn()
+            invalid.record(listOf(product), 1, "token")
+            assertEquals(0, invalid.drain().getJSONArray("purchases").length())
+        }
+    }
+
+    @Test fun recoveryQueueIsBoundedAndDuplicateTokensDoNotEvictPurchases() {
+        val recovery = PlusBilling.PurchaseRecovery("plus.monthly", "net.leviro.levix")
+        recovery.optIn()
+        for (index in 0..15) recovery.record(listOf("plus.monthly"), 1, "token-$index")
+        recovery.record(listOf("plus.monthly"), 1, "token-0")
+        recovery.record(listOf("plus.monthly"), 1, "token-16")
+        val purchases = recovery.drain().getJSONArray("purchases")
+        assertEquals(16, purchases.length())
+        assertEquals("token-1", purchases.getJSONObject(0).getString("purchaseToken"))
+        assertEquals("token-16", purchases.getJSONObject(15).getString("purchaseToken"))
+        assertEquals(0, recovery.drain().getJSONArray("purchases").length())
+    }
 }

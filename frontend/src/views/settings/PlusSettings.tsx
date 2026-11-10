@@ -1,5 +1,5 @@
 import { ExternalLink, RefreshCw } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../../api/client";
 import {
   Button,
@@ -17,6 +17,7 @@ import {
   type PlusPurchaseResult,
   isAndroidHost,
   plusManage,
+  plusPendingPurchases,
   plusProduct,
   plusPurchase,
   plusRestore,
@@ -65,7 +66,7 @@ type PlusStatus = {
   entitlement: { state: keyof typeof STATE_LABELS; until: string | null; reason: string | null };
   extension: { state: keyof typeof EXTENSION_LABELS; id?: string; version?: string };
 };
-type Operation = "subscribe" | "restore" | "refresh" | "toggle" | "manage" | "reload";
+type Operation = "subscribe" | "restore" | "refresh" | "toggle" | "manage" | "reload" | "recover";
 type Notice = "plusPaymentPending" | "plusPurchaseCancelled" | "plusNoPurchases";
 
 function failure(code = "FAILED"): never {
@@ -95,6 +96,8 @@ export function PlusSettings({
   const [productLoading, setProductLoading] = useState(false);
   const [busy, setBusy] = useState<Operation | null>(null);
   const running = useRef(false);
+  const [recoveryRequest, setRecoveryRequest] = useState(0);
+  const recoveredRequest = useRef(-1);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
 
@@ -128,7 +131,7 @@ export function PlusSettings({
     };
   }, [android]);
 
-  async function readStatus() {
+  const readStatus = useCallback(async () => {
     try {
       const next = await api.get<PlusStatus>("/plus/status");
       setStatus(next);
@@ -138,31 +141,36 @@ export function PlusSettings({
       setStatus(null);
       throw err;
     }
-  }
+  }, []);
 
-  async function run(operation: Operation, action: () => Promise<void>) {
-    if (running.current || productLoading) return;
-    running.current = true;
-    setBusy(operation);
-    setError(null);
-    setNotice(null);
-    try {
-      await action();
-    } catch (err) {
-      setError(errorCode(err));
-    } finally {
-      // Play results and even claim responses never set the displayed entitlement.
+  const run = useCallback(
+    async (operation: Operation, action: () => Promise<void>) => {
+      if (running.current || productLoading) return;
+      running.current = true;
+      setBusy(operation);
+      if (operation !== "recover") {
+        setError(null);
+        setNotice(null);
+      }
       try {
-        await readStatus();
+        await action();
       } catch (err) {
         setError(errorCode(err));
+      } finally {
+        // Play results and even claim responses never set the displayed entitlement.
+        try {
+          await readStatus();
+        } catch (err) {
+          setError(errorCode(err));
+        }
+        running.current = false;
+        setBusy(null);
       }
-      running.current = false;
-      setBusy(null);
-    }
-  }
+    },
+    [productLoading, readStatus],
+  );
 
-  async function claim(purchase: PlusPurchaseResult) {
+  const claim = useCallback(async (purchase: PlusPurchaseResult) => {
     if (!purchase.ok) {
       if (purchase.status === "cancelled") setNotice("plusPurchaseCancelled");
       else failure(purchase.code);
@@ -176,7 +184,49 @@ export function PlusSettings({
       });
       if (!result.ok) failure(result.code);
     }
-  }
+  }, []);
+
+  const claimPurchases = useCallback(
+    async (purchases: PlusPurchaseResult[]) => {
+      let firstError: unknown;
+      for (const purchase of purchases) {
+        try {
+          await claim(purchase);
+        } catch (err) {
+          firstError ??= err;
+        }
+      }
+      if (firstError) throw firstError;
+    },
+    [claim],
+  );
+
+  useEffect(() => {
+    if (!android) return;
+    const visible = () => {
+      if (document.visibilityState === "visible") setRecoveryRequest((value) => value + 1);
+    };
+    document.addEventListener("visibilitychange", visible);
+    return () => document.removeEventListener("visibilitychange", visible);
+  }, [android]);
+
+  const recoveryAvailable = android && status?.configured && status.extension.state !== "absent";
+  useEffect(() => {
+    if (
+      !recoveryAvailable || loading || productLoading || busy ||
+      recoveredRequest.current === recoveryRequest
+    ) return;
+    recoveredRequest.current = recoveryRequest;
+    void run("recover", async () => {
+      const result = await plusPendingPurchases();
+      if (!result.ok) failure(result.code);
+      if (result.purchases.length > 0) {
+        setError(null);
+        setNotice(null);
+      }
+      await claimPurchases(result.purchases.map((purchase) => ({ ok: true as const, ...purchase })));
+    });
+  }, [recoveryAvailable, loading, productLoading, busy, recoveryRequest, run, claimPurchases]);
 
   function subscribe() {
     void run("subscribe", async () => {
@@ -191,15 +241,7 @@ export function PlusSettings({
       const result = await plusRestore();
       if (!result.ok) failure(result.code);
       if (result.purchases.length === 0) setNotice("plusNoPurchases");
-      let firstError: unknown;
-      for (const purchase of result.purchases) {
-        try {
-          await claim(purchase);
-        } catch (err) {
-          firstError ??= err;
-        }
-      }
-      if (firstError) throw firstError;
+      await claimPurchases(result.purchases);
     });
   }
 

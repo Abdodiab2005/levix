@@ -545,6 +545,7 @@ class PanelActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         pushUiPrefs()
+        if (::billingHost.isInitialized) billingHost.onResume()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
