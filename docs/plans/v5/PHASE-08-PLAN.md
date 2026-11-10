@@ -277,7 +277,7 @@ voided or revoked → `inactive`. The client never trusts a local purchase state
 ### 4.7 Wire contract v1 (Core client and verifier)
 
 The exact contract both sides implement is kept verbatim in the private `levix-plus/service/README.md`
-and in the Core client tests. Summary: origin `https://plus.leviro.net` (D-08-2); `POST /v1/claim`
+and in the Core client tests. Summary: origin `https://levix-plus.leviro.net` (D-08-2); `POST /v1/claim`
 body `{ purchaseToken, productId, packageName }`; `POST /v1/refresh` body `{ seq }`; every Play
 outcome answers 200 `{ token }` (not entitled = `st: "inactive"`); request problems answer
 `{ error: { code, retryable } }` with codes `BAD_REQUEST`, `BAD_SIGNATURE`, `STALE_TIMESTAMP`,
@@ -320,7 +320,7 @@ limiting). Retention: rows deleted 90 days after subscription expiry or on suppo
 | Id | Question | Recommendation |
 | --- | --- | --- |
 | D-08-1 | Paid artifact: Play AAB built by a private pipeline that adds the runtime? | Yes; public builds stay Free |
-| D-08-2 | Verifier host name and deployment (VPS beside levix.leviro.net?) | `https://plus.leviro.net`, owner deploys |
+| D-08-2 | Verifier host name and deployment (VPS beside levix.leviro.net?) | `https://levix-plus.leviro.net`, owner deploys |
 | D-08-3 | Rebind policy: one active installation, 3 moves per 30 days | Accept |
 | D-08-4 | Play product id and base plan id (Play Console), Egypt price | Owner creates; read from Play, not assumed |
 | D-08-5 | Entitlement signing key generation and custody | Owner generates offline like the Terms key |

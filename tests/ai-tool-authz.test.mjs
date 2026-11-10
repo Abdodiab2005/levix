@@ -25,6 +25,10 @@ cron.schedule = () => ({ stop() {} });
 
 const scheduler = require("./scheduler.cjs");
 const settings = require("./src/config/settings.cjs");
+// Exercise the pre-policy role matrix with the owner's explicit global grants.
+settings.set("ai_global_memory_read", "everyone");
+settings.set("ai_global_memory_write", "privileged");
+settings.set("ai_global_memory_where", "all");
 const runtimeConfig = require("./src/config/runtime-config.cjs");
 const memory = require("./src/utils/memory.cjs");
 const { runTool, TOOLS } = require("./src/services/aiTools.cjs");
@@ -349,7 +353,7 @@ try {
   );
   equal("member: chat memory still works, like !memory add", result.saved, true);
   result = await runTool("search_memory", { scope: "all" }, { caller: member });
-  ok("member: search_memory still works, like !memory search", Array.isArray(result.chat));
+  ok("member: search_memory works when the owner allows everyone", Array.isArray(result.chat));
   result = await runTool("get_datetime", {}, {});
   ok("get_datetime needs no caller at all", typeof result.iso === "string");
 

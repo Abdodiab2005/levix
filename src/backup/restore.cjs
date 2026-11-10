@@ -14,6 +14,7 @@ const { classifyTables, RESTORABLE_SETTING_KEYS, COMMAND_TABLE_KEYS } = require(
 const { readPairedAccount, maskAccount, accountsMatch } = require("./account.cjs");
 const { writeJournal, readJournal, clearJournal, writeOutcome, readOutcome, atomicJson } = require("./journal.cjs");
 const uploads = require("./uploads.cjs");
+const extensions = require("./extensions.cjs");
 const { buildPlan, appliedPlan, currentDigests, digestsFrom, restorableRows, publicPlan } = require("./plan.cjs");
 
 const root = () => {
@@ -66,9 +67,13 @@ function assertNoExcludedData(database) {
     "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'bot_settings'",
   ).get();
   if (!settingsTable) return;
+  // Only the named Plus keys may carry extension data. plus:* and every other ext:* key is refused.
+  const extensionKeys = [];
   for (const row of database.prepare("SELECT key FROM bot_settings").iterate()) {
-    if (isSecretBotKey(row.key)) throw new BackupError("DAMAGED", "Backup database holds excluded data");
+    if (isSecretBotKey(row.key, extensions.isRestorableExtKey)) throw new BackupError("DAMAGED", "Backup database holds excluded data");
+    if (row.key.startsWith("ext:")) extensionKeys.push(row.key);
   }
+  extensions.assertStagedExtensions(database, extensionKeys);
 }
 function expectedSchema(database) {
   const version = database.prepare("PRAGMA user_version").get().user_version;
@@ -110,6 +115,7 @@ function fsyncStagedTree(folder) {
 function applySettings(id, secrets, { base, confirmDestructive = false } = {}) {
   const source = new DatabaseSync(path.join(staged(id), "db", "levix.db"), { readOnly: true });
   const report = { applied: [], skipped: [], restartNeeded: [] };
+  let plusApplied = false;
   const skip = (key) => report.skipped.push({ key, reason: "Rejected value" });
   try {
     db.exec("PRAGMA synchronous = FULL");
@@ -148,6 +154,17 @@ function applySettings(id, secrets, { base, confirmDestructive = false } = {}) {
           catch { skip(key); }
         }
       }
+      // Plus config applies with the settings. Account data (acct) waits for activation. A cfg key the
+      // backup lacks keeps its value: nothing here deletes.
+      const plusRows = extensions.validRows(source);
+      for (const { key, parsed } of plusRows.filter((row) => extensions.kindOf(row.key) === "cfg")) {
+        const name = extensions.shortName(key);
+        try {
+          store.setExtStorage(extensions.EXT_ID, "cfg", name.slice("cfg:".length), parsed);
+          report.applied.push(name);
+          plusApplied = true;
+        } catch { skip(name); }
+      }
       for (const row of rows.filter((item) => COMMAND_TABLE_KEYS.includes(item.key) && item.oversized)) skip(row.key);
       const commandRows = new Map(rows.filter((row) => COMMAND_TABLE_KEYS.includes(row.key) && !row.oversized)
         .map((row) => [row.key, safeJson(row.value, null)]));
@@ -184,7 +201,7 @@ function applySettings(id, secrets, { base, confirmDestructive = false } = {}) {
       // The decision uses what this transaction actually changed, side effects
       // included. Refusing rolls back, so nothing live has changed.
       const plan = appliedPlan({ before, after: currentDigests(),
-        source: digestsFrom(rows, secrets?.settings ?? {}), base });
+        source: digestsFrom([...rows, ...plusRows], secrets?.settings ?? {}), base });
       report.plan = publicPlan(plan);
       if (plan.destructive && confirmDestructive !== true) {
         const refused = new BackupError("CONFIRM_REQUIRED", "Restore replaces existing values");
@@ -200,6 +217,7 @@ function applySettings(id, secrets, { base, confirmDestructive = false } = {}) {
     finally { source.close(); }
   }
   crash("after-commit");
+  if (plusApplied) extensions.reloadHost();
   return report;
 }
 

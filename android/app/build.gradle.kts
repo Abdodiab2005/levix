@@ -287,6 +287,12 @@ tasks.register<Exec>("stageLevixApp") {
         ?: throw GradleException("defaultConfig.versionCode is not set")
     environment("LEVIX_ANDROID_VERSION_CODE", versionCode)
     inputs.property("versionCode", versionCode)
+    val extensionsDir = System.getenv("LEVIX_EXTENSIONS_DIR")?.trim().orEmpty()
+    inputs.property("extensionsDir", extensionsDir)
+    if (extensionsDir.isNotEmpty()) {
+        environment("LEVIX_EXTENSIONS_DIR", extensionsDir)
+        inputs.dir(File(extensionsDir))
+    }
     inputs.dir(File(repoRoot, "src"))
     inputs.dir(File(repoRoot, "public"))
     // Config, HTML, public assets and lockfile changes must invalidate the ZIP

@@ -4,6 +4,8 @@ import { equal, finish, ok, require, section, useTempDataDir } from "./harness.m
 useTempDataDir("levix-extensions-tools");
 
 const settings = require("./src/config/settings.cjs");
+// This file tests tool roles and cancellation with Free global writes enabled.
+settings.set("ai_global_memory_write", "owner");
 settings.set("bot_min_delay_ms", 0);
 settings.set("bot_max_delay_ms", 0);
 const { timing } = await import("../src/utils/sendBotMessage.esm.js");
@@ -51,7 +53,11 @@ section("chat-only memory cannot read, write or delete global scope");
     ]) {
       const result = await runTool(tool, { ...args, scope }, { caller, memoryScope: "chat" });
       equal(`${tool}/${scope}: denied`, result.denied, true);
-      equal(`${tool}/${scope}: scope error`, result.error, "only chat memory is available");
+      equal(
+        `${tool}/${scope}: scope error`,
+        result.error,
+        "global memory is not available in this turn",
+      );
       equal(
         `${tool}/${scope}: only error fields, no global data or count`,
         JSON.stringify(Object.keys(result).sort()),

@@ -248,6 +248,10 @@ async function runAiReply(runtime, job = {}) {
   const instructions = job.instructions == null ? "" : String(job.instructions);
   if (instructions.length > MAX_INSTRUCTIONS) return { sent: false };
   const quote = job.quote === true;
+  const autoReplyGlobal = Object.freeze({
+    read: job.globalMemory?.read === true,
+    write: job.globalMemory?.write === true,
+  });
   const { sock, msg, event, epoch, generation } = entry;
   const chatJid = event.chatJid;
   const isGroup = event.isGroup;
@@ -354,9 +358,8 @@ async function runAiReply(runtime, job = {}) {
         isAdmin: caller.isOwner || caller.isBotAdmin,
         isGroup: caller.isGroup,
         chatName: caller.chatName,
-        // Auto Reply stays chat-scoped even in an owner's private chat.
-        includeGlobalMemory: false,
         memoryScope: "chat",
+        autoReplyGlobal,
       },
     });
 
@@ -507,6 +510,7 @@ async function dispatch(runtime, sock, msg, epoch) {
     messageId,
     instructions: decision.instructions,
     quote: decision.quote === true,
+    globalMemory: decision.globalMemory,
   });
 }
 

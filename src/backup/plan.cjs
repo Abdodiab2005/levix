@@ -14,15 +14,24 @@ const settings = require("../config/settings.cjs");
 const { dataPath } = require("../config/paths.cjs");
 const { ACCOUNT_TABLES, RESTORABLE_BOT_KEYS, RESTORABLE_SETTING_KEYS } = require("./content.cjs");
 const { readPairedAccount, maskAccount, accountsMatch } = require("./account.cjs");
+const extensions = require("./extensions.cjs");
 
 const digest = (text) => crypto.createHash("sha256").update(String(text)).digest("hex");
 
-/** Digests of the restorable bot_settings rows and of the plain API key values. */
+/**
+ * Digests of the restorable bot_settings rows and of the plain API key values.
+ * `plus` (Plus config and account rows, keyed `cfg:<name>` / `acct:<name>`) is
+ * present only when there is at least one, so an install without Plus data
+ * produces the same digests as before.
+ */
 function digestsFrom(rows, secretValues = {}) {
   const result = { settings: {}, apiKeys: {} };
+  const plus = {};
   for (const { key, value } of rows) {
     if (RESTORABLE_BOT_KEYS.includes(key)) result.settings[key] = digest(value);
+    else if (extensions.isRestorableExtKey(key)) plus[extensions.shortName(key)] = digest(extensions.canonicalValue(value));
   }
+  if (Object.keys(plus).length) result.plus = plus;
   for (const [name, value] of Object.entries(secretValues)) {
     if (settings.SECRET_SETTING_KEYS.includes(name)) result.apiKeys[name] = digest(value);
   }
@@ -31,9 +40,10 @@ function digestsFrom(rows, secretValues = {}) {
 
 function restorableRows(database) {
   const keys = RESTORABLE_BOT_KEYS;
-  return database.prepare(
+  const rows = database.prepare(
     `SELECT key, value FROM bot_settings WHERE key IN (${keys.map(() => "?").join(",")})`,
   ).all(...keys);
+  return [...rows, ...extensions.validRows(database).map(({ key, value }) => ({ key, value }))];
 }
 
 function currentDigests() {
@@ -47,7 +57,8 @@ function currentDigests() {
   // has no stored row still shows up.
   const effective = {};
   for (const key of RESTORABLE_SETTING_KEYS) effective[`setting:${key}`] = digest(JSON.stringify(settings.get(key)));
-  return { settings: digestsFrom(restorableRows(db)).settings, apiKeys, effective };
+  const rows = digestsFrom(restorableRows(db));
+  return { settings: rows.settings, apiKeys, effective, plus: rows.plus ?? {} };
 }
 
 // Command permissions decide who may run what, so even adding overrides to an
@@ -66,6 +77,34 @@ function compare(source, target) {
   for (const list of Object.values(result)) list.sort();
   return result;
 }
+
+const emptyPlus = () => ({ messages: { total: 0, added: 0, replaced: 0, unchanged: 0 },
+  presets: "none", visibility: "none", autoReply: "none", autoReplyWaits: false });
+
+/**
+ * What the backup's Plus data does here. Message overrides are counted; presets,
+ * visibility and Auto Reply are each added, replaced, unchanged or none (the
+ * backup lacks it, so the current value stays). Auto Reply is account data: it
+ * waits for the matching account to pair and is never written by the restore.
+ */
+function plusPlan(source = {}, current = {}) {
+  const result = emptyPlus();
+  const status = (name) => !Object.hasOwn(source, name) ? "none" : !Object.hasOwn(current, name) ? "added" :
+    source[name] === current[name] ? "unchanged" : "replaced";
+  for (const name of Object.keys(source)) {
+    if (!name.startsWith("cfg:") || ["cfg:presets", "cfg:visibility"].includes(name)) continue;
+    const state = status(name);
+    result.messages.total += 1;
+    result.messages[state] += 1;
+  }
+  result.presets = status("cfg:presets");
+  result.visibility = status("cfg:visibility");
+  result.autoReply = status("acct:autoReply");
+  result.autoReplyWaits = result.autoReply !== "none";
+  return result;
+}
+// Replacing a message override, the presets or the visibility overwrites a value this install has.
+const plusReplaces = (plus) => plus.messages.replaced > 0 || plus.presets === "replaced" || plus.visibility === "replaced";
 
 function personaChange(backupSha) {
   let current = null;
@@ -125,10 +164,11 @@ function buildPlan({ digests, apiKeyNames = [], personaSha = null, account = nul
       replacesWaiting: waiting ? maskAccount(waiting) : null,
     };
   }
-  const destructive = !exact || settingsPlan.replaced.length > 0 || apiKeys.replaced.length > 0 ||
+  const plus = plusPlan(exact ? digests.plus : {}, current.plus);
+  const destructive = !exact || settingsPlan.replaced.length > 0 || apiKeys.replaced.length > 0 || plusReplaces(plus) ||
     settingsPlan.removed.length > 0 || apiKeys.removed.length > 0 || changesAccess(settingsPlan) ||
     persona === "replaced" || Boolean(accountData?.replacesCurrent || accountData?.replacesWaiting);
-  return { exact, destructive, settings: settingsPlan, apiKeys, persona, accountData };
+  return { exact, destructive, settings: settingsPlan, apiKeys, persona, accountData, plus };
 }
 
 /**
@@ -162,10 +202,12 @@ function appliedPlan({ before, after, source, base }) {
   };
   const settingsPlan = section(before.settings, after.settings, source.settings, before.effective, after.effective);
   const apiKeys = section(before.apiKeys, after.apiKeys, source.apiKeys);
+  const plus = plusPlan(source.plus, before.plus);
   const destructive = [settingsPlan, apiKeys].some((part) => part.replaced.length + part.removed.length > 0) ||
-    changesAccess(settingsPlan) ||
+    changesAccess(settingsPlan) || plusReplaces(plus) ||
     base.persona === "replaced" || Boolean(base.accountData?.replacesCurrent || base.accountData?.replacesWaiting);
-  return { exact: true, destructive, settings: settingsPlan, apiKeys, persona: base.persona, accountData: base.accountData };
+  return { exact: true, destructive, settings: settingsPlan, apiKeys, persona: base.persona,
+    accountData: base.accountData, plus };
 }
 
 /** The plan as the panel sees it: names only, never a value or a digest. */
@@ -174,7 +216,8 @@ function publicPlan(plan) {
   const section = (part) => ({ added: names(part.added), replaced: names(part.replaced),
     removed: names(part.removed), unchanged: part.unchanged.length, kept: names(part.kept) });
   return { exact: plan.exact, destructive: plan.destructive, settings: section(plan.settings),
-    apiKeys: section(plan.apiKeys), persona: plan.persona, accountData: plan.accountData };
+    apiKeys: section(plan.apiKeys), persona: plan.persona, accountData: plan.accountData,
+    plus: plan.plus ?? emptyPlus() };
 }
 
 module.exports = { digest, digestsFrom, restorableRows, currentDigests, buildPlan, appliedPlan, publicPlan };
