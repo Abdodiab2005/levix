@@ -153,7 +153,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
-| Status | Code: CODE READY FOR OWNER MERGE REVIEW; production billing and live QA: BLOCKED on owner credentials, consoles and devices (2026-11-10). Plan: `PHASE-08-PLAN.md`; owner decisions: `PHASE-08-OWNER-DECISIONS.md` (#160); completion contract: `PHASE-08-COMPLETION.md`; results, reviews, PRs #153-#164 and levix-plus #1-#5: `PHASE-08-RESULTS.md`. Nothing merged; not shipped. |
+| Status | PHASE 08 CODE MERGED (2026-11-10): levix #153-#164 into `release/5.0.0-beta.1` at `1e0de07`, levix-plus #1-#5 into `main` at `cc1e8e1`. Production billing and live QA: PENDING on owner credentials, consoles and devices. Plan: `PHASE-08-PLAN.md`; owner decisions: `PHASE-08-OWNER-DECISIONS.md` (#160); completion contract: `PHASE-08-COMPLETION.md`; results, merge commits and CI: `PHASE-08-RESULTS.md`. Not shipped; no tag or release. |
 | Goal | Public extension contract with Free defaults; Android Play Billing client; server-verified entitlements; message personalization and paid prefix-free AI Auto Reply in Plus. |
 | Files (public) | new `src/extensions/` contract, message-engine hooks, Android billing client, CI scan of public artifacts. Plus code lives only in the private repository, including Auto Reply runtime and per-contact/group configuration (ADR-009). |
 | Migrations | Entitlement cache and template overrides, additive. |
