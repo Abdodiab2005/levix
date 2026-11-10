@@ -341,19 +341,12 @@ try {
     const jid = "201000003002@s.whatsapp.net";
     const receivedEpoch = store.accountEpoch();
     store.advanceAccountEpoch();
-    let toolResult;
+    let providerCalls = 0;
     router.registerProvider(
       "openai",
       Object.assign(Object.create(realProvider), {
-        async runTurn({ context }) {
-          toolResult = await runTool(
-            "save_memory",
-            {
-              scope: "chat",
-              content: "old account request",
-            },
-            context,
-          );
+        async runTurn() {
+          providerCalls += 1;
           return { text: "done", history: [{ role: "user", parts: [{ text: "stale" }] }] };
         },
       }),
@@ -362,7 +355,7 @@ try {
       await command.execute(out, message(jid), ["hello"], "!ai hello", null, {
         accountEpoch: receivedEpoch,
       });
-      equal("old dispatch epoch reaches tool authorization", toolResult?.denied, true);
+      equal("old dispatch epoch never calls the provider", providerCalls, 0);
       equal("delayed dispatch cannot save history", (await hub.getChatHistoryAsync(jid)).length, 0);
       equal(
         "delayed dispatch cannot write memory",

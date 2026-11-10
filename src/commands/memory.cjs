@@ -96,6 +96,8 @@ module.exports = {
       reply(t("bot.ai.memory.denied"));
 
     try {
+      if (scope === "global" && !botPrivileged) return denied();
+
       // ---------------------------------------------------------------- add
       if (["add", "save", "احفظ", "ضيف", "اضف"].includes(action)) {
         const content = rest.join(" ").trim();
