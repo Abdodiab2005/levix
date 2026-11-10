@@ -153,6 +153,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
+| Status | IN PROGRESS (2026-11-10). Audit, architecture, contract, threat model and slices: `PHASE-08-PLAN.md`. Private repository `levix-plus` created on the owner's instruction. Verifier deployment, Play product and signing key are BLOCKED on owner decisions D-08-1 to D-08-8. |
 | Goal | Public extension contract with Free defaults; Android Play Billing client; server-verified entitlements; message personalization and paid prefix-free AI Auto Reply in Plus. |
 | Files (public) | new `src/extensions/` contract, message-engine hooks, Android billing client, CI scan of public artifacts. Plus code lives only in the private repository, including Auto Reply runtime and per-contact/group configuration (ADR-009). |
 | Migrations | Entitlement cache and template overrides, additive. |
