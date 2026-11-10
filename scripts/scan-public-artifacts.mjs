@@ -193,18 +193,21 @@ function readName(buffer, start, length) {
 // bit of the first byte is set.
 function readTarNumber(buffer, start, length) {
   if (buffer[start] & 0x80) {
+    if (buffer[start] & 0x40) throw new Error("tar number out of range");
     let value = BigInt(buffer[start] & 0x7f);
     for (let index = start + 1; index < start + length; index += 1) {
       value = value * 256n + BigInt(buffer[index]);
     }
     const number = Number(value);
-    if (!Number.isSafeInteger(number)) throw new Error("tar number out of range");
+    if (!Number.isSafeInteger(number) || number < 0) throw new Error("tar number out of range");
     return number;
   }
   const text = readName(buffer, start, length).trim();
   if (text === "") return 0;
   if (!/^[0-7]+$/.test(text)) throw new Error("bad octal field in tar header");
-  return Number.parseInt(text, 8);
+  const number = Number.parseInt(text, 8);
+  if (!Number.isSafeInteger(number) || number < 0) throw new Error("tar number out of range");
+  return number;
 }
 
 function isZeroBlock(buffer) {
@@ -212,6 +215,10 @@ function isZeroBlock(buffer) {
     if (buffer[index] !== 0) return false;
   }
   return true;
+}
+
+function isUstar(buffer) {
+  return buffer.length >= 262 && buffer.subarray(257, 262).toString("ascii") === "ustar";
 }
 
 function scanTarBuffer(tar, result, budget, depth = 0, archivePrefix = "") {
@@ -232,16 +239,39 @@ function scanTarBuffer(tar, result, budget, depth = 0, archivePrefix = "") {
 
     const nameField = readName(header, 0, 100);
     const prefix = readName(header, 345, 155);
-    const size = readTarNumber(header, 124, 12);
+    const ustarSize = readTarNumber(header, 124, 12);
     const type = String.fromCharCode(header[156] || 0x30);
 
+    let size = ustarSize;
+    if (type !== "L" && type !== "x" && type !== "g" && pendingPax?.size !== undefined) {
+      const rawPaxSize = pendingPax.size;
+      if (!/^[0-9]+$/.test(rawPaxSize)) {
+        const entryName =
+          pendingPax?.path ?? pendingLongName ?? (prefix ? `${prefix}/${nameField}` : nameField);
+        throw new Error(`${entryName}: invalid PAX size`);
+      }
+      const parsed = Number(rawPaxSize);
+      if (!Number.isSafeInteger(parsed) || parsed < 0) {
+        const entryName =
+          pendingPax?.path ?? pendingLongName ?? (prefix ? `${prefix}/${nameField}` : nameField);
+        throw new Error(`${entryName}: invalid PAX size`);
+      }
+      size = parsed;
+    }
+
+    if (!Number.isSafeInteger(size) || size < 0) {
+      const entryName =
+        pendingPax?.path ?? pendingLongName ?? (prefix ? `${prefix}/${nameField}` : nameField);
+      throw new Error(`${entryName}: invalid entry size`);
+    }
+
     const dataStart = offset + TAR_BLOCK;
-    const dataEnd = dataStart + size;
-    if (dataEnd > tar.length) {
+    if (size > tar.length - dataStart) {
       const entryName =
         pendingPax?.path ?? pendingLongName ?? (prefix ? `${prefix}/${nameField}` : nameField);
       throw new Error(`${entryName}: truncated tar entry`);
     }
+    const dataEnd = dataStart + size;
 
     // GNU long name: the payload is the next entry's name.
     if (type === "L") {
@@ -278,10 +308,7 @@ function scanTarBuffer(tar, result, budget, depth = 0, archivePrefix = "") {
     if (type === "0" || type === "7") {
       const data = tar.subarray(dataStart, dataEnd);
       inspectContent(result, qualifiedName, data, budget);
-      const nested = archiveType(name);
-      if (nested) {
-        scanNestedArchive(data, nested, qualifiedName, result, budget, depth + 1);
-      }
+      scanNestedArchive(data, qualifiedName, result, budget, depth + 1);
     }
 
     offset = dataStart + Math.ceil(size / TAR_BLOCK) * TAR_BLOCK;
@@ -433,10 +460,7 @@ function scanZipBuffer(zip, result, budget, depth = 0, archivePrefix = "") {
       throw new Error(`${qualifiedName}: unsupported compression method ${method}`);
     }
 
-    const nested = archiveType(name);
-    if (nested) {
-      scanNestedArchive(data, nested, qualifiedName, result, budget, depth + 1);
-    }
+    scanNestedArchive(data, qualifiedName, result, budget, depth + 1);
 
     cursor += 46 + nameLength + extraLength + commentLength;
   }
@@ -466,22 +490,76 @@ export function scanZip(input, options = {}) {
   return result;
 }
 
-function scanNestedArchive(data, type, prefix, result, budget, depth) {
-  if (depth > 4) {
-    throw new Error(`${prefix}: archive nesting exceeds depth cap of 4`);
-  }
-  if (type === "tar.gz") {
+function scanNestedArchive(data, prefix, result, budget, depth) {
+  if (data.length >= 2 && data[0] === 0x1f && data[1] === 0x8b) {
+    if (depth > 4) {
+      throw new Error(`${prefix}: archive nesting exceeds depth cap of 4`);
+    }
     const remaining = Math.max(0, budget.maxTotalBytes - budget.used);
-    const tar = gunzipSync(data, { maxOutputLength: remaining });
-    scanTarBuffer(tar, result, budget, depth, prefix);
-  } else if (type === "tar") {
-    scanTarBuffer(data, result, budget, depth, prefix);
-  } else if (type === "zip") {
+    let inflated;
+    try {
+      inflated = gunzipSync(data, { maxOutputLength: remaining });
+    } catch (error) {
+      if (
+        String(error?.code).startsWith("ERR_BUFFER_TOO_LARGE") ||
+        error?.message?.includes("cap")
+      ) {
+        throw error;
+      }
+      if (archiveType(prefix) === "tar.gz") {
+        throw error;
+      }
+      return;
+    }
+    if (isUstar(inflated)) {
+      scanTarBuffer(inflated, result, budget, depth, prefix);
+    }
+    return;
+  }
+  if (
+    data.length >= 4 &&
+    data[0] === 0x50 &&
+    data[1] === 0x4b &&
+    data[2] === 0x03 &&
+    data[3] === 0x04
+  ) {
+    if (depth > 4) {
+      throw new Error(`${prefix}: archive nesting exceeds depth cap of 4`);
+    }
     scanZipBuffer(data, result, budget, depth, prefix);
+    return;
+  }
+  if (isUstar(data)) {
+    if (depth > 4) {
+      throw new Error(`${prefix}: archive nesting exceeds depth cap of 4`);
+    }
+    scanTarBuffer(data, result, budget, depth, prefix);
+    return;
+  }
+  const fallback = archiveType(prefix);
+  if (fallback === "zip") {
+    if (depth > 4) {
+      throw new Error(`${prefix}: archive nesting exceeds depth cap of 4`);
+    }
+    scanZipBuffer(data, result, budget, depth, prefix);
+  } else if (fallback === "tar") {
+    if (depth > 4) {
+      throw new Error(`${prefix}: archive nesting exceeds depth cap of 4`);
+    }
+    scanTarBuffer(data, result, budget, depth, prefix);
   }
 }
 
-function walkDirectory(dir, prefix, result, budget, depth = 0, visited = new Set(), root = dir) {
+function walkDirectory(
+  dir,
+  prefix,
+  result,
+  budget,
+  depth = 0,
+  ancestors = new Set([dir]),
+  readFiles = new Map(),
+  root = dir,
+) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const name = prefix ? `${prefix}/${entry.name}` : entry.name;
     const full = join(dir, entry.name);
@@ -498,24 +576,31 @@ function walkDirectory(dir, prefix, result, budget, depth = 0, visited = new Set
       if (rel.startsWith("..") || isAbsolute(rel)) {
         throw new Error(`${name}: symlink escapes scanned root (${realTarget})`);
       }
-      if (visited.has(realTarget)) continue;
 
       const st = statSync(realTarget);
       if (st.isDirectory()) {
-        visited.add(realTarget);
-        walkDirectory(realTarget, name, result, budget, depth, visited, root);
+        if (ancestors.has(realTarget)) continue;
+        const nextAncestors = new Set(ancestors);
+        nextAncestors.add(realTarget);
+        walkDirectory(realTarget, name, result, budget, depth, nextAncestors, readFiles, root);
       } else if (st.isFile()) {
-        budget.use(st.size, name);
         result.entries += 1;
+        const cached = readFiles.get(realTarget);
+        if (cached) {
+          if (cached.hasCanary) {
+            result.findings.push({ path: name, reason: "canary" });
+          }
+          continue;
+        }
+        budget.use(st.size, name);
         const data = readFileSync(realTarget);
         result.bytes += data.length;
-        if (containsCanary(data)) {
+        const hasCanary = containsCanary(data);
+        readFiles.set(realTarget, { hasCanary });
+        if (hasCanary) {
           result.findings.push({ path: name, reason: "canary" });
         }
-        const nested = archiveType(entry.name) ?? archiveType(realTarget);
-        if (nested) {
-          scanNestedArchive(data, nested, name, result, budget, depth + 1);
-        }
+        scanNestedArchive(data, name, result, budget, depth + 1);
       }
       continue;
     }
@@ -527,26 +612,41 @@ function walkDirectory(dir, prefix, result, budget, depth = 0, visited = new Set
       } catch (error) {
         throw new Error(`${name}: cannot read directory (${error.message})`);
       }
-      if (visited.has(real)) continue;
-      visited.add(real);
-      walkDirectory(full, name, result, budget, depth, visited, root);
+      if (ancestors.has(real)) continue;
+      const nextAncestors = new Set(ancestors);
+      nextAncestors.add(real);
+      walkDirectory(full, name, result, budget, depth, nextAncestors, readFiles, root);
       continue;
     }
 
     if (!entry.isFile()) continue;
 
+    let realFile;
+    try {
+      realFile = realpathSync(full);
+    } catch (error) {
+      throw new Error(`${name}: cannot read file (${error.message})`);
+    }
+
+    result.entries += 1;
+    const cached = readFiles.get(realFile);
+    if (cached) {
+      if (cached.hasCanary) {
+        result.findings.push({ path: name, reason: "canary" });
+      }
+      continue;
+    }
+
     const size = statSync(full).size;
     budget.use(size, name);
-    result.entries += 1;
     const data = readFileSync(full);
     result.bytes += data.length;
-    if (containsCanary(data)) {
+    const hasCanary = containsCanary(data);
+    readFiles.set(realFile, { hasCanary });
+    if (hasCanary) {
       result.findings.push({ path: name, reason: "canary" });
     }
-    const nested = archiveType(entry.name);
-    if (nested) {
-      scanNestedArchive(data, nested, name, result, budget, depth + 1);
-    }
+    scanNestedArchive(data, name, result, budget, depth + 1);
   }
 }
 
@@ -556,7 +656,7 @@ export function scanDirectory(dir, options = {}) {
   const depth = options.depth ?? 0;
   try {
     const root = realpathSync(resolve(dir));
-    walkDirectory(root, "", result, budget, depth, new Set([root]), root);
+    walkDirectory(root, "", result, budget, depth, new Set([root]), new Map(), root);
   } catch (error) {
     result.error = error.message;
   }
