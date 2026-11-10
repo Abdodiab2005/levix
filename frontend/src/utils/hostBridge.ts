@@ -1,8 +1,12 @@
-// Sticker Studio's Android bridge carries references and small JSON only.
+// The Android bridge carries references and small JSON only.
 import { ApiError } from "../api/client";
 import type { StickerUpload } from "../types";
 
 interface LevixHost {
+  plusProduct?(id: string): string;
+  plusPurchase?(id: string, offerToken: string, installationId: string): string;
+  plusRestore?(id: string): string;
+  plusManage?(): string;
   takePendingSticker?(): string;
   pickStickerSource?(id: string): string;
   pickFile?(id: string): string;
@@ -28,10 +32,8 @@ interface LevixHost {
   cancel?(id: string): void;
 }
 
-type HostResult = {
-  ok: boolean;
-  cancelled?: boolean;
-  code?: string;
+type HostReply = { ok: boolean; code?: string; cancelled?: boolean };
+type HostResult = HostReply & {
   error?: string;
   status?: number;
   body?: string;
@@ -44,7 +46,8 @@ type HostResult = {
 };
 const host = () => (window as { LevixHost?: LevixHost }).LevixHost;
 export const hasHostBridge = () => host() != null;
-const waiting = new Map<string, (value: HostResult) => void>();
+export const isAndroidHost = hasHostBridge;
+const waiting = new Map<string, (value: HostReply) => void>();
 const progress = new Map<string, (bytes: number, total: number) => void>();
 let installed = false;
 
@@ -52,7 +55,7 @@ function installDone() {
   if (installed) return;
   installed = true;
   (
-    window as Window & { __levixHostDone?: (id: string, result: HostResult) => void }
+    window as Window & { __levixHostDone?: (id: string, result: HostReply) => void }
   ).__levixHostDone = (id, result) => {
     const done = waiting.get(id);
     waiting.delete(id);
@@ -63,22 +66,32 @@ function installDone() {
     .__levixHostProgress = (id, bytes, total) => progress.get(id)?.(bytes, total);
 }
 
-function call(
-  method: "pickStickerSource" | "pickFile" | "uploadSource" | "uploadForm" | "exportFile" | "uploadBackup" | "saveBackup",
+function call<T extends HostReply = HostResult>(
+  method:
+    | "pickStickerSource"
+    | "pickFile"
+    | "uploadSource"
+    | "uploadForm"
+    | "exportFile"
+    | "uploadBackup"
+    | "saveBackup"
+    | "plusProduct"
+    | "plusPurchase"
+    | "plusRestore",
   args: (string | number)[],
   signal?: AbortSignal,
   onProgress?: (bytes: number, total: number) => void,
-): Promise<HostResult> {
+): Promise<T> {
   const h = host();
   const fn = h?.[method];
-  if (!h || typeof fn !== "function") return Promise.resolve({ ok: false, code: "UNAVAILABLE" });
+  if (!h || typeof fn !== "function") return Promise.resolve({ ok: false, code: "UNAVAILABLE" } as T);
   installDone();
   const id = crypto.randomUUID();
   return new Promise((resolve) => {
-    const finish = (result: HostResult) => {
+    const finish = (result: HostReply) => {
       signal?.removeEventListener("abort", abort);
       progress.delete(id);
-      resolve(result);
+      resolve(result as T);
     };
     const abort = () => h.cancel?.(id);
     if (signal?.aborted) return finish({ ok: false, cancelled: true });
@@ -87,6 +100,9 @@ function call(
     signal?.addEventListener("abort", abort, { once: true });
     try {
       const raw =
+        method === "plusProduct" ? h.plusProduct?.(id) :
+        method === "plusPurchase" ? h.plusPurchase?.(id, args[0] as string, args[1] as string) :
+        method === "plusRestore" ? h.plusRestore?.(id) :
         method === "pickStickerSource"
           ? h.pickStickerSource?.(id)
           : method === "pickFile"
@@ -124,6 +140,48 @@ function call(
       finish({ ok: false, code: "UNAVAILABLE" });
     }
   });
+}
+
+type PlusFailure = { ok: false; code?: string; status?: "cancelled" | "error" };
+export type PlusProductResult =
+  | PlusFailure
+  | {
+      ok: true;
+      productId: string;
+      offerToken: string;
+      formattedPrice: string;
+      billingPeriod: string;
+    };
+export type PlusPurchaseResult =
+  | PlusFailure
+  | { ok: true; status: "pending" }
+  | {
+      ok: true;
+      status: "purchased";
+      purchaseToken: string;
+      productId: string;
+      packageName: string;
+    };
+export type PlusRestoreResult = PlusFailure | { ok: true; purchases: PlusPurchaseResult[] };
+
+export function plusProduct(): Promise<PlusProductResult> {
+  return call<PlusProductResult>("plusProduct", []);
+}
+
+export function plusPurchase(offerToken: string, installationId: string): Promise<PlusPurchaseResult> {
+  return call<PlusPurchaseResult>("plusPurchase", [offerToken, installationId]);
+}
+
+export function plusRestore(): Promise<PlusRestoreResult> {
+  return call<PlusRestoreResult>("plusRestore", []);
+}
+
+export function plusManage(): HostReply {
+  try {
+    return JSON.parse(host()?.plusManage?.() || "") as HostReply;
+  } catch {
+    return { ok: false, code: "UNAVAILABLE" };
+  }
 }
 
 export interface HostSource {
