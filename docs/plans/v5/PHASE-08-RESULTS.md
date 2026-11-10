@@ -311,9 +311,10 @@ backup-restore 344, backup-restore-merge 102, db-copy 150: all 0 failed.
   two-day throwaway key. `check-paid-aab.mjs` requires the paid zip to equal the baseline byte for byte plus only
   the manifest's runtime files, parses ZIPs strictly (central and local records), walks nested ZIP, gzip and tar
   members, and refuses service code, private keys and misplaced canaries. No artifact upload, no secret, no Play.
-- Evidence: CI run 42889902273 (Core `007c5c5`): AAB 1,032 entries, `levix-app.zip` 4,545 entries, public
-  baseline 4,539 entries scanned clean, 7 runtime files verified, AAB sha256 `b8f7e66b…0342b`, throwaway
-  certificate SHA-256 `43:1F:51:63…68:36`. Script tests 79/79 locally.
+- Evidence: CI run 42893041228 (Core `02a3c17`, final checker): AAB 1,032 entries, `levix-app.zip` 4,545
+  entries, public baseline 4,539 entries scanned clean, 7 runtime files verified and every other entry
+  byte-identical to the baseline, AAB sha256 `33912068…05ca`, two-day throwaway key. Earlier run 42889902273
+  (Core `007c5c5`) also passed. Script tests 79/79 locally.
 - Status: NON-PRODUCTION PIPELINE READY. A production AAB needs the owner's upload key, Play App Signing and the
   real product id (`docs/PAID-BUILD.md`).
 
@@ -339,12 +340,13 @@ subscription and keep no cap.
 | Independent Codex review (fresh session) of 08i to 08k and 08g/paid | 1 P1, 7 P2 |
 | Fixes | `fd770d0`, `4f63270` (Core), `ee6b70b` (labels), `f445965`, `d004d26`, `ad2b120`, `3520d4e` (checker) |
 | Codex verification, two rounds | all 8 FIXED, no new P1/P2 |
-| `npm test` on the stack head | PASS 57,304 checks, 0 failed (before `4f63270`; rerun recorded in #164) |
+| `npm test` on the stack head `b160c9d` | PASS 57,304 checks, 0 failed; 14/14 Q-19 strings kept |
 | lint, i18n:check, docs:check, build:frontend | PASS (lint 231 warnings, base 230) |
 | build:sea, validate:sea | PASS 51 checks |
 | validate:tarball | NOT RUN locally (the workstation install hung on a dependency download); PASS in CI "package installs and boots" |
 | Private tests with Core `02a3c17` | PASS 244 tests (verifier, runtime, interop, scripts), 0 skipped |
-| Public CI on #161, #162, #163 | 7/7 each (heads before the last review fix; final runs in the PR checks) |
+| Public CI | 7/7 on #161 `4f63270`, #162 `8848095`, #163 `02a3c17`, #164 `b160c9d` |
+| Private CI | `ci` success on #4 `2b1358b` and #5 `81dadb6`; `paid aab` success on `81dadb6` (run 42893041228) |
 
 ### 10.9 Owner actions still required (credentials, consoles, devices)
 
