@@ -28,7 +28,7 @@ const logger = require("../utils/logger.cjs");
 const memory = require("../utils/memory.cjs");
 const { decodeBuffer, stripHtml, decodeText } = require("../utils/textDecode.cjs");
 const { authorize, callerAudio } = require("./aiToolAuth.cjs");
-const { globalMemoryAccess } = require("./memoryPolicy.cjs");
+const { globalMemoryAccess, stripMemoryToolParts } = require("./memoryPolicy.cjs");
 const {
   withMediaLimit,
   assertAudio,
@@ -659,7 +659,13 @@ const TOOLS = {
         ref: args?.ref,
       });
       return removed
-        ? { removed: true, content: removed.content, scope }
+        ? {
+            removed: true,
+            scope,
+            ...(scope === "chat" || globalMemory?.().read === true
+              ? { content: removed.content }
+              : {}),
+          }
         : { removed: false, reason: "no matching entry" };
     },
   },
@@ -1291,7 +1297,8 @@ const TOOLS = {
       const scope = scopeOf(args);
       const { getChatHistoryAsync } = require("../utils/storage-hub.cjs");
       const history = await getChatHistoryAsync(caller.chatId);
-      const transcript = transcriptFromHistory(history);
+      const stripped = globalMemory?.().read !== true;
+      const transcript = transcriptFromHistory(stripped ? stripMemoryToolParts(history) : history);
       if (!transcript) {
         return { error: "there is no stored conversation to summarize in this chat", saved: 0 };
       }
@@ -1329,7 +1336,12 @@ const TOOLS = {
         });
         ids.push(entry.id);
       }
-      return { saved: ids.length, scope, facts, ids };
+      return {
+        saved: ids.length,
+        scope,
+        ids,
+        ...(globalMemory?.().read === true || (scope === "chat" && stripped) ? { facts } : {}),
+      };
     },
   },
 };
