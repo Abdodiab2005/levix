@@ -40,6 +40,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import net.leviro.levix.billing.BillingHost
 import java.io.File
 import java.net.URI
 import java.nio.charset.StandardCharsets
@@ -59,6 +60,7 @@ class PanelActivity : AppCompatActivity() {
     private lateinit var sock: File
     private lateinit var bridgeJs: String
     private lateinit var stickerHost: StickerHost
+    private lateinit var billingHost: BillingHost
     private val stickerSources = StickerSources()
     private val stickerPickerIds = ArrayDeque<String>()
     private val backupSaveIds = ArrayDeque<String>()
@@ -239,6 +241,17 @@ class PanelActivity : AppCompatActivity() {
                 web.evaluateJavascript(
                     "window.__levixHostProgress(${JSONObject.quote(id)}, $bytes, $total)", null)
             } })
+        billingHost = BillingHost(
+            this,
+            { runOnUiThread {
+                web.evaluateJavascript(
+                    "window.dispatchEvent(new CustomEvent(\"levix-plus-purchase\"))", null)
+            } },
+            { id, result -> runOnUiThread {
+                web.evaluateJavascript(
+                    "window.__levixHostDone(${JSONObject.quote(id)}, ${result})", null)
+            } },
+        )
         web.addJavascriptInterface(
             PanelBridge(
                 sock,
@@ -249,6 +262,8 @@ class PanelActivity : AppCompatActivity() {
                 { runOnUiThread { finish() } },
                 stickerHost,
                 { runOnUiThread { pushUiPrefs() } },
+                billingHost,
+                this,
             ),
             "LevixHost",
         )
@@ -537,6 +552,7 @@ class PanelActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         pushUiPrefs()
+        if (::billingHost.isInitialized) billingHost.onResume()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -546,6 +562,7 @@ class PanelActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (::billingHost.isInitialized) billingHost.destroy()
         stickerHost.destroy()
         stickerPickerIds.clear()
         backupSaveIds.clear()

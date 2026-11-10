@@ -154,10 +154,15 @@ levixAbis.forEach { abi ->
 val releaseKeystorePath = System.getenv("LEVIX_KEYSTORE_FILE")
 val hasCustomKeystore = !releaseKeystorePath.isNullOrBlank() && File(releaseKeystorePath!!).isFile
 val debugKeystore = File(System.getProperty("user.home"), ".android/debug.keystore")
+val plusProductId = providers.gradleProperty("levixPlusProductId").orNull
+    ?.takeIf { it.matches(Regex("^[a-z0-9][a-z0-9._]{0,63}$")) } ?: ""
 
 android {
     namespace = "net.leviro.levix"
     compileSdk = 36
+    buildFeatures {
+        buildConfig = true
+    }
 
     defaultConfig {
         applicationId = "net.leviro.levix"
@@ -165,6 +170,7 @@ android {
         targetSdk = 36
         versionCode = 71
         versionName = "5.0.0-beta.1"
+        buildConfigField("String", "PLUS_PRODUCT_ID", "\"$plusProductId\"")
     }
 
     // App languages ship whole. enableSplit = false keeps the translations in
@@ -247,8 +253,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+}
+
+// Play Billing 9.1.0 ships Kotlin 2.3 metadata; Kotlin 2.3 drops the android.kotlinOptions block.
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -360,6 +370,7 @@ tasks.register("stageLevixBundle") {
 }
 
 dependencies {
+    implementation("com.android.billingclient:billing-ktx:9.1.0")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
