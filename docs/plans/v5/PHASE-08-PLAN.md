@@ -247,11 +247,13 @@ tokens at most 24 h. Offline beyond `exp` disables paid capabilities; Core is un
 ### 4.4 Claim, refresh, restore, binding
 
 - Claim: Android `PURCHASED` purchase → panel → `POST /dashboard/api/plus/claim`
-  `{ purchaseToken, productId }` (panel session, same-origin, ≤ 4 KiB) → Core signs
+  `{ purchaseToken, productId, packageName }` (panel session, same-origin, ≤ 4 KiB) → Core signs
   `POST /v1/claim` with the installation key → verifier.
-- Signed request: Ed25519 over canonical JSON `{ aud: "levix-plus-verifier", method, path,
-  bodySha256, nonce (16 random bytes), ts }`; headers `X-Levix-Installation`, `X-Levix-Signature`.
-  Verifier rejects `|ts - now| > 5 min` and a reused nonce (stored 10 min).
+- Signed request (wire contract v1, §4.7): Ed25519 over canonical JSON `{ aud:
+  "levix-plus-verifier", bodySha256, installation, method, nonce (16 random bytes), path, ts }`;
+  headers `x-levix-installation`, `x-levix-key` (claim only), `x-levix-nonce`,
+  `x-levix-timestamp`, `x-levix-signature`. Verifier rejects `|ts - now| > 5 min` and a reused nonce
+  (stored 10 min).
 - Verifier: `subscriptionsv2.get`; check `packageName`, product id in the configured set,
   state, `expiryTime`, `testPurchase` (refused unless the deployment allows test purchases);
   first binding requires `obfuscatedExternalAccountId === installationId`; acknowledge server-side
@@ -259,7 +261,8 @@ tokens at most 24 h. Offline beyond `exp` disables paid capabilities; Core is un
 - One active installation per purchase token. A claim from another installation (restore, new
   phone) moves the binding; the old installation gets an `inactive` token (`rsn: "rebound"`) at
   its next refresh. At most 3 moves per token per 30 days (D-08-3).
-- Refresh: signed `POST /v1/refresh` `{ installationId, seq }` every 12 h with jitter, first one
+- Refresh: signed `POST /v1/refresh` `{ seq }` (the installation is in the signed envelope and
+  header) every 12 h with jitter, first one
   60 s after boot only if a record exists. Backoff 1 min, 5 min, 15 min, 1 h, 6 h cap; single
   flight; response ≤ 16 KiB; 10 s timeout; HTTPS fixed origin, no redirects, DNS pinned through
   `safeProviderFetch`.
@@ -269,6 +272,19 @@ tokens at most 24 h. Offline beyond `exp` disables paid capabilities; Core is un
 States: `ACTIVE` → active; `CANCELED` before `expiryTime` → active (`st: canceled`);
 `IN_GRACE_PERIOD` → active (`st: grace`, short `exp`); `ON_HOLD`, `PAUSED`, `EXPIRED`, `PENDING`,
 voided or revoked → `inactive`. The client never trusts a local purchase state or a boolean.
+
+### 4.7 Wire contract v1 (Core client and verifier)
+
+The exact contract both sides implement is kept verbatim in the private `levix-plus/service/README.md`
+and in the Core client tests. Summary: origin `https://plus.leviro.net` (D-08-2); `POST /v1/claim`
+body `{ purchaseToken, productId, packageName }`; `POST /v1/refresh` body `{ seq }`; every Play
+outcome answers 200 `{ token }` (not entitled = `st: "inactive"`); request problems answer
+`{ error: { code, retryable } }` with codes `BAD_REQUEST`, `BAD_SIGNATURE`, `STALE_TIMESTAMP`,
+`REPLAY`, `UNKNOWN_INSTALLATION`, `PURCHASE_INVALID`, `TEST_PURCHASE_REFUSED`, `ACCOUNT_MISMATCH`,
+`REBIND_LIMIT`, `RATE_LIMITED`, `UNAVAILABLE`. Token header `{ alg: "EdDSA", kid, typ:
+"levix-ent+jwt" }`; payload `iss`, `aud`, `sub`, `ent`, `st`, `rsn`, `iat`, `exp`, `seq`, `jti`,
+`pexp` (seconds). Entitled `exp` = `min(iat + TTL, pexp + allowance)`: active 72 h + 2 h renewal
+allowance, canceled 72 h, grace 24 h, never past `pexp` otherwise.
 
 ### 4.5 What the verifier stores (for PRIVACY.md and Data safety, before release)
 
