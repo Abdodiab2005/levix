@@ -52,6 +52,16 @@ jobs:
       # cannot: a missing file in `files`, a bad bin path, a broken view.
       - run: npm run validate:tarball
         timeout-minutes: 15
+      # validate:tarball packs into a temp directory it removes, so this packs
+      # the same artifact again and scans that directory for private Plus code.
+      - name: Scan the npm tarball
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/levix-tarball-scan"
+          rm -rf "$out"
+          mkdir -p "$out"
+          npm pack --pack-destination "$out" > /dev/null
+          node scripts/scan-public-artifacts.mjs "$out"/*.tgz
 
   sea:
     name: executable runs (${{ matrix.os }})
@@ -73,6 +83,10 @@ jobs:
       - run: npm --prefix frontend ci
       - run: npm run build:sea
         timeout-minutes: 20
+      # The executable name differs by platform (levix / levix.exe), so scan
+      # the directory build:sea writes it to.
+      - name: Scan the SEA executable
+        run: node scripts/scan-public-artifacts.mjs build
       # Building is not the test: this starts the binary in a directory with no
       # source tree and exercises assets, views, commands, restart and recovery.
       - run: npm run validate:sea
@@ -83,6 +97,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
       - name: build, start, claim, restart, upgrade
         run: |
           set -e
@@ -96,6 +113,11 @@ jobs:
           fi
           exit $status
         timeout-minutes: 25
+      - name: Scan the Docker image
+        run: |
+          set -euo pipefail
+          docker save levix-validate:local -o "$RUNNER_TEMP/levix-image.tar"
+          node scripts/scan-public-artifacts.mjs "$RUNNER_TEMP/levix-image.tar"
 
   android:
     name: android apk builds
@@ -157,6 +179,8 @@ jobs:
       - name: Build Android release APKs and AAB (debug key)
         working-directory: android
         run: ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace
+      - name: Scan the Android levix-app.zip
+        run: node scripts/scan-public-artifacts.mjs android/app/src/main/assets/levix-app.zip
       - name: Size report
         run: |
           set -o pipefail
