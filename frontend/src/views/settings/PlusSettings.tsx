@@ -13,6 +13,7 @@ import {
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
+import { PlusFeaturesView } from "../plus/PlusFeaturesView";
 import {
   type PlusProductResult,
   type PlusPurchaseResult,
@@ -453,6 +454,7 @@ export function PlusSettings({
         variant="primary"
         loading={busy === "restore"}
       />
+      {status.extension.state === "active" && <PlusFeaturesView />}
     </Card>
   );
 }
