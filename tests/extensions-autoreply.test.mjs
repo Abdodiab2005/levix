@@ -502,6 +502,7 @@ section("owner private Auto Reply cannot expose global memory; explicit AI comma
   const gemini = require("./src/commands/gemini.cjs");
   const previousProvider = settings.get("ai_provider");
   const previousCreds = store.authRead("creds");
+  const previousHistory = store.getChatHistory(CHAT);
   const provider = agent.getProvider("gemini");
   const originalRunTurn = provider.runTurn;
   const originalIsConfigured = provider.isConfigured;
@@ -510,6 +511,7 @@ section("owner private Auto Reply cannot expose global memory; explicit AI comma
   const chatMarker = "AUTOREPLY_CHAT_MEMORY_CONTROL_08A";
   const globalEntry = memory.addMemory({ scope: "global", content: marker });
   const chatEntry = memory.addMemory({ chatId: CHAT, content: chatMarker });
+  const chatBefore = JSON.stringify(memory.listMemory({ chatId: CHAT }));
   const globalFile = join(dataDir, "memory", "global.md");
   const globalBefore = readFileSync(globalFile, "utf8");
   equal("sensitive marker is in the test data directory", globalEntry.file, globalFile);
@@ -519,6 +521,10 @@ section("owner private Auto Reply cannot expose global memory; explicit AI comma
   settings.set("ai_provider", "gemini");
   store.authWrite("creds", JSON.stringify({ registered: true, me: { id: sock.user.id } }));
   permissions.grantRole(CHAT, "owner");
+  store.saveChatHistory(CHAT, [
+    { role: "user", parts: [{ text: "!ai recall my global memory" }] },
+    { role: "model", parts: [{ text: `Your global memory says: ${marker}` }] },
+  ]);
   provider.isConfigured = () => true;
   provider.runTurn = async (options) => {
     seen.push(options);
@@ -565,12 +571,26 @@ section("owner private Auto Reply cannot expose global memory; explicit AI comma
     );
     equal("Auto Reply disables global memory", turn.context.includeGlobalMemory, false);
     equal("Auto Reply restricts memory tools", turn.context.memoryScope, "chat");
+    equal("Auto Reply does not pass explicit-command history to the model", turn.history.length, 0);
+    for (const args of [{}, { scope: "chat" }, { scope: "global" }, { scope: "all" }]) {
+      const result = await runTool("summarize_chat", args, turn.context);
+      equal(
+        `summarize_chat/${String(args.scope)}: refuses the Auto Reply tool context`,
+        JSON.stringify(result),
+        JSON.stringify({ error: "stored chat history is unavailable in this turn", denied: true }),
+      );
+    }
+    equal("Auto Reply never calls the summarizer model", seen.length, 1);
+    equal(
+      "Auto Reply does not distill explicit-command history into chat memory",
+      JSON.stringify(memory.listMemory({ chatId: CHAT })),
+      chatBefore,
+    );
     for (const [tool, args] of [
       ["search_memory", { scope: "all" }],
       ["search_memory", { scope: "global" }],
       ["save_memory", { scope: "global", content: "must not be saved" }],
       ["forget_memory", { scope: "global", ref: globalEntry.id }],
-      ["summarize_chat", { scope: "global" }],
     ]) {
       const result = await runTool(tool, args, turn.context);
       equal(
@@ -642,6 +662,8 @@ section("owner private Auto Reply cannot expose global memory; explicit AI comma
     permissions.revokeRole(CHAT, "owner");
     if (previousCreds === null) store.authRemove("creds");
     else store.authWrite("creds", previousCreds);
+    if (previousHistory.length) store.saveChatHistory(CHAT, previousHistory);
+    else store.deleteChatHistory(CHAT);
     memory.removeMemory({ scope: "global", ref: globalEntry.id });
     memory.removeMemory({ chatId: CHAT, ref: chatEntry.id });
   }
