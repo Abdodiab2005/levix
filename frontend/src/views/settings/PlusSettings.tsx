@@ -13,6 +13,7 @@ import {
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
+import { TermsViewerDialog } from "../legal/TermsConsentDialog";
 import { PlusFeaturesView } from "../plus/PlusFeaturesView";
 import {
   type PlusProductResult,
@@ -103,6 +104,7 @@ export function PlusSettings({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [confirmRestore, setConfirmRestore] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -426,6 +428,12 @@ export function PlusSettings({
           >
             {t("plusRestore")}
           </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm text-muted">{t("plusActiveInstallationLimit")}</p>
+            <Button variant="ghost" size="sm" onClick={() => setTermsOpen(true)}>
+              {t("plusViewTerms")}
+            </Button>
+          </div>
         </>
       )}
       {notice && (
@@ -454,6 +462,7 @@ export function PlusSettings({
         variant="primary"
         loading={busy === "restore"}
       />
+      <TermsViewerDialog isOpen={termsOpen} onClose={() => setTermsOpen(false)} />
       {status.extension.state === "active" && <PlusFeaturesView />}
     </Card>
   );

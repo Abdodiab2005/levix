@@ -186,8 +186,8 @@ function createExtensionHost(opts = {}) {
   }
 
   function invalidateScope() {
+    autoReply.abortAccountJobs();
     refreshScope();
-    autoReply.abortOutOfScope(scopeSet);
   }
 
   function runtimeView() {
@@ -447,9 +447,27 @@ function createExtensionHost(opts = {}) {
     }
   }
 
+  // Re-read stored config (a restore changed it): stop, then start, through the
+  // normal lifecycle. Does nothing when the host is not running. One at a time.
+  let reloading = null;
+  function reload() {
+    if (!running) return Promise.resolve(false);
+    if (!reloading) {
+      reloading = (async () => {
+        await stop();
+        await start();
+        return true;
+      })().finally(() => {
+        reloading = null;
+      });
+    }
+    return reloading;
+  }
+
   return {
     start,
     stop,
+    reload,
     status() {
       return { state, generation };
     },
@@ -467,9 +485,14 @@ function createExtensionHost(opts = {}) {
 
 const host = createExtensionHost();
 
+function reloadExtensions() {
+  return host.reload();
+}
+
 module.exports = {
   API_VERSION,
   createExtensionHost,
   host,
+  reloadExtensions,
   defaultLoadModule,
 };

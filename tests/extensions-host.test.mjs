@@ -555,13 +555,14 @@ for (const cancellation of ["deadline", "request", "generation"]) {
   await host.stop();
 }
 
-section("scope invalidation aborts removed pending and in-flight chats only");
+section("scope invalidation aborts every pending and in-flight Auto Reply job");
 {
   const autoReply = require("./src/extensions/autoReply.cjs");
   const chats = [
     "201111111111@s.whatsapp.net",
     "201222222222@s.whatsapp.net",
     "201333333333@s.whatsapp.net",
+    "201444444444@s.whatsapp.net",
   ];
   const scope = new Set(chats);
   const turns = new Map();
@@ -573,6 +574,7 @@ section("scope invalidation aborts removed pending and in-flight chats only");
     entered = resolve;
   });
   let pendingEntered;
+  let pendingCount = 0;
   const pendingReady = new Promise((resolve) => {
     pendingEntered = resolve;
   });
@@ -614,8 +616,8 @@ section("scope invalidation aborts removed pending and in-flight chats only");
               scope: () => scope,
               consider(event, { signal }) {
                 signals.set(event.chatJid, signal);
-                if (event.chatJid === chats[2]) {
-                  pendingEntered();
+                if (event.chatJid === chats[2] || event.chatJid === chats[3]) {
+                  if (++pendingCount === 2) pendingEntered();
                   return pendingGate;
                 }
                 return { reply: true };
@@ -640,18 +642,20 @@ section("scope invalidation aborts removed pending and in-flight chats only");
     const second = dispatch(chats[1]);
     await ready;
     const third = dispatch(chats[2]);
+    const fourth = dispatch(chats[3]);
     await pendingReady;
     scope.delete(chats[0]);
     scope.delete(chats[2]);
     ctx.invalidateScope();
     equal("removed in-flight turn aborted", turns.get(chats[0]).context.signal.aborted, true);
-    equal("retained chat still live", turns.get(chats[1]).context.signal.aborted, false);
+    equal("retained in-flight chat also aborted", turns.get(chats[1]).context.signal.aborted, true);
     equal("removed pending consideration aborted", signals.get(chats[2]).aborted, true);
+    equal("retained pending consideration also aborted", signals.get(chats[3]).aborted, true);
     turns.get(chats[0]).resolve({ text: "late" });
     turns.get(chats[1]).resolve({ text: "kept" });
     releasePending({ reply: true });
-    await Promise.all([first, second, third]);
-    equal("only retained chat delivers", sent.join(","), chats[1]);
+    await Promise.all([first, second, third, fourth]);
+    equal("no stale memory decision delivers", sent.length, 0);
 
     let releaseTurn;
     autoReply.setAutoReplyDeps({
@@ -671,7 +675,7 @@ section("scope invalidation aborts removed pending and in-flight chats only");
       1,
     );
     equal("kill switch aborts an admitted turn", releaseTurn, true);
-    equal("kill switch prevents delivery", sent.length, 1);
+    equal("kill switch prevents delivery", sent.length, 0);
 
     scope.add(chats[1]);
     ctx.invalidateScope();
@@ -690,7 +694,7 @@ section("scope invalidation aborts removed pending and in-flight chats only");
       },
       1,
     );
-    equal("runtime final guard checks live entitlement", sent.length, 1);
+    equal("runtime final guard checks live entitlement", sent.length, 0);
   } finally {
     await host.stop();
     autoReply.resetAutoReplyDeps();

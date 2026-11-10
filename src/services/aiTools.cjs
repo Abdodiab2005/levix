@@ -28,6 +28,7 @@ const logger = require("../utils/logger.cjs");
 const memory = require("../utils/memory.cjs");
 const { decodeBuffer, stripHtml, decodeText } = require("../utils/textDecode.cjs");
 const { authorize, callerAudio } = require("./aiToolAuth.cjs");
+const { globalMemoryAccess, stripMemoryToolParts } = require("./memoryPolicy.cjs");
 const {
   withMediaLimit,
   assertAudio,
@@ -363,9 +364,13 @@ function scopeOf(args) {
   return memory.normalizeScope(args?.scope);
 }
 
-function memoryScopeDenied(args, memoryScope, caller) {
+function memoryAccessDenied(args, caller, globalMemory, permission) {
   // The memory store falls back to global.md when there is no chat ID.
-  return memoryScope === "chat" && (!caller?.chatId || scopeOf(args) === "global");
+  if (!caller?.chatId) return { error: "only chat memory is available", denied: true };
+  if (scopeOf(args) === "global" && globalMemory?.()[permission] !== true) {
+    return { error: "global memory is not available in this turn", denied: true };
+  }
+  return null;
 }
 
 // A role change may only target someone the sender themselves named: a
@@ -557,12 +562,13 @@ const TOOLS = {
       command: "memory",
       role: scopeOf(args) === "global" ? "botPrivileged" : undefined,
     }),
-    async run(args, { caller, memoryScope, deliveryGuard }) {
-      if (memoryScopeDenied(args, memoryScope, caller)) {
-        return { error: "only chat memory is available", denied: true };
-      }
+    async run(args, { caller, globalMemory, deliveryGuard }) {
+      const denied = memoryAccessDenied(args, caller, globalMemory, "write");
+      if (denied) return denied;
       const scope = scopeOf(args);
       deliveryGuard?.assert();
+      const current = memoryAccessDenied(args, caller, globalMemory, "write");
+      if (current) return current;
       const entry = memory.addMemory({
         scope,
         chatId: caller.chatId,
@@ -599,12 +605,11 @@ const TOOLS = {
       },
     },
     describe: () => t("bot.ai.aiTools.searchMemory"),
-    // `!memory search` reads both scopes for anyone who may run `!memory`.
+    // Global reads also need this turn's live memory policy.
     access: { command: "memory" },
-    async run(args, { caller, memoryScope }) {
-      if (memoryScopeDenied(args, memoryScope, caller)) {
-        return { error: "only chat memory is available", denied: true };
-      }
+    async run(args, { caller, globalMemory }) {
+      const denied = memoryAccessDenied(args, caller, globalMemory, "read");
+      if (denied) return denied;
       const wanted = String(args?.scope || "chat").toLowerCase();
       const scopes = wanted === "all" ? ["chat", "global"] : [scopeOf(args)];
       const out = {};
@@ -641,19 +646,26 @@ const TOOLS = {
       command: "memory",
       role: scopeOf(args) === "global" ? "botPrivileged" : "chatModerator",
     }),
-    async run(args, { caller, memoryScope, deliveryGuard }) {
-      if (memoryScopeDenied(args, memoryScope, caller)) {
-        return { error: "only chat memory is available", denied: true };
-      }
+    async run(args, { caller, globalMemory, deliveryGuard }) {
+      const denied = memoryAccessDenied(args, caller, globalMemory, "write");
+      if (denied) return denied;
       const scope = scopeOf(args);
       deliveryGuard?.assert();
+      const current = memoryAccessDenied(args, caller, globalMemory, "write");
+      if (current) return current;
       const removed = memory.removeMemory({
         scope,
         chatId: caller.chatId,
         ref: args?.ref,
       });
       return removed
-        ? { removed: true, content: removed.content, scope }
+        ? {
+            removed: true,
+            scope,
+            ...(scope === "chat" || globalMemory?.().read === true
+              ? { content: removed.content }
+              : {}),
+          }
         : { removed: false, reason: "no matching entry" };
     },
   },
@@ -1273,16 +1285,21 @@ const TOOLS = {
       command: "memory",
       role: scopeOf(args) === "global" ? "botPrivileged" : undefined,
     }),
-    async run(args, { caller, signal, memoryScope, deliveryGuard }) {
+    async run(args, { caller, signal, memoryScope, globalMemory, deliveryGuard }) {
       // Explicit-command history may quote global memory, even in this chat.
-      // Auto Reply cannot read or distill it into chat memory.
-      if (memoryScope === "chat") {
-        return { error: "stored chat history is unavailable in this turn", denied: true };
-      }
+      // Auto Reply needs an explicit read grant before it can distill that history.
+      const checkPolicy = () =>
+        memoryScope === "chat" && globalMemory?.().read !== true
+          ? { error: "stored chat history is unavailable in this turn", denied: true }
+          : memoryAccessDenied(args, caller, globalMemory, "write");
+      const denied = checkPolicy();
+      if (denied) return denied;
       const scope = scopeOf(args);
       const { getChatHistoryAsync } = require("../utils/storage-hub.cjs");
       const history = await getChatHistoryAsync(caller.chatId);
-      const transcript = transcriptFromHistory(history);
+      // Only text that was delivered to this chat may become chat memory, whoever asks:
+      // memory tool results, intermediate model text and thoughts never reach the summary.
+      const transcript = transcriptFromHistory(stripMemoryToolParts(history));
       if (!transcript) {
         return { error: "there is no stored conversation to summarize in this chat", saved: 0 };
       }
@@ -1293,6 +1310,8 @@ const TOOLS = {
       signal?.throwIfAborted();
       const before = authorize(TOOLS.summarize_chat.access(args), caller);
       if (!before.allowed) return { error: before.error, denied: true };
+      const beforePolicy = checkPolicy();
+      if (beforePolicy) return beforePolicy;
       const summary = await summarizeWithProvider(transcript, { signal });
       const facts = factsFromSummary(summary);
       if (!facts.length) {
@@ -1302,9 +1321,13 @@ const TOOLS = {
       signal?.throwIfAborted();
       const verdict = authorize(TOOLS.summarize_chat.access(args), caller);
       if (!verdict.allowed) return { error: verdict.error, denied: true };
+      const afterPolicy = checkPolicy();
+      if (afterPolicy) return afterPolicy;
       const ids = [];
       for (const fact of facts) {
         deliveryGuard?.assert();
+        const current = checkPolicy();
+        if (current) return current;
         const entry = memory.addMemory({
           scope,
           chatId: caller.chatId,
@@ -1314,7 +1337,12 @@ const TOOLS = {
         });
         ids.push(entry.id);
       }
-      return { saved: ids.length, scope, facts, ids };
+      return {
+        saved: ids.length,
+        scope,
+        ids,
+        ...(globalMemory?.().read === true || scope === "chat" ? { facts } : {}),
+      };
     },
   },
 };
@@ -1486,6 +1514,7 @@ async function runTool(name, args, ctx) {
       sock: ctx?.sock,
       signal: ctx?.signal,
       memoryScope: ctx?.memoryScope,
+      globalMemory: () => globalMemoryAccess(ctx),
       deliveryGuard,
     });
     return result && typeof result === "object" ? result : { result };
