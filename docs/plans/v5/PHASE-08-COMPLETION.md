@@ -76,17 +76,21 @@ Enforcement points, all recheck the policy when they run:
 ## 2. Plus Auto Reply global memory (08i Core, 08g runtime, 08k UI)
 
 - The runtime's per-chat Auto Reply config gains
-  `globalMemory: { read: boolean, write: boolean }`, both default `false`.
-  A stored config without the field means both `false`; nothing re-enables
-  global memory for an existing or a new chat.
-- `consider()` returns `globalMemory: { read: true, write: <bool> }` only for
-  a chat whose `read` or `write` is `true`.
-- Core `autoReply.cjs` accepts only literal booleans and builds a frozen
-  `autoReplyGlobal = { read, write }` for the turn context, with
+  `globalMemory: { read: boolean }`, default `false`. A stored config without
+  the field means `false`; nothing re-enables global memory for an existing or
+  a new chat.
+- `consider()` returns `globalMemory: { read: true }` only for a chat whose
+  `read` is `true`.
+- Core `autoReply.cjs` accepts only a literal boolean and builds a frozen
+  `autoReplyGlobal = { read }` for the turn context, with
   `memoryScope: "chat"`.
-- In an Auto Reply turn, read is `autoReplyGlobal.read`. Write is
-  `autoReplyGlobal.write && caller.isOwner`: an external sender, a bot admin or
-  a group admin never writes global memory through Auto Reply. The Free
+- In an Auto Reply turn, read is `autoReplyGlobal.read` and write is always
+  `false`. Auto Reply skips messages from the linked account (`fromMe` and every
+  sender candidate that names it), so the owner is never the sender of an Auto
+  Reply turn and an owner-only write grant could never apply. Owner review on
+  2026-11-10 removed the write option from the UI, the runtime config and Core.
+  A forged or stored `write` value is ignored. Global memory writes stay
+  available through Free AI turns, under the Free settings above. The Free
   settings do not apply to Auto Reply, and Auto Reply settings do not apply to
   Free turns.
 - `summarize_chat` in an Auto Reply turn stays refused unless read is on.
@@ -174,8 +178,8 @@ human legal review.
   `عالمي` scopes; `save_memory`, `search_memory`, `forget_memory`,
   `summarize_chat`; system prompt for all three providers; setting changed
   mid-turn; account epoch change; injected text asking for global facts.
-- Auto Reply: default off, read on, write on with owner and with non-owner,
-  malformed decision values, config change aborting an in-flight turn.
+- Auto Reply: default off, read on, a forged write grant ignored for every
+  role, malformed decision values, config change aborting an in-flight turn.
 - Backup: export contains only allowlisted Plus keys, never `plus:*`;
   restore of a tampered key refused; `acct` key waits for the matching
   account; mismatched account never gets it; older backup keeps current

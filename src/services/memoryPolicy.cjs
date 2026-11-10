@@ -9,11 +9,11 @@ function globalMemoryAccess(context = {}) {
   if (!isCurrentCaller(caller) || !caller.chatId) {
     return Object.freeze({ read: false, write: false });
   }
+  // Auto Reply may only read global memory. It skips the linked account's own
+  // messages, so no owner can be the sender, and a write grant would only let
+  // external senders steer what the AI saves.
   if (context.memoryScope === "chat") {
-    return Object.freeze({
-      read: context.autoReplyGlobal?.read === true,
-      write: context.autoReplyGlobal?.write === true && caller.isOwner === true,
-    });
+    return Object.freeze({ read: context.autoReplyGlobal?.read === true, write: false });
   }
 
   const where = settings.get("ai_global_memory_where");
