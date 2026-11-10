@@ -23,7 +23,8 @@
     "validate:tarball": "node scripts/validate-tarball.mjs",
     "validate:sea": "node scripts/validate-sea.mjs",
     "validate:docker": "bash scripts/validate-docker.sh",
-    "validate:recovery": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/validate-recovery-contract.mjs"
+    "validate:recovery": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/validate-recovery-contract.mjs",
+    "scan:public": "node scripts/scan-public-artifacts.mjs"
   },
   "keywords": [
     "whatsapp",

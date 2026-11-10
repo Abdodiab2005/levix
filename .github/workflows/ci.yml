@@ -52,6 +52,16 @@ jobs:
       # cannot: a missing file in `files`, a bad bin path, a broken view.
       - run: npm run validate:tarball
         timeout-minutes: 15
+      # validate:tarball packs into a temp directory it removes, so this packs
+      # the same artifact again and scans that directory for private Plus code.
+      - name: Scan the npm tarball
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/levix-tarball-scan"
+          rm -rf "$out"
+          mkdir -p "$out"
+          npm pack --pack-destination "$out" > /dev/null
+          node scripts/scan-public-artifacts.mjs "$out"/*.tgz
 
   sea:
     name: executable runs (${{ matrix.os }})
@@ -73,6 +83,10 @@ jobs:
       - run: npm --prefix frontend ci
       - run: npm run build:sea
         timeout-minutes: 20
+      # The executable name differs by platform (levix / levix.exe), so scan
+      # the directory build:sea writes it to.
+      - name: Scan the SEA executable
+        run: node scripts/scan-public-artifacts.mjs build
       # Building is not the test: this starts the binary in a directory with no
       # source tree and exercises assets, views, commands, restart and recovery.
       - run: npm run validate:sea
@@ -157,6 +171,8 @@ jobs:
       - name: Build Android release APKs and AAB (debug key)
         working-directory: android
         run: ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace
+      - name: Scan the Android levix-app.zip
+        run: node scripts/scan-public-artifacts.mjs android/app/src/main/assets/levix-app.zip
       - name: Size report
         run: |
           set -o pipefail
