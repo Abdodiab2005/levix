@@ -22,6 +22,8 @@
 
 const { AsyncLocalStorage } = require("node:async_hooks");
 const settings = require("../config/settings.cjs");
+const { escapeParam } = require("../messaging/escape.cjs");
+const { validateOverride } = require("../extensions/templateKeys.cjs");
 
 const scope = new AsyncLocalStorage();
 const FIXED_LANGUAGES = new Set(["ar", "en", "pt-BR", "es-419"]);
@@ -36,6 +38,12 @@ function normalizeLocale(value) {
   return null;
 }
 
+let templateOverride = null;
+
+function setTemplateOverride(fn) {
+  templateOverride = typeof fn === "function" ? fn : null;
+}
+
 function createTranslator(catalog, { getLocale, warn } = {}) {
   const pluralRules = new Map();
   const warned = new Set();
@@ -43,6 +51,23 @@ function createTranslator(catalog, { getLocale, warn } = {}) {
     const locale = getLocale?.() || "en";
     const messages = catalog.messages || {};
     let value = messages[locale]?.[key] ?? messages.en?.[key];
+    let escapeParams = false;
+    if (
+      templateOverride &&
+      typeof key === "string" &&
+      key.startsWith("bot.") &&
+      typeof value === "string"
+    ) {
+      try {
+        const next = templateOverride(key, locale);
+        if (typeof next === "string" && validateOverride(key, next).ok) {
+          value = next;
+          escapeParams = true;
+        }
+      } catch {
+        // A hook that throws leaves the catalog text in place.
+      }
+    }
     if (value === undefined) {
       if (!warned.has(key)) {
         warned.add(key);
@@ -58,9 +83,11 @@ function createTranslator(catalog, { getLocale, warn } = {}) {
       }
       value = value[rules.select(Number(params.count))] ?? value.other;
     }
-    return String(value).replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (token, name) =>
-      Object.hasOwn(params, name) ? String(params[name]) : token,
-    );
+    return String(value).replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (token, name) => {
+      if (!Object.hasOwn(params, name)) return token;
+      const raw = String(params[name]);
+      return escapeParams ? escapeParam(raw) : raw;
+    });
   };
 }
 
@@ -183,6 +210,7 @@ const t = createTranslator(require("../i18n/catalog.generated.cjs"), {
 module.exports = {
   normalizeLocale,
   createTranslator,
+  setTemplateOverride,
   t,
   configuredLang,
   detectLang,

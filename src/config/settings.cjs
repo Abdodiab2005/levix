@@ -147,6 +147,14 @@ const SETTINGS = [
     label: "Powered by Levix watermark",
     hint: "Adds a short watermark to eligible text results. Security notices, errors, files and exact-output commands stay clean.",
   },
+  {
+    key: "plus_enabled",
+    type: "bool",
+    default: true,
+    group: "general",
+    label: "Levix Plus",
+    hint: "Turns the Levix Plus extension off without uninstalling it. Free features are not affected.",
+  },
 
   // --- AI ----------------------------------------------------------------
   //

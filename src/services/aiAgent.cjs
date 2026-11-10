@@ -209,7 +209,9 @@ function buildSystemInstruction(context = {}) {
     botLangDirective(),
   ].join("\n");
 
-  const memoryBlock = memory.buildMemoryContext(chatId);
+  const memoryBlock = memory.buildMemoryContext(chatId, {
+    includeGlobal: context.includeGlobalMemory !== false,
+  });
 
   return [aiIdentity.systemBlock, loadPersona(), runtime, memoryBlock].filter(Boolean).join("\n\n");
 }
