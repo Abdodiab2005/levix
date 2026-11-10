@@ -147,6 +147,14 @@ const SETTINGS = [
     label: "Powered by Levix watermark",
     hint: "Adds a short watermark to eligible text results. Security notices, errors, files and exact-output commands stay clean.",
   },
+  {
+    key: "plus_enabled",
+    type: "bool",
+    default: true,
+    group: "general",
+    label: "Levix Plus",
+    hint: "Turns the Levix Plus extension off without uninstalling it. Free features are not affected.",
+  },
 
   // --- AI ----------------------------------------------------------------
   //
@@ -226,6 +234,33 @@ const SETTINGS = [
     max: 200,
     group: "ai",
     label: "Conversation turns kept",
+  },
+  {
+    key: "ai_global_memory_read",
+    type: "string",
+    default: "privileged",
+    choices: ["off", "owner", "privileged", "everyone"],
+    group: "ai",
+    label: "Global memory read access",
+    hint: "Who may use global memory in explicit AI turns. Privileged means bot owners and bot admins. Auto Reply uses its per-chat settings.",
+  },
+  {
+    key: "ai_global_memory_write",
+    type: "string",
+    default: "off",
+    choices: ["off", "owner", "privileged"],
+    group: "ai",
+    label: "Global memory write access",
+    hint: "Who may let the AI save, delete or summarize into global memory. Privileged means bot owners and bot admins. Explicit !memory commands keep their own permissions.",
+  },
+  {
+    key: "ai_global_memory_where",
+    type: "string",
+    default: "own_chat",
+    choices: ["own_chat", "private", "all"],
+    group: "ai",
+    label: "Global memory allowed chats",
+    hint: "Own chat allows a caller's own private chat, including the linked account's self chat. Private allows any private chat; all also allows groups. Applies to explicit AI turns.",
   },
   {
     key: "memory_context_chars",

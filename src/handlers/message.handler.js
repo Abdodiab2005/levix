@@ -95,7 +95,7 @@ export async function handleIncomingMessage(sock, m) {
   return withLang(detectLang(body), () => processMessage(sock, msg, body, epoch));
 }
 
-async function processMessage(sock, msg, body, epoch) {
+export async function processMessage(sock, msg, body, epoch) {
   const isGroup = msg.key.remoteJid.endsWith("@g.us");
 
   // Update user metadata (last seen)
@@ -148,12 +148,26 @@ async function processMessage(sock, msg, body, epoch) {
   }
 
   // Handle regular group messages (moderation)
+  let moderationActed = false;
   if (isGroup) {
     if (accountEpoch() !== epoch) {
       logger.debug("[Message] skipped account work after account change");
       return;
     }
-    await handleGroupModeration(sock, msg, epoch);
+    const result = await handleGroupModeration(sock, msg, epoch);
+    moderationActed = Boolean(result?.acted);
+  }
+
+  if (!moderationActed) {
+    try {
+      const { host } = require("../extensions/host.cjs");
+      const pending = host.dispatchAutoReply(sock, msg, epoch);
+      if (pending && typeof pending.catch === "function") {
+        pending.catch((error) => logger.error({ err: error }, "auto-reply dispatch failed"));
+      }
+    } catch (error) {
+      logger.error({ err: error }, "auto-reply dispatch failed");
+    }
   }
 }
 

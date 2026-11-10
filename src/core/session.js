@@ -124,6 +124,7 @@ function clearAccountScopedState() {
   // before their first await. Work that sampled that value during the logout
   // wait, then finishes after this wipe, must still drop its write.
   advanceAccountEpoch();
+  require("../extensions/host.cjs").host.accountReset("unlink");
 }
 
 // Baileys' `end()` awaits `ws.close()`, which waits for the socket's own

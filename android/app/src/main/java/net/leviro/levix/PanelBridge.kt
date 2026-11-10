@@ -1,11 +1,15 @@
 package net.leviro.levix
 
+import android.app.Activity
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Base64
 import android.webkit.JavascriptInterface
+import net.leviro.levix.billing.BillingHost
+import net.leviro.levix.billing.PlusBilling
 import org.json.JSONObject
 import java.io.File
 
@@ -25,7 +29,55 @@ class PanelBridge(
     private val onClosePanel: (() -> Unit)? = null,
     private val stickerHost: StickerHost? = null,
     private val onUiPrefsChanged: (() -> Unit)? = null,
+    private val billingHost: BillingHost? = null,
+    private val billingActivity: Activity? = null,
 ) {
+    private fun plusRefusal(callId: String): String? {
+        billingHost?.optIn()
+        return when {
+            BuildConfig.PLUS_PRODUCT_ID.isEmpty() -> PlusBilling.failure("UNAVAILABLE_IN_BUILD").toString()
+            !PanelFiles.validCallId(callId) -> PlusBilling.failure("INVALID_INPUT").toString()
+            billingHost == null -> PlusBilling.failure("UNAVAILABLE").toString()
+            else -> null
+        }
+    }
+
+    @JavascriptInterface
+    fun plusConfigured(): Boolean = BuildConfig.PLUS_PRODUCT_ID.isNotEmpty()
+
+    @JavascriptInterface
+    fun plusProduct(callId: String): String = plusRefusal(callId) ?: billingHost!!.productInfo(callId)
+
+    @JavascriptInterface
+    fun plusPurchase(callId: String, offerToken: String, installationId: String): String {
+        plusRefusal(callId)?.let { return it }
+        if (!PlusBilling.validOfferToken(offerToken) || !PlusBilling.validInstallationId(installationId))
+            return PlusBilling.failure("INVALID_INPUT").toString()
+        val activity = billingActivity ?: return PlusBilling.failure("UNAVAILABLE").toString()
+        return billingHost!!.purchase(activity, callId, offerToken, installationId)
+    }
+
+    @JavascriptInterface
+    fun plusRestore(callId: String): String = plusRefusal(callId) ?: billingHost!!.restore(callId)
+
+    @JavascriptInterface
+    fun plusPendingPurchases(callId: String): String = plusRefusal(callId) ?: billingHost!!.pendingPurchases(callId)
+
+    @JavascriptInterface
+    fun plusManage(): String {
+        billingHost?.optIn()
+        if (BuildConfig.PLUS_PRODUCT_ID.isEmpty())
+            return PlusBilling.failure("UNAVAILABLE_IN_BUILD").toString()
+        return try {
+            val context = requireNotNull(appContext)
+            val intent = requireNotNull(billingHost?.manageIntent())
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            JSONObject().put("ok", true).toString()
+        } catch (_: Exception) {
+            PlusBilling.failure("UNAVAILABLE").toString()
+        }
+    }
+
     @JavascriptInterface
     fun getUiPrefs(): String = appContext?.let(UiPrefs::json) ?: "{}"
 

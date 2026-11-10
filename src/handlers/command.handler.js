@@ -18,6 +18,7 @@ const { langForCommand, withLang, t } = require("../utils/i18n.cjs");
 const { parseCommandText, parseCommandTextV1 } = require("../messaging/parser.cjs");
 const { createMessage, renderMessage, stampWatermark } = require("../messaging/message.cjs");
 const { routeSend, canonicalJid } = require("../messaging/router.cjs");
+const { withCommand } = require("../utils/commandContext.cjs");
 
 // Commands collection (keyed by both names and aliases)
 const commands = new Map();
@@ -539,7 +540,9 @@ async function runCommand(
       logger.debug("[Command] skipped account work after account change");
       return true;
     }
-    await command.execute(proxiedSock, msg, args, body, groupMetadata, ctx);
+    await withCommand(command.name, () =>
+      command.execute(proxiedSock, msg, args, body, groupMetadata, ctx),
+    );
     return true;
   } catch (error) {
     logger.error({ err: error, command: invokedName }, "Error executing command");

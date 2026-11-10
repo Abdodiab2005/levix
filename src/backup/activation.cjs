@@ -8,6 +8,7 @@ const logger = require("../utils/logger.cjs");
 const { readPairedAccount, accountsMatch } = require("./account.cjs");
 const { ACCOUNT_TABLES, classifyTables } = require("./content.cjs");
 const { atomicJson, readJournal, writeJournal, clearJournal } = require("./journal.cjs");
+const extensions = require("./extensions.cjs");
 
 const pendingRoot = () => dataPath("restore", "pending");
 const outcomePath = () => dataPath("restore", "last-activation.json");
@@ -118,6 +119,10 @@ function replaceTables(id) {
     // Before the first account-table write, so in-flight work from the previous
     // account cannot commit into the rows this transaction is about to replace.
     require("../db/store.cjs").advanceAccountEpoch();
+    // accountReset wipes the extension's account rows. The ones this install holds are put back below
+    // when the backup has no value for them: a restore never deletes what the backup lacks.
+    const heldAccount = extensions.validRows(db).filter((row) => extensions.kindOf(row.key) === "acct");
+    require("../extensions/host.cjs").host.accountReset("restore");
     // Delete children first, then insert parents first. Deferred constraints
     // cover references between account tables until COMMIT.
     for (const table of [...ACCOUNT_TABLES].reverse()) db.exec(`DELETE FROM main."${table}"`);
@@ -125,6 +130,12 @@ function replaceTables(id) {
       const names = columns(db, "main", table).map(({ name }) => `"${name.replaceAll('"', '""')}"`).join(", ");
       db.exec(`INSERT INTO main."${table}" (${names}) SELECT ${names} FROM pending."${table}"`);
     }
+    // Plus account data: only the allowlisted keys, never plus:*, never a delete.
+    const upsert = db.prepare(
+      "INSERT INTO main.bot_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
+    const incoming = extensions.validRows(db, "pending").filter((row) => extensions.kindOf(row.key) === "acct");
+    for (const row of incoming) upsert.run(row.key, JSON.stringify(row.parsed));
+    for (const row of heldAccount) if (!incoming.some((item) => item.key === row.key)) upsert.run(row.key, row.value);
     // Replay metadata is not in backups. Require fresh operator opt-in after restore.
     db.exec("UPDATE reaction_rules SET enabled = 0");
     db.prepare("INSERT OR REPLACE INTO bot_settings(key,value) VALUES('reaction:enabled','false')").run();
@@ -201,6 +212,7 @@ function activatePendingIfMatching(resetAccountCaches = () => {}) {
     fault("db-committed");
     try { resetAccountCaches(); }
     catch { logger.error("[Backup] Could not reset account caches after activation"); }
+    extensions.reloadHost();
     journal(id, "cleanup", moved);
     finishActivation(id);
     return true;

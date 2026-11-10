@@ -231,6 +231,9 @@ section("summarize_chat tool");
 
 section("summarize_chat rechecks authority after the provider awaits");
 {
+  const settings = require("./src/config/settings.cjs");
+  const previousWrite = settings.get("ai_global_memory_write");
+  settings.set("ai_global_memory_write", "owner");
   const router = require("./src/services/aiRouter.cjs");
   const original = router.getProvider;
   for (const boundary of ["role", "epoch", "abort"]) {
@@ -259,6 +262,7 @@ section("summarize_chat rechecks authority after the provider awaits");
       await permissions.grantRole(OWNER, "owner");
     }
   }
+  settings.set("ai_global_memory_write", previousWrite);
 }
 
 section("conversation inspector store");

@@ -66,6 +66,19 @@ copy_tree "$ROOT/public" "$STAGE/public"
 cp -a "$ROOT/app.cjs" "$ROOT/scheduler.cjs" "$ROOT/package.json" "$ROOT/LICENSE" "$STAGE/"
 cp -a "$ROOT/android/host-boot.mjs" "$STAGE/boot.mjs"
 
+if [ -n "${LEVIX_EXTENSIONS_DIR:-}" ]; then
+  plus_index="$LEVIX_EXTENSIONS_DIR/levix-plus/index.cjs"
+  if [ ! -f "$plus_index" ]; then
+    echo "LEVIX_EXTENSIONS_DIR is set but $plus_index is not a regular file" >&2
+    exit 1
+  fi
+  if [ -n "$(find "$LEVIX_EXTENSIONS_DIR/levix-plus" -type l)" ]; then
+    echo "symlinks found in $LEVIX_EXTENSIONS_DIR/levix-plus, refusing to stage" >&2
+    exit 1
+  fi
+  copy_tree "$LEVIX_EXTENSIONS_DIR/levix-plus" "$STAGE/extensions/levix-plus"
+fi
+
 # Production dependencies from the lockfile, in a directory of their own.
 # The repository install tree is not an input of the archive.
 rm -rf "$PROD"

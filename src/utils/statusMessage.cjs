@@ -17,6 +17,7 @@ const logger = require("./logger.cjs");
 const { sendBotMessage } = require("./sendBotMessage.cjs");
 const { t } = require("./i18n.cjs");
 const settings = require("../config/settings.cjs");
+const { currentCommand } = require("./commandContext.cjs");
 
 // WhatsApp tolerates a few edits per message; spacing them out keeps the
 // server happy and the animation readable.
@@ -36,17 +37,33 @@ class StatusMessage {
     this.category = options.category || "progress";
     this.sensitivity = options.sensitivity || "source";
     this.mentions = Array.isArray(options.mentions) ? options.mentions : null;
+    this.command = options.command === undefined ? currentCommand() : options.command;
     this.key = null;
     this.text = "";
     this.lastEditAt = 0;
     this.closed = false;
     this.suppressed = false;
+    this.plusSuppressed = false;
   }
 
   async start(text) {
     this.text = text;
     // Hiding progress never hides a later result, error, or security notice.
+    if (this.category === "progress") {
+      let plusHide = false;
+      try {
+        plusHide = require("../extensions/host.cjs").host.hideProgress({
+          command: this.command,
+        });
+      } catch {}
+      this.plusSuppressed = plusHide;
+    }
     if (this.category === "progress" && settings.get("reply_hide_progress")) {
+      this.suppressed = true;
+      this.text = "";
+      return this;
+    }
+    if (this.category === "progress" && this.plusSuppressed) {
       this.suppressed = true;
       this.text = "";
       return this;
@@ -90,6 +107,7 @@ class StatusMessage {
     if (!next || next === this.text) return false;
     if (category) this.category = category;
     if (sensitivity) this.sensitivity = sensitivity;
+    if (this.plusSuppressed && this.category === "progress") return false;
     const mentionList = mentions === undefined ? this.mentions : mentions;
 
     // No message to edit (hidden progress, or the first send failed).

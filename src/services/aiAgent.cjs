@@ -27,6 +27,7 @@ const { t } = require("../utils/i18n.cjs");
 const aiIdentity = require("../config/ai-identity.cjs");
 const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
+const { globalMemoryAccess } = require("./memoryPolicy.cjs");
 const { assertProviderBaseUrl, assertProviderRequestUrl } = require("../utils/providerUrl.cjs");
 const { toolDeclarations, describeCall, runToolWithDeadline } = require("./aiTools.cjs");
 const { docSourcesFromTool } = require("./aiDocs.cjs");
@@ -209,7 +210,9 @@ function buildSystemInstruction(context = {}) {
     botLangDirective(),
   ].join("\n");
 
-  const memoryBlock = memory.buildMemoryContext(chatId);
+  const memoryBlock = memory.buildMemoryContext(chatId, {
+    includeGlobal: globalMemoryAccess(context).read,
+  });
 
   return [aiIdentity.systemBlock, loadPersona(), runtime, memoryBlock].filter(Boolean).join("\n\n");
 }

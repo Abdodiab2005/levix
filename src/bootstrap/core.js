@@ -88,6 +88,20 @@ export async function bootstrapCore({ autoStart = false } = {}) {
   // unreadable progress stays ERROR unlink_incomplete without crashing boot.
   const unlinkPending = await session.recoverPendingUnlink();
 
+  let stopExtensions = async () => {};
+  try {
+    const { host } = require("../extensions/host.cjs");
+    const entitlement = require("../extensions/entitlement/index.cjs");
+    await host.start();
+    entitlement.start();
+    stopExtensions = async () => {
+      await host.stop();
+      entitlement.stop();
+    };
+  } catch (error) {
+    logger.warn({ err: error }, "[extensions] host failed to start");
+  }
+
   // A `creds` row alone is not enough: Baileys creates one before pairing.
   // `me.id` is the durable proof that this install was actually linked.
   // Read after the retry so a wipe that just finished is not resumed.
@@ -109,6 +123,7 @@ export async function bootstrapCore({ autoStart = false } = {}) {
     commandCount: getLoadedCommands().size,
     wasPaired,
     stopRemoteTerms,
+    stopExtensions,
     /** The live socket, or null. Re-read it; a reconnect replaces it. */
     get sock() {
       return session.socket;

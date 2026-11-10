@@ -697,8 +697,8 @@ function clipTail(text, limitChars) {
  * character budget when both have content so one busy file can't starve the
  * other.
  */
-function buildMemoryContext(chatId, { limitChars = maxContextChars() } = {}) {
-  const globalText = memoryFileContext(readRaw(GLOBAL_FILE));
+function buildMemoryContext(chatId, { limitChars = maxContextChars(), includeGlobal = true } = {}) {
+  const globalText = includeGlobal ? memoryFileContext(readRaw(GLOBAL_FILE)) : "";
   const chatText = chatId ? memoryFileContext(readRaw(memoryFilePath("chat", chatId))) : "";
   if (!globalText && !chatText) return "";
 

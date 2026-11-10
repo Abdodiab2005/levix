@@ -43,7 +43,7 @@ const FILE_PATTERN = /^debug-\d{4}-\d{2}-\d{2}\.log$/;
 // deliberately absent: `err.code`, `statusCode` and friends are diagnostic
 // value, not a credential. A bare `code` is handled by the digit rule below.
 const SECRET_KEY_PATTERN =
-  /pass(word)?|secret|token|api[_-]?key|authorization|cookie|session|creds?|private|noise|signed|identity/i;
+  /pass(word)?|secret|token|api[_-]?key|authorization|cookie|session|creds?|private|noise|signed|identity|entitlement|obfuscated|installation|purchase/i;
 
 // Exactly these names are secrets; a substring rule would swallow `otpTimeout`
 // and the like without cause.
