@@ -48,7 +48,7 @@
   "perm.envOnly": "_De la Configuración (env/config): {count} entradas._",
   "perm.missingTarget": "Di quién: menciona (@), responde a su mensaje o escribe el número.\nEjemplo: `!perm add admin @miembro`",
   "perm.ownerOnly": "🚫 Solo un propietario puede crear otro propietario.",
-  "perm.selfOwner": "🚫 La cuenta vinculada siempre es propietaria. Desvincula WhatsApp para cambiarlo.",
+  "perm.selfOwner": "🚫 La cuenta vinculada siempre conserva el rol de propietario. Desvincula WhatsApp para cambiarlo.",
   "perm.ownerLabel": "propietario 👑",
   "perm.adminLabel": "admin 🛡️",
   "perm.granted": "✅ *{who}* ahora es *{role}*.",
