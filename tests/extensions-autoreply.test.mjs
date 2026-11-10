@@ -533,8 +533,8 @@ function stubTurn(overrides = {}) {
     isLinkedSelf: () => false,
     resolveCaller: async ({ msg }) => ({
       chatId: msg.key.remoteJid,
-      senderId: msg.key.remoteJid,
-      isGroup: false,
+      senderId: msg.key.participant || msg.key.remoteJid,
+      isGroup: msg.key.remoteJid.endsWith("@g.us"),
       isOwner: false,
     }),
     runAgent: async () => ({ text: "answer" }),
@@ -542,6 +542,11 @@ function stubTurn(overrides = {}) {
       await options.deliveryGuard.refresh();
       options.deliveryGuard.assert();
       sent.push({ jid, content });
+    },
+    groupMetadataCache: {
+      resolveGroupMetadata: async () => ({ id: GROUP, participants: [] }),
+      getRosterVersion: () => "0:0",
+      isRosterStale: () => false,
     },
     settingsGet: () => 5000,
     ...overrides,
@@ -551,7 +556,8 @@ function stubTurn(overrides = {}) {
 
 section("replay claims cover concurrent and completed redeliveries");
 {
-  const sent = stubTurn();
+  let now = 1000;
+  const sent = stubTurn({ now: () => now });
   let considered = 0;
   const rt = runtime({
     consider: async () => {
@@ -561,9 +567,17 @@ section("replay claims cover concurrent and completed redeliveries");
   });
   const msg = dm("hi", { id: "replay" });
   await Promise.all([autoReply.dispatch(rt, sock, msg, 1), autoReply.dispatch(rt, sock, msg, 1)]);
+  now += 10 * 60 * 1000;
   await autoReply.dispatch(rt, sock, msg, 1);
   equal("forwarded once", considered, 1);
-  equal("AI reply sent once", sent.length, 1);
+  equal("AI reply sent once after intake expires", sent.length, 1);
+  now = 1000 + 24 * 60 * 60 * 1000 - 1;
+  await autoReply.dispatch(rt, sock, msg, 1);
+  equal("execution claim lasts the full 24 hours", considered, 1);
+  now += 1;
+  await autoReply.dispatch(rt, sock, msg, 1);
+  equal("expired execution claim allows reconsideration", considered, 2);
+  equal("reply can run after 24 hours", sent.length, 2);
 }
 
 section("pending capability keys include chat and account epoch");
@@ -618,7 +632,28 @@ section("pending capability keys include chat and account epoch");
   equal("same id can belong to a new account", sent.length, 3);
 }
 
-section("seen claims are bounded and expire after 24 hours");
+section("unrelated group messages do not consume execution claims");
+{
+  const sent = stubTurn();
+  let considered = 0;
+  const rt = runtime({
+    consider: async (event) => {
+      considered += 1;
+      return { reply: event.text === "trigger" };
+    },
+  });
+  for (let i = 0; i < 2500; i++) {
+    await autoReply.dispatch(rt, sock, groupMsg("unrelated", { id: `unrelated-${i}` }), 1);
+  }
+  equal("all 2500 unrelated messages considered", considered, 2500);
+  equal("no unrelated replies", sent.length, 0);
+  await autoReply.dispatch(rt, sock, groupMsg("trigger", { id: "group-trigger" }), 1);
+  await autoReply.dispatch(rt, sock, dm("trigger", { id: "private-trigger" }), 1);
+  equal("later group and private triggers considered", considered, 2502);
+  equal("group and private replies still admitted", sent.length, 2);
+}
+
+section("intake dedup is a 5000-key LRU with a 10-minute window");
 {
   let now = 1000;
   stubTurn({ now: () => now });
@@ -629,15 +664,55 @@ section("seen claims are bounded and expire after 24 hours");
       return { reply: false };
     },
   });
-  for (let i = 0; i < 2001; i++) {
-    await autoReply.dispatch(rt, sock, dm("hi", { id: `seen-${i}` }), 1);
+  for (let i = 0; i < 5000; i++) {
+    await autoReply.dispatch(rt, sock, dm("hi", { id: `intake-${i}` }), 1);
   }
-  equal("no more than 2000 live claims", count, 2000);
-  await autoReply.dispatch(rt, sock, dm("hi", { id: "seen-0" }), 1);
-  equal("capacity does not evict a live replay claim", count, 2000);
-  now += 24 * 60 * 60 * 1000;
-  await autoReply.dispatch(rt, sock, dm("hi", { id: "seen-0" }), 1);
-  equal("expired claims allow work again", count, 2001);
+  equal("all 5000 intake keys admitted", count, 5000);
+  await autoReply.dispatch(rt, sock, dm("hi", { id: "intake-0" }), 1);
+  equal("same key deduplicated", count, 5000);
+  await autoReply.dispatch(rt, sock, dm("hi", { id: "intake-5000" }), 1);
+  equal("capacity evicts instead of refusing intake", count, 5001);
+  await autoReply.dispatch(rt, sock, dm("hi", { id: "intake-0" }), 1);
+  equal("recently accessed key retained", count, 5001);
+  await autoReply.dispatch(rt, sock, dm("hi", { id: "intake-1" }), 1);
+  equal("least recently used key evicted", count, 5002);
+  now += 10 * 60 * 1000 - 1;
+  await autoReply.dispatch(rt, sock, dm("hi", { id: "intake-0" }), 1);
+  equal("intake claim lasts just under 10 minutes", count, 5002);
+  now += 1;
+  await autoReply.dispatch(rt, sock, dm("hi", { id: "intake-0" }), 1);
+  equal("non-trigger can be reconsidered after 10 minutes", count, 5003);
+}
+
+section("execution claims evict the oldest at 2000 without refusing new replies");
+{
+  let now = 1000;
+  const sent = stubTurn({ now: () => now });
+  const rt = runtime();
+  for (let i = 0; i < 2001; i++) {
+    if (i > 0 && i % 6 === 0) now += 60_000;
+    await autoReply.dispatch(rt, sock, dm("hi", { id: `execution-${i}` }), 1);
+  }
+  equal("all 2001 replies admitted", sent.length, 2001);
+  now += 60_000;
+  await autoReply.dispatch(rt, sock, dm("hi", { id: "execution-1" }), 1);
+  equal("newest 2000 execution claims retained", sent.length, 2001);
+  await autoReply.dispatch(rt, sock, dm("hi", { id: "execution-0" }), 1);
+  equal("oldest execution claim evicted", sent.length, 2002);
+}
+
+section("Core backstop refusal does not record an execution claim");
+{
+  let now = 1000;
+  const sent = stubTurn({ now: () => now });
+  const rt = runtime();
+  for (let i = 0; i < 7; i++) {
+    await autoReply.dispatch(rt, sock, dm("hi", { id: `admission-${i}` }), 1);
+  }
+  equal("seventh reply refused by Core", sent.length, 6);
+  now += 10 * 60 * 1000;
+  await autoReply.dispatch(rt, sock, dm("hi", { id: "admission-6" }), 1);
+  equal("refused reply can run after intake expires", sent.length, 7);
 }
 
 section("scope removal fences tools and final delivery without an abort event");

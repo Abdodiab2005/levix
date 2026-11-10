@@ -25,36 +25,69 @@ function socket() {
 }
 
 try {
-  section("suppressed progress stays suppressed through updates for Free and Plus");
-  for (const mode of ["Free setting", "Plus hook"]) {
-    settings.set("reply_hide_progress", mode === "Free setting");
-    host.hideProgress = () => mode === "Plus hook";
+  section("Free reply_hide_progress preserves the pre-extension send sequence");
+  {
+    settings.set("reply_hide_progress", true);
+    host.hideProgress = originalHide;
     const sock = socket();
     const status = await createStatus(sock, CHAT, "starting");
-    equal(`${mode}: initial progress hidden`, sock.sent.length, 0);
-    equal(`${mode}: update hidden`, await status.update("working"), false);
+    equal("Free: initial progress hidden", sock.sent.length, 0);
+    equal("Free: first update sent fresh", await status.update("working"), true);
+    status.lastEditAt = 0;
+    await status.update("more work", { force: true });
+    status.lastEditAt = 0;
+    await status.update("security notice", { category: "security" });
+    status.lastEditAt = 0;
+    await status.update("progress again", { category: "progress" });
+    status.lastEditAt = 0;
+    await status.finish("done");
+    const edit = { remoteJid: CHAT, id: "status-1" };
+    // Golden payloads from 2439bc4~1: one fresh update, then edits of that message.
     equal(
-      `${mode}: forced progress update hidden`,
+      "Free: byte-identical send sequence",
+      JSON.stringify(sock.sent),
+      JSON.stringify([
+        { text: "working", linkPreview: null },
+        { text: "more work", edit },
+        { text: "security notice", edit },
+        { text: "progress again", edit },
+        { text: "done", edit },
+      ]),
+    );
+    const failure = await createStatus(sock, CHAT, "another start");
+    await failure.fail(new Error("failed"), "Failure");
+    ok("Free: failure delivered", sock.sent.at(-1)?.text.includes("failed"));
+  }
+
+  section("Plus-hidden progress stays suppressed through updates");
+  {
+    settings.set("reply_hide_progress", false);
+    host.hideProgress = () => true;
+    const sock = socket();
+    const status = await createStatus(sock, CHAT, "starting");
+    equal("Plus: initial progress hidden", sock.sent.length, 0);
+    equal("Plus: update hidden", await status.update("working"), false);
+    equal(
+      "Plus: forced progress update hidden",
       await status.update("more work", { force: true }),
       false,
     );
     settings.set("reply_hide_progress", false);
     host.hideProgress = () => false;
     await status.update("still working");
-    equal(`${mode}: suppression lasts for this status`, sock.sent.length, 0);
+    equal("Plus: suppression lasts for this status", sock.sent.length, 0);
     await status.update("security notice", { category: "security" });
-    equal(`${mode}: security notice delivered`, sock.sent[0]?.text, "security notice");
+    equal("Plus: security notice delivered", sock.sent[0]?.text, "security notice");
     await status.update("progress again", { category: "progress" });
-    equal(`${mode}: progress remains hidden even with a message key`, sock.sent.length, 1);
+    equal("Plus: progress remains hidden even with a message key", sock.sent.length, 1);
     status.lastEditAt = 0;
     await status.finish("done");
-    equal(`${mode}: result delivered`, sock.sent.at(-1)?.text, "done");
+    equal("Plus: result delivered", sock.sent.at(-1)?.text, "done");
 
-    settings.set("reply_hide_progress", mode === "Free setting");
-    host.hideProgress = () => mode === "Plus hook";
+    host.hideProgress = () => true;
     const failure = await createStatus(sock, CHAT, "another start");
     await failure.fail(new Error("failed"), "Failure");
-    ok(`${mode}: failure delivered`, sock.sent.at(-1)?.text.includes("failed"));
+    ok("Plus: failure delivered", sock.sent.at(-1)?.text.includes("failed"));
   }
 
   section("ordinary Free progress bytes remain unchanged");

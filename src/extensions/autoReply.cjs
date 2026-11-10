@@ -10,8 +10,10 @@ const MAX_TEXT = 4000;
 const MAX_INSTRUCTIONS = 1000;
 const PENDING_MAX = 50;
 const PENDING_TTL_MS = 2 * 60 * 1000;
-const SEEN_MAX = 2000;
-const SEEN_TTL_MS = 24 * 60 * 60 * 1000;
+const INTAKE_MAX = 5000;
+const INTAKE_TTL_MS = 10 * 60 * 1000;
+const EXECUTION_MAX = 2000;
+const EXECUTION_TTL_MS = 24 * 60 * 60 * 1000;
 const GLOBAL_CONCURRENT = 2;
 const CHAT_CONCURRENT = 1;
 const CHAT_PER_MINUTE = 6;
@@ -21,7 +23,8 @@ const AI_TIMEOUT_CAP_MS = 120_000;
 
 const injected = {};
 const pending = new Map();
-const seen = new Map();
+const intake = new Map();
+const executions = new Map();
 const inflightAbort = new Map();
 const chatInFlight = new Map();
 let globalInFlight = 0;
@@ -35,7 +38,8 @@ function setAutoReplyDeps(partial) {
 function resetAutoReplyDeps() {
   for (const key of Object.keys(injected)) delete injected[key];
   pending.clear();
-  seen.clear();
+  intake.clear();
+  executions.clear();
   inflightAbort.clear();
   chatInFlight.clear();
   globalInFlight = 0;
@@ -119,6 +123,18 @@ function abortOutOfScope(scope) {
 
 function jobKey(epoch, chatJid, messageId) {
   return `${epoch}:${chatJid}:${messageId}`;
+}
+
+function pruneClaims(claims, now) {
+  for (const [key, expiresAt] of claims) {
+    if (expiresAt <= now) claims.delete(key);
+  }
+}
+
+function rememberClaim(claims, key, expiresAt, max) {
+  claims.delete(key);
+  claims.set(key, expiresAt);
+  if (claims.size > max) claims.delete(claims.keys().next().value);
 }
 
 function hasBotMetadata(msg) {
@@ -233,6 +249,8 @@ async function runAiReply(runtime, job = {}) {
   const chatJid = event.chatJid;
   const isGroup = event.isGroup;
   const started = nowMs();
+  pruneClaims(executions, started);
+  if (executions.has(key)) return { sent: false };
   if (!admit(chatJid, started)) return { sent: false };
   if (typeof runtime.isActive === "function" && !runtime.isActive()) return { sent: false };
   if (typeof runtime.generation === "function" && runtime.generation() !== generation) {
@@ -241,6 +259,7 @@ async function runAiReply(runtime, job = {}) {
   if (accountEpochNow() !== epoch) return { sent: false };
   if (!inScope(chatJid, runtime.getScope?.())) return { sent: false };
 
+  rememberClaim(executions, key, started + EXECUTION_TTL_MS, EXECUTION_MAX);
   beginTurn(chatJid, started);
   const jobAbort = entry.controller;
   inflightAbort.set(jobAbort, chatJid);
@@ -422,14 +441,16 @@ async function dispatch(runtime, sock, msg, epoch) {
   const generation = typeof runtime.generation === "function" ? runtime.generation() : 0;
   const t = nowMs();
   const key = jobKey(epoch, chatJid, messageId);
-  for (const [handled, expiresAt] of seen) {
-    if (expiresAt <= t) seen.delete(handled);
+  pruneClaims(intake, t);
+  pruneClaims(executions, t);
+  if (executions.has(key)) return;
+  if (intake.has(key)) {
+    rememberClaim(intake, key, intake.get(key), INTAKE_MAX);
+    return;
   }
-  // Keep live replay claims at capacity; refuse new work until they expire.
-  if (seen.has(key) || seen.size >= SEEN_MAX) return;
   if (accountEpochNow() !== epoch || !runtime.isActive()) return;
   if (!inScope(chatJid, runtime.getScope?.())) return;
-  seen.set(key, t + SEEN_TTL_MS);
+  rememberClaim(intake, key, t + INTAKE_TTL_MS, INTAKE_MAX);
   prunePending(t);
   const controller = new AbortController();
   pending.set(key, {
