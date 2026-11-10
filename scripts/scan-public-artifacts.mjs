@@ -112,6 +112,11 @@ export function archiveType(name) {
   return null;
 }
 
+export function isTarName(name) {
+  const type = archiveType(name);
+  return type === "tar" || type === "tar.gz";
+}
+
 export function parsePax(buffer) {
   const records = {};
   let offset = 0;
@@ -219,6 +224,39 @@ function isZeroBlock(buffer) {
 
 function isUstar(buffer) {
   return buffer.length >= 262 && buffer.subarray(257, 262).toString("ascii") === "ustar";
+}
+
+export function hasTarChecksum(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < TAR_BLOCK) return false;
+  const header = buffer.subarray(0, TAR_BLOCK);
+  let start = 148;
+  let end = 156;
+  while (start < end && (header[start] === 0x20 || header[start] === 0)) {
+    start += 1;
+  }
+  while (end > start && (header[end - 1] === 0x20 || header[end - 1] === 0)) {
+    end -= 1;
+  }
+  if (start === end) return false;
+  const digits = header.subarray(start, end).toString("ascii");
+  if (!/^[0-7]+$/.test(digits)) return false;
+  const stored = Number.parseInt(digits, 8);
+
+  let unsignedSum = 0;
+  let signedSum = 0;
+  for (let i = 0; i < TAR_BLOCK; i += 1) {
+    const byte = i >= 148 && i < 156 ? 0x20 : header[i];
+    unsignedSum += byte;
+    signedSum += byte > 127 ? byte - 256 : byte;
+  }
+
+  return stored === unsignedSum || stored === signedSum;
+}
+
+function isTarBuffer(buffer) {
+  if (!buffer || buffer.length < TAR_BLOCK) return false;
+  if (isZeroBlock(buffer.subarray(0, TAR_BLOCK))) return true;
+  return hasTarChecksum(buffer) || isUstar(buffer);
 }
 
 function scanTarBuffer(tar, result, budget, depth = 0, archivePrefix = "") {
@@ -506,13 +544,19 @@ function scanNestedArchive(data, prefix, result, budget, depth) {
       ) {
         throw error;
       }
-      if (archiveType(prefix) === "tar.gz") {
+      if (isTarName(prefix)) {
         throw error;
       }
       return;
     }
-    if (isUstar(inflated)) {
+    if (containsCanary(inflated)) {
+      result.findings.push({ path: prefix, reason: "canary" });
+    }
+    const isTar = isTarBuffer(inflated);
+    if (isTar) {
       scanTarBuffer(inflated, result, budget, depth, prefix);
+    } else if (isTarName(prefix)) {
+      throw new Error(`${prefix}: not a tar archive`);
     }
     return;
   }
@@ -529,7 +573,7 @@ function scanNestedArchive(data, prefix, result, budget, depth) {
     scanZipBuffer(data, result, budget, depth, prefix);
     return;
   }
-  if (isUstar(data)) {
+  if (hasTarChecksum(data) || isUstar(data)) {
     if (depth > 4) {
       throw new Error(`${prefix}: archive nesting exceeds depth cap of 4`);
     }
@@ -545,6 +589,9 @@ function scanNestedArchive(data, prefix, result, budget, depth) {
   } else if (fallback === "tar") {
     if (depth > 4) {
       throw new Error(`${prefix}: archive nesting exceeds depth cap of 4`);
+    }
+    if (!isTarBuffer(data)) {
+      throw new Error(`${prefix}: not a tar archive`);
     }
     scanTarBuffer(data, result, budget, depth, prefix);
   }
