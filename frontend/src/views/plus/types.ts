@@ -80,7 +80,6 @@ export type AutoReplyChat = {
   perChatPerHour: number;
   globalMemory?: {
     read: boolean;
-    write: boolean;
   };
 };
 
