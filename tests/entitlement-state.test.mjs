@@ -8,6 +8,11 @@ useTempDataDir("levix-entitlement-state");
 
 const keys = require("./src/extensions/entitlement/keys.cjs");
 const state = require("./src/extensions/entitlement/state.cjs");
+const vault = require("./src/config/vault.cjs");
+const {
+  createInstallation,
+  INSTALLATION_KEY,
+} = require("./src/extensions/entitlement/installation.cjs");
 const { createEntitlement } = require("./src/extensions/entitlement/index.cjs");
 const { isSecretBotKey } = require("./src/db/copy.cjs");
 const { sanitizeRecord } = require("./src/diagnostics/debugLog.cjs");
@@ -164,6 +169,20 @@ section("server offset, clock rollback, recovery on fresh refresh, and highWater
     2 * 3600 * 1000,
   );
   equal("highWaterMs starts at iat*1000", storedAfterClaim.highWaterMs, serverNowMs);
+  ok("claim writes a sealed high-water row", vault.isSealed(backing.get(state.HW_KEY)));
+  const hwAfterClaim = state.openHighWater(backing.get(state.HW_KEY), vault);
+  equal(
+    "sealed offset matches accepted server time",
+    hwAfterClaim?.serverOffsetMs,
+    2 * 3600 * 1000,
+  );
+  equal("sealed sequence matches accepted token", hwAfterClaim?.maxSeq, 1);
+  equal("sealed jti matches accepted token", hwAfterClaim?.jti, storedAfterClaim.jti);
+  equal(
+    "sealed installation matches this installation",
+    hwAfterClaim?.installationId,
+    ent.prepare().installationId,
+  );
 
   const writesAfterClaim = persistWrites;
   // Advance local clock by 2 minutes (< 5 minutes): highWater moves in memory, not persisted yet.
@@ -180,6 +199,17 @@ section("server offset, clock rollback, recovery on fresh refresh, and highWater
     backing.get(state.RECORD_KEY).highWaterMs,
     serverNowMs + 360_000,
   );
+  equal(
+    "sealed highWater also advances",
+    state.openHighWater(backing.get(state.HW_KEY), vault)?.highWaterMs,
+    serverNowMs + 360_000,
+  );
+  const reloaded = createEntitlement({
+    keys: [signer.entry],
+    storage: backing,
+    now: () => currentNowMs,
+  });
+  equal("reloaded accepted pair is active", reloaded.status().state, "active");
 
   // Roll local clock backwards by 10 minutes (> 5 min skew below highWaterMs).
   currentNowMs -= 600_000;
@@ -281,11 +311,418 @@ section("expiry, inactive token with higher seq, replay ignore, and cache tamper
   ent.stop();
 }
 
+section("database rollback cannot replace the authenticated sequence or clock");
+
+{
+  const iat = 1_762_780_000;
+  const backing = new Map();
+  let tokenSpec = { seq: 1, iat };
+  let sentSeq = null;
+  const ent = createEntitlement({
+    keys: [signer.entry],
+    storage: backing,
+    now: () => iat * 1000,
+    fetch: async (url, init) => {
+      if (url.endsWith("/refresh")) sentSeq = JSON.parse(init.body).seq;
+      const token = makeToken(signer, ent.prepare().installationId, tokenSpec);
+      return new Response(JSON.stringify({ token }));
+    },
+  });
+  await ent.claim(validClaimInput);
+  const oldRecord = backing.get(state.RECORD_KEY);
+  const oldHw = backing.get(state.HW_KEY);
+  tokenSpec = { seq: 2, iat, st: "inactive", rsn: "revoked" };
+  await ent.refresh({ force: true });
+  const revokedRecord = backing.get(state.RECORD_KEY);
+  const revokedHw = backing.get(state.HW_KEY);
+  const reload = () =>
+    createEntitlement({
+      keys: [signer.entry],
+      storage: backing,
+      now: () => iat * 1000,
+    });
+  equal("revocation survives reload", reload().status().state, "inactive");
+
+  backing.set(state.RECORD_KEY, { ...oldRecord, serverOffsetMs: -999999, highWaterMs: 0 });
+  equal("older active token fails closed in process", ent.isActive(), false);
+  equal("older active token reports rollback", ent.status().reason, "rollback");
+  equal(
+    "sealed barrier rejects older active token after reload",
+    reload().status().reason,
+    "rollback",
+  );
+  backing.set(state.HW_KEY, oldHw);
+  equal("rolling back both rows cannot lower the process maximum", ent.status().reason, "rollback");
+
+  backing.set(state.HW_KEY, revokedHw);
+  backing.set(state.RECORD_KEY, {
+    ...revokedRecord,
+    token: makeToken(signer, ent.prepare().installationId, { seq: 2, iat, jti: "different" }),
+    jti: "different",
+  });
+  equal("same sequence with another jti is rollback", ent.status().reason, "rollback");
+  equal(
+    "same sequence with another jti is rollback after reload",
+    reload().status().reason,
+    "rollback",
+  );
+
+  backing.set(state.RECORD_KEY, revokedRecord);
+  const hw = state.openHighWater(revokedHw, vault);
+  const badHighWater = [
+    null,
+    `${revokedHw.slice(0, -2)}${revokedHw.endsWith("00") ? "01" : "00"}`,
+    JSON.stringify(hw),
+    vault.seal("invalid JSON"),
+    vault.seal(JSON.stringify({ ...hw, installationId: "another-installation" })),
+    vault.seal(JSON.stringify({ ...hw, maxSeq: -1 })),
+    oldHw,
+  ];
+  for (const [index, value] of badHighWater.entries()) {
+    if (value == null) backing.delete(state.HW_KEY);
+    else backing.set(state.HW_KEY, value);
+    equal(`invalid high-water row #${index} fails closed`, ent.status().state, "unverified");
+    equal(
+      `invalid high-water row #${index} fails closed after reload`,
+      reload().status().state,
+      "unverified",
+    );
+  }
+
+  backing.set(state.HW_KEY, revokedHw);
+  backing.set(state.RECORD_KEY, { ...revokedRecord, seq: 999999, jti: "spoofed" });
+  tokenSpec = { seq: 3, iat };
+  equal(
+    "fresh token repairs tampered plain metadata",
+    (await ent.refresh({ force: true })).ok,
+    true,
+  );
+  equal("refresh sends authenticated sequence", sentSeq, 2);
+  equal(
+    "fresh token replaces sealed sequence",
+    state.openHighWater(backing.get(state.HW_KEY), vault)?.maxSeq,
+    3,
+  );
+  equal("repaired pair is active after reload", reload().isActive(), true);
+
+  const activeRecord = backing.get(state.RECORD_KEY);
+  backing.set(state.RECORD_KEY, { ...activeRecord, serverOffsetMs: 1e15, highWaterMs: 1e15 });
+  equal("plain clock fields do not override sealed time", reload().isActive(), true);
+  backing.delete(state.HW_KEY);
+  equal("removing the barrier invalidates a cached active token", ent.status().state, "unverified");
+  tokenSpec = { seq: 4, iat };
+  equal(
+    "higher-sequence claim repairs missing barrier",
+    (await ent.claim(validClaimInput)).entitlement.state,
+    "active",
+  );
+  equal(
+    "claim repair persists the new barrier",
+    state.openHighWater(backing.get(state.HW_KEY), vault)?.maxSeq,
+    4,
+  );
+  backing.delete(state.RECORD_KEY);
+  backing.delete(state.HW_KEY);
+  equal("deleting both rows does not forget process acceptance", ent.status().state, "unverified");
+
+  const originalInstallation = backing.get(INSTALLATION_KEY);
+  const newBacking = new Map();
+  createInstallation({ storage: newBacking, vault }).getOrCreateInstallation();
+  backing.set(INSTALLATION_KEY, newBacking.get(INSTALLATION_KEY));
+  tokenSpec = { seq: 1, iat };
+  equal(
+    "a new installation has its own sequence space",
+    (await ent.claim(validClaimInput)).entitlement.state,
+    "active",
+  );
+  backing.set(INSTALLATION_KEY, originalInstallation);
+  backing.set(state.RECORD_KEY, oldRecord);
+  backing.set(state.HW_KEY, oldHw);
+  equal("switching installations does not forget the old maximum", ent.status().reason, "rollback");
+}
+
+section("an interrupted acceptance pair cannot expose the previous active token");
+
+{
+  const iat = 1_762_780_000;
+  const backing = new Map();
+  let seq = 1;
+  let failRecordWrite = false;
+  const ent = createEntitlement({
+    keys: [signer.entry],
+    now: () => iat * 1000,
+    storage: {
+      getBotSetting: (key, fallback) => backing.get(key) ?? fallback,
+      saveBotSetting: (key, value) => {
+        if (failRecordWrite && key === state.RECORD_KEY) throw new Error("fake write failure");
+        backing.set(key, value);
+      },
+    },
+    fetch: async () => {
+      const token = makeToken(signer, ent.prepare().installationId, {
+        iat,
+        seq,
+        st: seq === 1 ? "active" : "inactive",
+        rsn: "revoked",
+      });
+      return new Response(JSON.stringify({ token }));
+    },
+  });
+  await ent.claim(validClaimInput);
+  seq = 2;
+  failRecordWrite = true;
+  let rejected = false;
+  try {
+    await ent.refresh({ force: true });
+  } catch {
+    rejected = true;
+  }
+  equal("failed pair write rejects refresh", rejected, true);
+  equal(
+    "authenticated barrier was written first",
+    state.openHighWater(backing.get(state.HW_KEY), vault)?.maxSeq,
+    2,
+  );
+  equal("previous active row is still present", backing.get(state.RECORD_KEY).seq, 1);
+  equal("failed write invalidates in-memory acceptance", ent.status().reason, "rollback");
+  const reloaded = createEntitlement({
+    keys: [signer.entry],
+    storage: backing,
+    now: () => iat * 1000,
+  });
+  equal("failed write remains closed after reload", reloaded.status().reason, "rollback");
+}
+
+section("fresh verifier tokens rebase a high-water mark poisoned by a forward jump");
+
+for (const action of ["claim", "refresh"]) {
+  const iat = 1_762_780_000;
+  let nowMs = iat * 1000;
+  let tokenSpec = { seq: 1, iat };
+  const backing = new Map();
+  const ent = createEntitlement({
+    keys: [signer.entry],
+    storage: backing,
+    now: () => nowMs,
+    fetch: async () => {
+      const token = makeToken(signer, ent.prepare().installationId, tokenSpec);
+      return new Response(JSON.stringify({ token }));
+    },
+  });
+  await ent.claim(validClaimInput);
+  nowMs += 8 * 86_400_000;
+  equal(`${action}: forward jump expires the token`, ent.status().state, "expired");
+  nowMs = (iat + 3600) * 1000;
+  equal(`${action}: correcting the clock exposes poisoned high water`, ent.status().state, "clock");
+  tokenSpec = { seq: 2, iat: iat + 3600 };
+  const result =
+    action === "claim" ? await ent.claim(validClaimInput) : await ent.refresh({ force: true });
+  equal(`${action}: fresh higher sequence recovers`, result.entitlement.state, "active");
+  const hw = state.openHighWater(backing.get(state.HW_KEY), vault);
+  equal(`${action}: sealed high water rebased to server iat`, hw?.highWaterMs, nowMs);
+  equal(`${action}: sealed server offset rebased`, hw?.serverOffsetMs, 0);
+  const reloaded = createEntitlement({
+    keys: [signer.entry],
+    storage: backing,
+    now: () => nowMs,
+  });
+  equal(`${action}: recovery survives reload`, reloaded.isActive(), true);
+}
+
+section("expiry stops rearming when clock state wins after the deadline");
+
+{
+  const iat = 1_762_780_000;
+  let nowMs = iat * 1000;
+  const timers = [];
+  const events = [];
+  const ent = createEntitlement({
+    keys: [signer.entry],
+    storage: new Map(),
+    now: () => nowMs,
+    random: () => 0,
+    setTimer: (fn, ms) => {
+      const timer = { fn, ms };
+      timers.push(timer);
+      return timer;
+    },
+    clearTimer: () => {},
+    fetch: async () => {
+      const token = makeToken(signer, ent.prepare().installationId, { iat, exp: iat + 3600 });
+      return new Response(JSON.stringify({ token }));
+    },
+  });
+  ent.subscribe((status) => events.push(status));
+  ent.start();
+  await ent.claim(validClaimInput);
+  const expiry = timers.find((timer) => timer.ms === 3_600_000);
+  ok("expiry initially has a future deadline", !!expiry);
+  nowMs += 4 * 3_600_000;
+  ent.status();
+  nowMs = (iat + 7200) * 1000;
+  equal("corrected time past exp reports clock", ent.status().state, "clock");
+  const count = timers.length;
+  expiry?.fn();
+  equal("past deadline does not create another timer", timers.length, count);
+  equal(
+    "clock transition is published once",
+    events.filter((event) => event.state === "clock").length,
+    1,
+  );
+  ent.stop();
+  ent.start();
+  equal("restart arms only the first refresh", timers.length, count + 1);
+  ok(
+    "no zero-delay expiry timers",
+    timers.every((timer) => timer.ms > 0),
+  );
+  ent.stop();
+}
+
+section("verification and installation public views are cached and invalidate on raw changes");
+
+{
+  const iat = 1_762_780_000;
+  let nowMs = iat * 1000;
+  const backing = new Map();
+  const trusted = [signer.entry];
+  let verificationCalls = 0;
+  let keyImports = 0;
+  let installationOpens = 0;
+  const originalVerify = crypto.verify;
+  const originalImport = crypto.createPrivateKey;
+  const trackedVault = {
+    ...vault,
+    open(sealed) {
+      if (sealed === backing.get(INSTALLATION_KEY)) installationOpens += 1;
+      return vault.open(sealed);
+    },
+  };
+  crypto.verify = (...args) => {
+    verificationCalls += 1;
+    return originalVerify(...args);
+  };
+  crypto.createPrivateKey = (...args) => {
+    keyImports += 1;
+    return originalImport(...args);
+  };
+  try {
+    const installations = createInstallation({ storage: backing, vault: trackedVault });
+    const ent = createEntitlement({
+      keys: trusted,
+      storage: backing,
+      vault: trackedVault,
+      installation: installations,
+      now: () => nowMs,
+      fetch: async () => {
+        const token = makeToken(signer, ent.prepare().installationId, { iat, exp: iat + 3600 });
+        return new Response(JSON.stringify({ token }));
+      },
+    });
+    await ent.claim(validClaimInput);
+    const view = installations.getInstallation();
+    const initialVerifications = verificationCalls;
+    const initialImports = keyImports;
+    const initialOpens = installationOpens;
+    for (let index = 0; index < 100; index += 1) {
+      ent.isActive();
+      ent.status();
+      installations.getInstallation();
+    }
+    equal("repeated checks reuse signature verification", verificationCalls, initialVerifications);
+    equal("repeated checks do not import the private key", keyImports, initialImports);
+    equal(
+      "repeated public reads do not open the installation vault row",
+      installationOpens,
+      initialOpens,
+    );
+    equal("public view is reused", installations.getInstallation(), view);
+
+    const saved = backing.get(state.RECORD_KEY);
+    backing.set(state.RECORD_KEY, JSON.parse(JSON.stringify(saved)));
+    ent.isActive();
+    equal(
+      "equal raw row values preserve verification cache",
+      verificationCalls,
+      initialVerifications,
+    );
+    backing.set(state.RECORD_KEY, { ...saved, lastError: "UNAVAILABLE" });
+    equal("changed plain row is rechecked", ent.isActive(), true);
+    equal(
+      "plain row change invalidates signature cache",
+      verificationCalls,
+      initialVerifications + 1,
+    );
+    const hw = state.openHighWater(backing.get(state.HW_KEY), vault);
+    backing.set(state.HW_KEY, state.sealHighWater(hw, vault));
+    equal("resealed high-water row is rechecked", ent.isActive(), true);
+    equal(
+      "sealed row change invalidates signature cache",
+      verificationCalls,
+      initialVerifications + 2,
+    );
+
+    trusted.length = 0;
+    equal(
+      "removing trusted keys invalidates active verification",
+      ent.status().reason,
+      "unknown_kid",
+    );
+    trusted.push(signer.entry);
+    equal("restoring trusted keys verifies again", ent.isActive(), true);
+    equal(
+      "trusted key change invalidates signature cache",
+      verificationCalls,
+      initialVerifications + 3,
+    );
+
+    const installationKey = backing.get(INSTALLATION_KEY);
+    const otherBacking = new Map();
+    createInstallation({ storage: otherBacking, vault }).getOrCreateInstallation();
+    backing.set(INSTALLATION_KEY, otherBacking.get(INSTALLATION_KEY));
+    equal("changed installation rejects the cached token", ent.status().reason, "bad_sub");
+    const afterReplacement = verificationCalls;
+    ent.isActive();
+    equal("invalid verification is also cached", verificationCalls, afterReplacement);
+    backing.set(INSTALLATION_KEY, installationKey);
+    equal("restored installation rechecks the token", ent.isActive(), true);
+
+    const beforeSigning = keyImports;
+    view.sign(Buffer.from("one"));
+    view.sign(Buffer.from("two"));
+    equal("each request signing imports its private key afresh", keyImports, beforeSigning + 2);
+
+    const beforeTimeChecks = verificationCalls;
+    nowMs = (iat + 3600) * 1000;
+    equal("cached signature still expires at call time", ent.isActive(), false);
+    equal("time checks do not verify again", verificationCalls, beforeTimeChecks);
+  } finally {
+    crypto.verify = originalVerify;
+    crypto.createPrivateKey = originalImport;
+  }
+}
+
 section("isSecretBotKey and debugLog redaction");
 
 {
   equal("plus:installation-key is secret", isSecretBotKey("plus:installation-key"), true);
   equal("plus:entitlement is secret", isSecretBotKey("plus:entitlement"), true);
+  equal("plus:entitlement-hw is secret", isSecretBotKey(state.HW_KEY), true);
+  const { RESTORABLE_BOT_KEYS } = require("./src/backup/content.cjs");
+  equal(
+    "portable backups exclude high-water row",
+    RESTORABLE_BOT_KEYS.includes(state.HW_KEY),
+    false,
+  );
+  const { exportSettings } = require("./src/services/settingsTransfer.cjs");
+  const store = require("./src/db/store.cjs");
+  const exportMarker = vault.seal("high-water-export-marker");
+  store.saveBotSetting(state.HW_KEY, exportMarker);
+  const exported = JSON.stringify(exportSettings());
+  ok(
+    "settings export excludes high-water row and value",
+    !exported.includes(state.HW_KEY) && !exported.includes(exportMarker),
+  );
   equal("plus:any is secret", isSecretBotKey("plus:any"), true);
   equal("ext:levix-plus:acct:chats is secret", isSecretBotKey("ext:levix-plus:acct:chats"), true);
   equal("ext:x:acct:y is secret", isSecretBotKey("ext:x:acct:y"), true);

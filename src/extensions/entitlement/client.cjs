@@ -72,20 +72,15 @@ function defaultFetch(url, init) {
 
 function withAbort(promise, signal, onAbort) {
   if (!signal) return promise;
-  if (signal.aborted) {
-    try {
-      onAbort?.();
-    } catch {}
-    return Promise.reject(signal.reason ?? new Error("aborted"));
-  }
   return new Promise((resolve, reject) => {
     const abort = () => {
       try {
-        onAbort?.();
+        Promise.resolve(onAbort?.()).catch(() => {});
       } catch {}
       reject(signal.reason ?? new Error("aborted"));
     };
-    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort, { once: true });
     Promise.resolve(promise).then(
       (value) => {
         signal.removeEventListener("abort", abort);
@@ -119,7 +114,7 @@ async function discard(response) {
   }
 }
 
-async function readLimited(response) {
+async function readLimited(response, signal) {
   const declared = response.headers?.get?.("content-length");
   if (
     declared != null &&
@@ -137,7 +132,7 @@ async function readLimited(response) {
     let total = 0;
     try {
       for (;;) {
-        const { done, value } = await reader.read();
+        const { done, value } = await withAbort(reader.read(), signal, () => reader.cancel());
         if (done) break;
         const bytes = Buffer.from(value);
         total += bytes.length;
@@ -315,7 +310,9 @@ async function post(path, body, deps, includeKey) {
     return fail("REDIRECT", { retryable: false });
   }
   try {
-    const bytes = await withAbort(readLimited(response ?? {}), signal, () => discard(response));
+    const bytes = await withAbort(readLimited(response ?? {}, signal), signal, () =>
+      discard(response),
+    );
     const result = interpret(status, bytes, response);
     if (!result.ok) logFailure(deps.logger, result.code, status);
     return result;

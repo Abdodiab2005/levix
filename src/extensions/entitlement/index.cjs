@@ -74,9 +74,8 @@ function createEntitlement(deps = {}) {
   const clearTimer = deps.clearTimer ?? ((handle) => clearTimeout(handle));
   const listeners = new Set();
   const inFlightControllers = new Set();
+  const acceptedSequences = new Map();
   let memory = { record: null, hw: null, invalid: false, claims: null };
-  let maxAcceptedSeq = null;
-  let maxAcceptedJti = null;
   let cachedRawRecord = undefined;
   let cachedRawHw = undefined;
   let cachedInstallationId = undefined;
@@ -85,6 +84,7 @@ function createEntitlement(deps = {}) {
   let lastHighWaterPersistMs = null;
   let notifying = false;
   let running = false;
+  let stopped = false;
   let refreshTimer = null;
   let expiryTimer = null;
   let flight = null;
@@ -128,6 +128,11 @@ function createEntitlement(deps = {}) {
     cachedRawHw = sealed;
   }
 
+  function rememberSequence(installationId, seq, jti) {
+    const accepted = acceptedSequences.get(installationId);
+    if (!accepted || seq > accepted.seq) acceptedSequences.set(installationId, { seq, jti });
+  }
+
   function syncFromStorage(localNow, installationId = currentInstallationId()) {
     const stored = storage.getBotSetting(state.RECORD_KEY, null);
     const rawHw = storage.getBotSetting(state.HW_KEY, null);
@@ -150,10 +155,7 @@ function createEntitlement(deps = {}) {
     let hw = null;
     if (openedHw && openedHw.installationId === installationId) {
       hw = openedHw;
-      if (maxAcceptedSeq == null || hw.maxSeq > maxAcceptedSeq) {
-        maxAcceptedSeq = hw.maxSeq;
-        maxAcceptedJti = hw.jti;
-      }
+      rememberSequence(installationId, hw.maxSeq, hw.jti);
       if (
         memory.hw &&
         memory.hw.installationId === hw.installationId &&
@@ -166,7 +168,7 @@ function createEntitlement(deps = {}) {
     }
 
     if (stored == null) {
-      const expectedRecord = rawHw != null || maxAcceptedSeq != null;
+      const expectedRecord = rawHw != null || acceptedSequences.has(installationId);
       memory = { record: null, hw, invalid: expectedRecord, claims: null };
       return;
     }
@@ -230,16 +232,13 @@ function createEntitlement(deps = {}) {
       keys: keysList,
       installationId,
       hw: memory.hw,
-      maxSeq: maxAcceptedSeq,
-      maxJti: maxAcceptedJti,
+      maxSeq: acceptedSequences.get(installationId)?.seq,
+      maxJti: acceptedSequences.get(installationId)?.jti,
       verified: verifiedCache.result,
     });
     if (judged.claims) {
       memory.claims = judged.claims;
-      if (maxAcceptedSeq == null || judged.claims.seq > maxAcceptedSeq) {
-        maxAcceptedSeq = judged.claims.seq;
-        maxAcceptedJti = judged.claims.jti;
-      }
+      rememberSequence(installationId, judged.claims.seq, judged.claims.jti);
       touchHighWater(localNow);
     }
     return judged;
@@ -315,17 +314,18 @@ function createEntitlement(deps = {}) {
   }
 
   function clearRefreshTimer() {
-    if (refreshTimer) clearTimer(refreshTimer);
+    if (refreshTimer !== null) clearTimer(refreshTimer);
     refreshTimer = null;
   }
 
   function clearExpiryTimer() {
-    if (expiryTimer) clearTimer(expiryTimer);
+    if (expiryTimer !== null) clearTimer(expiryTimer);
     expiryTimer = null;
   }
 
   function armRefresh(delayMs) {
     clearRefreshTimer();
+    if (stopped) return;
     const wait = Math.max(MIN_SUCCESS_DELAY_MS, Math.min(Math.floor(delayMs), MAX_TIMER_MS));
     if (memory.record) {
       memory.record.nextRefreshAt = clock() + wait;
@@ -343,7 +343,11 @@ function createEntitlement(deps = {}) {
     if (!running || trustedKeys().length === 0 || !memory.claims || !memory.record) return;
     const delay = memory.claims.exp * 1000 - memory.record.serverOffsetMs - clock();
     if (!Number.isFinite(delay)) return;
-    const wait = Math.max(0, Math.min(Math.floor(delay), MAX_TIMER_MS));
+    if (delay <= 0) {
+      publish(judge());
+      return;
+    }
+    const wait = Math.max(1, Math.min(Math.floor(delay), MAX_TIMER_MS));
     expiryTimer = setTimer(() => {
       expiryTimer = null;
       try {
@@ -359,11 +363,20 @@ function createEntitlement(deps = {}) {
 
   function successDelay(claims, record) {
     const target = Math.min(claims.iat * 1000 + TWELVE_H_MS, claims.exp * 1000 - SIX_H_MS);
-    let delay = target - record.serverOffsetMs - clock();
+    const trustedNow = clock() + record.serverOffsetMs;
+    let delay = target - trustedNow;
+    const pastTarget = delay <= 0;
+    if (pastTarget) {
+      delay = Math.min(ONE_H_MS, Math.max(FIFTEEN_MIN_MS, (claims.exp * 1000 - trustedNow) / 2));
+    }
     if (!Number.isFinite(delay) || delay < MIN_SUCCESS_DELAY_MS) delay = MIN_SUCCESS_DELAY_MS;
     const unit = Number(random());
     const fraction = Number.isFinite(unit) && unit > 0 ? Math.min(unit, 1) : 0;
-    return Math.max(MIN_SUCCESS_DELAY_MS, Math.floor(delay + delay * fraction * 0.1));
+    const ceiling = pastTarget ? ONE_H_MS : MAX_TIMER_MS;
+    return Math.max(
+      MIN_SUCCESS_DELAY_MS,
+      Math.min(ceiling, Math.floor(delay + delay * fraction * 0.1)),
+    );
   }
 
   function scheduleSuccess() {
@@ -389,23 +402,34 @@ function createEntitlement(deps = {}) {
 
   function commit(token, claims) {
     const localNow = clock();
-    const previousHigh =
-      memory.record && Number.isFinite(memory.record.highWaterMs) ? memory.record.highWaterMs : 0;
     const serverOffsetMs = claims.iat * 1000 - localNow;
+    const hw = {
+      installationId: claims.sub,
+      maxSeq: claims.seq,
+      jti: claims.jti,
+      serverOffsetMs,
+      highWaterMs: claims.iat * 1000,
+    };
     const record = {
       token,
       seq: claims.seq,
       jti: claims.jti,
       serverOffsetMs,
-      highWaterMs: Math.max(previousHigh, claims.iat * 1000),
+      highWaterMs: hw.highWaterMs,
       lastRefreshAt: localNow,
       nextRefreshAt: null,
       lastError: null,
     };
-    memory = { record, invalid: false, claims };
+    rememberSequence(claims.sub, claims.seq, claims.jti);
+    // Write the authenticated barrier first. An interrupted pair fails closed.
+    cachedRawRecord = undefined;
+    verifiedCache = null;
+    persistHw(hw);
+    persist(record);
+    cachedInstallationId = claims.sub;
+    memory = { record, hw, invalid: false, claims };
     lastHighWaterPersistMs = localNow;
     failCount = 0;
-    persist(record);
   }
 
   function applyToken(token) {
@@ -414,7 +438,7 @@ function createEntitlement(deps = {}) {
       try {
         judge();
       } catch {
-        /* fall back to stored seq/jti */
+        /* only the authenticated sequence barrier can constrain acceptance */
       }
     }
     let installationId = null;
@@ -423,10 +447,9 @@ function createEntitlement(deps = {}) {
     } catch {
       return { ok: false, code: "UNAVAILABLE" };
     }
-    const storedSeq =
-      memory.claims?.seq ?? (Number.isSafeInteger(memory.record?.seq) ? memory.record.seq : null);
-    const storedJti =
-      memory.claims?.jti ?? (typeof memory.record?.jti === "string" ? memory.record.jti : null);
+    const accepted = acceptedSequences.get(installationId);
+    const storedSeq = accepted?.seq ?? null;
+    const storedJti = accepted?.jti ?? null;
     const verified = verifyToken(token, {
       keys: trustedKeys(),
       installationId,
@@ -452,7 +475,7 @@ function createEntitlement(deps = {}) {
     return { ok: true };
   }
 
-  function clientDeps(installation, seq) {
+  function clientDeps(installation, seq, signal) {
     return {
       keys: trustedKeys(),
       installation,
@@ -461,6 +484,7 @@ function createEntitlement(deps = {}) {
       now: clock,
       randomBytes,
       logger: deps.logger,
+      signal,
     };
   }
 
@@ -474,6 +498,7 @@ function createEntitlement(deps = {}) {
   }
 
   async function claim(input) {
+    if (stopped) return resultOf({ ok: false, code: "UNAVAILABLE" });
     if (trustedKeys().length === 0) return resultOf({ ok: false, code: "UNCONFIGURED" });
     if (!client.validateClaimBody(input)) return resultOf({ ok: false, code: "BAD_REQUEST" });
     let installation;
@@ -482,13 +507,20 @@ function createEntitlement(deps = {}) {
     } catch {
       return resultOf({ ok: false, code: "UNAVAILABLE" });
     }
-    const outcome = await client.claim(input, clientDeps(installation, 0));
-    if (!outcome.ok) {
-      rememberError(outcome.code);
-      return resultOf(outcome);
+    const controller = new AbortController();
+    inFlightControllers.add(controller);
+    try {
+      const outcome = await client.claim(input, clientDeps(installation, 0, controller.signal));
+      if (controller.signal.aborted) return resultOf({ ok: false, code: "UNAVAILABLE" });
+      if (!outcome.ok) {
+        rememberError(outcome.code);
+        return resultOf(outcome);
+      }
+      const applied = applyToken(outcome.token);
+      return resultOf({ ...outcome, ...applied, ok: applied.ok, code: applied.code });
+    } finally {
+      inFlightControllers.delete(controller);
     }
-    const applied = applyToken(outcome.token);
-    return resultOf({ ...outcome, ...applied, ok: applied.ok, code: applied.code });
   }
 
   async function runRefresh() {
@@ -498,7 +530,7 @@ function createEntitlement(deps = {}) {
       try {
         judge();
       } catch {
-        /* seq falls back to memory.record.seq */
+        /* only send an authenticated sequence to the verifier */
       }
     }
     let installation;
@@ -508,20 +540,27 @@ function createEntitlement(deps = {}) {
       return resultOf({ ok: false, code: "UNAVAILABLE" });
     }
     if (!installation) return resultOf({ ok: false, code: "NO_INSTALLATION" });
-    const seq =
-      memory.claims?.seq ?? (Number.isSafeInteger(memory.record?.seq) ? memory.record.seq : 0);
-    const outcome = await client.refresh(clientDeps(installation, seq));
-    if (!outcome.ok) {
-      rememberError(outcome.code);
-      scheduleFailure(outcome);
-      return resultOf(outcome);
+    const seq = acceptedSequences.get(installation.installationId)?.seq ?? 0;
+    const controller = new AbortController();
+    inFlightControllers.add(controller);
+    try {
+      const outcome = await client.refresh(clientDeps(installation, seq, controller.signal));
+      if (controller.signal.aborted) return resultOf({ ok: false, code: "UNAVAILABLE" });
+      if (!outcome.ok) {
+        rememberError(outcome.code);
+        scheduleFailure(outcome);
+        return resultOf(outcome);
+      }
+      const applied = applyToken(outcome.token);
+      if (!applied.ok) return resultOf(applied);
+      return resultOf({ ok: true });
+    } finally {
+      inFlightControllers.delete(controller);
     }
-    const applied = applyToken(outcome.token);
-    if (!applied.ok) return resultOf(applied);
-    return resultOf({ ok: true });
   }
 
   function refresh(options = {}) {
+    if (stopped) return Promise.resolve(resultOf({ ok: false, code: "UNAVAILABLE" }));
     if (flight) return flight;
     const force = options?.force === true;
     if (!force && (memory.record?.nextRefreshAt == null || clock() < memory.record.nextRefreshAt)) {
@@ -539,12 +578,16 @@ function createEntitlement(deps = {}) {
   }
 
   function stop() {
+    if (stopped) return;
+    stopped = true;
     running = false;
     clearRefreshTimer();
     clearExpiryTimer();
+    for (const controller of inFlightControllers) controller.abort();
   }
 
   function start() {
+    stopped = false;
     running = true;
     clearRefreshTimer();
     clearExpiryTimer();
