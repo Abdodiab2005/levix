@@ -216,7 +216,7 @@ section("reply sent once to the source chat only");
   equal("source chat", sent[0].jid, CHAT);
   equal("quoted when asked", sent[0].quote, true);
   equal("caller uses the real message", callerOpts.msg, msg);
-  equal("global memory excluded for non-owner", agentOpts.context.includeGlobalMemory, false);
+  equal("global memory excluded by default", agentOpts.context.autoReplyGlobal.read, false);
   equal("memory tools restricted to chat", agentOpts.context.memoryScope, "chat");
   equal("tools share the turn signal", agentOpts.context.signal, agentOpts.signal);
   ok(
@@ -444,7 +444,7 @@ section("one per chat in flight");
   equal("first text", sent[0], "first");
 }
 
-section("every Auto Reply turn uses chat-only memory");
+section("every Auto Reply turn defaults to chat-only memory");
 {
   const seen = [];
   reset();
@@ -486,7 +486,13 @@ section("every Auto Reply turn uses chat-only memory");
   for (const [, msg] of cases) await autoReply.dispatch(runtime(), sock, msg, 1);
   equal("all caller cases reached the agent", seen.length, cases.length);
   for (const [index, [name]] of cases.entries()) {
-    equal(`${name} excludes global`, seen[index]?.includeGlobalMemory, false);
+    equal(`${name} excludes global`, seen[index]?.autoReplyGlobal.read, false);
+    equal(
+      `${name} carries no write grant`,
+      Object.keys(seen[index]?.autoReplyGlobal ?? {}).join(),
+      "read",
+    );
+    ok(`${name} memory decision frozen`, Object.isFrozen(seen[index]?.autoReplyGlobal));
     equal(`${name} memory tools restricted`, seen[index]?.memoryScope, "chat");
   }
 }
@@ -569,7 +575,7 @@ section("owner private Auto Reply cannot expose global memory; explicit AI comma
       "Auto Reply prompt includes this chat's memory",
       turn.systemInstruction.includes(chatMarker),
     );
-    equal("Auto Reply disables global memory", turn.context.includeGlobalMemory, false);
+    equal("Auto Reply disables global memory", turn.context.autoReplyGlobal.read, false);
     equal("Auto Reply restricts memory tools", turn.context.memoryScope, "chat");
     equal("Auto Reply does not pass explicit-command history to the model", turn.history.length, 0);
     for (const args of [{}, { scope: "chat" }, { scope: "global" }, { scope: "all" }]) {
@@ -596,7 +602,7 @@ section("owner private Auto Reply cannot expose global memory; explicit AI comma
       equal(
         `${tool}/${args.scope}: normal scope refusal`,
         JSON.stringify(result),
-        JSON.stringify({ error: "only chat memory is available", denied: true }),
+        JSON.stringify({ error: "global memory is not available in this turn", denied: true }),
       );
     }
     const chatOnly = await runTool("search_memory", {}, turn.context);
@@ -737,6 +743,106 @@ function stubTurn(overrides = {}) {
     ...overrides,
   });
   return sent;
+}
+
+section("Auto Reply accepts only literal global memory decision booleans");
+{
+  const permissions = require("./src/utils/permissions.cjs");
+  const store = require("./src/db/store.cjs");
+  const { resolveCaller } = require("./src/services/aiToolAuth.cjs");
+  const { globalMemoryAccess } = require("./src/services/memoryPolicy.cjs");
+  const { buildSystemInstruction } = require("./src/services/aiAgent.cjs");
+  const memory = require("./src/utils/memory.cjs");
+  const marker = "AUTOREPLY_GLOBAL_DECISION_08I";
+  const entry = memory.addMemory({ scope: "global", content: marker });
+  // A write field, from an old config or a forged decision, never grants a write.
+  const cases = [
+    ["missing", undefined, false],
+    ["empty", {}, false],
+    ["read", { read: true }, true],
+    ["write", { write: true }, false],
+    ["read and write", { read: true, write: true }, true],
+    ["strings", { read: "true", write: "true" }, false],
+    ["numbers", { read: 1, write: 1 }, false],
+    ["mixed", { read: true, write: "true" }, true],
+    ["null", null, false],
+  ];
+  try {
+    for (const role of ["owner", "admin", "member"]) {
+      if (role !== "member") await permissions.grantRole(CHAT, role);
+      try {
+        for (const [name, globalMemory, read] of cases) {
+          let turn;
+          const sent = stubTurn({
+            accountEpoch: () => store.accountEpoch(),
+            resolveCaller,
+            runAgent: async ({ context }) => {
+              turn = context;
+              return { text: "ok" };
+            },
+          });
+          await autoReply.dispatch(
+            runtime({ consider: async () => ({ reply: true, globalMemory }) }),
+            sock,
+            dm("hi", { id: `global-${role}-${name}` }),
+            store.accountEpoch(),
+          );
+          equal(`${role}/${name}: turn delivered`, sent.length, 1);
+          equal(`${role}/${name}: read decision`, turn?.autoReplyGlobal.read, read);
+          equal(
+            `${role}/${name}: decision has no write field`,
+            Object.keys(turn?.autoReplyGlobal ?? {}).join(),
+            "read",
+          );
+          ok(`${role}/${name}: frozen decision`, Object.isFrozen(turn?.autoReplyGlobal));
+          equal(`${role}/${name}: chat-scoped turn`, turn?.memoryScope, "chat");
+          const access = globalMemoryAccess(turn);
+          equal(`${role}/${name}: read policy`, access.read, read);
+          equal(`${role}/${name}: write policy`, access.write, false);
+          equal(
+            `${role}/${name}: global prompt`,
+            buildSystemInstruction(turn).includes(marker),
+            read,
+          );
+        }
+      } finally {
+        if (role !== "member") await permissions.revokeRole(CHAT, role);
+      }
+    }
+  } finally {
+    memory.removeMemory({ scope: "global", ref: entry.id });
+    reset();
+  }
+}
+
+section("the linked owner never starts an Auto Reply turn, so no grant writes global memory");
+{
+  let considered = 0;
+  let turns = 0;
+  const sent = stubTurn({
+    runAgent: async () => {
+      turns++;
+      return { text: "ok" };
+    },
+  });
+  const granted = runtime({
+    consider: async () => {
+      considered++;
+      return { reply: true, globalMemory: { read: true, write: true } };
+    },
+  });
+  await autoReply.dispatch(
+    granted,
+    sock,
+    dm("remember this for every chat", { key: { fromMe: true, id: "own-write" } }),
+    1,
+  );
+  autoReply.setAutoReplyDeps({ isLinkedSelf: () => true });
+  await autoReply.dispatch(granted, sock, dm("remember this", { id: "linked-write" }), 1);
+  equal("own messages never reach the runtime", considered, 0);
+  equal("own messages never start a turn", turns, 0);
+  equal("own messages get no reply", sent.length, 0);
+  reset();
 }
 
 section("replay claims cover concurrent and completed redeliveries");

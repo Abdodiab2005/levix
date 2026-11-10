@@ -96,6 +96,8 @@ module.exports = {
       reply(t("bot.ai.memory.denied"));
 
     try {
+      if (scope === "global" && !botPrivileged) return denied();
+
       // ---------------------------------------------------------------- add
       if (["add", "save", "احفظ", "ضيف", "اضف"].includes(action)) {
         const content = rest.join(" ").trim();
@@ -125,7 +127,7 @@ module.exports = {
           return reply(t("bot.ai.memory.searchPrompt"));
         }
         const chatHits = memory.searchMemory(query, { scope: "chat", chatId });
-        const globalHits = memory.searchMemory(query, { scope: "global" });
+        const globalHits = botPrivileged ? memory.searchMemory(query, { scope: "global" }) : [];
 
         if (!chatHits.length && !globalHits.length) {
           return reply(t("bot.ai.memory.searchNone", { query }));
@@ -134,8 +136,10 @@ module.exports = {
           t("bot.ai.memory.searchResults", { query }) +
             t("bot.ai.memory.searchChatHeader", { count: chatHits.length }) +
             `${formatEntries(chatHits, { limit: 10 })}\n\n` +
-            t("bot.ai.memory.searchGlobalHeader", { count: globalHits.length }) +
-            formatEntries(globalHits, { limit: 10 }),
+            (botPrivileged
+              ? t("bot.ai.memory.searchGlobalHeader", { count: globalHits.length }) +
+                formatEntries(globalHits, { limit: 10 })
+              : ""),
         );
       }
 

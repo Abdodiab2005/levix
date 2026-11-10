@@ -186,8 +186,8 @@ function createExtensionHost(opts = {}) {
   }
 
   function invalidateScope() {
+    autoReply.abortAccountJobs();
     refreshScope();
-    autoReply.abortOutOfScope(scopeSet);
   }
 
   function runtimeView() {

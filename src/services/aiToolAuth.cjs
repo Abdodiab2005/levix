@@ -118,6 +118,11 @@ function isTrustedCaller(caller) {
   return Boolean(caller) && typeof caller === "object" && minted.has(caller);
 }
 
+/** A verified caller still belongs to the account that started its turn. */
+function isCurrentCaller(caller) {
+  return isTrustedCaller(caller) && authorityByCaller.get(caller)?.epoch === accountEpoch();
+}
+
 /**
  * May `caller` use a tool whose access rule is `access`?
  *
@@ -131,10 +136,10 @@ function authorize(access, caller) {
     return { allowed: false, error: "this action needs a verified sender, and there is none" };
   }
 
-  const authority = authorityByCaller.get(caller);
-  if (authority.epoch !== accountEpoch()) {
+  if (!isCurrentCaller(caller)) {
     return { allowed: false, error: "the linked WhatsApp account changed during this request" };
   }
+  const authority = authorityByCaller.get(caller);
   // Expiry must not revive an admin snapshot after a newer roster was observed.
   let metadata = null;
   if (!isRosterStale(caller.chatId)) {
@@ -178,4 +183,4 @@ function authorize(access, caller) {
   return { allowed: true };
 }
 
-module.exports = { resolveCaller, isTrustedCaller, callerAudio, authorize, ROLES };
+module.exports = { resolveCaller, isTrustedCaller, isCurrentCaller, callerAudio, authorize, ROLES };
