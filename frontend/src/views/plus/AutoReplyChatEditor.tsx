@@ -52,8 +52,7 @@ export function AutoReplyChatEditor({
   const [perSender, setPerSender] = useState(String(chat?.perSenderPerHour ?? 10));
   const [perChat, setPerChat] = useState(String(chat?.perChatPerHour ?? 30));
   const [globalMemoryRead, setGlobalMemoryRead] = useState(chat?.globalMemory?.read ?? false);
-  const [globalMemoryWrite, setGlobalMemoryWrite] = useState(chat?.globalMemory?.write ?? false);
-  const [confirmMemory, setConfirmMemory] = useState<"read" | "write" | null>(null);
+  const [confirmMemory, setConfirmMemory] = useState(false);
   const [jidError, setJidError] = useState<string | null>(null);
   const [keywordError, setKeywordError] = useState<string | null>(null);
   const [cooldownError, setCooldownError] = useState<string | null>(null);
@@ -121,10 +120,7 @@ export function AutoReplyChatEditor({
       cooldownSeconds: cooldownValue,
       perSenderPerHour: senderValue,
       perChatPerHour: chatValue,
-      globalMemory: {
-        read: globalMemoryRead,
-        write: globalMemoryWrite,
-      },
+      globalMemory: { read: globalMemoryRead },
     });
   }
 
@@ -234,20 +230,9 @@ export function AutoReplyChatEditor({
               label={t("plusAutoReplyGlobalMemoryRead")}
               onChange={(checked) => {
                 if (checked) {
-                  setConfirmMemory("read");
+                  setConfirmMemory(true);
                 } else {
                   setGlobalMemoryRead(false);
-                }
-              }}
-            />
-            <Toggle
-              checked={globalMemoryWrite}
-              label={t("plusAutoReplyGlobalMemoryWrite")}
-              onChange={(checked) => {
-                if (checked) {
-                  setConfirmMemory("write");
-                } else {
-                  setGlobalMemoryWrite(false);
                 }
               }}
             />
@@ -314,19 +299,14 @@ export function AutoReplyChatEditor({
         </form>
       </Dialog>
       <ConfirmDialog
-        isOpen={confirmMemory !== null}
-        onClose={() => setConfirmMemory(null)}
+        isOpen={confirmMemory}
+        onClose={() => setConfirmMemory(false)}
         onConfirm={() => {
-          if (confirmMemory === "read") setGlobalMemoryRead(true);
-          if (confirmMemory === "write") setGlobalMemoryWrite(true);
-          setConfirmMemory(null);
+          setGlobalMemoryRead(true);
+          setConfirmMemory(false);
         }}
         title={t("plusAutoReplyGlobalMemoryConfirmTitle")}
-        description={
-          confirmMemory === "write"
-            ? t("plusAutoReplyGlobalMemoryWriteWarning")
-            : t("plusAutoReplyGlobalMemoryReadWarning")
-        }
+        description={t("plusAutoReplyGlobalMemoryReadWarning")}
         confirmLabel={t("turnOn")}
         cancelLabel={t("cancel")}
         variant="primary"
