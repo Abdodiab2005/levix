@@ -1,9 +1,9 @@
 {
   "pt-BR/dashboard": {
     "status": "draft",
-    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex; terminology pass over all 164 pt-BR and es-419 reaction strings by OpenCode deepseek-v4.1-flash on 2026-11-09, 5 es-419 fixes), pending ChatGPT review under Q-19; not native-speaker verified; Phase 07.5e connectionUnlinkIncomplete, connectionUnlinkIncompleteHint, and connectionUnlinkRetry added 2026-11-09 are a machine draft, not a new ChatGPT review; Phase 07.5f reactionAutomationChanged added 2026-11-09 is a machine draft, not a ChatGPT review; Phase 08c Plus billing strings added 2026-11-10 are a machine draft, pending Q-19 review",
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex; terminology pass over all 164 pt-BR and es-419 reaction strings by OpenCode deepseek-v4.1-flash on 2026-11-09, 5 es-419 fixes), pending ChatGPT review under Q-19; not native-speaker verified; Phase 07.5e connectionUnlinkIncomplete, connectionUnlinkIncompleteHint, and connectionUnlinkRetry added 2026-11-09 are a machine draft, not a new ChatGPT review; Phase 07.5f reactionAutomationChanged added 2026-11-09 is a machine draft, not a ChatGPT review; 2026-11-10 ChatGPT targeted Q-19 semantic review and corrections of Phase 07c/07.5 reaction or linked-owner strings; older strings and native-speaker certification remain outstanding; Phase 08c Plus billing strings added 2026-11-10 are a machine draft, pending Q-19 review",
     "date": "2026-11-10",
-    "sha256": "32409c74af5512fde5fb5b2381f0ab79bba4463f72d2c66bec4fa1d542b0eb6e"
+    "sha256": "75807b45e8366007c540bf241b377a16496b877f5b49bd42ea567efdd4b62174"
   },
   "pt-BR/gateway": {
     "status": "draft",
@@ -13,9 +13,9 @@
   },
   "es-419/dashboard": {
     "status": "draft",
-    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex; terminology pass over all 164 pt-BR and es-419 reaction strings by OpenCode deepseek-v4.1-flash on 2026-11-09, 5 es-419 fixes), pending ChatGPT review under Q-19; not native-speaker verified; Phase 07.5e connectionUnlinkIncomplete, connectionUnlinkIncompleteHint, and connectionUnlinkRetry added 2026-11-09 are a machine draft, not a new ChatGPT review; Phase 07.5f reactionAutomationChanged added 2026-11-09 is a machine draft, not a ChatGPT review; Phase 08c Plus billing strings added 2026-11-10 are a machine draft, pending Q-19 review",
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex; terminology pass over all 164 pt-BR and es-419 reaction strings by OpenCode deepseek-v4.1-flash on 2026-11-09, 5 es-419 fixes), pending ChatGPT review under Q-19; not native-speaker verified; Phase 07.5e connectionUnlinkIncomplete, connectionUnlinkIncompleteHint, and connectionUnlinkRetry added 2026-11-09 are a machine draft, not a new ChatGPT review; Phase 07.5f reactionAutomationChanged added 2026-11-09 is a machine draft, not a ChatGPT review; 2026-11-10 ChatGPT targeted Q-19 semantic review and corrections of Phase 07c/07.5 reaction or linked-owner strings; older strings and native-speaker certification remain outstanding; Phase 08c Plus billing strings added 2026-11-10 are a machine draft, pending Q-19 review",
     "date": "2026-11-10",
-    "sha256": "8391825ef73b9bcde50524155daa519d129011352362695d5c7b9be8ec3d60d8"
+    "sha256": "46468f35c95752b2cb7c57d6761230c12fd09db268e9dddf0dabce994596da81"
   },
   "es-419/gateway": {
     "status": "draft",
@@ -91,9 +91,9 @@
   },
   "pt-BR/bot/tools": {
     "status": "draft",
-    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review; Phase 07.5d perm.selfOwner is a machine draft, pending Q-19 review",
-    "date": "2026-11-02",
-    "sha256": "b9c9afdabee037a25f50c68f8405fc7240f513920d377925382a7564299725bf"
+    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review; Phase 07.5d perm.selfOwner is a machine draft, pending Q-19 review; 2026-11-10 ChatGPT targeted Q-19 semantic review and corrections of Phase 07c/07.5 reaction or linked-owner strings; older strings and native-speaker certification remain outstanding",
+    "date": "2026-11-10",
+    "sha256": "1d4ce0a551148552f8fcc84ff3abb8a4dee4bb41b69f07cbc83f6a27698ba6f7"
   },
   "es-419/commands": {
     "status": "draft",
@@ -151,8 +151,8 @@
   },
   "es-419/bot/tools": {
     "status": "draft",
-    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review; Phase 07.5d perm.selfOwner is a machine draft, pending Q-19 review",
-    "date": "2026-11-02",
-    "sha256": "16068aeafc5ebd804dcc599c270372eb6bf0645e64a2956d688e953d648c537c"
+    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review; Phase 07.5d perm.selfOwner is a machine draft, pending Q-19 review; 2026-11-10 ChatGPT targeted Q-19 semantic review and corrections of Phase 07c/07.5 reaction or linked-owner strings; older strings and native-speaker certification remain outstanding",
+    "date": "2026-11-10",
+    "sha256": "4a79cffa557a704b3bb9a6ce0ecb92afb738235c87661831a06cb3951d95b9c0"
   }
 }
