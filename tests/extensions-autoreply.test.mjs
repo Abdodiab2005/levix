@@ -1,7 +1,8 @@
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { equal, finish, ok, require, ROOT, section, throws, useTempDataDir } from "./harness.mjs";
 
-useTempDataDir("levix-extensions-autoreply");
+const dataDir = useTempDataDir("levix-extensions-autoreply");
 
 const settings = require("./src/config/settings.cjs");
 settings.set("bot_min_delay_ms", 0);
@@ -443,7 +444,7 @@ section("one per chat in flight");
   equal("first text", sent[0], "first");
 }
 
-section("global memory excluded option and owner chat");
+section("every Auto Reply turn uses chat-only memory");
 {
   const seen = [];
   reset();
@@ -461,7 +462,7 @@ section("global memory excluded option and owner chat");
         isGroup: opts.msg.key.remoteJid.endsWith("@g.us"),
         senderId: opts.msg.key.participant || opts.msg.key.remoteJid,
         senderName: "n",
-        isOwner: !opts.msg.key.remoteJid.endsWith("@g.us"),
+        isOwner: opts.msg.pushName === "Owner",
         isBotAdmin: false,
         chatName: null,
       }),
@@ -476,12 +477,174 @@ section("global memory excluded option and owner chat");
     },
     settingsGet: () => 5000,
   });
-  await autoReply.dispatch(runtime(), sock, groupMsg("hi", { id: "gmem" }), 1);
-  await autoReply.dispatch(runtime(), sock, dm("hi", { id: "omem" }), 1);
-  equal("group excludes global", seen[0].includeGlobalMemory, false);
-  equal("group memory tools restricted", seen[0].memoryScope, "chat");
-  equal("owner private includes global", seen[1].includeGlobalMemory, true);
-  equal("owner private memory tools unchanged", seen[1].memoryScope, undefined);
+  const cases = [
+    ["member group", groupMsg("hi", { id: "gmem" })],
+    ["owner group", { ...groupMsg("hi", { id: "ogmem" }), pushName: "Owner" }],
+    ["member private", dm("hi", { id: "mem" })],
+    ["owner private", { ...dm("hi", { id: "omem" }), pushName: "Owner" }],
+  ];
+  for (const [, msg] of cases) await autoReply.dispatch(runtime(), sock, msg, 1);
+  equal("all caller cases reached the agent", seen.length, cases.length);
+  for (const [index, [name]] of cases.entries()) {
+    equal(`${name} excludes global`, seen[index]?.includeGlobalMemory, false);
+    equal(`${name} memory tools restricted`, seen[index]?.memoryScope, "chat");
+  }
+}
+
+section("owner private Auto Reply cannot expose global memory; explicit AI commands retain it");
+{
+  const memory = require("./src/utils/memory.cjs");
+  const store = require("./src/db/store.cjs");
+  const permissions = await import("../src/utils/permissions.esm.js");
+  const { isLinkedSelf, linkedIdentity } = require("./src/messaging/identity.cjs");
+  const { runTool } = require("./src/services/aiTools.cjs");
+  const agent = require("./src/services/aiAgent.cjs");
+  const gemini = require("./src/commands/gemini.cjs");
+  const previousProvider = settings.get("ai_provider");
+  const previousCreds = store.authRead("creds");
+  const provider = agent.getProvider("gemini");
+  const originalRunTurn = provider.runTurn;
+  const originalIsConfigured = provider.isConfigured;
+  const seen = [];
+  const marker = "AUTOREPLY_PRIVATE_GLOBAL_SECRET_08A";
+  const chatMarker = "AUTOREPLY_CHAT_MEMORY_CONTROL_08A";
+  const globalEntry = memory.addMemory({ scope: "global", content: marker });
+  const chatEntry = memory.addMemory({ chatId: CHAT, content: chatMarker });
+  const globalFile = join(dataDir, "memory", "global.md");
+  const globalBefore = readFileSync(globalFile, "utf8");
+  equal("sensitive marker is in the test data directory", globalEntry.file, globalFile);
+  ok("global file contains the sensitive marker", globalBefore.includes(marker));
+
+  reset();
+  settings.set("ai_provider", "gemini");
+  store.authWrite("creds", JSON.stringify({ registered: true, me: { id: sock.user.id } }));
+  permissions.grantRole(CHAT, "owner");
+  provider.isConfigured = () => true;
+  provider.runTurn = async (options) => {
+    seen.push(options);
+    return { text: "ok", history: [] };
+  };
+  autoReply.setAutoReplyDeps({
+    getMessageFromRecent: async () => undefined,
+    settingsGet: () => 5000,
+    sendBotMessage: async (_sock, _jid, _content, options) => {
+      await options.deliveryGuard.refresh();
+      options.deliveryGuard.assert();
+    },
+  });
+  try {
+    const identity = linkedIdentity();
+    ok("paired account has a linked identity", Boolean(identity.phone));
+    equal(
+      "sender is a different owner from the linked account",
+      isLinkedSelf(CHAT, identity),
+      false,
+    );
+    const epoch = store.accountEpoch();
+    const rt = runtime({ getScope: () => new Set([CHAT, identity.phone]) });
+    await autoReply.dispatch(
+      rt,
+      sock,
+      dm("hello", { key: { remoteJid: identity.phone, id: "linked-self-memory" } }),
+      epoch,
+    );
+    equal("linked account itself is never forwarded", seen.length, 0);
+    await autoReply.dispatch(rt, sock, dm("hello", { id: "owner-private-memory" }), epoch);
+    equal("other owner's private message reached the model", seen.length, 1);
+    const turn = seen[0];
+    equal("real caller is an owner", turn.context.caller.isOwner, true);
+    equal("real caller is the private sender", turn.context.caller.senderId, CHAT);
+    equal(
+      "Auto Reply prompt excludes sensitive global memory",
+      turn.systemInstruction.includes(marker),
+      false,
+    );
+    ok(
+      "Auto Reply prompt includes this chat's memory",
+      turn.systemInstruction.includes(chatMarker),
+    );
+    equal("Auto Reply disables global memory", turn.context.includeGlobalMemory, false);
+    equal("Auto Reply restricts memory tools", turn.context.memoryScope, "chat");
+    for (const [tool, args] of [
+      ["search_memory", { scope: "all" }],
+      ["search_memory", { scope: "global" }],
+      ["save_memory", { scope: "global", content: "must not be saved" }],
+      ["forget_memory", { scope: "global", ref: globalEntry.id }],
+      ["summarize_chat", { scope: "global" }],
+    ]) {
+      const result = await runTool(tool, args, turn.context);
+      equal(
+        `${tool}/${args.scope}: normal scope refusal`,
+        JSON.stringify(result),
+        JSON.stringify({ error: "only chat memory is available", denied: true }),
+      );
+    }
+    const chatOnly = await runTool("search_memory", {}, turn.context);
+    equal(
+      "omitted scope returns only chat data, with no global count",
+      JSON.stringify(Object.keys(chatOnly)),
+      JSON.stringify(["chat"]),
+    );
+    equal("omitted scope returns the chat fact", chatOnly.chat?.[0]?.content, chatMarker);
+    equal(
+      "omitted scope never returns the sensitive marker",
+      JSON.stringify(chatOnly).includes(marker),
+      false,
+    );
+    equal(
+      "omitted scope cannot delete a global entry",
+      (await runTool("forget_memory", { ref: globalEntry.id }, turn.context)).removed,
+      false,
+    );
+    equal(
+      "Auto Reply tools leave the global file untouched",
+      readFileSync(globalFile, "utf8"),
+      globalBefore,
+    );
+
+    for (const [index, invokedName] of ["ai", "gemini", "ask"].entries()) {
+      const body = `!${invokedName} hello`;
+      await gemini.execute(
+        sock,
+        dm(body, { id: `explicit-${invokedName}-memory` }),
+        ["hello"],
+        body,
+        null,
+        { invokedName },
+      );
+      equal(`${invokedName}: command reached the model`, seen.length, index + 2);
+      const explicit = seen.at(-1);
+      equal(`${invokedName}: real caller remains the owner`, explicit.context.caller.isOwner, true);
+      ok(
+        `${invokedName}: owner prompt still includes global memory`,
+        explicit.systemInstruction.includes(marker),
+      );
+      ok(
+        `${invokedName}: owner prompt still includes chat memory`,
+        explicit.systemInstruction.includes(chatMarker),
+      );
+      equal(
+        `${invokedName}: no Auto Reply memory restriction`,
+        explicit.context.memoryScope,
+        undefined,
+      );
+      equal(
+        `${invokedName}: global memory tools remain available`,
+        (await runTool("search_memory", { scope: "all" }, explicit.context)).global?.[0]?.content,
+        marker,
+      );
+    }
+  } finally {
+    reset();
+    provider.runTurn = originalRunTurn;
+    provider.isConfigured = originalIsConfigured;
+    settings.set("ai_provider", previousProvider);
+    permissions.revokeRole(CHAT, "owner");
+    if (previousCreds === null) store.authRemove("creds");
+    else store.authWrite("creds", previousCreds);
+    memory.removeMemory({ scope: "global", ref: globalEntry.id });
+    memory.removeMemory({ chatId: CHAT, ref: chatEntry.id });
+  }
 }
 
 section("tool authorization uses the real sender caller");
