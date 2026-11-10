@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { equal, finish, ok, require, section, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("levix-extensions-tools");
@@ -7,7 +8,7 @@ settings.set("bot_min_delay_ms", 0);
 settings.set("bot_max_delay_ms", 0);
 const { timing } = await import("../src/utils/sendBotMessage.esm.js");
 timing.sleep = async () => {};
-const { runTool } = require("./src/services/aiTools.cjs");
+const { runTool, TOOLS } = require("./src/services/aiTools.cjs");
 const { resolveCaller } = require("./src/services/aiToolAuth.cjs");
 const memory = require("./src/utils/memory.cjs");
 const config = require("./src/config/runtime-config.cjs");
@@ -33,7 +34,7 @@ async function callerFor(sock, fromMe = true) {
   });
 }
 
-section("chat-only memory cannot read, write, delete or summarize global scope");
+section("chat-only memory cannot read, write or delete global scope");
 {
   const caller = await callerFor({});
   const saved = await runTool(
@@ -47,7 +48,6 @@ section("chat-only memory cannot read, write, delete or summarize global scope")
       ["search_memory", {}],
       ["save_memory", { content: "must not be saved" }],
       ["forget_memory", { ref: saved.id }],
-      ["summarize_chat", {}],
     ]) {
       const result = await runTool(tool, { ...args, scope }, { caller, memoryScope: "chat" });
       equal(`${tool}/${scope}: denied`, result.denied, true);
@@ -82,56 +82,41 @@ section("chat-only memory cannot read, write, delete or summarize global scope")
   );
 
   const globalBefore = JSON.stringify(memory.listMemory({ scope: "global" }));
-  const originalGetProvider = router.getProvider;
-  router.getProvider = () => ({ runTurn: async () => ({ text: "- chat summary fact" }) });
-  store.saveChatHistory(caller.chatId, [
-    { role: "user", parts: [{ text: "remember a fact from this chat" }] },
-  ]);
-  try {
-    for (const [name, args] of [
-      ["omitted", {}],
-      ["undefined", { scope: undefined }],
-      ["null", { scope: null }],
-      ["empty", { scope: "" }],
-    ]) {
-      const context = { caller, memoryScope: "chat" };
-      const savedChat = await runTool(
-        "save_memory",
-        { ...args, content: "default chat fact" },
-        context,
-      );
-      equal(`${name}: save defaults to chat`, savedChat.scope, "chat");
-      const found = await runTool("search_memory", args, context);
-      equal(
-        `${name}: search returns only chat data, no global data or count`,
-        JSON.stringify(Object.keys(found)),
-        JSON.stringify(["chat"]),
-      );
-      equal(`${name}: search returns the chat fact`, found.chat?.[0]?.content, "default chat fact");
-      equal(
-        `${name}: global id cannot delete global memory`,
-        (await runTool("forget_memory", { ...args, ref: saved.id }, context)).removed,
-        false,
-      );
-      const summary = await runTool("summarize_chat", args, context);
-      equal(`${name}: summary defaults to chat`, summary.scope, "chat");
-      equal(`${name}: summary saves a chat fact`, summary.saved, 1);
-      equal(
-        `${name}: global entries stay unchanged`,
-        JSON.stringify(memory.listMemory({ scope: "global" })),
-        globalBefore,
-      );
-      equal(
-        `${name}: delete defaults to chat`,
-        (await runTool("forget_memory", { ...args, ref: savedChat.id }, context)).removed,
-        true,
-      );
-      for (const ref of summary.ids || []) {
-        await runTool("forget_memory", { ...args, ref }, context);
-      }
-    }
-  } finally {
-    router.getProvider = originalGetProvider;
+  for (const [name, args] of [
+    ["omitted", {}],
+    ["undefined", { scope: undefined }],
+    ["null", { scope: null }],
+    ["empty", { scope: "" }],
+  ]) {
+    const context = { caller, memoryScope: "chat" };
+    const savedChat = await runTool(
+      "save_memory",
+      { ...args, content: "default chat fact" },
+      context,
+    );
+    equal(`${name}: save defaults to chat`, savedChat.scope, "chat");
+    const found = await runTool("search_memory", args, context);
+    equal(
+      `${name}: search returns only chat data, no global data or count`,
+      JSON.stringify(Object.keys(found)),
+      JSON.stringify(["chat"]),
+    );
+    equal(`${name}: search returns the chat fact`, found.chat?.[0]?.content, "default chat fact");
+    equal(
+      `${name}: global id cannot delete global memory`,
+      (await runTool("forget_memory", { ...args, ref: saved.id }, context)).removed,
+      false,
+    );
+    equal(
+      `${name}: global entries stay unchanged`,
+      JSON.stringify(memory.listMemory({ scope: "global" })),
+      globalBefore,
+    );
+    equal(
+      `${name}: delete defaults to chat`,
+      (await runTool("forget_memory", { ...args, ref: savedChat.id }, context)).removed,
+      true,
+    );
   }
   const ordinary = await runTool("search_memory", { scope: "all" }, { caller });
   equal("flag absent preserves global reads", ordinary.global[0]?.content, "global secret");
@@ -152,6 +137,129 @@ section("chat-only memory cannot read, write, delete or summarize global scope")
     );
   } finally {
     config.setPermission("memory", null);
+  }
+}
+
+section("chat-only memory tools refuse a missing or empty chat ID");
+{
+  const entry = memory.addMemory({ scope: "global", content: "global fallback secret" });
+  const before = readFileSync(entry.file, "utf8");
+  try {
+    for (const chatId of [undefined, null, ""]) {
+      for (const scope of [undefined, "chat"]) {
+        for (const [tool, args] of [
+          ["save_memory", { content: "must not reach global memory" }],
+          ["search_memory", {}],
+          ["forget_memory", { ref: entry.id }],
+        ]) {
+          // resolveCaller cannot mint an empty chat ID. Call the handlers
+          // directly so generic caller authentication cannot mask this guard.
+          const result = await TOOLS[tool].run(
+            { ...args, scope },
+            { caller: { chatId }, memoryScope: "chat" },
+          );
+          equal(
+            `${tool}/${String(chatId)}/${String(scope)}: normal refusal without global data`,
+            JSON.stringify(result),
+            JSON.stringify({ error: "only chat memory is available", denied: true }),
+          );
+          equal(
+            `${tool}/${String(chatId)}/${String(scope)}: global.md stays unchanged`,
+            readFileSync(entry.file, "utf8"),
+            before,
+          );
+        }
+      }
+    }
+  } finally {
+    memory.removeMemory({ scope: "global", ref: entry.id });
+  }
+}
+
+section("chat-only turns cannot summarize stored explicit-command history");
+{
+  const caller = await callerFor({});
+  const historyHub = require("./src/utils/storage-hub.cjs");
+  const marker = "AUTOREPLY_PRIVATE_GLOBAL_SECRET_08A";
+  store.saveChatHistory(caller.chatId, [
+    { role: "user", parts: [{ text: "!ai recall my global memory" }] },
+    { role: "model", parts: [{ text: `Your global memory says: ${marker}` }] },
+  ]);
+  const chatBefore = JSON.stringify(memory.listMemory({ chatId: caller.chatId }));
+  const globalBefore = JSON.stringify(memory.listMemory({ scope: "global" }));
+  const originalGetHistory = historyHub.getChatHistoryAsync;
+  const originalGetProvider = router.getProvider;
+  const originalAddMemory = memory.addMemory;
+  let historyReads = 0;
+  let summaries = 0;
+  let writes = 0;
+  let transcript = "";
+  let explicit;
+  historyHub.getChatHistoryAsync = async (...args) => {
+    historyReads += 1;
+    return originalGetHistory(...args);
+  };
+  router.getProvider = () => ({
+    async runTurn(options) {
+      summaries += 1;
+      transcript = options.parts[0].text;
+      return { text: `- ${marker}` };
+    },
+  });
+  memory.addMemory = (...args) => {
+    writes += 1;
+    return originalAddMemory(...args);
+  };
+  try {
+    for (const args of [
+      {},
+      { scope: undefined },
+      { scope: null },
+      { scope: "" },
+      ...["chat", "global", "all", "GLOBAL", "ALL", "shared", "SHARED", "عام", "عالمي"].map(
+        (scope) => ({ scope }),
+      ),
+    ]) {
+      const result = await runTool("summarize_chat", args, { caller, memoryScope: "chat" });
+      equal(
+        `${String(args.scope)}: normal refusal without leaked facts`,
+        JSON.stringify(result),
+        JSON.stringify({ error: "stored chat history is unavailable in this turn", denied: true }),
+      );
+      equal(`${String(args.scope)}: history is not read`, historyReads, 0);
+      equal(`${String(args.scope)}: summarizer is not called`, summaries, 0);
+      equal(`${String(args.scope)}: memory is not written`, writes, 0);
+    }
+    equal(
+      "chat memory stays unchanged",
+      JSON.stringify(memory.listMemory({ chatId: caller.chatId })),
+      chatBefore,
+    );
+    equal(
+      "global memory stays unchanged",
+      JSON.stringify(memory.listMemory({ scope: "global" })),
+      globalBefore,
+    );
+
+    explicit = await runTool("summarize_chat", {}, { caller });
+    equal("explicit owner turn still reads history", historyReads, 1);
+    equal("explicit owner turn still calls the summarizer", summaries, 1);
+    ok("explicit transcript still contains the stored answer", transcript.includes(marker));
+    equal("explicit summary still defaults to chat memory", explicit.scope, "chat");
+    equal("explicit summary still saves its fact", explicit.saved, 1);
+    equal("explicit summary writes once", writes, 1);
+    equal("explicit summary returns the fact", explicit.facts?.[0], marker);
+    equal(
+      "explicit summary stores the fact",
+      memory.listMemory({ chatId: caller.chatId })[0]?.content,
+      marker,
+    );
+  } finally {
+    historyHub.getChatHistoryAsync = originalGetHistory;
+    router.getProvider = originalGetProvider;
+    memory.addMemory = originalAddMemory;
+    store.deleteChatHistory(caller.chatId);
+    for (const ref of explicit?.ids || []) memory.removeMemory({ chatId: caller.chatId, ref });
   }
 }
 

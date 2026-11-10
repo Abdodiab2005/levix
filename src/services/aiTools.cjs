@@ -363,8 +363,9 @@ function scopeOf(args) {
   return memory.normalizeScope(args?.scope);
 }
 
-function memoryScopeDenied(args, memoryScope) {
-  return memoryScope === "chat" && scopeOf(args) === "global";
+function memoryScopeDenied(args, memoryScope, caller) {
+  // The memory store falls back to global.md when there is no chat ID.
+  return memoryScope === "chat" && (!caller?.chatId || scopeOf(args) === "global");
 }
 
 // A role change may only target someone the sender themselves named: a
@@ -557,7 +558,7 @@ const TOOLS = {
       role: scopeOf(args) === "global" ? "botPrivileged" : undefined,
     }),
     async run(args, { caller, memoryScope, deliveryGuard }) {
-      if (memoryScopeDenied(args, memoryScope)) {
+      if (memoryScopeDenied(args, memoryScope, caller)) {
         return { error: "only chat memory is available", denied: true };
       }
       const scope = scopeOf(args);
@@ -601,7 +602,7 @@ const TOOLS = {
     // `!memory search` reads both scopes for anyone who may run `!memory`.
     access: { command: "memory" },
     async run(args, { caller, memoryScope }) {
-      if (memoryScopeDenied(args, memoryScope)) {
+      if (memoryScopeDenied(args, memoryScope, caller)) {
         return { error: "only chat memory is available", denied: true };
       }
       const wanted = String(args?.scope || "chat").toLowerCase();
@@ -641,7 +642,7 @@ const TOOLS = {
       role: scopeOf(args) === "global" ? "botPrivileged" : "chatModerator",
     }),
     async run(args, { caller, memoryScope, deliveryGuard }) {
-      if (memoryScopeDenied(args, memoryScope)) {
+      if (memoryScopeDenied(args, memoryScope, caller)) {
         return { error: "only chat memory is available", denied: true };
       }
       const scope = scopeOf(args);
@@ -1273,8 +1274,10 @@ const TOOLS = {
       role: scopeOf(args) === "global" ? "botPrivileged" : undefined,
     }),
     async run(args, { caller, signal, memoryScope, deliveryGuard }) {
-      if (memoryScopeDenied(args, memoryScope)) {
-        return { error: "only chat memory is available", denied: true };
+      // Explicit-command history may quote global memory, even in this chat.
+      // Auto Reply cannot read or distill it into chat memory.
+      if (memoryScope === "chat") {
+        return { error: "stored chat history is unavailable in this turn", denied: true };
       }
       const scope = scopeOf(args);
       const { getChatHistoryAsync } = require("../utils/storage-hub.cjs");
