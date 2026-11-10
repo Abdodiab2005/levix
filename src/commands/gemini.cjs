@@ -37,7 +37,7 @@ const { sendBotMessage, sendBotError } = require("../utils/sendBotMessage.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const { formatMarkdownForWhatsApp } = require("../utils/markdownParser.cjs");
 const { isOwnerJidSync, getSenderCandidatesSync } = require("../utils/permissions.cjs");
-const { resolveCaller } = require("../services/aiToolAuth.cjs");
+const { resolveCaller, isCurrentCaller } = require("../services/aiToolAuth.cjs");
 const { globalMemoryAccess, stripMemoryToolParts } = require("../services/memoryPolicy.cjs");
 const { resolveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
 const { generateImage } = require("../services/aiImage.cjs");
@@ -633,6 +633,7 @@ module.exports = {
       rosterVersion: ctx?.rosterVersion,
       text: body || "",
     });
+    if (!isCurrentCaller(caller)) return;
     const agentContext = {
       caller,
       // Infrastructure, not identity: tools that post media (speak, poll)
@@ -671,7 +672,9 @@ module.exports = {
       chatRevision === (chatHistoryRevisions.get(chatId) || 0);
 
     async function attempt(historyOverride) {
+      if (!isCurrentCaller(caller)) return;
       const history = historyOverride ?? ((await getChatHistoryAsync(chatId)) || []);
+      if (!isCurrentCaller(caller)) return;
       const result = await runAgent({
         parts,
         history: globalMemoryAccess(agentContext).read ? history : stripMemoryToolParts(history),
@@ -689,11 +692,13 @@ module.exports = {
       try {
         result = await attempt();
       } catch (firstErr) {
+        if (!isCurrentCaller(caller)) return;
         // A dead fileData URI in the history poisons every later call — scrub
         // it once and retry so the user never sees the expiry.
         if (!isFileReferenceError(firstErr) || !canSaveHistory()) throw firstErr;
 
         const oldHistory = (await getChatHistoryAsync(chatId)) || [];
+        if (!isCurrentCaller(caller)) return;
         const cleaned = sanitizeHistoryForFiles(oldHistory);
         if (!canSaveHistory()) throw firstErr;
         await saveChatHistoryAsync(chatId, cleaned);
@@ -703,6 +708,7 @@ module.exports = {
         result = await attempt(cleaned);
       }
 
+      if (!result) return;
       const text = result.text?.trim() || t("bot.ai.gemini.noAnswer");
       // Appended only when Gemini really grounded the answer on a search —
       // formatSources() returns "" for an answer the model gave from its own

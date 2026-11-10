@@ -1,12 +1,12 @@
 // Server-owned global memory grants. Caller identity comes only from aiToolAuth;
 // settings are read on every check, including immediately before a tool writes.
 const settings = require("../config/settings.cjs");
-const { isTrustedCaller } = require("./aiToolAuth.cjs");
+const { isCurrentCaller } = require("./aiToolAuth.cjs");
 const { sameUserSync } = require("../utils/permissions.cjs");
 
 function globalMemoryAccess(context = {}) {
   const caller = context?.caller;
-  if (!isTrustedCaller(caller) || !caller.chatId) {
+  if (!isCurrentCaller(caller) || !caller.chatId) {
     return Object.freeze({ read: false, write: false });
   }
   if (context.memoryScope === "chat") {
@@ -40,8 +40,12 @@ function stripMemoryToolParts(history) {
   if (!Array.isArray(history)) return [];
   return history.flatMap((entry) => {
     if (!Array.isArray(entry?.parts)) return [];
+    // Text alongside a tool call was intermediate output, never a chat reply.
+    const intermediate = entry.role === "model" && entry.parts.some((part) => part?.functionCall);
     const parts = entry.parts.filter(
       (part) =>
+        part?.thought !== true &&
+        !(intermediate && typeof part?.text === "string") &&
         !MEMORY_TOOLS.has(part?.functionCall?.name) &&
         !MEMORY_TOOLS.has(part?.functionResponse?.name),
     );

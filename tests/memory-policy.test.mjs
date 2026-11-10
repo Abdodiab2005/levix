@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { runInNewContext } from "node:vm";
 import { equal, finish, ok, require, section, throws, useTempDataDir } from "./harness.mjs";
@@ -9,7 +9,7 @@ const settings = require("./src/config/settings.cjs");
 const store = require("./src/db/store.cjs");
 const permissions = require("./src/utils/permissions.cjs");
 await permissions.primePermissions();
-const { resolveCaller } = require("./src/services/aiToolAuth.cjs");
+const { resolveCaller, isCurrentCaller } = require("./src/services/aiToolAuth.cjs");
 const { globalMemoryAccess, stripMemoryToolParts } = require("./src/services/memoryPolicy.cjs");
 const { runTool } = require("./src/services/aiTools.cjs");
 const memory = require("./src/utils/memory.cjs");
@@ -78,6 +78,60 @@ function contextFor(caller, extra = {}) {
   return { caller, chatId: caller.chatId, isGroup: caller.isGroup, ...extra };
 }
 
+function historyWithUnsentMemory(provider) {
+  const callId = provider === "gemini" ? {} : { id: "memory-call" };
+  const calculateId = provider === "gemini" ? {} : { id: "calculate-call" };
+  return [
+    { role: "user", parts: [{ text: "hello" }, { text: GLOBAL, thought: true }] },
+    {
+      role: "model",
+      parts: [
+        { text: `Unsent memory text: ${GLOBAL}` },
+        { text: GLOBAL, thought: true, thoughtSignature: "private-thought" },
+        { functionCall: { ...callId, name: "search_memory" }, thoughtSignature: "memory-sig" },
+      ],
+    },
+    {
+      role: "user",
+      parts: [{ functionResponse: { ...callId, name: "search_memory", response: GLOBAL } }],
+    },
+    {
+      role: "model",
+      parts: [{ text: "earlier reply" }, { text: GLOBAL, thought: true }],
+    },
+    { role: "user", parts: [{ text: "calculate" }] },
+    {
+      role: "model",
+      parts: [
+        { text: `Unsent non-memory tool text: ${GLOBAL}` },
+        { text: GLOBAL, thought: true },
+        {
+          functionCall: { ...calculateId, name: "calculate", args: { expression: "1+1" } },
+          thoughtSignature: "calculate-sig",
+        },
+      ],
+    },
+    {
+      role: "user",
+      parts: [
+        {
+          functionResponse: { ...calculateId, name: "calculate", response: { result: 2 } },
+          thoughtSignature: "result-sig",
+        },
+      ],
+    },
+    { role: "model", parts: [{ text: "2" }] },
+  ];
+}
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 function roleAllows(value, role) {
   return (
     value === "everyone" ||
@@ -136,7 +190,7 @@ section("Free global memory policy matrix");
     module,
     require: (name) =>
       name === "./aiToolAuth.cjs"
-        ? { isTrustedCaller: (caller) => trusted.has(caller) }
+        ? { isCurrentCaller: (caller) => trusted.has(caller) }
         : localRequire(name),
   });
   const policy = module.exports.globalMemoryAccess;
@@ -286,6 +340,7 @@ section("unverified callers never gain global memory access");
   setPolicy("everyone", "privileged", "all");
   const owner = callers[0][2];
   for (const caller of [undefined, {}, { ...owner }]) {
+    equal("unminted caller is never current", isCurrentCaller(caller), false);
     const context = { caller, memoryScope: "chat", autoReplyGlobal: { read: true, write: true } };
     for (const ctx of [{ caller }, context]) {
       equal(
@@ -344,6 +399,79 @@ section("all three providers share the policy-gated system instruction");
     }
   }
   setPolicy();
+}
+
+section("global write results expose content only with live read access");
+{
+  const caller = await callerFor();
+  const original = {
+    add: memory.addMemory,
+    remove: memory.removeMemory,
+    history: historyHub.getChatHistoryAsync,
+    provider: router.getProvider,
+  };
+  let revokeRead = false;
+  memory.addMemory = () => ({ id: "saved", content: GLOBAL });
+  memory.removeMemory = () => {
+    if (revokeRead) settings.set("ai_global_memory_read", "off");
+    return { content: GLOBAL };
+  };
+  historyHub.getChatHistoryAsync = async () => [{ role: "user", parts: [{ text: "a fact" }] }];
+  router.getProvider = () => ({ runTurn: async () => ({ text: `- ${GLOBAL}` }) });
+  try {
+    for (const read of ["off", "owner"]) {
+      setPolicy(read, "owner", "all");
+      for (const scope of ALIASES) {
+        const label = `${read}/${scope}`;
+        const saved = await runTool("save_memory", { scope, content: GLOBAL }, { caller });
+        equal(`${label}: save succeeds`, saved.saved, true);
+        equal(
+          `${label}: save returns metadata only`,
+          JSON.stringify(saved).includes(GLOBAL),
+          false,
+        );
+        const removed = await runTool("forget_memory", { scope, ref: "1" }, { caller });
+        equal(`${label}: delete succeeds`, removed.removed, true);
+        equal(`${label}: delete has normalized scope`, removed.scope, "global");
+        equal(
+          `${label}: deleted content follows read grant`,
+          removed.content,
+          read === "off" ? undefined : GLOBAL,
+        );
+        const summary = await runTool("summarize_chat", { scope }, { caller });
+        equal(`${label}: summary saves`, summary.saved, 1);
+        equal(
+          `${label}: summary facts follow read grant`,
+          Object.hasOwn(summary, "facts"),
+          read !== "off",
+        );
+        equal(
+          `${label}: summary payload follows read grant`,
+          JSON.stringify(summary).includes(GLOBAL),
+          read !== "off",
+        );
+      }
+    }
+    setPolicy("off", "owner", "all");
+    const chat = await runTool("forget_memory", { scope: "chat", ref: "1" }, { caller });
+    equal("chat deletion still returns its content", chat.content, GLOBAL);
+
+    setPolicy("owner", "owner", "all");
+    revokeRead = true;
+    const removed = await runTool("forget_memory", { scope: "global", ref: "1" }, { caller });
+    equal("delete still succeeds after read revocation", removed.removed, true);
+    equal(
+      "delete rechecks read before returning content",
+      Object.hasOwn(removed, "content"),
+      false,
+    );
+  } finally {
+    memory.addMemory = original.add;
+    memory.removeMemory = original.remove;
+    historyHub.getChatHistoryAsync = original.history;
+    router.getProvider = original.provider;
+    setPolicy();
+  }
 }
 
 section("global writes recheck settings after the delivery guard");
@@ -430,6 +558,77 @@ section("summarize_chat rechecks policy before and after the model call");
       equal(`${boundary}: unchanged file`, readFileSync(memory.GLOBAL_FILE, "utf8"), before);
     }
   } finally {
+    historyHub.getChatHistoryAsync = original.history;
+    router.getProvider = original.provider;
+    setPolicy();
+  }
+}
+
+section("summaries strip unreadable history and gate returned facts by provenance");
+{
+  const caller = await callerFor();
+  const original = {
+    add: memory.addMemory,
+    history: historyHub.getChatHistoryAsync,
+    provider: router.getProvider,
+  };
+  let writes = 0;
+  memory.addMemory = () => {
+    writes += 1;
+    return { id: `summary-${writes}` };
+  };
+  try {
+    for (const provider of ["gemini", "openai", "anthropic"]) {
+      const history = historyWithUnsentMemory(provider);
+      historyHub.getChatHistoryAsync = async () => history;
+      for (const scope of ["chat", "global"]) {
+        setPolicy("off", "owner", "all");
+        let transcript;
+        router.getProvider = () => ({
+          runTurn: async (options) => {
+            transcript = options.parts[0].text;
+            return { text: "- safe chat fact" };
+          },
+        });
+        const summary = await runTool("summarize_chat", { scope }, { caller });
+        const label = `${provider}/${scope}`;
+        equal(`${label}: summary saved`, summary.saved, 1);
+        equal(`${label}: no hidden global text reaches model`, transcript?.includes(GLOBAL), false);
+        ok(`${label}: delivered reply retained`, transcript?.includes("Assistant: earlier reply"));
+        ok(`${label}: user text retained`, transcript?.includes("User: calculate"));
+        equal(
+          `${label}: facts returned only for stripped chat scope`,
+          Object.hasOwn(summary, "facts"),
+          scope === "chat",
+        );
+        if (scope === "chat") {
+          equal(`${label}: safe facts returned`, summary.facts?.[0], "safe chat fact");
+        }
+
+        setPolicy("owner", "owner", "all");
+        router.getProvider = () => ({
+          runTurn: async () => {
+            settings.set("ai_global_memory_read", "off");
+            return { text: `- ${GLOBAL}` };
+          },
+        });
+        const revoked = await runTool("summarize_chat", { scope }, { caller });
+        equal(`${label}: read revocation preserves write`, revoked.saved, 1);
+        equal(
+          `${label}: facts from unstripped history withheld`,
+          Object.hasOwn(revoked, "facts"),
+          false,
+        );
+        equal(
+          `${label}: no global-derived payload after revocation`,
+          JSON.stringify(revoked).includes(GLOBAL),
+          false,
+        );
+      }
+    }
+    equal("each summary wrote exactly one fact", writes, 12);
+  } finally {
+    memory.addMemory = original.add;
     historyHub.getChatHistoryAsync = original.history;
     router.getProvider = original.provider;
     setPolicy();
@@ -549,6 +748,67 @@ section("memory history stripping keeps text, other tools and turn order");
   equal("provider history remains valid", agent.trimHistory(stripped).length, stripped.length);
 }
 
+section("Gemini and canonical histories strip unsent text and thoughts");
+{
+  const { historyToOpenAI, historyToAnthropic } = require("./src/services/aiProviders.cjs");
+  for (const provider of ["gemini", "openai", "anthropic"]) {
+    const history = historyWithUnsentMemory(provider);
+    const before = JSON.stringify(history);
+    const stripped = stripMemoryToolParts(history);
+    equal(`${provider}: empty memory entries dropped`, stripped.length, 6);
+    equal(
+      `${provider}: no unsent global content`,
+      JSON.stringify(stripped).includes(GLOBAL),
+      false,
+    );
+    equal(
+      `${provider}: no thought parts`,
+      stripped.some((entry) => entry.parts.some((part) => part.thought === true)),
+      false,
+    );
+    equal(`${provider}: delivered text stays`, stripped[1].parts[0].text, "earlier reply");
+    equal(`${provider}: tool call stays intact`, stripped[3].parts[0], history[5].parts[2]);
+    equal(`${provider}: tool response stays intact`, stripped[4].parts[0], history[6].parts[0]);
+    equal(
+      `${provider}: call signature retained`,
+      stripped[3].parts[0].thoughtSignature,
+      "calculate-sig",
+    );
+    equal(
+      `${provider}: response signature retained`,
+      stripped[4].parts[0].thoughtSignature,
+      "result-sig",
+    );
+    equal(
+      `${provider}: turn order retained`,
+      stripped.map((entry) => entry.role).join(","),
+      "user,model,user,model,user,model",
+    );
+    equal(`${provider}: history still valid`, agent.trimHistory(stripped).length, 6);
+    equal(`${provider}: input unchanged`, JSON.stringify(history), before);
+    if (provider === "openai") {
+      const messages = historyToOpenAI(stripped);
+      equal(
+        "OpenAI retains paired call id",
+        messages[3].tool_calls[0].id,
+        messages[4].tool_call_id,
+      );
+    } else if (provider === "anthropic") {
+      const messages = historyToAnthropic(stripped);
+      equal(
+        "Anthropic retains paired call id",
+        messages[3].content[0].id,
+        messages[4].content[0].tool_use_id,
+      );
+    }
+  }
+  equal(
+    "thought-only entries dropped",
+    stripMemoryToolParts([{ role: "model", parts: [{ text: GLOBAL, thought: true }] }]).length,
+    0,
+  );
+}
+
 section("explicit AI turns strip memory history on first attempt and file retry");
 {
   settings.set("bot_min_delay_ms", 0);
@@ -559,12 +819,8 @@ section("explicit AI turns strip memory history on first attempt and file retry"
   const provider = agent.getProvider("gemini");
   const original = { run: provider.runTurn, configured: provider.isConfigured };
   const previousProvider = settings.get("ai_provider");
-  const history = [
-    { role: "user", parts: [{ text: "hello" }, { fileData: { fileUri: "expired" } }] },
-    { role: "model", parts: [{ functionCall: { name: "search_memory" } }] },
-    { role: "user", parts: [{ functionResponse: { name: "search_memory", response: GLOBAL } }] },
-    { role: "model", parts: [{ text: "earlier reply" }] },
-  ];
+  const history = historyWithUnsentMemory("gemini");
+  history[0].parts.push({ fileData: { fileUri: "expired" } });
   settings.set("ai_provider", "gemini");
   provider.isConfigured = () => true;
   try {
@@ -703,12 +959,100 @@ section("manual memory search exposes global hits only to bot owners and admins"
   }
 }
 
+section("manual global memory reads require bot privilege for every entry point");
+{
+  const command = require("./src/commands/memory.cjs");
+  const { t } = require("./src/utils/i18n.cjs");
+  memory.addMemory({ scope: "global", content: GLOBAL });
+  for (const [role, jid] of [
+    ["owner", OWNER],
+    ["bot admin", ADMIN],
+    ["member", MEMBER],
+    ["group admin", MOD],
+  ]) {
+    const privileged = ["owner", "bot admin"].includes(role);
+    for (const flag of ["global", "GLOBAL", "-g", "--global", "عام", "العام", "الكل"]) {
+      for (const action of [
+        "",
+        "list",
+        "show",
+        "count",
+        "unknown",
+        "file",
+        "export",
+        "md",
+        "ملف",
+        "search",
+      ]) {
+        const sent = [];
+        const commandSock = {
+          ...sock,
+          async sendMessage(_jid, content) {
+            sent.push(content);
+            return { key: { id: "memory-read" } };
+          },
+        };
+        const args = [action, flag, ...(action === "search" ? ["MEMORY_POLICY"] : [])];
+        await command.execute(commandSock, message(jid, true), args, "!memory", metadata, {
+          authGroupMetadata: metadata,
+        });
+        const output = sent
+          .map((content) => content.document?.toString("utf8") || content.text)
+          .join("\n");
+        const label = `${role}/${flag}/${action || "default"}`;
+        equal(`${label}: global contents require privilege`, output.includes(GLOBAL), privileged);
+        if (!privileged) {
+          equal(`${label}: existing denied reply`, sent[0]?.text, t("bot.ai.memory.denied"));
+        }
+      }
+    }
+    const sent = [];
+    await command.execute(
+      {
+        ...sock,
+        async sendMessage(_jid, content) {
+          sent.push(content.text);
+          return { key: { id: "chat-read" } };
+        },
+      },
+      message(jid, true),
+      ["list"],
+      "!memory list",
+      metadata,
+      { authGroupMetadata: metadata },
+    );
+    equal(`${role}: chat list remains readable`, sent.join("\n").includes(CHAT), true);
+    equal(
+      `${role}: chat list never includes global entries`,
+      sent.join("\n").includes(GLOBAL),
+      false,
+    );
+  }
+}
+
 section("account epoch changes fence every memory tool and delayed summaries");
 {
   setPolicy("everyone", "privileged", "all");
   const caller = await callerFor();
   const before = readFileSync(memory.GLOBAL_FILE, "utf8");
+  equal("minted caller initially current", isCurrentCaller(caller), true);
   store.advanceAccountEpoch();
+  equal("minted caller stale after account change", isCurrentCaller(caller), false);
+  for (const memoryScope of [undefined, "chat"]) {
+    const context = contextFor(caller, {
+      memoryScope,
+      autoReplyGlobal: { read: true, write: true },
+    });
+    const access = globalMemoryAccess(context);
+    equal(`${String(memoryScope)}: stale caller has no read`, access.read, false);
+    equal(`${String(memoryScope)}: stale caller has no write`, access.write, false);
+    ok(`${String(memoryScope)}: stale grants frozen`, Object.isFrozen(access));
+    equal(
+      `${String(memoryScope)}: stale prompt omits global memory`,
+      agent.buildSystemInstruction(context).includes(GLOBAL),
+      false,
+    );
+  }
   for (const memoryScope of [undefined, "chat"])
     for (const tool of TOOLS) {
       const result = await runTool(
@@ -749,6 +1093,122 @@ section("account epoch changes fence every memory tool and delayed summaries");
     );
   } finally {
     router.getProvider = original;
+  }
+}
+
+section("explicit turns paused across account activation never load or call the new account");
+{
+  const file = require.resolve("./src/commands/gemini.cjs");
+  const localRequire = createRequire(file);
+  const auth = require("./src/services/aiToolAuth.cjs");
+  const statuses = require("./src/utils/statusMessage.cjs");
+  const provider = agent.getProvider("gemini");
+  const original = {
+    run: provider.runTurn,
+    configured: provider.isConfigured,
+    provider: settings.get("ai_provider"),
+    global: readFileSync(memory.GLOBAL_FILE, "utf8"),
+  };
+  settings.set("ai_provider", "gemini");
+  provider.isConfigured = () => true;
+  try {
+    for (const boundary of ["caller", "status", "history", "retry history"]) {
+      setPolicy("everyone", "privileged", "all");
+      const entered = deferred();
+      const pending = deferred();
+      const pause = async () => {
+        entered.resolve();
+        await pending.promise;
+      };
+      let loads = 0;
+      let saves = 0;
+      let calls = 0;
+      let replies = 0;
+      provider.runTurn = async () => {
+        calls += 1;
+        if (boundary === "retry history") {
+          throw Object.assign(new Error("file expired"), { status: 404 });
+        }
+        return { text: "must not run", history: [] };
+      };
+      const module = { exports: {} };
+      runInNewContext(readFileSync(file, "utf8"), {
+        module,
+        require(name) {
+          if (name === "../services/aiToolAuth.cjs") {
+            return {
+              ...auth,
+              async resolveCaller(options) {
+                const caller = await auth.resolveCaller(options);
+                if (boundary === "caller") await pause();
+                return caller;
+              },
+            };
+          }
+          if (name === "../utils/statusMessage.cjs") {
+            return {
+              async createStatus() {
+                if (boundary === "status") await pause();
+                return {
+                  ...statuses.nullStatus(),
+                  async finish() {
+                    replies += 1;
+                  },
+                  async fail() {
+                    replies += 1;
+                  },
+                };
+              },
+            };
+          }
+          if (name === "../utils/storage-hub.cjs") {
+            return {
+              ...historyHub,
+              async getChatHistoryAsync() {
+                loads += 1;
+                if (boundary === "history" || (boundary === "retry history" && loads === 2)) {
+                  await pause();
+                }
+                return historyWithUnsentMemory("gemini");
+              },
+              async saveChatHistoryAsync() {
+                saves += 1;
+              },
+            };
+          }
+          return localRequire(name);
+        },
+      });
+      const work = module.exports.execute(sock, message(OWNER), ["hello"], "!ai hello", null, {
+        accountEpoch: store.accountEpoch(),
+      });
+      try {
+        await entered.promise;
+        store.advanceAccountEpoch();
+        writeFileSync(memory.GLOBAL_FILE, "# New account\n\n- NEW_ACCOUNT_GLOBAL_FACT\n");
+      } finally {
+        pending.resolve();
+        await work;
+      }
+      equal(
+        `${boundary}: no new history loaded`,
+        loads,
+        boundary === "retry history" ? 2 : boundary === "history" ? 1 : 0,
+      );
+      equal(
+        `${boundary}: no provider call after activation`,
+        calls,
+        boundary === "retry history" ? 1 : 0,
+      );
+      equal(`${boundary}: no history saved`, saves, 0);
+      equal(`${boundary}: stale turn ends without a reply`, replies, 0);
+    }
+  } finally {
+    provider.runTurn = original.run;
+    provider.isConfigured = original.configured;
+    settings.set("ai_provider", original.provider);
+    writeFileSync(memory.GLOBAL_FILE, original.global);
+    setPolicy();
   }
 }
 
