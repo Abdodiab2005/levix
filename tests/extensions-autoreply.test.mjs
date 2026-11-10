@@ -684,21 +684,33 @@ section("intake dedup is a 5000-key LRU with a 10-minute window");
   equal("non-trigger can be reconsidered after 10 minutes", count, 5003);
 }
 
-section("execution claims evict the oldest at 2000 without refusing new replies");
+section("2500 admitted executions retain every unexpired replay claim");
 {
   let now = 1000;
-  const sent = stubTurn({ now: () => now });
+  let runs = 0;
+  const sent = stubTurn({
+    now: () => now,
+    runAgent: async () => {
+      runs += 1;
+      return { text: "answer" };
+    },
+  });
   const rt = runtime();
-  for (let i = 0; i < 2001; i++) {
+  for (let i = 0; i < 2500; i++) {
     if (i > 0 && i % 6 === 0) now += 60_000;
     await autoReply.dispatch(rt, sock, dm("hi", { id: `execution-${i}` }), 1);
   }
-  equal("all 2001 replies admitted", sent.length, 2001);
-  now += 60_000;
-  await autoReply.dispatch(rt, sock, dm("hi", { id: "execution-1" }), 1);
-  equal("newest 2000 execution claims retained", sent.length, 2001);
+  equal("all 2500 replies admitted", sent.length, 2500);
+  equal("all 2500 AI turns ran", runs, 2500);
+  now += 10 * 60 * 1000;
   await autoReply.dispatch(rt, sock, dm("hi", { id: "execution-0" }), 1);
-  equal("oldest execution claim evicted", sent.length, 2002);
+  equal("first execution cannot repeat tool side effects", runs, 2500);
+  equal("first execution cannot reply again", sent.length, 2500);
+  for (let i = 1; i < 2500; i++) {
+    await autoReply.dispatch(rt, sock, dm("hi", { id: `execution-${i}` }), 1);
+  }
+  equal("every execution claim survives intake expiry", runs, 2500);
+  equal("no redelivery sends another reply", sent.length, 2500);
 }
 
 section("Core backstop refusal does not record an execution claim");
