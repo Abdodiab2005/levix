@@ -1297,8 +1297,9 @@ const TOOLS = {
       const scope = scopeOf(args);
       const { getChatHistoryAsync } = require("../utils/storage-hub.cjs");
       const history = await getChatHistoryAsync(caller.chatId);
-      const stripped = globalMemory?.().read !== true;
-      const transcript = transcriptFromHistory(stripped ? stripMemoryToolParts(history) : history);
+      // Only text that was delivered to this chat may become chat memory, whoever asks:
+      // memory tool results, intermediate model text and thoughts never reach the summary.
+      const transcript = transcriptFromHistory(stripMemoryToolParts(history));
       if (!transcript) {
         return { error: "there is no stored conversation to summarize in this chat", saved: 0 };
       }
@@ -1340,7 +1341,7 @@ const TOOLS = {
         saved: ids.length,
         scope,
         ids,
-        ...(globalMemory?.().read === true || (scope === "chat" && stripped) ? { facts } : {}),
+        ...(globalMemory?.().read === true || scope === "chat" ? { facts } : {}),
       };
     },
   },

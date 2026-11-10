@@ -605,24 +605,27 @@ section("summaries strip unreadable history and gate returned facts by provenanc
           equal(`${label}: safe facts returned`, summary.facts?.[0], "safe chat fact");
         }
 
+        // A reader's summary is built from the same stripped transcript: delivered text only.
         setPolicy("owner", "owner", "all");
+        let readerTranscript;
         router.getProvider = () => ({
-          runTurn: async () => {
+          runTurn: async (options) => {
+            readerTranscript = options.parts[0].text;
             settings.set("ai_global_memory_read", "off");
-            return { text: `- ${GLOBAL}` };
+            return { text: "- delivered fact" };
           },
         });
         const revoked = await runTool("summarize_chat", { scope }, { caller });
         equal(`${label}: read revocation preserves write`, revoked.saved, 1);
         equal(
-          `${label}: facts from unstripped history withheld`,
-          Object.hasOwn(revoked, "facts"),
+          `${label}: reader transcript has no hidden global text`,
+          readerTranscript?.includes(GLOBAL),
           false,
         );
         equal(
-          `${label}: no global-derived payload after revocation`,
-          JSON.stringify(revoked).includes(GLOBAL),
-          false,
+          `${label}: facts returned after revocation only for chat scope`,
+          Object.hasOwn(revoked, "facts"),
+          scope === "chat",
         );
       }
     }
