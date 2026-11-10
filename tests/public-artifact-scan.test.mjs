@@ -1,0 +1,240 @@
+// The public artifact scanner must fail on private Levix Plus code and pass on
+// an artifact that carries none. Fixtures are built at runtime, so the test
+// needs no committed archives.
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
+import { zipTree } from "../android/scripts/zip-tree.mjs";
+import {
+  CANARY,
+  MAX_ENTRY_BYTES,
+  MAX_TOTAL_BYTES,
+  hasForbiddenPath,
+  scanArtifact,
+  scanDirectory,
+  scanRaw,
+  scanTarGz,
+  scanZip,
+} from "../scripts/scan-public-artifacts.mjs";
+import { equal, finish, ok, section } from "./harness.mjs";
+
+const dirs = [];
+
+function tempDir() {
+  const dir = mkdtempSync(join(tmpdir(), "levix-scan-"));
+  dirs.push(dir);
+  return dir;
+}
+
+function writeTree(root, files) {
+  for (const [name, data] of Object.entries(files)) {
+    const full = join(root, name);
+    mkdirSync(join(full, ".."), { recursive: true });
+    writeFileSync(full, data);
+  }
+}
+
+// --- a small ustar writer -------------------------------------------------
+
+function writeOctal(buf, offset, length, value) {
+  const text = value.toString(8).padStart(length - 1, "0");
+  buf.write(text, offset, length - 1, "ascii");
+  buf[offset + length - 1] = 0;
+}
+
+function tarHeader(name, size, type = "0", prefix = "") {
+  const buf = Buffer.alloc(512, 0);
+  buf.write(name, 0, 100, "utf8");
+  writeOctal(buf, 100, 8, 0o644);
+  writeOctal(buf, 108, 8, 0);
+  writeOctal(buf, 116, 8, 0);
+  writeOctal(buf, 124, 12, size);
+  writeOctal(buf, 136, 12, 0);
+  buf.fill(0x20, 148, 156);
+  buf.write(type, 156, 1, "ascii");
+  buf.write("ustar", 257, 6, "ascii");
+  buf[262] = 0;
+  buf.write("00", 263, 2, "ascii");
+  if (prefix) buf.write(prefix, 345, 155, "utf8");
+
+  let sum = 0;
+  for (const byte of buf) sum += byte;
+  buf.write(sum.toString(8).padStart(6, "0"), 148, 6, "ascii");
+  buf[154] = 0;
+  buf[155] = 0x20;
+  return buf;
+}
+
+function padded(data) {
+  const pad = (512 - (data.length % 512)) % 512;
+  return pad ? Buffer.concat([data, Buffer.alloc(pad)]) : data;
+}
+
+function tarGz(entries) {
+  const chunks = [];
+  for (const entry of entries) {
+    const data = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data ?? "", "utf8");
+    let name = entry.name;
+    if (name.length > 100) {
+      const long = Buffer.from(`${name}\0`, "utf8");
+      chunks.push(tarHeader("././@LongLink", long.length, "L"), padded(long));
+      name = name.slice(0, 100);
+    }
+    chunks.push(tarHeader(name, data.length, entry.type ?? "0", entry.prefix ?? ""), padded(data));
+  }
+  chunks.push(Buffer.alloc(1024));
+  return gzipSync(Buffer.concat(chunks));
+}
+
+// --- fixtures -------------------------------------------------------------
+
+const root = tempDir();
+
+try {
+  section("path rules");
+
+  ok("extensions/levix-plus is forbidden", hasForbiddenPath("extensions/levix-plus/index.cjs"));
+  ok("levix-plus/runtime is forbidden", hasForbiddenPath("a/levix-plus/runtime/x.cjs"));
+  ok("a clean path is allowed", !hasForbiddenPath("src/extensions/levix/index.cjs"));
+  ok(
+    "the caps are the documented numbers",
+    MAX_ENTRY_BYTES === 256 * 1024 * 1024 && MAX_TOTAL_BYTES === 2 * 1024 * 1024 * 1024,
+  );
+
+  section("a directory");
+
+  const cleanDir = join(root, "clean-dir");
+  writeTree(cleanDir, {
+    "src/index.js": "console.log(1);\n",
+    "public/app.css": "body { color: red; }\n",
+  });
+  const cleanDirectory = scanDirectory(cleanDir);
+  ok("a clean directory passes", cleanDirectory.ok, cleanDirectory.error ?? "");
+
+  const privateDir = join(root, "private-dir");
+  writeTree(privateDir, {
+    "extensions/levix-plus/index.cjs": "module.exports = 1;\n",
+  });
+  const privateDirectory = scanDirectory(privateDir);
+  ok("extensions/levix-plus fails", !privateDirectory.ok);
+  ok(
+    "…and names the entry",
+    privateDirectory.findings.some((finding) => finding.path === "extensions/levix-plus/index.cjs"),
+  );
+
+  const canaryDir = join(root, "canary-dir");
+  writeTree(canaryDir, { "src/deep/nested/file.txt": `prefix ${CANARY} suffix` });
+  const canaryDirectory = scanDirectory(canaryDir);
+  ok("a canary in a nested file fails", !canaryDirectory.ok);
+
+  section("tar.gz");
+
+  const cleanTar = tarGz([{ name: "package/src/index.js", data: "console.log(1);\n" }]);
+  ok("a clean tar.gz passes", scanTarGz(cleanTar).ok);
+
+  const longName = `${"deep/".repeat(25)}extensions/levix-plus/index.cjs`;
+  ok("the long-name fixture is longer than one header", longName.length > 100);
+  const longTar = tarGz([{ name: longName, data: "module.exports = 1;\n" }]);
+  const longResult = scanTarGz(longTar);
+  ok("a GNU long name reaches the path rule", !longResult.ok);
+  ok(
+    "…and names the long entry",
+    longResult.findings.some((finding) => finding.path === longName),
+  );
+
+  const prefixTar = tarGz([
+    { name: "index.cjs", prefix: "extensions/levix-plus", data: "module.exports = 1;\n" },
+  ]);
+  ok("a ustar prefix reaches the path rule", !scanTarGz(prefixTar).ok);
+
+  const canaryTar = tarGz([{ name: "src/file.txt", data: `x ${CANARY} y` }]);
+  ok("a canary in a tar.gz entry fails", !scanTarGz(canaryTar).ok);
+
+  section("zip");
+
+  const cleanZipDir = join(root, "clean-zip");
+  writeTree(cleanZipDir, { "src/index.js": "console.log(1);\n" });
+  const cleanZip = zipTree(cleanZipDir);
+  ok("a clean zip passes", scanZip(cleanZip).ok);
+
+  const cleanZipPath = join(root, "clean.zip");
+  writeFileSync(cleanZipPath, cleanZip);
+
+  const canaryZipDir = join(root, "canary-zip");
+  writeTree(canaryZipDir, {
+    "src/payload.txt": `${CANARY}${"x".repeat(4000)}`,
+  });
+  const canaryZip = scanZip(zipTree(canaryZipDir));
+  ok("a canary in a deflated zip entry fails", !canaryZip.ok);
+
+  const privateZipDir = join(root, "private-zip");
+  writeTree(privateZipDir, { "extensions/levix-plus/index.cjs": "module.exports = 1;\n" });
+  ok("a forbidden zip path fails", !scanZip(zipTree(privateZipDir)).ok);
+
+  const zip64 = Buffer.alloc(22);
+  zip64.writeUInt32LE(0x06054b50, 0);
+  zip64.writeUInt16LE(0xffff, 8);
+  zip64.writeUInt16LE(0xffff, 10);
+  const zip64Result = scanZip(zip64);
+  ok("ZIP64 is refused", !zip64Result.ok && /ZIP64/.test(zip64Result.error ?? ""));
+
+  section("raw bytes and caps");
+
+  const raw = Buffer.concat([
+    Buffer.from([0, 1, 2]),
+    Buffer.from(CANARY, "utf8"),
+    Buffer.from([3]),
+  ]);
+  ok("a canary in a raw binary fails", !scanRaw(raw).ok);
+  ok("a clean raw binary passes", scanRaw(Buffer.from("plain bytes")).ok);
+
+  const oversizeDir = join(root, "oversize");
+  writeTree(oversizeDir, { "big.bin": Buffer.alloc(2048, 0x61) });
+  const oversize = scanZip(zipTree(oversizeDir), { maxEntryBytes: 1024 });
+  ok("an entry over the cap fails", !oversize.ok && /cap/.test(oversize.error ?? ""));
+
+  const artifact = scanArtifact(cleanZipPath);
+  ok("scanArtifact detects a zip", artifact.kind === "zip" && artifact.ok);
+
+  section("the repository itself");
+
+  // Only the scanner may carry the canary literal. The test file is outside
+  // these trees; it is listed anyway so the rule is explicit.
+  const scanner = resolve(
+    fileURLToPath(new URL("../scripts/scan-public-artifacts.mjs", import.meta.url)),
+  );
+  const testFile = resolve(fileURLToPath(import.meta.url));
+  const allowed = new Set([scanner, testFile]);
+  const trees = ["src", "public", "bin", "scripts", "android", "frontend/src"].map((name) =>
+    resolve(fileURLToPath(new URL(`../${name}`, import.meta.url))),
+  );
+
+  const files = [];
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name === "node_modules" || entry.name === ".git") continue;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.isFile()) files.push(full);
+    }
+  };
+  for (const tree of trees) walk(tree);
+
+  const offenders = files.filter((file) => {
+    if (allowed.has(resolve(file))) return false;
+    return readFileSync(file).includes(Buffer.from(CANARY, "utf8"));
+  });
+  ok("no tracked source carries the canary", offenders.length === 0, offenders.join(", "));
+} finally {
+  for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+}
+
+finish();
