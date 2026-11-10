@@ -1,6 +1,6 @@
 // file: frontend/src/views/plus/VisibilityTab.tsx
 import { EyeOff, RotateCcw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api/client";
 import {
   Button,
@@ -18,6 +18,7 @@ import {
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
 import { withPlus, plusErrorCode, plusErrorKey, plusGet, plusPut } from "./plusApi";
+import { createWriteQueue } from "./plusUiLogic";
 import type { PlusVisibility } from "./types";
 
 export function VisibilityTab({ onInactive }: { onInactive: () => void }) {
@@ -86,6 +87,11 @@ export function VisibilityTab({ onInactive }: { onInactive: () => void }) {
   );
 }
 
+type ProgressFormData = {
+  hideProgress: PlusVisibility["hideProgress"];
+  commands: string[];
+};
+
 function VisibilityForm({
   visibility,
   commands,
@@ -98,10 +104,36 @@ function VisibilityForm({
   onInactive: () => void;
 }) {
   const { t } = useI18n();
-  const form = useDirtyForm({
-    hideProgress: visibility.hideProgress,
-    commands: visibility.commands,
-  });
+  const commandsKey = useMemo(() => visibility.commands.join(","), [visibility.commands]);
+  const savedBaseline = useMemo<ProgressFormData>(
+    () => ({
+      hideProgress: visibility.hideProgress,
+      commands: visibility.commands,
+    }),
+    [visibility.hideProgress, commandsKey],
+  );
+  const form = useDirtyForm<ProgressFormData>(savedBaseline);
+  const prevBaselineRef = useRef(savedBaseline);
+
+  useEffect(() => {
+    if (prevBaselineRef.current !== savedBaseline) {
+      const prev = prevBaselineRef.current;
+      prevBaselineRef.current = savedBaseline;
+      const userEditedProgress = form.draft.hideProgress !== prev.hideProgress;
+      const userEditedCommands = form.draft.commands.join(",") !== prev.commands.join(",");
+      if (userEditedProgress || userEditedCommands) {
+        form.setDraft({
+          hideProgress: userEditedProgress ? form.draft.hideProgress : savedBaseline.hideProgress,
+          commands: userEditedCommands ? form.draft.commands : savedBaseline.commands,
+        });
+      }
+    }
+  }, [savedBaseline, form.draft.hideProgress, form.draft.commands, form.setDraft]);
+
+  const writeQueueRef = useRef(createWriteQueue());
+  const savedRef = useRef(visibility);
+  savedRef.current = visibility;
+
   const [savingWatermark, setSavingWatermark] = useState(false);
   const [watermarkError, setWatermarkError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -116,15 +148,19 @@ function VisibilityForm({
     setSavingWatermark(true);
     setWatermarkError(null);
     try {
-      const next = await withPlus(
-        () =>
-          plusPut<PlusVisibility>("/visibility", {
-            hideWatermark: hide,
-            hideProgress: visibility.hideProgress,
-            commands: visibility.commands,
-          }),
-        onInactive,
-      );
+      const next = await writeQueueRef.current.enqueue(async () => {
+        const current = savedRef.current;
+        return withPlus(
+          () =>
+            plusPut<PlusVisibility>("/visibility", {
+              hideWatermark: hide,
+              hideProgress: current.hideProgress,
+              commands: current.commands,
+            }),
+          onInactive,
+        );
+      });
+      savedRef.current = next;
       onSaved(next);
     } catch (err) {
       const code = plusErrorCode(err);
@@ -165,15 +201,19 @@ function VisibilityForm({
         onSubmit={(event) => {
           event.preventDefault();
           void form.save(async (draft) => {
-            const next = await withPlus(
-              () =>
-                plusPut<PlusVisibility>("/visibility", {
-                  hideWatermark: visibility.hideWatermark,
-                  hideProgress: draft.hideProgress,
-                  commands: draft.commands,
-                }),
-              onInactive,
-            );
+            const next = await writeQueueRef.current.enqueue(async () => {
+              const current = savedRef.current;
+              return withPlus(
+                () =>
+                  plusPut<PlusVisibility>("/visibility", {
+                    hideWatermark: current.hideWatermark,
+                    hideProgress: draft.hideProgress,
+                    commands: draft.commands,
+                  }),
+                onInactive,
+              );
+            });
+            savedRef.current = next;
             onSaved(next);
           });
         }}

@@ -1,10 +1,35 @@
 package net.leviro.levix.billing
 
 import java.net.URLEncoder
+import org.json.JSONArray
 import org.json.JSONObject
 
 /** Wire rules only. No Play or Android types and no entitlement decisions. */
 object PlusBilling {
+    /** Process memory only; callers confine access to the main thread. */
+    class PurchaseRecovery(private val productId: String, private val packageName: String) {
+        var optedIn = false
+            private set
+        private val purchases = linkedMapOf<String, JSONObject>()
+
+        fun optIn() { optedIn = true }
+
+        fun record(products: List<String>, purchaseState: Int, purchaseToken: String) {
+            if (!optedIn || productId.isEmpty() || productId !in products || purchaseState != 1) return
+            val result = purchaseResult(0, purchaseState, purchaseToken, productId, packageName)
+            if (!result.getBoolean("ok")) return
+            result.remove("ok")
+            purchases[purchaseToken] = result
+            if (purchases.size > 16) purchases.remove(purchases.keys.first())
+        }
+
+        fun drain(): JSONObject {
+            val result = JSONObject().put("ok", true).put("purchases", JSONArray(purchases.values.toList()))
+            purchases.clear()
+            return result
+        }
+    }
+
     fun validInstallationId(value: String): Boolean = value.matches(Regex("[A-Za-z0-9_-]{43}"))
 
     fun validOfferToken(value: String): Boolean = value.length in 1..4096 &&

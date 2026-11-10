@@ -1,6 +1,6 @@
 // file: frontend/src/views/plus/AutoReplyTab.tsx
 import { Bot, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Badge,
   Button,
@@ -21,6 +21,7 @@ import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
 import { AutoReplyChatEditor } from "./AutoReplyChatEditor";
 import { plusErrorCode, plusErrorKey, plusGet, plusPut } from "./plusApi";
+import { createWriteQueue } from "./plusUiLogic";
 import {
   type AutoReplyChat,
   type AutoReplyConfig,
@@ -82,6 +83,11 @@ export function AutoReplyTab({ onInactive }: { onInactive: () => void }) {
   return <AutoReplyForm config={config} onSaved={setConfig} onInactive={onInactive} />;
 }
 
+type AutoReplyFormData = {
+  globalPerHour: number;
+  chats: AutoReplyChat[];
+};
+
 function AutoReplyForm({
   config,
   onSaved,
@@ -92,7 +98,39 @@ function AutoReplyForm({
   onInactive: () => void;
 }) {
   const { t } = useI18n();
-  const form = useDirtyForm<AutoReplyConfig>(config);
+  const chatsKey = useMemo(() => JSON.stringify(config.chats), [config.chats]);
+  const savedBaseline = useMemo<AutoReplyFormData>(
+    () => ({
+      globalPerHour: config.globalPerHour,
+      chats: config.chats,
+    }),
+    [config.globalPerHour, chatsKey],
+  );
+  const form = useDirtyForm<AutoReplyFormData>(savedBaseline);
+  const prevBaselineRef = useRef(savedBaseline);
+
+  useEffect(() => {
+    if (prevBaselineRef.current !== savedBaseline) {
+      const prev = prevBaselineRef.current;
+      prevBaselineRef.current = savedBaseline;
+      const userEditedLimit = form.draft.globalPerHour !== prev.globalPerHour;
+      const userEditedChats = JSON.stringify(form.draft.chats) !== JSON.stringify(prev.chats);
+      if (userEditedLimit || userEditedChats) {
+        form.setDraft({
+          globalPerHour: userEditedLimit ? form.draft.globalPerHour : savedBaseline.globalPerHour,
+          chats: userEditedChats ? form.draft.chats : savedBaseline.chats,
+        });
+      }
+    }
+  }, [savedBaseline, form.draft.globalPerHour, form.draft.chats, form.setDraft]);
+
+  const [togglingEnabled, setTogglingEnabled] = useState(false);
+  const [togglingKill, setTogglingKill] = useState(false);
+  const [toggleError, setToggleError] = useState<string | null>(null);
+  const writeQueueRef = useRef(createWriteQueue());
+  const savedRef = useRef(config);
+  savedRef.current = config;
+
   const [editor, setEditor] = useState<{ chat: AutoReplyChat | null } | null>(null);
   const [pendingRemove, setPendingRemove] = useState<string | null>(null);
   const [limitError, setLimitError] = useState<string | null>(null);
@@ -106,6 +144,48 @@ function AutoReplyForm({
       : value === "keywords"
         ? t("plusTriggerKeywords")
         : t("plusTriggerAll");
+
+  async function toggleEnabled(value: boolean) {
+    setTogglingEnabled(true);
+    setToggleError(null);
+    try {
+      const next = await writeQueueRef.current.enqueue(async () => {
+        const current = savedRef.current;
+        return plusPut<AutoReplyConfig>("/auto-reply", {
+          ...current,
+          enabled: value,
+        });
+      });
+      savedRef.current = next;
+      onSaved(next);
+    } catch (err) {
+      if (plusErrorCode(err) === "inactive") onInactive();
+      setToggleError(t(plusErrorKey(plusErrorCode(err))));
+    } finally {
+      setTogglingEnabled(false);
+    }
+  }
+
+  async function toggleKillSwitch(value: boolean) {
+    setTogglingKill(true);
+    setToggleError(null);
+    try {
+      const next = await writeQueueRef.current.enqueue(async () => {
+        const current = savedRef.current;
+        return plusPut<AutoReplyConfig>("/auto-reply", {
+          ...current,
+          killSwitch: value,
+        });
+      });
+      savedRef.current = next;
+      onSaved(next);
+    } catch (err) {
+      if (plusErrorCode(err) === "inactive") onInactive();
+      setToggleError(t(plusErrorKey(plusErrorCode(err))));
+    } finally {
+      setTogglingKill(false);
+    }
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -125,7 +205,15 @@ function AutoReplyForm({
     if (!valid) return;
     void form.save(async (draft) => {
       try {
-        const next = await plusPut<AutoReplyConfig>("/auto-reply", draft);
+        const next = await writeQueueRef.current.enqueue(async () => {
+          const current = savedRef.current;
+          return plusPut<AutoReplyConfig>("/auto-reply", {
+            ...current,
+            globalPerHour: draft.globalPerHour,
+            chats: draft.chats,
+          });
+        });
+        savedRef.current = next;
         onSaved(next);
       } catch (err) {
         if (plusErrorCode(err) === "inactive") onInactive();
@@ -146,16 +234,23 @@ function AutoReplyForm({
       <p className="text-sm text-muted">{t("plusAutoReplyIntro")}</p>
       <form className="flex flex-col gap-4" onSubmit={submit}>
         <Toggle
-          checked={form.draft.enabled}
+          checked={config.enabled}
+          disabled={togglingEnabled}
           label={t("plusAutoReplyEnabled")}
-          onChange={(value) => form.setField("enabled", value)}
+          onChange={(value) => void toggleEnabled(value)}
         />
         <Toggle
-          checked={form.draft.killSwitch}
+          checked={config.killSwitch}
+          disabled={togglingKill}
           label={t("plusAutoReplyKill")}
           description={t("plusAutoReplyKillHint")}
-          onChange={(value) => form.setField("killSwitch", value)}
+          onChange={(value) => void toggleKillSwitch(value)}
         />
+        {toggleError && (
+          <p role="alert" className="text-xs text-danger">
+            {toggleError}
+          </p>
+        )}
         <Field
           label={t("plusAutoReplyGlobalLimit")}
           htmlFor="plus-auto-reply-global"
