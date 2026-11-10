@@ -22,20 +22,41 @@ function defaultSetTimer(fn, ms) {
   return timer;
 }
 
-function createEntitlement(deps = {}) {
-  const storage = deps.storage ?? {
-    getBotSetting: (...args) => require("../../db/store.cjs").getBotSetting(...args),
-    saveBotSetting: (...args) => require("../../db/store.cjs").saveBotSetting(...args),
+function wrapStorage(raw) {
+  if (!raw) {
+    return {
+      getBotSetting: (...args) => require("../../db/store.cjs").getBotSetting(...args),
+      saveBotSetting: (...args) => require("../../db/store.cjs").saveBotSetting(...args),
+    };
+  }
+  return {
+    getBotSetting(key, fallback = null) {
+      if (typeof raw.getBotSetting === "function") return raw.getBotSetting(key, fallback);
+      if (typeof raw.get === "function") {
+        const value = raw.get(key);
+        return value === undefined ? fallback : value;
+      }
+      return fallback;
+    },
+    saveBotSetting(key, value) {
+      const cloned = value == null ? null : JSON.parse(JSON.stringify(value));
+      if (typeof raw.saveBotSetting === "function") raw.saveBotSetting(key, cloned);
+      else if (typeof raw.set === "function") raw.set(key, cloned);
+    },
   };
+}
+
+function createEntitlement(deps = {}) {
+  const storage = wrapStorage(deps.storage);
   const installations = deps.installation ?? createInstallation({ storage, vault: deps.vault });
-  const now = deps.now ?? (() => Date.now());
+  const now = deps.now ?? deps.clock ?? (() => Date.now());
   const random = deps.random ?? Math.random;
   const randomBytes = deps.randomBytes ?? ((size) => require("node:crypto").randomBytes(size));
   const setTimer = deps.setTimer ?? defaultSetTimer;
   const clearTimer = deps.clearTimer ?? ((handle) => clearTimeout(handle));
   const listeners = new Set();
   let memory = { record: null, invalid: false, claims: null };
-  let lastStatus = NONE;
+  let lastStatus = null;
   let lastHighWaterPersistMs = null;
   let notifying = false;
   let running = false;
@@ -47,6 +68,10 @@ function createEntitlement(deps = {}) {
   function trustedKeys() {
     if (Object.hasOwn(deps, "keys")) return Array.isArray(deps.keys) ? deps.keys : [];
     return require("./keys.cjs").TRUSTED_KEYS;
+  }
+
+  function isConfigured() {
+    return trustedKeys().length > 0;
   }
 
   function clock() {
@@ -62,7 +87,7 @@ function createEntitlement(deps = {}) {
     storage.saveBotSetting(state.RECORD_KEY, state.publicFields(record));
   }
 
-  function syncFromStorage() {
+  function syncFromStorage(localNow) {
     const stored = storage.getBotSetting(state.RECORD_KEY, null);
     if (stored == null) {
       memory = { record: null, invalid: false, claims: null };
@@ -72,37 +97,48 @@ function createEntitlement(deps = {}) {
       memory = { record: null, invalid: true, claims: null };
       return;
     }
-    if (memory.record && memory.record.token === stored.token && !memory.invalid) {
+    if (
+      memory.record &&
+      !memory.invalid &&
+      memory.record.token === stored.token &&
+      memory.record.seq === stored.seq &&
+      memory.record.jti === stored.jti &&
+      memory.record.serverOffsetMs === stored.serverOffsetMs
+    ) {
       if (Number.isFinite(stored.highWaterMs) && stored.highWaterMs > memory.record.highWaterMs) {
         memory.record.highWaterMs = stored.highWaterMs;
       }
       return;
     }
     memory = { record: state.publicFields(stored), invalid: false, claims: null };
-    if (lastHighWaterPersistMs == null) lastHighWaterPersistMs = clock();
+    if (lastHighWaterPersistMs == null) lastHighWaterPersistMs = localNow ?? clock();
   }
 
-  function touchHighWater() {
+  function touchHighWater(localNow) {
     if (!memory.record) return;
-    const noted = state.noteHighWater(memory.record, clock(), lastHighWaterPersistMs);
+    const noted = state.noteHighWater(memory.record, localNow, lastHighWaterPersistMs);
     memory.record = noted.record;
     lastHighWaterPersistMs = noted.lastPersistMs;
     if (noted.persisted) persist(memory.record);
   }
 
   function judge() {
-    syncFromStorage();
-    if (memory.invalid) return { state: "unverified", until: null, reason: "bad_record", claims: null };
+    const localNow = clock();
+    syncFromStorage(localNow);
+    if (memory.invalid)
+      return { state: "unverified", until: null, reason: "bad_record", claims: null };
     if (!memory.record) return { state: "none", until: null, reason: null, claims: null };
-    touchHighWater();
     let installationId = null;
     try {
       installationId = installationView()?.installationId ?? null;
     } catch {
       installationId = null;
     }
-    const judged = state.evaluate(memory.record, clock(), { keys: trustedKeys(), installationId });
-    if (judged.claims) memory.claims = judged.claims;
+    const judged = state.evaluate(memory.record, localNow, { keys: trustedKeys(), installationId });
+    if (judged.claims) {
+      memory.claims = judged.claims;
+      touchHighWater(localNow);
+    }
     return judged;
   }
 
@@ -116,15 +152,26 @@ function createEntitlement(deps = {}) {
 
   function publish(judged) {
     const next = toPublic(judged);
-    if (lastStatus.state === next.state && lastStatus.until === next.until && lastStatus.reason === next.reason) {
+    if (
+      lastStatus &&
+      lastStatus.state === next.state &&
+      lastStatus.until === next.until &&
+      lastStatus.reason === next.reason
+    ) {
       return next;
     }
+    const hadPrevious = lastStatus !== null;
     lastStatus = next;
+    if (!hadPrevious && next.state === "none") return next;
     if (notifying) return next;
     notifying = true;
     try {
       for (const listener of [...listeners]) {
-        try { listener(next); } catch { /* a subscriber cannot break the others */ }
+        try {
+          listener(next);
+        } catch {
+          /* a subscriber cannot break the others */
+        }
       }
     } finally {
       notifying = false;
@@ -153,6 +200,13 @@ function createEntitlement(deps = {}) {
 
   function subscribe(listener) {
     if (typeof listener !== "function") return () => {};
+    if (lastStatus === null) {
+      try {
+        lastStatus = toPublic(judge());
+      } catch {
+        lastStatus = NONE;
+      }
+    }
     listeners.add(listener);
     return () => listeners.delete(listener);
   }
@@ -169,12 +223,12 @@ function createEntitlement(deps = {}) {
 
   function armRefresh(delayMs) {
     clearRefreshTimer();
-    if (!running) return;
-    const wait = Math.max(0, Math.min(Math.floor(delayMs), MAX_TIMER_MS));
+    const wait = Math.max(MIN_SUCCESS_DELAY_MS, Math.min(Math.floor(delayMs), MAX_TIMER_MS));
     if (memory.record) {
       memory.record.nextRefreshAt = clock() + wait;
       persist(memory.record);
     }
+    if (!running || trustedKeys().length === 0) return;
     refreshTimer = setTimer(() => {
       refreshTimer = null;
       Promise.resolve(refresh({ force: true })).catch(() => {});
@@ -183,7 +237,7 @@ function createEntitlement(deps = {}) {
 
   function armExpiry() {
     clearExpiryTimer();
-    if (!running || !memory.claims || !memory.record) return;
+    if (!running || trustedKeys().length === 0 || !memory.claims || !memory.record) return;
     const delay = memory.claims.exp * 1000 - memory.record.serverOffsetMs - clock();
     if (!Number.isFinite(delay)) return;
     const wait = Math.max(0, Math.min(Math.floor(delay), MAX_TIMER_MS));
@@ -192,7 +246,8 @@ function createEntitlement(deps = {}) {
       try {
         const judged = judge();
         publish(judged);
-        if (judged.claims && judged.state !== "expired" && judged.state !== "unverified") armExpiry();
+        if (judged.claims && judged.state !== "expired" && judged.state !== "unverified")
+          armExpiry();
       } catch {
         publish({ state: "unverified", until: null, reason: "unavailable" });
       }
@@ -205,17 +260,17 @@ function createEntitlement(deps = {}) {
     if (!Number.isFinite(delay) || delay < MIN_SUCCESS_DELAY_MS) delay = MIN_SUCCESS_DELAY_MS;
     const unit = Number(random());
     const fraction = Number.isFinite(unit) && unit > 0 ? Math.min(unit, 1) : 0;
-    return Math.max(0, Math.floor(delay - delay * fraction * 0.1));
+    return Math.max(MIN_SUCCESS_DELAY_MS, Math.floor(delay + delay * fraction * 0.1));
   }
 
   function scheduleSuccess() {
-    if (!running || !memory.claims || !memory.record) return;
+    if (!memory.claims || !memory.record) return;
     armRefresh(successDelay(memory.claims, memory.record));
     armExpiry();
   }
 
   function scheduleFailure(result) {
-    if (!running) return;
+    if (!memory.record) return;
     const step = BACKOFF_MS[Math.min(failCount, BACKOFF_MS.length - 1)];
     failCount += 1;
     const retryMs = Number.isFinite(result?.retryAfter) ? result.retryAfter * 1000 : 0;
@@ -231,7 +286,8 @@ function createEntitlement(deps = {}) {
 
   function commit(token, claims) {
     const localNow = clock();
-    const previousHigh = memory.record && Number.isFinite(memory.record.highWaterMs) ? memory.record.highWaterMs : 0;
+    const previousHigh =
+      memory.record && Number.isFinite(memory.record.highWaterMs) ? memory.record.highWaterMs : 0;
     const serverOffsetMs = claims.iat * 1000 - localNow;
     const record = {
       token,
@@ -251,17 +307,28 @@ function createEntitlement(deps = {}) {
 
   function applyToken(token) {
     syncFromStorage();
+    if (memory.record && !memory.claims) {
+      try {
+        judge();
+      } catch {
+        /* fall back to stored seq/jti */
+      }
+    }
     let installationId = null;
     try {
       installationId = installationView()?.installationId ?? null;
     } catch {
       return { ok: false, code: "UNAVAILABLE" };
     }
+    const storedSeq =
+      memory.claims?.seq ?? (Number.isSafeInteger(memory.record?.seq) ? memory.record.seq : null);
+    const storedJti =
+      memory.claims?.jti ?? (typeof memory.record?.jti === "string" ? memory.record.jti : null);
     const verified = verifyToken(token, {
       keys: trustedKeys(),
       installationId,
-      storedSeq: memory.claims?.seq ?? null,
-      storedJti: memory.claims?.jti ?? null,
+      storedSeq,
+      storedJti,
     });
     if (!verified.ok) {
       if (verified.reason === "replay") {
@@ -272,8 +339,7 @@ function createEntitlement(deps = {}) {
       scheduleFailure({ code: "BAD_SIGNATURE" });
       return { ok: false, code: "BAD_SIGNATURE" };
     }
-    const currentSeq = memory.claims?.seq;
-    if (currentSeq != null && verified.claims.seq <= currentSeq) {
+    if (storedSeq != null && verified.claims.seq <= storedSeq) {
       scheduleSuccess();
       return { ok: true, ignored: true };
     }
@@ -325,6 +391,13 @@ function createEntitlement(deps = {}) {
   async function runRefresh() {
     if (trustedKeys().length === 0) return resultOf({ ok: false, code: "UNCONFIGURED" });
     syncFromStorage();
+    if (memory.record && !memory.claims) {
+      try {
+        judge();
+      } catch {
+        /* seq falls back to memory.record.seq */
+      }
+    }
     let installation;
     try {
       installation = installationView();
@@ -332,7 +405,8 @@ function createEntitlement(deps = {}) {
       return resultOf({ ok: false, code: "UNAVAILABLE" });
     }
     if (!installation) return resultOf({ ok: false, code: "NO_INSTALLATION" });
-    const seq = memory.claims?.seq ?? (Number.isSafeInteger(memory.record?.seq) ? memory.record.seq : 0);
+    const seq =
+      memory.claims?.seq ?? (Number.isSafeInteger(memory.record?.seq) ? memory.record.seq : 0);
     const outcome = await client.refresh(clientDeps(installation, seq));
     if (!outcome.ok) {
       rememberError(outcome.code);
@@ -372,6 +446,7 @@ function createEntitlement(deps = {}) {
     clearRefreshTimer();
     clearExpiryTimer();
     failCount = 0;
+    if (trustedKeys().length === 0) return stop;
     try {
       syncFromStorage();
     } catch {
@@ -379,17 +454,16 @@ function createEntitlement(deps = {}) {
     }
     if (!memory.record) return stop;
     try {
-      judge();
+      publish(judge());
     } catch {
       // A record that cannot be judged still refreshes; the request may replace it.
     }
     armRefresh(FIRST_REFRESH_MS);
     armExpiry();
-    try { publish(judge()); } catch { /* status stays fail-closed */ }
     return stop;
   }
 
-  return { isActive, status, subscribe, start, stop, claim, refresh, prepare };
+  return { isActive, status, subscribe, start, stop, claim, refresh, prepare, isConfigured };
 }
 
 const singleton = createEntitlement();
@@ -403,5 +477,7 @@ module.exports = {
   claim: (input) => singleton.claim(input),
   refresh: (options) => singleton.refresh(options),
   prepare: () => singleton.prepare(),
+  isConfigured: () => singleton.isConfigured(),
   createEntitlement,
+  _createForTest: createEntitlement,
 };

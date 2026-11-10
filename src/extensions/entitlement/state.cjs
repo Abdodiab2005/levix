@@ -5,7 +5,7 @@
 // clock set back past that mark, or before `iat` by more than five minutes,
 // fails closed until a newer token is accepted.
 
-const { verifyToken } = require("./token.cjs");
+const { MAX_TOKEN_BYTES, verifyToken } = require("./token.cjs");
 const { TRUSTED_KEYS } = require("./keys.cjs");
 
 const RECORD_KEY = "plus:entitlement";
@@ -22,12 +22,15 @@ function untilFor(claims) {
 }
 
 function recordShape(record) {
-  return !!record
-    && typeof record === "object"
-    && !Array.isArray(record)
-    && typeof record.token === "string"
-    && Number.isFinite(record.serverOffsetMs)
-    && Number.isFinite(record.highWaterMs);
+  return (
+    !!record &&
+    typeof record === "object" &&
+    !Array.isArray(record) &&
+    typeof record.token === "string" &&
+    Buffer.byteLength(record.token, "utf8") <= MAX_TOKEN_BYTES &&
+    Number.isFinite(record.serverOffsetMs) &&
+    Number.isFinite(record.highWaterMs)
+  );
 }
 
 /**
@@ -36,15 +39,29 @@ function recordShape(record) {
 function evaluate(record, localNowMs, options = {}) {
   if (record == null) return NONE;
   if (!recordShape(record) || !Number.isFinite(localNowMs)) return unverified("bad_record");
+  let installationId = options.installationId;
+  if (!Object.hasOwn(options, "installationId")) {
+    try {
+      installationId = require("./installation.cjs").getInstallation()?.installationId ?? null;
+    } catch {
+      installationId = null;
+    }
+  }
   const verified = verifyToken(record.token, {
     keys: options.keys ?? TRUSTED_KEYS,
-    installationId: options.installationId,
+    installationId,
     storedSeq: null,
     storedJti: null,
   });
   if (!verified.ok) return unverified(verified.reason);
 
   const claims = verified.claims;
+  if (
+    (record.seq != null && record.seq !== claims.seq) ||
+    (record.jti != null && record.jti !== claims.jti)
+  ) {
+    return unverified("bad_record");
+  }
   const trustedNow = localNowMs + record.serverOffsetMs;
   const until = untilFor(claims);
   if (!Number.isFinite(trustedNow)) return unverified("bad_record");

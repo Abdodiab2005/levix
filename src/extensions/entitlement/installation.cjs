@@ -17,15 +17,30 @@ function createInstallation(deps = {}) {
   let cache = null;
 
   function readSealed() {
-    const value = storage().getBotSetting(INSTALLATION_KEY, null);
+    const store = storage();
+    const value =
+      typeof store.getBotSetting === "function"
+        ? store.getBotSetting(INSTALLATION_KEY, null)
+        : typeof store.get === "function"
+          ? (store.get(INSTALLATION_KEY) ?? null)
+          : null;
     if (typeof value !== "string" || value.length === 0) return null;
     return value;
   }
 
+  function writeSealed(value) {
+    const store = storage();
+    if (typeof store.saveBotSetting === "function") store.saveBotSetting(INSTALLATION_KEY, value);
+    else if (typeof store.set === "function") store.set(INSTALLATION_KEY, value);
+    else throw unreadable();
+  }
+
   function importSealed(sealed) {
+    const v = vault();
+    if (typeof v.isSealed === "function" && !v.isSealed(sealed)) throw unreadable();
     let pkcs8;
     try {
-      pkcs8 = vault().open(sealed);
+      pkcs8 = v.open(sealed);
     } catch {
       throw unreadable();
     }
@@ -75,7 +90,7 @@ function createInstallation(deps = {}) {
     if (readSealed() != null) return load();
     const { privateKey } = crypto.generateKeyPairSync("ed25519");
     const pkcs8 = privateKey.export({ format: "der", type: "pkcs8" }).toString("base64");
-    storage().saveBotSetting(INSTALLATION_KEY, vault().seal(pkcs8));
+    writeSealed(vault().seal(pkcs8));
     return load();
   }
 

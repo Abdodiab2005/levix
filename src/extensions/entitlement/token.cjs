@@ -17,8 +17,39 @@ const HEADER_TYPE = "levix-ent+jwt";
 const ISSUER = "levix-plus-verifier";
 const AUDIENCE = "levix-core";
 const STATES = new Set(["active", "grace", "canceled", "inactive"]);
-const REASONS = new Set(["expired", "on_hold", "paused", "pending", "revoked", "rebound", "not_found"]);
-const PAYLOAD_KEYS = Object.freeze(["aud", "ent", "exp", "iat", "iss", "jti", "pexp", "rsn", "seq", "st", "sub"]);
+const REASONS = new Set([
+  "expired",
+  "on_hold",
+  "paused",
+  "pending",
+  "revoked",
+  "rebound",
+  "not_found",
+]);
+const PAYLOAD_KEYS = new Set([
+  "aud",
+  "ent",
+  "exp",
+  "iat",
+  "iss",
+  "jti",
+  "pexp",
+  "rsn",
+  "seq",
+  "st",
+  "sub",
+]);
+const REQUIRED_PAYLOAD_KEYS = Object.freeze([
+  "aud",
+  "ent",
+  "exp",
+  "iat",
+  "iss",
+  "jti",
+  "seq",
+  "st",
+  "sub",
+]);
 
 function fail(reason) {
   return { ok: false, claims: null, reason };
@@ -51,35 +82,59 @@ function exactKeys(value, keys) {
   return actual.length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 }
 
+function payloadShape(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const actual = Object.keys(value);
+  return (
+    actual.every((key) => PAYLOAD_KEYS.has(key)) &&
+    REQUIRED_PAYLOAD_KEYS.every((key) => Object.hasOwn(value, key))
+  );
+}
+
 function integer(value, min = 0) {
   return Number.isSafeInteger(value) && value >= min;
 }
 
 function claimsFrom(value, options) {
-  if (!exactKeys(value, PAYLOAD_KEYS)) return fail("bad_payload");
+  if (!payloadShape(value)) return fail("bad_payload");
   if (value.iss !== ISSUER) return fail("bad_iss");
   if (value.aud !== AUDIENCE) return fail("bad_aud");
-  if (typeof value.sub !== "string" || value.sub !== options.installationId) return fail("bad_sub");
-  if (!Array.isArray(value.ent) || value.ent.length > 1 || (value.ent.length === 1 && value.ent[0] !== "plus")) {
+  if (
+    typeof value.sub !== "string" ||
+    value.sub.length === 0 ||
+    typeof options.installationId !== "string" ||
+    options.installationId.length === 0 ||
+    value.sub !== options.installationId
+  ) {
+    return fail("bad_sub");
+  }
+  if (
+    !Array.isArray(value.ent) ||
+    value.ent.length > 1 ||
+    (value.ent.length === 1 && value.ent[0] !== "plus")
+  ) {
     return fail("bad_ent");
   }
   if (!STATES.has(value.st)) return fail("bad_st");
+  const rsn = Object.hasOwn(value, "rsn") ? value.rsn : null;
+  const pexp = Object.hasOwn(value, "pexp") ? value.pexp : null;
   const inactive = value.st === "inactive";
   if (inactive) {
-    if (!REASONS.has(value.rsn) || value.ent.length !== 0) return fail("bad_rsn");
-  } else if (value.rsn !== null) {
+    if (value.ent.length !== 0) return fail("bad_ent");
+    if (!REASONS.has(rsn)) return fail("bad_rsn");
+  } else if (rsn !== null) {
     return fail("bad_rsn");
   }
   if (!integer(value.iat) || !integer(value.exp)) return fail("bad_exp");
   if (value.exp <= value.iat) return fail("bad_exp");
   if (value.exp - value.iat > MAX_LIFETIME_SEC) return fail("bad_exp");
   if (value.st === "grace" && value.exp - value.iat > MAX_GRACE_SEC) return fail("bad_exp");
-  if (inactive && value.exp - value.iat !== INACTIVE_LIFETIME_SEC) return fail("bad_exp");
+  if (inactive && value.exp - value.iat > INACTIVE_LIFETIME_SEC) return fail("bad_exp");
   if (!integer(value.seq)) return fail("bad_seq");
-  const jti = decodeBase64Url(value.jti);
-  if (!jti || jti.length !== 16) return fail("bad_jti");
-  if (value.pexp !== null && !integer(value.pexp)) return fail("bad_pexp");
-  if (value.st === "canceled" && (!integer(value.pexp) || value.exp > value.pexp)) return fail("bad_pexp");
+  if (typeof value.jti !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(value.jti))
+    return fail("bad_jti");
+  if (pexp !== null && !integer(pexp)) return fail("bad_pexp");
+  if (value.st === "canceled" && pexp !== null && value.exp > pexp) return fail("bad_exp");
 
   const storedSeq = options.storedSeq;
   if (storedSeq != null) {
@@ -98,12 +153,12 @@ function claimsFrom(value, options) {
       sub: value.sub,
       ent: Object.freeze([...value.ent]),
       st: value.st,
-      rsn: value.rsn,
+      rsn,
       iat: value.iat,
       exp: value.exp,
       seq: value.seq,
       jti: value.jti,
-      pexp: value.pexp,
+      pexp,
     }),
   };
 }
@@ -121,7 +176,12 @@ function verifyToken(compact, options = {}) {
 
   const headerBytes = decodeBase64Url(parts[0]);
   const headerJson = headerBytes && utf8Json(headerBytes);
-  if (!headerJson || !headerJson.value || typeof headerJson.value !== "object" || Array.isArray(headerJson.value)) {
+  if (
+    !headerJson ||
+    !headerJson.value ||
+    typeof headerJson.value !== "object" ||
+    Array.isArray(headerJson.value)
+  ) {
     return fail("bad_header");
   }
   const header = headerJson.value;
@@ -129,7 +189,10 @@ function verifyToken(compact, options = {}) {
   if (header.alg !== "EdDSA" || header.typ !== HEADER_TYPE || !/^[0-9a-f]{16}$/.test(header.kid)) {
     return fail("bad_header");
   }
-  if (headerJson.text !== canonicalJson({ alg: "EdDSA", kid: header.kid, typ: HEADER_TYPE })) {
+  if (
+    headerJson.text !== JSON.stringify(header) &&
+    headerJson.text !== canonicalJson({ alg: "EdDSA", kid: header.kid, typ: HEADER_TYPE })
+  ) {
     return fail("bad_header");
   }
 
@@ -139,7 +202,12 @@ function verifyToken(compact, options = {}) {
   if (!signature || signature.length !== 64) return fail("bad_signature");
   let signed = false;
   try {
-    signed = crypto.verify(null, Buffer.from(`${parts[0]}.${parts[1]}`, "utf8"), key.keyObject, signature);
+    signed = crypto.verify(
+      null,
+      Buffer.from(`${parts[0]}.${parts[1]}`, "utf8"),
+      key.keyObject,
+      signature,
+    );
   } catch {
     signed = false;
   }
