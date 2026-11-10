@@ -27,11 +27,100 @@ class BillingHost(context: Context, private val deliver: (String, JSONObject) ->
     private val productId = BuildConfig.PLUS_PRODUCT_ID
     private var client: BillingClient? = null
     private var destroyed = false
+    private var connecting = false
+    private val connections = mutableListOf<(BillingResult, BillingClient) -> Unit>()
     private class Call(val id: String) {
         var purchasing = false
         var timeout: Runnable? = null
     }
     private var current: Call? = null
+
+    fun optIn() { main.post { recovery.optIn() } }
+
+    private fun handlePurchases(result: BillingResult, purchases: List<Purchase>) {
+        if (destroyed) return
+        if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+            purchases.forEach { recovery.record(it.products, it.purchaseState, it.purchaseToken) }
+        }
+        val call = current
+        if (call != null && call.purchasing) {
+            val purchase = purchases.firstOrNull { productId in it.products }
+            finish(call, if (result.responseCode != BillingClient.BillingResponseCode.OK)
+                PlusBilling.purchaseResult(result.responseCode)
+            else purchase?.let(::purchaseJson) ?: PlusBilling.failure("PURCHASE_INVALID"))
+        }
+    }
+
+    private fun connect(ready: (BillingResult, BillingClient) -> Unit) {
+        val billing = client ?: BillingClient.newBuilder(context)
+            .setListener { result, purchases -> main.post { handlePurchases(result, purchases.orEmpty()) } }
+            .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
+            .enableAutoServiceReconnection()
+            .build().also { client = it }
+        if (billing.isReady) {
+            ready(BillingResult.newBuilder().setResponseCode(BillingClient.BillingResponseCode.OK).build(), billing)
+            return
+        }
+        connections.add(ready)
+        if (connecting) return
+        connecting = true
+        try { billing.startConnection(object : BillingClientStateListener {
+            override fun onBillingSetupFinished(result: BillingResult) {
+                main.post {
+                    if (destroyed) return@post
+                    connecting = false
+                    if (result.responseCode == BillingClient.BillingResponseCode.OK) queryPurchases(billing)
+                    val waiting = connections.toList()
+                    connections.clear()
+                    waiting.forEach { it(result, billing) }
+                }
+            }
+            override fun onBillingServiceDisconnected() {
+                main.post {
+                    if (destroyed) return@post
+                    connecting = false
+                    val waiting = connections.toList()
+                    connections.clear()
+                    val result = BillingResult.newBuilder()
+                        .setResponseCode(BillingClient.BillingResponseCode.SERVICE_DISCONNECTED).build()
+                    waiting.forEach { it(result, billing) }
+                    current?.takeUnless { it.purchasing }?.let {
+                        finish(it, PlusBilling.failure("SERVICE_DISCONNECTED"))
+                    }
+                }
+            }
+        }) } catch (error: Exception) {
+            connecting = false
+            connections.clear()
+            throw error
+        }
+    }
+
+    private fun queryPurchases(billing: BillingClient, done: ((BillingResult, List<Purchase>) -> Unit)? = null) {
+        fun complete(result: BillingResult, purchases: List<Purchase>) {
+            if (destroyed) return
+            if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                purchases.forEach { recovery.record(it.products, it.purchaseState, it.purchaseToken) }
+            }
+            done?.invoke(result, purchases)
+        }
+        try {
+            billing.queryPurchasesAsync(QueryPurchasesParams.newBuilder()
+                .setProductType(BillingClient.ProductType.SUBS).build()) { result, purchases ->
+                main.post { complete(result, purchases) }
+            }
+        } catch (_: Exception) {
+            complete(BillingResult.newBuilder()
+                .setResponseCode(BillingClient.BillingResponseCode.SERVICE_UNAVAILABLE).build(), emptyList())
+        }
+    }
+
+    fun onResume() { main.post {
+        if (destroyed || !recovery.optedIn || productId.isEmpty() || connecting) return@post
+        runCatching { connect { result, billing ->
+            if (result.responseCode == BillingClient.BillingResponseCode.OK) queryPurchases(billing)
+        } }
+    } }
 
     private fun finish(call: Call, result: JSONObject) {
         if (current !== call || destroyed) return
@@ -54,36 +143,13 @@ class BillingHost(context: Context, private val deliver: (String, JSONObject) ->
             call.timeout = Runnable { finish(call, PlusBilling.failure("SERVICE_TIMEOUT")) }
             main.postDelayed(call.timeout!!, 30_000)
             try {
-                val billing = client ?: BillingClient.newBuilder(context)
-                    .setListener { result, purchases -> main.post {
-                        val pending = current
-                        if (pending != null && pending.purchasing) {
-                            val purchase = purchases?.firstOrNull { productId in it.products }
-                            finish(pending, if (result.responseCode != BillingClient.BillingResponseCode.OK)
-                                PlusBilling.purchaseResult(result.responseCode)
-                            else purchase?.let(::purchaseJson) ?: PlusBilling.failure("PURCHASE_INVALID"))
-                        }
-                    } }
-                    .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
-                    .enableAutoServiceReconnection()
-                    .build().also { client = it }
-                if (billing.isReady) action(call, billing)
-                else billing.startConnection(object : BillingClientStateListener {
-                    override fun onBillingSetupFinished(result: BillingResult) {
-                        main.post setup@{
-                            if (current !== call || destroyed) return@setup
-                            if (result.responseCode != BillingClient.BillingResponseCode.OK)
-                                finish(call, PlusBilling.failure(PlusBilling.responseName(result.responseCode)))
-                            else try { action(call, billing) }
-                            catch (_: Exception) { finish(call, PlusBilling.failure("UNAVAILABLE")) }
-                        }
-                    }
-                    override fun onBillingServiceDisconnected() {
-                        main.post {
-                            if (!call.purchasing) finish(call, PlusBilling.failure("SERVICE_DISCONNECTED"))
-                        }
-                    }
-                })
+                connect { result, billing ->
+                    if (current !== call || destroyed) return@connect
+                    if (result.responseCode != BillingClient.BillingResponseCode.OK)
+                        finish(call, PlusBilling.failure(PlusBilling.responseName(result.responseCode)))
+                    else try { action(call, billing) }
+                    catch (_: Exception) { finish(call, PlusBilling.failure("UNAVAILABLE")) }
+                }
             } catch (_: Exception) {
                 finish(call, PlusBilling.failure("UNAVAILABLE"))
             }
@@ -163,9 +229,8 @@ class BillingHost(context: Context, private val deliver: (String, JSONObject) ->
     )
 
     fun restore(callId: String): String = submit(callId) { call, billing ->
-        billing.queryPurchasesAsync(QueryPurchasesParams.newBuilder()
-            .setProductType(BillingClient.ProductType.SUBS).build()) { result, purchases -> main.post {
-            if (current !== call || destroyed) return@post
+        queryPurchases(billing) { result, purchases ->
+            if (current !== call || destroyed) return@queryPurchases
             if (result.responseCode != BillingClient.BillingResponseCode.OK)
                 finish(call, PlusBilling.failure(PlusBilling.responseName(result.responseCode)))
             else {
@@ -173,7 +238,15 @@ class BillingHost(context: Context, private val deliver: (String, JSONObject) ->
                 purchases.filter { productId in it.products }.forEach { results.put(purchaseJson(it)) }
                 finish(call, JSONObject().put("ok", true).put("purchases", results))
             }
-        } }
+        }
+    }
+
+    fun pendingPurchases(callId: String): String = submit(callId) { call, billing ->
+        queryPurchases(billing) { result, _ ->
+            if (current !== call || destroyed) return@queryPurchases
+            finish(call, if (result.responseCode == BillingClient.BillingResponseCode.OK) recovery.drain()
+                else PlusBilling.failure(PlusBilling.responseName(result.responseCode)))
+        }
     }
 
     fun manageIntent(): Intent? = if (productId.isEmpty()) null else Intent(
@@ -183,7 +256,12 @@ class BillingHost(context: Context, private val deliver: (String, JSONObject) ->
     fun destroy() {
         current?.let { finish(it, PlusBilling.failure("UNAVAILABLE")) }
         destroyed = true
+        connections.clear()
         runCatching { client?.endConnection() }
         client = null
+    }
+
+    companion object {
+        private val recovery = PlusBilling.PurchaseRecovery(BuildConfig.PLUS_PRODUCT_ID, BuildConfig.APPLICATION_ID)
     }
 }

@@ -32,11 +32,14 @@ class PanelBridge(
     private val billingHost: BillingHost? = null,
     private val billingActivity: Activity? = null,
 ) {
-    private fun plusRefusal(callId: String): String? = when {
-        BuildConfig.PLUS_PRODUCT_ID.isEmpty() -> PlusBilling.failure("UNAVAILABLE_IN_BUILD").toString()
-        !PanelFiles.validCallId(callId) -> PlusBilling.failure("INVALID_INPUT").toString()
-        billingHost == null -> PlusBilling.failure("UNAVAILABLE").toString()
-        else -> null
+    private fun plusRefusal(callId: String): String? {
+        billingHost?.optIn()
+        return when {
+            BuildConfig.PLUS_PRODUCT_ID.isEmpty() -> PlusBilling.failure("UNAVAILABLE_IN_BUILD").toString()
+            !PanelFiles.validCallId(callId) -> PlusBilling.failure("INVALID_INPUT").toString()
+            billingHost == null -> PlusBilling.failure("UNAVAILABLE").toString()
+            else -> null
+        }
     }
 
     @JavascriptInterface
@@ -55,7 +58,11 @@ class PanelBridge(
     fun plusRestore(callId: String): String = plusRefusal(callId) ?: billingHost!!.restore(callId)
 
     @JavascriptInterface
+    fun plusPendingPurchases(callId: String): String = plusRefusal(callId) ?: billingHost!!.pendingPurchases(callId)
+
+    @JavascriptInterface
     fun plusManage(): String {
+        billingHost?.optIn()
         if (BuildConfig.PLUS_PRODUCT_ID.isEmpty())
             return PlusBilling.failure("UNAVAILABLE_IN_BUILD").toString()
         return try {

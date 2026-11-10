@@ -6,6 +6,7 @@ interface LevixHost {
   plusProduct?(id: string): string;
   plusPurchase?(id: string, offerToken: string, installationId: string): string;
   plusRestore?(id: string): string;
+  plusPendingPurchases?(id: string): string;
   plusManage?(): string;
   takePendingSticker?(): string;
   pickStickerSource?(id: string): string;
@@ -77,7 +78,8 @@ function call<T extends HostReply = HostResult>(
     | "saveBackup"
     | "plusProduct"
     | "plusPurchase"
-    | "plusRestore",
+    | "plusRestore"
+    | "plusPendingPurchases",
   args: (string | number)[],
   signal?: AbortSignal,
   onProgress?: (bytes: number, total: number) => void,
@@ -103,6 +105,7 @@ function call<T extends HostReply = HostResult>(
         method === "plusProduct" ? h.plusProduct?.(id) :
         method === "plusPurchase" ? h.plusPurchase?.(id, args[0] as string, args[1] as string) :
         method === "plusRestore" ? h.plusRestore?.(id) :
+        method === "plusPendingPurchases" ? h.plusPendingPurchases?.(id) :
         method === "pickStickerSource"
           ? h.pickStickerSource?.(id)
           : method === "pickFile"
@@ -163,6 +166,10 @@ export type PlusPurchaseResult =
       packageName: string;
     };
 export type PlusRestoreResult = PlusFailure | { ok: true; purchases: PlusPurchaseResult[] };
+export type PlusPendingPurchasesResult = PlusFailure | {
+  ok: true;
+  purchases: Omit<Extract<PlusPurchaseResult, { status: "purchased" }>, "ok">[];
+};
 
 export function plusProduct(): Promise<PlusProductResult> {
   return call<PlusProductResult>("plusProduct", []);
@@ -174,6 +181,10 @@ export function plusPurchase(offerToken: string, installationId: string): Promis
 
 export function plusRestore(): Promise<PlusRestoreResult> {
   return call<PlusRestoreResult>("plusRestore", []);
+}
+
+export function plusPendingPurchases(): Promise<PlusPendingPurchasesResult> {
+  return call<PlusPendingPurchasesResult>("plusPendingPurchases", []);
 }
 
 export function plusManage(): HostReply {
