@@ -363,6 +363,11 @@ function scopeOf(args) {
   return memory.normalizeScope(args?.scope);
 }
 
+function memoryScopeDenied(args, memoryScope, caller) {
+  // The memory store falls back to global.md when there is no chat ID.
+  return memoryScope === "chat" && (!caller?.chatId || scopeOf(args) === "global");
+}
+
 // A role change may only target someone the sender themselves named: a
 // mention, the author of the message they replied to, or a number they typed.
 // A target the model came up with — from a web page, say — is refused.
@@ -552,8 +557,12 @@ const TOOLS = {
       command: "memory",
       role: scopeOf(args) === "global" ? "botPrivileged" : undefined,
     }),
-    async run(args, { caller }) {
+    async run(args, { caller, memoryScope, deliveryGuard }) {
+      if (memoryScopeDenied(args, memoryScope, caller)) {
+        return { error: "only chat memory is available", denied: true };
+      }
       const scope = scopeOf(args);
+      deliveryGuard?.assert();
       const entry = memory.addMemory({
         scope,
         chatId: caller.chatId,
@@ -592,7 +601,10 @@ const TOOLS = {
     describe: () => t("bot.ai.aiTools.searchMemory"),
     // `!memory search` reads both scopes for anyone who may run `!memory`.
     access: { command: "memory" },
-    async run(args, { caller }) {
+    async run(args, { caller, memoryScope }) {
+      if (memoryScopeDenied(args, memoryScope, caller)) {
+        return { error: "only chat memory is available", denied: true };
+      }
       const wanted = String(args?.scope || "chat").toLowerCase();
       const scopes = wanted === "all" ? ["chat", "global"] : [scopeOf(args)];
       const out = {};
@@ -629,8 +641,12 @@ const TOOLS = {
       command: "memory",
       role: scopeOf(args) === "global" ? "botPrivileged" : "chatModerator",
     }),
-    async run(args, { caller }) {
+    async run(args, { caller, memoryScope, deliveryGuard }) {
+      if (memoryScopeDenied(args, memoryScope, caller)) {
+        return { error: "only chat memory is available", denied: true };
+      }
       const scope = scopeOf(args);
+      deliveryGuard?.assert();
       const removed = memory.removeMemory({
         scope,
         chatId: caller.chatId,
@@ -668,7 +684,7 @@ const TOOLS = {
     // `!perm add`: that command's level (owner only unless the operator
     // changed it), and the owner role is always the owner's to hand out.
     access: (args) => ({ command: "perm", role: roleOf(args) === "owner" ? "owner" : undefined }),
-    async run(args, { caller, signal }) {
+    async run(args, { caller, signal, deliveryGuard }) {
       if (!roleTargetBound(args?.target, caller)) {
         return {
           error: "mention, quote, or type the target phone number in your own request",
@@ -680,6 +696,7 @@ const TOOLS = {
       signal?.throwIfAborted();
       const verdict = authorize(TOOLS.grant_role.access(args), caller);
       if (!verdict.allowed) return { error: verdict.error, denied: true };
+      deliveryGuard?.assert();
       const record = grantRole(args?.target, role);
       logger.info({ role }, "[aiTools] role granted by the agent");
       return {
@@ -706,7 +723,7 @@ const TOOLS = {
     describe: (args) => t("bot.ai.aiTools.revokeRole", { target: preview(args?.target, 25) }),
     // `!perm remove`, gated exactly like grant_role.
     access: (args) => ({ command: "perm", role: roleOf(args) === "owner" ? "owner" : undefined }),
-    async run(args, { caller, sock, signal }) {
+    async run(args, { caller, sock, signal, deliveryGuard }) {
       if (!roleTargetBound(args?.target, caller)) {
         return {
           error: "mention, quote, or type the target phone number in your own request",
@@ -726,6 +743,7 @@ const TOOLS = {
       const verdict = authorize(TOOLS.revoke_role.access(args), caller);
       if (!verdict.allowed) return { error: verdict.error, denied: true };
       try {
+        deliveryGuard?.assert();
         const record = revokeRole(args?.target, role, aliases);
         return { revoked: true, role, user: record ? record.jid : args?.target };
       } catch (error) {
@@ -857,7 +875,7 @@ const TOOLS = {
     // Posting into a chat at a later time is exactly what `!schedule` does, so
     // it takes `!schedule`'s permission level — whatever the dashboard sets.
     access: { command: "schedule" },
-    async run(args, { caller, signal }) {
+    async run(args, { caller, signal, deliveryGuard }) {
       const message = String(args?.message || "")
         .trim()
         .slice(0, 500);
@@ -898,6 +916,7 @@ const TOOLS = {
         status: "pending",
       };
       signal?.throwIfAborted();
+      deliveryGuard?.assert();
       const result = scheduler.scheduleJobNow(job);
       if (!result.ok) {
         return result.reason === "no_connection"
@@ -940,7 +959,7 @@ const TOOLS = {
     describe: (args) => t("bot.ai.aiTools.cancelReminder", { id: preview(args?.id, 20) }),
     // Deleting a scheduled job is `!deleteschedule`'s job, so its level.
     access: { command: "deleteschedule" },
-    async run(args, { caller, signal }) {
+    async run(args, { caller, signal, deliveryGuard }) {
       const id = String(args?.id || "").trim();
       if (!id) return { error: "id is required" };
 
@@ -954,6 +973,7 @@ const TOOLS = {
       if (!job) return { error: "no reminder with that id in this chat", cancelled: false };
 
       signal?.throwIfAborted();
+      deliveryGuard?.assert();
       scheduler.deleteScheduledJob(id);
       return { cancelled: true, id, message: job.message };
     },
@@ -1253,7 +1273,12 @@ const TOOLS = {
       command: "memory",
       role: scopeOf(args) === "global" ? "botPrivileged" : undefined,
     }),
-    async run(args, { caller, signal }) {
+    async run(args, { caller, signal, memoryScope, deliveryGuard }) {
+      // Explicit-command history may quote global memory, even in this chat.
+      // Auto Reply cannot read or distill it into chat memory.
+      if (memoryScope === "chat") {
+        return { error: "stored chat history is unavailable in this turn", denied: true };
+      }
       const scope = scopeOf(args);
       const { getChatHistoryAsync } = require("../utils/storage-hub.cjs");
       const history = await getChatHistoryAsync(caller.chatId);
@@ -1279,6 +1304,7 @@ const TOOLS = {
       if (!verdict.allowed) return { error: verdict.error, denied: true };
       const ids = [];
       for (const fact of facts) {
+        deliveryGuard?.assert();
         const entry = memory.addMemory({
           scope,
           chatId: caller.chatId,
@@ -1439,18 +1465,27 @@ async function runTool(name, args, ctx) {
     // The socket asserts this after all asynchronous send preparation, with
     // no await between authorization and the underlying WhatsApp send.
     const deliveryGuard = {
-      async refresh() {},
+      async refresh() {
+        if (ctx?.deliveryGuard) await ctx.deliveryGuard.refresh();
+      },
       assert() {
+        ctx?.signal?.throwIfAborted();
+        ctx?.deliveryGuard?.assert();
         const current = authorize(access || null, caller);
         if (!current.allowed) {
           throw Object.assign(new Error(current.error), { code: "DENIED" });
         }
       },
     };
+    if (ctx?.deliveryGuard) {
+      await deliveryGuard.refresh();
+      deliveryGuard.assert();
+    }
     const result = await tool.run(input, {
       caller,
       sock: ctx?.sock,
       signal: ctx?.signal,
+      memoryScope: ctx?.memoryScope,
       deliveryGuard,
     });
     return result && typeof result === "object" ? result : { result };
