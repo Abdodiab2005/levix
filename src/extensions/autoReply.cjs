@@ -12,7 +12,8 @@ const PENDING_MAX = 50;
 const PENDING_TTL_MS = 2 * 60 * 1000;
 const INTAKE_MAX = 5000;
 const INTAKE_TTL_MS = 10 * 60 * 1000;
-const EXECUTION_MAX = 2000;
+// The Core backstop admits at most 30 * 60 * 24 = 43,200 turns per 24 hours.
+const EXECUTION_MAX = 50_000;
 const EXECUTION_TTL_MS = 24 * 60 * 60 * 1000;
 const GLOBAL_CONCURRENT = 2;
 const CHAT_CONCURRENT = 1;
@@ -25,6 +26,7 @@ const injected = {};
 const pending = new Map();
 const intake = new Map();
 const executions = new Map();
+let executionCapacityWarned = false;
 const inflightAbort = new Map();
 const chatInFlight = new Map();
 let globalInFlight = 0;
@@ -40,6 +42,7 @@ function resetAutoReplyDeps() {
   pending.clear();
   intake.clear();
   executions.clear();
+  executionCapacityWarned = false;
   inflightAbort.clear();
   chatInFlight.clear();
   globalInFlight = 0;
@@ -259,7 +262,17 @@ async function runAiReply(runtime, job = {}) {
   if (accountEpochNow() !== epoch) return { sent: false };
   if (!inScope(chatJid, runtime.getScope?.())) return { sent: false };
 
-  rememberClaim(executions, key, started + EXECUTION_TTL_MS, EXECUTION_MAX);
+  if (executions.size >= EXECUTION_MAX) {
+    if (!executionCapacityWarned) {
+      executionCapacityWarned = true;
+      try {
+        runtime.log?.warn?.("Auto Reply execution claim capacity reached; new turns refused");
+      } catch {}
+    }
+    return { sent: false };
+  }
+  executionCapacityWarned = false;
+  executions.set(key, started + EXECUTION_TTL_MS);
   beginTurn(chatJid, started);
   const jobAbort = entry.controller;
   inflightAbort.set(jobAbort, chatJid);

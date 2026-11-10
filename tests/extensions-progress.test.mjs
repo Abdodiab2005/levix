@@ -59,9 +59,9 @@ try {
     ok("Free: failure delivered", sock.sent.at(-1)?.text.includes("failed"));
   }
 
-  section("Plus-hidden progress stays suppressed through updates");
-  {
-    settings.set("reply_hide_progress", false);
+  for (const freeHide of [false, true]) {
+    section(`Plus-hidden progress stays suppressed with Free setting ${freeHide ? "on" : "off"}`);
+    settings.set("reply_hide_progress", freeHide);
     host.hideProgress = () => true;
     const sock = socket();
     const status = await createStatus(sock, CHAT, "starting");
@@ -84,6 +84,7 @@ try {
     await status.finish("done");
     equal("Plus: result delivered", sock.sent.at(-1)?.text, "done");
 
+    settings.set("reply_hide_progress", freeHide);
     host.hideProgress = () => true;
     const failure = await createStatus(sock, CHAT, "another start");
     await failure.fail(new Error("failed"), "Failure");

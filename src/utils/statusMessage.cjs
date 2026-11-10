@@ -49,11 +49,6 @@ class StatusMessage {
   async start(text) {
     this.text = text;
     // Hiding progress never hides a later result, error, or security notice.
-    if (this.category === "progress" && settings.get("reply_hide_progress")) {
-      this.suppressed = true;
-      this.text = "";
-      return this;
-    }
     if (this.category === "progress") {
       let plusHide = false;
       try {
@@ -61,12 +56,17 @@ class StatusMessage {
           command: this.command,
         });
       } catch {}
-      if (plusHide) {
-        this.suppressed = true;
-        this.plusSuppressed = true;
-        this.text = "";
-        return this;
-      }
+      this.plusSuppressed = plusHide;
+    }
+    if (this.category === "progress" && settings.get("reply_hide_progress")) {
+      this.suppressed = true;
+      this.text = "";
+      return this;
+    }
+    if (this.category === "progress" && this.plusSuppressed) {
+      this.suppressed = true;
+      this.text = "";
+      return this;
     }
     try {
       const sent = await sendBotMessage(this.sock, this.jid, this.payload(text, this.mentions), {
