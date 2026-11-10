@@ -3,6 +3,7 @@ import { ApiError } from "../api/client";
 import type { StickerUpload } from "../types";
 
 interface LevixHost {
+  plusConfigured?(): boolean;
   plusProduct?(id: string): string;
   plusPurchase?(id: string, offerToken: string, installationId: string): string;
   plusRestore?(id: string): string;
@@ -45,9 +46,16 @@ type HostResult = HostReply & {
   mime?: string;
   size?: number;
 };
-const host = () => (window as { LevixHost?: LevixHost }).LevixHost;
+declare global {
+  interface Window {
+    LevixHost?: LevixHost;
+  }
+}
+
+const host = () => window.LevixHost;
 export const hasHostBridge = () => host() != null;
 export const isAndroidHost = hasHostBridge;
+export const isPlusConfigured = () => host()?.plusConfigured?.() === true;
 const waiting = new Map<string, (value: HostReply) => void>();
 const progress = new Map<string, (bytes: number, total: number) => void>();
 let installed = false;
@@ -63,8 +71,9 @@ function installDone() {
     progress.delete(id);
     done?.(result);
   };
-  (window as Window & { __levixHostProgress?: (id: string, bytes: number, total: number) => void })
-    .__levixHostProgress = (id, bytes, total) => progress.get(id)?.(bytes, total);
+  (
+    window as Window & { __levixHostProgress?: (id: string, bytes: number, total: number) => void }
+  ).__levixHostProgress = (id, bytes, total) => progress.get(id)?.(bytes, total);
 }
 
 function call<T extends HostReply = HostResult>(
@@ -86,7 +95,8 @@ function call<T extends HostReply = HostResult>(
 ): Promise<T> {
   const h = host();
   const fn = h?.[method];
-  if (!h || typeof fn !== "function") return Promise.resolve({ ok: false, code: "UNAVAILABLE" } as T);
+  if (!h || typeof fn !== "function")
+    return Promise.resolve({ ok: false, code: "UNAVAILABLE" } as T);
   installDone();
   const id = crypto.randomUUID();
   return new Promise((resolve) => {
@@ -102,37 +112,46 @@ function call<T extends HostReply = HostResult>(
     signal?.addEventListener("abort", abort, { once: true });
     try {
       const raw =
-        method === "plusProduct" ? h.plusProduct?.(id) :
-        method === "plusPurchase" ? h.plusPurchase?.(id, args[0] as string, args[1] as string) :
-        method === "plusRestore" ? h.plusRestore?.(id) :
-        method === "plusPendingPurchases" ? h.plusPendingPurchases?.(id) :
-        method === "pickStickerSource"
-          ? h.pickStickerSource?.(id)
-          : method === "pickFile"
-            ? h.pickFile?.(id)
-            : method === "uploadSource"
-              ? h.uploadSource?.(id, args[0] as string, args[1] as string, args[2] as number)
-              : method === "uploadForm"
-                ? h.uploadForm?.(
-                    id,
-                    args[0] as string,
-                    args[1] as string,
-                    args[2] as string,
-                    args[3] as number,
-                  )
-                : method === "uploadBackup"
-                  ? h.uploadBackup?.(id, args[0] as string, args[1] as number)
-                  : method === "saveBackup"
-                    ? h.saveBackup?.(id, args[0] as string, args[1] as string)
-                    : h.exportFile?.(
-                    id,
-                    args[0] as string,
-                    args[1] as string,
-                    args[2] as string,
-                    args[3] as string,
-                    args[4] as string,
-                    args[5] as string,
-                  );
+        method === "plusProduct"
+          ? h.plusProduct?.(id)
+          : method === "plusPurchase"
+            ? h.plusPurchase?.(id, args[0] as string, args[1] as string)
+            : method === "plusRestore"
+              ? h.plusRestore?.(id)
+              : method === "plusPendingPurchases"
+                ? h.plusPendingPurchases?.(id)
+                : method === "pickStickerSource"
+                  ? h.pickStickerSource?.(id)
+                  : method === "pickFile"
+                    ? h.pickFile?.(id)
+                    : method === "uploadSource"
+                      ? h.uploadSource?.(
+                          id,
+                          args[0] as string,
+                          args[1] as string,
+                          args[2] as number,
+                        )
+                      : method === "uploadForm"
+                        ? h.uploadForm?.(
+                            id,
+                            args[0] as string,
+                            args[1] as string,
+                            args[2] as string,
+                            args[3] as number,
+                          )
+                        : method === "uploadBackup"
+                          ? h.uploadBackup?.(id, args[0] as string, args[1] as number)
+                          : method === "saveBackup"
+                            ? h.saveBackup?.(id, args[0] as string, args[1] as string)
+                            : h.exportFile?.(
+                                id,
+                                args[0] as string,
+                                args[1] as string,
+                                args[2] as string,
+                                args[3] as string,
+                                args[4] as string,
+                                args[5] as string,
+                              );
       const reply = JSON.parse(raw || "") as HostResult;
       if (!reply.ok) {
         waiting.delete(id);
@@ -167,16 +186,21 @@ export type PlusPurchaseResult =
       acknowledged: boolean;
     };
 export type PlusRestoreResult = PlusFailure | { ok: true; purchases: PlusPurchaseResult[] };
-export type PlusPendingPurchasesResult = PlusFailure | {
-  ok: true;
-  purchases: Omit<Extract<PlusPurchaseResult, { status: "purchased" }>, "ok">[];
-};
+export type PlusPendingPurchasesResult =
+  | PlusFailure
+  | {
+      ok: true;
+      purchases: Omit<Extract<PlusPurchaseResult, { status: "purchased" }>, "ok">[];
+    };
 
 export function plusProduct(): Promise<PlusProductResult> {
   return call<PlusProductResult>("plusProduct", []);
 }
 
-export function plusPurchase(offerToken: string, installationId: string): Promise<PlusPurchaseResult> {
+export function plusPurchase(
+  offerToken: string,
+  installationId: string,
+): Promise<PlusPurchaseResult> {
   return call<PlusPurchaseResult>("plusPurchase", [offerToken, installationId]);
 }
 
@@ -282,7 +306,11 @@ export async function pickHostFile(): Promise<HostSource | null> {
 }
 
 /** Backup picker only needs the document token, name and size. */
-export async function pickHostBackupFile(): Promise<{ token: string; name: string; size: number } | null> {
+export async function pickHostBackupFile(): Promise<{
+  token: string;
+  name: string;
+  size: number;
+} | null> {
   const result = await call("pickFile", []);
   if (!result.ok && !result.cancelled) throw apiError(result);
   return result.ok && result.token && result.name && typeof result.size === "number"
@@ -298,17 +326,28 @@ export function canHostBackupSave(): boolean {
   return typeof host()?.saveBackup === "function";
 }
 
-export async function uploadHostBackup(token: string, maxBytes: number, signal?: AbortSignal,
-  onProgress?: (bytes: number, total: number) => void): Promise<{ uploadId: string; size: number } | "UNAVAILABLE" | "CANCELLED"> {
+export async function uploadHostBackup(
+  token: string,
+  maxBytes: number,
+  signal?: AbortSignal,
+  onProgress?: (bytes: number, total: number) => void,
+): Promise<{ uploadId: string; size: number } | "UNAVAILABLE" | "CANCELLED"> {
   const result = await call("uploadBackup", [token, maxBytes], signal, onProgress);
   if (result.code === "UNAVAILABLE") return "UNAVAILABLE";
   if (result.cancelled) return "CANCELLED";
-  if (!result.ok || !result.status || result.status < 200 || result.status >= 300) throw apiError(result);
-  try { return JSON.parse(result.body || "") as { uploadId: string; size: number }; }
-  catch { throw new ApiError(result.status, "Invalid upload response", { code: "INTERNAL" }); }
+  if (!result.ok || !result.status || result.status < 200 || result.status >= 300)
+    throw apiError(result);
+  try {
+    return JSON.parse(result.body || "") as { uploadId: string; size: number };
+  } catch {
+    throw new ApiError(result.status, "Invalid upload response", { code: "INTERNAL" });
+  }
 }
 
-export async function saveHostBackup(token: string, fileName: string): Promise<"SAVED" | "UNAVAILABLE" | "CANCELLED"> {
+export async function saveHostBackup(
+  token: string,
+  fileName: string,
+): Promise<"SAVED" | "UNAVAILABLE" | "CANCELLED"> {
   const result = await call("saveBackup", [token, fileName]);
   if (result.code === "UNAVAILABLE") return "UNAVAILABLE";
   if (result.cancelled) return "CANCELLED";

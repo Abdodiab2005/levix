@@ -126,7 +126,7 @@ section("claim signed bytes and signature vector");
   });
 
   equal("claim outcome is ok", outcome.ok, true);
-  equal("claim request URL", captured?.url, "https://plus.leviro.net/v1/claim");
+  equal("claim request URL", captured?.url, "https://levix-plus.leviro.net/v1/claim");
   equal("claim request body", captured?.init?.body, expectedBody);
   equal(
     "claim header x-levix-installation",
@@ -207,7 +207,7 @@ section("refresh signed bytes and signature vector");
     },
   });
 
-  equal("refresh request URL", captured?.url, "https://plus.leviro.net/v1/refresh");
+  equal("refresh request URL", captured?.url, "https://levix-plus.leviro.net/v1/refresh");
   equal("refresh request body", captured?.init?.body, expectedBody);
   equal(
     "refresh omits x-levix-key header",

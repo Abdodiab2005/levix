@@ -206,6 +206,9 @@ export const AIAssistantView: React.FC = () => {
   const aiReplyLang = useSavedValue(String(settings["ai_reply_language"] || "follow_bot"));
   const translateEngine = useSavedValue(String(settings["translate_engine"] || "ai"));
   const googleTranslateKey = useSavedValue(String(settings["google_translate_api_key"] || ""));
+  const globalMemoryRead = useSavedValue(String(settings["ai_global_memory_read"] || "privileged"));
+  const globalMemoryWrite = useSavedValue(String(settings["ai_global_memory_write"] || "off"));
+  const globalMemoryWhere = useSavedValue(String(settings["ai_global_memory_where"] || "own_chat"));
 
   const selectedPreset = PRESETS.find((p) => p.id === providerForm.draft.presetId) || savedPreset;
 
@@ -941,9 +944,7 @@ export const AIAssistantView: React.FC = () => {
                 id="ai-google-translate-key"
                 className="font-mono"
                 placeholder={
-                  configuredKeys.google_translate_api_key
-                    ? "••••••••••••"
-                    : t("enterApiKey")
+                  configuredKeys.google_translate_api_key ? "••••••••••••" : t("enterApiKey")
                 }
                 value={googleTranslateKey.value}
                 onChange={(e) => googleTranslateKey.setValue(e.target.value)}
@@ -978,6 +979,100 @@ export const AIAssistantView: React.FC = () => {
         >
           {t("openInspector")}
         </Button>
+      </Card>
+
+      <Card className="flex flex-col gap-3">
+        <CardHeader
+          icon={<Database size={18} />}
+          title={t("aiGlobalMemoryAccess")}
+          description={t("aiGlobalMemoryAccessDesc")}
+        />
+        <div className="flex flex-col divide-y divide-line">
+          <div className="py-2">
+            <SaveField
+              label={t("aiGlobalMemoryRead")}
+              description={t("aiGlobalMemoryReadDesc")}
+              htmlFor="ai-global-memory-read"
+              dirty={globalMemoryRead.dirty}
+              saving={globalMemoryRead.status === "saving"}
+              justSaved={globalMemoryRead.status === "saved"}
+              error={globalMemoryRead.error}
+              onSave={() =>
+                globalMemoryRead.save((next) => persistSetting("ai_global_memory_read", next))
+              }
+              onRevert={globalMemoryRead.revert}
+              {...saveLabels}
+            >
+              <Select
+                id="ai-global-memory-read"
+                aria-label={t("aiGlobalMemoryRead")}
+                value={globalMemoryRead.value}
+                onChange={(e) => globalMemoryRead.setValue(e.target.value)}
+              >
+                <option value="off">{t("aiGlobalMemoryOff")}</option>
+                <option value="owner">{t("aiGlobalMemoryOwner")}</option>
+                <option value="privileged">{t("aiGlobalMemoryPrivileged")}</option>
+                <option value="everyone">{t("aiGlobalMemoryEveryone")}</option>
+              </Select>
+            </SaveField>
+          </div>
+
+          <div className="py-2">
+            <SaveField
+              label={t("aiGlobalMemoryWrite")}
+              description={t("aiGlobalMemoryWriteDesc")}
+              htmlFor="ai-global-memory-write"
+              dirty={globalMemoryWrite.dirty}
+              saving={globalMemoryWrite.status === "saving"}
+              justSaved={globalMemoryWrite.status === "saved"}
+              error={globalMemoryWrite.error}
+              onSave={() =>
+                globalMemoryWrite.save((next) => persistSetting("ai_global_memory_write", next))
+              }
+              onRevert={globalMemoryWrite.revert}
+              {...saveLabels}
+            >
+              <Select
+                id="ai-global-memory-write"
+                aria-label={t("aiGlobalMemoryWrite")}
+                value={globalMemoryWrite.value}
+                onChange={(e) => globalMemoryWrite.setValue(e.target.value)}
+              >
+                <option value="off">{t("aiGlobalMemoryOff")}</option>
+                <option value="owner">{t("aiGlobalMemoryOwner")}</option>
+                <option value="privileged">{t("aiGlobalMemoryPrivileged")}</option>
+              </Select>
+            </SaveField>
+          </div>
+
+          <div className="py-2">
+            <SaveField
+              label={t("aiGlobalMemoryWhere")}
+              description={t("aiGlobalMemoryWhereDesc")}
+              htmlFor="ai-global-memory-where"
+              dirty={globalMemoryWhere.dirty}
+              saving={globalMemoryWhere.status === "saving"}
+              justSaved={globalMemoryWhere.status === "saved"}
+              error={globalMemoryWhere.error}
+              onSave={() =>
+                globalMemoryWhere.save((next) => persistSetting("ai_global_memory_where", next))
+              }
+              onRevert={globalMemoryWhere.revert}
+              {...saveLabels}
+            >
+              <Select
+                id="ai-global-memory-where"
+                aria-label={t("aiGlobalMemoryWhere")}
+                value={globalMemoryWhere.value}
+                onChange={(e) => globalMemoryWhere.setValue(e.target.value)}
+              >
+                <option value="own_chat">{t("aiGlobalMemoryWhereOwnChat")}</option>
+                <option value="private">{t("aiGlobalMemoryWherePrivate")}</option>
+                <option value="all">{t("aiGlobalMemoryWhereAll")}</option>
+              </Select>
+            </SaveField>
+          </div>
+        </div>
       </Card>
 
       <Dialog
