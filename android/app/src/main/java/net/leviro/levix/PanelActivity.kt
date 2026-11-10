@@ -241,10 +241,17 @@ class PanelActivity : AppCompatActivity() {
                 web.evaluateJavascript(
                     "window.__levixHostProgress(${JSONObject.quote(id)}, $bytes, $total)", null)
             } })
-        billingHost = BillingHost(this) { id, result -> runOnUiThread {
-            web.evaluateJavascript(
-                "window.__levixHostDone(${JSONObject.quote(id)}, ${result})", null)
-        } }
+        billingHost = BillingHost(
+            this,
+            { runOnUiThread {
+                web.evaluateJavascript(
+                    "window.dispatchEvent(new CustomEvent(\"levix-plus-purchase\"))", null)
+            } },
+            { id, result -> runOnUiThread {
+                web.evaluateJavascript(
+                    "window.__levixHostDone(${JSONObject.quote(id)}, ${result})", null)
+            } },
+        )
         web.addJavascriptInterface(
             PanelBridge(
                 sock,

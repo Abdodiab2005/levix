@@ -30,8 +30,11 @@ class PlusBillingTest {
         assertEquals("token\"\\", result.getString("purchaseToken"))
         assertEquals("plus.monthly", result.getString("productId"))
         assertEquals("net.leviro.levix", result.getString("packageName"))
+        assertFalse(result.getBoolean("acknowledged"))
         assertFalse(result.has("entitlement"))
         assertFalse(result.has("active"))
+        val acked = JSONObject(PlusBilling.purchaseResult(0, 1, "token", "plus.monthly", "net.leviro.levix", true).toString())
+        assertTrue(acked.getBoolean("acknowledged"))
         for (resultWithoutToken in listOf(
             PlusBilling.purchaseResult(0, 2, "secret", "plus", "pkg"),
             PlusBilling.purchaseResult(1, 1, "secret", "plus", "pkg"),
@@ -41,6 +44,7 @@ class PlusBillingTest {
             assertFalse(resultWithoutToken.has("purchaseToken"))
             assertFalse(resultWithoutToken.has("productId"))
             assertFalse(resultWithoutToken.has("packageName"))
+            assertFalse(resultWithoutToken.has("acknowledged"))
         }
     }
 
@@ -110,15 +114,18 @@ class PlusBillingTest {
         val purchases = result.getJSONArray("purchases")
         assertEquals(1, purchases.length())
         val purchase = purchases.getJSONObject(0)
-        assertEquals(4, purchase.length())
+        assertEquals(5, purchase.length())
         assertEquals("token\"\\", purchase.getString("purchaseToken"))
         assertEquals("plus.monthly", purchase.getString("productId"))
         assertEquals("net.leviro.levix", purchase.getString("packageName"))
         assertEquals("purchased", purchase.getString("status"))
+        assertFalse(purchase.getBoolean("acknowledged"))
         assertEquals(0, recovery.drain().getJSONArray("purchases").length())
         // A later Play reconciliation may offer the same token again for a failed claim.
-        recovery.record(listOf("plus.monthly"), 1, "token\"\\")
-        assertEquals(1, recovery.drain().getJSONArray("purchases").length())
+        recovery.record(listOf("plus.monthly"), 1, "token\"\\", true)
+        val second = recovery.drain()
+        assertEquals(1, second.getJSONArray("purchases").length())
+        assertTrue(second.getJSONArray("purchases").getJSONObject(0).getBoolean("acknowledged"))
     }
 
     @Test fun recoveryRejectsOtherProductsUnknownStatesAndInvalidClaimFields() {

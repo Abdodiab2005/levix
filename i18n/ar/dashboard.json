@@ -1424,6 +1424,8 @@
   "plusDisclosure": "{price}، تُحصّل شهريًا. يتجدد الاشتراك تلقائيًا حتى إلغائه من Google Play.",
   "plusSubscribe": "اشترك",
   "plusRestore": "استعادة المشتريات",
+  "plusRestoreConfirmTitle": "استعادة المشتريات",
+  "plusRestoreConfirm": "استعادة المشتريات تنقل Levix Plus إلى هذا التثبيت.",
   "plusManage": "إدارة الاشتراك في Google Play",
   "plusPaymentPending": "الدفع قيد الانتظار. تتطلب Plus اكتمال الدفع والتحقق من الخادم.",
   "plusPurchaseCancelled": "أُلغيت عملية الشراء",
