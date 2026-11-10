@@ -77,9 +77,10 @@ router.post("/backup/restore/uploads/:id/preview", async (req, res) => {
       accountsMatch(m.account, paired) ? "match" : "different";
     const plan = buildPlan({ digests: m.digests ?? null, apiKeyNames: m.apiKeys, account: m.account,
       personaSha: m.entries.find((entry) => entry.kind === "persona")?.sha256 ?? null });
+    const publicView = publicPlan(plan);
     return res.json({ created: m.created, app: m.app, schema: m.schema, platform: m.platform,
       counts: m.counts, apiKeys: m.apiKeys, account: { masked: maskAccount(m.account), status },
-      accountData: m.account ? "waits" : "none", plan: publicPlan(plan) });
+      accountData: m.account ? "waits" : "none", plan: publicView, plus: publicView.plus });
   } catch (error) {
     if (error.code === "WRONG_PASSWORD" && uploads.wrongPassword(id))
       return respondError(res, { code: "too_many_attempts" });
