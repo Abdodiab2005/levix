@@ -38,6 +38,7 @@ const { createStatus } = require("../utils/statusMessage.cjs");
 const { formatMarkdownForWhatsApp } = require("../utils/markdownParser.cjs");
 const { isOwnerJidSync, getSenderCandidatesSync } = require("../utils/permissions.cjs");
 const { resolveCaller } = require("../services/aiToolAuth.cjs");
+const { globalMemoryAccess, stripMemoryToolParts } = require("../services/memoryPolicy.cjs");
 const { resolveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
 const { generateImage } = require("../services/aiImage.cjs");
 const {
@@ -673,7 +674,7 @@ module.exports = {
       const history = historyOverride ?? ((await getChatHistoryAsync(chatId)) || []);
       const result = await runAgent({
         parts,
-        history,
+        history: globalMemoryAccess(agentContext).read ? history : stripMemoryToolParts(history),
         status,
         context: agentContext,
       });
