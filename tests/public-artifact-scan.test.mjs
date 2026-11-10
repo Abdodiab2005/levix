@@ -1,7 +1,15 @@
 // The public artifact scanner must fail on private Levix Plus code and pass on
 // an artifact that carries none. Fixtures are built at runtime, so the test
 // needs no committed archives.
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,9 +20,11 @@ import {
   MAX_ENTRY_BYTES,
   MAX_TOTAL_BYTES,
   hasForbiddenPath,
+  parsePax,
   scanArtifact,
   scanDirectory,
   scanRaw,
+  scanTar,
   scanTarGz,
   scanZip,
 } from "../scripts/scan-public-artifacts.mjs";
@@ -72,7 +82,7 @@ function padded(data) {
   return pad ? Buffer.concat([data, Buffer.alloc(pad)]) : data;
 }
 
-function tarGz(entries) {
+function tarBuffer(entries) {
   const chunks = [];
   for (const entry of entries) {
     const data = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data ?? "", "utf8");
@@ -85,7 +95,27 @@ function tarGz(entries) {
     chunks.push(tarHeader(name, data.length, entry.type ?? "0", entry.prefix ?? ""), padded(data));
   }
   chunks.push(Buffer.alloc(1024));
-  return gzipSync(Buffer.concat(chunks));
+  return Buffer.concat(chunks);
+}
+
+function tarGz(entries) {
+  return gzipSync(tarBuffer(entries));
+}
+
+function makePax(records) {
+  const parts = [];
+  for (const [key, val] of Object.entries(records)) {
+    const suffix = ` ${key}=${val}\n`;
+    const suffixLen = Buffer.byteLength(suffix, "utf8");
+    let len = suffixLen + 2;
+    while (true) {
+      const lenStr = String(len);
+      if (lenStr.length + suffixLen === len) break;
+      len = lenStr.length + suffixLen;
+    }
+    parts.push(Buffer.from(`${len}${suffix}`, "utf8"));
+  }
+  return Buffer.concat(parts);
 }
 
 // --- fixtures -------------------------------------------------------------
@@ -197,6 +227,110 @@ try {
 
   const artifact = scanArtifact(cleanZipPath);
   ok("scanArtifact detects a zip", artifact.kind === "zip" && artifact.ok);
+
+  section("nested archives and depth cap");
+
+  const nestedTgzDir = join(root, "nested-tgz-dir");
+  const canaryTgz = tarGz([{ name: "src/secret.txt", data: `prefix ${CANARY} suffix` }]);
+  writeTree(nestedTgzDir, { "clean.txt": "hello\n" });
+  writeFileSync(join(nestedTgzDir, "payload.tgz"), canaryTgz);
+  const nestedTgzResult = scanDirectory(nestedTgzDir);
+  ok("nested tgz in a directory is inspected", !nestedTgzResult.ok);
+  ok(
+    "…and detects canary in nested tgz",
+    nestedTgzResult.findings.some((finding) => finding.path === "payload.tgz/src/secret.txt"),
+  );
+
+  const innerZipDir = join(root, "inner-zip-tree");
+  writeTree(innerZipDir, { "payload.txt": `${CANARY} inside zip` });
+  const innerZip = zipTree(innerZipDir);
+  const zipInTgz = tarGz([{ name: "bundle.zip", data: innerZip }]);
+  const zipInTgzResult = scanTarGz(zipInTgz);
+  ok("zip inside tgz is inspected", !zipInTgzResult.ok);
+  ok(
+    "…and detects canary in nested zip",
+    zipInTgzResult.findings.some((finding) => finding.path === "bundle.zip/payload.txt"),
+  );
+
+  // The innermost entry is a real archive holding a text file; four more archives wrap it.
+  let okArchive = tarGz([
+    { name: "payload.txt", data: Buffer.from("clean inner payload\n", "utf8") },
+  ]);
+  for (let level = 4; level >= 1; level -= 1) {
+    okArchive = tarGz([{ name: `level${level}.tgz`, data: okArchive }]);
+  }
+  const okDepthResult = scanTarGz(okArchive);
+  ok("archive within depth cap passes", okDepthResult.ok);
+
+  let deepArchive = Buffer.from("deep clean payload\n", "utf8");
+  for (let level = 5; level >= 1; level -= 1) {
+    deepArchive = tarGz([{ name: `deep${level}.tgz`, data: deepArchive }]);
+  }
+  const deepResult = scanTarGz(deepArchive);
+  ok(
+    "archive exceeding depth cap fails",
+    !deepResult.ok && /depth cap/.test(deepResult.error ?? ""),
+  );
+
+  const uncompressedTar = tarBuffer([{ name: "src/clean.txt", data: "hello\n" }]);
+  ok("uncompressed tar passes", scanTar(uncompressedTar).ok);
+  const uncompressedPath = join(root, "clean.tar");
+  writeFileSync(uncompressedPath, uncompressedTar);
+  const artifactTar = scanArtifact(uncompressedPath);
+  ok("scanArtifact detects tar", artifactTar.kind === "tar" && artifactTar.ok);
+
+  section("symlinks");
+
+  const symlinkDir = join(root, "symlink-dir");
+  writeTree(symlinkDir, { "target.txt": `secret ${CANARY}` });
+  symlinkSync("target.txt", join(symlinkDir, "link.txt"));
+  const symlinkResult = scanDirectory(symlinkDir);
+  ok(
+    "in-root symlink scanned",
+    !symlinkResult.ok && symlinkResult.findings.some((f) => f.path === "link.txt"),
+  );
+
+  const escapeDir = join(root, "escape-dir");
+  writeTree(escapeDir, { "clean.txt": "hello\n" });
+  symlinkSync("/etc/hosts", join(escapeDir, "escape.txt"));
+  const escapeResult = scanDirectory(escapeDir);
+  ok("escaping symlink fails", !escapeResult.ok && /escapes/.test(escapeResult.error ?? ""));
+
+  const brokenDir = join(root, "broken-link-dir");
+  mkdirSync(brokenDir);
+  symlinkSync("missing.txt", join(brokenDir, "broken.txt"));
+  const brokenResult = scanDirectory(brokenDir);
+  ok(
+    "broken symlink fails",
+    !brokenResult.ok && /cannot read symlink/.test(brokenResult.error ?? ""),
+  );
+
+  const cycleDir = join(root, "cycle-dir");
+  mkdirSync(join(cycleDir, "sub"), { recursive: true });
+  writeFileSync(join(cycleDir, "sub", "hello.txt"), "hello\n");
+  symlinkSync(cycleDir, join(cycleDir, "sub", "loop"));
+  const cycleResult = scanDirectory(cycleDir);
+  ok("symlink cycle is handled safely", cycleResult.ok);
+
+  section("PAX extended headers");
+
+  const paxData = makePax({ path: "extensions/levix-plus/secret.js" });
+  const paxTar = tarGz([
+    { name: "PaxHeader/clean.js", data: paxData, type: "x" },
+    { name: "clean.js", data: "console.log(1);\n", type: "0" },
+  ]);
+  const paxResult = scanTarGz(paxTar);
+  ok(
+    "PAX path override detected",
+    !paxResult.ok && paxResult.findings.some((f) => f.path === "extensions/levix-plus/secret.js"),
+  );
+
+  const badPaxTar = tarGz([
+    { name: "PaxHeader/bad", data: "malformed pax record with no length or space\n", type: "x" },
+    { name: "clean.js", data: "console.log(1);\n", type: "0" },
+  ]);
+  const badPaxResult = scanTarGz(badPaxTar);
+  ok("malformed PAX record fails", !badPaxResult.ok && /PAX/.test(badPaxResult.error ?? ""));
 
   section("the repository itself");
 

@@ -97,6 +97,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
       - name: build, start, claim, restart, upgrade
         run: |
           set -e
@@ -110,6 +113,11 @@ jobs:
           fi
           exit $status
         timeout-minutes: 25
+      - name: Scan the Docker image
+        run: |
+          set -euo pipefail
+          docker save levix-validate:local -o "$RUNNER_TEMP/levix-image.tar"
+          node scripts/scan-public-artifacts.mjs "$RUNNER_TEMP/levix-image.tar"
 
   android:
     name: android apk builds
