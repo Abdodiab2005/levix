@@ -248,10 +248,7 @@ async function runAiReply(runtime, job = {}) {
   const instructions = job.instructions == null ? "" : String(job.instructions);
   if (instructions.length > MAX_INSTRUCTIONS) return { sent: false };
   const quote = job.quote === true;
-  const autoReplyGlobal = Object.freeze({
-    read: job.globalMemory?.read === true,
-    write: job.globalMemory?.write === true,
-  });
+  const autoReplyGlobal = Object.freeze({ read: job.globalMemory?.read === true });
   const { sock, msg, event, epoch, generation } = entry;
   const chatJid = event.chatJid;
   const isGroup = event.isGroup;
