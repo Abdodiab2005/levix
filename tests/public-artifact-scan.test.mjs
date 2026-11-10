@@ -262,7 +262,10 @@ try {
   const okDepthResult = scanTarGz(okArchive);
   ok("archive within depth cap passes", okDepthResult.ok);
 
-  let deepArchive = Buffer.from("deep clean payload\n", "utf8");
+  // Content detection only treats real archives as nesting, so the innermost entry is an archive too.
+  let deepArchive = tarGz([
+    { name: "payload.txt", data: Buffer.from("deep clean payload\n", "utf8") },
+  ]);
   for (let level = 5; level >= 1; level -= 1) {
     deepArchive = tarGz([{ name: `deep${level}.tgz`, data: deepArchive }]);
   }
@@ -278,6 +281,19 @@ try {
   writeFileSync(uncompressedPath, uncompressedTar);
   const artifactTar = scanArtifact(uncompressedPath);
   ok("scanArtifact detects tar", artifactTar.kind === "tar" && artifactTar.ok);
+
+  const ociDigest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+  const ociLayerName = `blobs/sha256/${ociDigest}`;
+  const ociInnerTar = tarGz([
+    { name: "extensions/levix-plus/runtime.js", data: "module.exports = 1;\n" },
+  ]);
+  const ociArchive = tarBuffer([{ name: ociLayerName, data: ociInnerTar }]);
+  const ociResult = scanTar(ociArchive);
+  ok(
+    "a gzip layer named blobs/sha256/<hex> holding a private path fails",
+    !ociResult.ok &&
+      ociResult.findings.some((f) => f.path === `${ociLayerName}/extensions/levix-plus/runtime.js`),
+  );
 
   section("symlinks");
 
@@ -312,6 +328,20 @@ try {
   const cycleResult = scanDirectory(cycleDir);
   ok("symlink cycle is handled safely", cycleResult.ok);
 
+  const aliasDir = join(root, "symlink-alias-dir");
+  writeTree(aliasDir, {
+    "a/levix-plus/x.js": "module.exports = 1;\n",
+  });
+  symlinkSync("a", join(aliasDir, "extensions"));
+  const aliasResult = scanDirectory(aliasDir);
+  ok(
+    "the symlink alias case fails",
+    !aliasResult.ok &&
+      aliasResult.findings.some(
+        (f) => f.path === "extensions/levix-plus" || f.path === "extensions/levix-plus/x.js",
+      ),
+  );
+
   section("PAX extended headers");
 
   const paxData = makePax({ path: "extensions/levix-plus/secret.js" });
@@ -323,6 +353,28 @@ try {
   ok(
     "PAX path override detected",
     !paxResult.ok && paxResult.findings.some((f) => f.path === "extensions/levix-plus/secret.js"),
+  );
+
+  const paxSizeData = makePax({ size: "1024" });
+  const paxSizeHeader = tarHeader("PaxHeader/zeros.bin", paxSizeData.length, "x");
+  const zerosHeader = tarHeader("zeros.bin", 0, "0");
+  const zerosPayload = Buffer.alloc(1024, 0);
+  const privatePayload = Buffer.from("module.exports = 1;\n", "utf8");
+  const privateHeader = tarHeader("extensions/levix-plus/secret.js", privatePayload.length, "0");
+  const paxSizeTar = Buffer.concat([
+    paxSizeHeader,
+    padded(paxSizeData),
+    zerosHeader,
+    zerosPayload,
+    privateHeader,
+    padded(privatePayload),
+    Buffer.alloc(1024, 0),
+  ]);
+  const paxSizeResult = scanTar(paxSizeTar);
+  ok(
+    "PAX size override with ustar size 0 followed by a private entry fails",
+    !paxSizeResult.ok &&
+      paxSizeResult.findings.some((f) => f.path === "extensions/levix-plus/secret.js"),
   );
 
   const badPaxTar = tarGz([
