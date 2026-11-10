@@ -55,6 +55,8 @@ function fail(code, extra = {}) {
 
 function defaultFetch(url, init) {
   const { safeProviderFetch } = require("../../utils/providerUrl.cjs");
+  const timeoutSignal = AbortSignal.timeout(TIMEOUT_MS);
+  const signal = init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal;
   return safeProviderFetch(
     url,
     {
@@ -62,10 +64,34 @@ function defaultFetch(url, init) {
       headers: init.headers,
       body: init.body,
       redirect: "manual",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+      signal,
     },
     { allowLoopback: false },
   );
+}
+
+function withAbort(promise, signal, onAbort) {
+  if (!signal) return promise;
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      try {
+        Promise.resolve(onAbort?.()).catch(() => {});
+      } catch {}
+      reject(signal.reason ?? new Error("aborted"));
+    };
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort, { once: true });
+    Promise.resolve(promise).then(
+      (value) => {
+        signal.removeEventListener("abort", abort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+  });
 }
 
 function logFailure(logger, code, status) {
@@ -88,7 +114,7 @@ async function discard(response) {
   }
 }
 
-async function readLimited(response) {
+async function readLimited(response, signal) {
   const declared = response.headers?.get?.("content-length");
   if (
     declared != null &&
@@ -106,7 +132,7 @@ async function readLimited(response) {
     let total = 0;
     try {
       for (;;) {
-        const { done, value } = await reader.read();
+        const { done, value } = await withAbort(reader.read(), signal, () => reader.cancel());
         if (done) break;
         const bytes = Buffer.from(value);
         total += bytes.length;
@@ -256,14 +282,23 @@ async function post(path, body, deps, includeKey) {
   };
   if (includeKey) headers["x-levix-key"] = installation.publicKeyRaw.toString("base64url");
   const fetchImpl = deps.fetch ?? defaultFetch;
+  const signal = deps.signal;
+  if (signal?.aborted) {
+    logFailure(deps.logger, "UNAVAILABLE", 0);
+    return fail("UNAVAILABLE", { retryable: true });
+  }
   let response;
   try {
-    response = await fetchImpl(`${ORIGIN}${path}`, {
-      method: "POST",
-      redirect: "manual",
-      headers,
-      body,
-    });
+    response = await withAbort(
+      fetchImpl(`${ORIGIN}${path}`, {
+        method: "POST",
+        redirect: "manual",
+        headers,
+        body,
+        ...(signal ? { signal } : {}),
+      }),
+      signal,
+    );
   } catch {
     logFailure(deps.logger, "UNAVAILABLE", 0);
     return fail("UNAVAILABLE", { retryable: true });
@@ -275,7 +310,9 @@ async function post(path, body, deps, includeKey) {
     return fail("REDIRECT", { retryable: false });
   }
   try {
-    const bytes = await readLimited(response ?? {});
+    const bytes = await withAbort(readLimited(response ?? {}, signal), signal, () =>
+      discard(response),
+    );
     const result = interpret(status, bytes, response);
     if (!result.ok) logFailure(deps.logger, result.code, status);
     return result;
