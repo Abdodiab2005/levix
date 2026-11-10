@@ -78,6 +78,7 @@ function createExtensionHost(opts = {}) {
   let lastEnabled = null;
   const failures = [];
   let didActivate = false;
+  let liveReconcilePending = false;
 
   function plusEnabled() {
     try {
@@ -93,6 +94,22 @@ function createExtensionHost(opts = {}) {
       () => reconcileNow(),
     );
     return chain;
+  }
+
+  function isActive() {
+    if (state !== "active") return false;
+    let active = false;
+    try {
+      active = Boolean(entitlement.isActive?.("plus")) && plusEnabled();
+    } catch {}
+    if (!active && !liveReconcilePending) {
+      liveReconcilePending = true;
+      const settled = () => {
+        liveReconcilePending = false;
+      };
+      schedule().then(settled, settled);
+    }
+    return active;
   }
 
   function recordFailure(error) {
@@ -170,11 +187,12 @@ function createExtensionHost(opts = {}) {
 
   function invalidateScope() {
     refreshScope();
+    autoReply.abortOutOfScope(scopeSet);
   }
 
   function runtimeView() {
     return {
-      isActive: () => state === "active",
+      isActive,
       generation: () => generation,
       signal: () => controller?.signal,
       getScope: () => scopeSet,
@@ -200,7 +218,10 @@ function createExtensionHost(opts = {}) {
       capabilities: mod.capabilities,
       log,
       invalidateScope,
-      aiReply: (job) => autoReply.runAiReply(runtimeView(), job),
+      aiReply: (job) =>
+        generation === gen
+          ? autoReply.runAiReply(runtimeView(), job)
+          : Promise.resolve({ sent: false }),
     });
     let returned;
     try {
@@ -215,6 +236,12 @@ function createExtensionHost(opts = {}) {
       return;
     }
     if (generation !== gen || !running) return;
+    const enabled = plusEnabled();
+    if (!enabled || !entitlement.isActive?.("plus")) {
+      handlers = returned;
+      await deactivate(enabled ? "entitlement" : "disabled");
+      return;
+    }
     const check = validateHandlers(mod.capabilities, returned);
     if (!check.ok) {
       try {
@@ -298,7 +325,7 @@ function createExtensionHost(opts = {}) {
   }
 
   function templateFor(key, locale) {
-    if (state !== "active" || typeof handlers?.templates?.resolve !== "function") return null;
+    if (!isActive() || typeof handlers?.templates?.resolve !== "function") return null;
     if (!isCustomizable(key)) return null;
     try {
       const result = handlers.templates.resolve(key, locale);
@@ -312,7 +339,7 @@ function createExtensionHost(opts = {}) {
   }
 
   function hideWatermark(meta) {
-    if (state !== "active" || typeof handlers?.watermark?.hide !== "function") return false;
+    if (!isActive() || typeof handlers?.watermark?.hide !== "function") return false;
     try {
       return handlers.watermark.hide(meta) === true;
     } catch (error) {
@@ -322,7 +349,7 @@ function createExtensionHost(opts = {}) {
   }
 
   function hideProgress(meta) {
-    if (state !== "active" || typeof handlers?.progress?.hide !== "function") return false;
+    if (!isActive() || typeof handlers?.progress?.hide !== "function") return false;
     try {
       return handlers.progress.hide(meta) === true;
     } catch (error) {
@@ -332,7 +359,7 @@ function createExtensionHost(opts = {}) {
   }
 
   function dispatchAutoReply(sock, msg, epoch) {
-    if (state !== "active" || !handlers?.autoReply) return Promise.resolve();
+    if (!isActive() || !handlers?.autoReply) return Promise.resolve();
     return autoReply.dispatch(runtimeView(), sock, msg, epoch).catch((error) => {
       try {
         log.error?.({ err: error }, "auto-reply dispatch failed");
@@ -341,16 +368,22 @@ function createExtensionHost(opts = {}) {
   }
 
   async function handlePanel(method, pathName, body, signal) {
-    if (state !== "active") return { status: 409, body: { error: "inactive" } };
+    if (!isActive()) return { status: 409, body: { error: "inactive" } };
     if (typeof handlers?.panelApi?.handle !== "function") {
       return { status: 404, body: { error: "not_found" } };
     }
+    const requestAbort = new AbortController();
+    const combinedSignal = AbortSignal.any(
+      [signal, controller?.signal, requestAbort.signal].filter(Boolean),
+    );
     try {
+      combinedSignal.throwIfAborted();
       const result = await withDeadline(
         handlers.panelApi.handle(method, pathName, body, {
-          signal: signal || controller?.signal,
+          signal: combinedSignal,
         }),
         panelTimeoutMs,
+        requestAbort,
       );
       if (!result || typeof result.status !== "number") {
         return { status: 500, body: { error: "invalid" } };
@@ -368,10 +401,8 @@ function createExtensionHost(opts = {}) {
     try {
       autoReply.abortAccountJobs();
     } catch {}
-    try {
-      const id = moduleLoaded?.id || "levix-plus";
-      require("../db/store.cjs").wipeExtStorage(id, "acct");
-    } catch {}
+    const id = moduleLoaded?.id || "levix-plus";
+    require("../db/store.cjs").wipeExtStorage(id, "acct");
     try {
       if (typeof moduleLoaded?.onAccountReset === "function") moduleLoaded.onAccountReset(allowed);
     } catch (error) {

@@ -1,4 +1,4 @@
-import { equal, finish, ok, require, section, useTempDataDir } from "./harness.mjs";
+import { equal, finish, ok, require, section, throws, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("levix-extensions-host");
 
@@ -366,6 +366,335 @@ section("stop() calls deactivate(shutdown)");
   await host.start();
   await host.stop();
   equal("shutdown", deactivated, "shutdown");
+}
+
+section("every paid entry checks entitlement expiry and the switch without reconciliation");
+for (const loss of ["expiry", "disabled"]) {
+  for (const entry of [
+    "templateFor",
+    "hideWatermark",
+    "hideProgress",
+    "dispatchAutoReply",
+    "handlePanel",
+  ]) {
+    let entitled = true;
+    let enabled = true;
+    let calls = 0;
+    const host = makeHost({
+      entitlement: { isActive: () => entitled },
+      settingsGet: () => enabled,
+      loadModule: () =>
+        validMod({
+          async activate() {
+            return handlers({
+              templates: {
+                resolve: () => {
+                  calls += 1;
+                  return "PLUS {name}";
+                },
+              },
+              watermark: {
+                hide: () => {
+                  calls += 1;
+                  return true;
+                },
+              },
+              progress: {
+                hide: () => {
+                  calls += 1;
+                  return true;
+                },
+              },
+              autoReply: {
+                scope: () => [],
+                consider: async () => {
+                  calls += 1;
+                  return {};
+                },
+              },
+              panelApi: {
+                handle: async () => {
+                  calls += 1;
+                  return { status: 200 };
+                },
+              },
+            });
+          },
+        }),
+    });
+    await host.start();
+    if (loss === "expiry") entitled = false;
+    else enabled = false;
+    equal(`${loss}/${entry} starts with cached active state`, host.status().state, "active");
+    if (entry === "templateFor")
+      equal("template Free", host.templateFor("bot.help.title", "en"), null);
+    else if (entry === "handlePanel")
+      equal("panel inactive", (await host.handlePanel("GET", "/", {})).status, 409);
+    else if (entry === "dispatchAutoReply") {
+      const autoReply = require("./src/extensions/autoReply.cjs");
+      const originalDispatch = autoReply.dispatch;
+      autoReply.dispatch = async () => {
+        calls += 1;
+      };
+      try {
+        await host.dispatchAutoReply({}, {}, 0);
+      } finally {
+        autoReply.dispatch = originalDispatch;
+      }
+    } else equal("hide hook Free", host[entry]({}), false);
+    equal(`${loss}/${entry} never enters a paid handler`, calls, 0);
+    // The live check itself schedules this; no explicit reconcile is requested.
+    await new Promise((resolve) => setImmediate(resolve));
+    equal(
+      `${loss}/${entry} schedules reconciliation`,
+      host.status().state,
+      loss === "expiry" ? "inactive" : "disabled",
+    );
+    await host.stop();
+  }
+}
+
+section("activation cannot publish handlers after entitlement or switch loss");
+for (const loss of ["entitlement", "disabled"]) {
+  let entitled = true;
+  let enabled = true;
+  let signal;
+  let deactivated;
+  const host = makeHost({
+    entitlement: { isActive: () => entitled },
+    settingsGet: () => enabled,
+    loadModule: () =>
+      validMod({
+        async activate(ctx) {
+          signal = ctx.signal;
+          await Promise.resolve();
+          if (loss === "entitlement") entitled = false;
+          else enabled = false;
+          return handlers();
+        },
+        async deactivate(reason) {
+          deactivated = reason;
+        },
+      }),
+  });
+  await host.start();
+  equal(
+    `${loss}: never active`,
+    host.status().state,
+    loss === "disabled" ? "disabled" : "inactive",
+  );
+  equal(`${loss}: generation aborted`, signal.aborted, true);
+  equal(`${loss}: runtime deactivated`, deactivated, loss);
+  await host.stop();
+}
+
+section("accountStorage wipe errors propagate after in-memory abort");
+{
+  const autoReply = require("./src/extensions/autoReply.cjs");
+  const originalAbort = autoReply.abortAccountJobs;
+  const originalWipe = store.wipeExtStorage;
+  const order = [];
+  const failure = new Error("disk full");
+  const host = makeHost();
+  try {
+    autoReply.abortAccountJobs = () => {
+      order.push("abort");
+    };
+    store.wipeExtStorage = () => {
+      order.push("wipe");
+      throw failure;
+    };
+    equal(
+      "same wipe error reaches caller",
+      throws("required wipe throws", () => host.accountReset("unlink")),
+      failure,
+    );
+    equal("abort comes before failed wipe", order.join(","), "abort,wipe");
+  } finally {
+    autoReply.abortAccountJobs = originalAbort;
+    store.wipeExtStorage = originalWipe;
+    await host.stop();
+  }
+}
+
+section("panel deadline aborts the request and request/generation signals are combined");
+for (const cancellation of ["deadline", "request", "generation"]) {
+  let passedSignal;
+  let entered;
+  const ready = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const request = new AbortController();
+  const host = makeHost({
+    entitlement: fakeEntitlement(true),
+    panelTimeoutMs: 40,
+    loadModule: () =>
+      validMod({
+        async activate() {
+          return handlers({
+            panelApi: {
+              handle(_method, _path, _body, { signal }) {
+                passedSignal = signal;
+                entered();
+                return new Promise(() => {});
+              },
+            },
+          });
+        },
+      }),
+  });
+  await host.start();
+  const response = host.handlePanel("GET", "/preview", {}, request.signal);
+  await ready;
+  equal(`${cancellation}: initially live`, passedSignal.aborted, false);
+  if (cancellation === "request") request.abort();
+  if (cancellation === "generation") await host.stop();
+  const result = await response;
+  equal(`${cancellation}: handler sees abort`, passedSignal.aborted, true);
+  equal(`${cancellation}: no successful response`, result.status, 500);
+  await host.stop();
+}
+
+section("scope invalidation aborts removed pending and in-flight chats only");
+{
+  const autoReply = require("./src/extensions/autoReply.cjs");
+  const chats = [
+    "201111111111@s.whatsapp.net",
+    "201222222222@s.whatsapp.net",
+    "201333333333@s.whatsapp.net",
+  ];
+  const scope = new Set(chats);
+  const turns = new Map();
+  const signals = new Map();
+  const sent = [];
+  let ctx;
+  let entered;
+  const ready = new Promise((resolve) => {
+    entered = resolve;
+  });
+  let pendingEntered;
+  const pendingReady = new Promise((resolve) => {
+    pendingEntered = resolve;
+  });
+  let releasePending;
+  let entitled = true;
+  const pendingGate = new Promise((resolve) => {
+    releasePending = resolve;
+  });
+  autoReply.resetAutoReplyDeps();
+  autoReply.setAutoReplyDeps({
+    accountEpoch: () => 1,
+    isLinkedSelf: () => false,
+    getMessageFromRecent: async () => undefined,
+    settingsGet: () => 5000,
+    resolveCaller: async ({ msg }) => ({
+      chatId: msg.key.remoteJid,
+      isGroup: false,
+      isOwner: false,
+    }),
+    runAgent: ({ context }) =>
+      new Promise((resolve) => {
+        turns.set(context.chatId, { context, resolve });
+        if (turns.size === 2) entered();
+      }),
+    sendBotMessage: async (_sock, jid, _content, options) => {
+      await options.deliveryGuard.refresh();
+      options.deliveryGuard.assert();
+      sent.push(jid);
+    },
+  });
+  const host = makeHost({
+    entitlement: { isActive: () => entitled },
+    loadModule: () =>
+      validMod({
+        async activate(context) {
+          ctx = context;
+          return handlers({
+            autoReply: {
+              scope: () => scope,
+              consider(event, { signal }) {
+                signals.set(event.chatJid, signal);
+                if (event.chatJid === chats[2]) {
+                  pendingEntered();
+                  return pendingGate;
+                }
+                return { reply: true };
+              },
+            },
+          });
+        },
+      }),
+  });
+  try {
+    await host.start();
+    const dispatch = (jid) =>
+      host.dispatchAutoReply(
+        {},
+        {
+          key: { remoteJid: jid, id: "scope", fromMe: false },
+          message: { conversation: "hello" },
+        },
+        1,
+      );
+    const first = dispatch(chats[0]);
+    const second = dispatch(chats[1]);
+    await ready;
+    const third = dispatch(chats[2]);
+    await pendingReady;
+    scope.delete(chats[0]);
+    scope.delete(chats[2]);
+    ctx.invalidateScope();
+    equal("removed in-flight turn aborted", turns.get(chats[0]).context.signal.aborted, true);
+    equal("retained chat still live", turns.get(chats[1]).context.signal.aborted, false);
+    equal("removed pending consideration aborted", signals.get(chats[2]).aborted, true);
+    turns.get(chats[0]).resolve({ text: "late" });
+    turns.get(chats[1]).resolve({ text: "kept" });
+    releasePending({ reply: true });
+    await Promise.all([first, second, third]);
+    equal("only retained chat delivers", sent.join(","), chats[1]);
+
+    let releaseTurn;
+    autoReply.setAutoReplyDeps({
+      runAgent: async ({ context }) => {
+        scope.clear();
+        ctx.invalidateScope();
+        releaseTurn = context.signal.aborted;
+        return { text: "after kill switch" };
+      },
+    });
+    await host.dispatchAutoReply(
+      {},
+      {
+        key: { remoteJid: chats[1], id: "kill", fromMe: false },
+        message: { conversation: "hello" },
+      },
+      1,
+    );
+    equal("kill switch aborts an admitted turn", releaseTurn, true);
+    equal("kill switch prevents delivery", sent.length, 1);
+
+    scope.add(chats[1]);
+    ctx.invalidateScope();
+    autoReply.setAutoReplyDeps({
+      runAgent: async ({ context }) => {
+        entitled = false;
+        equal("expiry has no abort notification yet", context.signal.aborted, false);
+        return { text: "after expiry" };
+      },
+    });
+    await host.dispatchAutoReply(
+      {},
+      {
+        key: { remoteJid: chats[1], id: "expiry", fromMe: false },
+        message: { conversation: "hello" },
+      },
+      1,
+    );
+    equal("runtime final guard checks live entitlement", sent.length, 1);
+  } finally {
+    await host.stop();
+    autoReply.resetAutoReplyDeps();
+  }
 }
 
 finish();

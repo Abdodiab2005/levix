@@ -10,6 +10,8 @@ const MAX_TEXT = 4000;
 const MAX_INSTRUCTIONS = 1000;
 const PENDING_MAX = 50;
 const PENDING_TTL_MS = 2 * 60 * 1000;
+const SEEN_MAX = 2000;
+const SEEN_TTL_MS = 24 * 60 * 60 * 1000;
 const GLOBAL_CONCURRENT = 2;
 const CHAT_CONCURRENT = 1;
 const CHAT_PER_MINUTE = 6;
@@ -19,7 +21,8 @@ const AI_TIMEOUT_CAP_MS = 120_000;
 
 const injected = {};
 const pending = new Map();
-const inflightAbort = new Set();
+const seen = new Map();
+const inflightAbort = new Map();
 const chatInFlight = new Map();
 let globalInFlight = 0;
 const globalHits = [];
@@ -32,6 +35,7 @@ function setAutoReplyDeps(partial) {
 function resetAutoReplyDeps() {
   for (const key of Object.keys(injected)) delete injected[key];
   pending.clear();
+  seen.clear();
   inflightAbort.clear();
   chatInFlight.clear();
   globalInFlight = 0;
@@ -79,22 +83,42 @@ function withDeadline(promise, ms) {
 
 function prunePending(now) {
   for (const [id, entry] of pending) {
-    if (entry.expiresAt <= now) pending.delete(id);
+    if (entry.expiresAt <= now) {
+      entry.controller.abort();
+      pending.delete(id);
+    }
   }
   while (pending.size > PENDING_MAX) {
     const oldest = pending.keys().next().value;
+    pending.get(oldest).controller.abort();
     pending.delete(oldest);
   }
 }
 
 function abortAccountJobs() {
+  for (const entry of pending.values()) entry.controller.abort();
   pending.clear();
-  for (const controller of inflightAbort) {
+  for (const controller of inflightAbort.keys()) {
     try {
       controller.abort();
     } catch {}
   }
   inflightAbort.clear();
+}
+
+function abortOutOfScope(scope) {
+  for (const [key, entry] of pending) {
+    if (inScope(entry.event.chatJid, scope)) continue;
+    entry.controller.abort();
+    pending.delete(key);
+  }
+  for (const [controller, chatJid] of inflightAbort) {
+    if (!inScope(chatJid, scope)) controller.abort();
+  }
+}
+
+function jobKey(epoch, chatJid, messageId) {
+  return `${epoch}:${chatJid}:${messageId}`;
 }
 
 function hasBotMetadata(msg) {
@@ -176,21 +200,7 @@ function endTurn(chatJid) {
 }
 
 function anySignal(signals) {
-  const controller = new AbortController();
-  const onAbort = () => {
-    try {
-      controller.abort();
-    } catch {}
-  };
-  for (const signal of signals) {
-    if (!signal) continue;
-    if (signal.aborted) {
-      onAbort();
-      return controller;
-    }
-    signal.addEventListener("abort", onAbort, { once: true });
-  }
-  return controller;
+  return AbortSignal.any(signals.filter(Boolean));
 }
 
 function liveSignal(runtime) {
@@ -210,9 +220,11 @@ function rosterHelpers() {
 
 async function runAiReply(runtime, job = {}) {
   const messageId = job?.messageId;
-  const entry = messageId ? pending.get(messageId) : null;
+  const key = jobKey(accountEpochNow(), job?.chatJid, messageId);
+  const entry = messageId && job?.chatJid ? pending.get(key) : null;
   if (!entry) return { sent: false };
-  pending.delete(messageId);
+  pending.delete(key);
+  if (entry.expiresAt <= nowMs()) return { sent: false };
 
   const instructions = job.instructions == null ? "" : String(job.instructions);
   if (instructions.length > MAX_INSTRUCTIONS) return { sent: false };
@@ -227,10 +239,11 @@ async function runAiReply(runtime, job = {}) {
     return { sent: false };
   }
   if (accountEpochNow() !== epoch) return { sent: false };
+  if (!inScope(chatJid, runtime.getScope?.())) return { sent: false };
 
   beginTurn(chatJid, started);
-  const jobAbort = new AbortController();
-  inflightAbort.add(jobAbort);
+  const jobAbort = entry.controller;
+  inflightAbort.set(jobAbort, chatJid);
   const timeoutMs = Math.max(
     1,
     Math.min(
@@ -245,10 +258,10 @@ async function runAiReply(runtime, job = {}) {
   );
   const timeoutAbort = new AbortController();
   const timer = setTimeout(() => timeoutAbort.abort(), timeoutMs);
-  const combined = anySignal([liveSignal(runtime), jobAbort.signal, timeoutAbort.signal]);
+  const signal = anySignal([liveSignal(runtime), jobAbort.signal, timeoutAbort.signal]);
 
   try {
-    if (combined.signal.aborted) return { sent: false };
+    if (signal.aborted) return { sent: false };
 
     const cache = rosterHelpers();
     let groupMetadata = null;
@@ -275,12 +288,32 @@ async function runAiReply(runtime, job = {}) {
     const parts = [{ text: event.text }];
     if (instructions) parts.push({ text: instructions });
     const includeGlobalMemory = Boolean(caller.isOwner && !caller.isGroup);
+    const deliveryGuard = {
+      async refresh() {
+        if (!isGroup) return;
+        await rosterHelpers().resolveGroupMetadata(sock, chatJid, { fresh: true });
+      },
+      assert() {
+        signal.throwIfAborted();
+        if (accountEpochNow() !== epoch) throw new Error("epoch");
+        if (typeof runtime.generation === "function" && runtime.generation() !== generation) {
+          throw new Error("generation");
+        }
+        if (typeof runtime.isActive === "function" && !runtime.isActive())
+          throw new Error("inactive");
+        if (!inScope(chatJid, runtime.getScope?.())) throw new Error("scope");
+        if (isGroup && rosterHelpers().isRosterStale(chatJid)) throw new Error("roster");
+      },
+    };
+    deliveryGuard.assert();
     const result = await runAgent({
       parts,
       history: [],
       status: null,
-      signal: combined.signal,
+      signal,
       context: {
+        signal,
+        deliveryGuard,
         caller,
         sock,
         chatId: chatJid,
@@ -291,6 +324,7 @@ async function runAiReply(runtime, job = {}) {
         isGroup: caller.isGroup,
         chatName: caller.chatName,
         includeGlobalMemory,
+        memoryScope: includeGlobalMemory ? undefined : "chat",
       },
     });
 
@@ -311,24 +345,6 @@ async function runAiReply(runtime, job = {}) {
       "sendBotMessage",
       () => require("../utils/sendBotMessage.cjs").sendBotMessage,
     );
-    const deliveryGuard = {
-      async refresh() {
-        if (!isGroup) return;
-        await rosterHelpers().resolveGroupMetadata(sock, chatJid, { fresh: true });
-      },
-      assert() {
-        combined.signal.throwIfAborted?.();
-        if (combined.signal.aborted) throw new Error("aborted");
-        if (accountEpochNow() !== epoch) throw new Error("epoch");
-        if (typeof runtime.generation === "function" && runtime.generation() !== generation) {
-          throw new Error("generation");
-        }
-        if (typeof runtime.isActive === "function" && !runtime.isActive())
-          throw new Error("inactive");
-        if (isGroup && rosterHelpers().isRosterStale(chatJid)) throw new Error("roster");
-      },
-    };
-
     await sendBotMessage(
       sock,
       chatJid,
@@ -338,7 +354,7 @@ async function runAiReply(runtime, job = {}) {
         quote,
         typing: false,
         delayMs: 0,
-        signal: combined.signal,
+        signal,
         deliveryGuard,
       },
     );
@@ -405,13 +421,24 @@ async function dispatch(runtime, sock, msg, epoch) {
 
   const generation = typeof runtime.generation === "function" ? runtime.generation() : 0;
   const t = nowMs();
+  const key = jobKey(epoch, chatJid, messageId);
+  for (const [handled, expiresAt] of seen) {
+    if (expiresAt <= t) seen.delete(handled);
+  }
+  // Keep live replay claims at capacity; refuse new work until they expire.
+  if (seen.has(key) || seen.size >= SEEN_MAX) return;
+  if (accountEpochNow() !== epoch || !runtime.isActive()) return;
+  if (!inScope(chatJid, runtime.getScope?.())) return;
+  seen.set(key, t + SEEN_TTL_MS);
   prunePending(t);
-  pending.set(messageId, {
+  const controller = new AbortController();
+  pending.set(key, {
     sock,
     msg,
     event,
     epoch,
     generation,
+    controller,
     expiresAt: t + PENDING_TTL_MS,
   });
   prunePending(t);
@@ -421,11 +448,11 @@ async function dispatch(runtime, sock, msg, epoch) {
     const timeout =
       typeof runtime.considerTimeoutMs === "function" ? runtime.considerTimeoutMs() : 2000;
     decision = await withDeadline(
-      runtime.consider(event, { signal: liveSignal(runtime) }),
+      runtime.consider(event, { signal: anySignal([liveSignal(runtime), controller.signal]) }),
       timeout,
     );
   } catch (error) {
-    pending.delete(messageId);
+    pending.delete(key);
     try {
       runtime.recordFailure?.(error);
     } catch {}
@@ -433,15 +460,16 @@ async function dispatch(runtime, sock, msg, epoch) {
   }
 
   if (decision?.reply !== true) {
-    pending.delete(messageId);
+    pending.delete(key);
     return;
   }
   if (decision.instructions != null && String(decision.instructions).length > MAX_INSTRUCTIONS) {
-    pending.delete(messageId);
+    pending.delete(key);
     return;
   }
 
   await runAiReply(runtime, {
+    chatJid,
     messageId,
     instructions: decision.instructions,
     quote: decision.quote === true,
@@ -452,6 +480,7 @@ module.exports = {
   dispatch,
   runAiReply,
   abortAccountJobs,
+  abortOutOfScope,
   setAutoReplyDeps,
   resetAutoReplyDeps,
 };

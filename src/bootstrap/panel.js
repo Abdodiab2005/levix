@@ -62,7 +62,7 @@ export async function bootstrapPanel({ core } = {}) {
     noStore,
     express.json({ limit: "64kb" }),
     (req, res) => {
-      Promise.resolve(plusHost.handlePanel(req.method, req.path || "/", req.body, req.signal))
+      Promise.resolve(plusHost.handlePanel(req.method, req.url || "/", req.body, req.signal))
         .then((result) => {
           const status = result?.status || 404;
           res.status(status).json(result?.body ?? { error: "not_found" });

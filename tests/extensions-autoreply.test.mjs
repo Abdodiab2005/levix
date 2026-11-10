@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { equal, finish, require, ROOT, section, useTempDataDir } from "./harness.mjs";
+import { equal, finish, ok, require, ROOT, section, throws, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("levix-extensions-autoreply");
 
@@ -216,6 +216,12 @@ section("reply sent once to the source chat only");
   equal("quoted when asked", sent[0].quote, true);
   equal("caller uses the real message", callerOpts.msg, msg);
   equal("global memory excluded for non-owner", agentOpts.context.includeGlobalMemory, false);
+  equal("memory tools restricted to chat", agentOpts.context.memoryScope, "chat");
+  equal("tools share the turn signal", agentOpts.context.signal, agentOpts.signal);
+  ok(
+    "tools receive the delivery guard",
+    typeof agentOpts.context.deliveryGuard.assert === "function",
+  );
 }
 
 section("entitlement revoked during the turn: no send");
@@ -446,7 +452,7 @@ section("global memory excluded option and owner chat");
     accountEpoch: () => 1,
     isLinkedSelf: () => false,
     runAgent: async (opts) => {
-      seen.push(opts.context.includeGlobalMemory);
+      seen.push(opts.context);
       return { text: "ok" };
     },
     resolveCaller: async (opts) =>
@@ -472,8 +478,10 @@ section("global memory excluded option and owner chat");
   });
   await autoReply.dispatch(runtime(), sock, groupMsg("hi", { id: "gmem" }), 1);
   await autoReply.dispatch(runtime(), sock, dm("hi", { id: "omem" }), 1);
-  equal("group excludes global", seen[0], false);
-  equal("owner private includes global", seen[1], true);
+  equal("group excludes global", seen[0].includeGlobalMemory, false);
+  equal("group memory tools restricted", seen[0].memoryScope, "chat");
+  equal("owner private includes global", seen[1].includeGlobalMemory, true);
+  equal("owner private memory tools unchanged", seen[1].memoryScope, undefined);
 }
 
 section("tool authorization uses the real sender caller");
@@ -514,6 +522,141 @@ section("tool authorization uses the real sender caller");
   await autoReply.dispatch(runtime(), sock, msg, 1);
   equal("caller senderId", callerMsg.senderId, "real-sender");
   equal("caller from the original message", callerMsg.fromMessage, msg);
+}
+
+function stubTurn(overrides = {}) {
+  reset();
+  const sent = [];
+  autoReply.setAutoReplyDeps({
+    getMessageFromRecent: async () => undefined,
+    accountEpoch: () => 1,
+    isLinkedSelf: () => false,
+    resolveCaller: async ({ msg }) => ({
+      chatId: msg.key.remoteJid,
+      senderId: msg.key.remoteJid,
+      isGroup: false,
+      isOwner: false,
+    }),
+    runAgent: async () => ({ text: "answer" }),
+    sendBotMessage: async (_sock, jid, content, options) => {
+      await options.deliveryGuard.refresh();
+      options.deliveryGuard.assert();
+      sent.push({ jid, content });
+    },
+    settingsGet: () => 5000,
+    ...overrides,
+  });
+  return sent;
+}
+
+section("replay claims cover concurrent and completed redeliveries");
+{
+  const sent = stubTurn();
+  let considered = 0;
+  const rt = runtime({
+    consider: async () => {
+      considered += 1;
+      return { reply: true };
+    },
+  });
+  const msg = dm("hi", { id: "replay" });
+  await Promise.all([autoReply.dispatch(rt, sock, msg, 1), autoReply.dispatch(rt, sock, msg, 1)]);
+  await autoReply.dispatch(rt, sock, msg, 1);
+  equal("forwarded once", considered, 1);
+  equal("AI reply sent once", sent.length, 1);
+}
+
+section("pending capability keys include chat and account epoch");
+{
+  let epoch = 1;
+  const sent = stubTurn({ accountEpoch: () => epoch });
+  const other = "201333333333@s.whatsapp.net";
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  let both;
+  const ready = new Promise((resolve) => {
+    both = resolve;
+  });
+  let count = 0;
+  const rt = runtime({
+    getScope: () => new Set([CHAT, other]),
+    consider: () => {
+      if (++count === 2) both();
+      return gate;
+    },
+  });
+  const first = autoReply.dispatch(rt, sock, dm("first", { id: "same" }), epoch);
+  const second = autoReply.dispatch(
+    rt,
+    sock,
+    dm("second", { key: { remoteJid: other, id: "same" } }),
+    epoch,
+  );
+  await ready;
+  equal(
+    "message id alone cannot claim a pending turn",
+    (await autoReply.runAiReply(rt, { messageId: "same" })).sent,
+    false,
+  );
+  equal(
+    "first chat claims its own entry",
+    (await autoReply.runAiReply(rt, { chatJid: CHAT, messageId: "same" })).sent,
+    true,
+  );
+  equal(
+    "other chat entry was not overwritten",
+    (await autoReply.runAiReply(rt, { chatJid: other, messageId: "same" })).sent,
+    true,
+  );
+  equal("destinations stay separate", sent.map((entry) => entry.jid).join(","), `${CHAT},${other}`);
+  release({ reply: false });
+  await Promise.all([first, second]);
+  epoch = 2;
+  await autoReply.dispatch(runtime(), sock, dm("new account", { id: "same" }), epoch);
+  equal("same id can belong to a new account", sent.length, 3);
+}
+
+section("seen claims are bounded and expire after 24 hours");
+{
+  let now = 1000;
+  stubTurn({ now: () => now });
+  let count = 0;
+  const rt = runtime({
+    consider: async () => {
+      count += 1;
+      return { reply: false };
+    },
+  });
+  for (let i = 0; i < 2001; i++) {
+    await autoReply.dispatch(rt, sock, dm("hi", { id: `seen-${i}` }), 1);
+  }
+  equal("no more than 2000 live claims", count, 2000);
+  await autoReply.dispatch(rt, sock, dm("hi", { id: "seen-0" }), 1);
+  equal("capacity does not evict a live replay claim", count, 2000);
+  now += 24 * 60 * 60 * 1000;
+  await autoReply.dispatch(rt, sock, dm("hi", { id: "seen-0" }), 1);
+  equal("expired claims allow work again", count, 2001);
+}
+
+section("scope removal fences tools and final delivery without an abort event");
+{
+  const scope = new Set([CHAT]);
+  const sent = stubTurn({
+    runAgent: async ({ context }) => {
+      scope.delete(CHAT);
+      throws("tool guard checks live chat scope", () => context.deliveryGuard.assert());
+      return { text: "late" };
+    },
+  });
+  await autoReply.dispatch(
+    runtime({ getScope: () => scope }),
+    sock,
+    dm("hi", { id: "removed" }),
+    1,
+  );
+  equal("final answer also dropped", sent.length, 0);
 }
 
 reset();
