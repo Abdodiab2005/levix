@@ -319,7 +319,6 @@ async function runAiReply(runtime, job = {}) {
     const runAgent = dep("runAgent", () => require("../services/aiAgent.cjs").runAgent);
     const parts = [{ text: event.text }];
     if (instructions) parts.push({ text: instructions });
-    const includeGlobalMemory = Boolean(caller.isOwner && !caller.isGroup);
     const deliveryGuard = {
       async refresh() {
         if (!isGroup) return;
@@ -355,8 +354,9 @@ async function runAiReply(runtime, job = {}) {
         isAdmin: caller.isOwner || caller.isBotAdmin,
         isGroup: caller.isGroup,
         chatName: caller.chatName,
-        includeGlobalMemory,
-        memoryScope: includeGlobalMemory ? undefined : "chat",
+        // Auto Reply stays chat-scoped even in an owner's private chat.
+        includeGlobalMemory: false,
+        memoryScope: "chat",
       },
     });
 
