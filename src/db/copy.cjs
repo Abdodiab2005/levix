@@ -9,7 +9,9 @@ const quote = (name) => `"${name.replaceAll('"', '""')}"`;
 
 function isSecretBotKey(key) {
   if (typeof key !== "string") return true;
-  if (key.startsWith("auth:") || key.startsWith("secret:")) return true;
+  if (key.startsWith("auth:") || key.startsWith("secret:") || key.startsWith("plus:")) return true;
+  // Account data for an extension (`ext:<id>:acct:…`) is not an operator setting.
+  if (/^ext:[^:]+:acct:/.test(key)) return true;
   return key.startsWith("setting:") && secretSettings.has(key.slice("setting:".length));
 }
 
