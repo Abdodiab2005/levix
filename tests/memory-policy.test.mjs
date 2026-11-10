@@ -638,7 +638,7 @@ section("summaries strip unreadable history and gate returned facts by provenanc
   }
 }
 
-section("Auto Reply global memory grants require owner-only writes");
+section("Auto Reply global memory is read-only for every sender");
 {
   const original = router.getProvider;
   router.getProvider = () => ({ runTurn: async () => ({ text: "- summary fact" }) });
@@ -657,13 +657,11 @@ section("Auto Reply global memory grants require owner-only writes");
             const label = `${role}/${chat}/${free}/${read}/${write}`;
             const access = globalMemoryAccess(context);
             equal(`${label}: read`, access.read, read);
-            equal(`${label}: write`, access.write, write && role === "owner");
+            // A write grant, forged or left in an old config, never applies.
+            equal(`${label}: write`, access.write, false);
             for (const scope of ALIASES)
               for (const tool of TOOLS) {
-                const allowed =
-                  tool === "search_memory"
-                    ? read
-                    : write && role === "owner" && (tool !== "summarize_chat" || read);
+                const allowed = tool === "search_memory" && read;
                 const result = await runTool(
                   tool,
                   { scope, content: "auto fact", ref: "absent" },
