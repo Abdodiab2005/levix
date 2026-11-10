@@ -52,8 +52,10 @@ import { type Language, LOCALES, type translations } from "../i18n/translations"
 import { fill } from "../utils/fill";
 import { BackupView } from "./BackupView";
 import { DiagnosticsView } from "./DiagnosticsView";
+import { PlusSettings } from "./settings/PlusSettings";
 
 type SettingsTab =
+  | "plus"
   | "general"
   | "integrations"
   | "proxy"
@@ -64,6 +66,7 @@ type SettingsTab =
   | "diagnostics";
 
 const SETTINGS_TABS: SettingsTab[] = [
+  "plus",
   "general",
   "integrations",
   "proxy",
@@ -691,6 +694,7 @@ export const SettingsView: React.FC = () => {
         className="overflow-x-auto no-scrollbar"
         options={[
           { value: "general", label: t("tabGeneral"), icon: <Sliders size={17} /> },
+          { value: "plus", label: t("plusTitle") },
           { value: "integrations", label: t("tabIntegrations"), icon: <Key size={17} /> },
           { value: "proxy", label: t("tabProxy"), icon: <Globe size={17} /> },
           { value: "security", label: t("tabSecurity"), icon: <Shield size={17} /> },
@@ -700,6 +704,13 @@ export const SettingsView: React.FC = () => {
           { value: "diagnostics", label: t("tabDiagnostics"), icon: <FileText size={17} /> },
         ]}
       />
+
+      {activeTab === "plus" && (
+        <PlusSettings
+          enabled={settings["plus_enabled"] !== false}
+          onEnabledChange={(value) => persistSetting("plus_enabled", value)}
+        />
+      )}
 
       {activeTab === "general" && (
         <div className="flex flex-col gap-5">

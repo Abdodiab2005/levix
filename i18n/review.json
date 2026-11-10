@@ -1,9 +1,9 @@
 {
   "pt-BR/dashboard": {
     "status": "draft",
-    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex; terminology pass over all 164 pt-BR and es-419 reaction strings by OpenCode deepseek-v4.1-flash on 2026-11-09, 5 es-419 fixes), pending ChatGPT review under Q-19; not native-speaker verified; Phase 07.5e connectionUnlinkIncomplete, connectionUnlinkIncompleteHint, and connectionUnlinkRetry added 2026-11-09 are a machine draft, not a new ChatGPT review; Phase 07.5f reactionAutomationChanged added 2026-11-09 is a machine draft, not a ChatGPT review",
-    "date": "2026-11-05",
-    "sha256": "cd8b6acb551de620008925d5a75a51517ffc075ef22e71c27eb98a7b4fee0673"
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex; terminology pass over all 164 pt-BR and es-419 reaction strings by OpenCode deepseek-v4.1-flash on 2026-11-09, 5 es-419 fixes), pending ChatGPT review under Q-19; not native-speaker verified; Phase 07.5e connectionUnlinkIncomplete, connectionUnlinkIncompleteHint, and connectionUnlinkRetry added 2026-11-09 are a machine draft, not a new ChatGPT review; Phase 07.5f reactionAutomationChanged added 2026-11-09 is a machine draft, not a ChatGPT review; Phase 08c Plus billing strings added 2026-11-10 are a machine draft, pending Q-19 review",
+    "date": "2026-11-10",
+    "sha256": "791b3c4949915c4b74ee50a439c2f8f0d5a51b4f64211756900a9a55a30bb327"
   },
   "pt-BR/gateway": {
     "status": "draft",
@@ -13,9 +13,9 @@
   },
   "es-419/dashboard": {
     "status": "draft",
-    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex; terminology pass over all 164 pt-BR and es-419 reaction strings by OpenCode deepseek-v4.1-flash on 2026-11-09, 5 es-419 fixes), pending ChatGPT review under Q-19; not native-speaker verified; Phase 07.5e connectionUnlinkIncomplete, connectionUnlinkIncompleteHint, and connectionUnlinkRetry added 2026-11-09 are a machine draft, not a new ChatGPT review; Phase 07.5f reactionAutomationChanged added 2026-11-09 is a machine draft, not a ChatGPT review",
-    "date": "2026-11-05",
-    "sha256": "132df4eccf960917d2a19b28d3839656f400c9291ca879c04e26aa625b0692a3"
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex; terminology pass over all 164 pt-BR and es-419 reaction strings by OpenCode deepseek-v4.1-flash on 2026-11-09, 5 es-419 fixes), pending ChatGPT review under Q-19; not native-speaker verified; Phase 07.5e connectionUnlinkIncomplete, connectionUnlinkIncompleteHint, and connectionUnlinkRetry added 2026-11-09 are a machine draft, not a new ChatGPT review; Phase 07.5f reactionAutomationChanged added 2026-11-09 is a machine draft, not a ChatGPT review; Phase 08c Plus billing strings added 2026-11-10 are a machine draft, pending Q-19 review",
+    "date": "2026-11-10",
+    "sha256": "23a316f0c6e2bac8ade3adf3128b3c9f4a42a09c6c615313e51f6230029c04f2"
   },
   "es-419/gateway": {
     "status": "draft",
