@@ -11,6 +11,8 @@ const BACKOFF_MS = Object.freeze([60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 
 const FIRST_REFRESH_MS = 60_000;
 const TWELVE_H_MS = 12 * 60 * 60 * 1000;
 const SIX_H_MS = 6 * 60 * 60 * 1000;
+const ONE_H_MS = 60 * 60 * 1000;
+const FIFTEEN_MIN_MS = 15 * 60 * 1000;
 const MIN_SUCCESS_DELAY_MS = 60_000;
 const MAX_TIMER_MS = 2 ** 31 - 1;
 const ACTIVE = new Set(["active", "grace", "canceled"]);
@@ -20,6 +22,21 @@ function defaultSetTimer(fn, ms) {
   const timer = setTimeout(fn, ms);
   if (typeof timer.unref === "function") timer.unref();
   return timer;
+}
+
+function keysCacheKey(keys) {
+  if (!Array.isArray(keys)) return "";
+  return keys.map((k) => `${k?.keyId ?? ""}:${k?.publicKey ?? ""}`).join(",");
+}
+
+function rawRecordString(stored) {
+  if (stored == null) return null;
+  if (typeof stored === "string") return stored;
+  try {
+    return JSON.stringify(stored);
+  } catch {
+    return undefined;
+  }
 }
 
 function wrapStorage(raw) {
@@ -48,14 +65,22 @@ function wrapStorage(raw) {
 
 function createEntitlement(deps = {}) {
   const storage = wrapStorage(deps.storage);
-  const installations = deps.installation ?? createInstallation({ storage, vault: deps.vault });
+  const vault = deps.vault ?? require("../../config/vault.cjs");
+  const installations = deps.installation ?? createInstallation({ storage, vault });
   const now = deps.now ?? deps.clock ?? (() => Date.now());
   const random = deps.random ?? Math.random;
   const randomBytes = deps.randomBytes ?? ((size) => require("node:crypto").randomBytes(size));
   const setTimer = deps.setTimer ?? defaultSetTimer;
   const clearTimer = deps.clearTimer ?? ((handle) => clearTimeout(handle));
   const listeners = new Set();
-  let memory = { record: null, invalid: false, claims: null };
+  const inFlightControllers = new Set();
+  let memory = { record: null, hw: null, invalid: false, claims: null };
+  let maxAcceptedSeq = null;
+  let maxAcceptedJti = null;
+  let cachedRawRecord = undefined;
+  let cachedRawHw = undefined;
+  let cachedInstallationId = undefined;
+  let verifiedCache = null;
   let lastStatus = null;
   let lastHighWaterPersistMs = null;
   let notifying = false;
@@ -83,60 +108,138 @@ function createEntitlement(deps = {}) {
     return installations.getInstallation();
   }
 
-  function persist(record) {
-    storage.saveBotSetting(state.RECORD_KEY, state.publicFields(record));
+  function currentInstallationId() {
+    try {
+      return installationView()?.installationId ?? null;
+    } catch {
+      return null;
+    }
   }
 
-  function syncFromStorage(localNow) {
+  function persist(record) {
+    const pub = state.publicFields(record);
+    storage.saveBotSetting(state.RECORD_KEY, pub);
+    cachedRawRecord = rawRecordString(pub);
+  }
+
+  function persistHw(hw) {
+    const sealed = state.sealHighWater(hw, vault);
+    storage.saveBotSetting(state.HW_KEY, sealed);
+    cachedRawHw = sealed;
+  }
+
+  function syncFromStorage(localNow, installationId = currentInstallationId()) {
     const stored = storage.getBotSetting(state.RECORD_KEY, null);
+    const rawHw = storage.getBotSetting(state.HW_KEY, null);
+    const rawRecord = rawRecordString(stored);
+    if (
+      cachedRawRecord !== undefined &&
+      rawRecord !== undefined &&
+      rawRecord === cachedRawRecord &&
+      rawHw === cachedRawHw &&
+      installationId === cachedInstallationId
+    ) {
+      return;
+    }
+    verifiedCache = null;
+    cachedRawRecord = rawRecord;
+    cachedRawHw = rawHw;
+    cachedInstallationId = installationId;
+
+    const openedHw = state.openHighWater(rawHw, vault);
+    let hw = null;
+    if (openedHw && openedHw.installationId === installationId) {
+      hw = openedHw;
+      if (maxAcceptedSeq == null || hw.maxSeq > maxAcceptedSeq) {
+        maxAcceptedSeq = hw.maxSeq;
+        maxAcceptedJti = hw.jti;
+      }
+      if (
+        memory.hw &&
+        memory.hw.installationId === hw.installationId &&
+        memory.hw.maxSeq === hw.maxSeq &&
+        memory.hw.jti === hw.jti &&
+        memory.hw.highWaterMs > hw.highWaterMs
+      ) {
+        hw = { ...hw, highWaterMs: memory.hw.highWaterMs };
+      }
+    }
+
     if (stored == null) {
-      memory = { record: null, invalid: false, claims: null };
+      const expectedRecord = rawHw != null || maxAcceptedSeq != null;
+      memory = { record: null, hw, invalid: expectedRecord, claims: null };
       return;
     }
     if (!state.recordShape(stored) || typeof stored.token !== "string") {
-      memory = { record: null, invalid: true, claims: null };
+      memory = { record: null, hw, invalid: true, claims: null };
       return;
     }
-    if (
-      memory.record &&
-      !memory.invalid &&
-      memory.record.token === stored.token &&
-      memory.record.seq === stored.seq &&
-      memory.record.jti === stored.jti &&
-      memory.record.serverOffsetMs === stored.serverOffsetMs
-    ) {
-      if (Number.isFinite(stored.highWaterMs) && stored.highWaterMs > memory.record.highWaterMs) {
-        memory.record.highWaterMs = stored.highWaterMs;
-      }
-      return;
+    const pub = state.publicFields(stored);
+    if (hw) {
+      pub.serverOffsetMs = hw.serverOffsetMs;
+      pub.highWaterMs = hw.highWaterMs;
     }
-    memory = { record: state.publicFields(stored), invalid: false, claims: null };
+    memory = { record: pub, hw, invalid: false, claims: null };
     if (lastHighWaterPersistMs == null) lastHighWaterPersistMs = localNow ?? clock();
   }
 
   function touchHighWater(localNow) {
-    if (!memory.record) return;
-    const noted = state.noteHighWater(memory.record, localNow, lastHighWaterPersistMs);
-    memory.record = noted.record;
+    if (!memory.record || !memory.hw) return;
+    const noted = state.noteHighWater(memory.hw, localNow, lastHighWaterPersistMs);
+    memory.hw = noted.hw;
+    memory.record = {
+      ...memory.record,
+      serverOffsetMs: memory.hw.serverOffsetMs,
+      highWaterMs: memory.hw.highWaterMs,
+    };
     lastHighWaterPersistMs = noted.lastPersistMs;
-    if (noted.persisted) persist(memory.record);
+    if (noted.persisted) {
+      persistHw(memory.hw);
+      persist(memory.record);
+    }
   }
 
   function judge() {
     const localNow = clock();
-    syncFromStorage(localNow);
+    const installationId = currentInstallationId();
+    syncFromStorage(localNow, installationId);
     if (memory.invalid)
       return { state: "unverified", until: null, reason: "bad_record", claims: null };
     if (!memory.record) return { state: "none", until: null, reason: null, claims: null };
-    let installationId = null;
-    try {
-      installationId = installationView()?.installationId ?? null;
-    } catch {
-      installationId = null;
+    const keysList = trustedKeys();
+    const keysKey = keysCacheKey(keysList);
+    if (
+      !verifiedCache ||
+      verifiedCache.token !== memory.record.token ||
+      verifiedCache.installationId !== installationId ||
+      verifiedCache.keysKey !== keysKey
+    ) {
+      verifiedCache = {
+        token: memory.record.token,
+        installationId,
+        keysKey,
+        result: verifyToken(memory.record.token, {
+          keys: keysList,
+          installationId,
+          storedSeq: null,
+          storedJti: null,
+        }),
+      };
     }
-    const judged = state.evaluate(memory.record, localNow, { keys: trustedKeys(), installationId });
+    const judged = state.evaluate(memory.record, localNow, {
+      keys: keysList,
+      installationId,
+      hw: memory.hw,
+      maxSeq: maxAcceptedSeq,
+      maxJti: maxAcceptedJti,
+      verified: verifiedCache.result,
+    });
     if (judged.claims) {
       memory.claims = judged.claims;
+      if (maxAcceptedSeq == null || judged.claims.seq > maxAcceptedSeq) {
+        maxAcceptedSeq = judged.claims.seq;
+        maxAcceptedJti = judged.claims.jti;
+      }
       touchHighWater(localNow);
     }
     return judged;

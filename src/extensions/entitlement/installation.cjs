@@ -58,11 +58,15 @@ function createInstallation(deps = {}) {
     }
   }
 
-  function viewFrom(loaded) {
+  function viewFrom(sealed, installationId, raw) {
     return Object.freeze({
-      installationId: loaded.installationId,
-      publicKeyRaw: Buffer.from(loaded.raw),
+      installationId,
+      publicKeyRaw: Buffer.from(raw),
       sign(bytes) {
+        const currentSealed = readSealed();
+        if (currentSealed == null || currentSealed !== sealed) throw unreadable();
+        const loaded = importSealed(currentSealed);
+        if (loaded.installationId !== installationId) throw unreadable();
         const data = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
         return crypto.sign(null, data, loaded.privateKey);
       },
@@ -76,8 +80,8 @@ function createInstallation(deps = {}) {
       return null;
     }
     if (cache && cache.sealed === sealed) return cache.view;
-    const loaded = importSealed(sealed);
-    const view = viewFrom(loaded);
+    const { installationId, raw } = importSealed(sealed);
+    const view = viewFrom(sealed, installationId, raw);
     cache = { sealed, view };
     return view;
   }

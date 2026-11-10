@@ -15,6 +15,7 @@ const {
 
 const TRUSTED_KEYS = Object.freeze([]);
 assertTrustedKeys(TRUSTED_KEYS);
+const loadedKeyCache = new Map();
 
 function keyIdFor(rawPublicKey) {
   if (!Buffer.isBuffer(rawPublicKey) && !(rawPublicKey instanceof Uint8Array)) {
@@ -34,13 +35,18 @@ function keyIdFor(rawPublicKey) {
 /** One frozen `{ keyId, publicKey, raw, keyObject }` from a trusted entry. Throws when the entry is not that key. */
 function loadTrustedKey(entry) {
   assertTrustedKeys([entry]);
+  const cacheKey = `${entry.keyId}:${entry.publicKey}`;
+  const cached = loadedKeyCache.get(cacheKey);
+  if (cached) return cached;
   const raw = rawPublicKeyFromBase64(entry.publicKey);
-  return Object.freeze({
+  const loaded = Object.freeze({
     keyId: entry.keyId,
     publicKey: entry.publicKey,
     raw: Buffer.from(raw),
     keyObject: publicKeyObjectFromRaw(raw),
   });
+  loadedKeyCache.set(cacheKey, loaded);
+  return loaded;
 }
 
 /** The single trusted entry for `kid`, or null when it is missing, repeated, or unusable. */
