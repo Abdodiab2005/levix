@@ -1,31 +1,407 @@
-// Levix Plus entitlement: the interface the extension host reads.
-//
-// Phase 08 slice 08-0 interface stub. Slice 08b replaces the body with the
-// verifier, the cache and the refresh client (docs/plans/v5/PHASE-08-PLAN.md
-// section 4). Until then nothing is entitled, so Core stays Free.
+// Levix Plus entitlement. The extension host reads isActive, status, subscribe
+// and start. Claim, refresh and prepare are the panel. Free installs have no
+// record and never call the verifier.
 
-/** @typedef {"none"|"active"|"grace"|"canceled"|"inactive"|"expired"|"clock"|"unverified"} EntitlementState */
+const { createInstallation } = require("./installation.cjs");
+const { verifyToken } = require("./token.cjs");
+const state = require("./state.cjs");
+const client = require("./client.cjs");
 
+const BACKOFF_MS = Object.freeze([60_000, 5 * 60_000, 15 * 60_000, 60 * 60_000, 6 * 60 * 60_000]);
+const FIRST_REFRESH_MS = 60_000;
+const TWELVE_H_MS = 12 * 60 * 60 * 1000;
+const SIX_H_MS = 6 * 60 * 60 * 1000;
+const MIN_SUCCESS_DELAY_MS = 60_000;
+const MAX_TIMER_MS = 2 ** 31 - 1;
+const ACTIVE = new Set(["active", "grace", "canceled"]);
 const NONE = Object.freeze({ state: "none", until: null, reason: null });
 
-/** True only while a verified, unexpired entitlement grants `name`. Read at call time. */
-function isActive(_name = "plus") {
-  return false;
+function defaultSetTimer(fn, ms) {
+  const timer = setTimeout(fn, ms);
+  if (typeof timer.unref === "function") timer.unref();
+  return timer;
 }
 
-/** @returns {Readonly<{state: EntitlementState, until: string|null, reason: string|null}>} */
-function status() {
-  return NONE;
+function createEntitlement(deps = {}) {
+  const storage = deps.storage ?? {
+    getBotSetting: (...args) => require("../../db/store.cjs").getBotSetting(...args),
+    saveBotSetting: (...args) => require("../../db/store.cjs").saveBotSetting(...args),
+  };
+  const installations = deps.installation ?? createInstallation({ storage, vault: deps.vault });
+  const now = deps.now ?? (() => Date.now());
+  const random = deps.random ?? Math.random;
+  const randomBytes = deps.randomBytes ?? ((size) => require("node:crypto").randomBytes(size));
+  const setTimer = deps.setTimer ?? defaultSetTimer;
+  const clearTimer = deps.clearTimer ?? ((handle) => clearTimeout(handle));
+  const listeners = new Set();
+  let memory = { record: null, invalid: false, claims: null };
+  let lastStatus = NONE;
+  let lastHighWaterPersistMs = null;
+  let notifying = false;
+  let running = false;
+  let refreshTimer = null;
+  let expiryTimer = null;
+  let flight = null;
+  let failCount = 0;
+
+  function trustedKeys() {
+    if (Object.hasOwn(deps, "keys")) return Array.isArray(deps.keys) ? deps.keys : [];
+    return require("./keys.cjs").TRUSTED_KEYS;
+  }
+
+  function clock() {
+    const value = now();
+    return Number.isSafeInteger(value) ? value : Date.now();
+  }
+
+  function installationView() {
+    return installations.getInstallation();
+  }
+
+  function persist(record) {
+    storage.saveBotSetting(state.RECORD_KEY, state.publicFields(record));
+  }
+
+  function syncFromStorage() {
+    const stored = storage.getBotSetting(state.RECORD_KEY, null);
+    if (stored == null) {
+      memory = { record: null, invalid: false, claims: null };
+      return;
+    }
+    if (!state.recordShape(stored) || typeof stored.token !== "string") {
+      memory = { record: null, invalid: true, claims: null };
+      return;
+    }
+    if (memory.record && memory.record.token === stored.token && !memory.invalid) {
+      if (Number.isFinite(stored.highWaterMs) && stored.highWaterMs > memory.record.highWaterMs) {
+        memory.record.highWaterMs = stored.highWaterMs;
+      }
+      return;
+    }
+    memory = { record: state.publicFields(stored), invalid: false, claims: null };
+    if (lastHighWaterPersistMs == null) lastHighWaterPersistMs = clock();
+  }
+
+  function touchHighWater() {
+    if (!memory.record) return;
+    const noted = state.noteHighWater(memory.record, clock(), lastHighWaterPersistMs);
+    memory.record = noted.record;
+    lastHighWaterPersistMs = noted.lastPersistMs;
+    if (noted.persisted) persist(memory.record);
+  }
+
+  function judge() {
+    syncFromStorage();
+    if (memory.invalid) return { state: "unverified", until: null, reason: "bad_record", claims: null };
+    if (!memory.record) return { state: "none", until: null, reason: null, claims: null };
+    touchHighWater();
+    let installationId = null;
+    try {
+      installationId = installationView()?.installationId ?? null;
+    } catch {
+      installationId = null;
+    }
+    const judged = state.evaluate(memory.record, clock(), { keys: trustedKeys(), installationId });
+    if (judged.claims) memory.claims = judged.claims;
+    return judged;
+  }
+
+  function toPublic(judged) {
+    return Object.freeze({
+      state: judged?.state || "none",
+      until: typeof judged?.until === "string" ? judged.until : null,
+      reason: typeof judged?.reason === "string" ? judged.reason : null,
+    });
+  }
+
+  function publish(judged) {
+    const next = toPublic(judged);
+    if (lastStatus.state === next.state && lastStatus.until === next.until && lastStatus.reason === next.reason) {
+      return next;
+    }
+    lastStatus = next;
+    if (notifying) return next;
+    notifying = true;
+    try {
+      for (const listener of [...listeners]) {
+        try { listener(next); } catch { /* a subscriber cannot break the others */ }
+      }
+    } finally {
+      notifying = false;
+    }
+    return next;
+  }
+
+  function status() {
+    try {
+      return publish(judge());
+    } catch {
+      return publish({ state: "unverified", until: null, reason: "unavailable" });
+    }
+  }
+
+  function isActive(name = "plus") {
+    if (name !== "plus") return false;
+    try {
+      const judged = judge();
+      publish(judged);
+      return ACTIVE.has(judged.state) && judged.claims?.ent?.includes("plus") === true;
+    } catch {
+      return false;
+    }
+  }
+
+  function subscribe(listener) {
+    if (typeof listener !== "function") return () => {};
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }
+
+  function clearRefreshTimer() {
+    if (refreshTimer) clearTimer(refreshTimer);
+    refreshTimer = null;
+  }
+
+  function clearExpiryTimer() {
+    if (expiryTimer) clearTimer(expiryTimer);
+    expiryTimer = null;
+  }
+
+  function armRefresh(delayMs) {
+    clearRefreshTimer();
+    if (!running) return;
+    const wait = Math.max(0, Math.min(Math.floor(delayMs), MAX_TIMER_MS));
+    if (memory.record) {
+      memory.record.nextRefreshAt = clock() + wait;
+      persist(memory.record);
+    }
+    refreshTimer = setTimer(() => {
+      refreshTimer = null;
+      Promise.resolve(refresh({ force: true })).catch(() => {});
+    }, wait);
+  }
+
+  function armExpiry() {
+    clearExpiryTimer();
+    if (!running || !memory.claims || !memory.record) return;
+    const delay = memory.claims.exp * 1000 - memory.record.serverOffsetMs - clock();
+    if (!Number.isFinite(delay)) return;
+    const wait = Math.max(0, Math.min(Math.floor(delay), MAX_TIMER_MS));
+    expiryTimer = setTimer(() => {
+      expiryTimer = null;
+      try {
+        const judged = judge();
+        publish(judged);
+        if (judged.claims && judged.state !== "expired" && judged.state !== "unverified") armExpiry();
+      } catch {
+        publish({ state: "unverified", until: null, reason: "unavailable" });
+      }
+    }, wait);
+  }
+
+  function successDelay(claims, record) {
+    const target = Math.min(claims.iat * 1000 + TWELVE_H_MS, claims.exp * 1000 - SIX_H_MS);
+    let delay = target - record.serverOffsetMs - clock();
+    if (!Number.isFinite(delay) || delay < MIN_SUCCESS_DELAY_MS) delay = MIN_SUCCESS_DELAY_MS;
+    const unit = Number(random());
+    const fraction = Number.isFinite(unit) && unit > 0 ? Math.min(unit, 1) : 0;
+    return Math.max(0, Math.floor(delay - delay * fraction * 0.1));
+  }
+
+  function scheduleSuccess() {
+    if (!running || !memory.claims || !memory.record) return;
+    armRefresh(successDelay(memory.claims, memory.record));
+    armExpiry();
+  }
+
+  function scheduleFailure(result) {
+    if (!running) return;
+    const step = BACKOFF_MS[Math.min(failCount, BACKOFF_MS.length - 1)];
+    failCount += 1;
+    const retryMs = Number.isFinite(result?.retryAfter) ? result.retryAfter * 1000 : 0;
+    armRefresh(Math.min(Math.max(step, retryMs), MAX_TIMER_MS));
+  }
+
+  function rememberError(code) {
+    if (!memory.record) return;
+    memory.record.lastError = typeof code === "string" ? code : "UNAVAILABLE";
+    memory.record.lastRefreshAt = clock();
+    persist(memory.record);
+  }
+
+  function commit(token, claims) {
+    const localNow = clock();
+    const previousHigh = memory.record && Number.isFinite(memory.record.highWaterMs) ? memory.record.highWaterMs : 0;
+    const serverOffsetMs = claims.iat * 1000 - localNow;
+    const record = {
+      token,
+      seq: claims.seq,
+      jti: claims.jti,
+      serverOffsetMs,
+      highWaterMs: Math.max(previousHigh, claims.iat * 1000),
+      lastRefreshAt: localNow,
+      nextRefreshAt: null,
+      lastError: null,
+    };
+    memory = { record, invalid: false, claims };
+    lastHighWaterPersistMs = localNow;
+    failCount = 0;
+    persist(record);
+  }
+
+  function applyToken(token) {
+    syncFromStorage();
+    let installationId = null;
+    try {
+      installationId = installationView()?.installationId ?? null;
+    } catch {
+      return { ok: false, code: "UNAVAILABLE" };
+    }
+    const verified = verifyToken(token, {
+      keys: trustedKeys(),
+      installationId,
+      storedSeq: memory.claims?.seq ?? null,
+      storedJti: memory.claims?.jti ?? null,
+    });
+    if (!verified.ok) {
+      if (verified.reason === "replay") {
+        scheduleSuccess();
+        return { ok: true, ignored: true };
+      }
+      rememberError("BAD_SIGNATURE");
+      scheduleFailure({ code: "BAD_SIGNATURE" });
+      return { ok: false, code: "BAD_SIGNATURE" };
+    }
+    const currentSeq = memory.claims?.seq;
+    if (currentSeq != null && verified.claims.seq <= currentSeq) {
+      scheduleSuccess();
+      return { ok: true, ignored: true };
+    }
+    commit(token, verified.claims);
+    scheduleSuccess();
+    publish(judge());
+    return { ok: true };
+  }
+
+  function clientDeps(installation, seq) {
+    return {
+      keys: trustedKeys(),
+      installation,
+      seq,
+      fetch: deps.fetch,
+      now: clock,
+      randomBytes,
+      logger: deps.logger,
+    };
+  }
+
+  function resultOf(outcome) {
+    return {
+      ok: outcome.ok === true,
+      ...(outcome.ok === true || typeof outcome.code !== "string" ? {} : { code: outcome.code }),
+      ...(Number.isFinite(outcome.retryAfter) ? { retryAfter: outcome.retryAfter } : {}),
+      entitlement: status(),
+    };
+  }
+
+  async function claim(input) {
+    if (trustedKeys().length === 0) return resultOf({ ok: false, code: "UNCONFIGURED" });
+    if (!client.validateClaimBody(input)) return resultOf({ ok: false, code: "BAD_REQUEST" });
+    let installation;
+    try {
+      installation = installations.getOrCreateInstallation();
+    } catch {
+      return resultOf({ ok: false, code: "UNAVAILABLE" });
+    }
+    const outcome = await client.claim(input, clientDeps(installation, 0));
+    if (!outcome.ok) {
+      rememberError(outcome.code);
+      return resultOf(outcome);
+    }
+    const applied = applyToken(outcome.token);
+    return resultOf({ ...outcome, ...applied, ok: applied.ok, code: applied.code });
+  }
+
+  async function runRefresh() {
+    if (trustedKeys().length === 0) return resultOf({ ok: false, code: "UNCONFIGURED" });
+    syncFromStorage();
+    let installation;
+    try {
+      installation = installationView();
+    } catch {
+      return resultOf({ ok: false, code: "UNAVAILABLE" });
+    }
+    if (!installation) return resultOf({ ok: false, code: "NO_INSTALLATION" });
+    const seq = memory.claims?.seq ?? (Number.isSafeInteger(memory.record?.seq) ? memory.record.seq : 0);
+    const outcome = await client.refresh(clientDeps(installation, seq));
+    if (!outcome.ok) {
+      rememberError(outcome.code);
+      scheduleFailure(outcome);
+      return resultOf(outcome);
+    }
+    const applied = applyToken(outcome.token);
+    if (!applied.ok) return resultOf(applied);
+    return resultOf({ ok: true });
+  }
+
+  function refresh(options = {}) {
+    if (flight) return flight;
+    const force = options?.force === true;
+    if (!force && (memory.record?.nextRefreshAt == null || clock() < memory.record.nextRefreshAt)) {
+      return Promise.resolve(resultOf({ ok: true }));
+    }
+    flight = runRefresh().finally(() => {
+      flight = null;
+    });
+    return flight;
+  }
+
+  function prepare() {
+    const created = installations.getOrCreateInstallation();
+    return { installationId: created.installationId };
+  }
+
+  function stop() {
+    running = false;
+    clearRefreshTimer();
+    clearExpiryTimer();
+  }
+
+  function start() {
+    running = true;
+    clearRefreshTimer();
+    clearExpiryTimer();
+    failCount = 0;
+    try {
+      syncFromStorage();
+    } catch {
+      return stop;
+    }
+    if (!memory.record) return stop;
+    try {
+      judge();
+    } catch {
+      // A record that cannot be judged still refreshes; the request may replace it.
+    }
+    armRefresh(FIRST_REFRESH_MS);
+    armExpiry();
+    try { publish(judge()); } catch { /* status stays fail-closed */ }
+    return stop;
+  }
+
+  return { isActive, status, subscribe, start, stop, claim, refresh, prepare };
 }
 
-/** Calls `listener(status())` after every change. Returns an unsubscribe function. */
-function subscribe(_listener) {
-  return () => {};
-}
+const singleton = createEntitlement();
 
-/** Starts the refresh schedule. Returns a stop function. No-op without a stored entitlement. */
-function start() {
-  return () => {};
-}
-
-module.exports = { isActive, status, subscribe, start };
+module.exports = {
+  isActive: (name) => singleton.isActive(name),
+  status: () => singleton.status(),
+  subscribe: (listener) => singleton.subscribe(listener),
+  start: () => singleton.start(),
+  stop: () => singleton.stop(),
+  claim: (input) => singleton.claim(input),
+  refresh: (options) => singleton.refresh(options),
+  prepare: () => singleton.prepare(),
+  createEntitlement,
+};
