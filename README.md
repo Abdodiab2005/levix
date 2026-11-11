@@ -185,6 +185,14 @@ beta installations can see a newer beta in their release line or a stable
 release. An offline check leaves the bot running normally. Checks share a short
 local cache and never download or install executable code.
 
+Open **Settings → About Levix** or **Help → About Levix** to check manually,
+read release notes, and open the official documentation, support, developer and
+Leviro links. Google Play installations check through Play and offer a flexible
+update: you choose when to download and when to restart. Other installations
+open the official GitHub release so you can use your normal installation method.
+Rating and GitHub stars are optional. Play review prompts have a separate local
+switch that is off by default; Google controls whether a review card appears.
+
 The optional **Powered by Levix** watermark stays off by default. Its existing
 Free switch is retained. When enabled, it excludes exact output, raw transcripts,
 forwarded text, short links, files and security messages. Active Plus extensions

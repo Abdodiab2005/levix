@@ -3,6 +3,15 @@ import { ApiError } from "../api/client";
 import type { StickerUpload } from "../types";
 
 interface LevixHost {
+  getInstallChannel?(): string;
+  hasPendingPlayUpdate?(): boolean;
+  openOfficialLink?(url: string): boolean;
+  playCheckUpdate?(id: string): string;
+  playStartUpdate?(id: string): string;
+  playCompleteUpdate?(id: string): string;
+  playMaybeReview?(id: string): string;
+  getReviewPromptsEnabled?(): boolean;
+  setReviewPromptsEnabled?(enabled: boolean): boolean;
   plusConfigured?(): boolean;
   plusProduct?(id: string): string;
   plusPurchase?(id: string, offerToken: string, installationId: string): string;
@@ -88,7 +97,11 @@ function call<T extends HostReply = HostResult>(
     | "plusProduct"
     | "plusPurchase"
     | "plusRestore"
-    | "plusPendingPurchases",
+    | "plusPendingPurchases"
+    | "playCheckUpdate"
+    | "playStartUpdate"
+    | "playCompleteUpdate"
+    | "playMaybeReview",
   args: (string | number)[],
   signal?: AbortSignal,
   onProgress?: (bytes: number, total: number) => void,
@@ -112,46 +125,51 @@ function call<T extends HostReply = HostResult>(
     signal?.addEventListener("abort", abort, { once: true });
     try {
       const raw =
-        method === "plusProduct"
-          ? h.plusProduct?.(id)
-          : method === "plusPurchase"
-            ? h.plusPurchase?.(id, args[0] as string, args[1] as string)
-            : method === "plusRestore"
-              ? h.plusRestore?.(id)
-              : method === "plusPendingPurchases"
-                ? h.plusPendingPurchases?.(id)
-                : method === "pickStickerSource"
-                  ? h.pickStickerSource?.(id)
-                  : method === "pickFile"
-                    ? h.pickFile?.(id)
-                    : method === "uploadSource"
-                      ? h.uploadSource?.(
-                          id,
-                          args[0] as string,
-                          args[1] as string,
-                          args[2] as number,
-                        )
-                      : method === "uploadForm"
-                        ? h.uploadForm?.(
+        method === "playCheckUpdate" ||
+        method === "playStartUpdate" ||
+        method === "playCompleteUpdate" ||
+        method === "playMaybeReview"
+          ? h[method]?.(id)
+          : method === "plusProduct"
+            ? h.plusProduct?.(id)
+            : method === "plusPurchase"
+              ? h.plusPurchase?.(id, args[0] as string, args[1] as string)
+              : method === "plusRestore"
+                ? h.plusRestore?.(id)
+                : method === "plusPendingPurchases"
+                  ? h.plusPendingPurchases?.(id)
+                  : method === "pickStickerSource"
+                    ? h.pickStickerSource?.(id)
+                    : method === "pickFile"
+                      ? h.pickFile?.(id)
+                      : method === "uploadSource"
+                        ? h.uploadSource?.(
                             id,
                             args[0] as string,
                             args[1] as string,
-                            args[2] as string,
-                            args[3] as number,
+                            args[2] as number,
                           )
-                        : method === "uploadBackup"
-                          ? h.uploadBackup?.(id, args[0] as string, args[1] as number)
-                          : method === "saveBackup"
-                            ? h.saveBackup?.(id, args[0] as string, args[1] as string)
-                            : h.exportFile?.(
-                                id,
-                                args[0] as string,
-                                args[1] as string,
-                                args[2] as string,
-                                args[3] as string,
-                                args[4] as string,
-                                args[5] as string,
-                              );
+                        : method === "uploadForm"
+                          ? h.uploadForm?.(
+                              id,
+                              args[0] as string,
+                              args[1] as string,
+                              args[2] as string,
+                              args[3] as number,
+                            )
+                          : method === "uploadBackup"
+                            ? h.uploadBackup?.(id, args[0] as string, args[1] as number)
+                            : method === "saveBackup"
+                              ? h.saveBackup?.(id, args[0] as string, args[1] as string)
+                              : h.exportFile?.(
+                                  id,
+                                  args[0] as string,
+                                  args[1] as string,
+                                  args[2] as string,
+                                  args[3] as string,
+                                  args[4] as string,
+                                  args[5] as string,
+                                );
       const reply = JSON.parse(raw || "") as HostResult;
       if (!reply.ok) {
         waiting.delete(id);
@@ -162,6 +180,43 @@ function call<T extends HostReply = HostResult>(
       finish({ ok: false, code: "UNAVAILABLE" });
     }
   });
+}
+
+export type PlayUpdateStatus =
+  | "available"
+  | "up_to_date"
+  | "downloading"
+  | "downloaded"
+  | "started"
+  | "cancelled"
+  | "unavailable";
+export type PlayResult = HostReply & { status?: PlayUpdateStatus; versionCode?: number };
+export const nativeInstallChannel = () => host()?.getInstallChannel?.();
+export const nativeUpdatePending = () => host()?.hasPendingPlayUpdate?.() === true;
+export const reviewPromptsEnabled = () => host()?.getReviewPromptsEnabled?.() === true;
+export function setReviewPromptsEnabled(enabled: boolean): boolean {
+  const h = host();
+  if (!h?.setReviewPromptsEnabled) return false;
+  h.setReviewPromptsEnabled(enabled);
+  const saved = reviewPromptsEnabled() === enabled;
+  if (saved) window.dispatchEvent(new Event("levix-review-prefs"));
+  return saved;
+}
+let pendingPlayCheck: Promise<PlayResult> | null = null;
+export function playUpdate(action: "check" | "start" | "complete" | "review"): Promise<PlayResult> {
+  const method = {
+    check: "playCheckUpdate",
+    start: "playStartUpdate",
+    complete: "playCompleteUpdate",
+    review: "playMaybeReview",
+  } as const;
+  if (action !== "check") return call<PlayResult>(method[action], []);
+  if (!pendingPlayCheck) {
+    pendingPlayCheck = call<PlayResult>(method.check, []).finally(() => {
+      pendingPlayCheck = null;
+    });
+  }
+  return pendingPlayCheck;
 }
 
 type PlusFailure = { ok: false; code?: string; status?: "cancelled" | "error" };

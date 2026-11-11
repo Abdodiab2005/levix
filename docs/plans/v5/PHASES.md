@@ -167,6 +167,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
+| Status | CODE-READY, pending owner review 2026-11-11. 09a #166 (`7ad6a0c`) and stacked 09b #167 (`3fb7513`) pass full CI. Local suite: 57664 checks, zero failures/crashes. Q-16 measured: one build, no added manifest requirements or Google services modules. Manual Play/device/old-WebView QA remains NOT RUN for Phase 10. See `PHASE-09-RESULTS.md`. |
 | Goal | Channel-aware update checks and `!update`; safe official links; respectful rating and star prompts; watermark rules. |
 | Files | new `src/commands/update.cjs`, new update-check module, `android/.../PanelActivity.kt` (external links), Android in-app update and review clients (new Play dependencies, Q-16), `frontend/src/` About, Help and Settings, message-engine watermark rules. |
 | Migrations | Local cache keys only. |
@@ -182,6 +183,13 @@ replaces them in its own plan before writing code.
 | Goal | Evidence-based Go or No-Go for v5.0.0. |
 | Work | Full security, privacy and product audit; all gates in `TEST_MATRIX.md`; artifact comparison against `BASELINE.md`; docs parity; `RELEASE_READINESS.md`; release notes in four languages. |
 | Gate | No open critical or high defect; owner approval before any version bump, tag or release. |
+
+## Next-release boundary
+
+The owner authorized Phase 11A (connected WhatsApp account card) on 2026-11-11
+after Phase 09 is code-ready. It is implemented only on `next/5.1.0` and a
+separate feature branch/PR, never `release/5.0.0-beta.1`. Phase 10 above remains
+the mandatory final audit and release gate for v5.0.0.
 
 ## 4. Migration failure policy
 

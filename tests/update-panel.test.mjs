@@ -1,5 +1,9 @@
 // Real authenticated panel routes, with isolated storage and no WhatsApp/network.
-import { equal, ok, finish, startServer, httpClient, useTempDataDir } from "./harness.mjs";
+import { join } from "node:path";
+import { equal, ok, finish, startServer, httpClient, useTempDataDir, ROOT } from "./harness.mjs";
+// Keep the fixture offline even when this file is run directly, outside run.mjs.
+const previousOptions = process.env.NODE_OPTIONS;
+process.env.NODE_OPTIONS = `${previousOptions || ""} --require=${JSON.stringify(join(ROOT, "tests/fixtures/no-external-network.cjs"))}`;
 const dataDir = useTempDataDir("levix-update-panel");
 const server = await startServer({ dataDir, routes: true });
 const http = httpClient(server.base);
@@ -46,5 +50,7 @@ try {
   ok("metadata response never cacheable", /no-store/.test(meta.headers.get("cache-control")));
 } finally {
   await server.stop();
+  if (previousOptions === undefined) delete process.env.NODE_OPTIONS;
+  else process.env.NODE_OPTIONS = previousOptions;
 }
 finish();

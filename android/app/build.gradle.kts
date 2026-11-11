@@ -377,6 +377,12 @@ tasks.register("stageLevixBundle") {
 
 dependencies {
     implementation("com.android.billingclient:billing-ktx:9.1.0")
+    // Play in-app update and review. Pinned, non-ktx: the app never depends on
+    // GoogleApiAvailability and never requires Play Services to boot. The
+    // channel decision (and whether a flavor is worth adding) waits for the
+    // Q-16 dependency/artifact evidence from CI.
+    implementation("com.google.android.play:app-update:2.1.0")
+    implementation("com.google.android.play:review:2.0.2")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")

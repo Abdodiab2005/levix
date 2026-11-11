@@ -20,6 +20,7 @@ import {
 import type React from "react";
 import { useI18n } from "../context/I18nContext";
 import { cn } from "../utils/cn";
+import { officialLinks, openOfficialLink } from "../utils/officialLinks";
 import { Button, IconButton } from "./ui";
 
 export type ViewTab =
@@ -180,7 +181,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="truncate text-[11px] text-muted">
             &copy; {brand.copyrightYear || 2026}{" "}
             <a
-              href={brand.developerSite || "#"}
+              href={officialLinks.portfolio}
+              onClick={(event) => {
+                event.preventDefault();
+                openOfficialLink(officialLinks.portfolio);
+              }}
               target="_blank"
               rel="noopener noreferrer"
               className="text-brand-cyan hover:underline"
@@ -189,7 +194,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </a>{" "}
             (
             <a
-              href={brand.studioSite || "#"}
+              href={officialLinks.studio}
+              onClick={(event) => {
+                event.preventDefault();
+                openOfficialLink(officialLinks.studio);
+              }}
               target="_blank"
               rel="noopener noreferrer"
               className="text-brand-cyan hover:underline"

@@ -6,7 +6,7 @@ working with code in this repository.
 ## Project Overview
 
 **Levix** — a self-hosted personal WhatsApp bot built with Node.js and
-**Baileys v7**: a 69-command system, group moderation, an AI agent whose
+**Baileys v7**: a 70-command system, group moderation, an AI agent whose
 provider (Google Gemini / OpenAI-compatible / Anthropic) is selected in the
 panel with its own endpoint, API key and model, scheduled messages, and a web
 control panel that changes almost all of it live. The database is the source of
@@ -1000,6 +1000,12 @@ endpoint back without a reason that survives "this holds a whole WhatsApp
 account".
 
 ### 5. Utility Commands
+
+- **`!update`** — owner-only by default, checks official release metadata with
+  channel-aware GitHub/Play handling. No executable download or install.
+  Settings/About and Help/About expose official links; Play updates/reviews
+  remain optional native flows. `message_watermark` stays false by default and
+  retains its existing Free switch; Plus may hide it through the host hook.
 
 - **`!calc <معادلة>`** (`src/commands/calc.cjs`) — hand-written tokenizer +
   recursive-descent parser (never `eval`). Handles `+ - * / % ^ !`, parentheses,

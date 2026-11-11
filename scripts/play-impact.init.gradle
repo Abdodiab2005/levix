@@ -1,0 +1,15 @@
+// Q-16 measurement only. Applied to both base and proposed checkouts so the
+// report uses selected runtime modules, not requested dependency-tree labels.
+gradle.projectsEvaluated {
+    def app = rootProject.findProject(':app')
+    app.tasks.register('reportPlayRuntimeModules') {
+        doLast {
+            app.configurations.getByName('releaseRuntimeClasspath')
+                .incoming.resolutionResult.allComponents
+                .collect { it.moduleVersion }
+                .findAll { it != null && (it.group.startsWith('com.google.android.gms') || it.group.startsWith('com.google.android.play')) }
+                .collect { it.toString() }.unique().sort()
+                .each { println("LEVIX_RUNTIME_MODULE ${it}") }
+        }
+    }
+}
