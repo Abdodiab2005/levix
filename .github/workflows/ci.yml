@@ -199,8 +199,8 @@ jobs:
           set -euo pipefail
           npm --prefix .phase09-baseline ci
           npm --prefix .phase09-baseline/frontend ci
-          (cd .phase09-baseline/android && ./gradlew :app:assembleRelease :app:dependencies --configuration releaseRuntimeClasspath --console=plain > "$RUNNER_TEMP/phase09-baseline-deps.txt")
-          (cd android && ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --console=plain > "$RUNNER_TEMP/phase09-proposed-deps.txt")
+          (cd .phase09-baseline/android && ./gradlew --init-script "$GITHUB_WORKSPACE/scripts/play-impact.init.gradle" :app:assembleRelease :app:reportPlayRuntimeModules --console=plain > "$RUNNER_TEMP/phase09-baseline-deps.txt")
+          (cd android && ./gradlew --init-script "$GITHUB_WORKSPACE/scripts/play-impact.init.gradle" :app:reportPlayRuntimeModules --console=plain > "$RUNNER_TEMP/phase09-proposed-deps.txt")
           node scripts/measure-play-impact.mjs \
             .phase09-baseline/android/app/build/outputs/apk/release/levix-android-arm64.apk \
             android/app/build/outputs/apk/release/levix-android-arm64.apk \

@@ -16,10 +16,23 @@ const manifest = (apk) =>
   });
 const base = manifest(baselineApk);
 const next = manifest(proposedApk);
+// Parse both self-closing and expanded tags with the standard XML parser.
 const entries = (xml, tag) =>
-  [...xml.matchAll(new RegExp(`<${tag}\\b[\\s\\S]*?\\/>`, "g"))]
-    .map((match) => match[0].replace(/\s+/g, " "))
-    .sort();
+  JSON.parse(
+    execFileSync(
+      "python3",
+      [
+        "-c",
+        `
+import json,sys,xml.etree.ElementTree as ET
+root=ET.fromstring(sys.stdin.read())
+print(json.dumps(sorted([json.dumps(dict(sorted(e.attrib.items())),sort_keys=True) for e in root.iter(sys.argv[1])])) )
+`,
+        tag,
+      ],
+      { input: xml, encoding: "utf8" },
+    ),
+  );
 const extra = (before, after) => after.filter((value) => !before.includes(value));
 const permissions = extra(entries(base, "uses-permission"), entries(next, "uses-permission"));
 const features = extra(entries(base, "uses-feature"), entries(next, "uses-feature"));
@@ -27,7 +40,15 @@ const libraries = extra(entries(base, "uses-library"), entries(next, "uses-libra
 const depsBefore = readFileSync(baselineDeps, "utf8");
 const depsAfter = readFileSync(proposedDeps, "utf8");
 const deps = (text) =>
-  [...new Set(text.match(/com\.google\.android\.(?:play|gms):[\w.-]+:[\w.-]+/g) || [])].sort();
+  [
+    ...new Set(
+      [
+        ...text.matchAll(
+          /^LEVIX_RUNTIME_MODULE (com\.google\.android\.(?:play|gms):[\w.-]+:[\w.-]+)$/gm,
+        ),
+      ].map((match) => match[1]),
+    ),
+  ].sort();
 const added = extra(deps(depsBefore), deps(depsAfter));
 const report = {
   baselineApk,
@@ -48,6 +69,8 @@ const report = {
 };
 writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`);
 console.log(JSON.stringify(report, null, 2));
-if (libraries.length || features.some((value) => !value.includes('android:required="false"'))) {
+const required = (value) =>
+  JSON.parse(value)["{http://schemas.android.com/apk/res/android}required"] !== "false";
+if (libraries.some(required) || features.some(required)) {
   process.exitCode = 1;
 }
