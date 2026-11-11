@@ -3,7 +3,6 @@
 import {
   AlertCircle,
   Check,
-  CheckCircle2,
   Copy,
   Key,
   Phone,
@@ -36,6 +35,7 @@ import {
 import { useI18n } from "../context/I18nContext";
 import type { SessionStatus } from "../types";
 import { fill } from "../utils/fill";
+import { ConnectedAccountCard } from "./ConnectedAccountCard";
 import { consentReasonText } from "./legal/TermsConsentDialog";
 
 function isAndroidCompanionApp() {
@@ -214,7 +214,6 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
     }
   };
 
-  const rawPhone = status?.user?.id ? status.user.id.split("@")[0].split(":")[0] : null;
   const hideRestart = isAndroidCompanionApp();
 
   const unlinkAction: SecondaryAction = {
@@ -274,6 +273,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
 
   return (
     <div className="flex flex-col gap-5 sm:gap-6">
+      <ConnectedAccountCard status={status} />
       {/* Primary Connection Hero Card */}
       <Card className="flex flex-col gap-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
@@ -335,26 +335,6 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
             </div>
           </div>
         ) : null}
-
-        {/* Connected Info Header when Active */}
-        {isConnected && rawPhone && (
-          <div className="rounded-xl border border-ok/30 bg-ok/10 p-3.5 sm:p-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-ok/20 text-ok flex items-center justify-center shrink-0">
-                <CheckCircle2 size={20} />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs text-muted font-medium">{t("connectedNumber")}</div>
-                <div className="text-sm sm:text-base font-mono font-bold text-text-main" dir="ltr">
-                  +{rawPhone}
-                </div>
-              </div>
-            </div>
-            <StatusPill tone="ok" className="shrink-0">
-              {t("connectionOnline")}
-            </StatusPill>
-          </div>
-        )}
 
         {/* Action Controls: strictly conditional based on state */}
         <div>

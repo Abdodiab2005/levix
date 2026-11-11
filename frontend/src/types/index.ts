@@ -26,6 +26,7 @@ export type SessionState =
 
 export interface SessionStatus {
   state: SessionState;
+  since?: number | null;
   status?: string;
   qr?: string | null;
   pairingCode?: string | null;
