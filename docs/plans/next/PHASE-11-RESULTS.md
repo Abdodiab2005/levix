@@ -1,6 +1,7 @@
 # Phase 11A results — connected WhatsApp account card
 
-Status: IMPLEMENTED, final verification in progress, 2026-11-11. Scope is only
+Status: CODE-READY, pending owner review, 2026-11-11. All automated gates pass;
+manual dedicated-device/old-WebView QA remains NOT RUN. Scope is only
 item A of the owner's Phase 11 request. Base `40051f6` on `next/5.1.0`;
 implementation branch `feat/next-account-card`. Never targets the v5.0 release.
 
@@ -52,7 +53,9 @@ appended after the final commit. No dependency/tool/artifact download occurred.
 | PASS | `npm run build:frontend` | `/tmp/levix-phase11-frontend.log`; existing chunk-size warning |
 | PASS | `npm run lint` | zero errors; `/tmp/levix-phase11-lint.log`; focused new-code lint also passes |
 | PASS | `npm run i18n:check`; `npm run docs:check` | `/tmp/levix-phase11-i18n.log`, `/tmp/levix-phase11-docs-check.log` |
-| NOT RUN (pending) | final `npm test` and full next-release PR CI | Run after the code commit; no pass claimed yet |
+| PASS | `npm test`, Linux x64, Node 24.22.2, code commit `cb0add4e47931c26ff923d5d2bb5ffa6e8a85344`, 2026-11-11 | 57878 checks, 0 failed, 0 crashed, 204.5 s; `/tmp/levix-phase11-full-tests.log` |
+| PASS | full CI [43101826791](https://github.com/Abdodiab2005/levix/actions/runs/43101826791), same code commit, 2026-11-11 | tests, lint/i18n/docs, npm install/boot, Docker persistence, SEA Linux/macOS/Windows, Android unit/debug/release both-ABI APKs/AAB and public artifact scans |
+| PASS | `npm pack --offline --ignore-scripts` then public artifact scan, same code commit, Linux x64, 2026-11-11 | 309-entry tarball; `/tmp/levix-phase11-scan.log`; no download or private Plus runtime |
 | NOT RUN | live dedicated-account/device and oldest-supported-WebView QA | No real WhatsApp number or pairing authorized/used; browser/socket/image fakes only |
 
 The browser proof includes no reads on Overview, one cached photo/lookup across
@@ -66,3 +69,18 @@ PR targets `next/5.1.0` only. Phase 09 PR #166 then #167 remain the v5 merge
 order; Phase 10 remains mandatory before any v5.0.0 release. Phase 11 must not
 enter or delay that branch. Reverting the card and its routes/service removes
 the feature without migrating data. No merge, tag, deploy or publication.
+
+## Pull request and merge order
+
+[Phase 11A PR #168](https://github.com/Abdodiab2005/levix/pull/168) targets
+`next/5.1.0`, not the v5.0 release branch. Code commit:
+`cb0add4e47931c26ff923d5d2bb5ffa6e8a85344`. The following evidence-only commit
+does not alter application behavior; its final checks are visible on the PR.
+
+Recommended v5 order: #166, then retarget and merge #167. Independently review
+#168 for the next release; never merge it into v5.0. Phase 10 remains mandatory.
+No PR was merged, and nothing was tagged, deployed, published or uploaded.
+
+Persistent local checkout:
+`/home/abdo/Documents/levix-wt/p11-account-card`. The original temporary
+checkout remains detached at the tested code commit; no user work was removed.
