@@ -1608,5 +1608,14 @@
   "rateLevix": "Rate Levix on Google Play",
   "starGithub": "Star on GitHub",
   "reviewPrompts": "Allow occasional rating prompts",
-  "reviewPromptsDesc": "Off by default. Google Play may offer a review after a successful experience. You can turn this off at any time."
+  "reviewPromptsDesc": "Off by default. Google Play may offer a review after a successful experience. You can turn this off at any time.",
+  "accountCardTitle": "WhatsApp account",
+  "accountProfileName": "Display name",
+  "accountProfilePhone": "Phone number",
+  "accountProfileAbout": "About",
+  "accountProfileMissing": "Unavailable",
+  "accountProfileDisconnected": "Connect WhatsApp to view your account details.",
+  "accountProfileUnavailable": "Could not load account details. Try again.",
+  "accountProfileRefresh": "Refresh account details",
+  "accountProfileRefreshSoon": "Account details were checked recently"
 }
