@@ -309,7 +309,7 @@ module.exports = {
         sock,
         msg.key.remoteJid,
         { text: helpText(lang).notFound(parsed.query, prefix) },
-        { replyTo: msg },
+        { replyTo: msg, levix: { category: "error" } },
       );
     }
 

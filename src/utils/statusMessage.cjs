@@ -123,7 +123,7 @@ class StatusMessage {
       const sent = await this.sock.sendMessage(
         this.jid,
         { ...this.payload(next, mentionList), edit: this.key },
-        { quoted: null },
+        { quoted: null, levix: { category: this.category, sensitivity: this.sensitivity } },
       );
       this.text = next;
       this.mentions = mentionList;
@@ -179,6 +179,7 @@ class StatusMessage {
       settings
         .redactSecrets(t("bot.core.statusMessage.errorCard", { lead, name, message }))
         .slice(0, 1500),
+      { category: "error" },
     );
   }
 

@@ -190,6 +190,7 @@ Notes:
 
 | Recipient | What is sent | When | Why |
 | --- | --- | --- | --- |
+| **GitHub** (`api.github.com`, official Levix Releases) | An ordinary HTTPS metadata request, with the connection IP address and a fixed Levix user-agent; no WhatsApp identifiers, messages, pairing credentials or settings | Only when you explicitly check for updates on a non-Play installation, subject to a local cooldown | Compare public release versions and show an official release link. No executable update is downloaded or run |
 | **WhatsApp (Meta)** | Your messages, media you send through the bot, your phone number / pairing credentials, group metadata | Continuously while the bot is linked | Levix is a WhatsApp client; this is the product's core function |
 | **Your configured AI provider** (Google, OpenAI-compatible server, or Anthropic — chosen by you, using your own API key) | The AI prompt and relevant context, which can include display name, WhatsApp user/phone identifiers, group name, messages, quoted/mentioned participant identifiers, AI history or memory, and supported media/files | Only when you invoke an AI feature (`!gemini`, `!ask`, `!ai`, `!generate`, `!stt`, …) | To generate or process the result you asked for |
 | **Google Search grounding within Gemini** | A search Gemini chooses from the prompt already sent to Gemini | When Gemini decides to search during an AI request; `ai_google_search` is on by default for Gemini and can be turned off | Grounding an answer in current information |

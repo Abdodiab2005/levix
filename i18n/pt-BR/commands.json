@@ -136,5 +136,7 @@
   "group.warns.description": "Mostra os avisos de um membro.",
   "group.warns.usage": "warns @membro",
   "group.welcome.description": "Gerencia as mensagens de boas-vindas do grupo.",
-  "group.welcome.usage": "welcome [status]\nwelcome <on|off>\nwelcome add <texto de boas-vindas>\nwelcome list\nwelcome delete <número>"
+  "group.welcome.usage": "welcome [status]\nwelcome <on|off>\nwelcome add <texto de boas-vindas>\nwelcome list\nwelcome delete <número>",
+  "update.description": "Verifique atualizações oficiais do Levix sem instalar nada.",
+  "update.usage": "update"
 }

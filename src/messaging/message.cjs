@@ -24,6 +24,9 @@ const EXACT_OUTPUT = new Set([
   "loop",
   "poll",
   "ping",
+  "stt",
+  "send",
+  "shortlink",
 ]);
 
 const CATEGORY_DEFAULTS = Object.freeze({
@@ -89,7 +92,7 @@ function renderMessage(message) {
   return stampWatermark(text, {
     commandName: message.context?.command,
     category: message.category,
-    exact: message.deliveryPolicy?.exact === true,
+    exact: message.deliveryPolicy?.exact === true || message.sensitivity === "secret",
   });
 }
 

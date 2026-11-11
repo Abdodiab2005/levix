@@ -95,7 +95,9 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName =
             // An edit stays on a chat this command already sent to. It cannot
             // open a new destination.
             if (!allowed.has(requested)) return { key: null, refused: true };
-            return target.sendMessage.call(target, jid, content, opts);
+            const outgoing =
+              content.edit && levix ? stampText(content, commandName, levix) : content;
+            return target.sendMessage.call(target, jid, outgoing, opts);
           }
 
           const plan = routeSend({
@@ -190,7 +192,7 @@ function stampText(content, commandName, levix) {
   const text = stampWatermark(content.text, {
     commandName,
     category: levix?.category || "result",
-    exact: levix?.exact === true,
+    exact: levix?.exact === true || levix?.sensitivity === "secret",
   });
   if (text === content.text) return content;
   return { ...content, text };

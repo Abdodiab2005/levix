@@ -151,6 +151,7 @@ const LEVELS = {
   translate: "MEMBERS",
   tts: "MEMBERS",
   unblock: "OWNER_ONLY",
+  update: "OWNER_ONLY",
   weather: "MEMBERS",
 };
 
@@ -162,7 +163,7 @@ section("permission matrix");
   );
   await loadCommands();
   const catalog = getCommandCatalog();
-  equal("69 commands", catalog.length, 69);
+  equal("69 existing commands and the approved update command", catalog.length, 70);
   const live = Object.fromEntries(catalog.map((command) => [command.key, command.permission]));
   for (const [key, level] of Object.entries(LEVELS)) {
     equal(key, live[key], level);
