@@ -1,0 +1,32 @@
+{
+  "baselineApk": ".phase09-baseline/android/app/build/outputs/apk/release/levix-android-arm64.apk",
+  "proposedApk": "android/app/build/outputs/apk/release/levix-android-arm64.apk",
+  "apkBytes": {
+    "baseline": 61061774,
+    "proposed": 61157852
+  },
+  "addedPermissions": [],
+  "addedFeatures": [],
+  "addedLibraries": [],
+  "addedGoogleDependencies": [
+    "com.google.android.play:app-update:2.1.0",
+    "com.google.android.play:core-common:2.0.4",
+    "com.google.android.play:review:2.0.2"
+  ],
+  "gmsRuntimeDependencies": [
+    "com.google.android.gms:play-services-base:18.5.0",
+    "com.google.android.gms:play-services-basement:18.9.0",
+    "com.google.android.gms:play-services-location:19.0.0",
+    "com.google.android.gms:play-services-places-placereport:17.0.0",
+    "com.google.android.gms:play-services-tasks:18.2.0"
+  ],
+  "type": "built-artifact-comparison; not Google Play download size",
+  "evidence": {
+    "type": "CI",
+    "date": "2026-11-11",
+    "platform": "GitHub-hosted Ubuntu x64; arm64 release APK",
+    "commit": "3fb751342d693671debb628f9325deca8c77bdbb",
+    "run": "https://github.com/Abdodiab2005/levix/actions/runs/43067593302",
+    "job": "android apk builds"
+  }
+}

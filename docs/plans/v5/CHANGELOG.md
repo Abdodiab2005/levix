@@ -151,3 +151,12 @@
 - Fixed numeric identity contamination/role-write and mapped revocation edges,
   unmatched metadata storms, pre-provider role refresh and broken credential
   lookup for linked-owner routing. Evidence/limits/rollback: `PHASE-07-RESULTS.md`.
+
+## 2026-11-11 — Phase 09 code-ready
+
+- #166 updates/watermark and #167 Android/UI independently reviewed and pass
+  full CI; 57664 local checks pass. No merge/release/upload.
+- Q-16 measured before choosing one build: no new selected Google services
+  module or manifest requirement. Manual device limits remain explicit.
+- Phase 11A authorized only for a separate next release; Phase 10 remains the
+  mandatory v5.0.0 gate. Evidence: `PHASE-09-RESULTS.md`.
