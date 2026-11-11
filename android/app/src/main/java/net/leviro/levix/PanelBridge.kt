@@ -31,6 +31,8 @@ class PanelBridge(
     private val onUiPrefsChanged: (() -> Unit)? = null,
     private val billingHost: BillingHost? = null,
     private val billingActivity: Activity? = null,
+    private val playHost: PlayExperience? = null,
+    private val onOpenOfficialLink: ((String) -> Boolean)? = null,
 ) {
     private fun plusRefusal(callId: String): String? {
         billingHost?.optIn()
@@ -76,6 +78,61 @@ class PanelBridge(
         } catch (_: Exception) {
             PlusBilling.failure("UNAVAILABLE").toString()
         }
+    }
+
+    @JavascriptInterface
+    fun getInstallChannel(): String = appContext?.let { PlayExperience.installChannel(it) }
+        ?: PlayExperience.CHANNEL_GITHUB
+
+    @JavascriptInterface
+    fun hasPendingPlayUpdate(): Boolean = appContext?.let { PlayExperience.hasPendingUpdate(it) } ?: false
+
+    /**
+     * Leaves the WebView only for a fixed official destination. Validation is
+     * synchronous; the activity launches the intent on the UI thread and a
+     * missing handler returns false.
+     */
+    @JavascriptInterface
+    fun openOfficialLink(url: String): Boolean = onOpenOfficialLink?.invoke(url) == true
+
+    @JavascriptInterface
+    fun getReviewPromptsEnabled(): Boolean =
+        appContext?.let { PlayExperience.reviewPromptsEnabled(it) }
+            ?: PlayExperience.REVIEW_PROMPTS_DEFAULT
+
+    @JavascriptInterface
+    fun setReviewPromptsEnabled(enabled: Boolean): Boolean =
+        appContext?.let { PlayExperience.setReviewPromptsEnabled(it, enabled) } ?: false
+
+    @JavascriptInterface
+    fun playCheckUpdate(callId: String): String =
+        playCall(callId) { host, id -> host.checkUpdate(id) }
+
+    @JavascriptInterface
+    fun playStartUpdate(callId: String): String =
+        playCall(callId) { host, id -> host.startUpdate(id) }
+
+    @JavascriptInterface
+    fun playCompleteUpdate(callId: String): String =
+        playCall(callId) { host, id -> host.completeUpdate(id) }
+
+    @JavascriptInterface
+    fun playMaybeReview(callId: String): String =
+        playCall(callId) { host, id -> host.maybeReview(id) }
+
+    /**
+     * A GitHub/self-hosted install must never create or call a Play client,
+     * so the channel is checked before the host is reached. The page can call
+     * every Play method; a non-Play install gets a plain refusal instead.
+     */
+    private fun playCall(callId: String, action: (PlayExperience, String) -> String): String {
+        if (!PanelFiles.validCallId(callId)) {
+            return PlayExperience.failure(PlayExperience.CODE_INVALID_INPUT).toString()
+        }
+        val context = appContext ?: return PlayExperience.unavailable().toString()
+        if (!PlayExperience.installedByPlay(context)) return PlayExperience.unavailable().toString()
+        val host = playHost ?: return PlayExperience.unavailable().toString()
+        return action(host, callId)
     }
 
     @JavascriptInterface

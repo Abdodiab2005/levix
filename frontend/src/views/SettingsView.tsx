@@ -23,6 +23,7 @@ import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../api/client";
 import { FeedbackForm } from "../components/FeedbackForm";
+import { AboutPanel } from "../components/AboutPanel";
 import { useGuidedTour } from "../components/GuidedTour";
 import { useToast } from "../components/Toasts";
 import {
@@ -55,6 +56,7 @@ import { DiagnosticsView } from "./DiagnosticsView";
 import { PlusSettings } from "./settings/PlusSettings";
 
 type SettingsTab =
+  | "about"
   | "plus"
   | "general"
   | "integrations"
@@ -66,6 +68,7 @@ type SettingsTab =
   | "diagnostics";
 
 const SETTINGS_TABS: SettingsTab[] = [
+  "about",
   "plus",
   "general",
   "integrations",
@@ -741,6 +744,7 @@ export const SettingsView: React.FC = () => {
         aria-label={t("settings")}
         className="overflow-x-auto no-scrollbar"
         options={[
+          { value: "about", label: t("aboutLevix"), icon: <CirclePlay size={17} /> },
           { value: "general", label: t("tabGeneral"), icon: <Sliders size={17} /> },
           ...(plusAvailable === true ? [{ value: "plus" as const, label: t("plusTitle") }] : []),
           { value: "integrations", label: t("tabIntegrations"), icon: <Key size={17} /> },
@@ -752,6 +756,8 @@ export const SettingsView: React.FC = () => {
           { value: "diagnostics", label: t("tabDiagnostics"), icon: <FileText size={17} /> },
         ]}
       />
+
+      {activeTab === "about" && <AboutPanel />}
 
       {activeTab === "plus" && plusAvailable === true && (
         <PlusSettings

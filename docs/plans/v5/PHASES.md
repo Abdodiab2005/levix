@@ -167,6 +167,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
+| Status | IMPLEMENTED, verification in progress on 2026-11-11. 09a PR #166 (`7ad6a0c`) targets `release/5.0.0-beta.1`; stacked 09b adds Android/UI and Q-16 evidence. `PHASE-09-PLAN.md` and `PHASE-09-RESULTS.md` record scope, independent review and actual gates. Watermark default remains false and the existing Free switch stays available. |
 | Goal | Channel-aware update checks and `!update`; safe official links; respectful rating and star prompts; watermark rules. |
 | Files | new `src/commands/update.cjs`, new update-check module, `android/.../PanelActivity.kt` (external links), Android in-app update and review clients (new Play dependencies, Q-16), `frontend/src/` About, Help and Settings, message-engine watermark rules. |
 | Migrations | Local cache keys only. |
