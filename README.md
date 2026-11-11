@@ -176,6 +176,20 @@ Reconnect attempts continue inside the bot even when no browser is open.
 An optional HTTP, HTTPS, or SOCKS5 proxy can route WhatsApp traffic, including
 media, without changing how the panel or AI connects.
 
+## Checking for updates
+
+`!update` checks official release information and replies with the current
+version and a release link. It is owner-only by default, with the same command
+permission controls as other commands. Stable installations see stable releases;
+beta installations can see a newer beta in their release line or a stable
+release. An offline check leaves the bot running normally. Checks share a short
+local cache and never download or install executable code.
+
+The optional **Powered by Levix** watermark stays off by default. Its existing
+Free switch is retained. When enabled, it excludes exact output, raw transcripts,
+forwarded text, short links, files and security messages. Active Plus extensions
+can hide it through the existing entitlement-controlled hook.
+
 ## CLI
 
 ```text

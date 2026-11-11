@@ -76,5 +76,9 @@
   "status.state.unknown": "desconhecido",
   "commandHandler.unknown": "Comando desconhecido `{name}`.\nExemplo: `{prefix}help`",
   "message.watermark": "Com tecnologia Levix",
-  "message.routeFailed": "Não foi possível enviar a resposta para o chat selecionado."
+  "message.routeFailed": "Não foi possível enviar a resposta para o chat selecionado.",
+  "update.available": "O Levix {latestVersion} está disponível. Versão atual: {currentVersion}.\n{url}",
+  "update.up_to_date": "O Levix está atualizado ({currentVersion}).\n{url}",
+  "update.unavailable": "Não foi possível verificar atualizações. Versão atual: {currentVersion}. Tente novamente mais tarde.\n{url}",
+  "update.play": "Versão atual: {currentVersion}. Confira no Google Play as atualizações disponíveis para sua conta.\n{url}"
 }

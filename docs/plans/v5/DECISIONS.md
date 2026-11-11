@@ -223,6 +223,9 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
 ## ADR-010: Plus price lives in store configuration
 
 - Status: ACCEPTED (owner, locked decision 10).
+- Amended by the owner 2026-11-11: preserve `message_watermark=false` and every
+  existing Free choice. Phase 09 must not silently enable the watermark or turn
+  its existing Free switch into a paid feature.
 - Decision: USD 0.99 per month worldwide, with an Egypt price 30% lower, set through Google Play
   country pricing. The final EGP amount follows Play pricing, taxes and rounding. No code converts
   currencies or locates users by IP address.

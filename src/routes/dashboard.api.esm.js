@@ -46,6 +46,8 @@ import {
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
+const updateChecker = require("../services/updateCheck.cjs");
+const { LINKS } = require("../config/official-links.cjs");
 const {
   buildModerationSummaryBoth,
   featureActionOf,
@@ -204,6 +206,29 @@ function parseDiagnosticsInput(raw) {
 // ===========================================================================
 // Overview
 // ===========================================================================
+
+// Reading About never triggers a network check. Only the explicit POST does.
+router.get("/updates", (_req, res) => {
+  const channel = updateChecker.getInstallChannel();
+  res.json({
+    success: true,
+    links: LINKS,
+    update: {
+      channel,
+      status: "idle",
+      currentVersion: require("../../package.json").version,
+      latestVersion: null,
+      url: channel === "play" ? LINKS.play : LINKS.releases,
+    },
+  });
+});
+
+router.post(
+  "/updates/check",
+  asyncRoute(async (_req, res) => {
+    res.json({ success: true, links: LINKS, update: await updateChecker.checkForUpdates() });
+  }),
+);
 
 router.get("/stats", (req, res) => {
   try {

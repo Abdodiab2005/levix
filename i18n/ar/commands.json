@@ -136,5 +136,7 @@
   "group.warns.description": "يعرض تحذيرات عضو معيّن.",
   "group.warns.usage": "warns @عضو",
   "group.welcome.description": "يدير رسائل الترحيب في المجموعة.",
-  "group.welcome.usage": "welcome [status]\nwelcome <on|off>\nwelcome add <نص الترحيب>\nwelcome list\nwelcome delete <رقم>"
+  "group.welcome.usage": "welcome [status]\nwelcome <on|off>\nwelcome add <نص الترحيب>\nwelcome list\nwelcome delete <رقم>",
+  "update.description": "البحث عن تحديثات Levix الرسمية دون تثبيت أي شيء.",
+  "update.usage": "update"
 }

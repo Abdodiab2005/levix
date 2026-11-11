@@ -4,7 +4,7 @@
   "sources": [
     {
       "file": "README.md",
-      "sha256": "8e74dfce7e2a963e3cfee7590c7480d8b4d7a5f0440bd819021de0acfbe5d4d6"
+      "sha256": "eba65411812cc07f1df693fbd83b4589812b0fe7acf4ea0ea2e969da6e1b56d9"
     },
     {
       "file": "SETUP.md",
@@ -16,23 +16,23 @@
     },
     {
       "file": "PRIVACY.md",
-      "sha256": "6c3b9cd24eb36ee63248c789d1f13a8ac6df7a3babdecd0a16eda69d3733df95"
+      "sha256": "d1347c57ffb3f995ecc7ec9a8889c732cc3c80a1f51e452818aeeed320b2ac39"
     },
     {
       "file": "i18n/en/commands.json",
-      "sha256": "75db435bb2273bf424306d1fdb4acc85a4fae62d5e10a256f8e98174a7ea6872"
+      "sha256": "9fb5584cd7b81b531c69b57bcc13cfdefa5eb546f1b5f0bd401976289ad8b1ed"
     },
     {
       "file": "i18n/ar/commands.json",
-      "sha256": "a3c9183fb54d69a93e44831cfe6d793b50d99ce5a11f082e295f38d12c9dae91"
+      "sha256": "d627161e473efb638044eda0a8bec013288569eef248850affbedc03570a8ed8"
     },
     {
       "file": "i18n/pt-BR/commands.json",
-      "sha256": "d8830a79d578c8249328ed4748a8a39d134d6824fb566df171dc458da70ffa45"
+      "sha256": "56eaa65131eaee969bd65016b40edbc16ec108f89069b686776ed1546bc25ca9"
     },
     {
       "file": "i18n/es-419/commands.json",
-      "sha256": "1c474349d3dcbbbc7bd73606d1d32435692e8246680942d8ac9c9299ee6b78b4"
+      "sha256": "950368187b217da8f9c2ab1962b033a3e5287680f471a220a1f455c77ecadcd8"
     }
   ],
   "sections": [
@@ -105,6 +105,13 @@
       "title": "A connection you control",
       "locale": "en",
       "text": "The panel can start, stop, reconnect, and unlink WhatsApp while showing the\nactual state: idle, waiting for a scan, connected, reconnecting, or stopped.\nReconnect attempts continue inside the bot even when no browser is open.\n\nAn optional HTTP, HTTPS, or SOCKS5 proxy can route WhatsApp traffic, including\nmedia, without changing how the panel or AI connects."
+    },
+    {
+      "id": "README.md#checking-for-updates",
+      "source": "README.md",
+      "title": "Checking for updates",
+      "locale": "en",
+      "text": "`!update` checks official release information and replies with the current\nversion and a release link. It is owner-only by default, with the same command\npermission controls as other commands. Stable installations see stable releases;\nbeta installations can see a newer beta in their release line or a stable\nrelease. An offline check leaves the bot running normally. Checks share a short\nlocal cache and never download or install executable code.\n\nThe optional **Powered by Levix** watermark stays off by default. Its existing\nFree switch is retained. When enabled, it excludes exact output, raw transcripts,\nforwarded text, short links, files and security messages. Active Plus extensions\ncan hide it through the existing entitlement-controlled hook."
     },
     {
       "id": "README.md#cli",
@@ -524,14 +531,14 @@
       "source": "PRIVACY.md",
       "title": "2. Data that leaves the device, and to whom",
       "locale": "en",
-      "text": "| Recipient | What is sent | When | Why |\n| --- | --- | --- | --- |\n| **WhatsApp (Meta)** | Your messages, media you send through the bot, your phone number / pairing credentials, group metadata | Continuously while the bot is linked | Levix is a WhatsApp client; this is the product's core function |\n| **Your configured AI provider** (Google, OpenAI-compatible server, or Anthropic — chosen by you, using your own API key) | The AI prompt and relevant context, which can include display name, WhatsApp user/phone identifiers, group name, messages, quoted/mentioned participant identifiers, AI history or memory, and supported media/files | Only when you invoke an AI feature (`!gemini`, `!ask`, `!ai`, `!generate`, `!stt`, …) | To generate or process the result you asked for |\n| **Google Search grounding within Gemini** | A search Gemini chooses from the prompt already sent to Gemini | When Gemini decides to search during an AI request; `ai_google_search` is on by default for Gemini and can be turned off | Grounding an answer in current information |\n| **DuckDuckGo** (`html.duckduckgo.com`) or **Google Programmable Search** (if you configured it) | The search query | When an AI answer uses `web_search` or `search_news`; the latter uses the same search path | Web-grounded answers and news |\n| **Wikipedia** (`ar.wikipedia.org` or `en.wikipedia.org`) | The search query and matching page titles requested for summaries | When an AI answer uses `search_wikipedia` | Finding and reading articles |\n| **Web pages the AI opens** | HTTPS request for the page to its host | When an AI answer uses `fetch_url` | Reading a page you asked about |\n| **Google Cloud Translation** (`translation.googleapis.com`) | Text to translate and the configured Google Translation API key | When you use `!translate google` with a key | Translating text through the official API |\n| **Google's public Translate endpoint** (`translate.googleapis.com/translate_a/single`) | Text to translate | When you use `!translate google` without a key | Translating text without an API key |\n| **Google TTS** (`translate.google.com`) | Text to speak | When you use `!tts` or the AI uses `speak` | Generating speech |\n| **Configured Gemini image endpoint** | The image prompt | When you use `!generate` or explicitly request an image through the AI `generate_image` tool, with the same command permission | Generating image bytes; it does not change the chat provider |\n| **Configured Gemini/OpenAI-compatible transcription endpoint, then your selected chat provider** | The selected attached/quoted voice audio goes to the transcription endpoint; the transcript goes to the chat provider and local AI history | When you request transcription through `transcribe_audio`, with the `stt` permission | Preparing a transcription and the AI answer; no unrelated chat audio is collected |\n| **Local bundled documentation index** | No network request for retrieval; the returned public excerpts join the current AI request | When the AI uses `search_levix_docs` or `open_levix_doc_section` | Versioned product help; the index excludes agent instructions, private memories, settings and arbitrary files |\n| **OpenWeatherMap** (`api.openweathermap.org`) | The city name and configured API key | When you use `!weather` with `openweathermap_api_key` set | Getting weather for the named city |\n| **Aladhan** (`api.aladhan.com`) | The city name | When you use `!prayer` | Getting prayer times for the named city |\n| **URL shorteners** (`is.gd`, then `v.gd` on fallback) | The URL to shorten | When you use `!shortlink` | Creating a short link |\n| **Host of a URL in an outgoing message** | Request for the linked page | When `link_previews_enabled` is on and an outgoing message contains a previewable link; off by default | Building a link preview |"
+      "text": "| Recipient | What is sent | When | Why |\n| --- | --- | --- | --- |\n| **GitHub** (`api.github.com`, official Levix Releases) | An ordinary HTTPS metadata request, with the connection IP address and a fixed Levix user-agent; no WhatsApp identifiers, messages, pairing credentials or settings | Only when you explicitly check for updates on a non-Play installation, subject to a local cooldown | Compare public release versions and show an official release link. No executable update is downloaded or run |\n| **WhatsApp (Meta)** | Your messages, media you send through the bot, your phone number / pairing credentials, group metadata | Continuously while the bot is linked | Levix is a WhatsApp client; this is the product's core function |\n| **Your configured AI provider** (Google, OpenAI-compatible server, or Anthropic — chosen by you, using your own API key) | The AI prompt and relevant context, which can include display name, WhatsApp user/phone identifiers, group name, messages, quoted/mentioned participant identifiers, AI history or memory, and supported media/files | Only when you invoke an AI feature (`!gemini`, `!ask`, `!ai`, `!generate`, `!stt`, …) | To generate or process the result you asked for |\n| **Google Search grounding within Gemini** | A search Gemini chooses from the prompt already sent to Gemini | When Gemini decides to search during an AI request; `ai_google_search` is on by default for Gemini and can be turned off | Grounding an answer in current information |\n| **DuckDuckGo** (`html.duckduckgo.com`) or **Google Programmable Search** (if you configured it) | The search query | When an AI answer uses `web_search` or `search_news`; the latter uses the same search path | Web-grounded answers and news |\n| **Wikipedia** (`ar.wikipedia.org` or `en.wikipedia.org`) | The search query and matching page titles requested for summaries | When an AI answer uses `search_wikipedia` | Finding and reading articles |\n| **Web pages the AI opens** | HTTPS request for the page to its host | When an AI answer uses `fetch_url` | Reading a page you asked about |\n| **Google Cloud Translation** (`translation.googleapis.com`) | Text to translate and the configured Google Translation API key | When you use `!translate google` with a key | Translating text through the official API |\n| **Google's public Translate endpoint** (`translate.googleapis.com/translate_a/single`) | Text to translate | When you use `!translate google` without a key | Translating text without an API key |\n| **Google TTS** (`translate.google.com`) | Text to speak | When you use `!tts` or the AI uses `speak` | Generating speech |\n| **Configured Gemini image endpoint** | The image prompt | When you use `!generate` or explicitly request an image through the AI `generate_image` tool, with the same command permission | Generating image bytes; it does not change the chat provider |\n| **Configured Gemini/OpenAI-compatible transcription endpoint, then your selected chat provider** | The selected attached/quoted voice audio goes to the transcription endpoint; the transcript goes to the chat provider and local AI history | When you request transcription through `transcribe_audio`, with the `stt` permission | Preparing a transcription and the AI answer; no unrelated chat audio is collected |\n| **Local bundled documentation index** | No network request for retrieval; the returned public excerpts join the current AI request | When the AI uses `search_levix_docs` or `open_levix_doc_section` | Versioned product help; the index excludes agent instructions, private memories, settings and arbitrary files |\n| **OpenWeatherMap** (`api.openweathermap.org`) | The city name and configured API key | When you use `!weather` with `openweathermap_api_key` set | Getting weather for the named city |\n| **Aladhan** (`api.aladhan.com`) | The city name | When you use `!prayer` | Getting prayer times for the named city |"
     },
     {
       "id": "PRIVACY.md#2-data-that-leaves-the-device-and-to-whom-part2",
       "source": "PRIVACY.md",
       "title": "2. Data that leaves the device, and to whom",
       "locale": "en",
-      "text": "| **Host of a remote media URL** | Request to download the media | When remote media is sent, or when `thumbnail_remote` is enabled for a thumbnail | Sending media or building a thumbnail |\n| **Configured AI provider's models endpoint** | The operator's API key | When the operator requests live model discovery in the panel | Listing available models |\n| **IP lookup service** (`api.ipify.org`) | An IP lookup request, exposing the server's source IP | When the operator runs `levix domain` on a desktop or server; not an Android flow | Checking the server's public IP |\n| **Caddy package sources** (`dl.cloudsmith.io` and system package repositories) | Package and repository requests, exposing the server's source IP | If the operator approves installing Caddy through `levix domain` | Installing the reverse proxy |\n| **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |\n| **Leviro Support** (via `levix.leviro.net/api/feedback`; currently delivered to Leviro Support through **Telegram**, which carries and stores the message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact, an optional file you attach yourself — plus the Levix version, the platform, and the sending app's user-agent. If you tick the diagnostics box, the section 2a diagnostics object and the sanitized technical debug log in section 2b as well | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |\n| **Leviro Support** (via `levix.leviro.net/api/crash-reports`, a Levix-operated server) | One crash report: category, sanitized error type/message/stack, an optional screen id, the app + section 2a device fields, the sanitized technical debug log in section 2b, and a few navigation breadcrumbs. Never a phone number, JID, chat/message body or media file | Only when **you** open the panel and press Send on one report; never automatically | Support: so a crash can be grouped and fixed |\n| **Levix mail relay** (`levix.leviro.net/api/recovery-email`) | The recovery address and UI language; verification ID and entered verification code on confirmation; address, reset code, recovery token and language on reset. No free text | When you verify an address in **Settings**, or when you choose **Email** on **Forgot password** | To verify address ownership and authorize delivery. Only keyed hashes and authorization state persist, never readable addresses, codes or tokens; the address is not forwarded to the developer |\n| **Your own Levix instance** (on Android, reached inside the app through a private socket; never the developer or an AI provider) | The one image, GIF or video you picked in Sticker Studio or the Media Hub, as a single upload | Only when you choose it in Sticker Studio or tap **Make sticker** / **Add to stickers** | Sticker Studio works in the local host, so it has to receive the file you chose |\n\nApart from feedback and crash reports you deliberately send to Leviro Support,\nthe developer of Levix is **not** a recipient of any of the above. The recovery-email relay\nreceives the fixed verification and reset fields described above. It stores only\nkeyed hashes and authorization state, never readable addresses, codes or tokens. The AI provider's use of the content you send\nit is governed by that provider's own privacy policy."
+      "text": "| **URL shorteners** (`is.gd`, then `v.gd` on fallback) | The URL to shorten | When you use `!shortlink` | Creating a short link |\n| **Host of a URL in an outgoing message** | Request for the linked page | When `link_previews_enabled` is on and an outgoing message contains a previewable link; off by default | Building a link preview |\n| **Host of a remote media URL** | Request to download the media | When remote media is sent, or when `thumbnail_remote` is enabled for a thumbnail | Sending media or building a thumbnail |\n| **Configured AI provider's models endpoint** | The operator's API key | When the operator requests live model discovery in the panel | Listing available models |\n| **IP lookup service** (`api.ipify.org`) | An IP lookup request, exposing the server's source IP | When the operator runs `levix domain` on a desktop or server; not an Android flow | Checking the server's public IP |\n| **Caddy package sources** (`dl.cloudsmith.io` and system package repositories) | Package and repository requests, exposing the server's source IP | If the operator approves installing Caddy through `levix domain` | Installing the reverse proxy |\n| **Your configured outbound proxy** (optional, off by default) | WhatsApp traffic only | While linked, if you set a proxy | Routing |\n| **Leviro Support** (via `levix.leviro.net/api/feedback`; currently delivered to Leviro Support through **Telegram**, which carries and stores the message) | Only the feedback form's own fields — your message, the topic, an optional rating, an optional contact, an optional file you attach yourself — plus the Levix version, the platform, and the sending app's user-agent. If you tick the diagnostics box, the section 2a diagnostics object and the sanitized technical debug log in section 2b as well | Only when you press Send in **Settings → Feedback** | Support: so a bug you report or a request you make reaches the person who can act on it |\n| **Leviro Support** (via `levix.leviro.net/api/crash-reports`, a Levix-operated server) | One crash report: category, sanitized error type/message/stack, an optional screen id, the app + section 2a device fields, the sanitized technical debug log in section 2b, and a few navigation breadcrumbs. Never a phone number, JID, chat/message body or media file | Only when **you** open the panel and press Send on one report; never automatically | Support: so a crash can be grouped and fixed |\n| **Levix mail relay** (`levix.leviro.net/api/recovery-email`) | The recovery address and UI language; verification ID and entered verification code on confirmation; address, reset code, recovery token and language on reset. No free text | When you verify an address in **Settings**, or when you choose **Email** on **Forgot password** | To verify address ownership and authorize delivery. Only keyed hashes and authorization state persist, never readable addresses, codes or tokens; the address is not forwarded to the developer |\n| **Your own Levix instance** (on Android, reached inside the app through a private socket; never the developer or an AI provider) | The one image, GIF or video you picked in Sticker Studio or the Media Hub, as a single upload | Only when you choose it in Sticker Studio or tap **Make sticker** / **Add to stickers** | Sticker Studio works in the local host, so it has to receive the file you chose |\n\nApart from feedback and crash reports you deliberately send to Leviro Support,\nthe developer of Levix is **not** a recipient of any of the above. The recovery-email relay\nreceives the fixed verification and reset fields described above. It stores only\nkeyed hashes and authorization state, never readable addresses, codes or tokens. The AI provider's use of the content you send\nit is governed by that provider's own privacy policy."
     },
     {
       "id": "PRIVACY.md#2a-optional-feedback-diagnostics-and-crash-reports",
@@ -1101,6 +1108,13 @@
       "text": "Unblocks a user.\nunblock [@member|number]   (or reply to their message)"
     },
     {
+      "id": "i18n/en/commands.json#update",
+      "source": "i18n/en/commands.json",
+      "title": "!update",
+      "locale": "en",
+      "text": "Check for official Levix updates without installing anything.\nupdate"
+    },
+    {
       "id": "i18n/en/commands.json#weather",
       "source": "i18n/en/commands.json",
       "title": "!weather",
@@ -1582,6 +1596,13 @@
       "title": "!unblock",
       "locale": "ar",
       "text": "يلغي حظر مستخدم.\nunblock [@عضو|رقم]   (أو رد على رسالته)"
+    },
+    {
+      "id": "i18n/ar/commands.json#update",
+      "source": "i18n/ar/commands.json",
+      "title": "!update",
+      "locale": "ar",
+      "text": "البحث عن تحديثات Levix الرسمية دون تثبيت أي شيء.\nupdate"
     },
     {
       "id": "i18n/ar/commands.json#weather",
@@ -2067,6 +2088,13 @@
       "text": "Desbloqueia um usuário.\nunblock [@membro|número]   (ou responda à mensagem da pessoa)"
     },
     {
+      "id": "i18n/pt-BR/commands.json#update",
+      "source": "i18n/pt-BR/commands.json",
+      "title": "!update",
+      "locale": "pt-BR",
+      "text": "Verifique atualizações oficiais do Levix sem instalar nada.\nupdate"
+    },
+    {
       "id": "i18n/pt-BR/commands.json#weather",
       "source": "i18n/pt-BR/commands.json",
       "title": "!weather",
@@ -2548,6 +2576,13 @@
       "title": "!unblock",
       "locale": "es-419",
       "text": "Desbloquea a un usuario.\nunblock [@miembro|número]   (o responde a su mensaje)"
+    },
+    {
+      "id": "i18n/es-419/commands.json#update",
+      "source": "i18n/es-419/commands.json",
+      "title": "!update",
+      "locale": "es-419",
+      "text": "Busca actualizaciones oficiales de Levix sin instalar nada.\nupdate"
     },
     {
       "id": "i18n/es-419/commands.json#weather",
