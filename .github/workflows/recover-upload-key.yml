@@ -1,0 +1,101 @@
+# Owner-triggered one-time recovery of EXISTING Android upload signing secrets.
+# ONLY outputs an age-encrypted file for the owner's offline private key.
+name: "Recover existing Play upload key (encrypted)"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: levix-upload-key-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    name: Encrypt existing Android signing secrets to owner
+    if: ${{ github.repository == 'Abdodiab2005/levix' && github.ref == 'refs/heads/main' && github.actor == 'Abdodiab2005' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AGE_RECIPIENT: age12m9sdwedrkj07xgjuctflyyhrl6dvche5v5h8g3aqps78sj5wdgqdwd6nu
+      LEVIX_KEYSTORE_BASE64: ${{ secrets.LEVIX_KEYSTORE_BASE64 }}
+      LEVIX_KEYSTORE_PASSWORD: ${{ secrets.LEVIX_KEYSTORE_PASSWORD }}
+      LEVIX_KEY_ALIAS: ${{ secrets.LEVIX_KEY_ALIAS }}
+      LEVIX_KEY_PASSWORD: ${{ secrets.LEVIX_KEY_PASSWORD }}
+    steps:
+      - name: Install age and Java keytool
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq age openjdk-17-jdk-headless >/dev/null
+
+      - name: Validate keystore and encrypt all four existing secrets in memory
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/levix-recovery"
+          python3 - <<'PY'
+          import base64
+          import binascii
+          import json
+          import os
+          import pathlib
+          import subprocess
+          import tempfile
+
+          keys = ('LEVIX_KEYSTORE_BASE64', 'LEVIX_KEYSTORE_PASSWORD', 'LEVIX_KEY_ALIAS', 'LEVIX_KEY_PASSWORD')
+          values = {k: os.environ.get(k, '') for k in keys}
+          missing = [k for k, v in values.items() if not v]
+          if missing:
+              raise SystemExit('Missing original GitHub Actions secret(s): ' + ', '.join(missing))
+          try:
+              keystore = base64.b64decode(''.join(values['LEVIX_KEYSTORE_BASE64'].split()), validate=True)
+          except (ValueError, binascii.Error):
+              raise SystemExit('Existing upload-keystore secret is not valid Base64')
+          if len(keystore) < 100 or len(keystore) > 1048576:
+              raise SystemExit('Existing upload-keystore secret has an unexpected byte length')
+
+          tmpdir = pathlib.Path(os.environ['RUNNER_TEMP']) / 'levix-recovery'
+          fd, file_path = tempfile.mkstemp(prefix='upload-', suffix='.keystore', dir=tmpdir)
+          try:
+              with os.fdopen(fd, 'wb') as output:
+                  output.write(keystore)
+              check = subprocess.run(
+                  ['keytool', '-list', '-keystore', file_path,
+                   '-storepass:env', 'LEVIX_KEYSTORE_PASSWORD',
+                   '-alias', values['LEVIX_KEY_ALIAS']],
+                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+              )
+              if check.returncode != 0:
+                  raise SystemExit('Existing keystore could not be opened with the stored password/alias; refusing recovery')
+          finally:
+              pathlib.Path(file_path).unlink(missing_ok=True)
+
+          plaintext = json.dumps({'schema': 1, 'repository': 'Abdodiab2005/levix', 'secrets': values},
+                                 ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+          output_path = tmpdir / 'levix-upload-key-recovery.age'
+          result = subprocess.run(
+              ['age', '-r', os.environ['AGE_RECIPIENT'], '-o', str(output_path)],
+              input=plaintext, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+              check=False,
+          )
+          if result.returncode != 0 or not output_path.is_file() or output_path.stat().st_size < 100:
+              raise SystemExit('age encryption failed; no artifact was produced')
+          os.chmod(output_path, 0o600)
+          print('Existing keystore and four secret values validated and encrypted. No plaintext secret exported.')
+          PY
+
+      - name: Upload only encrypted recovery file
+        uses: actions/upload-artifact@v7
+        with:
+          name: levix-upload-key-recovery
+          path: ${{ runner.temp }}/levix-recovery/levix-upload-key-recovery.age
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Erase recovery work area
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/levix-recovery"
