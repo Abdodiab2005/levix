@@ -36,3 +36,22 @@ WhatsApp image transport match the source integration contract.
 ## Results
 
 Pending validation. Source results are historical, not proof of this port.
+
+## Port validation — 2026-11-14
+
+| Result | Command / scope | Evidence |
+| --- | --- | --- |
+| PASS | `node tests/run.mjs account-profile`, Linux x64, Node 24.22.2 | 214 checks, 0 failed, 0 crashed (134 service + 80 authenticated panel) |
+| PASS | `node docs/plans/next/evidence/phase11/browser-qa.mjs /home/abdo/Documents/prometric-hybrid/node_modules/playwright/index.mjs`, Linux x64 | 19 browser checks; four locales, desktop/mobile, light/dark, cache, privacy, disconnect, stale response and reconnect |
+| PASS | `npm run build:frontend`, Linux x64 | TypeScript and Vite build pass; pre-existing large-chunk warning |
+| PASS | `npm run lint`, Linux x64 | Exit 0; repository reports existing warnings/infos |
+| PASS | `npm run i18n:check`; `npm run docs:check`, Linux x64 | Both pass |
+| PASS | `node tests/run.mjs gemini session connection`, Linux x64, Node 24.22.2 | 143 Gemini checks, 0 failed; confirms Gemini media and request-budget fixes on release base |
+| PASS | `git diff --check c9b3f88..HEAD` | No whitespace errors |
+| PENDING | Full GitHub CI for the new Draft PR | GitHub runs after PR creation |
+| NOT RUN | Dedicated real-account/device and oldest-WebView QA | No live account was used |
+
+Port commit `3ecab26` is based directly on release HEAD `c9b3f88`. The source
+implementation files are carried from PR #168; scope documentation and the
+results record are the port-specific changes. The Gemini fixes remain in the
+base history at `82508f8` and `73a679f`.
