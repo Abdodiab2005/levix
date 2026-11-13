@@ -127,7 +127,7 @@ function geminiClients() {
     geminiCache = {
       key,
       baseUrl,
-      genAI: new GoogleGenAI({ apiKey: key, httpOptions: { baseUrl } }),
+      genAI: new GoogleGenAI({ apiKey: key, apiVersion: "v1beta", httpOptions: { baseUrl } }),
     };
   }
   return geminiCache;
