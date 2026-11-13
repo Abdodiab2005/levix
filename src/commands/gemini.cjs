@@ -23,6 +23,7 @@
 // never costs four messages.
 
 const { GoogleGenAI } = require("@google/genai");
+const { geminiHttpOptions } = require("../utils/geminiHttpOptions.cjs");
 
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
@@ -130,7 +131,7 @@ function geminiClients() {
     geminiCache = {
       key,
       baseUrl,
-      genAI: new GoogleGenAI({ apiKey: key, apiVersion: "v1beta", httpOptions: { baseUrl } }),
+      genAI: new GoogleGenAI({ apiKey: key, apiVersion: "v1beta", httpOptions: geminiHttpOptions(baseUrl) }),
     };
   }
   return geminiCache;

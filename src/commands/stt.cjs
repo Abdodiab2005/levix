@@ -1,5 +1,6 @@
 // Speech-to-Text Command using FREE Gemini API
 const { GoogleGenAI } = require("@google/genai");
+const { geminiHttpOptions } = require("../utils/geminiHttpOptions.cjs");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 const logger = require("../utils/logger.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
@@ -32,7 +33,7 @@ function geminiStt() {
     cache = {
       key,
       baseUrl,
-      genAI: new GoogleGenAI({ apiKey: key, apiVersion: "v1beta", httpOptions: { baseUrl } }),
+      genAI: new GoogleGenAI({ apiKey: key, apiVersion: "v1beta", httpOptions: geminiHttpOptions(baseUrl) }),
     };
   }
   return cache;

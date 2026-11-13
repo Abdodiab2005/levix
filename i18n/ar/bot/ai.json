@@ -89,6 +89,7 @@
   "translate.emptyResult": "تعذر ترجمة هذا النص. حاول مرة أخرى.",
   "translate.timedOut": "انتهت مهلة خدمة الترجمة. حاول مرة أخرى.",
   "translate.failed": "فشلت الترجمة",
+  "gemini.requestTooLarge": "هذا الطلب أكبر من حدود بوابة Gemini (20 MiB لطلب JSON و15 MiB لمجموع الوسائط المضمّنة). قلّل النص أو استخدم مرفقات أصغر، أو امسح سجل المحادثة بنفسك ثم حاول مجددًا. لم يُحذف أي محتوى لتقليل حجم الطلب.",
   "aiAgent.sources": "*المصادر:*",
   "aiAgent.noGeminiKey": "لم يُضبط مفتاح Gemini API",
   "aiAgent.writingAnswer": "🤖 بجهّز الرد...",
