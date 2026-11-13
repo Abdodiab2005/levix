@@ -420,10 +420,12 @@ jobs:
             echo "- \`/install.sh\` left alone (prerelease)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+  # Play v5+ must come from the private combined Free + Plus AAB pipeline.
+  # A tag on the v5 release branch must never upload this public Free AAB.
   play:
-    name: publish to Google Play
+    name: publish to Google Play (disabled; use private paid AAB)
     needs: publish-release
-    if: ${{ !contains(github.ref_name, '-') }}
+    if: ${{ false }}
     runs-on: ubuntu-latest
     # The pause for manual approval. Without a required reviewer on this
     # environment the job runs at once, finds no approval comment, and stops
