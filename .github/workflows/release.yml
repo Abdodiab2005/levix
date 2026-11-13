@@ -420,10 +420,14 @@ jobs:
             echo "- \`/install.sh\` left alone (prerelease)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+  # Play v5+ is a single Free + private Plus AAB built inside levix-plus.
+  # Never upload a Free-only public release AAB over the official Play listing.
+  # Keep this job visibly disabled for audit; the private internal build is
+  # uploaded manually after review and cannot publish automatically either.
   play:
-    name: publish to Google Play
+    name: publish to Google Play (disabled; paid AAB is private)
     needs: publish-release
-    if: ${{ !contains(github.ref_name, '-') }}
+    if: ${{ false }}
     runs-on: ubuntu-latest
     # The pause for manual approval. Without a required reviewer on this
     # environment the job runs at once, finds no approval comment, and stops
