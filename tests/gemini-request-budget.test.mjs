@@ -1,18 +1,24 @@
-// Real SDK serialization, synthetic media/keys, and loopback/fake transports only.
+// Real SDK serialization and transport, synthetic media/keys, loopback servers only.
+import http from "node:http";
 import { equal, finish, ok, require, section, throws, useTempDataDir } from "./harness.mjs";
 import { startGenaiServer, textReply } from "./fixtures/genai-server.mjs";
 
 useTempDataDir("levix-gemini-budget");
-const { GoogleGenAI } = require("@google/genai");
 const {
   geminiHttpOptions,
   assertGeminiRequestBudget,
 } = require("./src/utils/geminiHttpOptions.cjs");
+const { GoogleGenAI } = require("@google/genai");
 const { geminiMediaPart } = require("./src/utils/geminiMedia.cjs");
 const { withLang, t } = require("./src/utils/i18n.cjs");
 const settings = require("./src/config/settings.cjs");
 const { runAgent, isFileReferenceError } = require("./src/services/aiAgent.cjs");
 const stt = require("./src/commands/stt.cjs");
+const { Agent, getGlobalDispatcher, setGlobalDispatcher } = require("undici");
+// Use a real Undici 8 dispatcher regardless of Node/SDK initialization order.
+const originalDispatcher = getGlobalDispatcher();
+const transport = new Agent();
+setGlobalDispatcher(transport);
 
 const MiB = 1024 * 1024;
 const limit = 20 * MiB;
@@ -70,26 +76,30 @@ section("exact serialized-byte boundary and localized errors");
 }
 
 section("actual SDK wire payload: envelope, tools, Unicode and streaming");
-const originalFetch = globalThis.fetch;
 let sent = 0;
 let wireBytes = 0;
 let wireUrl;
 let wireBody;
-let stream = false;
-globalThis.fetch = async (url, init) => {
+const server = http.createServer(async (req, res) => {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
   sent += 1;
-  wireUrl = String(url);
-  wireBytes = Buffer.byteLength(init.body);
-  wireBody = init.body;
-  return new Response(
-    stream ? `data: ${JSON.stringify(textReply("ok"))}\n\n` : JSON.stringify(textReply("ok")),
-    {
-      headers: { "content-type": stream ? "text/event-stream" : "application/json" },
-    },
+  wireUrl = `http://${req.headers.host}${req.url}`;
+  const raw = Buffer.concat(chunks);
+  wireBytes = raw.length;
+  wireBody = raw.toString("utf8");
+  const streaming = req.url.includes(":streamGenerateContent");
+  res.writeHead(200, {
+    "content-type": streaming ? "text/event-stream" : "application/json",
+  });
+  res.end(
+    streaming ? `data: ${JSON.stringify(textReply("ok"))}\n\n` : JSON.stringify(textReply("ok")),
   );
-};
+});
+await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+const baseUrl = `http://127.0.0.1:${server.address().port}`;
 try {
-  const genAI = client("https://gateway.example/custom");
+  const genAI = client(`${baseUrl}/custom`);
   const config = {
     systemInstruction: "تعليمات 🖼️",
     tools: [{ functionDeclarations: [{ name: "test", description: "tool envelope" }] }],
@@ -107,13 +117,12 @@ try {
   equal(
     "v1beta + custom prefix preserved",
     wireUrl,
-    "https://gateway.example/custom/v1beta/models/gemini-test:generateContent",
+    `${baseUrl}/custom/v1beta/models/gemini-test:generateContent`,
   );
   const count = sent;
   await rejected("one byte above actual SDK limit", () => generate(`${padding}x`));
   equal("oversized request never reaches transport", sent, count);
 
-  stream = true;
   const chunks = await genAI.models.generateContentStream({
     model: "gemini-test",
     contents: "small",
@@ -131,7 +140,6 @@ try {
     }
   });
   equal("oversized stream never sent", sent, beforeStream);
-  stream = false;
 
   section("one large image, two images, and retained history");
   const sendImage = (part, text = "") =>
@@ -237,14 +245,114 @@ try {
   section("production agent validates with its real instruction and tools");
   settings.set("ai_provider", "gemini");
   settings.set("gemini_api_key", "test-key-not-real");
-  settings.set("gemini_base_url", "http://127.0.0.1:1234");
+  settings.set("gemini_base_url", baseUrl);
   const beforeAgent = sent;
   await rejected("agent rejects large media", () =>
     runAgent({ parts: [large], history: [], search: false }),
   );
   equal("agent sends nothing", sent, beforeAgent);
 } finally {
-  globalThis.fetch = originalFetch;
+  server.closeAllConnections();
+  await new Promise((resolve) => server.close(resolve));
+}
+
+section("caller abort and SDK timeout cancel real sockets before headers and during body reads");
+for (const phase of ["headers", "body"]) {
+  for (const cause of ["caller", "timeout"]) {
+    const received = Promise.withResolvers();
+    const closed = Promise.withResolvers();
+    let requests = 0;
+    const stalled = http.createServer(async (req, res) => {
+      for await (const _chunk of req) {
+        /* consume the real request */
+      }
+      requests += 1;
+      res.on("close", closed.resolve);
+      if (phase === "body") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.write('{"candidates":['); // Headers arrive; JSON never completes.
+      }
+      received.resolve();
+    });
+    await new Promise((resolve) => stalled.listen(0, "127.0.0.1", resolve));
+    const controller = new AbortController();
+    const genAI = client(`http://127.0.0.1:${stalled.address().port}/custom`);
+    const started = performance.now();
+    const pending = genAI.models
+      .generateContent({
+        model: "gemini-test",
+        contents: "stall",
+        config: {
+          ...(cause === "caller" ? { abortSignal: controller.signal } : {}),
+          httpOptions: { timeout: cause === "timeout" ? 500 : 5000, retryOptions: { attempts: 1 } },
+        },
+      })
+      .then(
+        () => null,
+        (error) => error,
+      );
+    // An independent deadline bounds a broken transport without letting a test hang.
+    let watchdogTimer;
+    const watchdog = new Promise((resolve) => {
+      watchdogTimer = setTimeout(() => resolve("watchdog"), 4000);
+    });
+    try {
+      equal(
+        `${cause}/${phase}: server received request`,
+        await Promise.race([received.promise.then(() => "received"), watchdog]),
+        "received",
+      );
+      if (cause === "caller") controller.abort();
+      const error = await Promise.race([pending, watchdog]);
+      equal(`${cause}/${phase}: SDK reports abort`, error?.name, "AbortError");
+      equal(
+        `${cause}/${phase}: server observes socket close`,
+        await Promise.race([closed.promise.then(() => "closed"), watchdog]),
+        "closed",
+      );
+      equal(`${cause}/${phase}: only one attempt`, requests, 1);
+      if (cause === "timeout") {
+        ok(`${phase}: SDK deadline elapsed`, performance.now() - started >= 400);
+      }
+    } finally {
+      clearTimeout(watchdogTimer);
+      controller.abort();
+      stalled.closeAllConnections();
+      await new Promise((resolve) => stalled.close(resolve));
+      await pending;
+    }
+  }
+}
+
+section("working Files API upload and polling use the compatible transport");
+const files = await startGenaiServer([], { fileStates: ["PROCESSING", "ACTIVE"] });
+try {
+  const genAI = client(files.baseUrl);
+  const bytes = Buffer.from("synthetic-video-bytes");
+  const part = await geminiMediaPart(genAI, bytes, "video/mp4", {
+    baseUrl: files.baseUrl,
+    pollMs: 1,
+  });
+  ok("upload carries exact bytes", files.uploads[0]?.bytes?.equals(bytes));
+  equal("upload declares MIME", files.uploads[0]?.mimeType, "video/mp4");
+  equal("processing file is polled", files.fileGets.length, 1);
+  equal(
+    "active file reference preserved",
+    part.fileData?.fileUri,
+    `${files.baseUrl}/v1beta/files/test1`,
+  );
+  const result = await genAI.models.generateContent({
+    model: "gemini-test",
+    contents: [{ role: "user", parts: [part] }],
+  });
+  equal("uploaded file request succeeds", result.text, "ok");
+  equal(
+    "file URI sent on wire",
+    files.body().contents[0].parts[0].fileData.fileUri,
+    part.fileData.fileUri,
+  );
+} finally {
+  await files.stop();
 }
 
 section("missing Files API, custom prefix, small agent request and STT (real local server)");
@@ -291,4 +399,6 @@ try {
   await fake.stop();
 }
 
+setGlobalDispatcher(originalDispatcher);
+await transport.close();
 finish();

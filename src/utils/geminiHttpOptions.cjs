@@ -1,4 +1,4 @@
-const { getGlobalDispatcher } = require("undici");
+const { fetch: undiciFetch, getGlobalDispatcher } = require("undici");
 const { t } = require("./i18n.cjs");
 
 // Custom Gemini gateways use a 20 MiB JSON body limit and a 15 MiB
@@ -41,7 +41,9 @@ async function budgetedFetch(url, init) {
   }
   // Uploads, polling and downloads keep their existing behavior, including the
   // missing Files API response that triggers geminiMediaPart's inline fallback.
-  return fetch(url, { ...init, dispatcher });
+  // Node's built-in fetch uses a different dispatcher handler protocol.
+  // Keep fetch and dispatcher on the same installed Undici version.
+  return undiciFetch(url, { ...init, dispatcher });
 }
 
 function geminiHttpOptions(baseUrl) {
