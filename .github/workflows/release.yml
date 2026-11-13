@@ -420,12 +420,10 @@ jobs:
             echo "- \`/install.sh\` left alone (prerelease)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-  # Play v5+ is a single Free + private Plus AAB built inside levix-plus.
-  # Never upload a Free-only public release AAB over the official Play listing.
-  # Keep this job visibly disabled for audit; the private internal build is
-  # uploaded manually after review and cannot publish automatically either.
+  # Play v5+ must come from the private combined Free + Plus AAB pipeline.
+  # A tag on the v5 release branch must never upload this public Free AAB.
   play:
-    name: publish to Google Play (disabled; paid AAB is private)
+    name: publish to Google Play (disabled; use private paid AAB)
     needs: publish-release
     if: ${{ false }}
     runs-on: ubuntu-latest
