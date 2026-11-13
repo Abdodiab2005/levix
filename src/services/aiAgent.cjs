@@ -15,6 +15,7 @@
 
 const fs = require("fs");
 const { GoogleGenAI, FunctionCallingConfigMode } = require("@google/genai");
+const { geminiHttpOptions } = require("../utils/geminiHttpOptions.cjs");
 
 const logger = require("../utils/logger.cjs");
 const {
@@ -64,7 +65,7 @@ function geminiClient() {
     clientCache = {
       key,
       baseUrl,
-      client: new GoogleGenAI({ apiKey: key, apiVersion: "v1beta", httpOptions: { baseUrl } }),
+      client: new GoogleGenAI({ apiKey: key, apiVersion: "v1beta", httpOptions: geminiHttpOptions(baseUrl) }),
     };
   }
   return clientCache.client;
