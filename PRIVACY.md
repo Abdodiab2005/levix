@@ -141,6 +141,7 @@ other account data wait until the same WhatsApp account is linked.
 | Data | Where it lives | Purpose |
 | --- | --- | --- |
 | WhatsApp pairing credentials | App-private SQLite DB + files | Linking to your WhatsApp account |
+| Connected account profile (own name, phone, About and picture) | Bounded RAM cache only; no database, backup or settings export | The authenticated Connection card; own-profile reads only when opened or refreshed, with cache reuse. Images pass through the local authenticated panel, never a public image URL |
 | Control-panel password | scrypt hash in the local DB | Logging into the local panel |
 | Recovery email and authorization token | Sealed with AES-256-GCM in the local DB (`auth:recovery-email`) | A verified address for the panel's forgot-password email code. The panel shows a mask. Settings export does not include it. Unlink does not remove it |
 | AI provider API keys & endpoints | Local DB, sealed with AES-256-GCM | Calling the provider you chose |

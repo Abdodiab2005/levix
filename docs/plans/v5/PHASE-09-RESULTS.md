@@ -1,5 +1,10 @@
 # Phase 09 results
 
+> Scope update (2026-11-13): next-release-only statements below describe the
+> original decision. ADR-021 supersedes them for Phase 11A only, now included
+> in v5.0.0 through the separate port in `PHASE-11A-PORT.md`.
+
+
 Status: CODE-READY, pending owner review. Automated gates pass; manual device
 and Play eligibility checks remain release gates. Owner authorization: 2026-11-11.
 Release base: `94ef953`, `release/5.0.0-beta.1`. No merge or release authorized.

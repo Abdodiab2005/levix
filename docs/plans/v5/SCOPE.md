@@ -72,3 +72,13 @@ The owner made these decisions. They are recorded as ACCEPTED ADRs in `DECISIONS
 4. Public docs changed only for behaviour that shipped in that phase.
 5. A dated entry in `CHANGELOG.md` with the PR link.
 6. The owner approves before the next phase starts.
+
+## Phase 11A scope amendment — 2026-11-13
+
+Owner decision (Task 05): include the existing Free Connected WhatsApp Account
+Card from PR #168 in v5.0.0, PENDING REVIEW through a new Draft PR against
+`release/5.0.0-beta.1`. Only 11A is brought forward; other next-release work
+stays excluded. No redesign, dependencies, migration or version bump.
+Success: source-equivalent profile/privacy/lifecycle behavior and four locales,
+focused tests and full PR CI. Rollback: revert the card/service/routes together.
+See `PHASE-11A-PORT.md`; Phase 10 remains mandatory.

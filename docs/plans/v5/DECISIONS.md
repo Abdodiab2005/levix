@@ -424,3 +424,13 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
   update that keeps `package.json` but changes `versionCode` therefore asks again. A restart or a
   reinstall of the same APK keeps the acceptance. Two non-Android builds with the same
   `package.json` version share one identity; `release.yml` makes every official release bump it.
+
+## ADR-021: Include existing Phase 11A in v5.0.0
+
+- Status: ACCEPTED (owner, Task 05, 2026-11-13).
+- Decision: port only PR #168's account card, tests and relevant documentation
+  from its source diff to the current v5 release HEAD. This amends ADR-015's
+  order and supersedes the earlier next-release-only boundary for 11A alone.
+- Keep original PR #168 unchanged; create a new Draft PR targeting
+  `release/5.0.0-beta.1`. Phase 10 remains the final release gate. No merge,
+  version bump, tag or publication is authorized.
