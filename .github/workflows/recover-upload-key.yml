@@ -18,12 +18,6 @@ jobs:
     if: ${{ github.repository == 'Abdodiab2005/levix' && github.ref == 'refs/heads/main' && github.actor == 'Abdodiab2005' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      AGE_RECIPIENT: age12m9sdwedrkj07xgjuctflyyhrl6dvche5v5h8g3aqps78sj5wdgqdwd6nu
-      LEVIX_KEYSTORE_BASE64: ${{ secrets.LEVIX_KEYSTORE_BASE64 }}
-      LEVIX_KEYSTORE_PASSWORD: ${{ secrets.LEVIX_KEYSTORE_PASSWORD }}
-      LEVIX_KEY_ALIAS: ${{ secrets.LEVIX_KEY_ALIAS }}
-      LEVIX_KEY_PASSWORD: ${{ secrets.LEVIX_KEY_PASSWORD }}
     steps:
       - name: Install age and Java keytool
         run: |
@@ -33,6 +27,14 @@ jobs:
 
       - name: Validate keystore and encrypt all four existing secrets in memory
         shell: bash
+        # Secret values are intentionally scoped ONLY to this first-party script,
+        # not to the install step or the artifact upload action.
+        env:
+          AGE_RECIPIENT: age12m9sdwedrkj07xgjuctflyyhrl6dvche5v5h8g3aqps78sj5wdgqdwd6nu
+          LEVIX_KEYSTORE_BASE64: ${{ secrets.LEVIX_KEYSTORE_BASE64 }}
+          LEVIX_KEYSTORE_PASSWORD: ${{ secrets.LEVIX_KEYSTORE_PASSWORD }}
+          LEVIX_KEY_ALIAS: ${{ secrets.LEVIX_KEY_ALIAS }}
+          LEVIX_KEY_PASSWORD: ${{ secrets.LEVIX_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           umask 077
