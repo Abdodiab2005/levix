@@ -50,6 +50,10 @@ jobs:
 
           keys = ('LEVIX_KEYSTORE_BASE64', 'LEVIX_KEYSTORE_PASSWORD', 'LEVIX_KEY_ALIAS', 'LEVIX_KEY_PASSWORD')
           values = {k: os.environ.get(k, '') for k in keys}
+          # Gradle falls back to the store password when no distinct key
+          # password is provided; mirror that existing behavior safely.
+          if not values['LEVIX_KEY_PASSWORD']:
+              values['LEVIX_KEY_PASSWORD'] = values['LEVIX_KEYSTORE_PASSWORD']
           missing = [k for k, v in values.items() if not v]
           if missing:
               raise SystemExit('Missing original GitHub Actions secret(s): ' + ', '.join(missing))
