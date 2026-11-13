@@ -64,7 +64,7 @@ function geminiClient() {
     clientCache = {
       key,
       baseUrl,
-      client: new GoogleGenAI({ apiKey: key, httpOptions: { baseUrl } }),
+      client: new GoogleGenAI({ apiKey: key, apiVersion: "v1beta", httpOptions: { baseUrl } }),
     };
   }
   return clientCache.client;

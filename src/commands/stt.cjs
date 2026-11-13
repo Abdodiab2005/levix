@@ -32,7 +32,7 @@ function geminiStt() {
     cache = {
       key,
       baseUrl,
-      genAI: new GoogleGenAI({ apiKey: key, httpOptions: { baseUrl } }),
+      genAI: new GoogleGenAI({ apiKey: key, apiVersion: "v1beta", httpOptions: { baseUrl } }),
     };
   }
   return cache;
