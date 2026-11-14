@@ -54,4 +54,11 @@ ok(
   "tagged APK/AAB job is gated by play-signing environment",
   /^ {4}environment: play-signing\s*$/m.test(apkJob ?? ""),
 );
+section("manual signer check cannot publish and stays owner/main-only");
+const signerCheck = readFileSync(join(workflowDir, "verify-upload-signing.yml"), "utf8");
+ok("signer check requires play-signing", /^ {4}environment: play-signing\s*$/m.test(signerCheck));
+ok("signer check limits dispatch to main", signerCheck.includes("github.ref == 'refs/heads/main'"));
+ok("signer check requires repository owner", signerCheck.includes("github.actor == github.repository_owner"));
+ok("signer check takes original upload fingerprint", signerCheck.includes("expected_upload_cert_sha256"));
+ok("signer check has no upload or artifacts", !/upload-google-play|actions\/upload-artifact|gh release create/.test(signerCheck));
 finish();
