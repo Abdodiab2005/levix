@@ -138,3 +138,46 @@ with `tests/fixtures/no-external-network.cjs` loaded; all checks passed
 (`/tmp/levix-intro-upstream-focused.log`). PASS: `npm run lint`, zero errors
 (233 warnings, 107 infos with cached Biome 2.6.4), and `git diff --check`.
 These checks ran after integrating `c82fb89`, on 2026-11-14.
+
+## Independent review fixes — 2026-11-14
+
+An independent read-only review of `2846867` (public) and `3d564e5` (private)
+found no P0. The public changes in this section address its Android and
+translation findings and the Play Billing deprecation audit. The verifier,
+staging and artifact findings are fixed in the private repository.
+
+| Finding | Change |
+| --- | --- |
+| Hardcoded recurrence integers `1` and `2` | `PlusBilling.Phase` carries a `Recurrence` enum. `billing/PlayOffers.kt` is the only file that names `ProductDetails.RecurrenceMode`; `PlayOffersTest` asserts the mapping against the SDK constants, including `NON_RECURRING` and unknown values. |
+| Displayed offer held as a loose field | `PlusBilling.OfferSession` owns the offer the page was given. It belongs to one `BillingHost`. The WebView is created by the same Activity, so a recreated Activity reloads the page, which fetches the offer again. A refused confirmation clears the session; checkout never starts with a token the session did not return. |
+| Play reports the account ineligible at checkout | `BillingResult.getOnPurchasesUpdatedSubResponseCode()` equal to `OnPurchasesUpdatedSubResponseCode.USER_INELIGIBLE` now finishes the purchase with `OFFER_CHANGED`, so the page fetches the eligible offers again and shows the changed-offer notice. User cancellation and every other failure are unchanged. |
+| `i18n/review.json` claimed a ChatGPT review of the two new pt-BR and es-419 strings | The entries now say machine draft, pending Q-19 review. Status stays `draft`; file hashes are unchanged. |
+
+### Play Billing Library 9.1.0 deprecation audit
+
+Evidence: Kotlin compiler output of the `android apk builds` job in CI run
+43600382035 (Kotlin 2.3.21, billing-ktx 9.1.0, debug and release variants),
+the 8.0 to 9.1 release notes and the PBL 9 migration guide, read on
+2026-11-14.
+
+| API in `billing/BillingHost.kt` | Status in 9.1.0 |
+| --- | --- |
+| `enablePendingPurchases(PendingPurchasesParams)` | Current. The no-argument overload was removed in 8.0 and is not used. |
+| `enableAutoServiceReconnection()` | Current (added in 8.0). |
+| `queryProductDetailsAsync(params) { result, QueryProductDetailsResult }` | Current listener signature. A product missing from `productDetailsList` (an unfetched product) ends as `ITEM_UNAVAILABLE`. |
+| `queryPurchasesAsync(QueryPurchasesParams, listener)` | Current. The `skuType` overload was removed in 8.0 and is not used. Suspended subscriptions are not requested, so they are never treated as active. |
+| `launchBillingFlow`, `BillingFlowParams`, `setOfferToken`, `setObfuscatedAccountId` | Current. No subscription replacement API is used. |
+| `SkuDetails`, `querySkuDetailsAsync`, purchase history APIs | Not used anywhere in the Android source. |
+
+The compiler reported no warning in any file under `billing/`. No Billing API
+was replaced because none in use is deprecated, and no `@Suppress` was added.
+The warnings that remain in that log are outside Billing: `MediaRepository.kt`
+404 and 410, `StickerHost.kt` 403, 432 and 433, `CoachMarkOverlay.kt` 195, 234
+and 235, `MainActivity.kt` 287 and 329, `LevixAppBundle.kt` 37, and
+`app/build.gradle.kts` 155, 271 and 325.
+
+Gradle cannot run on the development machine (the Kotlin 2.3.21 plugin and
+Billing 9.1.0 are not cached), so the Android unit tests and the compile gate
+for this section are the PR's CI run, not a local run. Real License Tester
+purchases remain BLOCKED on a device, the staging verifier and Play Console
+configuration.

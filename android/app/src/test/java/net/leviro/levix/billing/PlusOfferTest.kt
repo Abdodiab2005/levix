@@ -5,8 +5,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PlusOfferTest {
-    private val renewal = PlusBilling.Phase("$2.99", 2_990_000, "USD", "P1M", 1, 0)
-    private val intro = PlusBilling.Phase("$0.99", 990_000, "USD", "P1M", 2, 3)
+    private val renewal = PlusBilling.Phase("$2.99", 2_990_000, "USD", "P1M", PlusBilling.Recurrence.INFINITE, 0)
+    private val intro = PlusBilling.Phase("$0.99", 990_000, "USD", "P1M", PlusBilling.Recurrence.FINITE, 3)
     private val regular = PlusBilling.Offer("monthly", null, "regular-token", listOf(renewal))
     private val introductory = PlusBilling.Offer("monthly", "intro-3months", "intro-token", listOf(intro, renewal))
 
@@ -34,9 +34,9 @@ class PlusOfferTest {
             listOf(intro.copy(billingPeriod = "P3M"), renewal),
             listOf(intro.copy(billingCycleCount = 1), renewal),
             listOf(intro.copy(billingCycleCount = 0), renewal),
-            listOf(intro.copy(recurrenceMode = 3), renewal),
+            listOf(intro.copy(recurrence = PlusBilling.Recurrence.OTHER), renewal),
             listOf(intro, renewal.copy(billingPeriod = "P1Y")),
-            listOf(intro, renewal.copy(recurrenceMode = 2)),
+            listOf(intro, renewal.copy(recurrence = PlusBilling.Recurrence.FINITE)),
             listOf(intro, renewal.copy(billingCycleCount = 1)),
             listOf(intro.copy(priceAmountMicros = 0), renewal), // free trial
             listOf(intro.copy(priceAmountMicros = renewal.priceAmountMicros), renewal),
@@ -54,7 +54,7 @@ class PlusOfferTest {
     @Test fun malformedRegularOrUnpricedOffersCannotBePurchased() {
         for (phase in listOf(renewal.copy(formattedPrice = ""), renewal.copy(priceAmountMicros = 0),
             renewal.copy(priceAmountMicros = -1), renewal.copy(priceCurrencyCode = ""),
-            renewal.copy(billingPeriod = "P4W"), renewal.copy(recurrenceMode = 3))) {
+            renewal.copy(billingPeriod = "P4W"), renewal.copy(recurrence = PlusBilling.Recurrence.OTHER))) {
             assertNull(PlusBilling.selectOffer(listOf(regular.copy(phases = listOf(phase)))))
         }
         assertNull(PlusBilling.selectOffer(listOf(regular.copy(offerToken = " "))))
@@ -110,5 +110,67 @@ class PlusOfferTest {
             introductory.copy(phases = listOf(intro, renewal.copy(priceAmountMicros = 3_990_000, formattedPrice = "$3.99"))),
             introductory.copy(phases = listOf(intro.copy(billingCycleCount = 2), renewal)),
         )) assertNull(PlusBilling.confirmedOffer(listOf(changed), "intro-token", introductory))
+    }
+
+    @Test fun recreatedHostRequiresTheOfferToBeShownAgain() {
+        val original = PlusBilling.OfferSession()
+        original.show(introductory)
+        val catalog = listOf(regular, introductory)
+        assertEquals(introductory, original.confirm(catalog, introductory.offerToken))
+
+        val recreated = PlusBilling.OfferSession()
+        assertNull(recreated.displayed)
+        assertNull(recreated.confirm(catalog, introductory.offerToken))
+        recreated.show(introductory)
+        assertEquals(introductory, recreated.confirm(catalog, introductory.offerToken))
+    }
+
+    @Test fun lifecycleCancellationClearsTheDisplayedOffer() {
+        val session = PlusBilling.OfferSession()
+        session.show(introductory)
+        session.clear()
+        assertNull(session.displayed)
+        assertNull(session.confirm(listOf(introductory), introductory.offerToken))
+    }
+
+    @Test fun expiredIntroRequiresTheRegularOfferToBeShownBeforeCheckout() {
+        val session = PlusBilling.OfferSession()
+        session.show(introductory)
+        val catalog = listOf(regular)
+        assertNull(session.confirm(catalog, introductory.offerToken))
+        assertNull(session.displayed)
+        assertNull(session.confirm(catalog, introductory.offerToken))
+        assertNull(session.confirm(catalog, regular.offerToken))
+        session.show(regular)
+        assertEquals(regular, session.confirm(catalog, regular.offerToken))
+    }
+
+    @Test fun changedPriceWithTheSameTokenClearsTheSession() {
+        val session = PlusBilling.OfferSession()
+        session.show(introductory)
+        val changed = introductory.copy(phases = listOf(
+            intro.copy(formattedPrice = "$1.09", priceAmountMicros = 1_090_000), renewal,
+        ))
+        assertNull(session.confirm(listOf(changed), introductory.offerToken))
+        assertNull(session.displayed)
+        assertNull(session.confirm(listOf(introductory), introductory.offerToken))
+    }
+
+    @Test fun forgedTokenReturnsNoCheckoutOfferAndClearsTheSession() {
+        val session = PlusBilling.OfferSession()
+        session.show(introductory)
+        assertNull(session.confirm(listOf(introductory), "forged-token"))
+        assertNull(session.displayed)
+        assertNull(session.confirm(listOf(introductory), introductory.offerToken))
+    }
+
+    @Test fun successfulConfirmationKeepsTheOfferForRetryAfterPlayCancellation() {
+        val session = PlusBilling.OfferSession()
+        session.show(introductory)
+        val catalog = listOf(regular, introductory)
+        assertEquals(introductory, session.confirm(catalog, introductory.offerToken))
+        assertEquals(introductory, session.displayed)
+        assertEquals(introductory, session.confirm(catalog, introductory.offerToken))
+        assertEquals(introductory, session.displayed)
     }
 }

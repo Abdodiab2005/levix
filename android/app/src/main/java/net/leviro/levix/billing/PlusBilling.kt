@@ -9,16 +9,14 @@ object PlusBilling {
     const val BASE_PLAN_ID = "monthly"
     const val INTRO_OFFER_ID = "intro-3months"
 
-    // Play RecurrenceMode values, kept Android-free for the wire/selection tests.
-    const val INFINITE_RECURRING = 1
-    const val FINITE_RECURRING = 2
+    enum class Recurrence { INFINITE, FINITE, OTHER }
 
     data class Phase(
         val formattedPrice: String,
         val priceAmountMicros: Long,
         val priceCurrencyCode: String,
         val billingPeriod: String,
-        val recurrenceMode: Int,
+        val recurrence: Recurrence,
         val billingCycleCount: Int,
     )
 
@@ -52,11 +50,11 @@ object PlusBilling {
             val renewal = offer.phases.lastOrNull()
             offer.basePlanId == BASE_PLAN_ID && validOfferToken(offer.offerToken) &&
                 renewal != null && validPrice(renewal) &&
-                renewal.recurrenceMode == INFINITE_RECURRING && renewal.billingCycleCount == 0 &&
+                renewal.recurrence == Recurrence.INFINITE && renewal.billingCycleCount == 0 &&
                 when (offer.offerId) {
                     null -> offer.phases.size == 1
                     INTRO_OFFER_ID -> offer.phases.size == 2 && offer.phases.first().let { intro ->
-                        validPrice(intro) && intro.recurrenceMode == FINITE_RECURRING &&
+                        validPrice(intro) && intro.recurrence == Recurrence.FINITE &&
                             intro.billingCycleCount == 3 &&
                             intro.priceCurrencyCode == renewal.priceCurrencyCode &&
                             intro.priceAmountMicros < renewal.priceAmountMicros
@@ -71,6 +69,17 @@ object PlusBilling {
     /** A refreshed catalog must still match everything shown before Subscribe. */
     fun confirmedOffer(offers: List<Offer>, token: String, displayed: Offer?): Offer? =
         selectOffer(offers)?.takeIf { it.offerToken == token && it == displayed }
+
+    /** The offer the page was last given. One per BillingHost; never outlives it. */
+    class OfferSession {
+        var displayed: Offer? = null
+            private set
+        fun show(offer: Offer) { displayed = offer }
+        fun clear() { displayed = null }
+        /** Null also clears the session, so the page must fetch and show the offer again. */
+        fun confirm(offers: List<Offer>, token: String): Offer? =
+            confirmedOffer(offers, token, displayed).also { if (it == null) displayed = null }
+    }
 
     /** Process memory only; callers confine access to the main thread. */
     class PurchaseRecovery(private val productId: String, private val packageName: String) {
