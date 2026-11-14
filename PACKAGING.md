@@ -402,41 +402,29 @@ the server.
 
 ### 4b. Google Play
 
-The `play` job uploads the signed `levix-android.aab` from the same run to
-Google Play. It starts after the GitHub Release exists. It waits on the
-`google-play` environment until someone approves it in the run's
-**Review deployments** dialog. Prereleases (tags with a `-`) skip it.
+Public GitHub APKs and AABs contain Free Core only. The public `release.yml`
+and `play-store.yml` upload jobs are disabled. The legacy beta upload workflow,
+where present on main, must also stay disabled. Do not upload a public release
+AAB to any Play track: Play uses one combined Free + Plus Android app.
 
-The comment written in that dialog becomes the release's "What's new" text.
-Plain text is the en-US notes. A line holding only a bracketed Play language
-code starts another language:
+The combined build belongs to the private `levix-plus` repository. Only the
+owner may authorize its production-signed build, using the original Play upload
+keystore, then separately authorize a Play Console upload to the intended
+track. Private runtime and combined artifacts never enter this public
+repository, GitHub Releases, npm or Docker. Public Free builds stay available
+for GitHub and other non-Play channels.
 
-```
-Faster Sticker Studio and Arabic sign-in screens.
-[ar]
-استوديو ملصقات أسرع وشاشات دخول بالعربية.
-```
+Before authorizing that private build, verify the reviewed Core/Plus SHAs,
+`net.leviro.levix` package, signing certificate against Play Console's upload
+certificate, unused `versionCode`, entitlement verification key, `levix.plus`
+product and `monthly` base plan. A private build's success does not prove live
+billing, pricing, verifier or RTDN configuration. Play Console state and track
+permissions must be checked separately. Production publication is never
+implied by a build or internal-testing approval.
 
-Each language takes 500 characters at most. `scripts/play-release-notes.mjs`
-turns the comment into the files the upload reads. An empty comment or an
-over-long section fails the job before anything reaches Google Play. Every
-language named must exist in the Play listing.
-
-Set up once:
-
-- In Settings → Environments → `google-play`, add a required reviewer.
-- Keep the `PLAY_SERVICE_ACCOUNT_JSON` secret (a service account with release
-  rights in the Play Console) on the repository or on that environment.
-- Releases go to the `alpha` track. Set the `PLAY_TRACK` repository variable
-  to `production` once the app has production access.
-
-Google Play refuses a `versionCode` it has seen before. `verify-version` fails
-the release when `versionName` in `android/app/build.gradle.kts` differs from
-the tag. Bump `versionName` and `versionCode` together with `package.json`.
-
-To upload an older release, or to send one to a different track as a draft,
-run the manual **Upload release AAB to Google Play** workflow
-(`.github/workflows/play-store.yml`).
+Google Play refuses a `versionCode` it has seen before. `verify-version` also
+requires Android `versionName` to match the release tag. Version changes need
+the owner's separate release approval.
 
 Before tagging:
 
