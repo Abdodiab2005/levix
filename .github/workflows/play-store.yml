@@ -39,12 +39,14 @@ concurrency:
 jobs:
   publish:
     name: Upload ${{ inputs.release_tag }} to Google Play
-    if: ${{ inputs.confirm == 'PUBLISH' }}
+    # Public release assets contain Free Core only. Play requires the private
+    # combined Free + Plus build, even for internal/closed testing.
+    if: ${{ false }}
     runs-on: ubuntu-latest
 
     # Configure this environment in:
     # Settings -> Environments -> google-play
-    # Add yourself as a required reviewer if you want a second approval gate.
+    # Owner approval is mandatory for every Play upload; this public job stays disabled.
     environment: google-play
 
     steps:
