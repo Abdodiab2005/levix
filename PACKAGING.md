@@ -402,6 +402,15 @@ the server.
 
 ### 4b. Google Play
 
+The tagged GitHub Release `apk` job signs public Free APKs using the protected
+`play-signing` environment, not repository-wide signing secrets. Configure that
+environment to allow **Tag `v*`** (a `main` branch-only rule will reject tags),
+with appropriate reviewer protection. These APKs are for GitHub distribution,
+**never** for the combined Google Play upload. After a non-publishing certificate
+check confirms the original key and all affected workflows are updated, remove
+the old repository-level `LEVIX_KEYSTORE_*` copies; historical workflow refs
+must not retain access to them. Never replace the original upload keystore.
+
 Public GitHub APKs and AABs contain Free Core only. The public `release.yml`
 and `play-store.yml` upload jobs are disabled. The legacy beta upload workflow,
 where present on main, must also stay disabled. Do not upload a public release
