@@ -22,6 +22,7 @@ import { fileToBuffer, MultipartError, readMultipartForm } from "../utils/multip
 import normalizeJid, { isLidJid } from "../utils/normalizeJid.esm.js";
 import { grantRole, listRoles, revokeRole } from "../utils/permissions.esm.js";
 import {
+  accountEpoch,
   countDebts,
   countNotes,
   countSchedules,
@@ -111,6 +112,8 @@ const autoDelete = require("../services/autoDelete.cjs");
 const legalTerms = require("../legal/terms.cjs");
 const legalConsent = require("../legal/consent.cjs");
 const cron = require("node-cron");
+const { createAccountProfile } = require("../panel/account-profile.cjs");
+const { linkedIdentity } = require("../messaging/identity.cjs");
 
 const router = Router();
 
@@ -118,6 +121,9 @@ const router = Router();
 // it questions and give it orders; they never create or destroy a socket
 // themselves, and nothing a browser does to its websocket reaches it.
 let session = null;
+// Built below, after the helpers it depends on exist. setSession may only call
+// into it once it is initialized.
+let accountProfile = null;
 const DASHBOARD_START_COALESCE_MS = 500;
 let dashboardStartPromise = null;
 let dashboardStartSettledAt = 0;
@@ -128,6 +134,9 @@ export function setSession(manager) {
   dashboardStartPromise = null;
   dashboardStartSettledAt = 0;
   dashboardStartKey = null;
+  // A new session manager means a new socket generation. Never let a profile
+  // or a cached photo revision survive it.
+  accountProfile?.reset?.();
 }
 
 /** The live socket, or null. Re-read every time — a reconnect replaces it. */
@@ -160,6 +169,24 @@ function sessionState() {
     }
   );
 }
+
+// The connected account card's cache. Constructing it only stores the
+// callbacks: no profile is read and no socket is touched until a route asks.
+accountProfile = createAccountProfile({
+  getContext() {
+    return {
+      socket: currentSocket(),
+      state: sessionState(),
+      epoch: accountEpoch(),
+      identity: linkedIdentity(),
+    };
+  },
+  // Existing WhatsApp image transport: HTTPS WhatsApp origins, DNS and
+  // private-network validation, and the live session's proxy.
+  fetchImage(sock, url, init) {
+    return fetchWhatsAppImage(sock, url, init);
+  },
+});
 
 // --- helpers --------------------------------------------------------------
 
@@ -2009,6 +2036,37 @@ router.post("/session/restart", (req, res, next) => {
   req.url = "/bot/restart";
   router.handle(req, res, next);
 });
+
+// --- Connected account profile ---------------------------------------------
+// Opening Connection may read only the connected account's own profile. The
+// service bounds, caches and context-guards every lookup; nothing here accepts
+// a JID or a URL from the browser.
+router.get(
+  "/account/profile",
+  asyncRoute(async (_req, res) => {
+    res.json({ success: true, profile: await accountProfile.get() });
+  }),
+);
+
+router.post(
+  "/account/profile/refresh",
+  asyncRoute(async (_req, res) => {
+    res.json({ success: true, profile: await accountProfile.refresh() });
+  }),
+);
+
+// The revision is opaque and bound to the current cache entry. An unknown,
+// expired or previous-account token is a plain 404 with no network.
+router.get(
+  "/account/photo",
+  asyncRoute(async (req, res) => {
+    const revision = typeof req.query.revision === "string" ? req.query.revision : "";
+    const picture = revision ? await accountProfile.photo(revision) : null;
+    if (!picture) return res.sendStatus(404);
+    res.set("X-Content-Type-Options", "nosniff");
+    res.type(picture.mime).send(picture.bytes);
+  }),
+);
 
 // ===========================================================================
 // Keyword auto-delete

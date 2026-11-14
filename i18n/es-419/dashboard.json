@@ -1608,5 +1608,14 @@
   "rateLevix": "Calificar Levix en Google Play",
   "starGithub": "Dar una estrella en GitHub",
   "reviewPrompts": "Permitir solicitudes ocasionales de calificación",
-  "reviewPromptsDesc": "Desactivado de forma predeterminada. Google Play puede ofrecer una calificación después de una buena experiencia. Puedes desactivarlo en cualquier momento."
+  "reviewPromptsDesc": "Desactivado de forma predeterminada. Google Play puede ofrecer una calificación después de una buena experiencia. Puedes desactivarlo en cualquier momento.",
+  "accountCardTitle": "Cuenta de WhatsApp",
+  "accountProfileName": "Nombre para mostrar",
+  "accountProfilePhone": "Número de teléfono",
+  "accountProfileAbout": "Información",
+  "accountProfileMissing": "No disponible",
+  "accountProfileDisconnected": "Conecta WhatsApp para ver los detalles de tu cuenta.",
+  "accountProfileUnavailable": "No se pudieron cargar los detalles de la cuenta. Inténtalo de nuevo.",
+  "accountProfileRefresh": "Actualizar detalles de la cuenta",
+  "accountProfileRefreshSoon": "Los detalles de la cuenta se verificaron recientemente"
 }

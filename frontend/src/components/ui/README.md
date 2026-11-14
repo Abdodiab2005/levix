@@ -289,8 +289,9 @@ A wrapping row. Put the search `Input` first (`className="min-w-48 flex-1"`), th
 ### StatusDot / Avatar / Disclosure
 
 `StatusDot` takes a `tone` and accessible `label`; it displays only a dot.
-`Avatar` takes a `src` and `name`, loads its picture lazily and falls back to the
+`Avatar` takes an optional `src` and a `name`, loads its picture lazily and falls back to the
 name initial on missing/failed images. Give it a new key when its source changes.
+An absent `src` renders only the fallback and makes no image request.
 `Disclosure` takes `summary` and children, composing Card and Button into an
 animated expandable region. Closed content is inert and hidden from assistive
 technology; reduced-motion preferences disable the transition. Put only

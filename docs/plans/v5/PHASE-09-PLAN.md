@@ -1,5 +1,10 @@
 # Phase 09 — updates, official links, rating and watermark
 
+> Scope update (2026-11-13): next-release-only statements below describe the
+> original decision. ADR-021 supersedes them for Phase 11A only, now included
+> in v5.0.0 through the separate port in `PHASE-11A-PORT.md`.
+
+
 Status: IMPLEMENTING, owner authorized 2026-11-11. Base: `94ef953` on
 `release/5.0.0-beta.1` (Phase 08 and its security corrections merged).
 Detailed owner brief read from

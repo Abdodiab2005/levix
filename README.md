@@ -173,6 +173,12 @@ The panel can start, stop, reconnect, and unlink WhatsApp while showing the
 actual state: idle, waiting for a scan, connected, reconnecting, or stopped.
 Reconnect attempts continue inside the bot even when no browser is open.
 
+The Free account card on **Connection** shows your connected WhatsApp profile
+picture, display name, verified phone number and About text. Missing or private
+details use a neutral placeholder. Open the screen or use its refresh button;
+stats polling does not query your profile. Profile lookups and images use a
+short memory cache, and disconnecting clears the visible account details.
+
 An optional HTTP, HTTPS, or SOCKS5 proxy can route WhatsApp traffic, including
 media, without changing how the panel or AI connects.
 

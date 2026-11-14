@@ -1608,5 +1608,14 @@
   "rateLevix": "تقييم Levix على Google Play",
   "starGithub": "إضافة نجمة على GitHub",
   "reviewPrompts": "السماح بطلبات تقييم متباعدة",
-  "reviewPromptsDesc": "معطّل افتراضيًا. قد يعرض Google Play طلب تقييم بعد تجربة ناجحة. يمكنك تعطيله في أي وقت."
+  "reviewPromptsDesc": "معطّل افتراضيًا. قد يعرض Google Play طلب تقييم بعد تجربة ناجحة. يمكنك تعطيله في أي وقت.",
+  "accountCardTitle": "حساب واتساب",
+  "accountProfileName": "اسم العرض",
+  "accountProfilePhone": "رقم الهاتف",
+  "accountProfileAbout": "النبذة",
+  "accountProfileMissing": "غير متاح",
+  "accountProfileDisconnected": "اربط واتساب لعرض تفاصيل حسابك.",
+  "accountProfileUnavailable": "تعذّر تحميل تفاصيل الحساب. حاول مجددًا.",
+  "accountProfileRefresh": "تحديث تفاصيل الحساب",
+  "accountProfileRefreshSoon": "تم التحقق من تفاصيل الحساب مؤخرًا"
 }

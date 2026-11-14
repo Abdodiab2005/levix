@@ -160,3 +160,10 @@
   module or manifest requirement. Manual device limits remain explicit.
 - Phase 11A authorized only for a separate next release; Phase 10 remains the
   mandatory v5.0.0 gate. Evidence: `PHASE-09-RESULTS.md`.
+
+### 2026-11-13 — Phase 11A brought into v5.0.0
+
+- Owner Task 05 supersedes the historical next-release-only scope for 11A.
+- Port PR #168's existing card from its exact diff onto release HEAD c9b3f88;
+  preserve the Gemini fixes and leave original PR #168 unchanged (ADR-021).
+- Audit, plan and validation: `PHASE-11A-PORT.md`. Phase 10 stays mandatory.
