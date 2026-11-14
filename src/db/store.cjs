@@ -19,9 +19,21 @@ const crypto = require("node:crypto");
 const logger = require("../utils/logger.cjs");
 const normalizeJid = require("../utils/normalizeJid.cjs");
 const { db, q, parseJson, sweepExpired, checkpoint, DB_PATH } = require("./db.cjs");
+const { candidateLimit, MAX_IDENTITY_ALIASES } = require("../automation/limits.cjs");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_FORWARD_TTL_DAYS = 30;
+const reactionListeners = new Set();
+function notifyReactionChange(change) {
+  for (const listener of reactionListeners) {
+    try { listener(change); }
+    catch { logger.warn("[Reactions] policy listener failed"); }
+  }
+}
+function subscribeReactionChanges(listener) {
+  reactionListeners.add(listener);
+  return () => reactionListeners.delete(listener);
+}
 
 // ===================================================================
 // --- Lifecycle ---
@@ -136,10 +148,74 @@ function saveBotSetting(key, value) {
     `INSERT INTO bot_settings (key, value) VALUES (?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
   ).run(key, JSON.stringify(value ?? null));
+  if (["reaction:enabled", "command_permissions", "disabled_commands"].includes(key))
+    notifyReactionChange({ type: "policy", key });
 }
 
 function deleteBotSetting(key) {
   q("DELETE FROM bot_settings WHERE key = ?").run(key);
+  notifyReactionChange({ type: "policy" });
+}
+
+const EXT_VALUE_MAX_BYTES = 64 * 1024;
+const EXT_MAX_NAMES = 200;
+const EXT_NAME_RE = /^[A-Za-z][A-Za-z0-9._-]{0,63}$/;
+
+function extStoragePrefix(id, kind) {
+  return `ext:${id}:${kind}:`;
+}
+
+function listBotSettingsByPrefix(prefix) {
+  const rows = q("SELECT key, value FROM bot_settings WHERE key >= ? AND key < ?").all(
+    prefix,
+    `${prefix}\uFFFF`,
+  );
+  return rows.filter((row) => row.key.startsWith(prefix));
+}
+
+function getExtStorage(id, kind, name) {
+  if (typeof name !== "string" || !EXT_NAME_RE.test(name)) return undefined;
+  const row = q("SELECT value FROM bot_settings WHERE key = ?").get(
+    extStoragePrefix(id, kind) + name,
+  );
+  if (!row) return undefined;
+  return parseJson(row.value, null);
+}
+
+function setExtStorage(id, kind, name, value) {
+  if (typeof name !== "string" || !EXT_NAME_RE.test(name)) {
+    throw new Error("invalid extension storage name");
+  }
+  const encoded = JSON.stringify(value ?? null);
+  if (Buffer.byteLength(encoded, "utf8") > EXT_VALUE_MAX_BYTES) {
+    throw new Error("extension storage value too large");
+  }
+  const prefix = extStoragePrefix(id, kind);
+  const key = prefix + name;
+  const existing = q("SELECT 1 AS found FROM bot_settings WHERE key = ?").get(key);
+  if (!existing) {
+    if (listBotSettingsByPrefix(prefix).length >= EXT_MAX_NAMES) {
+      throw new Error("extension storage name limit");
+    }
+  }
+  saveBotSetting(key, value);
+}
+
+function deleteExtStorage(id, kind, name) {
+  if (typeof name !== "string" || !EXT_NAME_RE.test(name)) return;
+  q("DELETE FROM bot_settings WHERE key = ?").run(extStoragePrefix(id, kind) + name);
+}
+
+function listExtStorage(id, kind) {
+  const prefix = extStoragePrefix(id, kind);
+  return listBotSettingsByPrefix(prefix).map((row) => row.key.slice(prefix.length));
+}
+
+function wipeExtStorage(id, kind) {
+  const prefix = extStoragePrefix(id, kind);
+  for (const row of listBotSettingsByPrefix(prefix)) {
+    q("DELETE FROM bot_settings WHERE key = ?").run(row.key);
+  }
 }
 
 // ===================================================================
@@ -156,6 +232,7 @@ function saveGroupSettings(groupId, settings) {
     `INSERT INTO group_settings (group_id, settings) VALUES (?, ?)
      ON CONFLICT(group_id) DO UPDATE SET settings = excluded.settings`,
   ).run(groupId, JSON.stringify(settings || {}));
+  notifyReactionChange({ type: "chat", chat: groupId });
 }
 
 function getAllGroupSettings() {
@@ -219,13 +296,233 @@ function clearLidMappings() {
   q("DELETE FROM lid_mapping").run();
 }
 
+// Account lifetime (Phase 07.5). Work that started for one linked account
+// captures accountEpoch() and must not write account-scoped state once it has
+// moved. Unlink, logout and backup activation advance it synchronously, before
+// their first await, so a late completion from the previous account is dropped.
+let accountEpochValue = 0;
+function accountEpoch() {
+  return accountEpochValue;
+}
+function advanceAccountEpoch() {
+  accountEpochValue += 1;
+  return accountEpochValue;
+}
+
 /** Drop WhatsApp-derived directory data after unlink / logged-out. */
 function clearWhatsAppDirectory() {
+  clearReactionAccountState();
   clearGroupDirectory();
   clearGroupSettings();
   clearUserMetadata();
   clearLidMappings();
   clearAllModerationFlags();
+}
+
+// Reaction intake claims contain hashes/times/emoji only, never message bodies.
+const REACTION_LEDGER_CAP = 10_000;
+
+function isReactionChatEnabled(chatJid) {
+  return Boolean(q("SELECT 1 FROM reaction_rules WHERE chat_jid = ? AND enabled = 1 LIMIT 1").get(chatJid));
+}
+function isReactionChatConfigured(chatJid) {
+  return Boolean(q("SELECT 1 FROM reaction_rules WHERE chat_jid = ? LIMIT 1").get(chatJid));
+}
+
+// Bound trusted alias expansion. Excess/ambiguous aliases fail closed at intake.
+function reactionIdentityAliases(jid) {
+  if (jid.endsWith("@g.us")) return [jid];
+  const pn = jid.endsWith("@lid") ? getPnForLid(jid) : jid;
+  if (!pn) return [jid];
+  const rows = q(
+    `SELECT lid FROM lid_mapping WHERE pn = ? LIMIT ${MAX_IDENTITY_ALIASES}`,
+  ).all(pn);
+  return [...new Set([jid, pn, ...rows.map((row) => normalizeJid(row.lid))])];
+}
+
+// Hash-only negative lookup state survives restart. Saturation replaces markers
+// with one conservative global block, never with a revived original.
+function invalidateReactionLookup(keys, expiresAt, now, cap = 500) {
+  return withImmediateTransaction(() => {
+    q("DELETE FROM reaction_invalidations WHERE expires_at <= ?").run(now);
+    const global = q("SELECT expires_at FROM reaction_invalidations WHERE invalidation_key='*'").get();
+    const existing = q("SELECT COUNT(*) AS n, MAX(expires_at) AS expiry FROM reaction_invalidations").get();
+    if (!keys || global || existing.n + keys.length > cap) {
+      q("DELETE FROM reaction_invalidations").run();
+      q("INSERT INTO reaction_invalidations VALUES ('*', ?)").run(Math.max(expiresAt, existing.expiry || 0));
+      return true;
+    } else {
+      for (const key of keys) q(`INSERT INTO reaction_invalidations VALUES (?, ?)
+        ON CONFLICT(invalidation_key) DO UPDATE SET expires_at=MAX(expires_at, excluded.expires_at)`).run(key, expiresAt);
+    }
+    return false;
+  });
+}
+function isReactionLookupInvalidated(keys, now) {
+  return Boolean(q(`SELECT 1 FROM reaction_invalidations WHERE expires_at > ?
+    AND invalidation_key IN (${sqlIn(["*", ...keys])}) LIMIT 1`).get(now, "*", ...keys));
+}
+
+// Cross-tab guard for the global switch. Never in backups or settings export. A
+// missing row on an existing install reads as "0" until the first write.
+const REACTION_AUTOMATION_REVISION_KEY = "reaction:automation-revision";
+
+function clearReactionAccountState() {
+  withImmediateTransaction(() => {
+    q("UPDATE reaction_rules SET enabled = 0").run();
+    q("DELETE FROM reaction_events").run();
+    q("DELETE FROM reaction_state").run();
+    q("DELETE FROM reaction_invalidations").run();
+    q("DELETE FROM reaction_executions").run();
+    q("DELETE FROM reaction_budgets").run();
+    saveBotSetting("reaction:enabled", false);
+    saveBotSetting(REACTION_AUTOMATION_REVISION_KEY, crypto.randomUUID());
+  });
+  notifyReactionChange({ type: "policy", account: true });
+}
+
+/** Claim before handoff. Saturation never deletes a live replay key. */
+function claimReactionEvent({ eventKey, slotKeys, timestampMs, emoji, expiresAt }, now, details = false) {
+  return withImmediateTransaction(() => {
+    q("DELETE FROM reaction_events WHERE expires_at <= ?").run(now);
+    q("DELETE FROM reaction_state WHERE expires_at <= ?").run(now);
+    if (q("SELECT 1 FROM reaction_events WHERE event_key = ?").get(eventKey)) return null;
+    const previous = q(`SELECT slot_key, timestamp_ms, emoji FROM reaction_state
+      WHERE slot_key IN (${sqlIn(slotKeys)}) ORDER BY timestamp_ms DESC LIMIT 1`).get(...slotKeys);
+    if (previous && timestampMs <= previous.timestamp_ms) return null;
+    if (q("SELECT COUNT(*) AS n FROM reaction_events").get().n >= REACTION_LEDGER_CAP) return null;
+    if (!previous && q("SELECT COUNT(*) AS n FROM reaction_state").get().n >= REACTION_LEDGER_CAP) return null;
+    q("INSERT INTO reaction_events (event_key, expires_at) VALUES (?, ?)").run(eventKey, expiresAt);
+    q(`INSERT INTO reaction_state (slot_key, timestamp_ms, emoji, expires_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(slot_key) DO UPDATE SET timestamp_ms=excluded.timestamp_ms,
+       emoji=excluded.emoji, expires_at=excluded.expires_at`).run(previous?.slot_key || slotKeys[0], timestampMs, emoji, expiresAt);
+    if (previous?.emoji === emoji) return null;
+    const type = !emoji ? "remove" : previous?.emoji ? "change" : "add";
+    return details ? { type, previousEmoji: previous?.emoji || "" } : type;
+  });
+}
+
+// Internal rule writes only; Phase 07c must put authenticated management over
+// these methods. Every edit disables execution and rotates the revision.
+function saveReactionRule(input) {
+  const { validateDefinition, exactJid } = require("../automation/rules.cjs");
+  if (!input || Object.keys(input).some((key) => !["id", "chatJid", "priority", "definition"].includes(key)))
+    throw new Error("REACTION_RULE_INVALID");
+  const id = input.id || crypto.randomUUID();
+  if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error("REACTION_RULE_INVALID");
+  const chat = exactJid(input.chatJid);
+  const priority = input.priority ?? 0;
+  if (!Number.isInteger(priority) || priority < 0 || priority > 1000) throw new Error("REACTION_RULE_INVALID");
+  const definition = validateDefinition(input.definition);
+  q(`INSERT INTO reaction_rules(id,chat_jid,definition,revision,priority) VALUES(?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET chat_jid=excluded.chat_jid,definition=excluded.definition,
+     revision=excluded.revision,priority=excluded.priority,enabled=0,enabled_at=NULL`)
+    .run(id, chat, JSON.stringify(definition), crypto.randomUUID(), priority);
+  saveBotSetting("reaction:revision", crypto.randomUUID());
+  notifyReactionChange({ type: "rule", id });
+  return getReactionRule(id);
+}
+function getReactionRule(id) {
+  return q("SELECT * FROM reaction_rules WHERE id=?").get(id) || null;
+}
+function listReactionRules() {
+  return q("SELECT * FROM reaction_rules ORDER BY chat_jid, priority, id COLLATE BINARY").all();
+}
+function setReactionRuleEnabled(id, enabled, now = Date.now()) {
+  if (typeof enabled !== "boolean" || !Number.isSafeInteger(now) || now < 0) throw new Error("REACTION_RULE_INVALID");
+  const rule = getReactionRule(id);
+  if (!rule) throw new Error("REACTION_RULE_MISSING");
+  if (enabled) require("../automation/rules.cjs").validateDefinition(JSON.parse(rule.definition));
+  q("UPDATE reaction_rules SET enabled=?,enabled_at=?,revision=? WHERE id=?")
+    .run(enabled ? 1 : 0, enabled ? now : null, crypto.randomUUID(), id);
+  saveBotSetting("reaction:revision", crypto.randomUUID());
+  notifyReactionChange({ type: "rule", id });
+  return getReactionRule(id);
+}
+function deleteReactionRule(id) {
+  q("DELETE FROM reaction_rules WHERE id=?").run(id);
+  saveBotSetting("reaction:revision", crypto.randomUUID());
+  notifyReactionChange({ type: "rule", id });
+}
+function getReactionAutomation() {
+  const revision = getBotSetting(REACTION_AUTOMATION_REVISION_KEY, "0");
+  return {
+    enabled: getBotSetting("reaction:enabled", false) === true,
+    revision: typeof revision === "string" && revision ? revision : "0",
+  };
+}
+/**
+ * Set the global switch and rotate its revision in one transaction. With
+ * `expectedRevision` the compare and the write share that transaction; a stale
+ * value throws REACTION_AUTOMATION_CHANGED and writes nothing. Without it the
+ * write is unconditional (internal callers).
+ */
+function setReactionAutomationEnabled(enabled, expectedRevision) {
+  if (typeof enabled !== "boolean") throw new Error("REACTION_SWITCH_INVALID");
+  return withImmediateTransaction(() => {
+    if (expectedRevision !== undefined && getReactionAutomation().revision !== expectedRevision)
+      throw new Error("REACTION_AUTOMATION_CHANGED");
+    saveBotSetting("reaction:enabled", enabled);
+    saveBotSetting(REACTION_AUTOMATION_REVISION_KEY, crypto.randomUUID());
+    return getReactionAutomation();
+  });
+}
+function reactionRulesForChats(chats, { emoji, type, originalType }) {
+  if (!chats.length || chats.length > MAX_IDENTITY_ALIASES) return [];
+  return q(`WITH rules AS (
+      SELECT *, CASE WHEN json_valid(definition) THEN definition ELSE '{}' END AS config
+      FROM reaction_rules WHERE enabled=1 AND chat_jid IN (${sqlIn(chats)})
+    ) SELECT id,chat_jid,enabled,definition,revision,enabled_at,priority FROM rules
+    WHERE json_extract(config,'$.emoji')=?
+      AND EXISTS (SELECT 1 FROM json_each(config,'$.transitions') WHERE value=?)
+      AND EXISTS (SELECT 1 FROM json_each(config,'$.originalTypes') WHERE value=?)
+    ORDER BY priority ASC,id COLLATE BINARY ASC LIMIT ?`).all(
+    ...chats,
+    emoji,
+    type,
+    originalType,
+    candidateLimit + 1,
+  );
+}
+// Strict role lookup deliberately never converts LID digits into phone digits.
+function verifiedUserRoles(ids) {
+  if (!ids.length || ids.length > MAX_IDENTITY_ALIASES) return { isOwner: false, isBotAdmin: false };
+  // Legacy contact merging can populate user_lid/phone_number by matching
+  // numeric digits alone. Only the role row's primary JID and authoritative
+  // lid_mapping expansion above may establish automation privileges.
+  const rows = q(`SELECT is_owner,is_admin FROM user_metadata WHERE user_jid IN (${sqlIn(ids)})`).all(...ids);
+  return { isOwner: rows.some((row) => row.is_owner === 1), isBotAdmin: rows.some((row) => row.is_admin === 1) };
+}
+// Nonmatching reactions never perform remote authorization. Matching attempts
+// spend reactor/chat budgets before metadata reads; rule budgets precede actions.
+function spendReactionBudgets(budgets, now) {
+  q("DELETE FROM reaction_budgets WHERE expires_at<=?").run(now);
+  let added = 0;
+  for (const budget of budgets) {
+    const row = q("SELECT attempts FROM reaction_budgets WHERE budget_key=?").get(budget.key);
+    if (row && row.attempts >= budget.limit) return "RATE_LIMIT";
+    if (!row) added++;
+  }
+  if (q("SELECT COUNT(*) AS n FROM reaction_budgets").get().n + added > REACTION_LEDGER_CAP) return "CAPACITY";
+  for (const budget of budgets) q(`INSERT INTO reaction_budgets VALUES(?,1,?)
+    ON CONFLICT(budget_key) DO UPDATE SET attempts=attempts+1`).run(budget.key, now + 60_000);
+  return "ADMITTED";
+}
+function admitReactionAttempt(budgets, now) {
+  return withImmediateTransaction(() => spendReactionBudgets(budgets, now));
+}
+function claimReactionExecution({ eventKey, ruleKey, actionKey, expiresAt, budgets }, now) {
+  return withImmediateTransaction(() => {
+    q("DELETE FROM reaction_executions WHERE expires_at<=?").run(now);
+    q("DELETE FROM reaction_budgets WHERE expires_at<=?").run(now);
+    if (!q("SELECT 1 FROM reaction_events WHERE event_key=? AND expires_at>?").get(eventKey, now)) return "EVENT_MISSING";
+    if (q("SELECT 1 FROM reaction_executions WHERE event_key=? OR rule_key=? OR action_key=?").get(eventKey, ruleKey, actionKey)) return "DUPLICATE";
+    if (q("SELECT COUNT(*) AS n FROM reaction_executions").get().n >= REACTION_LEDGER_CAP) return "CAPACITY";
+    const admitted = spendReactionBudgets(budgets, now);
+    if (admitted !== "ADMITTED") return admitted;
+    q("INSERT INTO reaction_executions VALUES(?,?,?,?)").run(eventKey, ruleKey, actionKey, expiresAt);
+    return "CLAIMED";
+  });
 }
 
 // ===================================================================
@@ -612,7 +909,8 @@ function storeLidPnMapping(lid, pn, deviceIndex = 0) {
        device_index = excluded.device_index,
        updated_at = excluded.updated_at`,
   ).run(lid, pn, deviceIndex, Date.now());
-  logger.debug(`[LID] Stored mapping: ${lid} <-> ${pn}`);
+  // The pair is an identifier: sanitized debug log only, never combined.log.
+  logger.debugOnly.debug({ lid, pn }, "[LID] Stored mapping");
 }
 
 function storeLidPnMappings(mappings) {
@@ -734,42 +1032,98 @@ function lidLocalPart(value) {
   return String(value).split("@")[0].split(":")[0];
 }
 
-/**
- * Find the existing user_metadata row for a person named by any mix of JID,
- * LID and phone, including the lid_mapping table, so a LID and a phone JID
- * of the same person land on one record.
- */
+// Contact writes may reuse a proven primary alias, never a numeric contact match.
 function resolveExistingUser(userData) {
-  const candidates = [];
-  const add = (value) => {
-    if (value && !candidates.includes(value)) candidates.push(value);
-  };
-  add(userData?.jid);
-  add(userData?.lid);
-  add(userData?.phone);
-  if (userData?.jid) {
-    add(getPnForLid(userData.jid));
-    add(getLidForPn(userData.jid));
-    if (!isLidJid(userData.jid)) add(asPnJid(userData.jid));
+  return resolveRoleUser(userData?.jid);
+}
+
+// Bare phones and PN JIDs share a namespace. LID digits never enter it.
+function roleJid(identifier) {
+  if (typeof identifier !== "string") return null;
+  const raw = identifier.trim();
+  if (!raw) return null;
+  if (!raw.includes("@")) {
+    if (!/^\+?[\d ()-]+$/.test(raw)) return null;
+    const phone = raw.replace(/\D/g, "");
+    return phone ? `${phone}@s.whatsapp.net` : null;
   }
-  if (userData?.lid) {
-    add(getPnForLid(userData.lid));
-    add(asLidJid(userData.lid));
+  return normalizeJid(raw);
+}
+
+// Mapping writers retain historical rows. Only the newest pair for a PN is
+// current. Tied conflicting pairs fail closed. Device suffixes are the only
+// aliases accepted when reading either indexed column.
+function roleMappingRows(column, jid) {
+  const local = jid.split("@")[0];
+  return q(`SELECT lid, pn, updated_at FROM lid_mapping
+    WHERE ${column} IN (?, ?) OR (${column} >= ? AND ${column} < ?)
+    ORDER BY updated_at DESC`).all(
+    jid, column === "pn" ? local : jid, `${local}:`, `${local};`,
+  ).filter((row) => roleJid(row[column]) === jid);
+}
+
+function currentRoleMapping(pn) {
+  const rows = roleMappingRows("pn", pn);
+  const newest = rows[0];
+  if (!newest) return null;
+  const lid = roleJid(newest.lid);
+  if (!lid?.endsWith("@lid")) return null;
+  if (rows.some((row) => row.updated_at === newest.updated_at && roleJid(row.lid) !== lid)) {
+    return null;
   }
-  if (userData?.phone) {
-    const pnJid = asPnJid(userData.phone);
-    add(pnJid);
-    if (pnJid) add(getLidForPn(pnJid));
+  // The normalized LID may itself have device-suffixed historical rows.
+  // Accept the pair only when its latest reverse link agrees as well.
+  const reverse = roleMappingRows("lid", lid);
+  const latest = reverse[0];
+  if (!latest || roleJid(latest.pn) !== pn || reverse.some((row) =>
+    row.updated_at === latest.updated_at && roleJid(row.pn) !== pn)) return null;
+  return newest;
+}
+
+// Shared by role reads/writes and the permission helpers. Secondary contact
+// columns are deliberately excluded: old digit merges could have populated them.
+function roleIdentityAliases(identifier) {
+  const jid = roleJid(identifier);
+  if (!jid) return [];
+  if (!jid.endsWith("@lid") && !jid.endsWith("@s.whatsapp.net")) return [jid];
+  if (jid.endsWith("@s.whatsapp.net")) {
+    const pair = currentRoleMapping(jid);
+    const lid = pair && roleJid(pair.lid);
+    return lid?.endsWith("@lid") ? [jid, lid] : [jid];
   }
-  for (const identifier of candidates) {
-    const found = getUserMetadata(identifier);
-    if (found) return found;
+  const pair = roleMappingRows("lid", jid)[0];
+  const pn = pair && roleJid(pair.pn);
+  if (!pn?.endsWith("@s.whatsapp.net")) return [jid];
+  const current = currentRoleMapping(pn);
+  return current && roleJid(current.lid) === jid ? [jid, pn] : [jid];
+}
+
+function roleUserRows(identifier) {
+  const rows = [];
+  for (const jid of roleIdentityAliases(identifier)) {
+    const exact = userRow(jid);
+    if (exact) rows.push(exact);
+    if (jid.endsWith("@s.whatsapp.net")) {
+      const bare = userRow(jid.split("@")[0]);
+      if (bare) rows.push(bare);
+    }
+    if (!jid.includes("@")) continue;
+    const local = jid.split("@")[0];
+    for (const row of q(`SELECT * FROM user_metadata
+      WHERE user_jid >= ? AND user_jid < ?`).all(`${local}:`, `${local};`)) {
+      if (roleJid(row.user_jid) === jid) rows.push(row);
+    }
   }
-  return null;
+  return rows;
 }
 
 function userRow(jid) {
   return q("SELECT * FROM user_metadata WHERE user_jid = ?").get(jid);
+}
+
+// Privilege writes must not follow the legacy contact digit-merging path.
+function resolveRoleUser(identifier) {
+  return rowToUser(roleUserRows(identifier)[0]);
 }
 
 /**
@@ -786,10 +1140,10 @@ function userRow(jid) {
 function saveUserMetadata(userData) {
   if (!userData?.jid) return;
   const now = Date.now();
-  const resolved = resolveExistingUser(userData);
-  const jid =
-    resolved?.jid ||
-    (isLidJid(userData.jid) ? userData.jid : asPnJid(userData.jid) || userData.jid);
+  const writesRole = userData.isOwner !== undefined || userData.isAdmin !== undefined;
+  const resolved = writesRole ? null : resolveExistingUser(userData);
+  const jid = resolved?.jid || roleJid(userData.jid);
+  if (!jid) return;
   const existing = userRow(jid) || (resolved ? userRow(resolved.jid) : null);
 
   let phone = userData.phone || existing?.phone_number || null;
@@ -839,6 +1193,19 @@ function saveUserMetadata(userData) {
     row.display_name,
     row.saved_name,
   );
+  if (writesRole) {
+    // Separate PN/LID rows can predate a learned mapping. A revocation must
+    // cover every proven primary alias, or the other row would retain access.
+    const ids = roleUserRows(userData.jid).map((entry) => entry.user_jid);
+    for (const [field, column] of [["isOwner", "is_owner"], ["isAdmin", "is_admin"]]) {
+      // A grant belongs to the requested primary identity. Copying it to a
+      // mapped LID would leave an independent grant when that mapping changes.
+      if (userData[field] !== undefined && !bool(userData[field]) && ids.length) {
+        q(`UPDATE user_metadata SET ${column}=0 WHERE user_jid IN (${sqlIn(ids)})`).run(...ids);
+      }
+    }
+    notifyReactionChange({ type: "policy" });
+  }
 }
 
 /**
@@ -938,7 +1305,7 @@ function getUserMetadata(identifier) {
 }
 
 function isUserOwner(identifier) {
-  return getUserMetadata(identifier)?.isOwner === true;
+  return roleUserRows(identifier).some((row) => row.is_owner === 1);
 }
 
 /**
@@ -946,7 +1313,7 @@ function isUserOwner(identifier) {
  * an admin of a WhatsApp group).
  */
 function isUserBotAdmin(identifier) {
-  return getUserMetadata(identifier)?.isAdmin === true;
+  return roleUserRows(identifier).some((row) => row.is_admin === 1);
 }
 
 function getAllOwners() {
@@ -977,28 +1344,19 @@ function setUserRole(identifier, role, enabled = true) {
   if (!identifier) return null;
 
   const wanted = String(role).toLowerCase() === "owner" ? "isOwner" : "isAdmin";
-  const existing = getUserMetadata(identifier);
-
-  // Keep LIDs as LIDs; anything else becomes a PN JID so the roster stays
-  // comparable with what the permission checks resolve senders to.
-  let jid = existing?.jid;
-  if (!jid) {
-    if (String(identifier).includes("@")) jid = identifier;
-    else {
-      const phone = digitsOf(identifier);
-      jid = phone ? `${phone}@s.whatsapp.net` : identifier;
-    }
-  }
+  const jid = roleJid(identifier);
+  if (!jid) return null;
+  const existing = rowToUser(userRow(jid));
 
   saveUserMetadata({
     jid,
-    lid: existing?.lid || (String(identifier).endsWith("@lid") ? identifier : null),
-    phone: existing?.phone || digitsOf(identifier),
+    lid: existing?.lid || (jid.endsWith("@lid") ? jid : null),
+    phone: existing?.phone || (jid.endsWith("@s.whatsapp.net") ? digitsOf(jid) : null),
     displayName: existing?.displayName || null,
     [wanted]: !!enabled,
   });
 
-  return getUserMetadata(jid);
+  return rowToUser(userRow(jid));
 }
 
 function updateUserLastSeen(jid) {
@@ -1289,8 +1647,45 @@ function authRemove(key) {
   q("DELETE FROM baileys_auth WHERE key = ?").run(key);
 }
 
+// One transaction. SQLITE_FULL / SQLITE_BUSY throw and the delete rolls back,
+// so the rows stay. The session writes `auth:unlink-pending` before calling
+// this; that row is outside this transaction and survives the rollback.
 function authClearAll() {
-  q("DELETE FROM baileys_auth").run();
+  return withImmediateTransaction(() => {
+    q("DELETE FROM baileys_auth").run();
+  });
+}
+
+// Set before the credential wipe. `auth:*` is already excluded from backups
+// (src/db/copy.cjs isSecretBotKey) and from settings export.
+const UNLINK_PENDING_KEY = "auth:unlink-pending";
+
+function isUnlinkPending() {
+  return !!q("SELECT 1 AS x FROM bot_settings WHERE key = ?").get(UNLINK_PENDING_KEY);
+}
+
+function markUnlinkPending() {
+  saveBotSetting(UNLINK_PENDING_KEY, Date.now());
+}
+
+function clearUnlinkPending() {
+  q("DELETE FROM bot_settings WHERE key = ?").run(UNLINK_PENDING_KEY);
+}
+
+// One keys.set is one IMMEDIATE transaction. `value == null` deletes the row
+// (Baileys passes null to remove a key). A throw rolls the whole batch back
+// and is rethrown unchanged; nothing here logs the key or the payload.
+function authApply(entries) {
+  if (!Array.isArray(entries)) throw new TypeError("authApply expects an array");
+  return withImmediateTransaction(() => {
+    for (const entry of entries) {
+      if (!entry || typeof entry.key !== "string") {
+        throw new TypeError("authApply entry needs a string key");
+      }
+      if (entry.value == null) authRemove(entry.key);
+      else authWrite(entry.key, entry.value);
+    }
+  });
 }
 
 function hasCredentials() {
@@ -2072,6 +2467,26 @@ function clearAutoDeleteOnUnlink() {
 }
 
 module.exports = {
+  isReactionChatEnabled,
+  isReactionChatConfigured,
+  reactionIdentityAliases,
+  invalidateReactionLookup,
+  isReactionLookupInvalidated,
+  clearReactionAccountState,
+  getReactionAutomation,
+  claimReactionEvent,
+  subscribeReactionChanges,
+  saveReactionRule,
+  listReactionRules,
+  getReactionRule,
+  setReactionRuleEnabled,
+  deleteReactionRule,
+  setReactionAutomationEnabled,
+  reactionRulesForChats,
+  verifiedUserRoles,
+  claimReactionExecution,
+  admitReactionAttempt,
+  REACTION_LEDGER_CAP,
   // Lifecycle
   initStore,
   flushStore,
@@ -2081,6 +2496,12 @@ module.exports = {
   getBotSetting,
   saveBotSetting,
   deleteBotSetting,
+  listBotSettingsByPrefix,
+  getExtStorage,
+  setExtStorage,
+  deleteExtStorage,
+  listExtStorage,
+  wipeExtStorage,
   // Group settings
   getGroupSettings,
   saveGroupSettings,
@@ -2093,6 +2514,8 @@ module.exports = {
   clearGroupSettings,
   clearUserMetadata,
   clearLidMappings,
+  accountEpoch,
+  advanceAccountEpoch,
   clearWhatsAppDirectory,
   // Warnings
   getUserWarnings,
@@ -2134,6 +2557,7 @@ module.exports = {
   getPnForLid,
   getAllLidMappings,
   // User metadata & roles
+  roleIdentityAliases,
   saveUserMetadata,
   rememberSavedName,
   applyContactRecord,
@@ -2178,6 +2602,11 @@ module.exports = {
   authWrite,
   authRemove,
   authClearAll,
+  authApply,
+  UNLINK_PENDING_KEY,
+  isUnlinkPending,
+  markUnlinkPending,
+  clearUnlinkPending,
   hasCredentials,
   isPairedSession,
   resolveUserPhone,

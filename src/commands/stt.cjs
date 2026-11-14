@@ -1,15 +1,11 @@
 // Speech-to-Text Command using FREE Gemini API
 const { GoogleGenAI } = require("@google/genai");
+const { geminiHttpOptions } = require("../utils/geminiHttpOptions.cjs");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 const logger = require("../utils/logger.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const { unwrapMessage } = require("../utils/messageContent.cjs");
-const {
-  INLINE_MEDIA_LIMIT,
-  baseMimeType,
-  downloadMedia,
-  uploadToGemini,
-} = require("../utils/geminiMedia.cjs");
+const { baseMimeType, downloadMedia } = require("../utils/geminiMedia.cjs");
 
 const settings = require("../config/settings.cjs");
 const {
@@ -18,6 +14,7 @@ const {
   safeProviderFetch,
 } = require("../utils/providerUrl.cjs");
 const { t } = require("../utils/i18n.cjs");
+const { assertAudio, MAX_MEDIA_BYTES } = require("../services/aiMedia.cjs");
 
 // Built on first use from whatever key is in force, and
 // rebuilt if that key changes — the operator can paste one without a restart.
@@ -36,7 +33,7 @@ function geminiStt() {
     cache = {
       key,
       baseUrl,
-      genAI: new GoogleGenAI({ apiKey: key, httpOptions: { baseUrl } }),
+      genAI: new GoogleGenAI({ apiKey: key, apiVersion: "v1beta", httpOptions: geminiHttpOptions(baseUrl) }),
     };
   }
   return cache;
@@ -67,40 +64,33 @@ function resolveSttProvider() {
 const TRANSCRIBE_PROMPT =
   "Please transcribe this audio message accurately. Return ONLY the transcription text without any additional commentary, explanations, or formatting. Just the raw transcribed text.";
 
-// A voice note is a few hundred KB, so it rides inline in the request: one
-// round trip, instead of an upload, a finalize and then the request. Past
-// INLINE_MEDIA_LIMIT (Gemini caps a whole inline request at 20 MB) it goes
-// through the Files API instead.
+// Transcription is capped at 8 MiB and fits inline, without a second upload.
 
-async function transcribeWithGemini(audioBuffer, mimetype) {
+async function transcribeWithGemini(audioBuffer, mimetype, signal) {
   const gemini = geminiStt();
-  if (!gemini)
-    throw new Error(t("bot.ai.stt.noGeminiKey"));
-  await assertProviderRequestUrl(settings.get("gemini_base_url"), {
+  if (!gemini) throw new Error(t("bot.ai.stt.noGeminiKey"));
+  await assertProviderRequestUrl(gemini.baseUrl, {
     allowLoopback: true,
   });
 
   // WhatsApp labels voice notes `audio/ogg; codecs=opus`; Gemini's type is
   // `audio/ogg`, and the codec parameter is not part of it.
   const mimeType = baseMimeType(mimetype, "audio");
-  let audioPart;
-  if (audioBuffer.length <= INLINE_MEDIA_LIMIT) {
-    audioPart = { inlineData: { mimeType, data: audioBuffer.toString("base64") } };
-  } else {
-    const file = await uploadToGemini(gemini.genAI, audioBuffer, mimeType, {
-      displayName: `audio-${Date.now()}`,
-    });
-    audioPart = { fileData: { mimeType: file.mimeType || mimeType, fileUri: file.uri } };
-  }
+  const audioPart = { inlineData: { mimeType, data: audioBuffer.toString("base64") } };
 
   const response = await gemini.genAI.models.generateContent({
     model: sttModel(),
     contents: [{ role: "user", parts: [audioPart, { text: TRANSCRIBE_PROMPT }] }],
+    config: {
+      abortSignal: signal,
+      httpOptions: { timeout: 60_000, baseUrl: gemini.baseUrl },
+      maxOutputTokens: 4096,
+    },
   });
   return (response.text ?? "").trim();
 }
 
-async function transcribeWithOpenAi(audioBuffer, mimetype) {
+async function transcribeWithOpenAi(audioBuffer, mimetype, signal) {
   const apiKey = settings.get("openai_api_key");
   if (!apiKey) {
     throw new Error(t("bot.ai.stt.noOpenAiKey"));
@@ -135,38 +125,57 @@ async function transcribeWithOpenAi(audioBuffer, mimetype) {
           Authorization: `Bearer ${apiKey}`,
         },
         body: formData,
-        signal: controller.signal,
+        signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
       },
       { allowLoopback: true },
     );
     if (!res.ok) {
-      const err = await res.text().catch(() => "");
-      throw new Error(`STT API (${res.status}): ${err}`);
+      await res.body?.cancel().catch(() => {});
+      throw new Error(res.status === 429 ? "STT_QUOTA" : "STT_FAILED");
     }
-    const data = await res.json();
-    return String(data?.text || "").trim();
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of res.body) {
+      size += chunk.length;
+      if (size > 64 * 1024) {
+        controller.abort();
+        throw new Error("STT_OUTPUT_INVALID");
+      }
+      chunks.push(chunk);
+    }
+    let data;
+    try {
+      data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    } catch {
+      throw new Error("STT_OUTPUT_INVALID");
+    }
+    if (typeof data?.text !== "string") throw new Error("STT_OUTPUT_INVALID");
+    return data.text.trim();
   } finally {
     clearTimeout(timer);
   }
 }
 
 /** Audio bytes -> text, on whichever engine the settings pick. */
-async function transcribe(audioBuffer, mimetype) {
+async function transcribe(audioBuffer, mimetype, { signal } = {}) {
+  signal?.throwIfAborted();
+  const mime = baseMimeType(mimetype, "audio");
+  assertAudio(audioBuffer, mime);
   const provider = resolveSttProvider();
-  const hasOpenAi = !!settings.get("openai_api_key");
-  if (provider === "openai" && hasOpenAi) {
-    logger.info("[STT] Transcribing via OpenAI/Groq Whisper API");
-    return transcribeWithOpenAi(audioBuffer, mimetype);
+  if (!settings.get(`${provider}_api_key`)) {
+    const error = new Error(
+      t(provider === "openai" ? "bot.ai.stt.noOpenAiKey" : "bot.ai.stt.noGeminiKey"),
+    );
+    error.code = "STT_KEY_REQUIRED";
+    throw error;
   }
-  if (geminiStt()) {
-    logger.info("[STT] Transcribing via Gemini");
-    return transcribeWithGemini(audioBuffer, mimetype);
-  }
-  if (hasOpenAi) {
-    logger.info("[STT] Fallback transcribing via OpenAI/Groq Whisper API");
-    return transcribeWithOpenAi(audioBuffer, mimetype);
-  }
-  throw new Error(t("bot.ai.stt.noAiKey"));
+  const result =
+    provider === "openai"
+      ? await transcribeWithOpenAi(audioBuffer, mime, signal)
+      : await transcribeWithGemini(audioBuffer, mime, signal);
+  signal?.throwIfAborted();
+  if (typeof result !== "string" || result.length > 12000) throw new Error("STT_OUTPUT_INVALID");
+  return result;
 }
 
 function sttErrorHint(error) {
@@ -203,7 +212,7 @@ module.exports = {
       });
     }
 
-    const hasGemini = !!geminiStt();
+    const hasGemini = !!settings.get("gemini_api_key");
     const hasOpenAi = !!settings.get("openai_api_key");
 
     if (!hasGemini && !hasOpenAi) {
@@ -213,32 +222,25 @@ module.exports = {
     }
 
     // One message, edited from "transcribing" into the transcript itself.
-    const status = await createStatus(
-      sock,
-      chatId,
-      t("bot.ai.stt.transcribing"),
-      {
-        replyTo: msg,
-      },
-    );
+    const status = await createStatus(sock, chatId, t("bot.ai.stt.transcribing"), {
+      replyTo: msg,
+    });
 
     try {
       // A real Buffer, not the download stream: the Whisper path wraps it in
       // a Blob, and a stream in a Blob is the string "[object Object]".
-      const audioBuffer = await downloadMedia(downloadContentFromMessage, audioMessage, "audio");
+      const audioBuffer = await downloadMedia(downloadContentFromMessage, audioMessage, "audio", {
+        maxBytes: MAX_MEDIA_BYTES,
+      });
       const transcription = await transcribe(audioBuffer, audioMessage.mimetype);
 
       if (!transcription) {
-        await status.finish(
-          t("bot.ai.stt.emptyTranscript"),
-        );
+        await status.finish(t("bot.ai.stt.emptyTranscript"));
         return;
       }
 
       // The status line becomes the transcript.
-      await status.finish(
-        t("bot.ai.stt.transcript", { transcription }),
-      );
+      await status.finish(t("bot.ai.stt.transcript", { transcription }));
 
       logger.info("[STT] Successfully transcribed audio to text");
     } catch (error) {
@@ -259,3 +261,4 @@ module.exports = {
 };
 
 module.exports.transcribe = transcribe;
+module.exports.resolveSttProvider = resolveSttProvider;

@@ -22,6 +22,7 @@ import { fileToBuffer, MultipartError, readMultipartForm } from "../utils/multip
 import normalizeJid, { isLidJid } from "../utils/normalizeJid.esm.js";
 import { grantRole, listRoles, revokeRole } from "../utils/permissions.esm.js";
 import {
+  accountEpoch,
   countDebts,
   countNotes,
   countSchedules,
@@ -46,6 +47,8 @@ import {
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
+const updateChecker = require("../services/updateCheck.cjs");
+const { LINKS } = require("../config/official-links.cjs");
 const {
   buildModerationSummaryBoth,
   featureActionOf,
@@ -109,6 +112,8 @@ const autoDelete = require("../services/autoDelete.cjs");
 const legalTerms = require("../legal/terms.cjs");
 const legalConsent = require("../legal/consent.cjs");
 const cron = require("node-cron");
+const { createAccountProfile } = require("../panel/account-profile.cjs");
+const { linkedIdentity } = require("../messaging/identity.cjs");
 
 const router = Router();
 
@@ -116,6 +121,9 @@ const router = Router();
 // it questions and give it orders; they never create or destroy a socket
 // themselves, and nothing a browser does to its websocket reaches it.
 let session = null;
+// Built below, after the helpers it depends on exist. setSession may only call
+// into it once it is initialized.
+let accountProfile = null;
 const DASHBOARD_START_COALESCE_MS = 500;
 let dashboardStartPromise = null;
 let dashboardStartSettledAt = 0;
@@ -126,6 +134,9 @@ export function setSession(manager) {
   dashboardStartPromise = null;
   dashboardStartSettledAt = 0;
   dashboardStartKey = null;
+  // A new session manager means a new socket generation. Never let a profile
+  // or a cached photo revision survive it.
+  accountProfile?.reset?.();
 }
 
 /** The live socket, or null. Re-read every time — a reconnect replaces it. */
@@ -158,6 +169,24 @@ function sessionState() {
     }
   );
 }
+
+// The connected account card's cache. Constructing it only stores the
+// callbacks: no profile is read and no socket is touched until a route asks.
+accountProfile = createAccountProfile({
+  getContext() {
+    return {
+      socket: currentSocket(),
+      state: sessionState(),
+      epoch: accountEpoch(),
+      identity: linkedIdentity(),
+    };
+  },
+  // Existing WhatsApp image transport: HTTPS WhatsApp origins, DNS and
+  // private-network validation, and the live session's proxy.
+  fetchImage(sock, url, init) {
+    return fetchWhatsAppImage(sock, url, init);
+  },
+});
 
 // --- helpers --------------------------------------------------------------
 
@@ -204,6 +233,29 @@ function parseDiagnosticsInput(raw) {
 // ===========================================================================
 // Overview
 // ===========================================================================
+
+// Reading About never triggers a network check. Only the explicit POST does.
+router.get("/updates", (_req, res) => {
+  const channel = updateChecker.getInstallChannel();
+  res.json({
+    success: true,
+    links: LINKS,
+    update: {
+      channel,
+      status: "idle",
+      currentVersion: require("../../package.json").version,
+      latestVersion: null,
+      url: channel === "play" ? LINKS.play : LINKS.releases,
+    },
+  });
+});
+
+router.post(
+  "/updates/check",
+  asyncRoute(async (_req, res) => {
+    res.json({ success: true, links: LINKS, update: await updateChecker.checkForUpdates() });
+  }),
+);
 
 router.get("/stats", (req, res) => {
   try {
@@ -1217,9 +1269,11 @@ router.post("/roles", (req, res) => {
     const jid = `${phone}@s.whatsapp.net`;
     if (action === "grant") grantRole(jid, role);
     else revokeRole(jid, role);
-    logger.info(`[Dashboard] ${action} ${role}: ${phone}`);
+    logger.info(`[Dashboard] ${action} ${role}`);
+    logger.debugOnly.info({ phone }, `[Dashboard] ${action} ${role}`);
     res.json({ success: true, roles: listRoles() });
   } catch (error) {
+    if (error?.code === "LINKED_ACCOUNT_OWNER") return badRequest(res, error.message);
     fail(res, error, "Error changing a role");
   }
 });
@@ -1915,7 +1969,17 @@ router.post(
       return res.status(409).json({ success: false, error: "There is nothing linked to unlink" });
     }
 
-    const state = await session.logout();
+    let state;
+    try {
+      state = await session.logout();
+    } catch (error) {
+      if (error.code !== "UNLINK_NOT_STARTED") throw error;
+      return res.status(503).json({
+        success: false,
+        error: error.message,
+        code: error.code,
+      });
+    }
     logger.warn("[Dashboard] WhatsApp account unlinked from the dashboard");
     res.json({ success: true, session: state });
   }),
@@ -1972,6 +2036,37 @@ router.post("/session/restart", (req, res, next) => {
   req.url = "/bot/restart";
   router.handle(req, res, next);
 });
+
+// --- Connected account profile ---------------------------------------------
+// Opening Connection may read only the connected account's own profile. The
+// service bounds, caches and context-guards every lookup; nothing here accepts
+// a JID or a URL from the browser.
+router.get(
+  "/account/profile",
+  asyncRoute(async (_req, res) => {
+    res.json({ success: true, profile: await accountProfile.get() });
+  }),
+);
+
+router.post(
+  "/account/profile/refresh",
+  asyncRoute(async (_req, res) => {
+    res.json({ success: true, profile: await accountProfile.refresh() });
+  }),
+);
+
+// The revision is opaque and bound to the current cache entry. An unknown,
+// expired or previous-account token is a plain 404 with no network.
+router.get(
+  "/account/photo",
+  asyncRoute(async (req, res) => {
+    const revision = typeof req.query.revision === "string" ? req.query.revision : "";
+    const picture = revision ? await accountProfile.photo(revision) : null;
+    if (!picture) return res.sendStatus(404);
+    res.set("X-Content-Type-Options", "nosniff");
+    res.type(picture.mime).send(picture.bytes);
+  }),
+);
 
 // ===========================================================================
 // Keyword auto-delete

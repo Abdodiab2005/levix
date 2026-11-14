@@ -15,7 +15,7 @@
   "deleteschedule.usage": "deleteschedule <id>",
   "digit.description": "Converts numbers between Arabic-Indic (٠١٢) and English (012) digits.",
   "digit.usage": "digit [en|ar] [number/text]   (or reply to a message)",
-  "gemini.description": "AI assistant with tools (web search, reading links, long-term memory). Sub-commands: add/send/clear/show for context, generate for images, del/delall to clear the conversation.",
+  "gemini.description": "AI assistant with web search, memory and help from this version's bundled Levix docs. Ask to create an image, read text aloud or transcribe a quoted voice note. Examples: !ai How do I back up Levix?; !ai Read this aloud. Sub-commands: add/send/clear/show for context, generate for images, del/delall to clear the conversation.",
   "gemini.usage": "gemini <text>\ngemini add <text>\ngemini send\ngemini show\ngemini clear\ngenerate <image description>\ndel   (clear this chat's conversation)\ndelall   (clear every conversation)",
   "group.description": "Main command for all group management actions.",
   "group.usage": "group <sub-command> [arguments]",
@@ -115,7 +115,7 @@
   "group.policy.usage": "policy\npolicy set <field> <value>\npolicy reset",
   "group.promote.description": "Promotes a member to admin.",
   "group.promote.usage": "promote @member",
-  "group.removeall.description": "Removes every non-admin member from the group, after confirmation.",
+  "group.removeall.description": "Not available: removing every member at once is disabled.",
   "group.removeall.usage": "removeall",
   "group.rules.description": "Shows the group rules.",
   "group.rules.usage": "rules",
@@ -136,5 +136,7 @@
   "group.warns.description": "Shows a member's warnings.",
   "group.warns.usage": "warns @member",
   "group.welcome.description": "Manages the group's welcome messages.",
-  "group.welcome.usage": "welcome [status]\nwelcome <on|off>\nwelcome add <welcome text>\nwelcome list\nwelcome delete <number>"
+  "group.welcome.usage": "welcome [status]\nwelcome <on|off>\nwelcome add <welcome text>\nwelcome list\nwelcome delete <number>",
+  "update.description": "Check for official Levix updates without installing anything.",
+  "update.usage": "update"
 }

@@ -17,6 +17,8 @@ const {
   getSenderCandidatesSync,
 } = require("../utils/permissions.cjs");
 const { evaluatePermissionLevel } = require("../utils/permissionLevel.cjs");
+const { resolveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
+const { accountEpoch } = require("../utils/storage.cjs");
 const normalizeJid = require("../utils/normalizeJid.cjs");
 const { langForCommand, withLang, t } = require("../utils/i18n.cjs");
 const { attachCommandDocs } = require("../utils/commandDocs.cjs");
@@ -78,16 +80,29 @@ function senderFor(msg, sock, groupMetadata) {
   const senderId = normalizeJid(msg?.key?.participant || remote);
   const senderIds = getSenderCandidatesSync(msg, sock);
   const senderCandidates = senderIds.length ? senderIds : [senderId].filter(Boolean);
-  const isOwner = Boolean(msg?.key?.fromMe) || senderCandidates.some((id) => isOwnerJidSync(id));
+  const isOwner =
+    Boolean(msg?.key?.fromMe) || senderCandidates.some((id) => isOwnerJidSync(id, groupMetadata));
   const groupAdmin =
     isGroup && senderCandidates.some((id) => isAdminInGroupSync(groupMetadata, id));
-  const isBotAdmin = isGroup && !isOwner && senderCandidates.some((id) => isBotAdminUserSync(id));
+  const isBotAdmin =
+    isGroup && !isOwner && senderCandidates.some((id) => isBotAdminUserSync(id, groupMetadata));
   return {
     isGroup,
     isOwner,
     isBotAdmin,
     isSenderAdmin: Boolean(isBotAdmin || groupAdmin),
   };
+}
+
+// The dispatcher passes the fresh roster it already read. A direct call reads
+// with `{ fresh: true }` so a stale admin flag cannot grant the sub-command.
+async function authMetadataFor(sock, msg, ctx) {
+  if (ctx && Object.prototype.hasOwnProperty.call(ctx, "authGroupMetadata")) {
+    return ctx.authGroupMetadata;
+  }
+  const jid = msg?.key?.remoteJid;
+  if (!jid || !String(jid).endsWith("@g.us")) return null;
+  return resolveGroupMetadata(sock, jid, { fresh: true });
 }
 
 /** The level check for one group sub-command. Exported for the permission matrix. */
@@ -102,7 +117,7 @@ module.exports = {
   subCommandAccess,
   senderFor,
 
-  async execute(sock, msg, args, body, groupMetadata) {
+  async execute(sock, msg, args, body, groupMetadata, ctx) {
     const subCommandName = args.shift()?.toLowerCase();
 
     if (!subCommandName) {
@@ -125,12 +140,15 @@ module.exports = {
     // `kick` looks like an English word. Judge it again against the
     // sub-command's, the way a direct `!kick` is judged.
     const lang = langForCommand(subCommand, args);
-    return withLang(lang, () => runSubCommand(sock, msg, args, body, groupMetadata, subCommand));
+    return withLang(lang, () =>
+      runSubCommand(sock, msg, args, body, groupMetadata, subCommand, ctx),
+    );
   },
 };
 
-async function runSubCommand(sock, msg, args, body, groupMetadata, subCommand) {
+async function runSubCommand(sock, msg, args, body, groupMetadata, subCommand, ctx) {
   const subCommandName = subCommand.name;
+  const authMetadata = await authMetadataFor(sock, msg, ctx);
 
   // Switched off from the dashboard: `!group kick` has to refuse it too, not
   // just the direct `!kick`.
@@ -140,7 +158,7 @@ async function runSubCommand(sock, msg, args, body, groupMetadata, subCommand) {
     });
   }
 
-  const sender = senderFor(msg, sock, groupMetadata);
+  const sender = senderFor(msg, sock, authMetadata);
   // The same level check the direct `!kick` path uses. A bot admin in the
   // group is included. A bot admin in a private chat is not, so this door
   // does not open a private chat the direct command already refuses.
@@ -157,7 +175,7 @@ async function runSubCommand(sock, msg, args, body, groupMetadata, subCommand) {
     });
   }
 
-  const isBotAdmin = isBotAdminInGroupSync(groupMetadata, sock);
+  const isBotAdmin = isBotAdminInGroupSync(authMetadata, sock);
   if (subCommand.userAdminRequired && !sender.isSenderAdmin && !sender.isOwner) {
     return await sock.sendMessage(msg.key.remoteJid, {
       text: t("bot.group.group.userAdminRequired"),
@@ -170,7 +188,15 @@ async function runSubCommand(sock, msg, args, body, groupMetadata, subCommand) {
   }
 
   try {
-    await subCommand.execute(sock, msg, args, body, groupMetadata);
+    const entryEpoch = ctx?.accountEpoch;
+    if (Number.isInteger(entryEpoch) && entryEpoch !== accountEpoch()) {
+      logger.debug("[group] skipped account work after account change");
+      return;
+    }
+    await subCommand.execute(sock, msg, args, body, groupMetadata, {
+      nested: true,
+      accountEpoch: ctx?.accountEpoch,
+    });
   } catch (error) {
     logger.error({ err: error, subCommand: subCommandName }, "Error executing a group sub-command");
     await sock.sendMessage(msg.key.remoteJid, {

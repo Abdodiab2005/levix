@@ -6,7 +6,7 @@ working with code in this repository.
 ## Project Overview
 
 **Levix** — a self-hosted personal WhatsApp bot built with Node.js and
-**Baileys v7**: a 69-command system, group moderation, an AI agent whose
+**Baileys v7**: a 70-command system, group moderation, an AI agent whose
 provider (Google Gemini / OpenAI-compatible / Anthropic) is selected in the
 panel with its own endpoint, API key and model, scheduled messages, and a web
 control panel that changes almost all of it live. The database is the source of
@@ -130,6 +130,14 @@ When importing:
 
 ## Commands to Run
 
+### Local tooling and downloads
+
+Use installed local tools and existing local caches. Ask the owner before
+downloading dependencies, tools, runtimes, artifacts, models or other files.
+Do not let a build or validation command download them implicitly.
+The owner has authorized dependency downloads on GitHub-hosted CI runners;
+workstation verification must remain offline.
+
 ### Development
 ```bash
 npm run build:frontend # compile React dashboard to public/dashboard
@@ -252,7 +260,8 @@ src/
 │   └── forward-tracking.middleware.js
 ├── routes/
 │   ├── dashboard.api.esm.js # everything the control panel reads/writes
-│   └── stickers.api.esm.js  # Sticker Studio library, packs, upload, and jobs
+│   ├── stickers.api.esm.js  # Sticker Studio library, packs, upload, and jobs
+│   └── reactions.api.esm.js # reaction rule management over src/automation/manage.js
 ├── panel/            # login throttling, session epochs, bounded session store
 │   ├── feedback.cjs  # validates + forwards Settings → Feedback to the developer
 │   ├── one-time-code.cjs # hashed 6-digit code, attempts, and the send throttle
@@ -267,6 +276,9 @@ src/
 │   ├── aiAgent.cjs   # The Gemini agent loop + provider dispatch (tools, memory, live status)
 │   ├── aiProviders.cjs # The openai/anthropic loops over their own wire formats
 │   ├── aiTools.cjs   # The tools the agent can call
+│   ├── aiDocs.cjs    # bounded search/open over the versioned public docs index
+│   ├── aiImage.cjs   # dedicated Gemini image bytes, shared by !generate and the image tool
+│   ├── aiMedia.cjs   # byte checks and per-sender rate/concurrency/deadline limits
 │   ├── aiToolAuth.cjs # who a tool call acts for, and whether they may
 │   ├── llmDiscovery.cjs # live, credential-scoped model discovery
 │   └── modelRegistry.cjs # model catalog and capability lookup
@@ -606,17 +618,25 @@ and blacklist middleware, the prefix lookup, every permission check) with no
 | `auto_delete_log` | opt-in text/caption copies of messages an auto-delete rule actually deleted (never media bytes) | `auto_delete_keep_days` (30), also capped at 5000 newest; wiped on unlink |
 | `moderation_flags` | members waiting for admin review after warn-limit FLAG (or a KICK the bot could not perform): canonical id, effective points (`warn_count`), last rule, time, reasons, `last_notified_at`, `repeat_points` | wiped on unlink |
 | `moderation_applied` | one row per moderated message id (`outcome`, `kicked`, `notified`) so a WhatsApp redelivery is applied once. Rows older than 7 days are swept | wiped on unlink |
+| `reaction_rules` | Free Core reaction rule configuration; disabled by default, no tier rule-count cap; managed only through `src/automation/manage.js` (panel Reaction rules screen, `/dashboard/api/reactions*`) | disabled on unlink and restore |
+| `reaction_events` / `reaction_state` / `reaction_invalidations` | bounded hashed transport claims, latest emoji transitions and deletion/edit markers; no original payload | short TTL, wiped on unlink, excluded from backups |
 
 `forward_scores` gains a row per forwarded message, so it expires; the sweep
 runs at boot and every six hours (`sweepExpired()` in `db.cjs`). Sticker files
 live under `<data>/stickers/<sha[0..2]>/` and are removed with the rows on
 unlink (`library.clearAll()`). `auto_delete_log` is swept on the same timer.
 
-The bot does **not** archive other people's messages. Nothing incoming is
+The bot does **not** permanently archive other people's messages. Nothing incoming is
 written beyond the forward counter, the sender's last-seen row, and — only
 when an auto-delete rule with `keepCopy` actually deletes a message — a
 text/caption copy in `auto_delete_log`. Deleted and edited messages are not
 captured otherwise.
+
+Phase 07a adds an opt-in RAM-only exception: enabled reaction-rule chats have a
+30-minute lookup capped at 500 sanitized originals and 8 MiB/64 KiB per entry.
+It downloads no media, strips quoted context and thumbnails, excludes hidden or
+disappearing content, and invalidates observed edits/deletes. Disconnect clears
+it. No original payload enters SQLite, logs or backups; 07a runs no actions.
 
 Long-term AI memory is **not** in the database — it lives in `memory/*.md`
 inside the data directory.
@@ -748,6 +768,9 @@ memory/*.md                   (long-term memory, capped)
 | `create_reminder` / `cancel_reminder` | a one-off message into this chat, through the scheduler — gated like `!schedule` / `!deleteschedule` |
 | `calculate` | the `!calc` parser (never `eval`) |
 | `speak` | the reply as a WhatsApp voice note, through the `!tts` synthesizer — gated like `!tts` |
+| `search_levix_docs` / `open_levix_doc_section` | local retrieval from the generated public docs index; all three providers cite the source section and version. No plans, agent instructions, arbitrary paths or private data |
+| `generate_image` | same dedicated Gemini image helper as `!generate`; gated by `gemini`, since `generate` is its alias |
+| `transcribe_audio` | this turn's direct/quoted audio through `stt.transcribe`; gated by `stt` and `ai_stt_enabled`; the transcript becomes chat-provider context |
 | `create_poll` | a native WhatsApp poll, through `!poll`'s builder (same 2-12 option limits) — gated like `!poll` |
 | `summarize_chat` | one-shot, tool-less model call over the stored conversation window, then up to 8 short facts into long-term memory — saves to a chat gated like `!memory add`, global scope needs the owner/admin role. Runs only when the user asks; the model cannot choose the saved text, only request the summary |
 | `get_datetime` | current time in `BOT_TIMEZONE` |
@@ -839,6 +862,29 @@ what says no:
 A new tool that writes, sends, schedules, or reads owner/admin data needs an
 `access` entry; `tests/ai-tool-authz.test.mjs` pins the rules.
 
+The backing command's disabled state also applies to tools. Audio is snapshotted
+inside `resolveCaller()` and held in a private WeakMap; no tool argument can pick
+a URL, message, caller or destination. Ordinary AI turns expose attached/quoted
+audio lazily to the transcription tool; the explicit `add`/`send` batch retains
+its existing media behavior. Speech output is Google TTS, image output is the
+dedicated Gemini model, and transcription follows `ai_stt_provider` (explicit
+choices fail closed on a missing key; `auto` retains its existing fallback).
+
+`aiMedia.cjs` limits model-initiated media to three attempts per sender per
+minute, one operation at a time, 8 MiB binary input/output, 3000-character
+speech/image prompts and a 12000-character transcript. The deadline follows
+`ai_tool_timeout_ms` up to 120 seconds. Abort checks prevent late sends; a
+non-cancellable operation stays busy until it finishes. Refused routing is
+never `sent: true`. Shared STT and TTS enforce their byte/text limits for
+explicit commands too; other AI media downloads are bounded at 64 MiB.
+
+`npm run docs:build` regenerates `src/services/levix-docs.generated.json` from
+README, SETUP, ANDROID, PRIVACY and the four command catalogs. Never edit it by
+hand. Run it after a source or package-version change; `npm run docs:check`
+and `tests/ai-docs.test.mjs` detect drift. The JSON is statically required so
+npm, Docker, Android and SEA carry the same offline index. Retrieved prose
+remains tool data; only fixed documentation policy belongs in the system prompt.
+
 **Sub-commands**
 - `!gemini <text>` / `!ask` / `!ai` — ask the agent
 - `!gemini add ...` → `!gemini send` — batch several messages into one request
@@ -913,6 +959,13 @@ sent. Audio and stickers take no caption, so their text follows separately.
 stops the previous timer for the same id first, or a weekly message would be
 sent twice after the first reconnect.
 
+**Delivery socket**: a job is always delivered through the scheduler's own live
+raw socket (`currentSock`, set by `initializeScheduledJobs()`, cleared by
+`stopAllScheduledJobs()`), captured once per attempt. The socket a caller passes
+to `scheduleNewJob()` only arms the job: a command's socket is a per-command
+reply proxy and must never deliver a later reminder. `!listschedules` and
+`!deleteschedule` act only on the current chat's jobs.
+
 ### 3. Group Moderation
 
 One policy object, `settings.moderationPolicy`, is resolved by `src/services/moderationPolicy.cjs`. Absent keys keep the defaults: simple mode, limit **3**, limit action **KICK**, feature actions **WARN** (anti-spam cannot be DELETE). Legacy `warn_system`, `antilink.action`, `media_control.action`, `antispam.action`, and `moderation.forbiddenWords.action` still apply when the policy field is absent. A write through `applyModerationPolicy` mirrors those legacy keys in the same `saveGroupSettings` call. `!setwarn max` writes the limit only and does not stamp an action.
@@ -947,6 +1000,12 @@ endpoint back without a reason that survives "this holds a whole WhatsApp
 account".
 
 ### 5. Utility Commands
+
+- **`!update`** — owner-only by default, checks official release metadata with
+  channel-aware GitHub/Play handling. No executable download or install.
+  Settings/About and Help/About expose official links; Play updates/reviews
+  remain optional native flows. `message_watermark` stays false by default and
+  retains its existing Free switch; Plus may hide it through the host hook.
 
 - **`!calc <معادلة>`** (`src/commands/calc.cjs`) — hand-written tokenizer +
   recursive-descent parser (never `eval`). Handles `+ - * / % ^ !`, parentheses,
@@ -1251,6 +1310,7 @@ the bot does can be changed from it, live:
 | Roles | bot owner / admin | `user_metadata` (same path as `!perm`) |
 | Tables | debts · warnings · notes · todos · users · schedules | read-only (schedules can be deleted) |
 | Auto-delete (JSON API; UI later) | keyword rules, counters, opt-in kept copies | `auto_delete_rules` / `auto_delete_log` via `/dashboard/api/auto-delete/*` |
+| Reaction rules (`#reactions`) | global reaction switch; create, edit, delete, enable and disable rules; statuses and the last outcome since start | `reaction_rules` and `reaction:enabled` via `/dashboard/api/reactions*` (`src/automation/manage.js`); outcomes stay in RAM (`src/automation/status.cjs`) |
 | Settings | API keys, model, timezone, delays, thumbnails, port, proxy | `bot_settings` (`setting:*`) |
 | Settings → password | the panel's own password | `bot_settings` (scrypt hash) |
 | Settings → recovery email | verified address for the forgot-password email code | `bot_settings` key `auth:recovery-email`, sealed with `vault.cjs`; masked in the API; never in settings export |
@@ -1609,6 +1669,8 @@ logger.debug('Debug info');
     Opt-in exception: an auto-delete rule with `keepCopy` stores the
     text/caption (never media bytes) of messages that rule actually deleted, in
     `auto_delete_log`, swept by `auto_delete_keep_days`.
+    Phase 07a adds a separate bounded RAM lookup only for enabled-rule chats;
+    see the database section above. It never writes original payloads to disk.
 14. **Don't add third-party media downloaders**: downloading from YouTube /
     TikTok / Facebook / Instagram violates those platforms' terms, so those
     commands were removed on purpose.
@@ -1666,11 +1728,19 @@ logger.debug('Debug info');
     active for the next phone that pairs. The panel password and the recovery
     email are not WhatsApp state, and unlink does not clear them. Sticker unlink
     deletes the `sticker_owners` rows as well as the stickers, packs and files,
-    so the next pairing starts a new `self` library.
+    so the next pairing starts a new `self` library. Work already running when
+    the account changes must not write afterwards: capture `accountEpoch()`
+    (`src/db/store.cjs`) when the work starts and skip account-scoped writes
+    once it moved. Unlink, logged-out and backup activation advance it; AI tools
+    refuse through `aiToolAuth.authorize()`. Socket listeners come from
+    `setupEventListeners()`, whose disposer `#detach` calls.
 27. **Compare WhatsApp identities with the shared helpers.** LIDs, phone-number
     JIDs and device suffixes can name the same user. Moderation and role gates
     must use `sameUser()`, `getSenderCandidates()` and `isAdminInGroup()` rather
     than exact string equality.
+    **Role recovery:** roles match exact identity or a verified current mapping.
+    An unverifiable legacy row needs a re-grant by phone number from the Roles
+    screen (or `!perm add`). The paired account is re-recorded on connection open.
 28. **An AI tool with a side effect declares `access`.** Name the command it
     stands in for (`{ command: "schedule" }`) and let `runTool()` enforce it
     against `ctx.caller`. Never read who is calling from the tool's arguments,

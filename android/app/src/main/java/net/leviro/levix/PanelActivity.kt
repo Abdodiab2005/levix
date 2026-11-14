@@ -40,6 +40,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import net.leviro.levix.billing.BillingHost
 import java.io.File
 import java.net.URI
 import java.nio.charset.StandardCharsets
@@ -59,6 +60,8 @@ class PanelActivity : AppCompatActivity() {
     private lateinit var sock: File
     private lateinit var bridgeJs: String
     private lateinit var stickerHost: StickerHost
+    private lateinit var billingHost: BillingHost
+    private lateinit var playExperience: PlayExperience
     private val stickerSources = StickerSources()
     private val stickerPickerIds = ArrayDeque<String>()
     private val backupSaveIds = ArrayDeque<String>()
@@ -98,6 +101,14 @@ class PanelActivity : AppCompatActivity() {
         callback?.onReceiveValue(
             WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data),
         )
+    }
+
+    // Play's flexible update flow. Registered during activity initialization,
+    // so a recreated activity receives the result instead of losing it.
+    private val startUpdateFlow = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        if (::playExperience.isInitialized) playExperience.onUpdateFlowResult(result.resultCode)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -179,6 +190,10 @@ class PanelActivity : AppCompatActivity() {
 
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
+        // Official links leave through an Intent; the panel WebView never
+        // grows a second window or a popup it would have to police.
+        web.settings.setSupportMultipleWindows(false)
+        web.settings.javaScriptCanOpenWindowsAutomatically = false
         web.settings.useWideViewPort = true
         web.settings.loadWithOverviewMode = true
         web.settings.textZoom = 100
@@ -239,6 +254,29 @@ class PanelActivity : AppCompatActivity() {
                 web.evaluateJavascript(
                     "window.__levixHostProgress(${JSONObject.quote(id)}, $bytes, $total)", null)
             } })
+        billingHost = BillingHost(
+            this,
+            { runOnUiThread {
+                web.evaluateJavascript(
+                    "window.dispatchEvent(new CustomEvent(\"levix-plus-purchase\"))", null)
+            } },
+            { id, result -> runOnUiThread {
+                web.evaluateJavascript(
+                    "window.__levixHostDone(${JSONObject.quote(id)}, ${result})", null)
+            } },
+        )
+        playExperience = PlayExperience(
+            this,
+            { runOnUiThread {
+                web.evaluateJavascript(
+                    "window.dispatchEvent(new CustomEvent(\"levix-play-update\"))", null)
+            } },
+            { id, result -> runOnUiThread {
+                web.evaluateJavascript(
+                    "window.__levixHostDone(${JSONObject.quote(id)}, ${result})", null)
+            } },
+            startUpdateFlow,
+        )
         web.addJavascriptInterface(
             PanelBridge(
                 sock,
@@ -249,6 +287,10 @@ class PanelActivity : AppCompatActivity() {
                 { runOnUiThread { finish() } },
                 stickerHost,
                 { runOnUiThread { pushUiPrefs() } },
+                billingHost,
+                this,
+                playExperience,
+                { raw -> openOfficialLink(raw) },
             ),
             "LevixHost",
         )
@@ -279,7 +321,18 @@ class PanelActivity : AppCompatActivity() {
                 request: WebResourceRequest,
             ): Boolean {
                 val url = request.url?.toString() ?: return true
-                return !isLoopback(url)
+                if (isLoopback(url)) return false
+                // Only a real user click on a main-frame GET can leave the
+                // app, and only through the fixed official destinations.
+                // Everything else (POSTs, scripted navigations, sub-frames,
+                // redirects) stays blocked in the WebView.
+                if (request.isForMainFrame &&
+                    request.method.equals("GET", ignoreCase = true) &&
+                    request.hasGesture()
+                ) {
+                    OfficialLinks.open(this@PanelActivity, url)
+                }
+                return true
             }
 
             override fun shouldInterceptRequest(
@@ -506,6 +559,34 @@ class PanelActivity : AppCompatActivity() {
         )
     }
 
+    /**
+     * Opens one of [OfficialLinks]' fixed destinations in another app. The
+     * bridge is called from a JavaScript thread; validation stays synchronous
+     * and the actual startActivity is posted to the main thread. A missing
+     * handler is a refusal, not an exception the page has to parse.
+     */
+    private fun openOfficialLink(raw: String): Boolean {
+        if (OfficialLinks.validate(raw) == null) return false
+        if (Looper.getMainLooper().isCurrentThread) return OfficialLinks.open(this, raw)
+        val latch = CountDownLatch(1)
+        val opened = booleanArrayOf(false)
+        runOnUiThread {
+            try {
+                opened[0] = OfficialLinks.open(this, raw)
+            } finally {
+                latch.countDown()
+            }
+        }
+        try {
+            if (!latch.await(SCREEN_CAPTURE_WAIT_MS, TimeUnit.MILLISECONDS)) {
+                HostLog.event("official link wait timed out")
+            }
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+        return opened[0]
+    }
+
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun applySystemBars() {
@@ -537,6 +618,10 @@ class PanelActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         pushUiPrefs()
+        if (::billingHost.isInitialized) billingHost.onResume()
+        // Only resumes Play's view of an update flow that already began; it
+        // never starts a check, a prompt or a download on its own.
+        if (::playExperience.isInitialized) playExperience.onResume()
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -546,6 +631,8 @@ class PanelActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (::billingHost.isInitialized) billingHost.destroy()
+        if (::playExperience.isInitialized) playExperience.destroy()
         stickerHost.destroy()
         stickerPickerIds.clear()
         backupSaveIds.clear()

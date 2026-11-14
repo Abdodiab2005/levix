@@ -75,7 +75,7 @@ Icon only. `label` is required. Same variants and sizes. `pressed` sets `aria-pr
 
 ### Field, Input, Textarea, Select, Checkbox, RadioGroup, Toggle
 
-`Field` wraps a control with `label`, `description`, and `error`. `Input`, `Textarea`, and `Select` are the native controls with the shared field style. `Checkbox` and `RadioGroup` are labelled choices. `Toggle` is the switch (`checked`, `onChange(checked)`, optional `label` and `description`).
+`Field` wraps a control with `label`, `description`, and `error`. `Input`, `Textarea`, and `Select` are the native controls with the shared field style. `Checkbox` and `RadioGroup` are labelled choices. `Toggle` is the switch (`checked`, `onChange(checked)`, optional `label` and `description`). When `htmlFor` is set, the error or description `<p>` uses id `${htmlFor}-message`; the control should set `aria-describedby` to that id (join with a space if it already has one). With no `htmlFor`, the `<p>` has no id.
 
 `Toggle` keeps a 44px-high hit target around its 44×26px visible track (20px thumb, equal 3px insets). Its button ref, `id`, `disabled`, `role="switch"`, and `aria-checked` work as native controls do.
 
@@ -87,7 +87,12 @@ Per-row settings stay as `Select` (with `SaveField`) or `Toggle`. A list filter 
 
 ```tsx
 <Field label={t("packName")} htmlFor="pack-name" error={nameError}>
-  <Input id="pack-name" value={name} onChange={(event) => setName(event.target.value)} />
+  <Input
+    id="pack-name"
+    aria-describedby={nameError ? "pack-name-message" : undefined}
+    value={name}
+    onChange={(event) => setName(event.target.value)}
+  />
 </Field>
 ```
 
@@ -284,8 +289,9 @@ A wrapping row. Put the search `Input` first (`className="min-w-48 flex-1"`), th
 ### StatusDot / Avatar / Disclosure
 
 `StatusDot` takes a `tone` and accessible `label`; it displays only a dot.
-`Avatar` takes a `src` and `name`, loads its picture lazily and falls back to the
+`Avatar` takes an optional `src` and a `name`, loads its picture lazily and falls back to the
 name initial on missing/failed images. Give it a new key when its source changes.
+An absent `src` renders only the fallback and makes no image request.
 `Disclosure` takes `summary` and children, composing Card and Button into an
 animated expandable region. Closed content is inert and hidden from assistive
 technology; reduced-motion preferences disable the transition. Put only

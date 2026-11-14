@@ -1,27 +1,27 @@
 {
   "pt-BR/dashboard": {
     "status": "draft",
-    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
-    "date": "2026-11-05",
-    "sha256": "0eb2c729c8f889fb9aa3799aaf2b11a9b2f7d304c26cb123adbcc8189e8f55a7"
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex; terminology pass over all 164 pt-BR and es-419 reaction strings by OpenCode deepseek-v4.1-flash on 2026-11-09, 5 es-419 fixes), pending ChatGPT review under Q-19; not native-speaker verified; Phase 07.5e connectionUnlinkIncomplete, connectionUnlinkIncompleteHint, and connectionUnlinkRetry added 2026-11-09 are a machine draft, not a new ChatGPT review; Phase 07.5f reactionAutomationChanged added 2026-11-09 is a machine draft, not a ChatGPT review; 2026-11-10 ChatGPT targeted Q-19 semantic review and corrections of Phase 07c/07.5 reaction or linked-owner strings; older strings and native-speaker certification remain outstanding; Phase 08c Plus billing strings added 2026-11-10 are a machine draft, pending Q-19 review; Phase 08h Plus feature strings added 2026-11-10 are a machine draft, not a new ChatGPT review; Phase 08 completion strings added 2026-11-10 (global memory, Plus backup preview, device-move notice) are a machine draft (Gemini Flash via agy), not a new ChatGPT review; 2026-11-11 ChatGPT targeted machine semantic review of Phase 09 update/About/help/review strings, including parameters and terminology; not blanket locale approval or native-speaker certification; 2026-11-11 ChatGPT targeted machine semantic review of the nine Phase 11A account-card strings, placeholders and terminology; not blanket locale approval or native-speaker certification",
+    "date": "2026-11-11",
+    "sha256": "45d1eae0cb263108a7ff4c587eab3182bec88b640f69e38db1419d48ca5630e7"
   },
   "pt-BR/gateway": {
     "status": "draft",
     "by": "ChatGPT targeted machine review (Q-19), including QR retry strings; not native-speaker certified; three Android recovery keys added on 2026-11-04 are not reviewed",
     "date": "2026-11-02",
-    "sha256": "e2189af0dceb1a0eadc3655e245730231903cfcd4b13164b0d2389fbb89b3e9d"
+    "sha256": "4fa1d3ba480fc748e6a23584f8ce2bd571fce3d18a4e938585899984e40cfd57"
   },
   "es-419/dashboard": {
     "status": "draft",
-    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
-    "date": "2026-11-05",
-    "sha256": "ffcdce560748945b3142373dab72ba77732c1b187a473f6c9de42fa9e6937635"
+    "by": "ChatGPT targeted machine review (Q-19), including Phase 04 consent strings; not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07c reaction-rule strings added 2026-11-09 are a machine draft (Gemini Flash via agy, spot-checked by OpenAI Codex; terminology pass over all 164 pt-BR and es-419 reaction strings by OpenCode deepseek-v4.1-flash on 2026-11-09, 5 es-419 fixes), pending ChatGPT review under Q-19; not native-speaker verified; Phase 07.5e connectionUnlinkIncomplete, connectionUnlinkIncompleteHint, and connectionUnlinkRetry added 2026-11-09 are a machine draft, not a new ChatGPT review; Phase 07.5f reactionAutomationChanged added 2026-11-09 is a machine draft, not a ChatGPT review; 2026-11-10 ChatGPT targeted Q-19 semantic review and corrections of Phase 07c/07.5 reaction or linked-owner strings; older strings and native-speaker certification remain outstanding; Phase 08c Plus billing strings added 2026-11-10 are a machine draft, pending Q-19 review; Phase 08h Plus feature strings added 2026-11-10 are a machine draft, not a new ChatGPT review; Phase 08 completion strings added 2026-11-10 (global memory, Plus backup preview, device-move notice) are a machine draft (Gemini Flash via agy), not a new ChatGPT review; 2026-11-11 ChatGPT targeted machine semantic review of Phase 09 update/About/help/review strings, including parameters and terminology; not blanket locale approval or native-speaker certification; 2026-11-11 ChatGPT targeted machine semantic review of the nine Phase 11A account-card strings, placeholders and terminology; not blanket locale approval or native-speaker certification",
+    "date": "2026-11-11",
+    "sha256": "6addecc336e162397ab6479acf534fce2115d26776ce3308163e94655b232261"
   },
   "es-419/gateway": {
     "status": "draft",
     "by": "ChatGPT targeted machine review (Q-19), including QR retry strings; not native-speaker certified; three Android recovery keys added on 2026-11-04 are not reviewed",
     "date": "2026-11-02",
-    "sha256": "c24b725238e74f640c016408de3fffd5c51e22c97982ddfeed4c479b73f904c2"
+    "sha256": "2e9f4a33979fecaca64db521a747b85c884547eadb159ca7e0b6a0220ddd081d"
   },
   "pt-BR/android": {
     "status": "reviewed",
@@ -37,27 +37,27 @@
   },
   "pt-BR/commands": {
     "status": "draft",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
-    "date": "2026-11-05",
-    "sha256": "afa348ecb3e99641d049892440b47899bd1c3ac085b4975cddbe2a6834868f9e"
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; ChatGPT targeted Q-19 semantic review approved the new Phase 06 help/media strings only (owner confirmed 2026-11-06), no material translation errors; older or otherwise unreviewed strings remain draft; not blanket locale approval or native-speaker certification; Phase 07.5a removeall strings added 2026-11-09 are a machine draft, not a ChatGPT review; 2026-11-11 ChatGPT targeted machine semantic review of Phase 09 update/About/help/review strings, including parameters and terminology; not blanket locale approval or native-speaker certification",
+    "date": "2026-11-11",
+    "sha256": "56eaa65131eaee969bd65016b40edbc16ec108f89069b686776ed1546bc25ca9"
   },
   "pt-BR/bot/ai": {
-    "status": "reviewed",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
-    "date": "2026-11-02",
-    "sha256": "dc66d793b7ee1a4144b3f5c99be06eb3fd1b24529de242a1473c72bedee64e56"
+    "status": "draft",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; ChatGPT targeted Q-19 semantic review approved the new Phase 06 help/media strings only (owner confirmed 2026-11-06), no material translation errors; older or otherwise unreviewed strings remain draft; not blanket locale approval or native-speaker certification; ChatGPT reviewed gemini.requestTooLarge only (request-budget fix, 2026-11-13); existing draft status retained",
+    "date": "2026-11-13",
+    "sha256": "fe29436ead3bd884bfb78a06d429d62fe3841d3fb2ba6d37c93786a0f645010c"
   },
   "pt-BR/bot/core": {
     "status": "draft",
-    "by": "ChatGPT targeted machine review of Phase 05 status.short and message.routeFailed only; other Phase 05 strings remain draft; not native-speaker certified",
-    "date": "2026-11-05",
-    "sha256": "367cc8c27a6478660b74c46590fe45f57e87ba8e39d69e7281e5a4fb0f983560"
+    "by": "ChatGPT targeted machine review of Phase 05 status.short and message.routeFailed only; other Phase 05 strings remain draft; not native-speaker certified; 2026-11-11 ChatGPT targeted machine semantic review of Phase 09 update/About/help/review strings, including parameters and terminology; not blanket locale approval or native-speaker certification",
+    "date": "2026-11-11",
+    "sha256": "1b2dafef3ffd95b53fc30b3bf677732342299147de538bbad7fe21ed36803118"
   },
   "pt-BR/bot/group": {
     "status": "draft",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07.5a removeall strings added 2026-11-09 are a machine draft, not a ChatGPT review",
     "date": "2026-11-05",
-    "sha256": "9cfbaa4dc9e080a54dd8f74a734c8989b09711bb6bf95836dfda874bb4836317"
+    "sha256": "9f5fc01d090d6357ef047d654222ba43a10461a09b07c33199c54d7a1f209702"
   },
   "pt-BR/bot/help": {
     "status": "reviewed",
@@ -91,33 +91,33 @@
   },
   "pt-BR/bot/tools": {
     "status": "draft",
-    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review",
-    "date": "2026-11-02",
-    "sha256": "776a56dc49dc17496e9718f99f2197dc1c5cfc642cecaba7e3b66d965bc247c7"
+    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review; Phase 07.5d perm.selfOwner is a machine draft, pending Q-19 review; 2026-11-10 ChatGPT targeted Q-19 semantic review and corrections of Phase 07c/07.5 reaction or linked-owner strings; older strings and native-speaker certification remain outstanding",
+    "date": "2026-11-10",
+    "sha256": "1d4ce0a551148552f8fcc84ff3abb8a4dee4bb41b69f07cbc83f6a27698ba6f7"
   },
   "es-419/commands": {
     "status": "draft",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
-    "date": "2026-11-05",
-    "sha256": "6cea0c08f677beea73cabeab59da942db714294f3497e620f48e7a816a275e05"
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; ChatGPT targeted Q-19 semantic review approved the new Phase 06 help/media strings only (owner confirmed 2026-11-06), no material translation errors; older or otherwise unreviewed strings remain draft; not blanket locale approval or native-speaker certification; Phase 07.5a removeall strings added 2026-11-09 are a machine draft, not a ChatGPT review; 2026-11-11 ChatGPT targeted machine semantic review of Phase 09 update/About/help/review strings, including parameters and terminology; not blanket locale approval or native-speaker certification",
+    "date": "2026-11-11",
+    "sha256": "950368187b217da8f9c2ab1962b033a3e5287680f471a220a1f455c77ecadcd8"
   },
   "es-419/bot/ai": {
-    "status": "reviewed",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified",
-    "date": "2026-11-02",
-    "sha256": "6243abf50d9b612666cdb7f8de3c3e2fd32e0f55d5f1263472d297f6d279a31b"
+    "status": "draft",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; ChatGPT targeted Q-19 semantic review approved the new Phase 06 help/media strings only (owner confirmed 2026-11-06), no material translation errors; older or otherwise unreviewed strings remain draft; not blanket locale approval or native-speaker certification; ChatGPT reviewed gemini.requestTooLarge only (request-budget fix, 2026-11-13); existing draft status retained",
+    "date": "2026-11-13",
+    "sha256": "e90d2d4b9847a8885209651e171fe6c205a9916c6e171ce66679db4dee77443b"
   },
   "es-419/bot/core": {
     "status": "draft",
-    "by": "ChatGPT targeted machine review of Phase 05 status.short and message.routeFailed only; other Phase 05 strings remain draft; not native-speaker certified",
-    "date": "2026-11-05",
-    "sha256": "b70b6bc6d82578c729d69235fa2c95fba178131ba234374d35b9ddd64ccab5c5"
+    "by": "ChatGPT targeted machine review of Phase 05 status.short and message.routeFailed only; other Phase 05 strings remain draft; not native-speaker certified; 2026-11-11 ChatGPT targeted machine semantic review of Phase 09 update/About/help/review strings, including parameters and terminology; not blanket locale approval or native-speaker certification",
+    "date": "2026-11-11",
+    "sha256": "007ee66ccb403b7990fe0b2ac24b8fd5bcf9e799ae004a708921f2af3b89a931"
   },
   "es-419/bot/group": {
     "status": "draft",
-    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review",
+    "by": "ChatGPT targeted sampled review (Q-19, #120; autoschedule finding fixed); machine translation, not native-speaker certified; Phase 05 strings added 2026-11-05 are a machine draft, not a new ChatGPT review; Phase 07.5a removeall strings added 2026-11-09 are a machine draft, not a ChatGPT review",
     "date": "2026-11-05",
-    "sha256": "fae758b047460846a836743e528b1dbf5d2d3b87abde4323cec36a5edf29be45"
+    "sha256": "9fbbe0c7902c55cf37446ff2fa4e20f76ebf4efd291de3e165cc31ea89f7f31d"
   },
   "es-419/bot/help": {
     "status": "reviewed",
@@ -151,8 +151,8 @@
   },
   "es-419/bot/tools": {
     "status": "draft",
-    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review",
-    "date": "2026-11-02",
-    "sha256": "7b59cfcbd43fe5db630173c23a6a4d60428d200ceea3073206a9e5ebc770fc9c"
+    "by": "machine draft (Grok); keys added after the ChatGPT Q-19 review are not yet AI-reviewed; earlier content was in that targeted review; Phase 07.5d perm.selfOwner is a machine draft, pending Q-19 review; 2026-11-10 ChatGPT targeted Q-19 semantic review and corrections of Phase 07c/07.5 reaction or linked-owner strings; older strings and native-speaker certification remain outstanding",
+    "date": "2026-11-10",
+    "sha256": "4a79cffa557a704b3bb9a6ce0ecb92afb738235c87661831a06cb3951d95b9c0"
   }
 }

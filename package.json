@@ -1,6 +1,6 @@
 {
   "name": "levix-bot",
-  "version": "4.9.2",
+  "version": "5.0.0-beta.1",
   "description": "A self-hosted personal WhatsApp bot with an AI agent, group moderation and a web control panel.",
   "main": "src/index.js",
   "scripts": {
@@ -13,6 +13,8 @@
     "check:fix": "biome check --write .",
     "i18n:build": "node scripts/i18n.mjs build",
     "i18n:check": "node scripts/i18n.mjs check",
+    "docs:build": "node scripts/build-ai-docs.mjs build",
+    "docs:check": "node scripts/build-ai-docs.mjs check",
     "brand:assets": "node scripts/build-brand-assets.mjs",
     "build": "npm run build:frontend",
     "build:frontend": "node scripts/build-frontend.mjs",
@@ -21,7 +23,8 @@
     "validate:tarball": "node scripts/validate-tarball.mjs",
     "validate:sea": "node scripts/validate-sea.mjs",
     "validate:docker": "bash scripts/validate-docker.sh",
-    "validate:recovery": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/validate-recovery-contract.mjs"
+    "validate:recovery": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/validate-recovery-contract.mjs",
+    "scan:public": "node scripts/scan-public-artifacts.mjs"
   },
   "keywords": [
     "whatsapp",

@@ -26,6 +26,7 @@ export type SessionState =
 
 export interface SessionStatus {
   state: SessionState;
+  since?: number | null;
   status?: string;
   qr?: string | null;
   pairingCode?: string | null;
@@ -354,6 +355,96 @@ export interface AutoDeleteLogEntry {
   mediaType: string;
   mode: string;
   createdAt: number;
+}
+
+export type ReactionTransition = "add" | "change" | "remove";
+export type ReactionOriginalType =
+  | "text"
+  | "voice"
+  | "audio"
+  | "image"
+  | "video"
+  | "document"
+  | "sticker";
+export type ReactionSenderRole = "any" | "owner" | "bot_admin" | "group_admin" | "member";
+export type ReactionAction = "stt" | "ping";
+export type ReactionDestinationMode = "same_chat" | "owner_private";
+export type ReactionStatusCode =
+  | "AUTOMATION_OFF"
+  | "RULE_OFF"
+  | "RULE_INVALID"
+  | "NOT_CONNECTED"
+  | "ACTION_DISABLED"
+  | "STT_DISABLED"
+  | "STT_KEY_MISSING"
+  | "OWNER_NOT_LINKED"
+  | "CANDIDATE_LIMIT"
+  | "READY";
+
+export interface ReactionDefinition {
+  version: 1;
+  emoji: string;
+  transitions: ReactionTransition[];
+  originalTypes: ReactionOriginalType[];
+  senders: {
+    role: ReactionSenderRole;
+    ids: string[];
+  };
+  action: ReactionAction;
+  destination: {
+    mode: ReactionDestinationMode;
+  };
+}
+
+export interface ReactionRuntime {
+  lastCode: string | null;
+  lastAt: number | null;
+  counts: Record<string, number>;
+}
+
+/** Keys match the 07b action-limit literals the management facade exports. */
+export interface ReactionLimits {
+  perReactor: number;
+  perChat: number;
+  perRule: number;
+  windowMs: number;
+  globalJobs: number;
+  candidateLimit: number;
+}
+
+export interface ReactionRule {
+  id: string;
+  revision: string;
+  chatJid: string;
+  chatName: string;
+  priority: number;
+  enabled: boolean;
+  enabledAt: number | null;
+  definition: ReactionDefinition;
+  valid: boolean;
+  statuses: ReactionStatusCode[];
+  overlaps: string[];
+  runtime: ReactionRuntime;
+}
+
+export interface ReactionIssue {
+  field: string;
+  code: string;
+}
+
+export interface ReactionRuleWrite {
+  chatJid: string;
+  priority: number;
+  definition: ReactionDefinition;
+}
+
+export interface ReactionOverview {
+  success: boolean;
+  automation: { enabled: boolean; revision: string };
+  connection: { connected: boolean };
+  owner: { linked: boolean };
+  limits: ReactionLimits;
+  rules: ReactionRule[];
 }
 
 export interface Capabilities {

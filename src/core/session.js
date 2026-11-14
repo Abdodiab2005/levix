@@ -30,7 +30,8 @@
 //   disconnected      closed and not retrying. Startable again by hand.
 //   retry_exhausted   the retry schedule ran out. Levix keeps running.
 //   logged_out        WhatsApp dropped the pairing; credentials were cleared.
-//   error             starting the socket threw.
+//   error             starting the socket threw, or an unlink could not clear
+//                     credentials or account data (reason `unlink_incomplete`).
 //
 // THE RECONNECT POLICY
 // --------------------
@@ -50,18 +51,20 @@ import { DisconnectReason } from "@whiskeysockets/baileys";
 import { createRequire } from "module";
 import { RETRY_SCHEDULE_MS } from "../config/constants.js";
 import { bootstrapAdmins, bootstrapOwners } from "../utils/permissions.esm.js";
+import { clearRecentMessages } from "../utils/recentMessageCache.esm.js";
 import {
-  clearAuthState,
   clearAutoDeleteOnUnlink,
   clearWhatsAppDirectory,
   deleteAllChatHistories,
   deleteQrCode,
+  advanceAccountEpoch,
   isPairedSession,
   pauseAllSchedules,
   saveQrCode,
 } from "../utils/storage.esm.js";
 import { classifyDisconnect, describeCloseError, handleConnectionOpen } from "./connection.js";
 import { setupEventListeners } from "./events.js";
+import { disposeReactionIntake } from "../automation/reactions.js";
 import {
   createProxyAgents,
   describeProxyFailure,
@@ -73,7 +76,12 @@ import { createWhatsAppSocket, groupMetadataCache } from "./socket.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
+const store = require("../db/store.cjs");
 const consent = require("../legal/consent.cjs");
+
+const UNLINK_INCOMPLETE_DETAIL =
+  "Unlink did not finish: the stored WhatsApp credentials could not be deleted. " +
+  "Press Unlink again to retry.";
 
 /**
  * How often a session waiting for the Terms re-reads the acceptance record.
@@ -83,39 +91,40 @@ const consent = require("../legal/consent.cjs");
 const CONSENT_POLL_MS = 5000;
 
 function clearAccountScopedState() {
+  // In-flight one-off deliveries compare this generation and leave a paused
+  // job paused instead of writing sent or failed after the account is gone.
+  require("../../scheduler.cjs").bumpScheduleGeneration();
   clearWhatsAppDirectory();
   deleteAllChatHistories();
   pauseAllSchedules();
   bootstrapOwners([]);
   bootstrapAdmins([]);
 
-  try {
-    require("../utils/memory.cjs").clearAllMemoryFiles();
-  } catch (error) {
-    logger.warn({ err: error }, "[Session] failed to clear AI memory after unlink");
-  }
+  // Persistent account data is required cleanup. Any failure keeps unlink
+  // pending so the next attempt repeats the whole cleanup before pairing.
+  require("../utils/memory.cjs").clearAllMemoryFiles();
   try {
     require("../commands/gemini.cjs").clearAllContextBuffers();
   } catch (error) {
     logger.warn({ err: error }, "[Session] failed to clear AI context buffers after unlink");
   }
-  try {
-    // Same boundary as the memory wipe above: the next phone that pairs must
-    // not inherit this account's stickers, packs, or files.
-    require("../stickers/library.cjs").clearAll();
-  } catch (error) {
-    logger.warn({ err: error }, "[Session] failed to clear the sticker library after unlink");
-  }
+  // Same boundary as the memory wipe above: the next phone that pairs must
+  // not inherit this account's stickers, packs, or files.
+  require("../stickers/library.cjs").clearAll();
   try {
     groupMetadataCache.flushAll();
   } catch {}
   try {
-    // Copies of deleted messages and the counters are account-derived; the
-    // rules themselves are operator configuration and stay.
-    clearAutoDeleteOnUnlink();
-  } catch (error) {
-    logger.warn({ err: error }, "[Session] failed to clear auto-delete copies after unlink");
-  }
+    clearRecentMessages();
+  } catch {}
+  // Copies of deleted messages and the counters are account-derived; the
+  // rules themselves are operator configuration and stay.
+  clearAutoDeleteOnUnlink();
+  // Second advance. Logout and a logged-out close already moved the epoch
+  // before their first await. Work that sampled that value during the logout
+  // wait, then finishes after this wipe, must still drop its write.
+  advanceAccountEpoch();
+  require("../extensions/host.cjs").host.accountReset("unlink");
 }
 
 // Baileys' `end()` awaits `ws.close()`, which waits for the socket's own
@@ -220,6 +229,7 @@ export class WhatsAppSession {
   #since = Date.now();
   #socket = null;
   #clearAll = null;
+  #fenceAuth = null;
 
   // Bumped for every socket. Events carrying an older number are ignored, which
   // is how a replaced socket stops being able to affect anything.
@@ -232,6 +242,27 @@ export class WhatsAppSession {
   // A start() already in flight. Concurrent callers await it instead of
   // creating a second socket.
   #starting = null;
+
+  // Set when an in-flight #open was overtaken and the latest intent is still
+  // "be running". The start() that was waiting on that attempt consumes it.
+  #resumeAfterStart = false;
+
+  // Generation at which stop or shutdown recorded intent. A resume must not
+  // start when this is newer than the overtaken attempt.
+  #terminalGeneration = 0;
+
+  // Per-socket disposer from setupEventListeners. A test fake may return
+  // undefined; only a function is stored.
+  #listenerDisposers = new WeakMap();
+
+  // A logout() already in flight. Refuses concurrent start() calls and
+  // deduplicates concurrent unlinks while teardown is awaited.
+  #loggingOut = null;
+
+  // The credential wipe did not finish. Paired with bot_settings
+  // `auth:unlink-pending`: start stays refused until a later logout() deletes
+  // the credentials. The flag also covers a marker that could not be written.
+  #unlinkFailed = false;
 
   // True while this attempt is an unpaired pairing attempt that has not yet
   // been scanned. Its closes are terminal by design.
@@ -268,8 +299,9 @@ export class WhatsAppSession {
     // The wipe of last resort. A socket hands us its own clearAll(), but a
     // session that is disconnected — 403, 405, retries exhausted, or simply
     // restarted — has no socket to ask, and that is exactly when an operator
-    // wants to unlink and pair a different account.
-    clearCredentials = clearAuthState,
+    // wants to unlink and pair a different account. Looked up on the store at
+    // call time so a retry sees the live deleter.
+    clearCredentials = () => store.authClearAll(),
     initializeScheduledJobs = null,
     stopScheduledJobs = null,
     // Read at socket-creation time, never cached at import: the operator can
@@ -354,14 +386,20 @@ export class WhatsAppSession {
       attempt: this.#attempt,
       maxAttempts: this.retryDelaysMs.length,
       nextRetryAt: this.#nextRetryAt,
-      canStart: !BUSY_STATES.has(this.#state) && !this.#shuttingDown,
+      canStart:
+        !BUSY_STATES.has(this.#state) &&
+        !this.#loggingOut &&
+        !this.#shuttingDown &&
+        !this.#incompleteUnlink(),
       canStop: BUSY_STATES.has(this.#state),
       // Not "is it connected": a pairing that WhatsApp has refused (403, 405)
       // leaves dead credentials behind, and unlinking is the only way out of
       // it. The one state with nothing to unlink is the one that just did.
-      canUnlink: this.#state !== S.LOGGED_OUT && !this.#shuttingDown,
+      // ERROR unlink_incomplete stays unlinkable: that is the retry.
+      canUnlink: this.#state !== S.LOGGED_OUT && !this.#loggingOut && !this.#shuttingDown,
       // Finished WhatsApp pairing — resume/connect, do not offer QR/pair.
-      linked: this.#state !== S.LOGGED_OUT && this.isLinked(),
+      // An unfinished wipe must not claim the surviving credentials are usable.
+      linked: this.#state !== S.LOGGED_OUT && !this.#incompleteUnlink() && this.isLinked(),
       // Redacted — never the password. Null when the socket is direct.
       proxy: this.#proxyLabel,
       // True when the saved proxy settings differ from what the live socket was
@@ -410,8 +448,13 @@ export class WhatsAppSession {
       this.#wasActiveBeforeOffline = BUSY_STATES.has(this.#state) || this.#state === S.PAUSED;
       this.#cancelRetry();
 
+      // #destroySocket() bumps the generation only when a socket exists.
+      // createSocket can still be in flight with #socket null; that attempt
+      // has to become stale too, or #open would adopt it after the pause.
       if (this.#socket) {
         await this.#destroySocket();
+      } else {
+        this.#generation += 1;
       }
       this.#transition(S.PAUSED, {
         reason: "offline",
@@ -435,21 +478,36 @@ export class WhatsAppSession {
   }
 
   /**
-   * Bring the session up. Idempotent: if a socket exists or is being made, this
-   * returns the state it is already in and creates nothing.
+   * Bring the session up. Idempotent while a socket exists or one is being
+   * made, except when that attempt was overtaken and the session should still
+   * be running: then this opens one replacement.
    */
   async start({ reason = "manual", method, phone } = {}) {
     if (this.#shuttingDown) return this.getState();
+
+    if (this.#loggingOut) {
+      await this.#loggingOut.catch(() => {});
+      return this.getState();
+    }
+
+    // Before pairing intent and before #open. A marker left by a failed wipe,
+    // including one written by a previous process, must not open a socket.
+    if (this.#refuseIncompleteUnlink()) return this.getState();
 
     if (this.#state === S.PAUSED && !this.#isOnline) {
       return this.getState();
     }
 
+    let resume = false;
     if (this.#starting) {
       await this.#starting.catch(() => {});
-      return this.getState();
+      resume = this.#resumeAfterStart;
+      this.#resumeAfterStart = false;
+      if (!resume || this.#shuttingDown || this.#loggingOut || !this.#isOnline) {
+        return this.getState();
+      }
     }
-    if (BUSY_STATES.has(this.#state) && this.#state !== S.PAUSED) return this.getState();
+    if (!resume && BUSY_STATES.has(this.#state) && this.#state !== S.PAUSED) return this.getState();
 
     // A known pairing reuses the stored session. Do not request a pairing code.
     if (this.isLinked()) {
@@ -483,9 +541,10 @@ export class WhatsAppSession {
     this.#stopConsentWatch();
     this.#attempt = 0;
 
-    // Wait for an in-flight start, or we would tear down a socket that has not
-    // been assigned yet and then have it appear behind us.
-    if (this.#starting) await this.#starting.catch(() => {});
+    // Intent before the wait. Otherwise a resume waiting on the same attempt
+    // can install a socket after stop has already looked and found none.
+    await this.#settleStarts();
+    if (this.#loggingOut) await this.#loggingOut.catch(() => {});
 
     // Again after the await: a close that landed while we were waiting is
     // entitled to schedule a retry, and it would outlive this stop.
@@ -495,6 +554,9 @@ export class WhatsAppSession {
     await this.#destroySocket();
     this.#clearQr();
     this.#pairing = false;
+    // A failed unlink stays in ERROR. Idle would look startable while the
+    // credentials and the marker are still there.
+    if (this.#incompleteUnlink()) return this.#failUnlink();
     this.#transition(state, { reason, detail });
     return this.getState();
   }
@@ -504,22 +566,97 @@ export class WhatsAppSession {
    * then clear the credentials whether or not that call got through.
    */
   async logout() {
-    // A start that is still creating its socket has to finish first: otherwise
-    // #open() assigns a live socket after this method has already declared the
-    // session logged out, and the account is unlinked with a connection still
-    // running.
+    if (this.#loggingOut) {
+      await this.#loggingOut;
+      return this.getState();
+    }
+    // The snapshot is taken after this promise settles. #runLogout resolves
+    // while the flag is still set, and canUnlink is false for that whole time.
+    let release = () => {};
+    let reject = () => {};
+    const done = new Promise((resolve, fail) => {
+      release = resolve;
+      reject = fail;
+    });
+    // The initiating caller gets the rejection below; concurrent callers share
+    // it through done. A single caller must not leave an unhandled rejection.
+    done.catch(() => {});
+    this.#loggingOut = done;
+    try {
+      await this.#runLogout();
+    } catch (error) {
+      reject(error);
+      throw error;
+    } finally {
+      this.#loggingOut = null;
+      release();
+    }
+    return this.getState();
+  }
+
+  /** Boot recovery before any pairing is resumed. Returns whether unlink still blocks start. */
+  async recoverPendingUnlink() {
+    let pending;
+    try {
+      pending = store.isUnlinkPending();
+    } catch (error) {
+      this.log.error({ err: error }, "[Session] could not read the pending-unlink marker at boot");
+      this.#failUnlink();
+      return true;
+    }
+    if (!pending) return false;
+    try {
+      await this.logout();
+    } catch (error) {
+      if (error.code !== "UNLINK_NOT_STARTED") throw error;
+      // The saved intent still blocks pairing even if storage refuses this retry.
+      this.#failUnlink();
+    }
+    return this.#refuseIncompleteUnlink();
+  }
+
+  async #runLogout() {
+    // Persist intent before changing the epoch, timers or socket. If this fails,
+    // restart may safely resume the pairing: WhatsApp was never asked to log out.
+    const retry = this.#incompleteUnlink();
+    try {
+      store.markUnlinkPending();
+    } catch (cause) {
+      this.log.error({ err: cause }, "[Session] could not start unlink");
+      const error = new Error(
+        "Unlink could not start: Levix could not save its progress. " +
+          "Check free storage and try again.",
+        { cause },
+      );
+      error.code = "UNLINK_NOT_STARTED";
+      throw error;
+    }
+
+    // Before the first await, so work already running for this account drops
+    // its account-scoped writes. Wait for an in-flight start without bumping
+    // the generation, so that start adopts its socket and logout tears it down.
+    this.#resumeAfterStart = false;
+    advanceAccountEpoch();
     this.#cancelRetry();
     this.#stopConsentWatch();
     if (this.#starting) await this.#starting.catch(() => {});
 
     const sock = this.#socket;
     const clearAll = this.#clearAll;
+    const fence = this.#fenceAuth;
+    this.#socket = null;
+    this.#clearAll = null;
+    this.#fenceAuth = null;
+    this.#pairing = false;
 
     // Stale from here on: whatever the socket emits while logging out is not
     // allowed to schedule anything.
     this.#generation += 1;
     this.#cancelRetry();
     this.#attempt = 0;
+    // Reaction work for this socket must stop now, not after the logout wait below.
+    if (sock) disposeReactionIntake(sock);
+    this.#fence(fence);
 
     if (sock) {
       try {
@@ -537,30 +674,34 @@ export class WhatsAppSession {
       } catch {}
     }
 
-    // clearAll() belongs to the socket that was alive; when there wasn't one,
-    // the store-level wipe does the same job.
-    try {
-      await (clearAll ? clearAll() : this.clearCredentials?.());
-    } catch (error) {
-      this.log.error({ err: error }, "[Session] failed to clear credentials");
+    // If any socket was installed while teardown was awaited, fence and tear
+    // it down before and after wiping credentials.
+    if (this.#starting) await this.#starting.catch(() => {});
+    if (this.#socket || this.#fenceAuth) {
+      await this.#destroySocket();
+    }
+
+    // The marker commits before the credential transaction, so a rolled-back
+    // delete cannot erase it. The first attempt uses the socket's clearAll.
+    // A retry uses the store wipe: that clearAll belongs to a socket we stopped.
+    const wiped = await this.#wipeCredentials(clearAll, { retry });
+
+    if (this.#starting) await this.#starting.catch(() => {});
+    if (this.#socket || this.#fenceAuth) {
+      await this.#destroySocket();
     }
 
     this.#socket = null;
     this.#clearAll = null;
+    this.#fenceAuth = null;
     this.#pairing = false;
     this.#clearQr();
     this.#stopJobs();
-    try {
-      this.clearDirectory?.();
-    } catch (error) {
-      this.log.warn({ err: error }, "[Session] failed to clear WhatsApp directory after unlink");
-    }
-
-    this.#transition(S.LOGGED_OUT, {
+    if (!wiped) return this.#failUnlink();
+    return this.#finishUnlink({
       reason: "unlinked",
       detail: "The WhatsApp account was unlinked. Start a session to pair a new one.",
     });
-    return this.getState();
   }
 
   /**
@@ -583,7 +724,8 @@ export class WhatsAppSession {
     this.#shuttingDown = true;
     this.#cancelRetry();
     this.#stopConsentWatch();
-    if (this.#starting) await this.#starting.catch(() => {});
+    await this.#settleStarts();
+    if (this.#loggingOut) await this.#loggingOut.catch(() => {});
     this.#cancelRetry();
     await this.#destroySocket();
     // A code left in the database would be served by GET /qr on the next boot,
@@ -597,6 +739,10 @@ export class WhatsAppSession {
   // -------------------------------------------------------------------------
 
   async #open({ reason }) {
+    // Before the Terms gate. The retry timer calls #open() directly, and an
+    // unfinished wipe must not create a socket on any of those paths.
+    if (this.#refuseIncompleteUnlink()) return;
+
     // The Terms gate (ADR-006). First, before the offline check and before any
     // socket: start(), the retry timer, network restore, !restart and the
     // panel all arrive here, so this is the one place a missing acceptance can
@@ -616,9 +762,9 @@ export class WhatsAppSession {
     this.#clearQr();
     this.#transition(S.STARTING, { reason });
 
-    // Anything that invalidates this attempt — stop, logout, shutdown — bumps
-    // the generation. Creating a socket is asynchronous, so the attempt has to
-    // recheck that it is still the current one when it comes back.
+    // Stop and shutdown bump the generation before they wait. Offline does too.
+    // Logout does not: it adopts this socket, then tears it down. Creating a
+    // socket is asynchronous, so the attempt rechecks when it comes back.
     const startedAt = this.#generation;
 
     // Read per attempt, so changing the proxy and pressing Reconnect is all it
@@ -647,48 +793,61 @@ export class WhatsAppSession {
     this.#proxyConfig = proxyConfig;
 
     let created;
+    let createError = null;
     try {
       created = await this.createSocket({
         proxy,
         pairingCode: !this.isLinked() && this.#pairingIntent.method === "pairing",
       });
     } catch (error) {
-      this.log.error({ err: error }, "[Session] failed to create the WhatsApp socket");
+      createError = error;
+    }
+
+    if (this.#shuttingDown || this.#generation !== startedAt) {
+      // Overtaken, including by offline while createSocket was still running.
+      // Adopt nothing and do not turn a pause into ERROR. A rejection has no
+      // socket to throw away.
+      if (created?.sock) {
+        this.log.warn("[Session] discarding a socket whose start was overtaken");
+        this.#fence(created.fence);
+        this.#detach(created.sock);
+        try {
+          await withTimeout(created.sock?.end?.(undefined), SOCKET_CLOSE_TIMEOUT_MS);
+        } catch {}
+      }
+      this.#noteOvertakenStart(startedAt);
+      return;
+    }
+
+    if (createError) {
+      this.log.error({ err: createError }, "[Session] failed to create the WhatsApp socket");
       this.#transition(S.ERROR, {
         reason: "socket_failed",
         detail:
-          describeProxyFailure(error, proxyConfig) ||
-          error?.message ||
+          describeProxyFailure(createError, proxyConfig) ||
+          createError?.message ||
           "Could not create the WhatsApp socket",
       });
       return;
     }
 
-    if (this.#shuttingDown || this.#generation !== startedAt) {
-      // Overtaken. Throw the socket away rather than adopt it, or we would end
-      // up with a live connection nobody asked for and no state pointing at it.
-      this.log.warn("[Session] discarding a socket whose start was overtaken");
-      this.#detach(created.sock);
-      try {
-        await withTimeout(created.sock?.end?.(undefined), SOCKET_CLOSE_TIMEOUT_MS);
-      } catch {}
-      return;
-    }
+    const { sock, saveCreds, clearAll, fence, isPaired } = created;
 
-    const { sock, saveCreds, clearAll, isPaired } = created;
-
+    this.#fence();
     const generation = (this.#generation += 1);
     this.#socket = sock;
     this.#clearAll = clearAll;
+    this.#fenceAuth = typeof fence === "function" ? fence : null;
     // An install with no pairing yet is on a pairing attempt: its closes are
     // terminal until a phone has actually scanned the code.
     this.#pairing = !isPaired;
 
-    this.attachListeners(sock, {
+    const disposeListeners = this.attachListeners(sock, {
       saveCreds,
       onConnectionUpdate: (update) => this.#onConnectionUpdate(generation, update),
       onHandshakeRejected: (response) => this.#onHandshakeRejected(generation, sock, response),
     });
+    if (typeof disposeListeners === "function") this.#listenerDisposers.set(sock, disposeListeners);
 
     const waitingForCode = this.#pairing && this.#pairingIntent.method === "pairing";
     this.#transition(this.#pairing ? S.WAITING_FOR_QR : S.STARTING, {
@@ -736,8 +895,65 @@ export class WhatsAppSession {
     Promise.resolve(sock?.end?.(error)).catch(() => {});
   }
 
+  /** Close the auth-store fence for a socket we are tearing down or unlinking. */
+  #fence(fence = this.#fenceAuth) {
+    if (fence === this.#fenceAuth) {
+      this.#fenceAuth = null;
+    }
+    if (typeof fence !== "function") return;
+    try {
+      fence();
+    } catch (error) {
+      this.log.debug({ err: error?.message }, "[Session] auth fence threw");
+    }
+  }
+
+  /**
+   * The attempt that just returned was no longer current. If the device is
+   * online again and the session should be running, the start() waiting on
+   * this attempt opens one replacement. Same condition as setInternetOnline(true).
+   */
+  #noteOvertakenStart(startedAt) {
+    const stopped = this.#terminalGeneration > startedAt;
+    this.#resumeAfterStart =
+      !stopped &&
+      !this.#shuttingDown &&
+      !this.#loggingOut &&
+      this.#isOnline &&
+      (this.#wasActiveBeforeOffline || this.#state === S.PAUSED);
+  }
+
+  // stop and shutdown. Bump before waiting so an attempt already in
+  // createSocket cannot adopt, and so a resume queued on that attempt cannot
+  // open a replacement. Then wait out any replacement that still appeared.
+  #markTerminalIntent() {
+    this.#resumeAfterStart = false;
+    this.#generation += 1;
+    this.#terminalGeneration = this.#generation;
+  }
+
+  async #settleStarts() {
+    this.#markTerminalIntent();
+    let pending = this.#starting;
+    while (pending) {
+      await pending.catch(() => {});
+      pending = this.#starting;
+      if (pending) this.#markTerminalIntent();
+    }
+  }
+
   /** Cut every wire back from a socket we are done with. */
   #detach(sock) {
+    disposeReactionIntake(sock);
+    const dispose = sock ? this.#listenerDisposers.get(sock) : undefined;
+    if (sock) this.#listenerDisposers.delete(sock);
+    if (typeof dispose === "function") {
+      try {
+        dispose();
+      } catch (error) {
+        this.log.debug({ err: error?.message }, "[Session] listener dispose threw");
+      }
+    }
     for (const event of ["connection.update", "creds.update"]) {
       try {
         sock?.ev?.removeAllListeners?.(event);
@@ -747,6 +963,7 @@ export class WhatsAppSession {
 
   /** End the current socket without letting its close event mean anything. */
   async #destroySocket() {
+    this.#fence();
     const sock = this.#socket;
     if (!sock) return;
 
@@ -923,6 +1140,7 @@ export class WhatsAppSession {
     // stop from `reconnecting` would leave the dead socket's generation current
     // and anything it emitted afterwards would still be believed.
     this.#generation += 1;
+    this.#fence();
     this.#detach(closedSocket);
     // The scheduled jobs were armed with that socket. Leaving them running
     // means a daily message firing into a closed connection, failing, and
@@ -989,35 +1207,133 @@ export class WhatsAppSession {
 
   async #handleLoggedOut(verdict, closedSocket) {
     this.log.error("[Session] WhatsApp logged this device out. Clearing the stored credentials.");
+    // WhatsApp already dropped the pairing. If saving intent fails here, stay
+    // ERROR in this process. Restart may resume the surviving credentials, but
+    // WhatsApp rejects them with 401 and takes this cleanup path again.
+    // Before clearAll(), which is the first await on this path.
+    this.#resumeAfterStart = false;
+    advanceAccountEpoch();
 
     // Baileys destroys its emitter inside end() before this close is reported,
     // so there is normally nothing left to hear from. Being explicit costs
     // nothing and closes the one window where a late creds.update could write
     // the dead credentials back over the wipe below.
+    this.#fence();
     this.#detach(closedSocket);
 
     const clearAll = this.#clearAll;
     this.#clearAll = null;
-    if (clearAll) {
-      try {
-        await clearAll();
-        this.log.info("[Session] Credentials cleared");
-      } catch (error) {
-        this.log.error({ err: error }, "[Session] failed to clear credentials");
-      }
-    }
+    const wiped = await this.#wipeCredentials(clearAll);
+    if (wiped) this.log.info("[Session] Credentials cleared");
 
     this.#pairing = false;
     this.#clearQr();
     this.#cancelRetry();
     this.#attempt = 0;
     this.#stopJobs();
+    if (!wiped) return this.#failUnlink();
+    return this.#finishUnlink({ reason: verdict.reason, detail: verdict.detail });
+  }
+
+  // True when this process saw a failed wipe, or the marker is on disk.
+  // A read error blocks start as pending. It never authorizes a wipe: boot
+  // recovery and the wipe itself refuse to delete when the marker read throws.
+  #incompleteUnlink() {
+    return this.#unlinkFailed || this.#unlinkPending();
+  }
+
+  #unlinkPending() {
     try {
-      this.clearDirectory?.();
+      return store.isUnlinkPending();
     } catch (error) {
-      this.log.warn({ err: error }, "[Session] failed to clear WhatsApp directory after logout");
+      this.log.error({ err: error }, "[Session] could not read the pending-unlink marker");
+      return true;
     }
-    this.#transition(S.LOGGED_OUT, { reason: verdict.reason, detail: verdict.detail });
+  }
+
+  #refuseIncompleteUnlink() {
+    if (!this.#incompleteUnlink()) return false;
+    this.#failUnlink();
+    return true;
+  }
+
+  #failUnlink() {
+    this.#unlinkFailed = true;
+    this.#cancelRetry();
+    this.#pairing = false;
+    this.#clearQr();
+    this.#transition(S.ERROR, {
+      reason: "unlink_incomplete",
+      detail: UNLINK_INCOMPLETE_DETAIL,
+    });
+    return this.getState();
+  }
+
+  #dropUnlinkMarker() {
+    try {
+      store.clearUnlinkPending();
+      return true;
+    } catch (error) {
+      this.log.error({ err: error }, "[Session] failed to clear the pending-unlink marker");
+      return false;
+    }
+  }
+
+  // Account data is cleared only after this returns true. Epoch already moved
+  // at the start of the unlink, so in-flight work drops its writes either way.
+  async #wipeCredentials(clearAll, { retry = null } = {}) {
+    let pendingBefore = false;
+    try {
+      pendingBefore = store.isUnlinkPending();
+    } catch (error) {
+      this.log.error({ err: error }, "[Session] could not read the pending-unlink marker");
+      this.#unlinkFailed = true;
+      return false;
+    }
+    if (!pendingBefore) {
+      try {
+        store.markUnlinkPending();
+      } catch (error) {
+        this.log.error({ err: error }, "[Session] failed to record the pending unlink");
+        this.#unlinkFailed = true;
+        return false;
+      }
+    }
+
+    // Manual unlink saved intent before teardown. Use its earlier snapshot so
+    // the first attempt still uses the live socket's clearAll, not the fallback.
+    const retryWipe = retry ?? (pendingBefore || this.#unlinkFailed);
+    try {
+      if (retryWipe || typeof clearAll !== "function") {
+        if (typeof this.clearCredentials !== "function") {
+          throw new Error("No credential wipe is available");
+        }
+        await this.clearCredentials();
+      } else {
+        await clearAll();
+      }
+    } catch (error) {
+      this.log.error({ err: error }, "[Session] failed to clear credentials");
+      this.#unlinkFailed = true;
+      return false;
+    }
+    return true;
+  }
+
+  // Account cleanup runs only once the credentials are gone. Keep the marker
+  // on any cleanup failure or crash, so retry repeats the whole cleanup before
+  // a new account can pair.
+  #finishUnlink({ reason, detail }) {
+    try {
+      this.clearDirectory();
+    } catch (error) {
+      this.log.error({ err: error }, "[Session] failed to clear account data after unlink");
+      return this.#failUnlink();
+    }
+    if (!this.#dropUnlinkMarker()) return this.#failUnlink();
+    this.#unlinkFailed = false;
+    this.#transition(S.LOGGED_OUT, { reason, detail });
+    return this.getState();
   }
 
   // -------------------------------------------------------------------------
@@ -1142,6 +1458,7 @@ export class WhatsAppSession {
       this.#retryTimer = null;
       this.#nextRetryAt = null;
       if (this.#shuttingDown) return;
+      if (this.#loggingOut) return;
       if (this.#starting) return;
 
       this.#starting = this.#open({ reason: "reconnect" })

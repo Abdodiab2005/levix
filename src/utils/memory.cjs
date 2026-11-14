@@ -623,45 +623,35 @@ function clearAllMemoryFiles() {
   // Unlink is an account boundary. Record that the copy is done before
   // deleting .md files, so a later access cannot import PACKAGE_ROOT/memory
   // from the previous account.
-  try {
-    fs.mkdirSync(ROOT, { recursive: true });
-    writeLegacyCopyMarker(ROOT);
-  } catch (err) {
-    logger.warn({ err }, "[memory] failed to write the unlink memory marker");
-  }
+  writeLegacyCopyMarker(ROOT);
 
   maybeMigrateLegacy();
 
   let removed = 0;
   try {
-    if (fs.existsSync(GLOBAL_FILE)) {
-      fs.unlinkSync(GLOBAL_FILE);
-      removed += 1;
-    }
+    fs.unlinkSync(GLOBAL_FILE);
+    removed += 1;
   } catch (err) {
-    logger.warn({ err }, "[memory] failed to remove global memory during unlink");
+    if (err.code !== "ENOENT") throw err;
   }
 
+  let names;
   try {
-    if (fs.existsSync(CHATS_DIR)) {
-      for (const name of fs.readdirSync(CHATS_DIR)) {
-        if (!isLiveMemoryMarkdownName(name)) continue;
-        const filePath = path.join(CHATS_DIR, name);
-        const stat = fs.lstatSync(filePath);
-        if (!stat.isFile() || stat.isSymbolicLink()) continue;
-        fs.unlinkSync(filePath);
-        removed += 1;
-      }
-    }
+    names = fs.readdirSync(CHATS_DIR);
   } catch (err) {
-    logger.warn({ err }, "[memory] failed to remove chat memory during unlink");
+    if (err.code !== "ENOENT") throw err;
+    names = [];
+  }
+  for (const name of names) {
+    if (!isLiveMemoryMarkdownName(name)) continue;
+    const filePath = path.join(CHATS_DIR, name);
+    const stat = fs.lstatSync(filePath);
+    if (!stat.isFile() || stat.isSymbolicLink()) continue;
+    fs.unlinkSync(filePath);
+    removed += 1;
   }
 
-  try {
-    writeLegacyCopyMarker(ROOT);
-  } catch (err) {
-    logger.warn({ err }, "[memory] failed to write the unlink memory marker");
-  }
+  writeLegacyCopyMarker(ROOT);
   return removed;
 }
 
@@ -707,8 +697,8 @@ function clipTail(text, limitChars) {
  * character budget when both have content so one busy file can't starve the
  * other.
  */
-function buildMemoryContext(chatId, { limitChars = maxContextChars() } = {}) {
-  const globalText = memoryFileContext(readRaw(GLOBAL_FILE));
+function buildMemoryContext(chatId, { limitChars = maxContextChars(), includeGlobal = true } = {}) {
+  const globalText = includeGlobal ? memoryFileContext(readRaw(GLOBAL_FILE)) : "";
   const chatText = chatId ? memoryFileContext(readRaw(memoryFilePath("chat", chatId))) : "";
   if (!globalText && !chatText) return "";
 

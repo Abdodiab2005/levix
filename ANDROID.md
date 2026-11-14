@@ -7,7 +7,7 @@ Levix for Android packages the complete Levix stack into a standalone Android AP
 - **SQLite** datastore powered by Node's built-in `node:sqlite`
 - **Baileys v7** WhatsApp protocol engine with local LID mapping
 - **AI Agent** with multi-provider support (Gemini, OpenAI, Anthropic)
-- **All 69 commands** & group moderation tools
+- **All 70 commands** & group moderation tools
 - **Embedded FFmpeg** for native WhatsApp voice notes (`!tts`) and video/image preview thumbnails
 - **Local Web Control Panel** accessible only inside the app's built-in WebView; a phone browser cannot open it
 
@@ -21,6 +21,21 @@ Levix for Android packages the complete Levix stack into a standalone Android AP
 | **Android Version** | **Android 10** or newer (API level 29+; the app targets API 36). |
 | **Free Storage** | ~400 MB (APK ~100–110 MB per ABI + unpacked app bundle + SQLite database). |
 | **WhatsApp Account** | An active WhatsApp account to link with via pairing code or QR. |
+
+## Updates and support
+
+Open **Settings → About Levix** in the panel to check for an update. An app
+installed by Google Play checks with Play and offers a flexible update; you
+choose the download and the restart separately. A previously started download
+can recover its status when you reopen the panel. A GitHub APK checks official
+GitHub release information and opens the release page in your browser.
+
+Official Docs, support, developer and Leviro links open outside the privileged
+panel WebView. Rating is optional. **Rate Levix on Google Play** opens the store
+listing. Optional in-app review opportunities have a separate switch that is
+off by default, a local request interval of at least 120 days, and no rating or
+dismissal tracking. Play can choose not to display a review card. GitHub APKs
+offer the repository link instead and need no Play account for Free features.
 
 ---
 

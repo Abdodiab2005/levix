@@ -220,3 +220,86 @@ export function TermsConsentDialog({ isOpen, onClose, onAccepted }: TermsConsent
     </Dialog>
   );
 }
+
+export function TermsViewerDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const { language, t } = useI18n();
+  const [document, setDocument] = useState<LegalTermsResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadTerms = useCallback(() => {
+    setError(null);
+    setLoading(true);
+    api
+      .getLegalTerms(language)
+      .then((result) => setDocument(result))
+      .catch(() => setError(t("legalLoadError")))
+      .finally(() => setLoading(false));
+  }, [language, t]);
+
+  useEffect(() => {
+    if (isOpen) loadTerms();
+  }, [isOpen, loadTerms]);
+
+  const documentDir = document?.locale === "ar" ? "rtl" : "ltr";
+
+  return (
+    <Dialog
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t("legalConsentTitle")}
+      maxWidth="44rem"
+      footer={
+        <Button variant="secondary" onClick={onClose}>
+          {t("close")}
+        </Button>
+      }
+    >
+      {loading ? <Spinner label={t("loading")} /> : null}
+      {!loading && !document && error && (
+        <Button variant="secondary" icon={<RefreshCw size={16} />} onClick={loadTerms}>
+          {t("retry")}
+        </Button>
+      )}
+      {!loading && document && (
+        <div className="space-y-4">
+          <p className="text-xs text-muted">
+            {renderSegments(
+              templateSegments(t("legalVersionEffective"), {
+                version: document.version,
+                date: document.effective,
+              }),
+            )}
+          </p>
+          <div
+            lang={document.locale}
+            dir={documentDir}
+            className="max-h-[50dvh] space-y-6 overflow-y-auto rounded-xl border border-line bg-panel-raised p-4"
+          >
+            <DocumentPart part={document.terms} dir={documentDir} />
+            <DocumentPart part={document.privacy} dir={documentDir} />
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            {(
+              [
+                ["privacyPolicy", "legalFullPrivacy"],
+                ["license", "legalLicense"],
+                ["website", "legalWebsite"],
+              ] as const
+            ).map(([key, label]) => (
+              <a
+                key={key}
+                href={document.links[key]}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-10 items-center text-sm text-brand-blue underline"
+              >
+                {t(label)}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </Dialog>
+  );
+}

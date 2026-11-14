@@ -48,6 +48,8 @@ for (const required of [
   "src/config/secrets.cjs",
   "src/config/defaults.cjs",
   "src/config/ai-persona.md",
+  "src/services/aiDocs.cjs",
+  "src/services/levix-docs.generated.json",
   "src/db/db.cjs",
   "src/db/store.cjs",
   "src/panel/fallback-page.cjs",

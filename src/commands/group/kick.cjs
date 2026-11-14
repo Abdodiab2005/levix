@@ -5,7 +5,8 @@ const {
   isAdminInGroupSync,
   sameUserSync,
 } = require("../../utils/permissions.cjs");
-const { kickGroupMember, targetFromCommand } = require("../../utils/moderationAction.cjs");
+const moderationAction = require("../../utils/moderationAction.cjs");
+const { senderCandidates, targetFromCommand } = moderationAction;
 const { t } = require("../../utils/i18n.cjs");
 
 module.exports = {
@@ -14,7 +15,9 @@ module.exports = {
   userAdminRequired: true,
   botAdminRequired: true,
 
-  async execute(sock, msg, args, body, groupMetadata) {
+  // Direct `!kick` has no `ctx.nested`. `!group kick` sets `nested: true`.
+  // The re-check below uses the gate that admitted this call.
+  async execute(sock, msg, args, body, groupMetadata, ctx) {
     const groupId = msg.key.remoteJid;
     const target = targetFromCommand(msg);
     const targetJid = target?.jid;
@@ -38,7 +41,7 @@ module.exports = {
 
     // Bot owners/admins are privileged across chats and cannot be removed by
     // a group-only admin through an alternate LID/PN representation.
-    if (targetCandidates.some((candidate) => hasBotPrivilegesSync(candidate))) {
+    if (targetCandidates.some((candidate) => hasBotPrivilegesSync(candidate, groupMetadata))) {
       return await sock.sendMessage(groupId, {
         text: t("bot.group.kick.botPrivileged"),
       });
@@ -69,10 +72,16 @@ module.exports = {
         mentions: [targetJid],
       });
 
-      const result = await kickGroupMember(sock, {
+      // The announcement above awaited, so the roster may have changed: the
+      // requester is re-checked on a fresh roster, as the dispatcher checked it.
+      const result = await moderationAction.kickGroupMember(sock, {
         groupId,
         groupMetadata,
         targetCandidates,
+        requesterCandidates: senderCandidates(msg, sock),
+        requesterFromMe: Boolean(msg.key?.fromMe),
+        requesterRule: ctx?.nested === true ? "nested" : "direct",
+        accountEpoch: ctx?.accountEpoch,
       });
       if (!result.kicked) {
         await sock.sendMessage(groupId, {

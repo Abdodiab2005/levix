@@ -154,17 +154,23 @@ levixAbis.forEach { abi ->
 val releaseKeystorePath = System.getenv("LEVIX_KEYSTORE_FILE")
 val hasCustomKeystore = !releaseKeystorePath.isNullOrBlank() && File(releaseKeystorePath!!).isFile
 val debugKeystore = File(System.getProperty("user.home"), ".android/debug.keystore")
+val plusProductId = providers.gradleProperty("levixPlusProductId").orNull
+    ?.takeIf { it.matches(Regex("^[a-z0-9][a-z0-9._]{0,63}$")) } ?: ""
 
 android {
     namespace = "net.leviro.levix"
     compileSdk = 36
+    buildFeatures {
+        buildConfig = true
+    }
 
     defaultConfig {
         applicationId = "net.leviro.levix"
         minSdk = 29
         targetSdk = 36
-        versionCode = 69
-        versionName = "4.9.2"
+        versionCode = 71
+        versionName = "5.0.0-beta.1"
+        buildConfigField("String", "PLUS_PRODUCT_ID", "\"$plusProductId\"")
     }
 
     // App languages ship whole. enableSplit = false keeps the translations in
@@ -247,8 +253,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+}
+
+// Play Billing 9.1.0 ships Kotlin 2.3 metadata; Kotlin 2.3 drops the android.kotlinOptions block.
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -277,6 +287,12 @@ tasks.register<Exec>("stageLevixApp") {
         ?: throw GradleException("defaultConfig.versionCode is not set")
     environment("LEVIX_ANDROID_VERSION_CODE", versionCode)
     inputs.property("versionCode", versionCode)
+    val extensionsDir = System.getenv("LEVIX_EXTENSIONS_DIR")?.trim().orEmpty()
+    inputs.property("extensionsDir", extensionsDir)
+    if (extensionsDir.isNotEmpty()) {
+        environment("LEVIX_EXTENSIONS_DIR", extensionsDir)
+        inputs.dir(File(extensionsDir))
+    }
     inputs.dir(File(repoRoot, "src"))
     inputs.dir(File(repoRoot, "public"))
     // Config, HTML, public assets and lockfile changes must invalidate the ZIP
@@ -360,6 +376,13 @@ tasks.register("stageLevixBundle") {
 }
 
 dependencies {
+    implementation("com.android.billingclient:billing-ktx:9.1.0")
+    // Play in-app update and review. Pinned, non-ktx: the app never depends on
+    // GoogleApiAvailability and never requires Play Services to boot. The
+    // channel decision (and whether a flavor is worth adding) waits for the
+    // Q-16 dependency/artifact evidence from CI.
+    implementation("com.google.android.play:app-update:2.1.0")
+    implementation("com.google.android.play:review:2.0.2")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")

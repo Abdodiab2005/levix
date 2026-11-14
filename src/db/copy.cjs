@@ -7,9 +7,13 @@ const SECRET_TABLES = Object.freeze(["baileys_auth", "qr_codes"]);
 const secretSettings = new Set(SECRET_SETTING_KEYS);
 const quote = (name) => `"${name.replaceAll('"', '""')}"`;
 
-function isSecretBotKey(key) {
+// `allowKey` lets a caller with its own allowlist (the backup) carry named
+// extension account rows. It never lifts auth:, secret:, plus: or a secret setting.
+function isSecretBotKey(key, allowKey = () => false) {
   if (typeof key !== "string") return true;
-  if (key.startsWith("auth:") || key.startsWith("secret:")) return true;
+  if (key.startsWith("auth:") || key.startsWith("secret:") || key.startsWith("plus:")) return true;
+  // Account data for an extension (`ext:<id>:acct:…`) is not an operator setting.
+  if (/^ext:[^:]+:acct:/.test(key)) return !allowKey(key);
   return key.startsWith("setting:") && secretSettings.has(key.slice("setting:".length));
 }
 
@@ -19,7 +23,7 @@ function tables(database, schema) {
 }
 
 function writeSecretFreeCopy(sourcePath, targetPath, {
-  omitTables = [], keepBotKey = () => true, onAfterRows,
+  omitTables = [], keepBotKey = () => true, allowBotKey, onAfterRows,
 } = {}) {
   const omitted = new Set([...SECRET_TABLES, ...omitTables]);
   let target;
@@ -43,7 +47,7 @@ function writeSecretFreeCopy(sourcePath, targetPath, {
         if (table.name === "bot_settings") {
           const insert = target.prepare(`INSERT INTO main.${name} SELECT * FROM src.${name} WHERE key = ?`);
           for (const { key } of target.prepare(`SELECT key FROM src.${name}`).all()) {
-            if (!isSecretBotKey(key) && keepBotKey(key)) insert.run(key);
+            if (!isSecretBotKey(key, allowBotKey) && keepBotKey(key)) insert.run(key);
           }
         } else {
           target.exec(`INSERT INTO main.${name} SELECT * FROM src.${name}`);
@@ -84,7 +88,7 @@ function writeSecretFreeCopy(sourcePath, targetPath, {
 }
 
 function verifySecretFreeCopy(targetPath, sourceDatabase, {
-  expectedVersion, omitTables = [], keepBotKey = () => true,
+  expectedVersion, omitTables = [], keepBotKey = () => true, allowBotKey,
 } = {}) {
   const omitted = new Set([...SECRET_TABLES, ...omitTables]);
   const copy = new DatabaseSync(targetPath, { readOnly: true });
@@ -107,7 +111,7 @@ function verifySecretFreeCopy(targetPath, sourceDatabase, {
       if (!omitted.has(name)) {
         if (name === "bot_settings") {
           expected = sourceDatabase.prepare(`SELECT key FROM ${identifier}`).all()
-            .filter(({ key }) => !isSecretBotKey(key) && keepBotKey(key)).length;
+            .filter(({ key }) => !isSecretBotKey(key, allowBotKey) && keepBotKey(key)).length;
         } else {
           expected = sourceDatabase.prepare(`SELECT count(*) AS n FROM ${identifier}`).get().n;
         }
@@ -115,7 +119,7 @@ function verifySecretFreeCopy(targetPath, sourceDatabase, {
       if (actual !== expected) throw new Error(`copy row count differs for ${name}`);
     }
     if (sourceTables.includes("bot_settings") &&
-        copy.prepare("SELECT key FROM bot_settings").all().some(({ key }) => isSecretBotKey(key))) {
+        copy.prepare("SELECT key FROM bot_settings").all().some(({ key }) => isSecretBotKey(key, allowBotKey))) {
       throw new Error("copy contains a secret bot setting");
     }
   } finally {

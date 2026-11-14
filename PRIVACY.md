@@ -38,7 +38,13 @@ decides whether to search for each answer.
    media or files you ask the AI to process. Supported images can be sent to
    OpenAI-compatible or Anthropic providers; Gemini can additionally receive
    supported video, audio and documents. Speech-to-text can send audio to
-   Gemini or an OpenAI-compatible provider.
+   Gemini or an OpenAI-compatible provider. Natural-language `generate_image`
+   requests use the dedicated Gemini image endpoint/key/model, including when
+   chat uses OpenAI-compatible or Anthropic. `transcribe_audio` uploads only
+   audio attached to or quoted by the invoking message, after checking the
+   sender's transcription permission. Its transcript is returned to the chat
+   provider to prepare the answer and can be stored in local AI conversation
+   history. That chat provider can differ from the transcription provider.
 3. **Search and web pages:** Gemini can run Google Search grounding inside
    its request when it decides current information is needed. The AI's
    `web_search` and `search_news` tools send queries to `html.duckduckgo.com`,
@@ -135,6 +141,7 @@ other account data wait until the same WhatsApp account is linked.
 | Data | Where it lives | Purpose |
 | --- | --- | --- |
 | WhatsApp pairing credentials | App-private SQLite DB + files | Linking to your WhatsApp account |
+| Connected account profile (own name, phone, About and picture) | Bounded RAM cache only; no database, backup or settings export | The authenticated Connection card; own-profile reads only when opened or refreshed, with cache reuse. Images pass through the local authenticated panel, never a public image URL |
 | Control-panel password | scrypt hash in the local DB | Logging into the local panel |
 | Recovery email and authorization token | Sealed with AES-256-GCM in the local DB (`auth:recovery-email`) | A verified address for the panel's forgot-password email code. The panel shows a mask. Settings export does not include it. Unlink does not remove it |
 | AI provider API keys & endpoints | Local DB, sealed with AES-256-GCM | Calling the provider you chose |
@@ -152,9 +159,20 @@ Notes:
 
 - The bot does **not** archive other people's messages by default. Nothing
   incoming is stored beyond the metadata rows listed above; deleted/edited
-  messages are not captured. The one exception is an auto-delete rule with
+  messages are not archived. An exception is an auto-delete rule with
   keep-copy turned on: it stores the text or caption (never media bytes) of
   messages that rule actually deleted, and those rows expire.
+- Reaction Automation keeps a temporary lookup only in chats with an enabled
+  reaction rule: at most 30 minutes, 500 sanitized messages and 8 MiB total
+  (64 KiB per entry). It holds text or media download metadata in memory,
+  without downloading media, quoted context or thumbnails. Hidden/disappearing
+  messages are excluded; observed edits/deletes invalidate entries and
+  disconnect clears the lookup. Original payloads never enter the database,
+  logs or backups. Bounded replay/deletion hashes, timestamps and the latest emoji stay
+  locally for the eligibility window; they are excluded from backups and
+  cleared on unlink. Rules default disabled and require re-enabling after
+  unlink or restore. Phase 07a supplies intake only: no automatic action,
+  provider upload or reply is executed by that groundwork.
 - Some data stored locally — especially AI conversation history, long-term
   memory, names and WhatsApp identifiers — can be included as context in a
   later AI request when you choose to use an AI feature. Local storage does
@@ -173,6 +191,8 @@ Notes:
 
 | Recipient | What is sent | When | Why |
 | --- | --- | --- | --- |
+| **GitHub** (`api.github.com`, official Levix Releases) | An ordinary HTTPS metadata request, with the connection IP address and a fixed Levix user-agent; no WhatsApp identifiers, messages, pairing credentials or settings | Only when you explicitly check for updates on a non-Play installation, subject to a local cooldown | Compare public release versions and show an official release link. No executable update is downloaded or run |
+| **Google Play** (Play-installed Android app only) | Play handles app/account eligibility and update/review requests through its own APIs; Levix supplies no WhatsApp identifiers, messages or pairing credentials | Update check/download/completion require your actions; a previously started download can resume status monitoring. An optional review opportunity requires local opt-in and at least 120 days between requests | Store-managed flexible updates and optional reviews. Levix records only the local opt-in, last request time and an initiated-update marker, outside backups; no rating or dismissal result is tracked |
 | **WhatsApp (Meta)** | Your messages, media you send through the bot, your phone number / pairing credentials, group metadata | Continuously while the bot is linked | Levix is a WhatsApp client; this is the product's core function |
 | **Your configured AI provider** (Google, OpenAI-compatible server, or Anthropic — chosen by you, using your own API key) | The AI prompt and relevant context, which can include display name, WhatsApp user/phone identifiers, group name, messages, quoted/mentioned participant identifiers, AI history or memory, and supported media/files | Only when you invoke an AI feature (`!gemini`, `!ask`, `!ai`, `!generate`, `!stt`, …) | To generate or process the result you asked for |
 | **Google Search grounding within Gemini** | A search Gemini chooses from the prompt already sent to Gemini | When Gemini decides to search during an AI request; `ai_google_search` is on by default for Gemini and can be turned off | Grounding an answer in current information |
@@ -182,6 +202,9 @@ Notes:
 | **Google Cloud Translation** (`translation.googleapis.com`) | Text to translate and the configured Google Translation API key | When you use `!translate google` with a key | Translating text through the official API |
 | **Google's public Translate endpoint** (`translate.googleapis.com/translate_a/single`) | Text to translate | When you use `!translate google` without a key | Translating text without an API key |
 | **Google TTS** (`translate.google.com`) | Text to speak | When you use `!tts` or the AI uses `speak` | Generating speech |
+| **Configured Gemini image endpoint** | The image prompt | When you use `!generate` or explicitly request an image through the AI `generate_image` tool, with the same command permission | Generating image bytes; it does not change the chat provider |
+| **Configured Gemini/OpenAI-compatible transcription endpoint, then your selected chat provider** | The selected attached/quoted voice audio goes to the transcription endpoint; the transcript goes to the chat provider and local AI history | When you request transcription through `transcribe_audio`, with the `stt` permission | Preparing a transcription and the AI answer; no unrelated chat audio is collected |
+| **Local bundled documentation index** | No network request for retrieval; the returned public excerpts join the current AI request | When the AI uses `search_levix_docs` or `open_levix_doc_section` | Versioned product help; the index excludes agent instructions, private memories, settings and arbitrary files |
 | **OpenWeatherMap** (`api.openweathermap.org`) | The city name and configured API key | When you use `!weather` with `openweathermap_api_key` set | Getting weather for the named city |
 | **Aladhan** (`api.aladhan.com`) | The city name | When you use `!prayer` | Getting prayer times for the named city |
 | **URL shorteners** (`is.gd`, then `v.gd` on fallback) | The URL to shorten | When you use `!shortlink` | Creating a short link |
@@ -484,6 +507,8 @@ the AI agent or an optional setting chose without the user naming it is
 | AI `search_wikipedia` (Arabic or English Wikipedia) | Yes | **Yes** | The AI chooses the lookup; declared as **In-app search history** shared |
 | AI `fetch_url` to a page host | Yes | **Yes** | The AI chooses the page; declared as **Web browsing history** shared |
 | AI `speak` through Google TTS | Yes | **Yes** | The AI chooses to answer as speech; the spoken text is declared as **Other user-generated content** shared |
+| AI `generate_image` through the dedicated Gemini endpoint | Yes | **Yes** | The AI composes the image prompt for the requested action; declared as **Other user-generated content** shared |
+| AI `transcribe_audio` through a configured speech endpoint, with transcript returned to the chat provider | Yes | **Yes** | The requested voice audio is transcribed and the transcript becomes AI context; declare **Voice or sound recordings** and **Other user-generated content** shared for this model-mediated path |
 | `!tts` through Google TTS | Yes | No | User-initiated: the user asks for speech of the text they gave |
 | `!translate google`, with or without a Google key | Yes | No | User-initiated: the command names Google translation; the key is the operator's own credential |
 | `!weather` to OpenWeatherMap, `!prayer` to Aladhan | Yes, the typed city | No | User-initiated: the user types a city name for that lookup. Declared as **Approximate location** because a city can describe where the user is; Levix never reads device location |

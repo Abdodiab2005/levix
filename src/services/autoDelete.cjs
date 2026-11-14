@@ -193,7 +193,9 @@ async function isManagementCommand(body, msg, sock) {
     const { evaluatePermissionLevel } = require("../utils/permissionLevel.cjs");
     const resolveSender = await loadResolveSender();
     const isGroup = Boolean(msg?.key?.remoteJid?.endsWith("@g.us"));
-    const groupMetadata = isGroup ? await resolveGroupMetadata(sock, msg.key.remoteJid) : null;
+    const groupMetadata = isGroup
+      ? await resolveGroupMetadata(sock, msg.key.remoteJid, { fresh: true })
+      : null;
     const sender = resolveSender(msg, groupMetadata, sock);
     const level = runtimeConfig.getPermission("autodelete");
     return Boolean(evaluatePermissionLevel(level, sender).hasPermission);
@@ -477,6 +479,7 @@ function keepCopyText(body) {
  * (caller must stop the rest of the pipeline). Never throws.
  */
 async function handleIncoming(sock, msg, body, helpers) {
+  const epoch = store.accountEpoch();
   try {
     const enabled = store.listEnabledAutoDeleteRules();
     if (!enabled.length) return false;
@@ -524,6 +527,11 @@ async function handleIncoming(sock, msg, body, helpers) {
     } catch (error) {
       logger.error({ err: error, ruleId: matched.id }, "[auto-delete] delete failed");
       return false;
+    }
+
+    if (store.accountEpoch() !== epoch) {
+      logger.debug("[auto-delete] skipped account write after account change");
+      return true;
     }
 
     store.incrementAutoDeleteCounter(matched.id);

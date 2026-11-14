@@ -32,11 +32,11 @@ function formatUptime(seconds) {
   return t("bot.core.status.uptime", { days: d, hours: h, minutes: m, seconds: s });
 }
 
-function senderIsOwner(msg, sock) {
+function senderIsOwner(msg, sock, groupMetadata) {
   if (msg?.key?.fromMe) return true;
   try {
     const ids = getSenderCandidatesSync(msg, sock);
-    return ids.some((id) => isOwnerJidSync(id));
+    return ids.some((id) => isOwnerJidSync(id, groupMetadata));
   } catch {
     return false;
   }
@@ -181,12 +181,14 @@ module.exports = {
   chat: "all",
   probes,
 
-  async execute(sock, msg, args) {
+  async execute(sock, msg, args, body, groupMetadata, ctx) {
     const chatId = msg.key.remoteJid;
     const send = (text) => sock.sendMessage(chatId, { text });
     try {
       if (String(args?.[0] || "").toLowerCase() === "debug") {
-        if (!senderIsOwner(msg, sock)) {
+        const authMetadata =
+          ctx && Object.hasOwn(ctx, "authGroupMetadata") ? ctx.authGroupMetadata : groupMetadata;
+        if (!senderIsOwner(msg, sock, authMetadata)) {
           return await send(t("bot.core.status.debugOwnerOnly"));
         }
         const report = assessHealth(await probes.gather());

@@ -27,6 +27,9 @@ jobs:
       # The suite starts real processes with deterministic fake WhatsApp sockets.
       - run: npm test
         timeout-minutes: 15
+      - run: npm run lint
+      - run: npm run i18n:check
+      - run: npm run docs:check
       # The installer is piped into root shells by strangers, and the scripts
       # that publish it write to a public directory. Both get checked here, not
       # only at release time.
@@ -52,6 +55,16 @@ jobs:
       # cannot: a missing file in `files`, a bad bin path, a broken view.
       - run: npm run validate:tarball
         timeout-minutes: 15
+      # validate:tarball packs into a temp directory it removes, so this packs
+      # the same artifact again and scans that directory for private Plus code.
+      - name: Scan the npm tarball
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/levix-tarball-scan"
+          rm -rf "$out"
+          mkdir -p "$out"
+          npm pack --pack-destination "$out" > /dev/null
+          node scripts/scan-public-artifacts.mjs "$out"/*.tgz
 
   sea:
     name: executable runs (${{ matrix.os }})
@@ -73,6 +86,10 @@ jobs:
       - run: npm --prefix frontend ci
       - run: npm run build:sea
         timeout-minutes: 20
+      # The executable name differs by platform (levix / levix.exe), so scan
+      # the directory build:sea writes it to.
+      - name: Scan the SEA executable
+        run: node scripts/scan-public-artifacts.mjs build
       # Building is not the test: this starts the binary in a directory with no
       # source tree and exercises assets, views, commands, restart and recovery.
       - run: npm run validate:sea
@@ -83,6 +100,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
       - name: build, start, claim, restart, upgrade
         run: |
           set -e
@@ -96,6 +116,11 @@ jobs:
           fi
           exit $status
         timeout-minutes: 25
+      - name: Scan the Docker image
+        run: |
+          set -euo pipefail
+          docker save levix-validate:local -o "$RUNNER_TEMP/levix-image.tar"
+          node scripts/scan-public-artifacts.mjs "$RUNNER_TEMP/levix-image.tar"
 
   android:
     name: android apk builds
@@ -157,6 +182,40 @@ jobs:
       - name: Build Android release APKs and AAB (debug key)
         working-directory: android
         run: ./gradlew :app:assembleRelease :app:bundleRelease --stacktrace
+      - name: Scan the Android levix-app.zip
+        run: node scripts/scan-public-artifacts.mjs android/app/src/main/assets/levix-app.zip
+      # Q-16 evidence, produced before choosing whether channel flavors help.
+      # Baseline is the actual PR base, with the same Node/SDK/runtime and key.
+      - name: Check out Phase 09 comparison baseline
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feat/v5-phase-09')
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .phase09-baseline
+      - name: Measure Play dependency impact on the GitHub APK
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feat/v5-phase-09')
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix .phase09-baseline ci
+          npm --prefix .phase09-baseline/frontend ci
+          (cd .phase09-baseline/android && ./gradlew --init-script "$GITHUB_WORKSPACE/scripts/play-impact.init.gradle" :app:assembleRelease :app:reportPlayRuntimeModules --console=plain > "$RUNNER_TEMP/phase09-baseline-deps.txt")
+          (cd android && ./gradlew --init-script "$GITHUB_WORKSPACE/scripts/play-impact.init.gradle" :app:reportPlayRuntimeModules --console=plain > "$RUNNER_TEMP/phase09-proposed-deps.txt")
+          node scripts/measure-play-impact.mjs \
+            .phase09-baseline/android/app/build/outputs/apk/release/levix-android-arm64.apk \
+            android/app/build/outputs/apk/release/levix-android-arm64.apk \
+            "$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer" \
+            "$RUNNER_TEMP/phase09-baseline-deps.txt" "$RUNNER_TEMP/phase09-proposed-deps.txt" \
+            phase09-play-impact.json
+      - name: Save Phase 09 Play impact evidence
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'feat/v5-phase-09')
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase09-play-impact
+          path: |
+            phase09-play-impact.json
+            ${{ runner.temp }}/phase09-baseline-deps.txt
+            ${{ runner.temp }}/phase09-proposed-deps.txt
       - name: Size report
         run: |
           set -o pipefail

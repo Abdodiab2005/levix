@@ -26,14 +26,14 @@ phase or reverts a change. Owners are phases; the release owner is the project o
 | R-16 | The docs tool presents planned features as shipped, or indexed text injects instructions. | 06 | Medium | Medium | Index shipped user docs only; treat retrieved text as data; tests with injected docs. | A test answer claims a `PLANNED` feature. |
 | R-17 | Media tools upload private media or run up provider costs. | 06 | Medium | Medium | `access` entries; size, rate and timeout limits; capability gating per provider. | Tool runs for an unauthorized caller. |
 | R-18 | Reactions replay after reconnect, run privileged actions for an unauthorized reactor, or require archiving messages. | 07 | Medium | High | Idempotency key per reaction event; existing permission checks; bounded lookup only for chats with rules (ADR-008). | Duplicate action or unauthorized action in tests. |
-| R-19 | AI Auto Reply loops or mass-replies and gets the WhatsApp account banned. | 07 | Medium | High | Off by default; allowlists; rate limits; loop detection; kill switch (ADR-009). | More than one reply per event in tests. |
+| R-19 | AI Auto Reply loops or mass-replies and gets the WhatsApp account banned. | 08 (Plus) | Medium | High | Off by default; allowlists; rate limits; loop detection; kill switch (ADR-009). | More than one reply per event in tests. |
 | R-20 | Plus code or keys leak into a public artifact; a forged purchase unlocks Plus; a billing outage disables Core. | 08 | Low | High | CI check on public artifacts; server-side purchase verification; Core never reads entitlement. | Public artifact contains Plus code; Core test fails offline. |
 | R-21 | The update checker follows a malicious URL, reports a wrong channel, or forces updates. | 09 | Low | Medium | Origin allowlist; semver and channel tests; no downloads (ADR-013). | Test reaches a non-allowlisted host. |
 | R-22 | WebView link handling opens `intent://`, `javascript:` or `file://` URLs, or exposes panel cookies. | 09 | Low | High | Scheme and host allowlist; external links open in the browser. | Abuse test succeeds. |
 | R-23 | The watermark corrupts raw output, security text or long messages. | 05, 09 | Medium | Low | Exclusion rules in the message engine (ADR-012). | Exact-output test changes. |
 | R-24 | `PRIVACY.md` and the Play Data safety form under-declare current data flows. | 00 to 10 | High | High | Mitigated by PR #82 (Q-11, Q-27, 2026-10-31): every destination named and mapped. The owner still updates the Play Console form from `PRIVACY.md` section 7. Re-audit at every phase that adds a destination. Open since 2026-11-02: the React dashboard loads fonts from `fonts.googleapis.com`, and `levix domain` can fetch Caddy from `dl.cloudsmith.io`; neither has a row (`LEGAL_COPY_REVIEW.md` section 4, owner decision). | A destination ships without a privacy row. |
 | R-25 | A Leviro call (Terms, entitlement, update) on the start-up path stalls or blocks start when offline. | 04, 08, 09 | Medium | Medium | No network call on the critical start path; timeouts; cached values. | Offline start slower than the v4 baseline. |
-| R-26 | `memory/global.md` reaches group prompts; Auto Reply widens that exposure. | 07 | Medium | Medium | Q-09 decides scope; Auto Reply in groups uses chat memory only until then. | Group test prompt contains global memory. |
+| R-26 | `memory/global.md` reaches group prompts; Auto Reply widens that exposure. | 08 (Plus) | Medium | Medium | Q-09 decides scope; Auto Reply in groups uses chat memory only until then. | Group test prompt contains global memory. |
 | R-27 | React gateway uses browser features that old Android WebViews lack (minSdk 29). | 04 | Medium | Medium | Build target and smoke test on the oldest supported WebView. | Gateway fails on the old WebView. |
 | R-34 | An Android update that changes only `versionCode` keeps an acceptance recorded for the previous build. | 04 | Medium | High | Fixed in commit 51d0051 (PR #126): the release identity is `<package version>+android.<versionCode>`, read from `levix-build.json` in the app archive; Gradle passes `versionCode` and re-stages on a bump; a broken build file fails closed. Tests in `tests/release-identity.test.mjs` and `tests/legal-consent.test.mjs`. | A build with a new `versionCode` connects without a new acceptance. |
 | R-28 | Delegated implementers widen scope, reformat unrelated files or run tests themselves. | all | Medium | Medium | Briefs list exact files; the orchestrator runs every gate and reviews each diff. | Diff touches files outside the brief. |
@@ -56,10 +56,12 @@ phase or reverts a change. Owners are phases; the release owner is the project o
 
 - Threats: a reaction from someone without permission runs an action; redelivery after reconnect
   runs an action twice; the lookup grows into a message archive.
-- Controls: the reactor is the caller for authorization; one idempotency key per
-  `(chat, message, reactor, emoji)`; time and size limits on the lookup.
+- Controls: the reactor is the caller for authorization; claim-first durable transport-event dedupe plus monotonic actor/target transition state;
+  bounded eligibility/retention and fail-closed ledger caps; bounded opt-in RAM lookup.
+  07b additionally claims event/rule actions before side effects. Deleted/edited originals
+  cannot be revived by redelivery; restore and unlink disable retained rules.
 
-### AI Auto Reply (Phase 07)
+### AI Auto Reply (Phase 08, private paid Plus)
 
 - Threats: reply loops with other bots; mass replies; prompt injection from incoming messages that
   asks for tools; private memory in group answers.
@@ -100,3 +102,22 @@ phase or reverts a change. Owners are phases; the release owner is the project o
   unsafe URLs; provider output treated as instructions.
 - Controls: `access` entries checked against the minted caller; identities taken from the caller,
   never from arguments; `fetch_url` HTTPS and private-range checks stay.
+
+
+### Phase 07b controls and residual limits
+
+Numeric LID/PN alias contamination cannot grant a reaction role: read primary
+role rows through authoritative mapping only; explicit grants/revocations use
+that same identity boundary and update all proven primary aliases. Group roles
+are refreshed before provider work and final send, with synchronous cancellation
+on membership changes. Matching authorization attempts consume budgets before
+remote metadata reads; unrelated triggers perform no network work.
+
+Execution claims precede side effects, and failed/cancelled attempts are never
+retried. An external send already initiated may finish; delivery is not exactly
+once. A provider ignoring cancellation occupies one of two cross-generation
+slots until settled. Resource saturation fails closed, potentially reducing
+availability. Unknown external bots cannot always be identified from ordinary
+WhatsApp envelopes; recognized bot metadata and all linked-self output are
+rejected, and rates bound other-client storms. Live provider/device QA remains
+a separately authorized release prerequisite.

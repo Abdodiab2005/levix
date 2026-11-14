@@ -31,30 +31,30 @@ async function primePermissions() {
   }
 }
 
-function isOwnerJidSync(jid) {
+function isOwnerJidSync(jid, groupMetadata) {
   if (!mod) return false;
   try {
-    return mod.isOwnerJid(jid);
+    return mod.isOwnerJid(jid, groupMetadata);
   } catch (err) {
     logger.error({ err }, "[permissions.cjs] isOwnerJidSync failed");
     return false;
   }
 }
 
-function isBotAdminUserSync(jid) {
+function isBotAdminUserSync(jid, groupMetadata) {
   if (!mod) return false;
   try {
-    return mod.isBotAdminUser(jid);
+    return mod.isBotAdminUser(jid, groupMetadata);
   } catch (err) {
     logger.error({ err }, "[permissions.cjs] isBotAdminUserSync failed");
     return false;
   }
 }
 
-function hasBotPrivilegesSync(jid) {
+function hasBotPrivilegesSync(jid, groupMetadata) {
   if (!mod) return false;
   try {
-    return mod.hasBotPrivileges(jid);
+    return mod.hasBotPrivileges(jid, groupMetadata);
   } catch (err) {
     logger.error({ err }, "[permissions.cjs] hasBotPrivilegesSync failed");
     return false;
@@ -123,6 +123,14 @@ function getSenderCandidatesSync(msg, sock) {
   return collectNormalized(raw);
 }
 
+function participantIdsSync(participant) {
+  if (mod?.participantIds) return mod.participantIds(participant);
+  if (!participant) return [];
+  return [participant.id, participant.lid, participant.phoneNumber, participant.jid].filter(
+    Boolean,
+  );
+}
+
 function findGroupParticipantSync(groupMetadata, jidOrList) {
   if (mod?.findGroupParticipant) {
     try {
@@ -156,9 +164,9 @@ function rosterJidForSync(groupMetadata, jidOrList) {
   return collectNormalized(list)[0] || list.find(Boolean) || null;
 }
 
-async function isOwnerJid(jid) {
+async function isOwnerJid(jid, groupMetadata) {
   const m = await getMod();
-  return m.isOwnerJid(jid);
+  return m.isOwnerJid(jid, groupMetadata);
 }
 
 async function isAdminInGroup(groupMetadata, jid) {
@@ -171,9 +179,9 @@ async function isBotAdminInGroup(groupMetadata, sock) {
   return m.isBotAdminInGroup(groupMetadata, sock);
 }
 
-async function bootstrapOwners(values) {
+async function bootstrapOwners(values, verifiedSelf) {
   const m = await getMod();
-  return m.bootstrapOwners(values);
+  return m.bootstrapOwners(values, verifiedSelf);
 }
 
 async function addBootstrapOwner(value) {
@@ -181,9 +189,9 @@ async function addBootstrapOwner(value) {
   return m.addBootstrapOwner(value);
 }
 
-async function isBotAdminUser(jid) {
+async function isBotAdminUser(jid, groupMetadata) {
   const m = await getMod();
-  return m.isBotAdminUser(jid);
+  return m.isBotAdminUser(jid, groupMetadata);
 }
 
 async function grantRole(target, role) {
@@ -191,9 +199,9 @@ async function grantRole(target, role) {
   return m.grantRole(target, role);
 }
 
-async function revokeRole(target, role) {
+async function revokeRole(target, role, verifiedAliases) {
   const m = await getMod();
-  return m.revokeRole(target, role);
+  return m.revokeRole(target, role, verifiedAliases);
 }
 
 async function listRoles() {
@@ -220,5 +228,6 @@ module.exports = {
   sameUserSync,
   getSenderCandidatesSync,
   findGroupParticipantSync,
+  participantIdsSync,
   rosterJidForSync,
 };

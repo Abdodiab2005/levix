@@ -3,8 +3,9 @@ import { createRequire } from "module";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { checkBotAdmin, checkCommandPermission } from "../middleware/permissions.middleware.js";
-import { resolveGroupMetadata } from "../utils/groupMetadataCache.cjs";
+import { getCached, getRosterVersion, resolveGroupMetadata } from "../utils/groupMetadataCache.cjs";
 import { sendBotMessage } from "../utils/sendBotMessage.esm.js";
+import { accountEpoch as readAccountEpoch } from "../utils/storage.esm.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -17,6 +18,7 @@ const { langForCommand, withLang, t } = require("../utils/i18n.cjs");
 const { parseCommandText, parseCommandTextV1 } = require("../messaging/parser.cjs");
 const { createMessage, renderMessage, stampWatermark } = require("../messaging/message.cjs");
 const { routeSend, canonicalJid } = require("../messaging/router.cjs");
+const { withCommand } = require("../utils/commandContext.cjs");
 
 // Commands collection (keyed by both names and aliases)
 const commands = new Map();
@@ -82,6 +84,8 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName =
       if (prop === "sendMessage") {
         return async (jid, content, options) => {
           const opts = options ? { ...options } : {};
+          const signal = opts.signal;
+          signal?.throwIfAborted();
           const levix = opts.levix || null;
           delete opts.levix;
 
@@ -91,7 +95,9 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName =
             // An edit stays on a chat this command already sent to. It cannot
             // open a new destination.
             if (!allowed.has(requested)) return { key: null, refused: true };
-            return target.sendMessage.call(target, jid, content, opts);
+            const outgoing =
+              content.edit && levix ? stampText(content, commandName, levix) : content;
+            return target.sendMessage.call(target, jid, outgoing, opts);
           }
 
           const plan = routeSend({
@@ -121,7 +127,7 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName =
                   target,
                   chatJid,
                   { text: notice, linkPreview: null },
-                  { quoted: originalMsg },
+                  { quoted: originalMsg, ...(signal ? { signal } : {}) },
                 );
               } catch (error) {
                 logger.warn({ err: error?.message }, "[router] refusal notice failed");
@@ -150,10 +156,12 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName =
           if (eligibleForEdit) {
             editUsed = true;
             try {
-              return await target.sendMessage.call(target, chatJid, {
-                ...outgoing,
-                edit: originalMsg.key,
-              });
+              return await target.sendMessage.call(
+                target,
+                chatJid,
+                { ...outgoing, edit: originalMsg.key },
+                signal ? { signal } : undefined,
+              );
             } catch {
               // Editing failed — fall through to a normal send.
             }
@@ -164,6 +172,7 @@ function wrapSockWithReply(sock, originalMsg, editInPlace = false, commandName =
           } else if ("quoted" in opts) {
             delete opts.quoted;
           }
+          signal?.throwIfAborted();
           const sent = await target.sendMessage.call(target, plan.destination, outgoing, opts);
           if (sent?.key && !sent.key.remoteJid) sent.key.remoteJid = plan.destination;
           return sent;
@@ -183,7 +192,7 @@ function stampText(content, commandName, levix) {
   const text = stampWatermark(content.text, {
     commandName,
     category: levix?.category || "result",
-    exact: levix?.exact === true,
+    exact: levix?.exact === true || levix?.sensitivity === "secret",
   });
   if (text === content.text) return content;
   return { ...content, text };
@@ -368,7 +377,8 @@ function parseBody(body) {
   return { prefix, useV1, parsed: parse(body, { prefix }) };
 }
 
-export async function handleCommand(sock, msg, body) {
+export async function handleCommand(sock, msg, body, accountEpoch) {
+  const epoch = Number.isInteger(accountEpoch) ? accountEpoch : readAccountEpoch();
   const isGroup = msg.key.remoteJid.endsWith("@g.us");
   const { prefix, useV1, parsed } = parseBody(body);
   if (parsed.kind !== "command") return false;
@@ -406,11 +416,17 @@ export async function handleCommand(sock, msg, body) {
       invokedName,
       isGroup,
       rawRemainder: parsed.rawRemainder,
+      accountEpoch: epoch,
     }),
   );
 }
 
-async function runCommand(sock, msg, body, { command, args, invokedName, isGroup, rawRemainder }) {
+async function runCommand(
+  sock,
+  msg,
+  body,
+  { command, args, invokedName, isGroup, rawRemainder, accountEpoch },
+) {
   // Turned off from the dashboard. Answered rather than ignored so the user
   // knows the command exists and isn't broken.
   if (runtimeConfig.isDisabled(command.name)) {
@@ -424,10 +440,13 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
   }
 
   try {
-    // Cache-first: a live query only when no cached metadata exists yet (see
-    // utils/groupMetadataCache.cjs — this used to be one network round-trip
-    // per command attempt in every group).
-    const groupMetadata = isGroup ? await resolveGroupMetadata(sock, msg.key.remoteJid) : null;
+    // One read. Authorization uses a fresh or live roster and denies when the
+    // only copy is stale. The command body keeps the last known roster so a
+    // failed refresh still protects the last-known admins.
+    const jid = msg.key.remoteJid;
+    const authMetadata = isGroup ? await resolveGroupMetadata(sock, jid, { fresh: true }) : null;
+    const groupMetadata = isGroup ? authMetadata || getCached(jid) || null : null;
+    const rosterVersion = isGroup ? getRosterVersion(jid) : undefined;
 
     if (command.name !== "group") {
       // Enforce the `chat` constraint declared by the command. Until now this
@@ -461,7 +480,7 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
       // `!kick` directly is gated exactly like running `!group kick`.
       const permissionKey = command.__category === "group" ? `group:${command.name}` : command.name;
 
-      const permissionCheck = checkCommandPermission(permissionKey, msg, groupMetadata, sock);
+      const permissionCheck = checkCommandPermission(permissionKey, msg, authMetadata, sock);
 
       if (!permissionCheck.hasPermission) {
         await sendBotMessage(
@@ -485,7 +504,7 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
         return true;
       }
 
-      if (command.botAdminRequired && !checkBotAdmin(groupMetadata, sock)) {
+      if (command.botAdminRequired && !checkBotAdmin(authMetadata, sock)) {
         await sendBotMessage(
           sock,
           msg.key.remoteJid,
@@ -505,7 +524,10 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
       canonicalName: command.name,
       isAlias: invokedName !== command.name,
       groupMetadata,
+      authGroupMetadata: authMetadata,
       rawRemainder: rawRemainder || "",
+      accountEpoch,
+      ...(isGroup ? { rosterVersion } : {}),
     };
 
     // Wrap the socket so legacy commands that still call sock.sendMessage
@@ -516,7 +538,13 @@ async function runCommand(sock, msg, body, { command, args, invokedName, isGroup
     // place instead of posting a second message (see EDIT_IN_PLACE_EXCLUDE).
     const editInPlace = !EDIT_IN_PLACE_EXCLUDE.has(command.name);
     const proxiedSock = wrapSockWithReply(sock, msg, editInPlace, command.name);
-    await command.execute(proxiedSock, msg, args, body, groupMetadata, ctx);
+    if (readAccountEpoch() !== accountEpoch) {
+      logger.debug("[Command] skipped account work after account change");
+      return true;
+    }
+    await withCommand(command.name, () =>
+      command.execute(proxiedSock, msg, args, body, groupMetadata, ctx),
+    );
     return true;
   } catch (error) {
     logger.error({ err: error, command: invokedName }, "Error executing command");

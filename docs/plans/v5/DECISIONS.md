@@ -151,30 +151,81 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
   to the creator's private chat, and password-reset codes keep their private destination. Phase 05
   records them as named exceptions in the router.
 
-## ADR-008: One generic reaction rules engine
+## ADR-008: One generic Free Core reaction rules engine
 
-- Status: ACCEPTED (owner, locked decision 8). Storage rule PROPOSED.
-- Context: reactions are dropped today. `reactionMessage` is in `NON_CONTENT_KEYS`
-  (`src/handlers/message.handler.js:26`) and `src/core/events.js` subscribes to `messages.upsert`
-  only. The only message cache keeps messages the bot itself sent, for one hour, up to 500 entries
-  (`src/utils/recentMessageCache.esm.js:13`).
-- Decision: one engine evaluates trigger, conditions, action and destination. The voice-to-text
-  example (a reaction on a voice note runs STT) is configuration, not code. Actions call existing
-  capabilities through their existing permission checks.
-- Decision (PROPOSED): a reaction can only act on a message the bot can still identify. Phase 07 adds
-  a bounded, time-limited lookup that records only what a rule needs, only for chats that have an
-  enabled rule. It does not archive message content by default (AGENTS.md gotcha 13).
+- Status: ACCEPTED (owner, clarified 2026-11-06).
+- Decision: Reaction Automation, the Rules Engine, rule creation/editing/enabling/
+  disabling, the dashboard Rule Builder and reaction actions through existing
+  capabilities are Free Core. There is no artificial Free-tier rule-count cap
+  and no subscription dependency. Actions retain normal live command permissions,
+  disabled-command checks and capability requirements, with Phase 05 routing.
+- Storage/event flow (07a): authenticated Baileys `messages.reaction` → validate
+  reactor transport key and exact target identity → enabled-chat RAM lookup →
+  atomic durable replay claim → normalized transition. Folded `WAMessage.reactions`
+  share those claims. Reaction upserts remain
+  outside commands/moderation and are not consumed twice. 07a sends nothing.
+- Originals are held only in memory, only for enabled-rule chats: 30-minute TTL,
+  500 entries, 8 MiB total/64 KiB per entry, no media downloads or quoted context.
+  Hidden/disappearing/self messages, historical recovery and unknown originals
+  are unsupported. Observed deletes/edits invalidate; reconnect starts empty.
+- Replay claims, latest transitions and bounded hash-only deletion/edit invalidations
+  survive restart. Event transport IDs are
+  unique within an account; reuse is conservatively refused across chats/aliases.
+  Tied/older timestamps and unchanged emoji do not produce transitions. Events
+  older than 30 minutes are ineligible; retention covers that window and clock
+  skew. Each event/transition ledger has a 10,000-row resource cap: reject new work at
+  capacity without evicting live claims. Up to 500 invalidation markers collapse to
+  one conservative global lookup block at saturation. These are resource bounds,
+  not rule-count or tier limits.
+- Claims precede handoff: crash recovery may lose an action, never blindly retry
+  it. 07b must additionally claim event/rule and deduplicated actions before
+  side effects, then apply real-sender auth, routing, cancellation, bounded
+  concurrency/rates and a global kill switch. Rules default disabled; unlink
+  and backup restore require fresh enablement. No original-message archive.
 
-## ADR-009: AI Auto Reply is opt-in, limited and part of Free
+- 07b implementation: strict versioned declarative definitions; initial existing
+  capabilities are voice STT and ping. Add/change matches the new emoji, removal
+  matches the previous emoji. Lower numeric priority then binary lexical id
+  selects one matching rule; failure never selects another action.
+- Rule/global switches default off. Enablement records an epoch and rotates a
+  revision; edits disable rules. Originals must be received and timestamped
+  strictly after enablement and this socket's connection, with the same captured
+  configuration revision. Configuration changes clear lookup conservatively.
+- Matching work has two global slots across socket generations, one per proven
+  reactor and no waiting queue. Persistent fixed 60-second admission windows
+  allow 3/reactor and 10/chat attempts; selected-rule actions allow 5/rule.
+  SQL prefilters emoji/transition/type before processing at most 100 matching
+  candidates; overload fails closed. There is no total/tier rule-count cap.
+- Schema 12 preserves hash-only event/rule/action claims and budgets, each ledger
+  bounded at 10,000 live rows. A crash/refusal/cancellation consumes the attempt;
+  no automatic retry. This is at-most-once execution, never exactly-once delivery.
+  External work that ignores cancellation retains its slot until settled.
+- Fresh remote group membership plus strict authoritative identity/role checks
+  precede actions/provider submission and final send. A synchronous final guard
+  follows all async preparation. Rule disable/edit/delete, global kill, original
+  invalidation, group changes and disconnect abort pending work. An initiated
+  send cannot be retracted. Only source and linked-owner-private destinations
+  are supported initially, through the Phase 05 router; there is no fallback.
 
-- Status: ACCEPTED (owner, locked decision 8).
-- Decision: off by default. The operator enables it per contact or group, with trigger policies,
-  rate limits, loop protection and a kill switch. Every tool call still runs as the real sender
-  through `src/services/aiToolAuth.cjs`.
+## ADR-009: Prefix-free AI Auto Reply is opt-in, limited and paid Plus
+
+- Status: ACCEPTED (owner, 2026-11-06); supersedes this ADR's earlier Free scope.
+- Decision: AI Auto Reply without a command prefix, its per-contact/group
+  configuration and entitlement-based activation/runtime belong to paid Levix
+  Plus in Phase 08. They are not implemented in Phase 07 or the public Core
+  repository. Existing explicit AI commands/tools remain Core.
+- Safety requirements are retained: off by default; per-contact/group opt-in
+  allowlists and trigger policy; rate/cost limits, debounce, loop protection,
+  bounded context, restart/reconnect idempotency, cancellation and a kill switch.
+  Every tool runs through `aiToolAuth.cjs` for the real sender. Protect group
+  memory/privacy; subscription outage never impairs Free Reaction Automation.
 
 ## ADR-010: Plus price lives in store configuration
 
 - Status: ACCEPTED (owner, locked decision 10).
+- Amended by the owner 2026-11-11: preserve `message_watermark=false` and every
+  existing Free choice. Phase 09 must not silently enable the watermark or turn
+  its existing Free switch into a paid feature.
 - Decision: USD 0.99 per month worldwide, with an Egypt price 30% lower, set through Google Play
   country pricing. The final EGP amount follows Play pricing, taxes and rounding. No code converts
   currencies or locates users by IP address.
@@ -373,3 +424,13 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
   update that keeps `package.json` but changes `versionCode` therefore asks again. A restart or a
   reinstall of the same APK keeps the acceptance. Two non-Android builds with the same
   `package.json` version share one identity; `release.yml` makes every official release bump it.
+
+## ADR-021: Include existing Phase 11A in v5.0.0
+
+- Status: ACCEPTED (owner, Task 05, 2026-11-13).
+- Decision: port only PR #168's account card, tests and relevant documentation
+  from its source diff to the current v5 release HEAD. This amends ADR-015's
+  order and supersedes the earlier next-release-only boundary for 11A alone.
+- Keep original PR #168 unchanged; create a new Draft PR targeting
+  `release/5.0.0-beta.1`. Phase 10 remains the final release gate. No merge,
+  version bump, tag or publication is authorized.

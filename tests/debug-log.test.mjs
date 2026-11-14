@@ -57,6 +57,57 @@ ok("a session value is gone", !text.includes("sess-1"));
 ok("a passcode value is gone", !text.includes("9999"));
 ok("the redaction marker is written", text.includes("[redacted]"));
 
+section("personal-name keys never keep their value");
+
+logger.debug(
+  {
+    update: {
+      participants: [{ id: "u1", username: "nora_qasim_91", admin: null }],
+    },
+    key: { participantUsername: "karim_adel_44" },
+    recv: {
+      attrs: { participant_username: "salma_nabil_17", notify: "Huda Farouk" },
+    },
+    pushName: "Yusuf Mansour",
+    verifiedName: "Lina Barakat",
+    displayName: "Omar Fathy",
+    user_name: "user_name_tariq_8",
+    push_name: "push_name_leila",
+    verified_name: "verified_name_mona",
+    display_name: "display_name_adel",
+    notified: true,
+    notifyMode: "group",
+  },
+  "name probe",
+);
+text = readToday();
+ok("a participant username is gone", !text.includes("nora_qasim_91"));
+ok("a key participantUsername is gone", !text.includes("karim_adel_44"));
+ok("a stanza participant_username is gone", !text.includes("salma_nabil_17"));
+ok("a stanza notify name is gone", !text.includes("Huda Farouk"));
+ok("a pushName is gone", !text.includes("Yusuf Mansour"));
+ok("a verifiedName is gone", !text.includes("Lina Barakat"));
+ok("a displayName is gone", !text.includes("Omar Fathy"));
+ok("a user_name is gone", !text.includes("user_name_tariq_8"));
+ok("a push_name is gone", !text.includes("push_name_leila"));
+ok("a verified_name is gone", !text.includes("verified_name_mona"));
+ok("a display_name is gone", !text.includes("display_name_adel"));
+ok("the redaction marker is written", text.includes("[redacted]"));
+const nameRecord = JSON.parse(text.trim().split("\n").at(-1));
+equal("participant username is redacted", nameRecord.update.participants[0].username, "[redacted]");
+equal("participantUsername is redacted", nameRecord.key.participantUsername, "[redacted]");
+equal("participant_username is redacted", nameRecord.recv.attrs.participant_username, "[redacted]");
+equal("notify is redacted", nameRecord.recv.attrs.notify, "[redacted]");
+equal("pushName is redacted", nameRecord.pushName, "[redacted]");
+equal("verifiedName is redacted", nameRecord.verifiedName, "[redacted]");
+equal("displayName is redacted", nameRecord.displayName, "[redacted]");
+equal("user_name is redacted", nameRecord.user_name, "[redacted]");
+equal("push_name is redacted", nameRecord.push_name, "[redacted]");
+equal("verified_name is redacted", nameRecord.verified_name, "[redacted]");
+equal("display_name is redacted", nameRecord.display_name, "[redacted]");
+equal("notified stays", nameRecord.notified, true);
+equal("notifyMode stays", nameRecord.notifyMode, "group");
+
 section("diagnostic codes survive, short digit codes do not");
 
 logger.debug(

@@ -56,7 +56,13 @@ function pickMedia(message) {
 
 function quotedOf(msg) {
   const inner = unwrapMessage(msg?.message);
-  for (const key of ["extendedTextMessage", "imageMessage", "videoMessage", "documentMessage"]) {
+  for (const key of [
+    "extendedTextMessage",
+    "imageMessage",
+    "videoMessage",
+    "audioMessage",
+    "documentMessage",
+  ]) {
     const quoted = inner[key]?.contextInfo?.quotedMessage;
     if (quoted) return quoted;
   }

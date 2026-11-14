@@ -48,8 +48,48 @@ export async function bootstrapPanel({ core } = {}) {
   );
   const stickerApi = await import("../routes/stickers.api.esm.js");
   const backupApi = await import("../routes/backup.api.esm.js");
+  const reactionsApi = await import("../routes/reactions.api.esm.js");
+  const { createPlusRouter } = await import("../routes/plus.api.esm.js");
   require("../backup/jobs.cjs").sweepBackupTemp();
   require("../backup/uploads.cjs").sweepUploads(true);
+
+  // Plus extension panel API. Same auth as the rest of the dashboard; a
+  // tighter JSON cap than the 2mb dashboard parser. /plus/status, /prepare,
+  // /claim and /refresh are mounted with the dashboard API below.
+  const express = require("express");
+  const { host: plusHost } = require("../extensions/host.cjs");
+  const plusApi = createPlusRouter({
+    entitlement: require("../extensions/entitlement/index.cjs"),
+    extensionStatus: () => ({ state: plusHost.status().state }),
+  });
+  app.use(
+    "/dashboard/api/plus/ext",
+    requireLoginApi,
+    noStore,
+    express.json({ limit: "64kb" }),
+    (req, res) => {
+      Promise.resolve(plusHost.handlePanel(req.method, req.url || "/", req.body, req.signal))
+        .then((result) => {
+          const status = result?.status || 404;
+          res.status(status).json(result?.body ?? { error: "not_found" });
+        })
+        .catch((error) => {
+          logger.error({ err: error }, "[plus] panelApi failed");
+          res.status(500).json({ error: "internal" });
+        });
+    },
+  );
+
+  app.use(
+    "/dashboard/api/plus",
+    requireLoginApi,
+    noStore,
+    express.json({ limit: "4kb" }),
+    (err, req, res, next) => {
+      if (res.headersSent) return next(err);
+      res.status(400).json({ ok: false, code: "BAD_REQUEST" });
+    },
+  );
 
   // Same session as the control panel. One chain and one JSON parser: the
   // sticker upload is raw bytes (any Content-Type, up to the upload cap) and
@@ -61,6 +101,8 @@ export async function bootstrapPanel({ core } = {}) {
     stickerApi.jsonUnlessStickerUpload(backupApi.jsonUnlessBackupUpload(dashboardJson)),
     stickerApi.default,
     backupApi.default,
+    reactionsApi.default,
+    plusApi,
     dashboardApiRoutes,
   );
   logger.info("Dashboard API routes registered");
@@ -81,6 +123,7 @@ export async function bootstrapPanel({ core } = {}) {
   if (core?.session) {
     setSession(core.session);
     stickerApi.setSession(core.session);
+    reactionsApi.setSession(core.session);
     require("../backup/jobs.cjs").setSession(core.session);
   }
   // The WhatsApp-code password reset talks to the same session manager.

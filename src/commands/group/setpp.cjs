@@ -42,7 +42,7 @@ module.exports = {
       await status.finish(t("bot.group.setpp.done"));
     } catch (error) {
       logger.error({ err: error }, "Error in !group setpp command");
-      await status.finish(t("bot.group.setpp.failed"));
+      await status.finish(t("bot.group.setpp.failed"), { category: "error" });
     }
   },
 };

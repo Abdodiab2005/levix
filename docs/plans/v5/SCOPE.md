@@ -20,10 +20,10 @@ The owner made these decisions. They are recorded as ACCEPTED ADRs in `DECISIONS
 7. Command Engine v2 handles aliases, nested commands and a newline between command and
    sub-command, and keeps every current permission. `!status` becomes short for ordinary users;
    detailed diagnostics stay privileged. `!update` and a health check are added.
-8. One generic reaction rules engine. AI Auto Reply without a prefix is opt-in (ADR-008, ADR-009).
+8. Free Core Reaction Automation, Rules Engine and Rule Builder, with no artificial tier rule-count restriction. Prefix-free AI Auto Reply and its per-chat configuration/runtime are paid Plus (ADR-008, ADR-009).
 9. Reply Router: the default is the same chat (ADR-007).
-10. Levix Plus: USD 0.99 per month, 30% lower in Egypt through Play pricing. Plus adds cosmetics and
-    customization only and removes no Free feature (ADR-010, ADR-012).
+10. Levix Plus: USD 0.99 per month, 30% lower in Egypt through Play pricing. Plus adds cosmetics,
+    customization and opt-in prefix-free AI Auto Reply; Reaction Automation stays Free (ADR-010, ADR-012).
 11. Mandatory Terms and Privacy consent from a central Leviro source with a verified local fallback.
     Acceptance is stored locally and not uploaded (ADR-006).
 12. Update checker, GitHub star and optional Play review prompt, official links, Backup and Restore,
@@ -56,8 +56,8 @@ The owner made these decisions. They are recorded as ACCEPTED ADRs in `DECISIONS
 | F-10 | Short `!status` and owner health check | `PLANNED`; owner-only `!status` is `SHIPPED` | 05 | Ordinary output shows no versions, kernel or paths; health states `ok`, `degraded`, `down`, `unknown` | Q-06 | none | restore old output |
 | F-11 | Documentation-aware AI | `PLANNED` | 06 | Answers cite a bundled doc section and version; planned features are never presented as shipped | approved user docs | bundled doc index | tools removed from the declaration list |
 | F-12 | Natural-language image, TTS and STT | `PLANNED`; the commands and the `speak` tool are `SHIPPED` | 06 | The agent calls the existing code paths, with the same permission checks, when the provider supports them | F-07, F-08 | provider uploads of user media | tool declarations removed |
-| F-13 | Reaction automation | `PLANNED`; reactions are ignored today | 07 | One engine runs every configured example; no shadow archive; idempotent on redelivery | F-08, ADR-008 | rules table, bounded message lookup | engine kill switch; rules disabled |
-| F-14 | AI Auto Reply | `PLANNED` | 07 | Off by default; one reply per authorized event; kill switch works; no loops | F-08, F-12 | per-chat state, local counters | kill switch |
+| F-13 | Free Reaction Automation and Rule Builder | `PLANNED`; 07a intake in review, actions/UI not yet implemented | 07 | One engine runs every configured example; no shadow archive; idempotent on redelivery | F-08, ADR-008 | rules table, bounded message lookup | engine kill switch; rules disabled |
+| F-14 | AI Auto Reply (paid Plus, private runtime) | `PLANNED` | 08 | Off by default; one reply per authorized event; kill switch works; no loops | F-08, F-12 | per-chat state, local counters | kill switch |
 | F-15 | Plus extension contract, billing, personalization | `PLANNED` | 08 | Free builds and passes with no Plus code; entitlements verified server-side; Core works offline | F-07, F-04, private repo access | entitlement cache, template overrides | Plus disabled; Free defaults return |
 | F-16 | Update checker and `!update` | `PLANNED` | 09 | Correct per channel; no download or run of code; offline handled | F-09 | small local cache | command disabled |
 | F-17 | Official links, rating and star prompts | `PLANNED` | 09 | Links open safely; prompts respect Play limits and never gate features | none | local dismiss flags | remove prompts |
@@ -72,3 +72,13 @@ The owner made these decisions. They are recorded as ACCEPTED ADRs in `DECISIONS
 4. Public docs changed only for behaviour that shipped in that phase.
 5. A dated entry in `CHANGELOG.md` with the PR link.
 6. The owner approves before the next phase starts.
+
+## Phase 11A scope amendment — 2026-11-13
+
+Owner decision (Task 05): include the existing Free Connected WhatsApp Account
+Card from PR #168 in v5.0.0, PENDING REVIEW through a new Draft PR against
+`release/5.0.0-beta.1`. Only 11A is brought forward; other next-release work
+stays excluded. No redesign, dependencies, migration or version bump.
+Success: source-equivalent profile/privacy/lifecycle behavior and four locales,
+focused tests and full PR CI. Rollback: revert the card/service/routes together.
+See `PHASE-11A-PORT.md`; Phase 10 remains mandatory.

@@ -1,5 +1,6 @@
 // file: /commands/listschedules.js
-const { getScheduledJobs } = require("../../scheduler.cjs");
+const { getScheduledJobsForChat } = require("../../scheduler.cjs");
+const settings = require("../config/settings.cjs");
 const { t, intlTag } = require("../utils/i18n.cjs");
 
 module.exports = {
@@ -8,7 +9,8 @@ module.exports = {
   userAdminRequired: true,
 
   async execute(sock, msg) {
-    const jobs = getScheduledJobs();
+    // Only this chat's jobs: another chat's reminders are never listed here.
+    const jobs = getScheduledJobsForChat(msg.key.remoteJid, msg.key.remoteJidAlt);
     const activeJobs = jobs.filter((job) => job.status === "pending" || job.status === "active");
 
     if (activeJobs.length === 0) {
@@ -28,7 +30,7 @@ module.exports = {
         reply += t("bot.schedules.listschedules.repeats", { cron: job.cronString });
       } else {
         const jobDate = new Date(job.date).toLocaleString(intlTag(), {
-          timeZone: "Africa/Cairo",
+          timeZone: settings.get("bot_timezone"),
         });
         reply += t("bot.schedules.listschedules.when", { date: jobDate });
       }

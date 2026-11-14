@@ -10,8 +10,8 @@
 //
 // The active provider itself (gemini / openai / anthropic) is a setting, and
 // the loop it dispatches to lives in services/aiAgent.cjs +
-// services/aiProviders.cjs. Media and !generate/!stt stay Gemini-only — the
-// other providers have no Files API to upload to.
+// services/aiProviders.cjs. Images use the dedicated Gemini model; ordinary
+// voice attachments are read lazily by the authorized transcription tool.
 //
 // What moved out:
 //   * the system prompt          -> config/ai-persona.md (editable, hot-reloaded)
@@ -23,9 +23,11 @@
 // never costs four messages.
 
 const { GoogleGenAI } = require("@google/genai");
+const { geminiHttpOptions } = require("../utils/geminiHttpOptions.cjs");
 
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
+const { accountEpoch } = require("../db/store.cjs");
 const {
   getChatHistoryAsync,
   saveChatHistoryAsync,
@@ -35,8 +37,11 @@ const {
 const { sendBotMessage, sendBotError } = require("../utils/sendBotMessage.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const { formatMarkdownForWhatsApp } = require("../utils/markdownParser.cjs");
-const { isOwnerJidSync } = require("../utils/permissions.cjs");
-const { resolveCaller } = require("../services/aiToolAuth.cjs");
+const { isOwnerJidSync, getSenderCandidatesSync } = require("../utils/permissions.cjs");
+const { resolveCaller, isCurrentCaller } = require("../services/aiToolAuth.cjs");
+const { globalMemoryAccess, stripMemoryToolParts } = require("../services/memoryPolicy.cjs");
+const { resolveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
+const { generateImage } = require("../services/aiImage.cjs");
 const {
   runAgent,
   formatSources,
@@ -46,16 +51,15 @@ const {
 } = require("../services/aiAgent.cjs");
 const { getProvider } = require("../services/aiRouter.cjs");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
-const { unwrapMessage, visibleText } = require("../utils/messageContent.cjs");
-const {
-  assertProviderBaseUrl,
-  assertProviderRequestUrl,
-} = require("../utils/providerUrl.cjs");
+const { unwrapMessage, visibleText, quotedOf } = require("../utils/messageContent.cjs");
+const { assertProviderBaseUrl, assertProviderRequestUrl } = require("../utils/providerUrl.cjs");
 const { t } = require("../utils/i18n.cjs");
 
 // Per-(chat, sender) explicit context buffer for the multi-message workflow.
 // Entries accumulate until `!gemini send` flushes them into a single call.
 // Lives in memory only — short-lived by design.
+let historyRevision = 0;
+const chatHistoryRevisions = new Map();
 const contextBuffers = new Map(); // key: "<chatJid>::<senderJid>" -> { entries, at }
 const MAX_BUFFER_ENTRIES = 20;
 const MAX_BUFFER_CHARS = 32_000;
@@ -127,7 +131,7 @@ function geminiClients() {
     geminiCache = {
       key,
       baseUrl,
-      genAI: new GoogleGenAI({ apiKey: key, httpOptions: { baseUrl } }),
+      genAI: new GoogleGenAI({ apiKey: key, apiVersion: "v1beta", httpOptions: geminiHttpOptions(baseUrl) }),
     };
   }
   return geminiCache;
@@ -251,12 +255,17 @@ module.exports = {
   chat: "all",
 
   async execute(sock, msg, args, body, groupMetadata, ctx = {}) {
+    const epoch = ctx?.accountEpoch ?? accountEpoch();
     const chatId = msg.key.remoteJid;
     const userName = msg.pushName;
     const isGroup = chatId.endsWith("@g.us");
 
     const senderId = msg.key.fromMe ? null : isGroup ? msg.key.participant : msg.key.remoteJid;
-    const isOwner = msg.key.fromMe || isOwnerJidSync(senderId);
+    const authMetadata =
+      ctx && Object.hasOwn(ctx, "authGroupMetadata") ? ctx.authGroupMetadata : groupMetadata;
+    const isOwner =
+      msg.key.fromMe ||
+      getSenderCandidatesSync(msg, sock).some((id) => isOwnerJidSync(id, authMetadata));
 
     // Resolve sub-command. Aliases like !del arrive via ctx.invokedName, while
     // `!gemini del ...` arrives as args[0].
@@ -288,6 +297,7 @@ module.exports = {
           { text: t("bot.ai.gemini.ownerOnly") },
           { replyTo: msg },
         );
+      chatHistoryRevisions.set(chatId, (chatHistoryRevisions.get(chatId) || 0) + 1);
       await deleteChatHistoryAsync(chatId);
       return sendBotMessage(
         sock,
@@ -306,6 +316,8 @@ module.exports = {
           { text: t("bot.ai.gemini.ownerOnly") },
           { replyTo: msg },
         );
+      historyRevision += 1;
+      chatHistoryRevisions.clear();
       await deleteAllChatHistoriesAsync();
       return sendBotMessage(
         sock,
@@ -338,50 +350,38 @@ module.exports = {
       });
 
       try {
-        // Image generation needs a model that returns image bytes, which only
-        // the Gemini image models do — it stays on Gemini whatever the chat
-        // provider is.
-        if (!geminiClients().genAI) {
-          throw new Error(t("bot.ai.gemini.noGeminiKeyImages"));
-        }
-        await assertProviderRequestUrl(settings.get("gemini_base_url"), {
-          allowLoopback: true,
-        });
+        // Image generation stays on the dedicated Gemini image model, whatever
+        // ai_provider is. generateImage owns the request, the byte checks, and
+        // the fixed error codes.
         const fullPrompt =
           imagePrompt && quotedMsg
             ? `Prompt: ${imagePrompt} ,using quote: ${quotedMsg}`
             : imagePrompt
               ? `Prompt: ${imagePrompt}`
               : `Prompt: ${quotedMsg}`;
-        const response = await geminiClients().genAI.models.generateContent({
-          model: settings.get("gemini_image_model"),
-          contents: `Generate an image using this prompt: ${fullPrompt}`,
-        });
-
-        // The bytes come back as an inlineData part. (The previous code read
-        // `fileData.data`, which is not a field that exists on either SDK —
-        // this path could never have produced an image.)
-        const image = (response.candidates?.[0]?.content?.parts || []).find(
-          (part) => part?.inlineData?.data,
-        );
-        if (!image) {
-          throw new Error(t("bot.ai.gemini.noImageInAnswer"));
-        }
-        const imageBuffer = Buffer.from(image.inlineData.data, "base64");
-
+        const generated = await generateImage(fullPrompt);
         await status.remove();
         await sendBotMessage(
           sock,
           chatId,
           {
-            image: imageBuffer,
+            image: generated.image,
             caption: t("bot.ai.gemini.imageCaption", { prompt: imagePrompt }),
           },
           { replyTo: msg },
         );
       } catch (error) {
-        logger.error({ err: error }, `Error in !generate command`);
-        await status.fail(error, t("bot.ai.gemini.imageFailed"));
+        const code = error?.code || error?.message;
+        const shown =
+          code === "IMAGE_KEY_REQUIRED"
+            ? t("bot.ai.gemini.noGeminiKeyImages")
+            : code === "IMAGE_OUTPUT_INVALID"
+              ? t("bot.ai.gemini.noImageInAnswer")
+              : code === "IMAGE_QUOTA"
+                ? t("bot.ai.stt.quota")
+                : t("bot.ai.gemini.imageFailed");
+        logger.error({ code: code || "IMAGE_FAILED" }, "Error in !generate command");
+        await status.fail(new Error(shown), t("bot.ai.gemini.imageFailed"));
       }
       return;
     }
@@ -389,6 +389,7 @@ module.exports = {
     // --- multi-message context buffer ---
     if (subCommand === "add") {
       const entry = await captureContextEntry(msg, args);
+      if (epoch !== accountEpoch()) return;
       if (!entryHasContent(entry)) {
         return sendBotMessage(
           sock,
@@ -479,6 +480,7 @@ module.exports = {
     if (subCommand === "send") {
       const buf = getBuffer(msg);
       const finalEntry = await captureContextEntry(msg, args);
+      if (epoch !== accountEpoch()) return;
       const allEntries = [...buf];
       if (entryHasContent(finalEntry)) allEntries.push(finalEntry);
       if (!allEntries.length) {
@@ -506,39 +508,20 @@ module.exports = {
           msg.message.imageMessage ? "image" : "video",
         );
         parts.push({
-          text:
-            prompt ||
-            mediaMessage.caption ||
-            t("bot.ai.gemini.mediaPrompt"),
+          text: prompt || mediaMessage.caption || t("bot.ai.gemini.mediaPrompt"),
         });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload media to Gemini.");
-        return sendBotError(
-          sock,
-          chatId,
-          error,
-          t("bot.ai.gemini.uploadMediaFailed"),
-          {
-            replyTo: msg,
-          },
-        );
+        return sendBotError(sock, chatId, error, t("bot.ai.gemini.uploadMediaFailed"), {
+          replyTo: msg,
+        });
       }
-    } else if (!parts.length && msg.message?.audioMessage) {
-      try {
-        await processIncomingMedia(parts, msg.message.audioMessage, "audio");
-        parts.push({ text: prompt || t("bot.ai.gemini.analyzeRecording") });
-      } catch (error) {
-        logger.error({ err: error }, "Failed to upload audio to Gemini.");
-        return sendBotError(
-          sock,
-          chatId,
-          error,
-          t("bot.ai.gemini.uploadRecordingFailed"),
-          {
-            replyTo: msg,
-          },
-        );
-      }
+    } else if (!parts.length && unwrapMessage(msg.message).audioMessage) {
+      // i18n-exception: attachment metadata sent only to the model, not a reply.
+      parts.push({
+        text: "[Audio attached to this turn; transcribe_audio can read it when requested.]",
+      });
+      parts.push({ text: prompt || t("bot.ai.gemini.analyzeRecording") });
     } else if (!parts.length && msg.message?.documentMessage) {
       try {
         await processIncomingMedia(parts, msg.message.documentMessage, "document");
@@ -551,15 +534,9 @@ module.exports = {
         });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload document to Gemini.");
-        return sendBotError(
-          sock,
-          chatId,
-          error,
-          t("bot.ai.gemini.uploadFileFailed"),
-          {
-            replyTo: msg,
-          },
-        );
+        return sendBotError(sock, chatId, error, t("bot.ai.gemini.uploadFileFailed"), {
+          replyTo: msg,
+        });
       }
     } else if (!parts.length && prompt) {
       parts.push({ text: prompt });
@@ -578,8 +555,7 @@ module.exports = {
 
     // Quoted message context. Skipped for `!gemini send` — those entries
     // captured their own quotes at `add` time.
-    const quotedMsg =
-      subCommand === "send" ? null : msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+    const quotedMsg = subCommand === "send" ? null : quotedOf(msg);
 
     if (quotedMsg) {
       let quotedMediaPart = null;
@@ -587,7 +563,12 @@ module.exports = {
       const quotedText = visibleText(quotedMsg);
       const mediaInQuote = pickMedia(quotedMsg);
 
-      if (mediaInQuote) {
+      if (mediaInQuote?.type === "audio") {
+        // i18n-exception: attachment metadata sent only to the model.
+        quotedMediaPart = {
+          text: "[Quoted audio is available to transcribe_audio when requested.]",
+        };
+      } else if (mediaInQuote) {
         try {
           const probeParts = [];
           await processIncomingMedia(probeParts, mediaInQuote.media, mediaInQuote.type);
@@ -597,15 +578,9 @@ module.exports = {
           // AND a second reply from a model that had never seen the photo
           // ("I can't see any image") — two messages, the second one wrong.
           logger.error({ err: mediaError }, "Failed to process quoted media");
-          return sendBotError(
-            sock,
-            chatId,
-            mediaError,
-            t("bot.ai.gemini.quotedProblem"),
-            {
-              replyTo: msg,
-            },
-          );
+          return sendBotError(sock, chatId, mediaError, t("bot.ai.gemini.quotedProblem"), {
+            replyTo: msg,
+          });
         }
       }
 
@@ -642,7 +617,24 @@ module.exports = {
     // way the command dispatcher resolves them, and frozen. The tools
     // authorize against it and nothing else — not the quoted message's author,
     // not a name in a web page, not anything the model writes into arguments.
-    const caller = await resolveCaller({ msg, sock, groupMetadata, text: body || "" });
+    // Group-admin tools follow the dispatcher's fresh roster. A stale copy
+    // keeps its subject for the prompt and loses the admin flags.
+    let callerRoster = groupMetadata;
+    if (ctx && Object.prototype.hasOwnProperty.call(ctx, "authGroupMetadata")) {
+      callerRoster = ctx.authGroupMetadata;
+    } else if (isGroup) {
+      callerRoster = await resolveGroupMetadata(sock, chatId, { fresh: true });
+    }
+    if (!callerRoster && groupMetadata?.subject) callerRoster = { subject: groupMetadata.subject };
+    const caller = await resolveCaller({
+      msg,
+      sock,
+      groupMetadata: callerRoster,
+      accountEpoch: epoch,
+      rosterVersion: ctx?.rosterVersion,
+      text: body || "",
+    });
+    if (!isCurrentCaller(caller)) return;
     const agentContext = {
       caller,
       // Infrastructure, not identity: tools that post media (speak, poll)
@@ -673,15 +665,24 @@ module.exports = {
       replyTo: msg,
     });
 
+    const revision = historyRevision;
+    const chatRevision = chatHistoryRevisions.get(chatId) || 0;
+    const canSaveHistory = () =>
+      epoch === accountEpoch() &&
+      revision === historyRevision &&
+      chatRevision === (chatHistoryRevisions.get(chatId) || 0);
+
     async function attempt(historyOverride) {
+      if (!isCurrentCaller(caller)) return;
       const history = historyOverride ?? ((await getChatHistoryAsync(chatId)) || []);
+      if (!isCurrentCaller(caller)) return;
       const result = await runAgent({
         parts,
-        history,
+        history: globalMemoryAccess(agentContext).read ? history : stripMemoryToolParts(history),
         status,
         context: agentContext,
       });
-      if (result.history?.length) {
+      if (canSaveHistory() && result.history?.length) {
         await saveChatHistoryAsync(chatId, result.history);
       }
       return result;
@@ -692,22 +693,24 @@ module.exports = {
       try {
         result = await attempt();
       } catch (firstErr) {
+        if (!isCurrentCaller(caller)) return;
         // A dead fileData URI in the history poisons every later call — scrub
         // it once and retry so the user never sees the expiry.
-        if (!isFileReferenceError(firstErr)) throw firstErr;
+        if (!isFileReferenceError(firstErr) || !canSaveHistory()) throw firstErr;
 
         const oldHistory = (await getChatHistoryAsync(chatId)) || [];
+        if (!isCurrentCaller(caller)) return;
         const cleaned = sanitizeHistoryForFiles(oldHistory);
+        if (!canSaveHistory()) throw firstErr;
         await saveChatHistoryAsync(chatId, cleaned);
         logger.info(
-          `[Gemini] sanitized history for chat ${chatId}: ${oldHistory.length} -> ${cleaned.length}; retrying once`,
+          `[Gemini] sanitized history: ${oldHistory.length} -> ${cleaned.length}; retrying once`,
         );
         result = await attempt(cleaned);
       }
 
-      const text =
-        result.text?.trim() ||
-        t("bot.ai.gemini.noAnswer");
+      if (!result) return;
+      const text = result.text?.trim() || t("bot.ai.gemini.noAnswer");
       // Appended only when Gemini really grounded the answer on a search —
       // formatSources() returns "" for an answer the model gave from its own
       // knowledge, so there is never a Sources block with nothing behind it.
@@ -715,10 +718,7 @@ module.exports = {
       await status.finish(responseText);
     } catch (error) {
       logger.error({ err: error }, "Error in !gemini command");
-      await status.fail(
-        error,
-        t("bot.ai.gemini.chatFailed"),
-      );
+      await status.fail(error, t("bot.ai.gemini.chatFailed"));
     }
   },
 };

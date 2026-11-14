@@ -74,4 +74,38 @@ policy = sessionStartupPolicy({ autoStart: true, wasPaired: true });
 equal("headless still starts an already-paired install", policy.start, true);
 equal("explicit autostart wins over resume-paired", policy.reason, "autostart");
 
+policy = sessionStartupPolicy({ autoStart: false, wasPaired: true, unlinkPending: true });
+equal("a pending unlink does not resume a paired install", policy.start, false);
+equal("a pending unlink reports unlink_incomplete", policy.reason, "unlink_incomplete");
+
+policy = sessionStartupPolicy({ autoStart: true, wasPaired: true, unlinkPending: true });
+equal("a pending unlink does not autostart", policy.start, false);
+equal("autostart does not override a pending unlink", policy.reason, "unlink_incomplete");
+
+policy = sessionStartupPolicy({ autoStart: false, wasPaired: false, unlinkPending: false });
+equal("a finished wipe keeps the fresh-install policy", policy.start, false);
+
+section("restart after unlink could not start");
+
+policy = sessionStartupPolicy({
+  wasPaired: hasPairedCredentials({ me: { id: "2015550102@s.whatsapp.net" }, registered: true }),
+  unlinkPending: false,
+});
+equal("without persisted intent the valid pairing resumes", policy.start, true);
+equal("unstarted unlink retains the resume reason", policy.reason, "resume-paired");
+
+section("uncertain unlink progress blocks every boot mode");
+
+for (const autoStart of [false, true]) {
+  for (const wasPaired of [false, true]) {
+    policy = sessionStartupPolicy({ autoStart, wasPaired, unlinkPending: true });
+    equal(
+      `uncertain progress blocks autoStart=${autoStart}, paired=${wasPaired}`,
+      policy.start,
+      false,
+    );
+    equal("uncertain progress reports incomplete unlink", policy.reason, "unlink_incomplete");
+  }
+}
+
 finish();

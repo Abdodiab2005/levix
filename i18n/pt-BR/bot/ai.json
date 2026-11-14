@@ -89,6 +89,7 @@
   "translate.emptyResult": "Não consegui traduzir isso. Tente de novo.",
   "translate.timedOut": "O serviço de tradução excedeu o tempo. Tente de novo.",
   "translate.failed": "A tradução falhou",
+  "gemini.requestTooLarge": "Esta solicitação excede os limites do gateway Gemini (20 MiB de JSON, 15 MiB de mídia incorporada no total). Use menos texto ou anexos menores, ou limpe o histórico da conversa manualmente e tente novamente. Nenhum conteúdo foi removido para atender ao limite.",
   "aiAgent.sources": "*Fontes:*",
   "aiAgent.noGeminiKey": "Nenhuma chave de API do Gemini está definida",
   "aiAgent.writingAnswer": "🤖 Escrevendo a resposta...",
@@ -117,5 +118,7 @@
   "aiTools.createPoll": "📊 Criando uma enquete: {question}",
   "aiTools.summarizeChat": "🧠 Resumindo a conversa e salvando o que importa...",
   "aiTools.running": "⚙️ Executando: {name}",
+  "aiTools.searchDocs": "📚 Buscando na documentação do Levix incluída no app...",
+  "aiTools.openDoc": "📖 Lendo uma seção da documentação do Levix...",
   "memoryStore.nothingToSave": "Não há nada para salvar"
 }

@@ -15,7 +15,7 @@
   "deleteschedule.usage": "deleteschedule <id>",
   "digit.description": "يحوّل الأرقام بين الأرقام العربية (٠١٢) والإنجليزية (012).",
   "digit.usage": "digit [en|ar] [رقم/نص]   (أو رد على رسالة)",
-  "gemini.description": "مساعد ذكي بأدوات (بحث في الويب، قراءة الروابط، ذاكرة دائمة). أوامر فرعية: add/send/clear/show للسياق، وgenerate للصور، وdel/delall لمسح المحادثة.",
+  "gemini.description": "مساعد ذكي للبحث والذاكرة والمساعدة من وثائق Levix المرفقة بهذا الإصدار. اطلب إنشاء صورة أو قراءة نص بصوت أو تفريغ رسالة صوتية ترد عليها. مثال: !ai كيف أنشئ نسخة احتياطية؟ أو !ai اقرأ هذا بصوت. أوامر فرعية: add/send/clear/show للسياق، وgenerate للصور، وdel/delall لمسح المحادثة.",
   "gemini.usage": "gemini <النص>\ngemini add <النص>\ngemini send\ngemini show\ngemini clear\ngenerate <وصف الصورة>\ndel   (مسح سجل هذه المحادثة)\ndelall   (مسح كل المحادثات)",
   "group.description": "الأمر الرئيسي لكل إجراءات إدارة المجموعة.",
   "group.usage": "group <أمر فرعي> [المعاملات]",
@@ -115,7 +115,7 @@
   "group.policy.usage": "policy\npolicy set <حقل> <قيمة>\npolicy reset",
   "group.promote.description": "يرقّي عضوًا إلى مشرف.",
   "group.promote.usage": "promote @عضو",
-  "group.removeall.description": "يطرد كل الأعضاء غير المشرفين من المجموعة بعد التأكيد.",
+  "group.removeall.description": "غير متاح: إزالة كل الأعضاء دفعة واحدة معطّلة.",
   "group.removeall.usage": "removeall",
   "group.rules.description": "يعرض قواعد المجموعة.",
   "group.rules.usage": "rules",
@@ -136,5 +136,7 @@
   "group.warns.description": "يعرض تحذيرات عضو معيّن.",
   "group.warns.usage": "warns @عضو",
   "group.welcome.description": "يدير رسائل الترحيب في المجموعة.",
-  "group.welcome.usage": "welcome [status]\nwelcome <on|off>\nwelcome add <نص الترحيب>\nwelcome list\nwelcome delete <رقم>"
+  "group.welcome.usage": "welcome [status]\nwelcome <on|off>\nwelcome add <نص الترحيب>\nwelcome list\nwelcome delete <رقم>",
+  "update.description": "البحث عن تحديثات Levix الرسمية دون تثبيت أي شيء.",
+  "update.usage": "update"
 }

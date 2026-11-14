@@ -15,6 +15,7 @@
 
 const fs = require("fs");
 const { GoogleGenAI, FunctionCallingConfigMode } = require("@google/genai");
+const { geminiHttpOptions } = require("../utils/geminiHttpOptions.cjs");
 
 const logger = require("../utils/logger.cjs");
 const {
@@ -23,15 +24,14 @@ const {
   downloadMedia,
   geminiMediaPart,
 } = require("../utils/geminiMedia.cjs");
-const { t, tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 const aiIdentity = require("../config/ai-identity.cjs");
 const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
-const {
-  assertProviderBaseUrl,
-  assertProviderRequestUrl,
-} = require("../utils/providerUrl.cjs");
-const { toolDeclarations, describeCall, runTool } = require("./aiTools.cjs");
+const { globalMemoryAccess } = require("./memoryPolicy.cjs");
+const { assertProviderBaseUrl, assertProviderRequestUrl } = require("../utils/providerUrl.cjs");
+const { toolDeclarations, describeCall, runToolWithDeadline } = require("./aiTools.cjs");
+const { docSourcesFromTool } = require("./aiDocs.cjs");
 const {
   BaseAIProvider,
   registerProvider,
@@ -65,7 +65,7 @@ function geminiClient() {
     clientCache = {
       key,
       baseUrl,
-      client: new GoogleGenAI({ apiKey: key, httpOptions: { baseUrl } }),
+      client: new GoogleGenAI({ apiKey: key, apiVersion: "v1beta", httpOptions: geminiHttpOptions(baseUrl) }),
     };
   }
   return clientCache.client;
@@ -99,7 +99,14 @@ use your tools instead of guessing when something needs to be looked up.`;
 // A copy of ai-persona.md from before that split still carries them, and an
 // operator can type one back in: both are dropped here, so the rules are stated
 // once, from code, and no edit of the persona can weaken them.
-const SEALED_HEADINGS = new Set(["tools", "memory", "chats and groups", "boundaries"]);
+const SEALED_HEADINGS = new Set([
+  "tools",
+  "levix help",
+  "media",
+  "memory",
+  "chats and groups",
+  "boundaries",
+]);
 
 function stripSealedSections(text) {
   const kept = [];
@@ -204,7 +211,9 @@ function buildSystemInstruction(context = {}) {
     botLangDirective(),
   ].join("\n");
 
-  const memoryBlock = memory.buildMemoryContext(chatId);
+  const memoryBlock = memory.buildMemoryContext(chatId, {
+    includeGlobal: globalMemoryAccess(context).read,
+  });
 
   return [aiIdentity.systemBlock, loadPersona(), runtime, memoryBlock].filter(Boolean).join("\n\n");
 }
@@ -227,6 +236,10 @@ function trimHistory(history) {
   const out = Array.isArray(history) ? [...history] : [];
   while (out.length > maxEntries) out.shift();
   while (out.length && !isOpeningTurn(out[0])) out.shift();
+  // A budget-exhausted model call has no response. Drop the whole turn so
+  // retained parts (including Gemini thought signatures) remain untouched.
+  while (out.at(-1)?.role === "model" && out.at(-1).parts?.some((part) => part?.functionCall))
+    out.pop();
   return out;
 }
 
@@ -266,28 +279,6 @@ function sanitizeHistoryForFiles(history) {
       return { ...turn, parts };
     })
     .filter(Boolean);
-}
-
-function withTimeout(promise, ms, label) {
-  let timer;
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => {
-      timer = setTimeout(
-        () =>
-          reject(
-            new Error(
-              // i18n-exception: sent to the model
-              tr(
-                `${label} took longer than ${Math.round(ms / 1000)} seconds`,
-                `${label} تأخرت أكتر من ${Math.round(ms / 1000)} ثانية`,
-              ),
-            ),
-          ),
-        ms,
-      );
-    }),
-  ]).finally(() => clearTimeout(timer));
 }
 
 function isAgentEnabled() {
@@ -423,7 +414,18 @@ const MAX_SOURCES = 5;
 function formatSources(sources) {
   const seen = new Set();
   const lines = [];
-  for (const source of sources || []) {
+  const ordered = [
+    ...(sources || []).filter((source) => source?.kind === "levix-doc"),
+    ...(sources || []).filter((source) => source?.kind !== "levix-doc"),
+  ];
+  for (const source of ordered) {
+    if (source?.kind === "levix-doc") {
+      if (seen.has(source.id)) continue;
+      seen.add(source.id);
+      lines.push(`• ${source.citation}`);
+      if (lines.length >= MAX_SOURCES) break;
+      continue;
+    }
     if (!source?.uri || seen.has(source.uri)) continue;
     seen.add(source.uri);
     const label = String(source.title || hostOf(source.uri) || "source").trim();
@@ -531,6 +533,7 @@ async function runGeminiTurn({
   maxSteps = null,
   systemInstruction = null,
   search = null,
+  signal,
 } = {}) {
   const genAI = geminiClient();
   if (!genAI) throw new Error(t("bot.ai.aiAgent.noGeminiKey"));
@@ -556,6 +559,7 @@ async function runGeminiTurn({
       history: trimmed,
       config: {
         systemInstruction: instruction,
+        ...(signal ? { abortSignal: signal } : {}),
         ...(tools.length ? { tools } : {}),
         ...(toolConfig ? { toolConfig } : {}),
       },
@@ -608,20 +612,22 @@ async function runGeminiTurn({
     const responses = [];
     for (const call of calls) {
       toolCalls.push({ name: call.name, args: call.args });
-      logger.info({ tool: call.name, chatId: context.chatId }, "[aiAgent] tool call");
+      logger.info({ tool: call.name }, "[aiAgent] tool call");
 
       // Named apart from the outer `response` on purpose: that one is the
       // model's reply and is reassigned at the bottom of this loop.
       let toolResult;
       try {
-        toolResult = await withTimeout(
-          runTool(call.name, call.args, context),
-          settings.get("ai_tool_timeout_ms"),
+        toolResult = await runToolWithDeadline(
           call.name,
+          call.args,
+          context,
+          settings.get("ai_tool_timeout_ms"),
         );
       } catch (err) {
         toolResult = { error: err?.message || String(err) };
       }
+      sources.push(...docSourcesFromTool(call.name, toolResult));
       responses.push({
         functionResponse: {
           // Echoed back when the model supplied one: with several calls in a

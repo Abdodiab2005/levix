@@ -21,6 +21,7 @@ const bannedKeys = [
   "auth:password",
   "auth:recovery-email",
   "secret:session",
+  "plus:entitlement-hw",
   ...SECRET_SETTING_KEYS.map(secretSettingKey),
 ];
 
@@ -188,6 +189,7 @@ source.exec(viewSql);
     ["auth:password", `${SENTINEL}:password`],
     ["auth:recovery-email", `${SENTINEL}:recovery-email`],
     ["secret:session", `${SENTINEL}:session`],
+    ["plus:entitlement-hw", `${SENTINEL}:entitlement-hw`],
     ...SECRET_SETTING_KEYS.map((key) => [secretSettingKey(key), `${SENTINEL}:${key}`]),
     ["prefix", "!"],
     ["setting:bot_language", "en"],

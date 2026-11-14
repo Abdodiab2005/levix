@@ -11,6 +11,7 @@ import {
   Radio,
   Settings,
   Shield,
+  SmilePlus,
   Sticker,
   Terminal,
   Users,
@@ -19,6 +20,7 @@ import {
 import type React from "react";
 import { useI18n } from "../context/I18nContext";
 import { cn } from "../utils/cn";
+import { officialLinks, openOfficialLink } from "../utils/officialLinks";
 import { Button, IconButton } from "./ui";
 
 export type ViewTab =
@@ -28,6 +30,7 @@ export type ViewTab =
   | "ai"
   | "groups"
   | "autodelete"
+  | "reactions"
   | "schedules"
   | "settings"
   | "logs"
@@ -68,6 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "ai", label: t("ai"), icon: Bot },
     { id: "groups", label: t("groups"), icon: Users },
     { id: "autodelete", label: t("autoDelete"), icon: MessageSquareX },
+    { id: "reactions", label: t("reaction"), icon: SmilePlus },
     { id: "schedules", label: t("schedules"), icon: Calendar },
     { id: "stickers", label: t("stickers"), icon: Sticker },
     { labelCategory: t("settings") },
@@ -177,7 +181,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="truncate text-[11px] text-muted">
             &copy; {brand.copyrightYear || 2026}{" "}
             <a
-              href={brand.developerSite || "#"}
+              href={officialLinks.portfolio}
+              onClick={(event) => {
+                event.preventDefault();
+                openOfficialLink(officialLinks.portfolio);
+              }}
               target="_blank"
               rel="noopener noreferrer"
               className="text-brand-cyan hover:underline"
@@ -186,7 +194,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </a>{" "}
             (
             <a
-              href={brand.studioSite || "#"}
+              href={officialLinks.studio}
+              onClick={(event) => {
+                event.preventDefault();
+                openOfficialLink(officialLinks.studio);
+              }}
               target="_blank"
               rel="noopener noreferrer"
               className="text-brand-cyan hover:underline"

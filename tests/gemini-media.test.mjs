@@ -33,6 +33,7 @@ useTempDataDir("levix-gemini-media");
 
 const settings = harnessRequire("./src/config/settings.cjs");
 const { GoogleGenAI } = harnessRequire("@google/genai");
+const { geminiHttpOptions } = harnessRequire("./src/utils/geminiHttpOptions.cjs");
 const { baseMimeType, mediaKind, uploadToGemini, isMissingUploadEndpoint } = harnessRequire(
   "./src/utils/geminiMedia.cjs",
 );
@@ -62,7 +63,7 @@ function fakeDownloader(bytes) {
 async function withGemini(options, run, replies = []) {
   const fake = await startGenaiServer(replies, options);
   settings.set("gemini_base_url", fake.baseUrl);
-  const genAI = new GoogleGenAI({ apiKey: "test-key", httpOptions: { baseUrl: fake.baseUrl } });
+  const genAI = new GoogleGenAI({ apiKey: "test-key", apiVersion: "v1beta", httpOptions: geminiHttpOptions(fake.baseUrl) });
   try {
     return await run({ fake, genAI });
   } finally {

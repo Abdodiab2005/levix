@@ -23,6 +23,7 @@ import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../api/client";
 import { FeedbackForm } from "../components/FeedbackForm";
+import { AboutPanel } from "../components/AboutPanel";
 import { useGuidedTour } from "../components/GuidedTour";
 import { useToast } from "../components/Toasts";
 import {
@@ -52,8 +53,11 @@ import { type Language, LOCALES, type translations } from "../i18n/translations"
 import { fill } from "../utils/fill";
 import { BackupView } from "./BackupView";
 import { DiagnosticsView } from "./DiagnosticsView";
+import { PlusSettings } from "./settings/PlusSettings";
 
 type SettingsTab =
+  | "about"
+  | "plus"
   | "general"
   | "integrations"
   | "proxy"
@@ -64,6 +68,8 @@ type SettingsTab =
   | "diagnostics";
 
 const SETTINGS_TABS: SettingsTab[] = [
+  "about",
+  "plus",
   "general",
   "integrations",
   "proxy",
@@ -74,12 +80,47 @@ const SETTINGS_TABS: SettingsTab[] = [
   "diagnostics",
 ];
 
-function tabFromHash(): SettingsTab {
+function tabFromHash(plusAvailable?: boolean | null): SettingsTab {
   const parts = window.location.hash.replace(/^#\/?/, "").split("/");
-  if (parts[0] === "settings" && parts[1] && SETTINGS_TABS.includes(parts[1] as SettingsTab)) {
-    return parts[1] as SettingsTab;
+  if (parts[0] === "settings" && parts[1]) {
+    if (parts[1] === "plus") {
+      if (plusAvailable === false) return "general";
+      return "plus";
+    }
+    if (SETTINGS_TABS.includes(parts[1] as SettingsTab)) {
+      return parts[1] as SettingsTab;
+    }
   }
   return "general";
+}
+
+function usePlusAvailable(): boolean | null {
+  const [available, setAvailable] = useState<boolean | null>(() => {
+    if (typeof window !== "undefined" && window.LevixHost?.plusConfigured?.() === true) {
+      return true;
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (available === true) return;
+    let live = true;
+    api
+      .get<{ extension?: { state: string } }>("/plus/status")
+      .then((res) => {
+        if (!live) return;
+        setAvailable(res?.extension?.state !== "absent");
+      })
+      .catch(() => {
+        if (!live) return;
+        setAvailable(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [available]);
+
+  return available;
 }
 
 const PREFIX_PRESETS = ["!", "/", ".", "#", "$", "?"];
@@ -428,16 +469,29 @@ export const SettingsView: React.FC = () => {
   const { t, language, setLanguage } = useI18n();
   const { toast } = useToast();
   const guided = useGuidedTour();
-  const [activeTab, setActiveTab] = useState<SettingsTab>(tabFromHash);
+  const plusAvailable = usePlusAvailable();
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => tabFromHash(plusAvailable));
+
+  useEffect(() => {
+    if (plusAvailable === false && activeTab === "plus") {
+      setActiveTab("general");
+      window.location.hash = "settings/general";
+    }
+  }, [plusAvailable, activeTab]);
 
   useEffect(() => {
     const handleHash = () => {
-      const tab = tabFromHash();
+      const tab = tabFromHash(plusAvailable);
+      if (tab === "plus" && plusAvailable === false) {
+        setActiveTab("general");
+        window.location.hash = "settings/general";
+        return;
+      }
       setActiveTab((prev) => (prev !== tab ? tab : prev));
     };
     window.addEventListener("hashchange", handleHash);
     return () => window.removeEventListener("hashchange", handleHash);
-  }, []);
+  }, [plusAvailable]);
 
   const handleTabChange = (tab: SettingsTab) => {
     setActiveTab(tab);
@@ -690,7 +744,9 @@ export const SettingsView: React.FC = () => {
         aria-label={t("settings")}
         className="overflow-x-auto no-scrollbar"
         options={[
+          { value: "about", label: t("aboutLevix"), icon: <CirclePlay size={17} /> },
           { value: "general", label: t("tabGeneral"), icon: <Sliders size={17} /> },
+          ...(plusAvailable === true ? [{ value: "plus" as const, label: t("plusTitle") }] : []),
           { value: "integrations", label: t("tabIntegrations"), icon: <Key size={17} /> },
           { value: "proxy", label: t("tabProxy"), icon: <Globe size={17} /> },
           { value: "security", label: t("tabSecurity"), icon: <Shield size={17} /> },
@@ -700,6 +756,15 @@ export const SettingsView: React.FC = () => {
           { value: "diagnostics", label: t("tabDiagnostics"), icon: <FileText size={17} /> },
         ]}
       />
+
+      {activeTab === "about" && <AboutPanel />}
+
+      {activeTab === "plus" && plusAvailable === true && (
+        <PlusSettings
+          enabled={settings["plus_enabled"] !== false}
+          onEnabledChange={(value) => persistSetting("plus_enabled", value)}
+        />
+      )}
 
       {activeTab === "general" && (
         <div className="flex flex-col gap-5">

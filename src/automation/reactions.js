@@ -1,0 +1,316 @@
+// Bounded verified transport intake. Execution belongs to engine.js.
+import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
+import { deserialize, serialize } from "node:v8";
+import { sameUser } from "../utils/permissions.esm.js";
+
+const require = createRequire(import.meta.url);
+const store = require("../db/store.cjs");
+const { canonicalJid } = require("../messaging/router.cjs");
+const { isReactionEmoji } = require("./rules.cjs");
+const { MAX_IDENTITY_ALIASES } = require("./limits.cjs");
+const logger = require("../utils/logger.cjs");
+
+export const REACTION_LIMITS = Object.freeze({
+  ttlMs: 30 * 60_000,
+  futureSkewMs: 30_000,
+  maxItems: 500,
+  maxBytes: 8 * 1024 * 1024,
+  maxEntryBytes: 64 * 1024,
+  maxBatch: 100,
+});
+const sockets = new WeakMap();
+const idPattern = /^[A-Za-z0-9_-]{1,128}$/;
+const jidPattern = /^\d{1,30}(?::\d{1,5})?@(s\.whatsapp\.net|lid|g\.us)$/;
+const mediaFields = [
+  "url", "directPath", "mediaKey", "fileEncSha256", "fileSha256", "fileLength",
+  "mimetype", "seconds", "ptt", "width", "height", "caption", "fileName",
+];
+const contentKeys = ["conversation", "extendedTextMessage", "audioMessage", "imageMessage",
+  "videoMessage", "documentMessage", "stickerMessage"];
+const hash = (parts) => createHash("sha256").update(JSON.stringify(parts)).digest("hex");
+const numberOf = (value) => value == null ? NaN : Number(String(value));
+
+// Validate BEFORE normalization; normalizeJid deliberately accepts legacy inputs.
+function jid(value) {
+  if (typeof value !== "string" || !jidPattern.test(value)) return null;
+  if (value.endsWith("@g.us") && value.includes(":")) return null;
+  return canonicalJid(value);
+}
+function aliases(value) {
+  const ids = store.reactionIdentityAliases(value);
+  return ids.length <= MAX_IDENTITY_ALIASES && ids.every((id) => jid(id)) ? ids : [];
+}
+function sameIdentity(a, b) {
+  if (a === b) return true;
+  if (!a || !b || a.endsWith("@g.us") || b.endsWith("@g.us")) return false;
+  // sameUser's legacy numeric fallback alone is not proof of a LID/PN link.
+  return aliases(a).includes(b) && sameUser(a, b);
+}
+function user(value) {
+  const normalized = jid(value);
+  return normalized && !normalized.endsWith("@g.us") ? normalized : null;
+}
+function messageKey(key) {
+  const chat = jid(key?.remoteJid);
+  if (!chat || key?.isViewOnce || typeof key?.id !== "string" || !idPattern.test(key.id) || key?.fromMe !== false) return null;
+  const author = chat.endsWith("@g.us") ? user(key.participant) : chat;
+  if (!author || (key.participant && !sameIdentity(author, user(key.participant)))) return null;
+  return { remoteJid: chat, id: key.id, fromMe: false, ...(chat.endsWith("@g.us") ? { participant: author } : {}) };
+}
+const identityOf = (key) => [key.remoteJid, key.id, key.fromMe, key.participant || key.remoteJid];
+const lookupKey = (key) => JSON.stringify(identityOf(key));
+const invalidationKeys = (chat, id = "*") => aliases(chat).map((alias) => hash([alias, id]));
+
+function safeContent(message) {
+  // Disappearing, view-once and edited content is deliberately unsupported.
+  let inner = message;
+  if (inner?.documentWithCaptionMessage?.message) inner = inner.documentWithCaptionMessage.message;
+  if (!inner || Object.keys(inner).some((key) =>
+    !contentKeys.includes(key) && !["messageContextInfo", "senderKeyDistributionMessage"].includes(key))) return null;
+  const keys = contentKeys.filter((key) => inner[key] != null);
+  if (keys.length !== 1) return null;
+  const key = keys[0];
+  const source = inner[key];
+  if (inner.messageContextInfo?.botMetadata || inner.messageContextInfo?.botMessageSecret ||
+    source?.contextInfo?.botMessageSharingInfo || source?.contextInfo?.botMessageInvokerJid) return null;
+  if (source?.viewOnce || source?.contextInfo?.expiration || inner.messageContextInfo?.expiration) return null;
+  if (key === "conversation") return typeof source === "string" && source.length <= 65536 ? { conversation: source } : null;
+  if (key === "extendedTextMessage") {
+    return typeof source?.text === "string" && source.text.length <= 65536 ? { extendedTextMessage: { text: source.text } } : null;
+  }
+  if (!source || typeof source !== "object") return null;
+  const media = {};
+  for (const field of mediaFields) {
+    const value = source[field];
+    if (value == null) continue;
+    if (["mediaKey", "fileEncSha256", "fileSha256"].includes(field)) {
+      if (!(value instanceof Uint8Array) || value.byteLength > 64) return null;
+      media[field] = value;
+    } else if (field === "ptt") {
+      if (typeof value !== "boolean") return null;
+      media[field] = value;
+    } else if (["seconds", "width", "height", "fileLength"].includes(field)) {
+      const number = numberOf(value);
+      if (!Number.isSafeInteger(number) || number < 0) return null;
+      media[field] = number;
+    } else {
+      if (typeof value !== "string" || value.length > (field === "caption" ? 65536 : 4096)) return null;
+      media[field] = value;
+    }
+  }
+  return { [key]: media };
+}
+
+/** One bounded lookup per live socket. Timers/closures are disposed with it. */
+export function createReactionIntake(sock, { now = Date.now, limits = REACTION_LIMITS,
+  onTransition = () => {}, onInvalidate = () => {}, onClose = () => {} } = {}) {
+  const cache = new Map();
+  const verified = new WeakMap();
+  let bytes = 0;
+  let active = false;
+  let closed = false;
+  let connectionAt = Infinity;
+  function block() {
+    cache.clear(); bytes = 0;
+    onInvalidate();
+    store.invalidateReactionLookup(null, now() + limits.ttlMs + limits.futureSkewMs, now());
+  }
+  const self = () => [user(sock?.user?.id), user(sock?.user?.lid)].filter(Boolean);
+  const isSelf = (author) => self().some((id) => sameIdentity(id, author));
+  const enabled = (chat) => aliases(chat).some((id) => store.isReactionChatEnabled(id));
+  const fresh = (timestamp, time) => Number.isSafeInteger(timestamp) &&
+    timestamp > time - limits.ttlMs && timestamp <= time + limits.futureSkewMs;
+
+  function drop(key) {
+    const entry = cache.get(key);
+    if (entry) bytes -= entry.size;
+    cache.delete(key);
+    if (entry) onInvalidate(entry.chat, entry.id);
+  }
+  function sweep() {
+    const time = now();
+    const scopes = new Map();
+    for (const [key, entry] of cache) {
+      if (!scopes.has(entry.chat)) scopes.set(entry.chat, enabled(entry.chat));
+      if (entry.expiresAt <= time || !scopes.get(entry.chat)) drop(key);
+    }
+  }
+  function invalidated(chat, id) {
+    const ids = aliases(chat);
+    return !ids.length || store.isReactionLookupInvalidated([
+      ...invalidationKeys(chat), ...invalidationKeys(chat, id),
+    ], now());
+  }
+  function invalidate(chatValue, id) {
+    const chat = jid(chatValue);
+    if (!active || !chat) return;
+    onInvalidate(chat, id);
+    // A configured but disabled chat still needs negative lookup state: a
+    // delete during disablement must not revive when the rule is re-enabled.
+    const tracked = [...cache.values()].some((entry) => sameIdentity(entry.chat, chat));
+    if (!tracked && !aliases(chat).some((alias) => store.isReactionChatConfigured(alias))) return;
+    sweep();
+    for (const [key, entry] of cache) {
+      if (sameIdentity(entry.chat, chat) && (!id || entry.id === id)) drop(key);
+    }
+    const keys = invalidationKeys(chat, id);
+    const blocked = store.invalidateReactionLookup(keys.length ? keys : null,
+      now() + limits.ttlMs + limits.futureSkewMs, now(), limits.maxItems);
+    if (blocked) { cache.clear(); bytes = 0; }
+  }
+  function findOriginal(key) {
+    const exact = cache.get(lookupKey(key));
+    if (exact) return exact;
+    return [...cache.values()].find((entry) => entry.id === key.id &&
+      sameIdentity(entry.chat, key.remoteJid) &&
+      sameIdentity(entry.author, key.participant || key.remoteJid));
+  }
+  function remember(msg) {
+    if (!active || !self().length) return false;
+    const key = messageKey(msg?.key);
+    const time = now();
+    if (!key || !enabled(key.remoteJid) || isSelf(key.participant || key.remoteJid)) return false;
+    sweep();
+    if (invalidated(key.remoteJid, key.id) || !fresh(numberOf(msg.messageTimestamp) * 1000, time) ||
+      msg.messageStubType != null || numberOf(msg.ephemeralStartTimestamp) > 0 ||
+      numberOf(msg.ephemeralDuration) > 0) return false;
+    const content = safeContent(msg.message);
+    if (!content) return false;
+    const value = { key, message: content, messageTimestamp: numberOf(msg.messageTimestamp) };
+    const data = serialize(value);
+    if (data.byteLength > limits.maxEntryBytes || data.byteLength > limits.maxBytes) return false;
+    const index = lookupKey(key);
+    // Redelivery never extends retention or replaces a verified snapshot.
+    if (findOriginal(key)) return false;
+    const configurationRevision = store.getBotSetting("reaction:revision", "");
+    const size = data.byteLength + serialize(configurationRevision).byteLength;
+    if (size > limits.maxEntryBytes || size > limits.maxBytes) return false;
+    while (cache.size >= limits.maxItems || bytes + size > limits.maxBytes) drop(cache.keys().next().value);
+    cache.set(index, { chat: key.remoteJid, id: key.id, author: key.participant || key.remoteJid, data,
+      receivedAt: time, configurationRevision, size,
+      expiresAt: Math.min(time, numberOf(msg.messageTimestamp) * 1000) + limits.ttlMs });
+    bytes += size;
+    return true;
+  }
+  function observeUpsert(payload) {
+    if (!active || payload?.type !== "notify" || payload.requestId || !Array.isArray(payload.messages)) return;
+    if (payload.messages.length > limits.maxBatch) { block(); return; }
+    sweep();
+    const folded = [];
+    for (const msg of payload.messages.slice(0, limits.maxBatch)) {
+      const protocol = msg?.message?.protocolMessage;
+      if (protocol?.key?.id) {
+        const chat = jid(msg?.key?.remoteJid);
+        // Revoke and edit envelopes are invalidations, never new originals.
+        if (chat && (!protocol.key.remoteJid || jid(protocol.key.remoteJid) === chat)) invalidate(chat, protocol.key.id);
+      }
+      remember(msg);
+      if (Array.isArray(msg?.reactions)) {
+        if (folded.length + msg.reactions.length > limits.maxBatch) { block(); return []; }
+        for (const reaction of msg.reactions) folded.push({ key: msg.key, reaction });
+      }
+    }
+    // Baileys can fold dedicated reactions into an original's buffered upsert.
+    return observeReactions(folded);
+  }
+  function observeUpdates(updates) {
+    if (!Array.isArray(updates)) return;
+    if (updates.length > limits.maxBatch) { block(); return; }
+    for (const item of updates.slice(0, limits.maxBatch)) {
+      if (item?.key?.id && item.update && Object.hasOwn(item.update, "message")) invalidate(item.key.remoteJid, item.key.id);
+    }
+  }
+  function observeDeletes(payload) {
+    if (payload?.all === true) invalidate(payload.jid);
+    else if (Array.isArray(payload?.keys)) {
+      if (payload.keys.length > limits.maxBatch) { block(); return; }
+      for (const key of payload.keys.slice(0, limits.maxBatch)) if (key?.id) invalidate(key.remoteJid, key.id);
+    }
+  }
+  function reaction(entry) {
+    if (!active || !self().length) return null;
+    const originalKey = messageKey(entry?.key);
+    const actorKey = messageKey(entry?.reaction?.key);
+    const emoji = entry?.reaction?.text ?? "";
+    const time = now();
+    const timestampMs = numberOf(entry?.reaction?.senderTimestampMs);
+    if (!originalKey || !actorKey || !sameIdentity(originalKey.remoteJid, actorKey.remoteJid) ||
+      typeof emoji !== "string" || emoji.length > 32 ||
+      (emoji && !isReactionEmoji(emoji)) ||
+      !fresh(timestampMs, time) || !enabled(originalKey.remoteJid)) return null;
+    const actor = actorKey.participant || actorKey.remoteJid;
+    if (isSelf(actor) || isSelf(originalKey.participant || originalKey.remoteJid)) return null;
+    sweep();
+    if (invalidated(originalKey.remoteJid, originalKey.id)) return null;
+    const stored = findOriginal(originalKey);
+    if (!stored) return null;
+    const account = self()[0];
+    // Transport ids are account-wide. Conservatively refuse any reuse, even
+    // across PN/LID chat aliases learned after the original claim.
+    const eventKey = hash([account, actorKey.id]);
+    const slotKeys = [];
+    for (const chat of aliases(originalKey.remoteJid)) {
+      for (const author of aliases(originalKey.participant || originalKey.remoteJid)) {
+        for (const sender of aliases(actor)) slotKeys.push(hash([account, chat, originalKey.id, false, author, sender]));
+      }
+    }
+    if (!slotKeys.length) return null;
+    const transition = store.claimReactionEvent({ eventKey, slotKeys, timestampMs, emoji,
+      expiresAt: timestampMs + limits.ttlMs + limits.futureSkewMs }, time, true);
+    if (!transition) return null;
+    const value = { eventKey, ...transition, emoji, timestampMs, actorKey,
+      original: deserialize(stored.data), receivedAt: stored.receivedAt, configurationRevision: stored.configurationRevision,
+      connectionAt };
+    verified.set(value, { stored, data: serialize(value) });
+    onTransition(value);
+    return value;
+  }
+  function observeReactions(entries) {
+    if (!Array.isArray(entries)) return [];
+    sweep();
+    return entries.slice(0, limits.maxBatch).map(reaction).filter(Boolean);
+  }
+  function close() {
+    closed = true; active = false;
+    cache.clear(); bytes = 0;
+    onClose();
+    clearInterval(timer);
+  }
+  const timer = setInterval(() => {
+    try { sweep(); }
+    catch {
+      close();
+      logger.warn("[Reactions] lookup sweep failed; cached originals discarded");
+    }
+  }, 60_000);
+  timer.unref?.();
+  return {
+    open() { if (!closed && !active) { active = true; connectionAt = now(); } },
+    close, observeUpsert, observeUpdates, observeDeletes, observeReactions,
+    resetLookup() { for (const key of cache.keys()) drop(key); },
+    resolveTransition(value) {
+      const record = verified.get(value);
+      if (!active || !record || record.stored.expiresAt <= now() ||
+        !enabled(record.stored.chat) || invalidated(record.stored.chat, record.stored.id) ||
+        findOriginal(deserialize(record.stored.data).key) !== record.stored) return null;
+      return deserialize(record.data);
+    },
+    // Resource counters only; no private cache contents in diagnostics.
+    stats() { sweep(); return { items: cache.size, bytes }; },
+  };
+}
+
+export function attachReactionIntake(sock, options) {
+  disposeReactionIntake(sock);
+  const intake = createReactionIntake(sock, options);
+  sockets.set(sock, intake);
+  return intake;
+}
+export function disposeReactionIntake(sock) {
+  sockets.get(sock)?.close();
+  sockets.delete(sock);
+}
+export function invalidateReactionMessage(sock, key) {
+  sockets.get(sock)?.observeDeletes({ keys: [key] });
+}

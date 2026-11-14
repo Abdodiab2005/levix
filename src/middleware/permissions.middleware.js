@@ -13,6 +13,38 @@ const require = createRequire(import.meta.url);
 const runtimeConfig = require("../config/runtime-config.cjs");
 const { evaluatePermissionLevel } = require("../utils/permissionLevel.cjs");
 const logger = require("../utils/logger.cjs");
+const store = require("../db/store.cjs");
+const { canonicalJid } = require("../messaging/router.cjs");
+const { MAX_IDENTITY_ALIASES } = require("../automation/limits.cjs");
+
+// Automation uses exact primary role rows and current authoritative mappings.
+// Roles still use the same backend roster and level evaluator.
+export function verifiedIdentityAliases(value) {
+  const jid = canonicalJid(value);
+  if (!jid || jid.endsWith("@g.us")) return [];
+  const ids = store.roleIdentityAliases(jid);
+  return ids.length <= MAX_IDENTITY_ALIASES ? ids : [];
+}
+export function verifiedParticipant(metadata, value) {
+  const ids = verifiedIdentityAliases(value);
+  return metadata?.participants?.find((p) =>
+    [p.id, p.lid, p.phoneNumber, p.jid].some((id) => ids.includes(canonicalJid(id)))) || null;
+}
+export function resolveVerifiedSender(msg, groupMetadata, sock) {
+  const key = msg?.key;
+  if (key?.fromMe !== false) throw new Error("REACTION_IDENTITY_INVALID");
+  const isGroup = Boolean(key.remoteJid?.endsWith("@g.us"));
+  const senderId = canonicalJid(isGroup ? key.participant : key.remoteJid);
+  const candidates = verifiedIdentityAliases(senderId);
+  if (!candidates.length) throw new Error("REACTION_IDENTITY_INVALID");
+  const roles = store.verifiedUserRoles(candidates);
+  const self = [sock?.user?.id, sock?.user?.lid].some((id) => candidates.includes(canonicalJid(id)));
+  const isOwner = roles.isOwner || self;
+  const isBotAdmin = !isOwner && roles.isBotAdmin;
+  const isGroupAdmin = isGroup && ["admin", "superadmin"].includes(verifiedParticipant(groupMetadata, senderId)?.admin);
+  return { isGroup, senderId, candidates, isOwner, isBotAdmin, isGroupAdmin,
+    isSenderAdmin: isBotAdmin || isGroupAdmin };
+}
 
 /**
  * Resolves the permission level in force for a command name — the dashboard
@@ -50,12 +82,12 @@ export function resolveSender(msg, groupMetadata, sock) {
   const candidates = senderCandidates.length ? senderCandidates : [senderId].filter(Boolean);
 
   // fromMe is an immediate owner indicator (the bot is always its own owner).
-  const isOwner = Boolean(msg?.key?.fromMe) || candidates.some((c) => isOwnerJid(c));
+  const isOwner = Boolean(msg?.key?.fromMe) || candidates.some((c) => isOwnerJid(c, groupMetadata));
 
   // Bot-level admins (granted with `!perm add admin`, from the dashboard, or by
   // asking the AI) count as admins everywhere — including DMs, where there is
   // no group roster to consult.
-  const isBotAdmin = !isOwner && candidates.some((c) => isBotAdminUser(c));
+  const isBotAdmin = !isOwner && candidates.some((c) => isBotAdminUser(c, groupMetadata));
 
   const isGroupAdmin = isGroup && candidates.some((c) => isAdminInGroup(groupMetadata, c));
   const isSenderAdmin = isBotAdmin || isGroupAdmin;

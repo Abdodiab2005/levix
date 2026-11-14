@@ -1,8 +1,13 @@
 import { makeWASocket } from "@whiskeysockets/baileys";
 import { createRequire } from "module";
+import { invalidateReactionMessage } from "../automation/reactions.js";
 import { useDatabaseAuthState } from "../auth/use-database-auth-state.js";
 import { getBaileysConfig, setRecentMessageGetter } from "../config/baileys.config.js";
-import { getMessageFromRecent } from "../utils/recentMessageCache.esm.js";
+import {
+  getMessageFromRecent,
+  getRecentCacheEpoch,
+  rememberMessage,
+} from "../utils/recentMessageCache.esm.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
@@ -99,12 +104,17 @@ function withoutUnwantedLinkPreview(content) {
  * sendBotMessage and the handful of legacy commands still calling
  * sock.sendMessage directly.
  */
-function withOutboundSavers(sock) {
+export function withOutboundSavers(sock) {
   const original = sock.sendMessage.bind(sock);
   const getUrlInfo = (text) => getHttpsUrlInfo(text, { dispatcher: socketDispatchers.get(sock) });
 
   sock.sendMessage = async function sendMessageWithOutboundSavers(jid, content, options) {
+    const sendEpoch = getRecentCacheEpoch();
+    if (content?.delete) invalidateReactionMessage(sock, { ...content.delete, remoteJid: jid });
+    const signal = options?.signal;
+    signal?.throwIfAborted();
     let payload = await withHttpsMedia(sock, content);
+    signal?.throwIfAborted();
     try {
       payload = await withMediaThumbnail(payload);
     } catch (err) {
@@ -116,7 +126,31 @@ function withOutboundSavers(sock) {
     // `levix` is a routing hint for the command proxy. It is not a Baileys field.
     const wireOptions = { ...(options || {}), getUrlInfo };
     delete wireOptions.levix;
-    return original(jid, payload, wireOptions);
+    delete wireOptions.signal;
+    delete wireOptions.deliveryGuard;
+    // Automation refreshes remote membership after preparation, then checks
+    // local policy synchronously. Nothing can interleave with the final send.
+    if (options?.deliveryGuard) {
+      await options.deliveryGuard.refresh();
+      options.deliveryGuard.assert();
+    }
+    // No await between this check and Baileys: cancellation cannot retract a
+    // send already initiated, but must prevent a new one after preparation.
+    signal?.throwIfAborted();
+    const result = await original(jid, payload, wireOptions);
+    try {
+      if (
+        getRecentCacheEpoch() === sendEpoch &&
+        result?.key?.id &&
+        result?.key?.remoteJid &&
+        result?.message
+      ) {
+        rememberMessage(result.key, result.message, sendEpoch);
+      }
+    } catch (err) {
+      logger.debug({ err: err?.message }, "[Socket] recent message cache step skipped");
+    }
+    return result;
   };
 
   return sock;
@@ -138,14 +172,17 @@ export async function createWhatsAppSocket({ proxy = null, pairingCode = false }
       : "[Socket] Initializing WhatsApp socket with database auth",
   );
 
-  const { state, saveCreds, clearAll } = await useDatabaseAuthState();
+  const { state, saveCreds, clearAll, fence = () => {} } = await useDatabaseAuthState();
 
   // Whether this install is already paired. NOT `store.hasCredentials()`: the
   // auth state writes a `creds` row on its very first call, paired or not. See
   // linkedCreds.cjs for what counts as a finished link.
   const isPaired = isLinkedCreds(state?.creds);
 
-  const cachedGroupMetadata = (jid) => groupMetadataCache.get(jid);
+  // The hook is built before makeWASocket returns, so the socket it fetches
+  // with is filled in immediately after. A stale roster is never returned.
+  let liveSock = null;
+  const cachedGroupMetadata = (jid) => groupMetadataCacheModule.groupMetadataForSend(liveSock, jid);
 
   const config = getBaileysConfig(cachedGroupMetadata, { pairingCode });
 
@@ -167,7 +204,8 @@ export async function createWhatsAppSocket({ proxy = null, pairingCode = false }
       ...config,
     }),
   );
+  liveSock = sock;
   socketDispatchers.set(sock, config.options?.dispatcher ?? null);
 
-  return { sock, saveCreds, clearAll, isPaired };
+  return { sock, saveCreds, clearAll, fence, isPaired };
 }
