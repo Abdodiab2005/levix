@@ -1,0 +1,64 @@
+# Manual, owner-only check of the existing Play upload key.
+# Does not build an APK/AAB, publish artifacts, or contact Google Play.
+name: Verify original Android signing key (no upload)
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_upload_cert_sha256:
+        description: SHA-256 of the original Upload key certificate from Play Console App integrity
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Match original keystore to Play upload certificate
+    if: ${{ github.repository == 'Abdodiab2005/levix' && github.ref == 'refs/heads/main' && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: play-signing
+    steps:
+      - name: Install Java signing tools
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Verify certificate and sign an isolated test JAR
+        shell: bash
+        env:
+          LEVIX_KEYSTORE_BASE64: ${{ secrets.LEVIX_KEYSTORE_BASE64 }}
+          LEVIX_KEYSTORE_PASSWORD: ${{ secrets.LEVIX_KEYSTORE_PASSWORD }}
+          LEVIX_KEY_ALIAS: ${{ secrets.LEVIX_KEY_ALIAS }}
+          LEVIX_KEY_PASSWORD: ${{ secrets.LEVIX_KEY_PASSWORD }}
+          EXPECTED_SHA256: ${{ inputs.expected_upload_cert_sha256 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          workdir="$(mktemp -d)"
+          trap 'rm -rf "$workdir"' EXIT
+          if [ -z "$LEVIX_KEYSTORE_BASE64" ] || [ -z "$LEVIX_KEYSTORE_PASSWORD" ] || [ -z "$LEVIX_KEY_ALIAS" ] || [ -z "$LEVIX_KEY_PASSWORD" ]; then
+            echo "::error::Missing one or more LEVIX_KEYSTORE_* secrets from play-signing"
+            exit 1
+          fi
+          expected="$(printf '%s' "$EXPECTED_SHA256" | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          if ! [[ "$expected" =~ ^[A-F0-9]{64}$ ]]; then
+            echo "::error::Enter the original Play Console Upload key certificate SHA-256"
+            exit 1
+          fi
+          printf '%s' "$LEVIX_KEYSTORE_BASE64" | base64 --decode > "$workdir/upload.jks"
+          test -s "$workdir/upload.jks"
+          keytool -exportcert -keystore "$workdir/upload.jks" -storepass:env LEVIX_KEYSTORE_PASSWORD -alias "$LEVIX_KEY_ALIAS" -file "$workdir/upload.der" >/dev/null 2>&1
+          actual="$(openssl x509 -inform DER -in "$workdir/upload.der" -noout -fingerprint -sha256 | cut -d= -f2 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Upload certificate does not match Google Play. Stop; do not replace the keystore."
+            exit 1
+          fi
+          printf 'Levix signing test only\n' > "$workdir/payload.txt"
+          jar --create --file "$workdir/unsigned.jar" -C "$workdir" payload.txt
+          jarsigner -keystore "$workdir/upload.jks" -storepass:env LEVIX_KEYSTORE_PASSWORD -keypass:env LEVIX_KEY_PASSWORD -signedjar "$workdir/signed.jar" "$workdir/unsigned.jar" "$LEVIX_KEY_ALIAS" >/dev/null
+          jarsigner -verify "$workdir/signed.jar" >/dev/null
+          echo "PASS: original Play upload certificate matched; temporary JAR signed and verified. No release or upload performed."
