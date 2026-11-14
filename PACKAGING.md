@@ -404,8 +404,9 @@ the server.
 
 The tagged GitHub Release `apk` job signs public Free APKs using the protected
 `play-signing` environment, not repository-wide signing secrets. Configure that
-environment to allow **Tag `v*`** (a `main` branch-only rule will reject tags),
-with appropriate reviewer protection. These APKs are for GitHub distribution,
+environment to allow **Tag `v*`** for releases and **Branch `main`** for
+an owner-only signing check, with appropriate reviewer protection. A `main`
+branch-only rule will reject release tags. These APKs are for GitHub distribution,
 **never** for the combined Google Play upload. After a non-publishing certificate
 check confirms the original key and all affected workflows are updated, remove
 the old repository-level `LEVIX_KEYSTORE_*` copies; historical workflow refs
