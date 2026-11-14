@@ -46,4 +46,12 @@ ok(
   "public builds do not stage the private Plus runtime",
   !/LEVIX_EXTENSIONS_DIR\s*:|levixPlusProductId=levix\.plus/.test(release + ci),
 );
+section("public release signing uses protected play-signing secrets");
+const apkJob = [...release.matchAll(/^ {2}([\w-]+):\s*\n([\s\S]*?)(?=^ {2}[\w-]+:\s*\n|$(?![\s\S]))/gm)]
+  .find(([, name]) => name === "apk")?.[2];
+ok("tagged APK/AAB job exists", Boolean(apkJob));
+ok(
+  "tagged APK/AAB job is gated by play-signing environment",
+  /^ {4}environment: play-signing\s*$/m.test(apkJob ?? ""),
+);
 finish();
