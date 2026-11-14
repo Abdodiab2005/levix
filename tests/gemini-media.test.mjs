@@ -62,7 +62,7 @@ function fakeDownloader(bytes) {
 async function withGemini(options, run, replies = []) {
   const fake = await startGenaiServer(replies, options);
   settings.set("gemini_base_url", fake.baseUrl);
-  const genAI = new GoogleGenAI({ apiKey: "test-key", httpOptions: { baseUrl: fake.baseUrl } });
+  const genAI = new GoogleGenAI({ apiKey: "test-key", apiVersion: "v1beta", httpOptions: { baseUrl: fake.baseUrl } });
   try {
     return await run({ fake, genAI });
   } finally {

@@ -1,6 +1,6 @@
 # Everything a tagged release produces: an npm package, a container image, one
 # executable per platform, the Android APKs and AAB, the public installer, a
-# checksum file covering exactly those files, and the Google Play release.
+# checksum file covering exactly those files. Play uses the private combined build.
 #
 # Nothing is published unless the tag matches package.json and the Android
 # versionName, and the full CI suite passes first.
@@ -12,15 +12,10 @@
 #                          └── apk ─────────────────┴─ publish-release ─┬─ installer
 #                                                                       └─ play (approval)
 #
-# Google Play goes last and only by hand. The play job waits on the
-# google-play environment; give it a required reviewer (Settings ->
-# Environments -> google-play -> Required reviewers). The comment the reviewer
-# writes when approving becomes the release's "What's new" text: plain text
-# for en-US, or a line such as [ar] to start another language's notes
-# (scripts/play-release-notes.mjs, 500 characters per language). An empty
-# comment fails the job before anything is uploaded. Prereleases (tags with a
-# "-") skip Google Play. The track is the PLAY_TRACK repository variable,
-# alpha when unset; set it to production once the app has production access.
+# Public Free AAB uploads are disabled on every track. Owner-authorized Play
+# builds come from the private combined Free + Plus workflow. Public GitHub,
+# npm and Docker releases keep their existing build and publication paths.
+# Legacy Play steps below are unconditionally disabled.
 #
 # Secrets: NPM_TOKEN, the LEVIX_DEPLOY_* set on the installer-production
 # environment, the LEVIX_KEYSTORE_* set for signing, and
@@ -183,6 +178,8 @@ jobs:
     name: android apk + aab (arm64, armv7)
     needs: ci
     runs-on: ubuntu-latest
+    # Original upload key is available only after play-signing protection rules.
+    environment: play-signing
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
@@ -348,7 +345,7 @@ jobs:
             - `levix-android-arm64.apk` — 64-bit devices (almost all phones since 2016)
             - `levix-android-armv7.apk` — 32-bit-only devices
 
-            `levix-android.aab` is the Google Play artifact — it is not
+            `levix-android.aab` contains Free Core only; never upload it to Play. It is not
             installable directly; upload it to the Play Console.
 
             ## Verifying a download
@@ -420,10 +417,13 @@ jobs:
             echo "- \`/install.sh\` left alone (prerelease)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+  # Play v5+ must come from the private combined Free + Plus AAB pipeline.
+  # A tag on the v5 release branch must never upload this public Free AAB.
   play:
-    name: publish to Google Play
+    name: publish to Google Play (disabled; use private paid AAB)
     needs: publish-release
-    if: ${{ !contains(github.ref_name, '-') }}
+    # Play uses the private combined Free + Plus build, never public Free AABs.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     # The pause for manual approval. Without a required reviewer on this
     # environment the job runs at once, finds no approval comment, and stops
