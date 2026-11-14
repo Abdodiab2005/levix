@@ -8,7 +8,7 @@ const crypto = require("node:crypto");
 
 const { canonicalJson } = require("../../legal/document.cjs");
 
-const ORIGIN = "https://levix-plus.leviro.net";
+const { ORIGIN } = require("./target.cjs");
 const CLAIM_PATH = "/v1/claim";
 const REFRESH_PATH = "/v1/refresh";
 const AUDIENCE = "levix-plus-verifier";

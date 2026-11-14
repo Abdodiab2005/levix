@@ -1617,5 +1617,7 @@
   "accountProfileDisconnected": "Connect WhatsApp to view your account details.",
   "accountProfileUnavailable": "Could not load account details. Try again.",
   "accountProfileRefresh": "Refresh account details",
-  "accountProfileRefreshSoon": "Account details were checked recently"
+  "accountProfileRefreshSoon": "Account details were checked recently",
+  "plusIntroDisclosure": "{introPrice} per month for the first {months} months. Starting in month {renewalMonth}, renews automatically at {price} per month until cancelled in Google Play.",
+  "plusOfferChanged": "The offer or price changed. Review the updated terms before subscribing."
 }

@@ -1622,6 +1622,8 @@ const en = {
   accountProfileUnavailable: "Could not load account details. Try again.",
   accountProfileRefresh: "Refresh account details",
   accountProfileRefreshSoon: "Account details were checked recently",
+  plusIntroDisclosure: "{introPrice} per month for the first {months} months. Starting in month {renewalMonth}, renews automatically at {price} per month until cancelled in Google Play.",
+  plusOfferChanged: "The offer or price changed. Review the updated terms before subscribing.",
 };
 
 export type MessageKey = keyof typeof en;
@@ -3252,6 +3254,8 @@ export const translations: {
     accountProfileUnavailable: "تعذّر تحميل تفاصيل الحساب. حاول مجددًا.",
     accountProfileRefresh: "تحديث تفاصيل الحساب",
     accountProfileRefreshSoon: "تم التحقق من تفاصيل الحساب مؤخرًا",
+    plusIntroDisclosure: "{introPrice} شهريًا خلال أول {months} أشهر. بدءًا من الشهر {renewalMonth}، يتجدد الاشتراك تلقائيًا بسعر {price} شهريًا حتى إلغائه من Google Play.",
+    plusOfferChanged: "تغيّر العرض أو السعر. راجع الشروط المحدّثة قبل الاشتراك.",
   },
   en,
   "pt-BR": {
@@ -4874,6 +4878,8 @@ export const translations: {
     accountProfileUnavailable: "Não foi possível carregar os detalhes da conta. Tente novamente.",
     accountProfileRefresh: "Atualizar detalhes da conta",
     accountProfileRefreshSoon: "Os detalhes da conta foram verificados recentemente",
+    plusIntroDisclosure: "{introPrice} por mês nos primeiros {months} meses. A partir do mês {renewalMonth}, a assinatura é renovada automaticamente por {price} por mês até ser cancelada no Google Play.",
+    plusOfferChanged: "A oferta ou o preço mudou. Confira as condições atualizadas antes de assinar.",
   },
   "es-419": {
     tabBackup: "Copia de seguridad y restauración",
@@ -6495,6 +6501,8 @@ export const translations: {
     accountProfileUnavailable: "No se pudieron cargar los detalles de la cuenta. Inténtalo de nuevo.",
     accountProfileRefresh: "Actualizar detalles de la cuenta",
     accountProfileRefreshSoon: "Los detalles de la cuenta se verificaron recientemente",
+    plusIntroDisclosure: "{introPrice} al mes durante los primeros {months} meses. A partir del mes {renewalMonth}, la suscripción se renueva automáticamente por {price} al mes hasta que la canceles en Google Play.",
+    plusOfferChanged: "La oferta o el precio cambió. Revisa las condiciones actualizadas antes de suscribirte.",
   },
 };
 

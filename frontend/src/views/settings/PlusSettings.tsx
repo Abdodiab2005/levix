@@ -13,6 +13,7 @@ import {
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
+import { presentPlusOffer } from "./plusOffer";
 import { TermsViewerDialog } from "../legal/TermsConsentDialog";
 import { PlusFeaturesView } from "../plus/PlusFeaturesView";
 import {
@@ -59,6 +60,7 @@ const ERROR_LABELS = {
   BILLING_UNAVAILABLE: "plusErrorUnavailable",
   FEATURE_NOT_SUPPORTED: "plusErrorUnavailable",
   ITEM_UNAVAILABLE: "plusErrorUnavailable",
+  OFFER_CHANGED: "plusOfferChanged",
   ITEM_ALREADY_OWNED: "plusErrorAlreadyOwned",
   BUSY: "plusErrorBusy",
   network: "plusErrorNetwork",
@@ -276,9 +278,14 @@ export function PlusSettings({
 
   function subscribe() {
     void run("subscribe", async () => {
-      if (!product?.ok || product.billingPeriod !== "P1M") failure("UNAVAILABLE");
+      const offer = presentPlusOffer(product, t);
+      if (!offer) failure("UNAVAILABLE");
       const prepared = await api.post<{ installationId: string }>("/plus/prepare");
-      await claim(await plusPurchase(product.offerToken, prepared.installationId));
+      const purchase = await plusPurchase(offer.product.offerToken, prepared.installationId);
+      if (!purchase.ok && purchase.code === "OFFER_CHANGED") {
+        setProduct(await plusProduct());
+      }
+      await claim(purchase);
     });
   }
 
@@ -336,7 +343,7 @@ export function PlusSettings({
   const until = status.entitlement.until ? new Date(status.entitlement.until) : null;
   const validUntil = until && Number.isFinite(until.getTime());
   const subscribed = ["active", "grace", "canceled"].includes(status.entitlement.state);
-  const monthlyProduct = product?.ok && product.billingPeriod === "P1M" ? product : null;
+  const monthlyOffer = presentPlusOffer(product, t);
   const disabled = !!busy || productLoading;
 
   return (
@@ -392,18 +399,13 @@ export function PlusSettings({
             onChange={(value) => void run("toggle", () => onEnabledChange(value))}
           />
           {productLoading && <Spinner label={t("loading")} />}
-          {monthlyProduct && (
+          {monthlyOffer && (
             <div className="flex flex-col gap-3">
-              <p className="text-sm text-text-main">
-                {fill(t("plusPrice"), {
-                  price: monthlyProduct.formattedPrice,
-                  period: t("plusMonthly"),
-                })}
-              </p>
+              <p className="text-sm text-text-main">{monthlyOffer.price}</p>
               {!subscribed && (
                 <>
                   <p id="plus-disclosure" className="text-sm text-muted">
-                    {fill(t("plusDisclosure"), { price: monthlyProduct.formattedPrice })}
+                    {monthlyOffer.disclosure}
                   </p>
                   <Button
                     variant="primary"

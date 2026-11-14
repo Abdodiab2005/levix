@@ -13,7 +13,7 @@ const {
   rawPublicKeyFromBase64,
 } = require("../../legal/keys.cjs");
 
-const TRUSTED_KEYS = Object.freeze([]);
+const { TRUSTED_KEYS } = require("./target.cjs");
 assertTrustedKeys(TRUSTED_KEYS);
 const loadedKeyCache = new Map();
 
