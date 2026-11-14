@@ -1,7 +1,7 @@
 # On manual dispatch: build and sign a beta AAB, then publish to CLOSED TESTING only.
 # Never tag, publish npm/GitHub Release, deploy servers, or touch Production/Open Testing.
 # Version inputs change the runner checkout only; the repository stays unchanged.
-name: Android Beta → Closed Testing (automatic)
+name: Android Beta → Closed Testing (disabled; Free AAB)
 
 on:
   workflow_dispatch:
@@ -32,7 +32,9 @@ concurrency:
 jobs:
   build:
     name: Test, sign and publish to CLOSED testing
-    if: ${{ github.ref == 'refs/heads/main' }}
+    # Public Free AABs cannot replace the combined Free + Plus Play app.
+    # Testing tracks also require the reviewed private build and owner approval.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     # Reuse the existing Play environment and its protection rules, if configured.
