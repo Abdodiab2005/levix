@@ -1617,5 +1617,7 @@
   "accountProfileDisconnected": "اربط واتساب لعرض تفاصيل حسابك.",
   "accountProfileUnavailable": "تعذّر تحميل تفاصيل الحساب. حاول مجددًا.",
   "accountProfileRefresh": "تحديث تفاصيل الحساب",
-  "accountProfileRefreshSoon": "تم التحقق من تفاصيل الحساب مؤخرًا"
+  "accountProfileRefreshSoon": "تم التحقق من تفاصيل الحساب مؤخرًا",
+  "plusIntroDisclosure": "{introPrice} شهريًا خلال أول {months} أشهر. بدءًا من الشهر {renewalMonth}، يتجدد الاشتراك تلقائيًا بسعر {price} شهريًا حتى إلغائه من Google Play.",
+  "plusOfferChanged": "تغيّر العرض أو السعر. راجع الشروط المحدّثة قبل الاشتراك."
 }

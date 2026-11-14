@@ -38,6 +38,8 @@ class BillingHost(
         var timeout: Runnable? = null
     }
     private var current: Call? = null
+    /** Activity recreation creates a new host with an empty session. The reloaded page fetches the offer again. */
+    private val offerSession = PlusBilling.OfferSession()
 
     fun optIn() { main.post { recovery.optIn() } }
 
@@ -52,6 +54,13 @@ class BillingHost(
         if (queued) onPurchase()
         val call = current
         if (call != null && call.purchasing) {
+            if (result.responseCode != BillingClient.BillingResponseCode.OK &&
+                result.responseCode != BillingClient.BillingResponseCode.USER_CANCELED &&
+                PlayOffers.userIneligible(result.onPurchasesUpdatedSubResponseCode)) {
+                offerSession.clear()
+                finish(call, PlusBilling.failure("OFFER_CHANGED"))
+                return
+            }
             val purchase = purchases.firstOrNull { productId in it.products }
             finish(call, if (result.responseCode != BillingClient.BillingResponseCode.OK)
                 PlusBilling.purchaseResult(result.responseCode)
@@ -169,12 +178,12 @@ class BillingHost(
         return JSONObject().put("ok", true).toString()
     }
 
-    // Only a monthly auto-renewing base plan without introductory phases is offered.
-    // This keeps the price beside Subscribe equal to the recurring monthly charge.
-    private fun monthlyOffers(details: ProductDetails) = details.subscriptionOfferDetails.orEmpty().filter {
-        val phases = it.pricingPhases.pricingPhaseList
-        it.offerId == null && phases.size == 1 && phases[0].billingPeriod == "P1M" &&
-            phases[0].recurrenceMode == ProductDetails.RecurrenceMode.INFINITE_RECURRING
+    private fun eligibleOffers(details: ProductDetails) = details.subscriptionOfferDetails.orEmpty().map { offer ->
+        PlusBilling.Offer(offer.basePlanId, offer.offerId, offer.offerToken,
+            offer.pricingPhases.pricingPhaseList.map { phase ->
+                PlayOffers.phase(phase.formattedPrice, phase.priceAmountMicros, phase.priceCurrencyCode,
+                    phase.billingPeriod, phase.recurrenceMode, phase.billingCycleCount)
+            })
     }
 
     private fun product(call: Call, billing: BillingClient, ready: (ProductDetails) -> Unit) {
@@ -196,15 +205,14 @@ class BillingHost(
     }
 
     fun productInfo(callId: String): String = submit(callId) { call, billing ->
+        offerSession.clear()
         product(call, billing) { details ->
-            val offer = monthlyOffers(details).firstOrNull()
-            if (offer == null || !PlusBilling.validOfferToken(offer.offerToken)) {
+            val offer = PlusBilling.selectOffer(eligibleOffers(details))
+            if (offer == null) {
                 finish(call, PlusBilling.failure("ITEM_UNAVAILABLE"))
             } else {
-                val price = offer.pricingPhases.pricingPhaseList[0]
-                finish(call, JSONObject().put("ok", true).put("productId", productId)
-                    .put("offerToken", offer.offerToken).put("formattedPrice", price.formattedPrice)
-                    .put("billingPeriod", price.billingPeriod))
+                offerSession.show(offer)
+                finish(call, offer.productInfo(productId))
             }
         }
     }
@@ -215,13 +223,17 @@ class BillingHost(
             return PlusBilling.failure("INVALID_INPUT").toString()
         return submit(callId) { call, billing ->
             product(call, billing) { details ->
-                if (activity.isFinishing || activity.isDestroyed ||
-                    monthlyOffers(details).none { it.offerToken == offerToken }) {
+                if (activity.isFinishing || activity.isDestroyed) {
                     finish(call, PlusBilling.failure("ITEM_UNAVAILABLE"))
+                    return@product
+                }
+                val offer = offerSession.confirm(eligibleOffers(details), offerToken)
+                if (offer == null) {
+                    finish(call, PlusBilling.failure("OFFER_CHANGED"))
                 } else {
                     val params = BillingFlowParams.newBuilder().setObfuscatedAccountId(installationId)
                         .setProductDetailsParamsList(listOf(BillingFlowParams.ProductDetailsParams.newBuilder()
-                            .setProductDetails(details).setOfferToken(offerToken).build())).build()
+                            .setProductDetails(details).setOfferToken(offer.offerToken).build())).build()
                     call.purchasing = true
                     val result = billing.launchBillingFlow(activity, params)
                     if (result.responseCode != BillingClient.BillingResponseCode.OK)
@@ -268,6 +280,7 @@ class BillingHost(
     fun destroy() {
         current?.let { finish(it, PlusBilling.failure("UNAVAILABLE")) }
         destroyed = true
+        offerSession.clear()
         connections.clear()
         runCatching { client?.endConnection() }
         client = null

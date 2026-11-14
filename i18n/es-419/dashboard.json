@@ -1617,5 +1617,7 @@
   "accountProfileDisconnected": "Conecta WhatsApp para ver los detalles de tu cuenta.",
   "accountProfileUnavailable": "No se pudieron cargar los detalles de la cuenta. Inténtalo de nuevo.",
   "accountProfileRefresh": "Actualizar detalles de la cuenta",
-  "accountProfileRefreshSoon": "Los detalles de la cuenta se verificaron recientemente"
+  "accountProfileRefreshSoon": "Los detalles de la cuenta se verificaron recientemente",
+  "plusIntroDisclosure": "{introPrice} al mes durante los primeros {months} meses. A partir del mes {renewalMonth}, la suscripción se renueva automáticamente por {price} al mes hasta que la canceles en Google Play.",
+  "plusOfferChanged": "La oferta o el precio cambió. Revisa las condiciones actualizadas antes de suscribirte."
 }
