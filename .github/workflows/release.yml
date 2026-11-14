@@ -178,6 +178,8 @@ jobs:
     name: android apk + aab (arm64, armv7)
     needs: ci
     runs-on: ubuntu-latest
+    # Original upload key is available only after play-signing protection rules.
+    environment: play-signing
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
