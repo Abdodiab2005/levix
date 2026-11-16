@@ -144,6 +144,23 @@ section("a live socket stays connected; its next retry checks consent");
   await h.session.stop();
 }
 
+section("a network change on an idle install never reaches the Terms gate");
+{
+  // QA 2026-11-16: Wi-Fi off and on with an unlinked, never-started install
+  // moved idle -> paused -> start -> consent_required, and the panel opened
+  // the Terms dialog over the page the operator was using.
+  const h = makeHarness({ paired: false });
+  equal("starts idle", h.session.state, S.IDLE);
+  const checks = h.checks;
+  await h.session.setInternetOnline(false);
+  equal("offline keeps idle", h.session.state, S.IDLE);
+  await h.session.setInternetOnline(true);
+  equal("online keeps idle", h.session.state, S.IDLE);
+  equal("consent is never asked", h.checks, checks);
+  equal("no socket", h.sockets.length, 0);
+  await h.session.stop();
+}
+
 section("network restoration and reconnect both pass the gate");
 {
   const network = makeHarness();
