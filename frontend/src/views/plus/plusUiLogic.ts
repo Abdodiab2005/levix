@@ -5,6 +5,85 @@ export function showsPlusUntil(state: string): boolean {
   return state === "active" || state === "grace" || state === "canceled";
 }
 
+/**
+ * Entitlement states in which an owned, acknowledged Play subscription means the
+ * server record may be stale. "inactive" covers a subscription that came back with
+ * the same purchase token, for example after account hold or pause.
+ */
+const RECOVERY_REFRESH_STATES: ReadonlySet<string> = new Set([
+  "none",
+  "expired",
+  "unverified",
+  "inactive",
+]);
+
+/**
+ * The verifier answers from its cached Play state for up to 10 minutes unless an
+ * RTDN updates it, so a repeated refresh for the same purchases sooner rarely
+ * changes the answer.
+ */
+export const RECOVERY_REFRESH_COOLDOWN_MS = 5 * 60_000;
+
+/** Allows one recovery refresh per set of purchase tokens per cooldown. */
+export function createRecoveryRefreshGate(
+  cooldownMs = RECOVERY_REFRESH_COOLDOWN_MS,
+  now: () => number = Date.now,
+) {
+  const last = new Map<string, number>();
+  return {
+    take(tokens: string[]): boolean {
+      const key = [...tokens].sort().join("\n");
+      const at = now();
+      const previous = last.get(key);
+      if (previous !== undefined && at - previous < cooldownMs) return false;
+      last.set(key, at);
+      return true;
+    },
+  };
+}
+
+export type RecoveryGate = ReturnType<typeof createRecoveryRefreshGate>;
+
+export interface RecoveryPurchase {
+  status: string;
+  acknowledged: boolean;
+  purchaseToken: string;
+}
+
+/**
+ * Foreground recovery of Play purchases. Unacknowledged purchases are claimed.
+ * An acknowledged purchase only asks the server to re-verify; the displayed
+ * entitlement always comes from the server, never from the Play result.
+ */
+export async function recoverPlusPurchases<P extends RecoveryPurchase>({
+  purchases,
+  state,
+  claim,
+  readState,
+  refresh,
+  gate,
+}: {
+  purchases: P[];
+  state: string | undefined;
+  claim: (fresh: P[]) => Promise<void>;
+  readState: () => Promise<string | undefined>;
+  refresh: () => Promise<void>;
+  gate: RecoveryGate;
+}): Promise<"claimed" | "refreshed" | "skipped" | "none"> {
+  const owned = purchases.filter((purchase) => purchase.status === "purchased");
+  const fresh = owned.filter((purchase) => !purchase.acknowledged);
+  const acknowledged = owned.filter((purchase) => purchase.acknowledged);
+  if (fresh.length > 0) await claim(fresh);
+  if (acknowledged.length === 0) return fresh.length > 0 ? "claimed" : "none";
+  const current = fresh.length > 0 ? await readState() : state;
+  if (!current || !RECOVERY_REFRESH_STATES.has(current)) {
+    return fresh.length > 0 ? "claimed" : "none";
+  }
+  if (!gate.take(acknowledged.map((purchase) => purchase.purchaseToken))) return "skipped";
+  await refresh();
+  return "refreshed";
+}
+
 export function createRequestGeneration() {
   let generation = 0;
   return {
