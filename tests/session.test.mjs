@@ -927,6 +927,70 @@ section("internet state: pausing when offline and restarting when online");
   equal("connected again", h.session.state, S.CONNECTED);
 }
 
+section("a network change never starts a session nobody asked to run");
+
+for (const [label, setup, expected] of [
+  ["a new install that was never started", async () => {}, S.IDLE],
+  [
+    "a session the operator stopped",
+    async (h) => {
+      await h.session.start();
+      await h.push({ connection: "open" });
+      await h.session.stop();
+    },
+    S.IDLE,
+  ],
+  [
+    "an unlinked session",
+    async (h) => {
+      await h.session.start();
+      await h.push({ connection: "open" });
+      await h.session.logout();
+    },
+    S.LOGGED_OUT,
+  ],
+]) {
+  const h = makeHarness({ paired: true });
+  await setup(h);
+  equal(`${label}: starting state`, h.session.state, expected);
+  const sockets = h.sockets.length;
+  await h.session.setInternetOnline(false);
+  equal(`${label}: going offline keeps the state`, h.session.state, expected);
+  equal(`${label}: offline is still reported`, h.session.getState().isOnline, false);
+  await h.session.setInternetOnline(true);
+  equal(`${label}: coming back online keeps the state`, h.session.state, expected);
+  equal(`${label}: no socket is created`, h.sockets.length, sockets);
+}
+
+{
+  // Start pressed while offline is still honoured once the network returns.
+  const h = makeHarness({ paired: true });
+  await h.session.setInternetOnline(false);
+  await h.session.start();
+  equal("start while offline waits paused", h.session.state, S.PAUSED);
+  equal("start while offline opens no socket", h.sockets.length, 0);
+  await h.session.setInternetOnline(true);
+  equal("network restore runs the requested start", h.session.state, S.STARTING);
+  equal("one socket after restore", h.sockets.length, 1);
+}
+
+{
+  // A paired bot whose retries ran out still recovers when the network returns.
+  const h = makeHarness({ paired: true, retryDelaysMs: [10] });
+  await h.session.start();
+  await h.push({ connection: "open" });
+  await h.push({ connection: "close", lastDisconnect: closedWith(DisconnectReason.connectionLost) });
+  await sleep(40);
+  await h.push({ connection: "close", lastDisconnect: closedWith(DisconnectReason.connectionLost) });
+  equal("retries exhausted", h.session.state, S.RETRY_EXHAUSTED);
+  const sockets = h.sockets.length;
+  await h.session.setInternetOnline(false);
+  equal("exhausted session pauses offline", h.session.state, S.PAUSED);
+  await h.session.setInternetOnline(true);
+  equal("exhausted session restarts on restore", h.session.state, S.STARTING);
+  equal("one new socket", h.sockets.length, sockets + 1);
+}
+
 section(
   "auth fence closes before clearing credentials and on socket teardown, without affecting reconnect",
 );
