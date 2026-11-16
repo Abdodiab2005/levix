@@ -1,6 +1,55 @@
 // file: frontend/src/views/plus/plusUiLogic.ts
 import type { PlusLocale, PlusTemplateMode } from "./types";
 
+export function showsPlusUntil(state: string): boolean {
+  return state === "active" || state === "grace" || state === "canceled";
+}
+
+export function createRequestGeneration() {
+  let generation = 0;
+  return {
+    begin: () => ++generation,
+    isCurrent: (token: number) => token === generation,
+  };
+}
+
+/**
+ * Reads may overlap, but only the newest one calls `show`. A read that fails after a
+ * newer read began settles with the newer read's outcome, so its caller cannot report
+ * an error over a status the newer read already displayed. `cancel` makes every
+ * pending read stale and lets a stale failure reject with its own error.
+ */
+export function createLatestReader<T>(fetch: () => Promise<T>, show: (value: T | null) => void) {
+  const reads = createRequestGeneration();
+  let latest: Promise<T> | null = null;
+  return {
+    read(): Promise<T> {
+      const token = reads.begin();
+      const request = fetch().then(
+        (value) => {
+          if (reads.isCurrent(token)) show(value);
+          return value;
+        },
+        (err) => {
+          if (reads.isCurrent(token)) {
+            // Only the latest read can clear the displayed value.
+            show(null);
+            throw err;
+          }
+          if (latest) return latest;
+          throw err;
+        },
+      );
+      latest = request;
+      return request;
+    },
+    cancel() {
+      reads.begin();
+      latest = null;
+    },
+  };
+}
+
 export interface WriteQueue {
   enqueue<T>(task: () => Promise<T>): Promise<T>;
 }

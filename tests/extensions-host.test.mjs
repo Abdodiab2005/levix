@@ -701,4 +701,70 @@ section("scope invalidation aborts every pending and in-flight Auto Reply job");
   }
 }
 
+section("host subscribers observe real state changes and isolate listener failures");
+
+{
+  const entitlement = fakeEntitlement(false);
+  let activations = 0;
+  let finishActivation;
+  let activationEntered;
+  const entered = new Promise((resolve) => {
+    activationEntered = resolve;
+  });
+  const host = makeHost({
+    entitlement,
+    loadModule: () =>
+      validMod({
+        activate() {
+          activations += 1;
+          if (activations > 1) return handlers();
+          activationEntered();
+          return new Promise((resolve) => {
+            finishActivation = () => resolve(handlers());
+          });
+        },
+      }),
+  });
+  const changes = [];
+  let throwingCalls = 0;
+  const unsubscribeThrowing = host.subscribe(() => {
+    throwingCalls += 1;
+    throw new Error("listener failed");
+  });
+  const unsubscribe = host.subscribe(() => changes.push(host.status().state));
+  try {
+    equal("subscribe does not emit an initial state", changes.length, 0);
+    await host.start();
+    equal("inactive transition emits once", changes.join(","), "inactive");
+    await host.start();
+    equal("unchanged inactive state emits nothing", changes.length, 1);
+    entitlement.setActive(true);
+    await entered;
+    equal("pending activation keeps inactive state", host.status().state, "inactive");
+    equal("pending activation emits nothing", changes.length, 1);
+    finishActivation();
+    await host.start();
+    equal("throwing listener does not stop activation", host.status().state, "active");
+    equal("activation emits once after completion", changes.join(","), "inactive,active");
+    equal("throwing listener receives both transitions", throwingCalls, 2);
+    entitlement.setActive(true);
+    await host.start();
+    equal("unchanged active state emits nothing", changes.length, 2);
+    entitlement.setActive(false);
+    await host.start();
+    equal("deactivation emits once", changes.join(","), "inactive,active,inactive");
+    unsubscribe();
+    unsubscribeThrowing();
+    entitlement.setActive(true);
+    await host.start();
+    equal("activation still completes after unsubscribe", host.status().state, "active");
+    equal("unsubscribe stops notifications", changes.length, 3);
+    equal("throwing listener is also removed", throwingCalls, 3);
+  } finally {
+    unsubscribe();
+    unsubscribeThrowing();
+    await host.stop();
+  }
+}
+
 finish();

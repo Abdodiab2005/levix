@@ -13,6 +13,16 @@ function getSocket(): Socket {
   return socketInstance;
 }
 
+export function useSocketEvent(event: string, handler: (data: unknown) => void) {
+  useEffect(() => {
+    const socket = getSocket();
+    socket.on(event, handler);
+    return () => {
+      socket.off(event, handler);
+    };
+  }, [event, handler]);
+}
+
 export function useSocket(onEvent?: (event: string, data: unknown) => void) {
   const [isConnected, setIsConnected] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);

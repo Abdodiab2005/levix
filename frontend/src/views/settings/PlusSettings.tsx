@@ -12,6 +12,8 @@ import {
   Toggle,
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
+import { useSocketEvent } from "../../hooks/useSocket";
+import { createLatestReader, showsPlusUntil } from "../plus/plusUiLogic";
 import { fill } from "../../utils/fill";
 import { presentPlusOffer } from "./plusOffer";
 import { TermsViewerDialog } from "../legal/TermsConsentDialog";
@@ -72,7 +74,11 @@ type PlusStatus = {
   extension: { state: keyof typeof EXTENSION_LABELS; id?: string; version?: string };
 };
 type Operation = "subscribe" | "restore" | "refresh" | "toggle" | "manage" | "reload" | "recover";
-type Notice = "plusPaymentPending" | "plusPurchaseCancelled" | "plusNoPurchases";
+type Notice =
+  | "plusPaymentPending"
+  | "plusPurchaseCancelled"
+  | "plusNoPurchases"
+  | "plusRefreshDone";
 
 function failure(code = "FAILED"): never {
   throw new ApiError(0, code, { code });
@@ -101,6 +107,9 @@ export function PlusSettings({
   const [productLoading, setProductLoading] = useState(false);
   const [busy, setBusy] = useState<Operation | null>(null);
   const running = useRef(false);
+  const [statusReader] = useState(() =>
+    createLatestReader(() => api.get<PlusStatus>("/plus/status"), setStatus),
+  );
   const [recoveryRequest, setRecoveryRequest] = useState(0);
   const recoveredRequest = useRef(-1);
   const [error, setError] = useState<string | null>(null);
@@ -108,13 +117,14 @@ export function PlusSettings({
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
 
+  const readStatus = useCallback(() => statusReader.read(), [statusReader]);
+
   useEffect(() => {
     let live = true;
     async function load() {
       try {
-        const next = await api.get<PlusStatus>("/plus/status");
+        const next = await readStatus();
         if (!live) return;
-        setStatus(next);
         setLoading(false);
         if (android && next.configured && next.extension.state !== "absent") {
           setProductLoading(true);
@@ -135,20 +145,23 @@ export function PlusSettings({
     void load();
     return () => {
       live = false;
+      statusReader.cancel();
     };
-  }, [android]);
+  }, [android, readStatus, statusReader]);
 
-  const readStatus = useCallback(async () => {
-    try {
-      const next = await api.get<PlusStatus>("/plus/status");
-      setStatus(next);
-      return next;
-    } catch (err) {
-      // Do not leave an old active badge visible when the current state is unknown.
-      setStatus(null);
-      throw err;
-    }
-  }, []);
+  const statusChanged = useCallback(() => {
+    void readStatus().catch((err) => setError(errorCode(err)));
+  }, [readStatus]);
+  useSocketEvent("plus_status", statusChanged);
+  useSocketEvent("connect", statusChanged);
+
+  useEffect(() => {
+    const visible = () => {
+      if (document.visibilityState === "visible") statusChanged();
+    };
+    document.addEventListener("visibilitychange", visible);
+    return () => document.removeEventListener("visibilitychange", visible);
+  }, [statusChanged]);
 
   const run = useCallback(
     async (operation: Operation, action: () => Promise<void>) => {
@@ -302,6 +315,8 @@ export function PlusSettings({
     void run("refresh", async () => {
       const result = await api.post<{ ok: boolean; code?: string }>("/plus/refresh");
       if (!result.ok) failure(result.code);
+      await readStatus();
+      setNotice("plusRefreshDone");
       const info = await plusProduct();
       setProduct(info);
       if (!info.ok) failure(info.code);
@@ -380,7 +395,7 @@ export function PlusSettings({
         <StatusPill tone={subscribed ? "ok" : "neutral"}>
           {t(STATE_LABELS[status.entitlement.state])}
         </StatusPill>
-        {validUntil && (
+        {showsPlusUntil(status.entitlement.state) && validUntil && (
           <time dateTime={status.entitlement.until || undefined} className="text-sm text-muted">
             {fill(t("plusUntil"), { date: until.toLocaleString(language) })}
           </time>

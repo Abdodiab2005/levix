@@ -1,7 +1,10 @@
 import {
+  createLatestReader,
+  createRequestGeneration,
   createWriteQueue,
   getDraftText,
   samplePlaceholderValue,
+  showsPlusUntil,
   substitutePlaceholders,
 } from "../frontend/src/views/plus/plusUiLogic.ts";
 import { equal, finish, ok, section } from "./harness.mjs";
@@ -254,6 +257,117 @@ section("U1: auto-reply immediate toggle uses saved config, never unsaved draft"
     1,
   );
   equal("user draft edits to globalPerHour were not sent by toggle", draftForm.globalPerHour, 120);
+}
+
+section("until date appears only for active, grace and canceled states");
+
+for (const [state, expected] of [
+  ["none", false],
+  ["active", true],
+  ["grace", true],
+  ["canceled", true],
+  ["inactive", false],
+  ["expired", false],
+  ["clock", false],
+  ["unverified", false],
+]) {
+  equal(`${state}: until visibility`, showsPlusUntil(state), expected);
+}
+
+section("status reads ignore reversed completion order and stale failures");
+
+{
+  const reads = createRequestGeneration();
+  let displayed = "initial";
+  const older = reads.begin();
+  const newer = reads.begin();
+  equal("newest read is current", reads.isCurrent(newer), true);
+  equal("older read is stale", reads.isCurrent(older), false);
+  if (reads.isCurrent(newer)) displayed = "newer success";
+  if (reads.isCurrent(older)) displayed = "older success";
+  equal("older success cannot overwrite newer success", displayed, "newer success");
+  if (reads.isCurrent(older)) displayed = null;
+  equal("older failure cannot clear newer success", displayed, "newer success");
+  const latest = reads.begin();
+  if (reads.isCurrent(latest)) displayed = null;
+  equal("latest failure clears status", displayed, null);
+  equal("new read invalidates previous success token", reads.isCurrent(newer), false);
+}
+
+section("a stale status read failure cannot report an error over a newer success");
+
+function deferredReader() {
+  const pending = [];
+  const shown = [];
+  const reader = createLatestReader(
+    () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+    (value) => shown.push(value),
+  );
+  // Mirrors PlusSettings statusChanged: every rejection becomes the displayed error.
+  const errors = [];
+  const report = (read) =>
+    read.then(
+      () => {},
+      (err) => errors.push(err.message),
+    );
+  return { pending, shown, reader, errors, report };
+}
+
+{
+  const { pending, shown, reader, errors, report } = deferredReader();
+  const a = reader.read();
+  const aReported = report(a);
+  const b = reader.read();
+  const bReported = report(b);
+  pending[1].resolve("B active");
+  await bReported;
+  pending[0].reject(new Error("A network"));
+  await aReported;
+  equal("stale failure reports no error", JSON.stringify(errors), JSON.stringify([]));
+  equal("only the newer success is shown", JSON.stringify(shown), JSON.stringify(["B active"]));
+  equal("stale read settles with the newer outcome", await a, "B active");
+}
+
+{
+  const { pending, shown, reader, errors, report } = deferredReader();
+  const a = report(reader.read());
+  const b = report(reader.read());
+  pending[0].reject(new Error("A network"));
+  pending[1].reject(new Error("B network"));
+  await Promise.all([a, b]);
+  equal(
+    "newer failure is still reported, never the stale one",
+    JSON.stringify(errors),
+    JSON.stringify(["B network", "B network"]),
+  );
+  equal("newer failure clears the shown status", JSON.stringify(shown), JSON.stringify([null]));
+}
+
+{
+  const { pending, shown, reader, errors, report } = deferredReader();
+  const only = report(reader.read());
+  pending[0].reject(new Error("current network"));
+  await only;
+  equal(
+    "current failure stays visible",
+    JSON.stringify(errors),
+    JSON.stringify(["current network"]),
+  );
+  equal("current failure clears the shown status", JSON.stringify(shown), JSON.stringify([null]));
+}
+
+{
+  const { pending, shown, reader, errors, report } = deferredReader();
+  const a = report(reader.read());
+  reader.cancel();
+  pending[0].reject(new Error("after cancel"));
+  await a;
+  equal("cancelled read shows nothing", JSON.stringify(shown), JSON.stringify([]));
+  equal(
+    "cancelled read rejects with its own error",
+    JSON.stringify(errors),
+    JSON.stringify(["after cancel"]),
+  );
 }
 
 finish();
