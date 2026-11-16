@@ -12,7 +12,7 @@ const { ORIGIN } = require("./target.cjs");
 const CLAIM_PATH = "/v1/claim";
 const REFRESH_PATH = "/v1/refresh";
 const AUDIENCE = "levix-plus-verifier";
-const TIMEOUT_MS = 10_000;
+const TIMEOUT_MS = 15_000;
 const MAX_RESPONSE_BYTES = 16 * 1024;
 const PURCHASE_TOKEN_RE = /^[A-Za-z0-9._:-]{1,2048}$/;
 const PRODUCT_ID_RE = /^[a-z0-9][a-z0-9._]{0,63}$/;
@@ -55,8 +55,6 @@ function fail(code, extra = {}) {
 
 function defaultFetch(url, init) {
   const { safeProviderFetch } = require("../../utils/providerUrl.cjs");
-  const timeoutSignal = AbortSignal.timeout(TIMEOUT_MS);
-  const signal = init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal;
   return safeProviderFetch(
     url,
     {
@@ -64,7 +62,7 @@ function defaultFetch(url, init) {
       headers: init.headers,
       body: init.body,
       redirect: "manual",
-      signal,
+      signal: init.signal,
     },
     { allowLoopback: false },
   );
@@ -282,44 +280,55 @@ async function post(path, body, deps, includeKey) {
   };
   if (includeKey) headers["x-levix-key"] = installation.publicKeyRaw.toString("base64url");
   const fetchImpl = deps.fetch ?? defaultFetch;
-  const signal = deps.signal;
-  if (signal?.aborted) {
+  if (deps.signal?.aborted) {
     logFailure(deps.logger, "UNAVAILABLE", 0);
     return fail("UNAVAILABLE", { retryable: true });
   }
+  const controller = new AbortController();
+  const signal = deps.signal
+    ? AbortSignal.any([deps.signal, controller.signal])
+    : controller.signal;
+  // The race settles even when DNS ignores cancellation.
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  timer.unref?.();
   let response;
+  let status = 0;
   try {
-    response = await withAbort(
+    const fetching = Promise.resolve(
       fetchImpl(`${ORIGIN}${path}`, {
         method: "POST",
         redirect: "manual",
         headers,
         body,
-        ...(signal ? { signal } : {}),
+        signal,
       }),
-      signal,
-    );
-  } catch {
-    logFailure(deps.logger, "UNAVAILABLE", 0);
-    return fail("UNAVAILABLE", { retryable: true });
-  }
-  const status = Number(response?.status);
-  if (response?.type === "opaqueredirect" || (status >= 300 && status < 400)) {
-    await discard(response);
-    logFailure(deps.logger, "REDIRECT", status);
-    return fail("REDIRECT", { retryable: false });
-  }
-  try {
+    ).then((received) => {
+      if (signal.aborted) void discard(received);
+      return received;
+    });
+    response = await withAbort(fetching, signal);
+    signal.throwIfAborted();
+    status = Number(response?.status);
+    if (response?.type === "opaqueredirect" || (status >= 300 && status < 400)) {
+      await withAbort(discard(response), signal);
+      signal.throwIfAborted();
+      logFailure(deps.logger, "REDIRECT", status);
+      return fail("REDIRECT", { retryable: false });
+    }
     const bytes = await withAbort(readLimited(response ?? {}, signal), signal, () =>
       discard(response),
     );
+    signal.throwIfAborted();
     const result = interpret(status, bytes, response);
     if (!result.ok) logFailure(deps.logger, result.code, status);
     return result;
   } catch (error) {
-    const code = error?.code === "OVERSIZED" ? "OVERSIZED" : "UNAVAILABLE";
+    if (signal.aborted) void discard(response);
+    const code = !signal.aborted && error?.code === "OVERSIZED" ? "OVERSIZED" : "UNAVAILABLE";
     logFailure(deps.logger, code, status);
     return fail(code, { retryable: code === "UNAVAILABLE" });
+  } finally {
+    clearTimeout(timer);
   }
 }
 

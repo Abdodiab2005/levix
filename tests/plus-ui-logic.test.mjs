@@ -1,7 +1,9 @@
 import {
+  createRequestGeneration,
   createWriteQueue,
   getDraftText,
   samplePlaceholderValue,
+  showsPlusUntil,
   substitutePlaceholders,
 } from "../frontend/src/views/plus/plusUiLogic.ts";
 import { equal, finish, ok, section } from "./harness.mjs";
@@ -254,6 +256,41 @@ section("U1: auto-reply immediate toggle uses saved config, never unsaved draft"
     1,
   );
   equal("user draft edits to globalPerHour were not sent by toggle", draftForm.globalPerHour, 120);
+}
+
+section("until date appears only for active, grace and canceled states");
+
+for (const [state, expected] of [
+  ["none", false],
+  ["active", true],
+  ["grace", true],
+  ["canceled", true],
+  ["inactive", false],
+  ["expired", false],
+  ["clock", false],
+  ["unverified", false],
+]) {
+  equal(`${state}: until visibility`, showsPlusUntil(state), expected);
+}
+
+section("status reads ignore reversed completion order and stale failures");
+
+{
+  const reads = createRequestGeneration();
+  let displayed = "initial";
+  const older = reads.begin();
+  const newer = reads.begin();
+  equal("newest read is current", reads.isCurrent(newer), true);
+  equal("older read is stale", reads.isCurrent(older), false);
+  if (reads.isCurrent(newer)) displayed = "newer success";
+  if (reads.isCurrent(older)) displayed = "older success";
+  equal("older success cannot overwrite newer success", displayed, "newer success");
+  if (reads.isCurrent(older)) displayed = null;
+  equal("older failure cannot clear newer success", displayed, "newer success");
+  const latest = reads.begin();
+  if (reads.isCurrent(latest)) displayed = null;
+  equal("latest failure clears status", displayed, null);
+  equal("new read invalidates previous success token", reads.isCurrent(newer), false);
 }
 
 finish();

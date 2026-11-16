@@ -1,6 +1,18 @@
 // file: frontend/src/views/plus/plusUiLogic.ts
 import type { PlusLocale, PlusTemplateMode } from "./types";
 
+export function showsPlusUntil(state: string): boolean {
+  return state === "active" || state === "grace" || state === "canceled";
+}
+
+export function createRequestGeneration() {
+  let generation = 0;
+  return {
+    begin: () => ++generation,
+    isCurrent: (token: number) => token === generation,
+  };
+}
+
 export interface WriteQueue {
   enqueue<T>(task: () => Promise<T>): Promise<T>;
 }

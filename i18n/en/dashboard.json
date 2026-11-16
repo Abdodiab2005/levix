@@ -1430,6 +1430,7 @@
   "plusPaymentPending": "Payment pending. Plus requires completed payment and server verification.",
   "plusPurchaseCancelled": "Purchase cancelled",
   "plusNoPurchases": "No Levix Plus purchases found in this Google Play account.",
+  "plusRefreshDone": "Subscription status checked.",
   "plusErrorUnavailable": "Subscriptions are unavailable. Try again later.",
   "plusErrorPurchaseInvalid": "This purchase could not be verified.",
   "plusErrorAccountMismatch": "This purchase could not be linked to this installation.",

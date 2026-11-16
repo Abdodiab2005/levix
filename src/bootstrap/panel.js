@@ -11,7 +11,7 @@ const fs = require("node:fs");
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
 const paths = require("../config/paths.cjs");
-const { attach } = require("./events.cjs");
+const { attach, emit } = require("./events.cjs");
 
 /** Unix socket path for the Android host. Bionic Node cannot bind TCP. */
 export function androidPanelSocketPath() {
@@ -58,8 +58,11 @@ export async function bootstrapPanel({ core } = {}) {
   // /claim and /refresh are mounted with the dashboard API below.
   const express = require("express");
   const { host: plusHost } = require("../extensions/host.cjs");
+  const entitlement = require("../extensions/entitlement/index.cjs");
+  entitlement.subscribe(() => emit("plus_status", {}));
+  plusHost.subscribe(() => emit("plus_status", {}));
   const plusApi = createPlusRouter({
-    entitlement: require("../extensions/entitlement/index.cjs"),
+    entitlement,
     extensionStatus: () => ({ state: plusHost.status().state }),
   });
   app.use(

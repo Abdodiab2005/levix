@@ -1430,6 +1430,7 @@
   "plusPaymentPending": "الدفع قيد الانتظار. تتطلب Plus اكتمال الدفع والتحقق من الخادم.",
   "plusPurchaseCancelled": "أُلغيت عملية الشراء",
   "plusNoPurchases": "لم يُعثر على مشتريات Levix Plus في حساب Google Play هذا.",
+  "plusRefreshDone": "تم التحقق من حالة الاشتراك.",
   "plusErrorUnavailable": "الاشتراكات غير متاحة. حاول لاحقًا.",
   "plusErrorPurchaseInvalid": "تعذر التحقق من عملية الشراء هذه.",
   "plusErrorAccountMismatch": "تعذر ربط عملية الشراء بهذا التثبيت.",

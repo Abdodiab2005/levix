@@ -2,6 +2,7 @@
 // backoff ladder, single-flight deduplication, and zero secret leakage in logs.
 
 import crypto from "node:crypto";
+import { mock } from "node:test";
 import { equal, finish, ok, require, section, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("levix-entitlement-client");
@@ -492,7 +493,7 @@ section("abort also cancels an in-flight response body reader");
     seq: 0,
     signal: controller.signal,
     fetch: async (url, init) => {
-      equal("client passes the caller abort signal to fetch", init.signal, controller.signal);
+      equal("fetch signal starts un-aborted", init.signal.aborted, false);
       return response;
     },
   });
@@ -502,6 +503,128 @@ section("abort also cancels an in-flight response body reader");
   equal("body abort returns unavailable", (await result).code, "UNAVAILABLE");
   equal("body reader is cancelled", cancelled, true);
   equal("body reader lock is released", response.body.locked, false);
+}
+
+section("whole-exchange deadline aborts a fetch that never settles");
+
+{
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    let signal;
+    const logs = [];
+    const result = client.refresh({
+      keys: [signer.entry],
+      installation: inst,
+      logger: { warn: (entry) => logs.push(entry) },
+      fetch: (_url, init) => {
+        signal = init.signal;
+        return new Promise(() => {});
+      },
+    });
+    mock.timers.tick(14_999);
+    equal("request remains live before 15000 ms", signal.aborted, false);
+    mock.timers.tick(1);
+    const outcome = await result;
+    equal("stalled fetch fails", outcome.ok, false);
+    equal("stalled fetch returns UNAVAILABLE", outcome.code, "UNAVAILABLE");
+    equal("stalled fetch can retry", outcome.retryable, true);
+    equal("deadline aborts fetch signal", signal.aborted, true);
+    equal("deadline logs UNAVAILABLE", logs[0]?.code, "UNAVAILABLE");
+    equal("deadline logs once", logs.length, 1);
+  } finally {
+    mock.timers.reset();
+  }
+}
+
+section("headers and stalled body share one deadline");
+
+{
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    let signal;
+    let resolveFetch;
+    let cancelled = false;
+    const response = new Response(
+      new ReadableStream({
+        cancel() {
+          cancelled = true;
+        },
+      }),
+    );
+    const result = client.refresh({
+      keys: [signer.entry],
+      installation: inst,
+      fetch: (_url, init) => {
+        signal = init.signal;
+        return new Promise((resolve) => {
+          resolveFetch = resolve;
+        });
+      },
+    });
+    mock.timers.tick(10_000);
+    resolveFetch(response);
+    for (let index = 0; index < 6; index += 1) await Promise.resolve();
+    equal("body reader starts after headers", response.body.locked, true);
+    mock.timers.tick(4_999);
+    equal("body is live before the shared deadline", signal.aborted, false);
+    mock.timers.tick(1);
+    const outcome = await result;
+    equal("stalled body fails", outcome.ok, false);
+    equal("stalled body returns UNAVAILABLE", outcome.code, "UNAVAILABLE");
+    equal("stalled body can retry", outcome.retryable, true);
+    equal("body deadline aborts fetch signal", signal.aborted, true);
+    equal("body deadline cancels reader", cancelled, true);
+    equal("body deadline releases reader", response.body.locked, false);
+  } finally {
+    mock.timers.reset();
+  }
+}
+
+section("caller abort settles before the deadline");
+
+{
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const controller = new AbortController();
+    let signal;
+    const result = client.refresh({
+      keys: [signer.entry],
+      installation: inst,
+      signal: controller.signal,
+      fetch: (_url, init) => {
+        signal = init.signal;
+        return new Promise(() => {});
+      },
+    });
+    mock.timers.tick(100);
+    controller.abort();
+    equal("caller abort reaches fetch", signal.aborted, true);
+    equal("caller abort settles early", (await result).code, "UNAVAILABLE");
+  } finally {
+    mock.timers.reset();
+  }
+}
+
+section("completed exchange clears its deadline");
+
+{
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    let signal;
+    const result = await client.refresh({
+      keys: [signer.entry],
+      installation: inst,
+      fetch: async (_url, init) => {
+        signal = init.signal;
+        return new Response(JSON.stringify({ token: "test-token" }));
+      },
+    });
+    equal("exchange succeeds", result.ok, true);
+    mock.timers.tick(15_000);
+    equal("completed request is not aborted later", signal.aborted, false);
+  } finally {
+    mock.timers.reset();
+  }
 }
 
 finish();
