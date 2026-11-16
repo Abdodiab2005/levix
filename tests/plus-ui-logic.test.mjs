@@ -1,4 +1,5 @@
 import {
+  createLatestReader,
   createRequestGeneration,
   createWriteQueue,
   getDraftText,
@@ -291,6 +292,82 @@ section("status reads ignore reversed completion order and stale failures");
   if (reads.isCurrent(latest)) displayed = null;
   equal("latest failure clears status", displayed, null);
   equal("new read invalidates previous success token", reads.isCurrent(newer), false);
+}
+
+section("a stale status read failure cannot report an error over a newer success");
+
+function deferredReader() {
+  const pending = [];
+  const shown = [];
+  const reader = createLatestReader(
+    () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+    (value) => shown.push(value),
+  );
+  // Mirrors PlusSettings statusChanged: every rejection becomes the displayed error.
+  const errors = [];
+  const report = (read) =>
+    read.then(
+      () => {},
+      (err) => errors.push(err.message),
+    );
+  return { pending, shown, reader, errors, report };
+}
+
+{
+  const { pending, shown, reader, errors, report } = deferredReader();
+  const a = reader.read();
+  const aReported = report(a);
+  const b = reader.read();
+  const bReported = report(b);
+  pending[1].resolve("B active");
+  await bReported;
+  pending[0].reject(new Error("A network"));
+  await aReported;
+  equal("stale failure reports no error", JSON.stringify(errors), JSON.stringify([]));
+  equal("only the newer success is shown", JSON.stringify(shown), JSON.stringify(["B active"]));
+  equal("stale read settles with the newer outcome", await a, "B active");
+}
+
+{
+  const { pending, shown, reader, errors, report } = deferredReader();
+  const a = report(reader.read());
+  const b = report(reader.read());
+  pending[0].reject(new Error("A network"));
+  pending[1].reject(new Error("B network"));
+  await Promise.all([a, b]);
+  equal(
+    "newer failure is still reported, never the stale one",
+    JSON.stringify(errors),
+    JSON.stringify(["B network", "B network"]),
+  );
+  equal("newer failure clears the shown status", JSON.stringify(shown), JSON.stringify([null]));
+}
+
+{
+  const { pending, shown, reader, errors, report } = deferredReader();
+  const only = report(reader.read());
+  pending[0].reject(new Error("current network"));
+  await only;
+  equal(
+    "current failure stays visible",
+    JSON.stringify(errors),
+    JSON.stringify(["current network"]),
+  );
+  equal("current failure clears the shown status", JSON.stringify(shown), JSON.stringify([null]));
+}
+
+{
+  const { pending, shown, reader, errors, report } = deferredReader();
+  const a = report(reader.read());
+  reader.cancel();
+  pending[0].reject(new Error("after cancel"));
+  await a;
+  equal("cancelled read shows nothing", JSON.stringify(shown), JSON.stringify([]));
+  equal(
+    "cancelled read rejects with its own error",
+    JSON.stringify(errors),
+    JSON.stringify(["after cancel"]),
+  );
 }
 
 finish();

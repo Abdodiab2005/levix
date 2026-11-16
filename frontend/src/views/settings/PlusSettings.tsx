@@ -13,7 +13,7 @@ import {
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { useSocketEvent } from "../../hooks/useSocket";
-import { createRequestGeneration, showsPlusUntil } from "../plus/plusUiLogic";
+import { createLatestReader, showsPlusUntil } from "../plus/plusUiLogic";
 import { fill } from "../../utils/fill";
 import { presentPlusOffer } from "./plusOffer";
 import { TermsViewerDialog } from "../legal/TermsConsentDialog";
@@ -107,7 +107,9 @@ export function PlusSettings({
   const [productLoading, setProductLoading] = useState(false);
   const [busy, setBusy] = useState<Operation | null>(null);
   const running = useRef(false);
-  const statusReads = useRef(createRequestGeneration());
+  const [statusReader] = useState(() =>
+    createLatestReader(() => api.get<PlusStatus>("/plus/status"), setStatus),
+  );
   const [recoveryRequest, setRecoveryRequest] = useState(0);
   const recoveredRequest = useRef(-1);
   const [error, setError] = useState<string | null>(null);
@@ -115,18 +117,7 @@ export function PlusSettings({
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
 
-  const readStatus = useCallback(async () => {
-    const token = statusReads.current.begin();
-    try {
-      const next = await api.get<PlusStatus>("/plus/status");
-      if (statusReads.current.isCurrent(token)) setStatus(next);
-      return next;
-    } catch (err) {
-      // Only the latest read can clear the displayed status.
-      if (statusReads.current.isCurrent(token)) setStatus(null);
-      throw err;
-    }
-  }, []);
+  const readStatus = useCallback(() => statusReader.read(), [statusReader]);
 
   useEffect(() => {
     let live = true;
@@ -154,9 +145,9 @@ export function PlusSettings({
     void load();
     return () => {
       live = false;
-      statusReads.current.begin();
+      statusReader.cancel();
     };
-  }, [android, readStatus]);
+  }, [android, readStatus, statusReader]);
 
   const statusChanged = useCallback(() => {
     void readStatus().catch((err) => setError(errorCode(err)));
