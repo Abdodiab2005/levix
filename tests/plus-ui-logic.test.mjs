@@ -1,8 +1,11 @@
 import {
   createLatestReader,
+  createRecoveryRefreshGate,
   createRequestGeneration,
   createWriteQueue,
   getDraftText,
+  RECOVERY_REFRESH_COOLDOWN_MS,
+  recoverPlusPurchases,
   samplePlaceholderValue,
   showsPlusUntil,
   substitutePlaceholders,
@@ -368,6 +371,146 @@ function deferredReader() {
     JSON.stringify(errors),
     JSON.stringify(["after cancel"]),
   );
+}
+
+section("foreground recovery re-verifies an inactive entitlement once Play owns it again");
+
+// A fake verifier: the only place the displayed entitlement can come from.
+function recoveryHarness({ serverState, afterRefresh = serverState, clock = { at: 0 } }) {
+  const calls = { claim: 0, refresh: 0, read: 0 };
+  const server = { state: serverState };
+  const gate = createRecoveryRefreshGate(RECOVERY_REFRESH_COOLDOWN_MS, () => clock.at);
+  const deps = (purchases, shownState = server.state) => ({
+    purchases,
+    state: shownState,
+    gate,
+    claim: async (fresh) => {
+      calls.claim += fresh.length;
+      server.state = "active";
+    },
+    readState: async () => {
+      calls.read += 1;
+      return server.state;
+    },
+    refresh: async () => {
+      calls.refresh += 1;
+      server.state = afterRefresh;
+    },
+  });
+  return { calls, server, deps, clock };
+}
+
+const owned = (token, acknowledged = true) => ({
+  status: "purchased",
+  acknowledged,
+  purchaseToken: token,
+  productId: "levix.plus",
+  packageName: "net.leviro.levix",
+});
+
+{
+  // QA Finding 7: hold or pause ended in Play, same token, app still holds an inactive token.
+  const h = recoveryHarness({ serverState: "inactive", afterRefresh: "active" });
+  const outcome = await recoverPlusPurchases(h.deps([owned("t1")]));
+  equal("inactive + owned purchase refreshes", outcome, "refreshed");
+  equal("one server refresh", h.calls.refresh, 1);
+  equal("nothing is claimed", h.calls.claim, 0);
+  equal("the server now reports active", h.server.state, "active");
+}
+
+for (const state of ["none", "expired", "unverified"]) {
+  const h = recoveryHarness({ serverState: state, afterRefresh: "active" });
+  equal(
+    `${state}: still refreshes`,
+    await recoverPlusPurchases(h.deps([owned("t1")])),
+    "refreshed",
+  );
+  equal(`${state}: one refresh`, h.calls.refresh, 1);
+}
+
+for (const state of ["active", "grace", "canceled", "clock"]) {
+  const h = recoveryHarness({ serverState: state });
+  equal(`${state}: no refresh`, await recoverPlusPurchases(h.deps([owned("t1")])), "none");
+  equal(`${state}: refresh not called`, h.calls.refresh, 0);
+}
+
+{
+  const h = recoveryHarness({ serverState: "inactive", afterRefresh: "inactive" });
+  equal("no Play purchase: nothing", await recoverPlusPurchases(h.deps([])), "none");
+  equal("no Play purchase: no refresh", h.calls.refresh, 0);
+  equal(
+    "a Play result alone never changes the entitlement",
+    await recoverPlusPurchases(h.deps([owned("t1")])),
+    "refreshed",
+  );
+  equal("server still inactive after its own answer", h.server.state, "inactive");
+}
+
+{
+  // A new purchase made outside the app is unacknowledged and is claimed instead.
+  const h = recoveryHarness({ serverState: "inactive" });
+  equal(
+    "fresh purchase is claimed",
+    await recoverPlusPurchases(h.deps([owned("new", false)])),
+    "claimed",
+  );
+  equal("one claim", h.calls.claim, 1);
+  equal("no refresh after a claim alone", h.calls.refresh, 0);
+}
+
+{
+  // Claim then re-read: an acknowledged purchase beside it refreshes only if the server is still stale.
+  const h = recoveryHarness({ serverState: "inactive", afterRefresh: "active" });
+  const outcome = await recoverPlusPurchases(h.deps([owned("new", false), owned("old")]));
+  equal("claim made the server active, so no refresh", outcome, "claimed");
+  equal("state re-read from the server after the claim", h.calls.read, 1);
+  equal("no refresh", h.calls.refresh, 0);
+}
+
+{
+  const clock = { at: 1_000 };
+  const h = recoveryHarness({ serverState: "inactive", afterRefresh: "inactive", clock });
+  equal(
+    "first foreground refreshes",
+    await recoverPlusPurchases(h.deps([owned("t1")])),
+    "refreshed",
+  );
+  clock.at += 30_000;
+  equal(
+    "repeat inside the cooldown is skipped",
+    await recoverPlusPurchases(h.deps([owned("t1")])),
+    "skipped",
+  );
+  equal("still one refresh", h.calls.refresh, 1);
+  equal(
+    "another purchase token is not blocked",
+    await recoverPlusPurchases(h.deps([owned("t2")])),
+    "refreshed",
+  );
+  clock.at += RECOVERY_REFRESH_COOLDOWN_MS;
+  equal(
+    "after the cooldown it refreshes again",
+    await recoverPlusPurchases(h.deps([owned("t1")])),
+    "refreshed",
+  );
+  equal("three refreshes in total", h.calls.refresh, 3);
+}
+
+{
+  const h = recoveryHarness({ serverState: "inactive" });
+  const failing = {
+    ...h.deps([owned("t1")]),
+    refresh: async () => {
+      throw new Error("NETWORK");
+    },
+  };
+  let error = null;
+  try {
+    await recoverPlusPurchases(failing);
+  } catch (err) {
+    error = err.message;
+  }
+  equal("a refresh failure reaches the caller", error, "NETWORK");
 }
 
 finish();

@@ -13,7 +13,12 @@ import {
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { useSocketEvent } from "../../hooks/useSocket";
-import { createLatestReader, showsPlusUntil } from "../plus/plusUiLogic";
+import {
+  createLatestReader,
+  createRecoveryRefreshGate,
+  recoverPlusPurchases,
+  showsPlusUntil,
+} from "../plus/plusUiLogic";
 import { fill } from "../../utils/fill";
 import { presentPlusOffer } from "./plusOffer";
 import { TermsViewerDialog } from "../legal/TermsConsentDialog";
@@ -79,6 +84,9 @@ type Notice =
   | "plusPurchaseCancelled"
   | "plusNoPurchases"
   | "plusRefreshDone";
+
+// Module scope: the cooldown survives leaving and reopening the Plus tab.
+const recoveryRefreshes = createRecoveryRefreshGate();
 
 function failure(code = "FAILED"): never {
   throw new ApiError(0, code, { code });
@@ -249,33 +257,32 @@ export function PlusSettings({
     void run("recover", async () => {
       const result = await plusPendingPurchases();
       if (!result.ok) failure(result.code);
-      const fresh = result.purchases.filter(
-        (purchase) => purchase.status === "purchased" && !purchase.acknowledged,
-      );
-      if (fresh.length > 0) {
-        setError(null);
-        setNotice(null);
-        await claimPurchases(fresh.map((purchase) => ({ ok: true as const, ...purchase })));
-      }
-      const acknowledged = result.purchases.some(
-        (purchase) => purchase.status === "purchased" && purchase.acknowledged,
-      );
-      const state = (fresh.length > 0 ? await readStatus() : status)?.entitlement.state;
-      if (acknowledged && (state === "none" || state === "expired" || state === "unverified")) {
-        try {
-          const refreshed = await api.post<{ ok: boolean; code?: string }>("/plus/refresh");
-          if (!refreshed.ok) failure(refreshed.code);
-          await readStatus();
-        } catch (err) {
-          if (
-            (err instanceof ApiError && err.status === 429) ||
-            errorCode(err) === "RATE_LIMITED"
-          ) {
-            return;
+      await recoverPlusPurchases({
+        purchases: result.purchases,
+        state: status?.entitlement.state,
+        gate: recoveryRefreshes,
+        claim: async (fresh) => {
+          setError(null);
+          setNotice(null);
+          await claimPurchases(fresh.map((purchase) => ({ ok: true as const, ...purchase })));
+        },
+        readState: async () => (await readStatus()).entitlement.state,
+        refresh: async () => {
+          try {
+            const refreshed = await api.post<{ ok: boolean; code?: string }>("/plus/refresh");
+            if (!refreshed.ok) failure(refreshed.code);
+            await readStatus();
+          } catch (err) {
+            if (
+              (err instanceof ApiError && err.status === 429) ||
+              errorCode(err) === "RATE_LIMITED"
+            ) {
+              return;
+            }
+            throw err;
           }
-          throw err;
-        }
-      }
+        },
+      });
     });
   }, [
     recoveryAvailable,
