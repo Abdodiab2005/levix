@@ -80,4 +80,5 @@ export { SortMenu, type SortMenuProps, type SortOption } from "./sort";
 export { SegmentedControl, type TabOption, Tabs } from "./tabs";
 export { Toolbar } from "./toolbar";
 export { Spotlight, Tour, type TourLabels, type TourProps, type TourStep } from "./tour";
+export { CodeText, type CodeTextProps } from "./code-text";
 export { UserText, type UserTextProps } from "./user-text";

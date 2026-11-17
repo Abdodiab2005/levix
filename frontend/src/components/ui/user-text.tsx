@@ -10,6 +10,9 @@ import { cn } from "../../utils/cn";
  *
  * `lines` clamps to that many lines (dense cards and chips); a clamped element
  * gets the full text as its `title` when the child is a string.
+ *
+ * Commands, prefixes, placeholders, and timezone ids use CodeText so they stay
+ * left to right. UserText is for names and messages.
  */
 type UserTextTag = "span" | "p" | "bdi" | "strong" | "em";
 

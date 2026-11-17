@@ -1,7 +1,7 @@
 // file: frontend/src/views/commands/AliasToken.tsx
 
 import { X } from "lucide-react";
-import { IconButton } from "../../components/ui";
+import { CodeText, IconButton } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { ARABIC_SCRIPT } from "./shared";
 
@@ -26,10 +26,7 @@ export function AliasToken({
   const otherScript = isArabic !== (language === "ar");
   return (
     <span className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-panel-raised px-2 py-0.5 text-[11px] text-muted">
-      <span dir="ltr" className="font-mono">
-        {prefix}
-        {alias}
-      </span>
+      <CodeText className="text-[11px]">{`${prefix}${alias}`}</CodeText>
       {otherScript && (
         <span className="font-sans text-[9px] font-bold uppercase tracking-wide text-brand-cyan/80">
           {isArabic ? "AR" : "EN"}

@@ -3,8 +3,9 @@ import { RotateCcw, Undo2 } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { ApiError } from "../../api/client";
 import {
+  Badge,
   Button,
-  Chip,
+  CodeText,
   ConfirmDialog,
   Dialog,
   Disclosure,
@@ -18,6 +19,7 @@ import {
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
+import { areaLabelKey, placeholderExplainKey, splitTemplateText, templateCommand } from "../../utils/templateLabels";
 import { plusDelete, plusErrorCode, plusErrorKey, plusGet, plusPut } from "./plusApi";
 import { getDraftText, substitutePlaceholders } from "./plusUiLogic";
 import {
@@ -33,6 +35,20 @@ import {
 } from "./types";
 
 const MODES: PlusTemplateMode[] = ["auto", "original"];
+
+/** Catalog or draft text, with `{name}` kept as its own left-to-right token. */
+export function TemplateBody({ text }: { text: string }) {
+  const parts = splitTemplateText(text);
+  return parts.map((part, index) =>
+    part.kind === "token" ? (
+      <CodeText key={`${part.text}-${index}`} className="text-xs">
+        {part.text}
+      </CodeText>
+    ) : (
+      <span key={`text-${index}`}>{part.text}</span>
+    ),
+  );
+}
 
 function placeholdersIn(text: string): string[] {
   const names = new Set<string>();
@@ -158,9 +174,15 @@ export function TemplateEditor({
     };
   }, [open, item?.key, sourceLocale, previewToken, onInactive, hasDraft]);
 
-  const key = item?.key ?? "";
   const catalog: Partial<Record<PlusLocale, string>> = item?.catalog ?? {};
   const allowed = item?.placeholders ?? [];
+  const panelLocale: PlusLocale = isPlusLocale(language) ? language : "en";
+  const defaultText = item ? (item.catalog[panelLocale] ?? item.catalog.en ?? "") : "";
+  const command = item ? templateCommand(item.key) : null;
+  const countLabel = fill(t("plusCharactersUsed"), {
+    n: text.length,
+    max: PLUS_LIMITS.templateText,
+  });
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -265,9 +287,13 @@ export function TemplateEditor({
         onClose={onClose}
         title={t("plusMessagesEdit")}
         description={
-          <span dir="ltr" className="font-mono text-xs">
-            {key}
-          </span>
+          item ? (
+            <span className="inline-flex max-w-full flex-wrap items-center gap-2">
+              <span>{t(areaLabelKey(item.key))}</span>
+              {command && <CodeText className="text-xs">{`!${command}`}</CodeText>}
+              {item.override && <Badge tone="info">{t("plusMessagesCustomized")}</Badge>}
+            </span>
+          ) : undefined
         }
         maxWidth="44rem"
         footer={
@@ -286,7 +312,7 @@ export function TemplateEditor({
                 icon={<RotateCcw size={16} />}
                 onSelect={() => setConfirmRestore(true)}
               >
-                {t("plusRestoreDefault")}
+                {t("plusResetDefault")}
               </MenuItem>
             </OverflowMenu>
             <Button variant="secondary" onClick={onClose} disabled={saving}>
@@ -344,53 +370,64 @@ export function TemplateEditor({
               ))}
             </Select>
           </Field>
-          <Field
-            label={t("plusSourceText")}
-            htmlFor="plus-template-text"
-            description={fill(t("plusTextCount"), {
-              n: text.length,
-              max: PLUS_LIMITS.templateText,
-            })}
-          >
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs font-bold text-text-main">{t("plusMessagesDefault")}</p>
+            <div
+              dir="auto"
+              className="whitespace-pre-wrap break-words text-sm text-text-main"
+            >
+              {defaultText ? (
+                <TemplateBody text={defaultText} />
+              ) : (
+                <span className="text-muted">{t("plusMessagesNoPreview")}</span>
+              )}
+            </div>
+          </div>
+          <Field label={t("plusSourceText")} htmlFor="plus-template-text">
             <Textarea
               id="plus-template-text"
               value={text}
               dir="auto"
               rows={4}
+              aria-describedby="plus-template-count"
               onChange={(event) => {
                 setText(event.target.value);
                 setError(null);
               }}
             />
+            <p id="plus-template-count" aria-live="polite" className="text-xs text-muted">
+              {countLabel}
+            </p>
           </Field>
           <div className="flex flex-col gap-1.5">
             <p className="text-xs font-bold text-text-main">{t("plusMessagesPlaceholders")}</p>
             {allowed.length === 0 ? (
               <p className="text-xs text-muted">{t("plusMessagesNoPlaceholders")}</p>
             ) : (
-              <div className="flex flex-wrap gap-1.5">
+              <ul className="m-0 flex list-none flex-col gap-2 p-0">
                 {allowed.map((name) => (
-                  <Chip key={name} dir="ltr" className="font-mono">
-                    {`{${name}}`}
-                  </Chip>
+                  <li key={name} className="flex flex-wrap items-baseline gap-2">
+                    <CodeText className="text-xs">{`{${name}}`}</CodeText>
+                    <span className="text-xs text-muted">{t(placeholderExplainKey(name))}</span>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </div>
           <div className="flex flex-col gap-1.5">
             <p className="text-xs font-bold text-text-main">{t("plusMessagesPreview")}</p>
-            <p
+            <div
               dir="auto"
-              className="rounded-xl border border-line bg-panel-raised/50 p-3 text-sm text-text-main whitespace-pre-wrap break-words"
+              className="whitespace-pre-wrap break-words rounded-xl border border-line bg-panel-raised/50 p-3 text-sm text-text-main"
             >
               {hasDraft ? (
-                localPreview
+                <TemplateBody text={localPreview} />
               ) : previewFailed ? (
                 <span className="text-muted">{t("plusMessagesPreviewFailed")}</span>
               ) : (
-                (preview ?? localPreview)
+                <TemplateBody text={preview ?? localPreview} />
               )}
-            </p>
+            </div>
           </div>
           {failed.length > 0 && (
             <p className="text-sm text-warn">
@@ -428,7 +465,7 @@ export function TemplateEditor({
         onConfirm={() => void restore()}
         title={t("plusRestoreDefaultTitle")}
         description={t("plusRestoreDefaultBody")}
-        confirmLabel={t("plusRestoreDefault")}
+        confirmLabel={t("plusResetDefault")}
         cancelLabel={t("cancel")}
         loading={restoring}
       />

@@ -2,7 +2,15 @@
 
 import { Copy, Edit3, Lock } from "lucide-react";
 import type { ReactNode } from "react";
-import { Badge, IconButton, Panel, SaveField, Select, useSavedValue } from "../../components/ui";
+import {
+  Badge,
+  CodeText,
+  IconButton,
+  Panel,
+  SaveField,
+  Select,
+  useSavedValue,
+} from "../../components/ui";
 import type { CommandItem, PermissionLevel } from "../../types";
 import { AliasToken } from "./AliasToken";
 import { type CommandActions, useCommandLabels } from "./shared";
@@ -33,7 +41,7 @@ export function CommandPermissionControl({
         className="flex min-h-11 items-center gap-2.5 px-3 py-3"
       >
         <Lock size={16} className="shrink-0 text-muted" aria-hidden />
-        <span className="min-w-0 break-words text-sm text-text-main">
+        <span className="min-w-0 whitespace-normal break-words text-sm text-text-main">
           {permissionLabel(command.permission)}
         </span>
       </Panel>
@@ -153,13 +161,9 @@ export function CommandDetails({
             {usages.map((line) => (
               <li key={line}>
                 <Panel padded={false} className="flex min-h-11 items-center gap-2 px-3 py-2">
-                  <code
-                    dir="ltr"
-                    title={line}
-                    className="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-muted"
-                  >
+                  <CodeText className="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-muted">
                     {line}
-                  </code>
+                  </CodeText>
                   <IconButton
                     label={t("copyCommand")}
                     variant="ghost"
