@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../utils/userError";
 // file: frontend/src/views/ConnectionView.tsx
 
 import {
@@ -130,7 +131,11 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
     }
   }, [isWaitingQr, status?.qr, status?.pairingCode, onRefresh]);
 
-  const handleAction = async (actionFn: () => Promise<unknown>, successMsg: string) => {
+  const handleAction = async (
+    actionFn: () => Promise<unknown>,
+    successMsg: string,
+    fallbackKey: string,
+  ) => {
     setActing(true);
     try {
       const res = await actionFn();
@@ -140,7 +145,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
       toast(successMsg, "success");
       await onRefresh?.();
     } catch (err: unknown) {
-      toast(err instanceof Error ? err.message : String(err), "error");
+      toast(userErrorMessage(t, err, fallbackKey), "error");
     } finally {
       setActing(false);
     }
@@ -160,15 +165,20 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
     await handleAction(
       () => api.startSession({ method: "pairing", phone: cleanPhone }),
       t("connectionRequestingPairing"),
+      "sessionStartError",
     );
   };
 
   const handleStartQr = async () => {
-    await handleAction(() => api.startSession({ method: "qr" }), t("connectionStartingQr"));
+    await handleAction(
+      () => api.startSession({ method: "qr" }),
+      t("connectionStartingQr"),
+      "sessionStartError",
+    );
   };
 
   const handleSwitchToPhone = async () => {
-    await handleAction(api.stopSession, t("connectionCancelledEnterPhone"));
+    await handleAction(api.stopSession, t("connectionCancelledEnterPhone"), "sessionStopError");
     setPairingMethod("pairing");
   };
 
@@ -198,7 +208,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
       }
       await onRefresh?.();
     } catch (err: unknown) {
-      toast(err instanceof Error ? err.message : String(err), "error");
+      toast(userErrorMessage(t, err, "sessionUnlinkError"), "error");
     } finally {
       setActing(false);
     }
@@ -210,7 +220,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
     <IconButton
       label={t("restart")}
       icon={<RotateCcw size={16} />}
-      onClick={() => handleAction(api.restartBot, t("restart"))}
+      onClick={() => handleAction(api.restartBot, t("restart"), "sessionRestartError")}
       disabled={acting}
     />
   );
@@ -246,7 +256,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
             <Button
               variant="secondary"
               icon={<RefreshCw size={16} />}
-              onClick={() => handleAction(api.reconnectSession, t("reconnecting"))}
+              onClick={() => handleAction(api.reconnectSession, t("reconnecting"), "sessionReconnectError")}
               disabled={acting}
               className="flex-1 whitespace-nowrap sm:flex-none"
             >
@@ -272,7 +282,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
               <Button
                 variant="primary"
                 icon={<Radio size={16} />}
-                onClick={() => handleAction(api.startSession, resumeLabel)}
+                onClick={() => handleAction(api.startSession, resumeLabel, "sessionStartError")}
                 disabled={acting}
                 className="flex-1 whitespace-nowrap sm:flex-none"
                 data-tour="connection-start"
@@ -505,7 +515,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
               <Button
                 variant="danger"
                 icon={<Square size={16} />}
-                onClick={() => handleAction(api.stopSession, t("stop"))}
+                onClick={() => handleAction(api.stopSession, t("stop"), "sessionStopError")}
                 disabled={acting}
                 className="w-full sm:w-auto"
               >

@@ -25,7 +25,7 @@ import {
   templateCommand,
   templateIsLong,
 } from "../../utils/templateLabels";
-import { plusErrorCode, plusErrorKey, plusGet } from "./plusApi";
+import { plusErrorCode, plusErrorMessage, plusGet } from "./plusApi";
 import { TemplateBody, TemplateEditor } from "./TemplateEditor";
 import {
   type PlusLocale,
@@ -78,7 +78,7 @@ export function MessagesTab({ onInactive }: { onInactive: () => void }) {
         if (!live) return;
         const code = plusErrorCode(err);
         if (code === "inactive") onInactive();
-        setError(t(plusErrorKey(code)));
+        setError(plusErrorMessage(t, err));
       })
       .finally(() => {
         if (live) setLoading(false);

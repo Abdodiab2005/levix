@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../utils/userError";
 // file: frontend/src/views/GroupsView.tsx
 
 import { ChevronDown, Eraser, RotateCcw, ShieldAlert, Undo2, UserX, Users } from "lucide-react";
@@ -36,6 +37,7 @@ import {
   usePagination,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
+import type { MessageKey } from "../i18n/translations";
 import { pickLocalized } from "../i18n/locale";
 import type {
   CommandItem,
@@ -262,10 +264,15 @@ function policyPatchForSave(
   return touched ? patch : undefined;
 }
 
-function errorsByKey(errors: ModerationPolicyFieldError[] | undefined): Record<string, string> {
+function errorsByKey(
+  t: (key: MessageKey) => string,
+  errors: ModerationPolicyFieldError[] | undefined,
+): Record<string, string> {
   const map: Record<string, string> = {};
   for (const item of errors || []) {
-    if (item?.field && item.message && !(item.field in map)) map[item.field] = item.message;
+    if (item?.field && !(item.field in map)) {
+      map[item.field] = userErrorMessage(t, item, "groupValidationError");
+    }
   }
   return map;
 }
@@ -337,12 +344,13 @@ export const GroupsView: React.FC = () => {
       if (res?.groups) setGroups(res.groups);
       setError(null);
     } catch (err: any) {
-      setError(err.message);
-      toast(err.message, "error");
+      const message = userErrorMessage(t, err, "groupsLoadError");
+      setError(message);
+      toast(message, "error");
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [t, toast]);
 
   useEffect(() => {
     void reloadToken;
@@ -386,7 +394,7 @@ export const GroupsView: React.FC = () => {
       if (res?.group) applyGroup(res.group);
       toast(t("savedSuccessfully"), "success");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "groupUpdateError"), "error");
       throw err;
     } finally {
       inflight.current.delete(jid);
@@ -403,7 +411,7 @@ export const GroupsView: React.FC = () => {
       if (res?.group) applyGroup(res.group);
       toast(t("savedSuccessfully"), "success");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "groupUpdateError"), "error");
       throw err;
     } finally {
       inflight.current.delete(jid);
@@ -735,7 +743,7 @@ function GroupSettings({
     rules: group.rules,
     welcome: group.welcome_system.messages.join("\n"),
     ...draftFromPolicy(savedPolicy),
-  });
+  }, "groupUpdateError");
 
   const [customSelected, setCustomSelected] = useState(false);
   const [undoPolicyDraft, setUndoPolicyDraft] = useState<PolicyDraft | null>(null);
@@ -877,11 +885,11 @@ function GroupSettings({
           if (cancelled) return;
           setLivePreview(pickLocalized(res, language));
           if (res.visibility) setPolicyVisibility(res.visibility);
-          setPolicyErrors(errorsByKey(res.errors));
+          setPolicyErrors(errorsByKey(t, res.errors));
         })
         .catch((err: any) => {
           if (cancelled) return;
-          if (Array.isArray(err?.data?.errors)) setPolicyErrors(errorsByKey(err.data.errors));
+          if (Array.isArray(err?.data?.errors)) setPolicyErrors(errorsByKey(t, err.data.errors));
           else if (savedPreview) setLivePreview(savedPreview);
         });
     }, 200);
@@ -889,7 +897,7 @@ function GroupSettings({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [previewKey, language, savedPreview, previewSettings]);
+  }, [previewKey, language, savedPreview, previewSettings, t]);
 
   const previewText = livePreview || savedPreview || "";
   const previewSegments = useMemo(() => {
@@ -953,7 +961,7 @@ function GroupSettings({
               setUndoPolicyDraft(null);
               setCustomSelected(false);
             } catch (err: any) {
-              if (Array.isArray(err?.data?.errors)) setPolicyErrors(errorsByKey(err.data.errors));
+              if (Array.isArray(err?.data?.errors)) setPolicyErrors(errorsByKey(t, err.data.errors));
               throw err;
             }
           });

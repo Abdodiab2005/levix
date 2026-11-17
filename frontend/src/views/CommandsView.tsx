@@ -120,11 +120,7 @@ export const CommandsView: React.FC = () => {
   };
 
   const persistPermission = async (cmd: CommandItem, permission: PermissionLevel) => {
-    try {
-      await api.updateCommand(cmd.name, { permission });
-    } catch (err: unknown) {
-      throw new Error(t(commandErrorKey(err, "commandUpdateFailed")));
-    }
+    await api.updateCommand(cmd.name, { permission });
     setCommands((prev) =>
       prev.map((c) =>
         commandId(c) === commandId(cmd) ? { ...c, permission, overridden: true } : c,

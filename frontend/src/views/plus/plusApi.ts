@@ -1,5 +1,6 @@
 // file: frontend/src/views/plus/plusApi.ts
 import { ApiError, api } from "../../api/client";
+import { userErrorMessage } from "../../utils/userError";
 import type { MessageKey } from "../../i18n/translations";
 import type { PlusStatusResponse } from "./types";
 
@@ -38,7 +39,17 @@ export function plusErrorCode(error: unknown): string {
 }
 
 export function plusErrorKey(code: string): MessageKey {
-  return ERROR_KEYS[code] ?? "plusExtErrorFailed";
+  return Object.hasOwn(ERROR_KEYS, code) ? ERROR_KEYS[code] : "plusExtErrorFailed";
+}
+
+export function plusErrorMessage(
+  t: (key: MessageKey) => string,
+  error: unknown,
+  fallbackKey = "plusExtErrorFailed",
+): string {
+  const code = plusErrorCode(error);
+  const key = Object.hasOwn(ERROR_KEYS, code) ? ERROR_KEYS[code] : undefined;
+  return key ? t(key) : userErrorMessage(t, error, fallbackKey);
 }
 
 /** The server decides whether Plus is active. Local state never does. */

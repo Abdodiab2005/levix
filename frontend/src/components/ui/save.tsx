@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../../utils/userError";
 // file: frontend/src/components/ui/save.tsx
 import { Check, Save } from "lucide-react";
 import {
@@ -11,18 +12,13 @@ import {
   useState,
 } from "react";
 import { cn } from "../../utils/cn";
+import { useI18n } from "../../context/I18nContext";
 import { Button, IconButton } from "./button";
 import { Field } from "./field";
 
 const SAVED_FLASH_MS = 1500;
 
 export type SaveStatus = "idle" | "saving" | "saved";
-
-function messageOf(err: unknown): string {
-  if (err instanceof Error && err.message) return err.message;
-  if (typeof err === "string" && err) return err;
-  return "";
-}
 
 function sameValue(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
@@ -47,7 +43,8 @@ function useSavedFlash(
   }, [status, setStatus]);
 }
 
-export function useSavedValue<T>(saved: T) {
+export function useSavedValue<T>(saved: T, fallbackKey = "saveFailed") {
+  const { t } = useI18n();
   const [value, setValue] = useState(saved);
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -74,10 +71,10 @@ export function useSavedValue<T>(saved: T) {
         setStatus("saved");
       } catch (err) {
         setStatus("idle");
-        setError(messageOf(err) || null);
+        setError(userErrorMessage(t, err, fallbackKey));
       }
     },
-    [dirty, status, value],
+    [dirty, status, value, t, fallbackKey],
   );
 
   const revert = useCallback(() => {
@@ -89,7 +86,12 @@ export function useSavedValue<T>(saved: T) {
   return { value, setValue, dirty, status, error, save, revert };
 }
 
-export function useDirtyForm<T extends Record<string, any>>(saved: T) {
+export function useDirtyForm<T extends Record<string, any>>(
+  saved: T,
+  fallbackKey = "saveFailed",
+  formatError = userErrorMessage,
+) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState(saved);
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -120,10 +122,10 @@ export function useDirtyForm<T extends Record<string, any>>(saved: T) {
         setStatus("saved");
       } catch (err) {
         setStatus("idle");
-        setError(messageOf(err) || null);
+        setError(formatError(t, err, fallbackKey));
       }
     },
-    [dirty, status, draft],
+    [dirty, status, draft, t, fallbackKey, formatError],
   );
 
   const revert = useCallback(() => {

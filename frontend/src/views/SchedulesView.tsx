@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../utils/userError";
 // file: frontend/src/views/SchedulesView.tsx
 
 import {
@@ -401,8 +402,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       }
       setError(null);
     } catch (err: any) {
-      setError(err.message);
-      toast(err.message, "error");
+      const message = userErrorMessage(t, err, "schedulesLoadError");
+      setError(message);
+      toast(message, "error");
     } finally {
       setLoading(false);
     }
@@ -459,7 +461,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       toast(t("savedSuccessfully"), "success");
       setSchedules((prev) => prev.filter((s) => s.id !== id));
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "scheduleDeleteError"), "error");
     }
   };
 
@@ -473,7 +475,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       toast(t("schedulesRetryTriggered"), "info");
       loadSchedules();
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "scheduleRetryError"), "error");
     }
   };
 
@@ -551,7 +553,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       }
       setScheduleMediaHost(picked);
     } catch (err: any) {
-      toast(err?.message || "Could not attach the file", "error");
+      toast(userErrorMessage(t, err, "attachmentError"), "error");
     }
   };
 
@@ -660,7 +662,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       resetForm();
       loadSchedules();
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "scheduleCreateError"), "error");
     } finally {
       setCreating(false);
     }
@@ -1559,7 +1561,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             {detailSchedule.lastError && (
               <DetailRow label={t("detailError")}>
                 <span className="text-danger break-words" dir="auto">
-                  {detailSchedule.lastError}
+                  {userErrorMessage(t, detailSchedule.lastError, "scheduleDeliveryError")}
                 </span>
               </DetailRow>
             )}

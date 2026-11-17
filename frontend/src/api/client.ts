@@ -33,13 +33,14 @@ import type {
 import type { Language } from "../i18n/translations";
 
 export class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public data?: any,
-  ) {
+  public status: number;
+  public data?: any;
+
+  constructor(status: number, message: string, data?: any) {
     super(message);
     this.name = "ApiError";
+    this.status = status;
+    this.data = data;
   }
 
   get code(): string | undefined {

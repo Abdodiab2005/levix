@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../utils/userError";
 import { Check, Search, User, Users } from "lucide-react";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -87,7 +88,7 @@ export const RecipientPicker: React.FC<RecipientPickerProps> = ({
         if (err instanceof ApiError && stickerErrorKey(err.code)) {
           setError(explainError(t, err));
         } else {
-          setError(t("recipientsLoadFailed"));
+          setError(userErrorMessage(t, err, "recipientsLoadFailed"));
         }
       })
       .finally(() => {

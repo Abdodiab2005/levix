@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../utils/userError";
 // file: frontend/src/views/SettingsView.tsx
 
 import {
@@ -151,7 +152,7 @@ function recoveryMessage(
     case "too_many_attempts":
       return { text: t("recoveryErrExpired"), backToEmail };
     default:
-      return { text: t("recoveryErrFailed"), backToEmail: false };
+      return { text: userErrorMessage(t, err, "recoveryErrFailed"), backToEmail: false };
   }
 }
 
@@ -492,7 +493,7 @@ export const SettingsView: React.FC = () => {
       await api.updateSetting(key, value);
       toast(t("savedSuccessfully"), "success");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "saveFailed"), "error");
       await loadSettings();
     }
   };
@@ -552,7 +553,7 @@ export const SettingsView: React.FC = () => {
       URL.revokeObjectURL(url);
       toast(t("exportSettingsSuccess"), "success");
     } catch (err: any) {
-      toast(err.message || t("exportSettingsError"), "error");
+      toast(userErrorMessage(t, err, "exportSettingsError"), "error");
     } finally {
       setExportingSettings(false);
     }
@@ -586,13 +587,13 @@ export const SettingsView: React.FC = () => {
         bits.push(`${t("importSkipped")}: ${report.skipped.length}`);
       }
       if (report.restartNeeded?.length) {
-        bits.push(`${t("importRestartNeeded")}: ${report.restartNeeded.join(", ")}`);
+        bits.push(`${t("importRestartNeeded")}: ${report.restartNeeded.length}`);
       }
       toast(`${t("importSuccess")} — ${bits.join(" · ")}`, "success");
       setImportPreview(null);
       await loadSettings();
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "importSettingsApplyError"), "error");
     } finally {
       setApplyingImport(false);
     }
@@ -620,7 +621,7 @@ export const SettingsView: React.FC = () => {
         setPrefixInput(res.prefix);
       }
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "settingsLoadError"), "error");
     } finally {
       setLoading(false);
     }
@@ -644,7 +645,7 @@ export const SettingsView: React.FC = () => {
       setPrefixInput(target);
       toast(`${t("prefixUpdated")} (${target})`, "success");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "prefixSaveError"), "error");
     } finally {
       setSavingPrefix(false);
     }
@@ -669,7 +670,7 @@ export const SettingsView: React.FC = () => {
       setNewPassword("");
       setConfirmPassword("");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "passwordChangeError"), "error");
     } finally {
       setChangingPass(false);
     }
@@ -919,7 +920,7 @@ export const SettingsView: React.FC = () => {
               onSubmit={(event) => {
                 event.preventDefault();
                 void delayForm.save(async (draft) => {
-                  if (draft.min > draft.max) throw new Error(t("delayRangeError"));
+                  if (draft.min > draft.max) throw new ApiError(400, "DELAY_RANGE_INVALID", { code: "DELAY_RANGE_INVALID" });
                   await persistSetting("bot_min_delay_ms", draft.min);
                   await persistSetting("bot_max_delay_ms", draft.max);
                 });

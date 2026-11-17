@@ -12,8 +12,9 @@ import {
   UserText,
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
+import { areaLabelKey } from "../../utils/templateLabels";
 import { fill } from "../../utils/fill";
-import { plusErrorCode, plusErrorKey, plusGet, plusPost } from "./plusApi";
+import { plusErrorCode, plusErrorMessage, plusGet, plusPost } from "./plusApi";
 import type { PlusPreset, PlusPresetsResponse } from "./types";
 
 export function PresetsTab({ onInactive }: { onInactive: () => void }) {
@@ -40,7 +41,7 @@ export function PresetsTab({ onInactive }: { onInactive: () => void }) {
         if (!live) return;
         const code = plusErrorCode(err);
         if (code === "inactive") onInactive();
-        setError(t(plusErrorKey(code)));
+        setError(plusErrorMessage(t, err));
       })
       .finally(() => {
         if (live) setLoading(false);
@@ -67,7 +68,7 @@ export function PresetsTab({ onInactive }: { onInactive: () => void }) {
     } catch (err) {
       const code = plusErrorCode(err);
       if (code === "inactive") onInactive();
-      setError(t(plusErrorKey(code)));
+      setError(plusErrorMessage(t, err));
     } finally {
       setApplying(false);
     }
@@ -124,8 +125,8 @@ export function PresetsTab({ onInactive }: { onInactive: () => void }) {
                   <UserText as="p" lines={2} className="text-sm text-text-main">
                     {line.text}
                   </UserText>
-                  <p dir="ltr" className="mt-0.5 truncate font-mono text-[11px] text-faint">
-                    {line.key}
+                  <p className="mt-0.5 text-[11px] text-faint">
+                    {t(areaLabelKey(line.key))}
                   </p>
                 </li>
               ))}

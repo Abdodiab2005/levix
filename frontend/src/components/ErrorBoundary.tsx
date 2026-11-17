@@ -2,6 +2,7 @@
 import { AlertTriangle, RefreshCw, Wrench } from "lucide-react";
 import React, { Component, type ErrorInfo, type ReactNode } from "react";
 import { I18nContext } from "../context/I18nContext";
+import { type MessageKey, translations } from "../i18n/translations";
 import { captureReport } from "../utils/errorCapture";
 import { Button, Card } from "./ui";
 
@@ -37,7 +38,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render(): ReactNode {
     if (this.state.hasError) {
-      const t = this.context?.t || ((key: string) => key);
+      const t = this.context?.t || ((key: MessageKey) => translations.en[key]);
       return (
         <div className="flex min-h-[50vh] items-center justify-center p-4">
           <Card className="max-w-md w-full text-center border-danger/30">
@@ -48,14 +49,6 @@ export class ErrorBoundary extends Component<Props, State> {
             <p className="mt-2 text-xs leading-relaxed text-muted sm:text-sm">
               {t("errorBoundaryDesc")}
             </p>
-            {this.state.error?.message && (
-              <pre
-                dir="ltr"
-                className="mt-3 overflow-x-auto rounded-lg bg-panel p-2 font-mono text-[11px] leading-relaxed text-danger border border-line text-start"
-              >
-                {this.state.error.message}
-              </pre>
-            )}
             <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Button
                 variant="primary"

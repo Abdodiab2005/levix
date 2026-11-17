@@ -20,7 +20,7 @@ import {
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
 import { areaLabelKey, placeholderExplainKey, splitTemplateText, templateCommand } from "../../utils/templateLabels";
-import { plusDelete, plusErrorCode, plusErrorKey, plusGet, plusPut } from "./plusApi";
+import { plusDelete, plusErrorCode, plusErrorMessage, plusGet, plusPut } from "./plusApi";
 import { getDraftText, substitutePlaceholders } from "./plusUiLogic";
 import {
   LOCALE_NAMES,
@@ -249,7 +249,7 @@ export function TemplateEditor({
         }
         onRefresh();
       } else {
-        setError(t(plusErrorKey(code)));
+        setError(plusErrorMessage(t, err));
       }
     } finally {
       setSaving(false);
@@ -267,7 +267,7 @@ export function TemplateEditor({
     } catch (err) {
       const code = plusErrorCode(err);
       if (code === "inactive") onInactive();
-      setError(t(plusErrorKey(code)));
+      setError(plusErrorMessage(t, err));
     } finally {
       setRestoring(false);
       setConfirmRestore(false);
