@@ -33,6 +33,7 @@ import {
   LoadingState,
   PageHeader,
   PasswordInput,
+  PlusFeatureRow,
   SaveField,
   SegmentedControl,
   Select,
@@ -529,6 +530,12 @@ export const AIAssistantView: React.FC = () => {
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
       <PageHeader icon={<Bot size={20} />} title={t("aiTitle")} description={t("aiSubtitle")} />
+
+      <PlusFeatureRow
+        tab="autoReply"
+        title={t("plusRowAutoReplyTitle")}
+        benefit={t("plusRowAutoReplyBenefit")}
+      />
 
       <Card data-tour="ai-agent">
         <div className="flex min-h-10 items-center justify-between gap-4">

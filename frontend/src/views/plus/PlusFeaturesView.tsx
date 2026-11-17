@@ -1,15 +1,14 @@
 // file: frontend/src/views/plus/PlusFeaturesView.tsx
 import { Bot, EyeOff, MessageSquareHeart, Sparkles } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Tabs } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { AutoReplyTab } from "./AutoReplyTab";
 import { MessagesTab } from "./MessagesTab";
 import { PresetsTab } from "./PresetsTab";
 import { VisibilityTab } from "./VisibilityTab";
+import { type PlusFeatureTab, plusTabFromHash } from "../../utils/plusAccess";
 import { readPlusStatus } from "./plusApi";
-
-type PlusFeatureTab = "messages" | "presets" | "visibility" | "autoReply";
 
 /**
  * Proves the extension is still active before showing anything. Local state
@@ -17,7 +16,19 @@ type PlusFeatureTab = "messages" | "presets" | "visibility" | "autoReply";
  */
 export function PlusFeaturesView() {
   const { t } = useI18n();
-  const [tab, setTab] = useState<PlusFeatureTab>("messages");
+  // #plus/<tab> (from an in-context Plus row) picks the starting tab.
+  const [tab, setTab] = useState<PlusFeatureTab>(
+    () => plusTabFromHash(window.location.hash) ?? "messages",
+  );
+
+  useEffect(() => {
+    const onHash = () => {
+      const next = plusTabFromHash(window.location.hash);
+      if (next) setTab(next);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
   const [inactive, setInactive] = useState(false);
 
   const handleInactive = useCallback(() => {

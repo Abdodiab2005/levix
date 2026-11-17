@@ -290,6 +290,23 @@ Set `kind="empty"` for no records, `kind="no-results"` for an empty search/filte
 
 A wrapping row. Put the search `Input` first (`className="min-w-48 flex-1"`), then `FilterButton`, `SortMenu`, and `OverflowMenu`.
 
+### CrownIcon / PlusBadge / PlusFeatureRow
+
+`CrownIcon` is the Levix Plus crown as an inline SVG in `currentColor`. It is `aria-hidden`, so always put text beside it. `PlusBadge` is a pill with that text (`tone`: `active` | `muted`, `crown` adds the icon).
+
+`PlusFeatureRow` announces one Plus feature in the screen it belongs to. Props: `title`, `benefit` (one line), and `tab` (the Plus page tab, such as `autoReply`). It reads the server's answer through `usePlusStatus` and maps it with `accessFromStatus`:
+
+- `active`: an "Open" link to `#plus/<tab>`.
+- `locked`: a lock mark, the benefit line and a "Learn more" link to `#plus`. No dialog, no popup.
+- `unknown`: says the status is being checked; the action is disabled and explains why.
+- `unavailable` (not offered on this platform): renders nothing.
+
+Add at most one per screen, never in place of a free control, and never decide access in the view.
+
+```tsx
+<PlusFeatureRow tab="autoReply" title={t("plusRowAutoReplyTitle")} benefit={t("plusRowAutoReplyBenefit")} />
+```
+
 ### StatusDot / Avatar / Disclosure
 
 `StatusDot` takes a `tone` and accessible `label`; it displays only a dot.

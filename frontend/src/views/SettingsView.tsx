@@ -53,11 +53,9 @@ import { type Language, LOCALES, type translations } from "../i18n/translations"
 import { fill } from "../utils/fill";
 import { BackupView } from "./BackupView";
 import { DiagnosticsView } from "./DiagnosticsView";
-import { PlusSettings } from "./settings/PlusSettings";
 
 type SettingsTab =
   | "about"
-  | "plus"
   | "general"
   | "integrations"
   | "proxy"
@@ -69,7 +67,6 @@ type SettingsTab =
 
 const SETTINGS_TABS: SettingsTab[] = [
   "about",
-  "plus",
   "general",
   "integrations",
   "proxy",
@@ -80,13 +77,11 @@ const SETTINGS_TABS: SettingsTab[] = [
   "diagnostics",
 ];
 
-function tabFromHash(plusAvailable?: boolean | null): SettingsTab {
+function tabFromHash(): SettingsTab {
   const parts = window.location.hash.replace(/^#\/?/, "").split("/");
   if (parts[0] === "settings" && parts[1]) {
-    if (parts[1] === "plus") {
-      if (plusAvailable === false) return "general";
-      return "plus";
-    }
+    // #settings/plus moved to #plus; App.tsx rewrites the hash.
+    if (parts[1] === "plus") return "general";
     if (SETTINGS_TABS.includes(parts[1] as SettingsTab)) {
       return parts[1] as SettingsTab;
     }
@@ -94,34 +89,6 @@ function tabFromHash(plusAvailable?: boolean | null): SettingsTab {
   return "general";
 }
 
-function usePlusAvailable(): boolean | null {
-  const [available, setAvailable] = useState<boolean | null>(() => {
-    if (typeof window !== "undefined" && window.LevixHost?.plusConfigured?.() === true) {
-      return true;
-    }
-    return null;
-  });
-
-  useEffect(() => {
-    if (available === true) return;
-    let live = true;
-    api
-      .get<{ extension?: { state: string } }>("/plus/status")
-      .then((res) => {
-        if (!live) return;
-        setAvailable(res?.extension?.state !== "absent");
-      })
-      .catch(() => {
-        if (!live) return;
-        setAvailable(false);
-      });
-    return () => {
-      live = false;
-    };
-  }, [available]);
-
-  return available;
-}
 
 const PREFIX_PRESETS = ["!", "/", ".", "#", "$", "?"];
 
@@ -469,29 +436,16 @@ export const SettingsView: React.FC = () => {
   const { t, language, setLanguage } = useI18n();
   const { toast } = useToast();
   const guided = useGuidedTour();
-  const plusAvailable = usePlusAvailable();
-  const [activeTab, setActiveTab] = useState<SettingsTab>(() => tabFromHash(plusAvailable));
-
-  useEffect(() => {
-    if (plusAvailable === false && activeTab === "plus") {
-      setActiveTab("general");
-      window.location.hash = "settings/general";
-    }
-  }, [plusAvailable, activeTab]);
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => tabFromHash());
 
   useEffect(() => {
     const handleHash = () => {
-      const tab = tabFromHash(plusAvailable);
-      if (tab === "plus" && plusAvailable === false) {
-        setActiveTab("general");
-        window.location.hash = "settings/general";
-        return;
-      }
+      const tab = tabFromHash();
       setActiveTab((prev) => (prev !== tab ? tab : prev));
     };
     window.addEventListener("hashchange", handleHash);
     return () => window.removeEventListener("hashchange", handleHash);
-  }, [plusAvailable]);
+  }, []);
 
   const handleTabChange = (tab: SettingsTab) => {
     setActiveTab(tab);
@@ -746,7 +700,6 @@ export const SettingsView: React.FC = () => {
         options={[
           { value: "about", label: t("aboutLevix"), icon: <CirclePlay size={17} /> },
           { value: "general", label: t("tabGeneral"), icon: <Sliders size={17} /> },
-          ...(plusAvailable === true ? [{ value: "plus" as const, label: t("plusTitle") }] : []),
           { value: "integrations", label: t("tabIntegrations"), icon: <Key size={17} /> },
           { value: "proxy", label: t("tabProxy"), icon: <Globe size={17} /> },
           { value: "security", label: t("tabSecurity"), icon: <Shield size={17} /> },
@@ -758,13 +711,6 @@ export const SettingsView: React.FC = () => {
       />
 
       {activeTab === "about" && <AboutPanel />}
-
-      {activeTab === "plus" && plusAvailable === true && (
-        <PlusSettings
-          enabled={settings["plus_enabled"] !== false}
-          onEnabledChange={(value) => persistSetting("plus_enabled", value)}
-        />
-      )}
 
       {activeTab === "general" && (
         <div className="flex flex-col gap-5">

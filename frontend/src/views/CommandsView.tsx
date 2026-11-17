@@ -12,6 +12,7 @@ import {
   FilterButton,
   Input,
   PageHeader,
+  PlusFeatureRow,
   RadioGroup,
   Skeleton,
   SortMenu,
@@ -222,6 +223,12 @@ export const CommandsView: React.FC = () => {
             )}
           </div>
         }
+      />
+
+      <PlusFeatureRow
+        tab="messages"
+        title={t("plusRowCommandsTitle")}
+        benefit={t("plusRowCommandsBenefit")}
       />
 
       <div className="flex flex-col gap-3" data-tour="commands-list">
