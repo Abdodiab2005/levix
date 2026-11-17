@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../../utils/userError";
 import type React from "react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "../../api/client";
@@ -56,14 +57,14 @@ interface ReactionRuleEditorProps {
   onConflict: () => void;
 }
 
-function errorMessage(t: TFn, err: unknown, fallback: string): string {
+function errorMessage(t: TFn, err: unknown, fallbackKey: string): string {
   const code = reactionApiCode(err);
   if (code === "REACTION_RULE_INVALID") return t("reactionErrorRuleInvalid");
   if (code === "REACTION_RULE_MISSING") return t("reactionErrorRuleMissing");
   if (code === "REACTION_RULE_CHANGED") return t("reactionErrorRuleChanged");
   if (code === "REACTION_SWITCH_INVALID") return t("reactionErrorSwitchInvalid");
   if (code === "INTERNAL") return t("reactionErrorInternal");
-  return fallback;
+  return userErrorMessage(t, err, fallbackKey);
 }
 
 function issueMessage(t: TFn, field: string, code: string): string {
@@ -312,7 +313,7 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
         applyIssues(issues);
         return;
       }
-      setFormError(errorMessage(t, err, t("reactionSaveFailed")));
+      setFormError(errorMessage(t, err, "reactionSaveFailed"));
     } finally {
       submitPending.current = false;
       if (openRef.current) setBusy(false);

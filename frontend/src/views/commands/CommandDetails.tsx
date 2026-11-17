@@ -30,7 +30,7 @@ export function CommandPermissionControl({
   actions: CommandActions;
 }) {
   const { t, permissionLabel } = useCommandLabels();
-  const field = useSavedValue(command.permission);
+  const field = useSavedValue(command.permission, "commandUpdateFailed");
 
   if (command.permissionLocked) {
     return (

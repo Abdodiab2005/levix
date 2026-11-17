@@ -1,7 +1,8 @@
+import { userErrorMessage } from "../../utils/userError";
 import { CircleHelp, Pencil, Plus, RotateCcw, SmilePlus, Trash2 } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, api } from "../../api/client";
+import { api } from "../../api/client";
 import { useToast } from "../../components/Toasts";
 import {
   Badge,
@@ -47,14 +48,14 @@ type TFn = (key: string) => string;
 type RefreshOutcome = "discarded" | "failed";
 type AutomationSnapshot = { automation?: { enabled?: boolean; revision?: string } };
 
-function failureMessage(t: TFn, err: unknown, fallback: string): string {
+function failureMessage(t: TFn, err: unknown, fallbackKey: string): string {
   const code = reactionApiCode(err);
   if (code === "REACTION_RULE_INVALID") return t("reactionErrorRuleInvalid");
   if (code === "REACTION_RULE_MISSING") return t("reactionErrorRuleMissing");
   if (code === "REACTION_RULE_CHANGED") return t("reactionErrorRuleChanged");
   if (code === "REACTION_SWITCH_INVALID") return t("reactionErrorSwitchInvalid");
   if (code === "INTERNAL") return t("reactionErrorInternal");
-  return err instanceof ApiError && err.message && !reactionApiCode(err) ? err.message : fallback;
+  return userErrorMessage(t, err, fallbackKey);
 }
 
 function statusCopy(t: TFn, code: string): { label: string; hint: string } {
@@ -95,7 +96,7 @@ function statusCopy(t: TFn, code: string): { label: string; hint: string } {
         hint: t("reactionStatusCandidateLimitHint"),
       };
     default:
-      return { label: code, hint: t("reactionStatusUnknown") };
+      return { label: t("reactionStatusUnknown"), hint: t("reactionStatusUnknown") };
   }
 }
 
@@ -150,7 +151,7 @@ function outcomeLabel(t: TFn, code: string | null | undefined): string {
     case "MEDIA_URL_INVALID":
       return t("reactionOutcomeMediaUrlInvalid");
     default:
-      return code ? fill(t("reactionOutcomeUnknown"), { code }) : t("reactionNeverRan");
+      return code ? t("reactionStatusUnknown") : t("reactionNeverRan");
   }
 }
 
@@ -271,7 +272,7 @@ export const ReactionRulesView: React.FC = () => {
       })
       .catch((err) => {
         if (!alive.current || listSeq.current !== token) return;
-        const message = failureMessage(t, err, t("reactionLoadFailed"));
+        const message = failureMessage(t, err, "reactionLoadFailed");
         setError(message);
         toast(message, "error");
       })
@@ -322,7 +323,7 @@ export const ReactionRulesView: React.FC = () => {
         busy: (pending) => setAutomationBusy(pending),
         failed: (err) => {
           const tNow = tRef.current;
-          toastRef.current(failureMessage(tNow, err, tNow("reactionSwitchFailed")), "error");
+          toastRef.current(failureMessage(tNow, err, "reactionSwitchFailed"), "error");
         },
         conflict: () => {
           toastRef.current(tRef.current("reactionAutomationChanged"), "warning");
@@ -364,7 +365,7 @@ export const ReactionRulesView: React.FC = () => {
         setNames(map);
       })
       .catch((err) => {
-        if (!cancelled) toast(failureMessage(t, err, t("reactionRecipientsFailed")), "error");
+        if (!cancelled) toast(failureMessage(t, err, "reactionRecipientsFailed"), "error");
       });
     return () => {
       cancelled = true;
@@ -423,7 +424,7 @@ export const ReactionRulesView: React.FC = () => {
       if (reactionApiCode(err) === "REACTION_RULE_CHANGED") {
         toast(t("reactionErrorRuleChanged"), "warning");
       } else {
-        toast(failureMessage(t, err, t("reactionToggleFailed")), "error");
+        toast(failureMessage(t, err, "reactionToggleFailed"), "error");
       }
     } finally {
       written.current += 1;
@@ -452,7 +453,7 @@ export const ReactionRulesView: React.FC = () => {
         setPendingDelete(null);
         await refresh();
       } else {
-        toast(failureMessage(t, err, t("reactionToggleFailed")), "error");
+        toast(failureMessage(t, err, "ruleDeleteError"), "error");
       }
     } finally {
       written.current += 1;

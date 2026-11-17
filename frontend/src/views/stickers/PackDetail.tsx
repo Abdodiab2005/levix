@@ -16,7 +16,7 @@ import { useI18n } from "../../context/I18nContext";
 import type { Pack, Sticker } from "../../types";
 import { cn } from "../../utils/cn";
 import { fill } from "../../utils/fill";
-import { explainError } from "../../utils/stickerErrors";
+import { explainError } from "./errors";
 import { BulkBar } from "./BulkBar";
 import { useStickerCommands } from "./StickerCommands";
 import { StickerTile } from "./StickerTile";

@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../utils/userError";
 // file: frontend/src/views/OverviewView.tsx
 
 import {
@@ -45,7 +46,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
       await api.startSession();
       toast(t("starting"), "info");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "sessionStartError"), "error");
     } finally {
       setStarting(false);
     }
@@ -59,7 +60,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
         if (mounted && res?.stats) setStats(res.stats);
       })
       .catch((err) => {
-        toast(err.message, "error");
+        toast(userErrorMessage(t, err, "overviewLoadError"), "error");
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -67,7 +68,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
     return () => {
       mounted = false;
     };
-  }, [toast]);
+  }, [t, toast]);
 
   const formatUptime = (seconds: number) => {
     const days = Math.floor(seconds / 86400);

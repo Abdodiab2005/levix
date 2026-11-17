@@ -17,7 +17,7 @@ import {
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
-import { withPlus, plusErrorCode, plusErrorKey, plusGet, plusPut } from "./plusApi";
+import { withPlus, plusErrorCode, plusErrorMessage, plusGet, plusPut } from "./plusApi";
 import { createWriteQueue } from "./plusUiLogic";
 import type { PlusVisibility } from "./types";
 
@@ -46,7 +46,7 @@ export function VisibilityTab({ onInactive }: { onInactive: () => void }) {
         if (!live) return;
         const code = plusErrorCode(err);
         if (code === "inactive") onInactive();
-        setError(t(plusErrorKey(code)));
+        setError(plusErrorMessage(t, err));
       })
       .finally(() => {
         if (live) setLoading(false);
@@ -112,7 +112,7 @@ function VisibilityForm({
     }),
     [visibility.hideProgress, commandsKey],
   );
-  const form = useDirtyForm<ProgressFormData>(savedBaseline);
+  const form = useDirtyForm<ProgressFormData>(savedBaseline, "plusExtErrorFailed", plusErrorMessage);
   const prevBaselineRef = useRef(savedBaseline);
 
   useEffect(() => {
@@ -164,7 +164,7 @@ function VisibilityForm({
       onSaved(next);
     } catch (err) {
       const code = plusErrorCode(err);
-      if (code !== "inactive") setWatermarkError(t(plusErrorKey(code)));
+      if (code !== "inactive") setWatermarkError(plusErrorMessage(t, err));
     } finally {
       setSavingWatermark(false);
     }
@@ -269,7 +269,7 @@ function VisibilityForm({
           dirty={form.dirty}
           saving={form.status === "saving"}
           justSaved={form.status === "saved"}
-          error={form.error ? t(plusErrorKey(form.error)) : null}
+          error={form.error}
           onDiscard={form.revert}
           saveLabel={t("save")}
           discardLabel={t("discard")}

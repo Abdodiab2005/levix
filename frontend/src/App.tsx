@@ -12,6 +12,7 @@ import { I18nProvider, useI18n } from "./context/I18nContext";
 import { useSocket } from "./hooks/useSocket";
 import type { SessionState, SessionStatus } from "./types";
 import { initWindowErrorHandlers } from "./utils/errorCapture";
+import { mapSessionToCard } from "./utils/accountCardState";
 import { legacyPlusRedirect } from "./utils/plusAccess";
 import { AIAssistantView } from "./views/AIAssistantView";
 import { AutoDeleteView } from "./views/autoDelete/AutoDeleteView";
@@ -101,7 +102,7 @@ const MainLayout: React.FC = () => {
   } = useSocket((event, data) => {
     if (event === "status") {
       const state = (data as { state?: string })?.state;
-      toast(`Connection state: ${state}`, "info");
+      toast(t(mapSessionToCard({ state } as SessionStatus).labelKey), "info");
     }
   });
 

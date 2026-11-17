@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../../utils/userError";
 import { ExternalLink, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../../api/client";
@@ -318,7 +319,9 @@ export function PlusSettings({
   }
 
   const message = error
-    ? t(ERROR_LABELS[error as keyof typeof ERROR_LABELS] || "plusErrorFailed")
+    ? Object.hasOwn(ERROR_LABELS, error)
+      ? t(ERROR_LABELS[error as keyof typeof ERROR_LABELS])
+      : userErrorMessage(t, { data: { error } }, "plusErrorFailed")
     : null;
   if (loading) return <Spinner label={t("loading")} />;
   if (status?.extension.state === "absent")

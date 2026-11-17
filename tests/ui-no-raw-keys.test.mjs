@@ -17,12 +17,6 @@ const catalogs = Object.fromEntries(
   ]),
 );
 
-// These screens still print a storage key. They are outside this task's files.
-const KNOWN_KEY_LEAKS = new Set([
-  "frontend/src/views/BackupView.tsx",
-  "frontend/src/views/plus/PresetsTab.tsx",
-]);
-
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
@@ -137,13 +131,25 @@ const dottedKey = /\b(?:bot|reaction|plus)[A-Za-z]*\.[a-z]+\.[a-zA-Z.]+/;
 section("JSX text does not render a template key");
 for (const file of tsxFiles) {
   const rel = relative(ROOT, file);
-  if (KNOWN_KEY_LEAKS.has(rel)) continue;
   const source = stripComments(readFileSync(file, "utf8"));
   const chunks = jsxChunks(source);
   const between = chunks.join("\n");
   const visible = chunks.map(visibleJsx).join("\n");
   ok(`${rel} does not render .key in JSX text`, !renderedKey.test(between));
   ok(`${rel} does not render a dotted catalog id`, !dottedKey.test(visible));
+}
+
+section("panel errors never display raw JavaScript or server messages");
+const CRASH_REPORT_PREVIEW_FILES = new Set(["frontend/src/views/DiagnosticsView.tsx"]);
+const rawHandler = /\b(?:toast|setError)\(\s*(?:err|error|e)\s*\??\.\s*message\b/;
+const rawJsx = /\{\s*(?:err|error|e)\s*\??\.\s*message\s*\}/;
+for (const file of files) {
+  const rel = relative(ROOT, file);
+  const source = stripComments(readFileSync(file, "utf8"));
+  ok(`${rel} does not pass raw messages to toast or setError`, !rawHandler.test(source));
+  if (!CRASH_REPORT_PREVIEW_FILES.has(rel)) {
+    ok(`${rel} does not render raw messages in JSX`, !rawJsx.test(source));
+  }
 }
 
 section("message templates keep the key off the screen");
