@@ -12,6 +12,7 @@ import { I18nProvider, useI18n } from "./context/I18nContext";
 import { useSocket } from "./hooks/useSocket";
 import type { SessionState, SessionStatus } from "./types";
 import { initWindowErrorHandlers } from "./utils/errorCapture";
+import { legacyPlusRedirect } from "./utils/plusAccess";
 import { AIAssistantView } from "./views/AIAssistantView";
 import { AutoDeleteView } from "./views/autoDelete/AutoDeleteView";
 import { ReactionRulesView } from "./views/reactions/ReactionRulesView";
@@ -24,6 +25,7 @@ import { TermsConsentDialog } from "./views/legal/TermsConsentDialog";
 import { OverviewView } from "./views/OverviewView";
 import { SchedulesView } from "./views/SchedulesView";
 import { SettingsView } from "./views/SettingsView";
+import { PlusSettings } from "./views/settings/PlusSettings";
 import { StickerStudioView } from "./views/StickerStudioView";
 
 const VALID_VIEWS: ViewTab[] = [
@@ -35,15 +37,53 @@ const VALID_VIEWS: ViewTab[] = [
   "autodelete",
   "reactions",
   "schedules",
+  "plus",
   "settings",
   "logs",
   "stickers",
 ];
 
+// #settings/plus moved to #plus. The history entry is replaced, not added.
+function applyLegacyPlusHash() {
+  const next = legacyPlusRedirect(window.location.hash);
+  if (next) window.history.replaceState(null, "", next);
+}
+
 function viewFromHash(): ViewTab {
+  applyLegacyPlusHash();
   const head = window.location.hash.replace(/^#/, "").split("/")[0] as ViewTab;
   return VALID_VIEWS.includes(head) ? head : "overview";
 }
+
+// Levix Plus page. The switch lives with the page because Settings no longer hosts it.
+const PlusPage: React.FC = () => {
+  const [enabled, setEnabled] = useState(true);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .getSettings()
+      .then((res) => {
+        if (!live) return;
+        const row = res?.settings?.find((s: { key: string }) => s.key === "plus_enabled");
+        if (row) setEnabled(row.value !== false);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  return (
+    <PlusSettings
+      enabled={enabled}
+      onEnabledChange={async (value) => {
+        await api.updateSetting("plus_enabled", value);
+        setEnabled(value);
+      }}
+    />
+  );
+};
 
 const MainLayout: React.FC = () => {
   const { t } = useI18n();
@@ -155,6 +195,7 @@ const MainLayout: React.FC = () => {
 
   useEffect(() => {
     const handleHashChange = () => {
+      applyLegacyPlusHash();
       const head = window.location.hash.replace(/^#/, "").split("/")[0] as ViewTab;
       if (VALID_VIEWS.includes(head)) setCurrentView(head);
     };
@@ -171,6 +212,7 @@ const MainLayout: React.FC = () => {
     autodelete: t("autoDelete"),
     reactions: t("reaction"),
     schedules: t("schedules"),
+    plus: t("plusTitle"),
     settings: t("settings"),
     logs: t("logs"),
     stickers: t("stickers"),
@@ -220,6 +262,7 @@ const MainLayout: React.FC = () => {
             {currentView === "groups" && <GroupsView />}
             {currentView === "autodelete" && <AutoDeleteView />}
             {currentView === "reactions" && <ReactionRulesView />}
+            {currentView === "plus" && <PlusPage />}
             {currentView === "settings" && <SettingsView />}
             {currentView === "stickers" && <StickerStudioView isConnected={isConnected} />}
             {currentView === "logs" && <LogsView />}

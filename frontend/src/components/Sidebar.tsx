@@ -16,12 +16,15 @@ import {
   Terminal,
   Users,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import type React from "react";
 import { useI18n } from "../context/I18nContext";
+import { usePlusStatus } from "../hooks/usePlusStatus";
 import { cn } from "../utils/cn";
 import { officialLinks, openOfficialLink } from "../utils/officialLinks";
-import { Button, IconButton } from "./ui";
+import { accessFromStatus } from "../utils/plusAccess";
+import { Button, CrownIcon, IconButton, PlusBadge } from "./ui";
 
 export type ViewTab =
   | "overview"
@@ -32,9 +35,19 @@ export type ViewTab =
   | "autodelete"
   | "reactions"
   | "schedules"
+  | "plus"
   | "settings"
   | "logs"
   | "stickers";
+
+// One entry: a link, a group heading, or the Levix Plus group.
+interface NavItem {
+  id?: ViewTab;
+  label?: string;
+  icon?: LucideIcon;
+  labelCategory?: string;
+  plusItem?: boolean;
+}
 
 interface SidebarProps {
   currentView: ViewTab;
@@ -50,6 +63,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
 }) => {
   const { t } = useI18n();
+  const { available: plusAvailable, status: plusStatus } = usePlusStatus();
+  const plusActive = accessFromStatus(plusStatus, plusAvailable) === "active";
 
   const isInApp = typeof (window as any).LevixHost?.closePanel === "function";
 
@@ -63,7 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     studioSite: "https://leviro.net",
   };
 
-  const navItems = [
+  const navItems: NavItem[] = [
     { id: "overview", label: t("overview"), icon: LayoutGrid },
     { id: "connection", label: t("connection"), icon: Radio },
     { labelCategory: t("control") },
@@ -74,6 +89,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: "reactions", label: t("reaction"), icon: SmilePlus },
     { id: "schedules", label: t("schedules"), icon: Calendar },
     { id: "stickers", label: t("stickers"), icon: Sticker },
+    ...(plusAvailable === true ? [{ plusItem: true }] : []),
     { labelCategory: t("settings") },
     { id: "settings", label: t("settings"), icon: Settings },
     { id: "logs", label: t("logs"), icon: FileText },
@@ -98,8 +114,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         <div className="flex items-center justify-between border-b border-line p-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-line bg-panel-raised shadow-md">
+            <div className="relative flex size-10 shrink-0 items-center justify-center rounded-xl border border-line bg-panel-raised shadow-md">
               <img src="/brand/mark.svg" alt={brand.name} className="size-6" />
+              {plusActive && (
+                <span
+                  role="img"
+                  aria-label={t("navPlusActiveLabel")}
+                  title={t("navPlusActiveLabel")}
+                  className="absolute -top-1.5 -end-1.5 flex size-5 items-center justify-center rounded-full border border-line bg-panel text-brand-purple shadow-sm"
+                >
+                  <CrownIcon size={12} />
+                </span>
+              )}
             </div>
             <div className="min-w-0">
               <div className="truncate text-base font-extrabold leading-tight tracking-tight text-text-main">
@@ -118,6 +144,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <nav className="flex-1 space-y-1 overflow-y-auto p-3" data-tour="sidebar-nav">
           {navItems.map((item) => {
+            if (item.plusItem) {
+              const isPlusView = currentView === "plus";
+              return (
+                <div key="plus-group" className="mt-2 border-t border-line pt-2">
+                  <Button
+                    variant={isPlusView ? "primary" : "ghost"}
+                    className="w-full justify-start"
+                    icon={<CrownIcon size={20} />}
+                    aria-current={isPlusView ? "page" : undefined}
+                    onClick={() => {
+                      onSelectView("plus");
+                      onCloseMobile();
+                    }}
+                  >
+                    <span className="truncate">{t("plusTitle")}</span>
+                    {plusActive && (
+                      <PlusBadge className="ms-auto shrink-0">{t("plusStateActive")}</PlusBadge>
+                    )}
+                  </Button>
+                </div>
+              );
+            }
             if (item.labelCategory) {
               return (
                 <div
@@ -128,17 +176,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               );
             }
-            if (!item.icon || !item.id) return null;
+            const id = item.id;
+            if (!item.icon || !id) return null;
             const Icon = item.icon;
-            const isActive = currentView === item.id;
+            const isActive = currentView === id;
             return (
               <Button
-                key={item.id}
+                key={id}
                 variant={isActive ? "primary" : "ghost"}
                 className="w-full justify-start"
                 icon={<Icon size={20} />}
                 onClick={() => {
-                  onSelectView(item.id as ViewTab);
+                  onSelectView(id);
                   onCloseMobile();
                 }}
               >

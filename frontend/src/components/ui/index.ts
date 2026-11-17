@@ -55,6 +55,13 @@ export {
 export { Pagination, type PaginationProps, usePagination } from "./pagination";
 export { PasswordInput, type PasswordInputProps } from "./password-input";
 export { Popover, type PopoverProps } from "./popover";
+export {
+  CrownIcon,
+  PlusBadge,
+  type PlusBadgeProps,
+  PlusFeatureRow,
+  type PlusFeatureRowProps,
+} from "./plus";
 export { RelativeTime, type RelativeTimeProps } from "./relative-time";
 export {
   FormActions,
