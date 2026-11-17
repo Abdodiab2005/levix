@@ -5,7 +5,7 @@ import { useI18n } from "../../context/I18nContext";
 import type { Pack, Sticker } from "../../types";
 import { fill } from "../../utils/fill";
 import { markUsed, saveOne, saveZip, shareOne, shareZip } from "../../utils/stickerDelivery";
-import { explainError } from "../../utils/stickerErrors";
+import { explainError } from "./errors";
 import type { Delivered } from "../../utils/stickerFiles";
 import { EXPORT_MAX_IDS, SEND_MAX_IDS, STICKER_NAME_MAX } from "../../utils/stickerLimits";
 import { DeleteStickersDialog } from "./DeleteStickersDialog";

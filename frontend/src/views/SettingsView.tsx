@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../utils/userError";
 // file: frontend/src/views/SettingsView.tsx
 
 import {
@@ -31,6 +32,7 @@ import {
   Button,
   Card,
   CardHeader,
+  CodeText,
   ConfirmDialog,
   Dialog,
   Field,
@@ -51,13 +53,12 @@ import {
 import { useI18n } from "../context/I18nContext";
 import { type Language, LOCALES, type translations } from "../i18n/translations";
 import { fill } from "../utils/fill";
+import { timezoneLabel } from "../utils/timezoneLabel";
 import { BackupView } from "./BackupView";
 import { DiagnosticsView } from "./DiagnosticsView";
-import { PlusSettings } from "./settings/PlusSettings";
 
 type SettingsTab =
   | "about"
-  | "plus"
   | "general"
   | "integrations"
   | "proxy"
@@ -69,7 +70,6 @@ type SettingsTab =
 
 const SETTINGS_TABS: SettingsTab[] = [
   "about",
-  "plus",
   "general",
   "integrations",
   "proxy",
@@ -80,47 +80,16 @@ const SETTINGS_TABS: SettingsTab[] = [
   "diagnostics",
 ];
 
-function tabFromHash(plusAvailable?: boolean | null): SettingsTab {
+function tabFromHash(): SettingsTab {
   const parts = window.location.hash.replace(/^#\/?/, "").split("/");
   if (parts[0] === "settings" && parts[1]) {
-    if (parts[1] === "plus") {
-      if (plusAvailable === false) return "general";
-      return "plus";
-    }
+    // #settings/plus moved to #plus; App.tsx rewrites the hash.
+    if (parts[1] === "plus") return "general";
     if (SETTINGS_TABS.includes(parts[1] as SettingsTab)) {
       return parts[1] as SettingsTab;
     }
   }
   return "general";
-}
-
-function usePlusAvailable(): boolean | null {
-  const [available, setAvailable] = useState<boolean | null>(() => {
-    if (typeof window !== "undefined" && window.LevixHost?.plusConfigured?.() === true) {
-      return true;
-    }
-    return null;
-  });
-
-  useEffect(() => {
-    if (available === true) return;
-    let live = true;
-    api
-      .get<{ extension?: { state: string } }>("/plus/status")
-      .then((res) => {
-        if (!live) return;
-        setAvailable(res?.extension?.state !== "absent");
-      })
-      .catch(() => {
-        if (!live) return;
-        setAvailable(false);
-      });
-    return () => {
-      live = false;
-    };
-  }, [available]);
-
-  return available;
 }
 
 const PREFIX_PRESETS = ["!", "/", ".", "#", "$", "?"];
@@ -182,7 +151,7 @@ function recoveryMessage(
     case "too_many_attempts":
       return { text: t("recoveryErrExpired"), backToEmail };
     default:
-      return { text: t("recoveryErrFailed"), backToEmail: false };
+      return { text: userErrorMessage(t, err, "recoveryErrFailed"), backToEmail: false };
   }
 }
 
@@ -469,29 +438,16 @@ export const SettingsView: React.FC = () => {
   const { t, language, setLanguage } = useI18n();
   const { toast } = useToast();
   const guided = useGuidedTour();
-  const plusAvailable = usePlusAvailable();
-  const [activeTab, setActiveTab] = useState<SettingsTab>(() => tabFromHash(plusAvailable));
-
-  useEffect(() => {
-    if (plusAvailable === false && activeTab === "plus") {
-      setActiveTab("general");
-      window.location.hash = "settings/general";
-    }
-  }, [plusAvailable, activeTab]);
+  const [activeTab, setActiveTab] = useState<SettingsTab>(() => tabFromHash());
 
   useEffect(() => {
     const handleHash = () => {
-      const tab = tabFromHash(plusAvailable);
-      if (tab === "plus" && plusAvailable === false) {
-        setActiveTab("general");
-        window.location.hash = "settings/general";
-        return;
-      }
+      const tab = tabFromHash();
       setActiveTab((prev) => (prev !== tab ? tab : prev));
     };
     window.addEventListener("hashchange", handleHash);
     return () => window.removeEventListener("hashchange", handleHash);
-  }, [plusAvailable]);
+  }, []);
 
   const handleTabChange = (tab: SettingsTab) => {
     setActiveTab(tab);
@@ -505,6 +461,7 @@ export const SettingsView: React.FC = () => {
   const [prefix, setPrefix] = useState<string>("!");
   const [prefixInput, setPrefixInput] = useState<string>("!");
   const [savingPrefix, setSavingPrefix] = useState(false);
+  const livePrefix = prefixInput || prefix;
 
   // Password visibility & changes
   const [currentPassword, setCurrentPassword] = useState("");
@@ -535,7 +492,7 @@ export const SettingsView: React.FC = () => {
       await api.updateSetting(key, value);
       toast(t("savedSuccessfully"), "success");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "saveFailed"), "error");
       await loadSettings();
     }
   };
@@ -544,6 +501,7 @@ export const SettingsView: React.FC = () => {
   const botLang = useSavedValue(String(settings["bot_language"] || "auto"));
   const aiReplyLang = useSavedValue(String(settings["ai_reply_language"] || "follow_bot"));
   const timezone = useSavedValue(String(settings["bot_timezone"] || "Africa/Cairo"));
+  const zoneLabel = timezoneLabel(timezone.value, language);
   const replyRoute = useSavedValue(String(settings["reply_route"] || "same_chat"));
   const replyChat = useSavedValue(String(settings["reply_route_chat"] || ""));
   const replyOverrides = useSavedValue(String(settings["reply_route_overrides"] || ""));
@@ -594,7 +552,7 @@ export const SettingsView: React.FC = () => {
       URL.revokeObjectURL(url);
       toast(t("exportSettingsSuccess"), "success");
     } catch (err: any) {
-      toast(err.message || t("exportSettingsError"), "error");
+      toast(userErrorMessage(t, err, "exportSettingsError"), "error");
     } finally {
       setExportingSettings(false);
     }
@@ -628,13 +586,13 @@ export const SettingsView: React.FC = () => {
         bits.push(`${t("importSkipped")}: ${report.skipped.length}`);
       }
       if (report.restartNeeded?.length) {
-        bits.push(`${t("importRestartNeeded")}: ${report.restartNeeded.join(", ")}`);
+        bits.push(`${t("importRestartNeeded")}: ${report.restartNeeded.length}`);
       }
       toast(`${t("importSuccess")} — ${bits.join(" · ")}`, "success");
       setImportPreview(null);
       await loadSettings();
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "importSettingsApplyError"), "error");
     } finally {
       setApplyingImport(false);
     }
@@ -662,7 +620,7 @@ export const SettingsView: React.FC = () => {
         setPrefixInput(res.prefix);
       }
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "settingsLoadError"), "error");
     } finally {
       setLoading(false);
     }
@@ -686,7 +644,7 @@ export const SettingsView: React.FC = () => {
       setPrefixInput(target);
       toast(`${t("prefixUpdated")} (${target})`, "success");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "prefixSaveError"), "error");
     } finally {
       setSavingPrefix(false);
     }
@@ -711,7 +669,7 @@ export const SettingsView: React.FC = () => {
       setNewPassword("");
       setConfirmPassword("");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "passwordChangeError"), "error");
     } finally {
       setChangingPass(false);
     }
@@ -746,7 +704,6 @@ export const SettingsView: React.FC = () => {
         options={[
           { value: "about", label: t("aboutLevix"), icon: <CirclePlay size={17} /> },
           { value: "general", label: t("tabGeneral"), icon: <Sliders size={17} /> },
-          ...(plusAvailable === true ? [{ value: "plus" as const, label: t("plusTitle") }] : []),
           { value: "integrations", label: t("tabIntegrations"), icon: <Key size={17} /> },
           { value: "proxy", label: t("tabProxy"), icon: <Globe size={17} /> },
           { value: "security", label: t("tabSecurity"), icon: <Shield size={17} /> },
@@ -759,13 +716,6 @@ export const SettingsView: React.FC = () => {
 
       {activeTab === "about" && <AboutPanel />}
 
-      {activeTab === "plus" && plusAvailable === true && (
-        <PlusSettings
-          enabled={settings["plus_enabled"] !== false}
-          onEnabledChange={(value) => persistSetting("plus_enabled", value)}
-        />
-      )}
-
       {activeTab === "general" && (
         <div className="flex flex-col gap-5">
           <Card className="flex flex-col gap-4 sm:gap-5" data-tour="settings-general">
@@ -776,8 +726,8 @@ export const SettingsView: React.FC = () => {
               actions={
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-muted">{t("activePrefix")}:</span>
-                  <Badge tone="info" className="font-mono">
-                    {prefix}
+                  <Badge tone="info">
+                    <CodeText>{prefix}</CodeText>
                   </Badge>
                 </div>
               }
@@ -786,7 +736,7 @@ export const SettingsView: React.FC = () => {
             <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
               <div className="flex min-w-0 flex-col gap-1.5 sm:max-w-72">
                 <span className="text-xs font-semibold text-muted">{t("prefixPresets")}</span>
-                <div className="flex max-w-full items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+                <div className="flex max-w-full flex-wrap items-center gap-2">
                   {PREFIX_PRESETS.map((p) => {
                     const isCurrent = prefix === p;
                     return (
@@ -795,13 +745,13 @@ export const SettingsView: React.FC = () => {
                         label={p}
                         size="md"
                         variant={isCurrent ? "primary" : "secondary"}
-                        className="shrink-0 font-mono"
+                        className="shrink-0"
                         onClick={() => {
                           setPrefixInput(p);
                           handleSavePrefix(p);
                         }}
                       >
-                        {p}
+                        <CodeText>{p}</CodeText>
                       </IconButton>
                     );
                   })}
@@ -838,14 +788,14 @@ export const SettingsView: React.FC = () => {
               <span className="text-xs font-semibold text-muted sm:text-sm">
                 {t("prefixPreview")}
               </span>
-              <Badge tone="info" className="font-mono">
-                <code>{prefixInput || prefix}help</code>
+              <Badge tone="info">
+                <CodeText>{`${livePrefix}help`}</CodeText>
               </Badge>
-              <Badge tone="info" className="font-mono">
-                <code>{prefixInput || prefix}lang ar</code>
+              <Badge tone="info">
+                <CodeText>{`${livePrefix}lang ar`}</CodeText>
               </Badge>
-              <Badge tone="info" className="font-mono">
-                <code>{prefixInput || prefix}sticker</code>
+              <Badge tone="info">
+                <CodeText>{`${livePrefix}sticker`}</CodeText>
               </Badge>
             </div>
           </Card>
@@ -934,28 +884,34 @@ export const SettingsView: React.FC = () => {
                 </Select>
               </SaveField>
 
-              <SaveField
-                label={t("botTimezone")}
-                description={t("botTimezoneDesc")}
-                htmlFor="bot-timezone"
-                dirty={timezone.dirty}
-                saving={timezone.status === "saving"}
-                justSaved={timezone.status === "saved"}
-                error={timezone.error}
-                onSave={() => timezone.save((next) => persistSetting("bot_timezone", next))}
-                onRevert={timezone.revert}
-                {...saveLabels}
-              >
-                <Input
-                  id="bot-timezone"
-                  type="text"
-                  technical
-                  className="font-mono"
-                  placeholder="Africa/Cairo"
-                  value={timezone.value}
-                  onChange={(e) => timezone.setValue(e.target.value)}
-                />
-              </SaveField>
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <SaveField
+                  label={t("botTimezone")}
+                  description={t("botTimezoneDesc")}
+                  htmlFor="bot-timezone"
+                  dirty={timezone.dirty}
+                  saving={timezone.status === "saving"}
+                  justSaved={timezone.status === "saved"}
+                  error={timezone.error}
+                  onSave={() => timezone.save((next) => persistSetting("bot_timezone", next))}
+                  onRevert={timezone.revert}
+                  {...saveLabels}
+                >
+                  <Input
+                    id="bot-timezone"
+                    type="text"
+                    technical
+                    className="font-mono"
+                    placeholder="Africa/Cairo"
+                    value={timezone.value}
+                    onChange={(e) => timezone.setValue(e.target.value)}
+                  />
+                </SaveField>
+                {zoneLabel && <p className="text-sm text-text-main">{zoneLabel}</p>}
+                {timezone.value.trim() && (
+                  <CodeText className="text-xs text-muted">{timezone.value.trim()}</CodeText>
+                )}
+              </div>
             </div>
 
             <form
@@ -963,7 +919,8 @@ export const SettingsView: React.FC = () => {
               onSubmit={(event) => {
                 event.preventDefault();
                 void delayForm.save(async (draft) => {
-                  if (draft.min > draft.max) throw new Error(t("delayRangeError"));
+                  if (draft.min > draft.max)
+                    throw new ApiError(400, "DELAY_RANGE_INVALID", { code: "DELAY_RANGE_INVALID" });
                   await persistSetting("bot_min_delay_ms", draft.min);
                   await persistSetting("bot_max_delay_ms", draft.max);
                 });

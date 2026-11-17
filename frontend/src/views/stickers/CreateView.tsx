@@ -16,7 +16,8 @@ import type {
 import { fill } from "../../utils/fill";
 import { canPickHostSource, pickHostSource, uploadHostSource } from "../../utils/hostBridge";
 import { markUsed, saveOne, shareOne } from "../../utils/stickerDelivery";
-import { explainError, jobStageMessage, stickerErrorMessage } from "../../utils/stickerErrors";
+import { explainError } from "./errors";
+import { jobStageMessage, stickerErrorMessage } from "../../utils/stickerErrors";
 import type { Delivered } from "../../utils/stickerFiles";
 import { STICKER_NAME_MAX } from "../../utils/stickerLimits";
 import { uploadBlockReason } from "../../utils/uploadCheck";

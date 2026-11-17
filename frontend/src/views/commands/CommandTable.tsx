@@ -2,7 +2,7 @@
 
 import { ChevronDown } from "lucide-react";
 import { Fragment } from "react";
-import { Badge, IconButton, Toggle, UserText } from "../../components/ui";
+import { Badge, CodeText, IconButton, Toggle, UserText } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { CommandItem } from "../../types";
 import { cn } from "../../utils/cn";
@@ -49,7 +49,7 @@ export function CommandTable({
   actions: CommandActions;
 }) {
   const { t } = useI18n();
-  const { describe } = useCommandLabels();
+  const { describe, permissionLabel } = useCommandLabels();
 
   return (
     <div className="overflow-hidden">
@@ -64,7 +64,7 @@ export function CommandTable({
             <th className="hidden px-3 py-3 text-start sm:table-cell sm:w-[26%] md:table-cell">
               {t("thRequiredRole")}
             </th>
-            <th className="w-[72px] px-3 py-3 text-center">{t("thStatus")}</th>
+            <th className="px-3 py-3 text-center">{t("thStatus")}</th>
             <th className="w-14 px-3 py-3 text-end">
               <span className="sr-only">{t("details")}</span>
             </th>
@@ -75,14 +75,18 @@ export function CommandTable({
             const id = commandId(command);
             const open = expanded === id;
             const panelId = commandDomId(command);
+            const commandText = `${prefix}${command.name}`;
             return (
               <Fragment key={id}>
                 <tr className="hover:bg-panel-hover/40">
                   <td className="min-w-0 px-3 py-2.5">
-                    <span dir="ltr" className="block truncate font-mono font-bold text-brand-cyan">
-                      {prefix}
-                      {command.name}
-                    </span>
+                    <CodeText
+                      copy
+                      copyLabel={t("copyCommand")}
+                      className="font-bold text-brand-cyan"
+                    >
+                      {commandText}
+                    </CodeText>
                   </td>
                   <td className="min-w-0 px-3 py-2.5">
                     <UserText as="p" lines={1} className="text-xs text-text-main md:text-sm">
@@ -92,14 +96,32 @@ export function CommandTable({
                   <td className="hidden min-w-0 px-3 py-2.5 lg:table-cell">
                     <AliasPreview command={command} prefix={prefix} />
                   </td>
-                  <td className="px-3 py-2.5">
-                    <CommandPermissionControl command={command} levels={levels} actions={actions} />
+                  <td className="min-w-0 px-3 py-2.5 whitespace-normal">
+                    <div className="flex min-w-0 flex-col gap-1.5">
+                      <Badge
+                        tone="neutral"
+                        className="min-w-0 max-w-full whitespace-normal break-words text-start"
+                      >
+                        {permissionLabel(command.permission)}
+                      </Badge>
+                      <CommandPermissionControl
+                        command={command}
+                        levels={levels}
+                        actions={actions}
+                      />
+                    </div>
                   </td>
                   <td className="px-3 py-2.5">
-                    <div className="flex justify-center">
+                    <div className="flex flex-col items-center gap-1">
+                      <Badge
+                        tone={command.enabled ? "ok" : "neutral"}
+                        className="whitespace-normal text-center"
+                      >
+                        {command.enabled ? t("statusEnabled") : t("statusDisabled")}
+                      </Badge>
                       <Toggle
                         checked={command.enabled}
-                        aria-label={`${t("thStatus")}: ${prefix}${command.name}`}
+                        aria-label={`${t("thStatus")}: ${commandText}`}
                         onChange={(enabled) => actions.onToggleEnabled(command, enabled)}
                       />
                     </div>

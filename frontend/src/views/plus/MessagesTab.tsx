@@ -1,10 +1,11 @@
 // file: frontend/src/views/plus/MessagesTab.tsx
-import { MessageSquareHeart, Pencil, RotateCcw } from "lucide-react";
+import { ChevronDown, MessageSquareHeart, Pencil, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Badge,
   Button,
   Card,
+  CodeText,
   EmptyState,
   FilterButton,
   IconButton,
@@ -18,8 +19,14 @@ import {
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
-import { plusErrorCode, plusErrorKey, plusGet } from "./plusApi";
-import { TemplateEditor } from "./TemplateEditor";
+import {
+  areaLabelKey,
+  templateArea,
+  templateCommand,
+  templateIsLong,
+} from "../../utils/templateLabels";
+import { plusErrorCode, plusErrorMessage, plusGet } from "./plusApi";
+import { TemplateBody, TemplateEditor } from "./TemplateEditor";
 import {
   type PlusLocale,
   type PlusTemplateKey,
@@ -27,9 +34,23 @@ import {
   isPlusLocale,
 } from "./types";
 
-function areaOf(key: string): string {
-  const parts = key.split(".");
-  return parts.length > 2 ? parts.slice(0, 2).join(".") : parts[0];
+function filled(value: string | undefined): string {
+  const text = value ?? "";
+  return text.trim() ? text : "";
+}
+
+/** Panel language, then English. A saved override wins over the shipped catalog. */
+function visibleTemplateText(item: PlusTemplateKey, locale: PlusLocale): string {
+  const values = item.override?.values;
+  const source = item.override?.source;
+  const overrideText = (loc: PlusLocale) =>
+    filled(values?.[loc]) || (source?.locale === loc ? filled(source.text) : "");
+  return (
+    overrideText(locale) ||
+    filled(item.catalog[locale]) ||
+    (locale === "en" ? "" : overrideText("en")) ||
+    filled(item.catalog.en)
+  );
 }
 
 export function MessagesTab({ onInactive }: { onInactive: () => void }) {
@@ -42,6 +63,7 @@ export function MessagesTab({ onInactive }: { onInactive: () => void }) {
   const [area, setArea] = useState("all");
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     let live = true;
@@ -56,7 +78,7 @@ export function MessagesTab({ onInactive }: { onInactive: () => void }) {
         if (!live) return;
         const code = plusErrorCode(err);
         if (code === "inactive") onInactive();
-        setError(t(plusErrorKey(code)));
+        setError(plusErrorMessage(t, err));
       })
       .finally(() => {
         if (live) setLoading(false);
@@ -69,19 +91,39 @@ export function MessagesTab({ onInactive }: { onInactive: () => void }) {
   const keys = data?.keys ?? [];
   const areas = useMemo(() => {
     const found = new Set<string>();
-    for (const item of keys) found.add(areaOf(item.key));
-    return [...found].sort((a, b) => a.localeCompare(b));
+    for (const item of keys) {
+      const name = templateArea(item.key);
+      if (name) found.add(name);
+    }
+    return [...found];
   }, [keys]);
+
+  const areaOptions = useMemo(
+    () =>
+      areas
+        .map((id) => ({ id, label: t(areaLabelKey(id)) }))
+        .sort((a, b) => a.label.localeCompare(b.label, language)),
+    [areas, language, t],
+  );
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
     return keys.filter((item) => {
-      if (area !== "all" && areaOf(item.key) !== area) return false;
+      if (area !== "all" && templateArea(item.key) !== area) return false;
       if (!needle) return true;
-      const catalogText = item.catalog[panelLocale] ?? item.catalog.en ?? "";
-      return item.key.toLowerCase().includes(needle) || catalogText.toLowerCase().includes(needle);
+      const preview = [
+        ...Object.values(item.catalog),
+        ...Object.values(item.override?.values ?? {}),
+        item.override?.source?.text,
+      ]
+        .filter((value): value is string => typeof value === "string")
+        .join("\n")
+        .toLowerCase();
+      const command = templateCommand(item.key) ?? "";
+      const areaName = t(areaLabelKey(item.key)).toLowerCase();
+      return preview.includes(needle) || command.includes(needle) || areaName.includes(needle);
     });
-  }, [keys, area, search, panelLocale]);
+  }, [keys, area, search, t]);
 
   const { page, pageCount, pageItems, setPage, total } = usePagination(
     filtered,
@@ -143,9 +185,9 @@ export function MessagesTab({ onInactive }: { onInactive: () => void }) {
               onChange={(event) => setArea(event.target.value)}
             >
               <option value="all">{t("plusMessagesAreaAll")}</option>
-              {areas.map((name) => (
-                <option key={name} value={name} dir="auto">
-                  {name}
+              {areaOptions.map((option) => (
+                <option key={option.id} value={option.id} dir="auto">
+                  {option.label}
                 </option>
               ))}
             </Select>
@@ -163,24 +205,58 @@ export function MessagesTab({ onInactive }: { onInactive: () => void }) {
         <EmptyState kind="no-results" title={t("plusMessagesNoResults")} />
       ) : (
         <ul className="divide-y divide-line">
-          {pageItems.map((item) => (
-            <li key={item.key} className="flex items-start gap-3 p-3 sm:p-4">
-              <div className="min-w-0 flex-1">
-                <UserText as="p" lines={2} className="text-sm text-text-main">
-                  {item.catalog[panelLocale] ?? item.catalog.en ?? item.key}
-                </UserText>
-                <p dir="ltr" className="mt-0.5 truncate font-mono text-xs text-faint">
-                  {item.key}
-                </p>
-              </div>
-              {item.override && <Badge tone="info">{t("plusMessagesEdited")}</Badge>}
-              <IconButton
-                label={t("plusMessagesEdit")}
-                icon={<Pencil size={16} />}
-                onClick={() => setEditingKey(item.key)}
-              />
-            </li>
-          ))}
+          {pageItems.map((item) => {
+            const preview = visibleTemplateText(item, panelLocale);
+            const command = templateCommand(item.key);
+            const open = expanded.has(item.key);
+            const long = templateIsLong(preview);
+            return (
+              <li key={item.key} className="flex items-start gap-2 p-3 sm:gap-3 sm:p-4">
+                <div className="min-w-0 flex-1">
+                  <p className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                    <span>{t(areaLabelKey(item.key))}</span>
+                    {command && <CodeText className="text-xs">{`!${command}`}</CodeText>}
+                    {item.override && <Badge tone="info">{t("plusMessagesCustomized")}</Badge>}
+                  </p>
+                  <UserText
+                    as="p"
+                    lines={open ? undefined : 2}
+                    title={open ? undefined : preview || t("plusMessagesNoPreview")}
+                    className="text-sm text-text-main"
+                  >
+                    {preview ? <TemplateBody text={preview} /> : t("plusMessagesNoPreview")}
+                  </UserText>
+                </div>
+                {long && (
+                  <IconButton
+                    label={open ? t("plusMessagesShowLess") : t("plusMessagesShowFull")}
+                    aria-expanded={open}
+                    icon={
+                      <ChevronDown
+                        size={16}
+                        className={
+                          open ? "rotate-180 transition-transform" : "transition-transform"
+                        }
+                      />
+                    }
+                    onClick={() =>
+                      setExpanded((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(item.key)) next.delete(item.key);
+                        else next.add(item.key);
+                        return next;
+                      })
+                    }
+                  />
+                )}
+                <IconButton
+                  label={t("plusMessagesEdit")}
+                  icon={<Pencil size={16} />}
+                  onClick={() => setEditingKey(item.key)}
+                />
+              </li>
+            );
+          })}
         </ul>
       )}
 

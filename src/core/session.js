@@ -207,6 +207,14 @@ const BUSY_STATES = new Set([
   S.PAUSED,
 ]);
 
+/**
+ * States that pause while offline and start again when the network returns.
+ * A start was asked for in each of them: it is running, waiting for consent,
+ * or ran out of retries. Idle, stopped, unlinked and failed sessions keep
+ * their state, so a network change never starts a session by itself.
+ */
+const NETWORK_RESUME_STATES = new Set([...BUSY_STATES, S.CONSENT_REQUIRED, S.RETRY_EXHAUSTED]);
+
 /** What the dashboard's status pill has always been told. Kept stable. */
 function legacyStatus(state, hasQr) {
   if (state === S.CONNECTED) return "Connected";
@@ -433,6 +441,7 @@ export class WhatsAppSession {
    * When offline (false):
    * - Pauses active connection attempts and cancels pending retry timers.
    * - Transitions to S.PAUSED without exhausting retries.
+   * - A session in no NETWORK_RESUME_STATES state keeps its state.
    *
    * When online (true):
    * - Restores connection if it was active before going offline or currently paused.
@@ -442,6 +451,14 @@ export class WhatsAppSession {
     const isOnline = !!online;
     if (this.#isOnline === isOnline) return this.getState();
     this.#isOnline = isOnline;
+
+    if (!isOnline && !NETWORK_RESUME_STATES.has(this.#state)) {
+      // Nothing was asked to run. Pausing here made network restore call
+      // start(), which opened a pairing socket or the Terms gate on its own.
+      this.#wasActiveBeforeOffline = false;
+      this.log.warn("[Session] Device is offline");
+      return this.getState();
+    }
 
     if (!isOnline) {
       this.log.warn("[Session] Device is offline — pausing WhatsApp connection and retries");

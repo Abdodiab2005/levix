@@ -225,9 +225,16 @@ export type PlusProductResult =
   | {
       ok: true;
       productId: string;
+      basePlanId: string;
+      offerId: string | null;
       offerToken: string;
       formattedPrice: string;
       billingPeriod: string;
+      introduction: {
+        formattedPrice: string;
+        billingPeriod: string;
+        billingCycleCount: number;
+      } | null;
     };
 export type PlusPurchaseResult =
   | PlusFailure

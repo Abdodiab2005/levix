@@ -4,8 +4,83 @@ import java.net.URLEncoder
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Wire rules only. No Play or Android types and no entitlement decisions. */
+/** Offer selection and wire rules. No Play/Android types or entitlement decisions. */
 object PlusBilling {
+    const val BASE_PLAN_ID = "monthly"
+    const val INTRO_OFFER_ID = "intro-3months"
+
+    enum class Recurrence { INFINITE, FINITE, OTHER }
+
+    data class Phase(
+        val formattedPrice: String,
+        val priceAmountMicros: Long,
+        val priceCurrencyCode: String,
+        val billingPeriod: String,
+        val recurrence: Recurrence,
+        val billingCycleCount: Int,
+    )
+
+    data class Offer(
+        val basePlanId: String,
+        val offerId: String?,
+        val offerToken: String,
+        val phases: List<Phase>,
+    ) {
+        fun productInfo(productId: String): JSONObject {
+            val renewal = phases.last()
+            val intro = phases.first().takeIf { offerId != null }
+            return JSONObject().put("ok", true).put("productId", productId)
+                .put("basePlanId", basePlanId).put("offerId", offerId ?: JSONObject.NULL)
+                .put("offerToken", offerToken).put("formattedPrice", renewal.formattedPrice)
+                .put("billingPeriod", renewal.billingPeriod)
+                .put("introduction", intro?.let {
+                    JSONObject().put("formattedPrice", it.formattedPrice)
+                        .put("billingPeriod", it.billingPeriod).put("billingCycleCount", it.billingCycleCount)
+                } ?: JSONObject.NULL)
+        }
+    }
+
+    private fun validPrice(phase: Phase): Boolean = phase.billingPeriod == "P1M" &&
+        phase.formattedPrice.isNotBlank() && phase.priceAmountMicros > 0 &&
+        phase.priceCurrencyCode.matches(Regex("[A-Z]{3}"))
+
+    /** Input is ONLY the offers returned as eligible by Play for this account. */
+    fun selectOffer(offers: List<Offer>): Offer? {
+        val valid = offers.filter { offer ->
+            val renewal = offer.phases.lastOrNull()
+            offer.basePlanId == BASE_PLAN_ID && validOfferToken(offer.offerToken) &&
+                renewal != null && validPrice(renewal) &&
+                renewal.recurrence == Recurrence.INFINITE && renewal.billingCycleCount == 0 &&
+                when (offer.offerId) {
+                    null -> offer.phases.size == 1
+                    INTRO_OFFER_ID -> offer.phases.size == 2 && offer.phases.first().let { intro ->
+                        validPrice(intro) && intro.recurrence == Recurrence.FINITE &&
+                            intro.billingCycleCount == 3 &&
+                            intro.priceCurrencyCode == renewal.priceCurrencyCode &&
+                            intro.priceAmountMicros < renewal.priceAmountMicros
+                    }
+                    else -> false
+                }
+        }
+        return valid.firstOrNull { it.offerId == INTRO_OFFER_ID }
+            ?: valid.firstOrNull { it.offerId == null }
+    }
+
+    /** A refreshed catalog must still match everything shown before Subscribe. */
+    fun confirmedOffer(offers: List<Offer>, token: String, displayed: Offer?): Offer? =
+        selectOffer(offers)?.takeIf { it.offerToken == token && it == displayed }
+
+    /** The offer the page was last given. One per BillingHost; never outlives it. */
+    class OfferSession {
+        var displayed: Offer? = null
+            private set
+        fun show(offer: Offer) { displayed = offer }
+        fun clear() { displayed = null }
+        /** Null also clears the session, so the page must fetch and show the offer again. */
+        fun confirm(offers: List<Offer>, token: String): Offer? =
+            confirmedOffer(offers, token, displayed).also { if (it == null) displayed = null }
+    }
+
     /** Process memory only; callers confine access to the main thread. */
     class PurchaseRecovery(private val productId: String, private val packageName: String) {
         var optedIn = false

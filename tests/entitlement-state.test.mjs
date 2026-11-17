@@ -2,6 +2,7 @@
 // subscriber notifications, copy exclusions, and debug-log redaction.
 
 import crypto from "node:crypto";
+import { mock } from "node:test";
 import { equal, finish, ok, require, section, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("levix-entitlement-state");
@@ -754,6 +755,65 @@ section("isSecretBotKey and debugLog redaction");
   equal("purchase is redacted", sanitized.purchase, "[redacted]");
   equal("existing password key stays redacted", sanitized.password, "[redacted]");
   equal("non-secret statusCode stays intact", sanitized.statusCode, 200);
+}
+
+section("refresh deadline releases single flight for the next forced request");
+
+{
+  mock.timers.enable({ apis: ["setTimeout"] });
+  const iat = 1_762_780_000;
+  const storage = new Map();
+  let requests = 0;
+  let stalledSignal;
+  let resolveStalled;
+  const ent = createEntitlement({
+    keys: [signer.entry],
+    storage,
+    now: () => iat * 1000,
+    setTimer: (fn, ms) => ({ fn, ms }),
+    clearTimer: () => {},
+    fetch: (_url, init) => {
+      requests += 1;
+      if (requests === 1) {
+        stalledSignal = init.signal;
+        return new Promise((resolve) => {
+          resolveStalled = resolve;
+        });
+      }
+      const token = makeToken(signer, ent.prepare().installationId, { iat, seq: 1 });
+      return Promise.resolve(new Response(JSON.stringify({ token })));
+    },
+  });
+  try {
+    const id = ent.prepare().installationId;
+    ent.start();
+    const first = ent.refresh({ force: true });
+    equal("pending forced refresh shares flight", ent.refresh({ force: true }), first);
+    equal("pending refresh sends one request", requests, 1);
+    mock.timers.tick(15_000);
+    const outcome = await first;
+    equal("engine deadline fails refresh", outcome.ok, false);
+    equal("engine deadline returns UNAVAILABLE", outcome.code, "UNAVAILABLE");
+    equal("engine deadline aborts transport", stalledSignal.aborted, true);
+    equal("next forced refresh succeeds", (await ent.refresh({ force: true })).ok, true);
+    equal("next forced refresh sends a new request", requests, 2);
+    equal("new request commits its token", storage.get(state.RECORD_KEY).seq, 1);
+
+    let discarded = false;
+    const late = new Response(JSON.stringify({ token: makeToken(signer, id, { iat, seq: 2 }) }));
+    const cancel = late.body.cancel.bind(late.body);
+    late.body.cancel = () => {
+      discarded = true;
+      return cancel();
+    };
+    resolveStalled(late);
+    for (let index = 0; index < 6; index += 1) await Promise.resolve();
+    equal("late response is discarded", discarded, true);
+    equal("late response cannot replace the token", storage.get(state.RECORD_KEY).seq, 1);
+  } finally {
+    ent.stop();
+    mock.timers.reset();
+  }
 }
 
 finish();

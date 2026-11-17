@@ -4,10 +4,11 @@ import { Plus, Tag } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "../../api/client";
 import { useToast } from "../../components/Toasts";
-import { Button, Dialog, Field, Input } from "../../components/ui";
+import { Button, CodeText, Dialog, Field, Input } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { CommandItem } from "../../types";
 import { AliasToken } from "./AliasToken";
+import { commandErrorKey } from "./shared";
 
 /**
  * The alias editor. Validation is unchanged: a leading prefix (or slash) is
@@ -64,8 +65,8 @@ export function CommandAliasDialog({
       onSaved(command, tempAliases);
       toast(t("savedSuccessfully"), "success");
       onClose();
-    } catch (err: any) {
-      toast(err.message, "error");
+    } catch (err: unknown) {
+      toast(t(commandErrorKey(err, "commandUpdateFailed")), "error");
     } finally {
       setSaving(false);
     }
@@ -78,11 +79,7 @@ export function CommandAliasDialog({
       title={
         command ? (
           <>
-            {t("aliasesFor")}{" "}
-            <span dir="ltr" className="font-mono">
-              {prefix}
-              {command.name}
-            </span>
+            {t("aliasesFor")} <CodeText>{`${prefix}${command.name}`}</CodeText>
           </>
         ) : (
           t("aliasesFor")

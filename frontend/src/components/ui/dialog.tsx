@@ -1,11 +1,28 @@
 // file: frontend/src/components/ui/dialog.tsx
 import { X } from "lucide-react";
-import { type ReactNode, useId, useRef } from "react";
+import { type CSSProperties, type ReactNode, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../../context/I18nContext";
 import { cn } from "../../utils/cn";
 import { Button, IconButton } from "./button";
 import { useFocusTrap } from "./focus";
+
+const dialogVariants = {
+  default: {
+    overlay: "items-center overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))]",
+    panel: "my-auto max-h-[var(--dialog-max-height)] max-w-[var(--dialog-max-width)] rounded-2xl",
+    header: "",
+  },
+  mobileFullscreen: {
+    overlay:
+      "items-stretch p-0 sm:items-center sm:overflow-y-auto sm:p-4 sm:pb-[max(1rem,env(safe-area-inset-bottom))]",
+    panel:
+      "h-dvh max-h-dvh max-w-none rounded-none sm:my-auto sm:h-auto sm:max-h-[var(--dialog-max-height)] sm:max-w-[var(--dialog-max-width)] sm:rounded-2xl",
+    header: "pt-[max(1rem,env(safe-area-inset-top))] sm:pt-4 md:pt-5",
+  },
+} as const;
+
+export type DialogVariant = keyof typeof dialogVariants;
 
 export interface DialogProps {
   isOpen: boolean;
@@ -17,6 +34,8 @@ export interface DialogProps {
   maxWidth?: string;
   description?: ReactNode;
   className?: string;
+  /** Full screen below 640px; the default remains centered at every size. */
+  variant?: DialogVariant;
 }
 
 export function Dialog({
@@ -28,6 +47,7 @@ export function Dialog({
   maxWidth,
   description,
   className,
+  variant = "default",
 }: DialogProps) {
   const { t } = useI18n();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -39,12 +59,10 @@ export function Dialog({
 
   // Clears the home indicator. Inline style so it applies even when a utility is overridden.
   const safeBottom = { paddingBottom: "max(1rem, env(safe-area-inset-bottom))" };
+  const styles = dialogVariants[variant];
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4"
-      style={safeBottom}
-    >
+    <div className={cn("fixed inset-0 z-50 flex justify-center", styles.overlay)}>
       <button
         type="button"
         className="fixed inset-0 cursor-default border-0 bg-black/65 p-0 backdrop-blur-sm"
@@ -60,16 +78,24 @@ export function Dialog({
         tabIndex={-1}
         data-overlay="dialog"
         className={cn(
-          "relative z-10 my-auto flex w-full flex-col overflow-hidden rounded-2xl border border-line bg-panel shadow-2xl outline-none",
+          "relative z-10 flex w-full flex-col overflow-hidden border border-line bg-panel shadow-2xl outline-none",
+          styles.panel,
           className,
         )}
-        style={{
-          maxWidth: maxWidth || "32.5rem",
-          maxHeight: "calc(100dvh - 1rem - max(1rem, env(safe-area-inset-bottom)))",
-          animation: "modal-enter 150ms ease-out",
-        }}
+        style={
+          {
+            "--dialog-max-width": maxWidth || "32.5rem",
+            "--dialog-max-height": "calc(100dvh - 1rem - max(1rem, env(safe-area-inset-bottom)))",
+            animation: "modal-enter 150ms ease-out",
+          } as CSSProperties
+        }
       >
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line p-4 md:p-5">
+        <div
+          className={cn(
+            "flex shrink-0 items-center justify-between gap-3 border-b border-line p-4 md:p-5",
+            styles.header,
+          )}
+        >
           <h2 id={titleId} className="min-w-0 text-base font-bold text-text-main md:text-lg">
             {title}
           </h2>
@@ -77,7 +103,7 @@ export function Dialog({
         </div>
         <div
           className={cn(
-            "min-h-0 overflow-y-auto p-4 md:p-5",
+            "min-h-0 flex-1 overflow-y-auto p-4 md:p-5",
             !footer && "pb-[max(1rem,env(safe-area-inset-bottom))]",
           )}
           style={footer ? undefined : safeBottom}
@@ -91,7 +117,7 @@ export function Dialog({
         </div>
         {footer && (
           <div
-            className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-line bg-panel-raised/50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+            className="sticky bottom-0 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-line bg-panel-raised/50 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
             style={safeBottom}
           >
             {footer}

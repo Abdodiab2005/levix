@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../../utils/userError";
 import { ExternalLink, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../../api/client";
@@ -12,7 +13,14 @@ import {
   Toggle,
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
+import { ensurePlusStatus, usePlusStatus } from "../../hooks/usePlusStatus";
+import {
+  createRecoveryRefreshGate,
+  recoverPlusPurchases,
+  showsPlusUntil,
+} from "../plus/plusUiLogic";
 import { fill } from "../../utils/fill";
+import { presentPlusOffer } from "./plusOffer";
 import { TermsViewerDialog } from "../legal/TermsConsentDialog";
 import { PlusFeaturesView } from "../plus/PlusFeaturesView";
 import {
@@ -59,18 +67,21 @@ const ERROR_LABELS = {
   BILLING_UNAVAILABLE: "plusErrorUnavailable",
   FEATURE_NOT_SUPPORTED: "plusErrorUnavailable",
   ITEM_UNAVAILABLE: "plusErrorUnavailable",
+  OFFER_CHANGED: "plusOfferChanged",
   ITEM_ALREADY_OWNED: "plusErrorAlreadyOwned",
   BUSY: "plusErrorBusy",
   network: "plusErrorNetwork",
 } as const;
 
-type PlusStatus = {
-  configured: boolean;
-  entitlement: { state: keyof typeof STATE_LABELS; until: string | null; reason: string | null };
-  extension: { state: keyof typeof EXTENSION_LABELS; id?: string; version?: string };
-};
 type Operation = "subscribe" | "restore" | "refresh" | "toggle" | "manage" | "reload" | "recover";
-type Notice = "plusPaymentPending" | "plusPurchaseCancelled" | "plusNoPurchases";
+type Notice =
+  | "plusPaymentPending"
+  | "plusPurchaseCancelled"
+  | "plusNoPurchases"
+  | "plusRefreshDone";
+
+// Module scope: the cooldown survives leaving and reopening the Plus tab.
+const recoveryRefreshes = createRecoveryRefreshGate();
 
 function failure(code = "FAILED"): never {
   throw new ApiError(0, code, { code });
@@ -93,7 +104,8 @@ export function PlusSettings({
 }) {
   const { t, language } = useI18n();
   const android = isAndroidHost();
-  const [status, setStatus] = useState<PlusStatus | null>(null);
+  // One shared reader: the sidebar and the in-context rows use the same copy.
+  const { status, refresh: readStatus, error: statusError } = usePlusStatus();
   const [product, setProduct] = useState<PlusProductResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [productLoading, setProductLoading] = useState(false);
@@ -106,13 +118,22 @@ export function PlusSettings({
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
 
+  // A read that failed before this page opened is not an error of this page.
+  const staleStatusError = useRef(statusError);
+  useEffect(() => {
+    if (!statusError) {
+      staleStatusError.current = null;
+      return;
+    }
+    if (statusError !== staleStatusError.current) setError(statusError);
+  }, [statusError]);
+
   useEffect(() => {
     let live = true;
     async function load() {
       try {
-        const next = await api.get<PlusStatus>("/plus/status");
+        const next = await ensurePlusStatus();
         if (!live) return;
-        setStatus(next);
         setLoading(false);
         if (android && next.configured && next.extension.state !== "absent") {
           setProductLoading(true);
@@ -136,17 +157,7 @@ export function PlusSettings({
     };
   }, [android]);
 
-  const readStatus = useCallback(async () => {
-    try {
-      const next = await api.get<PlusStatus>("/plus/status");
-      setStatus(next);
-      return next;
-    } catch (err) {
-      // Do not leave an old active badge visible when the current state is unknown.
-      setStatus(null);
-      throw err;
-    }
-  }, []);
+  // plus_status, connect and visibilitychange refreshes live in usePlusStatus.
 
   const run = useCallback(
     async (operation: Operation, action: () => Promise<void>) => {
@@ -234,33 +245,32 @@ export function PlusSettings({
     void run("recover", async () => {
       const result = await plusPendingPurchases();
       if (!result.ok) failure(result.code);
-      const fresh = result.purchases.filter(
-        (purchase) => purchase.status === "purchased" && !purchase.acknowledged,
-      );
-      if (fresh.length > 0) {
-        setError(null);
-        setNotice(null);
-        await claimPurchases(fresh.map((purchase) => ({ ok: true as const, ...purchase })));
-      }
-      const acknowledged = result.purchases.some(
-        (purchase) => purchase.status === "purchased" && purchase.acknowledged,
-      );
-      const state = (fresh.length > 0 ? await readStatus() : status)?.entitlement.state;
-      if (acknowledged && (state === "none" || state === "expired" || state === "unverified")) {
-        try {
-          const refreshed = await api.post<{ ok: boolean; code?: string }>("/plus/refresh");
-          if (!refreshed.ok) failure(refreshed.code);
-          await readStatus();
-        } catch (err) {
-          if (
-            (err instanceof ApiError && err.status === 429) ||
-            errorCode(err) === "RATE_LIMITED"
-          ) {
-            return;
+      await recoverPlusPurchases({
+        purchases: result.purchases,
+        state: status?.entitlement.state,
+        gate: recoveryRefreshes,
+        claim: async (fresh) => {
+          setError(null);
+          setNotice(null);
+          await claimPurchases(fresh.map((purchase) => ({ ok: true as const, ...purchase })));
+        },
+        readState: async () => (await readStatus()).entitlement.state,
+        refresh: async () => {
+          try {
+            const refreshed = await api.post<{ ok: boolean; code?: string }>("/plus/refresh");
+            if (!refreshed.ok) failure(refreshed.code);
+            await readStatus();
+          } catch (err) {
+            if (
+              (err instanceof ApiError && err.status === 429) ||
+              errorCode(err) === "RATE_LIMITED"
+            ) {
+              return;
+            }
+            throw err;
           }
-          throw err;
-        }
-      }
+        },
+      });
     });
   }, [
     recoveryAvailable,
@@ -276,9 +286,14 @@ export function PlusSettings({
 
   function subscribe() {
     void run("subscribe", async () => {
-      if (!product?.ok || product.billingPeriod !== "P1M") failure("UNAVAILABLE");
+      const offer = presentPlusOffer(product, t);
+      if (!offer) failure("UNAVAILABLE");
       const prepared = await api.post<{ installationId: string }>("/plus/prepare");
-      await claim(await plusPurchase(product.offerToken, prepared.installationId));
+      const purchase = await plusPurchase(offer.product.offerToken, prepared.installationId);
+      if (!purchase.ok && purchase.code === "OFFER_CHANGED") {
+        setProduct(await plusProduct());
+      }
+      await claim(purchase);
     });
   }
 
@@ -295,6 +310,8 @@ export function PlusSettings({
     void run("refresh", async () => {
       const result = await api.post<{ ok: boolean; code?: string }>("/plus/refresh");
       if (!result.ok) failure(result.code);
+      await readStatus();
+      setNotice("plusRefreshDone");
       const info = await plusProduct();
       setProduct(info);
       if (!info.ok) failure(info.code);
@@ -302,7 +319,9 @@ export function PlusSettings({
   }
 
   const message = error
-    ? t(ERROR_LABELS[error as keyof typeof ERROR_LABELS] || "plusErrorFailed")
+    ? Object.hasOwn(ERROR_LABELS, error)
+      ? t(ERROR_LABELS[error as keyof typeof ERROR_LABELS])
+      : userErrorMessage(t, { data: { error } }, "plusErrorFailed")
     : null;
   if (loading) return <Spinner label={t("loading")} />;
   if (status?.extension.state === "absent")
@@ -336,7 +355,7 @@ export function PlusSettings({
   const until = status.entitlement.until ? new Date(status.entitlement.until) : null;
   const validUntil = until && Number.isFinite(until.getTime());
   const subscribed = ["active", "grace", "canceled"].includes(status.entitlement.state);
-  const monthlyProduct = product?.ok && product.billingPeriod === "P1M" ? product : null;
+  const monthlyOffer = presentPlusOffer(product, t);
   const disabled = !!busy || productLoading;
 
   return (
@@ -373,7 +392,7 @@ export function PlusSettings({
         <StatusPill tone={subscribed ? "ok" : "neutral"}>
           {t(STATE_LABELS[status.entitlement.state])}
         </StatusPill>
-        {validUntil && (
+        {showsPlusUntil(status.entitlement.state) && validUntil && (
           <time dateTime={status.entitlement.until || undefined} className="text-sm text-muted">
             {fill(t("plusUntil"), { date: until.toLocaleString(language) })}
           </time>
@@ -392,18 +411,13 @@ export function PlusSettings({
             onChange={(value) => void run("toggle", () => onEnabledChange(value))}
           />
           {productLoading && <Spinner label={t("loading")} />}
-          {monthlyProduct && (
+          {monthlyOffer && (
             <div className="flex flex-col gap-3">
-              <p className="text-sm text-text-main">
-                {fill(t("plusPrice"), {
-                  price: monthlyProduct.formattedPrice,
-                  period: t("plusMonthly"),
-                })}
-              </p>
+              <p className="text-sm text-text-main">{monthlyOffer.price}</p>
               {!subscribed && (
                 <>
                   <p id="plus-disclosure" className="text-sm text-muted">
-                    {fill(t("plusDisclosure"), { price: monthlyProduct.formattedPrice })}
+                    {monthlyOffer.disclosure}
                   </p>
                   <Button
                     variant="primary"

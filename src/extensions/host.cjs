@@ -80,6 +80,26 @@ function createExtensionHost(opts = {}) {
   let didActivate = false;
   let liveReconcilePending = false;
 
+  const listeners = new Set();
+
+  function subscribe(listener) {
+    if (typeof listener !== "function") return () => {};
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }
+
+  function setState(next) {
+    if (state === next) return;
+    state = next;
+    for (const listener of listeners) {
+      try {
+        listener();
+      } catch {
+        // A listener failure cannot interrupt a state transition.
+      }
+    }
+  }
+
   function plusEnabled() {
     try {
       return settingsGet("plus_enabled") !== false;
@@ -126,7 +146,7 @@ function createExtensionHost(opts = {}) {
 
   function tripFailed() {
     const wasActive = state === "active" || didActivate;
-    state = "failed";
+    setState("failed");
     handlers = null;
     scopeSet = new Set();
     try {
@@ -152,7 +172,7 @@ function createExtensionHost(opts = {}) {
       const check = validateManifest(mod);
       if (!check.ok) {
         incompatible = true;
-        state = "incompatible";
+        setState("incompatible");
         try {
           log.warn?.({ reason: check.reason }, "Plus extension rejected");
         } catch {}
@@ -162,7 +182,7 @@ function createExtensionHost(opts = {}) {
       return mod;
     } catch {
       incompatible = true;
-      state = "incompatible";
+      setState("incompatible");
       try {
         log.warn?.("Plus extension failed to load");
       } catch {}
@@ -232,7 +252,7 @@ function createExtensionHost(opts = {}) {
         controller.abort();
       } catch {}
       recordFailure(error);
-      if (state !== "failed") state = "inactive";
+      if (state !== "failed") setState("inactive");
       return;
     }
     if (generation !== gen || !running) return;
@@ -251,14 +271,14 @@ function createExtensionHost(opts = {}) {
       try {
         log.warn?.({ reason: check.reason }, "Plus extension handlers rejected");
       } catch {}
-      if (state !== "failed") state = "inactive";
+      if (state !== "failed") setState("inactive");
       return;
     }
     handlers = returned;
     refreshScope();
     setTemplateOverride((key, locale) => templateFor(key, locale));
     didActivate = true;
-    state = "active";
+    setState("active");
   }
 
   async function deactivate(reason) {
@@ -273,10 +293,10 @@ function createExtensionHost(opts = {}) {
     try {
       controller?.abort();
     } catch {}
-    if (reason === "disabled") state = "disabled";
-    else if (reason === "failure") state = "failed";
-    else if (reason === "shutdown") state = moduleLoaded ? "inactive" : "absent";
-    else state = "inactive";
+    if (reason === "disabled") setState("disabled");
+    else if (reason === "failure") setState("failed");
+    else if (reason === "shutdown") setState(moduleLoaded ? "inactive" : "absent");
+    else setState("inactive");
     if (hadHandlers && typeof mod?.deactivate === "function") {
       try {
         await withDeadline(mod.deactivate(reason), deactivateTimeoutMs);
@@ -295,7 +315,7 @@ function createExtensionHost(opts = {}) {
     lastEnabled = enabled;
     if (enabledChanged) {
       failures.length = 0;
-      if (state === "failed" && enabled) state = "inactive";
+      if (state === "failed" && enabled) setState("inactive");
     }
 
     if (state === "failed" && enabled) return;
@@ -303,20 +323,20 @@ function createExtensionHost(opts = {}) {
     const mod = ensureLoaded();
     if (incompatible) return;
     if (!mod) {
-      state = "absent";
+      setState("absent");
       return;
     }
 
     if (!enabled) {
       if (didActivate || handlers) await deactivate("disabled");
-      else state = "disabled";
+      else setState("disabled");
       return;
     }
 
     const entitled = Boolean(entitlement.isActive?.("plus"));
     if (!entitled) {
       if (didActivate || handlers) await deactivate("entitlement");
-      else state = "inactive";
+      else setState("inactive");
       return;
     }
 
@@ -468,6 +488,7 @@ function createExtensionHost(opts = {}) {
     start,
     stop,
     reload,
+    subscribe,
     status() {
       return { state, generation };
     },

@@ -1,6 +1,7 @@
+import { userErrorMessage } from "../../utils/userError";
 import type React from "react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { ApiError, api } from "../../api/client";
+import { api } from "../../api/client";
 import { RecipientPicker } from "../../components/RecipientPicker";
 import {
   Button,
@@ -163,7 +164,7 @@ export const RuleEditor: React.FC<RuleEditorProps> = ({ open, rule, names, onClo
         : await api.createAutoDeleteRule(body);
       onSaved(res.rule);
     } catch (err) {
-      const message = err instanceof ApiError && err.message ? err.message : t("ruleSaveFailed");
+      const message = userErrorMessage(t, err, "ruleSaveFailed");
       setFormError(message);
     } finally {
       setBusy(false);

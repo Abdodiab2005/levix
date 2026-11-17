@@ -226,9 +226,14 @@ Every ADR lists the evidence it rests on. Line numbers refer to commit `050d8b9`
 - Amended by the owner 2026-11-11: preserve `message_watermark=false` and every
   existing Free choice. Phase 09 must not silently enable the watermark or turn
   its existing Free switch into a paid feature.
-- Decision: USD 0.99 per month worldwide, with an Egypt price 30% lower, set through Google Play
-  country pricing. The final EGP amount follows Play pricing, taxes and rounding. No code converts
-  currencies or locates users by IP address.
+- Decision (amended by the owner's introductory-offer request, 2026-11-14): product `levix.plus`,
+  auto-renewing base plan `monthly`, regular USD 2.99/month. Play-eligible new subscribers receive
+  offer `intro-3months`: USD 0.99/month for three monthly payments, then regular monthly renewal
+  from month 4. Amounts and eligibility live in Google Play, never in the purchase UI code.
+  Country pricing, including the existing Egypt pricing policy, stays in Play configuration;
+  final EGP amounts follow Play pricing, taxes and rounding. No code converts currencies or
+  locates users by IP address. Production activation requires successful end-to-end testing
+  and the owner's approval.
 
 ## ADR-011: Command Engine v2 keeps the existing permission system
 

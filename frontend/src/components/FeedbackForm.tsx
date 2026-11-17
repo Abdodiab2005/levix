@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../utils/userError";
 // file: frontend/src/components/FeedbackForm.tsx
 
 import {
@@ -164,7 +165,7 @@ export const FeedbackForm: React.FC = () => {
       }
       setHostFile(picked);
     } catch (err: any) {
-      toast(err?.message || "Could not attach the file", "error");
+      toast(userErrorMessage(t, err, "attachmentError"), "error");
     }
   };
 
@@ -206,7 +207,7 @@ export const FeedbackForm: React.FC = () => {
       setSent(true);
       toast(t("feedbackSent"), "success");
     } catch (err: any) {
-      toast(err?.message, "error");
+      toast(userErrorMessage(t, err, "feedbackSendError"), "error");
     } finally {
       setSending(false);
       setProgress(null);
