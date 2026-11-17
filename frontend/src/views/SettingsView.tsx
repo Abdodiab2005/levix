@@ -736,7 +736,7 @@ export const SettingsView: React.FC = () => {
             <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-center">
               <div className="flex min-w-0 flex-col gap-1.5 sm:max-w-72">
                 <span className="text-xs font-semibold text-muted">{t("prefixPresets")}</span>
-                <div className="flex max-w-full items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+                <div className="flex max-w-full flex-wrap items-center gap-2">
                   {PREFIX_PRESETS.map((p) => {
                     const isCurrent = prefix === p;
                     return (

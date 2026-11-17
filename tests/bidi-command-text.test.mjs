@@ -44,4 +44,19 @@ for (const rel of [
   ok(`${rel} has no bare code element`, !text.includes("<code"));
 }
 
+section("RTL catalog strings isolate embedded commands");
+{
+  // A command inside an Arabic sentence (for example "!help") reorders to
+  // "help!" unless it sits between U+2066 (LRI) and U+2069 (PDI).
+  const ar = JSON.parse(readFileSync(join(ROOT, "i18n/ar/dashboard.json"), "utf8"));
+  const bare = [];
+  for (const [key, value] of Object.entries(ar)) {
+    const text = String(value);
+    for (const match of text.matchAll(/(?<![\w\u2066])[!/][a-z][\w-]*/g)) {
+      if (text[match.index + match[0].length] !== "\u2069") bare.push(`${key}: ${match[0]}`);
+    }
+  }
+  ok(`no bare command token in Arabic dashboard strings (${bare.join(", ") || "none"})`, bare.length === 0);
+}
+
 finish();

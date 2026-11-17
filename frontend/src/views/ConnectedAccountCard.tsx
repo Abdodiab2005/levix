@@ -1,6 +1,6 @@
 // file: frontend/src/views/ConnectedAccountCard.tsx
 
-import { Eye, EyeOff, Play, RefreshCw, Settings2 } from "lucide-react";
+import { Eye, EyeOff, Play, RefreshCw, Settings2, Smartphone } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import {
@@ -144,7 +144,8 @@ export function ConnectedAccountCard({
             <Avatar
               key={visible?.photoUrl || identity || "none"}
               src={visible?.photoUrl || undefined}
-              name={visible?.name || fallbackName}
+              name={visible?.name || ""}
+              icon={<Smartphone size={22} />}
             />
           )}
           <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -159,7 +160,9 @@ export function ConnectedAccountCard({
                   <UserText lines={2} className="text-sm font-bold text-text-main">
                     {visible.name}
                   </UserText>
-                ) : null}
+                ) : (
+                  <p className="text-sm font-bold text-text-main">{fallbackName}</p>
+                )}
                 {visible?.phone ? (
                   <div className="flex items-center gap-1.5">
                     <UserText as="bdi" dir="ltr" className="text-xs text-muted">
