@@ -18,7 +18,7 @@ const { getCached } = require("../utils/groupMetadataCache.cjs");
 const { linkedIdentity } = require("./identity.cjs");
 
 const MODES = new Set(["same_chat", "owner_private", "authorized_chat"]);
-const JID_RE = /^[0-9]{1,30}@(s\.whatsapp\.net|lid|g\.us)$/;
+const JID_RE = /^(?:[0-9]{1,30}@(s\.whatsapp\.net|lid|g\.us)|[0-9]{1,30}-[0-9]{1,30}@g\.us)$/;
 const SCHEDULE_COMMANDS = new Set(["schedule", "autoschedule"]);
 
 function canonicalJid(jid) {

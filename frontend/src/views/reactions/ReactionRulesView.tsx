@@ -388,7 +388,6 @@ export const ReactionRulesView: React.FC = () => {
 
   const handleConflict = async () => {
     toast(t("reactionErrorRuleChanged"), "warning");
-    setEditorOpen(false);
     setPendingDelete(null);
     await refresh();
   };

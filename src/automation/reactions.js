@@ -21,7 +21,7 @@ export const REACTION_LIMITS = Object.freeze({
 });
 const sockets = new WeakMap();
 const idPattern = /^[A-Za-z0-9_-]{1,128}$/;
-const jidPattern = /^\d{1,30}(?::\d{1,5})?@(s\.whatsapp\.net|lid|g\.us)$/;
+const jidPattern = /^(?:\d{1,30}(?::\d{1,5})?@(s\.whatsapp\.net|lid|g\.us)|\d{1,30}-\d{1,30}@g\.us)$/;
 const mediaFields = [
   "url", "directPath", "mediaKey", "fileEncSha256", "fileSha256", "fileLength",
   "mimetype", "seconds", "ptt", "width", "height", "caption", "fileName",

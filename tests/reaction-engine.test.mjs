@@ -159,6 +159,20 @@ async function completed(f) { await f.engine.settled(); return f.engine.stats().
 const count = (table) => db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n;
 
 try {
+  section("legacy group reaction reaches the source chat and records its outcome");
+  {
+    const legacy = "201000000001-1600000000@g.us";
+    const f = await fixture({ rules: [{ id: "legacy", chatJid: legacy, definition: definition() }] });
+    const message = remember(f, original({ chat: legacy }));
+    equal("legacy group original is retained", f.engine.intake.stats().items, 1);
+    receive(f, message);
+    equal("legacy group reaction delivers", await completed(f), "DELIVERED");
+    equal("legacy group sends once", f.state.sent.length, 1);
+    equal("legacy group reply stays in source", f.state.sent[0]?.chat, legacy);
+    equal("legacy rule stays stored unchanged", store.getReactionRule("legacy").chat_jid, legacy);
+    equal("legacy rule records delivery status", require("./src/automation/status.cjs").get("legacy")?.lastCode, "DELIVERED");
+  }
+
   section("reaction live authorization updates the shared send roster");
   groupMetadataCache.flushAll();
   try {
