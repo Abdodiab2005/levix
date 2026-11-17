@@ -166,3 +166,59 @@ Google Play Billing / Levix Plus (license-test account):
 15. Purchase: crown on the brand mark and "Active" badge; rows open the right feature tab.
 16. Renewal, cancel, grace and expiry move the UI the same way the Plus page does.
 17. Verifier unreachable: the last state stays; nothing unlocks.
+
+## G. Google Play Internal Testing build 76
+
+Core `f3710631fba359e83e9d9ffa4d62c721659e27b8` (this branch, draft PR #182, not merged). Core CI run `44172154983` PASS 7/7.
+
+Private levix-plus PR #19 (merged as `eea66cc`) moved `core.lock.json` to that Core. levix-plus CI passed. Cross-repository tests against this Core: 340/340 locally.
+
+Build and upload: levix-plus run `44181528853` (`internal-play-aab.yml`, `UPLOAD_INTERNAL`). Both jobs success, 2026-11-17.
+
+| Field | Value |
+| --- | --- |
+| versionCode | 76 |
+| versionName | `5.0.0-beta.1-staging` |
+| Release name | 5.0.0-beta.1-staging (76) STAGING |
+| Track | internal |
+| Status | completed |
+| Play edit | `09057127212900976971` committed |
+| Package | `net.leviro.levix` |
+| AAB SHA-256 | `686740c011574a5616c272e8fafad3908a6e972b193875f03b30029396ed81cc` |
+| Artifact | `levix-internal-free-plus` ID `14373038215` |
+| Digest | `sha256:80a9ebc6699aec002db046db77f00a1ecb7a28d9c8fa0e35ba7ffa23ecdf8e67` |
+| Expires | 2026-11-24T21:49:55Z |
+| Signer | `jar verified.` |
+| Upload certificate SHA-256 | `637dd885fd20efe78e59e340889556b9a8c31e34a52ac1af70f0bc10cf54905d` |
+
+Classification: `verify-staging` passed. Staging verifier and its public key only (key id `5f6fba9447f1e681`). No private key in the AAB. This is a STAGING artifact and must never be promoted.
+
+Verifier health before upload: production (`127.0.0.1:18787`) and staging (`127.0.0.1:8788`) `/healthz` 200. Both systemd units active.
+
+Update compatibility: no database migration and no schema change in `0bc2a88..f3710631`. Pairing credentials and `levix.key` untouched. A new versionCode asks for Terms consent again (ADR-020). A closed tester whose Plus token came from the production verifier sees Plus unverified on this staging build until the staging verifier issues a token.
+
+Closed testing: owner chose a separate production-verifier build of the same Core (`closed-play-aab.yml`, versionCode 77) after the Android smoke test passes on build 76. Not started.
+
+Section F's 17 scenarios stay PENDING. They did not block Internal Testing.
+
+### Android smoke test of build 76 (2026-11-18, Redmi 9, Arabic)
+
+Device `fcc3e4fb0404` (Redmi 9, LineageOS), linked to the dedicated test account. Updated from build 74 through the Play Store internal listing. Panel checks ran over the WebView DevTools socket (`device-smoke.mjs`, read-only: nothing saved, no message sent).
+
+| Check | Result |
+| --- | --- |
+| Play update 74 to 76 | PASS: `versionCode=76`, `versionName=5.0.0-beta.1-staging` |
+| App launch | PASS: MainActivity, no entry in the crash buffer |
+| Terms consent after update (ADR-020) | PASS: engine ready, WhatsApp held until consent; the owner accepted on the phone |
+| WhatsApp session kept through the update | PASS: "متصل بالواتساب" (connected) with no re-pairing |
+| Panel session kept | PASS: no login asked |
+| Home account card | PASS: number masked, Manage session, connected state |
+| Prefix preview in Arabic | PASS: `!help`, `!lang ar`, `!sticker` LTR-isolated, prefix first |
+| Command names in Arabic | PASS: `!add`, `!all`, `!antilink`, `!antispam` LTR-isolated |
+| Reaction editor | PASS: full screen (393 of 393 px), 11 checkboxes and 0 disabled, the Image label toggles and back, Cancel closes it |
+| Levix Plus sidebar entry and page | PASS: entry shown, no raw keys |
+| Raw keys on Home and Plus | PASS: none |
+
+Not covered by this smoke test: touch input (clicks went through DevTools), the keyboard over the emoji field, the Android back button, number reveal, Start after Stop, schedules, groups, any rule execution, E2EE, Play Billing. Section F stays PENDING for those.
+
+Found: on the Connection screen's full account card, the avatar shows "ح" (the first letter of "حساب واتساب") when WhatsApp gives no profile name. The compact Home card uses a phone icon instead. Cosmetic; not fixed in build 76.
