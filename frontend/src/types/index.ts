@@ -126,6 +126,20 @@ export interface ScheduleMedia {
   fileName?: string | null;
 }
 
+/** Where a displayed name came from. "none" means the label is only a fallback. */
+export type RecipientNameSource = "saved" | "push" | "subject" | "phone" | "none";
+
+export interface DashboardRecipient {
+  id: string;
+  name: string;
+  type: "group" | "contact";
+  phone?: string | null;
+  savedName?: string | null;
+  pushName?: string | null;
+  memberCount?: number | null;
+  nameSource?: RecipientNameSource;
+}
+
 export interface ScheduleItem {
   id: string;
   type: "recurring" | "once";
@@ -133,6 +147,7 @@ export interface ScheduleItem {
   targetLabel?: string;
   targetKind?: "group" | "contact" | string;
   targetPhone?: string | null;
+  targetNameSource?: RecipientNameSource;
   savedName?: string | null;
   pushName?: string | null;
   phone?: string | null;

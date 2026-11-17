@@ -1300,6 +1300,7 @@ function scheduleView(job) {
     targetLabel: peer.label,
     targetKind: peer.kind,
     targetPhone: peer.phone,
+    targetNameSource: peer.nameSource,
     savedName: peer.savedName ?? null,
     pushName: peer.pushName ?? null,
     phone: peer.phone,
@@ -1320,14 +1321,18 @@ router.get("/recipients", (req, res) => {
       seen.add(gid);
       const live = groupMetadataCache.get(gid);
       const peer = describePeer(gid);
+      const liveSubject = typeof live?.subject === "string" ? live.subject.trim() : "";
+      const liveNamed = Boolean(liveSubject) && !liveSubject.includes("@");
+      const named = liveNamed || peer.nameSource === "subject";
       recipients.push({
         id: gid,
-        name: live?.subject || peer.label,
+        name: liveNamed ? liveSubject.slice(0, 128) : peer.label,
         type: "group",
         memberCount: live?.participants?.length ?? peer.memberCount,
         savedName: null,
         pushName: null,
         phone: null,
+        nameSource: named ? "subject" : "none",
       });
     };
 
@@ -1359,6 +1364,7 @@ router.get("/recipients", (req, res) => {
         savedName: peer.savedName ?? null,
         pushName: peer.pushName ?? null,
         type: "contact",
+        nameSource: peer.nameSource,
       });
     }
 

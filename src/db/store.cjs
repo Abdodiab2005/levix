@@ -1733,11 +1733,14 @@ function describePeer(jid) {
       savedName: null,
       pushName: null,
       memberCount: null,
+      nameSource: "none",
     };
   }
   if (id.endsWith("@g.us")) {
     const dir = getGroupDirectory(id);
-    const label = personName(dir?.subject) || "Group";
+    const subject = personName(dir?.subject);
+    // "Group" stays for older clients. nameSource says it was not a real subject.
+    const label = subject || "Group";
     return {
       jid: id,
       kind: "group",
@@ -1746,6 +1749,7 @@ function describePeer(jid) {
       savedName: null,
       pushName: null,
       memberCount: dir?.participant_count ?? null,
+      nameSource: subject ? "subject" : "none",
     };
   }
   const phone = resolveUserPhone(id);
@@ -1753,6 +1757,11 @@ function describePeer(jid) {
   const savedName = personName(meta?.savedName);
   const pushName = personName(meta?.displayName);
   const phoneLabel = phone ? `+${phone}` : null;
+  let nameSource = "none";
+  if (savedName) nameSource = "saved";
+  else if (pushName) nameSource = "push";
+  else if (phoneLabel) nameSource = "phone";
+  // "Contact" stays for older clients. nameSource says it was not a real name.
   const label = savedName || pushName || phoneLabel || "Contact";
   return {
     jid: id,
@@ -1762,6 +1771,7 @@ function describePeer(jid) {
     savedName,
     pushName,
     memberCount: null,
+    nameSource,
   };
 }
 
