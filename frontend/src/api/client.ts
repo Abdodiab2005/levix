@@ -8,6 +8,7 @@ import type {
   ClientDiagnostics,
   CrashReportInput,
   CrashReportItem,
+  DashboardRecipient,
   DiagnosticsObject,
   EditOptions,
   GroupItem,
@@ -356,12 +357,7 @@ export const api = {
     }>(`/ai/conversations/${encodeURIComponent(chatId)}`),
   getRecipients: () =>
     api.get<{
-      recipients: Array<{
-        id: string;
-        name: string;
-        type: "group" | "contact";
-        phone?: string | null;
-      }>;
+      recipients: DashboardRecipient[];
     }>("/recipients"),
   fetchAiModels: (payload?: {
     provider?: string;
