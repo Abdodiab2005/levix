@@ -21,7 +21,13 @@ export {
   type ChipProps,
   type ChipRejectReason,
 } from "./chip";
-export { ConfirmDialog, type ConfirmDialogProps, Dialog, type DialogProps } from "./dialog";
+export {
+  ConfirmDialog,
+  type ConfirmDialogProps,
+  Dialog,
+  type DialogProps,
+  type DialogVariant,
+} from "./dialog";
 export { Disclosure } from "./disclosure";
 export { EmptyState, type EmptyStateProps, LoadingState, Skeleton, Spinner } from "./feedback";
 export {

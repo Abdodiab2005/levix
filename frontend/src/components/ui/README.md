@@ -151,6 +151,8 @@ Dialogs that already end in a submit button stay as they are.
 
 `Dialog` keeps the old modal contract: `isOpen`, `onClose`, `title`, `children`, `footer`, `maxWidth`. Escape and the backdrop close it. Focus is trapped and returned to the trigger. The body scrolls and the footer stays on screen. The footer's bottom padding (the body's, when there is no footer) is `max(1rem, env(safe-area-inset-bottom))`. `ConfirmDialog` composes `Dialog` with cancel and confirm buttons (`variant` `danger` or `primary`, `loading`).
 
+`Dialog` has a `variant` map: `default` stays centered; `mobileFullscreen` fills the viewport below 640px and keeps the centered desktop layout and `maxWidth`. Both share the same focus trap, scrolling body and sticky footer. The full-screen header clears `env(safe-area-inset-top)`; the footer clears `env(safe-area-inset-bottom)`. Import `Dialog` and `DialogVariant` from the barrel. Long editor forms use `<Dialog variant="mobileFullscreen" footer={actions}>…</Dialog>`.
+
 ```tsx
 <ConfirmDialog
   isOpen={open}

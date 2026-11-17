@@ -54,6 +54,41 @@ for (const file of files) {
   }
 }
 
+section("editor explains STT without disabled message-type checkboxes");
+{
+  const editor = readFileSync(join(viewsDir, "ReactionRuleEditor.tsx"), "utf8");
+  const types = editor.match(/<section[^>]*aria-labelledby="rx-types-heading"[\s\S]*?<\/section>/)?.[0] || "";
+  ok("message-type section exists", types.length > 0);
+  ok("no typesLocked checkbox lock remains", !/disabled=\{typesLocked\}/.test(editor));
+  ok("message-type checkboxes are enabled", !/disabled=/.test(types));
+  ok("STT substitutes its explanation", /draft\.action === "stt"\s*\?/.test(types) && types.includes('t("reactionSttVoiceOnly")'));
+  ok("all supported messages is a checkbox", /<Checkbox\s+label=\{t\("reactionAllTypes"\)\}/.test(types));
+  const destination = editor.match(/<RadioGroup\b[\s\S]*?\/>/)?.[0] || "";
+  ok("destination has no duplicate visible label", destination.length > 0 && !/\blabel=/.test(destination));
+  ok("destination is named by its fieldset heading", /<fieldset[^>]*id="rx-destination"[^>]*aria-labelledby="rx-destination-heading"/.test(editor));
+  ok("emoji error is exposed to assistive technology", editor.includes('error={emojiError}') && editor.includes('aria-invalid={emojiError ? true : undefined}'));
+  const guard = editor.indexOf("if (submitPending.current) return;");
+  const lock = editor.indexOf("submitPending.current = true;");
+  const firstRequest = editor.indexOf("await api.checkReactionRule");
+  ok("submit checks the synchronous pending guard", guard >= 0 && guard < firstRequest);
+  ok("submit sets the pending guard before the first request", lock >= 0 && lock < firstRequest);
+  ok("revision conflict explains how to retain edits", editor.includes('setFormError(t("reactionEditConflict"))'));
+  const view = readFileSync(join(viewsDir, "ReactionRulesView.tsx"), "utf8");
+  const conflict = view.match(/const handleConflict = async \(\) => \{[\s\S]*?\n  \};/)?.[0] || "";
+  ok("save conflict keeps the editor open", conflict.length > 0 && !conflict.includes("setEditorOpen(false)"));
+  ok("advanced options use Disclosure", editor.includes("<Disclosure"));
+  ok("editor uses the mobile dialog variant", editor.includes('variant="mobileFullscreen"'));
+  const dialog = readFileSync(join(ROOT, "frontend/src/components/ui/dialog.tsx"), "utf8");
+  ok("dialog mobile variant fills the viewport", dialog.includes("h-dvh max-h-dvh max-w-none"));
+  ok("dialog desktop variant retains a size limit", dialog.includes("sm:max-w-[var(--dialog-max-width)]"));
+  ok("dialog footer is sticky and clears the safe area", dialog.includes("sticky bottom-0") && dialog.includes("env(safe-area-inset-bottom)"));
+  const editorKeys = [...editor.matchAll(keyPattern)].map((match) => match[2]);
+  for (const locale of ["ar", "pt-BR", "es-419"]) {
+    const json = JSON.parse(readFileSync(join(ROOT, "i18n", locale, "dashboard.json"), "utf8"));
+    for (const key of new Set(editorKeys)) ok(`${locale} has editor key ${key}`, typeof json[key] === "string" && json[key].length > 0);
+  }
+}
+
 section("automation toggle is single-flight; sort is recent activity");
 {
   const view = readFileSync(join(viewsDir, "ReactionRulesView.tsx"), "utf8");
