@@ -1,8 +1,8 @@
 // file: frontend/src/views/GroupsView.tsx
 
-import { Eraser, RotateCcw, ShieldAlert, UserX, Users } from "lucide-react";
+import { ChevronDown, Eraser, RotateCcw, ShieldAlert, Undo2, UserX, Users } from "lucide-react";
 import type React from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import { useToast } from "../components/Toasts";
 import {
@@ -11,12 +11,12 @@ import {
   Button,
   Card,
   Checkbox,
+  ConfirmDialog,
   Disclosure,
   EmptyState,
   Field,
   FilterButton,
   FormActions,
-  IconButton,
   Input,
   MenuItem,
   OverflowMenu,
@@ -25,7 +25,6 @@ import {
   RadioGroup,
   RelativeTime,
   Section,
-  SegmentedControl,
   Select,
   Skeleton,
   SortMenu,
@@ -47,10 +46,21 @@ import type {
   ModerationPolicyVisibility,
 } from "../types";
 import { fill } from "../utils/fill";
+import {
+  buildWarningsExplanation,
+  describePresetPolicy,
+  formatGroupMembers,
+  type ModerationActionCode,
+  moderationActionKey,
+  moderationActionTone,
+  parseWhatsAppMarkdown,
+  shouldWarnPresetReplace,
+} from "../utils/moderationText";
 import { useCommandLabels } from "./commands/shared";
 
 type Tri = "any" | "on" | "off";
 type MediaFilter = "any" | "none" | "block_all" | "custom";
+type TFn = (key: string) => string;
 
 /** Every schema default; a group with no policy behaves exactly like this. */
 const DEFAULT_POLICY: ModerationPolicy = {
@@ -286,6 +296,23 @@ function matchesGroup(group: GroupItem, query: string, filters: GroupFilters): b
   return true;
 }
 
+function ActionFieldLabel({
+  label,
+  action,
+  t,
+}: {
+  label: string;
+  action: ModerationActionCode;
+  t: TFn;
+}) {
+  return (
+    <span className="flex flex-wrap items-center justify-between gap-2">
+      <span>{label}</span>
+      <Badge tone={moderationActionTone(action)}>{t(moderationActionKey(action))}</Badge>
+    </span>
+  );
+}
+
 export const GroupsView: React.FC = () => {
   const { t, language } = useI18n();
   const { toast } = useToast();
@@ -412,11 +439,11 @@ export const GroupsView: React.FC = () => {
   const showToolbar = !loading && !error && groups.length > 0;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <PageHeader
         icon={<Users size={24} />}
         title={
-          <span className="inline-flex items-center gap-2">
+          <span className="inline-flex flex-wrap items-center gap-2">
             {t("groups")}
             <Badge tone="info">{fill(t("groupsCount"), { n: groups.length })}</Badge>
           </span>
@@ -434,7 +461,7 @@ export const GroupsView: React.FC = () => {
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("searchGroups")}
             aria-label={t("searchGroups")}
-            className="min-w-48 flex-1"
+            className="min-w-40 flex-1"
           />
           <SortMenu
             label={t("sort")}
@@ -548,38 +575,15 @@ export const GroupsView: React.FC = () => {
         <>
           <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
             {pageItems.map((group) => (
-              <Disclosure
+              <GroupCard
                 key={group.jid}
-                summary={
-                  <span className="flex items-center gap-3">
-                    <Avatar
-                      src={`/dashboard/api/groups/${encodeURIComponent(group.jid)}/photo`}
-                      name={group.subject || t("unnamedGroup")}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <UserText lines={2} className="block font-bold text-text-main">
-                        {group.subject || t("unnamedGroup")}
-                      </UserText>
-                      <span className="mt-1 flex flex-wrap gap-1.5">
-                        <Badge>
-                          {group.memberCount ?? "—"} {t("thMembers")}
-                        </Badge>
-                        {group.antilink.enabled && <Badge tone="info">{t("thAntiLink")}</Badge>}
-                        {group.antispam.enabled && <Badge tone="ok">{t("antiSpam")}</Badge>}
-                      </span>
-                    </span>
-                  </span>
-                }
-              >
-                <GroupSettings
-                  group={group}
-                  pending={pending.has(group.jid)}
-                  onSave={(patch) => handleUpdate(group.jid, patch)}
-                  onFlagged={(userId, action) => handleFlagged(group.jid, userId, action)}
-                  commands={commands}
-                  prefix={prefix}
-                />
-              </Disclosure>
+                group={group}
+                pending={pending.has(group.jid)}
+                onSave={(patch) => handleUpdate(group.jid, patch)}
+                onFlagged={(userId, action) => handleFlagged(group.jid, userId, action)}
+                commands={commands}
+                prefix={prefix}
+              />
             ))}
           </div>
 
@@ -590,7 +594,7 @@ export const GroupsView: React.FC = () => {
   );
 };
 
-function GroupSettings({
+function GroupCard({
   group,
   pending,
   onSave,
@@ -605,7 +609,122 @@ function GroupSettings({
   commands: CommandItem[];
   prefix: string;
 }) {
-  const { t, language } = useI18n();
+  const { t: tKey, language } = useI18n();
+  const t = tKey as TFn;
+  const [open, setOpen] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
+  const discardRef = useRef<(() => void) | null>(null);
+  const id = useId();
+
+  const handleToggle = () => {
+    if (!open) {
+      setOpen(true);
+      return;
+    }
+    if (dirty) {
+      setConfirmCloseOpen(true);
+      return;
+    }
+    setOpen(false);
+  };
+
+  return (
+    <Card padded={false} className="min-w-0 self-start overflow-hidden">
+      <Button
+        variant="ghost"
+        className="h-auto min-h-12 w-full justify-between gap-3 p-4 text-start"
+        aria-expanded={open}
+        aria-controls={id}
+        id={`${id}-trigger`}
+        onClick={handleToggle}
+      >
+        <span className="flex min-w-0 flex-1 items-center gap-3">
+          <Avatar
+            src={`/dashboard/api/groups/${encodeURIComponent(group.jid)}/photo`}
+            name={group.subject || t("unnamedGroup")}
+          />
+          <span className="min-w-0 flex-1">
+            <UserText lines={2} className="block font-bold text-text-main">
+              {group.subject || t("unnamedGroup")}
+            </UserText>
+            <span className="mt-1 flex flex-wrap gap-1.5">
+              <Badge>{formatGroupMembers(group.memberCount, language, t)}</Badge>
+              {group.antilink.enabled && <Badge tone="info">{t("thAntiLink")}</Badge>}
+              {group.antispam.enabled && <Badge tone="ok">{t("antiSpam")}</Badge>}
+              {dirty && <Badge tone="warn">{t("unsavedChanges")}</Badge>}
+            </span>
+          </span>
+        </span>
+        <ChevronDown
+          size={18}
+          aria-hidden
+          className={`shrink-0 transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
+        />
+      </Button>
+      <section
+        id={id}
+        aria-labelledby={`${id}-trigger`}
+        aria-hidden={!open}
+        inert={!open}
+        className={`grid transition-[grid-template-rows] duration-200 motion-reduce:transition-none ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <div className="border-t border-line p-4">
+            <GroupSettings
+              group={group}
+              pending={pending}
+              onSave={onSave}
+              onFlagged={onFlagged}
+              commands={commands}
+              prefix={prefix}
+              onDirtyChange={setDirty}
+              registerDiscard={(fn) => {
+                discardRef.current = fn;
+              }}
+            />
+          </div>
+        </div>
+      </section>
+      <ConfirmDialog
+        isOpen={confirmCloseOpen}
+        onClose={() => setConfirmCloseOpen(false)}
+        onConfirm={() => {
+          discardRef.current?.();
+          setConfirmCloseOpen(false);
+          setOpen(false);
+        }}
+        title={t("groupUnsavedCloseTitle")}
+        description={t("groupUnsavedCloseBody")}
+        confirmLabel={t("discard")}
+        cancelLabel={t("cancel")}
+        variant="danger"
+      />
+    </Card>
+  );
+}
+
+function GroupSettings({
+  group,
+  pending,
+  onSave,
+  onFlagged,
+  commands,
+  prefix,
+  onDirtyChange,
+  registerDiscard,
+}: {
+  group: GroupItem;
+  pending: boolean;
+  onSave: (patch: Partial<GroupItem>) => Promise<void>;
+  onFlagged: (userId: string, action: "kick" | "clear" | "dismiss") => Promise<void>;
+  commands: CommandItem[];
+  prefix: string;
+  onDirtyChange: (dirty: boolean) => void;
+  registerDiscard: (fn: () => void) => void;
+}) {
+  const { t: tKey, language } = useI18n();
+  const t = tKey as TFn;
   const { permissionLabel, describe } = useCommandLabels();
   const savedPolicy = { ...DEFAULT_POLICY, ...group.moderation_policy } as ModerationPolicy;
   const form = useDirtyForm({
@@ -617,6 +736,9 @@ function GroupSettings({
     welcome: group.welcome_system.messages.join("\n"),
     ...draftFromPolicy(savedPolicy),
   });
+
+  const [customSelected, setCustomSelected] = useState(false);
+  const [undoPolicyDraft, setUndoPolicyDraft] = useState<PolicyDraft | null>(null);
 
   // Progressive disclosure follows the preview's visibility for the draft,
   // falling back to the saved policy's visibility until the preview answers.
@@ -630,15 +752,62 @@ function GroupSettings({
     setPolicyErrors({});
   }, [group.moderation_policy_visibility]);
 
+  const handleDiscard = useCallback(() => {
+    form.revert();
+    setUndoPolicyDraft(null);
+    setCustomSelected(false);
+    setPolicyErrors({});
+  }, [form.revert]);
+
+  useEffect(() => {
+    onDirtyChange(form.dirty);
+  }, [form.dirty, onDirtyChange]);
+
+  useEffect(() => {
+    registerDiscard(handleDiscard);
+  }, [registerDiscard, handleDiscard]);
+
   const fieldVisible = (field: string) => policyVisibility[field] !== false;
   const policyError = (field: string) => policyErrors[field];
 
-  const presetValue = presetOf(policyFromDraft(form.draft));
+  const currentPolicy = useMemo(() => policyFromDraft(form.draft), [form.draft]);
+  const naturalPreset = presetOf(currentPolicy);
+  const presetValue: PresetKey | "custom" = customSelected ? "custom" : naturalPreset;
+
+  const setPolicyField = <K extends keyof typeof form.draft>(
+    key: K,
+    value: (typeof form.draft)[K],
+  ) => {
+    setCustomSelected(false);
+    setUndoPolicyDraft(null);
+    form.setField(key, value);
+  };
+
   const applyPreset = (value: PresetKey | "custom") => {
     // Choosing a preset fills the form and waits for Save; it does not send.
-    if (value === "custom") return;
-    form.setDraft((prev) => ({ ...prev, ...draftFromPolicy(PRESET_POLICIES[value]) }));
+    if (value === "custom") {
+      setCustomSelected(true);
+      return;
+    }
+    const targetPolicy = PRESET_POLICIES[value];
+    if (
+      shouldWarnPresetReplace(currentPolicy, savedPolicy, targetPolicy, naturalPreset === "custom")
+    ) {
+      setUndoPolicyDraft(draftFromPolicy(currentPolicy));
+    } else {
+      setUndoPolicyDraft(null);
+    }
+    setCustomSelected(false);
+    form.setDraft((prev) => ({ ...prev, ...draftFromPolicy(targetPolicy) }));
   };
+
+  const undoPreset = () => {
+    if (!undoPolicyDraft) return;
+    form.setDraft((prev) => ({ ...prev, ...undoPolicyDraft }));
+    setUndoPolicyDraft(null);
+    setCustomSelected(false);
+  };
+
   const toggle = (patch: Partial<GroupItem>) => {
     void onSave(patch).catch(() => {});
   };
@@ -646,9 +815,11 @@ function GroupSettings({
     label: string,
     checked: boolean,
     patch: (value: boolean) => Partial<GroupItem>,
+    description?: string,
   ) => (
     <Toggle
       label={label}
+      description={description}
       checked={checked}
       disabled={pending}
       onChange={(value) => toggle(patch(value))}
@@ -678,10 +849,14 @@ function GroupSettings({
         enabled: Boolean(group.forbidden_words?.enabled),
         count: group.forbidden_words?.count || 0,
       },
-      moderation_policy: policyFromDraft(form.draft),
+      moderation_policy: currentPolicy,
     }),
     [
-      form.draft,
+      currentPolicy,
+      form.draft.domains,
+      form.draft.linkMode,
+      form.draft.spamLimit,
+      form.draft.spamWindow,
       group.antilink.enabled,
       group.antispam.enabled,
       group.media_control,
@@ -717,12 +892,23 @@ function GroupSettings({
   }, [previewKey, language, savedPreview, previewSettings]);
 
   const previewText = livePreview || savedPreview || "";
+  const previewSegments = useMemo(() => {
+    let offset = 0;
+    return parseWhatsAppMarkdown(previewText).map((segment) => {
+      const key = `${offset}:${segment.type}`;
+      offset += segment.text.length;
+      return { ...segment, key };
+    });
+  }, [previewText]);
+  const warningExplanationLines = useMemo(
+    () => buildWarningsExplanation(currentPolicy, t),
+    [currentPolicy, t],
+  );
 
   return (
-    <div className="flex flex-col gap-5">
-      <p className="text-xs text-muted">{t("botAdminHint")}</p>
+    <div className="flex min-w-0 flex-col gap-4">
       <form
-        className="flex flex-col gap-5"
+        className="flex min-w-0 flex-col gap-4"
         onSubmit={(event) => {
           event.preventDefault();
           void form.save(async (draft) => {
@@ -764,6 +950,8 @@ function GroupSettings({
                 moderation_policy: policyPatch as unknown as Partial<ModerationPolicy>,
               });
               setPolicyErrors({});
+              setUndoPolicyDraft(null);
+              setCustomSelected(false);
             } catch (err: any) {
               if (Array.isArray(err?.data?.errors)) setPolicyErrors(errorsByKey(err.data.errors));
               throw err;
@@ -771,14 +959,59 @@ function GroupSettings({
           });
         }}
       >
-        <fieldset disabled={pending} className="flex min-w-0 flex-col gap-5">
-          <Section title={t("rulesAndModeration")}>
+        <fieldset disabled={pending} className="flex min-w-0 flex-col gap-4">
+          <Section title={t("groupModeration")} description={t("botAdminHint")}>
             {onOff(t("thAntiLink"), group.antilink.enabled, (enabled) => ({
               antilink: { ...group.antilink, enabled },
             }))}
+            <Field label={t("linkMode")}>
+              <Select
+                aria-label={t("linkMode")}
+                value={form.draft.linkMode}
+                onChange={(e) => form.setField("linkMode", e.target.value)}
+              >
+                <option value="ALL">{t("linkAll")}</option>
+                <option value="WHITELIST">{t("linkWhitelist")}</option>
+                <option value="BLACKLIST">{t("linkBlacklist")}</option>
+              </Select>
+            </Field>
+            <Field label={t("allowedDomains")}>
+              <Textarea
+                aria-label={t("allowedDomains")}
+                dir="ltr"
+                value={form.draft.domains}
+                onChange={(e) => form.setField("domains", e.target.value)}
+              />
+            </Field>
+
             {onOff(t("antiSpam"), group.antispam.enabled, (enabled) => ({
               antispam: { ...group.antispam, enabled },
             }))}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={t("spamWindow")}>
+                <Input
+                  aria-label={t("spamWindow")}
+                  type="number"
+                  min={1}
+                  max={600}
+                  required
+                  value={form.draft.spamWindow}
+                  onChange={(e) => form.setField("spamWindow", Number(e.target.value))}
+                />
+              </Field>
+              <Field label={t("spamLimit")}>
+                <Input
+                  aria-label={t("spamLimit")}
+                  type="number"
+                  min={2}
+                  max={100}
+                  required
+                  value={form.draft.spamLimit}
+                  onChange={(e) => form.setField("spamLimit", Number(e.target.value))}
+                />
+              </Field>
+            </div>
+
             {onOff(t("forbiddenWords"), Boolean(group.forbidden_words?.enabled), (enabled) => ({
               forbidden_words: {
                 ...group.forbidden_words,
@@ -786,7 +1019,8 @@ function GroupSettings({
                 count: group.forbidden_words?.count || 0,
               },
             }))}
-            <div className="grid grid-cols-1 gap-x-5 sm:grid-cols-2">
+
+            <div className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
               {(
                 [
                   ["image", "blockImages"],
@@ -814,63 +1048,186 @@ function GroupSettings({
                 />
               ))}
             </div>
-            <Field label={t("linkMode")}>
-              <Select
-                aria-label={t("linkMode")}
-                value={form.draft.linkMode}
-                onChange={(e) => form.setField("linkMode", e.target.value)}
-              >
-                <option value="ALL">{t("linkAll")}</option>
-                <option value="WHITELIST">{t("linkWhitelist")}</option>
-                <option value="BLACKLIST">{t("linkBlacklist")}</option>
-              </Select>
-            </Field>
-            <Field label={t("allowedDomains")}>
-              <Textarea
-                aria-label={t("allowedDomains")}
-                dir="ltr"
-                value={form.draft.domains}
-                onChange={(e) => form.setField("domains", e.target.value)}
-              />
-            </Field>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field label={t("spamWindow")}>
-                <Input
-                  aria-label={t("spamWindow")}
-                  type="number"
-                  min={1}
-                  max={600}
-                  required
-                  value={form.draft.spamWindow}
-                  onChange={(e) => form.setField("spamWindow", Number(e.target.value))}
-                />
-              </Field>
-              <Field label={t("spamLimit")}>
-                <Input
-                  aria-label={t("spamLimit")}
-                  type="number"
-                  min={2}
-                  max={100}
-                  required
-                  value={form.draft.spamLimit}
-                  onChange={(e) => form.setField("spamLimit", Number(e.target.value))}
-                />
-              </Field>
-            </div>
-            <p className="text-sm font-bold text-text-main">{t("policyBlockTitle")}</p>
+          </Section>
+
+          <Section title={t("policyBlockTitle")} className="border-t border-line pt-4">
             <Field label={t("policyPreset")}>
-              <SegmentedControl
-                aria-label={t("policyPreset")}
+              <RadioGroup
+                name={`policy-preset-${group.jid}`}
                 value={presetValue}
                 onChange={applyPreset}
                 options={[
-                  { value: "relaxed", label: t("presetRelaxed") },
-                  { value: "standard", label: t("presetStandard") },
-                  { value: "strict", label: t("presetStrict") },
-                  { value: "custom", label: t("presetCustom") },
+                  {
+                    value: "relaxed",
+                    label: t("presetRelaxed"),
+                    description: describePresetPolicy(PRESET_POLICIES.relaxed, t),
+                  },
+                  {
+                    value: "standard",
+                    label: t("presetStandard"),
+                    description: describePresetPolicy(PRESET_POLICIES.standard, t),
+                  },
+                  {
+                    value: "strict",
+                    label: t("presetStrict"),
+                    description: describePresetPolicy(PRESET_POLICIES.strict, t),
+                  },
+                  {
+                    value: "custom",
+                    label: t("presetCustom"),
+                    description: t("presetCustomDesc"),
+                  },
                 ]}
               />
+              {undoPolicyDraft && (
+                <div
+                  role="status"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-text-main"
+                >
+                  <span className="min-w-0 flex-1 text-muted">{t("presetReplacedNotice")}</span>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon={<Undo2 size={14} />}
+                    onClick={undoPreset}
+                  >
+                    {t("presetUndo")}
+                  </Button>
+                </div>
+              )}
             </Field>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {fieldVisible("features.antilink") && (
+                <Field
+                  label={
+                    <ActionFieldLabel
+                      label={t("policyLinkLabel")}
+                      action={form.draft.policyLinkAction ?? "WARN"}
+                      t={t}
+                    />
+                  }
+                  error={policyError("features.antilink")}
+                >
+                  <Select
+                    aria-label={t("policyLinkLabel")}
+                    value={form.draft.policyLinkAction ?? "DEFAULT"}
+                    onChange={(e) =>
+                      setPolicyField(
+                        "policyLinkAction",
+                        e.target.value === "DEFAULT"
+                          ? null
+                          : (e.target.value as "DELETE" | "WARN" | "KICK"),
+                      )
+                    }
+                  >
+                    <option value="DEFAULT">{t("moderationActionDefault")}</option>
+                    <option value="DELETE">{t("moderationActionDelete")}</option>
+                    <option value="WARN">{t("moderationActionWarn")}</option>
+                    <option value="KICK">{t("moderationActionKick")}</option>
+                  </Select>
+                </Field>
+              )}
+              {fieldVisible("features.media") && (
+                <Field
+                  label={
+                    <ActionFieldLabel
+                      label={t("policyMediaLabel")}
+                      action={form.draft.policyMediaAction ?? "WARN"}
+                      t={t}
+                    />
+                  }
+                  error={policyError("features.media")}
+                >
+                  <Select
+                    aria-label={t("policyMediaLabel")}
+                    value={form.draft.policyMediaAction ?? "DEFAULT"}
+                    onChange={(e) =>
+                      setPolicyField(
+                        "policyMediaAction",
+                        e.target.value === "DEFAULT"
+                          ? null
+                          : (e.target.value as "DELETE" | "WARN" | "KICK"),
+                      )
+                    }
+                  >
+                    <option value="DEFAULT">{t("moderationActionDefault")}</option>
+                    <option value="DELETE">{t("moderationActionDelete")}</option>
+                    <option value="WARN">{t("moderationActionWarn")}</option>
+                    <option value="KICK">{t("moderationActionKick")}</option>
+                  </Select>
+                </Field>
+              )}
+              {fieldVisible("features.forbidden") && (
+                <Field
+                  label={
+                    <ActionFieldLabel
+                      label={t("policyForbiddenLabel")}
+                      action={form.draft.policyForbiddenAction ?? "WARN"}
+                      t={t}
+                    />
+                  }
+                  error={policyError("features.forbidden")}
+                >
+                  <Select
+                    aria-label={t("policyForbiddenLabel")}
+                    value={form.draft.policyForbiddenAction ?? "DEFAULT"}
+                    onChange={(e) =>
+                      setPolicyField(
+                        "policyForbiddenAction",
+                        e.target.value === "DEFAULT"
+                          ? null
+                          : (e.target.value as "DELETE" | "WARN" | "KICK"),
+                      )
+                    }
+                  >
+                    <option value="DEFAULT">{t("moderationActionDefault")}</option>
+                    <option value="DELETE">{t("moderationActionDelete")}</option>
+                    <option value="WARN">{t("moderationActionWarn")}</option>
+                    <option value="KICK">{t("moderationActionKick")}</option>
+                  </Select>
+                </Field>
+              )}
+              {fieldVisible("features.antispam") && (
+                <Field
+                  label={
+                    <ActionFieldLabel
+                      label={t("policySpamLabel")}
+                      action={form.draft.policySpamAction ?? "WARN"}
+                      t={t}
+                    />
+                  }
+                  error={policyError("features.antispam")}
+                >
+                  <Select
+                    aria-label={t("policySpamLabel")}
+                    value={form.draft.policySpamAction ?? "DEFAULT"}
+                    onChange={(e) =>
+                      setPolicyField(
+                        "policySpamAction",
+                        e.target.value === "DEFAULT" ? null : (e.target.value as "WARN" | "KICK"),
+                      )
+                    }
+                  >
+                    <option value="DEFAULT">{t("moderationActionDefault")}</option>
+                    <option value="WARN">{t("moderationActionWarn")}</option>
+                    <option value="KICK">{t("moderationActionKick")}</option>
+                  </Select>
+                </Field>
+              )}
+            </div>
+          </Section>
+
+          <Section title={t("warnSectionTitle")} className="border-t border-line pt-4">
+            <div className="flex flex-col gap-1 rounded-xl border border-line bg-bg p-3 text-xs text-muted">
+              {warningExplanationLines.map((line) => (
+                <p key={line} dir="auto">
+                  {line}
+                </p>
+              ))}
+            </div>
+
             <Field label={t("policyMode")} error={policyError("mode")}>
               <Select
                 aria-label={t("policyMode")}
@@ -878,9 +1235,9 @@ function GroupSettings({
                 onChange={(e) => {
                   const mode: ModerationPolicy["mode"] =
                     e.target.value === "severity" ? "severity" : "simple";
-                  form.setField("policyMode", mode);
+                  setPolicyField("policyMode", mode);
                   if (mode === "severity" && form.draft.policyWhileFlagged === "escalate") {
-                    form.setField("policyWhileFlagged", "record");
+                    setPolicyField("policyWhileFlagged", "record");
                   }
                 }}
               >
@@ -888,6 +1245,7 @@ function GroupSettings({
                 <option value="severity">{t("policyModeSeverity")}</option>
               </Select>
             </Field>
+
             {fieldVisible("limit") && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label={t("warningLimit")} error={policyError("limit")}>
@@ -898,26 +1256,36 @@ function GroupSettings({
                     max={50}
                     required
                     value={form.draft.policyLimit}
-                    onChange={(e) => form.setField("policyLimit", Number(e.target.value))}
+                    onChange={(e) => setPolicyField("policyLimit", Number(e.target.value))}
                   />
                 </Field>
-                <Field label={t("warningAction")} error={policyError("limitAction")}>
+                <Field
+                  label={
+                    <ActionFieldLabel
+                      label={t("warningAction")}
+                      action={form.draft.policyLimitAction}
+                      t={t}
+                    />
+                  }
+                  error={policyError("limitAction")}
+                >
                   <Select
                     aria-label={t("warningAction")}
                     value={form.draft.policyLimitAction}
                     onChange={(e) =>
-                      form.setField(
+                      setPolicyField(
                         "policyLimitAction",
                         e.target.value === "FLAG" ? "FLAG" : "KICK",
                       )
                     }
                   >
-                    <option value="KICK">{t("actionKick")}</option>
+                    <option value="KICK">{t("moderationActionKick")}</option>
                     <option value="FLAG">{t("actionFlag")}</option>
                   </Select>
                 </Field>
               </div>
             )}
+
             {fieldVisible("flagAt") && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label={t("policyFlagAt")} error={policyError("flagAt")}>
@@ -928,10 +1296,13 @@ function GroupSettings({
                     max={49}
                     required
                     value={form.draft.policyFlagAt}
-                    onChange={(e) => form.setField("policyFlagAt", Number(e.target.value))}
+                    onChange={(e) => setPolicyField("policyFlagAt", Number(e.target.value))}
                   />
                 </Field>
-                <Field label={t("policyKickAt")} error={policyError("kickAt")}>
+                <Field
+                  label={<ActionFieldLabel label={t("policyKickAt")} action="KICK" t={t} />}
+                  error={policyError("kickAt")}
+                >
                   <Input
                     aria-label={t("policyKickAt")}
                     type="number"
@@ -939,18 +1310,19 @@ function GroupSettings({
                     max={50}
                     required
                     value={form.draft.policyKickAt}
-                    onChange={(e) => form.setField("policyKickAt", Number(e.target.value))}
+                    onChange={(e) => setPolicyField("policyKickAt", Number(e.target.value))}
                   />
                 </Field>
               </div>
             )}
+
             {fieldVisible("hitMerge") && (
               <Field label={t("policyHitMerge")} error={policyError("hitMerge")}>
                 <Select
                   aria-label={t("policyHitMerge")}
                   value={form.draft.policyHitMerge}
                   onChange={(e) =>
-                    form.setField("policyHitMerge", e.target.value === "sum" ? "sum" : "max")
+                    setPolicyField("policyHitMerge", e.target.value === "sum" ? "sum" : "max")
                   }
                 >
                   <option value="max">{t("policyHitMergeMax")}</option>
@@ -958,8 +1330,9 @@ function GroupSettings({
                 </Select>
               </Field>
             )}
+
             {fieldVisible("weights.antilink") && (
-              <div className="grid grid-cols-1 gap-x-5 gap-y-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label={t("policyWeightLink")} error={policyError("weights.antilink")}>
                   <Input
                     aria-label={t("policyWeightLink")}
@@ -968,7 +1341,7 @@ function GroupSettings({
                     max={10}
                     required
                     value={form.draft.policyWeightLink}
-                    onChange={(e) => form.setField("policyWeightLink", Number(e.target.value))}
+                    onChange={(e) => setPolicyField("policyWeightLink", Number(e.target.value))}
                   />
                 </Field>
                 <Field label={t("policyWeightMedia")} error={policyError("weights.media")}>
@@ -979,7 +1352,7 @@ function GroupSettings({
                     max={10}
                     required
                     value={form.draft.policyWeightMedia}
-                    onChange={(e) => form.setField("policyWeightMedia", Number(e.target.value))}
+                    onChange={(e) => setPolicyField("policyWeightMedia", Number(e.target.value))}
                   />
                 </Field>
                 <Field label={t("policyWeightForbidden")} error={policyError("weights.forbidden")}>
@@ -990,7 +1363,9 @@ function GroupSettings({
                     max={10}
                     required
                     value={form.draft.policyWeightForbidden}
-                    onChange={(e) => form.setField("policyWeightForbidden", Number(e.target.value))}
+                    onChange={(e) =>
+                      setPolicyField("policyWeightForbidden", Number(e.target.value))
+                    }
                   />
                 </Field>
                 <Field label={t("policyWeightSpam")} error={policyError("weights.antispam")}>
@@ -1001,7 +1376,7 @@ function GroupSettings({
                     max={10}
                     required
                     value={form.draft.policyWeightSpam}
-                    onChange={(e) => form.setField("policyWeightSpam", Number(e.target.value))}
+                    onChange={(e) => setPolicyField("policyWeightSpam", Number(e.target.value))}
                   />
                 </Field>
                 <Field label={t("policyWeightManual")} error={policyError("weights.manual")}>
@@ -1012,144 +1387,70 @@ function GroupSettings({
                     max={10}
                     required
                     value={form.draft.policyWeightManual}
-                    onChange={(e) => form.setField("policyWeightManual", Number(e.target.value))}
+                    onChange={(e) => setPolicyField("policyWeightManual", Number(e.target.value))}
                   />
                 </Field>
               </div>
             )}
-            {fieldVisible("features.antilink") && (
-              <Field label={t("policyLinkLabel")} error={policyError("features.antilink")}>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={t("policyDecay")} error={policyError("decay.mode")}>
                 <Select
-                  aria-label={t("policyLinkLabel")}
-                  value={form.draft.policyLinkAction ?? "DEFAULT"}
+                  aria-label={t("policyDecay")}
+                  value={form.draft.policyDecayMode}
                   onChange={(e) =>
-                    form.setField(
-                      "policyLinkAction",
-                      e.target.value === "DEFAULT"
-                        ? null
-                        : (e.target.value as "DELETE" | "WARN" | "KICK"),
+                    setPolicyField(
+                      "policyDecayMode",
+                      e.target.value === "expire"
+                        ? "expire"
+                        : e.target.value === "step"
+                          ? "step"
+                          : "off",
                     )
                   }
                 >
-                  <option value="DEFAULT">{t("policyActionDefault")}</option>
-                  <option value="DELETE">{t("actionDelete")}</option>
-                  <option value="WARN">{t("actionDeleteWarn")}</option>
-                  <option value="KICK">{t("actionDeleteKick")}</option>
+                  <option value="off">{t("policyDecayOff")}</option>
+                  <option value="expire">{t("policyDecayExpire")}</option>
+                  <option value="step">{t("policyDecayStep")}</option>
                 </Select>
               </Field>
-            )}
-            {fieldVisible("features.media") && (
-              <Field label={t("policyMediaLabel")} error={policyError("features.media")}>
+              {fieldVisible("decay.days") && (
+                <Field label={t("policyDecayDays")} error={policyError("decay.days")}>
+                  <Input
+                    aria-label={t("policyDecayDays")}
+                    type="number"
+                    min={1}
+                    max={365}
+                    required
+                    value={form.draft.policyDecayDays}
+                    onChange={(e) => setPolicyField("policyDecayDays", Number(e.target.value))}
+                  />
+                </Field>
+              )}
+              <Field label={t("policyMembership")} error={policyError("membership")}>
                 <Select
-                  aria-label={t("policyMediaLabel")}
-                  value={form.draft.policyMediaAction ?? "DEFAULT"}
+                  aria-label={t("policyMembership")}
+                  value={form.draft.policyMembership}
                   onChange={(e) =>
-                    form.setField(
-                      "policyMediaAction",
-                      e.target.value === "DEFAULT"
-                        ? null
-                        : (e.target.value as "DELETE" | "WARN" | "KICK"),
+                    setPolicyField(
+                      "policyMembership",
+                      e.target.value === "clear" ? "clear" : "keep",
                     )
                   }
                 >
-                  <option value="DEFAULT">{t("policyActionDefault")}</option>
-                  <option value="DELETE">{t("actionDelete")}</option>
-                  <option value="WARN">{t("actionDeleteWarn")}</option>
-                  <option value="KICK">{t("actionDeleteKick")}</option>
+                  <option value="keep">{t("policyMembershipKeep")}</option>
+                  <option value="clear">{t("policyMembershipClear")}</option>
                 </Select>
               </Field>
-            )}
-            {fieldVisible("features.forbidden") && (
-              <Field label={t("policyForbiddenLabel")} error={policyError("features.forbidden")}>
-                <Select
-                  aria-label={t("policyForbiddenLabel")}
-                  value={form.draft.policyForbiddenAction ?? "DEFAULT"}
-                  onChange={(e) =>
-                    form.setField(
-                      "policyForbiddenAction",
-                      e.target.value === "DEFAULT"
-                        ? null
-                        : (e.target.value as "DELETE" | "WARN" | "KICK"),
-                    )
-                  }
-                >
-                  <option value="DEFAULT">{t("policyActionDefault")}</option>
-                  <option value="DELETE">{t("actionDelete")}</option>
-                  <option value="WARN">{t("actionDeleteWarn")}</option>
-                  <option value="KICK">{t("actionDeleteKick")}</option>
-                </Select>
-              </Field>
-            )}
-            {fieldVisible("features.antispam") && (
-              <Field label={t("policySpamLabel")} error={policyError("features.antispam")}>
-                <Select
-                  aria-label={t("policySpamLabel")}
-                  value={form.draft.policySpamAction ?? "DEFAULT"}
-                  onChange={(e) =>
-                    form.setField(
-                      "policySpamAction",
-                      e.target.value === "DEFAULT" ? null : (e.target.value as "WARN" | "KICK"),
-                    )
-                  }
-                >
-                  <option value="DEFAULT">{t("policyActionDefault")}</option>
-                  <option value="WARN">{t("actionWarn")}</option>
-                  <option value="KICK">{t("actionKick")}</option>
-                </Select>
-              </Field>
-            )}
-            <Field label={t("policyDecay")} error={policyError("decay.mode")}>
-              <Select
-                aria-label={t("policyDecay")}
-                value={form.draft.policyDecayMode}
-                onChange={(e) =>
-                  form.setField(
-                    "policyDecayMode",
-                    e.target.value === "expire"
-                      ? "expire"
-                      : e.target.value === "step"
-                        ? "step"
-                        : "off",
-                  )
-                }
-              >
-                <option value="off">{t("policyDecayOff")}</option>
-                <option value="expire">{t("policyDecayExpire")}</option>
-                <option value="step">{t("policyDecayStep")}</option>
-              </Select>
-            </Field>
-            {fieldVisible("decay.days") && (
-              <Field label={t("policyDecayDays")} error={policyError("decay.days")}>
-                <Input
-                  aria-label={t("policyDecayDays")}
-                  type="number"
-                  min={1}
-                  max={365}
-                  required
-                  value={form.draft.policyDecayDays}
-                  onChange={(e) => form.setField("policyDecayDays", Number(e.target.value))}
-                />
-              </Field>
-            )}
-            <Field label={t("policyMembership")} error={policyError("membership")}>
-              <Select
-                aria-label={t("policyMembership")}
-                value={form.draft.policyMembership}
-                onChange={(e) =>
-                  form.setField("policyMembership", e.target.value === "clear" ? "clear" : "keep")
-                }
-              >
-                <option value="keep">{t("policyMembershipKeep")}</option>
-                <option value="clear">{t("policyMembershipClear")}</option>
-              </Select>
-            </Field>
+            </div>
+
             {fieldVisible("flag.notify") && (
               <Field label={t("policyFlagNotify")} error={policyError("flag.notify")}>
                 <Select
                   aria-label={t("policyFlagNotify")}
                   value={form.draft.policyNotify}
                   onChange={(e) =>
-                    form.setField("policyNotify", e.target.value === "silent" ? "silent" : "group")
+                    setPolicyField("policyNotify", e.target.value === "silent" ? "silent" : "group")
                   }
                 >
                   <option value="group">{t("policyNotifyGroup")}</option>
@@ -1162,7 +1463,7 @@ function GroupSettings({
                 label={t("policyMentionAdmins")}
                 checked={form.draft.policyMentionAdmins}
                 disabled={pending}
-                onChange={(event) => form.setField("policyMentionAdmins", event.target.checked)}
+                onChange={(event) => setPolicyField("policyMentionAdmins", event.target.checked)}
               />
             )}
             {fieldVisible("flag.cooldownMinutes") && (
@@ -1178,7 +1479,7 @@ function GroupSettings({
                   max={10080}
                   required
                   value={form.draft.policyCooldown}
-                  onChange={(e) => form.setField("policyCooldown", Number(e.target.value))}
+                  onChange={(e) => setPolicyField("policyCooldown", Number(e.target.value))}
                 />
               </Field>
             )}
@@ -1194,7 +1495,7 @@ function GroupSettings({
                         : e.target.value === "escalate"
                           ? "escalate"
                           : "record";
-                    form.setField("policyWhileFlagged", value);
+                    setPolicyField("policyWhileFlagged", value);
                   }}
                 >
                   <option value="record">{t("policyWhileFlaggedRecord")}</option>
@@ -1214,10 +1515,13 @@ function GroupSettings({
                   max={50}
                   required
                   value={form.draft.policyEscalateAfter}
-                  onChange={(e) => form.setField("policyEscalateAfter", Number(e.target.value))}
+                  onChange={(e) => setPolicyField("policyEscalateAfter", Number(e.target.value))}
                 />
               </Field>
             )}
+          </Section>
+
+          <Section title={t("rulesAndModeration")} className="border-t border-line pt-4">
             <Field label={t("groupRules")}>
               <Textarea
                 aria-label={t("groupRules")}
@@ -1227,7 +1531,50 @@ function GroupSettings({
                 onChange={(e) => form.setField("rules", e.target.value)}
               />
             </Field>
-            <div className="flex flex-col gap-3">
+
+            <Field label={t("moderationPreview")} description={t("moderationPreviewHint")}>
+              <div
+                dir="auto"
+                className="min-h-10 whitespace-pre-wrap break-words rounded-xl border border-line bg-bg p-3 text-sm text-text-main"
+              >
+                {previewSegments.map((segment) => {
+                  if (segment.type === "bold") {
+                    return (
+                      <strong key={segment.key} className="font-bold">
+                        {segment.text}
+                      </strong>
+                    );
+                  }
+                  if (segment.type === "italic") {
+                    return (
+                      <em key={segment.key} className="italic">
+                        {segment.text}
+                      </em>
+                    );
+                  }
+                  if (segment.type === "strike") {
+                    return (
+                      <del key={segment.key} className="line-through">
+                        {segment.text}
+                      </del>
+                    );
+                  }
+                  if (segment.type === "mono") {
+                    return (
+                      <code
+                        key={segment.key}
+                        className="rounded bg-panel px-1 py-0.5 font-mono text-xs"
+                      >
+                        {segment.text}
+                      </code>
+                    );
+                  }
+                  return <span key={segment.key}>{segment.text}</span>;
+                })}
+              </div>
+            </Field>
+
+            <div className="flex flex-col gap-2">
               <p className="text-sm font-bold text-text-main">{t("flaggedMembers")}</p>
               {(group.flagged_members || []).length === 0 ? (
                 <p className="text-sm text-muted">{t("flaggedEmpty")}</p>
@@ -1236,7 +1583,7 @@ function GroupSettings({
                   {(group.flagged_members || []).map((member: FlaggedMember) => (
                     <li
                       key={member.user_id}
-                      className="flex min-w-0 items-center gap-2 rounded-xl border border-line bg-bg px-3 py-2"
+                      className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-line bg-bg px-3 py-2"
                     >
                       <div className="min-w-0 flex-1">
                         <UserText className="block text-sm font-bold text-text-main">
@@ -1253,14 +1600,17 @@ function GroupSettings({
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
-                        <IconButton
-                          label={t("kickFlagged")}
+                        <Button
+                          variant="danger"
+                          size="sm"
                           icon={<UserX size={16} />}
                           disabled={pending}
                           onClick={() => {
                             void onFlagged(member.user_id, "kick");
                           }}
-                        />
+                        >
+                          {t("moderationActionKick")}
+                        </Button>
                         <OverflowMenu label={t("moreActions")}>
                           <MenuItem
                             icon={<Eraser size={16} />}
@@ -1284,25 +1634,33 @@ function GroupSettings({
                 </ul>
               )}
             </div>
-            <Field label={t("moderationPreview")} description={t("moderationPreviewHint")}>
-              <div
-                dir="auto"
-                className="min-h-10 whitespace-pre-wrap rounded-xl border border-line bg-bg p-3 text-sm text-text-main"
-              >
-                {previewText}
-              </div>
-            </Field>
           </Section>
-          <Section title={t("thWelcome")}>
-            {onOff(t("thWelcome"), group.welcome_system.enabled, (enabled) => ({
+
+          <Section title={t("thWelcome")} className="border-t border-line pt-4">
+            {onOff(t("welcomeToggleLabel"), group.welcome_system.enabled, (enabled) => ({
               welcome_system: { ...group.welcome_system, enabled },
             }))}
             {onOff(
               t("autoApprove"),
               group.join_requests.auto_approve_enabled,
               (auto_approve_enabled) => ({ join_requests: { auto_approve_enabled } }),
+              t("welcomeAutoApproveHint"),
             )}
-            <Field label={t("welcomeMessages")}>
+            <Field
+              label={
+                <span className="flex flex-wrap items-center justify-between gap-2">
+                  <span>{t("welcomeMessages")}</span>
+                  {!group.welcome_system.enabled && (
+                    <Badge tone="warn">{t("welcomeOffNotice")}</Badge>
+                  )}
+                </span>
+              }
+              description={
+                group.welcome_system.enabled
+                  ? t("welcomeMessagesHint")
+                  : `${t("welcomeOffNotice")} — ${t("welcomeMessagesHint")}`
+              }
+            >
               <Textarea
                 aria-label={t("welcomeMessages")}
                 dir="auto"
@@ -1311,12 +1669,13 @@ function GroupSettings({
               />
             </Field>
           </Section>
+
           <FormActions
             dirty={form.dirty}
             saving={pending}
             justSaved={form.status === "saved"}
             error={form.error}
-            onDiscard={form.revert}
+            onDiscard={handleDiscard}
             saveLabel={t("save")}
             discardLabel={t("discard")}
             unsavedLabel={t("unsavedChanges")}
