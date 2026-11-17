@@ -1302,7 +1302,7 @@ the bot does can be changed from it, live:
 
 | Screen | What it changes | Where it lands |
 | --- | --- | --- |
-| Overview | — (counters, uptime, connection) | — |
+| Overview | — (WhatsApp account card: photo, name, number masked until revealed, one status line, Manage session, Start when a linked session is stopped; counters, uptime) | `ConnectedAccountCard` `variant="compact"`, state from `frontend/src/utils/accountCardState.ts` |
 | Connection | **start / stop** the session, QR pairing, **unlink**, restart | `src/core/session.js` |
 | Commands | prefix · aliases · permission · on/off | `bot_settings` via `runtime-config.cjs` |
 | AI & memory | the persona (style and personality) · the `memory/*.md` files | `<data>/ai-persona.md`, `<data>/memory/` |
@@ -1310,7 +1310,8 @@ the bot does can be changed from it, live:
 | Roles | bot owner / admin | `user_metadata` (same path as `!perm`) |
 | Tables | debts · warnings · notes · todos · users · schedules | read-only (schedules can be deleted) |
 | Auto-delete (JSON API; UI later) | keyword rules, counters, opt-in kept copies | `auto_delete_rules` / `auto_delete_log` via `/dashboard/api/auto-delete/*` |
-| Reaction rules (`#reactions`) | global reaction switch; create, edit, delete, enable and disable rules; statuses and the last outcome since start | `reaction_rules` and `reaction:enabled` via `/dashboard/api/reactions*` (`src/automation/manage.js`); outcomes stay in RAM (`src/automation/status.cjs`) |
+| Reaction rules (`#reactions`) | global reaction switch; create, edit, delete, enable and disable rules (any of the 7 message types for Ping; Transcribe is voice-only; legacy `<digits>-<digits>@g.us` group ids are accepted as the chat); statuses and the last outcome since start | `reaction_rules` and `reaction:enabled` via `/dashboard/api/reactions*` (`src/automation/manage.js`); outcomes stay in RAM (`src/automation/status.cjs`) |
+| Levix Plus (`#plus`, crown in the sidebar) | subscription, restore, manage, and the Plus feature tabs (`#plus/<tab>`); shown only where Plus is offered. `#settings/plus` redirects here. In-context `PlusFeatureRow` entries on AI and Commands | `/dashboard/api/plus/*`; state from `usePlusStatus()` + `accessFromStatus()` only |
 | Settings | API keys, model, timezone, delays, thumbnails, port, proxy | `bot_settings` (`setting:*`) |
 | Settings → password | the panel's own password | `bot_settings` (scrypt hash) |
 | Settings → recovery email | verified address for the forgot-password email code | `bot_settings` key `auth:recovery-email`, sealed with `vault.cjs`; masked in the API; never in settings export |
@@ -1497,6 +1498,9 @@ The control panel UI is `frontend/src/components/ui/`. Read `frontend/src/compon
 - MUST lay out with logical CSS (`ms-` / `me-` / `ps-` / `pe-` / `start` / `end`) so Arabic RTL works. NEVER `ml-` / `mr-` / `pl-` / `pr-` / `left-` / `right-` for layout.
 - MUST keep touch targets at least 40px. `IconButton` `label` is required. Menus MUST use `role="menu"` / `role="menuitem"`, arrow keys, `aria-haspopup`, and `aria-expanded`. Dialogs MUST trap focus and return it on close.
 - MUST keep light and dark on the existing theme tokens. MUST keep working inside the Android WebView (`PanelActivity`). No CDN and no new npm dependency for UI.
+- MUST render technical tokens (a command, prefix, timezone id, cron, placeholder, phone number) through `CodeText` (`<bdi dir="ltr">`) so `!help` never reads `help!` in Arabic. An Arabic catalog string that embeds a command wraps it in U+2066 … U+2069; `tests/bidi-command-text.test.mjs` fails on a bare one.
+- NEVER show `err.message`, an API code, JSON or a stack to the user. Use `userErrorMessage(t, err, fallbackKey)` (`frontend/src/utils/userError.ts`) with an action-specific fallback key; `tests/ui-no-raw-keys.test.mjs` fails on `toast(err.message` and similar. `t()` never returns a raw key.
+- MUST decide Levix Plus UI state only from `usePlusStatus()` / `accessFromStatus()` (server answer; unknown states never unlock). Long forms on mobile use `Dialog` `mobileFullscreen` (sticky footer, safe-area padding).
 - MUST render user-entered text (a pack or sticker name, a keyword, a message) through the `UserText` primitive — or with `dir="auto"` where the element cannot take it, such as an `<option>` — never single-line truncated without a `title`. Headings and detail views wrap; dense grid cards and chips may clamp to two lines at most.
 
 ## Configuration
