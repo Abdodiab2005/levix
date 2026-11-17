@@ -1,8 +1,17 @@
 // file: frontend/src/views/commands/shared.ts
 
+import { ApiError } from "../../api/client";
 import { useI18n } from "../../context/I18nContext";
+import type { MessageKey } from "../../i18n/translations";
 import { pickLocalized } from "../../i18n/locale";
 import type { CommandItem, PermissionLevel } from "../../types";
+
+/** A panel-facing sentence. Network failures get the network sentence; never the raw API text. */
+export function commandErrorKey(err: unknown, fallback: MessageKey): MessageKey {
+  if (err instanceof TypeError) return "networkError";
+  if (err instanceof ApiError && err.status === 0) return "networkError";
+  return fallback;
+}
 
 /** What a row can ask the screen to do. The screen owns the API call and the state. */
 export interface CommandActions {
@@ -54,12 +63,12 @@ export function useCommandLabels() {
 
   const permissionLabel = (level: string) => {
     const key = PERMISSION_KEY[level];
-    return key ? t(key) : level;
+    return key ? t(key) : t("commandPermissionUnknown");
   };
 
   const scopeLabel = (chat: string) => {
     const key = SCOPE_KEY[chat];
-    return key ? t(key) : chat;
+    return key ? t(key) : t("commandScopeUnknown");
   };
 
   // Panel language, then English, then Arabic, then the flat field.

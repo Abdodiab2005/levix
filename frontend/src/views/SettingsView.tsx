@@ -31,6 +31,7 @@ import {
   Button,
   Card,
   CardHeader,
+  CodeText,
   ConfirmDialog,
   Dialog,
   Field,
@@ -51,6 +52,7 @@ import {
 import { useI18n } from "../context/I18nContext";
 import { type Language, LOCALES, type translations } from "../i18n/translations";
 import { fill } from "../utils/fill";
+import { timezoneLabel } from "../utils/timezoneLabel";
 import { BackupView } from "./BackupView";
 import { DiagnosticsView } from "./DiagnosticsView";
 import { PlusSettings } from "./settings/PlusSettings";
@@ -505,6 +507,7 @@ export const SettingsView: React.FC = () => {
   const [prefix, setPrefix] = useState<string>("!");
   const [prefixInput, setPrefixInput] = useState<string>("!");
   const [savingPrefix, setSavingPrefix] = useState(false);
+  const livePrefix = prefixInput || prefix;
 
   // Password visibility & changes
   const [currentPassword, setCurrentPassword] = useState("");
@@ -544,6 +547,7 @@ export const SettingsView: React.FC = () => {
   const botLang = useSavedValue(String(settings["bot_language"] || "auto"));
   const aiReplyLang = useSavedValue(String(settings["ai_reply_language"] || "follow_bot"));
   const timezone = useSavedValue(String(settings["bot_timezone"] || "Africa/Cairo"));
+  const zoneLabel = timezoneLabel(timezone.value, language);
   const replyRoute = useSavedValue(String(settings["reply_route"] || "same_chat"));
   const replyChat = useSavedValue(String(settings["reply_route_chat"] || ""));
   const replyOverrides = useSavedValue(String(settings["reply_route_overrides"] || ""));
@@ -776,8 +780,8 @@ export const SettingsView: React.FC = () => {
               actions={
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-semibold text-muted">{t("activePrefix")}:</span>
-                  <Badge tone="info" className="font-mono">
-                    {prefix}
+                  <Badge tone="info">
+                    <CodeText>{prefix}</CodeText>
                   </Badge>
                 </div>
               }
@@ -795,13 +799,13 @@ export const SettingsView: React.FC = () => {
                         label={p}
                         size="md"
                         variant={isCurrent ? "primary" : "secondary"}
-                        className="shrink-0 font-mono"
+                        className="shrink-0"
                         onClick={() => {
                           setPrefixInput(p);
                           handleSavePrefix(p);
                         }}
                       >
-                        {p}
+                        <CodeText>{p}</CodeText>
                       </IconButton>
                     );
                   })}
@@ -838,14 +842,14 @@ export const SettingsView: React.FC = () => {
               <span className="text-xs font-semibold text-muted sm:text-sm">
                 {t("prefixPreview")}
               </span>
-              <Badge tone="info" className="font-mono">
-                <code>{prefixInput || prefix}help</code>
+              <Badge tone="info">
+                <CodeText>{`${livePrefix}help`}</CodeText>
               </Badge>
-              <Badge tone="info" className="font-mono">
-                <code>{prefixInput || prefix}lang ar</code>
+              <Badge tone="info">
+                <CodeText>{`${livePrefix}lang ar`}</CodeText>
               </Badge>
-              <Badge tone="info" className="font-mono">
-                <code>{prefixInput || prefix}sticker</code>
+              <Badge tone="info">
+                <CodeText>{`${livePrefix}sticker`}</CodeText>
               </Badge>
             </div>
           </Card>
@@ -934,28 +938,34 @@ export const SettingsView: React.FC = () => {
                 </Select>
               </SaveField>
 
-              <SaveField
-                label={t("botTimezone")}
-                description={t("botTimezoneDesc")}
-                htmlFor="bot-timezone"
-                dirty={timezone.dirty}
-                saving={timezone.status === "saving"}
-                justSaved={timezone.status === "saved"}
-                error={timezone.error}
-                onSave={() => timezone.save((next) => persistSetting("bot_timezone", next))}
-                onRevert={timezone.revert}
-                {...saveLabels}
-              >
-                <Input
-                  id="bot-timezone"
-                  type="text"
-                  technical
-                  className="font-mono"
-                  placeholder="Africa/Cairo"
-                  value={timezone.value}
-                  onChange={(e) => timezone.setValue(e.target.value)}
-                />
-              </SaveField>
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <SaveField
+                  label={t("botTimezone")}
+                  description={t("botTimezoneDesc")}
+                  htmlFor="bot-timezone"
+                  dirty={timezone.dirty}
+                  saving={timezone.status === "saving"}
+                  justSaved={timezone.status === "saved"}
+                  error={timezone.error}
+                  onSave={() => timezone.save((next) => persistSetting("bot_timezone", next))}
+                  onRevert={timezone.revert}
+                  {...saveLabels}
+                >
+                  <Input
+                    id="bot-timezone"
+                    type="text"
+                    technical
+                    className="font-mono"
+                    placeholder="Africa/Cairo"
+                    value={timezone.value}
+                    onChange={(e) => timezone.setValue(e.target.value)}
+                  />
+                </SaveField>
+                {zoneLabel && <p className="text-sm text-text-main">{zoneLabel}</p>}
+                {timezone.value.trim() && (
+                  <CodeText className="text-xs text-muted">{timezone.value.trim()}</CodeText>
+                )}
+              </div>
             </div>
 
             <form

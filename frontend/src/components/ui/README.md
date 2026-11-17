@@ -6,7 +6,7 @@ Every screen in `frontend/src` is built from this folder. Import from the barrel
 import { Button, IconButton, Card, PageHeader } from "../components/ui";
 ```
 
-Colours come only from the tokens in `frontend/src/index.css` (`bg`, `panel`, `line`, `text-main`, `muted`, `faint`, `brand-*`, `ok`, `warn`, `danger`, `info`). Layout uses logical properties (`ms` / `me` / `ps` / `pe` / `start` / `end`) so Arabic RTL works. Touch targets are at least 40px. New visible strings, including tooltips, go in `i18n/en/dashboard.json` and `i18n/ar/dashboard.json`, then `npm run i18n:build`. `frontend/src/i18n/translations.ts` is generated.
+Colours come only from the tokens in `frontend/src/index.css` (`bg`, `panel`, `line`, `text-main`, `muted`, `faint`, `brand-*`, `ok`, `warn`, `danger`, `info`). Layout uses logical properties (`ms` / `me` / `ps` / `pe` / `start` / `end`) so Arabic RTL works. Touch targets are at least 40px. New visible strings, including tooltips, go in `i18n/en/dashboard.json` and the same key in every required locale (`ar`, `pt-BR`, `es-419`), then `npm run i18n:build`. `frontend/src/i18n/translations.ts` is generated.
 
 `text-white` is the foreground on `primary` and `danger` fills, and the switch thumb is `bg-white`, because those sit on saturated brand / danger tokens in both themes. Do not add any other raw colour.
 
@@ -249,9 +249,18 @@ Both take `value`, `onChange`, `options` (`{ value, label, icon? }`), and `aria-
 />
 ```
 
+### CodeText
+
+A technical token: a command, a prefix, a timezone id, a cron expression, a phone number, or a `{placeholder}`. It renders `<bdi dir="ltr">` in a monospace face so the token keeps its written order inside Arabic RTL. The text is exactly `children` — nothing is reversed or inserted. Set `copy` to add a copy `IconButton` (`copyLabel` is its accessible name). The button calls `navigator.clipboard.writeText` and shows the translated failure when the browser refuses. It does not throw.
+
+```tsx
+<CodeText>{`!help`}</CodeText>
+<CodeText copy copyLabel={t("copyCommand")}>{`${prefix}${command.name}`}</CodeText>
+```
+
 ### UserText
 
-A name or a message the operator typed (a sticker pack, a sticker, a keyword, a chat subject). It sets `dir="auto"` so Arabic, English, and mixed strings each lay out inside both the RTL and the LTR UI, and it wraps with `break-words` instead of cutting words off. Set `lines` (`1`–`3`) for dense cards and chips: the element clamps and, when the child is a string, gets the full text as its `title`. Use it for every user-entered string, or `dir="auto"` when the element already is a primitive (an `<option>`).
+A name or a message the operator typed (a sticker pack, a sticker, a keyword, a chat subject). It sets `dir="auto"` so Arabic, English, and mixed strings each lay out inside both the RTL and the LTR UI, and it wraps with `break-words` instead of cutting words off. Set `lines` (`1`–`3`) for dense cards and chips: the element clamps and, when the child is a string, gets the full text as its `title`. Use it for every user-entered string, or `dir="auto"` when the element already is a primitive (an `<option>`). Commands, prefixes, and other tokens use `CodeText`, not `UserText`.
 
 ```tsx
 <UserText className="font-bold">{pack.name}</UserText>
