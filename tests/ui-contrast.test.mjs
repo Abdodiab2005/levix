@@ -23,7 +23,7 @@ export function parseHex(hex) {
  */
 export function srgbChannelToLinear(c8bit) {
   const c = c8bit / 255;
-  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 }
 
 /**

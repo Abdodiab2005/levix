@@ -74,7 +74,7 @@ section("editor explains STT without disabled message-type checkboxes");
   ok("submit sets the pending guard before the first request", lock >= 0 && lock < firstRequest);
   ok("revision conflict explains how to retain edits", editor.includes('setFormError(t("reactionEditConflict"))'));
   const view = readFileSync(join(viewsDir, "ReactionRulesView.tsx"), "utf8");
-  const conflict = view.match(/const handleConflict = async \(\) => \{[\s\S]*?\n  \};/)?.[0] || "";
+  const conflict = view.match(/const handleConflict = async \(\) => \{[\s\S]*?\n {2}\};/)?.[0] || "";
   ok("save conflict keeps the editor open", conflict.length > 0 && !conflict.includes("setEditorOpen(false)"));
   ok("advanced options use Disclosure", editor.includes("<Disclosure"));
   ok("editor uses the mobile dialog variant", editor.includes('variant="mobileFullscreen"'));

@@ -13,7 +13,6 @@ import {
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { ensurePlusStatus, usePlusStatus } from "../../hooks/usePlusStatus";
-import { type PlusStatus } from "../../utils/plusAccess";
 import {
   createRecoveryRefreshGate,
   recoverPlusPurchases,
