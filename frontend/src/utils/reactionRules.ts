@@ -82,12 +82,12 @@ export interface ReactionDraft {
   originalTypes: ReactionOriginalType[];
   role: ReactionSenderRole;
   senderIds: string[];
-  action: ReactionAction;
+  action: ReactionAction | "";
   destination: ReactionDestinationMode;
   priority: number;
 }
 
-/** Same grapheme / pictographic check as src/automation/rules.cjs:27-38. Hint only. */
+/** Same grapheme / pictographic check as src/automation/rules.cjs. */
 export function isReactionEmoji(value: string): boolean {
   return (
     typeof value === "string" &&
@@ -107,10 +107,10 @@ export function emptyReactionDraft(): ReactionDraft {
     chatName: "",
     emoji: "",
     transitions: ["add"],
-    originalTypes: ["voice"],
+    originalTypes: [...ORIGINAL_TYPES],
     role: "owner",
     senderIds: [],
-    action: "stt",
+    action: "",
     destination: "same_chat",
     priority: PRIORITY_DEFAULT,
   };
@@ -145,16 +145,19 @@ export function draftFromRule(rule: ReactionRule): ReactionDraft {
   return {
     chatJid: typeof rule.chatJid === "string" ? rule.chatJid : "",
     chatName:
-      (typeof rule.chatName === "string" && rule.chatName) ||
-      (typeof rule.chatJid === "string" ? rule.chatJid : ""),
+      typeof rule.chatName === "string" && rule.chatName !== rule.chatJid ? rule.chatName : "",
     emoji: typeof definition?.emoji === "string" ? definition.emoji : "",
     transitions: transitions.length ? transitions : ["add"],
-    originalTypes: originalTypes.length ? originalTypes : ["voice"],
+    originalTypes: originalTypes.length
+      ? originalTypes
+      : action === "stt"
+        ? ["voice"]
+        : [...ORIGINAL_TYPES],
     role: (SENDER_ROLES as readonly string[]).includes(role as string)
       ? (role as ReactionSenderRole)
       : "owner",
     senderIds: stringList(senders?.ids).slice(0, SENDERS_MAX),
-    action: action === "ping" || action === "stt" ? action : "stt",
+    action: action === "ping" || action === "stt" ? action : "",
     destination: mode === "owner_private" || mode === "same_chat" ? mode : "same_chat",
     priority: Number.isInteger(rule.priority) ? rule.priority : PRIORITY_DEFAULT,
   };
@@ -183,11 +186,12 @@ export function displayRuleMeta(rule: ReactionRule): {
 }
 
 export function draftToWrite(draft: ReactionDraft): ReactionRuleWrite {
+  if (!draft.action) throw new Error("REACTION_ACTION_REQUIRED");
   const originalTypes =
     draft.action === "stt" ? (["voice"] as ReactionOriginalType[]) : [...draft.originalTypes];
   const definition: ReactionDefinition = {
     version: 1,
-    emoji: draft.emoji.trim(),
+    emoji: draft.emoji,
     transitions: [...draft.transitions],
     originalTypes,
     senders: {
@@ -215,10 +219,25 @@ export function peerLabel(
 ): string {
   if (!jid) return "";
   const known = names?.get(jid);
-  if (known) return known;
+  if (known && known !== jid) return known;
   const phone = /^(\d+)@s\.whatsapp\.net$/i.exec(jid);
   if (phone) return `+${phone[1]}`;
-  return jid;
+  return "";
+}
+
+/** Client checks run before the read-only server check or any write. */
+export function reactionDraftIssues(draft: ReactionDraft): ReactionIssue[] {
+  const issues: ReactionIssue[] = [];
+  if (!draft.chatJid) issues.push({ field: "chatJid", code: "required" });
+  if (!isReactionEmoji(draft.emoji))
+    issues.push({ field: "definition.emoji", code: draft.emoji ? "invalid" : "required" });
+  if (!draft.action) issues.push({ field: "definition.action", code: "invalid" });
+  if (!draft.transitions.length) issues.push({ field: "definition.transitions", code: "invalid" });
+  if (draft.action !== "stt" && !draft.originalTypes.length)
+    issues.push({ field: "definition.originalTypes", code: "invalid" });
+  if (draft.senderIds.length > SENDERS_MAX)
+    issues.push({ field: "definition.senders.ids", code: "too_many" });
+  return issues;
 }
 
 export function statusTone(code: string): "ok" | "warn" | "danger" | "neutral" {

@@ -12,7 +12,7 @@ export const buttonVariants = {
     primary: "bg-brand-blue text-white shadow-md shadow-brand-blue/20 hover:bg-brand-blue-deep",
     secondary: "border border-line bg-panel-raised text-text-main hover:bg-panel-hover",
     ghost: "text-muted hover:bg-panel-hover hover:text-text-main",
-    danger: "bg-danger text-white shadow-md shadow-danger/20 hover:bg-danger/90",
+    danger: "bg-danger-fill text-white shadow-md shadow-danger/20 hover:bg-danger-fill/90",
   },
   size: {
     sm: "h-10 min-h-10 rounded-lg px-3 text-xs",

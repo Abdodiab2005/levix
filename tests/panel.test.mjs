@@ -262,6 +262,16 @@ try {
     "Arabic when is returned for the panel",
     String(schedulePayload.schedules[0].whenAr || "").includes("الجمعة"),
   );
+  equal(
+    "an unnamed group schedule reports nameSource none",
+    schedulePayload.schedules[0].targetNameSource,
+    "none",
+  );
+  equal(
+    "the legacy Group label stays on that schedule",
+    schedulePayload.schedules[0].targetLabel,
+    "Group",
+  );
 
   res = await http.json("/dashboard/api/schedules", {
     targetJid: "201555555555@s.whatsapp.net",
@@ -276,6 +286,7 @@ try {
   equal("when is English", created.schedule.when, "Daily at 09:00 (Africa/Cairo)");
   equal("whenAr is Arabic", created.schedule.whenAr, "يومياً الساعة 09:00 (Africa/Cairo)");
   equal("picked name is stored as savedName", created.schedule.savedName, "Mona Hassan");
+  equal("a saved name reports nameSource saved", created.schedule.targetNameSource, "saved");
   equal("phone is shown", created.schedule.phone, "+201555555555");
   ok("no LID in the label", !String(created.schedule.targetLabel).includes("@"));
 
@@ -309,6 +320,7 @@ try {
     mona?.id,
     "201555555555@s.whatsapp.net",
   );
+  equal("that contact reports nameSource saved", mona?.nameSource, "saved");
   ok(
     "no recipient id carries the '+' of the phone label",
     recipients.recipients.every((r) => !String(r.id).startsWith("+")),

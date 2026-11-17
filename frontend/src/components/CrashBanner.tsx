@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../utils/userError";
 // file: frontend/src/components/CrashBanner.tsx
 import { AlertTriangle, Trash2, Wrench } from "lucide-react";
 import type React from "react";
@@ -49,7 +50,7 @@ export const CrashBanner: React.FC = () => {
       toast(t("allReportsDeleted"), "success");
       setVisible(false);
     } catch (err: any) {
-      toast(err?.message || "Delete failed", "error");
+      toast(userErrorMessage(t, err, "reportsDeleteError"), "error");
     } finally {
       setDeleting(false);
       setConfirmDelete(false);

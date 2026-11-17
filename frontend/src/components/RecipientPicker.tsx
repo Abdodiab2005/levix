@@ -1,17 +1,22 @@
-import { Search } from "lucide-react";
+import { userErrorMessage } from "../utils/userError";
+import { Check, Search, User, Users } from "lucide-react";
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
 import { ApiError, api } from "../api/client";
 import { useI18n } from "../context/I18nContext";
+import type { MessageKey } from "../i18n/translations";
+import type { DashboardRecipient } from "../types";
+import { fill } from "../utils/fill";
+import {
+  bidiRuns,
+  labelRecipients,
+  recipientMatches,
+  type RecipientParts,
+} from "../utils/recipientLabel";
 import { explainError, stickerErrorKey } from "../utils/stickerErrors";
-import { Badge, Button, Dialog, Input, LoadingState } from "./ui";
+import { Button, Dialog, Input, LoadingState, UserText } from "./ui";
 
-export interface Recipient {
-  id: string;
-  name: string;
-  type: "group" | "contact";
-  phone?: string | null;
-}
+export type Recipient = DashboardRecipient;
 
 interface RecipientPickerProps {
   open: boolean;
@@ -27,6 +32,36 @@ interface RecipientPickerProps {
   emptyText?: string;
 }
 
+export function BidiText({ text, className }: { text: string; className?: string }) {
+  const runs = bidiRuns(text);
+  return (
+    <span dir="auto" className={className}>
+      {runs.map((run) =>
+        run.ltr ? (
+          <bdi key={`ltr:${run.text}`} dir="ltr">
+            {run.text}
+          </bdi>
+        ) : (
+          <span key={`txt:${run.text}`}>{run.text}</span>
+        ),
+      )}
+    </span>
+  );
+}
+
+function KindIcon({ kind }: { kind: RecipientParts["kind"] }) {
+  const Icon = kind === "group" ? Users : User;
+  const tone = kind === "group" ? "bg-brand-blue/10 text-brand-cyan" : "bg-ok/10 text-ok";
+  return (
+    <span
+      className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${tone}`}
+      aria-hidden
+    >
+      <Icon size={18} />
+    </span>
+  );
+}
+
 export const RecipientPicker: React.FC<RecipientPickerProps> = ({
   open,
   busy = false,
@@ -37,7 +72,7 @@ export const RecipientPicker: React.FC<RecipientPickerProps> = ({
   selectedIds,
   emptyText,
 }) => {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [items, setItems] = useState<Recipient[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -55,10 +90,10 @@ export const RecipientPicker: React.FC<RecipientPickerProps> = ({
       })
       .catch((err) => {
         if (cancelled) return;
-        if (err instanceof ApiError && !stickerErrorKey(err.code)) {
-          setError(err.message || t("recipientsLoadFailed"));
-        } else {
+        if (err instanceof ApiError && stickerErrorKey(err.code)) {
           setError(explainError(t, err));
+        } else {
+          setError(userErrorMessage(t, err, "recipientsLoadFailed"));
         }
       })
       .finally(() => {
@@ -71,14 +106,15 @@ export const RecipientPicker: React.FC<RecipientPickerProps> = ({
 
   const shown = useMemo(() => {
     const pool = includeGroups ? items : items.filter((item) => item.type === "contact");
-    const needle = query.trim().toLowerCase();
+    const needle = query.trim();
     if (!needle) return pool;
-    return pool.filter(
-      (item) =>
-        item.name.toLowerCase().includes(needle) ||
-        (item.phone || "").toLowerCase().includes(needle),
-    );
+    return pool.filter((item) => recipientMatches(item, needle));
   }, [includeGroups, items, query]);
+
+  const parts = useMemo(
+    () => labelRecipients(shown, (key) => t(key as MessageKey), language),
+    [shown, language, t],
+  );
 
   return (
     <Dialog
@@ -112,31 +148,44 @@ export const RecipientPicker: React.FC<RecipientPickerProps> = ({
         {!loading && !error && shown.length === 0 && (
           <p className="text-sm text-muted">{emptyText ?? t("noRecipients")}</p>
         )}
-        <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
-          {shown.map((item) => {
+        {!loading && !error && shown.length > 0 && (
+          <p className="text-xs text-muted" aria-live="polite">
+            {fill(t("recipientResultCount"), { count: shown.length })}
+          </p>
+        )}
+        <div className="flex max-h-72 flex-col gap-1 overflow-y-auto">
+          {shown.map((item, index) => {
+            const row = parts[index];
             const selected = selectedIds?.includes(item.id) ?? false;
             return (
               <Button
                 key={item.id}
                 variant="secondary"
                 disabled={busy || selected}
+                aria-pressed={selected}
                 onClick={() => onPick(item.id)}
-                className="h-auto w-full flex-col items-start px-3 py-2.5"
+                className={`h-auto min-h-14 w-full items-center justify-start gap-3 px-3 py-1.5 text-start ${
+                  selected ? "border-brand-blue/40 bg-brand-blue/10" : ""
+                }`}
               >
-                <span className="flex w-full items-center gap-2">
-                  <span dir="auto" className="block min-w-0 flex-1 truncate text-sm font-semibold">
-                    {item.name}
-                  </span>
-                  {selected && <Badge tone="info">{t("contactAdded")}</Badge>}
-                </span>
-                <span className="block w-full text-[11px] font-medium text-muted">
-                  {item.type === "group" ? t("recipientGroup") : t("recipientContact")}
-                  {item.phone ? (
-                    <span dir="ltr" className="ms-2">
-                      {item.phone}
-                    </span>
+                <KindIcon kind={row.kind} />
+                <span className="min-w-0 flex-1">
+                  <UserText lines={1} className="block text-sm font-semibold text-text-main">
+                    {row.title}
+                  </UserText>
+                  {row.subtitle ? (
+                    <BidiText
+                      text={row.subtitle}
+                      className="block truncate text-[11px] text-muted"
+                    />
                   ) : null}
                 </span>
+                {selected && (
+                  <span className="inline-flex shrink-0 items-center text-brand-blue">
+                    <Check size={18} aria-hidden />
+                    <span className="sr-only">{t("contactAdded")}</span>
+                  </span>
+                )}
               </Button>
             );
           })}

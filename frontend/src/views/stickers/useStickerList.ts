@@ -3,7 +3,7 @@ import { api } from "../../api/client";
 import { useToast } from "../../components/Toasts";
 import { useI18n } from "../../context/I18nContext";
 import type { Pack, Sticker } from "../../types";
-import { explainError } from "../../utils/stickerErrors";
+import { explainError } from "./errors";
 
 export const STUDIO_PAGE_SIZE = 24;
 

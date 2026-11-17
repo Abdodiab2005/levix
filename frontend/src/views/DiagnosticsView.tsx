@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../utils/userError";
 // file: frontend/src/views/DiagnosticsView.tsx
 import { AlertTriangle, CheckCircle2, ChevronDown, FileText, Send, Trash2 } from "lucide-react";
 import type React from "react";
@@ -43,11 +44,11 @@ export const DiagnosticsView: React.FC = () => {
         setSent(res.sent || []);
       }
     } catch (err: any) {
-      setError(err?.message || "Failed to load crash reports");
+      setError(userErrorMessage(t, err, "reportsLoadError"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadReports();
@@ -60,7 +61,7 @@ export const DiagnosticsView: React.FC = () => {
       toast(t("reportSentSuccess"), "success");
       await loadReports();
     } catch (err: any) {
-      toast(err?.message || "Send failed", "error");
+      toast(userErrorMessage(t, err, "reportSendError"), "error");
       await loadReports();
     } finally {
       setSendingId(null);
@@ -73,7 +74,7 @@ export const DiagnosticsView: React.FC = () => {
       toast(t("reportDeleteSuccess"), "success");
       await loadReports();
     } catch (err: any) {
-      toast(err?.message || "Delete failed", "error");
+      toast(userErrorMessage(t, err, "reportDeleteError"), "error");
     } finally {
       setReportToDelete(null);
     }
@@ -85,7 +86,7 @@ export const DiagnosticsView: React.FC = () => {
       toast(t("allReportsDeleted"), "success");
       await loadReports();
     } catch (err: any) {
-      toast(err?.message || "Delete all failed", "error");
+      toast(userErrorMessage(t, err, "reportsDeleteError"), "error");
     } finally {
       setConfirmDeleteAll(false);
     }
@@ -160,7 +161,7 @@ export const DiagnosticsView: React.FC = () => {
                       <div className="flex flex-wrap items-center gap-2 min-w-0">
                         <Badge tone="neutral">{report.category}</Badge>
                         <span className="font-mono text-xs sm:text-sm font-bold text-text-main truncate">
-                          {report.error.type}
+                          {t("errorBoundaryTitle")}
                         </span>
                         <RelativeTime value={report.createdAt} className="text-xs text-muted" />
                       </div>
@@ -185,7 +186,7 @@ export const DiagnosticsView: React.FC = () => {
                     </div>
 
                     <p className="text-xs leading-relaxed text-muted select-text">
-                      {report.error.message}
+                      {t("diagnosticsDesc")}
                     </p>
 
                     {report.lastError && (
@@ -193,7 +194,7 @@ export const DiagnosticsView: React.FC = () => {
                         <AlertTriangle size={15} className="shrink-0 mt-0.5" />
                         <div className="min-w-0 flex-1">
                           <span className="font-semibold">{t("reportLastError")}: </span>
-                          <span>{report.lastError}</span>
+                          <span>{userErrorMessage(t, report.lastError, "reportSendError")}</span>
                         </div>
                       </div>
                     )}

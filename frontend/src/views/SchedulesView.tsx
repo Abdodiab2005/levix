@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../utils/userError";
 // file: frontend/src/views/SchedulesView.tsx
 
 import {
@@ -19,6 +20,7 @@ import {
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
+import { BidiText } from "../components/RecipientPicker";
 import type { ViewTab } from "../components/Sidebar";
 import { useToast } from "../components/Toasts";
 import {
@@ -49,7 +51,7 @@ import {
 import { useI18n } from "../context/I18nContext";
 import { intlLocale, pickLocalized } from "../i18n/locale";
 import type { Language, MessageKey } from "../i18n/translations";
-import type { ScheduleItem } from "../types";
+import type { DashboardRecipient, RecipientNameSource, ScheduleItem } from "../types";
 import { fill } from "../utils/fill";
 import {
   canHostUploadForm,
@@ -57,18 +59,19 @@ import {
   pickHostFile,
   uploadHostForm,
 } from "../utils/hostBridge";
+import {
+  formatInstantInZone,
+  labelRecipients,
+  recipientMatches,
+  recipientParts,
+  timezoneLongName,
+  type RecipientLike,
+  type RecipientParts,
+} from "../utils/recipientLabel";
 
 type RepeatKind = "daily" | "weekly" | "monthly" | "hourly";
 
-interface RecipientItem {
-  id: string;
-  name: string;
-  type: "group" | "contact";
-  phone?: string | null;
-  savedName?: string | null;
-  pushName?: string | null;
-  memberCount?: number | null;
-}
+type RecipientItem = DashboardRecipient;
 
 const WEEKDAY_KEYS = [
   "weekdaySun",
@@ -115,26 +118,6 @@ function personName(value?: string | null): string | null {
   return text;
 }
 
-function contactTitle(
-  item: {
-    savedName?: string | null;
-    pushName?: string | null;
-    name?: string | null;
-    phone?: string | null;
-    targetLabel?: string | null;
-  },
-  fallback: string,
-): string {
-  return (
-    personName(item.savedName) ||
-    personName(item.pushName) ||
-    personName(item.name) ||
-    personName(item.targetLabel) ||
-    item.phone ||
-    fallback
-  );
-}
-
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -149,10 +132,7 @@ function joinWeekdayNames(days: number[], t: ScheduleCopy) {
 
 function scheduleWhen(item: ScheduleItem, language: Language): string {
   if (item.whenByLocale) return pickLocalized(item.whenByLocale, language);
-  return pickLocalized(
-    { en: item.when || undefined, ar: item.whenAr || undefined },
-    language,
-  );
+  return pickLocalized({ en: item.when || undefined, ar: item.whenAr || undefined }, language);
 }
 
 function mediaKindLabel(
@@ -223,28 +203,34 @@ interface ScheduleFilters {
 
 const EMPTY_SCHEDULE_FILTERS: ScheduleFilters = { type: "any", delivery: "any", media: "any" };
 
-/** The name a target is best known by, or its phone/JID when there is none. */
-function scheduleTarget(s: ScheduleItem): string {
-  return (
-    personName(s.savedName) ||
-    personName(s.pushName) ||
-    personName(s.targetLabel) ||
-    s.targetPhone ||
-    s.phone ||
-    s.targetJid
-  );
+interface LabeledSchedule {
+  schedule: ScheduleItem;
+  parts: RecipientParts;
+}
+
+function scheduleAsRecipient(s: ScheduleItem): RecipientLike {
+  return {
+    id: s.targetJid,
+    name: s.targetLabel,
+    type: s.targetKind === "group" ? "group" : "contact",
+    phone: s.phone || s.targetPhone,
+    savedName: s.savedName,
+    pushName: s.pushName,
+    nameSource: s.targetNameSource,
+    targetJid: s.targetJid,
+    targetLabel: s.targetLabel,
+    targetKind: s.targetKind,
+    targetPhone: s.targetPhone,
+    targetNameSource: s.targetNameSource,
+  };
 }
 
 function matchesSchedule(s: ScheduleItem, query: string, filters: ScheduleFilters): boolean {
   const needle = query.trim().toLowerCase();
   if (needle) {
+    const target = recipientMatches(scheduleAsRecipient(s), query);
     const haystack = [
       s.message,
-      s.targetLabel,
-      s.savedName,
-      s.pushName,
-      s.phone,
-      s.targetPhone,
       s.when,
       s.whenAr,
       ...(s.whenByLocale ? Object.values(s.whenByLocale) : []),
@@ -252,7 +238,7 @@ function matchesSchedule(s: ScheduleItem, query: string, filters: ScheduleFilter
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
-    if (!haystack.includes(needle)) return false;
+    if (!target && !haystack.includes(needle)) return false;
   }
   if (filters.type !== "any" && s.type !== filters.type) return false;
   if (filters.delivery === "failed" && s.lastDeliveryStatus !== "failed") return false;
@@ -262,23 +248,77 @@ function matchesSchedule(s: ScheduleItem, query: string, filters: ScheduleFilter
   return true;
 }
 
-function sortSchedules(list: ScheduleItem[], sort: ScheduleSort, language: string): ScheduleItem[] {
+function sortLabeled(
+  list: LabeledSchedule[],
+  sort: ScheduleSort,
+  language: string,
+): LabeledSchedule[] {
   const items = [...list];
-  const byTarget = (a: ScheduleItem, b: ScheduleItem) =>
-    scheduleTarget(a).localeCompare(scheduleTarget(b), language, { sensitivity: "base" });
+  const byTarget = (a: LabeledSchedule, b: LabeledSchedule) =>
+    a.parts.title.localeCompare(b.parts.title, language, { sensitivity: "base" }) ||
+    a.parts.subtitle.localeCompare(b.parts.subtitle, language, { sensitivity: "base" });
   if (sort === "oldest") {
-    items.sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0) || byTarget(a, b));
+    items.sort(
+      (a, b) => (a.schedule.createdAt ?? 0) - (b.schedule.createdAt ?? 0) || byTarget(a, b),
+    );
   } else if (sort === "target") {
     items.sort(byTarget);
   } else if (sort === "status") {
-    const rank = (s: ScheduleItem) => (s.lastDeliveryStatus === "failed" ? 0 : 1);
+    const rank = (row: LabeledSchedule) => (row.schedule.lastDeliveryStatus === "failed" ? 0 : 1);
     items.sort(
-      (a, b) => rank(a) - rank(b) || (b.createdAt ?? 0) - (a.createdAt ?? 0) || byTarget(a, b),
+      (a, b) =>
+        rank(a) - rank(b) ||
+        (b.schedule.createdAt ?? 0) - (a.schedule.createdAt ?? 0) ||
+        byTarget(a, b),
     );
   } else {
-    items.sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0) || byTarget(a, b));
+    items.sort(
+      (a, b) => (b.schedule.createdAt ?? 0) - (a.schedule.createdAt ?? 0) || byTarget(a, b),
+    );
   }
   return items;
+}
+
+function TargetBlock({
+  parts,
+  kindLabel,
+  showIcon = true,
+  showKind = false,
+  titleClass = "text-sm font-semibold",
+}: {
+  parts: RecipientParts;
+  kindLabel?: string;
+  showIcon?: boolean;
+  showKind?: boolean;
+  titleClass?: string;
+}) {
+  const Icon = parts.kind === "group" ? Users : User;
+  const tone = parts.kind === "group" ? "bg-brand-blue/10 text-brand-cyan" : "bg-ok/10 text-ok";
+  const numericTitle = parts.title.startsWith("+");
+  return (
+    <span className="inline-flex min-w-0 items-center gap-2">
+      {showIcon ? (
+        <span className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${tone}`}>
+          <Icon size={16} aria-hidden />
+        </span>
+      ) : null}
+      <span className="min-w-0">
+        <UserText
+          lines={1}
+          dir={numericTitle ? "ltr" : "auto"}
+          className={`block text-text-main ${titleClass}`}
+        >
+          {parts.title}
+        </UserText>
+        {parts.subtitle ? (
+          <BidiText text={parts.subtitle} className="block truncate text-[11px] text-muted" />
+        ) : null}
+        {showKind && kindLabel ? (
+          <span className="block text-[11px] font-medium text-muted">{kindLabel}</span>
+        ) : null}
+      </span>
+    </span>
+  );
 }
 
 interface SchedulesViewProps {
@@ -307,7 +347,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [selectedRecipient, setSelectedRecipient] = useState<RecipientItem | null>(null);
   const [searchRecipient, setSearchRecipient] = useState("");
 
-  // New schedule modal state
+  // One-time and recurring inputs both stay in state. Switching type keeps them.
   const [showAddModal, setShowAddModal] = useState(false);
   const [message, setMessage] = useState("");
   const [scheduleType, setScheduleType] = useState<"recurring" | "once">("recurring");
@@ -333,6 +373,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const MEDIA_MAX_MB = 20;
   const isLimitReached = schedules.length >= MAX_SCHEDULES;
 
+  const zoneName = timezoneLongName(timezone || "UTC", intlLocale(language));
+
   const recurrencePreview = useMemo(
     () =>
       previewRecurrence(
@@ -342,11 +384,18 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         dayOfMonth,
         everyHours,
         hourlyMinute,
-        timezone,
+        zoneName,
         t,
       ),
-    [repeatKind, sendTime, weekdays, dayOfMonth, everyHours, hourlyMinute, timezone, t],
+    [repeatKind, sendTime, weekdays, dayOfMonth, everyHours, hourlyMinute, zoneName, t],
   );
+
+  const onceLabel = useMemo(() => {
+    if (!oneOffTime) return null;
+    const ms = new Date(oneOffTime).getTime();
+    if (!Number.isFinite(ms)) return null;
+    return formatInstantInZone(ms, timezone || "UTC", intlLocale(language));
+  }, [oneOffTime, timezone, language]);
 
   const loadSchedules = async () => {
     setLoading(true);
@@ -358,8 +407,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       }
       setError(null);
     } catch (err: any) {
-      setError(err.message);
-      toast(err.message, "error");
+      const message = userErrorMessage(t, err, "schedulesLoadError");
+      setError(message);
+      toast(message, "error");
     } finally {
       setLoading(false);
     }
@@ -386,15 +436,16 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     }
   }, [isConnected, reloadToken]);
 
-  const visible = useMemo(
-    () =>
-      sortSchedules(
-        schedules.filter((s) => matchesSchedule(s, query, filters)),
-        sort,
-        language,
-      ),
-    [schedules, query, filters, sort, language],
-  );
+  const visible = useMemo(() => {
+    const filtered = schedules.filter((s) => matchesSchedule(s, query, filters));
+    const parts = labelRecipients(
+      filtered.map(scheduleAsRecipient),
+      (key) => t(key as MessageKey),
+      language,
+    );
+    const rows = filtered.map((schedule, index) => ({ schedule, parts: parts[index] }));
+    return sortLabeled(rows, sort, language);
+  }, [schedules, query, filters, sort, language, t]);
 
   const resetKey = `${query}|${sort}|${filters.type}|${filters.delivery}|${filters.media}`;
   const { page, pageCount, pageItems, setPage, total } = usePagination(visible, 20, resetKey);
@@ -415,7 +466,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       toast(t("savedSuccessfully"), "success");
       setSchedules((prev) => prev.filter((s) => s.id !== id));
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "scheduleDeleteError"), "error");
     }
   };
 
@@ -429,7 +480,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       toast(t("schedulesRetryTriggered"), "info");
       loadSchedules();
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "scheduleRetryError"), "error");
     }
   };
 
@@ -472,6 +523,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       pushName: null,
       phone,
       type: "contact",
+      nameSource: saved ? "saved" : "phone",
     });
   };
 
@@ -506,7 +558,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       }
       setScheduleMediaHost(picked);
     } catch (err: any) {
-      toast(err?.message || "Could not attach the file", "error");
+      toast(userErrorMessage(t, err, "attachmentError"), "error");
     }
   };
 
@@ -530,25 +582,31 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     );
   };
 
-  const handleCreateSchedule = async () => {
-    if (!selectedRecipient) {
-      toast(t("schedulesSelectRecipient"), "warning");
-      return;
-    }
+  const collectMissing = () => {
+    const items: string[] = [];
+    if (!selectedRecipient) items.push(t("schedulesMissingRecipient"));
     if (!message.trim() && !scheduleMedia && !scheduleMediaHost) {
-      toast(t("schedulesMessageOrFile"), "warning");
-      return;
+      items.push(t("schedulesMissingMessage"));
     }
+    if (scheduleType === "once") {
+      const when = oneOffTime ? new Date(oneOffTime).getTime() : 0;
+      if (!when || when <= Date.now()) items.push(t("schedulesMissingWhen"));
+    } else if (!recurrencePreview) {
+      items.push(t("schedulesMissingRecurrence"));
+    }
+    return items;
+  };
 
-    if (scheduleType === "once" && (!oneOffTime || new Date(oneOffTime).getTime() <= Date.now())) {
-      toast(t("schedulesFutureTime"), "warning");
+  const handleCreateSchedule = async () => {
+    const missing = collectMissing();
+    if (missing.length) {
+      toast(
+        fill(t("schedulesMissingHint"), { items: missing.join(t("schedulesMissingSep")) }),
+        "warning",
+      );
       return;
     }
-
-    if (scheduleType === "recurring" && repeatKind === "weekly" && weekdays.length === 0) {
-      toast(t("weekdayRequired"), "warning");
-      return;
-    }
+    if (!selectedRecipient) return;
 
     setCreating(true);
     const payload: Record<string, unknown> = {
@@ -558,11 +616,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     };
 
     if (selectedRecipient.type === "contact") {
+      const source: RecipientNameSource | undefined = selectedRecipient.nameSource;
       const targetName =
-        personName(selectedRecipient.savedName) || personName(selectedRecipient.name);
-      if (targetName && targetName !== selectedRecipient.phone) {
-        payload.targetName = targetName;
-      }
+        personName(selectedRecipient.savedName) ||
+        (source === "push"
+          ? personName(selectedRecipient.pushName) || personName(selectedRecipient.name)
+          : null) ||
+        (source === "saved" ? personName(selectedRecipient.name) : null);
+      if (targetName && !targetName.startsWith("+")) payload.targetName = targetName;
     }
 
     if (scheduleType === "recurring") {
@@ -606,71 +667,45 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       resetForm();
       loadSchedules();
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "scheduleCreateError"), "error");
     } finally {
       setCreating(false);
     }
   };
 
-  const filteredRecipients = recipients.filter((r) => {
-    const q = searchRecipient.toLowerCase().trim();
-    if (!q) return true;
-    return (
-      r.name.toLowerCase().includes(q) ||
-      Boolean(r.savedName?.toLowerCase().includes(q)) ||
-      Boolean(r.pushName?.toLowerCase().includes(q)) ||
-      Boolean(r.phone?.toLowerCase().includes(q))
-    );
-  });
-
-  const renderContactLines = (
-    item: {
-      type?: string;
-      savedName?: string | null;
-      pushName?: string | null;
-      name?: string | null;
-      phone?: string | null;
-      targetLabel?: string | null;
-      targetKind?: string | null;
-      targetPhone?: string | null;
-      targetJid?: string;
-    },
-    titleClass: string,
-    showIcon = true,
-  ) => {
-    const isGroup =
-      item.type === "group" ||
-      item.targetKind === "group" ||
-      Boolean(item.targetJid?.includes("@g.us"));
-    if (isGroup) {
-      const label =
-        personName(item.name) ||
-        (personName(item.targetLabel) && item.targetLabel !== "Group" ? item.targetLabel : null) ||
-        t("groupFallback");
-      return (
-        <span className="inline-flex items-center gap-1.5 text-brand-cyan min-w-0">
-          {showIcon && <Users size={14} className="shrink-0" />}
-          <span className={`${titleClass} truncate`}>{label}</span>
-        </span>
-      );
+  const filteredRecipients = useMemo(
+    () => recipients.filter((item) => recipientMatches(item, searchRecipient)),
+    [recipients, searchRecipient],
+  );
+  const filteredParts = useMemo(
+    () => labelRecipients(filteredRecipients, (key) => t(key as MessageKey), language),
+    [filteredRecipients, language, t],
+  );
+  const selectedParts = selectedRecipient
+    ? recipientParts(selectedRecipient, (key) => t(key as MessageKey), language)
+    : null;
+  const formMissing = collectMissing();
+  const whenText = scheduleType === "recurring" ? recurrencePreview : onceLabel;
+  const clockLabel = (() => {
+    if (scheduleType === "once") return onceLabel;
+    if (repeatKind === "hourly") {
+      if (!Number.isInteger(hourlyMinute) || hourlyMinute < 0 || hourlyMinute > 59) return null;
+      return fill(t("schedulesLocalTime"), {
+        time: `00:${pad2(hourlyMinute)}`,
+        zone: zoneName,
+      });
     }
-    const phone = item.phone || item.targetPhone || null;
-    const title = contactTitle(item, t("contactFallback"));
-    const showPhone = Boolean(phone && title !== phone);
-    return (
-      <span className="inline-flex items-center gap-1.5 text-ok min-w-0">
-        {showIcon && <User size={14} className="shrink-0" />}
-        <span className="min-w-0">
-          <span className={`${titleClass} truncate block`}>{title}</span>
-          {showPhone && (
-            <span className="block text-[11px] text-muted font-mono" dir="ltr">
-              {phone}
-            </span>
-          )}
-        </span>
-      </span>
-    );
-  };
+    if (!/^\d{1,2}:\d{2}$/.test(sendTime)) return null;
+    const [hour, minute] = sendTime.split(":").map(Number);
+    if (hour > 23 || minute > 59) return null;
+    return fill(t("schedulesLocalTime"), { time: `${pad2(hour)}:${pad2(minute)}`, zone: zoneName });
+  })();
+  const detailParts = detailSchedule
+    ? (visible.find((row) => row.schedule.id === detailSchedule.id)?.parts ??
+      recipientParts(scheduleAsRecipient(detailSchedule), (key) => t(key as MessageKey), language))
+    : null;
+  const kindWord = (kind: RecipientParts["kind"]) =>
+    kind === "group" ? t("recipientGroup") : t("recipientContact");
 
   return (
     <div className="flex flex-col gap-5 sm:gap-6">
@@ -868,35 +903,23 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       {!loading && !error && visible.length > 0 && (
         <>
           <div className="grid grid-cols-1 gap-3 md:hidden">
-            {pageItems.map((s) => (
+            {pageItems.map(({ schedule: s, parts }) => (
               <Card key={s.id} className="flex flex-col gap-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex min-w-0 items-start gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-cyan">
-                      {s.targetKind === "group" || s.targetJid.includes("@g.us") ? (
-                        <Users size={18} />
-                      ) : (
-                        <User size={18} />
-                      )}
+                    <div
+                      className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${
+                        parts.kind === "group"
+                          ? "bg-brand-blue/10 text-brand-cyan"
+                          : "bg-ok/10 text-ok"
+                      }`}
+                    >
+                      {parts.kind === "group" ? <Users size={18} /> : <User size={18} />}
                     </div>
                     <div className="min-w-0">
-                      <bdi>
-                        {renderContactLines(
-                          {
-                            targetJid: s.targetJid,
-                            targetKind: s.targetKind,
-                            targetLabel: s.targetLabel,
-                            targetPhone: s.targetPhone,
-                            savedName: s.savedName,
-                            pushName: s.pushName,
-                            phone: s.phone,
-                          },
-                          "text-sm font-bold text-text-main",
-                          false,
-                        )}
-                      </bdi>
+                      <TargetBlock parts={parts} showIcon={false} titleClass="text-sm font-bold" />
                       <p className="mt-0.5 truncate text-xs text-muted" dir="auto">
-                        {scheduleWhen(s, language) || s.cronString || "—"}
+                        {scheduleWhen(s, language) || t("schedulesCustomWhen")}
                       </p>
                     </div>
                   </div>
@@ -985,27 +1008,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line/40">
-                  {pageItems.map((s) => (
+                  {pageItems.map(({ schedule: s, parts }) => (
                     <tr
                       key={s.id}
                       onClick={() => setDetailSchedule(s)}
                       className="cursor-pointer transition-colors hover:bg-panel-hover/50"
                     >
                       <td className="px-4 py-4 text-xs text-text-main">
-                        <bdi>
-                          {renderContactLines(
-                            {
-                              targetJid: s.targetJid,
-                              targetKind: s.targetKind,
-                              targetLabel: s.targetLabel,
-                              targetPhone: s.targetPhone,
-                              savedName: s.savedName,
-                              pushName: s.pushName,
-                              phone: s.phone,
-                            },
-                            "font-semibold",
-                          )}
-                        </bdi>
+                        <TargetBlock parts={parts} titleClass="text-xs font-semibold sm:text-sm" />
                       </td>
                       <td className="px-4 py-4 text-xs text-text-main sm:text-sm">
                         <UserText lines={2}>
@@ -1016,7 +1026,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                       </td>
                       <td className="px-4 py-4 text-xs text-muted">
                         <span dir="auto">
-                          {scheduleWhen(s, language) || s.cronString || "—"}
+                          {scheduleWhen(s, language) || t("schedulesCustomWhen")}
                         </span>
                       </td>
                       <td className="px-4 py-4">
@@ -1100,11 +1110,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               variant="primary"
               loading={creating}
               onClick={handleCreateSchedule}
-              disabled={
-                creating ||
-                !selectedRecipient ||
-                (!message.trim() && !scheduleMedia && !scheduleMediaHost)
-              }
+              disabled={creating || formMissing.length > 0}
+              aria-describedby={formMissing.length ? "schedule-missing" : undefined}
             >
               {creating ? t("saving") : t("scheduleAction")}
             </Button>
@@ -1118,20 +1125,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               {t("selectRecipient")} <span className="text-danger">*</span>
             </div>
 
-            {selectedRecipient ? (
-              <div className="flex items-center justify-between p-3 rounded-xl border border-brand-blue/40 bg-brand-blue/10">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-brand-blue/20 text-brand-cyan flex items-center justify-center shrink-0">
-                    {selectedRecipient.type === "group" ? <Users size={16} /> : <User size={16} />}
-                  </div>
-                  <div className="min-w-0">
-                    {renderContactLines(
-                      selectedRecipient,
-                      "text-xs sm:text-sm font-bold text-text-main",
-                      false,
-                    )}
-                  </div>
-                </div>
+            {selectedParts ? (
+              <div className="flex items-center justify-between gap-2 rounded-xl border border-brand-blue/40 bg-brand-blue/10 p-3">
+                <TargetBlock
+                  parts={selectedParts}
+                  showKind
+                  kindLabel={kindWord(selectedParts.kind)}
+                  titleClass="text-sm font-bold"
+                />
                 <IconButton
                   label={t("changeChat")}
                   variant="ghost"
@@ -1170,7 +1171,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   )}
                 </div>
 
-                <div className="max-h-48 overflow-y-auto rounded-xl border border-line bg-panel-raised divide-y divide-line/40">
+                {!loadingRecipients && (
+                  <p className="text-xs text-muted" aria-live="polite">
+                    {fill(t("recipientResultCount"), { count: filteredRecipients.length })}
+                  </p>
+                )}
+                <div className="max-h-72 overflow-y-auto rounded-xl border border-line bg-panel-raised">
                   {loadingRecipients ? (
                     <div className="flex justify-center p-4">
                       <Spinner label={t("loading")} />
@@ -1178,26 +1184,20 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   ) : filteredRecipients.length === 0 ? (
                     <EmptyState className="px-4 py-4" text={t("noRecipientsFound")} />
                   ) : (
-                    filteredRecipients.map((rec) => (
-                      <Button
-                        key={rec.id}
-                        variant="ghost"
-                        onClick={() => setSelectedRecipient(rec)}
-                        className="h-auto w-full justify-between gap-2 rounded-none px-2.5 py-2.5 text-start"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-7 h-7 rounded-lg bg-panel border border-line flex items-center justify-center shrink-0 text-muted">
-                            {rec.type === "group" ? <Users size={14} /> : <User size={14} />}
-                          </div>
-                          <div className="min-w-0">
-                            {renderContactLines(rec, "text-xs font-bold text-text-main", false)}
-                          </div>
-                        </div>
-                        <Badge tone="neutral" className="shrink-0">
-                          {rec.type === "group" ? t("groupFallback") : t("contactFallback")}
-                        </Badge>
-                      </Button>
-                    ))
+                    filteredRecipients.map((rec, index) => {
+                      const row = filteredParts[index];
+                      return (
+                        <Button
+                          key={rec.id}
+                          variant="ghost"
+                          aria-pressed={false}
+                          onClick={() => setSelectedRecipient(rec)}
+                          className="h-auto min-h-14 w-full justify-start gap-2 rounded-none px-2.5 py-1.5 text-start"
+                        >
+                          <TargetBlock parts={row} titleClass="text-sm font-semibold" />
+                        </Button>
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -1320,7 +1320,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 </Field>
               )}
 
-              <p className="text-xs text-text-main/90 bg-bg-soft border border-line rounded-lg px-3 py-2">
+              {clockLabel && scheduleType === "recurring" ? (
+                <p className="text-xs text-muted" dir="auto">
+                  {clockLabel}
+                </p>
+              ) : null}
+              <p className="rounded-lg border border-line bg-bg-soft px-3 py-2 text-xs text-text-main/90">
                 <span className="font-bold text-muted">{t("recurrencePreview")}: </span>
                 <span dir="auto">{recurrencePreview || "—"}</span>
               </p>
@@ -1334,7 +1339,43 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 onChange={(e) => setOneOffTime(e.target.value)}
                 dir="ltr"
               />
+              {clockLabel ? (
+                <p className="mt-1.5 text-xs text-muted" dir="auto">
+                  {clockLabel}
+                </p>
+              ) : null}
             </Field>
+          )}
+
+          {selectedParts && whenText ? (
+            <p
+              className="rounded-lg border border-line bg-bg-soft px-3 py-2 text-xs text-text-main"
+              dir="auto"
+            >
+              <span>{t("schedulesSummaryTo")}</span>{" "}
+              <UserText
+                dir={selectedParts.title.startsWith("+") ? "ltr" : "auto"}
+                className="font-semibold"
+              >
+                {selectedParts.title}
+              </UserText>
+              {selectedParts.subtitle ? (
+                <>
+                  {" "}
+                  <BidiText text={`(${selectedParts.subtitle})`} />
+                </>
+              ) : null}
+              <span>{t("schedulesSummarySep")}</span>
+              <span dir="auto">{whenText}</span>
+            </p>
+          ) : null}
+
+          {formMissing.length > 0 && (
+            <p id="schedule-missing" className="text-xs text-muted" role="status">
+              {fill(t("schedulesMissingHint"), {
+                items: formMissing.join(t("schedulesMissingSep")),
+              })}
+            </p>
           )}
 
           <Field
@@ -1458,21 +1499,15 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         {detailSchedule && (
           <div className="flex flex-col gap-3.5 py-1 text-xs sm:text-sm">
             <DetailRow label={t("thTarget")}>
-              <bdi>
-                {renderContactLines(
-                  {
-                    targetJid: detailSchedule.targetJid,
-                    targetKind: detailSchedule.targetKind,
-                    targetLabel: detailSchedule.targetLabel,
-                    targetPhone: detailSchedule.targetPhone,
-                    savedName: detailSchedule.savedName,
-                    pushName: detailSchedule.pushName,
-                    phone: detailSchedule.phone,
-                  },
-                  "font-semibold",
-                  false,
-                )}
-              </bdi>
+              {detailParts ? (
+                <TargetBlock
+                  parts={detailParts}
+                  showIcon={false}
+                  showKind
+                  kindLabel={kindWord(detailParts.kind)}
+                  titleClass="font-semibold"
+                />
+              ) : null}
             </DetailRow>
             <DetailRow label={t("thMessage")}>
               {detailSchedule.message ? (
@@ -1494,7 +1529,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             )}
             <DetailRow label={t("thSchedule")}>
               <span dir="auto">
-                {scheduleWhen(detailSchedule, language)}
+                {scheduleWhen(detailSchedule, language) || t("schedulesCustomWhen")}
               </span>
             </DetailRow>
             <DetailRow label={t("thType")}>
@@ -1534,7 +1569,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             {detailSchedule.lastError && (
               <DetailRow label={t("detailError")}>
                 <span className="text-danger break-words" dir="auto">
-                  {detailSchedule.lastError}
+                  {userErrorMessage(t, detailSchedule.lastError, "scheduleDeliveryError")}
                 </span>
               </DetailRow>
             )}

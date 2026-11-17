@@ -8,7 +8,7 @@ function invalid() {
 function exactJid(value, userOnly = false) {
   if (
     typeof value !== "string" ||
-    !/^\d{1,30}@(s\.whatsapp\.net|lid|g\.us)$/.test(value) ||
+    !/^(?:\d{1,30}@(s\.whatsapp\.net|lid|g\.us)|\d{1,30}-\d{1,30}@g\.us)$/.test(value) ||
     canonicalJid(value) !== value ||
     (userOnly && value.endsWith("@g.us"))
   )

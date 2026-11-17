@@ -1,7 +1,8 @@
+import { userErrorMessage } from "../../utils/userError";
 import { RotateCcw, Trash2 } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, api } from "../../api/client";
+import { api } from "../../api/client";
 import { useToast } from "../../components/Toasts";
 import {
   Badge,
@@ -31,10 +32,6 @@ interface CopiesPanelProps {
   names: ReadonlyMap<string, string>;
   ruleId: string;
   onRuleIdChange: (ruleId: string) => void;
-}
-
-function failureMessage(err: unknown, fallback: string): string {
-  return err instanceof ApiError && err.message ? err.message : fallback;
 }
 
 export const CopiesPanel: React.FC<CopiesPanelProps> = ({
@@ -77,7 +74,7 @@ export const CopiesPanel: React.FC<CopiesPanelProps> = ({
       })
       .catch((err) => {
         if (seq.current !== token) return;
-        const message = failureMessage(err, t("copiesLoadFailed"));
+        const message = userErrorMessage(t, err, "copiesLoadFailed");
         setError(message);
         toast(message, "error");
       })
@@ -94,7 +91,7 @@ export const CopiesPanel: React.FC<CopiesPanelProps> = ({
       setConfirm(null);
       setReloadToken((value) => value + 1);
     } catch (err) {
-      toast(failureMessage(err, t("copiesLoadFailed")), "error");
+      toast(userErrorMessage(t, err, "copiesClearError"), "error");
     } finally {
       setClearing(false);
     }

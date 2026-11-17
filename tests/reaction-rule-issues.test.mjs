@@ -1,7 +1,11 @@
 import { equal, finish, ok, require, section, throws, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("levix-reaction-rule-issues");
-const { definitionIssues, validateDefinition } = require("./src/automation/rules.cjs");
+const {
+  definitionIssues,
+  validateDefinition,
+  exactJid: ruleJid,
+} = require("./src/automation/rules.cjs");
 const { canonicalJid } = require("./src/messaging/router.cjs");
 
 // Frozen 07b validator from 7a6e532. Keep independent of the new validator.
@@ -270,4 +274,28 @@ equal("valid has no issues", definitionIssues(input).length, 0);
 equal("issues do not mutate input", JSON.stringify(input), before);
 validateDefinition(input).senders.ids.push("1@lid");
 equal("validator still returns a clone", input.senders.ids.length, 0);
+
+section("modern and legacy group chat ids retain strict sender validation");
+for (const chatJid of [
+  "120363000000000001@g.us",
+  "201000000001-1600000000@g.us",
+  `${"1".repeat(30)}-${"2".repeat(30)}@g.us`,
+]) {
+  equal(`chat accepts ${chatJid}`, ruleJid(chatJid), chatJid);
+  throws(`sender rejects ${chatJid}`, () => ruleJid(chatJid, true));
+  ok(
+    `definition rejects group sender ${chatJid}`,
+    definitionIssues(definition({ senders: { role: "any", ids: [chatJid] } })).some(
+      (issue) => issue.field === "definition.senders.ids",
+    ),
+  );
+}
+for (const chatJid of [
+  "201000000001-1600000000@s.whatsapp.net",
+  "1-2-3@g.us",
+  "abc@g.us",
+  `${"1".repeat(31)}-2@g.us`,
+  `1-${"2".repeat(31)}@g.us`,
+])
+  throws(`chat rejects ${chatJid}`, () => ruleJid(chatJid));
 finish();

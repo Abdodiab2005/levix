@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../utils/userError";
 import {
   AlertCircle,
   AlertTriangle,
@@ -33,6 +34,7 @@ import {
   LoadingState,
   PageHeader,
   PasswordInput,
+  PlusFeatureRow,
   SaveField,
   SegmentedControl,
   Select,
@@ -229,7 +231,7 @@ export const AIAssistantView: React.FC = () => {
         setConfiguredKeys(conf);
       }
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "settingsLoadError"), "error");
     } finally {
       setLoading(false);
     }
@@ -245,7 +247,7 @@ export const AIAssistantView: React.FC = () => {
       await api.updateSetting(key, value);
       if (!quiet) toast(t("savedSuccessfully"), "success");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "saveFailed"), "error");
     }
   };
 
@@ -304,14 +306,14 @@ export const AIAssistantView: React.FC = () => {
             fallback: Boolean(res.fallback),
             models: res.models || [],
             cached: Boolean(res.cached),
-            error: res.success ? undefined : res.error?.message,
+            error: res.success ? undefined : userErrorMessage(t, res.error, "aiModelsLoadError"),
           },
         }));
 
         if (!res.live && res.requiresApiKey && forceRefresh) {
           toast(t("connectKeyFirstPrompt"), "info");
         } else if (!res.success && res.error) {
-          toast(res.error.message || "Failed to discover models", "error");
+          toast(userErrorMessage(t, res.error, "aiModelsLoadError"), "error");
         }
       } else if (res && !res.success && res.error) {
         setDiscoveryState((prev) => ({
@@ -321,14 +323,14 @@ export const AIAssistantView: React.FC = () => {
             requiresApiKey: !(hasStoredKey || typedKey),
             fallback: true,
             models: res.models || [],
-            error: res.error?.message,
+            error: userErrorMessage(t, res.error, "aiModelsLoadError"),
           },
         }));
 
-        toast(res.error.message || "Failed to discover models", "error");
+        toast(userErrorMessage(t, res.error, "aiModelsLoadError"), "error");
       }
     } catch (err: any) {
-      if (!cacheOnly) toast(err.message || "Failed to fetch models", "error");
+      if (!cacheOnly) toast(userErrorMessage(t, err, "aiModelsLoadError"), "error");
     } finally {
       setFetchingModels(false);
     }
@@ -397,7 +399,7 @@ export const AIAssistantView: React.FC = () => {
       const persona = res?.persona;
       setPersonaText(typeof persona === "string" ? persona : persona?.body || "");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiPersonaLoadError"), "error");
     } finally {
       setPersonaLoading(false);
     }
@@ -409,7 +411,7 @@ export const AIAssistantView: React.FC = () => {
       toast(t("aiPersonaUpdated"), "success");
       setPersonaModalOpen(false);
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiPersonaSaveError"), "error");
     }
   };
 
@@ -428,7 +430,7 @@ export const AIAssistantView: React.FC = () => {
       );
     } catch (err: any) {
       setMemoryScopes([{ scope: "global", label: "Global memory", entries: 0 }]);
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiMemoryLoadError"), "error");
     }
   };
 
@@ -440,7 +442,7 @@ export const AIAssistantView: React.FC = () => {
       const res = await api.getMemoryFile(scope);
       setMemoryContent(res?.content || "");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiMemoryLoadError"), "error");
     } finally {
       setMemoryLoading(false);
     }
@@ -454,7 +456,7 @@ export const AIAssistantView: React.FC = () => {
       const res = await api.getMemoryFile("global");
       setMemoryContent(res?.content || "");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiMemoryLoadError"), "error");
     } finally {
       setMemoryLoading(false);
     }
@@ -468,7 +470,7 @@ export const AIAssistantView: React.FC = () => {
       loadMemoryFiles();
       setSelectedMemoryFile(null);
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiMemorySaveError"), "error");
     }
   };
 
@@ -481,7 +483,7 @@ export const AIAssistantView: React.FC = () => {
       const res = await api.getAiConversations();
       setConversations(res?.conversations || []);
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiConversationsLoadError"), "error");
     } finally {
       setInspectorLoading(false);
     }
@@ -495,7 +497,7 @@ export const AIAssistantView: React.FC = () => {
       const res = await api.getAiConversation(chatId);
       setConversation(res || null);
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiConversationLoadError"), "error");
     } finally {
       setInspectorLoading(false);
     }
@@ -529,6 +531,12 @@ export const AIAssistantView: React.FC = () => {
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
       <PageHeader icon={<Bot size={20} />} title={t("aiTitle")} description={t("aiSubtitle")} />
+
+      <PlusFeatureRow
+        tab="autoReply"
+        title={t("plusRowAutoReplyTitle")}
+        benefit={t("plusRowAutoReplyBenefit")}
+      />
 
       <Card data-tour="ai-agent">
         <div className="flex min-h-10 items-center justify-between gap-4">

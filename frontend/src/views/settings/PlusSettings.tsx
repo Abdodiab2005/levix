@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../../utils/userError";
 import { ExternalLink, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../../api/client";
@@ -12,9 +13,8 @@ import {
   Toggle,
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
-import { useSocketEvent } from "../../hooks/useSocket";
+import { ensurePlusStatus, usePlusStatus } from "../../hooks/usePlusStatus";
 import {
-  createLatestReader,
   createRecoveryRefreshGate,
   recoverPlusPurchases,
   showsPlusUntil,
@@ -73,11 +73,6 @@ const ERROR_LABELS = {
   network: "plusErrorNetwork",
 } as const;
 
-type PlusStatus = {
-  configured: boolean;
-  entitlement: { state: keyof typeof STATE_LABELS; until: string | null; reason: string | null };
-  extension: { state: keyof typeof EXTENSION_LABELS; id?: string; version?: string };
-};
 type Operation = "subscribe" | "restore" | "refresh" | "toggle" | "manage" | "reload" | "recover";
 type Notice =
   | "plusPaymentPending"
@@ -109,15 +104,13 @@ export function PlusSettings({
 }) {
   const { t, language } = useI18n();
   const android = isAndroidHost();
-  const [status, setStatus] = useState<PlusStatus | null>(null);
+  // One shared reader: the sidebar and the in-context rows use the same copy.
+  const { status, refresh: readStatus, error: statusError } = usePlusStatus();
   const [product, setProduct] = useState<PlusProductResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [productLoading, setProductLoading] = useState(false);
   const [busy, setBusy] = useState<Operation | null>(null);
   const running = useRef(false);
-  const [statusReader] = useState(() =>
-    createLatestReader(() => api.get<PlusStatus>("/plus/status"), setStatus),
-  );
   const [recoveryRequest, setRecoveryRequest] = useState(0);
   const recoveredRequest = useRef(-1);
   const [error, setError] = useState<string | null>(null);
@@ -125,13 +118,21 @@ export function PlusSettings({
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
 
-  const readStatus = useCallback(() => statusReader.read(), [statusReader]);
+  // A read that failed before this page opened is not an error of this page.
+  const staleStatusError = useRef(statusError);
+  useEffect(() => {
+    if (!statusError) {
+      staleStatusError.current = null;
+      return;
+    }
+    if (statusError !== staleStatusError.current) setError(statusError);
+  }, [statusError]);
 
   useEffect(() => {
     let live = true;
     async function load() {
       try {
-        const next = await readStatus();
+        const next = await ensurePlusStatus();
         if (!live) return;
         setLoading(false);
         if (android && next.configured && next.extension.state !== "absent") {
@@ -153,23 +154,10 @@ export function PlusSettings({
     void load();
     return () => {
       live = false;
-      statusReader.cancel();
     };
-  }, [android, readStatus, statusReader]);
+  }, [android]);
 
-  const statusChanged = useCallback(() => {
-    void readStatus().catch((err) => setError(errorCode(err)));
-  }, [readStatus]);
-  useSocketEvent("plus_status", statusChanged);
-  useSocketEvent("connect", statusChanged);
-
-  useEffect(() => {
-    const visible = () => {
-      if (document.visibilityState === "visible") statusChanged();
-    };
-    document.addEventListener("visibilitychange", visible);
-    return () => document.removeEventListener("visibilitychange", visible);
-  }, [statusChanged]);
+  // plus_status, connect and visibilitychange refreshes live in usePlusStatus.
 
   const run = useCallback(
     async (operation: Operation, action: () => Promise<void>) => {
@@ -331,7 +319,9 @@ export function PlusSettings({
   }
 
   const message = error
-    ? t(ERROR_LABELS[error as keyof typeof ERROR_LABELS] || "plusErrorFailed")
+    ? Object.hasOwn(ERROR_LABELS, error)
+      ? t(ERROR_LABELS[error as keyof typeof ERROR_LABELS])
+      : userErrorMessage(t, { data: { error } }, "plusErrorFailed")
     : null;
   if (loading) return <Spinner label={t("loading")} />;
   if (status?.extension.state === "absent")

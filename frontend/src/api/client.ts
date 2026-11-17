@@ -8,6 +8,7 @@ import type {
   ClientDiagnostics,
   CrashReportInput,
   CrashReportItem,
+  DashboardRecipient,
   DiagnosticsObject,
   EditOptions,
   GroupItem,
@@ -32,13 +33,14 @@ import type {
 import type { Language } from "../i18n/translations";
 
 export class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public data?: any,
-  ) {
+  public status: number;
+  public data?: any;
+
+  constructor(status: number, message: string, data?: any) {
     super(message);
     this.name = "ApiError";
+    this.status = status;
+    this.data = data;
   }
 
   get code(): string | undefined {
@@ -356,12 +358,7 @@ export const api = {
     }>(`/ai/conversations/${encodeURIComponent(chatId)}`),
   getRecipients: () =>
     api.get<{
-      recipients: Array<{
-        id: string;
-        name: string;
-        type: "group" | "contact";
-        phone?: string | null;
-      }>;
+      recipients: DashboardRecipient[];
     }>("/recipients"),
   fetchAiModels: (payload?: {
     provider?: string;

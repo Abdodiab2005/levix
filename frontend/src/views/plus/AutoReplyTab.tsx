@@ -20,7 +20,7 @@ import {
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
 import { AutoReplyChatEditor } from "./AutoReplyChatEditor";
-import { plusErrorCode, plusErrorKey, plusGet, plusPut } from "./plusApi";
+import { plusErrorCode, plusErrorMessage, plusGet, plusPut } from "./plusApi";
 import { createWriteQueue } from "./plusUiLogic";
 import {
   type AutoReplyChat,
@@ -49,7 +49,7 @@ export function AutoReplyTab({ onInactive }: { onInactive: () => void }) {
         if (!live) return;
         const code = plusErrorCode(err);
         if (code === "inactive") onInactive();
-        setError(t(plusErrorKey(code)));
+        setError(plusErrorMessage(t, err));
       })
       .finally(() => {
         if (live) setLoading(false);
@@ -106,7 +106,11 @@ function AutoReplyForm({
     }),
     [config.globalPerHour, chatsKey],
   );
-  const form = useDirtyForm<AutoReplyFormData>(savedBaseline);
+  const form = useDirtyForm<AutoReplyFormData>(
+    savedBaseline,
+    "plusExtErrorFailed",
+    plusErrorMessage,
+  );
   const prevBaselineRef = useRef(savedBaseline);
 
   useEffect(() => {
@@ -160,7 +164,7 @@ function AutoReplyForm({
       onSaved(next);
     } catch (err) {
       if (plusErrorCode(err) === "inactive") onInactive();
-      setToggleError(t(plusErrorKey(plusErrorCode(err))));
+      setToggleError(plusErrorMessage(t, err));
     } finally {
       setTogglingEnabled(false);
     }
@@ -181,7 +185,7 @@ function AutoReplyForm({
       onSaved(next);
     } catch (err) {
       if (plusErrorCode(err) === "inactive") onInactive();
-      setToggleError(t(plusErrorKey(plusErrorCode(err))));
+      setToggleError(plusErrorMessage(t, err));
     } finally {
       setTogglingKill(false);
     }
@@ -360,7 +364,7 @@ function AutoReplyForm({
           dirty={form.dirty}
           saving={form.status === "saving"}
           justSaved={form.status === "saved"}
-          error={form.error ? t(plusErrorKey(form.error)) : null}
+          error={form.error}
           onDiscard={form.revert}
           saveLabel={t("save")}
           discardLabel={t("discard")}
