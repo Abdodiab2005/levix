@@ -4,13 +4,9 @@ import {
   Bot,
   ChevronRight,
   Clock,
-  Eye,
-  EyeOff,
   MessageSquare,
-  Play,
   Radio,
   Sliders,
-  Square,
   Terminal,
   Users,
 } from "lucide-react";
@@ -19,23 +15,10 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { ViewTab } from "../components/Sidebar";
 import { useToast } from "../components/Toasts";
-import { Button, Card, IconButton, StatusDot } from "../components/ui";
+import { Button, Card } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 import type { DashboardStats, SessionStatus } from "../types";
-
-/** `201012345678:5@s.whatsapp.net` -> `+20 100 772 9621`, device suffix dropped. */
-const formatLinkedNumber = (id?: string | null): string | null => {
-  if (!id || id.endsWith("@lid")) return null;
-  const digits = id.split("@")[0].split(":")[0].replace(/\D/g, "");
-  if (!digits) return null;
-  if (digits.length === 12) {
-    return `+${digits.slice(0, 2)} ${digits.slice(2, 5)} ${digits.slice(5, 8)} ${digits.slice(8)}`;
-  }
-  if (digits.length === 11) {
-    return `+${digits.slice(0, 1)} ${digits.slice(1, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
-  }
-  return `+${digits}`;
-};
+import { ConnectedAccountCard } from "./ConnectedAccountCard";
 
 interface OverviewViewProps {
   status: SessionStatus | null;
@@ -47,11 +30,26 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
   const { toast } = useToast();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [revealedAccount, setRevealedAccount] = useState<string | null>(null);
-  const numberVisible = Boolean(status?.user?.id && revealedAccount === status.user.id);
-  useEffect(() => {
-    if (status?.state !== "connected") setRevealedAccount(null);
-  }, [status?.state]);
+  const [starting, setStarting] = useState(false);
+
+  const isStartable = Boolean(
+    status && ["idle", "disconnected", "retry_exhausted", "error"].includes(status.state),
+  );
+  const isLinked = Boolean(status?.user?.id || status?.linked);
+  const canQuickStart = isStartable && isLinked;
+
+  const handleStart = async () => {
+    if (!canQuickStart || starting) return;
+    setStarting(true);
+    try {
+      await api.startSession();
+      toast(t("starting"), "info");
+    } catch (err: any) {
+      toast(err.message, "error");
+    } finally {
+      setStarting(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -81,25 +79,6 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
   };
 
   const isConnected = status?.state === "connected";
-  const linkedNumber = formatLinkedNumber(status?.user?.id);
-
-  const handleStart = async () => {
-    try {
-      await api.startSession();
-      toast(t("starting"), "info");
-    } catch (err: any) {
-      toast(err.message, "error");
-    }
-  };
-
-  const handleStop = async () => {
-    try {
-      await api.stopSession();
-      toast(t("stop"), "info");
-    } catch (err: any) {
-      toast(err.message, "error");
-    }
-  };
 
   const quickNavCards: Array<{
     id: ViewTab;
@@ -111,7 +90,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
     {
       id: "connection",
       title: t("connection"),
-      desc: isConnected ? t("connected") : t(status?.state as any, "disconnected"),
+      desc: isConnected ? t("connected") : t("accountCardNotConnected"),
       icon: Radio,
       color: "border-brand-cyan/20 bg-brand-cyan/10 text-brand-cyan",
     },
@@ -166,72 +145,15 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
   ];
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Hero connection card: heading, linked number, then one action row */}
-      <Card className="flex flex-col gap-4">
-        <div className="relative">
-          <div className="min-w-0 pe-6 rtl:ps-6 rtl:pe-0">
-            <h2 className="text-base font-extrabold tracking-tight text-text-main sm:text-lg">
-              {isConnected ? t("connected") : t(status?.state as any, "disconnected")}
-            </h2>
-            {linkedNumber && isConnected ? (
-              <div className="mt-1 flex min-h-10 items-center gap-2">
-                <bdi dir="ltr" className="text-base font-bold text-text-main">
-                  {numberVisible ? linkedNumber : "••• ••• ••••"}
-                </bdi>
-                <IconButton
-                  label={numberVisible ? t("hideNumber") : t("showNumber")}
-                  pressed={numberVisible}
-                  variant="ghost"
-                  icon={numberVisible ? <EyeOff size={18} /> : <Eye size={18} />}
-                  onClick={() =>
-                    setRevealedAccount(numberVisible ? null : status?.user?.id || null)
-                  }
-                />
-              </div>
-            ) : null}
-            <p className="mt-1 text-sm text-muted">
-              {isConnected ? t("activeListening") : t("pausedOrLinking")}
-            </p>
-          </div>
-          <div className="absolute end-0 top-1 rtl:start-0 rtl:end-auto">
-            <StatusDot
-              tone={isConnected ? "ok" : "warn"}
-              label={isConnected ? t("online") : t("offline")}
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          {isConnected ? (
-            <Button
-              variant="danger"
-              icon={<Square size={16} />}
-              onClick={handleStop}
-              className="flex-1 whitespace-nowrap sm:flex-none"
-            >
-              {t("stop")}
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              icon={<Play size={16} />}
-              onClick={handleStart}
-              className="flex-1 whitespace-nowrap sm:flex-none"
-            >
-              {t("start")}
-            </Button>
-          )}
-          <Button
-            variant="secondary"
-            icon={<Radio size={16} />}
-            onClick={() => onNavigate("connection")}
-            className="flex-1 whitespace-nowrap sm:flex-none"
-          >
-            {t("connection")}
-          </Button>
-        </div>
-      </Card>
+    <div className="flex flex-col gap-5 sm:gap-6">
+      {/* The compact account card is the one place Home states the session. */}
+      <ConnectedAccountCard
+        status={status}
+        variant="compact"
+        onManage={() => onNavigate("connection")}
+        onStart={canQuickStart ? handleStart : undefined}
+        starting={starting}
+      />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4" data-tour="overview-stats">
         {statsCards.map((card) => {
