@@ -32,10 +32,7 @@ function resolveMode(input) {
   const commands = input.overrides?.commands;
   const categories = input.overrides?.categories;
   const chosen =
-    commands?.[input.commandName] ||
-    categories?.[input.category] ||
-    input.routeMode ||
-    "same_chat";
+    commands?.[input.commandName] || categories?.[input.category] || input.routeMode || "same_chat";
   return MODES.has(chosen) ? chosen : "same_chat";
 }
 

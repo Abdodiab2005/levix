@@ -135,7 +135,16 @@ try {
     "POST",
     "definition",
   );
-  for (const chatJid of ["", "123", "1:7@lid", "status@broadcast", "1@newsletter", "201000000001-1600000000@s.whatsapp.net", "1-2-3@g.us", "abc@g.us"])
+  for (const chatJid of [
+    "",
+    "123",
+    "1:7@lid",
+    "status@broadcast",
+    "1@newsletter",
+    "201000000001-1600000000@s.whatsapp.net",
+    "1-2-3@g.us",
+    "abc@g.us",
+  ])
     await invalid(`chat ${chatJid}`, "/rules", draft({ chatJid }), "POST", "chatJid");
   for (const priority of [-1, 1001, 1.5, "0", null])
     await invalid(`priority ${priority}`, "/rules", draft({ priority }), "POST", "priority");
@@ -182,7 +191,9 @@ try {
   await invalid(
     "legacy group is not a sender",
     "/rules",
-    draft({ definition: definition({ senders: { role: "any", ids: ["201000000001-1600000000@g.us"] } }) }),
+    draft({
+      definition: definition({ senders: { role: "any", ids: ["201000000001-1600000000@g.us"] } }),
+    }),
     "POST",
     "definition.senders.ids",
   );
@@ -409,16 +420,31 @@ try {
     response = await http.call(prefix);
     equal("legacy reload succeeds", response.status, 200);
     let reloaded = await response.json();
-    equal("legacy reload includes the rule", reloaded.rules.find((item) => item.id === legacyId)?.chatJid, legacyChat);
+    equal(
+      "legacy reload includes the rule",
+      reloaded.rules.find((item) => item.id === legacyId)?.chatJid,
+      legacyChat,
+    );
     equal("creating a rule leaves automation off", reloaded.automation.enabled, false);
-    const edited = draft({ chatJid: legacyChat, priority: 12, definition: definition({ emoji: "❤️", originalTypes: ["text", "image"] }) });
+    const edited = draft({
+      chatJid: legacyChat,
+      priority: 12,
+      definition: definition({ emoji: "❤️", originalTypes: ["text", "image"] }),
+    });
     result = await json(`/rules/${legacyId}`, { ...edited, revision: legacyRule.revision }, "PUT");
     equal("legacy edit succeeds", result.status, 200);
     legacyRule = result.body.rule;
     equal("legacy edit keeps chat", legacyRule.chatJid, legacyChat);
     equal("legacy edit keeps rule off", legacyRule.enabled, false);
-    equal("legacy edit saves chosen types", JSON.stringify(legacyRule.definition.originalTypes), '["text","image"]');
-    result = await json(`/rules/${legacyId}/enabled`, { revision: legacyRule.revision, enabled: true });
+    equal(
+      "legacy edit saves chosen types",
+      JSON.stringify(legacyRule.definition.originalTypes),
+      '["text","image"]',
+    );
+    result = await json(`/rules/${legacyId}/enabled`, {
+      revision: legacyRule.revision,
+      enabled: true,
+    });
     equal("legacy enable succeeds", result.status, 200);
     legacyRule = result.body.rule;
     equal("legacy rule is enabled", legacyRule.enabled, true);
@@ -426,12 +452,22 @@ try {
     ok("legacy status has no invalid-rule warning", !legacyRule.statuses.includes("RULE_INVALID"));
     response = await http.call(prefix);
     reloaded = await response.json();
-    equal("legacy enabled state survives reload", reloaded.rules.find((item) => item.id === legacyId)?.enabled, true);
+    equal(
+      "legacy enabled state survives reload",
+      reloaded.rules.find((item) => item.id === legacyId)?.enabled,
+      true,
+    );
     equal("enabling a rule leaves automation off", reloaded.automation.enabled, false);
-    response = await http.call(`${prefix}/rules/${legacyId}?revision=${legacyRule.revision}`, { method: "DELETE" });
+    response = await http.call(`${prefix}/rules/${legacyId}?revision=${legacyRule.revision}`, {
+      method: "DELETE",
+    });
     equal("legacy delete succeeds", response.status, 200);
     response = await http.call(prefix);
-    equal("legacy deletion survives reload", (await response.json()).rules.some((item) => item.id === legacyId), false);
+    equal(
+      "legacy deletion survives reload",
+      (await response.json()).rules.some((item) => item.id === legacyId),
+      false,
+    );
   }
 
   section("150 rules have no tier cap and unpaired destinations explain refusal");

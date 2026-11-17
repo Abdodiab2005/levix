@@ -22,7 +22,11 @@ export interface PlusStatusState {
 
 function initialState(): PlusStatusState {
   return {
-    available: plusAvailableFrom({ hostConfigured: isPlusConfigured(), status: null, failed: false }),
+    available: plusAvailableFrom({
+      hostConfigured: isPlusConfigured(),
+      status: null,
+      failed: false,
+    }),
     status: null,
     loading: true,
     error: null,
@@ -75,13 +79,15 @@ export function refreshPlusStatus(): Promise<PlusStatus> {
     },
     (err) => {
       if (token === generation) {
+        // A failed refresh keeps the last good answer (the server still
+        // enforces entitlement); only the first read leaves status null.
         set({
-          status: null,
+          status: state.status,
           error: errorCode(err),
           loading: false,
           available: plusAvailableFrom({
             hostConfigured: isPlusConfigured(),
-            status: null,
+            status: state.status,
             failed: true,
             previous: state.available,
           }),

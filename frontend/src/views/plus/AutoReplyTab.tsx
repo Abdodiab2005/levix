@@ -106,7 +106,11 @@ function AutoReplyForm({
     }),
     [config.globalPerHour, chatsKey],
   );
-  const form = useDirtyForm<AutoReplyFormData>(savedBaseline, "plusExtErrorFailed", plusErrorMessage);
+  const form = useDirtyForm<AutoReplyFormData>(
+    savedBaseline,
+    "plusExtErrorFailed",
+    plusErrorMessage,
+  );
   const prevBaselineRef = useRef(savedBaseline);
 
   useEffect(() => {

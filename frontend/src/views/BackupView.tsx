@@ -175,7 +175,9 @@ const ITEM_LABEL_KEYS: Record<string, Key> = {
 };
 
 function knownKey(value: unknown, fallback: string): Key {
-  return (typeof value === "string" && Object.hasOwn(translations.en, value) ? value : fallback) as Key;
+  return (
+    typeof value === "string" && Object.hasOwn(translations.en, value) ? value : fallback
+  ) as Key;
 }
 
 const maxBytes = 16 * 1024 ** 3;
@@ -534,7 +536,9 @@ export function BackupView() {
   );
   const itemLabel = (name: string, fallback = "backupErrorOtherSetting") => {
     const normalized = name.startsWith("setting:") ? name.slice(8) : name;
-    const key = Object.hasOwn(ITEM_LABEL_KEYS, normalized) ? ITEM_LABEL_KEYS[normalized] : undefined;
+    const key = Object.hasOwn(ITEM_LABEL_KEYS, normalized)
+      ? ITEM_LABEL_KEYS[normalized]
+      : undefined;
     return t(key ? knownKey(key, fallback) : (fallback as Key));
   };
   const keyList = (keys: string[]) => (
@@ -718,9 +722,7 @@ export function BackupView() {
         {job && job.kind === "backup" && (
           <p role="status" className="text-sm">
             {fill(t("backupJobProgress"), {
-              phase: t(
-                knownKey(`backupPhase${job.phase}`, "backupPhaseWorking"),
-              ),
+              phase: t(knownKey(`backupPhase${job.phase}`, "backupPhaseWorking")),
               percent: job.totalBytes ? Math.round((job.bytes / job.totalBytes) * 100) : 0,
             })}
           </p>
@@ -803,15 +805,19 @@ export function BackupView() {
             {countList(preview.counts)}
             {keyList(preview.apiKeys)}
             <p className="text-sm">
-              {t(knownKey(
-                ({
-                  match: "backupAccountmatch",
-                  different: "backupAccountdifferent",
-                  "target-unpaired": "backupAccounttargetunpaired",
-                  none: "backupAccountnone",
-                } as const)[preview.account.status],
-                "backupErrorOtherItem",
-              ))}{" "}
+              {t(
+                knownKey(
+                  (
+                    {
+                      match: "backupAccountmatch",
+                      different: "backupAccountdifferent",
+                      "target-unpaired": "backupAccounttargetunpaired",
+                      none: "backupAccountnone",
+                    } as const
+                  )[preview.account.status],
+                  "backupErrorOtherItem",
+                ),
+              )}{" "}
               {preview.account.masked && <UserText as="span">{preview.account.masked}</UserText>}
             </p>
             {planView(preview.plan)}
@@ -843,9 +849,7 @@ export function BackupView() {
         {job && job.kind === "restore" && (
           <p role="status" className="text-sm">
             {fill(t("backupJobProgress"), {
-              phase: t(
-                knownKey(`backupPhase${job.phase}`, "backupPhaseWorking"),
-              ),
+              phase: t(knownKey(`backupPhase${job.phase}`, "backupPhaseWorking")),
               percent: job.totalBytes ? Math.round((job.bytes / job.totalBytes) * 100) : 0,
             })}
           </p>
@@ -896,8 +900,13 @@ export function BackupView() {
           {pending.lastActivation && (
             <p className="text-sm">
               {t("backupActivation")}:{" "}
-              {t(knownKey(`backupActivation${pending.lastActivation.status}`, "backupErrorOtherItem"))} ·{" "}
-              {date(pending.lastActivation.at, stampLocale)}
+              {t(
+                knownKey(
+                  `backupActivation${pending.lastActivation.status}`,
+                  "backupErrorOtherItem",
+                ),
+              )}{" "}
+              · {date(pending.lastActivation.at, stampLocale)}
             </p>
           )}
         </Card>

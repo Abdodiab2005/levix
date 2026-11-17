@@ -224,11 +224,7 @@ export function MessagesTab({ onInactive }: { onInactive: () => void }) {
                     title={open ? undefined : preview || t("plusMessagesNoPreview")}
                     className="text-sm text-text-main"
                   >
-                    {preview ? (
-                      <TemplateBody text={preview} />
-                    ) : (
-                      t("plusMessagesNoPreview")
-                    )}
+                    {preview ? <TemplateBody text={preview} /> : t("plusMessagesNoPreview")}
                   </UserText>
                 </div>
                 {long && (
@@ -238,7 +234,9 @@ export function MessagesTab({ onInactive }: { onInactive: () => void }) {
                     icon={
                       <ChevronDown
                         size={16}
-                        className={open ? "rotate-180 transition-transform" : "transition-transform"}
+                        className={
+                          open ? "rotate-180 transition-transform" : "transition-transform"
+                        }
                       />
                     }
                     onClick={() =>

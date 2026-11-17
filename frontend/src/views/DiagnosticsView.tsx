@@ -194,9 +194,7 @@ export const DiagnosticsView: React.FC = () => {
                         <AlertTriangle size={15} className="shrink-0 mt-0.5" />
                         <div className="min-w-0 flex-1">
                           <span className="font-semibold">{t("reportLastError")}: </span>
-                          <span>
-                            {userErrorMessage(t, report.lastError, "reportSendError")}
-                          </span>
+                          <span>{userErrorMessage(t, report.lastError, "reportSendError")}</span>
                         </div>
                       </div>
                     )}

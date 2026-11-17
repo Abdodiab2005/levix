@@ -19,7 +19,12 @@ import {
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
-import { areaLabelKey, placeholderExplainKey, splitTemplateText, templateCommand } from "../../utils/templateLabels";
+import {
+  areaLabelKey,
+  placeholderExplainKey,
+  splitTemplateText,
+  templateCommand,
+} from "../../utils/templateLabels";
 import { plusDelete, plusErrorCode, plusErrorMessage, plusGet, plusPut } from "./plusApi";
 import { getDraftText, substitutePlaceholders } from "./plusUiLogic";
 import {
@@ -372,10 +377,7 @@ export function TemplateEditor({
           </Field>
           <div className="flex flex-col gap-1.5">
             <p className="text-xs font-bold text-text-main">{t("plusMessagesDefault")}</p>
-            <div
-              dir="auto"
-              className="whitespace-pre-wrap break-words text-sm text-text-main"
-            >
+            <div dir="auto" className="whitespace-pre-wrap break-words text-sm text-text-main">
               {defaultText ? (
                 <TemplateBody text={defaultText} />
               ) : (

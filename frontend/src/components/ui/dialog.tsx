@@ -10,8 +10,7 @@ import { useFocusTrap } from "./focus";
 const dialogVariants = {
   default: {
     overlay: "items-center overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))]",
-    panel:
-      "my-auto max-h-[var(--dialog-max-height)] max-w-[var(--dialog-max-width)] rounded-2xl",
+    panel: "my-auto max-h-[var(--dialog-max-height)] max-w-[var(--dialog-max-width)] rounded-2xl",
     header: "",
   },
   mobileFullscreen: {
@@ -63,9 +62,7 @@ export function Dialog({
   const styles = dialogVariants[variant];
 
   return createPortal(
-    <div
-      className={cn("fixed inset-0 z-50 flex justify-center", styles.overlay)}
-    >
+    <div className={cn("fixed inset-0 z-50 flex justify-center", styles.overlay)}>
       <button
         type="button"
         className="fixed inset-0 cursor-default border-0 bg-black/65 p-0 backdrop-blur-sm"

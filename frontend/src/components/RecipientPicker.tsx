@@ -7,7 +7,12 @@ import { useI18n } from "../context/I18nContext";
 import type { MessageKey } from "../i18n/translations";
 import type { DashboardRecipient } from "../types";
 import { fill } from "../utils/fill";
-import { bidiRuns, labelRecipients, recipientMatches, type RecipientParts } from "../utils/recipientLabel";
+import {
+  bidiRuns,
+  labelRecipients,
+  recipientMatches,
+  type RecipientParts,
+} from "../utils/recipientLabel";
 import { explainError, stickerErrorKey } from "../utils/stickerErrors";
 import { Button, Dialog, Input, LoadingState, UserText } from "./ui";
 

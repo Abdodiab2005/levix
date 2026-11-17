@@ -3,12 +3,12 @@ import { Bot, EyeOff, MessageSquareHeart, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Tabs } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
+import { type PlusFeatureTab, plusHash, plusTabFromHash } from "../../utils/plusAccess";
 import { AutoReplyTab } from "./AutoReplyTab";
 import { MessagesTab } from "./MessagesTab";
 import { PresetsTab } from "./PresetsTab";
-import { VisibilityTab } from "./VisibilityTab";
-import { type PlusFeatureTab, plusTabFromHash } from "../../utils/plusAccess";
 import { readPlusStatus } from "./plusApi";
+import { VisibilityTab } from "./VisibilityTab";
 
 /**
  * Proves the extension is still active before showing anything. Local state
@@ -48,7 +48,13 @@ export function PlusFeaturesView() {
     <div className="flex flex-col gap-4">
       <Tabs
         value={tab}
-        onChange={setTab}
+        onChange={(next) => {
+          setTab(next);
+          // Keep #plus/<tab> in step so a reload or a later hashchange agrees.
+          if (window.location.hash !== plusHash(next)) {
+            window.history.replaceState(null, "", plusHash(next));
+          }
+        }}
         aria-label={t("plusTitle")}
         className="overflow-x-auto no-scrollbar"
         options={[

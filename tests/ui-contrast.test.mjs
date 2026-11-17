@@ -131,10 +131,10 @@ equal("dark theme (:root) --warn is #f59e0b", rootBlock["--warn"], "#f59e0b");
 equal("dark theme (:root) --danger is #f87171", rootBlock["--danger"], "#f87171");
 equal("dark theme (:root) --info is #60a5fa", rootBlock["--info"], "#60a5fa");
 
-equal("light theme ([data-theme=\"light\"]) --ok is #047857", lightBlock["--ok"], "#047857");
-equal("light theme ([data-theme=\"light\"]) --warn is #b45309", lightBlock["--warn"], "#b45309");
-equal("light theme ([data-theme=\"light\"]) --danger is #b91c1c", lightBlock["--danger"], "#b91c1c");
-equal("light theme ([data-theme=\"light\"]) --info is #1d4ed8", lightBlock["--info"], "#1d4ed8");
+equal('light theme ([data-theme="light"]) --ok is #047857', lightBlock["--ok"], "#047857");
+equal('light theme ([data-theme="light"]) --warn is #b45309', lightBlock["--warn"], "#b45309");
+equal('light theme ([data-theme="light"]) --danger is #b91c1c', lightBlock["--danger"], "#b91c1c");
+equal('light theme ([data-theme="light"]) --info is #1d4ed8', lightBlock["--info"], "#1d4ed8");
 
 section("light theme contrast (>= 4.5:1 against panel and panel-raised)");
 for (const surface of surfaces) {

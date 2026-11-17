@@ -11,7 +11,8 @@ import { equal, finish, section } from "./harness.mjs";
 
 const status = (entitlement, extension = "active", configured = true) => ({
   configured,
-  entitlement: entitlement === undefined ? undefined : { state: entitlement, until: null, reason: null },
+  entitlement:
+    entitlement === undefined ? undefined : { state: entitlement, until: null, reason: null },
   extension: extension === undefined ? undefined : { state: extension },
 });
 
@@ -56,25 +57,69 @@ equal("null status, not available", accessFromStatus(null, false), "unavailable"
 
 section("extension states");
 equal("absent extension", accessFromStatus(status("active", "absent"), true), "unavailable");
-equal("absent wins over a subscribed state", accessFromStatus(status("grace", "absent")), "unavailable");
+equal(
+  "absent wins over a subscribed state",
+  accessFromStatus(status("grace", "absent")),
+  "unavailable",
+);
 equal("not configured", accessFromStatus(status("active", "active", false), true), "unavailable");
 equal("available=false wins", accessFromStatus(status("active"), false), "unavailable");
 for (const extension of ["inactive", "incompatible", "disabled", "failed"]) {
-  equal(`subscribed but extension ${extension} stays locked`, accessFromStatus(status("active", extension), true), "locked");
-  equal(`not subscribed, extension ${extension}`, accessFromStatus(status("none", extension), true), "locked");
+  equal(
+    `subscribed but extension ${extension} stays locked`,
+    accessFromStatus(status("active", extension), true),
+    "locked",
+  );
+  equal(
+    `not subscribed, extension ${extension}`,
+    accessFromStatus(status("none", extension), true),
+    "locked",
+  );
 }
-equal("subscribed, extension state missing", accessFromStatus({ configured: true, entitlement: { state: "active" }, extension: {} }, true), "unknown");
-equal("subscribed, unknown extension state", accessFromStatus(status("active", "mystery"), true), "locked");
+equal(
+  "subscribed, extension state missing",
+  accessFromStatus({ configured: true, entitlement: { state: "active" }, extension: {} }, true),
+  "unknown",
+);
+equal(
+  "subscribed, unknown extension state",
+  accessFromStatus(status("active", "mystery"), true),
+  "locked",
+);
 
 section("availability follows the Settings tab rules");
 const absent = status("none", "absent");
 const present = status("none", "inactive");
-equal("host says configured", plusAvailableFrom({ hostConfigured: true, status: null, failed: false }), true);
-equal("host wins over an absent extension", plusAvailableFrom({ hostConfigured: true, status: absent, failed: false }), true);
-equal("nothing known yet", plusAvailableFrom({ hostConfigured: false, status: null, failed: false }), null);
-equal("absent extension", plusAvailableFrom({ hostConfigured: false, status: absent, failed: false }), false);
-equal("present extension", plusAvailableFrom({ hostConfigured: false, status: present, failed: false }), true);
-equal("first read failed", plusAvailableFrom({ hostConfigured: false, status: null, failed: true }), false);
+equal(
+  "host says configured",
+  plusAvailableFrom({ hostConfigured: true, status: null, failed: false }),
+  true,
+);
+equal(
+  "host wins over an absent extension",
+  plusAvailableFrom({ hostConfigured: true, status: absent, failed: false }),
+  true,
+);
+equal(
+  "nothing known yet",
+  plusAvailableFrom({ hostConfigured: false, status: null, failed: false }),
+  null,
+);
+equal(
+  "absent extension",
+  plusAvailableFrom({ hostConfigured: false, status: absent, failed: false }),
+  false,
+);
+equal(
+  "present extension",
+  plusAvailableFrom({ hostConfigured: false, status: present, failed: false }),
+  true,
+);
+equal(
+  "first read failed",
+  plusAvailableFrom({ hostConfigured: false, status: null, failed: true }),
+  false,
+);
 equal(
   "a later failure keeps an earlier yes",
   plusAvailableFrom({ hostConfigured: false, status: null, failed: true, previous: true }),

@@ -92,7 +92,10 @@ export function PlusFeatureRow({ title, benefit, tab, className }: PlusFeatureRo
 
   return (
     <Card
-      className={cn("flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", className)}
+      className={cn(
+        "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+        className,
+      )}
       data-plus-access={access}
     >
       <div className="flex min-w-0 flex-col gap-1.5">

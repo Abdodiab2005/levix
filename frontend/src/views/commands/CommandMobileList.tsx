@@ -62,10 +62,7 @@ export function CommandMobileList({
                   >
                     {permissionLabel(command.permission)}
                   </Badge>
-                  <Badge
-                    tone={command.enabled ? "ok" : "neutral"}
-                    className="whitespace-normal"
-                  >
+                  <Badge tone={command.enabled ? "ok" : "neutral"} className="whitespace-normal">
                     {command.enabled ? t("statusEnabled") : t("statusDisabled")}
                   </Badge>
                 </div>

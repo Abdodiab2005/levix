@@ -8,15 +8,15 @@ import { GuidedTourProvider } from "./components/GuidedTour";
 import { Header } from "./components/Header";
 import { Sidebar, type ViewTab } from "./components/Sidebar";
 import { ToastProvider, useToast } from "./components/Toasts";
+import { Spinner } from "./components/ui";
 import { I18nProvider, useI18n } from "./context/I18nContext";
 import { useSocket } from "./hooks/useSocket";
 import type { SessionState, SessionStatus } from "./types";
-import { initWindowErrorHandlers } from "./utils/errorCapture";
 import { mapSessionToCard } from "./utils/accountCardState";
+import { initWindowErrorHandlers } from "./utils/errorCapture";
 import { legacyPlusRedirect } from "./utils/plusAccess";
 import { AIAssistantView } from "./views/AIAssistantView";
 import { AutoDeleteView } from "./views/autoDelete/AutoDeleteView";
-import { ReactionRulesView } from "./views/reactions/ReactionRulesView";
 import { CommandsView } from "./views/CommandsView";
 import { ConnectionView } from "./views/ConnectionView";
 import { GroupsView } from "./views/GroupsView";
@@ -24,10 +24,11 @@ import { LogsView } from "./views/LogsView";
 import { TermsConsentDialog } from "./views/legal/TermsConsentDialog";
 // Views
 import { OverviewView } from "./views/OverviewView";
+import { ReactionRulesView } from "./views/reactions/ReactionRulesView";
 import { SchedulesView } from "./views/SchedulesView";
 import { SettingsView } from "./views/SettingsView";
-import { PlusSettings } from "./views/settings/PlusSettings";
 import { StickerStudioView } from "./views/StickerStudioView";
+import { PlusSettings } from "./views/settings/PlusSettings";
 
 const VALID_VIEWS: ViewTab[] = [
   "overview",
@@ -58,7 +59,9 @@ function viewFromHash(): ViewTab {
 
 // Levix Plus page. The switch lives with the page because Settings no longer hosts it.
 const PlusPage: React.FC = () => {
-  const [enabled, setEnabled] = useState(true);
+  const { t } = useI18n();
+  // null until the saved value is read, so a toggle can never race the read.
+  const [enabled, setEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -67,13 +70,18 @@ const PlusPage: React.FC = () => {
       .then((res) => {
         if (!live) return;
         const row = res?.settings?.find((s: { key: string }) => s.key === "plus_enabled");
-        if (row) setEnabled(row.value !== false);
+        setEnabled(row ? row.value !== false : true);
       })
-      .catch(() => {});
+      .catch(() => {
+        // Same default Settings used when its read failed: on.
+        if (live) setEnabled(true);
+      });
     return () => {
       live = false;
     };
   }, []);
+
+  if (enabled === null) return <Spinner label={t("loading")} />;
 
   return (
     <PlusSettings

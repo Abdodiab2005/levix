@@ -125,9 +125,7 @@ export function PresetsTab({ onInactive }: { onInactive: () => void }) {
                   <UserText as="p" lines={2} className="text-sm text-text-main">
                     {line.text}
                   </UserText>
-                  <p className="mt-0.5 text-[11px] text-faint">
-                    {t(areaLabelKey(line.key))}
-                  </p>
+                  <p className="mt-0.5 text-[11px] text-faint">{t(areaLabelKey(line.key))}</p>
                 </li>
               ))}
             </ul>

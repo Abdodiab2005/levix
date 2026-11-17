@@ -735,15 +735,18 @@ function GroupSettings({
   const t = tKey as TFn;
   const { permissionLabel, describe } = useCommandLabels();
   const savedPolicy = { ...DEFAULT_POLICY, ...group.moderation_policy } as ModerationPolicy;
-  const form = useDirtyForm({
-    linkMode: group.antilink.mode,
-    domains: group.antilink.allowed_domains.join("\n"),
-    spamWindow: group.antispam.time_window,
-    spamLimit: group.antispam.message_count,
-    rules: group.rules,
-    welcome: group.welcome_system.messages.join("\n"),
-    ...draftFromPolicy(savedPolicy),
-  }, "groupUpdateError");
+  const form = useDirtyForm(
+    {
+      linkMode: group.antilink.mode,
+      domains: group.antilink.allowed_domains.join("\n"),
+      spamWindow: group.antispam.time_window,
+      spamLimit: group.antispam.message_count,
+      rules: group.rules,
+      welcome: group.welcome_system.messages.join("\n"),
+      ...draftFromPolicy(savedPolicy),
+    },
+    "groupUpdateError",
+  );
 
   const [customSelected, setCustomSelected] = useState(false);
   const [undoPolicyDraft, setUndoPolicyDraft] = useState<PolicyDraft | null>(null);
@@ -961,7 +964,8 @@ function GroupSettings({
               setUndoPolicyDraft(null);
               setCustomSelected(false);
             } catch (err: any) {
-              if (Array.isArray(err?.data?.errors)) setPolicyErrors(errorsByKey(t, err.data.errors));
+              if (Array.isArray(err?.data?.errors))
+                setPolicyErrors(errorsByKey(t, err.data.errors));
               throw err;
             }
           });

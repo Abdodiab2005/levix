@@ -112,7 +112,11 @@ function VisibilityForm({
     }),
     [visibility.hideProgress, commandsKey],
   );
-  const form = useDirtyForm<ProgressFormData>(savedBaseline, "plusExtErrorFailed", plusErrorMessage);
+  const form = useDirtyForm<ProgressFormData>(
+    savedBaseline,
+    "plusExtErrorFailed",
+    plusErrorMessage,
+  );
   const prevBaselineRef = useRef(savedBaseline);
 
   useEffect(() => {

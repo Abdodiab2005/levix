@@ -77,10 +77,7 @@ section("the compact card masks the phone by default and uses showNumber/hideNum
     "compact card uses Eye and EyeOff icons",
     accountCard.includes("Eye") && accountCard.includes("EyeOff"),
   );
-  ok(
-    "phone renders LTR-isolated",
-    /as="bdi" dir="ltr"|<bdi dir="ltr"/.test(accountCard),
-  );
+  ok("phone renders LTR-isolated", /as="bdi" dir="ltr"|<bdi dir="ltr"/.test(accountCard));
   ok(
     "revealed state keyed by status.user.id",
     accountCard.includes("revealedAccount === status.user.id"),
@@ -92,7 +89,9 @@ section("the compact card masks the phone by default and uses showNumber/hideNum
   );
 }
 
-section("OverviewView calls api.startSession only behind the startable+linked condition and never calls api.stopSession");
+section(
+  "OverviewView calls api.startSession only behind the startable+linked condition and never calls api.stopSession",
+);
 {
   ok("OverviewView imports ConnectedAccountCard", /from "\.\/ConnectedAccountCard"/.test(overview));
   const use = overview.match(/<ConnectedAccountCard[\s\S]{0,350}?\/>/)?.[0] || "";
@@ -101,10 +100,7 @@ section("OverviewView calls api.startSession only behind the startable+linked co
   ok('account card navigates to "connection"', /onNavigate\("connection"\)/.test(use));
   ok("OverviewView calls api.startSession", overview.includes("api.startSession"));
   ok("OverviewView never calls api.stopSession", !overview.includes("api.stopSession"));
-  for (const call of [
-    "api.reconnectSession",
-    "api.unlinkSession",
-  ]) {
+  for (const call of ["api.reconnectSession", "api.unlinkSession"]) {
     ok(`OverviewView does not call ${call}`, !overview.includes(call));
   }
   ok(
@@ -134,7 +130,10 @@ section("Connection screen keeps one status display and a danger zone");
   );
   ok("stop still calls the session", connection.includes("api.stopSession"));
   ok("unlink still calls the session", connection.includes("api.unlinkSession"));
-  ok("unlink still confirms", connection.includes("showUnlinkModal") && connection.includes("connectionUnlinkConfirm"));
+  ok(
+    "unlink still confirms",
+    connection.includes("showUnlinkModal") && connection.includes("connectionUnlinkConfirm"),
+  );
   ok("reconnect still available", connection.includes("api.reconnectSession"));
   ok("restart still available", connection.includes("api.restartBot"));
   ok("no overflow menu plumbing left", !connection.includes("OverflowMenu"));

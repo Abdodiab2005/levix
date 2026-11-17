@@ -13,11 +13,17 @@ section("CodeText isolates a token as bdi dir=ltr");
   ok("renders a bdi element", code.includes("<bdi"));
   ok('sets dir="ltr" on that element', code.includes('dir="ltr"'));
   ok("uses the monospace token face", code.includes("font-mono"));
-  ok("does not insert bidi control characters", !/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/.test(code));
+  ok(
+    "does not insert bidi control characters",
+    !/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/.test(code),
+  );
   ok("copy uses the clipboard", code.includes("navigator.clipboard"));
   ok("copy failure is translated", code.includes('t("copyFailed")'));
   const barrel = source("frontend/src/components/ui/index.ts");
-  ok("barrel exports CodeText", barrel.includes('export { CodeText, type CodeTextProps } from "./code-text"'));
+  ok(
+    "barrel exports CodeText",
+    barrel.includes('export { CodeText, type CodeTextProps } from "./code-text"'),
+  );
 }
 
 section("prefix preview keeps the prefix first");
@@ -56,7 +62,10 @@ section("RTL catalog strings isolate embedded commands");
       if (text[match.index + match[0].length] !== "\u2069") bare.push(`${key}: ${match[0]}`);
     }
   }
-  ok(`no bare command token in Arabic dashboard strings (${bare.join(", ") || "none"})`, bare.length === 0);
+  ok(
+    `no bare command token in Arabic dashboard strings (${bare.join(", ") || "none"})`,
+    bare.length === 0,
+  );
 }
 
 finish();

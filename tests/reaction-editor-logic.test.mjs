@@ -127,7 +127,9 @@ for (const value of ["👍h", "hi", "👍👍", "", " 👍", "👍 "]) {
   equal(`reject ${JSON.stringify(value)}`, isReactionEmoji(value), false);
   ok(
     `invalid emoji blocks submit: ${JSON.stringify(value)}`,
-    reactionDraftIssues({ ...draft, emoji: value }).some((issue) => issue.field === "definition.emoji"),
+    reactionDraftIssues({ ...draft, emoji: value }).some(
+      (issue) => issue.field === "definition.emoji",
+    ),
   );
 }
 
@@ -136,7 +138,10 @@ section("empty message types and transitions are errors in their own sections");
   const issues = reactionDraftIssues({ ...draft, originalTypes: [], transitions: [] });
   equal(
     "both sections need attention",
-    issues.map((issue) => issueBucket(issue.field)).sort().join(","),
+    issues
+      .map((issue) => issueBucket(issue.field))
+      .sort()
+      .join(","),
     "originalTypes,transitions",
   );
   equal(
@@ -150,7 +155,8 @@ section("empty message types and transitions are errors in their own sections");
     ["definition.originalTypes", "originalTypes"],
     ["definition.senders.ids", "senders"],
     ["definition.destination.mode", "destination"],
-  ]) equal(`bucket ${field}`, issueBucket(field), bucket);
+  ])
+    equal(`bucket ${field}`, issueBucket(field), bucket);
 }
 
 section("unknown peer labels never display raw WhatsApp identifiers");

@@ -26,8 +26,11 @@ const DEFAULT_FORWARD_TTL_DAYS = 30;
 const reactionListeners = new Set();
 function notifyReactionChange(change) {
   for (const listener of reactionListeners) {
-    try { listener(change); }
-    catch { logger.warn("[Reactions] policy listener failed"); }
+    try {
+      listener(change);
+    } catch {
+      logger.warn("[Reactions] policy listener failed");
+    }
   }
 }
 function subscribeReactionChanges(listener) {
@@ -323,7 +326,9 @@ function clearWhatsAppDirectory() {
 const REACTION_LEDGER_CAP = 10_000;
 
 function isReactionChatEnabled(chatJid) {
-  return Boolean(q("SELECT 1 FROM reaction_rules WHERE chat_jid = ? AND enabled = 1 LIMIT 1").get(chatJid));
+  return Boolean(
+    q("SELECT 1 FROM reaction_rules WHERE chat_jid = ? AND enabled = 1 LIMIT 1").get(chatJid),
+  );
 }
 function isReactionChatConfigured(chatJid) {
   return Boolean(q("SELECT 1 FROM reaction_rules WHERE chat_jid = ? LIMIT 1").get(chatJid));
@@ -334,9 +339,7 @@ function reactionIdentityAliases(jid) {
   if (jid.endsWith("@g.us")) return [jid];
   const pn = jid.endsWith("@lid") ? getPnForLid(jid) : jid;
   if (!pn) return [jid];
-  const rows = q(
-    `SELECT lid FROM lid_mapping WHERE pn = ? LIMIT ${MAX_IDENTITY_ALIASES}`,
-  ).all(pn);
+  const rows = q(`SELECT lid FROM lid_mapping WHERE pn = ? LIMIT ${MAX_IDENTITY_ALIASES}`).all(pn);
   return [...new Set([jid, pn, ...rows.map((row) => normalizeJid(row.lid))])];
 }
 
@@ -345,22 +348,34 @@ function reactionIdentityAliases(jid) {
 function invalidateReactionLookup(keys, expiresAt, now, cap = 500) {
   return withImmediateTransaction(() => {
     q("DELETE FROM reaction_invalidations WHERE expires_at <= ?").run(now);
-    const global = q("SELECT expires_at FROM reaction_invalidations WHERE invalidation_key='*'").get();
-    const existing = q("SELECT COUNT(*) AS n, MAX(expires_at) AS expiry FROM reaction_invalidations").get();
+    const global = q(
+      "SELECT expires_at FROM reaction_invalidations WHERE invalidation_key='*'",
+    ).get();
+    const existing = q(
+      "SELECT COUNT(*) AS n, MAX(expires_at) AS expiry FROM reaction_invalidations",
+    ).get();
     if (!keys || global || existing.n + keys.length > cap) {
       q("DELETE FROM reaction_invalidations").run();
-      q("INSERT INTO reaction_invalidations VALUES ('*', ?)").run(Math.max(expiresAt, existing.expiry || 0));
+      q("INSERT INTO reaction_invalidations VALUES ('*', ?)").run(
+        Math.max(expiresAt, existing.expiry || 0),
+      );
       return true;
     } else {
-      for (const key of keys) q(`INSERT INTO reaction_invalidations VALUES (?, ?)
-        ON CONFLICT(invalidation_key) DO UPDATE SET expires_at=MAX(expires_at, excluded.expires_at)`).run(key, expiresAt);
+      for (const key of keys)
+        q(`INSERT INTO reaction_invalidations VALUES (?, ?)
+        ON CONFLICT(invalidation_key) DO UPDATE SET expires_at=MAX(expires_at, excluded.expires_at)`).run(
+          key,
+          expiresAt,
+        );
     }
     return false;
   });
 }
 function isReactionLookupInvalidated(keys, now) {
-  return Boolean(q(`SELECT 1 FROM reaction_invalidations WHERE expires_at > ?
-    AND invalidation_key IN (${sqlIn(["*", ...keys])}) LIMIT 1`).get(now, "*", ...keys));
+  return Boolean(
+    q(`SELECT 1 FROM reaction_invalidations WHERE expires_at > ?
+    AND invalidation_key IN (${sqlIn(["*", ...keys])}) LIMIT 1`).get(now, "*", ...keys),
+  );
 }
 
 // Cross-tab guard for the global switch. Never in backups or settings export. A
@@ -382,7 +397,11 @@ function clearReactionAccountState() {
 }
 
 /** Claim before handoff. Saturation never deletes a live replay key. */
-function claimReactionEvent({ eventKey, slotKeys, timestampMs, emoji, expiresAt }, now, details = false) {
+function claimReactionEvent(
+  { eventKey, slotKeys, timestampMs, emoji, expiresAt },
+  now,
+  details = false,
+) {
   return withImmediateTransaction(() => {
     q("DELETE FROM reaction_events WHERE expires_at <= ?").run(now);
     q("DELETE FROM reaction_state WHERE expires_at <= ?").run(now);
@@ -391,11 +410,17 @@ function claimReactionEvent({ eventKey, slotKeys, timestampMs, emoji, expiresAt 
       WHERE slot_key IN (${sqlIn(slotKeys)}) ORDER BY timestamp_ms DESC LIMIT 1`).get(...slotKeys);
     if (previous && timestampMs <= previous.timestamp_ms) return null;
     if (q("SELECT COUNT(*) AS n FROM reaction_events").get().n >= REACTION_LEDGER_CAP) return null;
-    if (!previous && q("SELECT COUNT(*) AS n FROM reaction_state").get().n >= REACTION_LEDGER_CAP) return null;
+    if (!previous && q("SELECT COUNT(*) AS n FROM reaction_state").get().n >= REACTION_LEDGER_CAP)
+      return null;
     q("INSERT INTO reaction_events (event_key, expires_at) VALUES (?, ?)").run(eventKey, expiresAt);
     q(`INSERT INTO reaction_state (slot_key, timestamp_ms, emoji, expires_at) VALUES (?, ?, ?, ?)
        ON CONFLICT(slot_key) DO UPDATE SET timestamp_ms=excluded.timestamp_ms,
-       emoji=excluded.emoji, expires_at=excluded.expires_at`).run(previous?.slot_key || slotKeys[0], timestampMs, emoji, expiresAt);
+       emoji=excluded.emoji, expires_at=excluded.expires_at`).run(
+      previous?.slot_key || slotKeys[0],
+      timestampMs,
+      emoji,
+      expiresAt,
+    );
     if (previous?.emoji === emoji) return null;
     const type = !emoji ? "remove" : previous?.emoji ? "change" : "add";
     return details ? { type, previousEmoji: previous?.emoji || "" } : type;
@@ -406,18 +431,28 @@ function claimReactionEvent({ eventKey, slotKeys, timestampMs, emoji, expiresAt 
 // these methods. Every edit disables execution and rotates the revision.
 function saveReactionRule(input) {
   const { validateDefinition, exactJid } = require("../automation/rules.cjs");
-  if (!input || Object.keys(input).some((key) => !["id", "chatJid", "priority", "definition"].includes(key)))
+  if (
+    !input ||
+    Object.keys(input).some((key) => !["id", "chatJid", "priority", "definition"].includes(key))
+  )
     throw new Error("REACTION_RULE_INVALID");
   const id = input.id || crypto.randomUUID();
-  if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error("REACTION_RULE_INVALID");
+  if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(id))
+    throw new Error("REACTION_RULE_INVALID");
   const chat = exactJid(input.chatJid);
   const priority = input.priority ?? 0;
-  if (!Number.isInteger(priority) || priority < 0 || priority > 1000) throw new Error("REACTION_RULE_INVALID");
+  if (!Number.isInteger(priority) || priority < 0 || priority > 1000)
+    throw new Error("REACTION_RULE_INVALID");
   const definition = validateDefinition(input.definition);
   q(`INSERT INTO reaction_rules(id,chat_jid,definition,revision,priority) VALUES(?,?,?,?,?)
      ON CONFLICT(id) DO UPDATE SET chat_jid=excluded.chat_jid,definition=excluded.definition,
-     revision=excluded.revision,priority=excluded.priority,enabled=0,enabled_at=NULL`)
-    .run(id, chat, JSON.stringify(definition), crypto.randomUUID(), priority);
+     revision=excluded.revision,priority=excluded.priority,enabled=0,enabled_at=NULL`).run(
+    id,
+    chat,
+    JSON.stringify(definition),
+    crypto.randomUUID(),
+    priority,
+  );
   saveBotSetting("reaction:revision", crypto.randomUUID());
   notifyReactionChange({ type: "rule", id });
   return getReactionRule(id);
@@ -429,12 +464,17 @@ function listReactionRules() {
   return q("SELECT * FROM reaction_rules ORDER BY chat_jid, priority, id COLLATE BINARY").all();
 }
 function setReactionRuleEnabled(id, enabled, now = Date.now()) {
-  if (typeof enabled !== "boolean" || !Number.isSafeInteger(now) || now < 0) throw new Error("REACTION_RULE_INVALID");
+  if (typeof enabled !== "boolean" || !Number.isSafeInteger(now) || now < 0)
+    throw new Error("REACTION_RULE_INVALID");
   const rule = getReactionRule(id);
   if (!rule) throw new Error("REACTION_RULE_MISSING");
   if (enabled) require("../automation/rules.cjs").validateDefinition(JSON.parse(rule.definition));
-  q("UPDATE reaction_rules SET enabled=?,enabled_at=?,revision=? WHERE id=?")
-    .run(enabled ? 1 : 0, enabled ? now : null, crypto.randomUUID(), id);
+  q("UPDATE reaction_rules SET enabled=?,enabled_at=?,revision=? WHERE id=?").run(
+    enabled ? 1 : 0,
+    enabled ? now : null,
+    crypto.randomUUID(),
+    id,
+  );
   saveBotSetting("reaction:revision", crypto.randomUUID());
   notifyReactionChange({ type: "rule", id });
   return getReactionRule(id);
@@ -486,12 +526,18 @@ function reactionRulesForChats(chats, { emoji, type, originalType }) {
 }
 // Strict role lookup deliberately never converts LID digits into phone digits.
 function verifiedUserRoles(ids) {
-  if (!ids.length || ids.length > MAX_IDENTITY_ALIASES) return { isOwner: false, isBotAdmin: false };
+  if (!ids.length || ids.length > MAX_IDENTITY_ALIASES)
+    return { isOwner: false, isBotAdmin: false };
   // Legacy contact merging can populate user_lid/phone_number by matching
   // numeric digits alone. Only the role row's primary JID and authoritative
   // lid_mapping expansion above may establish automation privileges.
-  const rows = q(`SELECT is_owner,is_admin FROM user_metadata WHERE user_jid IN (${sqlIn(ids)})`).all(...ids);
-  return { isOwner: rows.some((row) => row.is_owner === 1), isBotAdmin: rows.some((row) => row.is_admin === 1) };
+  const rows = q(
+    `SELECT is_owner,is_admin FROM user_metadata WHERE user_jid IN (${sqlIn(ids)})`,
+  ).all(...ids);
+  return {
+    isOwner: rows.some((row) => row.is_owner === 1),
+    isBotAdmin: rows.some((row) => row.is_admin === 1),
+  };
 }
 // Nonmatching reactions never perform remote authorization. Matching attempts
 // spend reactor/chat budgets before metadata reads; rule budgets precede actions.
@@ -503,8 +549,10 @@ function spendReactionBudgets(budgets, now) {
     if (row && row.attempts >= budget.limit) return "RATE_LIMIT";
     if (!row) added++;
   }
-  if (q("SELECT COUNT(*) AS n FROM reaction_budgets").get().n + added > REACTION_LEDGER_CAP) return "CAPACITY";
-  for (const budget of budgets) q(`INSERT INTO reaction_budgets VALUES(?,1,?)
+  if (q("SELECT COUNT(*) AS n FROM reaction_budgets").get().n + added > REACTION_LEDGER_CAP)
+    return "CAPACITY";
+  for (const budget of budgets)
+    q(`INSERT INTO reaction_budgets VALUES(?,1,?)
     ON CONFLICT(budget_key) DO UPDATE SET attempts=attempts+1`).run(budget.key, now + 60_000);
   return "ADMITTED";
 }
@@ -515,12 +563,26 @@ function claimReactionExecution({ eventKey, ruleKey, actionKey, expiresAt, budge
   return withImmediateTransaction(() => {
     q("DELETE FROM reaction_executions WHERE expires_at<=?").run(now);
     q("DELETE FROM reaction_budgets WHERE expires_at<=?").run(now);
-    if (!q("SELECT 1 FROM reaction_events WHERE event_key=? AND expires_at>?").get(eventKey, now)) return "EVENT_MISSING";
-    if (q("SELECT 1 FROM reaction_executions WHERE event_key=? OR rule_key=? OR action_key=?").get(eventKey, ruleKey, actionKey)) return "DUPLICATE";
-    if (q("SELECT COUNT(*) AS n FROM reaction_executions").get().n >= REACTION_LEDGER_CAP) return "CAPACITY";
+    if (!q("SELECT 1 FROM reaction_events WHERE event_key=? AND expires_at>?").get(eventKey, now))
+      return "EVENT_MISSING";
+    if (
+      q("SELECT 1 FROM reaction_executions WHERE event_key=? OR rule_key=? OR action_key=?").get(
+        eventKey,
+        ruleKey,
+        actionKey,
+      )
+    )
+      return "DUPLICATE";
+    if (q("SELECT COUNT(*) AS n FROM reaction_executions").get().n >= REACTION_LEDGER_CAP)
+      return "CAPACITY";
     const admitted = spendReactionBudgets(budgets, now);
     if (admitted !== "ADMITTED") return admitted;
-    q("INSERT INTO reaction_executions VALUES(?,?,?,?)").run(eventKey, ruleKey, actionKey, expiresAt);
+    q("INSERT INTO reaction_executions VALUES(?,?,?,?)").run(
+      eventKey,
+      ruleKey,
+      actionKey,
+      expiresAt,
+    );
     return "CLAIMED";
   });
 }
@@ -1057,9 +1119,9 @@ function roleMappingRows(column, jid) {
   const local = jid.split("@")[0];
   return q(`SELECT lid, pn, updated_at FROM lid_mapping
     WHERE ${column} IN (?, ?) OR (${column} >= ? AND ${column} < ?)
-    ORDER BY updated_at DESC`).all(
-    jid, column === "pn" ? local : jid, `${local}:`, `${local};`,
-  ).filter((row) => roleJid(row[column]) === jid);
+    ORDER BY updated_at DESC`)
+    .all(jid, column === "pn" ? local : jid, `${local}:`, `${local};`)
+    .filter((row) => roleJid(row[column]) === jid);
 }
 
 function currentRoleMapping(pn) {
@@ -1075,8 +1137,12 @@ function currentRoleMapping(pn) {
   // Accept the pair only when its latest reverse link agrees as well.
   const reverse = roleMappingRows("lid", lid);
   const latest = reverse[0];
-  if (!latest || roleJid(latest.pn) !== pn || reverse.some((row) =>
-    row.updated_at === latest.updated_at && roleJid(row.pn) !== pn)) return null;
+  if (
+    !latest ||
+    roleJid(latest.pn) !== pn ||
+    reverse.some((row) => row.updated_at === latest.updated_at && roleJid(row.pn) !== pn)
+  )
+    return null;
   return newest;
 }
 
@@ -1197,7 +1263,10 @@ function saveUserMetadata(userData) {
     // Separate PN/LID rows can predate a learned mapping. A revocation must
     // cover every proven primary alias, or the other row would retain access.
     const ids = roleUserRows(userData.jid).map((entry) => entry.user_jid);
-    for (const [field, column] of [["isOwner", "is_owner"], ["isAdmin", "is_admin"]]) {
+    for (const [field, column] of [
+      ["isOwner", "is_owner"],
+      ["isAdmin", "is_admin"],
+    ]) {
       // A grant belongs to the requested primary identity. Copying it to a
       // mapped LID would leave an independent grant when that mapping changes.
       if (userData[field] !== undefined && !bool(userData[field]) && ids.length) {

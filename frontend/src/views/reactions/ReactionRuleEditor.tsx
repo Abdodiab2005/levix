@@ -326,13 +326,11 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
       setFieldErrors((prev) => ({ ...prev, senders: t("reactionTooManySenders") }));
       return;
     }
-    setField("senderIds", (previous) => previous.includes(jid) ? previous : [...previous, jid]);
+    setField("senderIds", (previous) => (previous.includes(jid) ? previous : [...previous, jid]));
   };
 
   const emojiError =
-    draft.emoji && !isReactionEmoji(draft.emoji)
-      ? t("reactionEmojiInvalid")
-      : fieldErrors.emoji;
+    draft.emoji && !isReactionEmoji(draft.emoji) ? t("reactionEmojiInvalid") : fieldErrors.emoji;
   const errors = { ...fieldErrors, ...(emojiError ? { emoji: emojiError } : {}) };
   const invalidSections = Object.keys(errors).map((field) => sectionLabel(t, field));
   const errorBanner = [
@@ -384,9 +382,7 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
               1. {t("reactionChat")}
             </h3>
             <Field htmlFor="rx-chat" error={fieldErrors.chatJid}>
-              {draft.chatJid && (
-                <UserText className="text-sm font-semibold">{chatLabel}</UserText>
-              )}
+              {draft.chatJid && <UserText className="text-sm font-semibold">{chatLabel}</UserText>}
               <Button
                 id="rx-chat"
                 type="button"
@@ -482,7 +478,8 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
                       label={t("reactionAllTypes")}
                       checked={allTypes}
                       ref={(input) => {
-                        if (input) input.indeterminate = !allTypes && draft.originalTypes.length > 0;
+                        if (input)
+                          input.indeterminate = !allTypes && draft.originalTypes.length > 0;
                       }}
                       aria-invalid={fieldErrors.originalTypes ? true : undefined}
                       onChange={(event) =>
@@ -517,7 +514,9 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
                 id="rx-role"
                 value={draft.role}
                 aria-invalid={fieldErrors.senders ? true : undefined}
-                aria-describedby={describedBy(fieldErrors.senders ? "rx-senders-message" : undefined)}
+                aria-describedby={describedBy(
+                  fieldErrors.senders ? "rx-senders-message" : undefined,
+                )}
                 onChange={(event) => setField("role", event.target.value as ReactionDraft["role"])}
               >
                 {SENDER_ROLES.map((value) => (
@@ -542,7 +541,9 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
                         key={id}
                         removeLabel={fill(t("reactionRemoveSender"), { name: label })}
                         onRemove={() =>
-                          setField("senderIds", (previous) => previous.filter((item) => item !== id))
+                          setField("senderIds", (previous) =>
+                            previous.filter((item) => item !== id),
+                          )
                         }
                       >
                         <UserText>{label}</UserText>
@@ -651,7 +652,9 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
                 value={Number.isFinite(draft.priority) ? draft.priority : 100}
                 aria-invalid={fieldErrors.priority ? true : undefined}
                 aria-describedby="rx-priority-message"
-                onChange={(event) => setField("priority", clampPriority(Number(event.target.value)))}
+                onChange={(event) =>
+                  setField("priority", clampPriority(Number(event.target.value)))
+                }
               />
             </Field>
           </Disclosure>

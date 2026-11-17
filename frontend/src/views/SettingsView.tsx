@@ -92,7 +92,6 @@ function tabFromHash(): SettingsTab {
   return "general";
 }
 
-
 const PREFIX_PRESETS = ["!", "/", ".", "#", "$", "?"];
 
 // Marker written by the backend's settingsTransfer service — anything else is
@@ -920,7 +919,8 @@ export const SettingsView: React.FC = () => {
               onSubmit={(event) => {
                 event.preventDefault();
                 void delayForm.save(async (draft) => {
-                  if (draft.min > draft.max) throw new ApiError(400, "DELAY_RANGE_INVALID", { code: "DELAY_RANGE_INVALID" });
+                  if (draft.min > draft.max)
+                    throw new ApiError(400, "DELAY_RANGE_INVALID", { code: "DELAY_RANGE_INVALID" });
                   await persistSetting("bot_min_delay_ms", draft.min);
                   await persistSetting("bot_max_delay_ms", draft.max);
                 });

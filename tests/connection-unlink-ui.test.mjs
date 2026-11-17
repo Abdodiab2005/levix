@@ -55,10 +55,10 @@ ok(
 );
 ok("the retry button uses connectionUnlinkRetry", view.includes('t("connectionUnlinkRetry")'));
 ok(
-  "a rejected unlink toasts the server's message",
+  "a rejected unlink toasts a translated message, never err.message",
   view
     .slice(view.indexOf("const confirmUnlink"), view.indexOf("const rawPhone"))
-    .includes('toast(err instanceof Error ? err.message : String(err), "error")'),
+    .includes('toast(userErrorMessage(t, err, "sessionUnlinkError"), "error")'),
 );
 for (const key of keys) ok(`the view uses ${key}`, view.includes(`t("${key}")`));
 

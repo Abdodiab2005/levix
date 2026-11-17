@@ -132,10 +132,7 @@ function joinWeekdayNames(days: number[], t: ScheduleCopy) {
 
 function scheduleWhen(item: ScheduleItem, language: Language): string {
   if (item.whenByLocale) return pickLocalized(item.whenByLocale, language);
-  return pickLocalized(
-    { en: item.when || undefined, ar: item.whenAr || undefined },
-    language,
-  );
+  return pickLocalized({ en: item.when || undefined, ar: item.whenAr || undefined }, language);
 }
 
 function mediaKindLabel(
@@ -251,13 +248,19 @@ function matchesSchedule(s: ScheduleItem, query: string, filters: ScheduleFilter
   return true;
 }
 
-function sortLabeled(list: LabeledSchedule[], sort: ScheduleSort, language: string): LabeledSchedule[] {
+function sortLabeled(
+  list: LabeledSchedule[],
+  sort: ScheduleSort,
+  language: string,
+): LabeledSchedule[] {
   const items = [...list];
   const byTarget = (a: LabeledSchedule, b: LabeledSchedule) =>
     a.parts.title.localeCompare(b.parts.title, language, { sensitivity: "base" }) ||
     a.parts.subtitle.localeCompare(b.parts.subtitle, language, { sensitivity: "base" });
   if (sort === "oldest") {
-    items.sort((a, b) => (a.schedule.createdAt ?? 0) - (b.schedule.createdAt ?? 0) || byTarget(a, b));
+    items.sort(
+      (a, b) => (a.schedule.createdAt ?? 0) - (b.schedule.createdAt ?? 0) || byTarget(a, b),
+    );
   } else if (sort === "target") {
     items.sort(byTarget);
   } else if (sort === "status") {
@@ -269,7 +272,9 @@ function sortLabeled(list: LabeledSchedule[], sort: ScheduleSort, language: stri
         byTarget(a, b),
     );
   } else {
-    items.sort((a, b) => (b.schedule.createdAt ?? 0) - (a.schedule.createdAt ?? 0) || byTarget(a, b));
+    items.sort(
+      (a, b) => (b.schedule.createdAt ?? 0) - (a.schedule.createdAt ?? 0) || byTarget(a, b),
+    );
   }
   return items;
 }
@@ -1343,7 +1348,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           )}
 
           {selectedParts && whenText ? (
-            <p className="rounded-lg border border-line bg-bg-soft px-3 py-2 text-xs text-text-main" dir="auto">
+            <p
+              className="rounded-lg border border-line bg-bg-soft px-3 py-2 text-xs text-text-main"
+              dir="auto"
+            >
               <span>{t("schedulesSummaryTo")}</span>{" "}
               <UserText
                 dir={selectedParts.title.startsWith("+") ? "ltr" : "auto"}

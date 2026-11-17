@@ -184,9 +184,18 @@ for (const key of [...used].sort()) {
 
 section("template area and placeholder labels exist in every required locale");
 const labelKeys = new Set([
-  ...["ai", "core", "group", "help", "lang", "moderation", "schedules", "stickers", "tools", "other"].map(
-    (area) => areaLabelKey(area === "other" ? "bot.unknown.x" : `bot.${area}.x`),
-  ),
+  ...[
+    "ai",
+    "core",
+    "group",
+    "help",
+    "lang",
+    "moderation",
+    "schedules",
+    "stickers",
+    "tools",
+    "other",
+  ].map((area) => areaLabelKey(area === "other" ? "bot.unknown.x" : `bot.${area}.x`)),
   ...["count", "name", "user", "group", "n", "emoji", "prefix", "command", "slot"].map((name) =>
     placeholderExplainKey(name),
   ),
@@ -201,19 +210,27 @@ const labelKeys = new Set([
   "commandPermissionUnknown",
   "commandScopeUnknown",
 ]);
-ok("area helper returns ten keys", new Set(
-  ["ai", "core", "group", "help", "lang", "moderation", "schedules", "stickers", "tools", "other"].map(
-    (area) => areaLabelKey(area === "other" ? "bot.unknown.x" : `bot.${area}.ping`),
-  ),
-).size === 10);
+ok(
+  "area helper returns ten keys",
+  new Set(
+    [
+      "ai",
+      "core",
+      "group",
+      "help",
+      "lang",
+      "moderation",
+      "schedules",
+      "stickers",
+      "tools",
+      "other",
+    ].map((area) => areaLabelKey(area === "other" ? "bot.unknown.x" : `bot.${area}.ping`)),
+  ).size === 10,
+);
 for (const key of labelKeys) {
   for (const locale of locales) {
     const value = catalogs[locale][key];
-    ok(
-      `${locale} has ${key}`,
-      typeof value === "string" && value.length > 0,
-      value,
-    );
+    ok(`${locale} has ${key}`, typeof value === "string" && value.length > 0, value);
   }
 }
 

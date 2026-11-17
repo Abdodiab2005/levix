@@ -256,7 +256,9 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
             <Button
               variant="secondary"
               icon={<RefreshCw size={16} />}
-              onClick={() => handleAction(api.reconnectSession, t("reconnecting"), "sessionReconnectError")}
+              onClick={() =>
+                handleAction(api.reconnectSession, t("reconnecting"), "sessionReconnectError")
+              }
               disabled={acting}
               className="flex-1 whitespace-nowrap sm:flex-none"
             >
@@ -318,7 +320,10 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
 
             {/* Method 1: Phone Pairing Form */}
             {pairingMethod === "pairing" && (
-              <form onSubmit={handleStartPairing} className="flex w-full flex-col gap-3 sm:max-w-xl">
+              <form
+                onSubmit={handleStartPairing}
+                className="flex w-full flex-col gap-3 sm:max-w-xl"
+              >
                 <div className="relative">
                   <Phone
                     size={17}

@@ -36,7 +36,12 @@ import {
   EMPTY_COMMAND_FILTERS,
   sortCommands,
 } from "./commands/filters";
-import { type CommandActions, commandErrorKey, commandId, useCommandLabels } from "./commands/shared";
+import {
+  type CommandActions,
+  commandErrorKey,
+  commandId,
+  useCommandLabels,
+} from "./commands/shared";
 
 // What the server sends in GET /commands `levels`. An unlabelled level stays
 // selectable; its label is a translation, never the raw level name.

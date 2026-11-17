@@ -184,10 +184,7 @@ for (const locale of LOCALES) {
   }
 }
 const arabicForms = MEMBER_CATEGORIES.map((category) => ar(`recipientMembers_${category}`));
-ok(
-  "Arabic plural forms are not one string",
-  new Set(arabicForms).size > 1,
-);
+ok("Arabic plural forms are not one string", new Set(arabicForms).size > 1);
 ok("Arabic one is singular", ar("recipientMembers_one").includes("عضو"));
 ok("Arabic two is dual", ar("recipientMembers_two").includes("عضوان"));
 ok("Arabic many uses the accusative plural", ar("recipientMembers_many").includes("عضوًا"));

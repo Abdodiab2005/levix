@@ -111,10 +111,14 @@ function peerId(item: RecipientLike): string {
 
 function titleFor(item: RecipientLike, source: NameSource): string | null {
   if (source === "saved") {
-    return cleanName(item.savedName) || cleanName(item.name, true) || cleanName(item.targetLabel, true);
+    return (
+      cleanName(item.savedName) || cleanName(item.name, true) || cleanName(item.targetLabel, true)
+    );
   }
   if (source === "push") {
-    return cleanName(item.pushName) || cleanName(item.name, true) || cleanName(item.targetLabel, true);
+    return (
+      cleanName(item.pushName) || cleanName(item.name, true) || cleanName(item.targetLabel, true)
+    );
   }
   if (source === "subject") {
     return cleanName(item.name) || cleanName(item.targetLabel);
@@ -182,7 +186,9 @@ export function disambiguateParts(list: RecipientParts[]): RecipientParts[] {
     if (part.subtitle.includes(part.distinguisher) || part.title.includes(part.distinguisher)) {
       return part;
     }
-    const subtitle = part.subtitle ? `${part.subtitle} · ${part.distinguisher}` : part.distinguisher;
+    const subtitle = part.subtitle
+      ? `${part.subtitle} · ${part.distinguisher}`
+      : part.distinguisher;
     return { ...part, subtitle };
   });
 }
