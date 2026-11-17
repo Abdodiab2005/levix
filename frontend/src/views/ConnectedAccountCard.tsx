@@ -1,6 +1,6 @@
 // file: frontend/src/views/ConnectedAccountCard.tsx
 
-import { Play, RefreshCw, Settings2 } from "lucide-react";
+import { Eye, EyeOff, Play, RefreshCw, Settings2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import {
@@ -35,6 +35,10 @@ interface ConnectedAccountCardProps {
   variant?: "full" | "compact";
   /** Home only. Navigates to the Connection screen; it never touches the session. */
   onManage?: () => void;
+  /** Home only. Starts a linked session directly from the compact card. */
+  onStart?: () => void;
+  /** True while the session start request is in flight. */
+  starting?: boolean;
 }
 
 const ACTION_ICON = {
@@ -47,12 +51,19 @@ export function ConnectedAccountCard({
   status,
   variant = "full",
   onManage,
+  onStart,
+  starting = false,
 }: ConnectedAccountCardProps) {
   const { t } = useI18n();
   const card = mapSessionToCard(status);
   const connected = status?.state === "connected" && status.connected !== false;
   const identity = connected ? `${status?.user?.id || "connected"}|${status?.since ?? ""}` : "";
   const [saved, setSaved] = useState<{ identity: string; profile: Profile } | null>(null);
+  const [revealedAccount, setRevealedAccount] = useState<string | null>(null);
+  const numberVisible = Boolean(status?.user?.id && revealedAccount === status.user.id);
+  useEffect(() => {
+    if (status?.state !== "connected") setRevealedAccount(null);
+  }, [status?.state]);
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(false);
   const request = useRef(0);
@@ -119,6 +130,11 @@ export function ConnectedAccountCard({
 
   if (variant === "compact") {
     const fallbackName = t("accountCardTitle");
+    const isStartable = Boolean(
+      status && ["idle", "disconnected", "retry_exhausted", "error"].includes(status.state),
+    );
+    const isLinked = Boolean(status?.user?.id || status?.linked);
+    const canStart = Boolean(onStart && isStartable && isLinked);
     return (
       <Card className="flex flex-col gap-3">
         <div className="flex min-w-0 items-start gap-3">
@@ -145,9 +161,20 @@ export function ConnectedAccountCard({
                   </UserText>
                 ) : null}
                 {visible?.phone ? (
-                  <UserText as="bdi" dir="ltr" className="text-xs text-muted">
-                    {visible.phone}
-                  </UserText>
+                  <div className="flex items-center gap-1.5">
+                    <UserText as="bdi" dir="ltr" className="text-xs text-muted">
+                      {numberVisible ? visible.phone : "••• ••• ••••"}
+                    </UserText>
+                    <IconButton
+                      label={numberVisible ? t("hideNumber") : t("showNumber")}
+                      pressed={numberVisible}
+                      variant="ghost"
+                      icon={numberVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                      onClick={() =>
+                        setRevealedAccount(numberVisible ? null : status?.user?.id || null)
+                      }
+                    />
+                  </div>
                 ) : null}
               </>
             )}
@@ -163,15 +190,30 @@ export function ConnectedAccountCard({
             {t("accountCardProfileUnavailable")}
           </p>
         ) : null}
-        {onManage ? (
-          <Button
-            variant={card.tone === "ok" ? "secondary" : "primary"}
-            icon={ACTION_ICON[card.action]}
-            onClick={onManage}
-            className="w-full sm:w-auto sm:self-start"
-          >
-            {t("accountCardManageSession")}
-          </Button>
+        {onManage || canStart ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {canStart ? (
+              <Button
+                variant="primary"
+                icon={<Play size={16} />}
+                onClick={onStart}
+                loading={starting}
+                className="w-full sm:w-auto"
+              >
+                {t("start")}
+              </Button>
+            ) : null}
+            {onManage ? (
+              <Button
+                variant={card.tone === "ok" || canStart ? "secondary" : "primary"}
+                icon={canStart ? ACTION_ICON.manage : ACTION_ICON[card.action]}
+                onClick={onManage}
+                className="w-full sm:w-auto sm:self-start"
+              >
+                {t("accountCardManageSession")}
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </Card>
     );

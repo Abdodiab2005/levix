@@ -30,6 +30,26 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
   const { toast } = useToast();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [starting, setStarting] = useState(false);
+
+  const isStartable = Boolean(
+    status && ["idle", "disconnected", "retry_exhausted", "error"].includes(status.state),
+  );
+  const isLinked = Boolean(status?.user?.id || status?.linked);
+  const canQuickStart = isStartable && isLinked;
+
+  const handleStart = async () => {
+    if (!canQuickStart || starting) return;
+    setStarting(true);
+    try {
+      await api.startSession();
+      toast(t("starting"), "info");
+    } catch (err: any) {
+      toast(err.message, "error");
+    } finally {
+      setStarting(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -131,6 +151,8 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
         status={status}
         variant="compact"
         onManage={() => onNavigate("connection")}
+        onStart={canQuickStart ? handleStart : undefined}
+        starting={starting}
       />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4" data-tour="overview-stats">

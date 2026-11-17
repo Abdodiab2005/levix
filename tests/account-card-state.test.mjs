@@ -67,37 +67,59 @@ section("retry attempt reaches the card only when the session reports one");
   equal("non-positive max is dropped", junk.maxAttempts, null);
 }
 
-section("Home renders the compact card and never runs session actions");
-{
-  ok("OverviewView imports ConnectedAccountCard", /from "\.\/ConnectedAccountCard"/.test(overview));
-  const use = overview.match(/<ConnectedAccountCard[\s\S]{0,240}?\/>/)?.[0] || "";
-  ok("OverviewView renders exactly one account card", use !== "", use);
-  ok('account card uses variant="compact"', /variant="compact"/.test(use));
-  ok('account card navigates to "connection"', /onNavigate\("connection"\)/.test(use));
-  for (const call of [
-    "api.startSession",
-    "api.stopSession",
-    "api.reconnectSession",
-    "api.unlinkSession",
-  ]) {
-    ok(`OverviewView does not call ${call}`, !overview.includes(call));
-  }
-  ok("OverviewView has no show/hide number toggle", !overview.includes("showNumber"));
-}
-
-section("compact card keeps the phone readable and unmasked");
+section("the compact card masks the phone by default and uses showNumber/hideNumber");
 {
   ok("card maps through accountCardState", accountCard.includes("mapSessionToCard"));
+  ok("compact card masks the phone by default", accountCard.includes("••• ••• ••••"));
+  ok("compact card uses showNumber", accountCard.includes('t("showNumber")'));
+  ok("compact card uses hideNumber", accountCard.includes('t("hideNumber")'));
+  ok(
+    "compact card uses Eye and EyeOff icons",
+    accountCard.includes("Eye") && accountCard.includes("EyeOff"),
+  );
   ok(
     "phone renders LTR-isolated",
-    /<UserText as="bdi" dir="ltr"[\s\S]{0,80}\{visible\.phone\}/.test(accountCard),
+    /as="bdi" dir="ltr"|<bdi dir="ltr"/.test(accountCard),
   );
-  ok("compact card does not mask the phone", !accountCard.includes("•••"));
+  ok(
+    "revealed state keyed by status.user.id",
+    accountCard.includes("revealedAccount === status.user.id"),
+  );
   ok("card renders the compact variant", /variant === "compact"/.test(accountCard));
   ok(
     "one status indicator shared by both variants",
     accountCard.split("<StatusPill").length - 1 === 1,
   );
+}
+
+section("OverviewView calls api.startSession only behind the startable+linked condition and never calls api.stopSession");
+{
+  ok("OverviewView imports ConnectedAccountCard", /from "\.\/ConnectedAccountCard"/.test(overview));
+  const use = overview.match(/<ConnectedAccountCard[\s\S]{0,350}?\/>/)?.[0] || "";
+  ok("OverviewView renders exactly one account card", use !== "", use);
+  ok('account card uses variant="compact"', /variant="compact"/.test(use));
+  ok('account card navigates to "connection"', /onNavigate\("connection"\)/.test(use));
+  ok("OverviewView calls api.startSession", overview.includes("api.startSession"));
+  ok("OverviewView never calls api.stopSession", !overview.includes("api.stopSession"));
+  for (const call of [
+    "api.reconnectSession",
+    "api.unlinkSession",
+  ]) {
+    ok(`OverviewView does not call ${call}`, !overview.includes(call));
+  }
+  ok(
+    "OverviewView checks startable states",
+    /idle/.test(overview) &&
+      /disconnected/.test(overview) &&
+      /retry_exhausted/.test(overview) &&
+      /error/.test(overview),
+  );
+  ok("OverviewView checks linked status", /status\?\.user\?\.id|status\?\.linked/.test(overview));
+  ok(
+    "OverviewView guards onStart behind startable and linked",
+    /onStart=\{canQuickStart \? handleStart : undefined\}/.test(overview),
+  );
+  ok("OverviewView has no show/hide number toggle", !overview.includes("showNumber"));
 }
 
 section("Connection screen keeps one status display and a danger zone");
