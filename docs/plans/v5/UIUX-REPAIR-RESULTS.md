@@ -51,7 +51,8 @@ WhatsApp number, purchase or production endpoint was used.
 
 ## C. Verification
 
-All on Linux, Node 24, branch `fix/v5-ui-ux`, 2026-11-17.
+Local checks ran on Linux, Node 24, branch `fix/v5-ui-ux`, 2026-11-17. CI ran on GitHub
+Actions for PR #182.
 
 | Check | Command | Result |
 | --- | --- | --- |
@@ -65,16 +66,43 @@ All on Linux, Node 24, branch `fix/v5-ui-ux`, 2026-11-17.
 | Recipient picker | headless Chrome, ar | PASS: distinct unknown contacts, Arabic plurals, LTR phone numbers |
 | Independent review | Grok read-only | 3 P2 findings (Plus status cleared on failure, switch race, tab hash), all fixed in `9d5e277` with static checks |
 | Independent review | Codex read-only at `9d5e277` | "Ship as is" |
-| CI | GitHub Actions | NOT RUN (branch not pushed) |
+| CI | GitHub Actions run `44168499582` at `8846706` | PASS, 7/7 jobs (table below) |
 | Android device | WebView, keyboard, back button, safe area | NOT RUN (no device session) |
-| Live WhatsApp | reaction execution, real profile on the card, schedule send | NOT RUN (no test account in this session) |
+| Live WhatsApp | reaction execution, real profile on the card, schedule send, E2EE | NOT RUN (no test account in this session) |
+| Google Play Billing / Levix Plus | real purchase, renewal, grace, expiry, restore | NOT RUN; Plus states were simulated by request interception only |
+
+### CI run `44168499582` (PR #182, head `8846706`, 2026-11-17): PASS 7/7
+
+| Job | What it ran | Result |
+| --- | --- | --- |
+| tests | `npm ci`, `npm test`, `npm run lint`, `npm run i18n:check`, `npm run docs:check`, shell script checks (Ubuntu) | PASS |
+| android apk builds | Android unit tests; debug APKs; release APKs and AAB signed with the debug key; `levix-app.zip` scan; Phase 09 Play dependency and size reports (API 36 SDK, NDK, arm64 and armv7 Node runtimes and FFmpeg) | PASS |
+| package installs and boots | `npm run validate:tarball`: packs the npm tarball, installs it into a clean prefix and boots it (Linux, Node); tarball scan | PASS |
+| container persists its volume | `npm run validate:docker`: builds the image, starts it, claims the panel, restarts, upgrades the volume; image scan | PASS |
+| executable runs (ubuntu-latest) | `npm run build:sea`, executable scan, `npm run validate:sea` | PASS |
+| executable runs (macos-latest) | same | PASS |
+| executable runs (windows-latest) | same | PASS |
+
+The Android job builds and unit-tests the app. It does not install or launch the APK on an
+emulator or a phone, so no Android boot, WebView rendering or touch check ran in CI. "package
+installs and boots" boots the npm package on Linux, not on Android. Real-device QA stays NOT RUN.
 
 ## D. Remaining issues
+
+Release blockers for this branch (manual QA, owner-run):
+
+- PENDING: physical Android device UI/UX QA (the checklist in section F).
+- PENDING: live WhatsApp integration with a dedicated test account, including E2EE delivery of
+  reaction-rule results.
+- PENDING: real Google Play Billing and Levix Plus entitlement scenarios; only simulated states
+  were tested.
+
+Known limitations:
 
 - The schedule form needs a connected session, so it was checked by static tests and the shared
   picker only; its layout was not seen in a browser.
 - The full-screen reaction dialog on Android: keyboard overlap, the back button and safe-area
-  insets are untested on a device.
+  insets are untested on a device. No Android back-button handling was added for it.
 - `frontend/src/gateway/login.tsx:287` and `frontend/src/gateway/main.tsx:231` still have raw
   error fallbacks (gateway pages were outside every task).
 - Timezone labels use CLDR names ("Eastern European Time (UTC+02:00)"); Intl has no city label.
@@ -99,12 +127,42 @@ All on Linux, Node 24, branch `fix/v5-ui-ux`, 2026-11-17.
 | Message types match platform support | PASS | the 7 types `originalType()` classifies |
 | No internal identifiers in normal UI | PASS for the panel; gateway has 2 raw fallbacks | `ui-no-raw-keys`, `user-error`, visual sweep |
 | RTL/LTR mixed text | PASS in headless Chrome | `bidi-command-text`, screenshots |
-| Home account card | PASS with an unlinked install; NOT RUN with a real profile | `account-card-state`, screenshots |
+| Home account card | PASS with an unlinked install; PENDING with a real linked profile | `account-card-state`, screenshots |
 | Schedule recipients distinguishable | PASS | `recipient-labels`, picker capture |
 | Group settings readable | PASS | `moderation-ui`, screenshot |
-| Mobile form layouts | PASS in headless Chrome at 360px; NOT RUN on a device | screenshots |
-| Levix Plus in sidebar with crown | PASS (MOCKED status) | `plus-nav-static`, screenshots |
-| Subscriber state shown correctly | PASS (MOCKED status) | `plus-access` |
-| Premium settings discoverable with locks | PASS (MOCKED status) | `plus-nav-static`, screenshots |
+| Mobile form layouts | PASS in headless Chrome at 360px; PENDING on a physical Android device | screenshots |
+| Levix Plus in sidebar with crown | PASS with simulated status; PENDING with real Play Billing | `plus-nav-static`, screenshots |
+| Subscriber state shown correctly | PASS with simulated status; PENDING with real Play Billing | `plus-access` |
+| Premium settings discoverable with locks | PASS with simulated status; PENDING with real Play Billing | `plus-nav-static`, screenshots |
 | Free features remain free | PASS: no free control gated | `plus-nav-static`, review |
-| Automated checks pass | PASS locally; CI NOT RUN | section C |
+| Automated checks pass | PASS locally and in CI run `44168499582` (7/7) | section C |
+| Physical Android device QA | NOT RUN / PENDING | section F |
+| Live WhatsApp integration and E2EE | NOT RUN / PENDING | section F |
+| Real Play Billing / Plus entitlement | NOT RUN / PENDING | section F |
+
+## F. Remaining manual QA (owner-run)
+
+Use the dedicated test account and the `.dev` build, not a personal number.
+
+Physical Android device (Arabic and English, light and dark):
+1. Reaction rule editor opens full screen; the keyboard never covers the emoji field or Save.
+2. Android back closes the editor without losing a saved rule and without leaving the panel.
+3. Every checkbox and its label toggle by touch; "All supported messages" selects all 7 types.
+4. Safe-area insets: the sticky Save/Cancel footer clears the gesture bar.
+5. Home account card: photo, name, masked number, reveal, Manage session, Start after Stop.
+6. Commands, Settings prefix preview and Arabic descriptions read `!help` in order.
+7. Schedule form: recipient picker rows, disabled-reason hint, summary with the timezone.
+8. Group settings: preset notice and Undo, unsaved-changes confirm, formatted preview.
+9. No horizontal scroll on any screen in portrait; landscape where the app allows it.
+
+Live WhatsApp (test account and test groups only):
+10. A Ping rule on a modern group and on a legacy `<digits>-<digits>@g.us` group runs once.
+11. A Transcribe rule on a voice note replies in the source chat; nothing reaches another chat.
+12. Rule results arrive end-to-end encrypted on recipient phones (E2EE, Phase 07.5 method).
+13. The account card shows the real profile after pairing and the right state through a reconnect.
+
+Google Play Billing / Levix Plus (license-test account):
+14. Not subscribed: sidebar entry, locked in-context rows, Learn more opens `#plus`.
+15. Purchase: crown on the brand mark and "Active" badge; rows open the right feature tab.
+16. Renewal, cancel, grace and expiry move the UI the same way the Plus page does.
+17. Verifier unreachable: the last state stays; nothing unlocks.
