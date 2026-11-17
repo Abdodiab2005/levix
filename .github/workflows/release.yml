@@ -422,6 +422,7 @@ jobs:
   play:
     name: publish to Google Play (disabled; use private paid AAB)
     needs: publish-release
+    # Play uses the private combined Free + Plus build, never public Free AABs.
     if: ${{ false }}
     runs-on: ubuntu-latest
     # The pause for manual approval. Without a required reviewer on this
