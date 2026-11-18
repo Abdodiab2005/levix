@@ -169,7 +169,7 @@ android {
         minSdk = 29
         targetSdk = 36
         versionCode = 71
-        versionName = "5.0.0-beta.1"
+        versionName = "5.0.0"
         buildConfigField("String", "PLUS_PRODUCT_ID", "\"$plusProductId\"")
     }
 
