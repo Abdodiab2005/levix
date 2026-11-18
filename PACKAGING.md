@@ -412,6 +412,13 @@ check confirms the original key and all affected workflows are updated, remove
 the old repository-level `LEVIX_KEYSTORE_*` copies; historical workflow refs
 must not retain access to them. Never replace the original upload keystore.
 
+Non-publishing key check (after the manual workflow lands on `main`):
+Actions → **Verify original Android signing key (no upload)** → Run workflow on
+`main`; paste **Upload key certificate SHA-256** from Google Play Console →
+App integrity. The job uses `play-signing` to sign and verify a temporary test
+JAR, compares the certificate fingerprint, and publishes nothing. A PASS only
+proves the protected key works; it does not approve a production release.
+
 Public GitHub APKs and AABs contain Free Core only. The public `release.yml`
 and `play-store.yml` upload jobs are disabled. The legacy beta upload workflow,
 where present on main, must also stay disabled. Do not upload a public release
