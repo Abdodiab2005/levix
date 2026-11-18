@@ -89,7 +89,10 @@ press Unlink after pairing.
 
 On the first 5.0.0 start, Levix writes and verifies a copy at
 `<data>/backups/pre-migration/levix-v<old schema>-<UTC time>.db` (for 4.9.2:
-`levix-v10-<time>.db`), then migrates to schema 12. The copy omits WhatsApp
+`levix-v10-<time>.db`), then migrates to schema 12. A copy exists only when an
+existing database had a pending migration. A fresh 5.0.0 install gets none.
+Levix keeps only the two newest pre-migration copies (`src/db/db.cjs` prunes
+older ones), so later upgrades can remove the schema-10 copy. The copy omits WhatsApp
 pairing credentials and QR codes, panel authentication, the recovery email
 record, the session key, API keys, the WhatsApp proxy password, and the Terms
 acceptance record.
@@ -106,7 +109,11 @@ The supported way back is the restore above. Stop Levix. Keep a copy of the
 whole data directory first. Copy the pre-migration file over `levix.db`.
 Delete `levix.db-wal` and `levix.db-shm`. Start 4.9.x. Then `/setup` asks for
 a new panel password and, from another machine, the setup code printed in the
-terminal. Enter API keys again and pair the same WhatsApp account on the
+terminal. Enter API keys again. If you use a WhatsApp proxy with a password,
+enter the proxy password again in Settings before you press Start on
+Connection. The copy keeps the other proxy settings (enabled, protocol, host,
+port, username), so an authenticated proxy rejects the connection and pairing
+fails until that password is set. Then pair the same WhatsApp account on the
 Connection screen. Anything written after the upgrade is not in that copy.
 
 A Settings → Backup `.levixbak` file is a 5.0.0 feature. 4.9.x cannot
