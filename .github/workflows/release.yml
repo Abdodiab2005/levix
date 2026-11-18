@@ -2,8 +2,9 @@
 # executable per platform, the Android APKs and AAB, the public installer, a
 # checksum file covering exactly those files. Play uses the private combined build.
 #
-# Nothing is published unless the tag matches package.json and the Android
-# versionName, and the full CI suite passes first.
+# Nothing is published unless the repository owner pushed the tag, the tag
+# matches package.json and the Android versionName, and the full CI suite
+# passes first.
 #
 #   tag pushed
 #     └─ verify-version ── ci ── npm ───────────────┐
@@ -31,6 +32,9 @@ on:
 jobs:
   verify-version:
     name: tag matches package version
+    # Only the repository owner's own tag push starts a release. Every
+    # publishing job needs this one, so any other actor's tag skips them all.
+    if: github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
