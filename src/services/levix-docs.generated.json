@@ -8,7 +8,7 @@
     },
     {
       "file": "SETUP.md",
-      "sha256": "eb54f5bd1bbf005827df95a30b3103d358fe5904b5a0720cbec8b385e2fba113"
+      "sha256": "24ec89bcfcab9767345bb8efae52ec8a4828544bb15519d8109f10c9d25ddd5f"
     },
     {
       "file": "ANDROID.md",
@@ -223,7 +223,14 @@
       "source": "SETUP.md",
       "title": "Back up and restore",
       "locale": "en",
-      "text": "Open **Settings → Backup**. Create a backup with a password of at least 12\ncharacters and save the `.levixbak` file. Keep the password safe: Levix cannot\nrecover it. To restore, upload the file, enter its backup password, review the\npreview, then confirm with your panel password.\n\nThe preview lists what the restore changes: settings and API keys that are\nadded, replaced or unchanged, the ones the backup does not hold (they stay as\nthey are), the AI persona, and the WhatsApp account data. When the restore would\nreplace or remove something this install already has, tick the confirmation\nbefore **Confirm restore** is enabled. Restore writes only what the backup\nholds: a setting, an API key or a persona missing from the backup keeps its\ncurrent value. It keeps this install's panel password, recovery email, session\nkey, device settings and encryption key. WhatsApp pairing is never in the backup;\npair the account again by hand. Conversations, AI memory, stickers, schedules,\nroles and group data activate only when the same WhatsApp account connects.\nIf a different account connects, the Backup screen shows **waiting account\ndata**. You can later pair the matching account or choose **Discard** to remove\nthe waiting data.\n\n---"
+      "text": "Open **Settings → Backup**. Create a backup with a password of at least 12\ncharacters and save the `.levixbak` file. Keep the password safe: Levix cannot\nrecover it. To restore, upload the file, enter its backup password, review the\npreview, then confirm with your panel password.\n\nThe preview lists what the restore changes: settings and API keys that are\nadded, replaced or unchanged, the ones the backup does not hold (they stay as\nthey are), the AI persona, and the WhatsApp account data. When the restore would\nreplace or remove something this install already has, tick the confirmation\nbefore **Confirm restore** is enabled. Restore writes only what the backup\nholds: a setting, an API key or a persona missing from the backup keeps its\ncurrent value. It keeps this install's panel password, recovery email, session\nkey, device settings and encryption key. WhatsApp pairing is never in the backup;\npair the account again by hand. Conversations, AI memory, stickers, schedules,\nroles and group data activate only when the same WhatsApp account connects.\nIf a different account connects, the Backup screen shows **waiting account\ndata**. You can later pair the matching account or choose **Discard** to remove\nthe waiting data."
+    },
+    {
+      "id": "SETUP.md#going-back-to-4-9-x",
+      "source": "SETUP.md",
+      "title": "Going back to 4.9.x",
+      "locale": "en",
+      "text": "Starting 4.9.x on the same data after 5.0.0 has run is not supported.\n4.9.x does not refuse that database. It runs and ignores the newer data.\nWrites from 4.9.x can leave that data inconsistent. A later 5.0.0 start\ndoes not repair it.\n\nStop Levix. Keep a copy of the whole data directory first. Copy\n`backups/pre-migration/levix-v10-<time>.db` (first 5.0.0 start, from\n4.9.2) over `levix.db`. Keep your own copy of that file, because later\nupgrades remove older copies. Delete `levix.db-wal` and `levix.db-shm`.\nStart 4.9.x.\n\nThe setup page asks for a new panel password. From another machine it\nalso asks for the setup code printed in the terminal. Enter your API\nkeys again. If you use a WhatsApp proxy with a password, enter the proxy\npassword again in **Settings** before you press **Start** on **Connection**.\nPair the same WhatsApp account on the **Connection** screen.\nAnything written after the upgrade is not in that copy.\n\nA **Settings → Backup** `.levixbak` file is a 5.0.0 backup. 4.9.x cannot\nrestore it. Google Play cannot downgrade an installed app. A GitHub APK\ncan go back only after you uninstall, which deletes the app data. Do not\nstart a 4.9.x Docker image on a volume 5.0.0 has used. Pin the image tag.\n\n---"
     },
     {
       "id": "SETUP.md#when-something-goes-wrong",

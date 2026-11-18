@@ -72,6 +72,7 @@ installs, SEA binaries, Docker volumes, headless servers and the Android app.
 | A v5 migration ran | restore the pre-migration backup, then install the previous build |
 | Android | Google Play cannot downgrade an installed app; a fix ships as a newer version code. GitHub APK users can reinstall an older APK only after uninstalling, which deletes app data, so a Phase 02 backup must exist first |
 | Terms gate blocks a user wrongly | the bundled Terms copy is always acceptable offline; a fixed release follows |
+| 4.9.x on a 5.0.0 database (schema 12) | not supported. 4.9.x does not refuse it. Restore the pre-migration copy first. See below |
 
 With Levix stopped, copy the chosen `backups/pre-migration/levix-v*.db` over
 `levix.db`, then delete `levix.db-wal` and `levix.db-shm`. This copy has no CLI
@@ -80,3 +81,44 @@ password and, from another machine, the setup code printed in the terminal.
 Levix generates a new session key. Enter API keys again and pair the same
 WhatsApp account on the Connection screen. To start with another account,
 press Unlink after pairing.
+
+### Known incompatibility: 4.9.x on a 5.0.0 database
+
+4.9.2 has database schema 10 (10 migrations in `src/db/db.cjs` at tag v4.9.2).
+5.0.0 has schema 12.
+
+On the first 5.0.0 start, Levix writes and verifies a copy at
+`<data>/backups/pre-migration/levix-v<old schema>-<UTC time>.db` (for 4.9.2:
+`levix-v10-<time>.db`), then migrates to schema 12. A copy exists only when an
+existing database had a pending migration. A fresh 5.0.0 install gets none.
+Levix keeps only the two newest pre-migration copies (`src/db/db.cjs` prunes
+older ones), so later upgrades can remove the schema-10 copy. The copy omits WhatsApp
+pairing credentials and QR codes, panel authentication, the recovery email
+record, the session key, API keys, the WhatsApp proxy password, and the Terms
+acceptance record.
+
+5.0.0 refuses a database newer than it knows (exit code 78). 4.9.x has no such
+check. In 4.9.2, `migrate()` returns early when `user_version` is at least its
+10 migrations. So 4.9.x started on an upgraded (schema 12) data directory does
+not refuse. It runs on that database and ignores the v5 tables and columns.
+This is not supported. 4.9.x writes do not keep v5 data consistent (automation
+rule revisions, execution claims and rate budgets). A later 5.0.0 start runs
+no migration to repair them, because the schema already says 12.
+
+The supported way back is the restore above. Stop Levix. Keep a copy of the
+whole data directory first. Copy the pre-migration file over `levix.db`.
+Delete `levix.db-wal` and `levix.db-shm`. Start 4.9.x. Then `/setup` asks for
+a new panel password and, from another machine, the setup code printed in the
+terminal. Enter API keys again. If you use a WhatsApp proxy with a password,
+enter the proxy password again in Settings before you press Start on
+Connection. The copy keeps the other proxy settings (enabled, protocol, host,
+port, username), so an authenticated proxy rejects the connection and pairing
+fails until that password is set. Then pair the same WhatsApp account on the
+Connection screen. Anything written after the upgrade is not in that copy.
+
+A Settings → Backup `.levixbak` file is a 5.0.0 feature. 4.9.x cannot
+restore it.
+
+Android: Google Play cannot downgrade an installed app. A GitHub APK can go
+back only after uninstalling, which deletes app data. Docker: do not start a
+4.9.x image on a volume that 5.0.0 has used. Pin the image tag.
