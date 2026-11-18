@@ -1,6 +1,6 @@
 // Secret-free copies: schema, sequences, and ordinary rows survive; authentication
 // material must not land in the target file or its journal or WAL.
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { equal, finish, ok, require, section, throws, useTempDataDir } from "./harness.mjs";
@@ -492,4 +492,52 @@ section("existing target and failed copy");
 }
 
 source.close();
+
+section("pre-migration copy excludes installation consent");
+{
+  const database = require("./src/db/db.cjs");
+  const lock = require("./src/config/lock.cjs");
+  const oldVersion = MIGRATIONS.length - 1;
+  const acceptance = '{"acceptedAt":"2026-11-18T00:00:00.000Z"}';
+  const setting = '"en"';
+  const previousPath = join(dir, "previous.db");
+  const old = new DatabaseSync(database.DB_PATH);
+  migrate(old, MIGRATIONS.slice(0, oldVersion));
+  const insert = old.prepare("INSERT INTO bot_settings (key, value) VALUES (?, ?)");
+  insert.run("legal:acceptance", acceptance);
+  insert.run("setting:bot_language", setting);
+  old.close();
+  copyFileSync(database.DB_PATH, previousPath);
+
+  lock.acquireSingleInstanceLock();
+  try {
+    const report = await database.prepareDatabase();
+    equal("migration starts at previous schema", report.from, oldVersion);
+    equal("migration reaches current schema", report.to, MIGRATIONS.length);
+    ok("pre-migration copy exists", !!report.copyPath && existsSync(report.copyPath));
+    const previous = new DatabaseSync(previousPath, { readOnly: true });
+    try {
+      let verificationError;
+      try {
+        verifySecretFreeCopy(report.copyPath, previous, {
+          expectedVersion: oldVersion,
+          keepBotKey: (key) => key !== "legal:acceptance",
+        });
+      } catch (error) { verificationError = error; }
+      ok("pre-migration copy passes verification", !verificationError, verificationError?.message);
+    } finally { previous.close(); }
+    const copy = new DatabaseSync(report.copyPath, { readOnly: true });
+    try {
+      const row = copy.prepare("SELECT value FROM bot_settings WHERE key = ?");
+      equal("copy excludes consent", row.get("legal:acceptance"), undefined);
+      equal("copy keeps ordinary setting", row.get("setting:bot_language")?.value, setting);
+    } finally { copy.close(); }
+    const live = database.openWithoutMigration();
+    equal("live database retains consent after migration",
+      live.prepare("SELECT value FROM bot_settings WHERE key = ?").get("legal:acceptance")?.value, acceptance);
+  } finally {
+    database.close();
+    lock.release();
+  }
+}
 finish();
