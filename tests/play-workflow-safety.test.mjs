@@ -120,7 +120,7 @@ section("tag release starts only for the repository owner");
     } else if (job !== "verify-version") {
       ok(
         `${job} re-checks the triggering actor`,
-        condition.includes("github.triggering_actor == github.repository_owner"),
+        /^ {4}if: github\.triggering_actor == github\.repository_owner *$/.test(condition),
       );
     }
   }
