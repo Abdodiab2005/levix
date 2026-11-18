@@ -4,7 +4,8 @@
 #
 # Nothing is published unless the repository owner pushed the tag, the tag
 # matches package.json and the Android versionName, and the full CI suite
-# passes first.
+# passes first. Every enabled job re-checks the triggering actor, so re-running a
+# failed job needs the owner.
 #
 #   tag pushed
 #     └─ verify-version ── ci ── npm ───────────────┐
@@ -32,8 +33,9 @@ on:
 jobs:
   verify-version:
     name: tag matches package version
-    # Only the repository owner's own tag push starts a release. Every
-    # publishing job needs this one, so any other actor's tag skips them all.
+    # Only the repository owner's own tag push starts a release. Re-running a
+    # failed job does not re-run this gate, so later jobs check the triggering
+    # actor themselves.
     if: github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
     runs-on: ubuntu-latest
     steps:
@@ -73,10 +75,12 @@ jobs:
   # release.
   ci:
     needs: verify-version
+    if: github.triggering_actor == github.repository_owner
     uses: ./.github/workflows/ci.yml
 
   npm:
     needs: ci
+    if: github.triggering_actor == github.repository_owner
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -109,6 +113,7 @@ jobs:
 
   image:
     needs: ci
+    if: github.triggering_actor == github.repository_owner
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -143,6 +148,7 @@ jobs:
 
   binaries:
     needs: ci
+    if: github.triggering_actor == github.repository_owner
     # A single executable embeds the host's node binary, so each platform has
     # to be built on itself.
     strategy:
@@ -181,6 +187,7 @@ jobs:
   apk:
     name: android apk + aab (arm64, armv7)
     needs: ci
+    if: github.triggering_actor == github.repository_owner
     runs-on: ubuntu-latest
     # Original upload key is available only after play-signing protection rules.
     environment: play-signing
@@ -276,6 +283,7 @@ jobs:
   # it through their own publish/build path successfully.
   publish-release:
     needs: [binaries, npm, image, apk]
+    if: github.triggering_actor == github.repository_owner
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -365,6 +373,7 @@ jobs:
   installer:
     name: publish the public installer
     needs: publish-release
+    if: github.triggering_actor == github.repository_owner
     runs-on: ubuntu-latest
     environment: installer-production
     concurrency:

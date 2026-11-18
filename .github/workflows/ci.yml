@@ -227,16 +227,14 @@ jobs:
             android/app/build/outputs/apk/release/levix-android-armv7.apk \
             android/app/build/outputs/bundle/release/app-release.aab \
             | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Upload size report and release builds
+      # Release-variant APKs and the AAB are signed with the debug key and are not kept as artifacts.
+      - name: Upload size report
         uses: actions/upload-artifact@v7
         with:
-          name: android-release-size
+          name: android-size-report
           retention-days: 7
           path: |
             android-size.json
-            android/app/build/outputs/apk/release/levix-android-arm64.apk
-            android/app/build/outputs/apk/release/levix-android-armv7.apk
-            android/app/build/outputs/bundle/release/app-release.aab
       - name: Upload Debug APKs
         uses: actions/upload-artifact@v7
         with:
