@@ -118,9 +118,15 @@ function verifySecretFreeCopy(targetPath, sourceDatabase, {
       }
       if (actual !== expected) throw new Error(`copy row count differs for ${name}`);
     }
-    if (sourceTables.includes("bot_settings") &&
-        copy.prepare("SELECT key FROM bot_settings").all().some(({ key }) => isSecretBotKey(key, allowBotKey))) {
-      throw new Error("copy contains a secret bot setting");
+    if (sourceTables.includes("bot_settings")) {
+      const copiedKeys = copy.prepare("SELECT key FROM bot_settings").all().map(({ key }) => key);
+      if (copiedKeys.some((key) => isSecretBotKey(key, allowBotKey))) {
+        throw new Error("copy contains a secret bot setting");
+      }
+      // A row count alone would accept an excluded key standing in for a missing one.
+      if (copiedKeys.some((key) => !keepBotKey(key))) {
+        throw new Error("copy contains an excluded bot setting");
+      }
     }
   } finally {
     copy.close();

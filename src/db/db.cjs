@@ -840,10 +840,12 @@ async function makePreMigrationCopy(database, from) {
     const stamp = new Date(instant).toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
     copyPath = path.join(folder, `levix-v${from}-${stamp}.db`);
     partPath = `${copyPath}.part`;
+    const keepBotKey = (key) => key !== "legal:acceptance";
     writeSecretFreeCopy(DB_PATH, partPath, {
+      keepBotKey,
       onAfterRows: () => copyHookForTest?.("after-rows"),
     });
-    verifySecretFreeCopy(partPath, database, { expectedVersion: from });
+    verifySecretFreeCopy(partPath, database, { expectedVersion: from, keepBotKey });
     copyHookForTest?.("before-rename");
     fs.renameSync(partPath, copyPath);
     renamed = true;

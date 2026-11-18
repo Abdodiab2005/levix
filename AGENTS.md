@@ -650,8 +650,9 @@ Startup refuses a newer schema. For an existing older schema it verifies a
 pre-migration copy before all pending steps run in one transaction. The copy
 holds every table, but leaves out pairing credentials and QR codes, panel
 authentication, the recovery email record, the session key, API keys and the
-WhatsApp proxy password. These secrets are never written to the copy. Levix writes a `.part` file, verifies
-it, then renames it to `levix-v*.db`. With Levix stopped, manual recovery
+WhatsApp proxy password. These secrets are never written to the copy. The copy
+also leaves out the installation's Terms consent record (`legal:acceptance`).
+Levix writes a `.part` file, verifies it, then renames it to `levix-v*.db`. With Levix stopped, manual recovery
 copies a `backups/pre-migration/levix-v*.db` over `levix.db` and deletes
 `levix.db-wal` and `levix.db-shm`. There is no CLI restore. On the previous
 build, `/setup` asks for a new panel password and, from another machine, the
