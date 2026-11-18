@@ -532,6 +532,22 @@ section("pre-migration copy excludes installation consent");
       equal("copy excludes consent", row.get("legal:acceptance"), undefined);
       equal("copy keeps ordinary setting", row.get("setting:bot_language")?.value, setting);
     } finally { copy.close(); }
+    // Same row count, wrong content: consent standing in for the ordinary setting.
+    const tampered = join(dir, "tampered.db");
+    copyFileSync(report.copyPath, tampered);
+    const edit = new DatabaseSync(tampered);
+    edit.prepare("DELETE FROM bot_settings WHERE key = 'setting:bot_language'").run();
+    edit.prepare("INSERT INTO bot_settings (key, value) VALUES ('legal:acceptance', ?)").run(acceptance);
+    edit.close();
+    const previousAgain = new DatabaseSync(previousPath, { readOnly: true });
+    try {
+      throws("verification refuses consent swapped in for an ordinary setting", () =>
+        verifySecretFreeCopy(tampered, previousAgain, {
+          expectedVersion: oldVersion,
+          keepBotKey: (key) => key !== "legal:acceptance",
+        }),
+      );
+    } finally { previousAgain.close(); }
     const live = database.openWithoutMigration();
     equal("live database retains consent after migration",
       live.prepare("SELECT value FROM bot_settings WHERE key = ?").get("legal:acceptance")?.value, acceptance);
