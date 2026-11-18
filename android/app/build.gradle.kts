@@ -168,8 +168,8 @@ android {
         applicationId = "net.leviro.levix"
         minSdk = 29
         targetSdk = 36
-        versionCode = 71
-        versionName = "5.0.0-beta.1"
+        versionCode = 78
+        versionName = "5.0.0"
         buildConfigField("String", "PLUS_PRODUCT_ID", "\"$plusProductId\"")
     }
 
