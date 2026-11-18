@@ -61,4 +61,23 @@ ok("signer check limits dispatch to main", signerCheck.includes("github.ref == '
 ok("signer check requires repository owner", signerCheck.includes("github.actor == github.repository_owner"));
 ok("signer check takes original upload fingerprint", signerCheck.includes("expected_upload_cert_sha256"));
 ok("signer check has no upload or artifacts", !/upload-google-play|actions\/upload-artifact|gh release create/.test(signerCheck));
+section("tag release starts only for the repository owner");
+{
+  const head = release.slice(release.indexOf("  verify-version:"), release.indexOf("    steps:", release.indexOf("  verify-version:")));
+  ok("verify-version requires the owner as actor", head.includes("github.actor == github.repository_owner"));
+  ok("verify-version requires the owner as triggering actor", head.includes("github.triggering_actor == github.repository_owner"));
+  // Every job reaches verify-version through needs, so the gate covers all publishing.
+  const jobsBlock = release.slice(release.indexOf("\njobs:\n"));
+  const jobs = [...jobsBlock.matchAll(/^ {2}([a-z][a-z-]*):\n/gm)].map((m) => m[1]);
+  const needs = Object.fromEntries(jobs.map((job) => {
+    const start = release.indexOf(`\n  ${job}:\n`);
+    const next = jobs.map((j) => release.indexOf(`\n  ${j}:\n`)).filter((i) => i > start).sort((a, b) => a - b)[0] ?? release.length;
+    const body = release.slice(start, next);
+    const m = body.match(/^ {4}needs: (\[[^\]]*\]|[a-z-]+)/m);
+    return [job, m ? m[1].replace(/[\[\]\s]/g, "").split(",").filter(Boolean) : []];
+  }));
+  const reaches = (job, seen = new Set()) => job === "verify-version" || (needs[job] || []).some((n) => !seen.has(n) && (seen.add(n), reaches(n, seen)));
+  for (const job of jobs) ok(`${job} depends on verify-version`, reaches(job));
+}
+
 finish();
