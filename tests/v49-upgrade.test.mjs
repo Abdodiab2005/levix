@@ -1,4 +1,5 @@
 // Real panel startup from the frozen released v4.9.1/v4.9.2 schema (user_version 10).
+// Those releases stored no legal:acceptance row.
 // bootstrapCore takes the lock, copies, migrates, and resumes a paired install.
 // The Baileys constructor is the offline fake. Identities, keys and content are synthetic.
 import { registerHooks } from "node:module";
@@ -85,7 +86,6 @@ const consent = require("./src/legal/consent.cjs");
 const { SECRET_SETTING_KEYS } = require("./src/config/settings.cjs");
 const document = terms.documentFor("en");
 ok("bundled Terms document is available", !!document?.version && !!document?.sha256);
-ok("this build is not the seeded v4.9.2 acceptance", consent.appVersion() !== "4.9.2");
 for (const key of [
   "gemini_api_key",
   "openai_api_key",
@@ -120,15 +120,6 @@ const preKey = JSON.stringify({ sentinel: track("PREKEY-SENTINEL-v49") });
 const encryptedCreds = track(vault.seal(credentials));
 const encryptedSignal = track(vault.seal(signalSession));
 const encryptedPreKey = track(vault.seal(preKey));
-const oldAcceptance = {
-  schema: 1,
-  appVersion: "4.9.2",
-  termsVersion: document.version,
-  sha256: document.sha256,
-  locale: "en",
-  acceptedAt: "2026-01-15T00:00:00.000Z",
-  via: "panel",
-};
 
 const source = new DatabaseSync(join(dir, "levix.db"));
 source.exec(readFileSync(new URL("./fixtures/v49-schema.sql", import.meta.url), "utf8"));
@@ -159,7 +150,6 @@ const settings = {
   "auth:password": track("PASSWORD-SENTINEL-v49"),
   "auth:recovery-email": track("RECOVERY-SENTINEL-v49"),
   "secret:session": track("SESSION-KEY-SENTINEL-v49"),
-  "legal:acceptance": oldAcceptance,
 };
 for (const key of SECRET_SETTING_KEYS) {
   const plaintext = `SECRET-${key}-SENTINEL-v49`;
@@ -559,19 +549,31 @@ try {
         0,
       );
     }
-    const copiedAcceptance = JSON.parse(
-      copy.prepare("SELECT value FROM bot_settings WHERE key = 'legal:acceptance'").get().value,
+    equal(
+      "the pre-migration copy has no legal:acceptance row",
+      copy
+        .prepare("SELECT count(*) AS n FROM bot_settings WHERE key = 'legal:acceptance'")
+        .get().n,
+      0,
     );
-    equal("copy keeps the v4.9.2 acceptance", copiedAcceptance.appVersion, "4.9.2");
   } finally {
     copy.close();
   }
 
   section("paired resume waits for Terms consent for this version");
+  equal(
+    "the live database has no legal:acceptance before consent",
+    db.prepare("SELECT count(*) AS n FROM bot_settings WHERE key = 'legal:acceptance'").get().n,
+    0,
+  );
   equal("bootstrap recognized the paired install", core.wasPaired, true);
   equal("sessionStartupPolicy resumed the paired install", startReasons.join(","), "resume-paired");
   equal("resume is held in consent_required", core.session.state, "consent_required");
-  equal("the gate reason is the new app version", core.session.getState().reason, "app_updated");
+  equal(
+    "the gate reason is missing Terms consent",
+    core.session.getState().reason,
+    "terms_not_accepted",
+  );
   equal("the gate reports the install as linked", core.session.getState().linked, true);
   equal("the gate created no socket", globalThis.__levixV49SocketCreates, 0);
   equal("the gate holds no socket", core.session.socket, null);
@@ -678,6 +680,10 @@ try {
   } finally {
     reopened.close();
   }
+
+  // close() clears the connection. The next store read configures the file, so it needs the lock.
+  lock.acquireSingleInstanceLock();
+  equal("the post-shutdown checks hold the instance lock", lock.isLockHeld(), true);
   equal(
     "install vault key is unchanged after shutdown",
     readFileSync(join(dir, "levix.key")).toString("hex"),
@@ -689,6 +695,9 @@ try {
     store.authRead("session-synthetic"),
     signalSession,
   );
+  database.close();
+  lock.release();
+  equal("the post-shutdown checks release the instance lock", lock.isLockHeld(), false);
 
   lock.acquireSingleInstanceLock();
   equal("the data directory can be claimed again", lock.isLockHeld(), true);
