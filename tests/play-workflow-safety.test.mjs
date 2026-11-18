@@ -48,15 +48,18 @@ ok(
 );
 section("CI artifacts omit debug-signed release builds");
 {
-  // Each upload-artifact step, then only the path block that follows it.
-  const artifactUploads = [
-    ...ci.matchAll(/uses: actions\/upload-artifact@v\d+\n(?:.*\n)*? {10}path: \|\n((?: {12}.*\n)*)/g),
-  ];
-  ok("the inventory covers existing CI artifact uploads", artifactUploads.length >= 2);
-  ok(
-    "no CI artifact path keeps a release APK or AAB",
-    artifactUploads.every((match) => match[1].trim() !== "" && !/outputs\/bundle\/|outputs\/apk\/release\//.test(match[1])),
-  );
+  // Every step in ci.yml starts at 6 spaces. Keep each upload inside its own step.
+  const steps = ci.split(/(?=^ {6}- )/m).filter((chunk) => /^ {6}- /m.test(chunk));
+  const uploads = steps.filter((chunk) => chunk.includes("uses: actions/upload-artifact@"));
+  const usesCount = [...ci.matchAll(/uses: actions\/upload-artifact@/g)].length;
+  ok("the inventory covers existing CI artifact uploads", uploads.length >= 2 && uploads.length === usesCount);
+  for (const chunk of uploads) {
+    const step = chunk.match(/^ {6}- name: (.+)$/m)?.[1] ?? "unnamed upload";
+    ok(
+      `${step} excludes release APKs and the AAB`,
+      !/outputs\/bundle\/|outputs\/apk\/release\/|\.aab\b/.test(chunk),
+    );
+  }
   ok("debug APK artifact remains", ci.includes("name: android-debug-apks"));
 }
 section("public release signing uses protected play-signing secrets");
@@ -79,25 +82,48 @@ section("tag release starts only for the repository owner");
   const head = release.slice(release.indexOf("  verify-version:"), release.indexOf("    steps:", release.indexOf("  verify-version:")));
   ok("verify-version requires the owner as actor", head.includes("github.actor == github.repository_owner"));
   ok("verify-version requires the owner as triggering actor", head.includes("github.triggering_actor == github.repository_owner"));
-  // Every job reaches verify-version through needs, so the gate covers all publishing.
+  // Every job reaches verify-version through needs. A re-run skips a successful
+  // gate, so each job's own if re-checks the triggering actor.
   const jobsBlock = release.slice(release.indexOf("\njobs:\n"));
   const jobs = [...jobsBlock.matchAll(/^ {2}([a-z][a-z-]*):\n/gm)].map((m) => m[1]);
-  const needs = Object.fromEntries(jobs.map((job) => {
+  const bodies = Object.fromEntries(jobs.map((job) => {
     const start = release.indexOf(`\n  ${job}:\n`);
     const next = jobs.map((j) => release.indexOf(`\n  ${j}:\n`)).filter((i) => i > start).sort((a, b) => a - b)[0] ?? release.length;
-    const body = release.slice(start, next);
-    const m = body.match(/^ {4}needs: (\[[^\]]*\]|[a-z-]+)/m);
+    return [job, release.slice(start, next)];
+  }));
+  const needs = Object.fromEntries(jobs.map((job) => {
+    const m = bodies[job].match(/^ {4}needs: (\[[^\]]*\]|[a-z-]+)/m);
     return [job, m ? m[1].replace(/[\[\]\s]/g, "").split(",").filter(Boolean) : []];
   }));
   const reaches = (job, seen = new Set()) => job === "verify-version" || (needs[job] || []).some((n) => !seen.has(n) && (seen.add(n), reaches(n, seen)));
   for (const job of jobs) ok(`${job} depends on verify-version`, reaches(job));
-  // A job-level if (4 spaces, directly under the job) that uses always(),
-  // cancelled(), failure(), or success() || still runs when verify-version is skipped.
-  const jobIfs = [...release.matchAll(/^ {4}if:.*$/gm)].map((match) => match[0]);
-  ok(
-    "no job-level if bypasses a skipped verify-version",
-    jobIfs.length >= 2 && jobIfs.every((line) => !/always\(\)|cancelled\(\)|failure\(\)|success\(\) \|\|/.test(line)),
-  );
+  // Job-level if is exactly 4 spaces, plus continuation lines indented 6 or more.
+  const jobLevelIf = (body) => {
+    const lines = body.split("\n");
+    const start = lines.findIndex((line) => /^ {4}if:/.test(line));
+    if (start < 0) return "";
+    const kept = [lines[start]];
+    for (let i = start + 1; i < lines.length; i += 1) {
+      if (/^ {6,}/.test(lines[i])) kept.push(lines[i]);
+      else break;
+    }
+    return kept.join("\n");
+  };
+  for (const job of jobs) {
+    const condition = jobLevelIf(bodies[job]);
+    ok(
+      `${job} job-level if has no status function`,
+      condition !== "" && !/\b(always|cancelled|failure|success)\s*\(/.test(condition),
+    );
+    if (job === "play") {
+      ok(`${job} job-level if is \${{ false }}`, condition.includes("${{ false }}"));
+    } else if (job !== "verify-version") {
+      ok(
+        `${job} re-checks the triggering actor`,
+        condition.includes("github.triggering_actor == github.repository_owner"),
+      );
+    }
+  }
 }
 
 finish();
