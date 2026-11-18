@@ -151,6 +151,7 @@ const LEVELS = {
   translate: "MEMBERS",
   tts: "MEMBERS",
   unblock: "OWNER_ONLY",
+  update: "OWNER_ONLY",
   weather: "MEMBERS",
 };
 
@@ -162,7 +163,7 @@ section("permission matrix");
   );
   await loadCommands();
   const catalog = getCommandCatalog();
-  equal("69 commands", catalog.length, 69);
+  equal("69 existing commands and the approved update command", catalog.length, 70);
   const live = Object.fromEntries(catalog.map((command) => [command.key, command.permission]));
   for (const [key, level] of Object.entries(LEVELS)) {
     equal(key, live[key], level);
@@ -278,6 +279,125 @@ section("dispatcher");
       "block is the owner command, not the blacklist alias",
       /owner/i.test(fake.sent[0]?.content?.text || ""),
     );
+  }
+}
+
+section("an epoch move during metadata skips execute");
+
+{
+  const { handleCommand } = await import(join(ROOT, "src/handlers/command.handler.js"));
+  const store = require("./src/db/store.cjs");
+  const ping = require("./src/commands/ping.cjs");
+  const rules = require("./src/commands/group/rules.cjs");
+  const realPing = ping.execute;
+  const realRules = rules.execute;
+  let pingRuns = 0;
+  let ruleRuns = 0;
+  ping.execute = async () => {
+    pingRuns += 1;
+  };
+  rules.execute = async () => {
+    ruleRuns += 1;
+  };
+
+  async function untilCalled(flag, label) {
+    const started = Date.now();
+    while (!flag()) {
+      if (Date.now() - started > 1000) throw new Error(label);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  }
+
+  try {
+    const groupId = "120363-epoch-dispatch@g.us";
+    let releaseMeta;
+    let asked = false;
+    const sock = {
+      sent: [],
+      user: { id: "201111111111:1@s.whatsapp.net" },
+      async sendMessage(_jid, content) {
+        this.sent.push(content);
+        return { key: { id: "out" } };
+      },
+      groupMetadata() {
+        asked = true;
+        return new Promise((resolve) => {
+          releaseMeta = () =>
+            resolve({
+              id: groupId,
+              subject: "Epoch",
+              participants: [{ id: "201111111111@s.whatsapp.net", admin: "admin" }],
+            });
+        });
+      },
+    };
+    const pending = handleCommand(
+      sock,
+      {
+        key: {
+          remoteJid: groupId,
+          fromMe: true,
+          id: "ping-epoch",
+          participant: "201111111111@s.whatsapp.net",
+        },
+        message: { conversation: "!ping" },
+      },
+      "!ping",
+    );
+    await untilCalled(() => asked, "dispatcher did not await metadata");
+    store.advanceAccountEpoch();
+    releaseMeta();
+    await pending;
+    equal("dispatcher skips execute when the epoch moves", pingRuns, 0);
+    equal("dispatcher sends nothing for that skip", sock.sent.length, 0);
+
+    const nestedId = "120363-epoch-nested@g.us";
+    let releaseNested;
+    let nestedAsked = false;
+    const nestedSock = {
+      sent: [],
+      async sendMessage(_jid, content) {
+        this.sent.push(content);
+        return { key: { id: "out" } };
+      },
+      groupMetadata() {
+        nestedAsked = true;
+        return new Promise((resolve) => {
+          releaseNested = () =>
+            resolve({
+              id: nestedId,
+              subject: "Epoch",
+              participants: [{ id: "201111111111@s.whatsapp.net", admin: "admin" }],
+            });
+        });
+      },
+    };
+    const entry = store.accountEpoch();
+    const nestedPending = group.execute(
+      nestedSock,
+      {
+        key: {
+          remoteJid: nestedId,
+          fromMe: true,
+          id: "rules-epoch",
+          participant: "201111111111@s.whatsapp.net",
+        },
+        message: { conversation: "!group rules" },
+      },
+      ["rules"],
+      "!group rules",
+      null,
+      { accountEpoch: entry },
+    );
+    await untilCalled(() => nestedAsked, "nested dispatch did not await metadata");
+    store.advanceAccountEpoch();
+    releaseNested();
+    await nestedPending;
+    equal("nested dispatch skips the sub-command when the epoch moves", ruleRuns, 0);
+    equal("nested dispatch sends nothing for that skip", nestedSock.sent.length, 0);
+  } finally {
+    ping.execute = realPing;
+    rules.execute = realRules;
   }
 }
 

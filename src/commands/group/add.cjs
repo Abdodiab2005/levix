@@ -12,9 +12,8 @@ module.exports = {
 
   // The full, correct execute function for commands/add.js
 
-  async execute(sock, msg, args, body, groupMetadata, confirmationSessions) {
+  async execute(sock, msg, args, body, groupMetadata) {
     const groupId = msg.key.remoteJid;
-    const senderId = msg.key.participant; // The admin who is running the command
     let targetJid;
     let statusLine = null;
     let shouldPromote = false;
@@ -96,20 +95,6 @@ module.exports = {
           t("bot.group.add.privacyBlocked", { number: targetJid.split("@")[0] }),
           { mentions: [targetJid] },
         );
-
-        confirmationSessions.set(senderId, {
-          command: "send_invite",
-          groupId: groupId,
-          targetJid: targetJid,
-          adminJid: senderId,
-          timestamp: Date.now(),
-        });
-
-        setTimeout(() => {
-          if (confirmationSessions.has(senderId)) {
-            confirmationSessions.delete(senderId);
-          }
-        }, 30000);
       } else {
         await statusLine.finish(t("bot.group.add.failedStatus", { status }));
       }

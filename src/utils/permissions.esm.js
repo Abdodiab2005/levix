@@ -1,47 +1,17 @@
-// Centralized permissions module.
-//
-// Until now, owner detection was scattered across at least five places, each
-// using a slightly different (and mutually inconsistent) check:
-//   * permissions.middleware.js  — DB lookup + config.owners + fromMe
-//   * group.cjs                  — config.owners only (always empty)
-//   * group/media.cjs            — config.owners on a `{}` parameter (throws!)
-//   * group/antilink.cjs         — same as media.cjs
-//   * antispam.middleware.js     — a legacy owner mirror (only the bot itself)
-//   * gemini.cjs                 — display-name match (fragile)
-//
-// This module is the single source of truth. It exposes:
-//
-//   bootstrapOwners(list)
-//     Called once at connection time with the bot's own JID/LID plus every
-//     owner already recorded in user_metadata. Stored in a Set so subsequent
-//     checks are O(1) and don't hit the database on the hot path.
-//
-//   isOwnerJid(jidOrLidOrPhone)
-//     Checks every direction we know about:
-//       - bootstrap set
-//       - user_metadata table (is_owner = 1) by jid, lid, or phone
-//       - cross-format: if given a LID, look up its PN and recheck; vice versa
-//       - phone-digit fallback (handles `:XX` device suffixes etc.)
-//
-//   isAdminInGroup(groupMetadata, jid)
-//     LID/PN-aware admin check.
-//
-//   isBotAdminInGroup(groupMetadata, sock)
-//     Same idea for the bot itself.
-//
-//   sameUser(a, b)
-//     True if two identifiers refer to the same person (LID/PN/phone equiv).
-
-import normalizeJid, { isLidJid, isPnJid } from "./normalizeJid.esm.js";
+// Centralized role and WhatsApp identity checks. Numeric equality across the
+// LID and PN namespaces is never evidence of identity.
+import normalizeJid from "./normalizeJid.esm.js";
+import { createRequire } from "node:module";
 import {
   isUserBotAdmin as dbIsBotAdmin,
   isUserOwner as dbIsOwner,
   getAllBotAdmins,
   getAllOwners,
-  getLidForPn,
-  getPnForLid,
   setUserRole,
 } from "./storage.esm.js";
+
+const require = createRequire(import.meta.url);
+const { roleIdentityAliases, withImmediateTransaction } = require("../db/store.cjs");
 
 // Two rosters, same mechanics:
 //   owners      — full access, including OWNER_ONLY commands
@@ -49,20 +19,36 @@ import {
 //                 satisfies ADMINS_ONLY / ADMINS_OWNER), but not OWNER_ONLY
 const bootstrap = new Set();
 const bootstrapAdminSet = new Set();
-
-function digitsOnly(value) {
-  if (!value) return null;
-  const m = String(value).match(/\d+/);
-  return m ? m[0] : null;
-}
+const linkedSelf = new Set();
 
 function pushInto(set, value) {
-  if (!value) return;
-  const norm = normalizeJid(value);
+  const norm = identityForms(value)[0];
   if (norm) set.add(norm);
-  const phone = digitsOnly(value);
-  if (phone) {
-    set.add(`${phone}@s.whatsapp.net`);
+}
+
+// Connection bootstrap passes primary JIDs plus legacy user_lid columns.
+// Do not freeze a secondary column into an independent grant. Current mapping
+// aliases are resolved at check time, and unverified contact links grant nothing.
+function replaceBootstrap(set, values, listAll) {
+  set.clear();
+  if (!Array.isArray(values)) return;
+  const secondary = new Set();
+  const primary = new Set();
+  try {
+    for (const row of listAll()) {
+      const jid = identityForms(row.jid)[0];
+      const lid = identityForms(row.lid)[0];
+      if (jid) primary.add(jid);
+      if (lid && lid !== jid && values.some((value) => identityForms(value)[0] === jid)) {
+        secondary.add(lid);
+      }
+    }
+  } catch {
+    return; // A bootstrap list may contain unverified contact aliases.
+  }
+  for (const value of values) {
+    const norm = identityForms(value)[0];
+    if (!secondary.has(norm) || primary.has(norm)) pushInto(set, value);
   }
 }
 
@@ -72,12 +58,14 @@ function pushBootstrap(value) {
 
 /**
  * Replace the bootstrap owner set. Pass an array of JIDs/LIDs/phones; we
- * normalize and de-dupe them.
+ * normalize and de-dupe them. verifiedSelf contains only paired credentials.
  */
-export function bootstrapOwners(values) {
-  bootstrap.clear();
-  if (!Array.isArray(values)) return;
-  values.forEach(pushBootstrap);
+export function bootstrapOwners(values, verifiedSelf = []) {
+  replaceBootstrap(bootstrap, values, getAllOwners);
+  // Cleared by lifecycle bootstrap (including unlink), never by revocation.
+  // Supplied only from paired credentials, never from contact metadata.
+  linkedSelf.clear();
+  for (const value of verifiedSelf) pushInto(linkedSelf, value);
 }
 
 /** Add an owner to the bootstrap set (does not touch the DB). */
@@ -86,16 +74,12 @@ export function addBootstrapOwner(value) {
 }
 
 export function getBootstrapOwners() {
-  return [...bootstrap];
+  return [...new Set([...bootstrap, ...linkedSelf])];
 }
 
 /** Same as bootstrapOwners, for the bot-admin roster. */
 export function bootstrapAdmins(values) {
-  bootstrapAdminSet.clear();
-  if (!Array.isArray(values)) return;
-  values.forEach((value) => {
-    pushInto(bootstrapAdminSet, value);
-  });
+  replaceBootstrap(bootstrapAdminSet, values, getAllBotAdmins);
 }
 
 export function addBootstrapAdmin(value) {
@@ -106,80 +90,38 @@ export function getBootstrapAdmins() {
   return [...bootstrapAdminSet];
 }
 
-/**
- * Every identifier that could stand for the same person: the normalized form,
- * its LID/PN counterpart, and the bare-phone JID. Both role checks walk this
- * list so a user granted a role by phone still matches when they message under
- * a LID (and vice-versa).
- */
+/** Exact normalized identity and its current authoritative mapping only. */
 function identityForms(jid) {
-  const forms = [];
-  const push = (value) => {
-    const norm = normalizeJid(value);
-    if (norm && !forms.includes(norm)) forms.push(norm);
-  };
-
-  const norm = normalizeJid(jid);
-  if (!norm) return forms;
-  push(norm);
-
-  if (isLidJid(norm)) {
-    try {
-      push(getPnForLid(norm));
-    } catch {}
+  if (!jid) return [];
+  try {
+    return roleIdentityAliases(jid);
+  } catch {
+    // A failed mapping read cannot establish another identity.
+    const norm = normalizeJid(jid);
+    return norm?.includes("@") ? [norm] : [];
   }
-  if (isPnJid(norm)) {
-    try {
-      push(getLidForPn(norm));
-    } catch {}
-  }
-
-  const phone = digitsOnly(norm);
-  if (phone) push(`${phone}@s.whatsapp.net`);
-
-  return forms;
 }
 
-/**
- * Shared role resolution: bootstrap set, then the DB, then a phone-digit walk
- * over the stored roster (covers rows saved with only a phone or only a LID).
- */
-function hasRole(jid, { set, dbCheck, listAll }) {
-  if (!jid) return false;
-  const forms = identityForms(jid);
-  if (!forms.length) return false;
-
+function hasRole(jid, { set, dbCheck, permanent }, groupMetadata) {
+  const forms = new Set(identityForms(jid));
+  // A transport roster object carrying both forms is proof even before the
+  // mapping table learns the pair. Never consult user_metadata aliases here.
+  const participant = findGroupParticipant(groupMetadata, jid);
+  for (const id of participantIds(participant)) {
+    for (const form of identityForms(id)) forms.add(form);
+  }
   for (const form of forms) {
-    if (set.has(form)) return true;
+    if (set.has(form) || permanent?.has(form)) return true;
     try {
       if (dbCheck(form)) return true;
     } catch {}
   }
-
-  const phone = digitsOnly(forms[0]);
-  if (phone) {
-    try {
-      for (const entry of listAll()) {
-        const entryPhone =
-          digitsOnly(entry.phone) || digitsOnly(entry.jid) || digitsOnly(entry.lid);
-        if (entryPhone && entryPhone === phone) return true;
-      }
-    } catch {}
-  }
-
   return false;
 }
 
-/**
- * Comprehensive owner check (bootstrap set + user_metadata + LID/PN
- * cross-lookup + phone-digit fallback).
- */
-export function isOwnerJid(jid) {
-  return hasRole(jid, {
-    set: bootstrap,
-    dbCheck: dbIsOwner,
-    listAll: getAllOwners,
-  });
+/** Owner check by exact primary identity or verified current mapping. */
+export function isOwnerJid(jid, groupMetadata) {
+  return hasRole(jid, { set: bootstrap, dbCheck: dbIsOwner, permanent: linkedSelf }, groupMetadata);
 }
 
 /**
@@ -188,18 +130,21 @@ export function isOwnerJid(jid) {
  * the AI) that makes the user an admin everywhere the bot works.
  * Owners always pass.
  */
-export function isBotAdminUser(jid) {
-  if (isOwnerJid(jid)) return true;
-  return hasRole(jid, {
-    set: bootstrapAdminSet,
-    dbCheck: dbIsBotAdmin,
-    listAll: getAllBotAdmins,
-  });
+export function isBotAdminUser(jid, groupMetadata) {
+  if (isOwnerJid(jid, groupMetadata)) return true;
+  return hasRole(
+    jid,
+    {
+      set: bootstrapAdminSet,
+      dbCheck: dbIsBotAdmin,
+    },
+    groupMetadata,
+  );
 }
 
 /** Owner or bot-admin — "this person may drive the bot". */
-export function hasBotPrivileges(jid) {
-  return isOwnerJid(jid) || isBotAdminUser(jid);
+export function hasBotPrivileges(jid, groupMetadata) {
+  return isOwnerJid(jid, groupMetadata) || isBotAdminUser(jid, groupMetadata);
 }
 
 /**
@@ -219,21 +164,33 @@ export function grantRole(target, role = "admin") {
 }
 
 /**
- * Revoke a bot-level role. The in-memory roster is rebuilt from what's left so
- * a revoked user stops matching without a restart.
+ * Revoke a bot-level role and remove its proven aliases from the bootstrap
+ * set so the revocation takes effect without a restart. verifiedAliases must
+ * come from trusted target participant metadata.
  *
  * @returns {object|null} the stored user record
  */
-export function revokeRole(target, role = "admin") {
+export function revokeRole(target, role = "admin", verifiedAliases = []) {
   const wanted = String(role).toLowerCase() === "owner" ? "owner" : "admin";
-  const record = setUserRole(target, wanted, false);
-
-  const forms = identityForms(record?.jid || target);
+  // Extra identities come from the target's trusted roster participant, never
+  // from model arguments or secondary user_metadata columns.
+  const forms = new Set([target, ...verifiedAliases].flatMap(identityForms));
+  if (wanted === "owner" && [...forms].some((form) => linkedSelf.has(form))) {
+    throw Object.assign(
+      new Error("The linked account is always an owner. Unlink WhatsApp to change it."),
+      { code: "LINKED_ACCOUNT_OWNER" },
+    );
+  }
+  const record = withImmediateTransaction(() => {
+    const result = setUserRole(target, wanted, false);
+    for (const form of forms) {
+      if (form !== result?.jid) setUserRole(form, wanted, false);
+    }
+    return result;
+  });
   const set = wanted === "owner" ? bootstrap : bootstrapAdminSet;
   for (const form of forms) {
     set.delete(form);
-    const phone = digitsOnly(form);
-    if (phone) set.delete(`${phone}@s.whatsapp.net`);
   }
   return record;
 }
@@ -257,37 +214,13 @@ export function listRoles() {
 }
 
 /**
- * True if the two identifiers refer to the same physical user — handles LID
- * vs PN vs phone-with-device-suffix confusion.
+ * Exact identity (including bare PN/device suffix forms) or a current mapping.
  */
 export function sameUser(a, b) {
   if (!a || !b) return false;
-  const na = normalizeJid(a);
-  const nb = normalizeJid(b);
-  if (na === nb) return true;
-  const da = digitsOnly(na);
-  const db = digitsOnly(nb);
-  if (da && db && da === db) return true;
-  // Cross-format lookup
-  try {
-    if (isLidJid(na)) {
-      const pn = getPnForLid(na);
-      if (pn && normalizeJid(pn) === nb) return true;
-    }
-    if (isLidJid(nb)) {
-      const pn = getPnForLid(nb);
-      if (pn && normalizeJid(pn) === na) return true;
-    }
-    if (isPnJid(na)) {
-      const lid = getLidForPn(na);
-      if (lid && normalizeJid(lid) === nb) return true;
-    }
-    if (isPnJid(nb)) {
-      const lid = getLidForPn(nb);
-      if (lid && normalizeJid(lid) === na) return true;
-    }
-  } catch {}
-  return false;
+  const forms = identityForms(a);
+  const other = identityForms(b)[0];
+  return Boolean(other) && forms.includes(other);
 }
 
 /**

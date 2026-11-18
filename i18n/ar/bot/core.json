@@ -76,5 +76,9 @@
   "status.state.unknown": "غير معروف",
   "commandHandler.unknown": "أمر غير معروف `{name}`.\nمثال: `{prefix}help`",
   "message.watermark": "مدعوم من Levix",
-  "message.routeFailed": "تعذّر إرسال الرد إلى المحادثة المحددة."
+  "message.routeFailed": "تعذّر إرسال الرد إلى المحادثة المحددة.",
+  "update.available": "يتوفر Levix {latestVersion}. الإصدار الحالي: {currentVersion}.\n{url}",
+  "update.up_to_date": "لديك أحدث إصدار من Levix ({currentVersion}).\n{url}",
+  "update.unavailable": "تعذّر البحث عن تحديثات. الإصدار الحالي: {currentVersion}. حاول لاحقًا.\n{url}",
+  "update.play": "الإصدار الحالي: {currentVersion}. تحقق من Google Play لمعرفة التحديثات المتاحة لحسابك.\n{url}"
 }

@@ -35,9 +35,13 @@ module.exports = {
 
   async execute(sock, msg, args) {
     if (!args || args.length === 0) {
-      return await sock.sendMessage(msg.key.remoteJid, {
-        text: t("bot.tools.weather.noCity"),
-      });
+      return await sock.sendMessage(
+        msg.key.remoteJid,
+        {
+          text: t("bot.tools.weather.noCity"),
+        },
+        { levix: { category: "error" } },
+      );
     }
 
     const city = args.join(" ");
@@ -84,22 +88,15 @@ module.exports = {
       // التعامل مع الأخطاء
       if (error.response && error.response.status === 404) {
         // خطأ 404 يعني أن المدينة غير موجودة
-        await status.finish(
-          t("bot.tools.weather.cityNotFound", { city }),
-        );
+        await status.finish(t("bot.tools.weather.cityNotFound", { city }), { category: "error" });
       } else if (error.response && error.response.status === 401) {
         // خطأ 401 يعني أن مفتاح الـ API غير صالح
         logger.error("[Error] Invalid API Key for OpenWeatherMap.");
-        await status.finish(
-          t("bot.tools.weather.authError"),
-        );
+        await status.finish(t("bot.tools.weather.authError"), { category: "error" });
       } else {
         // أي أخطاء أخرى
         logger.error(error.message, "[Error] in Weather API:");
-        await status.fail(
-          error,
-          t("bot.tools.weather.failed"),
-        );
+        await status.fail(error, t("bot.tools.weather.failed"));
       }
     }
   },

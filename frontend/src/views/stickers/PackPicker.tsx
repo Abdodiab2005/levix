@@ -5,7 +5,7 @@ import { useToast } from "../../components/Toasts";
 import { Button, Dialog, FieldLabel, Input, UserText } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import type { Pack } from "../../types";
-import { explainError } from "../../utils/stickerErrors";
+import { explainError } from "./errors";
 import { packNameLengthError } from "../../utils/stickerLimits";
 
 interface PackPickerProps {
@@ -52,7 +52,7 @@ export const PackPicker: React.FC<PackPickerProps> = ({
       onPick(pack.id);
       toast(t("packCreated"), "success");
     } catch (err) {
-      toast(explainError(t, err), "error");
+      toast(explainError(t, err, "failedToCreatePack"), "error");
     } finally {
       setBusy(false);
     }

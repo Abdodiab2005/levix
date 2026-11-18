@@ -1,9 +1,9 @@
+import { userErrorMessage } from "../utils/userError";
 // file: frontend/src/views/ConnectionView.tsx
 
 import {
   AlertCircle,
   Check,
-  CheckCircle2,
   Copy,
   Key,
   Phone,
@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import * as QRCode from "qrcode";
 import type React from "react";
-import type { FC, ReactNode } from "react";
+import type { FC } from "react";
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { useToast } from "../components/Toasts";
@@ -27,28 +27,17 @@ import {
   Dialog,
   IconButton,
   Input,
-  MenuItem,
-  OverflowMenu,
   SegmentedControl,
   Spinner,
-  StatusPill,
 } from "../components/ui";
 import { useI18n } from "../context/I18nContext";
 import type { SessionStatus } from "../types";
 import { fill } from "../utils/fill";
+import { ConnectedAccountCard } from "./ConnectedAccountCard";
 import { consentReasonText } from "./legal/TermsConsentDialog";
 
 function isAndroidCompanionApp() {
   return typeof window !== "undefined" && Boolean((window as { LevixHost?: unknown }).LevixHost);
-}
-
-/** A secondary action that belongs beside a primary action's button. */
-interface SecondaryAction {
-  key: string;
-  label: string;
-  icon: ReactNode;
-  danger?: boolean;
-  onSelect: () => void;
 }
 
 interface ConnectionViewProps {
@@ -81,8 +70,19 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
   const isConsentRequired = state === "consent_required";
   const isPaused = state === "paused";
   const isLoggedOut = state === "logged_out";
+  /** An attempt or a live socket is running, so Stop / Cancel is meaningful. */
+  const isRunning = isConnected || isStarting || isWaitingQr || isReconnecting;
   const linked = Boolean(status?.linked) && !isLoggedOut;
   const needsPairing = !linked;
+  const unlinkIncomplete = state === "error" && status?.reason === "unlink_incomplete";
+  const showPairing =
+    !isConnected &&
+    !isStarting &&
+    !isWaitingQr &&
+    !isReconnecting &&
+    !isConsentRequired &&
+    needsPairing &&
+    !unlinkIncomplete;
   const canUnlink = Boolean(status?.canUnlink);
   const isOnline = status?.isOnline !== false;
   const resumeLabel =
@@ -131,7 +131,11 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
     }
   }, [isWaitingQr, status?.qr, status?.pairingCode, onRefresh]);
 
-  const handleAction = async (actionFn: () => Promise<unknown>, successMsg: string) => {
+  const handleAction = async (
+    actionFn: () => Promise<unknown>,
+    successMsg: string,
+    fallbackKey: string,
+  ) => {
     setActing(true);
     try {
       const res = await actionFn();
@@ -141,7 +145,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
       toast(successMsg, "success");
       await onRefresh?.();
     } catch (err: unknown) {
-      toast(err instanceof Error ? err.message : String(err), "error");
+      toast(userErrorMessage(t, err, fallbackKey), "error");
     } finally {
       setActing(false);
     }
@@ -161,6 +165,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
     await handleAction(
       () => api.startSession({ method: "pairing", phone: cleanPhone }),
       t("connectionRequestingPairing"),
+      "sessionStartError",
     );
   };
 
@@ -168,14 +173,12 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
     await handleAction(
       () => api.startSession({ method: "qr" }),
       t("connectionStartingQr"),
+      "sessionStartError",
     );
   };
 
   const handleSwitchToPhone = async () => {
-    await handleAction(
-      api.stopSession,
-      t("connectionCancelledEnterPhone"),
-    );
+    await handleAction(api.stopSession, t("connectionCancelledEnterPhone"), "sessionStopError");
     setPairingMethod("pairing");
   };
 
@@ -190,297 +193,199 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
 
   const confirmUnlink = async () => {
     setShowUnlinkModal(false);
-    await handleAction(
-      api.unlinkSession,
-      t("connectionUnlinked"),
-    );
-  };
-
-  const rawPhone = status?.user?.id ? status.user.id.split("@")[0].split(":")[0] : null;
-  const hideRestart = isAndroidCompanionApp();
-
-  const unlinkAction: SecondaryAction = {
-    key: "unlink",
-    label: t("unlink"),
-    icon: <Unlink size={16} />,
-    danger: true,
-    onSelect: () => setShowUnlinkModal(true),
-  };
-  const restartAction: SecondaryAction = {
-    key: "restart",
-    label: t("restart"),
-    icon: <RotateCcw size={16} />,
-    onSelect: () => handleAction(api.restartBot, t("restart")),
-  };
-  const reconnectAction: SecondaryAction = {
-    key: "reconnect",
-    label: t("reconnect"),
-    icon: <RefreshCw size={16} />,
-    onSelect: () => handleAction(api.reconnectSession, t("reconnecting")),
-  };
-  /** Restart only exists outside the Android companion app. */
-  const withRestart = (actions: SecondaryAction[]) =>
-    hideRestart ? actions : [...actions, restartAction];
-  /** Unlink + restart for the states that show secondary actions but no reconnect. */
-  const pairedSecondary = withRestart(canUnlink ? [unlinkAction] : []);
-
-  /**
-   * The secondary actions of a row, at the end of its primary button: two or
-   * more collapse into one OverflowMenu, a lone one stays an IconButton, and
-   * none renders nothing. A 3-dots button for a single item is noise.
-   */
-  const renderSecondary = (actions: SecondaryAction[]): ReactNode => {
-    if (actions.length === 0) return null;
-    if (actions.length === 1) {
-      const only = actions[0];
-      return (
-        <IconButton label={only.label} icon={only.icon} onClick={only.onSelect} disabled={acting} />
-      );
+    setActing(true);
+    try {
+      const res = await api.unlinkSession();
+      const session =
+        res && typeof res === "object" && "session" in res
+          ? (res.session as Partial<SessionStatus>)
+          : null;
+      if (session) onStatusUpdate?.(session);
+      if (session?.state === "error" && session.reason === "unlink_incomplete") {
+        toast(t("connectionUnlinkIncomplete"), "error");
+      } else {
+        toast(t("connectionUnlinked"), "success");
+      }
+      await onRefresh?.();
+    } catch (err: unknown) {
+      toast(userErrorMessage(t, err, "sessionUnlinkError"), "error");
+    } finally {
+      setActing(false);
     }
-    return (
-      <OverflowMenu label={t("moreActions")}>
-        {actions.map((action) => (
-          <MenuItem
-            key={action.key}
-            danger={action.danger}
-            icon={action.icon}
-            disabled={acting}
-            onSelect={action.onSelect}
-          >
-            {action.label}
-          </MenuItem>
-        ))}
-      </OverflowMenu>
-    );
   };
+
+  const hideRestart = isAndroidCompanionApp();
+  /** Restart is safe: it keeps the pairing and only bounces the process. */
+  const restartControl = hideRestart ? null : (
+    <IconButton
+      label={t("restart")}
+      icon={<RotateCcw size={16} />}
+      onClick={() => handleAction(api.restartBot, t("restart"), "sessionRestartError")}
+      disabled={acting}
+    />
+  );
 
   return (
-    <div className="flex flex-col gap-5 sm:gap-6">
-      {/* Primary Connection Hero Card */}
-      <Card className="flex flex-col gap-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-line">
-          <div className="flex items-center gap-3.5">
-            <div
-              className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 border ${
-                isConnected
-                  ? "bg-ok/15 text-ok border-ok/30 shadow-sm shadow-ok/20"
-                  : isWaitingQr
-                    ? "bg-warn/15 text-warn border-warn/30 shadow-sm shadow-warn/20"
-                    : isStarting || isReconnecting
-                      ? "bg-brand-blue/15 text-brand-blue border-brand-blue/30 shadow-sm shadow-brand-blue/20"
-                      : "bg-info/15 text-info border-info/30 shadow-sm shadow-info/20"
-              }`}
-            >
-              <Radio size={24} />
-            </div>
-            <div>
-              <h2 className="text-lg sm:text-xl font-extrabold text-text-main">
-                {t("connection")}
-              </h2>
-              <p className="text-xs sm:text-sm text-muted mt-0.5">
-                {isConnected
-                  ? t("sessionActive")
-                  : isPaused
-                    ? t("paused")
-                    : linked
-                      ? t("connectionSavedReady")
-                      : t("sessionOffline")}
-              </p>
-            </div>
-          </div>
+    <div className="flex flex-col gap-4 sm:gap-5">
+      <ConnectedAccountCard status={status} />
+      {/* The account card states the session once; this card only acts on it. */}
+      <Card className="flex flex-col gap-3">
+        <p className="text-xs text-muted sm:text-sm">
+          {isConnected
+            ? t("sessionActive")
+            : isPaused
+              ? t("paused")
+              : linked
+                ? t("connectionSavedReady")
+                : t("sessionOffline")}
+        </p>
 
-          <div className="flex items-center gap-3 self-start sm:self-auto">
-            <span
-              className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold border ${
-                isConnected
-                  ? "bg-ok/15 text-ok border-ok/30"
-                  : isWaitingQr
-                    ? "bg-warn/15 text-warn border-warn/30"
-                    : isStarting || isReconnecting
-                      ? "bg-brand-blue/15 text-brand-blue border-brand-blue/30 animate-pulse"
-                      : "bg-brand-cyan/15 text-brand-cyan border-brand-cyan/30"
-              }`}
-            >
-              <span className="pulse-dot" />
-              <span>{t(state as any, state)}</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Retry Alert */}
         {status?.retryInSeconds ? (
-          <div className="rounded-xl border border-warn/30 bg-warn/10 p-3.5 flex items-center gap-3 text-warn">
-            <AlertCircle size={20} className="shrink-0" />
+          <div className="flex items-center gap-2.5 rounded-xl border border-warn/30 bg-warn/10 p-3 text-warn">
+            <AlertCircle size={18} className="shrink-0" />
             <div className="text-xs sm:text-sm">
               <span className="font-bold">{t("connectionReconnectingSoon")}</span> &bull;{" "}
-              <span>
-                {fill(t("connectionNextAttempt"), { seconds: status.retryInSeconds })}
-              </span>
+              <span>{fill(t("connectionNextAttempt"), { seconds: status.retryInSeconds })}</span>
             </div>
           </div>
         ) : null}
 
-        {/* Connected Info Header when Active */}
-        {isConnected && rawPhone && (
-          <div className="rounded-xl border border-ok/30 bg-ok/10 p-3.5 sm:p-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-ok/20 text-ok flex items-center justify-center shrink-0">
-                <CheckCircle2 size={20} />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs text-muted font-medium">{t("connectedNumber")}</div>
-                <div className="text-sm sm:text-base font-mono font-bold text-text-main" dir="ltr">
-                  +{rawPhone}
-                </div>
-              </div>
-            </div>
-            <StatusPill tone="ok" className="shrink-0">
-              {t("connectionOnline")}
-            </StatusPill>
+        {/* Safe actions only; Stop and Unlink stay in the danger zone below. */}
+        {isConnected && (
+          <div className="flex w-full items-center gap-2.5">
+            <Button
+              variant="secondary"
+              icon={<RefreshCw size={16} />}
+              onClick={() =>
+                handleAction(api.reconnectSession, t("reconnecting"), "sessionReconnectError")
+              }
+              disabled={acting}
+              className="flex-1 whitespace-nowrap sm:flex-none"
+            >
+              {t("reconnect")}
+            </Button>
+            {restartControl}
           </div>
         )}
 
-        {/* Action Controls: strictly conditional based on state */}
-        <div>
-          {/* 1. When CONNECTED: Stop beside an overflow holding Reconnect, Restart and Unlink */}
-          {isConnected && (
+        {!isConnected && isRunning && restartControl ? (
+          <div className="flex w-full items-center gap-2.5">{restartControl}</div>
+        ) : null}
+
+        {/* Known session (paused / idle / disconnected): resume, never QR or pairing codes */}
+        {!isRunning && !isConsentRequired && linked && (
+          <div className="flex w-full flex-col gap-3 sm:max-w-xl">
+            {isPaused && (
+              <p className="text-xs leading-relaxed text-muted sm:text-sm">
+                {isOnline ? t("connectionPausedResume") : t("connectionPausedOffline")}
+              </p>
+            )}
             <div className="flex w-full items-center gap-2.5">
               <Button
-                variant="danger"
-                icon={<Square size={16} />}
-                onClick={() => handleAction(api.stopSession, t("stop"))}
+                variant="primary"
+                icon={<Radio size={16} />}
+                onClick={() => handleAction(api.startSession, resumeLabel, "sessionStartError")}
                 disabled={acting}
-                className="flex-1 sm:flex-none"
+                className="flex-1 whitespace-nowrap sm:flex-none"
+                data-tour="connection-start"
               >
-                {t("stop")}
+                {resumeLabel}
               </Button>
-              {renderSecondary(withRestart([reconnectAction, unlinkAction]))}
+              {restartControl}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* 2. When STARTING or LINKING or WAITING FOR QR or RECONNECTING: Cancel beside Restart */}
-          {(isStarting || isWaitingQr || isReconnecting) && (
-            <div className="flex w-full items-center gap-2.5">
-              <Button
-                variant="danger"
-                icon={<Square size={16} />}
-                onClick={() => handleAction(api.stopSession, t("stop"))}
-                disabled={acting}
-                className="flex-1 sm:flex-none"
+        {/* No saved session / logged out: QR or pairing code */}
+        {showPairing && (
+          <div className="flex w-full flex-col gap-4" data-tour="connection-pairing">
+            <SegmentedControl
+              aria-label={t("connection")}
+              value={pairingMethod}
+              onChange={setPairingMethod}
+              className="w-full sm:w-fit"
+              options={[
+                {
+                  value: "pairing",
+                  label: t("connectionPairingCodePhone"),
+                  icon: <Smartphone size={16} />,
+                },
+                {
+                  value: "qr",
+                  label: t("connectionQrScan"),
+                  icon: <QrCode size={16} />,
+                },
+              ]}
+            />
+
+            {/* Method 1: Phone Pairing Form */}
+            {pairingMethod === "pairing" && (
+              <form
+                onSubmit={handleStartPairing}
+                className="flex w-full flex-col gap-3 sm:max-w-xl"
               >
-                {t("connectionCancelAttempt")}
-              </Button>
-              {renderSecondary(withRestart([]))}
-            </div>
-          )}
-
-          {/* 3a. Known session (paused / idle / disconnected): resume, never QR or pairing codes */}
-          {!isConnected && !isStarting && !isWaitingQr && !isReconnecting && !isConsentRequired && linked && (
-            <div className="flex flex-col gap-3 w-full max-w-xl">
-              {isPaused && (
-                <p className="text-xs sm:text-sm text-muted leading-relaxed">
-                  {isOnline ? t("connectionPausedResume") : t("connectionPausedOffline")}
-                </p>
-              )}
-              <div className="flex items-center gap-2.5">
-                <Button
-                  variant="primary"
-                  icon={<Radio size={16} />}
-                  onClick={() => handleAction(api.startSession, resumeLabel)}
-                  disabled={acting}
-                  className="flex-1 sm:flex-none"
-                  data-tour="connection-start"
-                >
-                  {resumeLabel}
-                </Button>
-                {renderSecondary(pairedSecondary)}
-              </div>
-            </div>
-          )}
-
-          {/* 3b. No saved session / logged out: QR or pairing code */}
-          {!isConnected && !isStarting && !isWaitingQr && !isReconnecting && !isConsentRequired && needsPairing && (
-            <div className="flex flex-col gap-4 w-full" data-tour="connection-pairing">
-              <SegmentedControl
-                aria-label={t("connection")}
-                value={pairingMethod}
-                onChange={setPairingMethod}
-                className="w-full sm:w-fit"
-                options={[
-                  {
-                    value: "pairing",
-                    label: t("connectionPairingCodePhone"),
-                    icon: <Smartphone size={16} />,
-                  },
-                  {
-                    value: "qr",
-                    label: t("connectionQrScan"),
-                    icon: <QrCode size={16} />,
-                  },
-                ]}
-              />
-
-              {/* Method 1: Phone Pairing Form */}
-              {pairingMethod === "pairing" && (
-                <form onSubmit={handleStartPairing} className="flex w-full max-w-xl flex-col gap-3">
-                  <div className="relative">
-                    <Phone
-                      size={17}
-                      className="absolute top-1/2 -translate-y-1/2 start-3.5 text-muted pointer-events-none"
-                    />
-                    <Input
-                      type="tel"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder={
-                        t("connectionPhonePlaceholder")
-                      }
-                      dir="ltr"
-                      className="ps-10"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2.5">
-                    <Button
-                      type="submit"
-                      variant="primary"
-                      icon={<Key size={16} />}
-                      disabled={acting}
-                      className="flex-1 whitespace-nowrap sm:flex-none"
-                      data-tour="connection-start"
-                    >
-                      {t("connectionGetPairingCode")}
-                    </Button>
-                    {renderSecondary(pairedSecondary)}
-                  </div>
-                  <p className="text-xs text-muted leading-relaxed">
-                    {t("connectionPairingHint")}
-                  </p>
-                </form>
-              )}
-
-              {/* Method 2: QR Scan Start */}
-              {pairingMethod === "qr" && (
-                <div className="flex w-full max-w-xl flex-col gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <Button
-                      variant="primary"
-                      icon={<QrCode size={18} />}
-                      onClick={handleStartQr}
-                      disabled={acting}
-                      className="flex-1 whitespace-nowrap sm:flex-none"
-                      data-tour="connection-start"
-                    >
-                      {t("connectionStartQr")}
-                    </Button>
-                    {renderSecondary(pairedSecondary)}
-                  </div>
-                  <p className="text-xs text-muted">{t("connectionQrHint")}</p>
+                <div className="relative">
+                  <Phone
+                    size={17}
+                    className="pointer-events-none absolute start-3.5 top-1/2 -translate-y-1/2 text-muted"
+                  />
+                  <Input
+                    type="tel"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    placeholder={t("connectionPhonePlaceholder")}
+                    dir="ltr"
+                    className="ps-10"
+                  />
                 </div>
-              )}
-            </div>
-          )}
-        </div>
+                <div className="flex w-full items-center gap-2.5">
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    icon={<Key size={16} />}
+                    disabled={acting}
+                    className="flex-1 whitespace-nowrap sm:flex-none"
+                    data-tour="connection-start"
+                  >
+                    {t("connectionGetPairingCode")}
+                  </Button>
+                  {restartControl}
+                </div>
+                <p className="text-xs leading-relaxed text-muted">{t("connectionPairingHint")}</p>
+              </form>
+            )}
+
+            {/* Method 2: QR Scan Start */}
+            {pairingMethod === "qr" && (
+              <div className="flex w-full flex-col gap-2 sm:max-w-xl">
+                <div className="flex w-full items-center gap-2.5">
+                  <Button
+                    variant="primary"
+                    icon={<QrCode size={18} />}
+                    onClick={handleStartQr}
+                    disabled={acting}
+                    className="flex-1 whitespace-nowrap sm:flex-none"
+                    data-tour="connection-start"
+                  >
+                    {t("connectionStartQr")}
+                  </Button>
+                  {restartControl}
+                </div>
+                <p className="text-xs text-muted">{t("connectionQrHint")}</p>
+              </div>
+            )}
+          </div>
+        )}
       </Card>
+
+      {unlinkIncomplete && (
+        <Card className="flex flex-col items-start gap-4">
+          <p className="text-sm text-text-main">{t("connectionUnlinkIncompleteHint")}</p>
+          <Button variant="primary" onClick={() => setShowUnlinkModal(true)} disabled={acting}>
+            {t("connectionUnlinkRetry")}
+          </Button>
+        </Card>
+      )}
 
       {isConsentRequired && (
         <Card className="flex flex-col items-start gap-4">
@@ -491,16 +396,16 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
         </Card>
       )}
 
-      {/* Starting / Linking Progress Feedback Card */}
+      {/* Starting / Linking progress: one line, no empty space */}
       {isStarting && (
-        <Card className="flex flex-col items-center text-center">
-          <div className="w-12 h-12 rounded-2xl bg-brand-blue/15 text-brand-blue flex items-center justify-center mb-4 border border-brand-blue/30">
-            <RefreshCw size={24} className="animate-spin" />
+        <Card className="flex items-center gap-3">
+          <RefreshCw size={20} className="shrink-0 animate-spin text-brand-blue" aria-hidden />
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-text-main">
+              {state === "linking" ? t("connectionFinishingLink") : t("connectionInitializing")}
+            </p>
+            <p className="text-xs text-muted">{t("connectionCreatingSocket")}</p>
           </div>
-          <h3 className="text-base sm:text-lg font-bold text-text-main mb-1.5">
-            {state === "linking" ? t("connectionFinishingLink") : t("connectionInitializing")}
-          </h3>
-          <p className="text-xs sm:text-sm text-muted max-w-md">{t("connectionCreatingSocket")}</p>
         </Card>
       )}
 
@@ -562,7 +467,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
               <div className="w-12 h-12 rounded-2xl bg-brand-cyan/15 text-brand-cyan flex items-center justify-center mb-4 border border-brand-cyan/30">
                 <QrCode size={26} />
               </div>
-              <h3 className="text-lg font-bold text-text-main mb-1.5">{t("waiting_for_qr")}</h3>
+              <h3 className="text-lg font-bold text-text-main mb-1.5">{t("connectionQrScan")}</h3>
               <p className="text-xs sm:text-sm text-muted max-w-md mb-6">
                 {t("connectionScanHint")}
               </p>
@@ -577,9 +482,7 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
 
               {/* Helper for users on mobile who can't scan their own screen */}
               <div className="mt-6 pt-5 border-t border-line w-full max-w-md flex flex-col items-center gap-2.5">
-                <p className="text-xs text-muted text-center">
-                  {t("connectionSamePhone")}
-                </p>
+                <p className="text-xs text-muted text-center">{t("connectionSamePhone")}</p>
                 <Button
                   variant="secondary"
                   icon={<Smartphone size={16} />}
@@ -600,6 +503,42 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
               </span>
             </div>
           )}
+        </Card>
+      )}
+
+      {/* Session-interrupting actions, kept apart from the safe ones above. */}
+      {(isRunning || canUnlink) && (
+        <Card className="flex flex-col gap-3 border-danger/30">
+          <div className="min-w-0">
+            <h3 className="text-sm font-bold text-danger">{t("connectionDangerZone")}</h3>
+            <p className="mt-0.5 text-xs leading-relaxed text-muted">
+              {t("connectionDangerZoneDesc")}
+            </p>
+          </div>
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap">
+            {isRunning && (
+              <Button
+                variant="danger"
+                icon={<Square size={16} />}
+                onClick={() => handleAction(api.stopSession, t("stop"), "sessionStopError")}
+                disabled={acting}
+                className="w-full sm:w-auto"
+              >
+                {isConnected ? t("connectionStopSession") : t("connectionCancelAttempt")}
+              </Button>
+            )}
+            {canUnlink && (
+              <Button
+                variant="danger"
+                icon={<Unlink size={16} />}
+                onClick={() => setShowUnlinkModal(true)}
+                disabled={acting}
+                className="w-full sm:w-auto"
+              >
+                {t("unlink")}
+              </Button>
+            )}
+          </div>
         </Card>
       )}
 

@@ -255,6 +255,31 @@ If a different account connects, the Backup screen shows **waiting account
 data**. You can later pair the matching account or choose **Discard** to remove
 the waiting data.
 
+## Going back to 4.9.x
+
+Starting 4.9.x on the same data after 5.0.0 has run is not supported.
+4.9.x does not refuse that database. It runs and ignores the newer data.
+Writes from 4.9.x can leave that data inconsistent. A later 5.0.0 start
+does not repair it.
+
+Stop Levix. Keep a copy of the whole data directory first. Copy
+`backups/pre-migration/levix-v10-<time>.db` (first 5.0.0 start, from
+4.9.2) over `levix.db`. Keep your own copy of that file, because later
+upgrades remove older copies. Delete `levix.db-wal` and `levix.db-shm`.
+Start 4.9.x.
+
+The setup page asks for a new panel password. From another machine it
+also asks for the setup code printed in the terminal. Enter your API
+keys again. If you use a WhatsApp proxy with a password, enter the proxy
+password again in **Settings** before you press **Start** on **Connection**.
+Pair the same WhatsApp account on the **Connection** screen.
+Anything written after the upgrade is not in that copy.
+
+A **Settings → Backup** `.levixbak` file is a 5.0.0 backup. 4.9.x cannot
+restore it. Google Play cannot downgrade an installed app. A GitHub APK
+can go back only after you uninstall, which deletes the app data. Do not
+start a 4.9.x Docker image on a volume 5.0.0 has used. Pin the image tag.
+
 ---
 
 ## When something goes wrong

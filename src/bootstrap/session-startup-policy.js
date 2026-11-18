@@ -19,7 +19,14 @@ export function hasPairedCredentials(rawCreds) {
 // Panel mode must not create a fresh pairing attempt on a brand-new install,
 // but once a real pairing exists a process restart should restore that session
 // automatically. Headless has no Start button, so it always forces a start.
-export function sessionStartupPolicy({ autoStart = false, wasPaired = false } = {}) {
+// An unfinished unlink is neither: the credentials may still be the old
+// account, so boot must not resume or auto-start until the wipe completes.
+export function sessionStartupPolicy({
+  autoStart = false,
+  wasPaired = false,
+  unlinkPending = false,
+} = {}) {
+  if (unlinkPending) return { start: false, reason: "unlink_incomplete" };
   if (autoStart) return { start: true, reason: "autostart" };
   if (wasPaired) return { start: true, reason: "resume-paired" };
   return { start: false, reason: null };

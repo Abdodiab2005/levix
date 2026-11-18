@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../utils/userError";
 import {
   AlertCircle,
   AlertTriangle,
@@ -33,6 +34,7 @@ import {
   LoadingState,
   PageHeader,
   PasswordInput,
+  PlusFeatureRow,
   SaveField,
   SegmentedControl,
   Select,
@@ -206,6 +208,9 @@ export const AIAssistantView: React.FC = () => {
   const aiReplyLang = useSavedValue(String(settings["ai_reply_language"] || "follow_bot"));
   const translateEngine = useSavedValue(String(settings["translate_engine"] || "ai"));
   const googleTranslateKey = useSavedValue(String(settings["google_translate_api_key"] || ""));
+  const globalMemoryRead = useSavedValue(String(settings["ai_global_memory_read"] || "privileged"));
+  const globalMemoryWrite = useSavedValue(String(settings["ai_global_memory_write"] || "off"));
+  const globalMemoryWhere = useSavedValue(String(settings["ai_global_memory_where"] || "own_chat"));
 
   const selectedPreset = PRESETS.find((p) => p.id === providerForm.draft.presetId) || savedPreset;
 
@@ -226,7 +231,7 @@ export const AIAssistantView: React.FC = () => {
         setConfiguredKeys(conf);
       }
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "settingsLoadError"), "error");
     } finally {
       setLoading(false);
     }
@@ -242,7 +247,7 @@ export const AIAssistantView: React.FC = () => {
       await api.updateSetting(key, value);
       if (!quiet) toast(t("savedSuccessfully"), "success");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "saveFailed"), "error");
     }
   };
 
@@ -301,14 +306,14 @@ export const AIAssistantView: React.FC = () => {
             fallback: Boolean(res.fallback),
             models: res.models || [],
             cached: Boolean(res.cached),
-            error: res.success ? undefined : res.error?.message,
+            error: res.success ? undefined : userErrorMessage(t, res.error, "aiModelsLoadError"),
           },
         }));
 
         if (!res.live && res.requiresApiKey && forceRefresh) {
           toast(t("connectKeyFirstPrompt"), "info");
         } else if (!res.success && res.error) {
-          toast(res.error.message || "Failed to discover models", "error");
+          toast(userErrorMessage(t, res.error, "aiModelsLoadError"), "error");
         }
       } else if (res && !res.success && res.error) {
         setDiscoveryState((prev) => ({
@@ -318,14 +323,14 @@ export const AIAssistantView: React.FC = () => {
             requiresApiKey: !(hasStoredKey || typedKey),
             fallback: true,
             models: res.models || [],
-            error: res.error?.message,
+            error: userErrorMessage(t, res.error, "aiModelsLoadError"),
           },
         }));
 
-        toast(res.error.message || "Failed to discover models", "error");
+        toast(userErrorMessage(t, res.error, "aiModelsLoadError"), "error");
       }
     } catch (err: any) {
-      if (!cacheOnly) toast(err.message || "Failed to fetch models", "error");
+      if (!cacheOnly) toast(userErrorMessage(t, err, "aiModelsLoadError"), "error");
     } finally {
       setFetchingModels(false);
     }
@@ -394,7 +399,7 @@ export const AIAssistantView: React.FC = () => {
       const persona = res?.persona;
       setPersonaText(typeof persona === "string" ? persona : persona?.body || "");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiPersonaLoadError"), "error");
     } finally {
       setPersonaLoading(false);
     }
@@ -406,7 +411,7 @@ export const AIAssistantView: React.FC = () => {
       toast(t("aiPersonaUpdated"), "success");
       setPersonaModalOpen(false);
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiPersonaSaveError"), "error");
     }
   };
 
@@ -425,7 +430,7 @@ export const AIAssistantView: React.FC = () => {
       );
     } catch (err: any) {
       setMemoryScopes([{ scope: "global", label: "Global memory", entries: 0 }]);
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiMemoryLoadError"), "error");
     }
   };
 
@@ -437,7 +442,7 @@ export const AIAssistantView: React.FC = () => {
       const res = await api.getMemoryFile(scope);
       setMemoryContent(res?.content || "");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiMemoryLoadError"), "error");
     } finally {
       setMemoryLoading(false);
     }
@@ -451,7 +456,7 @@ export const AIAssistantView: React.FC = () => {
       const res = await api.getMemoryFile("global");
       setMemoryContent(res?.content || "");
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiMemoryLoadError"), "error");
     } finally {
       setMemoryLoading(false);
     }
@@ -465,7 +470,7 @@ export const AIAssistantView: React.FC = () => {
       loadMemoryFiles();
       setSelectedMemoryFile(null);
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiMemorySaveError"), "error");
     }
   };
 
@@ -478,7 +483,7 @@ export const AIAssistantView: React.FC = () => {
       const res = await api.getAiConversations();
       setConversations(res?.conversations || []);
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiConversationsLoadError"), "error");
     } finally {
       setInspectorLoading(false);
     }
@@ -492,7 +497,7 @@ export const AIAssistantView: React.FC = () => {
       const res = await api.getAiConversation(chatId);
       setConversation(res || null);
     } catch (err: any) {
-      toast(err.message, "error");
+      toast(userErrorMessage(t, err, "aiConversationLoadError"), "error");
     } finally {
       setInspectorLoading(false);
     }
@@ -526,6 +531,12 @@ export const AIAssistantView: React.FC = () => {
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
       <PageHeader icon={<Bot size={20} />} title={t("aiTitle")} description={t("aiSubtitle")} />
+
+      <PlusFeatureRow
+        tab="autoReply"
+        title={t("plusRowAutoReplyTitle")}
+        benefit={t("plusRowAutoReplyBenefit")}
+      />
 
       <Card data-tour="ai-agent">
         <div className="flex min-h-10 items-center justify-between gap-4">
@@ -941,9 +952,7 @@ export const AIAssistantView: React.FC = () => {
                 id="ai-google-translate-key"
                 className="font-mono"
                 placeholder={
-                  configuredKeys.google_translate_api_key
-                    ? "••••••••••••"
-                    : t("enterApiKey")
+                  configuredKeys.google_translate_api_key ? "••••••••••••" : t("enterApiKey")
                 }
                 value={googleTranslateKey.value}
                 onChange={(e) => googleTranslateKey.setValue(e.target.value)}
@@ -978,6 +987,100 @@ export const AIAssistantView: React.FC = () => {
         >
           {t("openInspector")}
         </Button>
+      </Card>
+
+      <Card className="flex flex-col gap-3">
+        <CardHeader
+          icon={<Database size={18} />}
+          title={t("aiGlobalMemoryAccess")}
+          description={t("aiGlobalMemoryAccessDesc")}
+        />
+        <div className="flex flex-col divide-y divide-line">
+          <div className="py-2">
+            <SaveField
+              label={t("aiGlobalMemoryRead")}
+              description={t("aiGlobalMemoryReadDesc")}
+              htmlFor="ai-global-memory-read"
+              dirty={globalMemoryRead.dirty}
+              saving={globalMemoryRead.status === "saving"}
+              justSaved={globalMemoryRead.status === "saved"}
+              error={globalMemoryRead.error}
+              onSave={() =>
+                globalMemoryRead.save((next) => persistSetting("ai_global_memory_read", next))
+              }
+              onRevert={globalMemoryRead.revert}
+              {...saveLabels}
+            >
+              <Select
+                id="ai-global-memory-read"
+                aria-label={t("aiGlobalMemoryRead")}
+                value={globalMemoryRead.value}
+                onChange={(e) => globalMemoryRead.setValue(e.target.value)}
+              >
+                <option value="off">{t("aiGlobalMemoryOff")}</option>
+                <option value="owner">{t("aiGlobalMemoryOwner")}</option>
+                <option value="privileged">{t("aiGlobalMemoryPrivileged")}</option>
+                <option value="everyone">{t("aiGlobalMemoryEveryone")}</option>
+              </Select>
+            </SaveField>
+          </div>
+
+          <div className="py-2">
+            <SaveField
+              label={t("aiGlobalMemoryWrite")}
+              description={t("aiGlobalMemoryWriteDesc")}
+              htmlFor="ai-global-memory-write"
+              dirty={globalMemoryWrite.dirty}
+              saving={globalMemoryWrite.status === "saving"}
+              justSaved={globalMemoryWrite.status === "saved"}
+              error={globalMemoryWrite.error}
+              onSave={() =>
+                globalMemoryWrite.save((next) => persistSetting("ai_global_memory_write", next))
+              }
+              onRevert={globalMemoryWrite.revert}
+              {...saveLabels}
+            >
+              <Select
+                id="ai-global-memory-write"
+                aria-label={t("aiGlobalMemoryWrite")}
+                value={globalMemoryWrite.value}
+                onChange={(e) => globalMemoryWrite.setValue(e.target.value)}
+              >
+                <option value="off">{t("aiGlobalMemoryOff")}</option>
+                <option value="owner">{t("aiGlobalMemoryOwner")}</option>
+                <option value="privileged">{t("aiGlobalMemoryPrivileged")}</option>
+              </Select>
+            </SaveField>
+          </div>
+
+          <div className="py-2">
+            <SaveField
+              label={t("aiGlobalMemoryWhere")}
+              description={t("aiGlobalMemoryWhereDesc")}
+              htmlFor="ai-global-memory-where"
+              dirty={globalMemoryWhere.dirty}
+              saving={globalMemoryWhere.status === "saving"}
+              justSaved={globalMemoryWhere.status === "saved"}
+              error={globalMemoryWhere.error}
+              onSave={() =>
+                globalMemoryWhere.save((next) => persistSetting("ai_global_memory_where", next))
+              }
+              onRevert={globalMemoryWhere.revert}
+              {...saveLabels}
+            >
+              <Select
+                id="ai-global-memory-where"
+                aria-label={t("aiGlobalMemoryWhere")}
+                value={globalMemoryWhere.value}
+                onChange={(e) => globalMemoryWhere.setValue(e.target.value)}
+              >
+                <option value="own_chat">{t("aiGlobalMemoryWhereOwnChat")}</option>
+                <option value="private">{t("aiGlobalMemoryWherePrivate")}</option>
+                <option value="all">{t("aiGlobalMemoryWhereAll")}</option>
+              </Select>
+            </SaveField>
+          </div>
+        </div>
       </Card>
 
       <Dialog

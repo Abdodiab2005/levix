@@ -15,6 +15,25 @@ export interface I18nContextType {
 
 export const I18nContext = createContext<I18nContextType | null>(null);
 
+const warnedMissingKeys = new Set<string>();
+
+function devMode(): boolean {
+  return (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV === true;
+}
+
+function warnMissing(key: string): void {
+  if (warnedMissingKeys.has(key)) return;
+  warnedMissingKeys.add(key);
+  console.warn(`Missing translation key: ${key}`);
+}
+
+function readTranslation(lang: Language, key: MessageKey): string | undefined {
+  const table = translations[lang] as Partial<Record<MessageKey, string>> | undefined;
+  if (!table || !Object.prototype.hasOwnProperty.call(table, key)) return undefined;
+  const value = table[key];
+  return typeof value === "string" ? value : undefined;
+}
+
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() =>
     resolveLocale(document.documentElement.lang),
@@ -68,7 +87,13 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const t = useMemo(() => {
     return (key: MessageKey, fallback?: string): string => {
-      return translations[language]?.[key] ?? translations.en[key] ?? fallback ?? key;
+      const localized = readTranslation(language, key);
+      if (localized !== undefined) return localized;
+      if (devMode()) warnMissing(String(key));
+      if (fallback !== undefined) return fallback;
+      const english = readTranslation("en", key);
+      if (english !== undefined) return english;
+      return "";
     };
   }, [language]);
 

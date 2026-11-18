@@ -88,7 +88,7 @@ section("speak tool");
   const original = tts._synthesizeVoice;
   tts._synthesizeVoice = async (text, lang) => {
     tts.lastCall = { text, lang };
-    return { audio: Buffer.from("ogg-bytes"), mimetype: "audio/ogg; codecs=opus", ptt: true };
+    return { audio: Buffer.from("OggS-test-voice-bytes"), mimetype: "audio/ogg; codecs=opus", ptt: true };
   };
   try {
     const result = await runTool("speak", { text: "مرحبا بيك", language: "ar" }, { caller, sock: sentSock });
@@ -146,6 +146,13 @@ section("create_poll tool");
   ok("content is a native poll", Array.isArray(sentSock.sent[0]?.content?.poll?.values));
   ok("model args went through the same caps", sentSock.sent[0]?.content?.poll?.values.length === 2);
   equal("tool reports the question", result.question, "نروح فين؟");
+
+  const routeRefusal = await runTool(
+    "create_poll",
+    { question: "q", options: ["a", "b"] },
+    { caller, sock: { async sendMessage() { return { refused: true }; } } },
+  );
+  equal("a refused poll is reported as not sent", routeRefusal.sent, false);
 
   runtimeConfig.setPermission("poll", "OWNER_ONLY");
   const refused = await runTool(
@@ -220,6 +227,42 @@ section("summarize_chat tool");
   } finally {
     require("./src/services/aiRouter.cjs").getProvider = originalGetProvider;
   }
+}
+
+section("summarize_chat rechecks authority after the provider awaits");
+{
+  const settings = require("./src/config/settings.cjs");
+  const previousWrite = settings.get("ai_global_memory_write");
+  settings.set("ai_global_memory_write", "owner");
+  const router = require("./src/services/aiRouter.cjs");
+  const original = router.getProvider;
+  for (const boundary of ["role", "epoch", "abort"]) {
+    await permissions.grantRole(OWNER, "owner");
+    await saveChatHistoryAsync(OWNER, [{ role: "user", parts: [{ text: "remember this" }] }]);
+    const caller = await callerFor(OWNER);
+    const controller = new AbortController();
+    const before = memory.listMemory({ scope: "global" }).length;
+    router.getProvider = () => ({
+      async runTurn(options) {
+        equal("summary receives turn signal", options.signal, controller.signal);
+        if (boundary === "role") await permissions.revokeRole(OWNER, "owner");
+        if (boundary === "epoch") require("./src/db/store.cjs").advanceAccountEpoch();
+        if (boundary === "abort") controller.abort(new Error("expired"));
+        return { text: "- Must never be saved" };
+      },
+    });
+    try {
+      const result = await runTool("summarize_chat", { scope: "global" }, {
+        caller, sock, signal: controller.signal,
+      });
+      ok(`${boundary}: summary refused`, Boolean(result.error));
+      equal(`${boundary}: no memory write`, memory.listMemory({ scope: "global" }).length, before);
+    } finally {
+      router.getProvider = original;
+      await permissions.grantRole(OWNER, "owner");
+    }
+  }
+  settings.set("ai_global_memory_write", previousWrite);
 }
 
 section("conversation inspector store");

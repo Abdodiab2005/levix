@@ -477,6 +477,65 @@ section("modular provider router and registry");
   ok("claude-3 supports vision", claudeCaps.supportsVision);
 }
 
+section("provider switches preserve repeated same-name tool/result pairs");
+{
+  const { historyToOpenAI, historyToAnthropic } = harnessRequire("./src/services/aiProviders.cjs");
+  // Gemini omits ids; explicit ids can also arrive out of order. Exercise both
+  // in the same batch so consuming an explicit result cannot shift another.
+  for (const mode of ["Gemini", "explicit", "mixed"]) {
+    const hasId = (slot) => mode === "explicit" || (mode === "mixed" && slot === 2);
+    const calls = [0, 1, 2].map((slot) => ({
+      name: slot === 1 ? "get_datetime" : "search_levix_docs",
+      args: { slot },
+      ...(hasId(slot) ? { id: `id_${slot}` } : {}),
+    }));
+    const order = mode === "Gemini" ? [0, 1, 2] : [2, 1, 0];
+    const history = [
+      { role: "user", parts: [{ text: "Find the guide" }] },
+      {
+        role: "model",
+        parts: [{ text: "Checking guides" }, ...calls.map((functionCall) => ({ functionCall }))],
+      },
+      {
+        role: "user",
+        parts: order.map((slot) => ({
+          functionResponse: {
+            name: calls[slot].name,
+            response: { slot },
+            ...(hasId(slot) ? { id: `id_${slot}` } : {}),
+          },
+        })),
+      },
+      { role: "model", parts: [{ functionCall: { name: "search_levix_docs", args: {} } }] },
+      {
+        role: "user",
+        parts: [{ functionResponse: { name: "search_levix_docs", response: { slot: 3 } } }],
+      },
+    ];
+    for (const provider of ["openai", "anthropic"]) {
+      const messages =
+        provider === "openai" ? historyToOpenAI(history) : historyToAnthropic(history);
+      const uses =
+        provider === "openai"
+          ? messages.flatMap((m) => m.tool_calls || [])
+          : messages.flatMap((m) => m.content.filter((b) => b.type === "tool_use"));
+      const results =
+        provider === "openai"
+          ? messages.filter((m) => m.role === "tool")
+          : messages.flatMap((m) => m.content.filter((b) => b.type === "tool_result"));
+      equal(`${provider}: distinct call ids`, new Set(uses.map((use) => use.id)).size, 4);
+      for (const result of results) {
+        const slot = JSON.parse(result.content).slot;
+        equal(
+          `${provider}: result ${slot} answers its own call (${mode} ids)`,
+          result.tool_call_id || result.tool_use_id,
+          uses[slot]?.id,
+        );
+      }
+    }
+  }
+}
+
 finish();
 
 // --- helpers ---------------------------------------------------------------

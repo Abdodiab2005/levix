@@ -2,7 +2,11 @@
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
-const { isOwnerJidSync, isBotAdminUserSync } = require("../utils/permissions.cjs");
+const {
+  isOwnerJidSync,
+  isBotAdminUserSync,
+  getSenderCandidatesSync,
+} = require("../utils/permissions.cjs");
 const { normalizeLocale, t, withLang } = require("../utils/i18n.cjs");
 
 module.exports = {
@@ -10,9 +14,8 @@ module.exports = {
   aliases: ["language", "لغة"],
   chat: "all",
 
-  async execute(sock, msg, args) {
+  async execute(sock, msg, args, body, groupMetadata, ctx) {
     const chatId = msg.key.remoteJid;
-    const sender = msg.key.participant || msg.key.remoteJid;
     const prefix = runtimeConfig.getPrefix();
     const currentLang = settings.get("bot_language") || "auto";
     const firstArg = args?.[0] ? String(args[0]).toLowerCase().trim() : "";
@@ -41,8 +44,13 @@ module.exports = {
         return;
       }
 
-      const isOwner = isOwnerJidSync(sender);
-      const isAdmin = isBotAdminUserSync(sender);
+      const authMetadata =
+      ctx && Object.hasOwn(ctx, "authGroupMetadata")
+        ? ctx.authGroupMetadata
+        : groupMetadata;
+      const candidates = getSenderCandidatesSync(msg, sock);
+      const isOwner = candidates.some((id) => isOwnerJidSync(id, authMetadata));
+      const isAdmin = candidates.some((id) => isBotAdminUserSync(id, authMetadata));
       if (!isOwner && !isAdmin) {
         await sock.sendMessage(chatId, { text: t("bot.lang.denied", { prefix }) }, { quoted: msg });
         return;

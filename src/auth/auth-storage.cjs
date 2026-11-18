@@ -16,20 +16,59 @@ try {
   };
 }
 
+const MISSING = Symbol("missing");
+
+function serialize(value) {
+  return JSON.stringify(value, BufferJSON.replacer);
+}
+
+function deserialize(text) {
+  return JSON.parse(text, BufferJSON.reviver);
+}
+
+// `value == null` is a delete. Anything else is BufferJSON text. Stringify
+// every entry before the first mutation so a later encode failure leaves
+// the batch untouched.
+function encodeEntry(entry) {
+  if (entry == null || typeof entry.key !== "string") {
+    throw new TypeError("auth entry needs a string key");
+  }
+  if (entry.value == null) return { key: entry.key, delete: true };
+  return { key: entry.key, text: serialize(entry.value) };
+}
+
 function memoryFactory() {
   const map = new Map();
 
   return {
     async writeData(key, value) {
-      map.set(key, JSON.stringify(value, BufferJSON.replacer));
+      map.set(key, serialize(value));
     },
     async readData(key) {
-      const v = map.get(key);
-      if (!v) return null;
-      return JSON.parse(v, BufferJSON.reviver);
+      if (!map.has(key)) return null;
+      const text = map.get(key);
+      if (text == null) return null;
+      return deserialize(text);
     },
     async removeData(key) {
       map.delete(key);
+    },
+    async apply(entries) {
+      const ops = entries.map((entry) => encodeEntry(entry));
+      const prior = new Map();
+      try {
+        for (const op of ops) {
+          if (!prior.has(op.key)) prior.set(op.key, map.has(op.key) ? map.get(op.key) : MISSING);
+          if (op.delete) map.delete(op.key);
+          else map.set(op.key, op.text);
+        }
+      } catch (error) {
+        for (const [key, value] of prior) {
+          if (value === MISSING) map.delete(key);
+          else map.set(key, value);
+        }
+        throw error;
+      }
     },
     async clearAll() {
       map.clear();
@@ -46,15 +85,23 @@ function memoryFactory() {
 function sqliteFactory() {
   return {
     async writeData(key, value) {
-      store.authWrite(key, JSON.stringify(value, BufferJSON.replacer));
+      store.authWrite(key, serialize(value));
     },
     async readData(key) {
       const text = store.authRead(key);
-      if (text === null || text === undefined) return null;
-      return JSON.parse(text, BufferJSON.reviver);
+      if (text == null) return null;
+      return deserialize(text);
     },
     async removeData(key) {
       store.authRemove(key);
+    },
+    async apply(entries) {
+      store.authApply(
+        entries.map((entry) => {
+          const op = encodeEntry(entry);
+          return op.delete ? { key: op.key, value: null } : { key: op.key, value: op.text };
+        }),
+      );
     },
     async clearAll() {
       store.authClearAll();

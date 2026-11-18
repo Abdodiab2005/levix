@@ -50,6 +50,7 @@ const COMMAND_PERMISSIONS = Object.freeze({
   restart: "OWNER_ONLY",
   stopbot: "OWNER_ONLY",
   status: "OWNER_ONLY",
+  update: "OWNER_ONLY",
   lang: "MEMBERS",
   digit: "MEMBERS",
   md: "MEMBERS",

@@ -18,7 +18,7 @@ const { getCached } = require("../utils/groupMetadataCache.cjs");
 const { linkedIdentity } = require("./identity.cjs");
 
 const MODES = new Set(["same_chat", "owner_private", "authorized_chat"]);
-const JID_RE = /^[0-9]{1,30}@(s\.whatsapp\.net|lid|g\.us)$/;
+const JID_RE = /^(?:[0-9]{1,30}@(s\.whatsapp\.net|lid|g\.us)|[0-9]{1,30}-[0-9]{1,30}@g\.us)$/;
 const SCHEDULE_COMMANDS = new Set(["schedule", "autoschedule"]);
 
 function canonicalJid(jid) {
@@ -32,10 +32,7 @@ function resolveMode(input) {
   const commands = input.overrides?.commands;
   const categories = input.overrides?.categories;
   const chosen =
-    commands?.[input.commandName] ||
-    categories?.[input.category] ||
-    input.routeMode ||
-    "same_chat";
+    commands?.[input.commandName] || categories?.[input.category] || input.routeMode || "same_chat";
   return MODES.has(chosen) ? chosen : "same_chat";
 }
 

@@ -83,5 +83,6 @@
   "all.failed": "Algo salió mal al mencionar a todos.",
   "note.usageHint": "Formato incorrecto. Usa: `!note #palabra-clave`",
   "note.notFound": "⚠️ Ninguna nota tiene la palabra clave `{keyword}`\n\nPara ver todas las notas, usa: `!notes`",
-  "removeall.confirm": "⚠️ ¿Seguro que quieres quitar a todos los miembros que no son admin?\n\nEnvía `yes` dentro de 30 segundos para confirmar."
+  "removeall.confirm": "⚠️ ¿Seguro que quieres quitar a todos los miembros que no son admin?\n\nEnvía `yes` dentro de 30 segundos para confirmar.",
+  "removeall.unavailable": "Eliminar a todos los miembros a la vez no está disponible. Elimina a los miembros uno por uno con kick."
 }

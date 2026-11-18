@@ -10,9 +10,10 @@
 //
 //   * Nothing secret and no message content is ever written. Every record is
 //     rebuilt key by key before it reaches the file: a secret-shaped key name
-//     becomes "[redacted]" at any depth, a message-content key keeps only its
-//     length, and every remaining string runs through the one shared sanitizer
-//     (src/diagnostics/sanitize.cjs) before being capped at 2000 characters.
+//     or a personal-name key becomes "[redacted]" at any depth, a
+//     message-content key keeps only its length, and every remaining string
+//     runs through the one shared sanitizer (src/diagnostics/sanitize.cjs)
+//     before being capped at 2000 characters.
 //   * A failure never reaches the caller. A full disk, a permission problem or
 //     a record that cannot be serialized must not break the other log streams
 //     or the code that logged.
@@ -42,7 +43,7 @@ const FILE_PATTERN = /^debug-\d{4}-\d{2}-\d{2}\.log$/;
 // deliberately absent: `err.code`, `statusCode` and friends are diagnostic
 // value, not a credential. A bare `code` is handled by the digit rule below.
 const SECRET_KEY_PATTERN =
-  /pass(word)?|secret|token|api[_-]?key|authorization|cookie|session|creds?|private|noise|signed|identity/i;
+  /pass(word)?|secret|token|api[_-]?key|authorization|cookie|session|creds?|private|noise|signed|identity|entitlement|obfuscated|installation|purchase/i;
 
 // Exactly these names are secrets; a substring rule would swallow `otpTimeout`
 // and the like without cause.
@@ -53,6 +54,13 @@ const EXACT_SECRET_KEYS = new Set([
   "verificationcode",
   "setupcode",
 ]);
+
+// Personal-name keys, at any depth. A substring covers camelCase and
+// snake_case; `notify` is exact so `notified` and `notifyMode` stay.
+const PERSONAL_NAME_KEY_PATTERN =
+  /username|user_name|pushname|push_name|verifiedname|verified_name|displayname|display_name/i;
+
+const EXACT_PERSONAL_NAME_KEYS = new Set(["notify"]);
 
 // A bare `code` is an OTP when it is a short digit string, and an error/status
 // code otherwise (`ENOENT`, `ERR_…`, 404).
@@ -129,6 +137,10 @@ function sanitizeValue(value, depth, seen) {
   for (const [key, item] of Object.entries(value)) {
     const lower = key.toLowerCase();
     if (SECRET_KEY_PATTERN.test(key) || EXACT_SECRET_KEYS.has(lower)) {
+      out[key] = "[redacted]";
+      continue;
+    }
+    if (PERSONAL_NAME_KEY_PATTERN.test(key) || EXACT_PERSONAL_NAME_KEYS.has(lower)) {
       out[key] = "[redacted]";
       continue;
     }

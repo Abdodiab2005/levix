@@ -1,13 +1,15 @@
 // file: frontend/src/components/Header.tsx
 
 import { CircleHelp, Globe, Menu as MenuIcon, Moon, Sun } from "lucide-react";
-import type { FC } from "react";
+import { type FC, useState } from "react";
 import { useI18n } from "../context/I18nContext";
 import { LOCALES } from "../i18n/translations";
 import type { SessionStatus } from "../types";
 import { useGuidedTour } from "./GuidedTour";
+import { AboutPanel } from "./AboutPanel";
+import { officialLinks, openOfficialLink } from "../utils/officialLinks";
 import type { ViewTab } from "./Sidebar";
-import { IconButton, Menu, MenuItem, MenuLabel } from "./ui";
+import { Dialog, IconButton, Menu, MenuItem, MenuLabel } from "./ui";
 
 interface HeaderProps {
   onToggleMobileMenu: () => void;
@@ -20,6 +22,7 @@ interface HeaderProps {
 export const Header: FC<HeaderProps> = ({ onToggleMobileMenu, title, view, status: _status }) => {
   const { language, setLanguage, theme, setTheme, t } = useI18n();
   const guided = useGuidedTour();
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   const handleThemeToggle = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -44,14 +47,27 @@ export const Header: FC<HeaderProps> = ({ onToggleMobileMenu, title, view, statu
       </div>
 
       <div className="flex items-center gap-2 md:gap-3">
-        {guided?.hasScreenSteps(view) && (
-          <IconButton
-            id="btn-header-guide"
-            label={t("tourScreenHelp")}
-            icon={<CircleHelp size={18} className="text-brand-cyan" />}
-            onClick={() => guided.startScreenTour(view)}
-          />
-        )}
+        <Menu
+          label={t("officialHelp")}
+          trigger={
+            <IconButton
+              id="btn-header-guide"
+              label={t("officialHelp")}
+              icon={<CircleHelp size={18} className="text-brand-cyan" />}
+            />
+          }
+        >
+          {guided?.hasScreenSteps(view) && (
+            <MenuItem onSelect={() => guided.startScreenTour(view)}>{t("tourScreenHelp")}</MenuItem>
+          )}
+          <MenuItem onSelect={() => openOfficialLink(officialLinks.docs)}>
+            {t("officialDocs")}
+          </MenuItem>
+          <MenuItem onSelect={() => openOfficialLink(officialLinks.support)}>
+            {t("officialSupport")}
+          </MenuItem>
+          <MenuItem onSelect={() => setAboutOpen(true)}>{t("aboutLevix")}</MenuItem>
+        </Menu>
         <Menu
           label={t("chooseLanguage")}
           trigger={
@@ -87,6 +103,9 @@ export const Header: FC<HeaderProps> = ({ onToggleMobileMenu, title, view, statu
           onClick={handleThemeToggle}
         />
       </div>
+      <Dialog isOpen={aboutOpen} onClose={() => setAboutOpen(false)} title={t("aboutLevix")}>
+        {aboutOpen && <AboutPanel />}
+      </Dialog>
     </header>
   );
 };

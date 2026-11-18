@@ -8,6 +8,7 @@ import type {
   ClientDiagnostics,
   CrashReportInput,
   CrashReportItem,
+  DashboardRecipient,
   DiagnosticsObject,
   EditOptions,
   GroupItem,
@@ -17,6 +18,10 @@ import type {
   ModerationPolicyFieldError,
   ModerationPolicyVisibility,
   Pack,
+  ReactionIssue,
+  ReactionOverview,
+  ReactionRule,
+  ReactionRuleWrite,
   SentCrashReportItem,
   Sticker,
   StickerBulkResult,
@@ -28,13 +33,14 @@ import type {
 import type { Language } from "../i18n/translations";
 
 export class ApiError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-    public data?: any,
-  ) {
+  public status: number;
+  public data?: any;
+
+  constructor(status: number, message: string, data?: any) {
     super(message);
     this.name = "ApiError";
+    this.status = status;
+    this.data = data;
   }
 
   get code(): string | undefined {
@@ -352,12 +358,7 @@ export const api = {
     }>(`/ai/conversations/${encodeURIComponent(chatId)}`),
   getRecipients: () =>
     api.get<{
-      recipients: Array<{
-        id: string;
-        name: string;
-        type: "group" | "contact";
-        phone?: string | null;
-      }>;
+      recipients: DashboardRecipient[];
     }>("/recipients"),
   fetchAiModels: (payload?: {
     provider?: string;
@@ -574,5 +575,30 @@ export const api = {
   clearAutoDeleteLog: (ruleId?: string) =>
     api.delete<{ success: boolean; cleared: number }>(
       ruleId ? `/auto-delete/log?ruleId=${encodeURIComponent(ruleId)}` : "/auto-delete/log",
+    ),
+
+  getReactions: () => api.get<ReactionOverview>("/reactions"),
+  checkReactionRule: (body: ReactionRuleWrite) =>
+    api.post<{ success: boolean; issues: ReactionIssue[] }>("/reactions/rules/check", body),
+  createReactionRule: (body: ReactionRuleWrite) =>
+    api.post<{ success: boolean; rule: ReactionRule }>("/reactions/rules", body),
+  updateReactionRule: (id: string, body: ReactionRuleWrite & { revision: string }) =>
+    api.put<{ success: boolean; rule: ReactionRule }>(
+      `/reactions/rules/${encodeURIComponent(id)}`,
+      body,
+    ),
+  setReactionRuleEnabled: (id: string, body: { revision: string; enabled: boolean }) =>
+    api.post<{ success: boolean; rule: ReactionRule }>(
+      `/reactions/rules/${encodeURIComponent(id)}/enabled`,
+      body,
+    ),
+  deleteReactionRule: (id: string, revision: string) =>
+    api.delete<{ success: boolean }>(
+      `/reactions/rules/${encodeURIComponent(id)}?revision=${encodeURIComponent(revision)}`,
+    ),
+  setReactionAutomation: (enabled: boolean, revision: string) =>
+    api.put<{ success: boolean; automation: ReactionOverview["automation"] }>(
+      "/reactions/automation",
+      { enabled, revision },
     ),
 };

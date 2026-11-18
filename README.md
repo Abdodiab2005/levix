@@ -135,6 +135,31 @@ Existing WhatsApp `*bold*` and `_italic_` text keeps its formatting.
 
 AI is optional. The rest of Levix works without an AI key.
 
+#### Ask about Levix or request media
+
+Ask `!ai How do I back up Levix?` for help grounded in this release's bundled
+README, setup, Android, privacy and four-language command reference. The AI can
+search those documents offline and cite the source section and version. Prose
+guides are English; Arabic, Brazilian Portuguese and Latin American Spanish
+queries can fall back to them. Missing evidence is reported instead of treating
+future plans as installed features. Only the retrieval is offline: an AI answer
+still uses your configured chat provider.
+
+- `!ai Create an image of a cat on the moon` uses the same dedicated Gemini
+  image key and model as `!generate`.
+- Reply to text with `!ai Read this aloud` for Google TTS, the same synthesizer
+  as `!tts`. FFmpeg makes a voice note; MP3 is the fallback.
+- Reply to a voice message with `!ai Transcribe this voice note` for the same
+  Gemini/OpenAI-compatible transcription policy as `!stt`. The transcript then
+  becomes context for the selected chat provider's answer.
+
+These actions retain the backing command's live permission and enabled state,
+and results follow the configured reply router. They do not change your chat
+provider. Image and transcription providers may charge against your own key;
+Google TTS has no API-key charge. There is no music or sound-effect generator.
+Natural-language media tools have bounded input, output, time and request rates;
+a missing key, unsupported response or refused delivery is a failure.
+
 ### Persistent schedules and memory
 
 One-off and recurring schedules survive restarts and record their latest
@@ -148,8 +173,36 @@ The panel can start, stop, reconnect, and unlink WhatsApp while showing the
 actual state: idle, waiting for a scan, connected, reconnecting, or stopped.
 Reconnect attempts continue inside the bot even when no browser is open.
 
+The Free account card on **Connection** shows your connected WhatsApp profile
+picture, display name, verified phone number and About text. Missing or private
+details use a neutral placeholder. Open the screen or use its refresh button;
+stats polling does not query your profile. Profile lookups and images use a
+short memory cache, and disconnecting clears the visible account details.
+
 An optional HTTP, HTTPS, or SOCKS5 proxy can route WhatsApp traffic, including
 media, without changing how the panel or AI connects.
+
+## Checking for updates
+
+`!update` checks official release information and replies with the current
+version and a release link. It is owner-only by default, with the same command
+permission controls as other commands. Stable installations see stable releases;
+beta installations can see a newer beta in their release line or a stable
+release. An offline check leaves the bot running normally. Checks share a short
+local cache and never download or install executable code.
+
+Open **Settings → About Levix** or **Help → About Levix** to check manually,
+read release notes, and open the official documentation, support, developer and
+Leviro links. Google Play installations check through Play and offer a flexible
+update: you choose when to download and when to restart. Other installations
+open the official GitHub release so you can use your normal installation method.
+Rating and GitHub stars are optional. Play review prompts have a separate local
+switch that is off by default; Google controls whether a review card appears.
+
+The optional **Powered by Levix** watermark stays off by default. Its existing
+Free switch is retained. When enabled, it excludes exact output, raw transcripts,
+forwarded text, short links, files and security messages. Active Plus extensions
+can hide it through the existing entitlement-controlled hook.
 
 ## CLI
 

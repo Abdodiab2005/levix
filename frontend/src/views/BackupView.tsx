@@ -1,3 +1,4 @@
+import { userErrorMessage } from "../utils/userError";
 import { Download, HardDrive, RefreshCw, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import { ApiError, api } from "../api/client";
@@ -42,6 +43,7 @@ type PlanSection = {
   unchanged: number;
   kept: string[];
 };
+type PlusItemState = "added" | "replaced" | "unchanged" | "none";
 type Plan = {
   exact: boolean;
   destructive: boolean;
@@ -49,6 +51,13 @@ type Plan = {
   apiKeys: PlanSection;
   persona: "added" | "replaced" | "unchanged" | "kept" | "none";
   accountData: { replacesCurrent: boolean; replacesWaiting: string | null } | null;
+  plus?: {
+    messages: { total: number; added: number; replaced: number; unchanged: number };
+    presets: PlusItemState;
+    visibility: PlusItemState;
+    autoReply: PlusItemState;
+    autoReplyWaits: boolean;
+  };
 };
 type Preview = {
   created: string;
@@ -124,6 +133,53 @@ const errors: Record<string, Key> = {
   NOT_FOUND: "backupErrNotFound",
   IO: "backupErrUnknown",
 };
+const ITEM_LABEL_KEYS: Record<string, Key> = {
+  prefix: "prefix",
+  command_permissions: "thRequiredRole",
+  command_aliases: "thAliases",
+  disabled_commands: "commands",
+  ai_provider: "aiProvider",
+  ai_enabled: "aiAgentEnabled",
+  ai_vision_enabled: "aiVision",
+  ai_stt_enabled: "aiSttEnabled",
+  ai_stt_provider: "aiStt",
+  bot_language: "botLanguage",
+  ai_reply_language: "aiReplyLanguage",
+  bot_timezone: "botTimezone",
+  bot_min_delay_ms: "botMinDelay",
+  bot_max_delay_ms: "botMaxDelay",
+  gemini_model: "modelName",
+  openai_model: "modelName",
+  anthropic_model: "modelName",
+  gemini_api_key: "providerGemini",
+  openai_api_key: "providerOpenAI",
+  anthropic_api_key: "providerAnthropic",
+  google_translate_api_key: "googleTranslateApiKey",
+  openweathermap_api_key: "weatherApiKey",
+  translate_engine: "translateEngine",
+  forward_score_ttl_days: "forwardTtl",
+  max_fetch_bytes: "maxFetchBytes",
+  sticker_library_limit: "stickerLibraryLimit",
+  auto_delete_keep_days: "autoDeleteKeepDays",
+  reply_route: "replyRoute",
+  reply_route_chat: "replyRouteChat",
+  reply_route_overrides: "replyRouteOverrides",
+  command_parser: "commandParser",
+  connection_log_level: "connectionLogLevel",
+  ai_global_memory_read: "aiGlobalMemoryRead",
+  ai_global_memory_write: "aiGlobalMemoryWrite",
+  ai_global_memory_where: "aiGlobalMemoryWhere",
+  "cfg:presets": "plusTabPresets",
+  "cfg:visibility": "plusTabVisibility",
+  "cfg:auto-reply": "plusTabAutoReply",
+};
+
+function knownKey(value: unknown, fallback: string): Key {
+  return (
+    typeof value === "string" && Object.hasOwn(translations.en, value) ? value : fallback
+  ) as Key;
+}
+
 const maxBytes = 16 * 1024 ** 3;
 const bytes = (n: number) => `${(n / 1024 ** 2).toFixed(1)} MiB`;
 const date = (value: string, locale: string) => new Date(value).toLocaleString(locale);
@@ -167,12 +223,8 @@ export function BackupView() {
     const code = (err instanceof ApiError ? err.code : undefined) || data?.code;
     if (code === "throttled")
       return fill(t("backupErrThrottled"), { n: Number(data?.retryAfter) || 60 });
-    return t(
-      errors[code] ||
-        ((err instanceof ApiError && err.status === 0) || err instanceof TypeError
-          ? "backupErrNetwork"
-          : "backupErrUnknown"),
-    );
+    const key = typeof code === "string" && Object.hasOwn(errors, code) ? errors[code] : undefined;
+    return key ? t(key) : userErrorMessage(t, err, "backupErrUnknown");
   };
   const load = async () => {
     try {
@@ -482,6 +534,13 @@ export function BackupView() {
       ))}
     </dl>
   );
+  const itemLabel = (name: string, fallback = "backupErrorOtherSetting") => {
+    const normalized = name.startsWith("setting:") ? name.slice(8) : name;
+    const key = Object.hasOwn(ITEM_LABEL_KEYS, normalized)
+      ? ITEM_LABEL_KEYS[normalized]
+      : undefined;
+    return t(key ? knownKey(key, fallback) : (fallback as Key));
+  };
   const keyList = (keys: string[]) => (
     <p className="text-sm text-muted">
       {t("backupKeyNames")}:{" "}
@@ -489,7 +548,7 @@ export function BackupView() {
         ? keys.map((key, i) => (
             <span key={key}>
               {i ? ", " : ""}
-              <UserText as="span">{key}</UserText>
+              <span>{itemLabel(key, "backupErrorOtherItem")}</span>
             </span>
           ))
         : t("backupNone")}
@@ -499,7 +558,7 @@ export function BackupView() {
     names.map((name, i) => (
       <span key={name}>
         {i ? ", " : ""}
-        <UserText as="span">{name}</UserText>
+        <span>{itemLabel(name)}</span>
       </span>
     ));
   const planNames = (label: Key, names: string[]) =>
@@ -515,7 +574,9 @@ export function BackupView() {
       {planNames("backupPlanReplaced", part.replaced)}
       {planNames("backupPlanRemoved", part.removed)}
       {part.unchanged > 0 && (
-        <p className="text-sm text-muted">{fill(t("backupPlanUnchanged"), { n: part.unchanged })}</p>
+        <p className="text-sm text-muted">
+          {fill(t("backupPlanUnchanged"), { n: part.unchanged })}
+        </p>
       )}
       {part.kept.length > 0 && (
         <Disclosure summary={fill(t("backupPlanKept"), { n: part.kept.length })}>
@@ -524,13 +585,59 @@ export function BackupView() {
       )}
     </div>
   );
+  const planPlus = (plus?: Plan["plus"]) => {
+    if (!plus) return null;
+    const hasItems =
+      plus.messages.total > 0 ||
+      plus.presets !== "none" ||
+      plus.visibility !== "none" ||
+      plus.autoReply !== "none";
+    if (!hasItems) return null;
+
+    return (
+      <div className="flex flex-col gap-1">
+        <h4 className="text-sm font-semibold">{t("backupPlanPlusTitle")}</h4>
+        {plus.messages.total > 0 && (
+          <p className="text-sm">
+            {fill(t("backupPlanPlusMessages"), {
+              total: plus.messages.total,
+              added: plus.messages.added,
+              replaced: plus.messages.replaced,
+              unchanged: plus.messages.unchanged,
+            })}
+          </p>
+        )}
+        {plus.presets !== "none" && (
+          <p className="text-sm">
+            {t(knownKey(`backupPlanPlusPresets${plus.presets}`, "backupErrorOtherItem"))}
+          </p>
+        )}
+        {plus.visibility !== "none" && (
+          <p className="text-sm">
+            {t(knownKey(`backupPlanPlusVisibility${plus.visibility}`, "backupErrorOtherItem"))}
+          </p>
+        )}
+        {plus.autoReply !== "none" && (
+          <p className="text-sm">
+            {t(knownKey(`backupPlanPlusAutoReply${plus.autoReply}`, "backupErrorOtherItem"))}
+          </p>
+        )}
+        {plus.autoReplyWaits && (
+          <p className="text-sm text-muted">{t("backupPlanPlusAutoReplyWaits")}</p>
+        )}
+      </div>
+    );
+  };
   const planView = (plan: Plan) => (
     <div className="flex flex-col gap-3">
       <h3 className="font-semibold">{t("backupPlanTitle")}</h3>
       {!plan.exact && <p className="text-sm text-warn">{t("backupPlanUnknown")}</p>}
       {planSection("backupPlanSettings", plan.settings)}
       {planSection("backupPlanApiKeys", plan.apiKeys)}
-      <p className="text-sm">{t(`backupPersona${plan.persona}` as Key)}</p>
+      <p className="text-sm">
+        {t(knownKey(`backupPersona${plan.persona}`, "backupErrorOtherItem"))}
+      </p>
+      {planPlus(plan.plus)}
       {plan.accountData?.replacesCurrent && (
         <p className="text-sm text-warn">{t("backupPlanReplacesCurrent")}</p>
       )}
@@ -571,7 +678,10 @@ export function BackupView() {
                 : t("backupUnpaired")}
             </p>
             <p className="text-sm text-muted">
-              {t("backupNeverIncludes")}: {t("backupExclusions")}
+              {t("backupIncludes")}: {t("backupIncludedPlus")}
+            </p>
+            <p className="text-sm text-muted">
+              {t("backupNeverIncludes")}: {t("backupExclusions")}, {t("backupPlusExclusions")}
             </p>
           </>
         ) : (
@@ -612,11 +722,7 @@ export function BackupView() {
         {job && job.kind === "backup" && (
           <p role="status" className="text-sm">
             {fill(t("backupJobProgress"), {
-              phase: t(
-                (`backupPhase${job.phase}` in translations.en
-                  ? `backupPhase${job.phase}`
-                  : "backupPhaseWorking") as Key,
-              ),
+              phase: t(knownKey(`backupPhase${job.phase}`, "backupPhaseWorking")),
               percent: job.totalBytes ? Math.round((job.bytes / job.totalBytes) * 100) : 0,
             })}
           </p>
@@ -659,7 +765,7 @@ export function BackupView() {
           }}
         />
         <div className="flex items-center gap-2">
-            <Button type="button" variant="secondary" disabled={busy} onClick={() => void choose()}>
+          <Button type="button" variant="secondary" disabled={busy} onClick={() => void choose()}>
             {t("backupChooseFile")}
           </Button>
           {fileName && (
@@ -700,14 +806,17 @@ export function BackupView() {
             {keyList(preview.apiKeys)}
             <p className="text-sm">
               {t(
-                (
-                  {
-                    match: "backupAccountmatch",
-                    different: "backupAccountdifferent",
-                    "target-unpaired": "backupAccounttargetunpaired",
-                    none: "backupAccountnone",
-                  } as const
-                )[preview.account.status],
+                knownKey(
+                  (
+                    {
+                      match: "backupAccountmatch",
+                      different: "backupAccountdifferent",
+                      "target-unpaired": "backupAccounttargetunpaired",
+                      none: "backupAccountnone",
+                    } as const
+                  )[preview.account.status],
+                  "backupErrorOtherItem",
+                ),
               )}{" "}
               {preview.account.masked && <UserText as="span">{preview.account.masked}</UserText>}
             </p>
@@ -740,11 +849,7 @@ export function BackupView() {
         {job && job.kind === "restore" && (
           <p role="status" className="text-sm">
             {fill(t("backupJobProgress"), {
-              phase: t(
-                (`backupPhase${job.phase}` in translations.en
-                  ? `backupPhase${job.phase}`
-                  : "backupPhaseWorking") as Key,
-              ),
+              phase: t(knownKey(`backupPhase${job.phase}`, "backupPhaseWorking")),
               percent: job.totalBytes ? Math.round((job.bytes / job.totalBytes) * 100) : 0,
             })}
           </p>
@@ -762,15 +867,14 @@ export function BackupView() {
                 <h4 className="font-semibold">{t("backupSkipped")}</h4>
                 {restored.skipped.map((item) => (
                   <p key={item.key}>
-                    <UserText as="span">{item.key}</UserText>:{" "}
-                    <UserText as="span">{item.reason}</UserText>
+                    {itemLabel(item.key)}: {t("backupErrorSkipped" as Key)}
                   </p>
                 ))}
               </div>
             )}
             {restored.restartNeeded.length > 0 && (
               <p>
-                {t("backupRestartNeeded")}: {restored.restartNeeded.join(", ")}
+                {t("backupRestartNeeded")}: {nameList(restored.restartNeeded)}
               </p>
             )}
           </div>
@@ -796,8 +900,13 @@ export function BackupView() {
           {pending.lastActivation && (
             <p className="text-sm">
               {t("backupActivation")}:{" "}
-              {t(`backupActivation${pending.lastActivation.status}` as Key)} ·{" "}
-              {date(pending.lastActivation.at, stampLocale)}
+              {t(
+                knownKey(
+                  `backupActivation${pending.lastActivation.status}`,
+                  "backupErrorOtherItem",
+                ),
+              )}{" "}
+              · {date(pending.lastActivation.at, stampLocale)}
             </p>
           )}
         </Card>

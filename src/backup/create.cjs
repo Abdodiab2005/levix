@@ -14,6 +14,7 @@ const logger = require("../utils/logger.cjs");
 const { readPairedAccount, maskAccount } = require("./account.cjs");
 const { ACCOUNT_TABLES, EXCLUDED_TABLES, RESTORABLE_BOT_KEYS, classifyTables } = require("./content.cjs");
 const { digestsFrom, restorableRows } = require("./plan.cjs");
+const extensions = require("./extensions.cjs");
 
 const EXCLUDED_CATEGORIES = Object.freeze([
   "WhatsApp credentials", "panel password and sessions", "recovery email", "device settings",
@@ -194,15 +195,20 @@ function capture(stage, statfs = fs.statfsSync) {
   fs.mkdirSync(stage, { recursive: true, mode: 0o700 });
   const filtered = path.join(stage, "filtered.db");
   const omitTables = [...EXCLUDED_TABLES, ...(paired ? [] : ACCOUNT_TABLES)];
-  const keepBotKey = (key) => RESTORABLE_BOT_KEYS.includes(key);
+  // Plus config always; Plus account data only with the account it belongs to.
+  // Values that would fail validation on restore stay out instead of poisoning the file.
+  const plusKeys = new Set(extensions.validRows(db).map((row) => row.key)
+    .filter((key) => extensions.kindOf(key) === "cfg" || paired));
+  const keepBotKey = (key) => RESTORABLE_BOT_KEYS.includes(key) || plusKeys.has(key);
+  const allowBotKey = (key) => plusKeys.has(key);
   try {
-    writeSecretFreeCopy(dataPath("levix.db"), filtered, { omitTables, keepBotKey });
+    writeSecretFreeCopy(dataPath("levix.db"), filtered, { omitTables, keepBotKey, allowBotKey });
     captureHookForTest?.("after-db-copy", stage);
     const source = new DatabaseSync(dataPath("levix.db"), { readOnly: true });
     try {
       verifySecretFreeCopy(filtered, source, {
         expectedVersion: source.prepare("PRAGMA user_version").get().user_version,
-        omitTables, keepBotKey,
+        omitTables, keepBotKey, allowBotKey,
       });
     } finally { source.close(); }
   }

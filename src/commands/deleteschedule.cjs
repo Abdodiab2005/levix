@@ -1,5 +1,5 @@
 // file: /commands/deleteschedule.js
-const { deleteScheduledJob, getScheduledJobs } = require("../../scheduler.cjs");
+const { deleteScheduledJob, getScheduledJobsForChat } = require("../../scheduler.cjs");
 const { t } = require("../utils/i18n.cjs");
 
 module.exports = {
@@ -16,7 +16,8 @@ module.exports = {
       });
     }
 
-    const jobs = getScheduledJobs();
+    // A job of another chat answers like an unknown id, so existence never leaks.
+    const jobs = getScheduledJobsForChat(msg.key.remoteJid, msg.key.remoteJidAlt);
     const jobExists = jobs.some((job) => job.id === jobIdToDelete);
 
     if (!jobExists) {

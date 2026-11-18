@@ -15,11 +15,13 @@ const memory = require("../utils/memory.cjs");
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 const {
   isOwnerJidSync,
+  getSenderCandidatesSync,
   isBotAdminUserSync,
   isAdminInGroupSync,
 } = require("../utils/permissions.cjs");
 const logger = require("../utils/logger.cjs");
 const { t } = require("../utils/i18n.cjs");
+const { resolveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
 
 const GLOBAL_WORDS = new Set(["global", "-g", "--global", "عام", "العام", "الكل"]);
 
@@ -64,14 +66,25 @@ module.exports = {
   aliases: ["mem", "ذاكرة", "remember"],
   chat: "all",
 
-  async execute(sock, msg, args, body, groupMetadata) {
+  async execute(sock, msg, args, body, groupMetadata, ctx) {
     const chatId = msg.key.remoteJid;
     const isGroup = chatId.endsWith("@g.us");
     const senderId = isGroup ? msg.key.participant : msg.key.remoteJid;
 
-    const isOwner = msg.key.fromMe || isOwnerJidSync(senderId);
-    const botPrivileged = isOwner || isBotAdminUserSync(senderId);
-    const groupAdmin = Boolean(isGroup && isAdminInGroupSync(groupMetadata, senderId));
+    // Chat forget/clear/export is a grant. A stale roster must not provide it.
+    // The subject on `groupMetadata` stays the last-known display name.
+    const authMetadata =
+      ctx && Object.prototype.hasOwnProperty.call(ctx, "authGroupMetadata")
+        ? ctx.authGroupMetadata
+        : isGroup
+          ? await resolveGroupMetadata(sock, chatId, { fresh: true })
+          : null;
+    const candidates = getSenderCandidatesSync(msg, sock);
+    const isOwner = msg.key.fromMe || candidates.some((id) => isOwnerJidSync(id, authMetadata));
+    const botPrivileged = isOwner || candidates.some((id) => isBotAdminUserSync(id, authMetadata));
+    const groupAdmin = Boolean(
+      isGroup && candidates.some((id) => isAdminInGroupSync(authMetadata, id)),
+    );
 
     const action = String(args[0] || "").toLowerCase();
     const { scope, rest } = extractScope(args.slice(1));
@@ -83,6 +96,8 @@ module.exports = {
       reply(t("bot.ai.memory.denied"));
 
     try {
+      if (scope === "global" && !botPrivileged) return denied();
+
       // ---------------------------------------------------------------- add
       if (["add", "save", "احفظ", "ضيف", "اضف"].includes(action)) {
         const content = rest.join(" ").trim();
@@ -112,7 +127,7 @@ module.exports = {
           return reply(t("bot.ai.memory.searchPrompt"));
         }
         const chatHits = memory.searchMemory(query, { scope: "chat", chatId });
-        const globalHits = memory.searchMemory(query, { scope: "global" });
+        const globalHits = botPrivileged ? memory.searchMemory(query, { scope: "global" }) : [];
 
         if (!chatHits.length && !globalHits.length) {
           return reply(t("bot.ai.memory.searchNone", { query }));
@@ -121,8 +136,10 @@ module.exports = {
           t("bot.ai.memory.searchResults", { query }) +
             t("bot.ai.memory.searchChatHeader", { count: chatHits.length }) +
             `${formatEntries(chatHits, { limit: 10 })}\n\n` +
-            t("bot.ai.memory.searchGlobalHeader", { count: globalHits.length }) +
-            formatEntries(globalHits, { limit: 10 }),
+            (botPrivileged
+              ? t("bot.ai.memory.searchGlobalHeader", { count: globalHits.length }) +
+                formatEntries(globalHits, { limit: 10 })
+              : ""),
         );
       }
 

@@ -89,6 +89,7 @@
   "translate.emptyResult": "I couldn't translate that. Try again.",
   "translate.timedOut": "The translation service timed out. Try again.",
   "translate.failed": "Translation failed",
+  "gemini.requestTooLarge": "This request is too large for the Gemini gateway (20 MiB JSON, 15 MiB total inline media). Use less text or smaller attachments, or explicitly clear the chat history and try again. No content was removed to fit the limit.",
   "aiAgent.sources": "*Sources:*",
   "aiAgent.noGeminiKey": "No Gemini API key is set",
   "aiAgent.writingAnswer": "🤖 Writing the answer...",
@@ -117,5 +118,7 @@
   "aiTools.createPoll": "📊 Creating a poll: {question}",
   "aiTools.summarizeChat": "🧠 Summarizing the chat and saving what matters...",
   "aiTools.running": "⚙️ Running: {name}",
+  "aiTools.searchDocs": "📚 Searching the bundled Levix docs...",
+  "aiTools.openDoc": "📖 Reading a Levix documentation section...",
   "memoryStore.nothingToSave": "There is nothing to save"
 }

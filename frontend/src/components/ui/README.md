@@ -6,9 +6,11 @@ Every screen in `frontend/src` is built from this folder. Import from the barrel
 import { Button, IconButton, Card, PageHeader } from "../components/ui";
 ```
 
-Colours come only from the tokens in `frontend/src/index.css` (`bg`, `panel`, `line`, `text-main`, `muted`, `faint`, `brand-*`, `ok`, `warn`, `danger`, `info`). Layout uses logical properties (`ms` / `me` / `ps` / `pe` / `start` / `end`) so Arabic RTL works. Touch targets are at least 40px. New visible strings, including tooltips, go in `i18n/en/dashboard.json` and `i18n/ar/dashboard.json`, then `npm run i18n:build`. `frontend/src/i18n/translations.ts` is generated.
+Colours come only from the tokens in `frontend/src/index.css` (`bg`, `panel`, `line`, `text-main`, `muted`, `faint`, `brand-*`, `ok`, `warn`, `danger`, `info`). Layout uses logical properties (`ms` / `me` / `ps` / `pe` / `start` / `end`) so Arabic RTL works. Touch targets are at least 40px. New visible strings, including tooltips, go in `i18n/en/dashboard.json` and the same key in every required locale (`ar`, `pt-BR`, `es-419`), then `npm run i18n:build`. `frontend/src/i18n/translations.ts` is generated.
 
-`text-white` is the foreground on `primary` and `danger` fills, and the switch thumb is `bg-white`, because those sit on saturated brand / danger tokens in both themes. Do not add any other raw colour.
+The four status tokens (`ok`, `warn`, `danger`, `info`) are theme-aware and meet WCAG AA contrast (at least 4.5:1) as text against both `panel` and `panel-raised` surfaces in light and dark themes.
+
+`text-white` is the foreground on `primary` and `danger-fill` fills (`danger-fill` keeps white text at 4.5:1 or more in both themes), and the switch thumb is `bg-white`, because those sit on saturated brand / danger tokens in both themes. Do not add any other raw colour.
 
 ## Composition
 
@@ -75,7 +77,7 @@ Icon only. `label` is required. Same variants and sizes. `pressed` sets `aria-pr
 
 ### Field, Input, Textarea, Select, Checkbox, RadioGroup, Toggle
 
-`Field` wraps a control with `label`, `description`, and `error`. `Input`, `Textarea`, and `Select` are the native controls with the shared field style. `Checkbox` and `RadioGroup` are labelled choices. `Toggle` is the switch (`checked`, `onChange(checked)`, optional `label` and `description`).
+`Field` wraps a control with `label`, `description`, and `error`. `Input`, `Textarea`, and `Select` are the native controls with the shared field style. `Checkbox` and `RadioGroup` are labelled choices. `Toggle` is the switch (`checked`, `onChange(checked)`, optional `label` and `description`). When `htmlFor` is set, the error or description `<p>` uses id `${htmlFor}-message`; the control should set `aria-describedby` to that id (join with a space if it already has one). With no `htmlFor`, the `<p>` has no id.
 
 `Toggle` keeps a 44px-high hit target around its 44×26px visible track (20px thumb, equal 3px insets). Its button ref, `id`, `disabled`, `role="switch"`, and `aria-checked` work as native controls do.
 
@@ -87,7 +89,12 @@ Per-row settings stay as `Select` (with `SaveField`) or `Toggle`. A list filter 
 
 ```tsx
 <Field label={t("packName")} htmlFor="pack-name" error={nameError}>
-  <Input id="pack-name" value={name} onChange={(event) => setName(event.target.value)} />
+  <Input
+    id="pack-name"
+    aria-describedby={nameError ? "pack-name-message" : undefined}
+    value={name}
+    onChange={(event) => setName(event.target.value)}
+  />
 </Field>
 ```
 
@@ -145,6 +152,8 @@ Dialogs that already end in a submit button stay as they are.
 ### Dialog / ConfirmDialog
 
 `Dialog` keeps the old modal contract: `isOpen`, `onClose`, `title`, `children`, `footer`, `maxWidth`. Escape and the backdrop close it. Focus is trapped and returned to the trigger. The body scrolls and the footer stays on screen. The footer's bottom padding (the body's, when there is no footer) is `max(1rem, env(safe-area-inset-bottom))`. `ConfirmDialog` composes `Dialog` with cancel and confirm buttons (`variant` `danger` or `primary`, `loading`).
+
+`Dialog` has a `variant` map: `default` stays centered; `mobileFullscreen` fills the viewport below 640px and keeps the centered desktop layout and `maxWidth`. Both share the same focus trap, scrolling body and sticky footer. The full-screen header clears `env(safe-area-inset-top)`; the footer clears `env(safe-area-inset-bottom)`. Import `Dialog` and `DialogVariant` from the barrel. Long editor forms use `<Dialog variant="mobileFullscreen" footer={actions}>…</Dialog>`.
 
 ```tsx
 <ConfirmDialog
@@ -244,9 +253,18 @@ Both take `value`, `onChange`, `options` (`{ value, label, icon? }`), and `aria-
 />
 ```
 
+### CodeText
+
+A technical token: a command, a prefix, a timezone id, a cron expression, a phone number, or a `{placeholder}`. It renders `<bdi dir="ltr">` in a monospace face so the token keeps its written order inside Arabic RTL. The text is exactly `children` — nothing is reversed or inserted. Set `copy` to add a copy `IconButton` (`copyLabel` is its accessible name). The button calls `navigator.clipboard.writeText` and shows the translated failure when the browser refuses. It does not throw.
+
+```tsx
+<CodeText>{`!help`}</CodeText>
+<CodeText copy copyLabel={t("copyCommand")}>{`${prefix}${command.name}`}</CodeText>
+```
+
 ### UserText
 
-A name or a message the operator typed (a sticker pack, a sticker, a keyword, a chat subject). It sets `dir="auto"` so Arabic, English, and mixed strings each lay out inside both the RTL and the LTR UI, and it wraps with `break-words` instead of cutting words off. Set `lines` (`1`–`3`) for dense cards and chips: the element clamps and, when the child is a string, gets the full text as its `title`. Use it for every user-entered string, or `dir="auto"` when the element already is a primitive (an `<option>`).
+A name or a message the operator typed (a sticker pack, a sticker, a keyword, a chat subject). It sets `dir="auto"` so Arabic, English, and mixed strings each lay out inside both the RTL and the LTR UI, and it wraps with `break-words` instead of cutting words off. Set `lines` (`1`–`3`) for dense cards and chips: the element clamps and, when the child is a string, gets the full text as its `title`. Use it for every user-entered string, or `dir="auto"` when the element already is a primitive (an `<option>`). Commands, prefixes, and other tokens use `CodeText`, not `UserText`.
 
 ```tsx
 <UserText className="font-bold">{pack.name}</UserText>
@@ -281,11 +299,29 @@ Set `kind="empty"` for no records, `kind="no-results"` for an empty search/filte
 
 A wrapping row. Put the search `Input` first (`className="min-w-48 flex-1"`), then `FilterButton`, `SortMenu`, and `OverflowMenu`.
 
+### CrownIcon / PlusBadge / PlusFeatureRow
+
+`CrownIcon` is the Levix Plus crown as an inline SVG in `currentColor`. It is `aria-hidden`, so always put text beside it. `PlusBadge` is a pill with that text (`tone`: `active` | `muted`, `crown` adds the icon).
+
+`PlusFeatureRow` announces one Plus feature in the screen it belongs to. Props: `title`, `benefit` (one line), and `tab` (the Plus page tab, such as `autoReply`). It reads the server's answer through `usePlusStatus` and maps it with `accessFromStatus`:
+
+- `active`: an "Open" link to `#plus/<tab>`.
+- `locked`: a lock mark, the benefit line and a "Learn more" link to `#plus`. No dialog, no popup.
+- `unknown`: says the status is being checked; the action is disabled and explains why.
+- `unavailable` (not offered on this platform): renders nothing.
+
+Add at most one per screen, never in place of a free control, and never decide access in the view.
+
+```tsx
+<PlusFeatureRow tab="autoReply" title={t("plusRowAutoReplyTitle")} benefit={t("plusRowAutoReplyBenefit")} />
+```
+
 ### StatusDot / Avatar / Disclosure
 
 `StatusDot` takes a `tone` and accessible `label`; it displays only a dot.
-`Avatar` takes a `src` and `name`, loads its picture lazily and falls back to the
+`Avatar` takes an optional `src` and a `name`, loads its picture lazily and falls back to the
 name initial on missing/failed images. Give it a new key when its source changes.
+An absent `src` renders only the fallback and makes no image request.
 `Disclosure` takes `summary` and children, composing Card and Button into an
 animated expandable region. Closed content is inert and hidden from assistive
 technology; reduced-motion preferences disable the transition. Put only

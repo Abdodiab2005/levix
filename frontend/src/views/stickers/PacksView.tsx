@@ -20,7 +20,7 @@ import {
 import { useI18n } from "../../context/I18nContext";
 import type { Pack, Sticker } from "../../types";
 import { fill } from "../../utils/fill";
-import { explainError } from "../../utils/stickerErrors";
+import { explainError } from "./errors";
 import { PACK_NAME_MAX, packNameLengthError } from "../../utils/stickerLimits";
 import { PackDetail } from "./PackDetail";
 
@@ -56,7 +56,7 @@ export const PacksView: React.FC<PacksViewProps> = ({
     api
       .getPacks()
       .then((res) => setPacks(res.packs))
-      .catch((err) => setError(explainError(t, err)))
+      .catch((err) => setError(explainError(t, err, "loadError")))
       .finally(() => setLoading(false));
   }, [t]);
 
@@ -77,7 +77,7 @@ export const PacksView: React.FC<PacksViewProps> = ({
       toast(t("packCreated"), "success");
       load();
     } catch (err) {
-      toast(explainError(t, err), "error");
+      toast(explainError(t, err, "failedToCreatePack"), "error");
     } finally {
       setBusy(false);
     }
@@ -96,7 +96,7 @@ export const PacksView: React.FC<PacksViewProps> = ({
       setRenameTarget(null);
       load();
     } catch (err) {
-      toast(explainError(t, err), "error");
+      toast(explainError(t, err, "failedToRenamePack"), "error");
     } finally {
       setBusy(false);
     }
@@ -112,7 +112,7 @@ export const PacksView: React.FC<PacksViewProps> = ({
       setDeleteStickers(false);
       load();
     } catch (err) {
-      toast(explainError(t, err), "error");
+      toast(explainError(t, err, "failedToDeletePack"), "error");
     } finally {
       setBusy(false);
     }
@@ -132,7 +132,7 @@ export const PacksView: React.FC<PacksViewProps> = ({
       setIntoPackId("");
       load();
     } catch (err) {
-      toast(explainError(t, err), "error");
+      toast(explainError(t, err, "failedToMerge"), "error");
     } finally {
       setBusy(false);
     }

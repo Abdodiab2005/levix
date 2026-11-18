@@ -30,7 +30,8 @@
 
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
-const { toolDeclarations, describeCall, runTool } = require("./aiTools.cjs");
+const { toolDeclarations, describeCall, runToolWithDeadline } = require("./aiTools.cjs");
+const { docSourcesFromTool } = require("./aiDocs.cjs");
 const { assertProviderBaseUrl, safeProviderFetch } = require("../utils/providerUrl.cjs");
 const { baseMimeType, downloadMedia } = require("../utils/geminiMedia.cjs");
 
@@ -103,7 +104,7 @@ const {
   getProvider,
   detectModelCapabilities,
 } = require("./aiRouter.cjs");
-const { t, tr } = require("../utils/i18n.cjs");
+const { t } = require("../utils/i18n.cjs");
 
 function visionAllowed(providerId) {
   const id = providerId || settings.get("ai_provider");
@@ -343,6 +344,21 @@ function safeJsonArgs(raw) {
   }
 }
 
+function rememberToolCall(callIds, call, id) {
+  const pending = callIds.get(call.name) || [];
+  pending.push(id);
+  callIds.set(call.name, pending);
+}
+
+function toolResponseId(callIds, response, fallback) {
+  const pending = callIds.get(response.name);
+  // Gemini results have no id and follow call order. Other providers may
+  // return explicit ids out of order; consume that exact id from the queue.
+  const index = response.id ? (pending?.indexOf(response.id) ?? -1) : 0;
+  const matched = index >= 0 ? pending?.splice(index, 1)[0] : undefined;
+  return response.id || matched || fallback;
+}
+
 /**
  * Canonical -> chat-completions.
  *
@@ -367,7 +383,7 @@ function historyToOpenAI(history) {
     if (calls.length) {
       const toolCalls = calls.map((call, i) => {
         const id = call.id || `call_${turnIndex}_${i}`;
-        if (call.name) callIds.set(call.name, id);
+        rememberToolCall(callIds, call, id);
         return {
           id,
           type: "function",
@@ -409,7 +425,7 @@ function historyToOpenAI(history) {
       for (const response of responses) {
         messages.push({
           role: "tool",
-          tool_call_id: response.id || callIds.get(response.name) || `call_${turnIndex}`,
+          tool_call_id: toolResponseId(callIds, response, `call_${turnIndex}`),
           content: JSON.stringify(response.response ?? {}),
         });
       }
@@ -450,7 +466,7 @@ function historyToAnthropic(history) {
         blocks.push({ type: "text", text: part.text });
       } else if (part?.functionCall) {
         const id = part.functionCall.id || `call_${turnIndex}_${blocks.length}`;
-        if (part.functionCall.name) callIds.set(part.functionCall.name, id);
+        rememberToolCall(callIds, part.functionCall, id);
         blocks.push({
           type: "tool_use",
           id,
@@ -460,10 +476,7 @@ function historyToAnthropic(history) {
       } else if (part?.functionResponse) {
         blocks.push({
           type: "tool_result",
-          tool_use_id:
-            part.functionResponse.id ||
-            callIds.get(part.functionResponse.name) ||
-            `call_${turnIndex}`,
+          tool_use_id: toolResponseId(callIds, part.functionResponse, `call_${turnIndex}`),
           content: JSON.stringify(part.functionResponse.response ?? {}),
         });
       } else if (part?.fileData || part?.inlineData) {
@@ -558,44 +571,48 @@ function parseAnthropicResponse(payload) {
 // the wire
 // ===========================================================================
 
-async function callApi({ url, headers, body, label }) {
+async function callApi({ url, headers, body, label, signal: turnSignal }) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
-
-  let response;
+  const timeoutError = new Error(`${label} API request timed out after ${API_TIMEOUT_MS / 1000}s`);
+  const timer = setTimeout(() => controller.abort(timeoutError), API_TIMEOUT_MS);
+  const signal = turnSignal ? AbortSignal.any([turnSignal, controller.signal]) : controller.signal;
   try {
-    response = await safeProviderFetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    }, { allowLoopback: true });
-  } catch (err) {
-    throw new Error(
-      err?.name === "AbortError"
-        ? `${label} API request timed out after ${API_TIMEOUT_MS / 1000}s`
-        : `${label} API request failed: ${err?.message || err}`,
+    const response = await safeProviderFetch(
+      url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify(body),
+        signal,
+      },
+      { allowLoopback: true },
     );
+    let payload = {};
+    try {
+      payload = await response.json();
+    } catch {
+      // Non-JSON proxy pages still use the status; cancellation must escape.
+      signal.throwIfAborted();
+    }
+    signal.throwIfAborted();
+    if (!response.ok) {
+      const message =
+        payload?.error?.message || payload?.error || response.statusText || "unknown error";
+      const error = new Error(
+        settings.redactSecrets(`${label} API request failed (${response.status}): ${message}`),
+      );
+      error.status = response.status;
+      throw error;
+    }
+    return payload;
+  } catch (err) {
+    if (controller.signal.aborted) throw timeoutError;
+    if (turnSignal?.aborted) throw turnSignal.reason;
+    if (err?.status) throw err;
+    throw new Error(settings.redactSecrets(`${label} API request failed: ${err?.message || err}`));
   } finally {
     clearTimeout(timer);
   }
-
-  let payload = {};
-  try {
-    payload = await response.json();
-  } catch {
-    // A non-JSON body (a proxy error page, say) still gets the status below.
-  }
-
-  if (!response.ok) {
-    const message =
-      payload?.error?.message || payload?.error || response.statusText || "unknown error";
-    const error = new Error(`${label} API request failed (${response.status}): ${message}`);
-    error.status = response.status;
-    throw error;
-  }
-
-  return payload;
 }
 
 function requestFor(
@@ -632,28 +649,6 @@ function requestFor(
   };
 }
 
-function withTimeout(promise, ms, label) {
-  let timer;
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => {
-      timer = setTimeout(
-        () =>
-          reject(
-            new Error(
-              // i18n-exception: sent to the model
-              tr(
-                `${label} took longer than ${Math.round(ms / 1000)} seconds`,
-                `${label} استغرقت العملية أكثر من ${Math.round(ms / 1000)} ثانية`,
-              ),
-            ),
-          ),
-        ms,
-      );
-    }),
-  ]).finally(() => clearTimeout(timer));
-}
-
 // ===========================================================================
 // the loop — same shape as aiAgent.runAgent, different wire format
 // ===========================================================================
@@ -681,6 +676,7 @@ async function runProviderAgent(
     context = {},
     useTools = true,
     maxSteps = null,
+    signal,
   } = {},
 ) {
   const adapter = adapterFor(provider);
@@ -711,6 +707,7 @@ async function runProviderAgent(
 
   const tools = useTools ? adapter.tools() : [];
   const toolCalls = [];
+  const sources = [];
   let steps = 0;
 
   const send = () => {
@@ -722,7 +719,7 @@ async function runProviderAgent(
       messages,
       tools,
     });
-    return callApi({ ...request, label: adapter.label });
+    return callApi({ ...request, label: adapter.label, signal });
   };
 
   let response = await send();
@@ -749,17 +746,16 @@ async function runProviderAgent(
     messages.push(parsed.assistantMessage);
 
     if (!parsed.calls.length) {
-      return finish({ text: parsed.text, canonical, toolCalls, steps });
+      return finish({ text: parsed.text, canonical, toolCalls, steps, sources });
     }
     if (steps >= stepBudget) {
       // Same contract as the Gemini loop: the budget answer, not a lie.
       return finish({
-        text:
-          parsed.text ||
-          t("bot.ai.aiProviders.toolBudget"),
+        text: parsed.text || t("bot.ai.aiProviders.toolBudget"),
         canonical,
         toolCalls,
         steps,
+        sources,
       });
     }
 
@@ -773,18 +769,20 @@ async function runProviderAgent(
     const results = [];
     for (const call of parsed.calls) {
       toolCalls.push({ name: call.name, args: call.args });
-      logger.info({ tool: call.name, chatId: context.chatId }, "[aiAgent] tool call");
+      logger.info({ tool: call.name }, "[aiAgent] tool call");
 
       let toolResult;
       try {
-        toolResult = await withTimeout(
-          runTool(call.name, call.args, context),
-          settings.get("ai_tool_timeout_ms"),
+        toolResult = await runToolWithDeadline(
           call.name,
+          call.args,
+          context,
+          settings.get("ai_tool_timeout_ms"),
         );
       } catch (err) {
         toolResult = { error: err?.message || String(err) };
       }
+      sources.push(...docSourcesFromTool(call.name, toolResult));
       results.push(toolResult);
     }
 
@@ -808,14 +806,14 @@ async function runProviderAgent(
   }
 }
 
-function finish({ text, canonical, toolCalls, steps }) {
+function finish({ text, canonical, toolCalls, steps, sources }) {
   return {
     text,
     history: canonical,
     toolCalls,
     steps,
-    // Grounding is a Gemini feature; these providers never have sources.
-    sources: [],
+    // Public bundled doc citations are available independently of web grounding.
+    sources,
     searchOffered: false,
   };
 }

@@ -1,11 +1,15 @@
 package net.leviro.levix
 
+import android.app.Activity
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Base64
 import android.webkit.JavascriptInterface
+import net.leviro.levix.billing.BillingHost
+import net.leviro.levix.billing.PlusBilling
 import org.json.JSONObject
 import java.io.File
 
@@ -25,7 +29,112 @@ class PanelBridge(
     private val onClosePanel: (() -> Unit)? = null,
     private val stickerHost: StickerHost? = null,
     private val onUiPrefsChanged: (() -> Unit)? = null,
+    private val billingHost: BillingHost? = null,
+    private val billingActivity: Activity? = null,
+    private val playHost: PlayExperience? = null,
+    private val onOpenOfficialLink: ((String) -> Boolean)? = null,
 ) {
+    private fun plusRefusal(callId: String): String? {
+        billingHost?.optIn()
+        return when {
+            BuildConfig.PLUS_PRODUCT_ID.isEmpty() -> PlusBilling.failure("UNAVAILABLE_IN_BUILD").toString()
+            !PanelFiles.validCallId(callId) -> PlusBilling.failure("INVALID_INPUT").toString()
+            billingHost == null -> PlusBilling.failure("UNAVAILABLE").toString()
+            else -> null
+        }
+    }
+
+    @JavascriptInterface
+    fun plusConfigured(): Boolean = BuildConfig.PLUS_PRODUCT_ID.isNotEmpty()
+
+    @JavascriptInterface
+    fun plusProduct(callId: String): String = plusRefusal(callId) ?: billingHost!!.productInfo(callId)
+
+    @JavascriptInterface
+    fun plusPurchase(callId: String, offerToken: String, installationId: String): String {
+        plusRefusal(callId)?.let { return it }
+        if (!PlusBilling.validOfferToken(offerToken) || !PlusBilling.validInstallationId(installationId))
+            return PlusBilling.failure("INVALID_INPUT").toString()
+        val activity = billingActivity ?: return PlusBilling.failure("UNAVAILABLE").toString()
+        return billingHost!!.purchase(activity, callId, offerToken, installationId)
+    }
+
+    @JavascriptInterface
+    fun plusRestore(callId: String): String = plusRefusal(callId) ?: billingHost!!.restore(callId)
+
+    @JavascriptInterface
+    fun plusPendingPurchases(callId: String): String = plusRefusal(callId) ?: billingHost!!.pendingPurchases(callId)
+
+    @JavascriptInterface
+    fun plusManage(): String {
+        billingHost?.optIn()
+        if (BuildConfig.PLUS_PRODUCT_ID.isEmpty())
+            return PlusBilling.failure("UNAVAILABLE_IN_BUILD").toString()
+        return try {
+            val context = requireNotNull(appContext)
+            val intent = requireNotNull(billingHost?.manageIntent())
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            JSONObject().put("ok", true).toString()
+        } catch (_: Exception) {
+            PlusBilling.failure("UNAVAILABLE").toString()
+        }
+    }
+
+    @JavascriptInterface
+    fun getInstallChannel(): String = appContext?.let { PlayExperience.installChannel(it) }
+        ?: PlayExperience.CHANNEL_GITHUB
+
+    @JavascriptInterface
+    fun hasPendingPlayUpdate(): Boolean = appContext?.let { PlayExperience.hasPendingUpdate(it) } ?: false
+
+    /**
+     * Leaves the WebView only for a fixed official destination. Validation is
+     * synchronous; the activity launches the intent on the UI thread and a
+     * missing handler returns false.
+     */
+    @JavascriptInterface
+    fun openOfficialLink(url: String): Boolean = onOpenOfficialLink?.invoke(url) == true
+
+    @JavascriptInterface
+    fun getReviewPromptsEnabled(): Boolean =
+        appContext?.let { PlayExperience.reviewPromptsEnabled(it) }
+            ?: PlayExperience.REVIEW_PROMPTS_DEFAULT
+
+    @JavascriptInterface
+    fun setReviewPromptsEnabled(enabled: Boolean): Boolean =
+        appContext?.let { PlayExperience.setReviewPromptsEnabled(it, enabled) } ?: false
+
+    @JavascriptInterface
+    fun playCheckUpdate(callId: String): String =
+        playCall(callId) { host, id -> host.checkUpdate(id) }
+
+    @JavascriptInterface
+    fun playStartUpdate(callId: String): String =
+        playCall(callId) { host, id -> host.startUpdate(id) }
+
+    @JavascriptInterface
+    fun playCompleteUpdate(callId: String): String =
+        playCall(callId) { host, id -> host.completeUpdate(id) }
+
+    @JavascriptInterface
+    fun playMaybeReview(callId: String): String =
+        playCall(callId) { host, id -> host.maybeReview(id) }
+
+    /**
+     * A GitHub/self-hosted install must never create or call a Play client,
+     * so the channel is checked before the host is reached. The page can call
+     * every Play method; a non-Play install gets a plain refusal instead.
+     */
+    private fun playCall(callId: String, action: (PlayExperience, String) -> String): String {
+        if (!PanelFiles.validCallId(callId)) {
+            return PlayExperience.failure(PlayExperience.CODE_INVALID_INPUT).toString()
+        }
+        val context = appContext ?: return PlayExperience.unavailable().toString()
+        if (!PlayExperience.installedByPlay(context)) return PlayExperience.unavailable().toString()
+        val host = playHost ?: return PlayExperience.unavailable().toString()
+        return action(host, callId)
+    }
+
     @JavascriptInterface
     fun getUiPrefs(): String = appContext?.let(UiPrefs::json) ?: "{}"
 

@@ -6,9 +6,9 @@ const ACCOUNT_TABLES = Object.freeze([
   "user_metadata", "lid_mapping", "group_directory", "group_settings", "warnings",
   "todos", "notes", "debts", "ai_history", "schedules", "moderation_flags",
   "auto_delete_rules", "auto_delete_log", "sticker_owners", "stickers",
-  "sticker_packs", "sticker_pack_items",
+  "sticker_packs", "sticker_pack_items", "reaction_rules",
 ]);
-const EXCLUDED_TABLES = Object.freeze(["baileys_auth", "qr_codes", "moderation_applied", "forward_scores"]);
+const EXCLUDED_TABLES = Object.freeze(["baileys_auth", "qr_codes", "moderation_applied", "forward_scores", "reaction_events", "reaction_state", "reaction_invalidations", "reaction_executions", "reaction_budgets"]);
 const DEVICE_SETTING_KEYS = Object.freeze([
   "port", "bind_address", "trust_proxy", "public_domain", "dashboard_origin", "ffmpeg_path",
 ]);

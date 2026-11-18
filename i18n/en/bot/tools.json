@@ -47,6 +47,7 @@
   "perm.envOnly": "_From settings (env/config): {count} entries._",
   "perm.missingTarget": "Say who: mention them (@), reply to their message, or type their number.\nExample: `!perm add admin @member`",
   "perm.ownerOnly": "🚫 Only an owner can make a new owner.",
+  "perm.selfOwner": "🚫 The linked account is always an owner. Unlink WhatsApp to change it.",
   "perm.ownerLabel": "owner 👑",
   "perm.adminLabel": "admin 🛡️",
   "perm.granted": "✅ *{who}* is now *{role}*.",

@@ -413,6 +413,43 @@ async function translateWithGoogle({ text, target, detect }) {
   return parseFreeGoogleResponse(payload);
 }
 
+function googleTargetLocale(locale) {
+  if (locale === "pt-BR" || locale === "pt") return "pt";
+  if (locale === "es-419" || locale === "es") return "es";
+  if (locale === "ar") return "ar";
+  return "en";
+}
+
+function shieldPlaceholders(text) {
+  const map = [];
+  const shielded = String(text ?? "").replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (all) => {
+    const token = `@@PH${map.length}@@`;
+    map.push({ token, all });
+    return token;
+  });
+  return { shielded, map };
+}
+
+function unshieldPlaceholders(text, map) {
+  let out = String(text ?? "");
+  for (const { token, all } of map) out = out.split(token).join(all);
+  return out;
+}
+
+async function translateForExtension(text, targetLocale) {
+  try {
+    const { shielded, map } = shieldPlaceholders(text);
+    const result = await translateWithGoogle({
+      text: shielded,
+      target: googleTargetLocale(targetLocale),
+      detect: false,
+    });
+    return { text: unshieldPlaceholders(result.text, map) };
+  } catch (error) {
+    return { error: String(error?.message || error) };
+  }
+}
+
 async function translateWithAi({ text, target, sourceLabel, mode, tone }) {
   const systemInstruction = buildSystemPrompt({ target, sourceLabel, mode, tone });
   const result = await ai.runTurn({
@@ -560,4 +597,6 @@ module.exports = {
   LANGUAGE_NAMES,
   http,
   ai,
+  translateForExtension,
+  translateWithGoogle,
 };

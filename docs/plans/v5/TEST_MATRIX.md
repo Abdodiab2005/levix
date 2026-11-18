@@ -46,9 +46,12 @@ output.
 | 04 | core gates, Docker, SEA, Android unit tests | auth negative paths; consent on every start path; offline first start; tampered Terms; old WebView |
 | 05 | core gates | parser matrix; permission matrix for 69 commands; routing privacy; status editing; health without network |
 | 06 | core gates | mocked providers; tool authorization; docs retrieval and injection; four-locale queries |
-| 07 | core gates | fake event streams; idempotency; loops; rate limits; restart; permissions per reactor |
+| 07a | core gates, i18n/docs checks, tarball/SEA, Android/Docker CI | fake add/change/remove streams; durable replay claims; exact identity; opt-in TTL/bytes; deletes/edits; disconnect/restart; migration and backup/unlink |
+| 07b | core gates, i18n/docs, packaging and final-head CI | reaction-engine and execution-migration regressions: strict roles/aliases/revocation; epochs/priority; voice-STT; admission/action claims; restart; bounded rates/concurrency; kill/disable/invalidation/deadline; final delivery guard; existing Phase 05/06 gates |
+| 07c | core gates, packaging and CI | authenticated/CSRF management over 07b interfaces; validation; explicit enablement; four-language responsive accessible Rule Builder; no backend bypass |
+| 07.5 | proposed, not started | behavior-preserving regression proof only after owner approval |
 | 08 | core gates plus Free-only build | no Plus code in public artifacts; forged and revoked entitlements; offline Core |
-| 09 | core gates | semver and channel matrix; link scheme abuse; review prompt declined; watermark exclusions |
+| 09 | core gates and full CI PASS at `3fb7513`, 2026-11-11, run 43067593302; local full suite 57664/0 | semver/channel/offline/bounds; auth/CSRF; scheme abuse; review opt-in/decline policy; watermark helper + actual dispatcher/status; 10 browser race/recovery checks; four-language screenshots; Q-16 measured. Real Play/no-GMS/old-WebView device smoke NOT RUN, tracked in `PHASE-09-RESULTS.md`. |
 | 10 | everything above plus artifact comparison with `BASELINE.md` | full feature matrix in four locales |
 
 "Core gates" means `npm test`, `npm run lint` and `npm run build:frontend`.

@@ -11,9 +11,9 @@ replaces them in its own plan before writing code.
                                                                           |
                                                           06 AI docs + media tools
                                                                           |
-                                                          07 reactions + auto reply
+                                                          07 Free reactions -> 07.5 stabilization (proposed)
                                                                           |
-                                                 08 Plus (needs 03, 05, 07) -> 09 UX -> 10 release audit
+                                                 08 Plus + Auto Reply (needs 03, 05, 07) -> 09 UX -> 10 release audit
 ```
 
 - Critical path: 01, 02, 03, 04, 05, 06, 07, 08, 09, 10. No phase is skipped or reordered without an
@@ -102,7 +102,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
-| Status | IMPLEMENTED 2026-11-05 on `feat/v5-phase-05` from `main` `2682a09`. PR #132 covers 05a–05f. Results in `PHASE-05-RESULTS.md`. Not merged. Q-06 stays open; the code follows recommendation (a). |
+| Status | MERGED in `3aee413` via PR #132. Results in `PHASE-05-RESULTS.md`. Q-06 stays open; the code follows recommendation (a). |
 | Goal | One `parse, authorize, execute, render, route, send` path; same-chat default; v2 parser; short `!status`; owner health check. |
 | Files | `src/handlers/command.handler.js`, `src/commands/group.cjs`, `src/middleware/permissions.middleware.js`, `src/utils/statusMessage.cjs`, `src/utils/sendBotMessage.esm.js`, new `src/messaging/` (templates, router), `src/commands/status.cjs`, new health module, `src/config/defaults.cjs` (Q-08), `src/config/runtime-config.cjs`, dashboard routing settings, the six commands in AUDIT C-07. |
 | Migrations | Additive routing settings. |
@@ -116,6 +116,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
+| Status | IMPLEMENTED, PENDING OWNER REVIEW on `feat/v5-phase-06` (corrections `d602671`), draft PR #134, 2026-11-06. 10002 automated checks pass; targeted Phase 06 Q-19 approved. Final-head CI and manual QA limits are tracked in the PR and `PHASE-06-RESULTS.md`. Merged as `f04ce30` through PR #134 on 2026-11-06; owner authorized Phase 07. |
 | Goal | Answers about Levix cite bundled, versioned user docs; image, TTS and STT reachable from natural language through existing code paths. |
 | Files | `src/services/aiTools.cjs`, `src/services/aiToolAuth.cjs`, `src/services/aiAgent.cjs`, new docs index generator and generated index, `src/commands/gemini.cjs`, `src/commands/tts.cjs`, `src/commands/stt.cjs` (exports reused). |
 | Migrations | None. |
@@ -125,28 +126,39 @@ replaces them in its own plan before writing code.
 | Rollback | Remove the tool declarations. |
 | PRs | 06a docs index and two doc tools. 06b media tools. |
 
-### Phase 07: reaction automation and AI Auto Reply
+### Phase 07: Free Core Reaction Automation
 
 | Item | Plan |
 | --- | --- |
-| Goal | One reaction rules engine and an opt-in prefix-free AI reply, both on the 05 router and the existing permission checks. |
-| Files | `src/core/events.js`, `src/handlers/message.handler.js`, new automation modules, `src/db/db.cjs` (new migration), `src/db/store.cjs`, dashboard API and a rule builder view. |
-| Migrations | New tables for rules, processed-event keys and a bounded message lookup; additive. |
-| Compliance | No archive of unrelated messages; visible notices; anti-spam limits. |
-| Tests | fake Baileys event streams; added, changed and removed reactions; redelivery; owner, admin and member reactors; missing media; restart; loops; rate and cost limits; four locales in the builder. |
-| Gate | Auto Reply off by default; one action per event; kill switch works. |
-| Rollback | Kill switches; tables stay unused. |
-| PRs | 07a event intake, idempotency, lookup. 07b engine and actions. 07c dashboard builder. 07d Auto Reply. |
+| Status | 07a [PR #135](https://github.com/Abdodiab2005/levix/pull/135) merged at `b383ed1`. 07b [PR #136](https://github.com/Abdodiab2005/levix/pull/136) merged into `release/5.0.0-beta.1` at `ba7ef44`. 07c Rule Builder implemented on `feat/v5-phase-07c`, PR against `release/5.0.0-beta.1`, pending owner review. Audit, plan and evidence: `PHASE-07-RESULTS.md`. |
+| Goal | One generic reaction engine, existing capabilities and Rule Builder in Free Core; no artificial tier rule cap or subscription check. |
+| Files | `src/automation/reactions.js`, core event/socket/session boundaries, additive DB/store, backup classification; later dashboard API and React builder. |
+| Migrations | Immutable schema 11 intake; append-only schema 12 adds rule epoch/revision/priority and bounded hashed execution claims/rate budgets. Original lookup stays in RAM. |
+| Compliance | Capture only live originals in enabled-rule chats, bounded TTL/bytes; no unrelated archive; no action in 07a. |
+| Tests | fake Baileys streams; add/change/remove; replay/restart; exact actor/target; stale/deleted/hidden originals; alias, bounds and lifecycle tests. 07b adds role/action/routing/rate/cancel tests; 07c adds auth/CSRF/four-language UI tests. |
+| Gate | No action for unknown/pre-enable/pre-connection originals or duplicate events. Rule/global opt-in; strict live reactor permissions, source-sensitive routing, cancellation at final send. STT and ping reuse existing capabilities; no API/UI in 07b. |
+| Rollback | Kill global runtime and disable rules, keep schema 12 unused; binary downgrade requires the verified schema-11 pre-migration copy. |
+| PRs | Independently reviewed 07a intake/idempotency/lookup, then 07b rules/safe actions, then 07c Rule Builder. No merge without owner approval. No Auto Reply in this phase. |
+
+### Phase 07.5: Architecture Stabilization & Refactor (PROPOSED)
+
+| Item | Plan |
+| --- | --- |
+| Status | IMPLEMENTED, PENDING OWNER REVIEW (2026-11-09). Audit, findings matrix, decisions and evidence: `PHASE-07.5-ARCHITECTURE-RESULTS.md`. Six stacked PRs on `feat/v5-phase-07c`: 07.5a messaging, 07.5b account boundary, 07.5c AI tools, then the owner-approved follow-ups 07.5d A-6 identity, 07.5e D-3 unlink cleanup and 07.5f R-3 automation revision (2026-11-09). Not to be confused with the group E2EE incident remediation, which also carries the 07.5 number and is merged (`PHASE-07.5-E2EE-REMEDIATION-RESULTS.md`). |
+| Scope | Behavior-preserving cleanup of messaging, AI tool and automation boundaries, cancellation ownership, duplication and legacy code. |
+| Gate | Preserve permissions, privacy, routing, cancellation, command/API compatibility and all functional behavior; before/after regression proof. No feature expansion. |
+| Rollback | Small independently reviewable commits/PRs, each reversible; no schema change without its own migration plan. |
 
 ### Phase 08: Levix Plus
 
 | Item | Plan |
 | --- | --- |
-| Goal | Public extension contract with Free defaults; Android Play Billing client; server-verified entitlements; message personalization in Plus. |
-| Files (public) | new `src/extensions/` contract, message-engine hooks, Android billing client, CI scan of public artifacts. Plus code lives only in the private repository. |
+| Status | PHASE 08 CODE MERGED (2026-11-10): levix #153-#164 into `release/5.0.0-beta.1` at `1e0de07`, levix-plus #1-#5 into `main` at `cc1e8e1`. Production billing and live QA: PENDING on owner credentials, consoles and devices. Plan: `PHASE-08-PLAN.md`; owner decisions: `PHASE-08-OWNER-DECISIONS.md` (#160); completion contract: `PHASE-08-COMPLETION.md`; results, merge commits and CI: `PHASE-08-RESULTS.md`. Not shipped; no tag or release. |
+| Goal | Public extension contract with Free defaults; Android Play Billing client; server-verified entitlements; message personalization and paid prefix-free AI Auto Reply in Plus. |
+| Files (public) | new `src/extensions/` contract, message-engine hooks, Android billing client, CI scan of public artifacts. Plus code lives only in the private repository, including Auto Reply runtime and per-contact/group configuration (ADR-009). |
 | Migrations | Entitlement cache and template overrides, additive. |
 | Compliance | Play billing policy; `PRIVACY.md` and Data safety rows for billing data before release. |
-| Tests | Free build without Plus; forged token; wrong account; revoked and expired states; outage with Core still working; template placeholders across four locales. |
+| Tests | Free Reaction Automation without Plus; opt-in Auto Reply with rate limits, loop protection, kill switch and real-sender tool authorization; forged token; wrong account; revoked and expired states; outage with Core still working; template placeholders across four locales. |
 | Gate | Core fully works without Plus and offline. |
 | Rollback | Plus disabled; Free defaults return. |
 | Blockers | private repository access, Leviro verification service, Play Console product setup. |
@@ -155,6 +167,7 @@ replaces them in its own plan before writing code.
 
 | Item | Plan |
 | --- | --- |
+| Status | CODE-READY, pending owner review 2026-11-11. 09a #166 (`7ad6a0c`) and stacked 09b #167 (`3fb7513`) pass full CI. Local suite: 57664 checks, zero failures/crashes. Q-16 measured: one build, no added manifest requirements or Google services modules. Manual Play/device/old-WebView QA remains NOT RUN for Phase 10. See `PHASE-09-RESULTS.md`. |
 | Goal | Channel-aware update checks and `!update`; safe official links; respectful rating and star prompts; watermark rules. |
 | Files | new `src/commands/update.cjs`, new update-check module, `android/.../PanelActivity.kt` (external links), Android in-app update and review clients (new Play dependencies, Q-16), `frontend/src/` About, Help and Settings, message-engine watermark rules. |
 | Migrations | Local cache keys only. |
@@ -170,6 +183,15 @@ replaces them in its own plan before writing code.
 | Goal | Evidence-based Go or No-Go for v5.0.0. |
 | Work | Full security, privacy and product audit; all gates in `TEST_MATRIX.md`; artifact comparison against `BASELINE.md`; docs parity; `RELEASE_READINESS.md`; release notes in four languages. |
 | Gate | No open critical or high defect; owner approval before any version bump, tag or release. |
+
+## Phase 11A release scope (owner decision, 2026-11-13)
+
+The Connected WhatsApp Account Card now belongs to v5.0.0. Port only PR #168's
+existing implementation to a fresh branch from `release/5.0.0-beta.1` and open
+a new Draft PR. The original PR and next branch remain unchanged. This
+supersedes the 2026-11-11 next-release-only restriction for 11A; no other
+Phase 11 work is included. Phase 10 remains the mandatory final release gate.
+Audit, plan, privacy, rollback and port evidence: `PHASE-11A-PORT.md`.
 
 ## 4. Migration failure policy
 

@@ -19,6 +19,8 @@ npm package, the Docker image, the SEA binaries or the Android bundle.
 | `OPEN_QUESTIONS.md` | decisions the owner still has to make |
 | `CHANGELOG.md` | dated log of each phase |
 | `PHASE-04-RESULTS.md` | Phase 04 re-audit, plan and results |
+| `PHASE-07-RESULTS.md` | Free Reaction Automation audit, 07a plan, contracts and evidence |
+| `PHASE-06-RESULTS.md` | Phase 06 docs retrieval, media tools, audit, plan and evidence |
 | `LEGAL_CONSENT_CONTRACT.md` | Terms document, hash, acceptance record, consent states, CLI, panel and remote contracts |
 
 Labels used throughout: `SHIPPED`, `PLANNED`, `PENDING REVIEW` for features; `PASS`, `FAIL`,

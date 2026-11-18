@@ -31,14 +31,21 @@ export function Field({
   children: ReactNode;
   className?: string;
 }) {
+  const messageId = htmlFor ? `${htmlFor}-message` : undefined;
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
       {label && <FieldLabel htmlFor={htmlFor}>{label}</FieldLabel>}
       {children}
       {error ? (
-        <p className="text-xs text-danger">{error}</p>
+        <p id={messageId} className="text-xs text-danger">
+          {error}
+        </p>
       ) : (
-        description && <p className="text-xs text-muted">{description}</p>
+        description && (
+          <p id={messageId} className="text-xs text-muted">
+            {description}
+          </p>
+        )
       )}
     </div>
   );
@@ -125,6 +132,8 @@ export function RadioGroup<T extends string>({
   options,
   orientation = "vertical",
   className,
+  id,
+  "aria-describedby": ariaDescribedBy,
 }: {
   label?: string;
   name: string;
@@ -133,11 +142,15 @@ export function RadioGroup<T extends string>({
   options: readonly RadioOption<T>[];
   orientation?: "vertical" | "horizontal";
   className?: string;
+  id?: string;
+  "aria-describedby"?: string;
 }) {
   return (
     <div
+      id={id}
       role="radiogroup"
       aria-label={label}
+      aria-describedby={ariaDescribedBy}
       className={cn(
         "flex gap-1",
         orientation === "horizontal" ? "flex-row flex-wrap" : "flex-col",

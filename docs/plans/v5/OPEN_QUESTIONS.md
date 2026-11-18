@@ -58,7 +58,15 @@ blocked without an answer.
 | ID | Question | Options | Recommendation | Needed by |
 | --- | --- | --- | --- | --- |
 | Q-06 | Who may run the short `!status` by default? | (a) keep `OWNER_ONLY` and make the output short; (b) `MEMBERS` for the short output, with `!status debug` owner only | (a). It keeps today's permission. Operators who want members to see it can lower it in the panel. | 05 |
-| Q-09 | Should `memory/global.md` stay in every agent prompt (today: groups and other people's private chats too)? | (a) keep; (b) the owner's own private chat only, other chats by explicit per-chat opt-in; (c) per-group opt-in only | (b), before AI Auto Reply ships, because Auto Reply answers contacts who should not see the owner's global facts. (Agreed with codex review.) | 07 |
-| Q-16 | Play in-app updates and in-app review need Google Play libraries. The GitHub APK is built from the same sources. | (a) one build with the libraries, which do nothing outside Play; (b) a build flavour per channel | (b) only if (a) adds Google Play services requirements to GitHub APK users; otherwise (a). Decide after measuring in Phase 09. | 09 |
+| Q-09 | Should `memory/global.md` stay in every agent prompt (today: groups and other people's private chats too)? | (a) keep; (b) the owner's own private chat only, other chats by explicit per-chat opt-in; (c) per-group opt-in only | (b), before AI Auto Reply ships, because Auto Reply answers contacts who should not see the owner's global facts. (Agreed with codex review.) | 08 (Plus) |
 | Q-18 | Which documents feed the documentation-aware AI? | (a) public docs in this repository only; (b) plus the website docs from `levix-ui` | (a) first. Website docs need their own version tags before they can be cited. | 06 |
 | Q-20 | Should Plus entitlements work on desktop and self-hosted installs? | (a) Android Play only in v5; (b) a portable entitlement design now | (a). The phase prompt marks portability as an open design question. | 08 |
+
+## Resolved by Phase 09 measurement (2026-11-11)
+
+Q-16: option (a), one build. Under the owner's instruction to measure before
+choosing flavors, CI run 43067593302 shows only three new Play modules, no
+new selected Google services module and no new manifest permission, feature or
+shared library. Non-Play calls fail before Play client creation. See
+`PHASE-09-RESULTS.md` and its committed `play-impact.json`. Physical no-GMS
+device QA remains NOT RUN; this does not claim Play download-size measurements.

@@ -34,6 +34,7 @@ mock.module(require.resolve("@whiskeysockets/baileys"), {
         return { key: { id: "sent" } };
       },
     }),
+    proto: { Message: { encode: () => ({ finish: () => new Uint8Array(0) }) } },
   },
 });
 mock.module(source("src/auth/use-database-auth-state.js"), {

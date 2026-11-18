@@ -16,6 +16,7 @@ const path = require("path");
 const os = require("os");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
+const { randomUUID } = require("node:crypto");
 const logger = require("../utils/logger.cjs");
 const { createStatus } = require("../utils/statusMessage.cjs");
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
@@ -24,15 +25,13 @@ const execFileAsync = promisify(execFile);
 
 const { ffmpegPath } = require("../utils/thumbnail.cjs");
 const { t } = require("../utils/i18n.cjs");
+const { assertAudio, MAX_MEDIA_BYTES } = require("../services/aiMedia.cjs");
 
 function tmpPath(ext) {
-  return path.join(
-    os.tmpdir(),
-    `wa-bot-tts-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`,
-  );
+  return path.join(os.tmpdir(), `wa-bot-tts-${randomUUID()}.${ext}`);
 }
 
-async function synthesizeMp3(text, mp3Path, lang = "ar") {
+async function synthesizeMp3(text, mp3Path, lang = "ar", signal) {
   const parts = await googleTTS.getAllAudioBase64(text, {
     lang,
     slow: false,
@@ -44,11 +43,24 @@ async function synthesizeMp3(text, mp3Path, lang = "ar") {
     throw new Error("Google TTS returned no audio");
   }
 
-  const buffers = parts.map((part) => Buffer.from(part.base64, "base64"));
-  await fsp.writeFile(mp3Path, Buffer.concat(buffers));
+  signal?.throwIfAborted();
+  const buffers = [];
+  let size = 0;
+  for (const part of parts) {
+    if (typeof part.base64 !== "string" || part.base64.length > Math.ceil(MAX_MEDIA_BYTES / 3) * 4)
+      throw new Error("MEDIA_AUDIO_INVALID");
+    const buffer = Buffer.from(part.base64, "base64");
+    size += buffer.length;
+    if (!buffer.length || buffer.toString("base64") !== part.base64 || size > MAX_MEDIA_BYTES)
+      throw new Error("MEDIA_AUDIO_INVALID");
+    buffers.push(buffer);
+  }
+  const buffer = Buffer.concat(buffers);
+  assertAudio(buffer, "audio/mpeg");
+  await fsp.writeFile(mp3Path, buffer, { mode: 0o600, flag: "wx" });
 }
 
-async function transcodeWithEncoder(bin, encoder, mp3Path, oggPath) {
+async function transcodeWithEncoder(bin, encoder, mp3Path, oggPath, signal) {
   return execFileAsync(
     bin,
     [
@@ -71,23 +83,26 @@ async function transcodeWithEncoder(bin, encoder, mp3Path, oggPath) {
       "voip",
       "-f",
       "ogg",
+      "-fs",
+      String(MAX_MEDIA_BYTES + 1),
       oggPath,
     ],
-    { windowsHide: true, timeout: 30_000 },
+    { windowsHide: true, timeout: 30_000, signal },
   );
 }
 
-async function transcodeToOpus(mp3Path) {
+async function transcodeToOpus(mp3Path, signal) {
   const bin = ffmpegPath();
   if (!bin) return null;
 
   const oggPath = tmpPath("ogg");
+  await (await fsp.open(oggPath, "wx", 0o600)).close();
   const encoders = ["libopus", "opus"];
   let lastError = null;
 
   for (const encoder of encoders) {
     try {
-      await transcodeWithEncoder(bin, encoder, mp3Path, oggPath);
+      await transcodeWithEncoder(bin, encoder, mp3Path, oggPath, signal);
       return oggPath;
     } catch (err) {
       lastError = err;
@@ -99,6 +114,8 @@ async function transcodeToOpus(mp3Path) {
     }
   }
 
+  await fsp.unlink(oggPath).catch(() => {});
+  signal?.throwIfAborted();
   logger.warn(
     { err: lastError?.message, bin },
     "[TTS] ffmpeg transcode failed — will fall back to raw MP3",
@@ -112,15 +129,22 @@ async function transcodeToOpus(mp3Path) {
  * proper push-to-talk note when ffmpeg can transcode, raw MP3 otherwise.
  * Temp files are cleaned up here either way.
  */
-async function synthesizeVoice(text, lang = "ar") {
+async function synthesizeVoice(text, lang = "ar", { signal } = {}) {
+  if (typeof text !== "string" || !text.trim() || text.length > 3000)
+    throw new Error(t("bot.ai.tts.failed"));
+  signal?.throwIfAborted();
   const mp3Path = tmpPath("mp3");
+  let oggPath;
   try {
-    await synthesizeMp3(text, mp3Path, lang);
+    await synthesizeMp3(text, mp3Path, lang, signal);
+    signal?.throwIfAborted();
 
-    const oggPath = await transcodeToOpus(mp3Path);
+    oggPath = await transcodeToOpus(mp3Path, signal);
     if (oggPath && fs.existsSync(oggPath)) {
+      if ((await fsp.stat(oggPath)).size > MAX_MEDIA_BYTES) throw new Error("MEDIA_AUDIO_INVALID");
       const audio = await fsp.readFile(oggPath);
-      await fsp.unlink(oggPath).catch(() => {});
+      signal?.throwIfAborted();
+      assertAudio(audio, "audio/ogg", true);
       return { audio, mimetype: "audio/ogg; codecs=opus", ptt: true };
     }
 
@@ -128,6 +152,7 @@ async function synthesizeVoice(text, lang = "ar") {
     return { audio, mimetype: "audio/mpeg", ptt: false };
   } finally {
     await fsp.unlink(mp3Path).catch(() => {});
+    if (oggPath) await fsp.unlink(oggPath).catch(() => {});
   }
 }
 
@@ -158,14 +183,9 @@ module.exports = {
     }
 
     // One status line: it disappears once the voice note is on its way.
-    const status = await createStatus(
-      sock,
-      chatId,
-      t("bot.ai.tts.working"),
-      {
-        replyTo: msg,
-      },
-    );
+    const status = await createStatus(sock, chatId, t("bot.ai.tts.working"), {
+      replyTo: msg,
+    });
 
     try {
       const voice = await synthesizeVoice(textToConvert);
@@ -202,10 +222,7 @@ module.exports = {
       logger.info("[TTS] Successfully delivered TTS audio");
     } catch (error) {
       logger.error({ err: error }, "[TTS] Error converting text to speech");
-      await status.fail(
-        error,
-        t("bot.ai.tts.failed"),
-      );
+      await status.fail(error, t("bot.ai.tts.failed"));
     }
   },
 

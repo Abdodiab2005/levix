@@ -21,7 +21,13 @@ export {
   type ChipProps,
   type ChipRejectReason,
 } from "./chip";
-export { ConfirmDialog, type ConfirmDialogProps, Dialog, type DialogProps } from "./dialog";
+export {
+  ConfirmDialog,
+  type ConfirmDialogProps,
+  Dialog,
+  type DialogProps,
+  type DialogVariant,
+} from "./dialog";
 export { Disclosure } from "./disclosure";
 export { EmptyState, type EmptyStateProps, LoadingState, Skeleton, Spinner } from "./feedback";
 export {
@@ -55,6 +61,13 @@ export {
 export { Pagination, type PaginationProps, usePagination } from "./pagination";
 export { PasswordInput, type PasswordInputProps } from "./password-input";
 export { Popover, type PopoverProps } from "./popover";
+export {
+  CrownIcon,
+  PlusBadge,
+  type PlusBadgeProps,
+  PlusFeatureRow,
+  type PlusFeatureRowProps,
+} from "./plus";
 export { RelativeTime, type RelativeTimeProps } from "./relative-time";
 export {
   FormActions,
@@ -67,4 +80,5 @@ export { SortMenu, type SortMenuProps, type SortOption } from "./sort";
 export { SegmentedControl, type TabOption, Tabs } from "./tabs";
 export { Toolbar } from "./toolbar";
 export { Spotlight, Tour, type TourLabels, type TourProps, type TourStep } from "./tour";
+export { CodeText, type CodeTextProps } from "./code-text";
 export { UserText, type UserTextProps } from "./user-text";

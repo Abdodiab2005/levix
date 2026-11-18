@@ -2,7 +2,7 @@
 // Media conversion is not involved here — saving takes WebP bytes directly.
 
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
 import { Readable } from "node:stream";
 import { equal, finish, ok, require, section, throws, useTempDataDir } from "./harness.mjs";
 
@@ -874,6 +874,42 @@ section("unlink clears every sticker, pack, and file");
     "NOT_FOUND",
   );
   ok("the file is gone", !existsSync(stickerFile(Buffer.from("unlink-me"))));
+}
+
+section("unlink refuses success while sticker files cannot be deleted");
+
+{
+  const fs = require("node:fs");
+  const { WhatsAppSession, SESSION_STATES } = await import("../src/core/session.js");
+  for (const folder of [dataPath("stickers"), dataPath("tmp", "stickers")]) {
+    mkdirSync(folder, { recursive: true });
+    const file = `${folder}/unlink-failure.webp`;
+    writeFileSync(file, "old account sticker");
+    const original = fs.rmSync;
+    fs.rmSync = (target, ...args) => {
+      if (target === folder) {
+        throw Object.assign(new Error("sticker cleanup denied"), { code: "EACCES" });
+      }
+      return original(target, ...args);
+    };
+    const session = new WhatsAppSession({
+      isLinked: () => false,
+      log: { info() {}, warn() {}, error() {}, debug() {} },
+    });
+    try {
+      const failed = await session.logout();
+      equal("sticker deletion failure stays ERROR", failed.state, SESSION_STATES.ERROR);
+      equal("sticker deletion failure is incomplete unlink", failed.reason, "unlink_incomplete");
+      ok("sticker deletion failure keeps the marker", store.isUnlinkPending());
+      ok("failed deletion leaves the file", existsSync(file));
+    } finally {
+      fs.rmSync = original;
+    }
+    const done = await session.logout();
+    equal("retry completes unlink", done.state, SESSION_STATES.LOGGED_OUT);
+    equal("retry removes the marker", store.isUnlinkPending(), false);
+    equal("retry removes the old file", existsSync(file), false);
+  }
 }
 
 section("unlink cancels running and queued sticker work");

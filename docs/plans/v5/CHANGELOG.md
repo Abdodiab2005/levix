@@ -108,3 +108,62 @@
   is hard-gated to the owner role.
 - The watermark hook exists and defaults off, so existing replies do not change until the
   operator turns `message_watermark` on.
+
+## Phase 06: bundled docs and media tools (2026-11-06)
+
+- Preserved the owner's beta version edits in `a68696d` and pushed
+  `release/5.0.0-beta.1`; Phase 06 is on `feat/v5-phase-06`, draft PR #134.
+- Implementation `bb69ea6` adds offline, versioned public-doc search/open and
+  backend citations across all three chat providers. No private/planning index.
+- Natural-language image, speech and transcription reuse existing commands,
+  with real-caller authorization, live disabled-command checks, lazy audio,
+  bounded bytes/rate/concurrency/deadlines and fail-closed delivery.
+- PASS: full suite 9919 checks, lint, frontend, i18n, docs freshness, installed
+  tarball 36 checks and Linux SEA 51 checks. Local Node v24.19.0; official pin
+  v24.22.2 unchanged. Full evidence and initial failure corrections are in
+  `PHASE-06-RESULTS.md`; tool contracts in `docs/AI_TOOLS.md`.
+- Final review `d602671` fixes cancellation through cooldown/thumbnail waits,
+  removes unsafe raw-send retries and preserves repeated tool/result IDs across
+  provider switches. 10002 checks pass; final-head gates/CI are rerun for handoff.
+- Targeted ChatGPT Q-19 approval covers new Phase 06 pt-BR/es-419 strings only;
+  older/unreviewed content remains draft. No migration/dependency/release.
+  Device/live-provider QA remains NOT RUN. No merge or Phase 07 start.
+
+## 2026-11-06/07 — Phase 07a intake (pending owner review)
+
+- Verified Phase 06 merge #134 at `f04ce30`, audited and recorded the plan before code.
+- Draft PR: https://github.com/Abdodiab2005/levix/pull/135. Implementation `eed2621`: all local gates PASS (10194 checks); CI run 42302901593 PASS 7/7. Final documentation-head rerun evidence is in the PR verification record.
+- Owner decision: Reaction Automation/rules/builder are Free Core without tier rule limits;
+  prefix-free per-chat AI Auto Reply is paid private Plus in Phase 08 (ADR-009).
+- Proposed behavior-preserving stabilization Phase 07.5, not started.
+- 07a adds bounded opt-in RAM lookup and hash-only replay/invalidation state, no actions or UI.
+  Evidence, final PR/commit verification record and rollback: `PHASE-07-RESULTS.md`.
+
+
+## 2026-11-07 — Phase 07b rules and safe actions (pending owner review)
+
+- Verified merged #135 at `b383ed1`; dedicated `feat/v5-phase-07b` branch.
+- Added Free declarative matching, deterministic single winner, existing voice
+  STT/ping actions, strict reactor roles, source/linked-owner routing and final
+  cancellation/authorization guards. No Rule Builder/API, Plus or refactor.
+- Append-only schema 12 adds epochs/revisions, durable execution claims and
+  bounded rate budgets. Global kill and rules default off; no total rule cap.
+- Fixed numeric identity contamination/role-write and mapped revocation edges,
+  unmatched metadata storms, pre-provider role refresh and broken credential
+  lookup for linked-owner routing. Evidence/limits/rollback: `PHASE-07-RESULTS.md`.
+
+## 2026-11-11 — Phase 09 code-ready
+
+- #166 updates/watermark and #167 Android/UI independently reviewed and pass
+  full CI; 57664 local checks pass. No merge/release/upload.
+- Q-16 measured before choosing one build: no new selected Google services
+  module or manifest requirement. Manual device limits remain explicit.
+- Phase 11A authorized only for a separate next release; Phase 10 remains the
+  mandatory v5.0.0 gate. Evidence: `PHASE-09-RESULTS.md`.
+
+### 2026-11-13 — Phase 11A brought into v5.0.0
+
+- Owner Task 05 supersedes the historical next-release-only scope for 11A.
+- Port PR #168's existing card from its exact diff onto release HEAD c9b3f88;
+  preserve the Gemini fixes and leave original PR #168 unchanged (ADR-021).
+- Audit, plan and validation: `PHASE-11A-PORT.md`. Phase 10 stays mandatory.

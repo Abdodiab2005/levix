@@ -83,5 +83,6 @@
   "all.failed": "Something went wrong while mentioning everyone.",
   "note.usageHint": "Wrong format. Use: `!note #keyword`",
   "note.notFound": "⚠️ No note has the keyword `{keyword}`\n\nTo see every note, use: `!notes`",
-  "removeall.confirm": "⚠️ Are you sure you want to remove every non-admin member?\n\nSend `yes` within 30 seconds to confirm."
+  "removeall.confirm": "⚠️ Are you sure you want to remove every non-admin member?\n\nSend `yes` within 30 seconds to confirm.",
+  "removeall.unavailable": "Removing every member at once is not available. Remove members one at a time with kick."
 }

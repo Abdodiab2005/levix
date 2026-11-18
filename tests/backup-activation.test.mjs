@@ -48,6 +48,7 @@ function fixture(account = backupAccount) {
   const copy = new DatabaseSync(join(pendingRoot, "levix.db"));
   try {
     migrate(copy);
+    copy.prepare("INSERT INTO reaction_rules (id, chat_jid, enabled) VALUES ('restored-rule', '120363000000001@g.us', 1)").run();
     copy.prepare("INSERT INTO ai_history (chat_id, history, updated_at) VALUES ('backup', '[]', 1)").run();
     copy.prepare("INSERT INTO schedules (id,type,target_jid,message,status,created_at) VALUES ('backup', 'once', 'chat@g.us', 'backup', 'pending', 1)").run();
     copy.prepare("INSERT INTO user_metadata (user_jid, is_owner, is_admin, first_seen, last_seen) VALUES (?, 1, 0, 1, 1)").run(lid);
@@ -71,8 +72,11 @@ function pendingExists() { return existsSync(pendingRoot); }
 section("matching LID activates before rosters and schedules");
 pair(); fixture();
 let scheduledRows = null;
+const epochBefore = store.accountEpoch();
 await handleConnectionOpen(sock, () => { scheduledRows = currentRows(); });
+equal("activation advances the account epoch", store.accountEpoch(), epochBefore + 1);
 equal("account tables replaced", currentRows(), "backup");
+equal("restored reaction rules require fresh opt-in", db.prepare("SELECT enabled FROM reaction_rules WHERE id='restored-rule'").get().enabled, 0);
 equal("scheduler sees backup rows", scheduledRows, "backup");
 equal("schedule replaced", db.prepare("SELECT id FROM schedules").get().id, "backup");
 equal("sticker rows replaced", db.prepare("SELECT id FROM stickers").get().id, "4".repeat(16));
@@ -209,12 +213,21 @@ writeFileSync(join(pendingRoot, "files", "media", "schedules", "backup"), "resto
 let releaseSend;
 let signalSend;
 const sendStarted = new Promise((resolve) => { signalSend = resolve; });
-const delivery = scheduler.retryScheduledJob({
+// Delivery goes through the scheduler's own live socket, so bind it first. Cron is
+// stubbed while it binds: the cleanup task it registers must not outlive the test.
+const deliverySock = {
   sendMessage() {
     signalSend();
     return new Promise((resolve) => { releaseSend = resolve; });
   },
-}, "backup");
+};
+{
+  const cron = require("node-cron");
+  const realSchedule = cron.schedule;
+  cron.schedule = () => ({ stop() {} });
+  try { scheduler.initializeScheduledJobs(deliverySock); } finally { cron.schedule = realSchedule; }
+}
+const delivery = scheduler.retryScheduledJob(deliverySock, "backup");
 await sendStarted;
 ok("matching activation succeeds while send waits", activatePendingIfMatching());
 releaseSend();

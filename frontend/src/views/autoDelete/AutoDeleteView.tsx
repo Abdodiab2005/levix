@@ -1,7 +1,8 @@
+import { userErrorMessage } from "../../utils/userError";
 import { Eye, MessageSquareX, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, api } from "../../api/client";
+import { api } from "../../api/client";
 import { useToast } from "../../components/Toasts";
 import {
   Badge,
@@ -49,10 +50,6 @@ const MATCH_LABEL: Record<AutoDeleteMatch, "matchContains" | "matchWord" | "matc
   word: "matchWord",
   exact: "matchExact",
 };
-
-function failureMessage(err: unknown, fallback: string): string {
-  return err instanceof ApiError && err.message ? err.message : fallback;
-}
 
 export const AutoDeleteView: React.FC = () => {
   const { t, language } = useI18n();
@@ -106,7 +103,7 @@ export const AutoDeleteView: React.FC = () => {
       })
       .catch((err) => {
         if (!alive.current || listSeq.current !== token) return;
-        const message = failureMessage(err, t("rulesLoadFailed"));
+        const message = userErrorMessage(t, err, "rulesLoadFailed");
         setError(message);
         toast(message, "error");
       })
@@ -167,7 +164,7 @@ export const AutoDeleteView: React.FC = () => {
         setNames(map);
       })
       .catch((err) => {
-        if (!cancelled) toast(failureMessage(err, t("recipientsLoadFailed")), "error");
+        if (!cancelled) toast(userErrorMessage(t, err, "recipientsLoadFailed"), "error");
       });
     return () => {
       cancelled = true;
@@ -219,7 +216,7 @@ export const AutoDeleteView: React.FC = () => {
         setRules((list) =>
           list.map((item) => (item.id === rule.id ? { ...item, enabled: previous } : item)),
         );
-        toast(failureMessage(err, t("toggleFailed")), "error");
+        toast(userErrorMessage(t, err, "toggleFailed"), "error");
       }
     } finally {
       written.current += 1;
@@ -234,7 +231,7 @@ export const AutoDeleteView: React.FC = () => {
       setRules((list) => list.map((item) => (item.id === rule.id ? res.rule : item)));
       toast(t("counterReset"), "success");
     } catch (err) {
-      toast(failureMessage(err, t("toggleFailed")), "error");
+      toast(userErrorMessage(t, err, "counterResetError"), "error");
     } finally {
       written.current += 1;
     }
@@ -251,7 +248,7 @@ export const AutoDeleteView: React.FC = () => {
       toast(t("ruleDeleted"), "success");
       setPendingDelete(null);
     } catch (err) {
-      toast(failureMessage(err, t("toggleFailed")), "error");
+      toast(userErrorMessage(t, err, "ruleDeleteError"), "error");
     } finally {
       written.current += 1;
       setDeleting(false);

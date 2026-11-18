@@ -87,11 +87,15 @@ function validPath(entry) {
 
 // Optional: digests of the restorable settings and API keys, so the restore
 // preview can list what changes. Files from earlier v1 builds have none.
+// `plus` is optional too: digests of the Levix Plus config and account rows.
 function validateDigests(digests, apiKeys) {
-  exactKeys(digests, ["settings", "apiKeys"], "BAD_MANIFEST");
+  const hasPlus = Boolean(digests) && typeof digests === "object" && Object.hasOwn(digests, "plus");
+  exactKeys(digests, hasPlus ? ["settings", "apiKeys", "plus"] : ["settings", "apiKeys"], "BAD_MANIFEST");
   const map = (value, keyRe, limit) => value && typeof value === "object" && !Array.isArray(value) &&
     Object.keys(value).length <= limit &&
     Object.entries(value).every(([key, hash]) => keyRe.test(key) && typeof hash === "string" && /^[0-9a-f]{64}$/.test(hash));
+  if (hasPlus && !map(digests.plus, /^(cfg|acct):[A-Za-z][A-Za-z0-9._-]{0,63}$/, 400))
+    fail("BAD_MANIFEST", "Invalid manifest digests");
   if (!map(digests.settings, /^[a-z][a-z0-9_:]{0,95}$/, 1024) || !map(digests.apiKeys, /^[a-z][a-z0-9_]{0,63}$/, 32))
     fail("BAD_MANIFEST", "Invalid manifest digests");
   const names = Object.keys(digests.apiKeys).sort();

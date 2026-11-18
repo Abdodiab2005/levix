@@ -71,10 +71,35 @@ function baseMimeType(mime, kind = mediaKind(mime)) {
  * `downloadType` picks the decryption keys, so it has to follow the message
  * type (an image sent as a document is a "document"), not the MIME type.
  */
-async function downloadMedia(downloadContentFromMessage, mediaMessage, downloadType) {
-  const stream = await downloadContentFromMessage(mediaMessage, downloadType);
+async function downloadMedia(
+  downloadContentFromMessage,
+  mediaMessage,
+  downloadType,
+  { maxBytes = 64 * 1024 * 1024, signal } = {},
+) {
+  signal?.throwIfAborted();
+  if (Number(mediaMessage?.fileLength || 0) > maxBytes) throw new Error("MEDIA_TOO_LARGE");
+  const stream = await downloadContentFromMessage(mediaMessage, downloadType, {
+    options: { signal },
+  });
   const chunks = [];
-  for await (const chunk of stream) chunks.push(chunk);
+  let size = 0;
+  const abort = () => stream.destroy?.(new Error("MEDIA_TIMEOUT"));
+  signal?.addEventListener("abort", abort, { once: true });
+  try {
+    signal?.throwIfAborted();
+    for await (const chunk of stream) {
+      signal?.throwIfAborted();
+      size += chunk.length;
+      if (size > maxBytes) throw new Error("MEDIA_TOO_LARGE");
+      chunks.push(chunk);
+    }
+  } catch (error) {
+    stream.destroy?.();
+    throw error;
+  } finally {
+    signal?.removeEventListener("abort", abort);
+  }
   const buffer = Buffer.concat(chunks);
   if (!buffer.length) throw new Error("Empty media buffer");
   return buffer;

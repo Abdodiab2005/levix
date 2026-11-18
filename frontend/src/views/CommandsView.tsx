@@ -8,10 +8,12 @@ import { useToast } from "../components/Toasts";
 import {
   Button,
   Card,
+  CodeText,
   EmptyState,
   FilterButton,
   Input,
   PageHeader,
+  PlusFeatureRow,
   RadioGroup,
   Skeleton,
   SortMenu,
@@ -34,11 +36,15 @@ import {
   EMPTY_COMMAND_FILTERS,
   sortCommands,
 } from "./commands/filters";
-import { type CommandActions, commandId, useCommandLabels } from "./commands/shared";
+import {
+  type CommandActions,
+  commandErrorKey,
+  commandId,
+  useCommandLabels,
+} from "./commands/shared";
 
-// What the server sends in GET /commands `levels`, in case it ever grows one the
-// panel doesn't have a label for yet (an unlabelled level still renders, as its
-// raw key, rather than disappearing from the list).
+// What the server sends in GET /commands `levels`. An unlabelled level stays
+// selectable; its label is a translation, never the raw level name.
 const FALLBACK_LEVELS = ["MEMBERS", "ADMINS_ONLY", "ADMINS_OWNER", "OWNER_ONLY"];
 
 const SKELETON_ROWS = ["s1", "s2", "s3", "s4", "s5"];
@@ -72,9 +78,10 @@ export const CommandsView: React.FC = () => {
       }
       if (Array.isArray(res?.levels) && res.levels.length) setLevels(res.levels);
       setError(null);
-    } catch (err: any) {
-      setError(err?.message || t("loadError"));
-      toast(err.message, "error");
+    } catch (err: unknown) {
+      const message = t(commandErrorKey(err, "loadError"));
+      setError(message);
+      toast(message, "error");
     } finally {
       setLoading(false);
     }
@@ -95,8 +102,8 @@ export const CommandsView: React.FC = () => {
       setPrefix(clean);
       setIsEditingPrefix(false);
       toast(`${t("prefixUpdated")} (${clean})`, "success");
-    } catch (err: any) {
-      toast(err.message, "error");
+    } catch (err: unknown) {
+      toast(t(commandErrorKey(err, "commandUpdateFailed")), "error");
     }
   };
 
@@ -111,8 +118,8 @@ export const CommandsView: React.FC = () => {
         t(enabled ? "commandEnabled" : "commandDisabled").replace("{name}", cmd.name),
         "success",
       );
-    } catch (err: any) {
-      toast(err.message, "error");
+    } catch (err: unknown) {
+      toast(t(commandErrorKey(err, "commandUpdateFailed")), "error");
       loadCommands();
     }
   };
@@ -215,13 +222,17 @@ export const CommandsView: React.FC = () => {
                   setIsEditingPrefix(true);
                 }}
               >
-                <span dir="ltr" className="font-mono">
-                  {prefix}
-                </span>
+                <CodeText>{prefix}</CodeText>
               </Button>
             )}
           </div>
         }
+      />
+
+      <PlusFeatureRow
+        tab="messages"
+        title={t("plusRowCommandsTitle")}
+        benefit={t("plusRowCommandsBenefit")}
       />
 
       <div className="flex flex-col gap-3" data-tour="commands-list">

@@ -116,7 +116,12 @@ object NodeRuntime {
         }
         val boot = File(appDir, LevixAppBundle.BOOT_FILE)
         val dataDir = LevixAppBundle.dataDir(app)
-        val builder = ProcessBuilder(binary.absolutePath, boot.absolutePath)
+        // The install channel is an internal boot fact, not a setting: only a
+        // package installed by Google Play receives the flag. The backend
+        // still requires the existing LEVIX_ANDROID marker beside it.
+        val args = mutableListOf(binary.absolutePath, boot.absolutePath)
+        if (PlayExperience.installedByPlay(app)) args.add("--levix-play-install")
+        val builder = ProcessBuilder(args)
             .directory(appDir)
             .redirectErrorStream(true)
         val env = builder.environment()

@@ -1,7 +1,6 @@
 // CommonJS shim around sendBotMessage.esm.js so .cjs commands can use it.
 // We lazy-import the ESM module on first call and cache the resolved exports.
 
-const logger = require("./logger.cjs");
 const { t } = require("./i18n.cjs");
 
 let cached = null;
@@ -13,18 +12,10 @@ async function getModule() {
 }
 
 async function sendBotMessage(sock, jid, content, options = {}) {
-  try {
-    const mod = await getModule();
-    return await mod.sendBotMessage(sock, jid, content, options);
-  } catch (err) {
-    logger.error({ err }, "[sendBotMessage.cjs] fell back to raw sendMessage");
-    const opts = {};
-    if (options?.quote !== false) {
-      const quoted = options?.quoted || options?.replyTo;
-      if (quoted) opts.quoted = quoted;
-    }
-    return sock.sendMessage(jid, content, opts);
-  }
+  // Import, cancellation, routing and send errors must propagate. A raw retry
+  // could duplicate delivery or bypass the failed helper's safety checks.
+  const mod = await getModule();
+  return mod.sendBotMessage(sock, jid, content, options);
 }
 
 async function sendBotError(
@@ -34,17 +25,8 @@ async function sendBotError(
   lead = t("bot.core.sendBotMessage.defaultLead"),
   options = {},
 ) {
-  try {
-    const mod = await getModule();
-    return await mod.sendBotError(sock, jid, err, lead, options);
-  } catch (innerErr) {
-    logger.error({ err: innerErr }, "[sendBotMessage.cjs] error helper failed");
-    const name = err?.name || "Error";
-    const message = err?.message || String(err);
-    return sock.sendMessage(jid, {
-      text: t("bot.core.sendBotMessage.errorCard", { lead, name, message }),
-    });
-  }
+  const mod = await getModule();
+  return mod.sendBotError(sock, jid, err, lead, options);
 }
 
 module.exports = { sendBotMessage, sendBotError };

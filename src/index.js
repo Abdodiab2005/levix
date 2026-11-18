@@ -27,6 +27,9 @@ const { release: releaseLock } = require("./config/lock.cjs");
 const { close: closeDatabase } = require("./db/db.cjs");
 const { attach } = require("./bootstrap/events.cjs");
 const { openBrowser } = require("./utils/openBrowser.cjs");
+const { installSignalSessionInspect } = require("./diagnostics/signalSessionInspect.cjs");
+
+installSignalSessionInspect();
 
 const line = (text = "") => console.log(text);
 
@@ -41,10 +44,12 @@ function short(path) {
 // started by bootstrapCore (a no-op while the trusted key list is empty).
 let liveSession = null;
 let stopRemoteTerms = () => {};
+let stopExtensions = async () => {};
 
 function adoptCore(core) {
   liveSession = core.session;
   if (typeof core.stopRemoteTerms === "function") stopRemoteTerms = core.stopRemoteTerms;
+  if (typeof core.stopExtensions === "function") stopExtensions = core.stopExtensions;
   return core;
 }
 
@@ -331,6 +336,13 @@ export function installShutdownHandlers() {
       logger.warn({ err: error }, "[shutdown] stopping the remote terms schedule failed");
     }
     stopRemoteTerms = () => {};
+
+    try {
+      await stopExtensions();
+    } catch (error) {
+      logger.warn({ err: error }, "[shutdown] stopping extensions failed");
+    }
+    stopExtensions = async () => {};
 
     if (liveSession) {
       try {

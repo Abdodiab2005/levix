@@ -8,6 +8,7 @@
 
 const settings = require("../config/settings.cjs");
 const { t } = require("../utils/i18n.cjs");
+const { escapeParam } = require("./escape.cjs");
 
 const CATEGORIES = Object.freeze(["progress", "result", "error", "security", "system"]);
 const SENSITIVITIES = Object.freeze(["operational", "source", "secret"]);
@@ -23,6 +24,9 @@ const EXACT_OUTPUT = new Set([
   "loop",
   "poll",
   "ping",
+  "stt",
+  "send",
+  "shortlink",
 ]);
 
 const CATEGORY_DEFAULTS = Object.freeze({
@@ -38,21 +42,6 @@ const hooks = { renderText: null };
 
 function setRenderHook(fn) {
   hooks.renderText = typeof fn === "function" ? fn : null;
-}
-
-function escapeParam(value) {
-  let out = "";
-  for (const char of String(value ?? "")) {
-    const code = char.codePointAt(0);
-    const keep = code === 0x09 || code === 0x0a || code === 0x0d;
-    const control = code <= 0x1f || code === 0x7f;
-    const bidi = (code >= 0x202a && code <= 0x202e) || (code >= 0x2066 && code <= 0x2069);
-    if (!keep && (control || bidi)) continue;
-    if (char === "{") out += "｛";
-    else if (char === "}") out += "｝";
-    else out += char;
-  }
-  return out;
 }
 
 /**
@@ -103,7 +92,7 @@ function renderMessage(message) {
   return stampWatermark(text, {
     commandName: message.context?.command,
     category: message.category,
-    exact: message.deliveryPolicy?.exact === true,
+    exact: message.deliveryPolicy?.exact === true || message.sensitivity === "secret",
   });
 }
 
@@ -116,6 +105,11 @@ function stampWatermark(text, { commandName, category = "result", exact = false 
   if (typeof text !== "string" || !text) return text;
   if (exact || category !== "result") return text;
   if (commandName && EXACT_OUTPUT.has(commandName)) return text;
+  try {
+    if (require("../extensions/host.cjs").host.hideWatermark({ command: commandName, category })) {
+      return text;
+    }
+  } catch {}
   if (!settings.get("message_watermark")) return text;
   const mark = t("bot.core.message.watermark");
   if (!mark || text.includes(mark)) return text;

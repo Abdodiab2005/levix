@@ -67,7 +67,7 @@ export const getBaileysConfig = (cachedGroupMetadata, { pairingCode = false } = 
       const cached = await getRecentMessage(key);
       if (cached) return cached;
     }
-    return { conversation: "" };
+    return undefined;
   },
   syncFullHistory: false,
   shouldSyncHistoryMessage: () => false,

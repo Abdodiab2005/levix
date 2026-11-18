@@ -8,10 +8,13 @@ import { GuidedTourProvider } from "./components/GuidedTour";
 import { Header } from "./components/Header";
 import { Sidebar, type ViewTab } from "./components/Sidebar";
 import { ToastProvider, useToast } from "./components/Toasts";
+import { Spinner } from "./components/ui";
 import { I18nProvider, useI18n } from "./context/I18nContext";
 import { useSocket } from "./hooks/useSocket";
 import type { SessionState, SessionStatus } from "./types";
+import { mapSessionToCard } from "./utils/accountCardState";
 import { initWindowErrorHandlers } from "./utils/errorCapture";
+import { legacyPlusRedirect } from "./utils/plusAccess";
 import { AIAssistantView } from "./views/AIAssistantView";
 import { AutoDeleteView } from "./views/autoDelete/AutoDeleteView";
 import { CommandsView } from "./views/CommandsView";
@@ -21,9 +24,11 @@ import { LogsView } from "./views/LogsView";
 import { TermsConsentDialog } from "./views/legal/TermsConsentDialog";
 // Views
 import { OverviewView } from "./views/OverviewView";
+import { ReactionRulesView } from "./views/reactions/ReactionRulesView";
 import { SchedulesView } from "./views/SchedulesView";
 import { SettingsView } from "./views/SettingsView";
 import { StickerStudioView } from "./views/StickerStudioView";
+import { PlusSettings } from "./views/settings/PlusSettings";
 
 const VALID_VIEWS: ViewTab[] = [
   "overview",
@@ -32,16 +37,62 @@ const VALID_VIEWS: ViewTab[] = [
   "ai",
   "groups",
   "autodelete",
+  "reactions",
   "schedules",
+  "plus",
   "settings",
   "logs",
   "stickers",
 ];
 
+// #settings/plus moved to #plus. The history entry is replaced, not added.
+function applyLegacyPlusHash() {
+  const next = legacyPlusRedirect(window.location.hash);
+  if (next) window.history.replaceState(null, "", next);
+}
+
 function viewFromHash(): ViewTab {
+  applyLegacyPlusHash();
   const head = window.location.hash.replace(/^#/, "").split("/")[0] as ViewTab;
   return VALID_VIEWS.includes(head) ? head : "overview";
 }
+
+// Levix Plus page. The switch lives with the page because Settings no longer hosts it.
+const PlusPage: React.FC = () => {
+  const { t } = useI18n();
+  // null until the saved value is read, so a toggle can never race the read.
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .getSettings()
+      .then((res) => {
+        if (!live) return;
+        const row = res?.settings?.find((s: { key: string }) => s.key === "plus_enabled");
+        setEnabled(row ? row.value !== false : true);
+      })
+      .catch(() => {
+        // Same default Settings used when its read failed: on.
+        if (live) setEnabled(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  if (enabled === null) return <Spinner label={t("loading")} />;
+
+  return (
+    <PlusSettings
+      enabled={enabled}
+      onEnabledChange={async (value) => {
+        await api.updateSetting("plus_enabled", value);
+        setEnabled(value);
+      }}
+    />
+  );
+};
 
 const MainLayout: React.FC = () => {
   const { t } = useI18n();
@@ -59,7 +110,7 @@ const MainLayout: React.FC = () => {
   } = useSocket((event, data) => {
     if (event === "status") {
       const state = (data as { state?: string })?.state;
-      toast(`Connection state: ${state}`, "info");
+      toast(t(mapSessionToCard({ state } as SessionStatus).labelKey), "info");
     }
   });
 
@@ -153,6 +204,7 @@ const MainLayout: React.FC = () => {
 
   useEffect(() => {
     const handleHashChange = () => {
+      applyLegacyPlusHash();
       const head = window.location.hash.replace(/^#/, "").split("/")[0] as ViewTab;
       if (VALID_VIEWS.includes(head)) setCurrentView(head);
     };
@@ -167,7 +219,9 @@ const MainLayout: React.FC = () => {
     ai: t("ai"),
     groups: t("groups"),
     autodelete: t("autoDelete"),
+    reactions: t("reaction"),
     schedules: t("schedules"),
+    plus: t("plusTitle"),
     settings: t("settings"),
     logs: t("logs"),
     stickers: t("stickers"),
@@ -216,6 +270,8 @@ const MainLayout: React.FC = () => {
             )}
             {currentView === "groups" && <GroupsView />}
             {currentView === "autodelete" && <AutoDeleteView />}
+            {currentView === "reactions" && <ReactionRulesView />}
+            {currentView === "plus" && <PlusPage />}
             {currentView === "settings" && <SettingsView />}
             {currentView === "stickers" && <StickerStudioView isConnected={isConnected} />}
             {currentView === "logs" && <LogsView />}
