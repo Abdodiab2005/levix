@@ -46,6 +46,19 @@ ok(
   "public builds do not stage the private Plus runtime",
   !/LEVIX_EXTENSIONS_DIR\s*:|levixPlusProductId=levix\.plus/.test(release + ci),
 );
+section("CI artifacts omit debug-signed release builds");
+{
+  // Each upload-artifact step, then only the path block that follows it.
+  const artifactUploads = [
+    ...ci.matchAll(/uses: actions\/upload-artifact@v\d+\n(?:.*\n)*? {10}path: \|\n((?: {12}.*\n)*)/g),
+  ];
+  ok("the inventory covers existing CI artifact uploads", artifactUploads.length >= 2);
+  ok(
+    "no CI artifact path keeps a release APK or AAB",
+    artifactUploads.every((match) => match[1].trim() !== "" && !/outputs\/bundle\/|outputs\/apk\/release\//.test(match[1])),
+  );
+  ok("debug APK artifact remains", ci.includes("name: android-debug-apks"));
+}
 section("public release signing uses protected play-signing secrets");
 const apkJob = [...release.matchAll(/^ {2}([\w-]+):\s*\n([\s\S]*?)(?=^ {2}[\w-]+:\s*\n|$(?![\s\S]))/gm)]
   .find(([, name]) => name === "apk")?.[2];
@@ -78,6 +91,13 @@ section("tag release starts only for the repository owner");
   }));
   const reaches = (job, seen = new Set()) => job === "verify-version" || (needs[job] || []).some((n) => !seen.has(n) && (seen.add(n), reaches(n, seen)));
   for (const job of jobs) ok(`${job} depends on verify-version`, reaches(job));
+  // A job-level if (4 spaces, directly under the job) that uses always(),
+  // cancelled(), failure(), or success() || still runs when verify-version is skipped.
+  const jobIfs = [...release.matchAll(/^ {4}if:.*$/gm)].map((match) => match[0]);
+  ok(
+    "no job-level if bypasses a skipped verify-version",
+    jobIfs.length >= 2 && jobIfs.every((line) => !/always\(\)|cancelled\(\)|failure\(\)|success\(\) \|\|/.test(line)),
+  );
 }
 
 finish();
