@@ -12,7 +12,7 @@
     },
     {
       "file": "ANDROID.md",
-      "sha256": "28a4764e7d909b1b749bd32fee937a7ea28f3dfdbbbbbc4c7a60711523eac2d1"
+      "sha256": "c72b98ad65c5254b84a8d35dbcf8547b400813771c055c0e19883e959acef7ef"
     },
     {
       "file": "PRIVACY.md",
@@ -450,11 +450,11 @@
       "text": "```bash\nadb install -r app/build/outputs/apk/debug/levix-android-arm64.apk\n```"
     },
     {
-      "id": "ANDROID.md#5-build-the-google-play-bundle-aab",
+      "id": "ANDROID.md#5-build-an-aab-locally",
       "source": "ANDROID.md",
-      "title": "5. Build the Google Play bundle (AAB)",
+      "title": "5. Build an AAB locally",
       "locale": "en",
-      "text": "Google Play requires an **AAB**, not an APK:\n```bash\ncd android\n./gradlew :app:stageLevixBundle\n# -> app/build/outputs/bundle/release/levix-android.aab\n```\nThe AAB contains both ABIs; Play generates the right per-device APK from it. Sign with your upload keystore via `LEVIX_KEYSTORE_FILE` / `LEVIX_KEYSTORE_PASSWORD` / `LEVIX_KEY_ALIAS` / `LEVIX_KEY_PASSWORD` (`stageLevixBundle` refuses to run without them — Play rejects debug-signed bundles; release APKs from `assembleRelease` still fall back to the debug keystore for local testing). Before submitting, fill the Play Console **Data safety** form from `PRIVACY.md` and host that policy at a public URL.\n\n---"
+      "text": "The Google Play bundle is built, signed and uploaded only by the private levix-plus repository, which ships the combined Free + Plus app. This repository has no Play bundle task.\n\n`./gradlew :app:bundleRelease` still builds an AAB for local inspection or size checks. It is signed with the debug key unless the `LEVIX_KEYSTORE_*` variables are set, and such a bundle must never be uploaded to Play.\n\n---"
     },
     {
       "id": "ANDROID.md#sending-feedback-reaching-the-developer",

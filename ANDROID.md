@@ -309,14 +309,10 @@ Outputs land in `android/app/build/outputs/apk/<buildType>/` as `levix-android-a
 adb install -r app/build/outputs/apk/debug/levix-android-arm64.apk
 ```
 
-### 5. Build the Google Play bundle (AAB)
-Google Play requires an **AAB**, not an APK:
-```bash
-cd android
-./gradlew :app:stageLevixBundle
-# -> app/build/outputs/bundle/release/levix-android.aab
-```
-The AAB contains both ABIs; Play generates the right per-device APK from it. Sign with your upload keystore via `LEVIX_KEYSTORE_FILE` / `LEVIX_KEYSTORE_PASSWORD` / `LEVIX_KEY_ALIAS` / `LEVIX_KEY_PASSWORD` (`stageLevixBundle` refuses to run without them — Play rejects debug-signed bundles; release APKs from `assembleRelease` still fall back to the debug keystore for local testing). Before submitting, fill the Play Console **Data safety** form from [`PRIVACY.md`](PRIVACY.md) and host that policy at a public URL.
+### 5. Build an AAB locally
+The Google Play bundle is built, signed and uploaded only by the private levix-plus repository, which ships the combined Free + Plus app. This repository has no Play bundle task.
+
+`./gradlew :app:bundleRelease` still builds an AAB for local inspection or size checks. It is signed with the debug key unless the `LEVIX_KEYSTORE_*` variables are set, and such a bundle must never be uploaded to Play.
 
 ---
 

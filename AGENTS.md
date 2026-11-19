@@ -1794,17 +1794,13 @@ and describe what they can do or see; leave out internals, file names and PR
 numbers. When nothing an Android user sees changes (CI, docs, tests,
 server-only work), keep the heading and leave the section empty.
 
-At release time the owner gathers these sections into one text and pastes it
-as the approval comment of the `play` job (`.github/workflows/release.yml`,
-see PACKAGING.md "4b. Google Play"). That comment becomes the release's
-"What's new"; `scripts/play-release-notes.mjs` rejects an empty comment or a
-language over 500 characters.
-
-Publishing to Google Play is never automatic. The `play` job waits on the
-`google-play` environment, and its only required reviewer is the owner. An
-agent never approves that deployment, never removes the reviewer, and never
-uploads to Play any other way. Releases go to the `alpha` track until the
-owner sets the `PLAY_TRACK` repository variable to `production`.
+At release time the owner gathers these sections into one text; it becomes the
+release notes file the private levix-plus production promotion workflow reads
+(`release-notes/production/<versionName>-<versionCode>.txt`: English, a line
+holding only `[ar]`, Arabic, each language at most 500 characters). This
+repository has no Google Play upload or promotion path. Only owner-gated
+levix-plus workflows upload to or promote on Play, and an agent never runs one
+without the owner's explicit approval.
 
 ## Code Style Notes
 
