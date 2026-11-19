@@ -404,25 +404,17 @@ the server.
 
 The tagged GitHub Release `apk` job signs public Free APKs using the protected
 `play-signing` environment, not repository-wide signing secrets. Configure that
-environment to allow **Tag `v*`** for releases and **Branch `main`** for
-an owner-only signing check, with appropriate reviewer protection. A `main`
-branch-only rule will reject release tags. These APKs are for GitHub distribution,
-**never** for the combined Google Play upload. After a non-publishing certificate
-check confirms the original key and all affected workflows are updated, remove
-the old repository-level `LEVIX_KEYSTORE_*` copies; historical workflow refs
-must not retain access to them. Never replace the original upload keystore.
+environment to allow **Tag `v*`** with appropriate reviewer protection. These
+APKs are for GitHub distribution, **never** for the combined Google Play upload.
+After a non-publishing certificate check confirms the original key and all
+affected workflows are updated, remove the old repository-level
+`LEVIX_KEYSTORE_*` copies; historical workflow refs must not retain access to
+them. Never replace the original upload keystore. The original-key check runs in
+the private `levix-plus` repository.
 
-Non-publishing key check (after the manual workflow lands on `main`):
-Actions → **Verify original Android signing key (no upload)** → Run workflow on
-`main`; paste **Upload key certificate SHA-256** from Google Play Console →
-App integrity. The job uses `play-signing` to sign and verify a temporary test
-JAR, compares the certificate fingerprint, and publishes nothing. A PASS only
-proves the protected key works; it does not approve a production release.
-
-Public GitHub APKs and AABs contain Free Core only. The public `release.yml`
-and `play-store.yml` upload jobs are disabled. The legacy beta upload workflow,
-where present on main, must also stay disabled. Do not upload a public release
-AAB to any Play track: Play uses one combined Free + Plus Android app.
+Public GitHub releases ship Free Core APKs and no AAB; this repository has no
+Google Play upload workflow; Play builds, uploads and promotions run only in
+the private `levix-plus` repository.
 
 The combined build belongs to the private `levix-plus` repository. Only the
 owner may authorize its production-signed build, using the original Play upload

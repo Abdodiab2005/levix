@@ -1,42 +1,47 @@
-// Public Android artifacts are Free-only. They must never be uploaded to Play
-// by any public workflow, including manually dispatched jobs and testing tracks.
-import { readdirSync, readFileSync } from "node:fs";
+// No public workflow may publish to Google Play. Play builds, uploads and
+// promotions live in the private levix-plus repository, so every public
+// workflow is checked for the upload action, its credentials, its environment
+// and its track variable.
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { equal, finish, ok, ROOT, section } from "./harness.mjs";
+import { finish, ok, ROOT, section } from "./harness.mjs";
 
-section("every public Google Play upload job is unconditionally disabled");
+section("no public workflow can publish to Google Play");
 const workflowDir = join(ROOT, ".github/workflows");
-let uploadJobs = 0;
+const forbidden = [
+  "upload-google-play",
+  "PLAY_SERVICE_ACCOUNT_JSON",
+  "environment: google-play",
+  "PLAY_TRACK",
+  "play-release-notes",
+];
 for (const file of readdirSync(workflowDir).filter((name) => /\.ya?ml$/.test(name))) {
   const source = readFileSync(join(workflowDir, file), "utf8");
-  // Workflows use block-style jobs. Inspect every upload action rather than
-  // assuming only release.yml can publish an Android bundle.
-  const jobs = [
-    ...source.matchAll(/^ {2}([\w-]+):\s*\n([\s\S]*?)(?=^ {2}[\w-]+:\s*\n|$(?![\s\S]))/gm),
-  ];
-  const uploadPattern = /uses:\s*r0adkll\/upload-google-play@/g;
-  const uploadsInFile = [...source.matchAll(uploadPattern)].length;
-  let uploadsInJobs = 0;
-  for (const [, name, job] of jobs) {
-    const uploads = [...job.matchAll(uploadPattern)].length;
-    if (!uploads) continue;
-    uploadsInJobs += uploads;
-    uploadJobs += 1;
-    ok(
-      `${file}:${name} cannot upload even with confirmation inputs`,
-      /^ {4}if: \$\{\{ false \}\}\s*$/m.test(job),
-    );
+  for (const marker of forbidden) {
+    ok(`${file} does not contain ${marker}`, !source.includes(marker));
   }
-  equal(`${file}: all Play upload actions belong to inspected jobs`, uploadsInJobs, uploadsInFile);
 }
-ok("the inventory covers existing public upload jobs", uploadJobs >= 2);
+ok("the manual Play upload workflow is gone", !existsSync(join(workflowDir, "play-store.yml")));
+ok("the beta AAB upload workflow is gone", !existsSync(join(workflowDir, "android-beta-aab.yml")));
+ok("the signer check workflow is gone", !existsSync(join(workflowDir, "verify-upload-signing.yml")));
+const signingWorkflows = readdirSync(workflowDir)
+  .filter((name) => /\.ya?ml$/.test(name))
+  .filter((name) => readFileSync(join(workflowDir, name), "utf8").includes("play-signing"));
+ok(
+  "release.yml is the only workflow using play-signing",
+  signingWorkflows.join(",") === "release.yml",
+);
 
 section("public release and CI retain their Free Android builds");
 const release = readFileSync(join(workflowDir, "release.yml"), "utf8");
 const ci = readFileSync(join(workflowDir, "ci.yml"), "utf8");
 ok(
-  "release still builds APKs and AAB",
-  release.includes(":app:assembleRelease :app:stageLevixBundle"),
+  "release builds APKs and no AAB",
+  release.includes("./gradlew :app:assembleRelease --stacktrace"),
+);
+ok(
+  "release does not stage or build a Play bundle",
+  !release.includes("stageLevixBundle") && !release.includes("bundleRelease") && !release.includes(".aab"),
 );
 ok(
   "CI still builds release APKs and AAB with a test key",
@@ -70,13 +75,6 @@ ok(
   "tagged APK/AAB job is gated by play-signing environment",
   /^ {4}environment: play-signing\s*$/m.test(apkJob ?? ""),
 );
-section("manual signer check cannot publish and stays owner/main-only");
-const signerCheck = readFileSync(join(workflowDir, "verify-upload-signing.yml"), "utf8");
-ok("signer check requires play-signing", /^ {4}environment: play-signing\s*$/m.test(signerCheck));
-ok("signer check limits dispatch to main", signerCheck.includes("github.ref == 'refs/heads/main'"));
-ok("signer check requires repository owner", signerCheck.includes("github.actor == github.repository_owner"));
-ok("signer check takes original upload fingerprint", signerCheck.includes("expected_upload_cert_sha256"));
-ok("signer check has no upload or artifacts", !/upload-google-play|actions\/upload-artifact|gh release create/.test(signerCheck));
 section("tag release starts only for the repository owner");
 {
   const head = release.slice(release.indexOf("  verify-version:"), release.indexOf("    steps:", release.indexOf("  verify-version:")));
@@ -115,9 +113,7 @@ section("tag release starts only for the repository owner");
       `${job} job-level if has no status function`,
       condition !== "" && !/\b(always|cancelled|failure|success)\s*\(/.test(condition),
     );
-    if (job === "play") {
-      ok(`${job} job-level if is \${{ false }}`, condition.includes("${{ false }}"));
-    } else if (job !== "verify-version") {
+    if (job !== "verify-version") {
       ok(
         `${job} re-checks the triggering actor`,
         /^ {4}if: github\.triggering_actor == github\.repository_owner *$/.test(condition),

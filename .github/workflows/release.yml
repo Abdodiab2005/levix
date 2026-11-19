@@ -1,6 +1,6 @@
 # Everything a tagged release produces: an npm package, a container image, one
-# executable per platform, the Android APKs and AAB, the public installer, a
-# checksum file covering exactly those files. Play uses the private combined build.
+# executable per platform, the Android APKs, the public installer, a
+# checksum file covering exactly those files.
 #
 # Nothing is published unless the repository owner pushed the tag, the tag
 # matches package.json and the Android versionName, and the full CI suite
@@ -11,18 +11,15 @@
 #     └─ verify-version ── ci ── npm ───────────────┐
 #                          ├── image ───────────────┤
 #                          ├── binaries ────────────┤
-#                          └── apk ─────────────────┴─ publish-release ─┬─ installer
-#                                                                       └─ play (approval)
+#                          └── apk ─────────────────┴─ publish-release ── installer
 #
-# Public Free AAB uploads are disabled on every track. Owner-authorized Play
-# builds come from the private combined Free + Plus workflow. Public GitHub,
-# npm and Docker releases keep their existing build and publication paths.
-# Legacy Play steps below are unconditionally disabled.
+# Google Play builds and uploads live in the private levix-plus repository, and
+# this workflow builds no AAB. Public GitHub, npm and Docker releases keep their
+# existing build and publication paths.
 #
 # Secrets: NPM_TOKEN, the LEVIX_DEPLOY_* set on the installer-production
-# environment, the LEVIX_KEYSTORE_* set for signing, and
-# PLAY_SERVICE_ACCOUNT_JSON for Google Play. The container image uses the
-# built-in GITHUB_TOKEN.
+# environment, and the LEVIX_KEYSTORE_* set for signing. The container image
+# uses the built-in GITHUB_TOKEN.
 
 name: release
 
@@ -185,7 +182,7 @@ jobs:
           path: ${{ matrix.asset }}
 
   apk:
-    name: android apk + aab (arm64, armv7)
+    name: android apk (arm64, armv7)
     needs: ci
     if: github.triggering_actor == github.repository_owner
     runs-on: ubuntu-latest
@@ -253,18 +250,17 @@ jobs:
             echo "::error::LEVIX_KEYSTORE_BASE64 secret is missing; refusing to ship a debug-signed release"
             exit 1
           fi
-      - name: Build Android Release APKs + AAB
+      - name: Build Android Release APKs
         working-directory: android
         env:
           LEVIX_KEYSTORE_PASSWORD: ${{ secrets.LEVIX_KEYSTORE_PASSWORD }}
           LEVIX_KEY_ALIAS: ${{ secrets.LEVIX_KEY_ALIAS }}
           LEVIX_KEY_PASSWORD: ${{ secrets.LEVIX_KEY_PASSWORD }}
-        run: ./gradlew :app:assembleRelease :app:stageLevixBundle --stacktrace
+        run: ./gradlew :app:assembleRelease --stacktrace
       - name: Stage Release Artifacts
         run: |
           cp android/app/build/outputs/apk/release/levix-android-arm64.apk levix-android-arm64.apk
           cp android/app/build/outputs/apk/release/levix-android-armv7.apk levix-android-armv7.apk
-          cp android/app/build/outputs/bundle/release/levix-android.aab levix-android.aab
       - uses: actions/upload-artifact@v7
         with:
           name: levix-android-arm64.apk
@@ -273,10 +269,6 @@ jobs:
         with:
           name: levix-android-armv7.apk
           path: levix-android-armv7.apk
-      - uses: actions/upload-artifact@v7
-        with:
-          name: levix-android.aab
-          path: levix-android.aab
 
   # The GitHub release is the public claim that all shipping channels are good.
   # Do not create it unless npm, the container image and every binary all made
@@ -357,9 +349,6 @@ jobs:
             - `levix-android-arm64.apk` — 64-bit devices (almost all phones since 2016)
             - `levix-android-armv7.apk` — 32-bit-only devices
 
-            `levix-android.aab` contains Free Core only; never upload it to Play. It is not
-            installable directly; upload it to the Play Console.
-
             ## Verifying a download
 
             ```
@@ -429,71 +418,3 @@ jobs:
           else
             echo "- \`/install.sh\` left alone (prerelease)" >> "$GITHUB_STEP_SUMMARY"
           fi
-
-  # Play v5+ must come from the private combined Free + Plus AAB pipeline.
-  # A tag on the v5 release branch must never upload this public Free AAB.
-  play:
-    name: publish to Google Play (disabled; use private paid AAB)
-    needs: publish-release
-    # Play uses the private combined Free + Plus build, never public Free AABs.
-    if: ${{ false }}
-    runs-on: ubuntu-latest
-    # The pause for manual approval. Without a required reviewer on this
-    # environment the job runs at once, finds no approval comment, and stops
-    # before uploading.
-    environment: google-play
-    concurrency:
-      group: google-play
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      actions: read
-    steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.1.0
-        with:
-          node-version-file: .node-version
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: levix-android.aab
-          path: dist
-
-      # The comment is written to a file and parsed by a script, never put
-      # into a shell line or $GITHUB_ENV, so its text cannot become a command.
-      - name: Read the approval comment
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/approvals" \
-            --jq '[.[] | select(.state == "approved" and any(.environments[]; .name == "google-play"))] | last | .comment // ""' \
-            > dist/approval-comment.txt
-
-      - name: Write the What's new text
-        run: node scripts/play-release-notes.mjs dist/approval-comment.txt dist/whatsnew
-
-      - name: Upload the AAB to Google Play
-        uses: r0adkll/upload-google-play@v1
-        with:
-          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: net.leviro.levix
-          releaseFiles: dist/levix-android.aab
-          tracks: ${{ vars.PLAY_TRACK || 'alpha' }}
-          status: completed
-          releaseName: ${{ github.ref_name }}
-          whatsNewDirectory: dist/whatsnew
-
-      - name: What was published
-        run: |
-          {
-            echo "### Google Play"
-            echo ""
-            echo "- \`${{ github.ref_name }}\` on the \`${{ vars.PLAY_TRACK || 'alpha' }}\` track"
-            echo "- What's new:"
-            for f in dist/whatsnew/whatsnew-*; do
-              echo ""
-              echo "  ${f##*/whatsnew-}:"
-              sed 's/^/  > /' "$f"
-            done
-          } >> "$GITHUB_STEP_SUMMARY"
