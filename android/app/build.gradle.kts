@@ -349,32 +349,6 @@ tasks.named("preBuild").configure {
     }
 }
 
-// The Google Play artifact: ./gradlew :app:stageLevixBundle
-// -> outputs/bundle/release/levix-android.aab (signed, both ABIs inside).
-tasks.register("stageLevixBundle") {
-    description = "Build the signed release AAB (levix-android.aab) for Google Play."
-    dependsOn("bundleRelease")
-    doFirst {
-        // Google Play refuses anything signed with the debug certificate, so
-        // an AAB built without the upload keystore is never worth producing.
-        if (!hasCustomKeystore) {
-            throw GradleException(
-                "No upload keystore: set LEVIX_KEYSTORE_FILE (and LEVIX_KEYSTORE_PASSWORD, " +
-                    "LEVIX_KEY_ALIAS) — Google Play rejects debug-signed bundles.",
-            )
-        }
-    }
-    doLast {
-        val src = layout.buildDirectory.file("outputs/bundle/release/app-release.aab").get().asFile
-        if (!src.isFile) {
-            throw GradleException("bundleRelease produced no AAB at $src")
-        }
-        val dst = File(src.parentFile, "levix-android.aab")
-        src.copyTo(dst, overwrite = true)
-        logger.lifecycle("Signed AAB ready: $dst")
-    }
-}
-
 dependencies {
     implementation("com.android.billingclient:billing-ktx:9.1.0")
     // Play in-app update and review. Pinned, non-ktx: the app never depends on

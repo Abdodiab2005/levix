@@ -281,15 +281,13 @@ inputs include backend source, frontend source/config/lockfile, build and stagin
 scripts, and installed dependencies so Gradle cannot reuse a ZIP after those
 change. APKs and AABs share this task. Application updates replace `files/app`,
 while the database and vault key remain in `files/data`; no separate native
-recovery implementation exists. Before releasing, build both ABI APKs and the
-AAB, verify the archive contains the current backend and hashed dashboard assets,
-and perform device WebView/offline/update QA. A local desktop test does not prove
-those device checks. Play upload still requires the owner's approved signing
-and deployment workflow. A passing debug APK build is not Play release approval:
+recovery implementation exists. Before releasing, build both ABI APKs, verify the
+archive contains the current backend and hashed dashboard assets, and perform
+device WebView/offline/update QA. A local desktop test does not prove those
+device checks. Play builds and uploads run only in the private `levix-plus`
+repository. A passing debug APK build is not Play release approval:
 physical-device WebView recovery (Arabic/English), offline/reconnect and update
-persistence QA remain prerequisites. Build and inspect an upload-key-signed AAB
-through `:app:stageLevixBundle` before the owner-approved Play submission; a local
-`bundleRelease` using the debug key does not satisfy that check.
+persistence QA remain prerequisites.
 
 ## 4. Releasing
 

@@ -1,12 +1,12 @@
-// No public workflow may publish to Google Play. Play builds, uploads and
-// promotions live in the private levix-plus repository, so every public
-// workflow is checked for the upload action, its credentials, its environment
-// and its track variable.
+// No public workflow may publish to Google Play through a known upload
+// mechanism. Play builds, uploads and promotions live in the private levix-plus
+// repository, so every public workflow is checked for known upload actions,
+// credentials, environments and track variables.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { finish, ok, ROOT, section } from "./harness.mjs";
 
-section("no public workflow can publish to Google Play");
+section("known Google Play upload mechanisms");
 const workflowDir = join(ROOT, ".github/workflows");
 const forbidden = [
   "upload-google-play",
@@ -14,12 +14,16 @@ const forbidden = [
   "environment: google-play",
   "PLAY_TRACK",
   "play-release-notes",
+  "androidpublisher",
+  "play.google.com",
 ];
 for (const file of readdirSync(workflowDir).filter((name) => /\.ya?ml$/.test(name))) {
   const source = readFileSync(join(workflowDir, file), "utf8");
   for (const marker of forbidden) {
     ok(`${file} does not contain ${marker}`, !source.includes(marker));
   }
+  const playActions = source.split("\n").filter((line) => /^\s*-?\s*uses:.*play/i.test(line));
+  ok(`${file} uses no Play action`, playActions.length === 0);
 }
 ok("the manual Play upload workflow is gone", !existsSync(join(workflowDir, "play-store.yml")));
 ok("the beta AAB upload workflow is gone", !existsSync(join(workflowDir, "android-beta-aab.yml")));
@@ -51,6 +55,8 @@ ok(
   "public builds do not stage the private Plus runtime",
   !/LEVIX_EXTENSIONS_DIR\s*:|levixPlusProductId=levix\.plus/.test(release + ci),
 );
+const gradle = readFileSync(join(ROOT, "android/app/build.gradle.kts"), "utf8");
+ok("the public Gradle build has no Play bundle task", !gradle.includes("stageLevixBundle"));
 section("CI artifacts omit debug-signed release builds");
 {
   // Every step in ci.yml starts at 6 spaces. Keep each upload inside its own step.
