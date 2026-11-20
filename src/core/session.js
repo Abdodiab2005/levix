@@ -962,6 +962,9 @@ export class WhatsAppSession {
   /** Cut every wire back from a socket we are done with. */
   #detach(sock) {
     disposeReactionIntake(sock);
+    try {
+      require("../extensions/autoReply.cjs").abortSocketJobs(sock);
+    } catch {}
     const dispose = sock ? this.#listenerDisposers.get(sock) : undefined;
     if (sock) this.#listenerDisposers.delete(sock);
     if (typeof dispose === "function") {
@@ -989,6 +992,9 @@ export class WhatsAppSession {
     this.#clearAll = null;
 
     this.#detach(sock);
+    try {
+      require("../extensions/autoReply.cjs").abortAccountJobs();
+    } catch {}
     this.#stopJobs();
     this.#proxyFingerprint = null;
     this.#proxyLabel = null;
@@ -1159,6 +1165,9 @@ export class WhatsAppSession {
     this.#generation += 1;
     this.#fence();
     this.#detach(closedSocket);
+    try {
+      require("../extensions/autoReply.cjs").abortAccountJobs();
+    } catch {}
     // The scheduled jobs were armed with that socket. Leaving them running
     // means a daily message firing into a closed connection, failing, and
     // being lost with nothing to show for it. The next open re-arms them.

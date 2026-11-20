@@ -34,11 +34,116 @@ const { toolDeclarations, describeCall, runToolWithDeadline } = require("./aiToo
 const { docSourcesFromTool } = require("./aiDocs.cjs");
 const { assertProviderBaseUrl, safeProviderFetch } = require("../utils/providerUrl.cjs");
 const { baseMimeType, downloadMedia } = require("../utils/geminiMedia.cjs");
+const { isReactionEmoji } = require("../automation/rules.cjs");
 
 // Shown in place of a media part, on the wire and in the canonical history.
 const MEDIA_NOTE = "[تم إرفاق ملف/وسائط في الرسالة]";
 
 const API_TIMEOUT_MS = 120000;
+
+const AUTO_REPLY_DECISION_TOOL = "auto_reply_decision";
+const MAX_AUTO_REPLY_TEXT = 4000;
+const AUTO_REPLY_ACTIONS = new Set(["reply", "react", "silent", "task"]);
+
+const AUTO_REPLY_DECISION_DECLARATION = Object.freeze({
+  name: AUTO_REPLY_DECISION_TOOL,
+  description:
+    "Record the Auto Reply decision for the incoming WhatsApp message: reply with text now, react with one emoji, stay silent, or run a tool-enabled task turn.",
+  parameters: {
+    type: "OBJECT",
+    properties: {
+      action: {
+        type: "STRING",
+        enum: ["reply", "react", "silent", "task"],
+        description:
+          'The decision: "reply" for a direct text answer now, "react" for a single emoji reaction, "silent" to send nothing, or "task" when tools are required.',
+      },
+      text: {
+        type: "STRING",
+        description: 'Direct reply text when action is "reply". Omit for other actions.',
+      },
+      emoji: {
+        type: "STRING",
+        description: 'Single reaction emoji when action is "react". Omit for other actions.',
+      },
+    },
+    required: ["action"],
+  },
+});
+
+function validateAutoReplyDecision(raw) {
+  if (Array.isArray(raw)) {
+    return validateDecisionCalls(raw);
+  }
+  if (!raw || typeof raw !== "object") {
+    return { ok: false, reason: "malformed_args" };
+  }
+  if (Object.hasOwn(raw, "name") && !Object.hasOwn(raw, "action")) {
+    return validateDecisionCalls([raw]);
+  }
+  const proto = Object.getPrototypeOf(raw);
+  if (proto !== Object.prototype && proto !== null) {
+    return { ok: false, reason: "malformed_args" };
+  }
+  const keys = Object.keys(raw);
+  const action = raw.action;
+  if (typeof action !== "string" || !AUTO_REPLY_ACTIONS.has(action)) {
+    return { ok: false, reason: "invalid_action" };
+  }
+  if (action === "reply") {
+    if (!keys.every((k) => k === "action" || k === "text")) {
+      return { ok: false, reason: "extra_keys" };
+    }
+    if (typeof raw.text !== "string") {
+      return { ok: false, reason: "empty_reply" };
+    }
+    const text = raw.text.trim();
+    if (!text) {
+      return { ok: false, reason: "empty_reply" };
+    }
+    if (text.length > MAX_AUTO_REPLY_TEXT) {
+      return { ok: false, reason: "reply_too_long" };
+    }
+    if (isReactionEmoji(text)) {
+      return { ok: false, reason: "emoji_only_reply" };
+    }
+    return { ok: true, decision: Object.freeze({ action: "reply", text }) };
+  }
+  if (action === "react") {
+    if (!keys.every((k) => k === "action" || k === "emoji")) {
+      return { ok: false, reason: "extra_keys" };
+    }
+    if (typeof raw.emoji !== "string") {
+      return { ok: false, reason: "invalid_emoji" };
+    }
+    const emoji = raw.emoji.trim();
+    if (!isReactionEmoji(emoji)) {
+      return { ok: false, reason: "invalid_emoji" };
+    }
+    return { ok: true, decision: Object.freeze({ action: "react", emoji }) };
+  }
+  if (!keys.every((k) => k === "action")) {
+    return { ok: false, reason: "extra_keys" };
+  }
+  return { ok: true, decision: Object.freeze({ action }) };
+}
+
+function validateDecisionCalls(calls) {
+  if (!Array.isArray(calls) || calls.length === 0) {
+    return { ok: false, reason: "missing_call" };
+  }
+  if (calls.length > 1) {
+    return { ok: false, reason: "multiple_calls" };
+  }
+  const call = calls[0];
+  if (!call || typeof call !== "object" || Array.isArray(call)) {
+    return { ok: false, reason: "malformed_call" };
+  }
+  if (call.name !== AUTO_REPLY_DECISION_TOOL) {
+    return { ok: false, reason: "wrong_function" };
+  }
+  return validateAutoReplyDecision(call.args);
+}
 
 // ===========================================================================
 // adapters: everything that differs between the two wire formats
@@ -177,6 +282,10 @@ class OpenAIProvider extends BaseAIProvider {
   async runTurn(options) {
     return runProviderAgent("openai", options);
   }
+
+  async classifyAutoReply(options) {
+    return classifyProviderAutoReply("openai", options);
+  }
 }
 
 class AnthropicProvider extends BaseAIProvider {
@@ -210,6 +319,10 @@ class AnthropicProvider extends BaseAIProvider {
 
   async runTurn(options) {
     return runProviderAgent("anthropic", options);
+  }
+
+  async classifyAutoReply(options) {
+    return classifyProviderAutoReply("anthropic", options);
   }
 }
 
@@ -818,8 +931,190 @@ function finish({ text, canonical, toolCalls, steps, sources }) {
   };
 }
 
+function openaiDecisionTools() {
+  return [
+    {
+      type: "function",
+      function: {
+        name: AUTO_REPLY_DECISION_DECLARATION.name,
+        description: AUTO_REPLY_DECISION_DECLARATION.description,
+        parameters: toJsonSchema(AUTO_REPLY_DECISION_DECLARATION.parameters),
+      },
+    },
+  ];
+}
+
+function anthropicDecisionTools() {
+  return [
+    {
+      name: AUTO_REPLY_DECISION_DECLARATION.name,
+      description: AUTO_REPLY_DECISION_DECLARATION.description,
+      input_schema: toJsonSchema(AUTO_REPLY_DECISION_DECLARATION.parameters),
+    },
+  ];
+}
+
+function extractOpenAIDecisionCalls(payload) {
+  const message = payload?.choices?.[0]?.message;
+  const rawCalls = message?.tool_calls;
+  if (!Array.isArray(rawCalls) || rawCalls.length === 0) {
+    return { ok: false, reason: "missing_call" };
+  }
+  if (rawCalls.length > 1) {
+    return { ok: false, reason: "multiple_calls" };
+  }
+  const tc = rawCalls[0];
+  const name = tc?.function?.name;
+  const rawArgs = tc?.function?.arguments;
+  let args;
+  if (typeof rawArgs === "string") {
+    try {
+      args = JSON.parse(rawArgs);
+    } catch {
+      return { ok: false, reason: "malformed_json" };
+    }
+  } else if (rawArgs !== null && typeof rawArgs === "object" && !Array.isArray(rawArgs)) {
+    args = rawArgs;
+  } else {
+    return { ok: false, reason: "malformed_json" };
+  }
+  if (args === null || typeof args !== "object" || Array.isArray(args)) {
+    return { ok: false, reason: "malformed_json" };
+  }
+  return { ok: true, calls: [{ name, args }] };
+}
+
+function extractAnthropicDecisionCalls(payload) {
+  const content = payload?.content;
+  if (!Array.isArray(content)) {
+    return { ok: false, reason: "missing_call" };
+  }
+  const toolBlocks = content.filter((block) => block?.type === "tool_use");
+  if (toolBlocks.length === 0) {
+    return { ok: false, reason: "missing_call" };
+  }
+  if (toolBlocks.length > 1) {
+    return { ok: false, reason: "multiple_calls" };
+  }
+  const block = toolBlocks[0];
+  if (!block.input || typeof block.input !== "object" || Array.isArray(block.input)) {
+    return { ok: false, reason: "malformed_json" };
+  }
+  return { ok: true, calls: [{ name: block.name, args: block.input }] };
+}
+
+/**
+ * One-shot Auto Reply classification on OpenAI-compatible or Anthropic.
+ * Forces the single `auto_reply_decision` tool and never runs a tool loop.
+ */
+async function classifyProviderAutoReply(provider, { parts, systemInstruction, signal } = {}) {
+  signal?.throwIfAborted?.();
+  const adapter = adapterFor(provider);
+  const apiKey = settings.get(adapter.keySetting);
+  if (!apiKey) {
+    logger.warn(
+      { reason: "missing_key", provider },
+      "[aiProviders] Auto Reply classification skipped",
+    );
+    return null;
+  }
+  const model = settings.get(adapter.modelSetting);
+  let baseUrl;
+  try {
+    baseUrl = assertProviderBaseUrl(
+      settings.get(adapter.baseUrlSetting) || adapter.defaultBaseUrl,
+      { allowLoopback: true },
+    );
+  } catch {
+    logger.warn(
+      { reason: "invalid_base_url", provider },
+      "[aiProviders] Auto Reply classification skipped",
+    );
+    return null;
+  }
+  signal?.throwIfAborted?.();
+
+  const turnText = partsText(parts);
+  const userMsg = adapter.userMessage(turnText);
+  const request =
+    provider === "anthropic"
+      ? {
+          url: `${baseUrl}/v1/messages`,
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+          },
+          body: {
+            model,
+            max_tokens: 1024,
+            ...(systemInstruction ? { system: systemInstruction } : {}),
+            messages: [userMsg],
+            tools: anthropicDecisionTools(),
+            tool_choice: {
+              type: "tool",
+              name: AUTO_REPLY_DECISION_TOOL,
+            },
+          },
+        }
+      : {
+          url: `${baseUrl}/chat/completions`,
+          headers: { Authorization: `Bearer ${apiKey}` },
+          body: {
+            model,
+            messages: [...adapter.systemMessage(systemInstruction), userMsg],
+            tools: openaiDecisionTools(),
+            tool_choice: {
+              type: "function",
+              function: { name: AUTO_REPLY_DECISION_TOOL },
+            },
+            temperature: 0,
+          },
+        };
+
+  let payload;
+  try {
+    payload = await callApi({ ...request, label: adapter.label, signal });
+  } catch (error) {
+    if (signal?.aborted || error?.name === "AbortError") throw error;
+    logger.warn(
+      { reason: "provider_error", provider, status: error?.status || null },
+      "[aiProviders] Auto Reply classification request failed",
+    );
+    return null;
+  }
+  signal?.throwIfAborted?.();
+
+  const extracted =
+    provider === "anthropic"
+      ? extractAnthropicDecisionCalls(payload)
+      : extractOpenAIDecisionCalls(payload);
+  if (!extracted.ok) {
+    logger.warn(
+      { reason: extracted.reason, provider },
+      "[aiProviders] Auto Reply classification decision rejected",
+    );
+    return null;
+  }
+  const validated = validateDecisionCalls(extracted.calls);
+  if (!validated.ok) {
+    logger.warn(
+      { reason: validated.reason, provider },
+      "[aiProviders] Auto Reply classification decision rejected",
+    );
+    return null;
+  }
+  return validated.decision;
+}
+
 module.exports = {
   runProviderAgent,
+  classifyProviderAutoReply,
+  AUTO_REPLY_DECISION_TOOL,
+  AUTO_REPLY_DECISION_DECLARATION,
+  validateAutoReplyDecision,
+  validateDecisionCalls,
+  openaiDecisionTools,
+  anthropicDecisionTools,
   activeProviderKeySetting,
   toJsonSchema,
   openaiTools,

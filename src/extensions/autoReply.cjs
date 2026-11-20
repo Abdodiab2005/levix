@@ -7,13 +7,11 @@ const { getSenderCandidates } = require("../utils/permissions.esm.js");
 const { canonicalJid } = require("../messaging/router.cjs");
 const { EMPTY_SCOPE, normalizeScope, isChatEligible, inScope } = require("./autoReplyScope.cjs");
 const { classifyAcknowledgement } = require("./autoReplyAck.cjs");
-const { isReactionEmoji } = require("../automation/rules.cjs");
+const { validateAutoReplyDecision, validateDecisionCalls } = require("../services/aiProviders.cjs");
 
 const MAX_TEXT = 4000;
 // The longest model reply Auto Reply sends, the same cap as the incoming text.
 const MAX_REPLY_TEXT = MAX_TEXT;
-const DECISION_KEYS = new Set(["action", "text", "emoji"]);
-const graphemes = new Intl.Segmenter("en", { granularity: "grapheme" });
 const MAX_INSTRUCTIONS = 1000;
 const PENDING_MAX = 50;
 const PENDING_TTL_MS = 2 * 60 * 1000;
@@ -176,6 +174,7 @@ function abortSocketJobs(sock) {
     try {
       controller.abort();
     } catch {}
+    inflightAbort.delete(controller);
   }
 }
 
@@ -298,6 +297,42 @@ function rosterHelpers() {
   return dep("groupMetadataCache", () => require("../utils/groupMetadataCache.cjs"));
 }
 
+function logWarn(runtime, meta, message) {
+  const target = injected.log || runtime?.log;
+  if (target && typeof target.warn === "function") {
+    try {
+      target.warn(meta, message);
+    } catch {}
+    return;
+  }
+  try {
+    require("../utils/logger.cjs").warn(meta, message);
+  } catch {}
+}
+
+async function safePresence(sock, jid, presence) {
+  if (typeof sock?.sendPresenceUpdate !== "function") return;
+  try {
+    await sock.sendPresenceUpdate(presence, jid);
+  } catch {}
+}
+
+function formatReplyText(rawText, sources) {
+  let text = String(rawText || "").trim();
+  if (!text) return "";
+  if (sources?.length) {
+    try {
+      const { formatSources } = require("../services/aiAgent.cjs");
+      text = `${text}${formatSources(sources)}`;
+    } catch {}
+  }
+  try {
+    const { formatMarkdownForWhatsApp } = require("../utils/markdownParser.cjs");
+    text = formatMarkdownForWhatsApp(text);
+  } catch {}
+  return String(text || "").trim();
+}
+
 async function runAiReply(runtime, job = {}) {
   const messageId = job?.messageId;
   const key = jobKey(accountEpochNow(), job?.chatJid, messageId);
@@ -337,7 +372,7 @@ async function runAiReply(runtime, job = {}) {
   executions.set(key, started + EXECUTION_TTL_MS);
   beginTurn(chatJid, started);
   const jobAbort = entry.controller;
-  inflightAbort.set(jobAbort, { chatJid, chatAliases: event.chatAliases });
+  inflightAbort.set(jobAbort, { sock, chatJid, chatAliases: event.chatAliases });
   const timeoutMs = Math.max(
     1,
     Math.min(
@@ -354,8 +389,71 @@ async function runAiReply(runtime, job = {}) {
   const timer = setTimeout(() => timeoutAbort.abort(), timeoutMs);
   const signal = anySignal([liveSignal(runtime), jobAbort.signal, timeoutAbort.signal]);
 
+  const deliveryGuard = {
+    async refresh() {
+      if (!isGroup) return;
+      await rosterHelpers().resolveGroupMetadata(sock, chatJid, { fresh: true });
+    },
+    assert() {
+      signal.throwIfAborted();
+      if (accountEpochNow() !== epoch) throw new Error("epoch");
+      if (typeof runtime.generation === "function" && runtime.generation() !== generation) {
+        throw new Error("generation");
+      }
+      if (typeof runtime.isActive === "function" && !runtime.isActive())
+        throw new Error("inactive");
+      if (!inScope(chatJid, runtime.getScope?.(), event.chatAliases)) throw new Error("scope");
+      if (isGroup && rosterHelpers().isRosterStale(chatJid)) throw new Error("roster");
+    },
+  };
+
+  async function sendReaction(emoji) {
+    if (!msg?.key || typeof msg.key !== "object") {
+      logWarn(runtime, { action: "react", reason: "missing_key" }, "Auto Reply reaction skipped");
+      return { sent: false };
+    }
+    try {
+      await deliveryGuard.refresh();
+      deliveryGuard.assert();
+      const sendBotMessage = dep(
+        "sendBotMessage",
+        () => require("../utils/sendBotMessage.cjs").sendBotMessage,
+      );
+      await sendBotMessage(
+        sock,
+        chatJid,
+        { react: { text: emoji, key: msg.key } },
+        {
+          typing: false,
+          quote: false,
+          delayMs: 0,
+          signal,
+          deliveryGuard,
+        },
+      );
+      return { sent: true };
+    } catch (error) {
+      logWarn(
+        runtime,
+        {
+          action: "react",
+          reason: signal.aborted ? "aborted" : "send_failed",
+          ...(typeof error?.code === "string" ? { code: error.code } : {}),
+        },
+        "Auto Reply reaction send failed",
+      );
+      return { sent: false };
+    }
+  }
+
   try {
     if (signal.aborted) return { sent: false };
+
+    // 1. Deterministic acknowledgement before any model call.
+    const ack = classifyAcknowledgement(event.text);
+    if (ack) {
+      return await sendReaction(ack.emoji);
+    }
 
     const cache = rosterHelpers();
     let groupMetadata = null;
@@ -378,80 +476,126 @@ async function runAiReply(runtime, job = {}) {
       text: event.text,
     });
 
-    const runAgent = dep("runAgent", () => require("../services/aiAgent.cjs").runAgent);
     const parts = [{ text: event.text }];
     if (instructions) parts.push({ text: instructions });
-    const deliveryGuard = {
-      async refresh() {
-        if (!isGroup) return;
-        await rosterHelpers().resolveGroupMetadata(sock, chatJid, { fresh: true });
-      },
-      assert() {
-        signal.throwIfAborted();
-        if (accountEpochNow() !== epoch) throw new Error("epoch");
-        if (typeof runtime.generation === "function" && runtime.generation() !== generation) {
-          throw new Error("generation");
-        }
-        if (typeof runtime.isActive === "function" && !runtime.isActive())
-          throw new Error("inactive");
-        if (!inScope(chatJid, runtime.getScope?.(), event.chatAliases)) throw new Error("scope");
-        if (isGroup && rosterHelpers().isRosterStale(chatJid)) throw new Error("roster");
-      },
-    };
-    deliveryGuard.assert();
-    const result = await runAgent({
-      parts,
-      history: [],
-      status: null,
+    const context = {
       signal,
-      context: {
-        signal,
-        deliveryGuard,
-        caller,
-        sock,
-        chatId: chatJid,
-        senderId: caller.senderId,
-        senderName: caller.senderName,
-        isOwner: caller.isOwner,
-        isAdmin: caller.isOwner || caller.isBotAdmin,
-        isGroup: caller.isGroup,
-        chatName: caller.chatName,
-        memoryScope: "chat",
-        autoReplyGlobal,
-      },
+      deliveryGuard,
+      caller,
+      sock,
+      chatId: chatJid,
+      senderId: caller.senderId,
+      senderName: caller.senderName,
+      isOwner: caller.isOwner,
+      isAdmin: caller.isOwner || caller.isBotAdmin,
+      isGroup: caller.isGroup,
+      chatName: caller.chatName,
+      memoryScope: "chat",
+      autoReplyGlobal,
+    };
+
+    deliveryGuard.assert();
+
+    // 2. Single forced-tool classification request (no tools run, no search, no loop).
+    const classifyAutoReply =
+      Object.hasOwn(injected, "classifyAutoReply") && injected.classifyAutoReply != null
+        ? injected.classifyAutoReply
+        : Object.hasOwn(injected, "runAgent") && injected.runAgent != null
+          ? async () => ({ action: "task" })
+          : require("../services/aiAgent.cjs").classifyAutoReply;
+
+    const rawDecision = await classifyAutoReply({
+      parts,
+      context,
+      signal,
     });
 
-    let text = String(result?.text || "").trim();
-    if (!text) return { sent: false };
-    if (result?.sources?.length) {
-      try {
-        const { formatSources } = require("../services/aiAgent.cjs");
-        text = `${text}${formatSources(result.sources)}`;
-      } catch {}
+    if (rawDecision == null) {
+      return { sent: false };
     }
-    try {
-      const { formatMarkdownForWhatsApp } = require("../utils/markdownParser.cjs");
-      text = formatMarkdownForWhatsApp(text);
-    } catch {}
+
+    const validated = validateAutoReplyDecision(rawDecision);
+    if (!validated.ok) {
+      logWarn(runtime, { reason: validated.reason }, "Auto Reply classification decision rejected");
+      return { sent: false };
+    }
+
+    const { decision } = validated;
+    if (decision.action === "silent") {
+      return { sent: false };
+    }
+
+    if (decision.action === "react") {
+      return await sendReaction(decision.emoji);
+    }
 
     const sendBotMessage = dep(
       "sendBotMessage",
       () => require("../utils/sendBotMessage.cjs").sendBotMessage,
     );
-    await sendBotMessage(
-      sock,
-      chatJid,
-      { text },
-      {
-        replyTo: msg,
-        quote,
-        typing: false,
-        delayMs: 0,
+
+    if (decision.action === "reply") {
+      const text = formatReplyText(decision.text);
+      if (!text) return { sent: false };
+      await deliveryGuard.refresh();
+      deliveryGuard.assert();
+      await safePresence(sock, chatJid, "composing");
+      try {
+        await sendBotMessage(
+          sock,
+          chatJid,
+          { text },
+          {
+            replyTo: msg,
+            quote,
+            typing: false,
+            delayMs: 0,
+            signal,
+            deliveryGuard,
+          },
+        );
+        return { sent: true };
+      } finally {
+        await safePresence(sock, chatJid, "paused");
+      }
+    }
+
+    // 3. Task turn: run the full agent with tools and status: null, with presence around it.
+    const runAgent = dep("runAgent", () => require("../services/aiAgent.cjs").runAgent);
+    await deliveryGuard.refresh();
+    deliveryGuard.assert();
+    await safePresence(sock, chatJid, "composing");
+    try {
+      const result = await runAgent({
+        parts,
+        history: [],
+        status: null,
         signal,
-        deliveryGuard,
-      },
-    );
-    return { sent: true };
+        context,
+      });
+
+      const text = formatReplyText(result?.text, result?.sources);
+      if (!text || text.length > MAX_REPLY_TEXT) return { sent: false };
+
+      await deliveryGuard.refresh();
+      deliveryGuard.assert();
+      await sendBotMessage(
+        sock,
+        chatJid,
+        { text },
+        {
+          replyTo: msg,
+          quote,
+          typing: false,
+          delayMs: 0,
+          signal,
+          deliveryGuard,
+        },
+      );
+      return { sent: true };
+    } finally {
+      await safePresence(sock, chatJid, "paused");
+    }
   } catch {
     return { sent: false };
   } finally {
@@ -578,6 +722,7 @@ module.exports = {
   dispatch,
   runAiReply,
   abortAccountJobs,
+  abortSocketJobs,
   abortOutOfScope,
   setAutoReplyDeps,
   resetAutoReplyDeps,
@@ -586,4 +731,7 @@ module.exports = {
   normalizeScope,
   EMPTY_SCOPE,
   computeChatAliases,
+  validateAutoReplyDecision,
+  validateDecisionCalls,
+  classifyAcknowledgement,
 };

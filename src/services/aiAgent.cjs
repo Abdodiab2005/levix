@@ -38,7 +38,15 @@ const {
   getProvider,
   detectModelCapabilities,
 } = require("./aiRouter.cjs");
-const { runProviderAgent, activeProviderKeySetting } = require("./aiProviders.cjs");
+const {
+  runProviderAgent,
+  classifyProviderAutoReply,
+  AUTO_REPLY_DECISION_TOOL,
+  AUTO_REPLY_DECISION_DECLARATION,
+  validateAutoReplyDecision,
+  validateDecisionCalls,
+  activeProviderKeySetting,
+} = require("./aiProviders.cjs");
 
 // Model, key, tool budget and history length all come from config/settings.cjs
 // (what the dashboard saved, else the default) and are read per call, so changing
@@ -216,6 +224,28 @@ function buildSystemInstruction(context = {}) {
   });
 
   return [aiIdentity.systemBlock, loadPersona(), runtime, memoryBlock].filter(Boolean).join("\n\n");
+}
+
+const AUTO_REPLY_DECISION_DIRECTIVE = [
+  "# Auto Reply decision",
+  "You are deciding how Auto Reply responds to this incoming WhatsApp message. Call `auto_reply_decision` once and return no other output.",
+  '- Choose `action: "react"` with a single reaction `emoji` (such as "❤️", "👍", "😂") for pure acknowledgement, thanks, agreement, or laughter that needs no text reply.',
+  '- Choose `action: "silent"` when there is nothing to answer (a closing word, an ok/bye, a sticker-like message, or a message not addressed to the bot).',
+  '- Choose `action: "reply"` with `text` when you can give a direct answer right now from your existing knowledge and the context above, in the required reply language. Never put only a single emoji in `text`.',
+  '- Choose `action: "task"` when answering needs tools (web search, reminders, memory, documents, polls, voice notes, or images).',
+  "- Never choose a chat, JID, message key, target, or destination; the backend owns delivery.",
+].join("\n");
+
+function buildAutoReplySystemInstruction(context = {}) {
+  return [buildSystemInstruction(context), AUTO_REPLY_DECISION_DIRECTIVE]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function ensureAutoReplyDirective(systemInstruction, context) {
+  const base = systemInstruction || buildSystemInstruction(context);
+  if (typeof base === "string" && base.includes("# Auto Reply decision")) return base;
+  return [base, AUTO_REPLY_DECISION_DIRECTIVE].filter(Boolean).join("\n\n");
 }
 
 /** A turn the conversation can legally start from. */
@@ -506,6 +536,10 @@ class GeminiProvider extends BaseAIProvider {
   async runTurn(options) {
     return runGeminiTurn(options);
   }
+
+  async classifyAutoReply(options) {
+    return classifyGeminiAutoReply(options);
+  }
 }
 
 registerProvider("gemini", new GeminiProvider());
@@ -522,6 +556,120 @@ async function runAgent(options = {}) {
     systemInstruction: buildSystemInstruction(options.context),
   });
   return { ...result, history: trimHistory(result.history) };
+}
+
+function extractGeminiCalls(response) {
+  const parts = response?.candidates?.[0]?.content?.parts;
+  if (Array.isArray(parts)) {
+    return parts.filter((part) => part?.functionCall).map((part) => part.functionCall);
+  }
+  if (Array.isArray(response?.functionCalls)) {
+    return response.functionCalls;
+  }
+  return [];
+}
+
+async function classifyGeminiAutoReply({
+  parts,
+  context = {},
+  systemInstruction = null,
+  signal,
+} = {}) {
+  signal?.throwIfAborted?.();
+  const genAI = geminiClient();
+  if (!genAI) {
+    logger.warn(
+      { reason: "missing_key", provider: "gemini" },
+      "[aiAgent] Auto Reply classification skipped",
+    );
+    return null;
+  }
+  try {
+    await assertProviderRequestUrl(settings.get("gemini_base_url"), { allowLoopback: true });
+  } catch {
+    logger.warn(
+      { reason: "invalid_base_url", provider: "gemini" },
+      "[aiAgent] Auto Reply classification skipped",
+    );
+    return null;
+  }
+  signal?.throwIfAborted?.();
+
+  const instruction = ensureAutoReplyDirective(systemInstruction, context);
+  const model = settings.get("gemini_model");
+  const normalizedParts = Array.isArray(parts) ? parts : [];
+
+  let response;
+  try {
+    response = await genAI.models.generateContent({
+      model,
+      contents: [{ role: "user", parts: normalizedParts }],
+      config: {
+        systemInstruction: instruction,
+        ...(signal ? { abortSignal: signal } : {}),
+        // A fresh copy: the SDK rewrites declaration fields and the shared one is frozen.
+        tools: [{ functionDeclarations: [structuredClone(AUTO_REPLY_DECISION_DECLARATION)] }],
+        toolConfig: {
+          functionCallingConfig: {
+            mode: FunctionCallingConfigMode?.ANY || "ANY",
+            allowedFunctionNames: [AUTO_REPLY_DECISION_TOOL],
+          },
+        },
+      },
+    });
+  } catch (error) {
+    if (signal?.aborted || error?.name === "AbortError") throw error;
+    logger.warn(
+      {
+        reason: "provider_error",
+        provider: "gemini",
+        status: error?.status || error?.statusCode || null,
+      },
+      "[aiAgent] Auto Reply classification request failed",
+    );
+    return null;
+  }
+  signal?.throwIfAborted?.();
+
+  const calls = extractGeminiCalls(response);
+  const validated = validateDecisionCalls(calls);
+  if (!validated.ok) {
+    logger.warn(
+      { reason: validated.reason, provider: "gemini" },
+      "[aiAgent] Auto Reply classification decision rejected",
+    );
+    return null;
+  }
+  return validated.decision;
+}
+
+/**
+ * One-shot Auto Reply classification across Gemini, OpenAI-compatible, and Anthropic.
+ * Forces the single `auto_reply_decision` declaration with no tools executed,
+ * no Google Search, and no tool loop.
+ */
+async function classifyAutoReply(options = {}) {
+  const provider = getProvider(options.provider);
+  if (Object.hasOwn(provider, "runTurn") && !Object.hasOwn(provider, "classifyAutoReply")) {
+    return Object.freeze({ action: "task" });
+  }
+  const systemInstruction = ensureAutoReplyDirective(options.systemInstruction, options.context);
+  if (typeof provider.classifyAutoReply === "function") {
+    return provider.classifyAutoReply({
+      ...options,
+      systemInstruction,
+    });
+  }
+  if (provider.id === "openai" || provider.id === "anthropic") {
+    return classifyProviderAutoReply(provider.id, {
+      ...options,
+      systemInstruction,
+    });
+  }
+  return classifyGeminiAutoReply({
+    ...options,
+    systemInstruction,
+  });
 }
 
 async function runGeminiTurn({
@@ -683,6 +831,13 @@ async function runGeminiTurn({
 
 module.exports = {
   runAgent,
+  classifyAutoReply,
+  buildAutoReplySystemInstruction,
+  AUTO_REPLY_DECISION_DIRECTIVE,
+  AUTO_REPLY_DECISION_TOOL,
+  AUTO_REPLY_DECISION_DECLARATION,
+  validateAutoReplyDecision,
+  validateDecisionCalls,
   buildTools,
   buildToolConfig,
   googleSearchEnabled,

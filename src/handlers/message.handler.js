@@ -145,6 +145,7 @@ export async function processMessage(sock, msg, body, epoch) {
     }
   } catch (error) {
     logger.error({ err: error }, "Error handling command");
+    return;
   }
 
   // Handle regular group messages (moderation)
