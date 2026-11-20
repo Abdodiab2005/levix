@@ -207,6 +207,7 @@ before merge; disputed points go back to the owner.
 | PR-5 | `feat/v501-core-screens` | levix | `frontend/src/gateway/*`, `ConnectedAccountCard.tsx`, `ConnectionView.tsx`, `OverviewView.tsx`, `src/panel/account-profile.cjs` | Grok or Antigravity | PR-1 | none |
 | PR-6 | `feat/v501-plus-ui` | levix | `frontend/src/views/plus/*` | Antigravity | PR-1, PR-3 | none |
 | PR-7 | `release/v501-prep` | levix (+ levix-plus `core.lock.json`) | version files, CHANGELOG, docs index | orchestrator | all | none |
+| PR-8 | `feat/v501-site` | levix-ui | site copy, docs pages (`src/lib/docs-content.ts`, `docs/`), panel screenshots in `public/panel`, version and download page, `llms.txt`, feature sections (Emoji Commands, Auto Reply scope and reactions, compact panel) in four locales where the site has them | Antigravity or Grok | PR-7, after every other PR is final | none |
 
 Codex reviews every PR read-only. Implementers do not run tests or builds; the
 orchestrator runs every gate. OpenCode free models returned
@@ -275,3 +276,24 @@ Owner decision on reaction rule permissions (answer to the migration question):
 - O-5 All of it is configurable in the rule editor.
 - O-6 Reaction commands use the command's own authorization and never edit or
   delete the reacted-to message.
+
+## 12. Website update after release prep (owner request, 2026-11-20)
+
+After every 5.0.1 PR is final, `Abdodiab2005/levix-ui` gets one PR (PR-8) so
+the public site matches 5.0.1:
+
+- Version 5.0.1 wherever the site names the current release (download page,
+  hero, `llms.txt`, docs).
+- Docs pages for the changed behaviour: Emoji Commands as shortcuts to real
+  commands with per-rule "who can trigger" and the linked-message switch; the
+  supported and unsupported command list; Auto Reply scope modes, the group
+  switch and the reply, react or silent behaviour; the thought-signature fix if
+  it changes setup advice for proxies.
+- New panel screenshots in `public/panel` taken from the final 5.0.1 build
+  (login, Overview, Connection, reaction editor, Plus), light and dark.
+- Feature sections and copy that describe removed or changed screens are
+  updated, not left stale.
+- Nothing in the site claims a feature that 5.0.1 does not ship (for example
+  the todo emoji actions, which belong to the separate milestone).
+- Gates: the site's own lint, typecheck, tests and build, run by the
+  orchestrator. No deploy without the owner's approval.
