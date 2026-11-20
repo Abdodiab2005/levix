@@ -41,7 +41,7 @@ import {
 
 const MODES: PlusTemplateMode[] = ["auto", "original"];
 
-/** Catalog or draft text, with `{name}` kept as its own left-to-right token. */
+/** Catalog or draft text inside the editor, with `{name}` kept as its own left-to-right token. */
 export function TemplateBody({ text }: { text: string }) {
   const parts = splitTemplateText(text);
   return parts.map((part, index) =>
@@ -291,6 +291,7 @@ export function TemplateEditor({
         isOpen={open}
         onClose={onClose}
         title={t("plusMessagesEdit")}
+        variant="mobileFullscreen"
         description={
           item ? (
             <span className="inline-flex max-w-full flex-wrap items-center gap-2">
@@ -385,21 +386,17 @@ export function TemplateEditor({
               )}
             </div>
           </div>
-          <Field label={t("plusSourceText")} htmlFor="plus-template-text">
+          <Field label={t("plusSourceText")} htmlFor="plus-template-text" description={countLabel}>
             <Textarea
               id="plus-template-text"
               value={text}
               dir="auto"
               rows={4}
-              aria-describedby="plus-template-count"
               onChange={(event) => {
                 setText(event.target.value);
                 setError(null);
               }}
             />
-            <p id="plus-template-count" aria-live="polite" className="text-xs text-muted">
-              {countLabel}
-            </p>
           </Field>
           <div className="flex flex-col gap-1.5">
             <p className="text-xs font-bold text-text-main">{t("plusMessagesPlaceholders")}</p>
@@ -423,11 +420,11 @@ export function TemplateEditor({
               className="whitespace-pre-wrap break-words rounded-xl border border-line bg-panel-raised/50 p-3 text-sm text-text-main"
             >
               {hasDraft ? (
-                <TemplateBody text={localPreview} />
+                localPreview
               ) : previewFailed ? (
                 <span className="text-muted">{t("plusMessagesPreviewFailed")}</span>
               ) : (
-                <TemplateBody text={preview ?? localPreview} />
+                substitutePlaceholders(preview ?? localPreview)
               )}
             </div>
           </div>

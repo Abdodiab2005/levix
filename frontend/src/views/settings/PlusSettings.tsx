@@ -1,28 +1,25 @@
-import { userErrorMessage } from "../../utils/userError";
-import { ExternalLink, RefreshCw } from "lucide-react";
+import { ExternalLink, FileText, RefreshCw, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, api } from "../../api/client";
 import {
+  Badge,
   Button,
+  Callout,
   Card,
   CardHeader,
   ConfirmDialog,
+  CrownIcon,
   IconButton,
+  LoadingState,
+  MenuItem,
+  OverflowMenu,
   Spinner,
   StatusPill,
   Toggle,
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { ensurePlusStatus, usePlusStatus } from "../../hooks/usePlusStatus";
-import {
-  createRecoveryRefreshGate,
-  recoverPlusPurchases,
-  showsPlusUntil,
-} from "../plus/plusUiLogic";
 import { fill } from "../../utils/fill";
-import { presentPlusOffer } from "./plusOffer";
-import { TermsViewerDialog } from "../legal/TermsConsentDialog";
-import { PlusFeaturesView } from "../plus/PlusFeaturesView";
 import {
   type PlusProductResult,
   type PlusPurchaseResult,
@@ -33,6 +30,15 @@ import {
   plusPurchase,
   plusRestore,
 } from "../../utils/hostBridge";
+import { userErrorMessage } from "../../utils/userError";
+import { TermsViewerDialog } from "../legal/TermsConsentDialog";
+import { PlusFeaturesView } from "../plus/PlusFeaturesView";
+import {
+  createRecoveryRefreshGate,
+  recoverPlusPurchases,
+  showsPlusUntil,
+} from "../plus/plusUiLogic";
+import { presentPlusOffer } from "./plusOffer";
 
 const STATE_LABELS = {
   none: "plusStateNone",
@@ -323,11 +329,19 @@ export function PlusSettings({
       ? t(ERROR_LABELS[error as keyof typeof ERROR_LABELS])
       : userErrorMessage(t, { data: { error } }, "plusErrorFailed")
     : null;
-  if (loading) return <Spinner label={t("loading")} />;
+  if (loading) return <LoadingState text={t("loading")} />;
   if (status?.extension.state === "absent")
-    return <p className="text-sm text-muted">{t("plusNotIncluded")}</p>;
+    return (
+      <Callout tone="info" title={t("plusTitle")}>
+        {t("plusNotIncluded")}
+      </Callout>
+    );
   if (status && !status.configured)
-    return <p className="text-sm text-muted">{t("plusNotAvailable")}</p>;
+    return (
+      <Callout tone="info" title={t("plusTitle")}>
+        {t("plusNotAvailable")}
+      </Callout>
+    );
   if (!status)
     return (
       <Card className="flex items-center justify-between gap-3">
@@ -359,107 +373,123 @@ export function PlusSettings({
   const disabled = !!busy || productLoading;
 
   return (
-    <Card className="flex flex-col gap-4">
-      <CardHeader
-        title={t("plusTitle")}
-        actions={
-          android ? (
-            <>
-              <IconButton
-                label={t("plusManage")}
-                icon={<ExternalLink size={18} />}
-                disabled={disabled}
-                onClick={() =>
-                  void run("manage", async () => {
-                    const result = plusManage();
-                    if (!result.ok) failure(result.code);
-                  })
-                }
-              />
-              <IconButton
-                label={t("refresh")}
-                icon={<RefreshCw size={18} />}
-                disabled={disabled}
-                loading={busy === "refresh"}
-                onClick={refresh}
-              />
-            </>
-          ) : undefined
-        }
-      />
-      <div className="flex flex-wrap items-center gap-2" aria-live="polite">
-        <span className="text-sm text-muted">{t("plusStatus")}</span>
-        <StatusPill tone={subscribed ? "ok" : "neutral"}>
-          {t(STATE_LABELS[status.entitlement.state])}
-        </StatusPill>
-        {showsPlusUntil(status.entitlement.state) && validUntil && (
-          <time dateTime={status.entitlement.until || undefined} className="text-sm text-muted">
-            {fill(t("plusUntil"), { date: until.toLocaleString(language) })}
-          </time>
-        )}
-      </div>
-      <p className="text-sm text-muted">{t(EXTENSION_LABELS[status.extension.state])}</p>
-      {!android ? (
-        <p className="text-sm text-muted">{t("plusAndroidOnly")}</p>
-      ) : (
-        <>
-          <Toggle
-            label={t("plusEnabled")}
-            description={t("plusEnabledDescription")}
-            checked={enabled}
-            disabled={disabled}
-            onChange={(value) => void run("toggle", () => onEnabledChange(value))}
-          />
-          {productLoading && <Spinner label={t("loading")} />}
-          {monthlyOffer && (
-            <div className="flex flex-col gap-3">
-              <p className="text-sm text-text-main">{monthlyOffer.price}</p>
-              {!subscribed && (
-                <>
-                  <p id="plus-disclosure" className="text-sm text-muted">
+    <div className="flex flex-col gap-4">
+      <Card className="flex flex-col gap-3">
+        <CardHeader
+          icon={<CrownIcon className="size-5 text-brand-cyan" />}
+          title={t("plusTitle")}
+          description={t(EXTENSION_LABELS[status.extension.state])}
+          actions={
+            android ? (
+              <>
+                <IconButton
+                  label={t("plusManage")}
+                  icon={<ExternalLink size={18} />}
+                  disabled={disabled}
+                  onClick={() =>
+                    void run("manage", async () => {
+                      const result = plusManage();
+                      if (!result.ok) failure(result.code);
+                    })
+                  }
+                />
+                <IconButton
+                  label={t("refresh")}
+                  icon={<RefreshCw size={18} />}
+                  disabled={disabled}
+                  loading={busy === "refresh"}
+                  onClick={refresh}
+                />
+                <OverflowMenu label={t("more")}>
+                  <MenuItem
+                    icon={<RotateCcw size={16} />}
+                    disabled={disabled}
+                    onSelect={() => setConfirmRestore(true)}
+                  >
+                    {t("plusRestore")}
+                  </MenuItem>
+                  <MenuItem icon={<FileText size={16} />} onSelect={() => setTermsOpen(true)}>
+                    {t("plusViewTerms")}
+                  </MenuItem>
+                </OverflowMenu>
+              </>
+            ) : undefined
+          }
+        />
+
+        <div className="flex flex-wrap items-center gap-2" aria-live="polite">
+          <span className="text-xs font-medium text-muted">{t("plusStatus")}</span>
+          <StatusPill tone={subscribed ? "ok" : "neutral"}>
+            {t(STATE_LABELS[status.entitlement.state])}
+          </StatusPill>
+          {showsPlusUntil(status.entitlement.state) && validUntil && (
+            <time dateTime={status.entitlement.until || undefined} className="text-xs text-muted">
+              {fill(t("plusUntil"), { date: until.toLocaleDateString(language) })}
+            </time>
+          )}
+          {monthlyOffer && <Badge tone="info">{monthlyOffer.price}</Badge>}
+        </div>
+
+        {!android ? (
+          <p className="text-xs text-muted">{t("plusAndroidOnly")}</p>
+        ) : (
+          <>
+            <Toggle
+              label={t("plusEnabled")}
+              description={t("plusEnabledDescription")}
+              checked={enabled}
+              disabled={disabled}
+              onChange={(value) => void run("toggle", () => onEnabledChange(value))}
+            />
+            {productLoading && <Spinner label={t("loading")} />}
+            {!subscribed && (
+              <div className="flex flex-col gap-2">
+                {monthlyOffer && (
+                  <p id="plus-disclosure" className="text-xs text-muted">
                     {monthlyOffer.disclosure}
                   </p>
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {monthlyOffer && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      aria-describedby="plus-disclosure"
+                      disabled={disabled}
+                      loading={busy === "subscribe"}
+                      onClick={subscribe}
+                    >
+                      {t("plusSubscribe")}
+                    </Button>
+                  )}
                   <Button
-                    variant="primary"
-                    className="self-start"
-                    aria-describedby="plus-disclosure"
+                    variant="secondary"
+                    size="sm"
                     disabled={disabled}
-                    loading={busy === "subscribe"}
-                    onClick={subscribe}
+                    loading={busy === "restore"}
+                    onClick={() => setConfirmRestore(true)}
                   >
-                    {t("plusSubscribe")}
+                    {t("plusRestore")}
                   </Button>
-                </>
-              )}
-            </div>
-          )}
-          <Button
-            variant="secondary"
-            className="self-start"
-            disabled={disabled}
-            loading={busy === "restore"}
-            onClick={() => setConfirmRestore(true)}
-          >
-            {t("plusRestore")}
-          </Button>
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm text-muted">{t("plusActiveInstallationLimit")}</p>
-            <Button variant="ghost" size="sm" onClick={() => setTermsOpen(true)}>
-              {t("plusViewTerms")}
-            </Button>
-          </div>
-        </>
-      )}
-      {notice && (
-        <p role="status" className="text-sm text-info">
-          {t(notice)}
-        </p>
-      )}
-      {message && (
-        <p role="alert" className="text-sm text-danger">
-          {message}
-        </p>
-      )}
+                </div>
+              </div>
+            )}
+            <p className="text-xs text-muted">{t("plusActiveInstallationLimit")}</p>
+          </>
+        )}
+
+        {notice && (
+          <p role="status" className="text-xs text-info">
+            {t(notice)}
+          </p>
+        )}
+        {message && (
+          <p role="alert" className="text-xs text-danger">
+            {message}
+          </p>
+        )}
+      </Card>
+
       <ConfirmDialog
         isOpen={confirmRestore}
         onClose={() => {
@@ -478,6 +508,6 @@ export function PlusSettings({
       />
       <TermsViewerDialog isOpen={termsOpen} onClose={() => setTermsOpen(false)} />
       {status.extension.state === "active" && <PlusFeaturesView />}
-    </Card>
+    </div>
   );
 }

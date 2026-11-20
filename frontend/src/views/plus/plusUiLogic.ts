@@ -1,5 +1,23 @@
 // file: frontend/src/views/plus/plusUiLogic.ts
-import type { PlusLocale, PlusTemplateMode } from "./types";
+import {
+  type LabelCopy,
+  type RecipientLike,
+  type RecipientParts,
+  labelRecipients,
+} from "../../utils/recipientLabel.ts";
+import {
+  type AutoReplyChat,
+  type AutoReplyPolicy,
+  type AutoReplyScopeMode,
+  CHAT_JID_PATTERN,
+  DEFAULT_AUTO_REPLY_POLICY,
+  PLUS_LIMITS,
+  type PlusLocale,
+  type PlusPreset,
+  type PlusTemplateKey,
+  type PlusTemplateMode,
+  isGroupJid,
+} from "./types.ts";
 
 export function showsPlusUntil(state: string): boolean {
   return state === "active" || state === "grace" || state === "canceled";
@@ -153,9 +171,42 @@ export function createWriteQueue(): WriteQueue {
   };
 }
 
+const SAMPLE_PLACEHOLDER_VALUES: Readonly<Record<string, string>> = Object.freeze({
+  name: "Levix",
+  count: "3",
+  quotedText: "Hello!",
+  user: "Alex",
+  sender: "Alex",
+  member: "Alex",
+  winner: "Alex",
+  who: "Alex",
+  group: "Family",
+  n: "5",
+  total: "5",
+  limit: "5",
+  max: "10",
+  min: "1",
+  page: "1",
+  pages: "3",
+  emoji: "👍",
+  prefix: "!",
+  city: "Cairo",
+  place: "Cairo",
+  time: "09:00",
+  date: "2026-11-20",
+  pack: "Favorites",
+  text: "Sample message",
+  message: "Sample message",
+  content: "Sample message",
+  transcription: "Sample voice note",
+  summary: "Chat summary",
+  url: "https://example.com",
+});
+
 export function samplePlaceholderValue(name: string): string {
-  if (name === "name") return "Levix";
-  if (name === "count") return "3";
+  if (Object.hasOwn(SAMPLE_PLACEHOLDER_VALUES, name)) {
+    return SAMPLE_PLACEHOLDER_VALUES[name];
+  }
   return `<${name}>`;
 }
 
@@ -179,4 +230,250 @@ export function getDraftText(
     return sourceText;
   }
   return manual[locale]?.trim() || "";
+}
+
+function filled(value: string | undefined): string {
+  const text = value ?? "";
+  return text.trim() ? text : "";
+}
+
+/** Panel language, then English. A saved override wins over the shipped catalog. */
+export function visibleTemplateText(item: PlusTemplateKey, locale: PlusLocale): string {
+  const values = item.override?.values;
+  const source = item.override?.source;
+  const overrideText = (loc: PlusLocale) =>
+    filled(values?.[loc]) || (source?.locale === loc ? filled(source.text) : "");
+  return (
+    overrideText(locale) ||
+    filled(item.catalog[locale]) ||
+    (locale === "en" ? "" : overrideText("en")) ||
+    filled(item.catalog.en)
+  );
+}
+
+/** Human-readable preview for list rows: placeholders are always substituted with sample values. */
+export function visibleTemplatePreview(item: PlusTemplateKey, locale: PlusLocale): string {
+  const raw = visibleTemplateText(item, locale);
+  return raw ? substitutePlaceholders(raw) : "";
+}
+
+export type MessageSort = "area" | "customized" | "command";
+
+export function filterAndSortTemplateKeys(
+  keys: readonly PlusTemplateKey[],
+  options: {
+    search: string;
+    area: string;
+    onlyCustomized: boolean;
+    sort: MessageSort;
+    areaOf: (key: string) => string;
+    areaLabel: (key: string) => string;
+    commandOf: (key: string) => string | null;
+    locale?: string;
+  },
+): PlusTemplateKey[] {
+  const needle = options.search.trim().toLowerCase();
+  const filtered = keys.filter((item) => {
+    if (options.area !== "all" && options.areaOf(item.key) !== options.area) return false;
+    if (options.onlyCustomized && !item.override) return false;
+    if (!needle) return true;
+    const preview = [
+      ...Object.values(item.catalog),
+      ...Object.values(item.override?.values ?? {}),
+      item.override?.source?.text,
+    ]
+      .filter((value): value is string => typeof value === "string")
+      .join("\n")
+      .toLowerCase();
+    const command = (options.commandOf(item.key) ?? "").toLowerCase();
+    const areaName = options.areaLabel(item.key).toLowerCase();
+    return preview.includes(needle) || command.includes(needle) || areaName.includes(needle);
+  });
+
+  const loc = options.locale || "en";
+  return [...filtered].sort((a, b) => {
+    if (options.sort === "customized") {
+      const aCustom = a.override ? 1 : 0;
+      const bCustom = b.override ? 1 : 0;
+      if (aCustom !== bCustom) return bCustom - aCustom;
+    } else if (options.sort === "command") {
+      const aCmd = options.commandOf(a.key) ?? "\uffff";
+      const bCmd = options.commandOf(b.key) ?? "\uffff";
+      const cmp = aCmd.localeCompare(bCmd, loc);
+      if (cmp !== 0) return cmp;
+    }
+    const areaCmp = options.areaLabel(a.key).localeCompare(options.areaLabel(b.key), loc);
+    if (areaCmp !== 0) return areaCmp;
+    return a.key.localeCompare(b.key);
+  });
+}
+
+export type PresetTranslationKey =
+  | "plusPresetMinimalName"
+  | "plusPresetMinimalDesc"
+  | "plusPresetProfessionalName"
+  | "plusPresetProfessionalDesc"
+  | "plusPresetFunName"
+  | "plusPresetFunDesc";
+
+/** Localized name and description for known Plus presets, with safe fallback to server text. */
+export function presetDisplayCopy(
+  preset: Pick<PlusPreset, "id" | "name" | "description">,
+  t: (key: PresetTranslationKey) => string,
+): { name: string; description: string } {
+  const id = String(preset.id || "")
+    .trim()
+    .toLowerCase();
+  if (id === "minimal") {
+    return {
+      name: t("plusPresetMinimalName") || preset.name,
+      description: t("plusPresetMinimalDesc") || preset.description,
+    };
+  }
+  if (id === "professional") {
+    return {
+      name: t("plusPresetProfessionalName") || preset.name,
+      description: t("plusPresetProfessionalDesc") || preset.description,
+    };
+  }
+  if (id === "fun") {
+    return {
+      name: t("plusPresetFunName") || preset.name,
+      description: t("plusPresetFunDesc") || preset.description,
+    };
+  }
+  return { name: preset.name, description: preset.description };
+}
+
+/**
+ * Switching the response scope mode keeps both the selected chat rows (`chats`)
+ * and the excluded JIDs list (`excludedChats`) intact.
+ */
+export function setAutoReplyScopeMode<
+  T extends {
+    scopeMode?: AutoReplyScopeMode;
+    chats: AutoReplyChat[];
+    excludedChats?: string[];
+  },
+>(state: T, scopeMode: AutoReplyScopeMode): T {
+  return {
+    ...state,
+    scopeMode,
+    chats: [...state.chats],
+    excludedChats: Array.isArray(state.excludedChats) ? [...state.excludedChats] : [],
+  };
+}
+
+export function addExcludedChat(
+  excludedChats: readonly string[],
+  jid: string,
+  max: number = PLUS_LIMITS.autoReplyExcludedChats,
+): {
+  excludedChats: string[];
+  added: boolean;
+  reason: "invalid" | "duplicate" | "limit" | null;
+} {
+  const value = String(jid || "").trim();
+  if (!CHAT_JID_PATTERN.test(value)) {
+    return { excludedChats: [...excludedChats], added: false, reason: "invalid" };
+  }
+  if (excludedChats.includes(value)) {
+    return { excludedChats: [...excludedChats], added: false, reason: "duplicate" };
+  }
+  if (excludedChats.length >= max) {
+    return { excludedChats: [...excludedChats], added: false, reason: "limit" };
+  }
+  return { excludedChats: [...excludedChats, value], added: true, reason: null };
+}
+
+export function removeExcludedChat(excludedChats: readonly string[], jid: string): string[] {
+  const value = String(jid || "").trim();
+  return excludedChats.filter((item) => item !== value);
+}
+
+export function createDefaultAutoReplyChat(
+  jid: string,
+  policy: AutoReplyPolicy = DEFAULT_AUTO_REPLY_POLICY,
+): AutoReplyChat {
+  const value = String(jid || "").trim();
+  const group = isGroupJid(value);
+  return {
+    jid: value,
+    enabled: true,
+    trigger: group ? policy.groupTrigger : policy.privateTrigger,
+    keywords: [],
+    instructions: "",
+    cooldownSeconds: policy.cooldownSeconds,
+    perSenderPerHour: policy.perSenderPerHour,
+    perChatPerHour: policy.perChatPerHour,
+    globalMemory: { read: false },
+  };
+}
+
+export function addAutoReplyChat(
+  chats: readonly AutoReplyChat[],
+  jid: string,
+  policy: AutoReplyPolicy = DEFAULT_AUTO_REPLY_POLICY,
+  max: number = PLUS_LIMITS.autoReplyChats,
+): {
+  chats: AutoReplyChat[];
+  chat: AutoReplyChat | null;
+  added: boolean;
+  reason: "invalid" | "duplicate" | "limit" | null;
+} {
+  const value = String(jid || "").trim();
+  if (!CHAT_JID_PATTERN.test(value)) {
+    return { chats: [...chats], chat: null, added: false, reason: "invalid" };
+  }
+  if (chats.some((item) => item.jid === value)) {
+    return { chats: [...chats], chat: null, added: false, reason: "duplicate" };
+  }
+  if (chats.length >= max) {
+    return { chats: [...chats], chat: null, added: false, reason: "limit" };
+  }
+  const chat = createDefaultAutoReplyChat(value, policy);
+  return { chats: [...chats, chat], chat, added: true, reason: null };
+}
+
+export function removeAutoReplyChat(chats: readonly AutoReplyChat[], jid: string): AutoReplyChat[] {
+  const value = String(jid || "").trim();
+  return chats.filter((item) => item.jid !== value);
+}
+
+export function fallbackRecipientForJid(jid: string): RecipientLike {
+  const clean = String(jid || "").trim();
+  if (clean.endsWith("@g.us")) {
+    return { id: clean, type: "group", nameSource: "none" };
+  }
+  const phoneMatch = /^(\d+)@s\.whatsapp\.net$/i.exec(clean);
+  if (phoneMatch) {
+    return {
+      id: clean,
+      type: "contact",
+      phone: `+${phoneMatch[1]}`,
+      nameSource: "phone",
+    };
+  }
+  return { id: clean, type: "contact", nameSource: "none" };
+}
+
+export function describeAutoReplyPeers(
+  jids: readonly string[],
+  recipients: readonly RecipientLike[],
+  t: LabelCopy,
+  locale = "en",
+): Map<string, RecipientParts> {
+  const byId = new Map<string, RecipientLike>();
+  for (const item of recipients) {
+    const id = String(item.id || item.targetJid || "").trim();
+    if (id) byId.set(id, item);
+  }
+  const uniqueJids = [...new Set(jids.map((jid) => String(jid || "").trim()).filter(Boolean))];
+  const items = uniqueJids.map((jid) => byId.get(jid) ?? fallbackRecipientForJid(jid));
+  const parts = labelRecipients(items, t, locale);
+  const out = new Map<string, RecipientParts>();
+  uniqueJids.forEach((jid, idx) => {
+    if (parts[idx]) out.set(jid, parts[idx]);
+  });
+  return out;
 }

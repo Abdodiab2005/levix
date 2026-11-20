@@ -7,14 +7,16 @@ import {
   Card,
   Checkbox,
   ConfirmDialog,
+  Disclosure,
   EmptyState,
   LoadingState,
   UserText,
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
-import { areaLabelKey } from "../../utils/templateLabels";
 import { fill } from "../../utils/fill";
+import { areaLabelKey } from "../../utils/templateLabels";
 import { plusErrorCode, plusErrorMessage, plusGet, plusPost } from "./plusApi";
+import { presetDisplayCopy, substitutePlaceholders } from "./plusUiLogic";
 import type { PlusPreset, PlusPresetsResponse } from "./types";
 
 export function PresetsTab({ onInactive }: { onInactive: () => void }) {
@@ -94,59 +96,76 @@ export function PresetsTab({ onInactive }: { onInactive: () => void }) {
     );
   }
 
+  const pendingCopy = pending ? presetDisplayCopy(pending, t) : null;
+
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted">{t("plusPresetsIntro")}</p>
+    <div className="flex flex-col gap-3">
+      <p className="text-xs text-muted">{t("plusPresetsIntro")}</p>
       {error && (
-        <p role="alert" className="text-sm text-danger">
+        <p role="alert" className="text-xs text-danger">
           {error}
         </p>
       )}
       {applied !== null && (
-        <p role="status" className="text-sm text-ok">
+        <p role="status" className="text-xs text-ok">
           {fill(t("plusPresetApplied"), { n: applied })}
         </p>
       )}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {(data?.presets ?? []).map((preset) => (
-          <Card key={preset.id} className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <UserText as="strong" className="min-w-0 flex-1 text-sm font-bold text-text-main">
-                {preset.name}
-              </UserText>
-              {data?.active === preset.id && <Badge tone="ok">{t("plusPresetActive")}</Badge>}
-            </div>
-            <UserText as="p" className="text-sm text-muted">
-              {preset.description}
-            </UserText>
-            <ul className="flex flex-col gap-2">
-              {preset.preview.slice(0, 3).map((line) => (
-                <li key={line.key}>
-                  <UserText as="p" lines={2} className="text-sm text-text-main">
-                    {line.text}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        {(data?.presets ?? []).map((preset) => {
+          const copy = presetDisplayCopy(preset, t);
+          return (
+            <Card key={preset.id} className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                  <UserText as="strong" className="text-sm font-bold text-text-main">
+                    {copy.name}
                   </UserText>
-                  <p className="mt-0.5 text-[11px] text-faint">{t(areaLabelKey(line.key))}</p>
-                </li>
-              ))}
-            </ul>
-            <Button
-              variant="secondary"
-              className="mt-auto self-start"
-              onClick={() => {
-                setPending(preset);
-                setOverwriteManual(false);
-              }}
-            >
-              {t("plusPresetApply")}
-            </Button>
-          </Card>
-        ))}
+                  {data?.active === preset.id && <Badge tone="ok">{t("plusPresetActive")}</Badge>}
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setPending(preset);
+                    setOverwriteManual(false);
+                  }}
+                >
+                  {t("plusPresetApply")}
+                </Button>
+              </div>
+              <UserText as="p" className="text-xs text-muted">
+                {copy.description}
+              </UserText>
+              {preset.preview.length > 0 && (
+                <Disclosure
+                  summary={
+                    <span className="text-xs font-semibold text-muted">
+                      {t("plusPresetExamples")}
+                    </span>
+                  }
+                >
+                  <ul className="flex flex-col gap-2">
+                    {preset.preview.slice(0, 3).map((line) => (
+                      <li key={line.key}>
+                        <UserText as="p" lines={2} className="text-xs text-text-main">
+                          {substitutePlaceholders(line.text)}
+                        </UserText>
+                        <p className="mt-0.5 text-[11px] text-faint">{t(areaLabelKey(line.key))}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </Disclosure>
+              )}
+            </Card>
+          );
+        })}
       </div>
       <ConfirmDialog
         isOpen={pending !== null}
         onClose={() => setPending(null)}
         onConfirm={() => void apply()}
-        title={fill(t("plusPresetConfirmTitle"), { name: pending?.name ?? "" })}
+        title={fill(t("plusPresetConfirmTitle"), { name: pendingCopy?.name ?? "" })}
         description={t("plusPresetConfirmBody")}
         confirmLabel={t("plusPresetApply")}
         cancelLabel={t("cancel")}
