@@ -24,7 +24,7 @@ const {
   downloadMedia,
   geminiMediaPart,
 } = require("../utils/geminiMedia.cjs");
-const { t } = require("../utils/i18n.cjs");
+const { t, currentLang } = require("../utils/i18n.cjs");
 const aiIdentity = require("../config/ai-identity.cjs");
 const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
@@ -218,6 +218,52 @@ function buildSystemInstruction(context = {}) {
   return [aiIdentity.systemBlock, loadPersona(), runtime, memoryBlock].filter(Boolean).join("\n\n");
 }
 
+function attachHistoryProvenance(turns, { provider = null, model = null } = {}) {
+  const list = Array.isArray(turns) ? turns : [];
+  if (provider !== null || model !== null || list.provider !== undefined || list.model !== undefined) {
+    Object.defineProperties(list, {
+      provider: {
+        value: typeof provider === "string" && provider ? provider : null,
+        writable: true,
+        configurable: true,
+      },
+      model: {
+        value: typeof model === "string" && model ? model : null,
+        writable: true,
+        configurable: true,
+      },
+    });
+  }
+  return list;
+}
+
+function unpackHistoryInput(history) {
+  if (Array.isArray(history)) {
+    return {
+      turns: history,
+      provider: typeof history.provider === "string" && history.provider ? history.provider : null,
+      model: typeof history.model === "string" && history.model ? history.model : null,
+    };
+  }
+  if (history && typeof history === "object") {
+    const turns = Array.isArray(history.history)
+      ? history.history
+      : Array.isArray(history.turns)
+        ? history.turns
+        : Array.isArray(history.entries)
+          ? history.entries
+          : [];
+    const provider = history.provider ?? turns.provider ?? null;
+    const model = history.model ?? turns.model ?? null;
+    return {
+      turns,
+      provider: typeof provider === "string" && provider ? provider : null,
+      model: typeof model === "string" && model ? model : null,
+    };
+  }
+  return { turns: [], provider: null, model: null };
+}
+
 /** A turn the conversation can legally start from. */
 function isOpeningTurn(entry) {
   if (entry?.role !== "user") return false;
@@ -233,14 +279,15 @@ function isOpeningTurn(entry) {
  */
 function trimHistory(history) {
   const maxEntries = settings.get("ai_max_history");
-  const out = Array.isArray(history) ? [...history] : [];
+  const { turns, provider, model } = unpackHistoryInput(history);
+  const out = [...turns];
   while (out.length > maxEntries) out.shift();
   while (out.length && !isOpeningTurn(out[0])) out.shift();
   // A budget-exhausted model call has no response. Drop the whole turn so
   // retained parts (including Gemini thought signatures) remain untouched.
   while (out.at(-1)?.role === "model" && out.at(-1).parts?.some((part) => part?.functionCall))
     out.pop();
-  return out;
+  return attachHistoryProvenance(out, { provider, model });
 }
 
 /**
@@ -270,8 +317,9 @@ function isFileReferenceError(error) {
 
 /** Drop every uploaded-media part so a stale file URI can't poison the chat. */
 function sanitizeHistoryForFiles(history) {
-  if (!Array.isArray(history)) return [];
-  return history
+  const { turns, provider, model } = unpackHistoryInput(history);
+  if (!turns.length) return attachHistoryProvenance([], { provider, model });
+  const out = turns
     .map((turn) => {
       if (!turn?.parts) return turn;
       const parts = turn.parts.filter((part) => !part?.fileData && !part?.inlineData);
@@ -279,6 +327,159 @@ function sanitizeHistoryForFiles(history) {
       return { ...turn, parts };
     })
     .filter(Boolean);
+  return attachHistoryProvenance(out, { provider, model });
+}
+
+/**
+ * Does this error mean Gemini rejected a thought signature on a 400 INVALID_ARGUMENT?
+ */
+function isThoughtSignatureError(error) {
+  if (!error) return false;
+  const numStatus = Number(
+    error.status ??
+      error.statusCode ??
+      (typeof error.code === "number" ? error.code : undefined) ??
+      error.response?.status ??
+      error.error?.code ??
+      0,
+  );
+  const text = [
+    error.message,
+    error.details,
+    error.statusText,
+    error.error?.message,
+    error.error?.status,
+    typeof error.status === "string" ? error.status : "",
+    typeof error.code === "string" ? error.code : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  if (numStatus && numStatus !== 400) return false;
+  if (!numStatus && !/\b400\b|invalid_argument/i.test(text)) return false;
+  return /thought[\s_-]*signature/i.test(text);
+}
+
+/**
+ * Sanitize prior history to plain user/model text turns: drop every prior-turn
+ * functionCall/functionResponse entry and every thought part (and signatures).
+ */
+function sanitizeHistoryForThoughtSignatures(history) {
+  const { turns } = unpackHistoryInput(history);
+  const out = [];
+  for (const entry of turns) {
+    if (!entry || (entry.role !== "user" && entry.role !== "model") || !Array.isArray(entry.parts)) {
+      continue;
+    }
+    if (entry.parts.some((part) => part?.functionCall || part?.functionResponse)) {
+      continue;
+    }
+    const parts = [];
+    for (const part of entry.parts) {
+      if (part?.thought === true) continue;
+      if (typeof part?.text === "string" && part.text.length > 0) {
+        parts.push({ text: part.text });
+      }
+    }
+    if (parts.length) {
+      out.push({ role: entry.role, parts });
+    }
+  }
+  return trimHistory(out);
+}
+
+/**
+ * Classify an AI error into a fixed user-facing category so raw provider JSON
+ * or SDK error messages never reach WhatsApp.
+ */
+function classifyAiError(error) {
+  const numStatus = Number(
+    error?.status ??
+      error?.statusCode ??
+      (typeof error?.code === "number" ? error.code : undefined) ??
+      error?.response?.status ??
+      error?.error?.code ??
+      0,
+  );
+  const code = typeof error?.code === "string" ? error.code : "";
+  const text = [
+    error?.message,
+    error?.details,
+    error?.statusText,
+    error?.error?.message,
+    error?.error?.status,
+    typeof error?.status === "string" ? error.status : "",
+    code,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (isThoughtSignatureError(error) || /thought[\s_-]*signature/i.test(text)) {
+    return "signature";
+  }
+  if (
+    /\bsafety\b|prohibited_content|recitation|content[\s_-]*filter|content_policy|harm_category|finish_reason[:\s"]*safety|blocked by safety|blocked due to safety/i.test(
+      text,
+    )
+  ) {
+    return "safety";
+  }
+  if (
+    numStatus === 429 ||
+    code === "IMAGE_QUOTA" ||
+    /resource_exhausted|\bquota\b|rate[\s_-]*limit|too many requests|\b429\b|insufficient_quota/i.test(
+      text,
+    )
+  ) {
+    return "quota";
+  }
+  if (
+    numStatus === 401 ||
+    numStatus === 403 ||
+    code === "IMAGE_KEY_REQUIRED" ||
+    /api[\s_-]*key|invalid_api_key|api_key_invalid|unauthenticated|unauthorized|authentication|permission_denied|invalid.*key|key.*not.*configured|no.*api.*key|لم يُضبط مفتاح/i.test(
+      text,
+    )
+  ) {
+    return "apiKey";
+  }
+  if (
+    (numStatus >= 500 && numStatus < 600) ||
+    error?.name === "AbortError" ||
+    /timed?\s*out|\btimeout\b|econnrefused|econnreset|enotfound|ehostunreach|enetunreach|eai_again|socket hang up|fetch failed|network|service[\s_-]*unavailable|unavailable|bad gateway|gateway timeout|overloaded|internal error|\b50[0234]\b/i.test(
+      text,
+    )
+  ) {
+    return "unavailable";
+  }
+  return "generic";
+}
+
+const AI_ERROR_KEYS = Object.freeze({
+  signature: "bot.ai.gemini.errorThoughtSignature",
+  quota: "bot.ai.gemini.errorQuota",
+  apiKey: "bot.ai.gemini.errorApiKey",
+  safety: "bot.ai.gemini.errorSafety",
+  unavailable: "bot.ai.gemini.errorUnavailable",
+  generic: "bot.ai.gemini.errorGeneric",
+});
+
+function describeAiError(error) {
+  const kind = classifyAiError(error);
+  const key = AI_ERROR_KEYS[kind] || AI_ERROR_KEYS.generic;
+  const translated = t(key);
+  if (translated && translated !== key) return translated;
+  const shortKey = key.replace(/^bot\.ai\./, "");
+  for (const locale of [currentLang(), "en"]) {
+    try {
+      const bundle = JSON.parse(
+        fs.readFileSync(assetPath("i18n", locale, "bot", "ai.json"), "utf8"),
+      );
+      if (typeof bundle?.[shortKey] === "string" && bundle[shortKey]) {
+        return bundle[shortKey];
+      }
+    } catch {}
+  }
+  return translated;
 }
 
 function isAgentEnabled() {
@@ -521,7 +722,20 @@ async function runAgent(options = {}) {
     history: trimHistory(options.history),
     systemInstruction: buildSystemInstruction(options.context),
   });
-  return { ...result, history: trimHistory(result.history) };
+  const provenance = {
+    provider: result.provider ?? result.history?.provider ?? provider.id ?? null,
+    model:
+      result.model ??
+      result.history?.model ??
+      (provider.modelSetting ? settings.get(provider.modelSetting) : null),
+  };
+  const history = attachHistoryProvenance(trimHistory(result.history), provenance);
+  return {
+    ...result,
+    provider: provenance.provider,
+    model: provenance.model,
+    history,
+  };
 }
 
 async function runGeminiTurn({
@@ -541,8 +755,15 @@ async function runGeminiTurn({
 
   const stepBudget = maxSteps ?? settings.get("ai_max_tool_steps");
   const instruction = systemInstruction || buildSystemInstruction(context);
-  const trimmed = trimHistory(history);
   const model = settings.get("gemini_model");
+  const { turns: rawTurns, provider: historyProvider, model: historyModel } =
+    unpackHistoryInput(history);
+  const provenanceMismatch =
+    (Boolean(historyProvider) && historyProvider !== "gemini") ||
+    (Boolean(historyModel) && historyModel !== model);
+  let activeHistory = provenanceMismatch
+    ? sanitizeHistoryForThoughtSignatures(rawTurns)
+    : trimHistory(rawTurns);
 
   // `ai.chats` rather than a hand-rolled contents array on purpose. Gemini 3
   // returns a `thoughtSignature` on the parts it produces and expects it back
@@ -551,12 +772,12 @@ async function runGeminiTurn({
   // circulating it is not something this file has to remember to do. Levix
   // persists that same history, and a signature is a plain string, so it
   // survives the round trip through SQLite too.
-  const openChat = (search) => {
+  const openChat = (search, chatHistory = activeHistory) => {
     const tools = buildTools({ useTools, search });
     const toolConfig = buildToolConfig({ useTools, search });
     return genAI.chats.create({
       model,
-      history: trimmed,
+      history: chatHistory,
       config: {
         systemInstruction: instruction,
         ...(signal ? { abortSignal: signal } : {}),
@@ -569,7 +790,7 @@ async function runGeminiTurn({
   // One-shot callers (the summarize tool) pass search:false explicitly; the
   // chat agent follows the setting.
   let searchOffered = search === null ? googleSearchEnabled() : Boolean(search);
-  let chat = openChat(searchOffered);
+  let chat = openChat(searchOffered, activeHistory);
   const toolCalls = [];
   // Only ever filled from real grounding metadata; see extractSources().
   const sources = [];
@@ -578,18 +799,29 @@ async function runGeminiTurn({
   try {
     response = await chat.sendMessage({ message: parts });
   } catch (error) {
-    // Defensive only. Gemini 3 takes the built-in search and custom functions
-    // in one request, so this is not the expected path — but a model that
-    // refuses the combination must not cost Levix its own tools, which the
-    // commands depend on. Search is what gets dropped, never the functions.
-    if (!searchOffered || !isToolCombinationError(error)) throw error;
-    logger.warn(
-      { err: error?.message, model },
-      "[aiAgent] this model refused Google Search together with function tools — retrying with functions only",
-    );
-    searchOffered = false;
-    chat = openChat(false);
-    response = await chat.sendMessage({ message: parts });
+    if (isThoughtSignatureError(error)) {
+      logger.warn(
+        { err: error?.message, model },
+        "[aiAgent] thought signature rejected on first send — retrying once with sanitized history",
+      );
+      activeHistory = sanitizeHistoryForThoughtSignatures(activeHistory);
+      chat = openChat(searchOffered, activeHistory);
+      response = await chat.sendMessage({ message: parts });
+    } else if (searchOffered && isToolCombinationError(error)) {
+      // Defensive only. Gemini 3 takes the built-in search and custom functions
+      // in one request, so this is not the expected path — but a model that
+      // refuses the combination must not cost Levix its own tools, which the
+      // commands depend on. Search is what gets dropped, never the functions.
+      logger.warn(
+        { err: error?.message, model },
+        "[aiAgent] this model refused Google Search together with function tools — retrying with functions only",
+      );
+      searchOffered = false;
+      chat = openChat(false, activeHistory);
+      response = await chat.sendMessage({ message: parts });
+    } else {
+      throw error;
+    }
   }
 
   sources.push(...extractSources(response));
@@ -665,7 +897,10 @@ async function runGeminiTurn({
     // Synchronous in this SDK, and `true` asks for the curated history — the
     // turns the API would actually accept back, with empty or invalid model
     // outputs left out. That is exactly what Levix wants to persist.
-    newHistory = trimHistory(chat.getHistory(true));
+    newHistory = attachHistoryProvenance(trimHistory(chat.getHistory(true)), {
+      provider: "gemini",
+      model,
+    });
   } catch (err) {
     logger.warn({ err: err?.message }, "[aiAgent] could not read chat history");
   }
@@ -673,6 +908,8 @@ async function runGeminiTurn({
   return {
     text,
     history: newHistory,
+    provider: "gemini",
+    model,
     toolCalls,
     steps,
     // Empty unless Gemini actually grounded this answer on a search.
@@ -683,12 +920,18 @@ async function runGeminiTurn({
 
 module.exports = {
   runAgent,
+  runGeminiTurn,
   buildTools,
   buildToolConfig,
   googleSearchEnabled,
   extractSources,
   formatSources,
   isToolCombinationError,
+  isThoughtSignatureError,
+  sanitizeHistoryForThoughtSignatures,
+  classifyAiError,
+  describeAiError,
+  attachHistoryProvenance,
   GOOGLE_SEARCH_TOOL,
   buildSystemInstruction,
   loadPersona,

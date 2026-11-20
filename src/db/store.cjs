@@ -1643,18 +1643,110 @@ function countSchedules() {
 // table. The callers are async (they always were, back when this was a
 // separate database), so storage-hub keeps the async signatures.
 
-function getChatHistory(chatId) {
-  const row = q("SELECT history FROM ai_history WHERE chat_id = ?").get(chatId);
-  return row ? parseJson(row.history, []) : [];
+const HISTORY_MODEL_SETTINGS = Object.freeze({
+  gemini: "gemini_model",
+  openai: "openai_model",
+  anthropic: "anthropic_model",
+});
+
+function attachChatHistoryProvenance(turns, { provider = null, model = null } = {}) {
+  const list = Array.isArray(turns) ? turns : [];
+  Object.defineProperties(list, {
+    provider: {
+      value: typeof provider === "string" && provider ? provider : null,
+      writable: true,
+      configurable: true,
+    },
+    model: {
+      value: typeof model === "string" && model ? model : null,
+      writable: true,
+      configurable: true,
+    },
+  });
+  return list;
 }
 
-function saveChatHistory(chatId, historyArray) {
+function unpackChatHistory(raw) {
+  if (Array.isArray(raw)) {
+    return attachChatHistoryProvenance([...raw], { provider: null, model: null });
+  }
+  if (raw && typeof raw === "object") {
+    const turns = Array.isArray(raw.history)
+      ? raw.history
+      : Array.isArray(raw.turns)
+        ? raw.turns
+        : Array.isArray(raw.entries)
+          ? raw.entries
+          : [];
+    return attachChatHistoryProvenance([...turns], {
+      provider: raw.provider,
+      model: raw.model,
+    });
+  }
+  return attachChatHistoryProvenance([], { provider: null, model: null });
+}
+
+function resolveSavedHistoryProvenance(historyInput, meta) {
+  const hasMetaProvider = Boolean(meta && Object.hasOwn(meta, "provider"));
+  const hasMetaModel = Boolean(meta && Object.hasOwn(meta, "model"));
+  const inputProvider =
+    historyInput && typeof historyInput === "object" ? historyInput.provider : undefined;
+  const inputModel =
+    historyInput && typeof historyInput === "object" ? historyInput.model : undefined;
+
+  let activeProvider = null;
+  let activeModel = null;
+  if (
+    !hasMetaProvider &&
+    inputProvider === undefined &&
+    !hasMetaModel &&
+    inputModel === undefined
+  ) {
+    try {
+      const settings = require("../config/settings.cjs");
+      activeProvider = settings.get("ai_provider") || null;
+      const modelKey = activeProvider ? HISTORY_MODEL_SETTINGS[activeProvider] : null;
+      activeModel = modelKey ? settings.get(modelKey) || null : null;
+    } catch {
+      activeProvider = null;
+      activeModel = null;
+    }
+  }
+
+  const provider = hasMetaProvider ? meta.provider : (inputProvider ?? activeProvider);
+  const model = hasMetaModel ? meta.model : (inputModel ?? activeModel);
+  return {
+    provider: typeof provider === "string" && provider ? provider : null,
+    model: typeof model === "string" && model ? model : null,
+  };
+}
+
+function getChatHistory(chatId) {
+  const row = q("SELECT history FROM ai_history WHERE chat_id = ?").get(chatId);
+  return row ? unpackChatHistory(parseJson(row.history, [])) : attachChatHistoryProvenance([]);
+}
+
+function saveChatHistory(chatId, historyArray, meta) {
+  const turns = Array.isArray(historyArray)
+    ? historyArray
+    : Array.isArray(historyArray?.history)
+      ? historyArray.history
+      : [];
+  const { provider, model } = resolveSavedHistoryProvenance(historyArray, meta);
+  const payload =
+    provider || model
+      ? {
+          history: turns,
+          ...(provider ? { provider } : {}),
+          ...(model ? { model } : {}),
+        }
+      : turns;
   q(
     `INSERT INTO ai_history (chat_id, history, updated_at) VALUES (?, ?, ?)
      ON CONFLICT(chat_id) DO UPDATE SET
        history = excluded.history,
        updated_at = excluded.updated_at`,
-  ).run(chatId, JSON.stringify(historyArray || []), Date.now());
+  ).run(chatId, JSON.stringify(payload), Date.now());
 }
 
 function deleteChatHistory(chatId) {
@@ -1674,7 +1766,10 @@ function listChatHistories() {
   return q(
     `SELECT chat_id AS chatId,
             updated_at AS updatedAt,
-            json_array_length(history) AS turns
+            CASE
+              WHEN json_type(history) = 'object' THEN COALESCE(json_array_length(history, '$.history'), 0)
+              ELSE COALESCE(json_array_length(history), 0)
+            END AS turns
      FROM ai_history
      ORDER BY updated_at DESC`,
   ).all();
@@ -1685,7 +1780,13 @@ function getChatHistoryWithMeta(chatId) {
     chatId,
   );
   if (!row) return null;
-  return { history: parseJson(row.history, []), updatedAt: row.updatedAt };
+  const history = unpackChatHistory(parseJson(row.history, []));
+  return {
+    history,
+    provider: history.provider,
+    model: history.model,
+    updatedAt: row.updatedAt,
+  };
 }
 
 // ===================================================================

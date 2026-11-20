@@ -536,6 +536,34 @@ section("provider switches preserve repeated same-name tool/result pairs");
   }
 }
 
+section("provider turns stamp provenance on returned and stored history");
+{
+  const store = harnessRequire("./src/db/store.cjs");
+  settings.set("openai_model", "gpt-5.4-mini");
+  await useOpenAI(
+    [openaiToolCall([{ name: "get_datetime", args: {}, id: "call_prov" }]), openaiText("clocked")],
+    async () => {
+      const result = await aiAgent.runAgent({
+        parts: [{ text: "check time" }],
+        history: [],
+        context: chatContext,
+      });
+      equal("result carries provider", result.provider, "openai");
+      equal("result carries model", result.model, "gpt-5.4-mini");
+      equal("history array carries provider", result.history.provider, "openai");
+      equal("history array carries model", result.history.model, "gpt-5.4-mini");
+
+      store.saveChatHistory(chatContext.chatId, result.history);
+      const loaded = store.getChatHistory(chatContext.chatId);
+      equal("loaded history preserves provider", loaded.provider, "openai");
+      equal("loaded history preserves model", loaded.model, "gpt-5.4-mini");
+      const meta = store.getChatHistoryWithMeta(chatContext.chatId);
+      equal("meta exposes provider", meta.provider, "openai");
+      equal("meta exposes model", meta.model, "gpt-5.4-mini");
+    },
+  );
+}
+
 finish();
 
 // --- helpers ---------------------------------------------------------------

@@ -746,7 +746,7 @@ async function runProviderAgent(
     messages.push(parsed.assistantMessage);
 
     if (!parsed.calls.length) {
-      return finish({ text: parsed.text, canonical, toolCalls, steps, sources });
+      return finish({ text: parsed.text, canonical, toolCalls, steps, sources, provider, model });
     }
     if (steps >= stepBudget) {
       // Same contract as the Gemini loop: the budget answer, not a lie.
@@ -756,6 +756,8 @@ async function runProviderAgent(
         toolCalls,
         steps,
         sources,
+        provider,
+        model,
       });
     }
 
@@ -806,10 +808,26 @@ async function runProviderAgent(
   }
 }
 
-function finish({ text, canonical, toolCalls, steps, sources }) {
+function finish({ text, canonical, toolCalls, steps, sources, provider, model }) {
+  if (Array.isArray(canonical)) {
+    Object.defineProperties(canonical, {
+      provider: {
+        value: typeof provider === "string" && provider ? provider : null,
+        writable: true,
+        configurable: true,
+      },
+      model: {
+        value: typeof model === "string" && model ? model : null,
+        writable: true,
+        configurable: true,
+      },
+    });
+  }
   return {
     text,
     history: canonical,
+    provider: provider || null,
+    model: model || null,
     toolCalls,
     steps,
     // Public bundled doc citations are available independently of web grounding.

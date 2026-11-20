@@ -48,6 +48,8 @@ const {
   isFileReferenceError,
   sanitizeHistoryForFiles,
   activeProviderKeySetting,
+  classifyAiError,
+  describeAiError,
 } = require("../services/aiAgent.cjs");
 const { getProvider } = require("../services/aiRouter.cjs");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
@@ -512,9 +514,15 @@ module.exports = {
         });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload media to Gemini.");
-        return sendBotError(sock, chatId, error, t("bot.ai.gemini.uploadMediaFailed"), {
-          replyTo: msg,
-        });
+        return sendBotError(
+          sock,
+          chatId,
+          new Error(describeAiError(error)),
+          t("bot.ai.gemini.uploadMediaFailed"),
+          {
+            replyTo: msg,
+          },
+        );
       }
     } else if (!parts.length && unwrapMessage(msg.message).audioMessage) {
       // i18n-exception: attachment metadata sent only to the model, not a reply.
@@ -534,9 +542,15 @@ module.exports = {
         });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload document to Gemini.");
-        return sendBotError(sock, chatId, error, t("bot.ai.gemini.uploadFileFailed"), {
-          replyTo: msg,
-        });
+        return sendBotError(
+          sock,
+          chatId,
+          new Error(describeAiError(error)),
+          t("bot.ai.gemini.uploadFileFailed"),
+          {
+            replyTo: msg,
+          },
+        );
       }
     } else if (!parts.length && prompt) {
       parts.push({ text: prompt });
@@ -578,9 +592,15 @@ module.exports = {
           // AND a second reply from a model that had never seen the photo
           // ("I can't see any image") — two messages, the second one wrong.
           logger.error({ err: mediaError }, "Failed to process quoted media");
-          return sendBotError(sock, chatId, mediaError, t("bot.ai.gemini.quotedProblem"), {
-            replyTo: msg,
-          });
+          return sendBotError(
+            sock,
+            chatId,
+            new Error(describeAiError(mediaError)),
+            t("bot.ai.gemini.quotedProblem"),
+            {
+              replyTo: msg,
+            },
+          );
         }
       }
 
@@ -683,7 +703,10 @@ module.exports = {
         context: agentContext,
       });
       if (canSaveHistory() && result.history?.length) {
-        await saveChatHistoryAsync(chatId, result.history);
+        await saveChatHistoryAsync(chatId, result.history, {
+          provider: result.provider,
+          model: result.model,
+        });
       }
       return result;
     }
@@ -702,7 +725,10 @@ module.exports = {
         if (!isCurrentCaller(caller)) return;
         const cleaned = sanitizeHistoryForFiles(oldHistory);
         if (!canSaveHistory()) throw firstErr;
-        await saveChatHistoryAsync(chatId, cleaned);
+        await saveChatHistoryAsync(chatId, cleaned, {
+          provider: cleaned.provider,
+          model: cleaned.model,
+        });
         logger.info(
           `[Gemini] sanitized history: ${oldHistory.length} -> ${cleaned.length}; retrying once`,
         );
@@ -718,9 +744,11 @@ module.exports = {
       await status.finish(responseText);
     } catch (error) {
       logger.error({ err: error }, "Error in !gemini command");
-      await status.fail(error, t("bot.ai.gemini.chatFailed"));
+      await status.fail(new Error(describeAiError(error)), t("bot.ai.gemini.chatFailed"));
     }
   },
 };
 
 module.exports.clearAllContextBuffers = clearAllContextBuffers;
+module.exports.classifyAiError = classifyAiError;
+module.exports.describeAiError = describeAiError;
