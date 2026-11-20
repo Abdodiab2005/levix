@@ -98,7 +98,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
     {
       id: "ai",
       title: t("ai"),
-      desc: t("aiAssistantDesc") || "Autonomous tool-calling AI agent",
+      desc: t("aiAssistantDesc"),
       icon: Bot,
       color: "border-brand-purple/20 bg-brand-purple/10 text-brand-purple",
     },
@@ -112,7 +112,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
     {
       id: "settings",
       title: t("settings"),
-      desc: t("settingsSub") || "Prefix, ports, delays, security & storage",
+      desc: t("settingsSub"),
       icon: Sliders,
       color: "border-ok/20 bg-ok/10 text-ok",
     },
