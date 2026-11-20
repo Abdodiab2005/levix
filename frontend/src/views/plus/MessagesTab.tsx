@@ -7,12 +7,16 @@ import {
   Card,
   CodeText,
   EmptyState,
+  Field,
   FilterButton,
   IconButton,
   Input,
+  ListRow,
   LoadingState,
   Pagination,
+  RadioGroup,
   Select,
+  SortMenu,
   Toolbar,
   UserText,
   usePagination,
@@ -26,32 +30,14 @@ import {
   templateIsLong,
 } from "../../utils/templateLabels";
 import { plusErrorCode, plusErrorMessage, plusGet } from "./plusApi";
-import { TemplateBody, TemplateEditor } from "./TemplateEditor";
+import { type MessageSort, filterAndSortTemplateKeys, visibleTemplatePreview } from "./plusUiLogic";
+import { TemplateEditor } from "./TemplateEditor";
 import {
   type PlusLocale,
   type PlusTemplateKey,
   type PlusTemplatesResponse,
   isPlusLocale,
 } from "./types";
-
-function filled(value: string | undefined): string {
-  const text = value ?? "";
-  return text.trim() ? text : "";
-}
-
-/** Panel language, then English. A saved override wins over the shipped catalog. */
-function visibleTemplateText(item: PlusTemplateKey, locale: PlusLocale): string {
-  const values = item.override?.values;
-  const source = item.override?.source;
-  const overrideText = (loc: PlusLocale) =>
-    filled(values?.[loc]) || (source?.locale === loc ? filled(source.text) : "");
-  return (
-    overrideText(locale) ||
-    filled(item.catalog[locale]) ||
-    (locale === "en" ? "" : overrideText("en")) ||
-    filled(item.catalog.en)
-  );
-}
 
 export function MessagesTab({ onInactive }: { onInactive: () => void }) {
   const { t, language } = useI18n();
@@ -61,6 +47,8 @@ export function MessagesTab({ onInactive }: { onInactive: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [area, setArea] = useState("all");
+  const [onlyCustomized, setOnlyCustomized] = useState(false);
+  const [sort, setSort] = useState<MessageSort>("area");
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
@@ -106,29 +94,27 @@ export function MessagesTab({ onInactive }: { onInactive: () => void }) {
     [areas, language, t],
   );
 
-  const filtered = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return keys.filter((item) => {
-      if (area !== "all" && templateArea(item.key) !== area) return false;
-      if (!needle) return true;
-      const preview = [
-        ...Object.values(item.catalog),
-        ...Object.values(item.override?.values ?? {}),
-        item.override?.source?.text,
-      ]
-        .filter((value): value is string => typeof value === "string")
-        .join("\n")
-        .toLowerCase();
-      const command = templateCommand(item.key) ?? "";
-      const areaName = t(areaLabelKey(item.key)).toLowerCase();
-      return preview.includes(needle) || command.includes(needle) || areaName.includes(needle);
-    });
-  }, [keys, area, search, t]);
+  const filtered = useMemo(
+    () =>
+      filterAndSortTemplateKeys(keys, {
+        search,
+        area,
+        onlyCustomized,
+        sort,
+        areaOf: templateArea,
+        areaLabel: (key) => t(areaLabelKey(key)),
+        commandOf: templateCommand,
+        locale: language,
+      }),
+    [keys, area, onlyCustomized, sort, search, t, language],
+  );
+
+  const activeFilters = (area === "all" ? 0 : 1) + (onlyCustomized ? 1 : 0);
 
   const { page, pageCount, pageItems, setPage, total } = usePagination(
     filtered,
     20,
-    `${search}|${area}`,
+    `${search}|${area}|${onlyCustomized}|${sort}`,
   );
   const editingItem: PlusTemplateKey | null = editingKey
     ? (keys.find((item) => item.key === editingKey) ?? null)
@@ -176,22 +162,50 @@ export function MessagesTab({ onInactive }: { onInactive: () => void }) {
           <FilterButton
             label={t("filter")}
             resetLabel={t("reset")}
-            activeCount={area === "all" ? 0 : 1}
-            onReset={() => setArea("all")}
+            activeCount={activeFilters}
+            onReset={() => {
+              setArea("all");
+              setOnlyCustomized(false);
+            }}
           >
-            <Select
-              aria-label={t("plusMessagesArea")}
-              value={area}
-              onChange={(event) => setArea(event.target.value)}
-            >
-              <option value="all">{t("plusMessagesAreaAll")}</option>
-              {areaOptions.map((option) => (
-                <option key={option.id} value={option.id} dir="auto">
-                  {option.label}
-                </option>
-              ))}
-            </Select>
+            <div className="flex flex-col gap-3">
+              <Field label={t("plusMessagesArea")} htmlFor="plus-messages-area">
+                <Select
+                  id="plus-messages-area"
+                  aria-label={t("plusMessagesArea")}
+                  value={area}
+                  onChange={(event) => setArea(event.target.value)}
+                >
+                  <option value="all">{t("plusMessagesAreaAll")}</option>
+                  {areaOptions.map((option) => (
+                    <option key={option.id} value={option.id} dir="auto">
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <RadioGroup
+                label={t("plusMessagesFilterStatus")}
+                name="plus-messages-status"
+                value={onlyCustomized ? "customized" : "all"}
+                onChange={(value) => setOnlyCustomized(value === "customized")}
+                options={[
+                  { value: "all", label: t("plusMessagesFilterAll") },
+                  { value: "customized", label: t("plusMessagesCustomized") },
+                ]}
+              />
+            </div>
           </FilterButton>
+          <SortMenu
+            label={t("sort")}
+            value={sort}
+            onChange={setSort}
+            options={[
+              { value: "area", label: t("plusMessagesSortArea") },
+              { value: "customized", label: t("plusMessagesSortCustomized") },
+              { value: "command", label: t("plusMessagesSortCommand") },
+            ]}
+          />
         </Toolbar>
       </div>
 
@@ -204,57 +218,66 @@ export function MessagesTab({ onInactive }: { onInactive: () => void }) {
       {total === 0 ? (
         <EmptyState kind="no-results" title={t("plusMessagesNoResults")} />
       ) : (
-        <ul className="divide-y divide-line">
+        <ul className="flex flex-col gap-2 p-4">
           {pageItems.map((item) => {
-            const preview = visibleTemplateText(item, panelLocale);
+            const preview = visibleTemplatePreview(item, panelLocale);
             const command = templateCommand(item.key);
             const open = expanded.has(item.key);
             const long = templateIsLong(preview);
             return (
-              <li key={item.key} className="flex items-start gap-2 p-3 sm:gap-3 sm:p-4">
-                <div className="min-w-0 flex-1">
-                  <p className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+              <ListRow
+                key={item.key}
+                as="li"
+                variant="raised"
+                onClick={() => setEditingKey(item.key)}
+                title={
+                  <UserText
+                    lines={open ? undefined : 2}
+                    title={open ? undefined : preview || t("plusMessagesNoPreview")}
+                    className="font-normal text-text-main"
+                  >
+                    {preview || t("plusMessagesNoPreview")}
+                  </UserText>
+                }
+                meta={
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span>{t(areaLabelKey(item.key))}</span>
                     {command && <CodeText className="text-xs">{`!${command}`}</CodeText>}
                     {item.override && <Badge tone="info">{t("plusMessagesCustomized")}</Badge>}
-                  </p>
-                  <UserText
-                    as="p"
-                    lines={open ? undefined : 2}
-                    title={open ? undefined : preview || t("plusMessagesNoPreview")}
-                    className="text-sm text-text-main"
-                  >
-                    {preview ? <TemplateBody text={preview} /> : t("plusMessagesNoPreview")}
-                  </UserText>
-                </div>
-                {long && (
-                  <IconButton
-                    label={open ? t("plusMessagesShowLess") : t("plusMessagesShowFull")}
-                    aria-expanded={open}
-                    icon={
-                      <ChevronDown
-                        size={16}
-                        className={
-                          open ? "rotate-180 transition-transform" : "transition-transform"
+                  </span>
+                }
+                trailing={
+                  <>
+                    {long && (
+                      <IconButton
+                        label={open ? t("plusMessagesShowLess") : t("plusMessagesShowFull")}
+                        aria-expanded={open}
+                        icon={
+                          <ChevronDown
+                            size={16}
+                            className={
+                              open ? "rotate-180 transition-transform" : "transition-transform"
+                            }
+                          />
+                        }
+                        onClick={() =>
+                          setExpanded((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(item.key)) next.delete(item.key);
+                            else next.add(item.key);
+                            return next;
+                          })
                         }
                       />
-                    }
-                    onClick={() =>
-                      setExpanded((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(item.key)) next.delete(item.key);
-                        else next.add(item.key);
-                        return next;
-                      })
-                    }
-                  />
-                )}
-                <IconButton
-                  label={t("plusMessagesEdit")}
-                  icon={<Pencil size={16} />}
-                  onClick={() => setEditingKey(item.key)}
-                />
-              </li>
+                    )}
+                    <IconButton
+                      label={t("plusMessagesEdit")}
+                      icon={<Pencil size={16} />}
+                      onClick={() => setEditingKey(item.key)}
+                    />
+                  </>
+                }
+              />
             );
           })}
         </ul>

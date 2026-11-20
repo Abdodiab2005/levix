@@ -1,16 +1,32 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
+  addAutoReplyChat,
+  addExcludedChat,
   createLatestReader,
   createRecoveryRefreshGate,
   createRequestGeneration,
   createWriteQueue,
+  describeAutoReplyPeers,
+  fallbackRecipientForJid,
+  filterAndSortTemplateKeys,
   getDraftText,
+  presetDisplayCopy,
   RECOVERY_REFRESH_COOLDOWN_MS,
   recoverPlusPurchases,
+  removeAutoReplyChat,
+  removeExcludedChat,
   samplePlaceholderValue,
+  setAutoReplyScopeMode,
   showsPlusUntil,
   substitutePlaceholders,
+  visibleTemplatePreview,
 } from "../frontend/src/views/plus/plusUiLogic.ts";
-import { equal, finish, ok, section } from "./harness.mjs";
+import {
+  DEFAULT_AUTO_REPLY_POLICY,
+  normalizeAutoReplyConfig,
+} from "../frontend/src/views/plus/types.ts";
+import { equal, finish, ok, ROOT, section } from "./harness.mjs";
 
 const deepEqual = (label, actual, expected) =>
   equal(label, JSON.stringify(actual), JSON.stringify(expected));
@@ -511,6 +527,458 @@ for (const state of ["active", "grace", "canceled", "clock"]) {
     error = err.message;
   }
   equal("a refresh failure reaches the caller", error, "NETWORK");
+}
+
+section(
+  "U4: Auto Reply v1 save-path preserves scopeMode, groupsEnabled, excludedChats and policy round-trip",
+);
+
+{
+  const fullV1 = {
+    schemaVersion: 1,
+    enabled: false,
+    killSwitch: false,
+    globalPerHour: 40,
+    scopeMode: "except",
+    groupsEnabled: true,
+    chats: [
+      {
+        jid: "123@s.whatsapp.net",
+        enabled: true,
+        trigger: "keywords",
+        keywords: ["urgent"],
+        instructions: "Row instructions",
+        cooldownSeconds: 30,
+        perSenderPerHour: 8,
+        perChatPerHour: 25,
+        globalMemory: { read: true },
+      },
+    ],
+    excludedChats: ["999@s.whatsapp.net", "888@g.us"],
+    policy: {
+      privateTrigger: "keywords",
+      groupTrigger: "mention",
+      keywords: ["support"],
+      instructions: "Global policy instructions",
+      cooldownSeconds: 45,
+      perSenderPerHour: 12,
+      perChatPerHour: 50,
+      globalMemory: { read: true },
+    },
+  };
+
+  const toggledEnabled = normalizeAutoReplyConfig(fullV1, { enabled: true });
+  deepEqual("enabling preserves all v1 fields round-trip", toggledEnabled, {
+    ...fullV1,
+    enabled: true,
+  });
+
+  const toggledKill = normalizeAutoReplyConfig(toggledEnabled, { killSwitch: true });
+  deepEqual("kill switch toggle preserves all v1 fields round-trip", toggledKill, {
+    ...fullV1,
+    enabled: true,
+    killSwitch: true,
+  });
+
+  const editedForm = normalizeAutoReplyConfig(toggledKill, {
+    globalPerHour: 100,
+    chats: [],
+  });
+  deepEqual(
+    "form save updates globalPerHour and chats while keeping scopeMode, groupsEnabled, excludedChats and policy",
+    editedForm,
+    {
+      ...fullV1,
+      enabled: true,
+      killSwitch: true,
+      globalPerHour: 100,
+      chats: [],
+    },
+  );
+
+  // Legacy v0 config without schemaVersion/scopeMode never widens on save (C-A1).
+  const legacyV0 = {
+    enabled: true,
+    killSwitch: false,
+    globalPerHour: 30,
+    chats: fullV1.chats,
+  };
+  const migratedV0 = normalizeAutoReplyConfig(legacyV0);
+  equal("v0 config normalizes to schemaVersion 1", migratedV0.schemaVersion, 1);
+  equal("v0 config defaults scopeMode to only (never widens)", migratedV0.scopeMode, "only");
+  equal(
+    "v0 config defaults groupsEnabled to true so listed groups keep working",
+    migratedV0.groupsEnabled,
+    true,
+  );
+  deepEqual("v0 config defaults excludedChats to empty array", migratedV0.excludedChats, []);
+  deepEqual(
+    "v0 config defaults policy to DEFAULT_AUTO_REPLY_POLICY",
+    migratedV0.policy,
+    DEFAULT_AUTO_REPLY_POLICY,
+  );
+
+  // Partial v1 config with schemaVersion 1 defaults missing optional fields sensibly.
+  const partialV1 = {
+    schemaVersion: 1,
+    enabled: false,
+    killSwitch: false,
+    globalPerHour: 30,
+    chats: [],
+  };
+  const normalizedPartialV1 = normalizeAutoReplyConfig(partialV1);
+  equal("partial v1 without a mode stays only", normalizedPartialV1.scopeMode, "only");
+  equal("partial v1 defaults groupsEnabled to false", normalizedPartialV1.groupsEnabled, false);
+  deepEqual("partial v1 defaults excludedChats to []", normalizedPartialV1.excludedChats, []);
+  deepEqual("partial v1 defaults policy", normalizedPartialV1.policy, DEFAULT_AUTO_REPLY_POLICY);
+}
+
+section("U5: scope mode switching keeps both selected chats and excluded chats lists");
+
+{
+  const initialChats = [
+    {
+      jid: "201111111111@s.whatsapp.net",
+      enabled: true,
+      trigger: "all",
+      keywords: [],
+      instructions: "VIP contact",
+      cooldownSeconds: 15,
+      perSenderPerHour: 12,
+      perChatPerHour: 40,
+      globalMemory: { read: false },
+    },
+    {
+      jid: "120363111111111@g.us",
+      enabled: false,
+      trigger: "keywords",
+      keywords: ["help", "bot"],
+      instructions: "Support group",
+      cooldownSeconds: 30,
+      perSenderPerHour: 5,
+      perChatPerHour: 20,
+      globalMemory: { read: true },
+    },
+  ];
+  const initialExcluded = ["201999999999@s.whatsapp.net", "120363999999999@g.us"];
+
+  const startState = {
+    scopeMode: "only",
+    globalPerHour: 50,
+    chats: initialChats,
+    excludedChats: initialExcluded,
+  };
+
+  const toExcept = setAutoReplyScopeMode(startState, "except");
+  equal("mode switched to except", toExcept.scopeMode, "except");
+  deepEqual("switching to except keeps selected chats list", toExcept.chats, initialChats);
+  deepEqual(
+    "switching to except keeps excludedChats list",
+    toExcept.excludedChats,
+    initialExcluded,
+  );
+
+  const toAll = setAutoReplyScopeMode(toExcept, "all");
+  equal("mode switched to all", toAll.scopeMode, "all");
+  deepEqual("switching to all keeps selected chats list", toAll.chats, initialChats);
+  deepEqual("switching to all keeps excludedChats list", toAll.excludedChats, initialExcluded);
+
+  const backToOnly = setAutoReplyScopeMode(toAll, "only");
+  equal("mode switched back to only", backToOnly.scopeMode, "only");
+  deepEqual("switching back to only keeps selected chats list", backToOnly.chats, initialChats);
+  deepEqual(
+    "switching back to only keeps excludedChats list",
+    backToOnly.excludedChats,
+    initialExcluded,
+  );
+}
+
+section("U6: excluded list and selected chat list add/remove pure helpers");
+
+{
+  let excluded = [];
+  const r1 = addExcludedChat(excluded, "201234567890@s.whatsapp.net");
+  equal("valid contact JID is added to excluded list", r1.added, true);
+  equal("no rejection reason for valid contact JID", r1.reason, null);
+  excluded = r1.excludedChats;
+
+  const r2 = addExcludedChat(excluded, "120363123456789@g.us");
+  equal("valid group JID is added to excluded list", r2.added, true);
+  excluded = r2.excludedChats;
+  deepEqual("excluded list holds both JIDs in order", excluded, [
+    "201234567890@s.whatsapp.net",
+    "120363123456789@g.us",
+  ]);
+
+  const dup = addExcludedChat(excluded, "201234567890@s.whatsapp.net");
+  equal("duplicate excluded JID is rejected", dup.added, false);
+  equal("duplicate reason is duplicate", dup.reason, "duplicate");
+  deepEqual("duplicate attempt leaves excluded list unchanged", dup.excludedChats, excluded);
+
+  const bad = addExcludedChat(excluded, "not-a-valid-jid");
+  equal("invalid JID is rejected", bad.added, false);
+  equal("invalid reason is invalid", bad.reason, "invalid");
+
+  const capped = addExcludedChat(excluded, "111111111111111@lid", 2);
+  equal("adding past limit is rejected", capped.added, false);
+  equal("limit reason is limit", capped.reason, "limit");
+
+  const afterRemove = removeExcludedChat(excluded, "201234567890@s.whatsapp.net");
+  deepEqual("removeExcludedChat removes the target JID only", afterRemove, [
+    "120363123456789@g.us",
+  ]);
+  deepEqual(
+    "removeExcludedChat with unknown JID leaves list intact",
+    removeExcludedChat(afterRemove, "999999999@s.whatsapp.net"),
+    ["120363123456789@g.us"],
+  );
+
+  // Selected chat rows add/remove
+  let chats = [];
+  const c1 = addAutoReplyChat(chats, "201234567890@s.whatsapp.net", DEFAULT_AUTO_REPLY_POLICY);
+  equal("contact chat row added", c1.added, true);
+  equal("contact chat defaults to privateTrigger (all)", c1.chat?.trigger, "all");
+  chats = c1.chats;
+
+  const c2 = addAutoReplyChat(chats, "120363123456789@g.us", DEFAULT_AUTO_REPLY_POLICY);
+  equal("group chat row added", c2.added, true);
+  equal("group chat defaults to groupTrigger (mention)", c2.chat?.trigger, "mention");
+  chats = c2.chats;
+
+  const cDup = addAutoReplyChat(chats, "120363123456789@g.us", DEFAULT_AUTO_REPLY_POLICY);
+  equal("duplicate chat row rejected", cDup.added, false);
+  equal("duplicate chat reason", cDup.reason, "duplicate");
+
+  const remainingChats = removeAutoReplyChat(chats, "201234567890@s.whatsapp.net");
+  equal("removeAutoReplyChat leaves 1 chat", remainingChats.length, 1);
+  equal("remaining chat is the group", remainingChats[0].jid, "120363123456789@g.us");
+}
+
+section("U7: preview rendering never shows a raw placeholder");
+
+{
+  const rawPlaceholderPattern = /\{[A-Za-z_][A-Za-z0-9_]*\}/;
+  equal(
+    "sample value for quotedText is friendly text",
+    samplePlaceholderValue("quotedText"),
+    "Hello!",
+  );
+  ok(
+    "quotedText sample is not a raw placeholder",
+    !rawPlaceholderPattern.test(samplePlaceholderValue("quotedText")),
+  );
+
+  const templateItem = {
+    key: "bot.tools.quote",
+    placeholders: ["quotedText", "count", "name", "customToken"],
+    catalog: {
+      en: "Quoted: {quotedText} ({count} by {name}, {customToken})",
+      ar: "اقتباس: {quotedText} ({count} من {name}، {customToken})",
+    },
+    override: null,
+  };
+
+  for (const loc of ["en", "ar", "pt-BR", "es-419"]) {
+    const rendered = visibleTemplatePreview(templateItem, loc);
+    ok(`${loc}: preview is non-empty`, rendered.length > 0);
+    ok(`${loc}: preview never contains a raw {placeholder}`, !rawPlaceholderPattern.test(rendered));
+    ok(`${loc}: preview does not contain {quotedText}`, !rendered.includes("{quotedText}"));
+    ok(`${loc}: preview does not contain {count}`, !rendered.includes("{count}"));
+  }
+
+  // Verify every bot catalog template across all locales renders without raw placeholders.
+  for (const loc of ["en", "ar", "pt-BR", "es-419"]) {
+    const botDir = join(ROOT, "i18n", loc, "bot");
+    for (const file of readdirSync(botDir)) {
+      if (!file.endsWith(".json")) continue;
+      const entries = JSON.parse(readFileSync(join(botDir, file), "utf8"));
+      for (const [key, val] of Object.entries(entries)) {
+        if (typeof val !== "string") continue;
+        const preview = substitutePlaceholders(val);
+        ok(
+          `${loc}/${file}:${key} preview has no raw placeholder`,
+          !rawPlaceholderPattern.test(preview),
+          preview,
+        );
+      }
+    }
+  }
+}
+
+section("U8: Auto Reply peer resolution never displays raw JIDs and uses unknown-contact fallback");
+
+{
+  const enCatalog = JSON.parse(readFileSync(join(ROOT, "i18n/en/dashboard.json"), "utf8"));
+  const t = (key) => enCatalog[key] || "";
+  const recipients = [
+    {
+      id: "201222222222@s.whatsapp.net",
+      name: "Saved Contact",
+      savedName: "Saved Contact",
+      phone: "+201222222222",
+      type: "contact",
+      nameSource: "saved",
+    },
+    {
+      id: "120363111111111@g.us",
+      name: "Project Group",
+      type: "group",
+      memberCount: 8,
+      nameSource: "subject",
+    },
+  ];
+  const jids = [
+    "201222222222@s.whatsapp.net",
+    "120363111111111@g.us",
+    "201000000010@s.whatsapp.net",
+    "111111111111111@lid",
+    "120363999999999@g.us",
+  ];
+  const peers = describeAutoReplyPeers(jids, recipients, t, "en");
+  equal(
+    "known contact shows saved name",
+    peers.get("201222222222@s.whatsapp.net")?.title,
+    "Saved Contact",
+  );
+  equal(
+    "known group shows group subject",
+    peers.get("120363111111111@g.us")?.title,
+    "Project Group",
+  );
+  ok(
+    "unlisted phone JID formats as phone number without @s.whatsapp.net",
+    peers.get("201000000010@s.whatsapp.net")?.title.startsWith("+") &&
+      !peers.get("201000000010@s.whatsapp.net")?.title.includes("@"),
+  );
+  equal(
+    "unlisted LID uses existing unknown-contact label",
+    peers.get("111111111111111@lid")?.title,
+    enCatalog.recipientUnknownContact,
+  );
+  equal(
+    "unlisted group uses existing unnamed-group label",
+    peers.get("120363999999999@g.us")?.title,
+    enCatalog.recipientUnnamedGroup,
+  );
+  for (const [jid, part] of peers) {
+    ok(
+      `peer label for ${jid} never contains raw @ domain`,
+      !part.title.includes("@") && !part.subtitle.includes("@"),
+    );
+  }
+  equal(
+    "fallbackRecipientForJid marks @g.us as group",
+    fallbackRecipientForJid("123@g.us").type,
+    "group",
+  );
+}
+
+section(
+  "U9: preset localization, message filtering/sorting, and preset examples collapsed by default",
+);
+
+{
+  for (const loc of ["en", "ar", "pt-BR", "es-419"]) {
+    const catalog = JSON.parse(readFileSync(join(ROOT, "i18n", loc, "dashboard.json"), "utf8"));
+    const t = (key) => catalog[key] || "";
+    for (const id of ["minimal", "professional", "fun"]) {
+      const copy = presetDisplayCopy(
+        { id, name: "Fallback Name", description: "Fallback Description" },
+        t,
+      );
+      ok(
+        `${loc} ${id} preset has localized name`,
+        copy.name.length > 0 && copy.name !== "Fallback Name",
+      );
+      ok(
+        `${loc} ${id} preset has localized description`,
+        copy.description.length > 0 && copy.description !== "Fallback Description",
+      );
+    }
+  }
+
+  const sampleKeys = [
+    {
+      key: "bot.tools.weather.done",
+      placeholders: [],
+      catalog: { en: "Weather ready" },
+      override: null,
+    },
+    {
+      key: "bot.core.ping.pong",
+      placeholders: [],
+      catalog: { en: "Pong!" },
+      override: {
+        mode: "original",
+        source: { locale: "en", text: "Custom Pong!" },
+        values: { en: "Custom Pong!" },
+        manual: [],
+        translated: [],
+        failed: [],
+        updatedAt: 1,
+      },
+    },
+  ];
+
+  const onlyCustom = filterAndSortTemplateKeys(sampleKeys, {
+    search: "",
+    area: "all",
+    onlyCustomized: true,
+    sort: "area",
+    areaOf: (k) => k.split(".")[1] || "",
+    areaLabel: (k) => k.split(".")[1] || "",
+    commandOf: (k) => k.split(".")[2] || null,
+  });
+  equal("onlyCustomized filter returns 1 customized key", onlyCustom.length, 1);
+  equal("onlyCustomized returns the customized key", onlyCustom[0].key, "bot.core.ping.pong");
+
+  const sortedCustomFirst = filterAndSortTemplateKeys(sampleKeys, {
+    search: "",
+    area: "all",
+    onlyCustomized: false,
+    sort: "customized",
+    areaOf: (k) => k.split(".")[1] || "",
+    areaLabel: (k) => k.split(".")[1] || "",
+    commandOf: (k) => k.split(".")[2] || null,
+  });
+  equal(
+    "customized sort places customized item first",
+    sortedCustomFirst[0].key,
+    "bot.core.ping.pong",
+  );
+
+  // Static check: preset examples are collapsed in a Disclosure by default.
+  const presetsSource = readFileSync(join(ROOT, "frontend/src/views/plus/PresetsTab.tsx"), "utf8");
+  ok("PresetsTab imports Disclosure from components/ui", /\bDisclosure\b/.test(presetsSource));
+  const disclosureIdx = presetsSource.indexOf("<Disclosure");
+  const previewIdx = presetsSource.indexOf("preset.preview.slice");
+  ok(
+    "preset examples are rendered inside a collapsed-by-default Disclosure",
+    disclosureIdx !== -1 && previewIdx > disclosureIdx,
+  );
+  ok(
+    "preset examples substitute placeholders in preview text",
+    presetsSource.includes("substitutePlaceholders(line.text)"),
+  );
+
+  // Static check: MessagesTab renders human-readable previews without TemplateBody raw tokens.
+  const messagesSource = readFileSync(
+    join(ROOT, "frontend/src/views/plus/MessagesTab.tsx"),
+    "utf8",
+  );
+  ok("MessagesTab uses ListRow", /\bListRow\b/.test(messagesSource));
+  ok(
+    "MessagesTab uses FilterButton and SortMenu",
+    /\bFilterButton\b/.test(messagesSource) && /\bSortMenu\b/.test(messagesSource),
+  );
+  ok(
+    "MessagesTab renders visibleTemplatePreview",
+    messagesSource.includes("visibleTemplatePreview("),
+  );
+  ok(
+    "MessagesTab does not render raw TemplateBody tokens in list rows",
+    !messagesSource.includes("<TemplateBody"),
+  );
 }
 
 finish();

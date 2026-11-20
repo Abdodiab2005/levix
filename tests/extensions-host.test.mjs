@@ -767,4 +767,197 @@ section("host subscribers observe real state changes and isolate listener failur
   }
 }
 
+section("host advertises scopeDescriptor capability and accepts array or descriptor scopes");
+{
+  const autoReply = require("./src/extensions/autoReply.cjs");
+  const PRIVATE_UNLISTED = "201555555555@s.whatsapp.net";
+  const PRIVATE_EXCLUDED = "201666666666@s.whatsapp.net";
+  const GROUP_JID = "120363000000000099@g.us";
+  let currentScopeValue = [PRIVATE_UNLISTED];
+  let seenCtx = null;
+  let considered = [];
+  const sent = [];
+
+  autoReply.resetAutoReplyDeps();
+  autoReply.setAutoReplyDeps({
+    accountEpoch: () => 1,
+    isLinkedSelf: () => false,
+    getMessageFromRecent: async () => undefined,
+    settingsGet: () => 5000,
+    resolveCaller: async ({ msg }) => ({
+      chatId: msg.key.remoteJid,
+      isGroup: msg.key.remoteJid.endsWith("@g.us"),
+      isOwner: false,
+    }),
+    runAgent: async () => ({ text: "reply" }),
+    groupMetadataCache: {
+      resolveGroupMetadata: async () => ({ id: GROUP_JID, participants: [] }),
+      getRosterVersion: () => "0:0",
+      isRosterStale: () => false,
+    },
+    sendBotMessage: async (_sock, jid, _content, options) => {
+      await options.deliveryGuard.refresh();
+      options.deliveryGuard.assert();
+      sent.push(jid);
+    },
+  });
+
+  const host = makeHost({
+    entitlement: fakeEntitlement(true),
+    loadModule: () =>
+      validMod({
+        async activate(ctx) {
+          seenCtx = ctx;
+          return handlers({
+            autoReply: {
+              scope: () => currentScopeValue,
+              consider: async (event) => {
+                considered.push(event.chatJid);
+                return { reply: true };
+              },
+            },
+          });
+        },
+      }),
+  });
+
+  const msgFor = (jid, id) => ({
+    key: {
+      remoteJid: jid,
+      id,
+      fromMe: false,
+      ...(jid.endsWith("@g.us") ? { participant: PRIVATE_UNLISTED } : {}),
+    },
+    message: { conversation: "hello" },
+  });
+
+  try {
+    await host.start();
+    equal("ctx.autoReply.scopeDescriptor advertised", seenCtx?.autoReply?.scopeDescriptor, true);
+    ok("ctx.autoReply frozen", Object.isFrozen(seenCtx?.autoReply));
+
+    // 1. Legacy array treated as mode "only".
+    await host.dispatchAutoReply({}, msgFor(PRIVATE_UNLISTED, "arr-1"), 1);
+    await host.dispatchAutoReply({}, msgFor(PRIVATE_EXCLUDED, "arr-2"), 1);
+    equal("array scope admits listed chat only", sent.join(","), PRIVATE_UNLISTED);
+
+    // 2. Descriptor mode "all" with groupsEnabled false.
+    sent.length = 0;
+    considered = [];
+    currentScopeValue = {
+      mode: "all",
+      groupsEnabled: false,
+      chats: [],
+      excluded: [],
+    };
+    seenCtx.invalidateScope();
+    await host.dispatchAutoReply({}, msgFor(PRIVATE_EXCLUDED, "all-dm"), 1);
+    await host.dispatchAutoReply({}, msgFor(GROUP_JID, "all-grp-off"), 1);
+    equal("all mode admits unlisted private chat", sent.join(","), PRIVATE_EXCLUDED);
+    equal("groupsEnabled false drops group in prefilter", considered.join(","), PRIVATE_EXCLUDED);
+
+    // 3. Descriptor mode "except" with groupsEnabled true.
+    sent.length = 0;
+    considered = [];
+    currentScopeValue = {
+      mode: "except",
+      groupsEnabled: true,
+      chats: [],
+      excluded: [PRIVATE_EXCLUDED],
+    };
+    seenCtx.invalidateScope();
+    await host.dispatchAutoReply({}, msgFor(PRIVATE_EXCLUDED, "exc-dropped"), 1);
+    await host.dispatchAutoReply({}, msgFor(PRIVATE_UNLISTED, "exc-dm"), 1);
+    await host.dispatchAutoReply({}, msgFor(GROUP_JID, "exc-grp"), 1);
+    equal(
+      "except mode drops excluded chat and admits others",
+      sent.join(","),
+      `${PRIVATE_UNLISTED},${GROUP_JID}`,
+    );
+
+    // 4. Malformed descriptors fail closed to empty "only" (no replies).
+    for (const [idx, malformed] of [
+      null,
+      undefined,
+      "all",
+      42,
+      {},
+      { mode: "everyone", groupsEnabled: true, chats: [], excluded: [] },
+      { mode: "all", groupsEnabled: "true", chats: [], excluded: [] },
+      { mode: "all", groupsEnabled: true, chats: [123], excluded: [] },
+      { mode: "except", groupsEnabled: true, chats: [], excluded: [null] },
+      { mode: "except", groupsEnabled: true, chats: [] },
+      { mode: "only", groupsEnabled: true, excluded: [] },
+      { mode: "all", groupsEnabled: true, chats: [], excluded: [], extra: true },
+      [123],
+      [""],
+    ].entries()) {
+      sent.length = 0;
+      considered = [];
+      currentScopeValue = malformed;
+      seenCtx.invalidateScope();
+      await host.dispatchAutoReply({}, msgFor(PRIVATE_UNLISTED, `mal-${idx}`), 1);
+      equal(`malformed scope #${idx} prefilters out every chat`, considered.length, 0);
+      equal(`malformed scope #${idx} sends nothing`, sent.length, 0);
+    }
+
+    // 5. Host dispatch applies alias matching in prefilter with mapped/unmapped LID chats.
+    const PN_MAPPED = "201333333333@s.whatsapp.net";
+    const LID_MAPPED = "333333@lid";
+    const LID_UNMAPPED = "444444@lid";
+
+    autoReply.setAutoReplyDeps({
+      roleIdentityAliases: (jid) => {
+        if (jid === PN_MAPPED || jid === LID_MAPPED) {
+          return [jid, jid === PN_MAPPED ? LID_MAPPED : PN_MAPPED];
+        }
+        return [jid];
+      },
+    });
+
+    // 5a. Phone exclusion blocks mapped LID form in host dispatch
+    sent.length = 0;
+    considered = [];
+    currentScopeValue = {
+      mode: "except",
+      groupsEnabled: true,
+      chats: [],
+      excluded: [PN_MAPPED],
+    };
+    seenCtx.invalidateScope();
+    await host.dispatchAutoReply({}, msgFor(LID_MAPPED, "exc-mapped-lid"), 1);
+    equal("host prefilter: phone exclusion blocks mapped LID form", considered.length, 0);
+    equal("host prefilter: no send for mapped LID form", sent.length, 0);
+
+    // 5b. Phone exclusion blocks unmapped LID form (fail closed)
+    await host.dispatchAutoReply({}, msgFor(LID_UNMAPPED, "exc-unmapped-lid"), 1);
+    equal(
+      "host prefilter: phone exclusion blocks unmapped LID (fail closed)",
+      considered.length,
+      0,
+    );
+
+    // 5c. "only" mode with phone entry admits mapped LID form
+    sent.length = 0;
+    considered = [];
+    currentScopeValue = {
+      mode: "only",
+      groupsEnabled: false,
+      chats: [PN_MAPPED],
+      excluded: [],
+    };
+    seenCtx.invalidateScope();
+    await host.dispatchAutoReply({}, msgFor(LID_MAPPED, "only-mapped-lid"), 1);
+    equal(
+      "host prefilter: only with phone entry admits mapped LID",
+      considered.join(","),
+      LID_MAPPED,
+    );
+    equal("host send for mapped LID", sent.length, 1);
+  } finally {
+    await host.stop();
+    autoReply.resetAutoReplyDeps();
+  }
+}
+
 finish();

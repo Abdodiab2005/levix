@@ -103,12 +103,5 @@
     "matched": "<button",
     "reason": "legitimate: mobile navigation backdrop click target",
     "count": 1
-  },
-  {
-    "file": "frontend/src/views/plus/AutoReplyTab.tsx",
-    "rule": "raw-identifier",
-    "matched": "{chat.jid}",
-    "reason": "fixed in PR-6",
-    "count": 1
   }
 ]

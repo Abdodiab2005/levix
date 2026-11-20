@@ -6,6 +6,7 @@ import {
   Button,
   Card,
   Checkbox,
+  CodeText,
   EmptyState,
   Field,
   FormActions,
@@ -17,7 +18,7 @@ import {
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
-import { withPlus, plusErrorCode, plusErrorMessage, plusGet, plusPut } from "./plusApi";
+import { plusErrorCode, plusErrorMessage, plusGet, plusPut, withPlus } from "./plusApi";
 import { createWriteQueue } from "./plusUiLogic";
 import type { PlusVisibility } from "./types";
 
@@ -239,12 +240,11 @@ function VisibilityForm({
         {form.draft.hideProgress === "selected" && (
           <Field
             label={t("plusVisibilityCommands")}
-            description={fill(t("plusVisibilitySelectedCount"), {
+            description={`${fill(t("plusVisibilitySelectedCount"), {
               n: form.draft.commands.length,
               max: commands.length,
-            })}
+            })} · ${t("plusVisibilityCommandsHint")}`}
           >
-            <p className="text-xs text-muted">{t("plusVisibilityCommandsHint")}</p>
             <Input
               type="search"
               value={search}
@@ -252,17 +252,13 @@ function VisibilityForm({
               aria-label={t("plusVisibilityCommands")}
               onChange={(event) => setSearch(event.target.value)}
             />
-            <div className="flex max-h-72 flex-col gap-1 overflow-y-auto rounded-xl border border-line bg-panel-raised/40 p-3">
+            <div className="grid max-h-72 grid-cols-1 gap-1 overflow-y-auto rounded-xl border border-line bg-panel-raised/40 p-3 sm:grid-cols-2">
               {visibleCommands.map((name) => (
                 <Checkbox
                   key={name}
                   checked={form.draft.commands.includes(name)}
                   onChange={(event) => toggleCommand(name, event.target.checked)}
-                  label={
-                    <span dir="ltr" className="font-mono text-sm">
-                      {name}
-                    </span>
-                  }
+                  label={<CodeText className="text-xs">{name}</CodeText>}
                 />
               ))}
             </div>

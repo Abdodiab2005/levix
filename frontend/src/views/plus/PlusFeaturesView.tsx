@@ -1,7 +1,7 @@
 // file: frontend/src/views/plus/PlusFeaturesView.tsx
 import { Bot, EyeOff, MessageSquareHeart, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Tabs } from "../../components/ui";
+import { Callout, Tabs } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { type PlusFeatureTab, plusHash, plusTabFromHash } from "../../utils/plusAccess";
 import { AutoReplyTab } from "./AutoReplyTab";
@@ -42,7 +42,12 @@ export function PlusFeaturesView() {
     })();
   }, []);
 
-  if (inactive) return <p className="text-sm text-muted">{t("plusExtErrorInactive")}</p>;
+  if (inactive)
+    return (
+      <Callout tone="warn" title={t("plusTitle")}>
+        {t("plusExtErrorInactive")}
+      </Callout>
+    );
 
   return (
     <div className="flex flex-col gap-4">

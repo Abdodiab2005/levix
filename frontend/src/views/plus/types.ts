@@ -68,6 +68,20 @@ export type PlusVisibility = {
 };
 
 export type AutoReplyTrigger = "all" | "mention" | "keywords";
+export type AutoReplyScopeMode = "all" | "except" | "only";
+
+export type AutoReplyPolicy = {
+  privateTrigger: AutoReplyTrigger;
+  groupTrigger: AutoReplyTrigger;
+  keywords: string[];
+  instructions: string;
+  cooldownSeconds: number;
+  perSenderPerHour: number;
+  perChatPerHour: number;
+  globalMemory: {
+    read: boolean;
+  };
+};
 
 export type AutoReplyChat = {
   jid: string;
@@ -84,11 +98,68 @@ export type AutoReplyChat = {
 };
 
 export type AutoReplyConfig = {
+  schemaVersion?: 1;
   enabled: boolean;
   killSwitch: boolean;
   globalPerHour: number;
+  scopeMode?: AutoReplyScopeMode;
+  groupsEnabled?: boolean;
   chats: AutoReplyChat[];
+  excludedChats?: string[];
+  policy?: AutoReplyPolicy;
 };
+
+export const DEFAULT_AUTO_REPLY_POLICY: AutoReplyPolicy = Object.freeze({
+  privateTrigger: "all",
+  groupTrigger: "mention",
+  keywords: [],
+  instructions: "",
+  cooldownSeconds: 20,
+  perSenderPerHour: 10,
+  perChatPerHour: 30,
+  globalMemory: Object.freeze({ read: false }),
+});
+
+/**
+ * Preserves v1 Auto Reply fields round-trip on save and applies C-A1 defaults
+ * when an older v0 document without schemaVersion/scopeMode is encountered.
+ */
+export function normalizeAutoReplyConfig(
+  config: AutoReplyConfig,
+  patch: Partial<AutoReplyConfig> = {},
+): AutoReplyConfig {
+  const merged = { ...config, ...patch };
+  const hasV1 =
+    config.schemaVersion === 1 ||
+    config.scopeMode !== undefined ||
+    patch.schemaVersion === 1 ||
+    patch.scopeMode !== undefined;
+  const rawPolicy = merged.policy;
+  const policy: AutoReplyPolicy = {
+    privateTrigger: rawPolicy?.privateTrigger ?? DEFAULT_AUTO_REPLY_POLICY.privateTrigger,
+    groupTrigger: rawPolicy?.groupTrigger ?? DEFAULT_AUTO_REPLY_POLICY.groupTrigger,
+    keywords: Array.isArray(rawPolicy?.keywords) ? [...rawPolicy.keywords] : [],
+    instructions: rawPolicy?.instructions ?? DEFAULT_AUTO_REPLY_POLICY.instructions,
+    cooldownSeconds: rawPolicy?.cooldownSeconds ?? DEFAULT_AUTO_REPLY_POLICY.cooldownSeconds,
+    perSenderPerHour: rawPolicy?.perSenderPerHour ?? DEFAULT_AUTO_REPLY_POLICY.perSenderPerHour,
+    perChatPerHour: rawPolicy?.perChatPerHour ?? DEFAULT_AUTO_REPLY_POLICY.perChatPerHour,
+    globalMemory: {
+      read: rawPolicy?.globalMemory?.read ?? false,
+    },
+  };
+  return {
+    schemaVersion: 1,
+    enabled: Boolean(merged.enabled),
+    killSwitch: Boolean(merged.killSwitch),
+    globalPerHour: merged.globalPerHour,
+    // A missing mode never widens: the server always sends one for v1.
+    scopeMode: merged.scopeMode ?? "only",
+    groupsEnabled: merged.groupsEnabled ?? !hasV1,
+    chats: merged.chats,
+    excludedChats: Array.isArray(merged.excludedChats) ? [...merged.excludedChats] : [],
+    policy,
+  };
+}
 
 export type PlusStatusResponse = {
   configured: boolean;
@@ -105,6 +176,7 @@ export const PLUS_LIMITS = {
   templateText: 1000,
   templates: 150,
   autoReplyChats: 100,
+  autoReplyExcludedChats: 500,
   keywords: 20,
   keywordChars: 40,
   instructions: 1000,

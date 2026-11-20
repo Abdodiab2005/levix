@@ -1,5 +1,7 @@
 // file: frontend/src/views/plus/AutoReplyChatEditor.tsx
-import { type FormEvent, useRef, useState } from "react";
+import { User, Users } from "lucide-react";
+import { type FormEvent, useState } from "react";
+import { BidiText } from "../../components/RecipientPicker";
 import {
   Button,
   ChipInput,
@@ -8,20 +10,16 @@ import {
   Dialog,
   Field,
   Input,
-  Section,
+  ListRow,
   Select,
   Textarea,
   Toggle,
+  UserText,
 } from "../../components/ui";
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
-import {
-  type AutoReplyChat,
-  type AutoReplyTrigger,
-  CHAT_JID_PATTERN,
-  PLUS_LIMITS,
-  isGroupJid,
-} from "./types";
+import type { RecipientParts } from "../../utils/recipientLabel";
+import { type AutoReplyChat, type AutoReplyTrigger, PLUS_LIMITS } from "./types";
 
 const TRIGGERS: AutoReplyTrigger[] = ["all", "mention", "keywords"];
 
@@ -33,32 +31,27 @@ export function AutoReplyChatEditor({
   onClose,
   onSaved,
   chat,
-  existingJids,
+  peer,
 }: {
   onClose: () => void;
   onSaved: (chat: AutoReplyChat) => void;
-  chat: AutoReplyChat | null;
-  existingJids: string[];
+  chat: AutoReplyChat;
+  peer: RecipientParts;
 }) {
   const { t } = useI18n();
-  const [jid, setJid] = useState(chat?.jid ?? "");
-  const [enabled, setEnabled] = useState(chat?.enabled ?? true);
-  const [trigger, setTrigger] = useState<AutoReplyTrigger>(
-    chat?.trigger ?? (chat && isGroupJid(chat.jid) ? "mention" : "all"),
-  );
-  const [keywords, setKeywords] = useState<string[]>(chat?.keywords ?? []);
-  const [instructions, setInstructions] = useState(chat?.instructions ?? "");
-  const [cooldown, setCooldown] = useState(String(chat?.cooldownSeconds ?? 20));
-  const [perSender, setPerSender] = useState(String(chat?.perSenderPerHour ?? 10));
-  const [perChat, setPerChat] = useState(String(chat?.perChatPerHour ?? 30));
-  const [globalMemoryRead, setGlobalMemoryRead] = useState(chat?.globalMemory?.read ?? false);
+  const [enabled, setEnabled] = useState(chat.enabled);
+  const [trigger, setTrigger] = useState<AutoReplyTrigger>(chat.trigger);
+  const [keywords, setKeywords] = useState<string[]>(chat.keywords);
+  const [instructions, setInstructions] = useState(chat.instructions);
+  const [cooldown, setCooldown] = useState(String(chat.cooldownSeconds));
+  const [perSender, setPerSender] = useState(String(chat.perSenderPerHour));
+  const [perChat, setPerChat] = useState(String(chat.perChatPerHour));
+  const [globalMemoryRead, setGlobalMemoryRead] = useState(chat.globalMemory?.read ?? false);
   const [confirmMemory, setConfirmMemory] = useState(false);
-  const [jidError, setJidError] = useState<string | null>(null);
   const [keywordError, setKeywordError] = useState<string | null>(null);
   const [cooldownError, setCooldownError] = useState<string | null>(null);
   const [perSenderError, setPerSenderError] = useState<string | null>(null);
   const [perChatError, setPerChatError] = useState<string | null>(null);
-  const triggerTouched = useRef(chat !== null);
 
   const range = (min: number, max: number) => fill(t("plusAutoReplyRange"), { min, max });
   const triggerLabel = (value: AutoReplyTrigger) =>
@@ -77,12 +70,6 @@ export function AutoReplyChatEditor({
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    const value = jid.trim();
-    const jidProblem = !CHAT_JID_PATTERN.test(value)
-      ? t("plusAutoReplyInvalidJid")
-      : existingJids.includes(value)
-        ? t("plusAutoReplyDuplicateJid")
-        : null;
     const cooldownValue = readInteger(cooldown);
     const cooldownProblem =
       Number.isInteger(cooldownValue) &&
@@ -105,14 +92,13 @@ export function AutoReplyChatEditor({
         ? null
         : range(PLUS_LIMITS.perChatPerHour.min, PLUS_LIMITS.perChatPerHour.max);
 
-    setJidError(jidProblem);
     setCooldownError(cooldownProblem);
     setPerSenderError(senderProblem);
     setPerChatError(chatProblem);
-    if (jidProblem || cooldownProblem || senderProblem || chatProblem) return;
+    if (cooldownProblem || senderProblem || chatProblem) return;
 
     onSaved({
-      jid: value,
+      jid: chat.jid,
       enabled,
       trigger,
       keywords,
@@ -129,8 +115,9 @@ export function AutoReplyChatEditor({
       <Dialog
         isOpen
         onClose={onClose}
-        title={chat ? t("plusAutoReplyEditChat") : t("plusAutoReplyAddChat")}
-        maxWidth="40rem"
+        title={t("plusAutoReplyEditChat")}
+        variant="mobileFullscreen"
+        maxWidth="36rem"
         footer={
           <>
             <Button variant="secondary" onClick={onClose}>
@@ -147,37 +134,28 @@ export function AutoReplyChatEditor({
           className="flex flex-col gap-4"
           onSubmit={(event) => submit(event)}
         >
+          <ListRow
+            variant="raised"
+            leading={
+              peer.kind === "group" ? (
+                <Users size={16} className="text-brand-cyan" />
+              ) : (
+                <User size={16} className="text-ok" />
+              )
+            }
+            title={<UserText>{peer.title}</UserText>}
+            meta={peer.subtitle ? <BidiText text={peer.subtitle} /> : undefined}
+          />
           <Toggle
             checked={enabled}
             label={t("plusAutoReplyChatOn")}
             onChange={(value) => setEnabled(value)}
           />
-          <Field label={t("plusAutoReplyJid")} htmlFor="plus-chat-jid" error={jidError}>
-            <Input
-              id="plus-chat-jid"
-              technical
-              value={jid}
-              placeholder="201234567890@s.whatsapp.net"
-              aria-invalid={jidError ? true : undefined}
-              onChange={(event) => {
-                const value = event.target.value;
-                setJid(value);
-                setJidError(null);
-                if (!triggerTouched.current) {
-                  setTrigger(value.trim().endsWith("@g.us") ? "mention" : "all");
-                }
-              }}
-            />
-          </Field>
-          <p className="text-xs text-muted">{t("plusAutoReplyJidHint")}</p>
           <Field label={t("plusAutoReplyTrigger")} htmlFor="plus-chat-trigger">
             <Select
               id="plus-chat-trigger"
               value={trigger}
-              onChange={(event) => {
-                triggerTouched.current = true;
-                setTrigger(event.target.value as AutoReplyTrigger);
-              }}
+              onChange={(event) => setTrigger(event.target.value as AutoReplyTrigger)}
             >
               {TRIGGERS.map((value) => (
                 <option key={value} value={value}>
@@ -187,7 +165,11 @@ export function AutoReplyChatEditor({
             </Select>
           </Field>
           {trigger === "keywords" && (
-            <Field label={t("plusAutoReplyKeywords")} error={keywordError}>
+            <Field
+              label={t("plusAutoReplyKeywords")}
+              description={t("plusAutoReplyKeywordsHint")}
+              error={keywordError}
+            >
               <ChipInput
                 value={keywords}
                 onChange={setKeywords}
@@ -203,7 +185,6 @@ export function AutoReplyChatEditor({
                 aria-label={t("plusAutoReplyKeywords")}
                 aria-invalid={keywordError ? true : undefined}
               />
-              <p className="text-xs text-muted">{t("plusAutoReplyKeywordsHint")}</p>
             </Field>
           )}
           <Field
@@ -217,26 +198,23 @@ export function AutoReplyChatEditor({
             <Textarea
               id="plus-chat-instructions"
               dir="auto"
-              rows={4}
+              rows={3}
               maxLength={PLUS_LIMITS.instructions}
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
             />
           </Field>
-          <p className="text-xs text-muted">{t("plusAutoReplyInstructionsHint")}</p>
-          <Section title={t("plusAutoReplyGlobalMemoryTitle")}>
-            <Toggle
-              checked={globalMemoryRead}
-              label={t("plusAutoReplyGlobalMemoryRead")}
-              onChange={(checked) => {
-                if (checked) {
-                  setConfirmMemory(true);
-                } else {
-                  setGlobalMemoryRead(false);
-                }
-              }}
-            />
-          </Section>
+          <Toggle
+            checked={globalMemoryRead}
+            label={t("plusAutoReplyGlobalMemoryRead")}
+            onChange={(checked) => {
+              if (checked) {
+                setConfirmMemory(true);
+              } else {
+                setGlobalMemoryRead(false);
+              }
+            }}
+          />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field
               label={t("plusAutoReplyCooldown")}
