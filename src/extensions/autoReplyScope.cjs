@@ -79,7 +79,9 @@ function normalizeScope(raw) {
   });
 }
 
-function isChatEligible(chatJid, rawScope) {
+function isChatEligible(chatTarget, rawScope, aliasesArg) {
+  const chatJid =
+    typeof chatTarget === "object" && chatTarget !== null ? chatTarget.chatJid : chatTarget;
   if (typeof chatJid !== "string" || !chatJid) return false;
   const norm = normalizeJid(chatJid);
   if (
@@ -97,12 +99,50 @@ function isChatEligible(chatJid, rawScope) {
   const scope = normalizeScope(rawScope);
   if (isGroup && !scope.groupsEnabled) return false;
   if (scope.mode === "all") return true;
+
+  let rawAliases = aliasesArg;
+  if (rawAliases === undefined && typeof chatTarget === "object" && chatTarget !== null) {
+    rawAliases = chatTarget.chatAliases;
+  }
+  const aliasList = [];
+  const seen = new Set();
+  seen.add(norm);
+  aliasList.push(norm);
+  if (Array.isArray(rawAliases) || rawAliases instanceof Set) {
+    for (const a of rawAliases) {
+      if (typeof a === "string") {
+        const na = normalizeJid(a);
+        if (na && !seen.has(na)) {
+          seen.add(na);
+          aliasList.push(na);
+        }
+      }
+    }
+  }
+
   if (scope.mode === "only") {
-    return scope.chats.some((jid) => normalizeJid(jid) === norm);
+    return scope.chats.some((jid) => {
+      const entryNorm = normalizeJid(jid);
+      return entryNorm && aliasList.includes(entryNorm);
+    });
   }
+
   if (scope.mode === "except") {
-    return !scope.excluded.some((jid) => normalizeJid(jid) === norm);
+    const hasPhoneAlias = !isGroup && aliasList.some((a) => a.endsWith("@s.whatsapp.net"));
+    const hasLidAlias = !isGroup && aliasList.some((a) => a.endsWith("@lid"));
+
+    for (const jid of scope.excluded) {
+      const entryNorm = normalizeJid(jid);
+      if (!entryNorm) continue;
+      if (aliasList.includes(entryNorm)) return false;
+      if (!isGroup) {
+        if (entryNorm.endsWith("@s.whatsapp.net") && !hasPhoneAlias) return false;
+        if (entryNorm.endsWith("@lid") && !hasLidAlias) return false;
+      }
+    }
+    return true;
   }
+
   return false;
 }
 

@@ -900,6 +900,60 @@ section("host advertises scopeDescriptor capability and accepts array or descrip
       equal(`malformed scope #${idx} prefilters out every chat`, considered.length, 0);
       equal(`malformed scope #${idx} sends nothing`, sent.length, 0);
     }
+
+    // 5. Host dispatch applies alias matching in prefilter with mapped/unmapped LID chats.
+    const PN_MAPPED = "201333333333@s.whatsapp.net";
+    const LID_MAPPED = "333333@lid";
+    const LID_UNMAPPED = "444444@lid";
+
+    autoReply.setAutoReplyDeps({
+      roleIdentityAliases: (jid) => {
+        if (jid === PN_MAPPED || jid === LID_MAPPED) {
+          return [jid, jid === PN_MAPPED ? LID_MAPPED : PN_MAPPED];
+        }
+        return [jid];
+      },
+    });
+
+    // 5a. Phone exclusion blocks mapped LID form in host dispatch
+    sent.length = 0;
+    considered = [];
+    currentScopeValue = {
+      mode: "except",
+      groupsEnabled: true,
+      chats: [],
+      excluded: [PN_MAPPED],
+    };
+    seenCtx.invalidateScope();
+    await host.dispatchAutoReply({}, msgFor(LID_MAPPED, "exc-mapped-lid"), 1);
+    equal("host prefilter: phone exclusion blocks mapped LID form", considered.length, 0);
+    equal("host prefilter: no send for mapped LID form", sent.length, 0);
+
+    // 5b. Phone exclusion blocks unmapped LID form (fail closed)
+    await host.dispatchAutoReply({}, msgFor(LID_UNMAPPED, "exc-unmapped-lid"), 1);
+    equal(
+      "host prefilter: phone exclusion blocks unmapped LID (fail closed)",
+      considered.length,
+      0,
+    );
+
+    // 5c. "only" mode with phone entry admits mapped LID form
+    sent.length = 0;
+    considered = [];
+    currentScopeValue = {
+      mode: "only",
+      groupsEnabled: false,
+      chats: [PN_MAPPED],
+      excluded: [],
+    };
+    seenCtx.invalidateScope();
+    await host.dispatchAutoReply({}, msgFor(LID_MAPPED, "only-mapped-lid"), 1);
+    equal(
+      "host prefilter: only with phone entry admits mapped LID",
+      considered.join(","),
+      LID_MAPPED,
+    );
+    equal("host send for mapped LID", sent.length, 1);
   } finally {
     await host.stop();
     autoReply.resetAutoReplyDeps();

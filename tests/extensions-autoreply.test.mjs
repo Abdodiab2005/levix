@@ -1143,5 +1143,167 @@ section(
   equal("except mode sends only to non-excluded chat", sent.length, 1);
 }
 
+section("PN and LID alias resolution, exclusion matching and fail closed");
+{
+  const PN_EXCLUDED = "201888888888@s.whatsapp.net";
+  const LID_MAPPED_EXCLUDED = "888888@lid";
+  const PN_MAPPED = "201777777777@s.whatsapp.net";
+  const LID_MAPPED = "777777@lid";
+  const LID_UNMAPPED = "999999@lid";
+  const PN_UNMAPPED = "201999999999@s.whatsapp.net";
+  const GROUP_ID = "120363000000000001@g.us";
+
+  // Check computeChatAliases directly
+  {
+    // Ignores malformed mapping rows whose values are not real JIDs
+    autoReply.setAutoReplyDeps({
+      roleIdentityAliases: () => [PN_MAPPED, "not-a-valid-jid@lid", "bare123", LID_MAPPED],
+    });
+    const aliases = autoReply.computeChatAliases(PN_MAPPED);
+    equal("computeChatAliases length ignores malformed rows", aliases.length, 2);
+    equal("chat itself included first", aliases[0], PN_MAPPED);
+    equal("valid canonical LID included", aliases[1], LID_MAPPED);
+
+    // Groups have no LID mapping lookup
+    let called = 0;
+    autoReply.setAutoReplyDeps({
+      roleIdentityAliases: () => {
+        called++;
+        return [GROUP_ID];
+      },
+    });
+    const groupAliases = autoReply.computeChatAliases(GROUP_ID);
+    equal("groups have no alias lookup", called, 0);
+    equal("group aliases has group itself", groupAliases[0], GROUP_ID);
+  }
+
+  // Set up identity mapping helper
+  const mappingTable = new Map([
+    [PN_EXCLUDED, [PN_EXCLUDED, LID_MAPPED_EXCLUDED]],
+    [LID_MAPPED_EXCLUDED, [LID_MAPPED_EXCLUDED, PN_EXCLUDED]],
+    [PN_MAPPED, [PN_MAPPED, LID_MAPPED]],
+    [LID_MAPPED, [LID_MAPPED, PN_MAPPED]],
+    [LID_UNMAPPED, [LID_UNMAPPED]],
+    [PN_UNMAPPED, [PN_UNMAPPED]],
+  ]);
+
+  let seenEvents = [];
+  let considered = [];
+  const sent = stubTurn({
+    roleIdentityAliases: (jid) => mappingTable.get(jid) || [jid],
+  });
+
+  const makeRt = (scopeValue) =>
+    runtime({
+      getScope: () => scopeValue,
+      consider: async (event) => {
+        seenEvents.push(event);
+        considered.push(event.chatJid);
+        return { reply: true };
+      },
+    });
+
+  // 1. Phone exclusion blocks the LID form when a mapping exists
+  considered = [];
+  sent.length = 0;
+  const excPhoneRt = makeRt({
+    mode: "except",
+    groupsEnabled: true,
+    chats: [],
+    excluded: [PN_EXCLUDED],
+  });
+  await autoReply.dispatch(
+    excPhoneRt,
+    sock,
+    dm("hi from mapped lid", { key: { remoteJid: LID_MAPPED_EXCLUDED, id: "mapped-lid-exc" } }),
+    1,
+  );
+  equal("phone exclusion blocks mapped LID form", considered.length, 0);
+  equal("no reply sent to mapped LID form", sent.length, 0);
+
+  // 2. Phone exclusion blocks an unmapped LID chat (fail closed)
+  considered = [];
+  sent.length = 0;
+  await autoReply.dispatch(
+    excPhoneRt,
+    sock,
+    dm("hi from unmapped lid", { key: { remoteJid: LID_UNMAPPED, id: "unmapped-lid-exc" } }),
+    1,
+  );
+  equal("phone exclusion blocks unmapped LID chat (fail closed)", considered.length, 0);
+  equal("no reply sent to unmapped LID chat", sent.length, 0);
+
+  // 3. A LID exclusion blocks the mapped phone form
+  considered = [];
+  sent.length = 0;
+  const excLidRt = makeRt({
+    mode: "except",
+    groupsEnabled: true,
+    chats: [],
+    excluded: [LID_MAPPED_EXCLUDED],
+  });
+  await autoReply.dispatch(
+    excLidRt,
+    sock,
+    dm("hi from mapped pn", { key: { remoteJid: PN_EXCLUDED, id: "mapped-pn-exc" } }),
+    1,
+  );
+  equal("LID exclusion blocks mapped phone form", considered.length, 0);
+  equal("no reply sent to mapped phone form", sent.length, 0);
+
+  // 4. "only" with a phone entry admits the mapped LID (and rejects unmapped LID)
+  considered = [];
+  sent.length = 0;
+  seenEvents = [];
+  const onlyPhoneRt = makeRt({
+    mode: "only",
+    groupsEnabled: false,
+    chats: [PN_MAPPED],
+    excluded: [],
+  });
+  await autoReply.dispatch(
+    onlyPhoneRt,
+    sock,
+    dm("hi from mapped lid in only", { key: { remoteJid: LID_MAPPED, id: "only-mapped-lid" } }),
+    1,
+  );
+  equal("only mode with phone entry admits mapped LID", considered.length, 1);
+  equal("reply sent to mapped LID", sent.length, 1);
+  ok("event carries frozen chatAliases", Object.isFrozen(seenEvents[0].chatAliases));
+  ok("chatAliases includes primary", seenEvents[0].chatAliases.includes(LID_MAPPED));
+  ok("chatAliases includes mapped phone", seenEvents[0].chatAliases.includes(PN_MAPPED));
+
+  considered = [];
+  sent.length = 0;
+  await autoReply.dispatch(
+    onlyPhoneRt,
+    sock,
+    dm("hi from unmapped lid in only", {
+      key: { remoteJid: LID_UNMAPPED, id: "only-unmapped-lid" },
+    }),
+    1,
+  );
+  equal("only mode rejects unmapped LID", considered.length, 0);
+  equal("no reply sent to unmapped LID", sent.length, 0);
+
+  // 5. Groups unaffected by phone/LID exclusions
+  considered = [];
+  sent.length = 0;
+  const excPhoneLidRt = makeRt({
+    mode: "except",
+    groupsEnabled: true,
+    chats: [],
+    excluded: [PN_EXCLUDED, LID_MAPPED_EXCLUDED],
+  });
+  await autoReply.dispatch(
+    excPhoneLidRt,
+    sock,
+    groupMsg("hello group unaffected", { id: "grp-unaffected" }),
+    1,
+  );
+  equal("groups unaffected by phone and LID exclusions", considered.length, 1);
+  equal("group reply sent", sent.length, 1);
+}
+
 reset();
 finish();

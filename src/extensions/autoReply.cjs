@@ -4,6 +4,7 @@
 const { visibleText, unwrapMessage } = require("../utils/messageContent.cjs");
 const { isLinkedSelf, linkedIdentity } = require("../messaging/identity.cjs");
 const { getSenderCandidates } = require("../utils/permissions.esm.js");
+const { canonicalJid } = require("../messaging/router.cjs");
 const { EMPTY_SCOPE, normalizeScope, isChatEligible, inScope } = require("./autoReplyScope.cjs");
 
 const MAX_TEXT = 4000;
@@ -68,6 +69,45 @@ function accountEpochNow() {
   return require("../db/store.cjs").accountEpoch();
 }
 
+function computeChatAliases(chatJid) {
+  const primary = canonicalJid(chatJid);
+  if (!primary) return Object.freeze([]);
+  if (primary.endsWith("@g.us")) {
+    return Object.freeze([primary]);
+  }
+  const helper = dep("roleIdentityAliases", () => {
+    const v = dep("verifiedIdentityAliases", () => null);
+    if (typeof v === "function") return v;
+    try {
+      return require("../db/store.cjs").roleIdentityAliases;
+    } catch {
+      return null;
+    }
+  });
+  let rawAliases = [];
+  if (typeof helper === "function") {
+    try {
+      rawAliases = helper(primary) || [];
+    } catch {
+      rawAliases = [];
+    }
+  }
+  const result = [primary];
+  const seen = new Set([primary]);
+  if (Array.isArray(rawAliases) || rawAliases instanceof Set) {
+    for (const raw of rawAliases) {
+      if (typeof raw === "string") {
+        const c = canonicalJid(raw);
+        if (c && !seen.has(c)) {
+          seen.add(c);
+          result.push(c);
+        }
+      }
+    }
+  }
+  return Object.freeze(result);
+}
+
 function withDeadline(promise, ms) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -115,12 +155,14 @@ function abortAccountJobs() {
 
 function abortOutOfScope(scope) {
   for (const [key, entry] of pending) {
-    if (inScope(entry.event.chatJid, scope)) continue;
+    if (inScope(entry.event.chatJid, scope, entry.event.chatAliases)) continue;
     entry.controller.abort();
     pending.delete(key);
   }
-  for (const [controller, chatJid] of inflightAbort) {
-    if (!inScope(chatJid, scope)) controller.abort();
+  for (const [controller, info] of inflightAbort) {
+    const targetJid = typeof info === "object" && info !== null ? info.chatJid : info;
+    const aliases = typeof info === "object" && info !== null ? info.chatAliases : undefined;
+    if (!inScope(targetJid, scope, aliases)) controller.abort();
   }
 }
 
@@ -254,7 +296,7 @@ async function runAiReply(runtime, job = {}) {
     return { sent: false };
   }
   if (accountEpochNow() !== epoch) return { sent: false };
-  if (!inScope(chatJid, runtime.getScope?.())) return { sent: false };
+  if (!inScope(chatJid, runtime.getScope?.(), event.chatAliases)) return { sent: false };
 
   if (executions.size >= EXECUTION_MAX) {
     if (!executionCapacityWarned) {
@@ -269,7 +311,7 @@ async function runAiReply(runtime, job = {}) {
   executions.set(key, started + EXECUTION_TTL_MS);
   beginTurn(chatJid, started);
   const jobAbort = entry.controller;
-  inflightAbort.set(jobAbort, chatJid);
+  inflightAbort.set(jobAbort, { chatJid, chatAliases: event.chatAliases });
   const timeoutMs = Math.max(
     1,
     Math.min(
@@ -326,7 +368,7 @@ async function runAiReply(runtime, job = {}) {
         }
         if (typeof runtime.isActive === "function" && !runtime.isActive())
           throw new Error("inactive");
-        if (!inScope(chatJid, runtime.getScope?.())) throw new Error("scope");
+        if (!inScope(chatJid, runtime.getScope?.(), event.chatAliases)) throw new Error("scope");
         if (isGroup && rosterHelpers().isRosterStale(chatJid)) throw new Error("roster");
       },
     };
@@ -416,8 +458,9 @@ async function dispatch(runtime, sock, msg, epoch) {
   const candidates = getSenderCandidates(msg, sock) || [];
   if (candidates.some((id) => selfCheck(id, identity))) return;
 
+  const chatAliases = computeChatAliases(chatJid);
   const scope = typeof runtime.getScope === "function" ? runtime.getScope() : null;
-  if (!inScope(chatJid, scope)) return;
+  if (!inScope(chatJid, scope, chatAliases)) return;
 
   const text = String(visibleText(msg.message) || "").trim();
   if (!text || text.length > MAX_TEXT) return;
@@ -432,6 +475,7 @@ async function dispatch(runtime, sock, msg, epoch) {
 
   const event = Object.freeze({
     chatJid,
+    chatAliases,
     isGroup: chatJid.endsWith("@g.us"),
     sender: Object.freeze({
       primary: candidates[0] || null,
@@ -455,7 +499,7 @@ async function dispatch(runtime, sock, msg, epoch) {
     return;
   }
   if (accountEpochNow() !== epoch || !runtime.isActive()) return;
-  if (!inScope(chatJid, runtime.getScope?.())) return;
+  if (!inScope(chatJid, runtime.getScope?.(), chatAliases)) return;
   rememberClaim(intake, key, t + INTAKE_TTL_MS, INTAKE_MAX);
   prunePending(t);
   const controller = new AbortController();
@@ -515,4 +559,5 @@ module.exports = {
   isChatEligible,
   normalizeScope,
   EMPTY_SCOPE,
+  computeChatAliases,
 };
