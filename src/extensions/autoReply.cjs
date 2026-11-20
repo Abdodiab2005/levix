@@ -4,7 +4,7 @@
 const { visibleText, unwrapMessage } = require("../utils/messageContent.cjs");
 const { isLinkedSelf, linkedIdentity } = require("../messaging/identity.cjs");
 const { getSenderCandidates } = require("../utils/permissions.esm.js");
-const normalizeJid = require("../utils/normalizeJid.cjs");
+const { EMPTY_SCOPE, normalizeScope, isChatEligible, inScope } = require("./autoReplyScope.cjs");
 
 const MAX_TEXT = 4000;
 const MAX_INSTRUCTIONS = 1000;
@@ -173,13 +173,6 @@ function contextInfoOf(msg) {
     if (inner[key]?.contextInfo) return inner[key].contextInfo;
   }
   return inner.messageContextInfo || null;
-}
-
-function inScope(chatJid, scope) {
-  if (!scope || typeof scope.has !== "function") return false;
-  if (scope.has(chatJid)) return true;
-  const norm = normalizeJid(chatJid);
-  return Boolean(norm) && scope.has(norm);
 }
 
 function pruneHits(list, now) {
@@ -518,4 +511,8 @@ module.exports = {
   abortOutOfScope,
   setAutoReplyDeps,
   resetAutoReplyDeps,
+  inScope,
+  isChatEligible,
+  normalizeScope,
+  EMPTY_SCOPE,
 };

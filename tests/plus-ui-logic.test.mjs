@@ -10,6 +10,10 @@ import {
   showsPlusUntil,
   substitutePlaceholders,
 } from "../frontend/src/views/plus/plusUiLogic.ts";
+import {
+  DEFAULT_AUTO_REPLY_POLICY,
+  normalizeAutoReplyConfig,
+} from "../frontend/src/views/plus/types.ts";
 import { equal, finish, ok, section } from "./harness.mjs";
 
 const deepEqual = (label, actual, expected) =>
@@ -511,6 +515,110 @@ for (const state of ["active", "grace", "canceled", "clock"]) {
     error = err.message;
   }
   equal("a refresh failure reaches the caller", error, "NETWORK");
+}
+
+section(
+  "U4: Auto Reply v1 save-path preserves scopeMode, groupsEnabled, excludedChats and policy round-trip",
+);
+
+{
+  const fullV1 = {
+    schemaVersion: 1,
+    enabled: false,
+    killSwitch: false,
+    globalPerHour: 40,
+    scopeMode: "except",
+    groupsEnabled: true,
+    chats: [
+      {
+        jid: "123@s.whatsapp.net",
+        enabled: true,
+        trigger: "keywords",
+        keywords: ["urgent"],
+        instructions: "Row instructions",
+        cooldownSeconds: 30,
+        perSenderPerHour: 8,
+        perChatPerHour: 25,
+        globalMemory: { read: true },
+      },
+    ],
+    excludedChats: ["999@s.whatsapp.net", "888@g.us"],
+    policy: {
+      privateTrigger: "keywords",
+      groupTrigger: "mention",
+      keywords: ["support"],
+      instructions: "Global policy instructions",
+      cooldownSeconds: 45,
+      perSenderPerHour: 12,
+      perChatPerHour: 50,
+      globalMemory: { read: true },
+    },
+  };
+
+  const toggledEnabled = normalizeAutoReplyConfig(fullV1, { enabled: true });
+  deepEqual("enabling preserves all v1 fields round-trip", toggledEnabled, {
+    ...fullV1,
+    enabled: true,
+  });
+
+  const toggledKill = normalizeAutoReplyConfig(toggledEnabled, { killSwitch: true });
+  deepEqual("kill switch toggle preserves all v1 fields round-trip", toggledKill, {
+    ...fullV1,
+    enabled: true,
+    killSwitch: true,
+  });
+
+  const editedForm = normalizeAutoReplyConfig(toggledKill, {
+    globalPerHour: 100,
+    chats: [],
+  });
+  deepEqual(
+    "form save updates globalPerHour and chats while keeping scopeMode, groupsEnabled, excludedChats and policy",
+    editedForm,
+    {
+      ...fullV1,
+      enabled: true,
+      killSwitch: true,
+      globalPerHour: 100,
+      chats: [],
+    },
+  );
+
+  // Legacy v0 config without schemaVersion/scopeMode never widens on save (C-A1).
+  const legacyV0 = {
+    enabled: true,
+    killSwitch: false,
+    globalPerHour: 30,
+    chats: fullV1.chats,
+  };
+  const migratedV0 = normalizeAutoReplyConfig(legacyV0);
+  equal("v0 config normalizes to schemaVersion 1", migratedV0.schemaVersion, 1);
+  equal("v0 config defaults scopeMode to only (never widens)", migratedV0.scopeMode, "only");
+  equal(
+    "v0 config defaults groupsEnabled to true so listed groups keep working",
+    migratedV0.groupsEnabled,
+    true,
+  );
+  deepEqual("v0 config defaults excludedChats to empty array", migratedV0.excludedChats, []);
+  deepEqual(
+    "v0 config defaults policy to DEFAULT_AUTO_REPLY_POLICY",
+    migratedV0.policy,
+    DEFAULT_AUTO_REPLY_POLICY,
+  );
+
+  // Partial v1 config with schemaVersion 1 defaults missing optional fields sensibly.
+  const partialV1 = {
+    schemaVersion: 1,
+    enabled: false,
+    killSwitch: false,
+    globalPerHour: 30,
+    chats: [],
+  };
+  const normalizedPartialV1 = normalizeAutoReplyConfig(partialV1);
+  equal("partial v1 without a mode stays only", normalizedPartialV1.scopeMode, "only");
+  equal("partial v1 defaults groupsEnabled to false", normalizedPartialV1.groupsEnabled, false);
+  deepEqual("partial v1 defaults excludedChats to []", normalizedPartialV1.excludedChats, []);
+  deepEqual("partial v1 defaults policy", normalizedPartialV1.policy, DEFAULT_AUTO_REPLY_POLICY);
 }
 
 finish();

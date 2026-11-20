@@ -1037,5 +1037,111 @@ section("scope removal fences tools and final delivery without an abort event");
   equal("final answer also dropped", sent.length, 0);
 }
 
+section(
+  "descriptor scope modes, groupsEnabled gate, device normalization and broadcast/newsletter filter",
+);
+{
+  const UNLISTED_DM = "201777777777@s.whatsapp.net";
+  const UNLISTED_LID = "777777:3@lid";
+  const EXCLUDED_DM = "201888888888@s.whatsapp.net";
+  let considered = [];
+  const sent = stubTurn();
+  const makeRt = (scopeValue) =>
+    runtime({
+      getScope: () => scopeValue,
+      consider: async (event) => {
+        considered.push(event.chatJid);
+        return { reply: true };
+      },
+    });
+
+  // 1. groupsEnabled: false blocks a group even when listed in "only", "except" or "all".
+  for (const mode of ["only", "except", "all"]) {
+    considered = [];
+    sent.length = 0;
+    const rt = makeRt({
+      mode,
+      groupsEnabled: false,
+      chats: [CHAT, GROUP],
+      excluded: [],
+    });
+    await autoReply.dispatch(rt, sock, groupMsg("hello group", { id: `grp-off-${mode}` }), 1);
+    equal(
+      `${mode} with groupsEnabled false blocks listed group before consider`,
+      considered.length,
+      0,
+    );
+    equal(`${mode} with groupsEnabled false sends no group reply`, sent.length, 0);
+  }
+
+  // 2. "all" mode admits unlisted private chats and rejects broadcast, status@broadcast and newsletter.
+  considered = [];
+  sent.length = 0;
+  const allRt = makeRt({
+    mode: "all",
+    groupsEnabled: true,
+    chats: [],
+    excluded: [],
+  });
+  await autoReply.dispatch(
+    allRt,
+    sock,
+    dm("hi unlisted", { key: { remoteJid: UNLISTED_DM, id: "all-unlisted-dm" } }),
+    1,
+  );
+  await autoReply.dispatch(
+    allRt,
+    sock,
+    dm("hi lid", { key: { remoteJid: UNLISTED_LID, id: "all-unlisted-lid" } }),
+    1,
+  );
+  await autoReply.dispatch(allRt, sock, groupMsg("hi group", { id: "all-group-on" }), 1);
+  for (const [idx, badJid] of [
+    "status@broadcast",
+    "12345@broadcast",
+    "12345@newsletter",
+  ].entries()) {
+    await autoReply.dispatch(
+      allRt,
+      sock,
+      dm("broadcast text", { key: { remoteJid: badJid, id: `bad-${idx}` } }),
+      1,
+    );
+  }
+  equal("all mode admits unlisted DM, LID and group", sent.length, 3);
+  equal("broadcast/status/newsletter never reach consider", considered.length, 3);
+
+  // 3. "except" mode drops excluded contact (with or without device suffix) and excluded group.
+  considered = [];
+  sent.length = 0;
+  const exceptRt = makeRt({
+    mode: "except",
+    groupsEnabled: true,
+    chats: [],
+    excluded: [EXCLUDED_DM, GROUP],
+  });
+  await autoReply.dispatch(
+    exceptRt,
+    sock,
+    dm("blocked dm", { key: { remoteJid: EXCLUDED_DM, id: "exc-1" } }),
+    1,
+  );
+  await autoReply.dispatch(
+    exceptRt,
+    sock,
+    dm("blocked dm device", { key: { remoteJid: "201888888888:4@s.whatsapp.net", id: "exc-2" } }),
+    1,
+  );
+  await autoReply.dispatch(exceptRt, sock, groupMsg("blocked group", { id: "exc-3" }), 1);
+  await autoReply.dispatch(
+    exceptRt,
+    sock,
+    dm("allowed dm", { key: { remoteJid: UNLISTED_DM, id: "exc-4" } }),
+    1,
+  );
+  equal("except mode admits only non-excluded chat", considered.join(","), UNLISTED_DM);
+  equal("except mode sends only to non-excluded chat", sent.length, 1);
+}
+
 reset();
 finish();
