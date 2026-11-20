@@ -23,6 +23,7 @@ import {
   visibleTemplatePreview,
 } from "../frontend/src/views/plus/plusUiLogic.ts";
 import {
+  CHAT_JID_PATTERN,
   DEFAULT_AUTO_REPLY_POLICY,
   normalizeAutoReplyConfig,
 } from "../frontend/src/views/plus/types.ts";
@@ -979,6 +980,24 @@ section(
     "MessagesTab does not render raw TemplateBody tokens in list rows",
     !messagesSource.includes("<TemplateBody"),
   );
+section("R3: CHAT_JID_PATTERN accepts legacy groups and standard JIDs");
+{
+  equal(
+    "accepts legacy group with hyphen",
+    CHAT_JID_PATTERN.test("123456789-1234567890@g.us"),
+    true,
+  );
+  equal("accepts short legacy group", CHAT_JID_PATTERN.test("1-2@g.us"), true);
+  equal("accepts standard group", CHAT_JID_PATTERN.test("120363000000000001@g.us"), true);
+  equal("accepts user s.whatsapp.net", CHAT_JID_PATTERN.test("201111111111@s.whatsapp.net"), true);
+  equal("accepts lid format", CHAT_JID_PATTERN.test("123456789@lid"), true);
+
+  equal("rejects letters in user", CHAT_JID_PATTERN.test("abc@s.whatsapp.net"), false);
+  equal("rejects letters in legacy group", CHAT_JID_PATTERN.test("123-abc@g.us"), false);
+  equal("rejects hyphen in user JID", CHAT_JID_PATTERN.test("123-456@s.whatsapp.net"), false);
+  equal("rejects hyphen in LID", CHAT_JID_PATTERN.test("123-456@lid"), false);
+  equal("rejects invalid server", CHAT_JID_PATTERN.test("12345@c.us"), false);
+  equal("rejects broadcast", CHAT_JID_PATTERN.test("status@broadcast"), false);
 }
 
 finish();
