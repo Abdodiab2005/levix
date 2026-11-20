@@ -980,6 +980,8 @@ section(
     "MessagesTab does not render raw TemplateBody tokens in list rows",
     !messagesSource.includes("<TemplateBody"),
   );
+}
+
 section("R3: CHAT_JID_PATTERN accepts legacy groups and standard JIDs");
 {
   equal(

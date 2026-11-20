@@ -11,8 +11,8 @@ export async function getChatHistoryAsync(chatId) {
   return store.getChatHistory(chatId);
 }
 
-export async function saveChatHistoryAsync(chatId, historyArray) {
-  store.saveChatHistory(chatId, historyArray);
+export async function saveChatHistoryAsync(chatId, historyArray, meta) {
+  store.saveChatHistory(chatId, historyArray, meta);
 }
 
 export async function deleteChatHistoryAsync(chatId) {

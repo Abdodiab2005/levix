@@ -36,21 +36,91 @@ function globalMemoryAccess(context = {}) {
 
 const MEMORY_TOOLS = new Set(["search_memory", "save_memory", "forget_memory", "summarize_chat"]);
 
-function stripMemoryToolParts(history) {
-  if (!Array.isArray(history)) return [];
-  return history.flatMap((entry) => {
-    if (!Array.isArray(entry?.parts)) return [];
-    // Text alongside a tool call was intermediate output, never a chat reply.
-    const intermediate = entry.role === "model" && entry.parts.some((part) => part?.functionCall);
-    const parts = entry.parts.filter(
+function isToolCallEntry(entry) {
+  return Array.isArray(entry?.parts) && entry.parts.some((part) => part?.functionCall);
+}
+
+function isToolResponseEntry(entry) {
+  return Array.isArray(entry?.parts) && entry.parts.some((part) => part?.functionResponse);
+}
+
+function hasMemoryTool(entry) {
+  return (
+    Array.isArray(entry?.parts) &&
+    entry.parts.some(
       (part) =>
-        part?.thought !== true &&
-        !(intermediate && typeof part?.text === "string") &&
-        !MEMORY_TOOLS.has(part?.functionCall?.name) &&
-        !MEMORY_TOOLS.has(part?.functionResponse?.name),
-    );
-    return parts.length ? [{ ...entry, parts }] : [];
-  });
+        MEMORY_TOOLS.has(part?.functionCall?.name) ||
+        MEMORY_TOOLS.has(part?.functionResponse?.name),
+    )
+  );
+}
+
+function copyHistoryProvenance(source, target) {
+  if (!source || typeof source !== "object" || !Array.isArray(target)) return target;
+  if (source.provider !== undefined || source.model !== undefined) {
+    Object.defineProperties(target, {
+      provider: {
+        value: source.provider ?? null,
+        writable: true,
+        configurable: true,
+      },
+      model: {
+        value: source.model ?? null,
+        writable: true,
+        configurable: true,
+      },
+    });
+  }
+  return target;
+}
+
+function stripMemoryToolParts(history) {
+  const list = Array.isArray(history)
+    ? history
+    : Array.isArray(history?.history)
+      ? history.history
+      : null;
+  if (!list) return [];
+  const out = [];
+  for (let i = 0; i < list.length; i += 1) {
+    const entry = list[i];
+    if (!Array.isArray(entry?.parts)) continue;
+
+    if (isToolCallEntry(entry)) {
+      const next = list[i + 1];
+      const hasResponse = isToolResponseEntry(next);
+      // Drop the entire tool exchange whenever any call in the batch is a
+      // memory tool, or when the call/response pair is already incomplete.
+      // That prevents dropping a signed leading memory call while leaving an
+      // unsigned sibling call behind, and never splits a call/response pair.
+      if (!hasResponse || hasMemoryTool(entry) || hasMemoryTool(next)) {
+        if (hasResponse) i += 1;
+        continue;
+      }
+      // Text alongside a tool call was intermediate output, never a chat reply.
+      const callParts = entry.parts.filter(
+        (part) => part?.thought !== true && typeof part?.text !== "string",
+      );
+      const responseParts = next.parts.filter((part) => part?.thought !== true);
+      const callCount = callParts.filter((part) => part?.functionCall).length;
+      const responseCount = responseParts.filter((part) => part?.functionResponse).length;
+      if (!callCount || callCount !== responseCount) {
+        i += 1;
+        continue;
+      }
+      out.push({ ...entry, parts: callParts }, { ...next, parts: responseParts });
+      i += 1;
+      continue;
+    }
+
+    if (isToolResponseEntry(entry)) {
+      continue;
+    }
+
+    const parts = entry.parts.filter((part) => part?.thought !== true);
+    if (parts.length) out.push({ ...entry, parts });
+  }
+  return copyHistoryProvenance(history, out);
 }
 
 module.exports = { globalMemoryAccess, stripMemoryToolParts };

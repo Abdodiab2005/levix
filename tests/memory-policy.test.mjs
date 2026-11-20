@@ -708,11 +708,31 @@ section("memory history stripping keeps text, other tools and turn order");
       parts: TOOLS.map((name) => ({ functionResponse: { name, response: GLOBAL } })),
     },
     { role: "model", parts: [{ text: `Already sent: ${GLOBAL}`, thoughtSignature: "keep" }] },
+    { role: "user", parts: [{ text: "mixed parallel batch" }] },
+    {
+      role: "model",
+      parts: [
+        {
+          functionCall: { name: "save_memory", args: { content: GLOBAL } },
+          thoughtSignature: "mixed-batch-sig",
+        },
+        {
+          functionCall: { name: "web_search", args: { query: "levix" } },
+        },
+      ],
+    },
+    {
+      role: "user",
+      parts: [
+        { functionResponse: { name: "save_memory", response: { saved: true } } },
+        { functionResponse: { name: "web_search", response: { results: [] } } },
+      ],
+    },
+    { role: "model", parts: [{ text: "mixed batch reply" }] },
     { role: "user", parts: [{ text: "calculate" }] },
     {
       role: "model",
       parts: [
-        { functionCall: { name: "search_memory" } },
         {
           functionCall: { name: "calculate", args: { expression: "1+1" } },
           thoughtSignature: "sig",
@@ -721,29 +741,32 @@ section("memory history stripping keeps text, other tools and turn order");
     },
     {
       role: "user",
-      parts: [
-        { functionResponse: { name: "search_memory", response: GLOBAL } },
-        { functionResponse: { name: "calculate", response: { result: 2 } } },
-      ],
+      parts: [{ functionResponse: { name: "calculate", response: { result: 2 } } }],
     },
     { role: "model", parts: [{ text: "2" }] },
   ];
   const before = JSON.stringify(history);
   const stripped = stripMemoryToolParts(history);
-  equal("two empty entries dropped", stripped.length, 6);
+  equal("memory and mixed tool exchanges dropped as whole pairs", stripped.length, 8);
   equal(
     "remaining order preserved",
     stripped.map((entry) => entry.role).join(","),
-    "user,model,user,model,user,model",
+    "user,model,user,model,user,model,user,model",
   );
   equal("already delivered model text stays", stripped[1].parts[0].text, `Already sent: ${GLOBAL}`);
-  equal("non-memory call signature stays", stripped[3].parts[0].thoughtSignature, "sig");
+  equal(
+    "mixed parallel batch sibling call removed too",
+    JSON.stringify(stripped).includes("web_search"),
+    false,
+  );
+  equal("non-memory call signature stays byte-exact", stripped[5].parts[0].thoughtSignature, "sig");
+  equal("non-memory call part reference preserved", stripped[5].parts[0], history[9].parts[0]);
   equal(
     "non-memory call and result stay paired",
-    stripped[3].parts[0].functionCall.name,
-    stripped[4].parts[0].functionResponse.name,
+    stripped[5].parts[0].functionCall.name,
+    stripped[6].parts[0].functionResponse.name,
   );
-  equal("all memory tool parts removed", JSON.stringify(stripped).includes("search_memory"), false);
+  equal("all memory tool parts removed", JSON.stringify(stripped).includes("save_memory"), false);
   equal("input not mutated", JSON.stringify(history), before);
   equal("empty input", stripMemoryToolParts(null).length, 0);
   equal("provider history remains valid", agent.trimHistory(stripped).length, stripped.length);

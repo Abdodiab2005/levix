@@ -440,4 +440,63 @@ await withReplies(
   },
 );
 
+section("thought signature 400 on first send retries once with sanitized text-only history");
+
+await withReplies(
+  [errorReply(400, "Invalid thought signature."), textReply("recovered after signature scrub")],
+  async (fake) => {
+    const staleHistory = [
+      { role: "user", parts: [{ text: "first question" }] },
+      {
+        role: "model",
+        parts: [
+          { text: "internal reasoning", thought: true, thoughtSignature: "stale-thought-sig" },
+          {
+            functionCall: { name: "get_datetime", args: {} },
+            thoughtSignature: "stale-call-sig",
+          },
+        ],
+      },
+      {
+        role: "user",
+        parts: [{ functionResponse: { name: "get_datetime", response: { iso: "2026-11-20" } } }],
+      },
+      {
+        role: "model",
+        parts: [{ text: "It is November 20.", thoughtSignature: "stale-reply-sig" }],
+      },
+    ];
+
+    const result = await aiAgent.runAgent({
+      parts: [{ text: "second question" }],
+      history: staleHistory,
+    });
+
+    equal("exactly two requests were sent", fake.requests.length, 2);
+    equal("recovered answer returned", result.text, "recovered after signature scrub");
+
+    const secondContents = fake.body(1).contents || [];
+    const serializedSecond = JSON.stringify(secondContents);
+    ok("retry dropped prior functionCall", !serializedSecond.includes("functionCall"));
+    ok("retry dropped prior functionResponse", !serializedSecond.includes("functionResponse"));
+    ok("retry dropped prior thought parts", !serializedSecond.includes("internal reasoning"));
+    ok("retry dropped stale signatures", !serializedSecond.includes("stale-"));
+    equal("prior user text turn survived", secondContents[0]?.parts?.[0]?.text, "first question");
+    equal(
+      "prior model text turn survived",
+      secondContents[1]?.parts?.[0]?.text,
+      "It is November 20.",
+    );
+    equal(
+      "current user message is intact",
+      secondContents.at(-1)?.parts?.[0]?.text,
+      "second question",
+    );
+    ok(
+      "returned history has no stale signatures",
+      !JSON.stringify(result.history).includes("stale-"),
+    );
+  },
+);
+
 finish();
