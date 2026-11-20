@@ -240,3 +240,38 @@ matching Plus release. Rule JSON v2 is readable only by 5.0.1; a downgrade to
 5.0.0 leaves those rules rejected by the old validator and therefore inactive.
 The Plus document v1 is rejected by a 5.0.0 Plus runtime, which then falls back
 to its defaults (Auto Reply off).
+
+## 11. Review and owner decisions (2026-11-20)
+
+Codex reviewed sections 5 and 6 read-only and objected to six decisions at
+P1. The plan changes as follows. Each change is in the matching implementer
+brief.
+
+| Item | Change |
+| --- | --- |
+| 6.1.1 requester | The invocation carries a verified `ctx.requester` separate from source and target. The DM quote carries the original author. Commands that read the requester from `msg.key` (`todo`, `packs`, `stickers`) are unsupported in 5.0.1. |
+| 6.1.7 provenance | The send wrapper assigns and records every outbound message id before Baileys sends. A linked-account reaction or original counts only when it arrives as an inbound server event, is not a recorded outbound id, and is newer than the socket open time. |
+| 6.1.4 eligibility | `gemini` takes a plain prompt only and rejects its management verbs. `sticker`, bare `group:antilink`/`group:media`/`group:welcome` (they write settings), `group:promote`, `group:demote` and `group:clearwarns` are unsupported in 5.0.1. `group:note` is supported with one `#keyword`. |
+| 6.1.5 destructive | `group:kick` is the only destructive command. Its claim happens at the mutation boundary after authorization, and rechecks epoch, rule revision, transition version and live membership. |
+| 6.1.6 denials | Dispatcher denials and router refusals are silent for reactions. Messages a command sends after authorization passed stay. |
+| STT | Reaction STT keeps its switch, provider key, voice-only, byte and re-authorization checks inside execution. |
+| Delivery | The rule's destination overrides global route overrides for reactions. Destructive announcements stay in the source chat. |
+| 6.2 aliases | Scope matching uses verified PN/LID aliases in Core and Plus. A private chat in `except` mode that cannot be matched against an exclusion of the other address form is treated as excluded. |
+| 6.2 stale save | A v0 save over a stored v1 document keeps the v1 scope, group switch, exclusions and policy. |
+| 6.3 decisions | Classification is one request with one schema-only forced tool and no execution loop. Deterministic acknowledgements run after admission. One deadline covers classification and the task turn. |
+| Release | Core 5.0.1 with versionCode 80. Plus repins Core and uses a fresh code of at least 81, above the Play high-water mark; its upload and promotion pins still name build 79 and must move. |
+
+Owner decision on reaction rule permissions (answer to the migration question):
+
+- O-1 Each rule chooses who may trigger it: Everyone, Owner and group admins,
+  Owner only, Group admins only, or Selected participants. This extends the
+  existing `senders { role, ids }` with one new role, `owner_group_admin`.
+  Stored `bot_admin` and `member` roles keep their meaning.
+- O-2 The rule filter is extra. The command's own authorization must also pass.
+- O-3 A per-rule setting decides whether other participants may react to
+  messages the linked account wrote. It defaults to off.
+- O-4 Migration keeps every sender role and id list, accepts the linked
+  account's own reactions, and keeps O-3 off for existing rules.
+- O-5 All of it is configurable in the rule editor.
+- O-6 Reaction commands use the command's own authorization and never edit or
+  delete the reacted-to message.
