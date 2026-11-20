@@ -6,8 +6,14 @@ const { isLinkedSelf, linkedIdentity } = require("../messaging/identity.cjs");
 const { getSenderCandidates } = require("../utils/permissions.esm.js");
 const { canonicalJid } = require("../messaging/router.cjs");
 const { EMPTY_SCOPE, normalizeScope, isChatEligible, inScope } = require("./autoReplyScope.cjs");
+const { classifyAcknowledgement } = require("./autoReplyAck.cjs");
+const { isReactionEmoji } = require("../automation/rules.cjs");
 
 const MAX_TEXT = 4000;
+// The longest model reply Auto Reply sends, the same cap as the incoming text.
+const MAX_REPLY_TEXT = MAX_TEXT;
+const DECISION_KEYS = new Set(["action", "text", "emoji"]);
+const graphemes = new Intl.Segmenter("en", { granularity: "grapheme" });
 const MAX_INSTRUCTIONS = 1000;
 const PENDING_MAX = 50;
 const PENDING_TTL_MS = 2 * 60 * 1000;
@@ -151,6 +157,26 @@ function abortAccountJobs() {
     } catch {}
   }
   inflightAbort.clear();
+}
+
+// A socket that closed takes its pending and in-flight turns with it. Without a
+// socket to match, every turn is aborted (fail closed).
+function abortSocketJobs(sock) {
+  if (!sock) {
+    abortAccountJobs();
+    return;
+  }
+  for (const [key, entry] of pending) {
+    if (entry.sock !== sock) continue;
+    entry.controller.abort();
+    pending.delete(key);
+  }
+  for (const [controller, info] of inflightAbort) {
+    if (info?.sock && info.sock !== sock) continue;
+    try {
+      controller.abort();
+    } catch {}
+  }
 }
 
 function abortOutOfScope(scope) {
