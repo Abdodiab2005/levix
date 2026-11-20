@@ -8,6 +8,7 @@ const { API_VERSION, validateManifest, validateHandlers } = require("./contract.
 const { isCustomizable, validateOverride } = require("./templateKeys.cjs");
 const { buildContext } = require("./context.cjs");
 const autoReply = require("./autoReply.cjs");
+const { EMPTY_SCOPE, normalizeScope } = require("./autoReplyScope.cjs");
 const { setTemplateOverride } = require("../utils/i18n.cjs");
 
 const ACTIVATE_MS = 5000;
@@ -71,7 +72,7 @@ function createExtensionHost(opts = {}) {
   let incompatible = false;
   let handlers = null;
   let controller = null;
-  let scopeSet = new Set();
+  let currentScope = EMPTY_SCOPE;
   let unsub = null;
   let pollTimer = null;
   let chain = Promise.resolve();
@@ -148,7 +149,7 @@ function createExtensionHost(opts = {}) {
     const wasActive = state === "active" || didActivate;
     setState("failed");
     handlers = null;
-    scopeSet = new Set();
+    currentScope = EMPTY_SCOPE;
     try {
       setTemplateOverride(null);
     } catch {}
@@ -191,15 +192,11 @@ function createExtensionHost(opts = {}) {
   }
 
   function refreshScope() {
-    scopeSet = new Set();
+    currentScope = EMPTY_SCOPE;
     const scopeFn = handlers?.autoReply?.scope;
     if (typeof scopeFn !== "function") return;
     try {
-      const value = scopeFn();
-      const list = value && typeof value[Symbol.iterator] === "function" ? value : [];
-      for (const jid of list) {
-        if (typeof jid === "string" && jid) scopeSet.add(jid);
-      }
+      currentScope = normalizeScope(scopeFn());
     } catch (error) {
       recordFailure(error);
     }
@@ -215,7 +212,7 @@ function createExtensionHost(opts = {}) {
       isActive,
       generation: () => generation,
       signal: () => controller?.signal,
-      getScope: () => scopeSet,
+      getScope: () => currentScope,
       consider: (event, opts) => handlers?.autoReply?.consider?.(event, opts),
       considerTimeoutMs: () => considerTimeoutMs,
       recordFailure,
@@ -285,7 +282,7 @@ function createExtensionHost(opts = {}) {
     const mod = moduleLoaded;
     const hadHandlers = Boolean(handlers);
     handlers = null;
-    scopeSet = new Set();
+    currentScope = EMPTY_SCOPE;
     didActivate = false;
     try {
       setTemplateOverride(null);

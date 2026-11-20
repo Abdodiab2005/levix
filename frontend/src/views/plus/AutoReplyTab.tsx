@@ -27,6 +27,7 @@ import {
   type AutoReplyConfig,
   type AutoReplyTrigger,
   PLUS_LIMITS,
+  normalizeAutoReplyConfig,
 } from "./types";
 
 export function AutoReplyTab({ onInactive }: { onInactive: () => void }) {
@@ -42,7 +43,7 @@ export function AutoReplyTab({ onInactive }: { onInactive: () => void }) {
     plusGet<AutoReplyConfig>("/auto-reply")
       .then((result) => {
         if (!live) return;
-        setConfig(result);
+        setConfig(normalizeAutoReplyConfig(result));
         setError(null);
       })
       .catch((err) => {
@@ -155,13 +156,14 @@ function AutoReplyForm({
     try {
       const next = await writeQueueRef.current.enqueue(async () => {
         const current = savedRef.current;
-        return plusPut<AutoReplyConfig>("/auto-reply", {
-          ...current,
-          enabled: value,
-        });
+        return plusPut<AutoReplyConfig>(
+          "/auto-reply",
+          normalizeAutoReplyConfig(current, { enabled: value }),
+        );
       });
-      savedRef.current = next;
-      onSaved(next);
+      const normalized = normalizeAutoReplyConfig(next);
+      savedRef.current = normalized;
+      onSaved(normalized);
     } catch (err) {
       if (plusErrorCode(err) === "inactive") onInactive();
       setToggleError(plusErrorMessage(t, err));
@@ -176,13 +178,14 @@ function AutoReplyForm({
     try {
       const next = await writeQueueRef.current.enqueue(async () => {
         const current = savedRef.current;
-        return plusPut<AutoReplyConfig>("/auto-reply", {
-          ...current,
-          killSwitch: value,
-        });
+        return plusPut<AutoReplyConfig>(
+          "/auto-reply",
+          normalizeAutoReplyConfig(current, { killSwitch: value }),
+        );
       });
-      savedRef.current = next;
-      onSaved(next);
+      const normalized = normalizeAutoReplyConfig(next);
+      savedRef.current = normalized;
+      onSaved(normalized);
     } catch (err) {
       if (plusErrorCode(err) === "inactive") onInactive();
       setToggleError(plusErrorMessage(t, err));
@@ -211,14 +214,17 @@ function AutoReplyForm({
       try {
         const next = await writeQueueRef.current.enqueue(async () => {
           const current = savedRef.current;
-          return plusPut<AutoReplyConfig>("/auto-reply", {
-            ...current,
-            globalPerHour: draft.globalPerHour,
-            chats: draft.chats,
-          });
+          return plusPut<AutoReplyConfig>(
+            "/auto-reply",
+            normalizeAutoReplyConfig(current, {
+              globalPerHour: draft.globalPerHour,
+              chats: draft.chats,
+            }),
+          );
         });
-        savedRef.current = next;
-        onSaved(next);
+        const normalized = normalizeAutoReplyConfig(next);
+        savedRef.current = normalized;
+        onSaved(normalized);
       } catch (err) {
         if (plusErrorCode(err) === "inactive") onInactive();
         throw err;

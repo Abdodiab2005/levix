@@ -48,6 +48,9 @@ function buildContext({
   };
   if (caps.has("autoReply")) {
     ctx.accountStorage = makeStorage(id, "acct");
+    ctx.autoReply = Object.freeze({
+      scopeDescriptor: true,
+    });
     ctx.ai = Object.freeze({
       reply(job) {
         return aiReply(job);
