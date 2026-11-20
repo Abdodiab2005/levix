@@ -32,12 +32,22 @@ function ownJid(value) {
 function isPhoneJid(value) {
   return ownJid(value)?.endsWith("@s.whatsapp.net") === true;
 }
+function isLidJid(value) {
+  return ownJid(value)?.endsWith("@lid") === true;
+}
 
 function boundedText(value, max) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
   return trimmed.slice(0, max);
+}
+
+function cleanProfileName(value) {
+  const text = boundedText(value, 256);
+  if (!text || text === "~") return null;
+  if (/^\d+(?::\d+)?@(?:s\.whatsapp\.net|lid|g\.us)$/.test(text)) return null;
+  return text;
 }
 
 /** Digits of a phone-number JID, or null. A LID can never become a phone. */
@@ -48,7 +58,8 @@ function phoneFromPnJid(jid) {
 
 /**
  * @param {object} options
- * @param {() => {socket?: object|null, state?: object, epoch?: number, identity?: object}} options.getContext
+ * @param {() => {socket?: object|null, state?: object, epoch?: number, identity?: object, creds?: object, storedName?: string|null, getUserDisplayName?: (jid: string) => string|null}} options.getContext
+ * @param {(jid: string) => string|null} [options.getUserDisplayName]
  * @param {(socket: object, url: string, init: object) => Promise<object>} [options.fetchImage]
  * @param {() => number} [options.now]
  * @param {number} [options.timeoutMs]
@@ -58,6 +69,7 @@ function phoneFromPnJid(jid) {
  */
 function createAccountProfile({
   getContext,
+  getUserDisplayName = null,
   fetchImage = null,
   now = Date.now,
   timeoutMs = 8000,
@@ -75,6 +87,54 @@ function createAccountProfile({
   let lastLookupAt = null;
   const controllers = new Set();
 
+  function resolveCredsName(raw, identity, acceptedIds, matchesIdentity) {
+    const credsMe = raw?.creds?.me;
+    if (credsMe && typeof credsMe === "object") {
+      const credId = ownJid(credsMe.id);
+      const credLid = ownJid(credsMe.lid);
+      const hasCredIds = Boolean(credId || credLid);
+      const credMatches = hasCredIds
+        ? (credId && acceptedIds.includes(credId)) || (credLid && acceptedIds.includes(credLid))
+        : matchesIdentity;
+      if (credMatches) {
+        const fromCreds = cleanProfileName(credsMe.name);
+        if (fromCreds) return fromCreds;
+      }
+    }
+    if (matchesIdentity) {
+      return cleanProfileName(identity?.name ?? identity?.me?.name);
+    }
+    return null;
+  }
+
+  function resolveStoredDisplayName(raw, identity, acceptedIds, matchesIdentity) {
+    const lookupFn =
+      typeof raw?.getUserDisplayName === "function"
+        ? raw.getUserDisplayName
+        : typeof getUserDisplayName === "function"
+          ? getUserDisplayName
+          : null;
+    if (lookupFn) {
+      for (const jid of acceptedIds) {
+        try {
+          const candidate = cleanProfileName(lookupFn(jid));
+          if (candidate) return candidate;
+        } catch {}
+      }
+    }
+    if (raw?.userMetadata && typeof raw.userMetadata === "object") {
+      for (const jid of acceptedIds) {
+        const entry = raw.userMetadata[jid];
+        const candidate = cleanProfileName(typeof entry === "string" ? entry : entry?.displayName);
+        if (candidate) return candidate;
+      }
+    }
+    if (matchesIdentity) {
+      return cleanProfileName(raw?.storedName ?? identity?.displayName);
+    }
+    return null;
+  }
+
   function readContext() {
     let raw = null;
     try {
@@ -89,15 +149,49 @@ function createAccountProfile({
       ? [...new Set(identity.selfJids.map(ownJid).filter(Boolean))].sort()
       : [];
     const selfId = ownJid(socket?.user?.id);
+    const selfLid = ownJid(socket?.user?.lid);
     const connected = Boolean(socket && state.connected);
+    const matchesIdentity = Boolean(
+      selfId && (selfJids.includes(selfId) || (selfLid && selfJids.includes(selfLid))),
+    );
+    const socketIds = [selfId, selfLid].filter(Boolean);
+    const acceptedIds = matchesIdentity
+      ? [...new Set([...selfJids, ...socketIds])]
+      : [...new Set(socketIds)];
 
     let phone = null;
     if (selfId && isPhoneJid(selfId)) {
       phone = phoneFromPnJid(selfId);
-    } else if (selfId && selfJids.includes(selfId) && isPhoneJid(identity.phone)) {
+    } else if (matchesIdentity && isPhoneJid(identity.phone)) {
       // Only while the verified pairing still names this socket's LID.
       phone = phoneFromPnJid(identity.phone);
     }
+
+    // Other verified form (PN vs LID) for photo retry when selfId has no photo.
+    let altSelfId = null;
+    if (selfId && matchesIdentity) {
+      if (isLidJid(selfId) && isPhoneJid(identity.phone)) {
+        altSelfId = ownJid(identity.phone);
+      } else if (isPhoneJid(selfId)) {
+        const verifiedLid = ownJid(identity.lid) || (isLidJid(selfLid) ? selfLid : null);
+        if (verifiedLid && isLidJid(verifiedLid)) altSelfId = verifiedLid;
+      }
+    }
+
+    // Fallback chain:
+    // 1. sock.user.name
+    // 2. sock.user.verifiedName
+    // 3. sock.user.notify
+    // 4. saved credentials' me.name
+    // 5. linked account's own display name in user_metadata
+    const name = selfId
+      ? cleanProfileName(socket?.user?.name) ||
+        cleanProfileName(socket?.user?.verifiedName) ||
+        cleanProfileName(socket?.user?.notify) ||
+        resolveCredsName(raw, identity, acceptedIds, matchesIdentity) ||
+        resolveStoredDisplayName(raw, identity, acceptedIds, matchesIdentity) ||
+        null
+      : null;
 
     return {
       generation,
@@ -105,10 +199,11 @@ function createAccountProfile({
       connected,
       epoch: raw?.epoch ?? null,
       selfId,
-      name: boundedText(socket?.user?.name, 256),
+      altSelfId,
+      name,
       phone,
       selfJidsKey: selfJids.join("|"),
-      acceptedIds: selfJids.includes(selfId) ? selfJids : [selfId].filter(Boolean),
+      acceptedIds,
     };
   }
 
@@ -251,20 +346,34 @@ function createAccountProfile({
     return boundedText(status && typeof status === "object" ? status.status : null, 2048);
   }
 
+  async function lookupPhotoUrl(snapshot) {
+    const first = await callWithin(snapshot.socket, "profilePictureUrl", [
+      snapshot.selfId,
+      "image",
+      PICTURE_TIMEOUT_MS,
+    ]);
+    if (first.status === "fulfilled" && typeof first.value === "string" && first.value.trim()) {
+      return first.value.trim();
+    }
+    if (!snapshot.altSelfId || snapshot.altSelfId === snapshot.selfId) return null;
+    const current = readContext();
+    if (!sameContext(snapshot, current) || !current.connected) return null;
+    const second = await callWithin(snapshot.socket, "profilePictureUrl", [
+      snapshot.altSelfId,
+      "image",
+      PICTURE_TIMEOUT_MS,
+    ]);
+    return second.status === "fulfilled" && typeof second.value === "string" && second.value.trim()
+      ? second.value.trim()
+      : null;
+  }
+
   async function lookup(snapshot) {
-    const [picture, status] = await Promise.all([
-      callWithin(snapshot.socket, "profilePictureUrl", [
-        snapshot.selfId,
-        "image",
-        PICTURE_TIMEOUT_MS,
-      ]),
+    const [photoInternal, status] = await Promise.all([
+      lookupPhotoUrl(snapshot),
       callWithin(snapshot.socket, "fetchStatus", [snapshot.selfId]),
     ]);
 
-    const photoInternal =
-      picture.status === "fulfilled" && typeof picture.value === "string" && picture.value.trim()
-        ? picture.value.trim()
-        : null;
     const about = status.status === "fulfilled" ? statusAbout(status.value, snapshot) : null;
 
     const current = readContext();
@@ -275,8 +384,8 @@ function createAccountProfile({
     const entry = {
       snapshot,
       revision: crypto.randomUUID(),
-      name: snapshot.name,
-      phone: snapshot.phone,
+      name: current.name,
+      phone: current.phone,
       about,
       photoInternal,
       expiresAt: now() + ttlMs,
@@ -285,7 +394,7 @@ function createAccountProfile({
     if (image && (image.revision !== entry.revision || !sameContext(image.snapshot, current))) {
       image = null;
     }
-    return view(entry, snapshot);
+    return view(entry, current);
   }
 
   function startLookup(snapshot) {

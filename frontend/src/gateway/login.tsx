@@ -9,9 +9,8 @@ type Result = {
   reason?: string;
   retryAfter?: number;
   attemptsLeft?: number;
-  message?: string;
 };
-type ErrorState = { key: GatewayKey; vars?: Record<string, string | number>; raw?: string };
+type ErrorState = { key: GatewayKey; vars?: Record<string, string | number> };
 
 const RESET_REASON_KEYS: Record<string, GatewayKey> = {
   no_session: "resetErrNoSession",
@@ -73,7 +72,7 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
     setLoginError(null);
     const result = await submitGatewayForm("/login", form);
     if (result.redirect !== undefined) return navigateAfterAuth(result.redirect);
-    setLoginError({ code: result.error.code, message: result.error.message || "" });
+    setLoginError({ code: result.error.code });
     const password = form.elements.namedItem("password") as HTMLInputElement | null;
     if (password) {
       password.value = "";
@@ -81,13 +80,12 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
     }
     setBusy(false);
   };
-  const showError = (key: GatewayKey, vars?: Record<string, string | number>, raw?: string) =>
+  const showError = (key: GatewayKey, vars?: Record<string, string | number>) =>
     setError({
       key: (window as Window & { LevixHost?: object }).LevixHost
         ? RESET_ANDROID_KEYS[key] || key
         : key,
       vars,
-      raw,
     });
   const send = async (channel: string) => {
     if (busy) return;
@@ -150,8 +148,7 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
       } else if (result.reason === "throttled")
         showError(RESET_REASON_KEYS.throttled, { n: result.retryAfter || 60 });
       else if (result.reason === "mismatch") showError(RESET_REASON_KEYS.mismatch);
-      else if (result.reason === "invalid_password")
-        showError(RESET_REASON_KEYS.invalid_password, undefined, result.message);
+      else if (result.reason === "invalid_password") showError(RESET_REASON_KEYS.invalid_password);
       else showError("resetErrFailed");
     } catch {
       showError("resetErrServer");
@@ -161,9 +158,10 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
   };
   return reset ? (
     <>
-      <header>
+      <header className="space-y-1">
         <Button
           variant="ghost"
+          size="sm"
           onClick={() => {
             setReset(false);
             setSent(false);
@@ -172,9 +170,8 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
         >
           {t("backToSignIn")}
         </Button>
-        <p className="mt-4 text-sm text-brand-cyan">{t("resetEyebrow")}</p>
-        <h1 className="text-2xl font-bold">{t("resetTitle")}</h1>
-        <p className="text-muted">
+        <h1 className="text-base font-bold text-text-main sm:text-lg">{t("resetTitle")}</h1>
+        <p className="text-xs leading-relaxed text-muted">
           {t(
             state.recoveryEmailVerified && state.recoveryEmail
               ? "resetSubtitleChannels"
@@ -194,19 +191,19 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
             {t("resetSend")}
           </Button>
           {state.recoveryEmailVerified && state.recoveryEmail && (
-            <>
-              <Button className="w-full" disabled={busy} onClick={() => send("email")}>
+            <div className="space-y-1.5">
+              <Button variant="secondary" disabled={busy} onClick={() => send("email")}>
                 {t("resetSendEmail")}
               </Button>
-              <p className="text-sm text-muted">
+              <p className="text-xs text-muted">
                 {t("resetEmailHint")} <strong dir="ltr">{state.recoveryEmail}</strong>
               </p>
-            </>
+            </div>
           )}
         </div>
       )}
       {sent && !done && (
-        <form onSubmit={complete} className="space-y-4">
+        <form onSubmit={complete} className="space-y-3.5">
           <Field label={t("resetCodeLabel")} htmlFor="reset-code">
             <Input
               id="reset-code"
@@ -239,7 +236,7 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
           </Button>
           <Button
             variant="ghost"
-            className="w-full"
+            size="sm"
             onClick={() => {
               setSent(false);
               setError(null);
@@ -250,10 +247,8 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
         </form>
       )}
       {error && (
-        <p role="alert" className="text-danger">
-          {error.raw && document.documentElement.lang === "en"
-            ? error.raw
-            : t(error.key, error.vars)}
+        <p role="alert" className="text-xs text-danger">
+          {t(error.key, error.vars)}
           {error.key === "resetErrWrongCode" && error.vars?.n
             ? ` ${t("resetErrAttemptsLeft", error.vars)}`
             : ""}
@@ -262,12 +257,11 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
     </>
   ) : (
     <>
-      <header>
-        <p className="text-sm text-brand-cyan">{t("secureAccess")}</p>
-        <h1 className="text-2xl font-bold">{t("welcomeBack")}</h1>
-        <p className="text-muted">{t("loginSub", { brand: state.brand.name })}</p>
+      <header className="space-y-0.5">
+        <h1 className="text-base font-bold text-text-main sm:text-lg">{t("welcomeBack")}</h1>
+        <p className="text-xs text-muted">{t("loginSub", { brand: state.brand.name })}</p>
       </header>
-      <form action="/login" method="post" onSubmit={submitLogin} className="space-y-5">
+      <form action="/login" method="post" onSubmit={submitLogin} className="space-y-3.5">
         <PasswordField
           id="login-password"
           name="password"
@@ -281,15 +275,17 @@ export function Login({ state, t }: { state: GatewayState; t: GatewayText }) {
         </Button>
       </form>
       {loginError && (
-        <p role="alert" className="text-danger">
+        <p role="alert" className="text-xs text-danger">
           {loginError.code && loginError.code in gatewayTranslations.en
             ? t(loginError.code as GatewayKey)
-            : loginError.message}
+            : t("authErrGeneric")}
         </p>
       )}
-      <Button variant="ghost" onClick={() => setReset(true)}>
-        {t("forgotPassword")}
-      </Button>
+      <div>
+        <Button variant="ghost" size="sm" onClick={() => setReset(true)}>
+          {t("forgotPassword")}
+        </Button>
+      </div>
     </>
   );
 }

@@ -1,4 +1,4 @@
-// Who the linked WhatsApp account is, for routing only.
+// Who the linked WhatsApp account is, for routing and profile fallbacks.
 //
 // A phone number typed into a setting is not this. The only ids accepted are
 // `creds.me.id` and `creds.me.lid` from the paired session. No creds means
@@ -23,14 +23,25 @@ function asUserJid(value, suffix) {
   return norm;
 }
 
+function cleanCredName(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "~") return null;
+  if (/^\d+(?::\d+)?@(?:s\.whatsapp\.net|lid|g\.us)$/.test(trimmed)) return null;
+  return trimmed.slice(0, 256);
+}
+
 function linkedIdentity() {
   const me = readCreds()?.me || {};
   const phone = asUserJid(me.id, "@s.whatsapp.net");
-  const lid = asUserJid(me.lid, "@lid");
+  const lid = asUserJid(me.lid, "@lid") || asUserJid(me.id, "@lid");
+  const name =
+    cleanCredName(me.name) || cleanCredName(me.verifiedName) || cleanCredName(me.notify) || null;
   return {
     phone,
     lid,
-    selfJids: [phone, lid].filter(Boolean),
+    name,
+    selfJids: [...new Set([phone, lid].filter(Boolean))],
   };
 }
 

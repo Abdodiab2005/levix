@@ -23,10 +23,14 @@ import { api } from "../api/client";
 import { useToast } from "../components/Toasts";
 import {
   Button,
+  Callout,
   Card,
   Dialog,
   IconButton,
   Input,
+  MenuItem,
+  MenuSeparator,
+  OverflowMenu,
   SegmentedControl,
   Spinner,
 } from "../components/ui";
@@ -215,30 +219,96 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
   };
 
   const hideRestart = isAndroidCompanionApp();
-  /** Restart is safe: it keeps the pairing and only bounces the process. */
-  const restartControl = hideRestart ? null : (
+  const hasOverflowItems = !hideRestart || canUnlink;
+  const overflowControl = hasOverflowItems ? (
+    <OverflowMenu label={t("moreActions")}>
+      {!hideRestart && (
+        <MenuItem
+          icon={<RotateCcw size={16} />}
+          onSelect={() => handleAction(api.restartBot, t("restart"), "sessionRestartError")}
+          disabled={acting}
+        >
+          {t("restart")}
+        </MenuItem>
+      )}
+      {!hideRestart && canUnlink && <MenuSeparator />}
+      {canUnlink && (
+        <MenuItem
+          danger
+          icon={<Unlink size={16} />}
+          onSelect={() => setShowUnlinkModal(true)}
+          disabled={acting}
+        >
+          {t("unlink")}
+        </MenuItem>
+      )}
+    </OverflowMenu>
+  ) : null;
+
+  const stopControl = isRunning ? (
     <IconButton
-      label={t("restart")}
-      icon={<RotateCcw size={16} />}
-      onClick={() => handleAction(api.restartBot, t("restart"), "sessionRestartError")}
+      label={isConnected ? t("connectionStopSession") : t("connectionCancelAttempt")}
+      icon={<Square size={16} />}
+      onClick={() => handleAction(api.stopSession, t("stop"), "sessionStopError")}
       disabled={acting}
     />
-  );
+  ) : null;
+
+  const reconnectControl = isConnected ? (
+    <IconButton
+      label={t("reconnect")}
+      icon={<RefreshCw size={16} />}
+      onClick={() => handleAction(api.reconnectSession, t("reconnecting"), "sessionReconnectError")}
+      disabled={acting}
+    />
+  ) : null;
 
   return (
     <div className="flex flex-col gap-4 sm:gap-5">
-      <ConnectedAccountCard status={status} />
+      <ConnectedAccountCard status={status} variant="expanded" />
+
+      {isConnected && status?.proxyChanged ? (
+        <Callout
+          tone="info"
+          title={t("connectionProxyChangedTitle")}
+          action={
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<RefreshCw size={16} />}
+              onClick={() =>
+                handleAction(api.reconnectSession, t("reconnecting"), "sessionReconnectError")
+              }
+              disabled={acting}
+            >
+              {t("connectionProxyReconnect")}
+            </Button>
+          }
+        >
+          {t("connectionProxyChangedBody")}
+        </Callout>
+      ) : null}
+
       {/* The account card states the session once; this card only acts on it. */}
       <Card className="flex flex-col gap-3">
-        <p className="text-xs text-muted sm:text-sm">
-          {isConnected
-            ? t("sessionActive")
-            : isPaused
-              ? t("paused")
-              : linked
-                ? t("connectionSavedReady")
-                : t("sessionOffline")}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          <p className="text-xs text-muted sm:text-sm">
+            {isConnected
+              ? t("sessionActive")
+              : isPaused
+                ? t("paused")
+                : linked
+                  ? t("connectionSavedReady")
+                  : t("sessionOffline")}
+          </p>
+          {isRunning && (
+            <div className="flex items-center gap-1.5">
+              {reconnectControl}
+              {stopControl}
+              {overflowControl}
+            </div>
+          )}
+        </div>
 
         {status?.retryInSeconds ? (
           <div className="flex items-center gap-2.5 rounded-xl border border-warn/30 bg-warn/10 p-3 text-warn">
@@ -250,28 +320,6 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
           </div>
         ) : null}
 
-        {/* Safe actions only; Stop and Unlink stay in the danger zone below. */}
-        {isConnected && (
-          <div className="flex w-full items-center gap-2.5">
-            <Button
-              variant="secondary"
-              icon={<RefreshCw size={16} />}
-              onClick={() =>
-                handleAction(api.reconnectSession, t("reconnecting"), "sessionReconnectError")
-              }
-              disabled={acting}
-              className="flex-1 whitespace-nowrap sm:flex-none"
-            >
-              {t("reconnect")}
-            </Button>
-            {restartControl}
-          </div>
-        )}
-
-        {!isConnected && isRunning && restartControl ? (
-          <div className="flex w-full items-center gap-2.5">{restartControl}</div>
-        ) : null}
-
         {/* Known session (paused / idle / disconnected): resume, never QR or pairing codes */}
         {!isRunning && !isConsentRequired && linked && (
           <div className="flex w-full flex-col gap-3 sm:max-w-xl">
@@ -280,18 +328,17 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
                 {isOnline ? t("connectionPausedResume") : t("connectionPausedOffline")}
               </p>
             )}
-            <div className="flex w-full items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="primary"
                 icon={<Radio size={16} />}
                 onClick={() => handleAction(api.startSession, resumeLabel, "sessionStartError")}
                 disabled={acting}
-                className="flex-1 whitespace-nowrap sm:flex-none"
                 data-tour="connection-start"
               >
                 {resumeLabel}
               </Button>
-              {restartControl}
+              {overflowControl}
             </div>
           </div>
         )}
@@ -338,18 +385,17 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
                     className="ps-10"
                   />
                 </div>
-                <div className="flex w-full items-center gap-2.5">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="submit"
                     variant="primary"
                     icon={<Key size={16} />}
                     disabled={acting}
-                    className="flex-1 whitespace-nowrap sm:flex-none"
                     data-tour="connection-start"
                   >
                     {t("connectionGetPairingCode")}
                   </Button>
-                  {restartControl}
+                  {overflowControl}
                 </div>
                 <p className="text-xs leading-relaxed text-muted">{t("connectionPairingHint")}</p>
               </form>
@@ -358,18 +404,17 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
             {/* Method 2: QR Scan Start */}
             {pairingMethod === "qr" && (
               <div className="flex w-full flex-col gap-2 sm:max-w-xl">
-                <div className="flex w-full items-center gap-2.5">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     variant="primary"
                     icon={<QrCode size={18} />}
                     onClick={handleStartQr}
                     disabled={acting}
-                    className="flex-1 whitespace-nowrap sm:flex-none"
                     data-tour="connection-start"
                   >
                     {t("connectionStartQr")}
                   </Button>
-                  {restartControl}
+                  {overflowControl}
                 </div>
                 <p className="text-xs text-muted">{t("connectionQrHint")}</p>
               </div>
@@ -381,18 +426,24 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
       {unlinkIncomplete && (
         <Card className="flex flex-col items-start gap-4">
           <p className="text-sm text-text-main">{t("connectionUnlinkIncompleteHint")}</p>
-          <Button variant="primary" onClick={() => setShowUnlinkModal(true)} disabled={acting}>
-            {t("connectionUnlinkRetry")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="primary" onClick={() => setShowUnlinkModal(true)} disabled={acting}>
+              {t("connectionUnlinkRetry")}
+            </Button>
+            {overflowControl}
+          </div>
         </Card>
       )}
 
       {isConsentRequired && (
         <Card className="flex flex-col items-start gap-4">
           <p className="text-sm text-text-main">{consentReasonText(status?.reason, t)}</p>
-          <Button variant="primary" onClick={onReviewTerms}>
-            {t("legalReviewTerms")}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="primary" onClick={onReviewTerms}>
+              {t("legalReviewTerms")}
+            </Button>
+            {overflowControl}
+          </div>
         </Card>
       )}
 
@@ -488,7 +539,6 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
                   icon={<Smartphone size={16} />}
                   onClick={handleSwitchToPhone}
                   disabled={acting}
-                  className="w-full"
                 >
                   {t("connectionLinkWithPhoneInstead")}
                 </Button>
@@ -503,42 +553,6 @@ export const ConnectionView: FC<ConnectionViewProps> = ({
               </span>
             </div>
           )}
-        </Card>
-      )}
-
-      {/* Session-interrupting actions, kept apart from the safe ones above. */}
-      {(isRunning || canUnlink) && (
-        <Card className="flex flex-col gap-3 border-danger/30">
-          <div className="min-w-0">
-            <h3 className="text-sm font-bold text-danger">{t("connectionDangerZone")}</h3>
-            <p className="mt-0.5 text-xs leading-relaxed text-muted">
-              {t("connectionDangerZoneDesc")}
-            </p>
-          </div>
-          <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap">
-            {isRunning && (
-              <Button
-                variant="danger"
-                icon={<Square size={16} />}
-                onClick={() => handleAction(api.stopSession, t("stop"), "sessionStopError")}
-                disabled={acting}
-                className="w-full sm:w-auto"
-              >
-                {isConnected ? t("connectionStopSession") : t("connectionCancelAttempt")}
-              </Button>
-            )}
-            {canUnlink && (
-              <Button
-                variant="danger"
-                icon={<Unlink size={16} />}
-                onClick={() => setShowUnlinkModal(true)}
-                disabled={acting}
-                className="w-full sm:w-auto"
-              >
-                {t("unlink")}
-              </Button>
-            )}
-          </div>
         </Card>
       )}
 

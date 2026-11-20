@@ -39,6 +39,7 @@ import {
   getGroupSettings,
   getRecentDebts,
   getSchedules,
+  getUserMetadata,
   listModerationFlags,
   rememberSavedName,
   resolveUserPhone,
@@ -180,6 +181,9 @@ accountProfile = createAccountProfile({
       epoch: accountEpoch(),
       identity: linkedIdentity(),
     };
+  },
+  getUserDisplayName(jid) {
+    return getUserMetadata(jid)?.displayName ?? null;
   },
   // Existing WhatsApp image transport: HTTPS WhatsApp origins, DNS and
   // private-network validation, and the live session's proxy.

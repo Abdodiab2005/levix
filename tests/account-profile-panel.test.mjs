@@ -229,6 +229,131 @@ try {
   const stats = await res.json();
   equal("stats still reports the connected account", stats.stats.botName, "Next account");
   equal("stats route never reads the account profile", pictureCalls, callsBeforeStats);
+
+  section("panel route fallback chain, LID-only phone safety, photo retry and account change");
+  {
+    const LID_ID = "987654321098765@lid";
+    store.authWrite(
+      "creds",
+      JSON.stringify({
+        registered: true,
+        me: { id: PHONE_ID, lid: LID_ID, name: "Saved Creds Name" },
+      }),
+    );
+    store.saveUserMetadata({
+      jid: PHONE_ID,
+      lid: LID_ID,
+      phone: "201234567890",
+      isOwner: true,
+      displayName: "Stored Owner PushName",
+    });
+
+    // 1. verifiedName fallback
+    setSession(
+      connectedSession({
+        user: { id: LID_ID, name: null, verifiedName: "Verified Panel Name" },
+        async profilePictureUrl() {
+          return null;
+        },
+        async fetchStatus() {
+          return [];
+        },
+      }),
+    );
+    res = await http.call("/dashboard/api/account/profile");
+    let p = (await res.json()).profile;
+    equal("panel uses verifiedName fallback", p.name, "Verified Panel Name");
+    equal("panel resolves verified PN for LID socket", p.phone, "+201234567890");
+
+    // 2. notify fallback
+    setSession(
+      connectedSession({
+        user: { id: LID_ID, name: "~", notify: "Notify Panel Name" },
+        async profilePictureUrl() {
+          return null;
+        },
+        async fetchStatus() {
+          return [];
+        },
+      }),
+    );
+    res = await http.call("/dashboard/api/account/profile");
+    p = (await res.json()).profile;
+    equal("panel uses notify fallback", p.name, "Notify Panel Name");
+
+    // 3. creds.me.name fallback
+    setSession(
+      connectedSession({
+        user: { id: LID_ID, name: null },
+        async profilePictureUrl() {
+          return null;
+        },
+        async fetchStatus() {
+          return [];
+        },
+      }),
+    );
+    res = await http.call("/dashboard/api/account/profile");
+    p = (await res.json()).profile;
+    equal("panel uses saved creds.me.name fallback", p.name, "Saved Creds Name");
+
+    // 4. user_metadata displayName fallback + photo retry from LID to verified PN
+    store.authWrite(
+      "creds",
+      JSON.stringify({
+        registered: true,
+        me: { id: PHONE_ID, lid: LID_ID },
+      }),
+    );
+    const photoAttempts = [];
+    setSession(
+      connectedSession({
+        user: { id: LID_ID, name: null },
+        async profilePictureUrl(jid) {
+          photoAttempts.push(jid);
+          if (jid === PHONE_ID) return PHOTO_URL;
+          return null;
+        },
+        async fetchStatus() {
+          return [];
+        },
+      }),
+    );
+    res = await http.call("/dashboard/api/account/profile");
+    p = (await res.json()).profile;
+    equal("panel uses user_metadata display_name fallback", p.name, "Stored Owner PushName");
+    equal(
+      "panel retries photo with verified PN when LID fails",
+      photoAttempts.join(","),
+      `${LID_ID},${PHONE_ID}`,
+    );
+    ok("retried photo URL is exposed", Boolean(p.photoUrl));
+
+    // 5. LID-only session with no PN in creds never shows a LID as a phone number
+    const ONLY_LID = "555666777888999@lid";
+    store.authWrite(
+      "creds",
+      JSON.stringify({
+        registered: true,
+        me: { id: ONLY_LID, lid: ONLY_LID },
+      }),
+    );
+    setSession(
+      connectedSession({
+        user: { id: ONLY_LID, name: null },
+        async profilePictureUrl() {
+          return null;
+        },
+        async fetchStatus() {
+          return [];
+        },
+      }),
+    );
+    res = await http.call("/dashboard/api/account/profile");
+    p = (await res.json()).profile;
+    equal("LID-only account has no phone", p.phone, null);
+    equal("new LID account does not leak previous owner's metadata name", p.name, null);
+  }
 } catch (error) {
   ok("account profile panel tests run", false, error?.stack || String(error));
 } finally {

@@ -1,7 +1,13 @@
-// Home account card state mapping and the static markup that consumes it.
+// Home account card state mapping, profile retention across reconnects, and the
+// static markup that consumes it.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { mapSessionToCard } from "../frontend/src/utils/accountCardState.ts";
+import {
+  canDisplaySavedProfile,
+  mapSessionToCard,
+  normalizeAccountId,
+  shouldClearSavedProfile,
+} from "../frontend/src/utils/accountCardState.ts";
 import { equal, finish, ok, ROOT, section } from "./harness.mjs";
 
 const view = (name) => readFileSync(join(ROOT, "frontend/src/views", name), "utf8");
@@ -67,17 +73,96 @@ section("retry attempt reaches the card only when the session reports one");
   equal("non-positive max is dropped", junk.maxAttempts, null);
 }
 
-section("the compact card masks the phone by default and uses showNumber/hideNumber");
+section(
+  "reconnect race: last good profile is retained while reconnecting for the same account and cleared on unlink or account change",
+);
+{
+  equal(
+    "device suffix stripped from PN",
+    normalizeAccountId("201234567890:14@s.whatsapp.net"),
+    "201234567890@s.whatsapp.net",
+  );
+  equal(
+    "device suffix stripped from LID",
+    normalizeAccountId("987654321098765:2@lid"),
+    "987654321098765@lid",
+  );
+  equal("invalid JID normalizes to null", normalizeAccountId("not-a-jid"), null);
+
+  const saved = {
+    accountId: "201234567890@s.whatsapp.net",
+    phone: "+201234567890",
+    profile: { name: "Levix Owner" },
+  };
+
+  equal(
+    "retained while reconnecting for the same linked account",
+    canDisplaySavedProfile({ state: "reconnecting", linked: true, canUnlink: true }, saved),
+    true,
+  );
+  equal(
+    "retained while starting for the same linked account",
+    canDisplaySavedProfile({ state: "starting", linked: true, canUnlink: true }, saved),
+    true,
+  );
+  equal(
+    "retained while connected with device-suffixed same user id",
+    canDisplaySavedProfile(
+      {
+        state: "connected",
+        connected: true,
+        linked: true,
+        canUnlink: true,
+        user: { id: "201234567890:9@s.whatsapp.net" },
+      },
+      saved,
+    ),
+    true,
+  );
+  equal(
+    "cleared immediately on logged_out",
+    shouldClearSavedProfile({ state: "logged_out", linked: false }, saved),
+    true,
+  );
+  equal(
+    "cleared immediately on waiting_for_qr",
+    shouldClearSavedProfile({ state: "waiting_for_qr", linked: false }, saved),
+    true,
+  );
+  equal(
+    "cleared immediately on unlink_incomplete",
+    shouldClearSavedProfile({ state: "error", reason: "unlink_incomplete" }, saved),
+    true,
+  );
+  equal(
+    "cleared immediately when a different account connects",
+    shouldClearSavedProfile(
+      {
+        state: "connected",
+        connected: true,
+        linked: true,
+        canUnlink: true,
+        user: { id: "201999999999@s.whatsapp.net" },
+      },
+      saved,
+    ),
+    true,
+  );
+}
+
+section("the account card masks the phone by default with CodeText and uses showNumber/hideNumber");
 {
   ok("card maps through accountCardState", accountCard.includes("mapSessionToCard"));
-  ok("compact card masks the phone by default", accountCard.includes("••• ••• ••••"));
-  ok("compact card uses showNumber", accountCard.includes('t("showNumber")'));
-  ok("compact card uses hideNumber", accountCard.includes('t("hideNumber")'));
+  ok("card masks the phone by default", accountCard.includes("••• ••• ••••"));
+  ok("card uses CodeText for phone numbers", accountCard.includes("<CodeText"));
+  ok("card uses UserText for names", accountCard.includes("<UserText"));
+  ok("card uses showNumber", accountCard.includes('t("showNumber")'));
+  ok("card uses hideNumber", accountCard.includes('t("hideNumber")'));
   ok(
-    "compact card uses Eye and EyeOff icons",
+    "card uses Eye and EyeOff icons",
     accountCard.includes("Eye") && accountCard.includes("EyeOff"),
   );
-  ok("phone renders LTR-isolated", /as="bdi" dir="ltr"|<bdi dir="ltr"/.test(accountCard));
+  ok("phone renders LTR-isolated", /CodeText|as="bdi" dir="ltr"|<bdi dir="ltr"/.test(accountCard));
   ok(
     "revealed state keyed by status.user.id",
     accountCard.includes("revealedAccount === status.user.id"),
@@ -118,25 +203,35 @@ section(
   ok("OverviewView has no show/hide number toggle", !overview.includes("showNumber"));
 }
 
-section("Connection screen keeps one status display and a danger zone");
+section("Connection screen uses safe connection actions without a danger-zone card");
 {
   ok("old header pill is gone", !connection.includes("pulse-dot"));
   ok("state is not printed through a raw key", !connection.includes("t(state as any"));
-  ok("danger zone exists", connection.includes('t("connectionDangerZone")'));
+  ok("danger zone card is removed", !connection.includes('t("connectionDangerZone")'));
   ok(
-    "stop uses the danger tone label",
+    "stop uses an IconButton with connectionStopSession / connectionCancelAttempt label",
     connection.includes('t("connectionStopSession")') &&
       connection.includes('t("connectionCancelAttempt")'),
   );
   ok("stop still calls the session", connection.includes("api.stopSession"));
   ok("unlink still calls the session", connection.includes("api.unlinkSession"));
   ok(
+    "unlink is a danger item inside OverflowMenu",
+    connection.includes("OverflowMenu") &&
+      connection.includes("<MenuItem") &&
+      connection.includes("danger"),
+  );
+  ok(
     "unlink still confirms",
     connection.includes("showUnlinkModal") && connection.includes("connectionUnlinkConfirm"),
   );
   ok("reconnect still available", connection.includes("api.reconnectSession"));
   ok("restart still available", connection.includes("api.restartBot"));
-  ok("no overflow menu plumbing left", !connection.includes("OverflowMenu"));
+  ok(
+    "proxy Reconnect to apply is offered when proxyChanged is true",
+    connection.includes("status?.proxyChanged") &&
+      connection.includes('t("connectionProxyReconnect")'),
+  );
 }
 
 section("no physical-direction layout, hex colours or one-off palettes");
@@ -170,9 +265,10 @@ section("every status label is translated in all four locales");
   keys.add("accountCardAttempt");
   keys.add("accountCardManageSession");
   keys.add("accountCardProfileUnavailable");
-  keys.add("connectionDangerZone");
-  keys.add("connectionDangerZoneDesc");
   keys.add("connectionStopSession");
+  keys.add("connectionProxyChangedTitle");
+  keys.add("connectionProxyChangedBody");
+  keys.add("connectionProxyReconnect");
   for (const key of [...keys].sort()) {
     for (const [locale, catalog] of Object.entries(catalogs)) {
       ok(

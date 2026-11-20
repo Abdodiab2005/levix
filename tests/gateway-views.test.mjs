@@ -76,9 +76,15 @@ ok(
   login.includes("lang: document.documentElement.lang"),
 );
 ok(
-  "server errors use translated codes",
+  "server errors use translated codes and never raw .message",
   login.includes("loginError.code in gatewayTranslations.en") &&
-    login.includes("useState(state.error)"),
+    login.includes("useState(state.error)") &&
+    !login.includes("loginError.message") &&
+    !main.includes("setupError.message"),
+);
+ok(
+  "compact login card removes the marketing hero column",
+  !main.includes("gateway-story-react") && !main.includes("loginHeadline"),
 );
 
 section("gateway routes");
