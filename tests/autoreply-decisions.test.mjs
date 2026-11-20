@@ -584,6 +584,7 @@ section("provider classification wire format: Gemini, OpenAI-compatible, Anthrop
         JSON.stringify(body.tool_choice),
         JSON.stringify({ type: "function", function: { name: "auto_reply_decision" } }),
       );
+      equal("openai: body has no temperature", "temperature" in body, false);
       ok(
         "openai: system message carries Auto Reply directive",
         body.messages?.[0]?.content?.includes("Auto Reply decision"),
@@ -657,6 +658,7 @@ section("provider classification wire format: Gemini, OpenAI-compatible, Anthrop
         JSON.stringify(body.tool_choice),
         JSON.stringify({ type: "tool", name: "auto_reply_decision" }),
       );
+      equal("anthropic: body has no temperature", "temperature" in body, false);
       ok(
         "anthropic: system field carries Auto Reply directive",
         body.system?.includes("Auto Reply decision"),
@@ -796,6 +798,33 @@ section("A-3: a thrown command does not reach Auto Reply");
       0,
     );
     equal("non-command message still reaches Auto Reply", autoReplyCalls, 1);
+
+    // In a group, a thrown command skips only Auto Reply: group moderation still runs.
+    const store = require("./src/db/store.cjs");
+    store.saveGroupSettings(GROUP, {
+      moderation: { forbiddenWords: { enabled: true, list: ["badword"] } },
+    });
+    const groupSock = {
+      ...makeSock(),
+      groupMetadata: async () => ({
+        id: GROUP,
+        participants: [
+          { id: SENDER, admin: null },
+          { id: "201999999999@s.whatsapp.net", admin: "admin" },
+        ],
+      }),
+    };
+    const groupCmdMsg = {
+      key: { remoteJid: GROUP, participant: SENDER, fromMe: false, id: "cmd-throw-group" },
+      pushName: "Tester",
+      messageTimestamp: 1,
+      message: { conversation: "!ping badword" },
+    };
+    await processMessage(groupSock, groupCmdMsg, "!ping badword", 0);
+    equal("thrown command in group does not fall through to Auto Reply", autoReplyCalls, 1);
+    const warnings = store.getUserWarnings(GROUP, SENDER);
+    equal("group moderation still ran and recorded warning for thrown command", warnings.length, 1);
+    equal("recorded warning is for forbidden words", warnings[0].rules.includes("forbidden"), true);
   } finally {
     ping.execute = originalExecute;
     host.dispatchAutoReply = origDispatch;
@@ -852,6 +881,31 @@ section("A-4: a plain disconnect aborts in-flight and pending Auto Reply turns")
   });
   let observedSignal = null;
 
+  let considerEntered;
+  const considerEnteredPromise = new Promise((resolve) => {
+    considerEntered = resolve;
+  });
+  let releaseConsider;
+  const considerGate = new Promise((resolve) => {
+    releaseConsider = resolve;
+  });
+  let observedPendingSignal = null;
+
+  const PENDING_CHAT = "201333333333@s.whatsapp.net";
+
+  const customRuntime = runtime({
+    getScope: () => new Set([CHAT, PENDING_CHAT, GROUP]),
+    consider: async (event, { signal } = {}) => {
+      if (event.chatJid === PENDING_CHAT) {
+        observedPendingSignal = signal;
+        considerEntered();
+        await considerGate;
+        return { reply: true, instructions: "pending after disconnect", quote: true };
+      }
+      return { reply: true, instructions: "be concise", quote: true };
+    },
+  });
+
   wireBaseDeps(liveSock, {
     classifyAutoReply: async ({ signal }) => {
       observedSignal = signal;
@@ -861,14 +915,26 @@ section("A-4: a plain disconnect aborts in-flight and pending Auto Reply turns")
     },
   });
 
-  const dispatchPromise = autoReply.dispatch(
-    runtime(),
+  const inflightDispatchPromise = autoReply.dispatch(
+    customRuntime,
     liveSock,
     dm("hello while connected", { id: "disconnect-inflight" }),
     1,
   );
   await enteredPromise;
   equal("turn signal is live before disconnect", observedSignal.aborted, false);
+
+  const pendingDispatchPromise = autoReply.dispatch(
+    customRuntime,
+    liveSock,
+    dm("hello while pending", {
+      id: "disconnect-pending",
+      key: { remoteJid: PENDING_CHAT },
+    }),
+    1,
+  );
+  await considerEnteredPromise;
+  equal("pending consider signal is live before disconnect", observedPendingSignal.aborted, false);
 
   // Trigger a plain recoverable disconnect (no account change / no logout).
   await liveSock.updates({
@@ -885,10 +951,12 @@ section("A-4: a plain disconnect aborts in-flight and pending Auto Reply turns")
   });
 
   equal("plain disconnect aborts in-flight Auto Reply turn signal", observedSignal.aborted, true);
+  equal("plain disconnect aborts pending consider signal", observedPendingSignal.aborted, true);
   releaseClassify();
-  await dispatchPromise;
-  equal("aborted turn sends nothing", liveSock.sent.length, 0);
-  equal("aborted turn sends no presence", liveSock.presence.length, 0);
+  releaseConsider();
+  await Promise.all([inflightDispatchPromise, pendingDispatchPromise]);
+  equal("aborted turns send nothing", liveSock.sent.length, 0);
+  equal("aborted turns send no presence", liveSock.presence.length, 0);
 
   await session.shutdown();
 }

@@ -1067,7 +1067,6 @@ async function classifyProviderAutoReply(provider, { parts, systemInstruction, s
               type: "function",
               function: { name: AUTO_REPLY_DECISION_TOOL },
             },
-            temperature: 0,
           },
         };
 

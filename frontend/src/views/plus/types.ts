@@ -186,8 +186,8 @@ export const PLUS_LIMITS = {
   perChatPerHour: { min: 1, max: 200 },
 } as const;
 
-/** digits@s.whatsapp.net · digits@lid · digits@g.us */
-export const CHAT_JID_PATTERN = /^(?:\d+@s\.whatsapp\.net|\d+@lid|\d+@g\.us)$/;
+/** digits@s.whatsapp.net · digits@lid · digits@g.us · digits-digits@g.us */
+export const CHAT_JID_PATTERN = /^(?:\d+@s\.whatsapp\.net|\d+@lid|\d+@g\.us|\d+-\d+@g\.us)$/;
 
 export function isGroupJid(jid: string): boolean {
   return jid.endsWith("@g.us");

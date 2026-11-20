@@ -132,6 +132,7 @@ export async function processMessage(sock, msg, body, epoch) {
   }
 
   // Try to handle as command
+  let allowAutoReply = true;
   try {
     const wasCommand = await handleCommand(sock, msg, body, epoch);
     if (wasCommand) {
@@ -145,7 +146,7 @@ export async function processMessage(sock, msg, body, epoch) {
     }
   } catch (error) {
     logger.error({ err: error }, "Error handling command");
-    return;
+    allowAutoReply = false;
   }
 
   // Handle regular group messages (moderation)
@@ -159,7 +160,7 @@ export async function processMessage(sock, msg, body, epoch) {
     moderationActed = Boolean(result?.acted);
   }
 
-  if (!moderationActed) {
+  if (!moderationActed && allowAutoReply) {
     try {
       const { host } = require("../extensions/host.cjs");
       const pending = host.dispatchAutoReply(sock, msg, epoch);
