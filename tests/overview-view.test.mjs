@@ -177,20 +177,9 @@ section("Needs Attention: only real issues appear and healthy state is empty");
 
 section("Quick Actions adapt to connection state and target operational routes");
 {
-  const offlineActions = buildQuickActions({ state: "idle", linked: false });
-  equal("offline first quick action is connect", offlineActions[0].id, "connect");
-  equal("offline unlinked uses pair label", offlineActions[0].labelKey, "overviewQuickPairSession");
-
-  const linkedStoppedActions = buildQuickActions({ state: "disconnected", linked: true });
+  const connectedActions = buildQuickActions();
   equal(
-    "offline linked uses start label",
-    linkedStoppedActions[0].labelKey,
-    "overviewQuickStartSession",
-  );
-
-  const connectedActions = buildQuickActions({ state: "connected", connected: true, linked: true });
-  equal(
-    "connected quick actions cover reaction, schedule, ai and backup",
+    "quick actions cover reaction, schedule, ai and backup and never the session",
     connectedActions.map((a) => a.id).join(","),
     "reaction,schedule,ai,backup",
   );

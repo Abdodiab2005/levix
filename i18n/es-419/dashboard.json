@@ -1785,7 +1785,6 @@
   "connectionProxyChangedBody": "Reconecta la sesión de WhatsApp para aplicar la nueva configuración del proxy.",
   "connectionProxyReconnect": "Reconectar para aplicar",
   "overviewNeedsAttentionTitle": "Requiere atención",
-  "overviewNeedsAttentionDesc": "Problemas detectados en el estado actual del bot.",
   "overviewAttentionConsentTitle": "Revisión de términos necesaria",
   "overviewAttentionConsentMeta": "Acepta los términos actualizados antes de conectar WhatsApp.",
   "overviewAttentionLoggedOutTitle": "Sesión de WhatsApp desvinculada",
@@ -1817,10 +1816,6 @@
   "overviewAttentionReactionsFailedMeta": "{n} regla de reacción registró un fallo en su última ejecución.",
   "overviewAttentionReactionsAction": "Revisar reglas",
   "overviewQuickActionsTitle": "Acciones rápidas",
-  "overviewQuickActionsDesc": "Ve directamente a las operaciones frecuentes.",
-  "overviewQuickStartSession": "Iniciar sesión de WhatsApp",
-  "overviewQuickPairSession": "Vincular cuenta de WhatsApp",
-  "overviewQuickConnectDesc": "Conecta o vincula tu cuenta de WhatsApp",
   "overviewQuickCreateReaction": "Crear comando por emoji",
   "overviewQuickCreateReactionDesc": "Ejecuta un comando al reaccionar con un emoji",
   "overviewQuickAddSchedule": "Programar mensaje",
@@ -1830,7 +1825,6 @@
   "overviewQuickCreateBackup": "Crear copia de seguridad",
   "overviewQuickCreateBackupDesc": "Exporta o restaura configuraciones, reglas y datos",
   "overviewUpcomingTitle": "Próximos envíos y tareas",
-  "overviewUpcomingDesc": "Próximos mensajes programados y tareas pendientes.",
   "overviewUpcomingSchedulesHeading": "Próximos envíos programados",
   "overviewOpenTodosHeading": "Tareas pendientes"
 }

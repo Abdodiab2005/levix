@@ -35,7 +35,7 @@ export function StatTile({
   const content = (
     <>
       <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-xs font-medium text-muted">{label}</span>
+        <span className="line-clamp-2 break-words text-xs font-medium text-muted">{label}</span>
         {icon && (
           <span className="shrink-0 text-muted" aria-hidden="true">
             {icon}

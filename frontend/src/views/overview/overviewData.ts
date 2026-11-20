@@ -258,43 +258,8 @@ export function buildAttentionItems(input: {
   return items;
 }
 
-export function buildQuickActions(status: SessionStatus | null): OverviewQuickAction[] {
-  const isConnected = status?.state === "connected" && status.connected !== false;
-  const isLinked = Boolean(status?.linked || status?.user?.id) && status?.state !== "logged_out";
-
-  if (!isConnected) {
-    return [
-      {
-        id: "connect",
-        labelKey: isLinked ? "overviewQuickStartSession" : "overviewQuickPairSession",
-        descKey: "overviewQuickConnectDesc",
-        view: "connection",
-        hash: "#connection",
-      },
-      {
-        id: "reaction",
-        labelKey: "overviewQuickCreateReaction",
-        descKey: "overviewQuickCreateReactionDesc",
-        view: "reactions",
-        hash: "#reactions",
-      },
-      {
-        id: "schedule",
-        labelKey: "overviewQuickAddSchedule",
-        descKey: "overviewQuickAddScheduleDesc",
-        view: "schedules",
-        hash: "#schedules",
-      },
-      {
-        id: "backup",
-        labelKey: "overviewQuickCreateBackup",
-        descKey: "overviewQuickCreateBackupDesc",
-        view: "settings",
-        hash: "#settings/backup",
-      },
-    ];
-  }
-
+// The account card owns the session action, so these never repeat it.
+export function buildQuickActions(): OverviewQuickAction[] {
   return [
     {
       id: "reaction",

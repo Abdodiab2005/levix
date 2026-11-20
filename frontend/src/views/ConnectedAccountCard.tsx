@@ -268,11 +268,11 @@ export function ConnectedAccountCard({
           {loading && <Spinner label={t("loading")} />}
         </div>
       </div>
-      {variant !== "compact" && (
+      {variant !== "compact" && connected && (
         <IconButton
           label={cooldown ? t("accountProfileRefreshSoon") : t("accountProfileRefresh")}
           icon={<RefreshCw size={18} />}
-          disabled={!connected || loading || cooldown}
+          disabled={loading || cooldown}
           onClick={() => void load(true)}
         />
       )}

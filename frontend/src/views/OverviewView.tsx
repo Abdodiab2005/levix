@@ -170,7 +170,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
     [status, settings, stats?.aiConfigured, plusStatus, plusAvailable, schedules, reactions],
   );
 
-  const quickActions = useMemo(() => buildQuickActions(status), [status]);
+  const quickActions = useMemo(() => buildQuickActions(), []);
   const upcomingSchedules = useMemo(() => selectUpcomingSchedules(schedules, 3), [schedules]);
   const openTodos = useMemo(() => selectOpenTodos(todos, 5), [todos]);
   const hasUpcoming = upcomingSchedules.length > 0 || openTodos.length > 0;
@@ -219,10 +219,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
 
       {/* 3. Needs Attention (hidden entirely when nothing needs attention) */}
       {attentionItems.length > 0 && (
-        <Section
-          title={t("overviewNeedsAttentionTitle")}
-          description={t("overviewNeedsAttentionDesc")}
-        >
+        <Section title={t("overviewNeedsAttentionTitle")}>
           <div className="flex flex-col gap-2">
             {attentionItems.map((item) => {
               const metaText =
@@ -258,7 +255,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
       )}
 
       {/* 4. Quick Actions */}
-      <Section title={t("overviewQuickActionsTitle")} description={t("overviewQuickActionsDesc")}>
+      <Section title={t("overviewQuickActionsTitle")}>
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           {quickActions.map((action) => (
             <ListRow
@@ -274,7 +271,7 @@ export const OverviewView: FC<OverviewViewProps> = ({ status, onNavigate }) => {
 
       {/* 5. Upcoming / recent items (hidden when both are empty) */}
       {hasUpcoming && (
-        <Section title={t("overviewUpcomingTitle")} description={t("overviewUpcomingDesc")}>
+        <Section title={t("overviewUpcomingTitle")}>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {upcomingSchedules.length > 0 && (
               <Card className="flex flex-col gap-2.5">

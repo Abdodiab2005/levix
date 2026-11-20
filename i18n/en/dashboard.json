@@ -1785,7 +1785,6 @@
   "connectionProxyChangedBody": "Reconnect the WhatsApp session to apply the new proxy configuration.",
   "connectionProxyReconnect": "Reconnect to apply",
   "overviewNeedsAttentionTitle": "Needs attention",
-  "overviewNeedsAttentionDesc": "Issues detected from current bot state.",
   "overviewAttentionConsentTitle": "Terms review required",
   "overviewAttentionConsentMeta": "Accept the updated terms before WhatsApp can connect.",
   "overviewAttentionLoggedOutTitle": "WhatsApp session unlinked",
@@ -1817,10 +1816,6 @@
   "overviewAttentionReactionsFailedMeta": "{n} reaction rule reported a failure on its last run.",
   "overviewAttentionReactionsAction": "Review rules",
   "overviewQuickActionsTitle": "Quick actions",
-  "overviewQuickActionsDesc": "Jump straight to common operations.",
-  "overviewQuickStartSession": "Start WhatsApp session",
-  "overviewQuickPairSession": "Pair WhatsApp account",
-  "overviewQuickConnectDesc": "Connect or pair your WhatsApp account",
   "overviewQuickCreateReaction": "Create emoji command",
   "overviewQuickCreateReactionDesc": "Trigger a command when someone reacts with an emoji",
   "overviewQuickAddSchedule": "Schedule a message",
@@ -1830,7 +1825,6 @@
   "overviewQuickCreateBackup": "Create a backup",
   "overviewQuickCreateBackupDesc": "Export or restore settings, rules and data",
   "overviewUpcomingTitle": "Upcoming & open items",
-  "overviewUpcomingDesc": "Next scheduled sends and open todo items.",
   "overviewUpcomingSchedulesHeading": "Next scheduled sends",
   "overviewOpenTodosHeading": "Open todos"
 }

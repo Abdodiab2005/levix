@@ -1785,7 +1785,6 @@
   "connectionProxyChangedBody": "أعِد اتصال جلسة واتساب لتطبيق إعدادات الوكيل الجديدة.",
   "connectionProxyReconnect": "إعادة الاتصال للتطبيق",
   "overviewNeedsAttentionTitle": "يتطلب الانتباه",
-  "overviewNeedsAttentionDesc": "مشكلات مرصودة من الحالة الحالية للبوت.",
   "overviewAttentionConsentTitle": "يلزم مراجعة الشروط",
   "overviewAttentionConsentMeta": "اقبل الشروط المحدّثة قبل اتصال واتساب.",
   "overviewAttentionLoggedOutTitle": "تم فصل جلسة واتساب",
@@ -1817,10 +1816,6 @@
   "overviewAttentionReactionsFailedMeta": "أبلغت {n} قاعدة تفاعل عن فشل في آخر تشغيل.",
   "overviewAttentionReactionsAction": "مراجعة القواعد",
   "overviewQuickActionsTitle": "إجراءات سريعة",
-  "overviewQuickActionsDesc": "انتقل مباشرة إلى العمليات الشائعة.",
-  "overviewQuickStartSession": "بدء جلسة واتساب",
-  "overviewQuickPairSession": "ربط حساب واتساب",
-  "overviewQuickConnectDesc": "اتصل بحساب واتساب أو اربطه",
   "overviewQuickCreateReaction": "إنشاء أمر تفاعل بالرموز",
   "overviewQuickCreateReactionDesc": "تشغيل أمر عند التفاعل برمز تعبيري على رسالة",
   "overviewQuickAddSchedule": "جدولة رسالة",
@@ -1830,7 +1825,6 @@
   "overviewQuickCreateBackup": "إنشاء نسخة احتياطية",
   "overviewQuickCreateBackupDesc": "تصدير أو استعادة الإعدادات والقواعد والبيانات",
   "overviewUpcomingTitle": "المواعيد والمهام المفتوحة",
-  "overviewUpcomingDesc": "الرسائل المجدولة القادمة والمهام المفتوحة.",
   "overviewUpcomingSchedulesHeading": "الرسائل المجدولة القادمة",
   "overviewOpenTodosHeading": "المهام المفتوحة"
 }
