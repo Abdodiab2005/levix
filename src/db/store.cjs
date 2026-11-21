@@ -1742,6 +1742,21 @@ function rewriteStoredThoughtSignatures() {
   return updated;
 }
 
+// In-memory only. Moves on every gemini_model, gemini_base_url or
+// gemini_api_key change, including a change that lands back on the value a
+// turn already pinned. The turn captures this before its first request and
+// drops thought signatures when it has moved.
+let geminiSignatureGeneration = 0;
+
+function geminiSignatureGenerationNow() {
+  return geminiSignatureGeneration;
+}
+
+function bumpGeminiSignatureGeneration() {
+  geminiSignatureGeneration += 1;
+  return geminiSignatureGeneration;
+}
+
 // One transaction for every stored chat. Called when gemini_model,
 // gemini_base_url or gemini_api_key changes — not on each message.
 // Joins a transaction that is already open (backup restore) instead of
@@ -2801,6 +2816,8 @@ module.exports = {
   saveChatHistory,
   stripThoughtSignaturesFromHistory,
   stripGeminiThoughtSignatures,
+  geminiSignatureGeneration: geminiSignatureGenerationNow,
+  bumpGeminiSignatureGeneration,
   deleteChatHistory,
   deleteAllChatHistories,
   // Baileys auth

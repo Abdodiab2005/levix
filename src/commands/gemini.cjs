@@ -28,7 +28,11 @@ const { geminiHttpOptions } = require("../utils/geminiHttpOptions.cjs");
 
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
-const { accountEpoch, stripThoughtSignaturesFromHistory } = require("../db/store.cjs");
+const {
+  accountEpoch,
+  stripThoughtSignaturesFromHistory,
+  geminiSignatureGeneration,
+} = require("../db/store.cjs");
 const {
   getChatHistoryAsync,
   saveChatHistoryAsync,
@@ -45,6 +49,7 @@ const { resolveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
 const { generateImage } = require("../services/aiImage.cjs");
 const {
   runAgent,
+  readGeminiProviderPin,
   formatSources,
   isFileReferenceError,
   sanitizeHistoryForFiles,
@@ -59,12 +64,18 @@ const { assertProviderBaseUrl, assertProviderRequestUrl } = require("../utils/pr
 const { t } = require("../utils/i18n.cjs");
 
 // Model, endpoint, and a hash of the key. The key itself never leaves settings.
-function geminiSettingsFingerprint() {
-  const key = String(settings.get("gemini_api_key") || "");
+// A pin is the snapshot taken at the start of a turn; omit it to hash the
+// live values.
+function geminiSettingsFingerprint(pin) {
+  const model = pin ? pin.model : settings.get("gemini_model");
+  const baseUrl = pin ? pin.baseUrl : settings.get("gemini_base_url");
+  const key = pin ? pin.apiKey : settings.get("gemini_api_key");
   return [
-    String(settings.get("gemini_model") || ""),
-    String(settings.get("gemini_base_url") || ""),
-    createHash("sha256").update(key).digest("hex"),
+    String(model || ""),
+    String(baseUrl || ""),
+    createHash("sha256")
+      .update(String(key || ""))
+      .digest("hex"),
   ].join("\n");
 }
 
@@ -702,17 +713,20 @@ module.exports = {
       epoch === accountEpoch() &&
       revision === historyRevision &&
       chatRevision === (chatHistoryRevisions.get(chatId) || 0);
-    // Captured when the turn starts. A gemini_model, base URL or API key
-    // change while the request is in flight makes any signature from this
-    // turn belong to the previous endpoint.
-    const turnFingerprint = geminiSettingsFingerprint();
+    // Before this attempt's first await. Endpoint validation and a file-recovery
+    // retry both use this snapshot. The generation moves on every gemini_model,
+    // base URL or API key change, so A → B → A still drops signatures when the
+    // fingerprint matches again.
+    const turnPin = readGeminiProviderPin();
+    const turnFingerprint = geminiSettingsFingerprint(turnPin);
+    const turnGeneration = geminiSignatureGeneration();
 
     async function persistHistory(history) {
       if (!canSaveHistory() || !history?.length) return;
-      const turns =
-        geminiSettingsFingerprint() === turnFingerprint
-          ? history
-          : stripThoughtSignaturesFromHistory(history);
+      const keepSignatures =
+        geminiSignatureGeneration() === turnGeneration &&
+        geminiSettingsFingerprint() === turnFingerprint;
+      const turns = keepSignatures ? history : stripThoughtSignaturesFromHistory(history);
       await saveChatHistoryAsync(chatId, turns);
     }
 
@@ -725,6 +739,7 @@ module.exports = {
         history: globalMemoryAccess(agentContext).read ? history : stripMemoryToolParts(history),
         status,
         context: agentContext,
+        geminiPin: turnPin,
       });
       await persistHistory(result.history);
       return result;

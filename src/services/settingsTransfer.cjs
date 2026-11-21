@@ -253,5 +253,10 @@ module.exports = {
 const GEMINI_SIGNATURE_SETTINGS = new Set(["gemini_model", "gemini_base_url", "gemini_api_key"]);
 settings.onChange((key) => {
   if (!GEMINI_SIGNATURE_SETTINGS.has(key)) return;
-  require("../db/store.cjs").stripGeminiThoughtSignatures();
+  const store = require("../db/store.cjs");
+  // Move the generation before the sweep. emitChange swallows a sweep
+  // failure and the setting still saves; an in-flight turn must still see
+  // that the value changed and changed back.
+  store.bumpGeminiSignatureGeneration();
+  store.stripGeminiThoughtSignatures();
 });

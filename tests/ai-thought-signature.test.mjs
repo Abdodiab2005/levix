@@ -1217,6 +1217,210 @@ section("a gemini_model change during a pending turn stores no signature");
   );
 }
 
+section("A to B to A during a pending turn stores no signature");
+{
+  const pendingSig = "aba-roundtrip-sig";
+  let originalKey = "";
+  await withGeminiServer(
+    [
+      () => {
+        settings.set("gemini_model", "gemini-3.1-pro-preview");
+        settings.set("gemini_api_key", "AIzaSyRotatedDuringTurn000");
+        return functionCallReply([{ name: "get_datetime", args: {} }], {
+          thoughtSignature: pendingSig,
+        });
+      },
+      () => {
+        settings.set("gemini_model", "gemini-3.7-flash");
+        settings.set("gemini_api_key", originalKey);
+        return {
+          candidates: [
+            {
+              content: {
+                role: "model",
+                parts: [
+                  {
+                    text: "hidden-thought-aba",
+                    thought: true,
+                    thoughtSignature: "aba-thought-sig",
+                  },
+                  { text: "round trip answer", thoughtSignature: "aba-text-sig" },
+                ],
+              },
+            },
+          ],
+        };
+      },
+    ],
+    async (fake) => {
+      originalKey = settings.get("gemini_api_key");
+      const chatId = "201000000190@s.whatsapp.net";
+      store.saveChatHistory(chatId, priorToolHistory("aba-seed-sig"));
+      const sock = makeSocket();
+      await withLang("en", () =>
+        geminiCommand.execute(
+          sock,
+          makeMessage(chatId, "!ai round trip"),
+          ["round", "trip"],
+          "!ai round trip",
+          null,
+          { invokedName: "ai" },
+        ),
+      );
+      equal("the round trip finished", fake.requests.length, 2);
+      equal(
+        "the first request uses the pinned model",
+        fake.requests[0].url,
+        "/v1beta/models/gemini-3.7-flash:generateContent",
+      );
+      equal(
+        "the tool result uses the pinned model",
+        fake.requests[1].url,
+        "/v1beta/models/gemini-3.7-flash:generateContent",
+      );
+      equal(
+        "the first request uses the pinned API key",
+        fake.requests[0].headers["x-goog-api-key"],
+        originalKey,
+      );
+      equal(
+        "the tool result uses the pinned API key",
+        fake.requests[1].headers["x-goog-api-key"],
+        originalKey,
+      );
+      const raw = storedHistory(chatId);
+      ok("the new call signature is not stored", !raw.includes(pendingSig));
+      ok("the new text signature is not stored", !raw.includes("aba-text-sig"));
+      ok("the thought signature field is not stored", !raw.includes("thoughtSignature"));
+      ok("the seed signature is not stored", !raw.includes("aba-seed-sig"));
+      ok("the thought part is not stored", !raw.includes("hidden-thought-aba"));
+      ok("the answer is stored", raw.includes("round trip answer"));
+      ok("the function call is stored", raw.includes("functionCall"));
+    },
+  );
+}
+
+section("a file-recovery retry uses the pinned model");
+{
+  const fileUri = "https://generativelanguage.googleapis.com/v1beta/files/sentfile1";
+  let originalKey = "";
+  await withGeminiServer(
+    [
+      () => {
+        settings.set("gemini_model", "gemini-3.1-pro-preview");
+        settings.set("gemini_api_key", "AIzaSyRotatedOnRetry00000");
+        return errorReply(404, "file expired");
+      },
+      () => {
+        settings.set("gemini_model", "gemini-3.7-flash");
+        settings.set("gemini_api_key", originalKey);
+        return {
+          candidates: [
+            {
+              content: {
+                role: "model",
+                parts: [
+                  {
+                    text: "hidden-thought-retry",
+                    thought: true,
+                    thoughtSignature: "retry-thought-sig",
+                  },
+                  { text: "retry answer", thoughtSignature: "retry-text-sig" },
+                ],
+              },
+            },
+          ],
+        };
+      },
+    ],
+    async (fake) => {
+      originalKey = settings.get("gemini_api_key");
+      const chatId = "201000000191@s.whatsapp.net";
+      store.saveChatHistory(chatId, [
+        {
+          role: "user",
+          parts: [{ text: "look" }, { fileData: { fileUri, mimeType: "image/jpeg" } }],
+        },
+        {
+          role: "model",
+          parts: [
+            {
+              text: "private chain of thought",
+              thought: true,
+              thoughtSignature: "retry-seed-thought",
+            },
+            { text: "saw it", thoughtSignature: "retry-seed-sig" },
+          ],
+        },
+      ]);
+      const sock = makeSocket();
+      await withLang("en", () =>
+        geminiCommand.execute(
+          sock,
+          makeMessage(chatId, "!ai retry pinned"),
+          ["retry", "pinned"],
+          "!ai retry pinned",
+          null,
+          { invokedName: "ai" },
+        ),
+      );
+      equal("file expiry still retries once on the pinned client", fake.requests.length, 2);
+      equal(
+        "the failed request uses the pinned model",
+        fake.requests[0].url,
+        "/v1beta/models/gemini-3.7-flash:generateContent",
+      );
+      equal(
+        "the retry uses the pinned model",
+        fake.requests[1].url,
+        "/v1beta/models/gemini-3.7-flash:generateContent",
+      );
+      equal(
+        "the retry uses the pinned API key",
+        fake.requests[1].headers["x-goog-api-key"],
+        originalKey,
+      );
+      const raw = storedHistory(chatId);
+      ok("the retry signature is not stored", !raw.includes("retry-text-sig"));
+      ok("the seed signature is not stored", !raw.includes("retry-seed-sig"));
+      ok("thought parts are not stored", !raw.includes("private chain of thought"));
+      ok("thoughtSignature is not stored", !raw.includes("thoughtSignature"));
+      ok("the retry answer is stored", raw.includes("retry answer"));
+      ok("the earlier answer text is stored", raw.includes("saw it"));
+    },
+  );
+}
+
+section("a turn with no gemini settings change keeps its signatures");
+{
+  const kept = "kept-turn-sig-XYZ";
+  await withGeminiServer(
+    [
+      functionCallReply([{ name: "get_datetime", args: {} }], { thoughtSignature: kept }),
+      textReply("kept answer"),
+    ],
+    async () => {
+      const chatId = "201000000192@s.whatsapp.net";
+      store.saveChatHistory(chatId, priorToolHistory("kept-seed-sig"));
+      const sock = makeSocket();
+      await withLang("en", () =>
+        geminiCommand.execute(
+          sock,
+          makeMessage(chatId, "!ai keep signatures"),
+          ["keep", "signatures"],
+          "!ai keep signatures",
+          null,
+          { invokedName: "ai" },
+        ),
+      );
+      const raw = storedHistory(chatId);
+      ok("the new signature is stored", raw.includes(kept));
+      ok("the seed signature is stored", raw.includes("kept-seed-sig"));
+      ok("the answer is stored", raw.includes("kept answer"));
+    },
+  );
+}
+
 section("the gemini settings fingerprint hashes the key");
 {
   const key = "AIzaSyFingerprintSecret_abc123";
