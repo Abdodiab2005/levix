@@ -7,6 +7,7 @@ import {
 } from "../handlers/group.handler.js";
 import { handleIncomingMessage } from "../handlers/message.handler.js";
 import {
+  accountEpoch,
   applyContactRecord,
   storeLidPnMappings,
   upsertGroupDirectory,
@@ -22,7 +23,8 @@ const {
   storeUnsolicitedFullRoster,
 } = require("../utils/groupMetadataCache.cjs");
 
-const REPLAYED_OWN_NAME_TTL_MS = 60_000;
+const OWNER_NAME_BUFFER_TIMEOUT_MS = 30_000;
+const OWNER_NAME_BUFFER_POLL_MS = 100;
 
 /**
  * Wire one socket up.
@@ -62,6 +64,7 @@ export function setupEventListeners(
     if (typeof isLiveSocket === "function") return isLiveSocket();
     return true;
   };
+  const ownerNames = observeOwnerNames(sock, isLive);
   const bindings = [];
   const listen = (emitter, event, fn) => {
     if (!emitter || typeof emitter.on !== "function") return;
@@ -96,7 +99,10 @@ export function setupEventListeners(
 
   listen(sock.ev, "connection.update", (update) => {
     if (update?.connection === "open") reactions.open();
-    if (update?.connection === "close") reactions.close();
+    if (update?.connection === "close") {
+      ownerNames.close();
+      reactions.close();
+    }
     connectionUpdate(update);
   });
 
@@ -119,59 +125,6 @@ export function setupEventListeners(
 
   // Save credentials
   if (saveCreds) listen(sock.ev, "creds.update", saveCreds);
-
-  // Recent pushNames seen on non-notify (replayed/history) own messages. Baileys
-  // emits the same `creds.update { me: { name } }` for a replayed own message as
-  // for a real app-state `pushNameSetting` rename, and may flush the upsert in
-  // the same batch after `creds.update`. Deferring the creds check by one tick
-  // lets the upsert be recorded first so replays are ignored while real renames
-  // update the stored owner name.
-  const replayedOwnNames = new Map();
-  const pendingCredsNameTimers = new Set();
-  const recordReplayedOwnName = (name) => {
-    const now = Date.now();
-    for (const [entry, expiresAt] of replayedOwnNames) {
-      if (expiresAt <= now) replayedOwnNames.delete(entry);
-    }
-    replayedOwnNames.set(name, now + REPLAYED_OWN_NAME_TTL_MS);
-  };
-  const isReplayedOwnName = (name) => {
-    const expiresAt = replayedOwnNames.get(name);
-    if (expiresAt === undefined) return false;
-    if (expiresAt <= Date.now()) {
-      replayedOwnNames.delete(name);
-      return false;
-    }
-    return true;
-  };
-
-  // The linked account's own display name from its live messages and verified
-  // app-state renames. Fenced to the live socket generation; the disposer
-  // removes it on detach.
-  const ownerName = (candidate) => {
-    if (!isLive() || !candidate) return;
-    try {
-      updateOwnerDisplayName(sock, candidate);
-    } catch (err) {
-      logger.warn({ err }, "[User Metadata] owner display name update failed");
-    }
-  };
-  // Baileys also emits `creds.update` with the unchanged persisted `me.name` on
-  // connection open, edge routing, and props hash refreshes; only a changed name
-  // enters the deferred replay check.
-  let lastCredsName = cleanOwnerName(sock?.authState?.creds?.me?.name);
-  listen(sock.ev, "creds.update", (update) => {
-    const candidate = cleanOwnerName(update?.me?.name);
-    if (!candidate || !isLive()) return;
-    if (candidate === lastCredsName) return;
-    lastCredsName = candidate;
-    const timer = setTimeout(() => {
-      pendingCredsNameTimers.delete(timer);
-      if (!isLive() || isReplayedOwnName(candidate)) return;
-      ownerName(candidate);
-    }, 0);
-    pendingCredsNameTimers.add(timer);
-  });
 
   // Address-book names (`name`) and push names (`notify`) from the linked phone.
   // No history sync — these events are the live contact list WhatsApp already
@@ -235,17 +188,6 @@ export function setupEventListeners(
   listen(sock.ev, "messages.upsert", (m) => {
     intake("messages.upsert", (payload) => reactions.observeUpsert(payload))(m);
     contained("messages.upsert", (payload) => handleIncomingMessage(sock, payload))(m);
-    const list = Array.isArray(m?.messages) ? m.messages : [];
-    if (m?.type === "notify") {
-      const own = list.find((msg) => msg?.key?.fromMe && cleanOwnerName(msg.pushName));
-      if (own) ownerName(cleanOwnerName(own.pushName));
-    } else {
-      for (const msg of list) {
-        if (!msg?.key?.fromMe) continue;
-        const replayed = cleanOwnerName(msg.pushName);
-        if (replayed) recordReplayedOwnName(replayed);
-      }
-    }
   });
 
   listen(
@@ -289,14 +231,116 @@ export function setupEventListeners(
 
   return () => {
     disposed = true;
-    for (const timer of pendingCredsNameTimers) clearTimeout(timer);
-    pendingCredsNameTimers.clear();
-    replayedOwnNames.clear();
+    ownerNames.close();
     for (const [emitter, event, fn] of bindings) {
       try {
         emitter.off?.(event, fn);
       } catch {}
     }
     bindings.length = 0;
+  };
+}
+
+// Baileys rc14 emits an offline own message as append, then synchronously
+// emits the same pushName in creds.update. An app-state rename uses the same
+// creds payload. Observe the pair at emission: the buffer delays upserts and
+// can merge or delete them entirely. Forward every event unchanged.
+function observeOwnerNames(sock, isLive) {
+  const ev = sock.ev;
+  const emit = ev.emit;
+  let lastCredsName = cleanOwnerName(sock.authState?.creds?.me?.name);
+  let precedingReplay = null;
+  let pending = null;
+  let timer;
+  let closed = false;
+
+  const cancel = () => {
+    clearTimeout(timer);
+    timer = undefined;
+    pending = null;
+  };
+  const isBuffering = () => ev.isBuffering?.() === true;
+  const persist = ({ name, id, epoch }) => {
+    if (closed || !isLive() || sock.user?.id !== id || accountEpoch() !== epoch) return;
+    try {
+      updateOwnerDisplayName(sock, name);
+    } catch (err) {
+      logger.warn({ err }, "[User Metadata] owner display name update failed");
+    }
+  };
+  const settle = () => {
+    if (!pending) return;
+    const remaining = pending.deadline - performance.now();
+    if (closed || !isLive() || remaining <= 0) {
+      cancel();
+      return;
+    }
+    if (isBuffering()) {
+      timer ??= setTimeout(() => {
+        timer = undefined;
+        settle();
+      }, Math.min(remaining, OWNER_NAME_BUFFER_POLL_MS));
+      timer.unref?.();
+      return;
+    }
+    const candidate = pending;
+    cancel();
+    persist(candidate);
+  };
+  const submit = (name, id, fromCreds) => {
+    const epoch = accountEpoch();
+    if (!isBuffering() && !fromCreds) {
+      cancel();
+      persist({ name, id, epoch });
+      return;
+    }
+    const deadline = pending?.deadline ?? performance.now() + OWNER_NAME_BUFFER_TIMEOUT_MS;
+    if (!pending) queueMicrotask(settle);
+    pending = { name, id, epoch, fromCreds, deadline };
+  };
+
+  const observe = function (event, ...args) {
+    const previousReplay = precedingReplay;
+    precedingReplay = null;
+    if (!closed && (event === "messages.upsert" || event === "creds.update") && isLive()) {
+      const [payload] = args;
+      const id = sock.user?.id;
+      if (id && event === "messages.upsert" && Array.isArray(payload?.messages)) {
+        const own = payload.messages.find(
+          (msg) => msg?.key?.fromMe && cleanOwnerName(msg.pushName),
+        );
+        const name = cleanOwnerName(own?.pushName);
+        if (name && payload.type === "append") {
+          const replay = { name, id };
+          precedingReplay = replay;
+          queueMicrotask(() => {
+            if (precedingReplay === replay) precedingReplay = null;
+          });
+          // Also drop a matching candidate if an append is already queued
+          // behind it in this buffer.
+          if (pending?.fromCreds && pending.name === name && pending.id === id) cancel();
+        } else if (name && payload.type === "notify") {
+          submit(name, id, false);
+        }
+      }
+      if (id && event === "creds.update" && payload?.me?.id === id) {
+        const name = cleanOwnerName(payload.me.name);
+        if (name && name !== lastCredsName) {
+          lastCredsName = name;
+          if (previousReplay?.name !== name || previousReplay.id !== id) submit(name, id, true);
+        }
+      }
+    }
+    return emit.call(this, event, ...args);
+  };
+  ev.emit = observe;
+
+  return {
+    close() {
+      closed = true;
+      precedingReplay = null;
+      cancel();
+      if (ev.emit === observe) ev.emit = emit;
+    },
   };
 }
