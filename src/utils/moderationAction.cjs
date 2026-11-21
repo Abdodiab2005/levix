@@ -261,6 +261,9 @@ async function kickGroupMember(sock, opts) {
   if (!isBotAdminInGroupSync(meta, sock)) return { kicked: false, error: "bot-not-admin" };
   const kickJid = rosterJidForSync(meta, candidates) || candidates[0];
   if (accountEpoch() !== epoch) return { kicked: false, error: "stale" };
+  if (typeof opts.effectGuard === "function") {
+    await opts.effectGuard({ meta, kickJid, candidates });
+  }
   const updated = await sock.groupParticipantsUpdate(groupId, [kickJid], "remove");
   if (!removalSucceeded(updated)) return { kicked: false, error: "rejected", kickJid };
   if (accountEpochMoved(epoch)) return { kicked: true, kickJid };
