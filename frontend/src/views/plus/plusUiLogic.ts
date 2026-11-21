@@ -210,21 +210,31 @@ export type AutoReplyFormSaveResult =
   | { ok: true; config: AutoReplyConfig }
   | { ok: false; conflict: true; config: AutoReplyConfig; error: unknown };
 
+export interface AutoReplyFormSaveDeps extends AutoReplySaveDeps {
+  /**
+   * The revision of the baseline the draft was last reset or reconciled from.
+   * When provided, binds the save to the draft's base revision rather than
+   * `current.revision`, so a queued save cannot borrow a newer revision fetched
+   * by a concurrent toggle conflict recovery.
+   */
+  baseRevision?: number;
+}
+
 /**
- * Saves the full Auto Reply form with the revision this tab holds. On 409
+ * Saves the full Auto Reply form bound to the draft's base revision. On 409
  * CONFLICT it reloads the stored document and returns `conflict: true` without
  * re-sending the stale form, so the caller resets to the reloaded document and
  * displays the translated conflict message.
  */
-export async function saveAutoReplyForm({
-  current,
-  patch,
-  put,
-  load,
-  isConflict,
-}: AutoReplySaveDeps): Promise<AutoReplyFormSaveResult> {
+export async function saveAutoReplyForm(
+  deps: AutoReplyFormSaveDeps,
+): Promise<AutoReplyFormSaveResult> {
+  const { current, patch, put, load, isConflict } = deps;
+  const hasExplicitBase = Object.hasOwn(deps, "baseRevision");
+  const revision = hasExplicitBase ? deps.baseRevision : current.revision;
+  const body = normalizeAutoReplyConfig({ ...current, revision }, { ...patch(current), revision });
   try {
-    const saved = await put(normalizeAutoReplyConfig(current, patch(current)));
+    const saved = await put(body);
     return { ok: true, config: normalizeAutoReplyConfig(saved) };
   } catch (error) {
     if (!isConflict(error)) throw error;
@@ -236,6 +246,7 @@ export async function saveAutoReplyForm({
 export type AutoReplyPolicyDraft = Omit<AutoReplyPolicy, "globalMemory">;
 
 export type AutoReplyFormData = {
+  baseRevision?: number;
   scopeMode: AutoReplyScopeMode;
   globalPerHour: number;
   chats: AutoReplyChat[];
@@ -258,12 +269,28 @@ export function policyDraftFrom(policy?: AutoReplyPolicy): AutoReplyPolicyDraft 
 
 export function autoReplyFormDataFrom(config: AutoReplyConfig): AutoReplyFormData {
   return {
+    baseRevision:
+      typeof config.revision === "number" &&
+      Number.isSafeInteger(config.revision) &&
+      config.revision >= 0
+        ? config.revision
+        : undefined,
     scopeMode: config.scopeMode ?? "only",
     globalPerHour: config.globalPerHour,
     chats: config.chats,
     excludedChats: config.excludedChats ?? [],
     policy: policyDraftFrom(config.policy),
   };
+}
+
+function sameAutoReplyFormFields(a: AutoReplyFormData, b: AutoReplyFormData): boolean {
+  return (
+    a.scopeMode === b.scopeMode &&
+    a.globalPerHour === b.globalPerHour &&
+    JSON.stringify(a.chats) === JSON.stringify(b.chats) &&
+    JSON.stringify(a.excludedChats) === JSON.stringify(b.excludedChats) &&
+    JSON.stringify(a.policy) === JSON.stringify(b.policy)
+  );
 }
 
 /**
@@ -274,8 +301,13 @@ export function autoReplyFormDataFrom(config: AutoReplyConfig): AutoReplyFormDat
  * - After a full-form save completes, compares each draft field against the
  *   submitted snapshot (`submittedDraft`) so any edit made while the request
  *   was in flight is preserved and untouched fields adopt the server's baseline.
- * - After an immediate toggle reloads a newer baseline while the form has
- *   unsaved edits, compares each draft field against `previousBaseline`.
+ * - After an immediate toggle updates the baseline: if the draft has no unsaved
+ *   edits it adopts `nextBaseline`; if the server's form fields did not change
+ *   (only the toggle switch and revision changed) the draft keeps its edits and
+ *   advances `baseRevision` to `nextBaseline.baseRevision`; if another tab
+ *   changed form fields on the server while this tab has unsaved form edits,
+ *   the draft keeps its original `baseRevision` and never merges list fields
+ *   silently, so saving it gets 409 CONFLICT.
  */
 export function reconcileAutoReplyDraft({
   draft,
@@ -291,6 +323,18 @@ export function reconcileAutoReplyDraft({
   conflictReload?: boolean;
 }): AutoReplyFormData {
   if (conflictReload) return nextBaseline;
+  if (submittedDraft === null) {
+    const hasDraftEdits = !sameAutoReplyFormFields(draft, previousBaseline);
+    if (!hasDraftEdits) return nextBaseline;
+    const baselineFormChanged = !sameAutoReplyFormFields(previousBaseline, nextBaseline);
+    if (baselineFormChanged) {
+      return {
+        ...draft,
+        baseRevision:
+          draft.baseRevision !== undefined ? draft.baseRevision : previousBaseline.baseRevision,
+      };
+    }
+  }
   const ref = submittedDraft ?? previousBaseline;
   const editedScope = draft.scopeMode !== ref.scopeMode;
   const editedLimit = draft.globalPerHour !== ref.globalPerHour;
@@ -298,12 +342,19 @@ export function reconcileAutoReplyDraft({
   const editedExcluded = JSON.stringify(draft.excludedChats) !== JSON.stringify(ref.excludedChats);
   const editedPolicy = JSON.stringify(draft.policy) !== JSON.stringify(ref.policy);
   return {
+    baseRevision: nextBaseline.baseRevision,
     scopeMode: editedScope ? draft.scopeMode : nextBaseline.scopeMode,
     globalPerHour: editedLimit ? draft.globalPerHour : nextBaseline.globalPerHour,
     chats: editedChats ? draft.chats : nextBaseline.chats,
     excludedChats: editedExcluded ? draft.excludedChats : nextBaseline.excludedChats,
     policy: editedPolicy ? draft.policy : nextBaseline.policy,
   };
+}
+
+/** True when a peer title is a formatted phone number (e.g. "+201 000 000 010"). */
+export function isPhoneTitle(title: string): boolean {
+  const trimmed = String(title || "").trim();
+  return /^\+?\d[\d\s()-]*$/.test(trimmed);
 }
 
 const SAMPLE_PLACEHOLDER_VALUES: Readonly<Record<string, string>> = Object.freeze({

@@ -14,6 +14,7 @@ import {
   getDraftText,
   hasSamplePlaceholderValue,
   humanizePlaceholder,
+  isPhoneTitle,
   presetDisplayCopy,
   RECOVERY_REFRESH_COOLDOWN_MS,
   reconcileAutoReplyDraft,
@@ -1154,6 +1155,171 @@ section("F1: optimistic revision on Auto Reply saves and 409 CONFLICT recovery")
   equal("up-to-date full-form save returns ok: true", formOk.ok, true);
   equal("up-to-date full-form save updates globalPerHour", formOk.config.globalPerHour, 75);
   equal("up-to-date full-form save increments revision to 4", formOk.config.revision, 4);
+
+  // Round-3 F1 exact scenario:
+  // Tab A adds an exclusion; Tab B toggles groups and queues Save during conflict recovery;
+  // A's exclusion survives.
+  {
+    const initialDoc = normalizeAutoReplyConfig({
+      schemaVersion: 1,
+      enabled: true,
+      killSwitch: false,
+      globalPerHour: 30,
+      scopeMode: "except",
+      groupsEnabled: false,
+      chats: [],
+      excludedChats: [],
+      policy: DEFAULT_AUTO_REPLY_POLICY,
+      revision: 1,
+    });
+    let liveServer = structuredClone(initialDoc);
+    const serverPuts = [];
+
+    // Both Tab A and Tab B loaded initialDoc (revision 1, excludedChats: []).
+    const tabADoc = structuredClone(initialDoc);
+    let tabBSavedRef = structuredClone(initialDoc);
+    let tabBBaseline = autoReplyFormDataFrom(tabBSavedRef);
+    let tabBDraft = {
+      ...tabBBaseline,
+      globalPerHour: 45, // Tab B has an unsaved form edit built on revision 1
+    };
+    const tabBQueue = createWriteQueue();
+
+    // Deferred gate to pause Tab B's toggle inside its 409 conflict-recovery reload
+    // while Tab B queues a full-form Save.
+    let resolveToggleReload;
+    const toggleReloadGate = new Promise((resolve) => {
+      resolveToggleReload = resolve;
+    });
+    let notifyToggleEnteredRecovery;
+    const toggleEnteredRecovery = new Promise((resolve) => {
+      notifyToggleEnteredRecovery = resolve;
+    });
+
+    const serverPut = async (body) => {
+      serverPuts.push(structuredClone(body));
+      if (body.revision !== liveServer.revision) {
+        const err = new Error("CONFLICT");
+        err.code = "CONFLICT";
+        throw err;
+      }
+      liveServer = normalizeAutoReplyConfig({
+        ...body,
+        revision: liveServer.revision + 1,
+      });
+      return structuredClone(liveServer);
+    };
+
+    // 1. Tab A adds an exclusion and saves (server moves from revision 1 to 2).
+    const tabAExclusion = "201555555555@s.whatsapp.net";
+    await serverPut({
+      ...tabADoc,
+      excludedChats: [tabAExclusion],
+    });
+    equal("Tab A save moved server to revision 2", liveServer.revision, 2);
+    deepEqual("Tab A save stored the exclusion", liveServer.excludedChats, [tabAExclusion]);
+
+    // 2. Tab B toggles groupsEnabled (starts conflict recovery after 409 on revision 1).
+    let toggleReloadCount = 0;
+    const togglePromise = tabBQueue
+      .enqueue(() =>
+        saveAutoReplyPatch({
+          current: tabBSavedRef,
+          patch: () => ({ groupsEnabled: true }),
+          put: serverPut,
+          load: async () => {
+            toggleReloadCount += 1;
+            notifyToggleEnteredRecovery();
+            await toggleReloadGate;
+            return structuredClone(liveServer);
+          },
+          isConflict,
+        }),
+      )
+      .then(({ config: normalized }) => {
+        tabBSavedRef = normalized;
+        const prevBaseline = tabBBaseline;
+        tabBBaseline = autoReplyFormDataFrom(normalized);
+        tabBDraft = reconcileAutoReplyDraft({
+          draft: tabBDraft,
+          previousBaseline: prevBaseline,
+          nextBaseline: tabBBaseline,
+          submittedDraft: null,
+          conflictReload: false,
+        });
+        return normalized;
+      });
+
+    await toggleEnteredRecovery;
+    equal("Tab B toggle hit 409 and entered conflict recovery", toggleReloadCount, 1);
+
+    // 3. While conflict recovery is in flight, Tab B queues a full-form Save.
+    // The draft was built on revision 1 (with excludedChats: []).
+    const submittedDraftSnapshot = structuredClone(tabBDraft);
+    equal("queued Save draft baseRevision is 1", submittedDraftSnapshot.baseRevision, 1);
+
+    const queuedSavePromise = tabBQueue.enqueue(() =>
+      saveAutoReplyForm({
+        current: tabBSavedRef,
+        baseRevision: submittedDraftSnapshot.baseRevision,
+        patch: (current) => ({
+          scopeMode: submittedDraftSnapshot.scopeMode,
+          globalPerHour: submittedDraftSnapshot.globalPerHour,
+          chats: submittedDraftSnapshot.chats,
+          excludedChats: submittedDraftSnapshot.excludedChats,
+          policy: {
+            ...submittedDraftSnapshot.policy,
+            globalMemory: { read: current.policy?.globalMemory?.read ?? false },
+          },
+        }),
+        put: serverPut,
+        load: async () => structuredClone(liveServer),
+        isConflict,
+      }),
+    );
+
+    // Release toggle conflict recovery: toggle reloads rev 2 and saves rev 3 (groupsEnabled: true),
+    // then the queued full-form Save runs.
+    resolveToggleReload();
+    const toggleResult = await togglePromise;
+    equal("Tab B toggle succeeded at revision 3", toggleResult.revision, 3);
+    equal("Tab B toggle enabled groups", toggleResult.groupsEnabled, true);
+    deepEqual("Tab B toggle kept Tab A exclusion", toggleResult.excludedChats, [tabAExclusion]);
+    equal(
+      "dirty draft kept baseRevision 1 after toggle loaded concurrent form change",
+      tabBDraft.baseRevision,
+      1,
+    );
+
+    const saveOutcome = await queuedSavePromise;
+    equal(
+      "queued full-form Save bound to baseRevision 1 gets 409 (ok: false)",
+      saveOutcome.ok,
+      false,
+    );
+    if (!saveOutcome.ok) {
+      equal("queued full-form Save reports conflict: true", saveOutcome.conflict, true);
+      equal("queued full-form Save reloads revision 3", saveOutcome.config.revision, 3);
+      deepEqual(
+        "reloaded config after conflict preserves Tab A exclusion",
+        saveOutcome.config.excludedChats,
+        [tabAExclusion],
+      );
+      tabBSavedRef = saveOutcome.config;
+      tabBBaseline = autoReplyFormDataFrom(saveOutcome.config);
+      tabBDraft = autoReplyFormDataFrom(saveOutcome.config);
+    }
+
+    // Verify server state: Tab A's exclusion survived and was never reopened by Tab B's stale draft.
+    deepEqual("Tab A's exclusion survives on the server", liveServer.excludedChats, [
+      tabAExclusion,
+    ]);
+    equal("Tab B's toggle survives on the server", liveServer.groupsEnabled, true);
+    equal("server globalPerHour was not overwritten by stale save", liveServer.globalPerHour, 30);
+    equal("server revision remains 3", liveServer.revision, 3);
+    equal("Tab B draft resets to baseRevision 3 after conflict reload", tabBDraft.baseRevision, 3);
+    deepEqual("Tab B draft now has Tab A's exclusion", tabBDraft.excludedChats, [tabAExclusion]);
+  }
 }
 
 section("F3: Auto Reply draft reconciliation and per-chat Apply label");
@@ -1222,6 +1388,7 @@ section("F3: Auto Reply draft reconciliation and per-chat Apply label");
   // 3. On a 409 conflict reload of a full-form save, the draft resets to the reloaded baseline.
   const reloadedBaseline = {
     ...b0,
+    baseRevision: 3,
     excludedChats: ["201555555555@s.whatsapp.net"],
     globalPerHour: 45,
   };
@@ -1238,6 +1405,47 @@ section("F3: Auto Reply draft reconciliation and per-chat Apply label");
     reloadedBaseline,
   );
 
+  // 4. When a toggle in the same tab bumps revision without changing any form fields,
+  // a dirty draft keeps its edits and advances baseRevision to nextBaseline.baseRevision.
+  const sameFieldsNewRev = { ...b0, baseRevision: 2 };
+  const dirtyDraft = { ...b0, excludedChats: ["201999999999@s.whatsapp.net"] };
+  const afterOwnToggle = reconcileAutoReplyDraft({
+    draft: dirtyDraft,
+    previousBaseline: b0,
+    nextBaseline: sameFieldsNewRev,
+    submittedDraft: null,
+    conflictReload: false,
+  });
+  equal(
+    "own toggle advances dirty draft baseRevision when form fields unchanged",
+    afterOwnToggle.baseRevision,
+    2,
+  );
+  deepEqual("own toggle preserves dirty draft exclusions", afterOwnToggle.excludedChats, [
+    "201999999999@s.whatsapp.net",
+  ]);
+
+  // 5. When a toggle reloads form changes from another tab while this tab has unsaved
+  // edits, reconcileAutoReplyDraft never merges list fields silently and keeps the
+  // draft's old baseRevision so saving triggers 409 CONFLICT.
+  const afterConcurrentToggleReload = reconcileAutoReplyDraft({
+    draft: dirtyDraft,
+    previousBaseline: b0,
+    nextBaseline: reloadedBaseline,
+    submittedDraft: null,
+    conflictReload: false,
+  });
+  equal(
+    "concurrent form change during toggle keeps draft bound to its original baseRevision",
+    afterConcurrentToggleReload.baseRevision,
+    1,
+  );
+  deepEqual(
+    "concurrent form change during toggle never silently merges list fields",
+    afterConcurrentToggleReload.excludedChats,
+    ["201999999999@s.whatsapp.net"],
+  );
+
   // Static checks on AutoReplyTab.tsx and AutoReplyChatEditor.tsx
   const autoReplyTabSource = readFileSync(
     join(ROOT, "frontend/src/views/plus/AutoReplyTab.tsx"),
@@ -1252,12 +1460,24 @@ section("F3: Auto Reply draft reconciliation and per-chat Apply label");
     autoReplyTabSource.includes("saveAutoReplyForm("),
   );
   ok(
+    "AutoReplyTab passes baseRevision to saveAutoReplyForm",
+    /saveAutoReplyForm\(\{\s*current:\s*savedRef\.current,\s*baseRevision,/.test(
+      autoReplyTabSource,
+    ),
+  );
+  ok(
     "AutoReplyTab uses reconcileAutoReplyDraft",
     autoReplyTabSource.includes("reconcileAutoReplyDraft("),
   );
   ok(
     "AutoReplyTab disables draft controls while saving",
     autoReplyTabSource.includes("disabled={formSaving}"),
+  );
+  ok(
+    "AutoReplyTab renders phone-number chat titles through CodeText (LTR), not UserText",
+    autoReplyTabSource.includes("isPhoneTitle(peer.title)") &&
+      autoReplyTabSource.includes("<CodeText>{peer.title}</CodeText>") &&
+      !autoReplyTabSource.includes("title={<UserText>{peer.title}</UserText>}"),
   );
 
   const chatEditorSource = readFileSync(
@@ -1268,6 +1488,18 @@ section("F3: Auto Reply draft reconciliation and per-chat Apply label");
     "AutoReplyChatEditor labels its draft action with plusAutoReplyApply",
     chatEditorSource.includes('t("plusAutoReplyApply")') && !chatEditorSource.includes('t("save")'),
   );
+  ok(
+    "AutoReplyChatEditor renders phone-number chat titles through CodeText (LTR), not UserText",
+    chatEditorSource.includes("isPhoneTitle(peer.title)") &&
+      chatEditorSource.includes("<CodeText>{peer.title}</CodeText>") &&
+      !chatEditorSource.includes("title={<UserText>{peer.title}</UserText>}"),
+  );
+
+  equal("isPhoneTitle recognizes formatted phone number", isPhoneTitle("+201 000 000 010"), true);
+  equal("isPhoneTitle recognizes compact phone number", isPhoneTitle("+201222222222"), true);
+  equal("isPhoneTitle rejects contact name", isPhoneTitle("Saved Contact"), false);
+  equal("isPhoneTitle rejects group subject", isPhoneTitle("Project Group"), false);
+  equal("isPhoneTitle rejects unknown contact fallback", isPhoneTitle("Unknown contact"), false);
 
   for (const loc of ["en", "ar", "pt-BR", "es-419"]) {
     const catalog = JSON.parse(readFileSync(join(ROOT, "i18n", loc, "dashboard.json"), "utf8"));

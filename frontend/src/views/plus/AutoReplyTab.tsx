@@ -9,6 +9,7 @@ import {
   Card,
   ChipInput,
   type ChipRejectReason,
+  CodeText,
   ConfirmDialog,
   Disclosure,
   EmptyState,
@@ -42,6 +43,7 @@ import {
   createWriteQueue,
   describeAutoReplyPeers,
   fallbackRecipientForJid,
+  isPhoneTitle,
   policyDraftFrom,
   reconcileAutoReplyDraft,
   removeAutoReplyChat,
@@ -57,6 +59,7 @@ import {
   type AutoReplyScopeMode,
   type AutoReplyTrigger,
   DEFAULT_AUTO_REPLY_POLICY,
+  isAutoReplyRevision,
   PLUS_LIMITS,
   normalizeAutoReplyConfig,
 } from "./types";
@@ -166,13 +169,14 @@ function AutoReplyForm({
   // biome-ignore lint/correctness/useExhaustiveDependencies: keyed by content so a new object with the same values keeps the baseline.
   const savedBaseline = useMemo<AutoReplyFormData>(
     () => ({
+      baseRevision: isAutoReplyRevision(config.revision) ? config.revision : undefined,
       scopeMode,
       globalPerHour: config.globalPerHour,
       chats: config.chats,
       excludedChats: config.excludedChats ?? [],
       policy: policyDraft,
     }),
-    [scopeMode, config.globalPerHour, chatsKey, excludedKey, policyKey],
+    [config.revision, scopeMode, config.globalPerHour, chatsKey, excludedKey, policyKey],
   );
 
   const form = useDirtyForm<AutoReplyFormData>(
@@ -275,6 +279,8 @@ function AutoReplyForm({
         }),
       );
       savedRef.current = normalized;
+      submittedDraftRef.current = null;
+      conflictReloadRef.current = false;
       onSaved(normalized);
     } catch (err) {
       if (plusErrorCode(err) === "inactive") onInactive();
@@ -334,20 +340,23 @@ function AutoReplyForm({
 
     if (!validGlobal || !validCooldown || !validSender || !validChat) return;
 
-    submittedDraftRef.current = {
+    const submittedSnapshot: AutoReplyFormData = {
+      baseRevision: form.draft.baseRevision,
       scopeMode: form.draft.scopeMode,
       globalPerHour: form.draft.globalPerHour,
       chats: form.draft.chats,
       excludedChats: form.draft.excludedChats,
       policy: { ...form.draft.policy, keywords: [...form.draft.policy.keywords] },
     };
-    conflictReloadRef.current = false;
 
     void form.save(async (draft) => {
+      const baseRevision =
+        draft.baseRevision !== undefined ? draft.baseRevision : submittedSnapshot.baseRevision;
       try {
         const outcome = await writeQueueRef.current.enqueue(() =>
           saveAutoReplyForm({
             current: savedRef.current,
+            baseRevision,
             patch: (current) => ({
               scopeMode: draft.scopeMode,
               globalPerHour: draft.globalPerHour,
@@ -372,6 +381,8 @@ function AutoReplyForm({
           form.setDraft(autoReplyFormDataFrom(outcome.config));
           throw outcome.error;
         }
+        submittedDraftRef.current = submittedSnapshot;
+        conflictReloadRef.current = false;
         onSaved(outcome.config);
       } catch (err) {
         submittedDraftRef.current = null;
@@ -495,7 +506,13 @@ function AutoReplyForm({
                           <User size={16} className="text-ok" />
                         )
                       }
-                      title={<UserText>{peer.title}</UserText>}
+                      title={
+                        isPhoneTitle(peer.title) ? (
+                          <CodeText>{peer.title}</CodeText>
+                        ) : (
+                          <UserText>{peer.title}</UserText>
+                        )
+                      }
                       meta={
                         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                           {peer.subtitle ? <BidiText text={peer.subtitle} /> : null}
@@ -602,7 +619,13 @@ function AutoReplyForm({
                           <User size={16} className="text-ok" />
                         )
                       }
-                      title={<UserText>{peer.title}</UserText>}
+                      title={
+                        isPhoneTitle(peer.title) ? (
+                          <CodeText>{peer.title}</CodeText>
+                        ) : (
+                          <UserText>{peer.title}</UserText>
+                        )
+                      }
                       meta={peer.subtitle ? <BidiText text={peer.subtitle} /> : undefined}
                       trailing={
                         <IconButton

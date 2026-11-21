@@ -6,6 +6,7 @@ import {
   Button,
   ChipInput,
   type ChipRejectReason,
+  CodeText,
   ConfirmDialog,
   Dialog,
   Field,
@@ -19,6 +20,7 @@ import {
 import { useI18n } from "../../context/I18nContext";
 import { fill } from "../../utils/fill";
 import type { RecipientParts } from "../../utils/recipientLabel";
+import { isPhoneTitle } from "./plusUiLogic";
 import { type AutoReplyChat, type AutoReplyTrigger, PLUS_LIMITS } from "./types";
 
 const TRIGGERS: AutoReplyTrigger[] = ["all", "mention", "keywords"];
@@ -143,7 +145,13 @@ export function AutoReplyChatEditor({
                 <User size={16} className="text-ok" />
               )
             }
-            title={<UserText>{peer.title}</UserText>}
+            title={
+              isPhoneTitle(peer.title) ? (
+                <CodeText>{peer.title}</CodeText>
+              ) : (
+                <UserText>{peer.title}</UserText>
+              )
+            }
             meta={peer.subtitle ? <BidiText text={peer.subtitle} /> : undefined}
           />
           <Toggle
