@@ -13,6 +13,7 @@ import {
   issueBucket,
   peerLabel,
   previewText,
+  previewTransitionsPhrase,
   quoteNoteKey,
   reactionDraftIssues,
   resolveSenderMode,
@@ -498,6 +499,44 @@ section("previewText renders natural prose without form labels");
   ok("has no 'is added'", !enSentence.includes("is added"));
   ok("has no 'The same chat'", !enSentence.includes("The same chat"));
 
+  const enRemoveOwnerDraft = {
+    ...baseOwnerDraft,
+    transitions: ["remove"],
+  };
+  const enRemoveOwnerSentence = previewText(makeT(enCatalog), enRemoveOwnerDraft, "!");
+  equal(
+    "en remove-only second-person sentence matches expected target shape",
+    enRemoveOwnerSentence,
+    "When you remove 👍 from any supported message in Family, Levix runs !weather and sends the result to this chat.",
+  );
+  ok(
+    "English second-person remove-only says 'from'",
+    enRemoveOwnerSentence.includes("from any supported message"),
+  );
+  ok(
+    "English second-person remove-only never says 'remove 👍 to'",
+    !enRemoveOwnerSentence.includes("remove 👍 to"),
+  );
+
+  const enRemoveAnyoneDraft = {
+    ...selectSenderMode(baseOwnerDraft, "any"),
+    transitions: ["remove"],
+  };
+  const enRemoveAnyoneSentence = previewText(makeT(enCatalog), enRemoveAnyoneDraft, "!");
+  equal(
+    "en remove-only third-person sentence matches expected target shape",
+    enRemoveAnyoneSentence,
+    "When anyone removes 👍 from any supported message in Family, Levix runs !weather and sends the result to this chat.",
+  );
+  ok(
+    "English third-person remove-only says 'from'",
+    enRemoveAnyoneSentence.includes("from any supported message"),
+  );
+  ok(
+    "English third-person remove-only never says 'removes 👍 to'",
+    !enRemoveAnyoneSentence.includes("removes 👍 to"),
+  );
+
   const arSentence = previewText(makeT(arCatalog), baseOwnerDraft, "!");
   ok(
     "the Arabic sentence contains the command inside U+2066 ... U+2069",
@@ -527,6 +566,26 @@ section("previewText renders natural prose without form labels");
 
   for (const [locale, catalog] of Object.entries(catalogs)) {
     const t = makeT(catalog);
+    for (const isSecondPerson of [true, false]) {
+      for (const transitions of transitionSets) {
+        const clause = previewTransitionsPhrase(
+          t,
+          transitions,
+          isSecondPerson,
+          "👍",
+          "any supported message",
+        );
+        ok(
+          `${locale} clause ${isSecondPerson ? "2nd" : "3rd"} person (${transitions.join("+")}) has no '{'`,
+          !clause.includes("{"),
+          clause,
+        );
+      }
+    }
+  }
+
+  for (const [locale, catalog] of Object.entries(catalogs)) {
+    const t = makeT(catalog);
     for (const senderDraft of senderModes) {
       for (const transitions of transitionSets) {
         for (const destination of destinations) {
@@ -542,6 +601,18 @@ section("previewText renders natural prose without form labels");
             !text.includes("{"),
             text,
           );
+          if (locale === "en" && transitions.length === 1 && transitions[0] === "remove") {
+            ok(
+              `en ${mode} remove-only says 'from'`,
+              text.includes("from any supported message"),
+              text,
+            );
+            ok(
+              `en ${mode} remove-only never says 'to any supported message'`,
+              !text.includes("to any supported message"),
+              text,
+            );
+          }
         }
       }
     }

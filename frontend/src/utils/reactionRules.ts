@@ -1133,31 +1133,37 @@ export function previewTransitionsPhrase(
   t: (key: string) => string,
   transitions: readonly ReactionTransition[],
   isSecondPerson: boolean,
+  emoji: string = t("reactionPreviewEmoji"),
+  types: string = t("reactionPreviewAllTypes"),
 ): string {
-  if (!transitions.length) {
-    return isSecondPerson ? t("reactionPreviewTransAddYou") : t("reactionPreviewTransAdd");
+  const hasAdd = transitions.includes("add");
+  const hasChange = transitions.includes("change");
+  const hasRemove = transitions.includes("remove");
+
+  let key: string;
+  if (hasAdd && hasChange && hasRemove) {
+    key = isSecondPerson ? "reactionPreviewClauseAllYou" : "reactionPreviewClauseAll";
+  } else if (hasAdd && hasChange) {
+    key = isSecondPerson ? "reactionPreviewClauseAddChangeYou" : "reactionPreviewClauseAddChange";
+  } else if (hasAdd && hasRemove) {
+    key = isSecondPerson ? "reactionPreviewClauseAddRemoveYou" : "reactionPreviewClauseAddRemove";
+  } else if (hasChange && hasRemove) {
+    key = isSecondPerson
+      ? "reactionPreviewClauseChangeRemoveYou"
+      : "reactionPreviewClauseChangeRemove";
+  } else if (hasAdd) {
+    key = isSecondPerson ? "reactionPreviewClauseAddYou" : "reactionPreviewClauseAdd";
+  } else if (hasChange) {
+    key = isSecondPerson ? "reactionPreviewClauseChangeYou" : "reactionPreviewClauseChange";
+  } else if (hasRemove) {
+    key = isSecondPerson ? "reactionPreviewClauseRemoveYou" : "reactionPreviewClauseRemove";
+  } else {
+    key = isSecondPerson ? "reactionPreviewClauseAddYou" : "reactionPreviewClauseAdd";
   }
-  const phrases = transitions.map((item) => {
-    switch (item) {
-      case "add":
-        return isSecondPerson ? t("reactionPreviewTransAddYou") : t("reactionPreviewTransAdd");
-      case "change":
-        return isSecondPerson
-          ? t("reactionPreviewTransChangeYou")
-          : t("reactionPreviewTransChange");
-      default:
-        return isSecondPerson
-          ? t("reactionPreviewTransRemoveYou")
-          : t("reactionPreviewTransRemove");
-    }
-  });
-  if (phrases.length === 1) return phrases[0];
-  const joiner = t("reactionListJoin");
-  const orWord = t("reactionListOr");
-  if (phrases.length === 2) {
-    return `${phrases[0]}${orWord}${phrases[1]}`;
-  }
-  return `${phrases.slice(0, -1).join(joiner)}${orWord}${phrases[phrases.length - 1]}`;
+
+  const resolvedEmoji = emoji || t("reactionPreviewEmoji");
+  const resolvedTypes = types || t("reactionPreviewAllTypes");
+  return fill(t(key), { emoji: resolvedEmoji, types: resolvedTypes });
 }
 
 export function previewDestinationPhrase(
@@ -1208,16 +1214,16 @@ export function previewText(
   const mode = resolveSenderMode(draft);
   const isSecondPerson = mode === "owner";
   const who = previewRequesterPhrase(t, mode, draft.senderIds.length);
-  const transitions = previewTransitionsPhrase(t, draft.transitions, isSecondPerson);
   const emoji = draft.emoji || t("reactionPreviewEmoji");
   const types = previewTypesPhrase(t, draft.originalTypes, draft.action);
+  const clause = previewTransitionsPhrase(t, draft.transitions, isSecondPerson, emoji, types);
   const chat = draft.chatName.trim() || t("reactionPreviewChat");
   const action = previewActionPhrase(t, draft.action, prefix);
   const destination = previewDestinationPhrase(t, draft.destination);
 
   return fill(t("reactionPreview"), {
     who,
-    transitions,
+    clause,
     emoji,
     types,
     chat,
