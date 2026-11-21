@@ -3,15 +3,15 @@
 
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
-import {
-  cleanOwnerName,
-  saveBotOwnerMetadata,
-  updateOwnerDisplayName,
-} from "../src/core/connection.js";
-import { setupEventListeners } from "../src/core/events.js";
+import { mock } from "node:test";
+import { makeEventBuffer } from "@whiskeysockets/baileys";
 import { equal, finish, ok, require, section, useTempDataDir } from "./harness.mjs";
 
 useTempDataDir("levix-connection-owner-name");
+const { cleanOwnerName, saveBotOwnerMetadata, updateOwnerDisplayName } = await import(
+  "../src/core/connection.js"
+);
+const { setupEventListeners } = await import("../src/core/events.js");
 const store = require("./src/db/store.cjs");
 
 const OWNER_JID = "201234567890@s.whatsapp.net";
@@ -262,61 +262,32 @@ section("creds.update owner name updates on real rename and ignores replayed ups
     );
   }
 
-  // 5. Replayed own name entry expires after 60 seconds
+  // 5. A later app-state rename can reuse a name seen during replay.
   {
-    const realNow = Date.now;
-    let fakeNow = 1_700_000_000_000;
-    Date.now = () => fakeNow;
-    try {
-      const sock = makeFakeSocket();
-      const dispose = setupEventListeners(sock, {
-        isLiveSocket: () => true,
-      });
-      sock.ev.emit("messages.upsert", {
-        type: "append",
-        messages: [
-          {
-            key: { remoteJid: "120363000000001@g.us", fromMe: true },
-            pushName: "Expiring Name",
-          },
-        ],
-      });
+    const sock = makeFakeSocket();
+    const dispose = setupEventListeners(sock);
+    const me = { id: OWNER_JID };
+    sock.ev.emit("messages.upsert", {
+      type: "append",
+      messages: [{ key: { fromMe: true }, pushName: "Old" }],
+    });
+    sock.ev.emit("creds.update", { me: { ...me, name: "Old" } });
+    await flushTick();
+    equal(
+      "the replay left the current name alone",
+      store.getUserMetadata(OWNER_JID).displayName,
+      "Renamed Again",
+    );
 
-      fakeNow += 59_000;
-      sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Expiring Name" } });
-      await flushTick();
-      equal(
-        "replayed name still suppressed before 60s expiry",
-        store.getUserMetadata(OWNER_JID).displayName,
-        "Renamed Again",
-      );
-
-      // Advance lastCredsName via a second replayed name so the post-expiry
-      // emission of "Expiring Name" still enters the deferred replay check.
-      sock.ev.emit("messages.upsert", {
-        type: "append",
-        messages: [
-          {
-            key: { remoteJid: "120363000000001@g.us", fromMe: true },
-            pushName: "Intermediate Replayed Name",
-          },
-        ],
-      });
-      sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Intermediate Replayed Name" } });
-      await flushTick();
-
-      fakeNow += 2_000;
-      sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Expiring Name" } });
-      await flushTick();
-      dispose();
-      equal(
-        "replayed name expires after 60s",
-        store.getUserMetadata(OWNER_JID).displayName,
-        "Expiring Name",
-      );
-    } finally {
-      Date.now = realNow;
-    }
+    sock.ev.emit("creds.update", { me: { ...me, name: "Intermediate" } });
+    sock.ev.emit("creds.update", { me: { ...me, name: "Old" } });
+    await flushTick();
+    dispose();
+    equal(
+      "an app-state rename back to Old is accepted",
+      store.getUserMetadata(OWNER_JID).displayName,
+      "Old",
+    );
   }
 
   // 6. creds.update after the socket is replaced (or while pending replacement/dispose) changes nothing
@@ -331,7 +302,7 @@ section("creds.update owner name updates on real rename and ignores replayed ups
     equal(
       "creds.update after socket replacement changes nothing",
       store.getUserMetadata(OWNER_JID).displayName,
-      "Expiring Name",
+      "Old",
     );
 
     live = true;
@@ -341,7 +312,7 @@ section("creds.update owner name updates on real rename and ignores replayed ups
     equal(
       "creds.update invalidated before macrotask fires changes nothing",
       store.getUserMetadata(OWNER_JID).displayName,
-      "Expiring Name",
+      "Old",
     );
 
     live = true;
@@ -351,8 +322,139 @@ section("creds.update owner name updates on real rename and ignores replayed ups
     equal(
       "creds.update cancelled on dispose changes nothing",
       store.getUserMetadata(OWNER_JID).displayName,
-      "Expiring Name",
+      "Old",
     );
+  }
+}
+
+section("Baileys buffers offline owner upserts while credentials escape the buffer");
+{
+  const logger = require("./src/utils/logger.cjs");
+  const clock = mock.timers;
+  clock.enable({ apis: ["Date", "setTimeout"], now: 0 });
+  const monotonic = mock.method(performance, "now", () => Date.now());
+  const tick = async (ms) => {
+    await Promise.resolve();
+    clock.tick(ms);
+  };
+  const name = () => store.getUserMetadata(OWNER_JID).displayName;
+  store.saveUserMetadata({ jid: OWNER_JID, displayName: "Current" });
+
+  const sock = makeFakeSocket();
+  sock.ev = makeEventBuffer(logger);
+  const dispose = setupEventListeners(sock, { isLiveSocket: () => true });
+  const trace = [];
+  sock.ev.on("messages.upsert", ({ type }) => trace.push(type));
+  sock.ev.on("creds.update", () => trace.push("creds"));
+  const offline = (id, pushName) => {
+    const key = { id, remoteJid: "120363000000001@g.us", fromMe: true };
+    sock.ev.emit("messages.upsert", { type: "append", messages: [{ key, pushName }] });
+    sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: pushName } });
+    return key;
+  };
+
+  try {
+    sock.ev.buffer();
+    offline("replayed", "Stale");
+    equal("credentials arrived before the replayed message", trace.join(","), "creds");
+    await tick(1_000);
+    equal("buffered replay cannot overwrite the current name", name(), "Current");
+    sock.ev.flush();
+    equal("flush emitted the offline upsert", trace.join(","), "creds,append");
+    await tick(100);
+    equal("flush discarded the replayed credential name", name(), "Current");
+
+    sock.ev.buffer();
+    const key = offline("deleted", "Stale Deleted");
+    sock.ev.emit("messages.delete", { keys: [key] });
+    sock.ev.flush();
+    await tick(100);
+    equal("deleted replay upsert never reaches listeners", trace.join(","), "creds,append,creds");
+    equal("coalesced-away replay cannot overwrite the current name", name(), "Current");
+
+    sock.ev.buffer();
+    sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Renamed in sync" } });
+    offline("later-replay", "Stale Again");
+    sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Stale Again" } });
+    await tick(1_000);
+    equal("real rename waits for the buffer", name(), "Current");
+    sock.ev.flush();
+    await tick(100);
+    equal("later stale and duplicate events cannot replace the rename", name(), "Renamed in sync");
+
+    sock.ev.buffer();
+    sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Append arrives second" } });
+    await tick(100);
+    offline("reverse", "Append arrives second");
+    sock.ev.flush();
+    await tick(100);
+    equal(
+      "an out-of-order replay blocks the matching credentials candidate",
+      name(),
+      "Renamed in sync",
+    );
+
+    sock.ev.buffer();
+    sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Expires" } });
+    await tick(29_999);
+    equal("candidate remains uncommitted just before the timeout", name(), "Renamed in sync");
+    await tick(1);
+    equal(
+      "a candidate is discarded at 30 seconds even on Baileys' auto-flush",
+      name(),
+      "Renamed in sync",
+    );
+    sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Expires" } });
+    offline("late", "Expires");
+    await tick(1);
+    equal(
+      "late replay and duplicate after timeout cannot resurrect the candidate",
+      name(),
+      "Renamed in sync",
+    );
+
+    sock.ev.buffer();
+    sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Pending on close" } });
+    await tick(100);
+    sock.ev.emit("connection.update", { connection: "close" });
+    sock.ev.flush();
+    await tick(100);
+    equal("disconnect cancels a pending name", name(), "Renamed in sync");
+
+    const reconnect = makeFakeSocket();
+    const disposeReconnect = setupEventListeners(reconnect);
+    reconnect.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Reconnected" } });
+    await Promise.resolve();
+    equal(
+      "unbuffered rename on a replacement socket commits without a timer",
+      name(),
+      "Reconnected",
+    );
+    reconnect.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Before switch" } });
+    const other = "15550001122@s.whatsapp.net";
+    store.advanceAccountEpoch();
+    reconnect.user.id = other;
+    await Promise.resolve();
+    equal("pending update cannot write after the account epoch moves", name(), "Reconnected");
+    equal(
+      "pending update cannot create a name for the replacement account",
+      store.getUserMetadata(other),
+      null,
+    );
+    reconnect.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Late old account" } });
+    reconnect.ev.emit("creds.update", { me: { id: other, name: "Replacement account" } });
+    await Promise.resolve();
+    equal(
+      "new account accepts only its credentials name",
+      store.getUserMetadata(other)?.displayName,
+      "Replacement account",
+    );
+    equal("new account's names never update the old record", name(), "Reconnected");
+    disposeReconnect();
+  } finally {
+    dispose();
+    monotonic.mock.restore();
+    clock.reset();
   }
 }
 
