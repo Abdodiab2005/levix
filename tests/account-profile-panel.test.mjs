@@ -362,6 +362,51 @@ try {
     res = await http.call("/dashboard/api/account/profile");
     p = (await res.json()).profile;
     equal("exact self IDs only: contact with same digits cannot supply name", p.name, null);
+
+    // 7. JID-shaped profile names, "~", and empty strings are rejected from the server response (F5)
+    for (const invalidName of [
+      "user@s.whatsapp.net",
+      "operator@c.us",
+      "account@lid",
+      "team@g.us",
+      "announcements@broadcast",
+      "updates@newsletter",
+      "~",
+      "   ",
+      "",
+    ]) {
+      setSession(
+        connectedSession({
+          user: { id: PHONE_ID, name: invalidName },
+          async profilePictureUrl() {
+            return null;
+          },
+          async fetchStatus() {
+            return [];
+          },
+        }),
+      );
+      res = await http.call("/dashboard/api/account/profile");
+      p = (await res.json()).profile;
+      // The bad socket name is skipped and the next verified source answers.
+      equal(`rejects server profile name "${invalidName}"`, p.name, "Stored Owner PushName");
+    }
+
+    // Valid name passes through
+    setSession(
+      connectedSession({
+        user: { id: PHONE_ID, name: "Valid Operator Name" },
+        async profilePictureUrl() {
+          return null;
+        },
+        async fetchStatus() {
+          return [];
+        },
+      }),
+    );
+    res = await http.call("/dashboard/api/account/profile");
+    p = (await res.json()).profile;
+    equal("accepts valid server profile name", p.name, "Valid Operator Name");
   }
 } catch (error) {
   ok("account profile panel tests run", false, error?.stack || String(error));

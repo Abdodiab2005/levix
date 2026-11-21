@@ -57,6 +57,7 @@ section("owner name updates through setupEventListeners without touching role fl
 
   // 1. Live socket receives owner message -> updates name
   sock.ev.emit("messages.upsert", {
+    type: "notify",
     messages: [
       {
         key: { remoteJid: "120363000000001@g.us", fromMe: true },
@@ -70,8 +71,22 @@ section("owner name updates through setupEventListeners without touching role fl
   equal("isOwner remains true", meta.isOwner, true);
   equal("isAdmin remains false", meta.isAdmin, false);
 
+  // 1b. An append replay on the current live socket changes nothing
+  sock.ev.emit("messages.upsert", {
+    type: "append",
+    messages: [
+      {
+        key: { remoteJid: "120363000000001@g.us", fromMe: true },
+        pushName: "Older Appended Name",
+      },
+    ],
+  });
+  meta = store.getUserMetadata(OWNER_JID);
+  equal("append upsert with an older pushName changes nothing", meta.displayName, "First Update");
+
   // 2. JID-shaped pushName is rejected
   sock.ev.emit("messages.upsert", {
+    type: "notify",
     messages: [
       {
         key: { remoteJid: "120363000000001@g.us", fromMe: true },
@@ -85,6 +100,7 @@ section("owner name updates through setupEventListeners without touching role fl
   // 3. Fencing: when isLiveSocket returns false, no write occurs
   live = false;
   sock.ev.emit("messages.upsert", {
+    type: "notify",
     messages: [
       {
         key: { remoteJid: "120363000000001@g.us", fromMe: true },
@@ -99,6 +115,7 @@ section("owner name updates through setupEventListeners without touching role fl
   live = true;
   dispose();
   sock.ev.emit("messages.upsert", {
+    type: "notify",
     messages: [
       {
         key: { remoteJid: "120363000000001@g.us", fromMe: true },

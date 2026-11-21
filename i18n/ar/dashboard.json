@@ -1824,5 +1824,6 @@
   "overviewQuickCreateBackupDesc": "تصدير أو استعادة الإعدادات والقواعد والبيانات",
   "overviewUpcomingTitle": "المواعيد والمهام المفتوحة",
   "overviewUpcomingSchedulesHeading": "الرسائل المجدولة القادمة",
-  "overviewOpenTodosHeading": "المهام المفتوحة"
+  "overviewOpenTodosHeading": "المهام المفتوحة",
+  "overviewRefresh": "تحديث النظرة العامة"
 }

@@ -1824,5 +1824,6 @@
   "overviewQuickCreateBackupDesc": "Export or restore settings, rules and data",
   "overviewUpcomingTitle": "Upcoming & open items",
   "overviewUpcomingSchedulesHeading": "Next scheduled sends",
-  "overviewOpenTodosHeading": "Open todos"
+  "overviewOpenTodosHeading": "Open todos",
+  "overviewRefresh": "Refresh overview"
 }

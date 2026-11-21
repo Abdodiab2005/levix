@@ -69,6 +69,7 @@ const NON_FAILURE_REACTION_CODES = new Set([
   "REACTION_CAPACITY",
   "BUSY",
   "ADMITTED",
+  "REACTION_CANCELLED",
 ]);
 
 export function isActiveProviderKeyConfigured(
@@ -303,6 +304,13 @@ function scheduleTimestamp(item: ScheduleItem & { date?: string }): number | nul
   return null;
 }
 
+export function countActiveSchedules(
+  schedules: readonly ScheduleItem[] | null | undefined,
+): number {
+  if (!Array.isArray(schedules)) return 0;
+  return schedules.filter((item) => item && item.status === "active").length;
+}
+
 export function selectUpcomingSchedules(
   schedules: readonly ScheduleItem[] | null | undefined,
   limit = 3,
@@ -319,6 +327,32 @@ export function selectUpcomingSchedules(
       return (a.createdAt ?? 0) - (b.createdAt ?? 0);
     })
     .slice(0, limit);
+}
+
+export function countOpenTodos(rows: readonly TodoRowLike[] | null | undefined): number {
+  if (!Array.isArray(rows)) return 0;
+  let count = 0;
+  for (const row of rows) {
+    const tasks = row?.tasks;
+    if (!Array.isArray(tasks)) continue;
+    for (const item of tasks) {
+      if (typeof item === "string") {
+        if (item.trim()) count++;
+      } else if (item && typeof item === "object") {
+        const record = item as {
+          text?: unknown;
+          task?: unknown;
+          title?: unknown;
+          done?: unknown;
+          completed?: unknown;
+        };
+        if (record.done === true || record.completed === true) continue;
+        const raw = record.text ?? record.task ?? record.title;
+        if (typeof raw === "string" && raw.trim()) count++;
+      }
+    }
+  }
+  return count;
 }
 
 export function selectOpenTodos(

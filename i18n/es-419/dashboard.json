@@ -1824,5 +1824,6 @@
   "overviewQuickCreateBackupDesc": "Exporta o restaura configuraciones, reglas y datos",
   "overviewUpcomingTitle": "Próximos envíos y tareas",
   "overviewUpcomingSchedulesHeading": "Próximos envíos programados",
-  "overviewOpenTodosHeading": "Tareas pendientes"
+  "overviewOpenTodosHeading": "Tareas pendientes",
+  "overviewRefresh": "Actualizar resumen"
 }
