@@ -16,13 +16,14 @@ const store = require("./src/db/store.cjs");
 
 const OWNER_JID = "201234567890@s.whatsapp.net";
 
-function makeFakeSocket({ id = OWNER_JID } = {}) {
+function makeFakeSocket({ id = OWNER_JID, authState } = {}) {
   const ev = new EventEmitter();
   const ws = new EventEmitter();
   return {
     ev,
     ws,
     user: { id },
+    ...(authState !== undefined ? { authState } : {}),
   };
 }
 
@@ -44,12 +45,9 @@ section("connection.js registers no socket listeners of its own");
   equal("bindOwnerDisplayName removed", source.includes("bindOwnerDisplayName"), false);
 
   const eventsSource = readFileSync(new URL("../src/core/events.js", import.meta.url), "utf8");
-  equal(
-    "no ownerName listener on creds.update in events.js",
-    /listen\(\s*sock\.ev,\s*["']creds\.update["'],\s*\(update\)\s*=>\s*ownerName/.test(
-      eventsSource,
-    ),
-    false,
+  ok(
+    "saveCreds stays registered directly on creds.update in events.js",
+    eventsSource.includes('if (saveCreds) listen(sock.ev, "creds.update", saveCreds)'),
   );
 }
 
@@ -97,17 +95,6 @@ section("owner name updates through setupEventListeners without touching role fl
   meta = store.getUserMetadata(OWNER_JID);
   equal("append upsert with an older pushName changes nothing", meta.displayName, "First Update");
 
-  // 1c. A creds.update with an older name after a notify message leaves the stored name unchanged
-  sock.ev.emit("creds.update", {
-    me: { id: OWNER_JID, name: "Older Creds Name" },
-  });
-  meta = store.getUserMetadata(OWNER_JID);
-  equal(
-    "creds.update with an older name leaves the stored name unchanged",
-    meta.displayName,
-    "First Update",
-  );
-
   // 2. JID-shaped pushName is rejected
   sock.ev.emit("messages.upsert", {
     type: "notify",
@@ -149,6 +136,306 @@ section("owner name updates through setupEventListeners without touching role fl
   });
   meta = store.getUserMetadata(OWNER_JID);
   equal("disposed socket does not write", meta.displayName, "First Update");
+}
+
+section("creds.update owner name updates on real rename and ignores replayed upserts");
+{
+  const flushTick = () => new Promise((resolve) => setTimeout(resolve, 10));
+
+  store.saveUserMetadata({
+    jid: OWNER_JID,
+    isOwner: true,
+    isAdmin: false,
+    displayName: "Current Name",
+  });
+
+  // 1. Append upsert with own pushName "Old" followed by creds.update with "Old"
+  {
+    const sock = makeFakeSocket();
+    let saved = 0;
+    const dispose = setupEventListeners(sock, {
+      saveCreds: async () => {
+        saved += 1;
+      },
+      isLiveSocket: () => true,
+    });
+    sock.ev.emit("messages.upsert", {
+      type: "append",
+      messages: [
+        {
+          key: { remoteJid: "120363000000001@g.us", fromMe: true },
+          pushName: "Old",
+        },
+      ],
+    });
+    sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Old" } });
+    await flushTick();
+    dispose();
+
+    equal(
+      "append then creds.update with Old leaves stored name unchanged",
+      store.getUserMetadata(OWNER_JID).displayName,
+      "Current Name",
+    );
+    equal("saveCreds still ran on creds.update", saved, 1);
+  }
+
+  // 2. creds.update with "Old" followed in the same batch by append upsert with own pushName "Old"
+  {
+    const sock = makeFakeSocket();
+    let saved = 0;
+    const dispose = setupEventListeners(sock, {
+      saveCreds: async () => {
+        saved += 1;
+      },
+      isLiveSocket: () => true,
+    });
+    sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Old" } });
+    sock.ev.emit("messages.upsert", {
+      type: "append",
+      messages: [
+        {
+          key: { remoteJid: "120363000000001@g.us", fromMe: true },
+          pushName: "Old",
+        },
+      ],
+    });
+    await flushTick();
+    dispose();
+
+    equal(
+      "creds.update then append with Old leaves stored name unchanged",
+      store.getUserMetadata(OWNER_JID).displayName,
+      "Current Name",
+    );
+    equal("saveCreds still ran on batch-ordered creds.update", saved, 1);
+  }
+
+  // 3. creds.update with "Renamed" and no matching upsert updates the stored name
+  {
+    const sock = makeFakeSocket();
+    let saved = 0;
+    const dispose = setupEventListeners(sock, {
+      saveCreds: async () => {
+        saved += 1;
+      },
+      isLiveSocket: () => true,
+    });
+    sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Renamed" } });
+    await flushTick();
+    dispose();
+
+    const meta = store.getUserMetadata(OWNER_JID);
+    equal(
+      "creds.update with Renamed and no matching upsert updates stored name",
+      meta.displayName,
+      "Renamed",
+    );
+    equal("isOwner remains true after creds.update rename", meta.isOwner, true);
+    equal("isAdmin remains false after creds.update rename", meta.isAdmin, false);
+    equal("saveCreds ran for rename", saved, 1);
+  }
+
+  // 4. A non-own (fromMe: false) append upsert does not suppress a matching creds.update rename
+  {
+    const sock = makeFakeSocket();
+    const dispose = setupEventListeners(sock, {
+      isLiveSocket: () => true,
+    });
+    sock.ev.emit("messages.upsert", {
+      type: "append",
+      messages: [
+        {
+          key: { remoteJid: "120363000000001@g.us", fromMe: false },
+          pushName: "Renamed Again",
+        },
+      ],
+    });
+    sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Renamed Again" } });
+    await flushTick();
+    dispose();
+
+    equal(
+      "non-own append pushName does not block creds.update rename",
+      store.getUserMetadata(OWNER_JID).displayName,
+      "Renamed Again",
+    );
+  }
+
+  // 5. Replayed own name entry expires after 60 seconds
+  {
+    const realNow = Date.now;
+    let fakeNow = 1_700_000_000_000;
+    Date.now = () => fakeNow;
+    try {
+      const sock = makeFakeSocket();
+      const dispose = setupEventListeners(sock, {
+        isLiveSocket: () => true,
+      });
+      sock.ev.emit("messages.upsert", {
+        type: "append",
+        messages: [
+          {
+            key: { remoteJid: "120363000000001@g.us", fromMe: true },
+            pushName: "Expiring Name",
+          },
+        ],
+      });
+
+      fakeNow += 59_000;
+      sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Expiring Name" } });
+      await flushTick();
+      equal(
+        "replayed name still suppressed before 60s expiry",
+        store.getUserMetadata(OWNER_JID).displayName,
+        "Renamed Again",
+      );
+
+      // Advance lastCredsName via a second replayed name so the post-expiry
+      // emission of "Expiring Name" still enters the deferred replay check.
+      sock.ev.emit("messages.upsert", {
+        type: "append",
+        messages: [
+          {
+            key: { remoteJid: "120363000000001@g.us", fromMe: true },
+            pushName: "Intermediate Replayed Name",
+          },
+        ],
+      });
+      sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Intermediate Replayed Name" } });
+      await flushTick();
+
+      fakeNow += 2_000;
+      sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Expiring Name" } });
+      await flushTick();
+      dispose();
+      equal(
+        "replayed name expires after 60s",
+        store.getUserMetadata(OWNER_JID).displayName,
+        "Expiring Name",
+      );
+    } finally {
+      Date.now = realNow;
+    }
+  }
+
+  // 6. creds.update after the socket is replaced (or while pending replacement/dispose) changes nothing
+  {
+    const sock = makeFakeSocket();
+    let live = false;
+    const dispose = setupEventListeners(sock, {
+      isLiveSocket: () => live,
+    });
+    sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "After Replace" } });
+    await flushTick();
+    equal(
+      "creds.update after socket replacement changes nothing",
+      store.getUserMetadata(OWNER_JID).displayName,
+      "Expiring Name",
+    );
+
+    live = true;
+    sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Replaced Mid Tick" } });
+    live = false;
+    await flushTick();
+    equal(
+      "creds.update invalidated before macrotask fires changes nothing",
+      store.getUserMetadata(OWNER_JID).displayName,
+      "Expiring Name",
+    );
+
+    live = true;
+    sock.ev.emit("creds.update", { me: { id: OWNER_JID, name: "Disposed Mid Tick" } });
+    dispose();
+    await flushTick();
+    equal(
+      "creds.update cancelled on dispose changes nothing",
+      store.getUserMetadata(OWNER_JID).displayName,
+      "Expiring Name",
+    );
+  }
+}
+
+section("creds.update ignores unchanged persisted me.name and updates on subsequent rename");
+{
+  const flushTick = () => new Promise((resolve) => setTimeout(resolve, 10));
+  const TEST_LID = "9876543210@lid";
+
+  store.saveUserMetadata({
+    jid: OWNER_JID,
+    isOwner: true,
+    isAdmin: false,
+    displayName: "New",
+  });
+
+  const creds = {
+    me: { id: OWNER_JID, lid: TEST_LID, name: "Old" },
+    lastPropHash: "hash-1",
+  };
+  const sock = makeFakeSocket({
+    authState: { creds },
+  });
+  let saved = 0;
+  const dispose = setupEventListeners(sock, {
+    saveCreds: async () => {
+      saved += 1;
+    },
+    isLiveSocket: () => true,
+  });
+
+  // 1. Connection-open shape with unchanged persisted name "Old"
+  sock.ev.emit("creds.update", {
+    me: { id: OWNER_JID, lid: TEST_LID, name: "Old" },
+  });
+  await flushTick();
+  equal(
+    "connection-open creds.update with unchanged Old leaves stored name New",
+    store.getUserMetadata(OWNER_JID).displayName,
+    "New",
+  );
+
+  // 2. Full-creds shape (edge routing / props hash) with unchanged "Old"
+  sock.ev.emit("creds.update", {
+    ...creds,
+    routingInfo: Buffer.from("edge"),
+  });
+  await flushTick();
+  equal(
+    "full-creds creds.update with unchanged Old leaves stored name New",
+    store.getUserMetadata(OWNER_JID).displayName,
+    "New",
+  );
+
+  // 3. Later creds.update with a changed name "Renamed" updates stored name
+  sock.ev.emit("creds.update", {
+    me: { id: OWNER_JID, lid: TEST_LID, name: "Renamed" },
+  });
+  await flushTick();
+  equal(
+    "later creds.update with Renamed updates stored name",
+    store.getUserMetadata(OWNER_JID).displayName,
+    "Renamed",
+  );
+
+  // 4. Subsequent creds.update still carrying "Renamed" does not overwrite a newer stored name
+  store.saveUserMetadata({
+    jid: OWNER_JID,
+    isOwner: true,
+    isAdmin: false,
+    displayName: "Live Name",
+  });
+  sock.ev.emit("creds.update", {
+    me: { id: OWNER_JID, lid: TEST_LID, name: "Renamed" },
+    lastPropHash: "hash-2",
+  });
+  await flushTick();
+  dispose();
+  equal(
+    "repeated creds.update with Renamed leaves Live Name untouched",
+    store.getUserMetadata(OWNER_JID).displayName,
+    "Live Name",
+  );
+  equal("saveCreds ran for all four creds.update events", saved, 4);
 }
 
 section(
