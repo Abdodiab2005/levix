@@ -22,12 +22,13 @@
 // ("🤖 بفكر..." -> "🔍 ببحث عن ..." -> the final answer), so a single answer
 // never costs four messages.
 
+const { createHash } = require("node:crypto");
 const { GoogleGenAI } = require("@google/genai");
 const { geminiHttpOptions } = require("../utils/geminiHttpOptions.cjs");
 
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
-const { accountEpoch } = require("../db/store.cjs");
+const { accountEpoch, stripThoughtSignaturesFromHistory } = require("../db/store.cjs");
 const {
   getChatHistoryAsync,
   saveChatHistoryAsync,
@@ -56,6 +57,16 @@ const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 const { unwrapMessage, visibleText, quotedOf } = require("../utils/messageContent.cjs");
 const { assertProviderBaseUrl, assertProviderRequestUrl } = require("../utils/providerUrl.cjs");
 const { t } = require("../utils/i18n.cjs");
+
+// Model, endpoint, and a hash of the key. The key itself never leaves settings.
+function geminiSettingsFingerprint() {
+  const key = String(settings.get("gemini_api_key") || "");
+  return [
+    String(settings.get("gemini_model") || ""),
+    String(settings.get("gemini_base_url") || ""),
+    createHash("sha256").update(key).digest("hex"),
+  ].join("\n");
+}
 
 // Per-(chat, sender) explicit context buffer for the multi-message workflow.
 // Entries accumulate until `!gemini send` flushes them into a single call.
@@ -691,6 +702,19 @@ module.exports = {
       epoch === accountEpoch() &&
       revision === historyRevision &&
       chatRevision === (chatHistoryRevisions.get(chatId) || 0);
+    // Captured when the turn starts. A gemini_model, base URL or API key
+    // change while the request is in flight makes any signature from this
+    // turn belong to the previous endpoint.
+    const turnFingerprint = geminiSettingsFingerprint();
+
+    async function persistHistory(history) {
+      if (!canSaveHistory() || !history?.length) return;
+      const turns =
+        geminiSettingsFingerprint() === turnFingerprint
+          ? history
+          : stripThoughtSignaturesFromHistory(history);
+      await saveChatHistoryAsync(chatId, turns);
+    }
 
     async function attempt(historyOverride) {
       if (!isCurrentCaller(caller)) return;
@@ -702,9 +726,7 @@ module.exports = {
         status,
         context: agentContext,
       });
-      if (canSaveHistory() && result.history?.length) {
-        await saveChatHistoryAsync(chatId, result.history);
-      }
+      await persistHistory(result.history);
       return result;
     }
 
@@ -716,6 +738,7 @@ module.exports = {
         if (!isCurrentCaller(caller)) return;
         // A dead file URI poisons later calls. Retry only before any tool has
         // run, and only when the error is positively that stale reference.
+        // The cleaned history stays in memory until the retry succeeds.
         if (firstErr?.toolsRan || !canSaveHistory()) throw firstErr;
 
         const oldHistory = (await getChatHistoryAsync(chatId)) || [];
@@ -723,7 +746,6 @@ module.exports = {
         if (!isFileReferenceError(firstErr, [parts, oldHistory])) throw firstErr;
         const cleaned = sanitizeHistoryForFiles(oldHistory);
         if (!canSaveHistory()) throw firstErr;
-        await saveChatHistoryAsync(chatId, cleaned);
         logger.info(
           `[Gemini] sanitized history: ${oldHistory.length} -> ${cleaned.length}; retrying once`,
         );
@@ -747,3 +769,4 @@ module.exports = {
 module.exports.clearAllContextBuffers = clearAllContextBuffers;
 module.exports.classifyAiError = classifyAiError;
 module.exports.describeAiError = describeAiError;
+module.exports.geminiSettingsFingerprint = geminiSettingsFingerprint;

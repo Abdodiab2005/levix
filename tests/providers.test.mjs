@@ -415,6 +415,21 @@ await useOpenAI([providerError(401, "bad key")], async () => {
   );
 });
 
+await useOpenAI([providerError(500, "Upstream session abc123")], async () => {
+  let threw = null;
+  try {
+    await aiAgent.runAgent({ parts: [{ text: "hi" }], history: [], context: chatContext });
+  } catch (error) {
+    threw = error;
+  }
+  ok("a short upstream body still fails the turn", threw !== null);
+  equal("the HTTP status stays on the error", threw?.status, 500);
+  ok(
+    "the short upstream body is not Error.message",
+    !String(threw?.message || "").includes("Upstream session abc123"),
+  );
+});
+
 section("a provider without a key fails loudly, in Arabic, like gemini does");
 
 {

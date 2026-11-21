@@ -838,6 +838,13 @@ section("a stale file reference is positive, and a bare 404 is not");
     aiAgent.isFileReferenceError(Object.assign(new Error("file expired"), { status: 404 })),
   );
   ok(
+    "Invalid file format is not a file reference even when a file URI was sent",
+    !aiAgent.isFileReferenceError(
+      Object.assign(new Error("Invalid file format"), { status: 400 }),
+      sent,
+    ),
+  );
+  ok(
     "a files id this turn sent is a file reference",
     aiAgent.isFileReferenceError(
       Object.assign(new Error("https://generativelanguage.googleapis.com/v1beta/files/sentfile1"), {
@@ -1053,6 +1060,182 @@ section("a tool failure does not send the provider body to the model or the chat
   } finally {
     TOOLS.calculate.run = original;
   }
+}
+
+section("a short provider error never reaches the model or the chat");
+{
+  const { TOOLS } = harnessRequire("./src/services/aiTools.cjs");
+  const original = TOOLS.calculate.run;
+  const upstream = "Upstream session abc123";
+  TOOLS.calculate.run = async () => {
+    throw new Error(upstream);
+  };
+  try {
+    await withGeminiServer(
+      [
+        functionCallReply([{ name: "calculate", args: { expression: "1+1" } }]),
+        textReply("calculated"),
+      ],
+      async (fake) => {
+        const chatId = "201000000186@s.whatsapp.net";
+        const sock = makeSocket();
+        await withLang("en", () =>
+          geminiCommand.execute(
+            sock,
+            makeMessage(chatId, "!ai compute"),
+            ["compute"],
+            "!ai compute",
+            null,
+            { invokedName: "ai" },
+          ),
+        );
+        equal("the short failure was sent back once", fake.requests.length, 2);
+        const wire = JSON.stringify(fake.body(1) || {});
+        ok("the short provider string never reaches the model", !wire.includes(upstream));
+        ok(
+          "the model receives the fixed tool error",
+          wire.includes("TOOL_FAILED") || wire.includes("could not complete"),
+        );
+        const chat = sock.sent.map((entry) => entry.text).join("\n");
+        ok("the short provider string never reaches the chat", !chat.includes(upstream));
+      },
+    );
+  } finally {
+    TOOLS.calculate.run = original;
+  }
+}
+
+function storedHistory(chatId) {
+  return q("SELECT history FROM ai_history WHERE chat_id = ?").get(chatId).history;
+}
+
+section("Invalid file format does not retry and leaves stored history byte-exact");
+{
+  const fileUri = "https://generativelanguage.googleapis.com/v1beta/files/sentfile1";
+  await withGeminiServer(
+    [errorReply(400, "Invalid file format"), textReply("must not retry")],
+    async (fake) => {
+      const chatId = "201000000187@s.whatsapp.net";
+      store.saveChatHistory(chatId, [
+        { role: "user", parts: [{ text: "look", fileData: { fileUri, mimeType: "image/jpeg" } }] },
+        { role: "model", parts: [{ text: "saw it", thoughtSignature: "keep-format-sig" }] },
+      ]);
+      const before = storedHistory(chatId);
+      const sock = makeSocket();
+      await withLang("en", () =>
+        geminiCommand.execute(
+          sock,
+          makeMessage(chatId, "!ai again"),
+          ["again"],
+          "!ai again",
+          null,
+          { invokedName: "ai" },
+        ),
+      );
+      equal("Invalid file format is not retried", fake.requests.length, 1);
+      equal("Invalid file format leaves stored history byte-exact", storedHistory(chatId), before);
+      ok("the file URI is still stored", before.includes("sentfile1"));
+      const chat = sock.sent.map((entry) => entry.text).join("\n");
+      ok("Invalid file format is not quoted in the chat", !chat.includes("Invalid file format"));
+    },
+  );
+}
+
+section("a failed file retry leaves stored history byte-exact");
+{
+  const fileUri = "https://generativelanguage.googleapis.com/v1beta/files/sentfile1";
+  await withGeminiServer(
+    [errorReply(404, "file expired"), errorReply(500, "still broken")],
+    async (fake) => {
+      const chatId = "201000000188@s.whatsapp.net";
+      store.saveChatHistory(chatId, [
+        { role: "user", parts: [{ text: "look", fileData: { fileUri, mimeType: "image/jpeg" } }] },
+        { role: "model", parts: [{ text: "saw it", thoughtSignature: "keep-retry-sig" }] },
+      ]);
+      const before = storedHistory(chatId);
+      const sock = makeSocket();
+      await withLang("en", () =>
+        geminiCommand.execute(
+          sock,
+          makeMessage(chatId, "!ai again"),
+          ["again"],
+          "!ai again",
+          null,
+          { invokedName: "ai" },
+        ),
+      );
+      equal("file expiry still retries once", fake.requests.length, 2);
+      equal("a failed retry leaves stored history byte-exact", storedHistory(chatId), before);
+      ok("the failed retry did not drop the file URI", before.includes(fileUri));
+      const chat = sock.sent.map((entry) => entry.text).join("\n");
+      ok("the retry failure body is not in the chat", !chat.includes("still broken"));
+    },
+  );
+}
+
+section("a gemini_model change during a pending turn stores no signature");
+{
+  const pendingSig = "pending-turn-sig-XYZ";
+  await withGeminiServer(
+    [
+      () => {
+        settings.set("gemini_model", "gemini-3.1-pro-preview");
+        return functionCallReply([{ name: "get_datetime", args: {} }], {
+          thoughtSignature: pendingSig,
+        });
+      },
+      textReply("pending answer"),
+    ],
+    async (fake) => {
+      const chatId = "201000000189@s.whatsapp.net";
+      store.saveChatHistory(chatId, priorToolHistory("seed-sig-pending"));
+      const sock = makeSocket();
+      await withLang("en", () =>
+        geminiCommand.execute(
+          sock,
+          makeMessage(chatId, "!ai while settings move"),
+          ["while", "settings", "move"],
+          "!ai while settings move",
+          null,
+          { invokedName: "ai" },
+        ),
+      );
+      equal("the pending turn finished", fake.requests.length, 2);
+      const raw = storedHistory(chatId);
+      ok(
+        "a signature issued after the model change is not stored",
+        !raw.includes(pendingSig) && !raw.includes("thoughtSignature"),
+      );
+      ok("the seed signature is not stored either", !raw.includes("seed-sig-pending"));
+      ok("the new answer is stored", raw.includes("pending answer"));
+      ok("the function call is stored", raw.includes("functionCall"));
+      ok(
+        "the fingerprint does not contain the live API key",
+        !geminiCommand.geminiSettingsFingerprint().includes(settings.get("gemini_api_key")),
+      );
+    },
+  );
+}
+
+section("the gemini settings fingerprint hashes the key");
+{
+  const key = "AIzaSyFingerprintSecret_abc123";
+  settings.set("gemini_api_key", key);
+  settings.set("gemini_model", "gemini-3.7-flash");
+  const fingerprint = geminiCommand.geminiSettingsFingerprint();
+  ok("the fingerprint does not contain the key", !fingerprint.includes(key));
+  ok("the fingerprint names the model", fingerprint.startsWith("gemini-3.7-flash\n"));
+  equal(
+    "the fingerprint is stable for the same settings",
+    geminiCommand.geminiSettingsFingerprint(),
+    fingerprint,
+  );
+  settings.set("gemini_model", "gemini-3.1-pro-preview");
+  ok(
+    "a model change moves the fingerprint",
+    geminiCommand.geminiSettingsFingerprint() !== fingerprint,
+  );
+  settings.set("gemini_model", "gemini-3.7-flash");
 }
 
 finish();

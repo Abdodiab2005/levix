@@ -747,8 +747,9 @@ try {
 
 section("tool errors returned to the model drop provider bodies");
 {
-  const { toolErrorForModel } = require("./src/services/aiTools.cjs");
+  const { toolErrorForModel, ToolInputError } = require("./src/services/aiTools.cjs");
   const leak = "sk-FAKEKEY999 https://evil.example/leak?key=sk-FAKEKEY999 at run (/tmp/x.js:4:1)";
+  const upstream = "Upstream session abc123";
   const original = TOOLS.calculate.run;
   try {
     TOOLS.calculate.run = async () => {
@@ -770,36 +771,109 @@ section("tool errors returned to the model drop provider bodies");
     ok("a returned result has no fake key", !JSON.stringify(returned).includes("sk-FAKEKEY999"));
     ok("a returned result has no leak URL", !JSON.stringify(returned).includes("https://"));
 
+    TOOLS.calculate.run = async () => {
+      throw new Error(upstream);
+    };
+    const shortThrown = await runTool("calculate", { expression: "1+1" }, {});
+    equal("a short thrown provider string becomes TOOL_FAILED", shortThrown.code, "TOOL_FAILED");
+    ok("a short thrown provider string is absent", !JSON.stringify(shortThrown).includes(upstream));
+
+    TOOLS.calculate.run = async () => ({ error: upstream });
+    const shortReturned = await runTool("calculate", { expression: "1+1" }, {});
+    equal(
+      "a short returned provider string becomes TOOL_FAILED",
+      shortReturned.code,
+      "TOOL_FAILED",
+    );
+    ok(
+      "a short returned provider string is absent",
+      !JSON.stringify(shortReturned).includes(upstream),
+    );
+
+    // An unmarked short string is not a validation error. Only toolInput is.
     TOOLS.calculate.run = async () => ({ error: "expression is required" });
     equal(
-      "a short validation string stays",
-      (await runTool("calculate", { expression: "1+1" }, {})).error,
-      "expression is required",
+      "an unmarked validation-shaped string is TOOL_FAILED",
+      (await runTool("calculate", { expression: "1+1" }, {})).code,
+      "TOOL_FAILED",
     );
     TOOLS.calculate.run = async () => ({ error: "at_time must be HH:mm" });
     equal(
-      "at_time is not treated as a stack frame",
-      (await runTool("calculate", { expression: "1+1" }, {})).error,
-      "at_time must be HH:mm",
+      "an unmarked at_time string is TOOL_FAILED",
+      (await runTool("calculate", { expression: "1+1" }, {})).code,
+      "TOOL_FAILED",
     );
     TOOLS.calculate.run = async () => ({ error: "ask-me later" });
     equal(
-      "ask- is not treated as a secret token",
-      (await runTool("calculate", { expression: "1+1" }, {})).error,
-      "ask-me later",
+      "an unmarked ask- string is TOOL_FAILED",
+      (await runTool("calculate", { expression: "1+1" }, {})).code,
+      "TOOL_FAILED",
     );
+    TOOLS.calculate.run = async () => {
+      throw new ToolInputError("expression is required");
+    };
+    const marked = await runTool("calculate", { expression: "1+1" }, {});
+    equal("a marked validation throw keeps its message", marked.error, "expression is required");
+    ok("a marked validation throw is not TOOL_FAILED", marked.code !== "TOOL_FAILED");
   } finally {
     TOOLS.calculate.run = original;
   }
 
-  const timeout = toolErrorForModel(new Error("calculate took longer than 30 seconds"));
-  equal("a deadline sentence stays", timeout.error, "calculate took longer than 30 seconds");
-  ok("a deadline sentence has no TOOL_FAILED code", timeout.code === undefined);
+  const real = await runTool("calculate", {}, {});
+  equal(
+    "a real empty expression keeps its validation message",
+    real.error,
+    "expression is required",
+  );
+  ok("a real empty expression is not TOOL_FAILED", real.code !== "TOOL_FAILED");
+
+  const unmarkedTimeout = toolErrorForModel(new Error("calculate took longer than 30 seconds"));
+  equal("an unmarked deadline sentence is TOOL_FAILED", unmarkedTimeout.code, "TOOL_FAILED");
+  ok(
+    "an unmarked deadline sentence is not forwarded",
+    !JSON.stringify(unmarkedTimeout).includes("took longer"),
+  );
+  const timeout = toolErrorForModel(new ToolInputError("calculate took longer than 30 seconds"));
+  equal("a marked deadline sentence stays", timeout.error, "calculate took longer than 30 seconds");
+  ok("a marked deadline sentence has no TOOL_FAILED code", timeout.code === undefined);
   const leakedTimeout = toolErrorForModel(
     new Error("calculate took longer than 30 seconds https://evil.example/slow"),
   );
-  equal("a deadline that includes a URL is replaced", leakedTimeout.code, "TOOL_FAILED");
+  equal("an unmarked deadline that includes a URL is replaced", leakedTimeout.code, "TOOL_FAILED");
   ok("that URL is not returned", !JSON.stringify(leakedTimeout).includes("evil.example"));
+
+  const store = require("./src/db/store.cjs");
+  const aiRouter = require("./src/services/aiRouter.cjs");
+  const previousProvider = settings.get("ai_provider");
+  settings.set("ai_provider", "openai");
+  store.saveChatHistory(owner.chatId, [
+    { role: "user", parts: [{ text: "we meet on Fridays" }] },
+    { role: "model", parts: [{ text: "noted" }] },
+  ]);
+  const provider = aiRouter.getProvider("openai");
+  const originalRun = provider.runTurn;
+  provider.runTurn = async () => {
+    throw new Error(upstream);
+  };
+  try {
+    // The file advanced the account epoch earlier; a caller minted now is current.
+    const currentOwner = await inGroup(OWNER);
+    const summary = await runTool("summarize_chat", {}, { caller: currentOwner });
+    equal("summarize_chat provider failure is TOOL_FAILED", summary.code, "TOOL_FAILED");
+    equal(
+      "summarize_chat provider failure uses the fixed message",
+      summary.error,
+      "The tool could not complete this request.",
+    );
+    ok(
+      "summarize_chat does not return the short provider string",
+      !JSON.stringify(summary).includes(upstream),
+    );
+  } finally {
+    provider.runTurn = originalRun;
+    settings.set("ai_provider", previousProvider);
+    store.deleteChatHistory(owner.chatId);
+  }
 }
 
 finish();
