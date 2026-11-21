@@ -14,6 +14,7 @@ const {
   safeProviderFetch,
 } = require("../utils/providerUrl.cjs");
 const { t } = require("../utils/i18n.cjs");
+const { describeAiError } = require("../services/aiAgent.cjs");
 const { assertAudio, MAX_MEDIA_BYTES } = require("../services/aiMedia.cjs");
 
 // Built on first use from whatever key is in force, and
@@ -178,20 +179,6 @@ async function transcribe(audioBuffer, mimetype, { signal } = {}) {
   return result;
 }
 
-function sttErrorHint(error) {
-  const message = String(error?.message || "");
-  if (/quota|RESOURCE_EXHAUSTED|429/i.test(message)) {
-    return t("bot.ai.stt.quota");
-  }
-  if (/API key|API_KEY|401|403/i.test(message)) {
-    return t("bot.ai.stt.apiKeyHint");
-  }
-  if (/upload/i.test(message)) {
-    return t("bot.ai.stt.uploadFailed");
-  }
-  return "";
-}
-
 module.exports = {
   name: "stt",
   aliases: ["totext", "transcribe"],
@@ -246,14 +233,10 @@ module.exports = {
     } catch (error) {
       logger.error({ err: error }, "[STT] Error transcribing audio");
 
-      // The real reason goes in the card — a bare "an error happened" left
-      // nothing to act on.
-      const details = String(error?.message || error || t("bot.ai.stt.unknown")).slice(0, 800);
-      const hint = sttErrorHint(error);
       await status.finish(
         t("bot.ai.stt.failed", {
-          details,
-          hintBlock: hint ? `\n\n${hint}` : "",
+          details: describeAiError(error),
+          hintBlock: "",
         }),
       );
     }

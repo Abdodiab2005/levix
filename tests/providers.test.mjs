@@ -536,9 +536,10 @@ section("provider switches preserve repeated same-name tool/result pairs");
   }
 }
 
-section("provider turns stamp provenance on returned and stored history");
+section("provider turns keep provider and model on the result and store a plain history array");
 {
   const store = harnessRequire("./src/db/store.cjs");
+  const { q } = harnessRequire("./src/db/db.cjs");
   settings.set("openai_model", "gpt-5.4-mini");
   await useOpenAI(
     [openaiToolCall([{ name: "get_datetime", args: {}, id: "call_prov" }]), openaiText("clocked")],
@@ -550,16 +551,23 @@ section("provider turns stamp provenance on returned and stored history");
       });
       equal("result carries provider", result.provider, "openai");
       equal("result carries model", result.model, "gpt-5.4-mini");
-      equal("history array carries provider", result.history.provider, "openai");
-      equal("history array carries model", result.history.model, "gpt-5.4-mini");
+      ok("history is a plain array", Array.isArray(result.history));
+      ok("history array has no provider stamp", result.history.provider === undefined);
+      ok("history array has no model stamp", result.history.model === undefined);
 
       store.saveChatHistory(chatContext.chatId, result.history);
       const loaded = store.getChatHistory(chatContext.chatId);
-      equal("loaded history preserves provider", loaded.provider, "openai");
-      equal("loaded history preserves model", loaded.model, "gpt-5.4-mini");
+      ok("loaded history has no provider stamp", loaded.provider === undefined);
+      ok("loaded history has no model stamp", loaded.model === undefined);
       const meta = store.getChatHistoryWithMeta(chatContext.chatId);
-      equal("meta exposes provider", meta.provider, "openai");
-      equal("meta exposes model", meta.model, "gpt-5.4-mini");
+      ok("meta has no provider", meta.provider === undefined);
+      ok("meta has no model", meta.model === undefined);
+      ok("meta history is the turn list", Array.isArray(meta.history) && meta.history.length > 0);
+      const raw = q("SELECT history FROM ai_history WHERE chat_id = ?").get(
+        chatContext.chatId,
+      ).history;
+      ok("stored history is a JSON array", raw.startsWith("["));
+      ok("stored history is not a provider wrapper", !raw.includes('"provider"'));
     },
   );
 }

@@ -55,25 +55,6 @@ function hasMemoryTool(entry) {
   );
 }
 
-function copyHistoryProvenance(source, target) {
-  if (!source || typeof source !== "object" || !Array.isArray(target)) return target;
-  if (source.provider !== undefined || source.model !== undefined) {
-    Object.defineProperties(target, {
-      provider: {
-        value: source.provider ?? null,
-        writable: true,
-        configurable: true,
-      },
-      model: {
-        value: source.model ?? null,
-        writable: true,
-        configurable: true,
-      },
-    });
-  }
-  return target;
-}
-
 function stripMemoryToolParts(history) {
   const list = Array.isArray(history)
     ? history
@@ -120,7 +101,7 @@ function stripMemoryToolParts(history) {
     const parts = entry.parts.filter((part) => part?.thought !== true);
     if (parts.length) out.push({ ...entry, parts });
   }
-  return copyHistoryProvenance(history, out);
+  return out;
 }
 
 module.exports = { globalMemoryAccess, stripMemoryToolParts };

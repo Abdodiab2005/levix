@@ -30,7 +30,13 @@
 
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
-const { toolDeclarations, describeCall, runToolWithDeadline } = require("./aiTools.cjs");
+const {
+  toolDeclarations,
+  describeCall,
+  runToolWithDeadline,
+  toolErrorForModel,
+  markToolsRan,
+} = require("./aiTools.cjs");
 const { docSourcesFromTool } = require("./aiDocs.cjs");
 const { assertProviderBaseUrl, safeProviderFetch } = require("../utils/providerUrl.cjs");
 const { baseMimeType, downloadMedia } = require("../utils/geminiMedia.cjs");
@@ -895,7 +901,7 @@ async function runProviderAgent(
           settings.get("ai_tool_timeout_ms"),
         );
       } catch (err) {
-        toolResult = { error: err?.message || String(err) };
+        toolResult = toolErrorForModel(err);
       }
       sources.push(...docSourcesFromTool(call.name, toolResult));
       results.push(toolResult);
@@ -917,25 +923,17 @@ async function runProviderAgent(
     });
 
     if (status) await status.update(t("bot.ai.aiProviders.writingAnswer"));
-    response = await send();
+    // Tools already ran. Tag the provider error so a file-reference retry
+    // cannot execute them a second time.
+    try {
+      response = await send();
+    } catch (error) {
+      throw markToolsRan(error);
+    }
   }
 }
 
 function finish({ text, canonical, toolCalls, steps, sources, provider, model }) {
-  if (Array.isArray(canonical)) {
-    Object.defineProperties(canonical, {
-      provider: {
-        value: typeof provider === "string" && provider ? provider : null,
-        writable: true,
-        configurable: true,
-      },
-      model: {
-        value: typeof model === "string" && model ? model : null,
-        writable: true,
-        configurable: true,
-      },
-    });
-  }
   return {
     text,
     history: canonical,

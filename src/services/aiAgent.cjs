@@ -30,7 +30,13 @@ const settings = require("../config/settings.cjs");
 const memory = require("../utils/memory.cjs");
 const { globalMemoryAccess } = require("./memoryPolicy.cjs");
 const { assertProviderBaseUrl, assertProviderRequestUrl } = require("../utils/providerUrl.cjs");
-const { toolDeclarations, describeCall, runToolWithDeadline } = require("./aiTools.cjs");
+const {
+  toolDeclarations,
+  describeCall,
+  runToolWithDeadline,
+  toolErrorForModel,
+  markToolsRan,
+} = require("./aiTools.cjs");
 const { docSourcesFromTool } = require("./aiDocs.cjs");
 const {
   BaseAIProvider,
@@ -248,50 +254,14 @@ function ensureAutoReplyDirective(systemInstruction, context) {
   return [base, AUTO_REPLY_DECISION_DIRECTIVE].filter(Boolean).join("\n\n");
 }
 
-function attachHistoryProvenance(turns, { provider = null, model = null } = {}) {
-  const list = Array.isArray(turns) ? turns : [];
-  if (provider !== null || model !== null || list.provider !== undefined || list.model !== undefined) {
-    Object.defineProperties(list, {
-      provider: {
-        value: typeof provider === "string" && provider ? provider : null,
-        writable: true,
-        configurable: true,
-      },
-      model: {
-        value: typeof model === "string" && model ? model : null,
-        writable: true,
-        configurable: true,
-      },
-    });
-  }
-  return list;
-}
-
-function unpackHistoryInput(history) {
-  if (Array.isArray(history)) {
-    return {
-      turns: history,
-      provider: typeof history.provider === "string" && history.provider ? history.provider : null,
-      model: typeof history.model === "string" && history.model ? history.model : null,
-    };
-  }
+function historyTurns(history) {
+  if (Array.isArray(history)) return history;
   if (history && typeof history === "object") {
-    const turns = Array.isArray(history.history)
-      ? history.history
-      : Array.isArray(history.turns)
-        ? history.turns
-        : Array.isArray(history.entries)
-          ? history.entries
-          : [];
-    const provider = history.provider ?? turns.provider ?? null;
-    const model = history.model ?? turns.model ?? null;
-    return {
-      turns,
-      provider: typeof provider === "string" && provider ? provider : null,
-      model: typeof model === "string" && model ? model : null,
-    };
+    if (Array.isArray(history.history)) return history.history;
+    if (Array.isArray(history.turns)) return history.turns;
+    if (Array.isArray(history.entries)) return history.entries;
   }
-  return { turns: [], provider: null, model: null };
+  return [];
 }
 
 /** A turn the conversation can legally start from. */
@@ -309,47 +279,86 @@ function isOpeningTurn(entry) {
  */
 function trimHistory(history) {
   const maxEntries = settings.get("ai_max_history");
-  const { turns, provider, model } = unpackHistoryInput(history);
-  const out = [...turns];
+  const out = [...historyTurns(history)];
   while (out.length > maxEntries) out.shift();
   while (out.length && !isOpeningTurn(out[0])) out.shift();
   // A budget-exhausted model call has no response. Drop the whole turn so
   // retained parts (including Gemini thought signatures) remain untouched.
   while (out.at(-1)?.role === "model" && out.at(-1).parts?.some((part) => part?.functionCall))
     out.pop();
-  return attachHistoryProvenance(out, { provider, model });
+  return out;
+}
+
+function errorText(error) {
+  return [
+    error?.message,
+    error?.details,
+    error?.statusText,
+    error?.error?.message,
+    error?.error?.status,
+    typeof error?.status === "string" ? error.status : "",
+    typeof error?.code === "string" ? error.code : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function fileIdsFromText(text) {
+  return [...String(text || "").matchAll(/files\/([A-Za-z0-9_-]+)/gi)].map((match) =>
+    match[1].toLowerCase(),
+  );
+}
+
+// Only fileUri fields count as files this turn sent. Walking every string
+// would treat a mention of "files/…" in ordinary text as an upload.
+function collectSentFileIds(sent) {
+  const ids = new Set();
+  const visit = (value, seen) => {
+    if (!value || typeof value !== "object") return;
+    if (seen.has(value)) return;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, seen);
+      return;
+    }
+    if (typeof value.fileUri === "string") {
+      for (const id of fileIdsFromText(value.fileUri)) ids.add(id);
+    }
+    for (const key of ["parts", "history", "fileData", "contents", "message", "turns", "entries"]) {
+      if (value[key] != null) visit(value[key], seen);
+    }
+  };
+  visit(sent, new Set());
+  return ids;
+}
+
+function namesFileResource(text) {
+  const lower = String(text || "").toLowerCase();
+  if (!/\bfiles?\b|file_?uri|filedata|\/files\//.test(lower)) return false;
+  return /not found|not exist|expired|not in an active|not active|permission to access|forbidden|permission_denied|failed_precondition|no longer|invalid/.test(
+    lower,
+  );
 }
 
 /**
- * Gemini file URIs live ~48h; after that every call fails on the old parts.
- *
- * @google/genai throws its own `ApiError` with a numeric `status`, where the
- * old SDK put the code in a handful of different places. Both are still read:
- * the shapes are cheap to check and the stored history can outlive an upgrade.
+ * A stale Files API reference. A bare 403/404/410 is not enough: the error
+ * must name a file resource, or name a files/<id> URI this turn actually sent.
  */
-function isFileReferenceError(error) {
+function isFileReferenceError(error, sent) {
   if (!error) return false;
-  const status =
-    error.status || error.statusCode || error.code || error.response?.status || error.error?.code;
-  const message = `${error.message || ""} ${error.details || ""}`.toLowerCase();
-
-  if ([403, 404, 410].includes(Number(status))) return true;
-  if (message.includes("permission_denied")) return true;
-  if (message.includes("failed_precondition")) return true;
-
-  return (
-    message.includes("file") &&
-    /not found|not exist|expired|not in an active|not active|permission to access|forbidden|file_?uri/.test(
-      message,
-    )
-  );
+  const text = errorText(error);
+  if (sent) {
+    const sentIds = collectSentFileIds(sent);
+    if (fileIdsFromText(text).some((id) => sentIds.has(id))) return true;
+  }
+  return namesFileResource(text);
 }
 
 /** Drop every uploaded-media part so a stale file URI can't poison the chat. */
 function sanitizeHistoryForFiles(history) {
-  const { turns, provider, model } = unpackHistoryInput(history);
-  if (!turns.length) return attachHistoryProvenance([], { provider, model });
-  const out = turns
+  const turns = historyTurns(history);
+  if (!turns.length) return [];
+  return turns
     .map((turn) => {
       if (!turn?.parts) return turn;
       const parts = turn.parts.filter((part) => !part?.fileData && !part?.inlineData);
@@ -357,11 +366,11 @@ function sanitizeHistoryForFiles(history) {
       return { ...turn, parts };
     })
     .filter(Boolean);
-  return attachHistoryProvenance(out, { provider, model });
 }
 
 /**
- * Does this error mean Gemini rejected a thought signature on a 400 INVALID_ARGUMENT?
+ * Gemini rejected a thought signature. The field name alone is not a rejection:
+ * a 400 that merely echoes "thoughtSignature" from a prompt must not match.
  */
 function isThoughtSignatureError(error) {
   if (!error) return false;
@@ -373,20 +382,12 @@ function isThoughtSignatureError(error) {
       error.error?.code ??
       0,
   );
-  const text = [
-    error.message,
-    error.details,
-    error.statusText,
-    error.error?.message,
-    error.error?.status,
-    typeof error.status === "string" ? error.status : "",
-    typeof error.code === "string" ? error.code : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const text = errorText(error);
   if (numStatus && numStatus !== 400) return false;
   if (!numStatus && !/\b400\b|invalid_argument/i.test(text)) return false;
-  return /thought[\s_-]*signature/i.test(text);
+  return /invalid thought signature|thought signature is not valid|missing a thought_signature|missing thought signature|thought signature was issued by an unavailable route/i.test(
+    text,
+  );
 }
 
 /**
@@ -394,7 +395,7 @@ function isThoughtSignatureError(error) {
  * functionCall/functionResponse entry and every thought part (and signatures).
  */
 function sanitizeHistoryForThoughtSignatures(history) {
-  const { turns } = unpackHistoryInput(history);
+  const turns = historyTurns(history);
   const out = [];
   for (const entry of turns) {
     if (!entry || (entry.role !== "user" && entry.role !== "model") || !Array.isArray(entry.parts)) {
@@ -443,7 +444,7 @@ function classifyAiError(error) {
     .filter(Boolean)
     .join(" ");
 
-  if (isThoughtSignatureError(error) || /thought[\s_-]*signature/i.test(text)) {
+  if (isThoughtSignatureError(error)) {
     return "signature";
   }
   if (
@@ -756,19 +757,9 @@ async function runAgent(options = {}) {
     history: trimHistory(options.history),
     systemInstruction: buildSystemInstruction(options.context),
   });
-  const provenance = {
-    provider: result.provider ?? result.history?.provider ?? provider.id ?? null,
-    model:
-      result.model ??
-      result.history?.model ??
-      (provider.modelSetting ? settings.get(provider.modelSetting) : null),
-  };
-  const history = attachHistoryProvenance(trimHistory(result.history), provenance);
   return {
     ...result,
-    provider: provenance.provider,
-    model: provenance.model,
-    history,
+    history: trimHistory(result.history),
   };
 }
 
@@ -904,14 +895,10 @@ async function runGeminiTurn({
   const stepBudget = maxSteps ?? settings.get("ai_max_tool_steps");
   const instruction = systemInstruction || buildSystemInstruction(context);
   const model = settings.get("gemini_model");
-  const { turns: rawTurns, provider: historyProvider, model: historyModel } =
-    unpackHistoryInput(history);
-  const provenanceMismatch =
-    (Boolean(historyProvider) && historyProvider !== "gemini") ||
-    (Boolean(historyModel) && historyModel !== model);
-  let activeHistory = provenanceMismatch
-    ? sanitizeHistoryForThoughtSignatures(rawTurns)
-    : trimHistory(rawTurns);
+  // Signatures are stripped when gemini_model, gemini_base_url or gemini_api_key
+  // changes. A leftover 400 (a gateway alias, a restored backup) is retried once
+  // below; a provider switch does not drop function calls on its own.
+  let activeHistory = trimHistory(history);
 
   // `ai.chats` rather than a hand-rolled contents array on purpose. Gemini 3
   // returns a `thoughtSignature` on the parts it produces and expects it back
@@ -1005,7 +992,7 @@ async function runGeminiTurn({
           settings.get("ai_tool_timeout_ms"),
         );
       } catch (err) {
-        toolResult = { error: err?.message || String(err) };
+        toolResult = toolErrorForModel(err);
       }
       sources.push(...docSourcesFromTool(call.name, toolResult));
       responses.push({
@@ -1021,8 +1008,13 @@ async function runGeminiTurn({
 
     if (status) await status.update(t("bot.ai.aiAgent.writingAnswer"));
     // One message carrying every functionResponse part, which is what the API
-    // expects when the model asked for several calls in one turn.
-    response = await chat.sendMessage({ message: responses });
+    // expects when the model asked for several calls in one turn. A failure
+    // here must not rerun the turn: a tool has already executed.
+    try {
+      response = await chat.sendMessage({ message: responses });
+    } catch (error) {
+      throw markToolsRan(error);
+    }
     // Grounding can happen on any turn, not just the first.
     sources.push(...extractSources(response));
   }
@@ -1045,10 +1037,7 @@ async function runGeminiTurn({
     // Synchronous in this SDK, and `true` asks for the curated history — the
     // turns the API would actually accept back, with empty or invalid model
     // outputs left out. That is exactly what Levix wants to persist.
-    newHistory = attachHistoryProvenance(trimHistory(chat.getHistory(true)), {
-      provider: "gemini",
-      model,
-    });
+    newHistory = trimHistory(chat.getHistory(true));
   } catch (err) {
     logger.warn({ err: err?.message }, "[aiAgent] could not read chat history");
   }
@@ -1086,7 +1075,6 @@ module.exports = {
   sanitizeHistoryForThoughtSignatures,
   classifyAiError,
   describeAiError,
-  attachHistoryProvenance,
   GOOGLE_SEARCH_TOOL,
   buildSystemInstruction,
   loadPersona,

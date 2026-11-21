@@ -783,6 +783,29 @@ function validate(definition, value) {
   return text;
 }
 
+// Fired after a value actually changes. Panel saves, imports, backup restore
+// and commands all go through set(), so one listener sees every writer.
+const changeListeners = new Set();
+
+function onChange(listener) {
+  if (typeof listener !== "function") {
+    throw new TypeError("settings change listener must be a function");
+  }
+  changeListeners.add(listener);
+  return () => changeListeners.delete(listener);
+}
+
+function emitChange(key, previous, next) {
+  if (Object.is(previous, next)) return;
+  for (const listener of changeListeners) {
+    try {
+      listener(key, previous, next);
+    } catch (error) {
+      logger.warn({ err: error, key }, "[settings] change listener failed");
+    }
+  }
+}
+
 /**
  * Save one setting. An empty string clears the override, so the value falls
  * back to the default again.
@@ -793,11 +816,14 @@ function set(key, value) {
   if (!definition) throw new Error(`Unknown setting: ${key}`);
 
   const storage = require("../utils/storage.cjs");
+  const previous = get(key);
 
   if (value === null || value === "" || value === undefined) {
     storage.deleteBotSetting(`setting:${key}`);
     logger.info(`[settings] ${key} cleared (back to the default)`);
-    return get(key);
+    const next = get(key);
+    emitChange(key, previous, next);
+    return next;
   }
 
   const clean = validate(definition, value);
@@ -805,7 +831,9 @@ function set(key, value) {
   storage.saveBotSetting(`setting:${key}`, toStore);
   // Never log the value of a secret.
   logger.info(`[settings] ${key} -> ${definition.type === "secret" ? "(updated)" : clean}`);
-  return get(key);
+  const next = get(key);
+  emitChange(key, previous, next);
+  return next;
 }
 
 /**
@@ -854,6 +882,7 @@ module.exports = {
   redactSecrets,
   get,
   set,
+  onChange,
   describe,
   sourceOf,
   SETTING_KEYS: [...BY_KEY.keys()],

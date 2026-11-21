@@ -703,10 +703,7 @@ module.exports = {
         context: agentContext,
       });
       if (canSaveHistory() && result.history?.length) {
-        await saveChatHistoryAsync(chatId, result.history, {
-          provider: result.provider,
-          model: result.model,
-        });
+        await saveChatHistoryAsync(chatId, result.history);
       }
       return result;
     }
@@ -717,18 +714,16 @@ module.exports = {
         result = await attempt();
       } catch (firstErr) {
         if (!isCurrentCaller(caller)) return;
-        // A dead fileData URI in the history poisons every later call — scrub
-        // it once and retry so the user never sees the expiry.
-        if (!isFileReferenceError(firstErr) || !canSaveHistory()) throw firstErr;
+        // A dead file URI poisons later calls. Retry only before any tool has
+        // run, and only when the error is positively that stale reference.
+        if (firstErr?.toolsRan || !canSaveHistory()) throw firstErr;
 
         const oldHistory = (await getChatHistoryAsync(chatId)) || [];
         if (!isCurrentCaller(caller)) return;
+        if (!isFileReferenceError(firstErr, [parts, oldHistory])) throw firstErr;
         const cleaned = sanitizeHistoryForFiles(oldHistory);
         if (!canSaveHistory()) throw firstErr;
-        await saveChatHistoryAsync(chatId, cleaned, {
-          provider: cleaned.provider,
-          model: cleaned.model,
-        });
+        await saveChatHistoryAsync(chatId, cleaned);
         logger.info(
           `[Gemini] sanitized history: ${oldHistory.length} -> ${cleaned.length}; retrying once`,
         );

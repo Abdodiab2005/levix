@@ -16,9 +16,9 @@ async function getChatHistoryAsync(chatId) {
   }
 }
 
-async function saveChatHistoryAsync(chatId, historyArray, meta) {
+async function saveChatHistoryAsync(chatId, historyArray) {
   try {
-    store.saveChatHistory(chatId, historyArray, meta);
+    store.saveChatHistory(chatId, historyArray);
   } catch (err) {
     logger.error({ err }, "[storage-hub] saveChatHistoryAsync failed");
   }

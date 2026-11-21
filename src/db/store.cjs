@@ -1676,111 +1676,103 @@ function countSchedules() {
 // One row per chat, no expiry. `!del` clears one chat, `!delall` clears the
 // table. The callers are async (they always were, back when this was a
 // separate database), so storage-hub keeps the async signatures.
+//
+// `history` is a JSON array of Gemini turns, the same shape 5.0.0 stored.
+// Rows written by the short-lived `{ history, provider, model }` wrapper still
+// load; every write stores an array only.
 
-const HISTORY_MODEL_SETTINGS = Object.freeze({
-  gemini: "gemini_model",
-  openai: "openai_model",
-  anthropic: "anthropic_model",
-});
-
-function attachChatHistoryProvenance(turns, { provider = null, model = null } = {}) {
-  const list = Array.isArray(turns) ? turns : [];
-  Object.defineProperties(list, {
-    provider: {
-      value: typeof provider === "string" && provider ? provider : null,
-      writable: true,
-      configurable: true,
-    },
-    model: {
-      value: typeof model === "string" && model ? model : null,
-      writable: true,
-      configurable: true,
-    },
-  });
-  return list;
-}
-
-function unpackChatHistory(raw) {
-  if (Array.isArray(raw)) {
-    return attachChatHistoryProvenance([...raw], { provider: null, model: null });
-  }
+function historyTurnsFromStored(raw) {
+  if (Array.isArray(raw)) return raw;
   if (raw && typeof raw === "object") {
-    const turns = Array.isArray(raw.history)
-      ? raw.history
-      : Array.isArray(raw.turns)
-        ? raw.turns
-        : Array.isArray(raw.entries)
-          ? raw.entries
-          : [];
-    return attachChatHistoryProvenance([...turns], {
-      provider: raw.provider,
-      model: raw.model,
-    });
+    if (Array.isArray(raw.history)) return raw.history;
+    if (Array.isArray(raw.turns)) return raw.turns;
+    if (Array.isArray(raw.entries)) return raw.entries;
   }
-  return attachChatHistoryProvenance([], { provider: null, model: null });
+  return [];
 }
 
-function resolveSavedHistoryProvenance(historyInput, meta) {
-  const hasMetaProvider = Boolean(meta && Object.hasOwn(meta, "provider"));
-  const hasMetaModel = Boolean(meta && Object.hasOwn(meta, "model"));
-  const inputProvider =
-    historyInput && typeof historyInput === "object" ? historyInput.provider : undefined;
-  const inputModel =
-    historyInput && typeof historyInput === "object" ? historyInput.model : undefined;
-
-  let activeProvider = null;
-  let activeModel = null;
-  if (
-    !hasMetaProvider &&
-    inputProvider === undefined &&
-    !hasMetaModel &&
-    inputModel === undefined
-  ) {
-    try {
-      const settings = require("../config/settings.cjs");
-      activeProvider = settings.get("ai_provider") || null;
-      const modelKey = activeProvider ? HISTORY_MODEL_SETTINGS[activeProvider] : null;
-      activeModel = modelKey ? settings.get(modelKey) || null : null;
-    } catch {
-      activeProvider = null;
-      activeModel = null;
-    }
+function historyTurnsFromInput(historyArray) {
+  if (Array.isArray(historyArray)) return historyArray;
+  if (historyArray && typeof historyArray === "object") {
+    if (Array.isArray(historyArray.history)) return historyArray.history;
+    if (Array.isArray(historyArray.turns)) return historyArray.turns;
+    if (Array.isArray(historyArray.entries)) return historyArray.entries;
   }
+  return [];
+}
 
-  const provider = hasMetaProvider ? meta.provider : (inputProvider ?? activeProvider);
-  const model = hasMetaModel ? meta.model : (inputModel ?? activeModel);
-  return {
-    provider: typeof provider === "string" && provider ? provider : null,
-    model: typeof model === "string" && model ? model : null,
-  };
+// Drop thought signatures and thought parts. Function calls and responses stay,
+// because a signature is valid only for the model and endpoint that issued it.
+function stripThoughtPart(part) {
+  if (!part || typeof part !== "object" || Array.isArray(part)) return part;
+  const call = part.functionCall || part.functionResponse;
+  if (part.thought === true && !call) return null;
+  const dropThought = part.thought === true;
+  const dropSignature = Object.hasOwn(part, "thoughtSignature");
+  if (!dropThought && !dropSignature) return part;
+  const copy = { ...part };
+  if (dropThought) delete copy.thought;
+  if (dropSignature) delete copy.thoughtSignature;
+  return copy;
+}
+
+function stripThoughtTurns(turns) {
+  if (!Array.isArray(turns)) return [];
+  const out = [];
+  for (const turn of turns) {
+    if (!turn || typeof turn !== "object" || !Array.isArray(turn.parts)) {
+      out.push(turn);
+      continue;
+    }
+    let changed = false;
+    const parts = [];
+    for (const part of turn.parts) {
+      const next = stripThoughtPart(part);
+      if (next !== part) changed = true;
+      if (next) parts.push(next);
+    }
+    if (!changed) out.push(turn);
+    else if (parts.length) out.push({ ...turn, parts });
+  }
+  return out;
 }
 
 function getChatHistory(chatId) {
   const row = q("SELECT history FROM ai_history WHERE chat_id = ?").get(chatId);
-  return row ? unpackChatHistory(parseJson(row.history, [])) : attachChatHistoryProvenance([]);
+  return row ? [...historyTurnsFromStored(parseJson(row.history, []))] : [];
 }
 
-function saveChatHistory(chatId, historyArray, meta) {
-  const turns = Array.isArray(historyArray)
-    ? historyArray
-    : Array.isArray(historyArray?.history)
-      ? historyArray.history
-      : [];
-  const { provider, model } = resolveSavedHistoryProvenance(historyArray, meta);
-  const payload =
-    provider || model
-      ? {
-          history: turns,
-          ...(provider ? { provider } : {}),
-          ...(model ? { model } : {}),
-        }
-      : turns;
+function saveChatHistory(chatId, historyArray) {
+  const turns = historyTurnsFromInput(historyArray);
   q(
     `INSERT INTO ai_history (chat_id, history, updated_at) VALUES (?, ?, ?)
      ON CONFLICT(chat_id) DO UPDATE SET
        history = excluded.history,
        updated_at = excluded.updated_at`,
-  ).run(chatId, JSON.stringify(payload), Date.now());
+  ).run(chatId, JSON.stringify(turns), Date.now());
+}
+
+// One transaction for every stored chat. Called when gemini_model,
+// gemini_base_url or gemini_api_key changes — not on each message.
+function stripGeminiThoughtSignatures() {
+  return withImmediateTransaction(() => {
+    const rows = q("SELECT chat_id, history FROM ai_history").all();
+    let updated = 0;
+    for (const row of rows) {
+      let raw;
+      try {
+        raw = JSON.parse(row.history);
+      } catch {
+        continue;
+      }
+      const next = stripThoughtTurns(historyTurnsFromStored(raw));
+      const serialized = JSON.stringify(next);
+      if (serialized === row.history) continue;
+      q("UPDATE ai_history SET history = ? WHERE chat_id = ?").run(serialized, row.chat_id);
+      updated += 1;
+    }
+    return updated;
+  });
 }
 
 function deleteChatHistory(chatId) {
@@ -1814,11 +1806,8 @@ function getChatHistoryWithMeta(chatId) {
     chatId,
   );
   if (!row) return null;
-  const history = unpackChatHistory(parseJson(row.history, []));
   return {
-    history,
-    provider: history.provider,
-    model: history.model,
+    history: [...historyTurnsFromStored(parseJson(row.history, []))],
     updatedAt: row.updatedAt,
   };
 }
@@ -2828,6 +2817,7 @@ module.exports = {
   getChatHistoryWithMeta,
   listChatHistories,
   saveChatHistory,
+  stripGeminiThoughtSignatures,
   deleteChatHistory,
   deleteAllChatHistories,
   // Baileys auth
