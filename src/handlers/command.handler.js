@@ -10,6 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const require = createRequire(import.meta.url);
 const botSender = require("../utils/sendBotMessage.cjs");
+const store = require("../db/store.cjs");
 const logger = require("../utils/logger.cjs");
 const runtimeConfig = require("../config/runtime-config.cjs");
 const settings = require("../config/settings.cjs");
@@ -92,11 +93,18 @@ const REACTION_CONTROL_CODES = new Set([
   "CAPACITY",
 ]);
 
+function identityAliases(value) {
+  const canon = canonicalJid(value) || value;
+  if (typeof canon !== "string" || !canon) return [];
+  const extras = store.reactionIdentityAliases(canon);
+  return extras.length ? extras : [canon];
+}
+
 function sameTransportKey(left, right) {
   if (!left || !right || left.id !== right.id) return false;
-  const a = canonicalJid(left.remoteJid) || left.remoteJid;
-  const b = canonicalJid(right.remoteJid) || right.remoteJid;
-  return Boolean(a) && a === b;
+  const leftIds = identityAliases(left.remoteJid);
+  const rightIds = identityAliases(right.remoteJid);
+  return leftIds.some((id) => rightIds.includes(id));
 }
 
 function controlError(code) {
@@ -156,8 +164,21 @@ function wrapSockWithReply(sock, originalMsg, options = {}) {
     originalMsg.key.participant ||
     originalMsg.key.remoteJid;
   const allowed = new Set([source]);
+  const sentKeys = [];
   let editUsed = false;
   let noticeSent = false;
+  const rememberSent = (result, jid) => {
+    if (!reaction || !result?.key?.id || result.refused) return;
+    sentKeys.push({ id: result.key.id, remoteJid: result.key.remoteJid || jid });
+  };
+  const protocolWire = (opts) => {
+    if (!reaction) return opts;
+    return {
+      ...opts,
+      signal: opts.signal || options.signal,
+      deliveryGuard: opts.deliveryGuard || options.deliveryGuard,
+    };
+  };
 
   const proxy = new Proxy(sock, {
     get(target, prop, receiver) {
@@ -170,13 +191,17 @@ function wrapSockWithReply(sock, originalMsg, options = {}) {
           delete opts.levix;
 
           const requested = canonicalJid(jid) || source;
-          const protocolKey = content?.edit || content?.delete || null;
-          if (protocolKey && protectedKeys.some((key) => sameTransportKey(protocolKey, key))) {
-            logger.warn(
-              { command: commandName },
-              "[Command] refused edit or delete of a protected message",
-            );
-            return { key: null, refused: true };
+          const mutation = content?.edit || content?.delete || null;
+          if (mutation) {
+            const protectedHit = protectedKeys.some((key) => sameTransportKey(mutation, key));
+            const ownHit = sentKeys.some((key) => sameTransportKey(mutation, key));
+            if (protectedHit || (reaction && !ownHit)) {
+              logger.warn(
+                { command: commandName },
+                "[Command] refused edit or delete of a protected message",
+              );
+              return { key: null, refused: true };
+            }
           }
           const protocol = Boolean(content && (content.edit || content.delete || content.react));
           if (protocol) {
@@ -186,7 +211,9 @@ function wrapSockWithReply(sock, originalMsg, options = {}) {
             const outgoing =
               content.edit && levix ? stampText(content, commandName, levix) : content;
             state.attempted += 1;
-            return target.sendMessage.call(target, jid, outgoing, opts);
+            const sent = await target.sendMessage.call(target, jid, outgoing, protocolWire(opts));
+            rememberSent(sent, jid);
+            return sent;
           }
 
           const plan = planForSend(chatJid, jid, senderJid, commandName, levix, routeMode);
@@ -275,6 +302,7 @@ function wrapSockWithReply(sock, originalMsg, options = {}) {
               levix,
             });
             if (!sent?.key || sent.refused) throw controlError("REACTION_DELIVERY_REFUSED");
+            rememberSent(sent, plan.destination);
             return sent;
           }
           if (sameChat) opts.quoted = quoted;
@@ -549,11 +577,11 @@ function deny(status, reason) {
 export function evaluateCommandGates(sock, invocation, authMetadata) {
   const { command, msg, isGroup, accountEpoch } = invocation;
   const options = invocation.options || {};
+  if (command?.name && runtimeConfig.isDisabled(command.name)) return deny("disabled", "disabled");
   if (!command || command.name === "group") {
     if (readAccountEpoch() !== accountEpoch) return deny("stale", "account");
     return { status: "ready" };
   }
-  if (runtimeConfig.isDisabled(command.name)) return deny("disabled", "disabled");
   const chatScope = (command.chat || "all").toLowerCase();
   if (chatScope === "group" && !isGroup) return deny("denied", "scope");
   if (chatScope === "private" && isGroup) return deny("denied", "scope");
@@ -709,19 +737,31 @@ async function runInvocation(sock, invocation, flags) {
     logger.error({ err: error, command: invokedName }, "Error executing command");
     if (neutral) {
       if (state.attempted > 0) return { status: "failed", reason: "ACTION_FAILED", error };
+      const failureText = t("bot.core.commandHandler.failed", {
+        name: error.name || "Error",
+        details: t("bot.core.commandHandler.unknownDetails"),
+      });
       try {
-        await botSender.sendBotMessage(
-          sock,
-          msg.key.remoteJid,
-          {
-            text: t("bot.core.commandHandler.failed", {
-              name: error.name || "Error",
-              details: t("bot.core.commandHandler.unknownDetails"),
-            }),
-          },
-          { replyTo: anchor },
-        );
-      } catch {}
+        if (source === "reaction") {
+          await proxiedSock.sendMessage(
+            msg.key.remoteJid,
+            { text: failureText },
+            { quoted: anchor },
+          );
+        } else {
+          await botSender.sendBotMessage(
+            sock,
+            msg.key.remoteJid,
+            { text: failureText },
+            { replyTo: anchor },
+          );
+        }
+      } catch (sendError) {
+        const sendCode = sendError?.code || sendError?.message;
+        if (source === "reaction" && REACTION_CONTROL_CODES.has(sendCode)) {
+          return { status: "failed", reason: sendCode, error: sendError };
+        }
+      }
       return { status: "failed", reason: "REACTION_COMMAND_FAILED", error };
     }
     try {

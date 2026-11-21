@@ -30,7 +30,7 @@ const {
   rosterJidForSync,
   sameUserSync,
 } = require("./permissions.cjs");
-const { resolveGroupMetadata } = require("./groupMetadataCache.cjs");
+const { readLiveGroupMetadata, resolveGroupMetadata } = require("./groupMetadataCache.cjs");
 const { unwrapMessage } = require("./messageContent.cjs");
 const { mediaLabel } = require("./moderationSummary.cjs");
 const { resolveModerationPolicy, effectivePoints } = require("../services/moderationPolicy.cjs");
@@ -243,7 +243,13 @@ async function kickGroupMember(sock, opts) {
   if (!groupId?.endsWith("@g.us")) return { kicked: false, error: "not-group" };
   const candidates = (opts.targetCandidates || []).filter(Boolean);
   if (!candidates.length) return { kicked: false, error: "no-target" };
-  const meta = await resolveGroupMetadata(sock, groupId, { fresh: true });
+  // A reaction kick (it carries an effectGuard) reads the live roster, so its
+  // guard re-checks the state WhatsApp holds now. A typed !kick keeps the
+  // fresh-cache authorization read.
+  const meta =
+    typeof opts.effectGuard === "function"
+      ? await readLiveGroupMetadata(sock, groupId)
+      : await resolveGroupMetadata(sock, groupId, { fresh: true });
   if (!meta) return { kicked: false, error: "metadata-unavailable" };
   if (opts.requesterCandidates) {
     const requester = opts.requesterCandidates.filter(Boolean);
@@ -261,8 +267,11 @@ async function kickGroupMember(sock, opts) {
   if (!isBotAdminInGroupSync(meta, sock)) return { kicked: false, error: "bot-not-admin" };
   const kickJid = rosterJidForSync(meta, candidates) || candidates[0];
   if (accountEpoch() !== epoch) return { kicked: false, error: "stale" };
+  // The guard is synchronous. Calling the removal in this same turn means a
+  // cancellation that arrived during the roster read cannot land between the
+  // claim and groupParticipantsUpdate.
   if (typeof opts.effectGuard === "function") {
-    await opts.effectGuard({ meta, kickJid, candidates });
+    opts.effectGuard({ meta, kickJid, candidates });
   }
   const updated = await sock.groupParticipantsUpdate(groupId, [kickJid], "remove");
   if (!removalSucceeded(updated)) return { kicked: false, error: "rejected", kickJid };

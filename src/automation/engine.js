@@ -286,9 +286,7 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
       key.author ||
       key.participant ||
       (String(key.remoteJid || "").endsWith("@g.us") ? "" : key.remoteJid);
-    if (!author) return "";
-    const pool = [...(event.authorAliases || []), ...store.reactionIdentityAliases(author)];
-    return pool.find((id) => typeof id === "string" && id.endsWith("@s.whatsapp.net")) || author;
+    return typeof author === "string" ? author : "";
   }
   function accountStamp() {
     const linked = linkedIdentity();
@@ -486,14 +484,45 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
       return "REACTION_COMMAND_DENIED";
     return "ACTION_FAILED";
   }
-  function destructiveGuard(job, canonical) {
-    return async ({ meta, kickJid, candidates }) => {
+  function coded(code) {
+    const error = new Error(code);
+    error.code = code;
+    return error;
+  }
+  function destructiveGuard(job, canonical, api, invocation) {
+    return ({ meta, kickJid, candidates }) => {
       const ids = [canonical, kickJid, ...(candidates || [])].filter(Boolean);
-      if (!ids.some((id) => verifiedParticipant(meta, id))) {
-        const error = new Error("REACTION_STALE");
-        error.code = "REACTION_STALE";
+      if (!ids.some((id) => verifiedParticipant(meta, id))) throw coded("REACTION_STALE");
+      job.metadata = meta;
+      try {
+        available(job);
+        if (superseded(job)) throw coded("REACTION_STALE");
+        authorize(job);
+      } catch (error) {
+        if (!error.code) error.code = error.message;
         throw error;
       }
+      const command = invocation.command;
+      const requester = invocation.options?.requester;
+      const gate = api.evaluateCommandGates(
+        sock,
+        {
+          command,
+          msg: invocation.msg,
+          isGroup: invocation.isGroup,
+          accountEpoch: job.accountEpoch,
+          options: {
+            routeMode: invocation.options?.routeMode,
+            senderJid: requester?.jid,
+            requester,
+          },
+        },
+        meta,
+      );
+      if (gate.status === "denied" || gate.status === "disabled")
+        throw coded("REACTION_COMMAND_DENIED");
+      if (gate.status === "stale") throw coded("REACTION_STALE");
+      if (gate.status !== "ready") throw coded(gate.reason || "REACTION_DELIVERY_REFUSED");
       const event = job.event;
       const verdict = store.claimDestructiveReaction(
         {
@@ -518,11 +547,7 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
         },
         now(),
       );
-      if (verdict !== "CLAIMED") {
-        const error = new Error(verdict);
-        error.code = verdict;
-        throw error;
-      }
+      if (verdict !== "CLAIMED") throw coded(verdict);
     };
   }
   async function execute(job) {
@@ -552,7 +577,8 @@ export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}
     const api = await commands();
     const command = loadCommand(key, api);
     const invocation = invocationFor(job, command, api);
-    if (spec.destructive) invocation.options.effectGuard = destructiveGuard(job, canonical);
+    if (spec.destructive)
+      invocation.options.effectGuard = destructiveGuard(job, canonical, api, invocation);
     const run =
       dispatch || ((sockTarget, payload) => api.executeCommandInvocation(sockTarget, payload));
     const preview = await run(sock, {

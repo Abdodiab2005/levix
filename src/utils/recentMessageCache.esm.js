@@ -40,19 +40,22 @@ let maxEntryBytes = DEFAULT_MAX_ENTRY_BYTES;
 // Ids Levix assigned before sendMessage. No message body. Separate from the
 // content cache: an echo can arrive before that cache is written, and the
 // content cache is empty after a restart.
+// Ids only, and not the content cache. The default count is far above the
+// 500-message body cap. An id that is still inside its TTL is never evicted:
+// the reaction window can outlive a content-cache eviction. A full store
+// fails closed instead of forgetting a young id.
+const DEFAULT_OUTBOUND_MAX_ITEMS = 100_000;
 const outboundIds = new Map(); // id -> expiresAt
 let outboundTtlMs = DEFAULT_TTL_MS;
-let outboundMaxItems = DEFAULT_MAX_ITEMS;
+let outboundMaxItems = DEFAULT_OUTBOUND_MAX_ITEMS;
+let outboundSaturated = false;
 
 function gcOutbound(now = Date.now()) {
   for (const [id, expiresAt] of outboundIds) {
     if (expiresAt <= now) outboundIds.delete(id);
   }
-  while (outboundIds.size > outboundMaxItems) {
-    const oldest = outboundIds.keys().next().value;
-    if (oldest === undefined) break;
-    outboundIds.delete(oldest);
-  }
+  if (outboundIds.size > outboundMaxItems) outboundSaturated = true;
+  else if (outboundIds.size < outboundMaxItems) outboundSaturated = false;
 }
 
 function makeCacheKey(chatJid, id) {
@@ -115,6 +118,7 @@ export function clearRecentMessages() {
   recent.clear();
   totalBytes = 0;
   outboundIds.clear();
+  outboundSaturated = false;
   return accountEpoch;
 }
 
@@ -128,14 +132,17 @@ export function configureOutboundIds({ maxItems: nextMax, ttlMs: nextTtl } = {})
 export function rememberOutboundId(id, now = Date.now()) {
   if (typeof id !== "string" || !id) return false;
   gcOutbound(now);
-  if (outboundIds.has(id)) outboundIds.delete(id);
-  outboundIds.set(id, now + outboundTtlMs);
-  while (outboundIds.size > outboundMaxItems) {
-    const oldest = outboundIds.keys().next().value;
-    if (oldest === undefined) break;
-    outboundIds.delete(oldest);
+  if (outboundIds.has(id)) {
+    outboundIds.delete(id);
+    outboundIds.set(id, now + outboundTtlMs);
+    return true;
   }
-  return outboundIds.has(id);
+  if (outboundIds.size >= outboundMaxItems) {
+    outboundSaturated = true;
+    return false;
+  }
+  outboundIds.set(id, now + outboundTtlMs);
+  return true;
 }
 
 export function isOutboundId(id, now = Date.now()) {
@@ -144,13 +151,20 @@ export function isOutboundId(id, now = Date.now()) {
   if (expiresAt == null) return false;
   if (expiresAt <= now) {
     outboundIds.delete(id);
+    if (outboundIds.size < outboundMaxItems) outboundSaturated = false;
     return false;
   }
   return true;
 }
 
+/** True once a young id was refused because the id store was full. */
+export function outboundIdsSaturated() {
+  return outboundSaturated;
+}
+
 export function clearOutboundIds() {
   outboundIds.clear();
+  outboundSaturated = false;
 }
 
 function normalizeEpochArg(candidate) {

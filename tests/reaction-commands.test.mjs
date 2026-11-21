@@ -640,6 +640,133 @@ try {
 
     f.state.attempts.length = 0;
     f.state.sent.length = 0;
+    store.storeLidPnMapping("201070000050@lid", dm);
+    const aliasAnchor = {
+      key: { remoteJid: dm, id: "anchor-alias", fromMe: true },
+      message: { conversation: "own" },
+    };
+    let aliasDelete;
+    await executeCommandInvocation(f.socket, {
+      command: {
+        name: "ping",
+        chat: "all",
+        async execute(sock, msg) {
+          aliasDelete = await sock.sendMessage(msg.key.remoteJid, {
+            delete: { remoteJid: "201070000050@lid", id: aliasAnchor.key.id, fromMe: true },
+          });
+        },
+      },
+      invokedName: "ping",
+      args: [],
+      body: `${prefix()}ping`,
+      msg: {
+        key: { remoteJid: dm, id: "reaction-alias", fromMe: true },
+        message: { extendedTextMessage: { text: `${prefix()}ping` } },
+      },
+      isGroup: false,
+      rawRemainder: "",
+      accountEpoch: store.accountEpoch(),
+      options: {
+        source: "reaction",
+        editInPlace: false,
+        replyAnchor: aliasAnchor,
+        protectedKeys: [aliasAnchor.key],
+        silentDenials: true,
+        neutralFailure: true,
+      },
+    });
+    equal("alternate jid of the original is refused", aliasDelete?.refused, true);
+    equal(
+      "alternate delete never reached the socket",
+      f.state.attempts.some((row) => row.content?.delete),
+      false,
+    );
+
+    f.state.attempts.length = 0;
+    f.state.sent.length = 0;
+    let protocolCalls = 0;
+    const guarded = await executeCommandInvocation(f.socket, {
+      command: {
+        name: "ping",
+        chat: "all",
+        async execute(sock, msg) {
+          const first = await sock.sendMessage(msg.key.remoteJid, { text: "own" });
+          await sock.sendMessage(msg.key.remoteJid, { delete: first.key });
+        },
+      },
+      invokedName: "ping",
+      args: [],
+      body: `${prefix()}ping`,
+      msg: {
+        key: { remoteJid: dm, id: "reaction-protocol", fromMe: true },
+        message: { extendedTextMessage: { text: `${prefix()}ping` } },
+      },
+      isGroup: false,
+      rawRemainder: "",
+      accountEpoch: store.accountEpoch(),
+      options: {
+        source: "reaction",
+        silentDenials: true,
+        neutralFailure: true,
+        deliveryGuard: {
+          async refresh() {},
+          assert() {
+            protocolCalls += 1;
+            if (protocolCalls > 1) {
+              const error = new Error("REACTION_CANCELLED");
+              error.code = "REACTION_CANCELLED";
+              throw error;
+            }
+          },
+        },
+      },
+    });
+    equal("protocol guard refusal is the control code", guarded.reason, "REACTION_CANCELLED");
+    equal(
+      "protocol delete after the guard does not land",
+      f.state.attempts.some((row) => row.content?.delete),
+      false,
+    );
+
+    f.state.attempts.length = 0;
+    f.state.sent.length = 0;
+    let failureGuarded = 0;
+    const neutral = await executeCommandInvocation(f.socket, {
+      command: {
+        name: "ping",
+        chat: "all",
+        async execute() {
+          throw new Error("boom");
+        },
+      },
+      invokedName: "ping",
+      args: [],
+      body: `${prefix()}ping`,
+      msg: {
+        key: { remoteJid: dm, id: "reaction-neutral", fromMe: true },
+        message: { extendedTextMessage: { text: `${prefix()}ping` } },
+      },
+      isGroup: false,
+      rawRemainder: "",
+      accountEpoch: store.accountEpoch(),
+      options: {
+        source: "reaction",
+        silentDenials: true,
+        neutralFailure: true,
+        deliveryGuard: {
+          async refresh() {},
+          assert() {
+            failureGuarded += 1;
+          },
+        },
+      },
+    });
+    equal("neutral failure stays a command failure", neutral.reason, "REACTION_COMMAND_FAILED");
+    equal("neutral failure uses the delivery guard", failureGuarded > 0, true);
+    equal("neutral failure sends one notice", f.state.sent.length, 1);
+
+    f.state.attempts.length = 0;
+    f.state.sent.length = 0;
     const commandMsg = {
       key: { remoteJid: dm, id: "typed-edit", fromMe: true },
       message: { conversation: `${prefix()}ping` },
@@ -841,6 +968,103 @@ try {
     equal("second admin does not run the kick again", await completed(f), "DUPLICATE");
     equal("groupParticipantsUpdate ran once", f.state.updates.length, 1);
     equal("the one removal is the original author", f.state.updates[0].ids[0], author);
+    equal("a second admin does not announce again", f.state.sent.length, 1);
+  }
+
+  section("a kick cancelled during the final roster read removes nobody");
+  {
+    async function cancelled(mutate) {
+      const f = await fixture({
+        rules: [{ id: "kick", definition: commandDefinition("group:kick", { emoji: "🫰" }) }],
+      });
+      markAdmins(f);
+      const message = remember(f);
+      f.state.onMetadata = () => {
+        if (f.state.metadataCalls < 2) return;
+        mutate(f, message);
+      };
+      receive(f, message, "🫰");
+      await completed(f);
+      equal("cancelled kick removes nobody", f.state.updates.length, 0);
+      equal("cancelled kick does not claim", count("reaction_executions"), 0);
+      return f;
+    }
+    await cancelled(() => {
+      store.saveBotSetting("reaction:enabled", false);
+    });
+    await cancelled(() => {
+      runtime.setEnabled("kick", false);
+    });
+    await cancelled((f, message) => {
+      f.engine.intake.observeDeletes({ keys: [{ remoteJid: group, id: message.key.id }] });
+    });
+    await cancelled((f) => {
+      const row = f.state.participants.find((participant) => participant.id === reactor);
+      if (row) delete row.admin;
+    });
+    await cancelled(() => {
+      store.advanceAccountEpoch();
+    });
+    runtime.setEnabled("kick", true);
+  }
+
+  section("kick claim stays on the cached author after a phone mapping");
+  {
+    const lid = "201070000777@lid";
+    const phone = "201070000777@s.whatsapp.net";
+    const f = await fixture({
+      rules: [{ id: "kick", definition: commandDefinition("group:kick", { emoji: "🫰" }) }],
+    });
+    f.state.participants = [
+      { id: lid },
+      { id: reactor, admin: "admin" },
+      { id: bot, admin: "admin" },
+      { id: admin2, admin: "admin" },
+    ];
+    const message = remember(f, original({ sender: lid }));
+    receive(f, message, "🫰", reactor);
+    equal("lid kick delivers", await completed(f), "DELIVERED");
+    equal("lid kick removes once", f.state.updates.length, 1);
+    equal("lid kick removes the cached author", f.state.updates[0].ids[0], lid);
+    store.storeLidPnMapping(lid, phone);
+    f.state.participants = f.state.participants.filter((row) => row.id !== lid);
+    f.state.participants.push({ id: phone });
+    receive(f, message, "🫰", admin2);
+    equal("mapping does not open a second removal", await completed(f), "DUPLICATE");
+    equal("one removal after the target rejoins", f.state.updates.length, 1);
+  }
+
+  section("disabling group refuses !group kick and leaves !kick alone");
+  {
+    const f = await fixture({
+      rules: [{ id: "kick", definition: commandDefinition("group:kick", { emoji: "🫰" }) }],
+    });
+    markAdmins(f);
+    f.state.participants.push({ id: memberB });
+    runtime.setEnabled("group", false);
+    const quoted = {
+      stanzaId: "quoted-group",
+      participant: author,
+      quotedMessage: { conversation: "hello" },
+    };
+    const grouped = {
+      key: { remoteJid: group, id: "typed-group-kick", fromMe: false, participant: reactor },
+      message: {
+        extendedTextMessage: { text: `${prefix()}group kick`, contextInfo: quoted },
+      },
+    };
+    await handleCommand(f.socket, grouped, `${prefix()}group kick`, store.accountEpoch());
+    equal("disabled group wrapper does not remove", f.state.updates.length, 0);
+    const typed = {
+      key: { remoteJid: group, id: "typed-direct-kick", fromMe: false, participant: reactor },
+      message: {
+        extendedTextMessage: { text: `${prefix()}kick`, contextInfo: quoted },
+      },
+    };
+    await handleCommand(f.socket, typed, `${prefix()}kick`, store.accountEpoch());
+    equal("direct kick still removes while group is disabled", f.state.updates.length, 1);
+    equal("direct kick removes the quoted author", f.state.updates[0].ids[0], author);
+    runtime.setEnabled("group", true);
   }
 
   section("a superseded reaction or an account change does not execute");
@@ -899,6 +1123,17 @@ try {
       store.getLidForPn("201222222222@s.whatsapp.net"),
       "201111111111@lid",
     );
+    ev.emit("lid-mapping.update", {
+      lid: "201111111111:bad@lid",
+      pn: "201999999999@s.whatsapp.net",
+    });
+    equal(
+      "malformed device suffix does not replace the stored pair",
+      store.getPnForLid("201111111111@lid"),
+      "201222222222@s.whatsapp.net",
+    );
+    ev.emit("lid-mapping.update", { lid: "201555555556@lid", pn: "201666666662" });
+    equal("bare phone is not a mapping pn", store.getPnForLid("201555555556@lid"), null);
     ev.emit("lid-mapping.update", { lid: "lid", pn: "pn" });
     equal(
       "garbage pair is not stored",
@@ -1102,11 +1337,16 @@ try {
     ]) {
       equal(`${verb} is rejected`, validateArgs("gemini", [`${verb} hello`]).ok, false);
     }
-    equal("a plain prompt is accepted", validateArgs("gemini", ["hello there"]).ok, true);
-    equal("ask is not a management verb", validateArgs("gemini", ["ask what time is it"]).ok, true);
+    const plain = validateArgs("gemini", ["hello there"]);
+    equal("a plain prompt is unsupported", plain.ok, false);
+    equal("a plain prompt is not in 5.0.1", plain.errors[0]?.code, "NOT_IN_5_0_1");
+    const ask = validateArgs("gemini", ["ask what time is it"]);
+    equal("ask is unsupported", ask.ok, false);
+    equal("ask is not in 5.0.1", ask.errors[0]?.code, "NOT_IN_5_0_1");
     equal("note keyword is one hash token", validateArgs("group:note", ["#hello_1"]).ok, true);
     equal("note keyword must be hashed", validateArgs("group:note", ["hello"]).ok, false);
     const reasons = {
+      gemini: "NOT_IN_5_0_1",
       sticker: "NOT_IN_5_0_1",
       "group:promote": "NOT_IN_5_0_1",
       "group:demote": "NOT_IN_5_0_1",
@@ -1224,8 +1464,40 @@ try {
       error = caught;
     }
     equal("key is checked again before upload", error?.message, "STT_KEY_REQUIRED");
-    equal("re-check happens after download", order.join(","), "download");
+    equal("re-check happens after authorization", order.join(","), "download,auth");
     settings.set("gemini_api_key", "isolated-test-key");
+
+    order.length = 0;
+    let blockedUploads = 0;
+    media.downloadMedia = async () => {
+      order.push("download");
+      return audioBytes;
+    };
+    stt.transcribe = async () => {
+      blockedUploads += 1;
+      order.push("upload");
+      return "late";
+    };
+    error = null;
+    try {
+      await saved.stt(f.socket, quote(true), [], `${prefix()}stt`, null, {
+        source: "reaction",
+        beforeEffect: async () => {
+          order.push("auth");
+          settings.set("ai_stt_enabled", false);
+        },
+      });
+    } catch (caught) {
+      error = caught;
+    }
+    equal(
+      "switch flipped during authorization stops the upload",
+      error?.message,
+      "REACTION_STT_DISABLED",
+    );
+    equal("switch re-check is after authorization", order.join(","), "download,auth");
+    equal("switch re-check does not upload", blockedUploads, 0);
+    settings.set("ai_stt_enabled", true);
 
     order.length = 0;
     media.downloadMedia = async () => {
@@ -1266,8 +1538,14 @@ try {
       throw new Error("SECRET_PROVIDER_BOOM");
     };
     media.downloadMedia = async () => audioBytes;
-    await saved.stt(f.socket, quote(true), [], `${prefix()}stt`, null, { source: "reaction" });
+    error = null;
+    try {
+      await saved.stt(f.socket, quote(true), [], `${prefix()}stt`, null, { source: "reaction" });
+    } catch (caught) {
+      error = caught;
+    }
     const failure = f.state.sent.map((row) => row.content?.text || "").join("\n");
+    equal("provider failure is not delivered", error?.message, "REACTION_COMMAND_FAILED");
     ok("provider failure uses the translated STT error", failure.includes("Transcription failed"));
     ok("provider failure details stay generic", failure.includes("unknown"));
     equal("provider failure hides raw error text", failure.includes("SECRET_PROVIDER_BOOM"), false);
@@ -1472,6 +1750,30 @@ try {
     equal("omitted transitions use add", created.definition.transitions[0], "add");
     equal("saved rule is version 2", created.definition.version, 2);
     equal("new rules close linked messages", created.definition.allowOthersOnLinkedMessages, false);
+    const flaggedV1 = throws("v1 payload cannot carry the linked-message flag", () =>
+      manage.createRule({
+        chatJid: group,
+        priority: 5,
+        definition: {
+          version: 1,
+          emoji: "🏓",
+          transitions: ["add"],
+          originalTypes: ["text"],
+          senders: { role: "owner", ids: [reactor] },
+          action: "ping",
+          destination: { mode: "same_chat" },
+          allowOthersOnLinkedMessages: true,
+        },
+      }),
+    );
+    ok(
+      "v1 flag is an unknown field",
+      flaggedV1?.issues?.some(
+        (issue) =>
+          issue.field === "definition.allowOthersOnLinkedMessages" &&
+          issue.code === "unknown_field",
+      ),
+    );
 
     const { default: router } = await import("../src/routes/reactions.api.esm.js");
     const layer = router.stack.find(
@@ -1497,6 +1799,9 @@ try {
     equal("ping mode is none", arabicPing.mode, "none");
     const arabicKick = response.body.commands.find((command) => command.key === "group:kick");
     equal("kick is destructive", arabicKick.destructive, true);
+    const arabicGemini = response.body.commands.find((command) => command.key === "gemini");
+    equal("gemini is unsupported", arabicGemini.mode, "unsupported");
+    equal("gemini is not in 5.0.1", arabicGemini.reason, "NOT_IN_5_0_1");
     equal("kick transitions are add only", arabicKick.transitions.length, 1);
 
     for (const locale of ["en", "ar", "pt-BR", "es-419"]) {

@@ -239,11 +239,12 @@ async function reactToAudio(sock, msg, ctx) {
     { maxBytes: MAX_MEDIA_BYTES, signal: ctx?.signal },
   );
   assertAudio(audioBuffer, audioMessage.mimetype, true);
-  if (!settings.get("ai_stt_enabled")) reactionCode("REACTION_STT_DISABLED");
-  if (!settings.get(`${resolveSttProvider()}_api_key`)) reactionCode("STT_KEY_REQUIRED");
   ctx?.signal?.throwIfAborted();
   if (ctx?.beforeEffect) await ctx.beforeEffect();
   ctx?.signal?.throwIfAborted();
+  // Checked after beforeEffect: the switch or the key may change during that await.
+  if (!settings.get("ai_stt_enabled")) reactionCode("REACTION_STT_DISABLED");
+  if (!settings.get(`${resolveSttProvider()}_api_key`)) reactionCode("STT_KEY_REQUIRED");
   let transcription;
   try {
     transcription = await module.exports.transcribe(audioBuffer, audioMessage.mimetype, {
@@ -265,7 +266,7 @@ async function reactToAudio(sock, msg, ctx) {
       },
       { quoted: msg },
     );
-    return;
+    reactionCode("REACTION_COMMAND_FAILED");
   }
   if (typeof transcription !== "string" || !transcription.trim() || transcription.length > 12000)
     reactionCode("STT_OUTPUT_INVALID");

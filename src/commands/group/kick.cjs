@@ -75,25 +75,38 @@ module.exports = {
         member,
         reason,
       });
+      const announce = () =>
+        sock.sendMessage(groupId, {
+          text: kickMessage,
+          mentions: [targetJid],
+        });
+      const remove = () =>
+        moderationAction.kickGroupMember(sock, {
+          groupId,
+          groupMetadata,
+          targetCandidates,
+          requesterCandidates: senderCandidates(msg, sock),
+          requesterFromMe: Boolean(msg.key?.fromMe),
+          requesterRule: ctx?.nested === true ? "nested" : "direct",
+          accountEpoch: ctx?.accountEpoch,
+          effectGuard: ctx?.effectGuard,
+        });
 
-      // Announce the kick before performing it
-      await sock.sendMessage(groupId, {
-        text: kickMessage,
-        mentions: [targetJid],
-      });
+      // A reaction announces only after WhatsApp confirms the removal. A typed
+      // !kick still announces first, then removes.
+      if (ctx?.source === "reaction") {
+        const result = await remove();
+        if (!result.kicked) {
+          if (ctx?.silentDenials) reactionRefusal();
+          await sock.sendMessage(groupId, { text: t("bot.group.kick.failed") });
+          return;
+        }
+        await announce();
+        return;
+      }
 
-      // The announcement above awaited, so the roster may have changed: the
-      // requester is re-checked on a fresh roster, as the dispatcher checked it.
-      const result = await moderationAction.kickGroupMember(sock, {
-        groupId,
-        groupMetadata,
-        targetCandidates,
-        requesterCandidates: senderCandidates(msg, sock),
-        requesterFromMe: Boolean(msg.key?.fromMe),
-        requesterRule: ctx?.nested === true ? "nested" : "direct",
-        accountEpoch: ctx?.accountEpoch,
-        effectGuard: ctx?.effectGuard,
-      });
+      await announce();
+      const result = await remove();
       if (!result.kicked) {
         if (ctx?.silentDenials) reactionRefusal();
         await sock.sendMessage(groupId, {
