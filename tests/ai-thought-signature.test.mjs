@@ -28,7 +28,7 @@ const settings = harnessRequire("./src/config/settings.cjs");
 // Registers the gemini_model / base URL / API key listener that strips signatures.
 harnessRequire("./src/services/settingsTransfer.cjs");
 const store = harnessRequire("./src/db/store.cjs");
-const { q } = harnessRequire("./src/db/db.cjs");
+const { db, q } = harnessRequire("./src/db/db.cjs");
 const permissions = harnessRequire("./src/utils/permissions.cjs");
 await permissions.primePermissions();
 const aiAgent = harnessRequire("./src/services/aiAgent.cjs");
@@ -1669,6 +1669,201 @@ section("a failed thought-signature sweep self-heals on the next Gemini turn");
       }
     },
   );
+}
+
+section(
+  "two concurrent turns that load history while a sweep is pending both strip signatures and keep tool pairs",
+);
+{
+  await withGeminiServer(
+    [textReply("first concurrent answer"), textReply("second concurrent answer")],
+    async (fake) => {
+      const chatA = "201000000197@s.whatsapp.net";
+      const chatB = "201000000201@s.whatsapp.net";
+      store.saveChatHistory(chatA, priorToolHistory("concurrent-pending-sig-a"));
+      store.saveChatHistory(chatB, priorToolHistory("concurrent-pending-sig-b"));
+
+      const realStrip = store.stripGeminiThoughtSignatures;
+      const realGetChatHistory = store.getChatHistory;
+      let calls = 0;
+      const loadedSnapshots = [];
+
+      store.stripGeminiThoughtSignatures = function (...args) {
+        calls += 1;
+        if (calls === 1) {
+          throw new Error("simulated initial sweep failure");
+        }
+        return realStrip.apply(this, args);
+      };
+
+      store.getChatHistory = function (id, ...rest) {
+        const snapshot = realGetChatHistory.call(this, id, ...rest);
+        if (id === chatA || id === chatB) {
+          loadedSnapshots.push({
+            chatId: id,
+            pendingAtLoad: store.isGeminiSignatureSweepPending(),
+            hadSignatureAtLoad: JSON.stringify(snapshot).includes("thoughtSignature"),
+          });
+        }
+        return snapshot;
+      };
+
+      try {
+        settings.set("gemini_model", "gemini-3.1-pro-preview");
+        equal("initial sweep failed on settings change", calls, 1);
+        equal(
+          "pending flag is set before both turns start",
+          store.isGeminiSignatureSweepPending(),
+          true,
+        );
+
+        const sockA = makeSocket();
+        const sockB = makeSocket();
+        await withLang("en", () =>
+          Promise.all([
+            geminiCommand.execute(
+              sockA,
+              makeMessage(chatA, "!ai concurrent turn one"),
+              ["concurrent", "turn", "one"],
+              "!ai concurrent turn one",
+              null,
+              { invokedName: "ai" },
+            ),
+            geminiCommand.execute(
+              sockB,
+              makeMessage(chatB, "!ai concurrent turn two"),
+              ["concurrent", "turn", "two"],
+              "!ai concurrent turn two",
+              null,
+              { invokedName: "ai" },
+            ),
+          ]),
+        );
+
+        equal("both turns loaded stored history once", loadedSnapshots.length, 2);
+        equal("first turn loaded while sweep was pending", loadedSnapshots[0]?.pendingAtLoad, true);
+        equal(
+          "second turn loaded while sweep was still pending",
+          loadedSnapshots[1]?.pendingAtLoad,
+          true,
+        );
+        equal(
+          "first turn loaded signed history from storage",
+          loadedSnapshots[0]?.hadSignatureAtLoad,
+          true,
+        );
+        equal(
+          "second turn loaded signed history from storage before retry cleared it",
+          loadedSnapshots[1]?.hadSignatureAtLoad,
+          true,
+        );
+        equal("only the first turn needed to run the sweep retry", calls, 2);
+        equal(
+          "pending flag is cleared after the first turn swept",
+          store.isGeminiSignatureSweepPending(),
+          false,
+        );
+        equal("both turns sent their Gemini requests", fake.requests.length, 2);
+
+        for (const [index, sig] of [
+          [0, "concurrent-pending-sig-a"],
+          [1, "concurrent-pending-sig-b"],
+        ]) {
+          const sentJson = JSON.stringify(fake.body(index)?.contents || []);
+          ok(
+            `turn ${index + 1} sent no thoughtSignature`,
+            !sentJson.includes("thoughtSignature") &&
+              !sentJson.includes("concurrent-pending-sig-a") &&
+              !sentJson.includes("concurrent-pending-sig-b") &&
+              !sentJson.includes(sig),
+          );
+          ok(
+            `turn ${index + 1} sent no thought parts`,
+            !sentJson.includes("private chain of thought"),
+          );
+          ok(`turn ${index + 1} kept functionCall`, sentJson.includes("functionCall"));
+          ok(`turn ${index + 1} kept functionResponse`, sentJson.includes("functionResponse"));
+        }
+      } finally {
+        store.getChatHistory = realGetChatHistory;
+        store.stripGeminiThoughtSignatures = realStrip;
+        if (store.isGeminiSignatureSweepPending()) {
+          store.stripGeminiThoughtSignatures();
+        }
+      }
+    },
+  );
+}
+
+section(
+  "a sweep inside a rolled-back outer transaction leaves the pending flag set; a top-level sweep clears it",
+);
+{
+  const rollbackChatId = "201000000202@s.whatsapp.net";
+  store.saveChatHistory(rollbackChatId, priorToolHistory("nested-rollback-sig"));
+
+  // A failed sweep earlier left the flag set.
+  store.markGeminiSignatureSweepPending();
+
+  try {
+    equal(
+      "pending flag is set after initial failed sweep",
+      store.isGeminiSignatureSweepPending(),
+      true,
+    );
+    ok(
+      "stored history still has its signature before the outer transaction",
+      storedHistory(rollbackChatId).includes("nested-rollback-sig"),
+    );
+
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      equal("outer transaction is active", db.isTransaction, true);
+      store.stripGeminiThoughtSignatures();
+      equal(
+        "nested savepoint sweep inside outer transaction does not clear the pending flag",
+        store.isGeminiSignatureSweepPending(),
+        true,
+      );
+      ok(
+        "nested sweep rewrote rows inside the uncommitted outer transaction",
+        !storedHistory(rollbackChatId).includes("nested-rollback-sig"),
+      );
+    } finally {
+      db.exec("ROLLBACK");
+    }
+
+    equal("outer transaction rolled back", db.isTransaction, false);
+    equal(
+      "pending flag stays set after outer transaction rollback",
+      store.isGeminiSignatureSweepPending(),
+      true,
+    );
+    ok(
+      "unswept history returned when the outer transaction rolled back",
+      storedHistory(rollbackChatId).includes("nested-rollback-sig"),
+    );
+
+    store.stripGeminiThoughtSignatures();
+    equal(
+      "a top-level sweep clears the pending flag on commit",
+      store.isGeminiSignatureSweepPending(),
+      false,
+    );
+    const sweptRaw = storedHistory(rollbackChatId);
+    ok(
+      "top-level sweep removed signatures from stored history",
+      !sweptRaw.includes("nested-rollback-sig") && !sweptRaw.includes("thoughtSignature"),
+    );
+    ok(
+      "top-level sweep kept functionCall and functionResponse pairs",
+      sweptRaw.includes("functionCall") && sweptRaw.includes("functionResponse"),
+    );
+  } finally {
+    if (store.isGeminiSignatureSweepPending()) {
+      store.stripGeminiThoughtSignatures();
+    }
+  }
 }
 
 finish();

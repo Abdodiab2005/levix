@@ -32,6 +32,7 @@ const {
   accountEpoch,
   stripThoughtSignaturesFromHistory,
   geminiSignatureGeneration,
+  isGeminiSignatureSweepPending,
 } = require("../db/store.cjs");
 const {
   getChatHistoryAsync,
@@ -733,9 +734,14 @@ module.exports = {
       await saveChatHistoryAsync(chatId, turns);
     }
 
-    async function attempt(historyOverride) {
+    async function attempt(historyOverride, stripSignaturesOverride) {
       if (!isCurrentCaller(caller)) return;
+      const stripBeforeLoad =
+        stripSignaturesOverride !== undefined
+          ? Boolean(stripSignaturesOverride)
+          : isGeminiSignatureSweepPending();
       const history = historyOverride ?? ((await getChatHistoryAsync(chatId)) || []);
+      const stripSignatures = stripBeforeLoad || isGeminiSignatureSweepPending();
       if (!isCurrentCaller(caller)) return;
       const result = await runAgent({
         parts,
@@ -744,6 +750,7 @@ module.exports = {
         context: agentContext,
         provider: turnProvider,
         geminiPin: turnPin,
+        stripSignatures,
       });
       await persistHistory(result.history);
       return result;
@@ -761,7 +768,9 @@ module.exports = {
         // The cleaned history stays in memory until the retry succeeds.
         if (firstErr?.toolsRan || !canSaveHistory() || !isPinnedProviderLive()) throw firstErr;
 
+        const stripBeforeReload = isGeminiSignatureSweepPending();
         const oldHistory = (await getChatHistoryAsync(chatId)) || [];
+        const retryStripSignatures = stripBeforeReload || isGeminiSignatureSweepPending();
         if (!isCurrentCaller(caller)) return;
         if (!isFileReferenceError(firstErr, [parts, oldHistory])) throw firstErr;
         const cleaned = sanitizeHistoryForFiles(oldHistory);
@@ -769,7 +778,7 @@ module.exports = {
         logger.info(
           `[Gemini] sanitized history: ${oldHistory.length} -> ${cleaned.length}; retrying once`,
         );
-        result = await attempt(cleaned);
+        result = await attempt(cleaned, retryStripSignatures);
       }
 
       if (!result) return;
