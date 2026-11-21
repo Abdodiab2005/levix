@@ -24,13 +24,20 @@ const {
   downloadMedia,
   geminiMediaPart,
 } = require("../utils/geminiMedia.cjs");
-const { t } = require("../utils/i18n.cjs");
+const { t, currentLang } = require("../utils/i18n.cjs");
 const aiIdentity = require("../config/ai-identity.cjs");
 const settings = require("../config/settings.cjs");
+const store = require("../db/store.cjs");
 const memory = require("../utils/memory.cjs");
 const { globalMemoryAccess } = require("./memoryPolicy.cjs");
 const { assertProviderBaseUrl, assertProviderRequestUrl } = require("../utils/providerUrl.cjs");
-const { toolDeclarations, describeCall, runToolWithDeadline } = require("./aiTools.cjs");
+const {
+  toolDeclarations,
+  describeCall,
+  runToolWithDeadline,
+  toolErrorForModel,
+  markToolsRan,
+} = require("./aiTools.cjs");
 const { docSourcesFromTool } = require("./aiDocs.cjs");
 const {
   BaseAIProvider,
@@ -38,7 +45,15 @@ const {
   getProvider,
   detectModelCapabilities,
 } = require("./aiRouter.cjs");
-const { runProviderAgent, activeProviderKeySetting } = require("./aiProviders.cjs");
+const {
+  runProviderAgent,
+  classifyProviderAutoReply,
+  AUTO_REPLY_DECISION_TOOL,
+  AUTO_REPLY_DECISION_DECLARATION,
+  validateAutoReplyDecision,
+  validateDecisionCalls,
+  activeProviderKeySetting,
+} = require("./aiProviders.cjs");
 
 // Model, key, tool budget and history length all come from config/settings.cjs
 // (what the dashboard saved, else the default) and are read per call, so changing
@@ -55,10 +70,22 @@ const { runProviderAgent, activeProviderKeySetting } = require("./aiProviders.cj
 // change between one message and the next.
 let clientCache = { key: null, baseUrl: null, client: null };
 
-function geminiClient() {
-  const key = settings.get("gemini_api_key");
+// One synchronous snapshot. Callers read it before the turn's first await and
+// pass it through every request, including a later file-recovery retry.
+function readGeminiProviderPin() {
+  return {
+    provider: String(settings.get("ai_provider") || "gemini").toLowerCase(),
+    model: settings.get("gemini_model"),
+    baseUrl: settings.get("gemini_base_url"),
+    apiKey: settings.get("gemini_api_key"),
+  };
+}
+
+function geminiClient(pin = readGeminiProviderPin()) {
+  const resolved = pin || readGeminiProviderPin();
+  const key = resolved.apiKey;
   if (!key) return null;
-  const baseUrl = assertProviderBaseUrl(settings.get("gemini_base_url"), {
+  const baseUrl = assertProviderBaseUrl(resolved.baseUrl, {
     allowLoopback: true,
   });
   if (clientCache.key !== key || clientCache.baseUrl !== baseUrl) {
@@ -218,6 +245,38 @@ function buildSystemInstruction(context = {}) {
   return [aiIdentity.systemBlock, loadPersona(), runtime, memoryBlock].filter(Boolean).join("\n\n");
 }
 
+const AUTO_REPLY_DECISION_DIRECTIVE = [
+  "# Auto Reply decision",
+  "You are deciding how Auto Reply responds to this incoming WhatsApp message. Call `auto_reply_decision` once and return no other output.",
+  '- Choose `action: "react"` with a single reaction `emoji` (such as "❤️", "👍", "😂") for pure acknowledgement, thanks, agreement, or laughter that needs no text reply.',
+  '- Choose `action: "silent"` when there is nothing to answer (a closing word, an ok/bye, a sticker-like message, or a message not addressed to the bot).',
+  '- Choose `action: "reply"` with `text` when you can give a direct answer right now from your existing knowledge and the context above, in the required reply language. Never put only a single emoji in `text`.',
+  '- Choose `action: "task"` when answering needs tools (web search, reminders, memory, documents, polls, voice notes, or images).',
+  "- Never choose a chat, JID, message key, target, or destination; the backend owns delivery.",
+].join("\n");
+
+function buildAutoReplySystemInstruction(context = {}) {
+  return [buildSystemInstruction(context), AUTO_REPLY_DECISION_DIRECTIVE]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function ensureAutoReplyDirective(systemInstruction, context) {
+  const base = systemInstruction || buildSystemInstruction(context);
+  if (typeof base === "string" && base.includes("# Auto Reply decision")) return base;
+  return [base, AUTO_REPLY_DECISION_DIRECTIVE].filter(Boolean).join("\n\n");
+}
+
+function historyTurns(history) {
+  if (Array.isArray(history)) return history;
+  if (history && typeof history === "object") {
+    if (Array.isArray(history.history)) return history.history;
+    if (Array.isArray(history.turns)) return history.turns;
+    if (Array.isArray(history.entries)) return history.entries;
+  }
+  return [];
+}
+
 /** A turn the conversation can legally start from. */
 function isOpeningTurn(entry) {
   if (entry?.role !== "user") return false;
@@ -233,7 +292,7 @@ function isOpeningTurn(entry) {
  */
 function trimHistory(history) {
   const maxEntries = settings.get("ai_max_history");
-  const out = Array.isArray(history) ? [...history] : [];
+  const out = [...historyTurns(history)];
   while (out.length > maxEntries) out.shift();
   while (out.length && !isOpeningTurn(out[0])) out.shift();
   // A budget-exhausted model call has no response. Drop the whole turn so
@@ -243,35 +302,78 @@ function trimHistory(history) {
   return out;
 }
 
-/**
- * Gemini file URIs live ~48h; after that every call fails on the old parts.
- *
- * @google/genai throws its own `ApiError` with a numeric `status`, where the
- * old SDK put the code in a handful of different places. Both are still read:
- * the shapes are cheap to check and the stored history can outlive an upgrade.
- */
-function isFileReferenceError(error) {
-  if (!error) return false;
-  const status =
-    error.status || error.statusCode || error.code || error.response?.status || error.error?.code;
-  const message = `${error.message || ""} ${error.details || ""}`.toLowerCase();
+function errorText(error) {
+  return [
+    error?.message,
+    error?.details,
+    error?.statusText,
+    error?.error?.message,
+    error?.error?.status,
+    typeof error?.status === "string" ? error.status : "",
+    typeof error?.code === "string" ? error.code : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
-  if ([403, 404, 410].includes(Number(status))) return true;
-  if (message.includes("permission_denied")) return true;
-  if (message.includes("failed_precondition")) return true;
-
-  return (
-    message.includes("file") &&
-    /not found|not exist|expired|not in an active|not active|permission to access|forbidden|file_?uri/.test(
-      message,
-    )
+function fileIdsFromText(text) {
+  return [...String(text || "").matchAll(/files\/([A-Za-z0-9_-]+)/gi)].map((match) =>
+    match[1].toLowerCase(),
   );
+}
+
+// Only fileUri fields count as files this turn sent. Walking every string
+// would treat a mention of "files/…" in ordinary text as an upload.
+function collectSentFileIds(sent) {
+  const ids = new Set();
+  const visit = (value, seen) => {
+    if (!value || typeof value !== "object") return;
+    if (seen.has(value)) return;
+    seen.add(value);
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, seen);
+      return;
+    }
+    if (typeof value.fileUri === "string") {
+      for (const id of fileIdsFromText(value.fileUri)) ids.add(id);
+    }
+    for (const key of ["parts", "history", "fileData", "contents", "message", "turns", "entries"]) {
+      if (value[key] != null) visit(value[key], seen);
+    }
+  };
+  visit(sent, new Set());
+  return ids;
+}
+
+function namesFileResource(text) {
+  const lower = String(text || "").toLowerCase();
+  if (!/\bfiles?\b|file_?uri|filedata|\/files\//.test(lower)) return false;
+  // "invalid" is not expiry. "Invalid file format" names a file and still
+  // must not discard stored media.
+  return /not found|not_found|not exist|expired|not in an active|not active|permission to access|forbidden|permission_denied|failed_precondition|no longer|missing resource|resource not found/.test(
+    lower,
+  );
+}
+
+/**
+ * A stale Files API reference. A bare 403/404/410 is not enough: the error
+ * must name a file resource, or name a files/<id> URI this turn actually sent.
+ */
+function isFileReferenceError(error, sent) {
+  if (!error) return false;
+  const text = errorText(error);
+  if (sent) {
+    const sentIds = collectSentFileIds(sent);
+    if (fileIdsFromText(text).some((id) => sentIds.has(id))) return true;
+  }
+  return namesFileResource(text);
 }
 
 /** Drop every uploaded-media part so a stale file URI can't poison the chat. */
 function sanitizeHistoryForFiles(history) {
-  if (!Array.isArray(history)) return [];
-  return history
+  const turns = historyTurns(history);
+  if (!turns.length) return [];
+  return turns
     .map((turn) => {
       if (!turn?.parts) return turn;
       const parts = turn.parts.filter((part) => !part?.fileData && !part?.inlineData);
@@ -279,6 +381,151 @@ function sanitizeHistoryForFiles(history) {
       return { ...turn, parts };
     })
     .filter(Boolean);
+}
+
+/**
+ * Gemini rejected a thought signature. The field name alone is not a rejection:
+ * a 400 that merely echoes "thoughtSignature" from a prompt must not match.
+ */
+function isThoughtSignatureError(error) {
+  if (!error) return false;
+  const numStatus = Number(
+    error.status ??
+      error.statusCode ??
+      (typeof error.code === "number" ? error.code : undefined) ??
+      error.response?.status ??
+      error.error?.code ??
+      0,
+  );
+  const text = errorText(error);
+  if (numStatus && numStatus !== 400) return false;
+  if (!numStatus && !/\b400\b|invalid_argument/i.test(text)) return false;
+  return /invalid thought signature|thought signature is not valid|missing a thought_signature|missing thought signature|thought signature was issued by an unavailable route/i.test(
+    text,
+  );
+}
+
+/**
+ * Sanitize prior history to plain user/model text turns: drop every prior-turn
+ * functionCall/functionResponse entry and every thought part (and signatures).
+ */
+function sanitizeHistoryForThoughtSignatures(history) {
+  const turns = historyTurns(history);
+  const out = [];
+  for (const entry of turns) {
+    if (!entry || (entry.role !== "user" && entry.role !== "model") || !Array.isArray(entry.parts)) {
+      continue;
+    }
+    if (entry.parts.some((part) => part?.functionCall || part?.functionResponse)) {
+      continue;
+    }
+    const parts = [];
+    for (const part of entry.parts) {
+      if (part?.thought === true) continue;
+      if (typeof part?.text === "string" && part.text.length > 0) {
+        parts.push({ text: part.text });
+      }
+    }
+    if (parts.length) {
+      out.push({ role: entry.role, parts });
+    }
+  }
+  return trimHistory(out);
+}
+
+/**
+ * Classify an AI error into a fixed user-facing category so raw provider JSON
+ * or SDK error messages never reach WhatsApp.
+ */
+function classifyAiError(error) {
+  const numStatus = Number(
+    error?.status ??
+      error?.statusCode ??
+      (typeof error?.code === "number" ? error.code : undefined) ??
+      error?.response?.status ??
+      error?.error?.code ??
+      0,
+  );
+  const code = typeof error?.code === "string" ? error.code : "";
+  const text = [
+    error?.message,
+    error?.details,
+    error?.statusText,
+    error?.error?.message,
+    error?.error?.status,
+    typeof error?.status === "string" ? error.status : "",
+    code,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (isThoughtSignatureError(error)) {
+    return "signature";
+  }
+  if (
+    /\bsafety\b|prohibited_content|recitation|content[\s_-]*filter|content_policy|harm_category|finish_reason[:\s"]*safety|blocked by safety|blocked due to safety/i.test(
+      text,
+    )
+  ) {
+    return "safety";
+  }
+  if (
+    numStatus === 429 ||
+    code === "IMAGE_QUOTA" ||
+    /resource_exhausted|\bquota\b|rate[\s_-]*limit|too many requests|\b429\b|insufficient_quota/i.test(
+      text,
+    )
+  ) {
+    return "quota";
+  }
+  if (
+    numStatus === 401 ||
+    numStatus === 403 ||
+    code === "IMAGE_KEY_REQUIRED" ||
+    /api[\s_-]*key|invalid_api_key|api_key_invalid|unauthenticated|unauthorized|authentication|permission_denied|invalid.*key|key.*not.*configured|no.*api.*key|لم يُضبط مفتاح/i.test(
+      text,
+    )
+  ) {
+    return "apiKey";
+  }
+  if (
+    (numStatus >= 500 && numStatus < 600) ||
+    error?.name === "AbortError" ||
+    /timed?\s*out|\btimeout\b|econnrefused|econnreset|enotfound|ehostunreach|enetunreach|eai_again|socket hang up|fetch failed|network|service[\s_-]*unavailable|unavailable|bad gateway|gateway timeout|overloaded|internal error|\b50[0234]\b/i.test(
+      text,
+    )
+  ) {
+    return "unavailable";
+  }
+  return "generic";
+}
+
+const AI_ERROR_KEYS = Object.freeze({
+  signature: "bot.ai.gemini.errorThoughtSignature",
+  quota: "bot.ai.gemini.errorQuota",
+  apiKey: "bot.ai.gemini.errorApiKey",
+  safety: "bot.ai.gemini.errorSafety",
+  unavailable: "bot.ai.gemini.errorUnavailable",
+  generic: "bot.ai.gemini.errorGeneric",
+});
+
+function describeAiError(error) {
+  const kind = classifyAiError(error);
+  const key = AI_ERROR_KEYS[kind] || AI_ERROR_KEYS.generic;
+  const translated = t(key);
+  if (translated && translated !== key) return translated;
+  const shortKey = key.replace(/^bot\.ai\./, "");
+  for (const locale of [currentLang(), "en"]) {
+    try {
+      const bundle = JSON.parse(
+        fs.readFileSync(assetPath("i18n", locale, "bot", "ai.json"), "utf8"),
+      );
+      if (typeof bundle?.[shortKey] === "string" && bundle[shortKey]) {
+        return bundle[shortKey];
+      }
+    } catch {}
+  }
+  return translated;
 }
 
 function isAgentEnabled() {
@@ -506,6 +753,10 @@ class GeminiProvider extends BaseAIProvider {
   async runTurn(options) {
     return runGeminiTurn(options);
   }
+
+  async classifyAutoReply(options) {
+    return classifyGeminiAutoReply(options);
+  }
 }
 
 registerProvider("gemini", new GeminiProvider());
@@ -515,13 +766,136 @@ registerProvider("gemini", new GeminiProvider());
  * Modular dispatch through getProvider().
  */
 async function runAgent(options = {}) {
-  const provider = getProvider();
+  const pinnedProvider = options.provider ?? options.geminiPin?.provider;
+  const provider =
+    pinnedProvider !== undefined && pinnedProvider !== null
+      ? getProvider(pinnedProvider)
+      : getProvider();
+  const stripSignatures = Boolean(options.stripSignatures) || store.isGeminiSignatureSweepPending();
   const result = await provider.runTurn({
     ...options,
+    stripSignatures,
     history: trimHistory(options.history),
     systemInstruction: buildSystemInstruction(options.context),
   });
-  return { ...result, history: trimHistory(result.history) };
+  return {
+    ...result,
+    history: trimHistory(result.history),
+  };
+}
+
+function extractGeminiCalls(response) {
+  const parts = response?.candidates?.[0]?.content?.parts;
+  if (Array.isArray(parts)) {
+    return parts.filter((part) => part?.functionCall).map((part) => part.functionCall);
+  }
+  if (Array.isArray(response?.functionCalls)) {
+    return response.functionCalls;
+  }
+  return [];
+}
+
+async function classifyGeminiAutoReply({
+  parts,
+  context = {},
+  systemInstruction = null,
+  signal,
+} = {}) {
+  signal?.throwIfAborted?.();
+  const genAI = geminiClient();
+  if (!genAI) {
+    logger.warn(
+      { reason: "missing_key", provider: "gemini" },
+      "[aiAgent] Auto Reply classification skipped",
+    );
+    return null;
+  }
+  try {
+    await assertProviderRequestUrl(settings.get("gemini_base_url"), { allowLoopback: true });
+  } catch {
+    logger.warn(
+      { reason: "invalid_base_url", provider: "gemini" },
+      "[aiAgent] Auto Reply classification skipped",
+    );
+    return null;
+  }
+  signal?.throwIfAborted?.();
+
+  const instruction = ensureAutoReplyDirective(systemInstruction, context);
+  const model = settings.get("gemini_model");
+  const normalizedParts = Array.isArray(parts) ? parts : [];
+
+  let response;
+  try {
+    response = await genAI.models.generateContent({
+      model,
+      contents: [{ role: "user", parts: normalizedParts }],
+      config: {
+        systemInstruction: instruction,
+        ...(signal ? { abortSignal: signal } : {}),
+        // A fresh copy: the SDK rewrites declaration fields and the shared one is frozen.
+        tools: [{ functionDeclarations: [structuredClone(AUTO_REPLY_DECISION_DECLARATION)] }],
+        toolConfig: {
+          functionCallingConfig: {
+            mode: FunctionCallingConfigMode?.ANY || "ANY",
+            allowedFunctionNames: [AUTO_REPLY_DECISION_TOOL],
+          },
+        },
+      },
+    });
+  } catch (error) {
+    if (signal?.aborted || error?.name === "AbortError") throw error;
+    logger.warn(
+      {
+        reason: "provider_error",
+        provider: "gemini",
+        status: error?.status || error?.statusCode || null,
+      },
+      "[aiAgent] Auto Reply classification request failed",
+    );
+    return null;
+  }
+  signal?.throwIfAborted?.();
+
+  const calls = extractGeminiCalls(response);
+  const validated = validateDecisionCalls(calls);
+  if (!validated.ok) {
+    logger.warn(
+      { reason: validated.reason, provider: "gemini" },
+      "[aiAgent] Auto Reply classification decision rejected",
+    );
+    return null;
+  }
+  return validated.decision;
+}
+
+/**
+ * One-shot Auto Reply classification across Gemini, OpenAI-compatible, and Anthropic.
+ * Forces the single `auto_reply_decision` declaration with no tools executed,
+ * no Google Search, and no tool loop.
+ */
+async function classifyAutoReply(options = {}) {
+  const provider = getProvider(options.provider);
+  if (Object.hasOwn(provider, "runTurn") && !Object.hasOwn(provider, "classifyAutoReply")) {
+    return Object.freeze({ action: "task" });
+  }
+  const systemInstruction = ensureAutoReplyDirective(options.systemInstruction, options.context);
+  if (typeof provider.classifyAutoReply === "function") {
+    return provider.classifyAutoReply({
+      ...options,
+      systemInstruction,
+    });
+  }
+  if (provider.id === "openai" || provider.id === "anthropic") {
+    return classifyProviderAutoReply(provider.id, {
+      ...options,
+      systemInstruction,
+    });
+  }
+  return classifyGeminiAutoReply({
+    ...options,
+    systemInstruction,
+  });
 }
 
 async function runGeminiTurn({
@@ -534,15 +908,42 @@ async function runGeminiTurn({
   systemInstruction = null,
   search = null,
   signal,
+  geminiPin = null,
+  stripSignatures = false,
 } = {}) {
-  const genAI = geminiClient();
+  // Before the endpoint check. A settings change during that await must not
+  // move this turn onto another model, endpoint or key. A pin from the command
+  // covers the file-recovery retry, which is a second call.
+  const pin = geminiPin || readGeminiProviderPin();
+  const stripOnCall = Boolean(stripSignatures) || store.isGeminiSignatureSweepPending();
+  const genAI = geminiClient(pin);
   if (!genAI) throw new Error(t("bot.ai.aiAgent.noGeminiKey"));
-  await assertProviderRequestUrl(settings.get("gemini_base_url"), { allowLoopback: true });
+  await assertProviderRequestUrl(pin.baseUrl, { allowLoopback: true });
 
   const stepBudget = maxSteps ?? settings.get("ai_max_tool_steps");
   const instruction = systemInstruction || buildSystemInstruction(context);
-  const trimmed = trimHistory(history);
-  const model = settings.get("gemini_model");
+  const model = pin.model;
+  // Signatures are stripped when gemini_model, gemini_base_url or gemini_api_key
+  // changes. When that sweep threw after the setting write, retry it before the
+  // first request; if it fails again, strip the loaded history in memory and
+  // leave the pending flag set. A turn whose history snapshot was loaded while
+  // a sweep was pending also strips its copy in memory even if another turn
+  // cleared the flag first. A leftover 400 (a gateway alias, a restored backup)
+  // is retried once below; a provider switch does not drop function calls on
+  // its own.
+  const shouldStripHistory = stripOnCall || store.isGeminiSignatureSweepPending();
+  if (store.isGeminiSignatureSweepPending()) {
+    try {
+      store.stripGeminiThoughtSignatures();
+    } catch (error) {
+      store.markGeminiSignatureSweepPending();
+      logger.error({ err: error }, "[ai_history] thought-signature sweep retry failed");
+    }
+  }
+  const inputHistory = shouldStripHistory
+    ? store.stripThoughtSignaturesFromHistory(history)
+    : history;
+  let activeHistory = trimHistory(inputHistory);
 
   // `ai.chats` rather than a hand-rolled contents array on purpose. Gemini 3
   // returns a `thoughtSignature` on the parts it produces and expects it back
@@ -551,12 +952,12 @@ async function runGeminiTurn({
   // circulating it is not something this file has to remember to do. Levix
   // persists that same history, and a signature is a plain string, so it
   // survives the round trip through SQLite too.
-  const openChat = (search) => {
+  const openChat = (search, chatHistory = activeHistory) => {
     const tools = buildTools({ useTools, search });
     const toolConfig = buildToolConfig({ useTools, search });
     return genAI.chats.create({
       model,
-      history: trimmed,
+      history: chatHistory,
       config: {
         systemInstruction: instruction,
         ...(signal ? { abortSignal: signal } : {}),
@@ -569,7 +970,7 @@ async function runGeminiTurn({
   // One-shot callers (the summarize tool) pass search:false explicitly; the
   // chat agent follows the setting.
   let searchOffered = search === null ? googleSearchEnabled() : Boolean(search);
-  let chat = openChat(searchOffered);
+  let chat = openChat(searchOffered, activeHistory);
   const toolCalls = [];
   // Only ever filled from real grounding metadata; see extractSources().
   const sources = [];
@@ -578,18 +979,29 @@ async function runGeminiTurn({
   try {
     response = await chat.sendMessage({ message: parts });
   } catch (error) {
-    // Defensive only. Gemini 3 takes the built-in search and custom functions
-    // in one request, so this is not the expected path — but a model that
-    // refuses the combination must not cost Levix its own tools, which the
-    // commands depend on. Search is what gets dropped, never the functions.
-    if (!searchOffered || !isToolCombinationError(error)) throw error;
-    logger.warn(
-      { err: error?.message, model },
-      "[aiAgent] this model refused Google Search together with function tools — retrying with functions only",
-    );
-    searchOffered = false;
-    chat = openChat(false);
-    response = await chat.sendMessage({ message: parts });
+    if (isThoughtSignatureError(error)) {
+      logger.warn(
+        { err: error?.message, model },
+        "[aiAgent] thought signature rejected on first send — retrying once with sanitized history",
+      );
+      activeHistory = sanitizeHistoryForThoughtSignatures(activeHistory);
+      chat = openChat(searchOffered, activeHistory);
+      response = await chat.sendMessage({ message: parts });
+    } else if (searchOffered && isToolCombinationError(error)) {
+      // Defensive only. Gemini 3 takes the built-in search and custom functions
+      // in one request, so this is not the expected path — but a model that
+      // refuses the combination must not cost Levix its own tools, which the
+      // commands depend on. Search is what gets dropped, never the functions.
+      logger.warn(
+        { err: error?.message, model },
+        "[aiAgent] this model refused Google Search together with function tools — retrying with functions only",
+      );
+      searchOffered = false;
+      chat = openChat(false, activeHistory);
+      response = await chat.sendMessage({ message: parts });
+    } else {
+      throw error;
+    }
   }
 
   sources.push(...extractSources(response));
@@ -625,7 +1037,7 @@ async function runGeminiTurn({
           settings.get("ai_tool_timeout_ms"),
         );
       } catch (err) {
-        toolResult = { error: err?.message || String(err) };
+        toolResult = toolErrorForModel(err);
       }
       sources.push(...docSourcesFromTool(call.name, toolResult));
       responses.push({
@@ -641,8 +1053,13 @@ async function runGeminiTurn({
 
     if (status) await status.update(t("bot.ai.aiAgent.writingAnswer"));
     // One message carrying every functionResponse part, which is what the API
-    // expects when the model asked for several calls in one turn.
-    response = await chat.sendMessage({ message: responses });
+    // expects when the model asked for several calls in one turn. A failure
+    // here must not rerun the turn: a tool has already executed.
+    try {
+      response = await chat.sendMessage({ message: responses });
+    } catch (error) {
+      throw markToolsRan(error);
+    }
     // Grounding can happen on any turn, not just the first.
     sources.push(...extractSources(response));
   }
@@ -673,6 +1090,8 @@ async function runGeminiTurn({
   return {
     text,
     history: newHistory,
+    provider: "gemini",
+    model,
     toolCalls,
     steps,
     // Empty unless Gemini actually grounded this answer on a search.
@@ -683,12 +1102,26 @@ async function runGeminiTurn({
 
 module.exports = {
   runAgent,
+  classifyAutoReply,
+  buildAutoReplySystemInstruction,
+  AUTO_REPLY_DECISION_DIRECTIVE,
+  AUTO_REPLY_DECISION_TOOL,
+  AUTO_REPLY_DECISION_DECLARATION,
+  validateAutoReplyDecision,
+  validateDecisionCalls,
+  runGeminiTurn,
+  readGeminiProviderPin,
+  geminiClient,
   buildTools,
   buildToolConfig,
   googleSearchEnabled,
   extractSources,
   formatSources,
   isToolCombinationError,
+  isThoughtSignatureError,
+  sanitizeHistoryForThoughtSignatures,
+  classifyAiError,
+  describeAiError,
   GOOGLE_SEARCH_TOOL,
   buildSystemInstruction,
   loadPersona,

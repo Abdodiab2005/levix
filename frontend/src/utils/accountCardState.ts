@@ -42,6 +42,73 @@ const positive = (value: number | null | undefined): number | null =>
   typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
 
 /**
+ * Shared name validator. Rejects non-string, whitespace-only, "~", and raw JID-shaped strings.
+ */
+export function cleanAccountName(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "~") return null;
+  if (/^[^\s@]+@(?:s\.whatsapp\.net|c\.us|lid|g\.us|broadcast|newsletter)$/i.test(trimmed))
+    return null;
+  return trimmed.slice(0, 256);
+}
+
+/**
+ * Normalize a socket user JID by stripping any `:device` suffix.
+ * Returns null for invalid or non-user JIDs.
+ */
+export function normalizeAccountId(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  const match = /^(\d+)(?::\d+)?@(s\.whatsapp\.net|lid)$/.exec(trimmed);
+  if (!match) return null;
+  return `${match[1]}@${match[2]}`;
+}
+
+export interface RetainedProfileSnapshot<T = unknown> {
+  accountId: string | null;
+  phone?: string | null;
+  profile: T;
+}
+
+/**
+ * True when an unlink, logout, QR pairing flow or account switch has invalidated
+ * the previously cached profile so it must never be shown again.
+ */
+export function shouldClearSavedProfile(
+  status: SessionLike | null,
+  saved: RetainedProfileSnapshot | null,
+): boolean {
+  if (!saved || !status) return true;
+  if (status.state === "logged_out" || status.state === "waiting_for_qr") return true;
+  if (status.linked === false || status.canUnlink === false) return true;
+  if (status.state === "error" && status.reason === "unlink_incomplete") return true;
+  const currentId = normalizeAccountId(status.user?.id);
+  if (currentId && saved.accountId && currentId !== saved.accountId) return true;
+  return false;
+}
+
+/**
+ * True when the card should keep displaying the last good profile for the same
+ * linked account (while connected, or while connecting/reconnecting) instead of
+ * flashing "unavailable".
+ */
+export function canDisplaySavedProfile(
+  status: SessionLike | null,
+  saved: RetainedProfileSnapshot | null,
+): boolean {
+  if (!status || !saved || shouldClearSavedProfile(status, saved)) return false;
+  if (status.state === "connected" && status.connected !== false) return true;
+  if (
+    status.linked !== false &&
+    (status.state === "reconnecting" || status.state === "starting" || status.state === "linking")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Map a session snapshot to what the account card shows. Pure: the component
  * owns no session logic, and every non-connected state is a status line rather
  * than a profile.

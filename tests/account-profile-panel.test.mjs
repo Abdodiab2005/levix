@@ -229,6 +229,221 @@ try {
   const stats = await res.json();
   equal("stats still reports the connected account", stats.stats.botName, "Next account");
   equal("stats route never reads the account profile", pictureCalls, callsBeforeStats);
+
+  section("panel route fallback chain, LID-only phone safety, photo retry and account change");
+  {
+    const LID_ID = "987654321098765@lid";
+    store.authWrite(
+      "creds",
+      JSON.stringify({
+        registered: true,
+        me: { id: PHONE_ID, lid: LID_ID, name: "Saved Creds Name" },
+      }),
+    );
+    store.saveUserMetadata({
+      jid: PHONE_ID,
+      lid: LID_ID,
+      phone: "201234567890",
+      isOwner: true,
+      displayName: null,
+    });
+
+    // 1. verifiedName fallback
+    setSession(
+      connectedSession({
+        user: { id: LID_ID, name: null, verifiedName: "Verified Panel Name" },
+        async profilePictureUrl() {
+          return null;
+        },
+        async fetchStatus() {
+          return [];
+        },
+      }),
+    );
+    res = await http.call("/dashboard/api/account/profile");
+    let p = (await res.json()).profile;
+    equal("panel uses verifiedName fallback", p.name, "Verified Panel Name");
+    equal("panel resolves verified PN for LID socket", p.phone, "+201234567890");
+
+    // 2. notify fallback
+    setSession(
+      connectedSession({
+        user: { id: LID_ID, name: "~", notify: "Notify Panel Name" },
+        async profilePictureUrl() {
+          return null;
+        },
+        async fetchStatus() {
+          return [];
+        },
+      }),
+    );
+    res = await http.call("/dashboard/api/account/profile");
+    p = (await res.json()).profile;
+    equal("panel uses notify fallback", p.name, "Notify Panel Name");
+
+    // 3. creds.me.name fallback
+    setSession(
+      connectedSession({
+        user: { id: LID_ID, name: null },
+        async profilePictureUrl() {
+          return null;
+        },
+        async fetchStatus() {
+          return [];
+        },
+      }),
+    );
+    res = await http.call("/dashboard/api/account/profile");
+    p = (await res.json()).profile;
+    equal("panel uses saved creds.me.name fallback", p.name, "Saved Creds Name");
+
+    // 4. stored owner displayName in user_metadata is preferred over socket and creds names
+    store.saveUserMetadata({
+      jid: PHONE_ID,
+      lid: LID_ID,
+      phone: "201234567890",
+      isOwner: true,
+      displayName: "Stored Owner PushName",
+    });
+    store.authWrite(
+      "creds",
+      JSON.stringify({
+        registered: true,
+        me: { id: PHONE_ID, lid: LID_ID, name: "Replayed Creds Name" },
+      }),
+    );
+    const photoAttempts = [];
+    setSession(
+      connectedSession({
+        user: { id: LID_ID, name: "Mutated Replay Socket Name" },
+        async profilePictureUrl(jid) {
+          photoAttempts.push(jid);
+          if (jid === PHONE_ID) return PHOTO_URL;
+          return null;
+        },
+        async fetchStatus() {
+          return [];
+        },
+      }),
+    );
+    res = await http.call("/dashboard/api/account/profile");
+    p = (await res.json()).profile;
+    equal(
+      "panel prefers stored owner display_name when socket name differs",
+      p.name,
+      "Stored Owner PushName",
+    );
+    equal(
+      "panel retries photo with verified PN when LID fails",
+      photoAttempts.join(","),
+      `${LID_ID},${PHONE_ID}`,
+    );
+    ok("retried photo URL is exposed", Boolean(p.photoUrl));
+
+    // 5. LID-only session with no PN in creds never shows a LID as a phone number
+    const ONLY_LID = "555666777888999@lid";
+    store.authWrite(
+      "creds",
+      JSON.stringify({
+        registered: true,
+        me: { id: ONLY_LID, lid: ONLY_LID },
+      }),
+    );
+    setSession(
+      connectedSession({
+        user: { id: ONLY_LID, name: null },
+        async profilePictureUrl() {
+          return null;
+        },
+        async fetchStatus() {
+          return [];
+        },
+      }),
+    );
+    res = await http.call("/dashboard/api/account/profile");
+    p = (await res.json()).profile;
+    equal("LID-only account has no phone", p.phone, null);
+    equal("new LID account does not leak previous owner's metadata name", p.name, null);
+
+    // 6. Another contact with the same digits as the owner's LID does not supply the name (F2)
+    store.saveUserMetadata({
+      jid: `${ONLY_LID.split("@")[0]}@s.whatsapp.net`,
+      displayName: "Different Contact Name",
+    });
+    res = await http.call("/dashboard/api/account/profile");
+    p = (await res.json()).profile;
+    equal("exact self IDs only: contact with same digits cannot supply name", p.name, null);
+
+    // 7. JID-shaped profile names, "~", and empty strings are rejected from the server response (F5)
+    for (const invalidName of [
+      "user@s.whatsapp.net",
+      "operator@c.us",
+      "account@lid",
+      "team@g.us",
+      "announcements@broadcast",
+      "updates@newsletter",
+      "~",
+      "   ",
+      "",
+    ]) {
+      setSession(
+        connectedSession({
+          user: { id: PHONE_ID, name: invalidName },
+          async profilePictureUrl() {
+            return null;
+          },
+          async fetchStatus() {
+            return [];
+          },
+        }),
+      );
+      res = await http.call("/dashboard/api/account/profile");
+      p = (await res.json()).profile;
+      // The bad socket name is skipped and the next verified source answers.
+      equal(`rejects server profile name "${invalidName}"`, p.name, "Stored Owner PushName");
+    }
+
+    // Fresh install with no stored name still falls back to socket.user.name
+    store.clearUserMetadata();
+    setSession(
+      connectedSession({
+        user: { id: PHONE_ID, name: "Valid Operator Name" },
+        async profilePictureUrl() {
+          return null;
+        },
+        async fetchStatus() {
+          return [];
+        },
+      }),
+    );
+    res = await http.call("/dashboard/api/account/profile");
+    p = (await res.json()).profile;
+    equal("accepts valid server profile name", p.name, "Valid Operator Name");
+
+    // Profile returns stored name when socket.user.name differs
+    store.saveUserMetadata({
+      jid: PHONE_ID,
+      displayName: "Stored Trusted Owner",
+    });
+    setSession(
+      connectedSession({
+        user: { id: PHONE_ID, name: "Mutated Replay Socket Name" },
+        async profilePictureUrl() {
+          return null;
+        },
+        async fetchStatus() {
+          return [];
+        },
+      }),
+    );
+    res = await http.call("/dashboard/api/account/profile");
+    p = (await res.json()).profile;
+    equal(
+      "profile returns stored name when socket.user.name differs",
+      p.name,
+      "Stored Trusted Owner",
+    );
+  }
 } catch (error) {
   ok("account profile panel tests run", false, error?.stack || String(error));
 } finally {

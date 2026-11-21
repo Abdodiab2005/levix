@@ -238,4 +238,128 @@ ok(
   ),
 );
 
+section("legacy fabricated PN rows and verified PN provenance");
+{
+  // A legacy row that stored a LID as a fabricated PN without a verified mapping
+  store.saveUserMetadata({
+    jid: "777777777777777@s.whatsapp.net",
+    lid: "777777777777777@lid",
+    phone: "777777777777777",
+  });
+  equal(
+    "fabricated PN row returns no phone",
+    store.resolveUserPhone("777777777777777@s.whatsapp.net"),
+    null,
+  );
+  equal(
+    "fabricated PN peer has no phone",
+    store.describePeer("777777777777777@s.whatsapp.net").phone,
+    null,
+  );
+  equal(
+    "unmapped LID with stored digits returns no phone",
+    store.resolveUserPhone("777777777777777@lid"),
+    null,
+  );
+
+  // A verified PN mapped in lid_mapping
+  store.storeLidPnMapping("888888888888888@lid", "201088888888@s.whatsapp.net");
+  equal(
+    "verified mapping resolves phone for LID",
+    store.resolveUserPhone("888888888888888@lid"),
+    "201088888888",
+  );
+  equal(
+    "verified mapping peer shows formatted phone",
+    store.describePeer("888888888888888@lid").phone,
+    "+201088888888",
+  );
+
+  // Genuine PN-addressed contact without unverified matching LID
+  equal(
+    "genuine PN returns phone digits",
+    store.resolveUserPhone("201099999999@s.whatsapp.net"),
+    "201099999999",
+  );
+}
+
+section(
+  "getUserMetadataExact and resolveUserPhone reciprocal link and unverified legacy LID rejection",
+);
+{
+  // 1. Unverified legacy row: user_metadata has a PN row with user_lid, but lid_mapping has no entry
+  store.saveUserMetadata({
+    jid: "201011111111@s.whatsapp.net",
+    lid: "555555555555555@lid",
+    displayName: "Unverified Legacy Contact",
+    phone: "201011111111",
+  });
+  equal(
+    "legacy row whose user_lid is unverified does not supply a name to getUserMetadataExact",
+    store.getUserMetadataExact("555555555555555@lid"),
+    null,
+  );
+
+  // 2. Verified mapping: lid_mapping confirms row's PN maps to that LID
+  store.storeLidPnMapping("555555555555555@lid", "201011111111@s.whatsapp.net");
+  const verifiedMeta = store.getUserMetadataExact("555555555555555@lid");
+  ok("verified mapping supplies metadata to getUserMetadataExact", Boolean(verifiedMeta));
+  equal(
+    "verified metadata supplies correct name",
+    verifiedMeta?.displayName,
+    "Unverified Legacy Contact",
+  );
+  equal(
+    "resolveUserPhone accepts verified LID-to-PN mapping",
+    store.resolveUserPhone("555555555555555@lid"),
+    "201011111111",
+  );
+
+  // 3. Row with no PN: accepted even without a PN mapping
+  store.saveUserMetadata({
+    jid: "666666666666666@lid",
+    lid: "666666666666666@lid",
+    displayName: "No PN LID Contact",
+  });
+  const noPnMeta = store.getUserMetadataExact("666666666666666@lid");
+  ok("row with no PN is accepted by getUserMetadataExact", Boolean(noPnMeta));
+  equal("row with no PN supplies name", noPnMeta?.displayName, "No PN LID Contact");
+
+  // 4. Stale reverse link:
+  // LID_A initially maps to PN_Y.
+  // Then PN_Y is remapped to LID_B.
+  // The current reverse mapping from PN_Y points to LID_B, NOT LID_A.
+  const LID_A = "444444444444441@lid";
+  const LID_B = "444444444444442@lid";
+  const PN_Y = "201044444444@s.whatsapp.net";
+
+  store.storeLidPnMapping(LID_A, PN_Y);
+  store.saveUserMetadata({
+    jid: PN_Y,
+    lid: LID_A,
+    displayName: "Stale Link Contact",
+  });
+  equal("initially resolves phone for LID_A", store.resolveUserPhone(LID_A), "201044444444");
+
+  // PN_Y is now assigned to LID_B at a later timestamp. Equal updated_at
+  // values are ambiguous by design, so wait for the clock to move.
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  store.storeLidPnMapping(LID_B, PN_Y);
+  equal(
+    "resolveUserPhone rejects LID_A because reverse link now points to LID_B",
+    store.resolveUserPhone(LID_A),
+    null,
+  );
+  equal(
+    "resolveUserPhone accepts LID_B whose reverse link matches",
+    store.resolveUserPhone(LID_B),
+    "201044444444",
+  );
+  equal(
+    "getUserMetadataExact rejects LID_A due to stale reverse link",
+    store.getUserMetadataExact(LID_A),
+    null,
+  );
+}
+
 finish();

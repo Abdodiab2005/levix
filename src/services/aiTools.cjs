@@ -39,6 +39,30 @@ const {
 const { isForbiddenIp } = require("../utils/providerUrl.cjs");
 const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
 
+const TOOL_FAILED_MESSAGE = "The tool could not complete this request.";
+
+/** A deliberate invalid-argument or local-limit error. Its message may reach the model. */
+class ToolInputError extends Error {
+  constructor(message, code) {
+    super(message);
+    this.name = "ToolInputError";
+    this.toolInput = true;
+    if (typeof code === "string" && code) this.code = code;
+  }
+}
+
+function inputError(message, extra) {
+  return { error: message, ...(extra || {}), toolInput: true };
+}
+
+function toolFailed() {
+  return { error: TOOL_FAILED_MESSAGE, code: "TOOL_FAILED" };
+}
+
+function reportedMediaFailure(error) {
+  return { ...mediaFailure(error), toolInput: true };
+}
+
 // @google/genai exports a `Type` enum (the old SDK called it `SchemaType`).
 // Its members are the uppercase wire values — Type.STRING === "STRING" — so the
 // fallback below is the same thing spelled out, and a future rename can't take
@@ -228,7 +252,7 @@ async function searchWikipedia(query, language = "auto", limit = 3) {
     return await enrichWikiResults(cleanLang, titles, urls, limit);
   } catch (err) {
     logger.warn({ err: err.message }, "[aiTools] Wikipedia search failed");
-    return { error: `Wikipedia search failed: ${err.message}` };
+    return toolFailed();
   }
 }
 
@@ -250,14 +274,14 @@ async function assertPublicUrl(rawUrl) {
   try {
     url = new URL(rawUrl);
   } catch {
-    throw new Error("الرابط غير صالح");
+    throw new ToolInputError("الرابط غير صالح");
   }
-  if (url.protocol !== "https:") throw new Error("يُسمح بروابط HTTPS فقط");
+  if (url.protocol !== "https:") throw new ToolInputError("يُسمح بروابط HTTPS فقط");
 
   const host = url.hostname.replace(/^\[|\]$/g, "");
 
   if (net.isIP(host)) {
-    if (isForbiddenIp(host)) throw new Error("هذا الرابط محظور");
+    if (isForbiddenIp(host)) throw new ToolInputError("هذا الرابط محظور");
     return { url, host, addresses: [{ address: host, family: net.isIP(host) }] };
   }
 
@@ -265,10 +289,10 @@ async function assertPublicUrl(rawUrl) {
   try {
     addresses = await dns.lookup(host, { all: true, verbatim: true });
   } catch {
-    throw new Error("تعذّر الوصول إلى هذا النطاق");
+    throw new ToolInputError("تعذّر الوصول إلى هذا النطاق");
   }
   if (!addresses.length || addresses.some((a) => isForbiddenIp(a.address))) {
-    throw new Error("هذا الرابط محظور");
+    throw new ToolInputError("هذا الرابط محظور");
   }
 
   return { url, host, addresses };
@@ -277,8 +301,7 @@ async function assertPublicUrl(rawUrl) {
 function pinnedAgent(expectedHost, addresses) {
   const lookup = (hostname, options, callback) => {
     if (String(hostname).toLowerCase() !== expectedHost.toLowerCase()) {
-      const error = new Error("اتصال بدومين غير متوقع");
-      error.code = "EAI_FAIL";
+      const error = new ToolInputError("اتصال بدومين غير متوقع", "EAI_FAIL");
       return callback(error);
     }
 
@@ -287,8 +310,7 @@ function pinnedAgent(expectedHost, addresses) {
       ? addresses.filter(({ family }) => family === requestedFamily)
       : addresses;
     if (!candidates.length) {
-      const error = new Error("لا يوجد عنوان متوافق لهذا النطاق");
-      error.code = "EAI_ADDRFAMILY";
+      const error = new ToolInputError("لا يوجد عنوان متوافق لهذا النطاق", "EAI_ADDRFAMILY");
       return callback(error);
     }
     if (typeof options === "object" && options?.all) {
@@ -337,7 +359,8 @@ async function fetchUrl(rawUrl) {
     const location = response.headers?.location;
     const isRedirect = response.status >= 300 && response.status < 400 && location;
     if (!isRedirect) break;
-    if (hop >= MAX_REDIRECTS) throw new Error("تجاوز الرابط الحد المسموح لعمليات إعادة التوجيه");
+    if (hop >= MAX_REDIRECTS)
+      throw new ToolInputError("تجاوز الرابط الحد المسموح لعمليات إعادة التوجيه");
 
     target = await assertPublicUrl(new URL(location, url).toString());
   }
@@ -426,7 +449,7 @@ const TOOLS = {
     describe: (args) => t("bot.ai.aiTools.webSearch", { query: preview(args?.query, 50) }),
     async run(args) {
       const query = String(args?.query || "").trim();
-      if (!query) return { error: "query is required" };
+      if (!query) return inputError("query is required");
       const limit = Math.min(8, Math.max(1, Number(args?.limit) || 5));
       const results = await webSearch(query, limit);
       return {
@@ -466,7 +489,7 @@ const TOOLS = {
     describe: (args) => t("bot.ai.aiTools.searchWikipedia", { query: preview(args?.query, 45) }),
     async run(args) {
       const query = String(args?.query || "").trim();
-      if (!query) return { error: "query is required" };
+      if (!query) return inputError("query is required");
       const limit = Math.min(5, Math.max(1, Number(args?.limit) || 3));
       return searchWikipedia(query, args?.language, limit);
     },
@@ -495,7 +518,7 @@ const TOOLS = {
     describe: (args) => t("bot.ai.aiTools.searchNews", { query: preview(args?.query, 45) }),
     async run(args) {
       const query = String(args?.query || "").trim();
-      if (!query) return { error: "query is required" };
+      if (!query) return inputError("query is required");
       const limit = Math.min(8, Math.max(1, Number(args?.limit) || 5));
       const results = await searchNews(query, limit);
       return {
@@ -523,7 +546,7 @@ const TOOLS = {
     describe: (args) => t("bot.ai.aiTools.fetchUrl", { url: preview(args?.url, 45) }),
     async run(args) {
       const url = String(args?.url || "").trim();
-      if (!url) return { error: "url is required" };
+      if (!url) return inputError("url is required");
       return fetchUrl(url);
     },
   },
@@ -698,10 +721,9 @@ const TOOLS = {
     access: (args) => ({ command: "perm", role: roleOf(args) === "owner" ? "owner" : undefined }),
     async run(args, { caller, signal, deliveryGuard }) {
       if (!roleTargetBound(args?.target, caller)) {
-        return {
-          error: "mention, quote, or type the target phone number in your own request",
+        return inputError("mention, quote, or type the target phone number in your own request", {
           granted: false,
-        };
+        });
       }
       const role = roleOf(args);
       const { grantRole } = await import("../utils/permissions.esm.js");
@@ -737,10 +759,9 @@ const TOOLS = {
     access: (args) => ({ command: "perm", role: roleOf(args) === "owner" ? "owner" : undefined }),
     async run(args, { caller, sock, signal, deliveryGuard }) {
       if (!roleTargetBound(args?.target, caller)) {
-        return {
-          error: "mention, quote, or type the target phone number in your own request",
+        return inputError("mention, quote, or type the target phone number in your own request", {
           revoked: false,
-        };
+        });
       }
       const role = roleOf(args);
       const { revokeRole, participantIds, findGroupParticipant } = await import(
@@ -760,7 +781,7 @@ const TOOLS = {
         return { revoked: true, role, user: record ? record.jid : args?.target };
       } catch (error) {
         if (error?.code === "LINKED_ACCOUNT_OWNER") {
-          return { revoked: false, error: error.message };
+          return inputError(error.message, { revoked: false });
         }
         throw error;
       }
@@ -846,14 +867,14 @@ const TOOLS = {
       t("bot.ai.aiTools.calculate", { expression: preview(args?.expression, 40) }),
     async run(args) {
       const expression = String(args?.expression || "").trim();
-      if (!expression) return { error: "expression is required" };
+      if (!expression) return inputError("expression is required");
       // Same hand-written parser the !calc command uses — never eval.
       const calc = require("../commands/calc.cjs");
       try {
         const { normalized, value } = calc._evaluate(expression);
         return { expression: normalized, result: calc._format(value) };
       } catch (err) {
-        return { error: err?.message || "could not parse the expression" };
+        return inputError(err?.message || "could not parse the expression");
       }
     },
   },
@@ -891,7 +912,7 @@ const TOOLS = {
       const message = String(args?.message || "")
         .trim()
         .slice(0, 500);
-      if (!message) return { error: "message is required" };
+      if (!message) return inputError("message is required");
 
       const { zonedTimeToDate } = require("../utils/datetime.cjs");
       let when;
@@ -900,20 +921,20 @@ const TOOLS = {
           String(args.at_time).trim(),
         );
         if (!match) {
-          return { error: "at_time must be 'HH:mm DD-MM-YYYY' in the bot's timezone" };
+          return inputError("at_time must be 'HH:mm DD-MM-YYYY' in the bot's timezone");
         }
         const [, hour, minute, day, month, year] = match.map(Number);
         when = zonedTimeToDate({ year, month, day, hour, minute });
       } else {
         const minutes = Number(args?.in_minutes);
         if (!Number.isFinite(minutes) || minutes <= 0) {
-          return { error: "give either in_minutes (1-10080) or at_time ('HH:mm DD-MM-YYYY')" };
+          return inputError("give either in_minutes (1-10080) or at_time ('HH:mm DD-MM-YYYY')");
         }
-        if (minutes > 7 * 24 * 60) return { error: "in_minutes can be at most 10080 (7 days)" };
+        if (minutes > 7 * 24 * 60) return inputError("in_minutes can be at most 10080 (7 days)");
         when = new Date(Date.now() + minutes * 60_000);
       }
-      if (Number.isNaN(when.getTime())) return { error: "that time is not a valid date" };
-      if (when.getTime() <= Date.now()) return { error: "that time is already in the past" };
+      if (Number.isNaN(when.getTime())) return inputError("that time is not a valid date");
+      if (when.getTime() <= Date.now()) return inputError("that time is already in the past");
 
       // Same job shape the !schedule command stores, delivered by the same
       // scheduler — one mechanism, two doors into it.
@@ -932,8 +953,8 @@ const TOOLS = {
       const result = scheduler.scheduleJobNow(job);
       if (!result.ok) {
         return result.reason === "no_connection"
-          ? { error: "WhatsApp is not connected right now, so the reminder cannot be armed" }
-          : { error: "the reminder time is invalid" };
+          ? inputError("WhatsApp is not connected right now, so the reminder cannot be armed")
+          : inputError("the reminder time is invalid");
       }
       let local;
       try {
@@ -973,7 +994,7 @@ const TOOLS = {
     access: { command: "deleteschedule" },
     async run(args, { caller, signal, deliveryGuard }) {
       const id = String(args?.id || "").trim();
-      if (!id) return { error: "id is required" };
+      if (!id) return inputError("id is required");
 
       const scheduler = require("../../scheduler.cjs");
       // Only jobs posting into the chat the request came from. An id is all
@@ -982,7 +1003,7 @@ const TOOLS = {
       const job = scheduler
         .getScheduledJobs()
         .find((entry) => String(entry.id) === id && entry.targetJid === caller.chatId);
-      if (!job) return { error: "no reminder with that id in this chat", cancelled: false };
+      if (!job) return inputError("no reminder with that id in this chat", { cancelled: false });
 
       signal?.throwIfAborted();
       deliveryGuard?.assert();
@@ -1016,15 +1037,15 @@ const TOOLS = {
     access: { command: "tts" },
     async run(args, { caller, sock, signal: turnSignal, deliveryGuard }) {
       const text = typeof args?.text === "string" ? args.text.trim() : "";
-      if (!text) return { error: "text is required" };
+      if (!text) return inputError("text is required");
       if (text.length > 3000) {
-        return { error: "text is too long for one voice note (3000 characters max)" };
+        return inputError("text is too long for one voice note (3000 characters max)");
       }
-      if (!sock) return { error: "no WhatsApp connection is attached to this turn" };
+      if (!sock) return inputError("no WhatsApp connection is attached to this turn");
 
       const lang = args?.language ?? currentLang();
       if (typeof lang !== "string" || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$/.test(lang)) {
-        return { error: "a valid speech language code is required" };
+        return inputError("a valid speech language code is required");
       }
       try {
         return await withMediaLimit(caller, async (mediaSignal) => {
@@ -1060,7 +1081,7 @@ const TOOLS = {
         });
       } catch (error) {
         if (error?.code === "DENIED") throw error;
-        return mediaFailure(error);
+        return reportedMediaFailure(error);
       }
     },
   },
@@ -1082,9 +1103,9 @@ const TOOLS = {
     describe: () => t("bot.ai.gemini.makingImage"),
     async run(args, { caller, sock, signal: turnSignal, deliveryGuard }) {
       if (typeof args?.prompt !== "string" || !args.prompt.trim() || args.prompt.length > 3000) {
-        return { error: "an image prompt of 1–3000 characters is required" };
+        return inputError("an image prompt of 1–3000 characters is required");
       }
-      if (!sock) return { error: "no WhatsApp connection is attached to this turn" };
+      if (!sock) return inputError("no WhatsApp connection is attached to this turn");
       try {
         return await withMediaLimit(caller, async (mediaSignal) => {
           const signal = turnSignal ? AbortSignal.any([turnSignal, mediaSignal]) : mediaSignal;
@@ -1111,7 +1132,7 @@ const TOOLS = {
         });
       } catch (error) {
         if (error?.code === "DENIED") throw error;
-        return mediaFailure(error);
+        return reportedMediaFailure(error);
       }
     },
   },
@@ -1127,7 +1148,7 @@ const TOOLS = {
     describe: () => t("bot.ai.stt.transcribing"),
     async run(_args, { caller, signal: turnSignal }) {
       if (!settings.get("ai_stt_enabled"))
-        return { error: "Speech-to-text is disabled", code: "MEDIA_DISABLED" };
+        return inputError("Speech-to-text is disabled", { code: "MEDIA_DISABLED" });
       const audio = callerAudio(caller);
       try {
         assertWhatsAppAudio(audio);
@@ -1139,10 +1160,9 @@ const TOOLS = {
           const stt = require("../commands/stt.cjs");
           const provider = stt.resolveSttProvider();
           if (!settings.get(`${provider}_api_key`))
-            return {
-              error: "The selected speech provider needs an API key",
+            return inputError("The selected speech provider needs an API key", {
               code: "STT_KEY_REQUIRED",
-            };
+            });
           const buffer = await require("../utils/geminiMedia.cjs").downloadMedia(
             require("@whiskeysockets/baileys").downloadContentFromMessage,
             audio,
@@ -1160,7 +1180,7 @@ const TOOLS = {
           return { transcript, provider, untrustedData: true };
         });
       } catch (error) {
-        return mediaFailure(error);
+        return reportedMediaFailure(error);
       }
     },
   },
@@ -1237,14 +1257,19 @@ const TOOLS = {
     // A poll is a group message like any other, so `!poll`'s level.
     access: { command: "poll" },
     async run(args, { caller, sock, signal: turnSignal, deliveryGuard }) {
-      if (!sock) return { error: "no WhatsApp connection is attached to this turn" };
+      if (!sock) return inputError("no WhatsApp connection is attached to this turn");
       // Same builder the !poll command uses: dedupes, caps lengths, enforces
-      // WhatsApp's 2-12 option ceiling, and throws the user-facing Arabic
-      // message on any violation.
+      // WhatsApp's 2-12 option ceiling, and throws the user-facing message
+      // on any violation.
       const poll = require("../commands/poll.cjs");
-      const content = poll._buildPollContent(args?.question, args?.options, {
-        multi: Boolean(args?.multi),
-      });
+      let content;
+      try {
+        content = poll._buildPollContent(args?.question, args?.options, {
+          multi: Boolean(args?.multi),
+        });
+      } catch (err) {
+        throw new ToolInputError(typeof err?.message === "string" ? err.message : "invalid poll");
+      }
       const sent = await sendBotMessage(sock, caller.chatId, content, {
         typing: false,
         signal: turnSignal,
@@ -1301,7 +1326,9 @@ const TOOLS = {
       // memory tool results, intermediate model text and thoughts never reach the summary.
       const transcript = transcriptFromHistory(stripMemoryToolParts(history));
       if (!transcript) {
-        return { error: "there is no stored conversation to summarize in this chat", saved: 0 };
+        return inputError("there is no stored conversation to summarize in this chat", {
+          saved: 0,
+        });
       }
 
       // One-shot model call over the transcript with no tools: the facts come
@@ -1312,7 +1339,16 @@ const TOOLS = {
       if (!before.allowed) return { error: before.error, denied: true };
       const beforePolicy = checkPolicy();
       if (beforePolicy) return beforePolicy;
-      const summary = await summarizeWithProvider(transcript, { signal });
+      let summary;
+      try {
+        summary = await summarizeWithProvider(transcript, { signal });
+      } catch (error) {
+        if (signal?.aborted || error?.name === "AbortError" || error?.toolInput === true) {
+          throw error;
+        }
+        logger.warn({ err: error?.message }, "[aiTools] summarize_chat provider failed");
+        return toolFailed();
+      }
       const facts = factsFromSummary(summary);
       if (!facts.length) {
         return { saved: 0, note: "nothing durable enough to save came out of the summary" };
@@ -1467,6 +1503,58 @@ function declaredArgs(tool, args) {
   return Object.freeze(out);
 }
 
+// Only an error this module raised for invalid arguments or a local limit
+// (toolInput) keeps its message. Provider, network, fetch, SDK and unknown
+// failures always use the fixed code, however short the upstream text is.
+function toolErrorForModel(err) {
+  if (err?.toolInput === true) {
+    const message = typeof err.message === "string" ? err.message.trim() : "";
+    if (message) {
+      const code =
+        typeof err.code === "string" && err.code && !/\s/.test(err.code) && err.code.length <= 64
+          ? err.code
+          : "";
+      return code ? { error: message, code } : { error: message };
+    }
+  }
+  return toolFailed();
+}
+
+function scrubToolResult(result) {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return result;
+  if (result.denied || result.code === "DENIED") return result;
+  if (typeof result.error !== "string") return result;
+  if (result.toolInput === true) {
+    const copy = { ...result };
+    delete copy.toolInput;
+    return copy;
+  }
+  return toolFailed();
+}
+
+/** Mark a provider error thrown after at least one tool in this turn executed. */
+function markToolsRan(error) {
+  if (error && typeof error === "object") {
+    try {
+      error.toolsRan = true;
+      return error;
+    } catch {
+      // A frozen provider error cannot be tagged in place.
+    }
+  }
+  const wrapped = new Error(
+    typeof error?.message === "string" ? error.message : String(error || ""),
+  );
+  wrapped.toolsRan = true;
+  if (error && typeof error === "object") {
+    for (const key of ["status", "statusCode", "code", "details", "statusText", "error"]) {
+      if (error[key] !== undefined) wrapped[key] = error[key];
+    }
+    wrapped.cause = error;
+  }
+  return wrapped;
+}
+
 /**
  * Run one tool call. Never throws — a failure comes back as `{ error }` so the
  * model can apologise or try something else instead of the turn dying.
@@ -1476,7 +1564,7 @@ function declaredArgs(tool, args) {
  */
 async function runTool(name, args, ctx) {
   const tool = TOOLS[name];
-  if (!tool) return { error: `unknown tool: ${name}` };
+  if (!tool) return inputError(`unknown tool: ${name}`);
 
   const input = declaredArgs(tool, args);
   const caller = ctx?.caller;
@@ -1517,7 +1605,7 @@ async function runTool(name, args, ctx) {
       globalMemory: () => globalMemoryAccess(ctx),
       deliveryGuard,
     });
-    return result && typeof result === "object" ? result : { result };
+    return scrubToolResult(result && typeof result === "object" ? result : { result });
   } catch (err) {
     if (err?.code === "DENIED") {
       logger.info({ tool: name }, "[aiTools] tool delivery refused");
@@ -1528,8 +1616,10 @@ async function runTool(name, args, ctx) {
         sent: false,
       };
     }
-    logger.warn({ err: err?.message, tool: name }, "[aiTools] tool call failed");
-    return { error: `${err?.name || "Error"}: ${err?.message || err}` };
+    const safe = toolErrorForModel(err);
+    // The local log keeps the real reason; only the model sees the sanitized one.
+    logger.warn({ err: err?.message, tool: name, code: safe.code }, "[aiTools] tool call failed");
+    return safe;
   }
 }
 
@@ -1542,7 +1632,7 @@ function runToolWithDeadline(name, args, context, ms) {
   let timer;
   const expired = new Promise((_, reject) => {
     timer = setTimeout(() => {
-      const error = new Error(
+      const error = new ToolInputError(
         // i18n-exception: sent to the model
         tr(
           `${name} took longer than ${Math.round(ms / 1000)} seconds`,
@@ -1560,10 +1650,14 @@ function runToolWithDeadline(name, args, context, ms) {
 
 module.exports = {
   TOOLS,
+  ToolInputError,
   toolDeclarations,
   describeCall,
   runTool,
   runToolWithDeadline,
+  toolErrorForModel,
+  scrubToolResult,
+  markToolsRan,
   transcriptFromHistory,
   factsFromSummary,
   summarizeWithProvider,

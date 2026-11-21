@@ -12,6 +12,117 @@ The four status tokens (`ok`, `warn`, `danger`, `info`) are theme-aware and meet
 
 `text-white` is the foreground on `primary` and `danger-fill` fills (`danger-fill` keeps white text at 4.5:1 or more in both themes), and the switch thumb is `bg-white`, because those sit on saturated brand / danger tokens in both themes. Do not add any other raw colour.
 
+## Design contract
+
+The control panel adheres to a unified, tokenized design contract. Screens do not invent their own layout metrics, colors, typography, or interaction patterns.
+
+### Typography scale and heading hierarchy
+
+- **Page title**: [PageHeader](#card--panel--cardheader--pageheader--section) uses `text-base font-bold text-text-main md:text-lg`. Page-level description uses `text-xs text-muted`.
+- **Section title**: [Section](#card--panel--cardheader--pageheader--section) or [CardHeader](#card--panel--cardheader--pageheader--section) uses `text-base font-bold text-text-main md:text-lg`.
+- **Card / Row title**: [Card](#card--panel--cardheader--pageheader--section), [StatTile](#stattile), and [ListRow](#listrow) use `text-sm font-semibold text-text-main` or `text-sm font-bold text-text-main`.
+- **Body copy**: Standard content uses `text-sm text-text-main` (dense) or `text-xs leading-relaxed text-muted` (descriptions, hints, and explanations).
+- **Meta / Captions**: Secondary hints use `text-xs text-muted`. Eyebrows and section tags use `text-[11px] font-bold uppercase tracking-wider text-faint`.
+- **Monospace tokens**: Technical commands, prefixes, JIDs, phone numbers, and cron strings use `font-mono text-xs` or `text-sm` via [CodeText](#codetext) (`<bdi dir="ltr">`).
+- **Text density**: Content remains compact and information-dense without excessive vertical line spacing. User text is clamped to 1-3 lines using [UserText](#usertext) with the full text provided in the `title` attribute.
+
+### Colour tokens and semantic colours
+
+All colours derive strictly from the CSS variables declared in `frontend/src/index.css`:
+- **Surfaces**: `bg` (`--color-bg`), `bg-soft` (`--color-bg-soft`), `panel` (`--color-panel`), `panel-raised` (`--color-panel-raised`), `panel-hover` (`--color-panel-hover`), `panel-solid` (`--color-panel-solid`).
+- **Borders and lines**: `line` (`--color-line`), `line-soft` (`--color-line-soft`).
+- **Text levels**: `text-main` (`--color-text-main`), `muted` (`--color-muted`), `faint` (`--color-faint`).
+- **Brand accents**: `brand-blue` (`#176bfa`), `brand-blue-deep` (`#0b50d0`), `brand-cyan` (`var(--brand-cyan)`), `brand-purple` (`#a855f7`).
+- **Semantic status**: `ok` (`--color-ok`), `warn` (`--color-warn`), `danger` (`--color-danger`), `danger-fill` (`--color-danger-fill`), `info` (`--color-info`).
+- **Contrast rule**: `tests/ui-contrast.test.mjs` enforces WCAG AA contrast (at least 4.5:1 relative luminance) for text against both `panel` and `panel-raised` surfaces across both dark and light modes. White text (`text-white`) is permitted only on saturated fills (`primary` and `danger-fill`), and the switch thumb is `bg-white`. Never use raw hex literals (`#...`) or Tailwind palette classes (`text-red-400`, `bg-slate-*`).
+
+### Radii, elevation, and card surfaces
+
+- **Page cards**: `rounded-2xl border border-line bg-panel shadow-sm` ([Card](#card--panel--cardheader--pageheader--section), with `p-4 md:p-5` default padding).
+- **Raised rows and compact tiles**: `rounded-xl border border-line bg-panel-raised/40` or `bg-panel` ([StatTile](#stattile), [ListRow](#listrow), with `p-3 sm:p-4`).
+- **Dialog panels**: `rounded-2xl border border-line bg-panel shadow-xl` ([Dialog](#dialog--confirmdialog)), switching to `rounded-none sm:rounded-2xl` under `mobileFullscreen`.
+- **Badges, pills, and chips**: `rounded-full` ([Badge](#badge--statuspill), [Chip](#chip--chipinput)).
+- **Inputs and buttons**: `rounded-xl` ([Button](#button), [Input](#field-input-textarea-select-checkbox-radiogroup-toggle)).
+
+### Spacing, page padding, grid, and breakpoints
+
+- **Mobile first**: Minimum supported viewport is 360 px width. Layouts must never cause horizontal scrolling, clipped badges, or overflowing tables.
+- **Page padding**: Outer view padding follows `p-4 md:p-6 lg:p-8`.
+- **Grid layouts**: 1 column on mobile (`grid-cols-1`), expanding to 2 columns on tablet/desktop (`sm:grid-cols-2` or `xl:grid-cols-2`). Stat grids use a compact 2-column mobile grid (`grid grid-cols-2 gap-3 sm:grid-cols-4`).
+- **Breakpoints**: Standard Tailwind breakpoints: `sm` (640px), `md` (768px), `lg` (1024px), `xl` (1280px).
+
+### Button hierarchy
+
+- **Primary**: Exactly one primary button (`<Button variant="primary">`) per screen region for the principal call-to-action ("Start session", "Save changes", "Create pack").
+- **Secondary**: `<Button variant="secondary">` for named alternative actions ("Restart", "Export").
+- **Ghost**: `<Button variant="ghost">` for low-emphasis, tertiary text actions ("Discard", "Cancel").
+- **IconButton (R1)**: Simple, self-explanatory actions (share, download, copy, edit, delete, refresh, close, open-externally, export) MUST use `<IconButton>` with a required localized `label` for tooltips and accessibility. Never use full icon-and-text buttons for routine utility actions.
+- **Danger**: `<Button variant="danger">` is reserved strictly for destructive confirmation actions inside confirmation dialogs. Never place a full-width danger button in normal page flow.
+- **OverflowMenu (R2, R5)**: Non-essential, secondary, rarely used, and rare destructive actions belong in an [OverflowMenu](#menu--menuitem--overflowmenu). An overflow menu must contain at least two items (a single secondary action remains an `IconButton`). It sits beside the primary action at the end of the row, never alone on its own row.
+
+### Inputs, selects, toggles, checkboxes, labels, SaveField vs useDirtyForm (R6)
+
+- Always wrap inputs with [Field](#field-input-textarea-select-checkbox-radiogroup-toggle) to connect `label`, `description`, and `error` via accessible IDs.
+- **Explicit save requirement**: Settings that the operator types or picks MUST use explicit save mechanisms. Never save on blur or on keystroke.
+- **Per-field save**: For single, independent settings (timezone, standalone API key, storage limit, panel language), use [SaveField](#savefield--usesavedvalue--formactions--usedirtyform) paired with `useSavedValue`. It renders an inline save `IconButton` enabled only when dirty, displays a spinner while saving, Enter saves, and Escape reverts.
+- **Form-level save**: For interdependent grouped settings (delay minimum and maximum, provider endpoint + key + model, proxy host/port/auth), wrap fields in a `<form>` and use `useDirtyForm` with [FormActions](#savefield--usesavedvalue--formactions--usedirtyform) (Save `type="submit"` and Discard).
+- **Toggles**: [Toggle](#field-input-textarea-select-checkbox-radiogroup-toggle) switches apply immediately on toggle (a switch represents live circuit state).
+
+### Dialogs, bottom sheets, overflow menus, confirmation for destructive actions
+
+- **Modals**: Use [Dialog](#dialog--confirmdialog). Long editor forms on mobile use `variant="mobileFullscreen"`, ensuring full viewport height below 640px with sticky footers clearing `env(safe-area-inset-bottom)`.
+- **Bottom sheets**: [Popover](#popover) and [FilterButton](#filterbutton) automatically convert to bottom sheets on screens smaller than 640px.
+- **Destructive confirmation**: Any destructive or irreversible operation (deleting records, unlinking accounts, purging logs) requires a [ConfirmDialog](#dialog--confirmdialog) with `variant="danger"`.
+
+### Loading, empty, error, success, disabled states
+
+- **Loading**: Use [LoadingState](#emptystate--spinner--skeleton--loadingstate) for entire view loading, [Spinner](#emptystate--spinner--skeleton--loadingstate) for inline actions, and [Skeleton](#emptystate--spinner--skeleton--loadingstate) for card/list content placeholders.
+- **Empty**: Use [EmptyState](#emptystate--spinner--skeleton--loadingstate) with `kind="empty"` for zero records, or `kind="no-results"` for filtered search results. Render empty states outside horizontally scrollable table containers.
+- **Error**: Use [EmptyState](#emptystate--spinner--skeleton--loadingstate) (`kind="error"`), [Callout](#callout) (`tone="danger"` or `"warn"`), or `toast(userErrorMessage(t, err, fallbackKey), "error")`. Never show raw error objects or `.message` strings.
+- **Success**: Use `toast(t("savedSuccessfully"), "success")`, [SaveField](#savefield--usesavedvalue--formactions--usedirtyform) `justSaved` checkmarks, or [Callout](#callout) (`tone="ok"`).
+- **Disabled**: Apply the native `disabled` attribute, which dims opacity to 50% and removes pointer events.
+
+### RTL/LTR and bidi
+
+- **Logical properties only**: Always write `ms-`, `me-`, `ps-`, `pe-`, `start-`, `end-`. NEVER use physical layout classes (`ml-`, `mr-`, `pl-`, `pr-`, `left-`, `right-`, `text-left`, `text-right`, `rounded-l-`, `rounded-r-`, `border-l-`, `border-r-`).
+- **Technical tokens**: Pass technical strings (commands, prefixes, phone numbers, JIDs, cron expressions, placeholders) through [CodeText](#codetext) (`<bdi dir="ltr">`) so tokens retain left-to-right order inside Arabic RTL layouts.
+- **User-entered text**: Wrap arbitrary user input (pack names, keywords, chat titles) in [UserText](#usertext) with `dir="auto"`.
+
+### Navigation, tabs, toolbars, page headers
+
+- **Page header**: [PageHeader](#card--panel--cardheader--pageheader--section) standardizes titles, descriptions, status icons, and top-level action toolbars.
+- **Tabs & segments**: Use [Tabs](#tabs--segmentedcontrol) for scrolling pill lists. Use [SegmentedControl](#tabs--segmentedcontrol) for compact, enclosed view switches with roving keyboard navigation.
+- **Toolbars**: [Toolbar](#toolbar) wraps search [Input](#field-input-textarea-select-checkbox-radiogroup-toggle) (`flex-1 min-w-48`), [FilterButton](#filterbutton) (R3: single filter dropdown/sheet), [SortMenu](#sortmenu) (R4: single sort dropdown), and [OverflowMenu](#menu--menuitem--overflowmenu).
+
+### Accessibility
+
+- **Accessible names**: Every interactive button, input, toggle, and dialog must have an accessible name via localized `label`, `aria-label`, or associated `<FieldLabel>`.
+- **Focus visible**: Focus rings use `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue`.
+- **Touch targets**: All interactive targets must provide at least a 40px touch bounding box (e.g., [Toggle](#field-input-textarea-select-checkbox-radiogroup-toggle) has a 44px hit target, [IconButton](#iconbutton) minimum 40px).
+- **Keyboard navigation**: Escape closes dialogs, menus, and popovers; arrow keys navigate roving menus and tab segments; focus is automatically trapped within active dialogs.
+
+### Content density rules
+
+1. **Short actionable labels**: Use concise verbs and direct phrases instead of lengthy prose.
+2. **No repeated information across cards**: Do not echo page headers or replicate data between sibling cards.
+3. **Progressive disclosure**: Keep advanced and rarely adjusted settings tucked inside disclosures or overflow menus.
+4. **Never show JIDs, internal keys, database fields, raw error objects, decision traces to ordinary users**: Format identifiers as contact names or phone numbers, and translate errors.
+5. **Never show raw placeholders like {quotedText} or {count} as finished text outside an editor**: Interpolate values or display formatted previews.
+6. **Concise status labels**: Use short translated status pills (`ok`, `warn`, `danger`, `info`) rather than descriptive sentences.
+7. **No card per setting**: Group related configuration options into cohesive sections and cards.
+8. **Grouping over whitespace**: Separate logically grouped controls with borders, dividers, or subtle surface tiers rather than excessive blank margins.
+9. **No oversized buttons for secondary actions**: Keep secondary and utility actions as compact icon buttons or standard buttons.
+10. **Keep security, billing and destructive explanations**: Never omit essential warnings, data loss explanations, or security prerequisites to save space.
+
+### PR checklist
+
+Every UI PR must fulfill this checklist before merge:
+- [ ] Before/after screenshots captured at 360 px mobile viewport and 1280 px desktop viewport.
+- [ ] Visual verification in both light and dark themes.
+- [ ] Visual verification in both English (LTR) and Arabic (RTL) locales.
+- [ ] Automated static guards pass: `tests/ui-design-contract.test.mjs`, `tests/ui-contrast.test.mjs`, `tests/ui-no-raw-keys.test.mjs`.
+- [ ] No untranslated strings, English fallbacks (`|| "..."`), or raw identifiers. All new visible strings defined in `i18n/*/dashboard.json`.
+
 ## Composition
 
 One base per concept. Variants are a hand-written map (`buttonVariants`, badge `TONE`) passed through `cn()` from `frontend/src/utils/cn.ts`. A specialised control is built by rendering the base, not by copying its class string.
@@ -326,3 +437,39 @@ An absent `src` renders only the fallback and makes no image request.
 animated expandable region. Closed content is inert and hidden from assistive
 technology; reduced-motion preferences disable the transition. Put only
 noninteractive content in its summary.
+
+### StatTile
+
+A compact metric tile designed for a 2-column mobile grid (`grid-cols-2`). Displays a `label`, prominent `value`, optional `icon`, and optional `hint` or `trend`. May be rendered as an interactive tile with `onClick` or `href`. `variant`: `default` | `raised`.
+
+```tsx
+<StatTile
+  label={t("commandCount")}
+  value={stats?.commandCount ?? 0}
+  icon={<Terminal size={16} />}
+  hint={t("activeCommands")}
+/>
+```
+
+### ListRow
+
+A compact list row for dense collections (Needs Attention items, Auto Reply chat targets, message templates). Accepts leading icons or avatars, a `title`, an optional `titleLines` (`1` | `2` | `3` | `"none"`, default `2`; pass `"none"` to expand the full title), an optional `meta` line, and an optional `trailing` slot for action buttons or badges. Supports `as="li"` or `as="div"`, and optional `onClick` / `href` for interactive rows. `variant`: `default` | `raised` | `ghost`.
+
+```tsx
+<ListRow
+  leading={<Avatar name={chat.name} src={chat.photoUrl} size="sm" />}
+  title={chat.name}
+  meta={chat.lastMessageTime}
+  trailing={<IconButton label={t("edit")} icon={<Pencil size={16} />} onClick={editChat} />}
+/>
+```
+
+### Callout
+
+An inline notice box with semantic tone styling (`ok` | `warn` | `danger` | `info`), an icon (defaults to semantic Lucide icons), a `title`, short descriptive body `children`, and an optional `action` slot.
+
+```tsx
+<Callout tone="warn" title={t("backupWarningTitle")} action={<Button variant="secondary" size="sm">{t("learnMore")}</Button>}>
+  {t("backupWarningBody")}
+</Callout>
+```

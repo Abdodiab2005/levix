@@ -246,3 +246,22 @@ module.exports = {
   applyImport,
   applySettingChange,
 };
+
+// A Gemini thought signature is valid only for the model, endpoint and project
+// that issued it. Panel saves, imports and backup restore all apply settings
+// here, and set() notifies commands that write a setting directly.
+const GEMINI_SIGNATURE_SETTINGS = new Set(["gemini_model", "gemini_base_url", "gemini_api_key"]);
+settings.onChange((key) => {
+  if (!GEMINI_SIGNATURE_SETTINGS.has(key)) return;
+  const store = require("../db/store.cjs");
+  // Move the generation before the sweep. emitChange swallows a sweep
+  // failure and the setting still saves; an in-flight turn must still see
+  // that the value changed and changed back.
+  store.bumpGeminiSignatureGeneration();
+  try {
+    store.stripGeminiThoughtSignatures();
+  } catch (error) {
+    store.markGeminiSignatureSweepPending();
+    logger.error({ err: error, key }, "[ai_history] thought-signature sweep failed");
+  }
+});

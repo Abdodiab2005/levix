@@ -37,6 +37,26 @@ let maxItems = DEFAULT_MAX_ITEMS;
 let maxBytes = DEFAULT_MAX_BYTES;
 let maxEntryBytes = DEFAULT_MAX_ENTRY_BYTES;
 
+// Ids Levix assigned before sendMessage. No message body. Separate from the
+// content cache: an echo can arrive before that cache is written, and the
+// content cache is empty after a restart.
+// Ids only, and not the content cache. The default count is far above the
+// 500-message body cap. An id that is still inside its TTL is never evicted:
+// the reaction window can outlive a content-cache eviction. A full store
+// refuses the new id. Linked intake stays closed until one full TTL after the
+// latest refusal. Expiry of older ids does not reopen it.
+const DEFAULT_OUTBOUND_MAX_ITEMS = 100_000;
+const outboundIds = new Map(); // id -> expiresAt
+let outboundTtlMs = DEFAULT_TTL_MS;
+let outboundMaxItems = DEFAULT_OUTBOUND_MAX_ITEMS;
+let saturatedUntil = 0;
+
+function gcOutbound(now = Date.now()) {
+  for (const [id, expiresAt] of outboundIds) {
+    if (expiresAt <= now) outboundIds.delete(id);
+  }
+}
+
 function makeCacheKey(chatJid, id) {
   return `${chatJid}${KEY_SEPARATOR}${id}`;
 }
@@ -96,7 +116,57 @@ export function clearRecentMessages() {
   accountEpoch += 1;
   recent.clear();
   totalBytes = 0;
+  outboundIds.clear();
+  saturatedUntil = 0;
   return accountEpoch;
+}
+
+export function configureOutboundIds({ maxItems: nextMax, ttlMs: nextTtl } = {}) {
+  if (Number.isFinite(nextMax) && nextMax > 0) outboundMaxItems = Math.floor(nextMax);
+  if (Number.isFinite(nextTtl) && nextTtl > 0) outboundTtlMs = nextTtl;
+  gcOutbound();
+}
+
+/** Record an id before Baileys relays it. Ids only. */
+export function rememberOutboundId(id, now = Date.now()) {
+  if (typeof id !== "string" || !id) return false;
+  gcOutbound(now);
+  if (outboundIds.has(id)) {
+    outboundIds.delete(id);
+    outboundIds.set(id, now + outboundTtlMs);
+    return true;
+  }
+  if (outboundIds.size >= outboundMaxItems) {
+    saturatedUntil = Math.max(saturatedUntil, now + outboundTtlMs);
+    return false;
+  }
+  outboundIds.set(id, now + outboundTtlMs);
+  return true;
+}
+
+export function isOutboundId(id, now = Date.now()) {
+  if (typeof id !== "string" || !id) return false;
+  const expiresAt = outboundIds.get(id);
+  if (expiresAt == null) return false;
+  if (expiresAt <= now) {
+    outboundIds.delete(id);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * True while linked-account intake must stay closed.
+ * `now` defaults to the wall clock. A caller with its own clock passes that.
+ * The window ends one outbound TTL after the latest refused id.
+ */
+export function outboundIdsSaturated(now = Date.now()) {
+  return now < saturatedUntil;
+}
+
+export function clearOutboundIds() {
+  outboundIds.clear();
+  saturatedUntil = 0;
 }
 
 function normalizeEpochArg(candidate) {
@@ -271,4 +341,27 @@ export async function getMessageFromRecent(key) {
   return undefined;
 }
 
-setInterval(() => gc(), 1000 * 60 * 5).unref?.();
+/** True when this id is a message Levix itself sent. Sync; safe on the intake path. */
+export function wasSentByLevix(key) {
+  if (!key || typeof key.id !== "string" || !key.id) return false;
+  if (typeof key.remoteJid !== "string" || !key.remoteJid) return false;
+  const chatJid = normalizeChatJid(key.remoteJid);
+  if (!chatJid) return false;
+  const now = Date.now();
+  if (readEntry(chatJid, key.id, now) !== undefined) return true;
+  if (chatJid.endsWith("@g.us")) return false;
+  if (!isLidJid(chatJid) && !isPnJid(chatJid)) return false;
+  const rawRemoteJid = key.remoteJid.trim();
+  for (const aliasJid of resolveDirectChatAliases(chatJid, rawRemoteJid)) {
+    if (readEntry(aliasJid, key.id, now) !== undefined) return true;
+  }
+  return false;
+}
+
+setInterval(
+  () => {
+    gc();
+    gcOutbound();
+  },
+  1000 * 60 * 5,
+).unref?.();

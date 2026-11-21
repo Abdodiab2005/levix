@@ -15,6 +15,7 @@ import { bootstrapAdmins, bootstrapOwners } from "../utils/permissions.esm.js";
 import {
   getAllBotAdmins,
   getAllOwners,
+  getUserMetadata,
   saveUserMetadata,
   upsertGroupDirectory,
 } from "../utils/storage.esm.js";
@@ -22,6 +23,7 @@ import { groupMetadataCache } from "./socket.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
+const { linkedIdentity } = require("../messaging/identity.cjs");
 const {
   captureRosterCursor,
   storeBulkGroupMetadata,
@@ -184,10 +186,7 @@ async function finishConnectionOpen(sock, initializeScheduledJobs) {
   // is already a row in user_metadata by the time we get here.
   await saveBotOwnerMetadata(sock);
 
-  const botPn = sock?.user?.id
-    ? `${sock.user.id.split(":")[0].split("@")[0]}@s.whatsapp.net`
-    : null;
-  const botLid = sock?.user?.lid ? `${sock.user.lid.split(":")[0].split("@")[0]}@lid` : null;
+  const { userJid: botPn, userLid: botLid } = resolveOwnerSocketIds(sock);
 
   // Both rosters are seeded from the database so a permission check never has
   // to hit it on the hot path.
@@ -217,27 +216,100 @@ async function finishConnectionOpen(sock, initializeScheduledJobs) {
   await cacheAllGroups(sock);
 }
 
+export function cleanOwnerName(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "~") return null;
+  if (/^[^\s@]+@(?:s\.whatsapp\.net|c\.us|lid|g\.us|broadcast|newsletter)$/i.test(trimmed)) return null;
+  return trimmed.slice(0, 256);
+}
+
+export function resolveOwnerSocketIds(sock) {
+  const rawId = typeof sock?.user?.id === "string" ? sock.user.id.trim() : "";
+  const rawLid = typeof sock?.user?.lid === "string" ? sock.user.lid.trim() : "";
+  const idLocal = rawId.split(":")[0].split("@")[0];
+  const lidLocal = rawLid.split(":")[0].split("@")[0];
+  const idIsLid = rawId.endsWith("@lid");
+  const idIsPn = rawId.endsWith("@s.whatsapp.net") || (!rawId.includes("@") && /^\d+$/.test(idLocal));
+
+  let phoneNumber = idIsPn && /^\d+$/.test(idLocal) ? idLocal : null;
+  let userJid = phoneNumber ? `${phoneNumber}@s.whatsapp.net` : null;
+  const userLid =
+    rawLid && /^\d+$/.test(lidLocal)
+      ? `${lidLocal}@lid`
+      : idIsLid && /^\d+$/.test(idLocal)
+        ? `${idLocal}@lid`
+        : null;
+
+  if (!userJid && userLid) {
+    const linked = linkedIdentity();
+    if (linked?.selfJids?.includes(userLid) && linked.phone?.endsWith("@s.whatsapp.net")) {
+      userJid = linked.phone;
+      phoneNumber = linked.phone.split("@")[0];
+    }
+  }
+
+  return { phoneNumber, userJid, userLid };
+}
+
+export function updateOwnerDisplayName(sock, candidate) {
+  const verified = cleanOwnerName(candidate);
+  if (!verified) return;
+  const { phoneNumber, userJid, userLid } = resolveOwnerSocketIds(sock);
+  const primaryJid = userJid || userLid;
+  if (!primaryJid) return;
+  const existing = getUserMetadata(primaryJid, { exact: true });
+  if (existing?.displayName === verified) return;
+  saveUserMetadata({
+    jid: primaryJid,
+    lid: userLid,
+    phone: phoneNumber,
+    displayName: verified,
+  });
+  logger.info(`[User Metadata] Updated bot owner display name: ${verified}`);
+}
+
 // Record the paired WhatsApp account as the bot's first owner. Whoever scanned
 // the QR owns the bot — there is no owner list to configure anywhere.
-async function saveBotOwnerMetadata(sock) {
+export async function saveBotOwnerMetadata(sock, pushNameOverride = null) {
   try {
     logger.info("[User Metadata] Saving bot owner metadata...");
 
-    const phoneNumber = sock?.user?.id?.split(":")[0]?.split("@")[0];
-    const userJid = phoneNumber ? `${phoneNumber}@s.whatsapp.net` : null;
-    const userLid = sock?.user?.lid ? `${sock.user.lid.split(":")[0].split("@")[0]}@lid` : null;
-    const displayName = sock?.user?.name || sock?.user?.verifiedName || null;
+    const { phoneNumber, userJid, userLid } = resolveOwnerSocketIds(sock);
+    const primaryJid = userJid || userLid;
+    if (!primaryJid) return;
 
-    if (userJid) {
-      saveUserMetadata({
-        jid: userJid,
-        lid: userLid,
-        phone: phoneNumber,
-        isOwner: true,
-        displayName,
-      });
-      logger.info(`[User Metadata] Saved bot owner: ${maskAccount({ pn: userJid })}`);
+    const trustedOverride = cleanOwnerName(pushNameOverride);
+    let displayName = trustedOverride;
+
+    if (!displayName) {
+      // On connection open, write the owner display name from socket or credential
+      // names only when no trusted owner display name is stored yet; a stored name
+      // from a live notify message is never replaced by the socket or creds name.
+      const existing = getUserMetadata(primaryJid, { exact: true });
+      const storedName =
+        cleanOwnerName(existing?.displayName) ||
+        (userLid ? cleanOwnerName(getUserMetadata(userLid, { exact: true })?.displayName) : null);
+
+      if (storedName) {
+        displayName = storedName;
+      } else {
+        displayName =
+          cleanOwnerName(sock?.user?.name) ||
+          cleanOwnerName(sock?.user?.verifiedName) ||
+          cleanOwnerName(sock?.user?.notify) ||
+          null;
+      }
     }
+
+    saveUserMetadata({
+      jid: primaryJid,
+      lid: userLid,
+      phone: phoneNumber,
+      isOwner: true,
+      displayName,
+    });
+    logger.info(`[User Metadata] Saved bot owner: ${maskAccount({ pn: userJid, lid: userLid })}`);
   } catch (err) {
     logger.error({ err }, "[Error] Failed to save bot owner metadata");
   }

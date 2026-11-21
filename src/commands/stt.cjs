@@ -8,13 +8,11 @@ const { unwrapMessage } = require("../utils/messageContent.cjs");
 const { baseMimeType, downloadMedia } = require("../utils/geminiMedia.cjs");
 
 const settings = require("../config/settings.cjs");
-const {
-  assertProviderBaseUrl,
-  assertProviderRequestUrl,
-  safeProviderFetch,
-} = require("../utils/providerUrl.cjs");
+const runtime = require("../config/runtime-config.cjs");
+const providerUrl = require("../utils/providerUrl.cjs");
 const { t } = require("../utils/i18n.cjs");
-const { assertAudio, MAX_MEDIA_BYTES } = require("../services/aiMedia.cjs");
+const { describeAiError } = require("../services/aiAgent.cjs");
+const { assertAudio, assertWhatsAppAudio, MAX_MEDIA_BYTES } = require("../services/aiMedia.cjs");
 
 // Built on first use from whatever key is in force, and
 // rebuilt if that key changes — the operator can paste one without a restart.
@@ -23,12 +21,18 @@ const { assertAudio, MAX_MEDIA_BYTES } = require("../services/aiMedia.cjs");
 // GoogleAIFileManager, and the model is named per request.
 let cache = { key: null, baseUrl: null, genAI: null };
 
+function providerBaseUrl(provider) {
+  const raw =
+    provider === "openai"
+      ? settings.get("openai_base_url") || "https://api.openai.com/v1"
+      : settings.get("gemini_base_url");
+  return providerUrl.assertProviderBaseUrl(raw, { allowLoopback: true });
+}
+
 function geminiStt() {
   const key = settings.get("gemini_api_key");
   if (!key) return null;
-  const baseUrl = assertProviderBaseUrl(settings.get("gemini_base_url"), {
-    allowLoopback: true,
-  });
+  const baseUrl = providerBaseUrl("gemini");
   if (cache.key !== key || cache.baseUrl !== baseUrl) {
     cache = {
       key,
@@ -66,19 +70,39 @@ const TRANSCRIBE_PROMPT =
 
 // Transcription is capped at 8 MiB and fits inline, without a second upload.
 
-async function transcribeWithGemini(audioBuffer, mimetype, signal) {
+async function admitUpload(admit, provider) {
+  if (typeof admit !== "function") return;
+  await admit(provider);
+}
+
+async function transcribeWithGemini(audioBuffer, mimetype, signal, admit) {
   const gemini = geminiStt();
   if (!gemini) throw new Error(t("bot.ai.stt.noGeminiKey"));
-  await assertProviderRequestUrl(gemini.baseUrl, {
+  await admitUpload(admit, "gemini");
+  await providerUrl.assertProviderRequestUrl(gemini.baseUrl, {
     allowLoopback: true,
   });
+  // Typed !stt keeps the client captured above. A reaction reads the key
+  // after DNS and sends that exact key; if the endpoint changed, it aborts.
+  let genAI = gemini.genAI;
+  if (typeof admit === "function") {
+    const creds = sealReactionUpload("gemini", gemini.baseUrl);
+    genAI = new GoogleGenAI({
+      apiKey: creds.apiKey,
+      apiVersion: "v1beta",
+      httpOptions: geminiHttpOptions(gemini.baseUrl),
+    });
+  } else {
+    await admitUpload(admit, "gemini");
+  }
+  signal?.throwIfAborted();
 
   // WhatsApp labels voice notes `audio/ogg; codecs=opus`; Gemini's type is
   // `audio/ogg`, and the codec parameter is not part of it.
   const mimeType = baseMimeType(mimetype, "audio");
   const audioPart = { inlineData: { mimeType, data: audioBuffer.toString("base64") } };
 
-  const response = await gemini.genAI.models.generateContent({
+  const response = await genAI.models.generateContent({
     model: sttModel(),
     contents: [{ role: "user", parts: [audioPart, { text: TRANSCRIBE_PROMPT }] }],
     config: {
@@ -90,15 +114,12 @@ async function transcribeWithGemini(audioBuffer, mimetype, signal) {
   return (response.text ?? "").trim();
 }
 
-async function transcribeWithOpenAi(audioBuffer, mimetype, signal) {
+async function transcribeWithOpenAi(audioBuffer, mimetype, signal, admit) {
   const apiKey = settings.get("openai_api_key");
   if (!apiKey) {
     throw new Error(t("bot.ai.stt.noOpenAiKey"));
   }
-  const baseUrl = assertProviderBaseUrl(
-    settings.get("openai_base_url") || "https://api.openai.com/v1",
-    { allowLoopback: true },
-  );
+  const baseUrl = providerBaseUrl("openai");
   const model = settings.get("openai_stt_model") || "whisper-large-v3";
 
   const formData = new FormData();
@@ -114,10 +135,12 @@ async function transcribeWithOpenAi(audioBuffer, mimetype, signal) {
   formData.append("file", blob, `audio.${ext}`);
   formData.append("model", model);
 
+  await admitUpload(admit, "openai");
+  signal?.throwIfAborted();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60000);
   try {
-    const res = await safeProviderFetch(
+    const res = await providerUrl.safeProviderFetch(
       `${baseUrl}/audio/transcriptions`,
       {
         method: "POST",
@@ -127,7 +150,18 @@ async function transcribeWithOpenAi(audioBuffer, mimetype, signal) {
         body: formData,
         signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
       },
-      { allowLoopback: true },
+      {
+        allowLoopback: true,
+        // OpenAI resolves DNS inside this fetch. The reaction check runs after
+        // that lookup and replaces the header with the key it just read.
+        prepareRequest:
+          typeof admit === "function"
+            ? () => {
+                const creds = sealReactionUpload("openai", baseUrl);
+                return { headers: { Authorization: `Bearer ${creds.apiKey}` } };
+              }
+            : undefined,
+      },
     );
     if (!res.ok) {
       await res.body?.cancel().catch(() => {});
@@ -157,7 +191,7 @@ async function transcribeWithOpenAi(audioBuffer, mimetype, signal) {
 }
 
 /** Audio bytes -> text, on whichever engine the settings pick. */
-async function transcribe(audioBuffer, mimetype, { signal } = {}) {
+async function transcribe(audioBuffer, mimetype, { signal, admit } = {}) {
   signal?.throwIfAborted();
   const mime = baseMimeType(mimetype, "audio");
   assertAudio(audioBuffer, mime);
@@ -169,27 +203,125 @@ async function transcribe(audioBuffer, mimetype, { signal } = {}) {
     error.code = "STT_KEY_REQUIRED";
     throw error;
   }
+  await admitUpload(admit, provider);
   const result =
     provider === "openai"
-      ? await transcribeWithOpenAi(audioBuffer, mime, signal)
-      : await transcribeWithGemini(audioBuffer, mime, signal);
+      ? await transcribeWithOpenAi(audioBuffer, mime, signal, admit)
+      : await transcribeWithGemini(audioBuffer, mime, signal, admit);
   signal?.throwIfAborted();
   if (typeof result !== "string" || result.length > 12000) throw new Error("STT_OUTPUT_INVALID");
   return result;
 }
 
-function sttErrorHint(error) {
-  const message = String(error?.message || "");
-  if (/quota|RESOURCE_EXHAUSTED|429/i.test(message)) {
-    return t("bot.ai.stt.quota");
+function reactionCode(code) {
+  const error = new Error(code);
+  error.code = code;
+  throw error;
+}
+
+const REACTION_STT_CONTROL = new Set([
+  "REACTION_VOICE_REQUIRED",
+  "REACTION_STT_DISABLED",
+  "STT_KEY_REQUIRED",
+  "STT_OUTPUT_INVALID",
+  "MEDIA_AUDIO_INVALID",
+  "MEDIA_TOO_LARGE",
+  "MEDIA_NOT_AVAILABLE",
+  "MEDIA_URL_INVALID",
+  "REACTION_STALE",
+  "REACTION_CANCELLED",
+  "REACTION_FORBIDDEN",
+  "REACTION_COMMAND_DENIED",
+  "REACTION_DELIVERY_REFUSED",
+  "REACTION_INACCESSIBLE",
+  "REACTION_IDENTITY_INVALID",
+  "REACTION_TIMEOUT",
+]);
+
+function reactionControl(error) {
+  const code = error?.code || error?.message;
+  return REACTION_STT_CONTROL.has(code);
+}
+
+// Reaction uploads re-check after every await that precedes the request.
+// Typed !stt does not pass this, so its path is unchanged.
+function admitReactionUpload(provider) {
+  if (!settings.get("ai_stt_enabled")) reactionCode("REACTION_STT_DISABLED");
+  const selected = resolveSttProvider();
+  if (selected !== provider || !settings.get(`${selected}_api_key`))
+    reactionCode("STT_KEY_REQUIRED");
+}
+
+// The last check before the upload bytes leave. Synchronous: the returned key
+// is the one the request sends. A failed check throws and nothing is uploaded.
+function sealReactionUpload(provider, validatedBaseUrl) {
+  if (runtime.isDisabled("stt")) reactionCode("REACTION_COMMAND_DENIED");
+  if (!settings.get("ai_stt_enabled")) reactionCode("REACTION_STT_DISABLED");
+  const selected = resolveSttProvider();
+  const apiKey = settings.get(`${selected}_api_key`);
+  if (selected !== provider || !apiKey) reactionCode("STT_KEY_REQUIRED");
+  let expectedUrl;
+  let liveUrl;
+  try {
+    expectedUrl = providerUrl.assertProviderBaseUrl(validatedBaseUrl, { allowLoopback: true });
+    liveUrl = providerBaseUrl(selected);
+  } catch {
+    reactionCode("REACTION_CANCELLED");
   }
-  if (/API key|API_KEY|401|403/i.test(message)) {
-    return t("bot.ai.stt.apiKeyHint");
+  if (liveUrl !== expectedUrl) reactionCode("REACTION_CANCELLED");
+  return { provider: selected, apiKey, baseUrl: liveUrl };
+}
+
+// A reaction quotes the voice note. The command text is not the audio.
+async function reactToAudio(sock, msg, ctx) {
+  const quoted = unwrapMessage(
+    unwrapMessage(msg.message)?.extendedTextMessage?.contextInfo?.quotedMessage,
+  );
+  const audioMessage = quoted?.audioMessage;
+  assertWhatsAppAudio(audioMessage);
+  if (audioMessage.ptt !== true) reactionCode("REACTION_VOICE_REQUIRED");
+  if (!settings.get("ai_stt_enabled")) reactionCode("REACTION_STT_DISABLED");
+  if (!settings.get(`${resolveSttProvider()}_api_key`)) reactionCode("STT_KEY_REQUIRED");
+  const audioBuffer = await require("../utils/geminiMedia.cjs").downloadMedia(
+    downloadContentFromMessage,
+    audioMessage,
+    "audio",
+    { maxBytes: MAX_MEDIA_BYTES, signal: ctx?.signal },
+  );
+  assertAudio(audioBuffer, audioMessage.mimetype, true);
+  ctx?.signal?.throwIfAborted();
+  if (ctx?.beforeEffect) await ctx.beforeEffect();
+  ctx?.signal?.throwIfAborted();
+  // Checked after beforeEffect: the switch or the key may change during that await.
+  if (!settings.get("ai_stt_enabled")) reactionCode("REACTION_STT_DISABLED");
+  if (!settings.get(`${resolveSttProvider()}_api_key`)) reactionCode("STT_KEY_REQUIRED");
+  let transcription;
+  try {
+    transcription = await module.exports.transcribe(audioBuffer, audioMessage.mimetype, {
+      signal: ctx?.signal,
+      admit: admitReactionUpload,
+    });
+  } catch (error) {
+    if (reactionControl(error)) {
+      if (!error.code && REACTION_STT_CONTROL.has(error.message)) error.code = error.message;
+      throw error;
+    }
+    await sock.sendMessage(
+      msg.key.remoteJid,
+      {
+        text: t("bot.ai.stt.failed", { details: describeAiError(error), hintBlock: "" }),
+      },
+      { quoted: msg },
+    );
+    reactionCode("REACTION_COMMAND_FAILED");
   }
-  if (/upload/i.test(message)) {
-    return t("bot.ai.stt.uploadFailed");
-  }
-  return "";
+  if (typeof transcription !== "string" || !transcription.trim() || transcription.length > 12000)
+    reactionCode("STT_OUTPUT_INVALID");
+  await sock.sendMessage(
+    msg.key.remoteJid,
+    { text: t("bot.ai.stt.transcript", { transcription: transcription.trim() }) },
+    { quoted: msg },
+  );
 }
 
 module.exports = {
@@ -197,7 +329,8 @@ module.exports = {
   aliases: ["totext", "transcribe"],
   chat: "all",
 
-  async execute(sock, msg, args, body, groupMetadata) {
+  async execute(sock, msg, args, body, groupMetadata, ctx) {
+    if (ctx?.source === "reaction") return reactToAudio(sock, msg, ctx);
     const chatId = msg.key.remoteJid;
 
     // Check if message has audio or if it's a reply to an audio message
@@ -246,14 +379,10 @@ module.exports = {
     } catch (error) {
       logger.error({ err: error }, "[STT] Error transcribing audio");
 
-      // The real reason goes in the card — a bare "an error happened" left
-      // nothing to act on.
-      const details = String(error?.message || error || t("bot.ai.stt.unknown")).slice(0, 800);
-      const hint = sttErrorHint(error);
       await status.finish(
         t("bot.ai.stt.failed", {
-          details,
-          hintBlock: hint ? `\n\n${hint}` : "",
+          details: describeAiError(error),
+          hintBlock: "",
         }),
       );
     }

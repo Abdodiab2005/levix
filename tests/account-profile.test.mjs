@@ -625,6 +625,172 @@ try {
     const next = await harness.service.get();
     ok("a fresh lookup follows reset", next.revision !== profile.revision);
   }
+
+  section(
+    "name fallback chain: stored metadata -> user.name -> verifiedName -> notify -> creds.me.name",
+  );
+  {
+    const lidId = "987654321098765@lid";
+    const linked = identity({
+      phone: PHONE_ID,
+      lid: lidId,
+      name: "Creds Me Name",
+      selfJids: [PHONE_ID, lidId],
+    });
+    const storedNames = new Map([[PHONE_ID, "Stored Metadata Name"]]);
+
+    // 1. stored user_metadata displayName is preferred over socket.user.name when socket.user.name differs
+    {
+      const { socket } = fakeSocket({ id: lidId, name: "Differing Socket Name" });
+      socket.user.verifiedName = "Verified Biz Name";
+      socket.user.notify = "Notify Push Name";
+      const harness = makeService({
+        socket,
+        id: linked,
+        options: { getUserDisplayName: (jid) => storedNames.get(jid) || null },
+      });
+      equal(
+        "stored metadata name is preferred when socket.user.name differs",
+        (await harness.service.get()).name,
+        "Stored Metadata Name",
+      );
+    }
+
+    // 2. fresh install with no stored name falls back to socket.user.name
+    {
+      const { socket } = fakeSocket({ id: lidId, name: "Socket Name" });
+      socket.user.verifiedName = "Verified Biz Name";
+      socket.user.notify = "Notify Push Name";
+      const harness = makeService({
+        socket,
+        id: linked,
+        options: { getUserDisplayName: () => null },
+      });
+      equal(
+        "fresh install with no stored name falls back to socket.user.name",
+        (await harness.service.get()).name,
+        "Socket Name",
+      );
+    }
+
+    // 3. sock.user.verifiedName when stored name is missing and user.name is missing or '~'
+    {
+      const { socket } = fakeSocket({ id: lidId, name: "~" });
+      socket.user.verifiedName = "Verified Biz Name";
+      socket.user.notify = "Notify Push Name";
+      const harness = makeService({
+        socket,
+        id: linked,
+        options: { getUserDisplayName: () => null },
+      });
+      equal(
+        "verifiedName is used when user.name is placeholder '~'",
+        (await harness.service.get()).name,
+        "Verified Biz Name",
+      );
+    }
+
+    // 4. sock.user.notify when stored name, user.name and verifiedName are missing
+    {
+      const { socket } = fakeSocket({ id: lidId, name: null });
+      socket.user.notify = "Notify Push Name";
+      const harness = makeService({
+        socket,
+        id: linked,
+        options: { getUserDisplayName: () => null },
+      });
+      equal(
+        "user.notify is fourth in chain",
+        (await harness.service.get()).name,
+        "Notify Push Name",
+      );
+    }
+
+    // 5. saved credentials' me.name when stored name and socket name fields are missing
+    {
+      const { socket } = fakeSocket({ id: lidId, name: null });
+      const harness = makeService({
+        socket,
+        id: linked,
+        options: { getUserDisplayName: () => null },
+      });
+      equal("creds.me.name is fifth in chain", (await harness.service.get()).name, "Creds Me Name");
+    }
+
+    // 6. PN row "New" is preferred over earlier-sorting LID row "Old"
+    {
+      const earlierLid = "1234567890@lid"; // Sorts before PHONE_ID ("201234567890@s.whatsapp.net")
+      const linkedAliases = identity({
+        phone: PHONE_ID,
+        lid: earlierLid,
+        selfJids: [earlierLid, PHONE_ID],
+      });
+      const aliasNames = new Map([
+        [earlierLid, "Old"],
+        [PHONE_ID, "New"],
+      ]);
+      const { socket } = fakeSocket({ id: earlierLid, name: "Socket Name" });
+      const harness = makeService({
+        socket,
+        id: linkedAliases,
+        options: { getUserDisplayName: (jid) => aliasNames.get(jid) || null },
+      });
+      const profile = await harness.service.get();
+      equal("PN row 'New' is preferred over earlier-sorting LID row 'Old'", profile.name, "New");
+    }
+
+    // Unrelated account after switch does not inherit previous account's creds/metadata
+    {
+      const otherLid = "111222333444555@lid";
+      const { socket } = fakeSocket({ id: otherLid, name: null });
+      const harness = makeService({
+        socket,
+        id: linked,
+        options: { getUserDisplayName: (jid) => storedNames.get(jid) || null },
+      });
+      const profile = await harness.service.get();
+      equal("switched LID socket does not inherit old creds or metadata name", profile.name, null);
+      equal("switched LID socket does not inherit old phone", profile.phone, null);
+    }
+  }
+
+  section("LID-only socket with no verified PN has null phone and never derives phone from LID");
+  {
+    const lidOnly = "987654321098765@lid";
+    const { socket } = fakeSocket({ id: lidOnly, name: "LID User" });
+    const lidIdentity = { phone: null, lid: lidOnly, selfJids: [lidOnly] };
+    const profile = await makeService({ socket, id: lidIdentity }).service.get();
+    equal("LID-only profile is connected", profile.connected, true);
+    equal("LID-only profile keeps name", profile.name, "LID User");
+    equal("LID-only profile has null phone", profile.phone, null);
+  }
+
+  section("photo lookup retries once with the other verified form (PN vs LID)");
+  {
+    const lidId = "987654321098765@lid";
+    const linked = identity({ phone: PHONE_ID, lid: lidId, selfJids: [PHONE_ID, lidId] });
+    const tried = [];
+    const socket = {
+      user: { id: lidId, name: "Photo Retry Owner" },
+      async profilePictureUrl(jid) {
+        tried.push(jid);
+        if (jid === lidId) throw new Error("item-not-found on LID");
+        if (jid === PHONE_ID) return PHOTO_URL;
+        return null;
+      },
+      async fetchStatus() {
+        return [];
+      },
+    };
+    const harness = makeService({ socket, id: linked });
+    const profile = await harness.service.get();
+    equal("photo tried LID first then verified PN once", tried.join(","), `${lidId},${PHONE_ID}`);
+    ok(
+      "photo retry produced a revision URL",
+      typeof profile.photoUrl === "string" &&
+        profile.photoUrl.startsWith("/dashboard/api/account/photo?revision="),
+    );
+  }
 } catch (error) {
   ok("account profile unit tests run", false, error?.stack || String(error));
 } finally {

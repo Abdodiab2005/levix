@@ -1,0 +1,107 @@
+[
+  {
+    "file": "frontend/src/views/stickers/CreateControls.tsx",
+    "rule": "raw-color",
+    "matched": "#ffffff",
+    "reason": "legitimate: sticker colour picker default white background",
+    "count": 2
+  },
+  {
+    "file": "frontend/src/views/stickers/CreateControls.tsx",
+    "rule": "raw-color",
+    "matched": "#000000",
+    "reason": "legitimate: sticker colour picker default black background",
+    "count": 2
+  },
+  {
+    "file": "frontend/src/views/stickers/CreateControls.tsx",
+    "rule": "raw-color",
+    "matched": "#3366ff",
+    "reason": "legitimate: sticker colour picker default brand/blue accent",
+    "count": 2
+  },
+  {
+    "file": "frontend/src/views/stickers/CreateView.tsx",
+    "rule": "raw-color",
+    "matched": "#ffffff",
+    "reason": "legitimate: sticker canvas default white stroke",
+    "count": 2
+  },
+  {
+    "file": "frontend/src/views/stickers/LayerEditor.tsx",
+    "rule": "raw-color",
+    "matched": "#ffffff",
+    "reason": "legitimate: sticker layer default white color",
+    "count": 1
+  },
+  {
+    "file": "frontend/src/views/stickers/overlay.ts",
+    "rule": "raw-color",
+    "matched": "#000000",
+    "reason": "legitimate: sticker overlay contrast calculation fallback",
+    "count": 2
+  },
+  {
+    "file": "frontend/src/views/stickers/overlay.ts",
+    "rule": "raw-color",
+    "matched": "#ffffff",
+    "reason": "legitimate: sticker overlay contrast calculation fallback",
+    "count": 1
+  },
+  {
+    "file": "frontend/src/views/BackupView.tsx",
+    "rule": "native-element",
+    "matched": "<input",
+    "reason": "legitimate: hidden file input for backup JSON import",
+    "count": 1
+  },
+  {
+    "file": "frontend/src/views/SchedulesView.tsx",
+    "rule": "native-element",
+    "matched": "<input",
+    "reason": "legitimate: hidden file input for media attachment upload",
+    "count": 1
+  },
+  {
+    "file": "frontend/src/views/SettingsView.tsx",
+    "rule": "native-element",
+    "matched": "<input",
+    "reason": "legitimate: hidden file input for settings JSON import",
+    "count": 1
+  },
+  {
+    "file": "frontend/src/views/stickers/CreateView.tsx",
+    "rule": "native-element",
+    "matched": "<input",
+    "reason": "legitimate: hidden file input for sticker image upload",
+    "count": 1
+  },
+  {
+    "file": "frontend/src/views/stickers/CreateControls.tsx",
+    "rule": "native-element",
+    "matched": "<input",
+    "reason": "legitimate: color and range inputs in sticker editor",
+    "count": 7
+  },
+  {
+    "file": "frontend/src/views/stickers/LayerEditor.tsx",
+    "rule": "native-element",
+    "matched": "<input",
+    "reason": "legitimate: color and range inputs in sticker editor",
+    "count": 3
+  },
+  {
+    "file": "frontend/src/components/FeedbackForm.tsx",
+    "rule": "native-element",
+    "matched": "<input",
+    "reason": "legitimate: hidden file input for feedback attachment",
+    "count": 1
+  },
+  {
+    "file": "frontend/src/components/Sidebar.tsx",
+    "rule": "native-element",
+    "matched": "<button",
+    "reason": "legitimate: mobile navigation backdrop click target",
+    "count": 1
+  }
+]

@@ -22,12 +22,18 @@
 // ("🤖 بفكر..." -> "🔍 ببحث عن ..." -> the final answer), so a single answer
 // never costs four messages.
 
+const { createHash } = require("node:crypto");
 const { GoogleGenAI } = require("@google/genai");
 const { geminiHttpOptions } = require("../utils/geminiHttpOptions.cjs");
 
 const logger = require("../utils/logger.cjs");
 const settings = require("../config/settings.cjs");
-const { accountEpoch } = require("../db/store.cjs");
+const {
+  accountEpoch,
+  stripThoughtSignaturesFromHistory,
+  geminiSignatureGeneration,
+  isGeminiSignatureSweepPending,
+} = require("../db/store.cjs");
 const {
   getChatHistoryAsync,
   saveChatHistoryAsync,
@@ -44,16 +50,35 @@ const { resolveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
 const { generateImage } = require("../services/aiImage.cjs");
 const {
   runAgent,
+  readGeminiProviderPin,
   formatSources,
   isFileReferenceError,
   sanitizeHistoryForFiles,
   activeProviderKeySetting,
+  classifyAiError,
+  describeAiError,
 } = require("../services/aiAgent.cjs");
 const { getProvider } = require("../services/aiRouter.cjs");
 const { downloadContentFromMessage } = require("@whiskeysockets/baileys");
 const { unwrapMessage, visibleText, quotedOf } = require("../utils/messageContent.cjs");
 const { assertProviderBaseUrl, assertProviderRequestUrl } = require("../utils/providerUrl.cjs");
 const { t } = require("../utils/i18n.cjs");
+
+// Model, endpoint, and a hash of the key. The key itself never leaves settings.
+// A pin is the snapshot taken at the start of a turn; omit it to hash the
+// live values.
+function geminiSettingsFingerprint(pin) {
+  const model = pin ? pin.model : settings.get("gemini_model");
+  const baseUrl = pin ? pin.baseUrl : settings.get("gemini_base_url");
+  const key = pin ? pin.apiKey : settings.get("gemini_api_key");
+  return [
+    String(model || ""),
+    String(baseUrl || ""),
+    createHash("sha256")
+      .update(String(key || ""))
+      .digest("hex"),
+  ].join("\n");
+}
 
 // Per-(chat, sender) explicit context buffer for the multi-message workflow.
 // Entries accumulate until `!gemini send` flushes them into a single call.
@@ -512,9 +537,15 @@ module.exports = {
         });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload media to Gemini.");
-        return sendBotError(sock, chatId, error, t("bot.ai.gemini.uploadMediaFailed"), {
-          replyTo: msg,
-        });
+        return sendBotError(
+          sock,
+          chatId,
+          new Error(describeAiError(error)),
+          t("bot.ai.gemini.uploadMediaFailed"),
+          {
+            replyTo: msg,
+          },
+        );
       }
     } else if (!parts.length && unwrapMessage(msg.message).audioMessage) {
       // i18n-exception: attachment metadata sent only to the model, not a reply.
@@ -534,9 +565,15 @@ module.exports = {
         });
       } catch (error) {
         logger.error({ err: error }, "Failed to upload document to Gemini.");
-        return sendBotError(sock, chatId, error, t("bot.ai.gemini.uploadFileFailed"), {
-          replyTo: msg,
-        });
+        return sendBotError(
+          sock,
+          chatId,
+          new Error(describeAiError(error)),
+          t("bot.ai.gemini.uploadFileFailed"),
+          {
+            replyTo: msg,
+          },
+        );
       }
     } else if (!parts.length && prompt) {
       parts.push({ text: prompt });
@@ -578,9 +615,15 @@ module.exports = {
           // AND a second reply from a model that had never seen the photo
           // ("I can't see any image") — two messages, the second one wrong.
           logger.error({ err: mediaError }, "Failed to process quoted media");
-          return sendBotError(sock, chatId, mediaError, t("bot.ai.gemini.quotedProblem"), {
-            replyTo: msg,
-          });
+          return sendBotError(
+            sock,
+            chatId,
+            new Error(describeAiError(mediaError)),
+            t("bot.ai.gemini.quotedProblem"),
+            {
+              replyTo: msg,
+            },
+          );
         }
       }
 
@@ -671,20 +714,45 @@ module.exports = {
       epoch === accountEpoch() &&
       revision === historyRevision &&
       chatRevision === (chatHistoryRevisions.get(chatId) || 0);
+    // Before this attempt's first await. Endpoint validation and a file-recovery
+    // retry both use this snapshot. The generation moves on every gemini_model,
+    // base URL or API key change, so A → B → A still drops signatures when the
+    // fingerprint matches again.
+    const turnPin = readGeminiProviderPin();
+    const turnProvider = turnPin.provider;
+    const turnFingerprint = geminiSettingsFingerprint(turnPin);
+    const turnGeneration = geminiSignatureGeneration();
+    const isPinnedProviderLive = () =>
+      String(settings.get("ai_provider") || "gemini").toLowerCase() === turnProvider;
 
-    async function attempt(historyOverride) {
+    async function persistHistory(history) {
+      if (!canSaveHistory() || !history?.length) return;
+      const keepSignatures =
+        geminiSignatureGeneration() === turnGeneration &&
+        geminiSettingsFingerprint() === turnFingerprint;
+      const turns = keepSignatures ? history : stripThoughtSignaturesFromHistory(history);
+      await saveChatHistoryAsync(chatId, turns);
+    }
+
+    async function attempt(historyOverride, stripSignaturesOverride) {
       if (!isCurrentCaller(caller)) return;
+      const stripBeforeLoad =
+        stripSignaturesOverride !== undefined
+          ? Boolean(stripSignaturesOverride)
+          : isGeminiSignatureSweepPending();
       const history = historyOverride ?? ((await getChatHistoryAsync(chatId)) || []);
+      const stripSignatures = stripBeforeLoad || isGeminiSignatureSweepPending();
       if (!isCurrentCaller(caller)) return;
       const result = await runAgent({
         parts,
         history: globalMemoryAccess(agentContext).read ? history : stripMemoryToolParts(history),
         status,
         context: agentContext,
+        provider: turnProvider,
+        geminiPin: turnPin,
+        stripSignatures,
       });
-      if (canSaveHistory() && result.history?.length) {
-        await saveChatHistoryAsync(chatId, result.history);
-      }
+      await persistHistory(result.history);
       return result;
     }
 
@@ -694,19 +762,23 @@ module.exports = {
         result = await attempt();
       } catch (firstErr) {
         if (!isCurrentCaller(caller)) return;
-        // A dead fileData URI in the history poisons every later call — scrub
-        // it once and retry so the user never sees the expiry.
-        if (!isFileReferenceError(firstErr) || !canSaveHistory()) throw firstErr;
+        // A dead file URI poisons later calls. Retry only before any tool has
+        // run, only while the pinned provider is still the live one, and only
+        // when the error is positively that stale reference.
+        // The cleaned history stays in memory until the retry succeeds.
+        if (firstErr?.toolsRan || !canSaveHistory() || !isPinnedProviderLive()) throw firstErr;
 
+        const stripBeforeReload = isGeminiSignatureSweepPending();
         const oldHistory = (await getChatHistoryAsync(chatId)) || [];
+        const retryStripSignatures = stripBeforeReload || isGeminiSignatureSweepPending();
         if (!isCurrentCaller(caller)) return;
+        if (!isFileReferenceError(firstErr, [parts, oldHistory])) throw firstErr;
         const cleaned = sanitizeHistoryForFiles(oldHistory);
-        if (!canSaveHistory()) throw firstErr;
-        await saveChatHistoryAsync(chatId, cleaned);
+        if (!canSaveHistory() || !isPinnedProviderLive()) throw firstErr;
         logger.info(
           `[Gemini] sanitized history: ${oldHistory.length} -> ${cleaned.length}; retrying once`,
         );
-        result = await attempt(cleaned);
+        result = await attempt(cleaned, retryStripSignatures);
       }
 
       if (!result) return;
@@ -718,9 +790,12 @@ module.exports = {
       await status.finish(responseText);
     } catch (error) {
       logger.error({ err: error }, "Error in !gemini command");
-      await status.fail(error, t("bot.ai.gemini.chatFailed"));
+      await status.fail(new Error(describeAiError(error)), t("bot.ai.gemini.chatFailed"));
     }
   },
 };
 
 module.exports.clearAllContextBuffers = clearAllContextBuffers;
+module.exports.classifyAiError = classifyAiError;
+module.exports.describeAiError = describeAiError;
+module.exports.geminiSettingsFingerprint = geminiSettingsFingerprint;

@@ -13,14 +13,11 @@ const store = require("../db/store.cjs");
 const runtime = require("../config/runtime-config.cjs");
 const settings = require("../config/settings.cjs");
 const status = require("./status.cjs");
-const { evaluatePermissionLevel } = require("../utils/permissionLevel.cjs");
 const { planDelivery, canonicalJid } = require("../messaging/router.cjs");
 const { linkedIdentity } = require("../messaging/identity.cjs");
-const { validateDefinition, originalType } = require("./rules.cjs");
-const { assertWhatsAppAudio, assertAudio, MAX_MEDIA_BYTES } = require("../services/aiMedia.cjs");
-const { sendBotMessage } = require("../utils/sendBotMessage.cjs");
+const { validateDefinition, normalizeDefinition, originalType } = require("./rules.cjs");
+const { classify } = require("./commandEligibility.cjs");
 const { readLiveGroupMetadata } = require("../utils/groupMetadataCache.cjs");
-const { withLang, langForCommand, t } = require("../utils/i18n.cjs");
 const logger = require("../utils/logger.cjs");
 const { candidateLimit } = require("./limits.cjs");
 const hash = (...values) => createHash("sha256").update(JSON.stringify(values)).digest("hex");
@@ -28,7 +25,7 @@ const fail = (code) => {
   throw new Error(code);
 };
 const same = (a, b) => a === b || verifiedIdentityAliases(a).includes(canonicalJid(b));
-const actorOf = (key) => key.participant || key.remoteJid;
+const actorOf = (key) => key.author || key.participant || key.remoteJid;
 // Across socket generations too: an ignored cancellation must not free a slot.
 const inFlight = new Set();
 const OUTCOMES = new Set([
@@ -48,6 +45,13 @@ const OUTCOMES = new Set([
   "MEDIA_TOO_LARGE",
   "MEDIA_NOT_AVAILABLE",
   "MEDIA_URL_INVALID",
+  "REACTION_COMMAND_DENIED",
+  "REACTION_COMMAND_UNSUPPORTED",
+  "REACTION_COMMAND_FAILED",
+  "DUPLICATE",
+  "EVENT_MISSING",
+  "RATE_LIMIT",
+  "CAPACITY",
 ]);
 
 export const REACTION_ACTION_LIMITS = Object.freeze({
@@ -63,8 +67,10 @@ export const REACTION_ACTION_LIMITS = Object.freeze({
 // Read-only checks shared with management; authorization still belongs to the job.
 export function reactionActionReadiness(action, { checkKey = true } = {}) {
   const statuses = [];
-  if (runtime.isDisabled(action)) statuses.push("ACTION_DISABLED");
-  if (action === "stt") {
+  const name = typeof action === "string" && action.startsWith("group:") ? action.slice(6) : action;
+  if (!name || runtime.isDisabled(name) || runtime.isDisabled(action))
+    statuses.push("ACTION_DISABLED");
+  if (name === "stt") {
     if (!settings.get("ai_stt_enabled")) statuses.push("STT_DISABLED");
     if (checkKey) {
       const stt = require("../commands/stt.cjs");
@@ -72,6 +78,10 @@ export function reactionActionReadiness(action, { checkKey = true } = {}) {
     }
   }
   return statuses;
+}
+
+function commandKeyOf(definition) {
+  return definition?.command?.name || definition?.action || "";
 }
 
 function senderMatches(definition, sender) {
@@ -82,11 +92,12 @@ function senderMatches(definition, sender) {
     (role === "owner" && sender.isOwner) ||
     (role === "bot_admin" && (sender.isOwner || sender.isBotAdmin)) ||
     (role === "group_admin" && sender.isGroupAdmin) ||
+    (role === "owner_group_admin" && (sender.isOwner || sender.isGroupAdmin)) ||
     (role === "member" && !sender.isOwner && !sender.isBotAdmin && !sender.isGroupAdmin)
   );
 }
 
-export function createReactionAutomation(sock, { now = Date.now } = {}) {
+export function createReactionAutomation(sock, { now = Date.now, dispatch } = {}) {
   const active = new Set();
   let closed = false;
   let lastCode = null;
@@ -106,6 +117,30 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
     for (const job of active)
       if (predicate(job)) job.controller.abort(new Error("REACTION_CANCELLED"));
   };
+  // rc14 sends participant objects ({ id, phoneNumber, lid }). Older sockets
+  // send the bare JID. A removal is "only the kick target" when every listed
+  // person matches an identity the kick claimed, and nobody else is included.
+  function participantIds(participant) {
+    if (typeof participant === "string") return [participant];
+    if (!participant || typeof participant !== "object") return [];
+    const ids = [];
+    for (const field of ["id", "lid", "phoneNumber", "jid", "pn"]) {
+      const value = participant[field];
+      if (typeof value === "string" && value && !ids.includes(value)) ids.push(value);
+    }
+    return ids;
+  }
+  function expectedRemoval(job, update) {
+    const removal = job.removal;
+    if (!removal?.ids?.length || !update || typeof update !== "object") return false;
+    if (update.action !== "remove" && update.action !== "leave") return false;
+    const people = Array.isArray(update.participants) ? update.participants : null;
+    if (!people?.length) return false;
+    return people.every((person) => {
+      const ids = participantIds(person);
+      return ids.length > 0 && ids.some((id) => removal.ids.some((target) => same(target, id)));
+    });
+  }
   const intake = attachReactionIntake(sock, {
     now,
     onTransition: submit,
@@ -171,14 +206,40 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
       job.metadata = metadata;
     }
   }
-  function sender(job) {
+  function subjectFor(key, metadata) {
+    if (key?.fromMe === true) {
+      const isGroup = Boolean(key.remoteJid?.endsWith("@g.us"));
+      const senderId = canonicalJid(
+        key.author || key.participant || linkedIdentity().phone || sock?.user?.id,
+      );
+      const candidates = verifiedIdentityAliases(senderId);
+      if (!candidates.length) fail("REACTION_IDENTITY_INVALID");
+      const isGroupAdmin =
+        isGroup && ["admin", "superadmin"].includes(verifiedParticipant(metadata, senderId)?.admin);
+      return {
+        isGroup,
+        senderId,
+        candidates,
+        isOwner: true,
+        isBotAdmin: false,
+        isGroupAdmin,
+        isSenderAdmin: isGroupAdmin,
+      };
+    }
+    return resolveVerifiedSender({ key }, metadata, sock);
+  }
+  function sender(job, { requireOriginalAuthor = true } = {}) {
     available(job);
     const event = job.event;
-    const subject = resolveVerifiedSender({ key: event.actorKey }, job.metadata, sock);
+    const subject = subjectFor(event.actorKey, job.metadata);
     if (subject.isGroup) {
+      // A confirmed kick receipt must not require the removed member. Every
+      // earlier guard still requires the original author to be present.
+      const authorPresent =
+        !requireOriginalAuthor || verifiedParticipant(job.metadata, actorOf(event.original.key));
       if (
         !verifiedParticipant(job.metadata, subject.senderId) ||
-        !verifiedParticipant(job.metadata, actorOf(event.original.key)) ||
+        !authorPresent ||
         ![sock?.user?.id, sock?.user?.lid].some((id) => verifiedParticipant(job.metadata, id))
       )
         fail("REACTION_INACCESSIBLE");
@@ -193,50 +254,127 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
   }
   function authorize(job) {
     const subject = sender(job);
-    const readiness = reactionActionReadiness(job.definition.action, { checkKey: false });
-    if (
-      !senderMatches(job.definition, subject) ||
-      readiness.includes("ACTION_DISABLED") ||
-      !evaluatePermissionLevel(runtime.getPermission(job.definition.action), subject).hasPermission
-    )
-      fail("REACTION_FORBIDDEN");
-    if (readiness.includes("STT_DISABLED")) fail("REACTION_STT_DISABLED");
+    if (!senderMatches(job.definition, subject)) fail("REACTION_FORBIDDEN");
     return subject;
   }
-  function delivery(job) {
-    authorize(job);
+  function authorizeReceipt(job) {
+    const subject = sender(job, { requireOriginalAuthor: false });
+    if (!senderMatches(job.definition, subject)) fail("REACTION_FORBIDDEN");
+    return subject;
+  }
+  function superseded(job) {
+    // Events minted before slot keys existed are not stale: failing them closed
+    // would reject every reaction the intake did not stamp.
+    const keys = job.event.slotKeys;
+    if (!Array.isArray(keys) || !keys.length) return false;
+    const latest = store.latestReactionSlot(keys);
+    if (!latest) return true;
+    const expected = job.event.type === "remove" ? "" : job.event.emoji;
+    if (latest.emoji !== expected) return true;
+    // Same emoji after remove + re-add is a new version. The timestamp, not
+    // the emoji alone, is what retires the earlier job.
+    return latest.timestampMs !== job.event.timestampMs;
+  }
+  function linkedEvent(key) {
+    if (key?.fromMe === true) return true;
+    const id = canonicalJid(actorOf(key));
+    if (!id) return false;
+    let linked = {};
+    try {
+      linked = linkedIdentity();
+    } catch {
+      linked = {};
+    }
+    const ids = [
+      linked.phone,
+      linked.lid,
+      ...(linked.selfJids || []),
+      sock?.user?.id,
+      sock?.user?.lid,
+    ];
+    return ids.some((item) => item && same(id, canonicalJid(item) || item));
+  }
+  function admitsLinkedOriginal(definition, event) {
+    if (definition.allowOthersOnLinkedMessages === true) return true;
+    if (!linkedEvent(event.original.key)) return true;
+    return linkedEvent(event.actorKey);
+  }
+  function requesterOf(event) {
+    const raw = actorOf(event.actorKey);
+    const jid = canonicalJid(raw) || raw;
+    const candidates = verifiedIdentityAliases(jid);
+    return {
+      jid,
+      candidates: candidates.length ? candidates : [jid],
+      isLinked: linkedEvent(event.actorKey),
+    };
+  }
+  function routeModeFor(definition) {
+    if (classify(commandKeyOf(definition)).destructive) return "same_chat";
+    return definition.destination.mode;
+  }
+  function canonicalTarget(event) {
+    const key = event.original?.key || {};
+    const author =
+      key.author ||
+      key.participant ||
+      (String(key.remoteJid || "").endsWith("@g.us") ? "" : key.remoteJid);
+    return typeof author === "string" ? author : "";
+  }
+  function accountStamp() {
+    const linked = linkedIdentity();
+    return (
+      linked.phone ||
+      linked.lid ||
+      canonicalJid(sock?.user?.id) ||
+      canonicalJid(sock?.user?.lid) ||
+      ""
+    );
+  }
+  let commandModule = null;
+  async function commands() {
+    if (!commandModule) commandModule = await import("../handlers/command.handler.js");
+    return commandModule;
+  }
+  function loadCommand(key, api) {
+    if (!/^(?:group:)?[a-z][a-z0-9]*$/.test(key)) fail("REACTION_COMMAND_UNSUPPORTED");
+    const spec = classify(key);
+    if (spec.mode === "unsupported") {
+      const error = new Error("REACTION_COMMAND_UNSUPPORTED");
+      error.reason = spec.reason;
+      throw error;
+    }
+    const name = key.startsWith("group:") ? key.slice(6) : key;
+    const group = key.startsWith("group:");
+    const loaded = api?.getLoadedCommands?.().get(name);
+    if (loaded && (group ? loaded.__category === "group" : loaded.__category !== "group"))
+      return loaded;
+    const command = group
+      ? require(`../commands/group/${name}.cjs`)
+      : require(`../commands/${key}.cjs`);
+    if (group && command.__category !== "group") command.__category = "group";
+    return command;
+  }
+  function plannedRoute(job) {
     const source = job.event.original.key.remoteJid;
-    const mode = job.definition.destination.mode;
+    const mode = routeModeFor(job.definition);
+    const requester = requesterOf(job.event);
     const result = planDelivery({
       sourceJid: source,
       requestedJid: source,
-      senderJid: actorOf(job.event.actorKey),
-      commandName: job.definition.action,
+      senderJid: requester.jid,
+      commandName: commandKeyOf(job.definition),
       routeMode: mode,
+      overrides: { commands: {}, categories: {} },
       sensitivity: "source",
       identity: mode === "same_chat" ? { selfJids: [] } : linkedIdentity(),
     });
     if (!result.allow || !result.destination) fail("REACTION_DELIVERY_REFUSED");
     return result;
   }
-  async function send(job, content) {
-    await refresh(job);
-    const planned = delivery(job);
-    const guard = {
-      refresh: () => refresh(job),
-      assert: () => {
-        const final = delivery(job);
-        if (final.destination !== planned.destination || final.quote !== planned.quote)
-          fail("REACTION_DELIVERY_REFUSED");
-      },
-    };
-    const result = await sendBotMessage(sock, planned.destination, content, {
-      signal: job.controller.signal,
-      deliveryGuard: guard,
-      replyTo: planned.quote ? job.event.original : null,
-      quote: planned.quote,
-    });
-    if (!result?.key || result.refused) fail("REACTION_DELIVERY_REFUSED");
+  function delivery(job) {
+    authorize(job);
+    return plannedRoute(job);
   }
   function candidatesFor(event) {
     const candidates = [];
@@ -252,7 +390,7 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
     for (const row of rows) {
       let definition;
       try {
-        definition = validateDefinition(JSON.parse(row.definition));
+        definition = normalizeDefinition(validateDefinition(JSON.parse(row.definition)));
       } catch {
         continue;
       }
@@ -272,66 +410,312 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
     }
     return candidates;
   }
+  function commandText(name, args) {
+    const prefix = runtime.getPrefix();
+    const remainder = args.join(" ");
+    return remainder ? `${prefix}${name} ${remainder}` : `${prefix}${name}`;
+  }
+  function invocationFor(job, command, api) {
+    const event = job.event;
+    const keyName = commandKeyOf(job.definition);
+    const args = Array.isArray(job.definition.command?.args) ? job.definition.command.args : [];
+    const isGroup = event.original.key.remoteJid.endsWith("@g.us");
+    const requester = requesterOf(event);
+    const reactor = requester.jid;
+    const author =
+      event.original.key.author ||
+      event.original.key.participant ||
+      (isGroup ? "" : event.original.key.remoteJid);
+    const synthetic = {
+      key: {
+        remoteJid: event.original.key.remoteJid,
+        id: event.actorKey.id,
+        fromMe: event.actorKey.fromMe === true,
+        ...(isGroup ? { participant: reactor } : {}),
+      },
+      message: {
+        extendedTextMessage: {
+          text: commandText(command.name, args),
+          contextInfo: {
+            stanzaId: event.original.key.id,
+            ...(author ? { participant: author } : {}),
+            quotedMessage: event.original.message,
+          },
+        },
+      },
+      ...(typeof event.pushName === "string" ? { pushName: event.pushName } : {}),
+    };
+    const mode = routeModeFor(job.definition);
+    const planned = planDelivery({
+      sourceJid: event.original.key.remoteJid,
+      requestedJid: event.original.key.remoteJid,
+      senderJid: requester.jid,
+      commandName: command.name,
+      routeMode: mode,
+      overrides: { commands: {}, categories: {} },
+      sensitivity: "source",
+      identity: mode === "same_chat" ? { selfJids: [] } : linkedIdentity(),
+    });
+    const guard = {
+      refresh: () => refresh(job),
+      assert: () => {
+        available(job);
+        if (superseded(job)) fail("REACTION_STALE");
+        authorize(job);
+        const gate = api.evaluateCommandGates(
+          sock,
+          {
+            command,
+            msg: synthetic,
+            isGroup,
+            accountEpoch: job.accountEpoch,
+            options: { routeMode: mode, senderJid: requester.jid, requester },
+          },
+          job.metadata,
+        );
+        if (gate.status === "denied" || gate.status === "disabled") fail("REACTION_COMMAND_DENIED");
+        if (gate.status === "stale") fail("REACTION_STALE");
+        if (gate.status === "failed") fail(gate.reason || "REACTION_DELIVERY_REFUSED");
+        const final = delivery(job);
+        if (final.destination !== planned.destination || final.quote !== planned.quote)
+          fail("REACTION_DELIVERY_REFUSED");
+      },
+    };
+    // Posted only after WhatsApp has already removed the member. The live
+    // roster is read again first. The linked account, the requester's rule
+    // and command permission, and the group all have to still match. The
+    // removed member does not have to still be in the group.
+    const receiptGuard = {
+      refresh: () => refresh(job),
+      assert: () => {
+        if (accountStamp() !== job.linkedAccount) fail("REACTION_STALE");
+        const chat = job.event.original.key.remoteJid;
+        if (!job.metadata || canonicalJid(job.metadata.id) !== chat) fail("REACTION_INACCESSIBLE");
+        authorizeReceipt(job);
+        const gate = api.evaluateCommandGates(
+          sock,
+          {
+            command,
+            msg: synthetic,
+            isGroup,
+            accountEpoch: job.accountEpoch,
+            options: { routeMode: mode, senderJid: requester.jid, requester },
+          },
+          job.metadata,
+        );
+        if (gate.status === "denied" || gate.status === "disabled") fail("REACTION_COMMAND_DENIED");
+        if (gate.status === "stale") fail("REACTION_STALE");
+        if (gate.status === "failed") fail(gate.reason || "REACTION_DELIVERY_REFUSED");
+        const final = plannedRoute(job);
+        if (final.destination !== planned.destination || final.quote !== planned.quote)
+          fail("REACTION_DELIVERY_REFUSED");
+      },
+    };
+    return {
+      command,
+      invokedName: command.name,
+      args,
+      body: commandText(command.name, args),
+      msg: synthetic,
+      isGroup,
+      rawRemainder: args.join(" "),
+      accountEpoch: job.accountEpoch,
+      authMetadata: isGroup ? job.metadata : null,
+      options: {
+        source: "reaction",
+        editInPlace: false,
+        replyAnchor: event.original,
+        protectedKeys: [event.original.key],
+        silentDenials: true,
+        neutralFailure: true,
+        routeMode: mode,
+        senderJid: requester.jid,
+        requester,
+        signal: job.controller.signal,
+        deliveryGuard: guard,
+        receiptGuard,
+        rosterReady: true,
+        beforeEffect: async () => {
+          await refresh(job);
+          guard.assert();
+        },
+      },
+    };
+  }
+  function mapOutcome(result) {
+    if (!result) return "ACTION_FAILED";
+    if (result.status === "executed" || result.status === "ready") return "DELIVERED";
+    if (result.status === "stale") return "REACTION_STALE";
+    if (result.status === "failed") return result.reason || "REACTION_COMMAND_FAILED";
+    if (result.status === "denied" || result.status === "disabled")
+      return "REACTION_COMMAND_DENIED";
+    return "ACTION_FAILED";
+  }
+  function coded(code) {
+    const error = new Error(code);
+    error.code = code;
+    return error;
+  }
+  function rowMatches(row, aliases, jid) {
+    const rowIds = participantIds(row).map(canonicalJid).filter(Boolean);
+    if (jid.endsWith("@lid")) {
+      const rowLids = rowIds.filter((id) => id.endsWith("@lid"));
+      if (rowLids.length && !rowLids.includes(jid)) return false;
+    } else if (jid.endsWith("@s.whatsapp.net")) {
+      const rowPns = rowIds.filter((id) => id.endsWith("@s.whatsapp.net"));
+      if (rowPns.length && !rowPns.includes(jid)) return false;
+    }
+    return rowIds.some((id) => aliases.includes(id));
+  }
+  function participantRow(meta, value) {
+    const aliases = verifiedIdentityAliases(value);
+    if (!aliases.length) return null;
+    const jid = aliases[0];
+    return (
+      meta?.participants?.find((p) => participantIds(p).some((id) => canonicalJid(id) === jid)) ||
+      meta?.participants?.find((p) => rowMatches(p, aliases, jid)) ||
+      null
+    );
+  }
+  function destructiveGuard(job, canonical, api, invocation) {
+    return ({ meta, kickJid, candidates }) => {
+      const targetRow = participantRow(meta, kickJid);
+      if (!targetRow) throw coded("REACTION_STALE");
+      const ids = [canonical, kickJid, ...(candidates || [])].filter(Boolean);
+      for (const id of ids) {
+        const row = participantRow(meta, id);
+        if (row && row !== targetRow) throw coded("REACTION_STALE");
+      }
+      if (participantRow(meta, canonical) !== targetRow) throw coded("REACTION_STALE");
+      job.metadata = meta;
+      try {
+        available(job);
+        if (superseded(job)) throw coded("REACTION_STALE");
+        authorize(job);
+      } catch (error) {
+        if (!error.code) error.code = error.message;
+        throw error;
+      }
+      const command = invocation.command;
+      const requester = invocation.options?.requester;
+      const gate = api.evaluateCommandGates(
+        sock,
+        {
+          command,
+          msg: invocation.msg,
+          isGroup: invocation.isGroup,
+          accountEpoch: job.accountEpoch,
+          options: {
+            routeMode: invocation.options?.routeMode,
+            senderJid: requester?.jid,
+            requester,
+          },
+        },
+        meta,
+      );
+      if (gate.status === "denied" || gate.status === "disabled")
+        throw coded("REACTION_COMMAND_DENIED");
+      if (gate.status === "stale") throw coded("REACTION_STALE");
+      if (gate.status !== "ready") throw coded(gate.reason || "REACTION_DELIVERY_REFUSED");
+      const event = job.event;
+      const verdict = store.claimDestructiveReaction(
+        {
+          accountEpoch: job.accountEpoch,
+          ruleId: job.rule.id,
+          revision: job.rule.revision,
+          slotKeys: event.slotKeys,
+          expectedEmoji: event.type === "remove" ? "" : event.emoji,
+          timestampMs: event.timestampMs,
+          eventKey: event.eventKey,
+          ruleKey: hash(event.eventKey, job.rule.id, job.rule.revision),
+          // The stanza id is the operation. A later PN redelivery of the same
+          // id must not open a second claim under the other author form.
+          actionKey: hash(
+            "destructive",
+            accountStamp(),
+            event.original.key.remoteJid,
+            event.original.key.id,
+            commandKeyOf(job.definition),
+          ),
+          expiresAt: event.timestampMs + REACTION_LIMITS.ttlMs + REACTION_LIMITS.futureSkewMs,
+          budgets: [{ key: hash("rule", job.rule.id), limit: REACTION_ACTION_LIMITS.perRule }],
+        },
+        now(),
+      );
+      if (verdict !== "CLAIMED") throw coded(verdict);
+      // The remove call is the next statement in kickGroupMember, still in
+      // this turn. A later participants update that only removes this target
+      // is the effect of that call and must not abort the receipt.
+      if (invocation.command?.name === "kick") {
+        const removalIds = [kickJid];
+        for (const alias of participantIds(targetRow)) {
+          if (!removalIds.includes(alias)) removalIds.push(alias);
+        }
+        job.removal = { ids: removalIds };
+      }
+    };
+  }
   async function execute(job) {
+    job.accountEpoch = store.accountEpoch();
+    job.linkedAccount = accountStamp();
     await refresh(job);
     const subject = sender(job);
     const event = job.event;
     for (const candidate of job.candidates) {
+      const key = commandKeyOf(candidate.definition);
+      const spec = classify(key);
+      if (spec.mode === "unsupported") continue;
+      if (spec.destructive && event.type !== "add") continue;
       if (!senderMatches(candidate.definition, subject)) continue;
+      if (!admitsLinkedOriginal(candidate.definition, event)) continue;
       job.rule = candidate.row;
       job.definition = candidate.definition;
       break;
     }
     if (!job.rule) return "NO_MATCH";
     authorize(job);
-    delivery(job);
-    const budgets = [{ key: hash("rule", job.rule.id), limit: REACTION_ACTION_LIMITS.perRule }];
-    const claimed = store.claimReactionExecution(
-      {
-        eventKey: event.eventKey,
-        ruleKey: hash(event.eventKey, job.rule.id, job.rule.revision),
-        actionKey: hash(event.eventKey, job.definition.action, job.definition.destination),
-        expiresAt: event.timestampMs + REACTION_LIMITS.ttlMs + REACTION_LIMITS.futureSkewMs,
-        budgets,
-      },
-      now(),
-    );
-    if (claimed !== "CLAIMED") return claimed;
-    // No await separates the live authorization check and action invocation.
-    authorize(job);
-    const command =
-      job.definition.action === "ping"
-        ? require("../commands/ping.cjs")
-        : require("../commands/stt.cjs");
-    return withLang(langForCommand(command), async () => {
-      if (job.definition.action === "ping") {
-        await require("../commands/ping.cjs").execute(
-          { sendMessage: (_jid, content) => send(job, content) },
-          event.original,
-        );
-      } else {
-        const audio = event.original.message.audioMessage;
-        assertWhatsAppAudio(audio);
-        if (audio.ptt !== true) fail("REACTION_VOICE_REQUIRED");
-        const stt = require("../commands/stt.cjs");
-        if (reactionActionReadiness("stt").includes("STT_KEY_MISSING")) fail("STT_KEY_REQUIRED");
-        const bytes = await require("../utils/geminiMedia.cjs").downloadMedia(
-          require("@whiskeysockets/baileys").downloadContentFromMessage,
-          audio,
-          "audio",
-          { maxBytes: MAX_MEDIA_BYTES, signal: job.controller.signal },
-        );
-        await refresh(job);
-        authorize(job);
-        assertAudio(bytes, audio.mimetype, true);
-        const text = await stt.transcribe(bytes, audio.mimetype, { signal: job.controller.signal });
-        authorize(job);
-        if (typeof text !== "string" || !text.trim() || text.length > 12000)
-          fail("STT_OUTPUT_INVALID");
-        await send(job, { text: t("bot.ai.stt.transcript", { transcription: text }) });
-      }
-      return "DELIVERED";
+    const key = commandKeyOf(job.definition);
+    const spec = classify(key);
+    if (spec.mode === "unsupported") return "REACTION_COMMAND_UNSUPPORTED";
+    if (spec.destructive && event.type !== "add") return "REACTION_COMMAND_UNSUPPORTED";
+    const canonical = spec.destructive ? canonicalTarget(event) : "";
+    if (spec.destructive && !canonical) return "REACTION_IDENTITY_INVALID";
+    const api = await commands();
+    const command = loadCommand(key, api);
+    const invocation = invocationFor(job, command, api);
+    if (spec.destructive)
+      invocation.options.effectGuard = destructiveGuard(job, canonical, api, invocation);
+    const run =
+      dispatch || ((sockTarget, payload) => api.executeCommandInvocation(sockTarget, payload));
+    const preview = await run(sock, {
+      ...invocation,
+      options: { ...invocation.options, preflight: true, effectGuard: undefined },
     });
+    if (preview?.status && preview.status !== "ready") return mapOutcome(preview);
+    if (superseded(job)) return "REACTION_STALE";
+    if (command.name === "stt" || key === "stt") {
+      const readiness = reactionActionReadiness("stt");
+      if (readiness.includes("STT_DISABLED")) fail("REACTION_STT_DISABLED");
+      if (readiness.includes("STT_KEY_MISSING")) fail("STT_KEY_REQUIRED");
+    }
+    if (!spec.destructive) {
+      const budgets = [{ key: hash("rule", job.rule.id), limit: REACTION_ACTION_LIMITS.perRule }];
+      const claimed = store.claimReactionExecution(
+        {
+          eventKey: event.eventKey,
+          ruleKey: hash(event.eventKey, job.rule.id, job.rule.revision),
+          actionKey: hash(event.eventKey, key, job.definition.destination),
+          expiresAt: event.timestampMs + REACTION_LIMITS.ttlMs + REACTION_LIMITS.futureSkewMs,
+          budgets,
+        },
+        now(),
+      );
+      if (claimed !== "CLAIMED") return claimed;
+      if (superseded(job)) return "REACTION_STALE";
+    }
+    authorize(job);
+    const result = await run(sock, invocation);
+    return mapOutcome(result);
   }
   function submit(token) {
     const event = intake.resolveTransition(token);
@@ -399,8 +783,10 @@ export function createReactionAutomation(sock, { now = Date.now } = {}) {
   return {
     intake,
     close,
-    cancelChat(chat) {
-      cancel((job) => same(job.event.original.key.remoteJid, chat));
+    cancelChat(chat, update) {
+      cancel(
+        (job) => same(job.event.original.key.remoteJid, chat) && !expectedRemoval(job, update),
+      );
     },
     stats() {
       return { active: active.size, completed, lastCode };

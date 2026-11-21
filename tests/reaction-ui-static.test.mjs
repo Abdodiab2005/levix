@@ -141,4 +141,57 @@ section("automation toggle is single-flight; sort is recent activity");
   }
 }
 
+section("PR-2b command picker, args, sender modes, linked switch, callout, and R6 save");
+{
+  const editor = readFileSync(join(viewsDir, "ReactionRuleEditor.tsx"), "utf8");
+  const view = readFileSync(join(viewsDir, "ReactionRulesView.tsx"), "utf8");
+
+  ok("editor renders commands with CodeText", editor.includes("<CodeText"));
+  ok("view renders commands with CodeText", view.includes("<CodeText"));
+  ok(
+    "editor builds command picker items with prefix",
+    editor.includes("buildCommandPickerItems(commands, commandQuery, prefix)"),
+  );
+  ok(
+    "editor keeps unsupported commands disabled with reason badge",
+    editor.includes("disabled={item.disabled}") && editor.includes("item.reasonKey"),
+  );
+  ok("editor shows quote note when applicable", editor.includes("quoteNoteKey(selectedSpec)"));
+  ok(
+    "editor shows destructive warning callout",
+    editor.includes('t("reactionDestructiveWarning")'),
+  );
+  ok(
+    "editor locks transition checkboxes for destructive commands",
+    editor.includes("disabled={isDestructive}"),
+  );
+  ok(
+    "editor renders declared argument fields for mode args",
+    editor.includes('selectedSpec?.mode === "args"') && editor.includes("selectedSpec.fields.map"),
+  );
+  ok(
+    "editor renders legacy custom role choice when present",
+    editor.includes('t("reactionRoleCustom")'),
+  );
+  ok(
+    "editor renders command permission hint",
+    editor.includes('t("reactionSendersPermissionHint")'),
+  );
+  ok(
+    "editor renders separate allowOthersOnLinkedMessages toggle",
+    editor.includes('t("reactionAllowOthersOnLinked")'),
+  );
+  ok("editor uses useDirtyForm", editor.includes("useDirtyForm"));
+  ok("editor has no FormActions in the body", !editor.includes("<FormActions"));
+  ok(
+    "footer has the submit button bound to form=reaction-rule-form",
+    /footer=\{[\s\S]*?<Button[^>]*type="submit"[^>]*form="reaction-rule-form"/.test(editor),
+  );
+  ok(
+    "view renders single Callout when automation is off with enabled rules",
+    view.includes("shouldShowAutomationOffCallout(automation, rules)") && view.includes("<Callout"),
+  );
+  ok("view loads commands from /reactions/commands", view.includes("/reactions/commands?lang="));
+}
+
 finish();

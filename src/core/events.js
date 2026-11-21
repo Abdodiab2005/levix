@@ -1,23 +1,30 @@
 import { createRequire } from "module";
 import { createReactionAutomation } from "../automation/engine.js";
+import { executeCommandInvocation } from "../handlers/command.handler.js";
 import {
   handleGroupJoinRequests,
   handleGroupParticipantsUpdate,
 } from "../handlers/group.handler.js";
 import { handleIncomingMessage } from "../handlers/message.handler.js";
 import {
+  accountEpoch,
   applyContactRecord,
   storeLidPnMappings,
   upsertGroupDirectory,
 } from "../utils/storage.esm.js";
+import { cleanOwnerName, updateOwnerDisplayName } from "./connection.js";
 
 const require = createRequire(import.meta.url);
 const logger = require("../utils/logger.cjs");
+const store = require("../db/store.cjs");
 const {
   markRosterChanged,
   mergePartialGroupMetadata,
   storeUnsolicitedFullRoster,
 } = require("../utils/groupMetadataCache.cjs");
+
+const OWNER_NAME_BUFFER_TIMEOUT_MS = 30_000;
+const OWNER_NAME_BUFFER_POLL_MS = 100;
 
 /**
  * Wire one socket up.
@@ -34,15 +41,30 @@ const {
  */
 export function setupEventListeners(
   sock,
-  { saveCreds, onConnectionUpdate, onHandshakeRejected } = {},
+  {
+    saveCreds,
+    onConnectionUpdate,
+    onHandshakeRejected,
+    isLiveSocket,
+    automation: suppliedAutomation,
+  } = {},
 ) {
-  const automation = createReactionAutomation(sock);
+  // Production creates the engine. A test may pass the engine it is driving so
+  // this listener and that engine are the same object.
+  const automation =
+    suppliedAutomation || createReactionAutomation(sock, { dispatch: executeCommandInvocation });
   const reactions = automation.intake;
   // One disposer removes exactly the callbacks this call registered. Baileys
   // also listens on creds.update and lid-mapping.update, so this must not use
   // removeAllListeners by event name. A callback already queued by contained()
   // sees `disposed` and returns without calling its handler.
   let disposed = false;
+  const isLive = () => {
+    if (disposed) return false;
+    if (typeof isLiveSocket === "function") return isLiveSocket();
+    return true;
+  };
+  const ownerNames = observeOwnerNames(sock, isLive);
   const bindings = [];
   const listen = (emitter, event, fn) => {
     if (!emitter || typeof emitter.on !== "function") return;
@@ -77,7 +99,10 @@ export function setupEventListeners(
 
   listen(sock.ev, "connection.update", (update) => {
     if (update?.connection === "open") reactions.open();
-    if (update?.connection === "close") reactions.close();
+    if (update?.connection === "close") {
+      ownerNames.close();
+      reactions.close();
+    }
     connectionUpdate(update);
   });
 
@@ -113,16 +138,9 @@ export function setupEventListeners(
 
   // V7: LID mapping updates
   listen(sock.ev, "lid-mapping.update", (updates) => {
-    logger.info(`[LID] Received ${Object.keys(updates).length} LID mapping updates`);
-    const mappings = [];
-    for (const [lid, pn] of Object.entries(updates)) {
-      if (lid && pn) {
-        mappings.push({ lid, pn, deviceIndex: 0 });
-      }
-    }
-    if (mappings.length > 0) {
-      storeLidPnMappings(mappings);
-    }
+    const mappings = store.lidMappingsFromUpdate(updates);
+    logger.info(`[LID] Received ${mappings.length} LID mapping updates`);
+    if (mappings.length > 0) storeLidPnMappings(mappings);
   });
 
   // Group metadata updates. A participants array is a full roster (Baileys
@@ -191,11 +209,13 @@ export function setupEventListeners(
   // Group participant updates. Mark the roster stale in this turn, before the
   // contained handler's microtask and before any await. Every action (add,
   // remove, promote, demote, modify, leave) can change who must receive a
-  // sender key. Pending reaction actions for the group are cancelled in the
-  // same turn, because membership and roles may have changed.
+  // sender key, so pending reaction work for the group is cancelled here.
+  // cancelChat leaves a kick receipt running when this update is only the
+  // removal that kick already started. The receipt reads the live roster
+  // again before it is sent.
   listen(sock.ev, "group-participants.update", (update) => {
     markRosterChanged(sock, update?.id);
-    if (update?.id) automation.cancelChat(update.id);
+    if (update?.id) automation.cancelChat(update.id, update);
     contained(
       "group-participants.update",
       (payload) => handleGroupParticipantsUpdate(sock, payload),
@@ -211,11 +231,116 @@ export function setupEventListeners(
 
   return () => {
     disposed = true;
+    ownerNames.close();
     for (const [emitter, event, fn] of bindings) {
       try {
         emitter.off?.(event, fn);
       } catch {}
     }
     bindings.length = 0;
+  };
+}
+
+// Baileys rc14 emits an offline own message as append, then synchronously
+// emits the same pushName in creds.update. An app-state rename uses the same
+// creds payload. Observe the pair at emission: the buffer delays upserts and
+// can merge or delete them entirely. Forward every event unchanged.
+function observeOwnerNames(sock, isLive) {
+  const ev = sock.ev;
+  const emit = ev.emit;
+  let lastCredsName = cleanOwnerName(sock.authState?.creds?.me?.name);
+  let precedingReplay = null;
+  let pending = null;
+  let timer;
+  let closed = false;
+
+  const cancel = () => {
+    clearTimeout(timer);
+    timer = undefined;
+    pending = null;
+  };
+  const isBuffering = () => ev.isBuffering?.() === true;
+  const persist = ({ name, id, epoch }) => {
+    if (closed || !isLive() || sock.user?.id !== id || accountEpoch() !== epoch) return;
+    try {
+      updateOwnerDisplayName(sock, name);
+    } catch (err) {
+      logger.warn({ err }, "[User Metadata] owner display name update failed");
+    }
+  };
+  const settle = () => {
+    if (!pending) return;
+    const remaining = pending.deadline - performance.now();
+    if (closed || !isLive() || remaining <= 0) {
+      cancel();
+      return;
+    }
+    if (isBuffering()) {
+      timer ??= setTimeout(() => {
+        timer = undefined;
+        settle();
+      }, Math.min(remaining, OWNER_NAME_BUFFER_POLL_MS));
+      timer.unref?.();
+      return;
+    }
+    const candidate = pending;
+    cancel();
+    persist(candidate);
+  };
+  const submit = (name, id, fromCreds) => {
+    const epoch = accountEpoch();
+    if (!isBuffering() && !fromCreds) {
+      cancel();
+      persist({ name, id, epoch });
+      return;
+    }
+    const deadline = pending?.deadline ?? performance.now() + OWNER_NAME_BUFFER_TIMEOUT_MS;
+    if (!pending) queueMicrotask(settle);
+    pending = { name, id, epoch, fromCreds, deadline };
+  };
+
+  const observe = function (event, ...args) {
+    const previousReplay = precedingReplay;
+    precedingReplay = null;
+    if (!closed && (event === "messages.upsert" || event === "creds.update") && isLive()) {
+      const [payload] = args;
+      const id = sock.user?.id;
+      if (id && event === "messages.upsert" && Array.isArray(payload?.messages)) {
+        const own = payload.messages.find(
+          (msg) => msg?.key?.fromMe && cleanOwnerName(msg.pushName),
+        );
+        const name = cleanOwnerName(own?.pushName);
+        if (name && payload.type === "append") {
+          const replay = { name, id };
+          precedingReplay = replay;
+          queueMicrotask(() => {
+            if (precedingReplay === replay) precedingReplay = null;
+          });
+          // Also drop a matching candidate if an append is already queued
+          // behind it in this buffer.
+          if (pending?.fromCreds && pending.name === name && pending.id === id) cancel();
+        } else if (name && payload.type === "notify") {
+          submit(name, id, false);
+        }
+      }
+      if (id && event === "creds.update" && payload?.me?.id === id) {
+        const name = cleanOwnerName(payload.me.name);
+        if (name && name !== lastCredsName) {
+          lastCredsName = name;
+          if (previousReplay?.name !== name || previousReplay.id !== id) submit(name, id, true);
+        }
+      }
+    }
+    return emit.call(this, event, ...args);
+  };
+  ev.emit = observe;
+
+  return {
+    close() {
+      closed = true;
+      precedingReplay = null;
+      cancel();
+      if (ev.emit === observe) ev.emit = emit;
+    },
   };
 }

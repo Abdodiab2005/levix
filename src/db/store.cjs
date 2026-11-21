@@ -336,11 +336,17 @@ function isReactionChatConfigured(chatJid) {
 
 // Bound trusted alias expansion. Excess/ambiguous aliases fail closed at intake.
 function reactionIdentityAliases(jid) {
+  if (typeof jid !== "string" || !jid) return [];
   if (jid.endsWith("@g.us")) return [jid];
   const pn = jid.endsWith("@lid") ? getPnForLid(jid) : jid;
   if (!pn) return [jid];
   const rows = q(`SELECT lid FROM lid_mapping WHERE pn = ? LIMIT ${MAX_IDENTITY_ALIASES}`).all(pn);
-  return [...new Set([jid, pn, ...rows.map((row) => normalizeJid(row.lid))])];
+  const lids = [];
+  for (const row of rows) {
+    if (!acceptableMappingSide(row.lid, "@lid")) continue;
+    lids.push(normalizeJid(row.lid));
+  }
+  return [...new Set([jid, pn, ...lids])];
 }
 
 // Hash-only negative lookup state survives restart. Saturation replaces markers
@@ -963,7 +969,112 @@ function deleteQrCode() {
 // --- LID <-> phone number (Baileys v7) ---
 // ===================================================================
 
+// A real LID or phone JID. Device suffixes are accepted; the normalized local
+// part has to be digits. Callers that must keep the raw stored text check
+// first, then write the original string.
+function acceptableMappingSide(value, suffix) {
+  const norm = roleJid(value);
+  if (typeof norm !== "string" || !norm.endsWith(suffix)) return false;
+  const local = norm.slice(0, -suffix.length);
+  return /^\d{1,30}$/.test(local);
+}
+
+// Raw event text, before roleJid. A non-numeric device suffix must not
+// disappear inside normalizeJid, and a bare phone is not a PN JID.
+const RAW_MAPPING_JID = /^(\d{1,30})(?::(\d{1,3}))?@(lid|s\.whatsapp\.net)$/;
+
+function rawMappingJid(value, domain) {
+  if (typeof value !== "string") return false;
+  const match = RAW_MAPPING_JID.exec(value.trim());
+  return Boolean(match && match[3] === domain);
+}
+
+// Baileys rc14 emits { lid, pn } or an array of those. Older builds emit a
+// map of lid -> pn. A pair is stored only when both sides are real JIDs.
+function lidMappingsFromUpdate(updates) {
+  const mappings = [];
+  const push = (lid, pn) => {
+    if (!rawMappingJid(lid, "lid") || !rawMappingJid(pn, "s.whatsapp.net")) return;
+    if (!acceptableMappingSide(lid, "@lid") || !acceptableMappingSide(pn, "@s.whatsapp.net"))
+      return;
+    mappings.push({ lid: roleJid(lid), pn: roleJid(pn), deviceIndex: 0 });
+  };
+  if (Array.isArray(updates)) {
+    for (const item of updates) push(item?.lid, item?.pn);
+    return mappings;
+  }
+  if (updates && typeof updates === "object") {
+    if (Object.hasOwn(updates, "lid") || Object.hasOwn(updates, "pn")) {
+      push(updates.lid, updates.pn);
+      return mappings;
+    }
+    for (const [lid, pn] of Object.entries(updates)) push(lid, pn);
+  }
+  return mappings;
+}
+
+function latestReactionSlot(slotKeys) {
+  if (!Array.isArray(slotKeys) || !slotKeys.length || slotKeys.length > 64) return null;
+  if (slotKeys.some((key) => typeof key !== "string" || key.length > 128)) return null;
+  const row = q(
+    `SELECT emoji, timestamp_ms FROM reaction_state WHERE slot_key IN (${sqlIn(slotKeys)}) ORDER BY timestamp_ms DESC LIMIT 1`,
+  ).get(...slotKeys);
+  if (!row) return null;
+  return { emoji: row.emoji, timestampMs: Number(row.timestamp_ms) };
+}
+
+function latestReactionEmoji(slotKeys) {
+  return latestReactionSlot(slotKeys)?.emoji ?? null;
+}
+
+// Epoch, rule revision, slot version and the action key, in one transaction.
+// Membership is checked by the caller immediately before this. Do not call
+// claimReactionExecution from here: it opens its own transaction.
+function claimDestructiveReaction(input, now) {
+  return withImmediateTransaction(() => {
+    if (accountEpoch() !== input.accountEpoch) return "REACTION_STALE";
+    const rule = getReactionRule(input.ruleId);
+    if (!rule || !rule.enabled || rule.revision !== input.revision) return "REACTION_CANCELLED";
+    const latest = latestReactionSlot(input.slotKeys);
+    const expected = input.expectedEmoji;
+    if (!latest || latest.emoji !== expected || latest.timestampMs !== input.timestampMs)
+      return "REACTION_STALE";
+    q("DELETE FROM reaction_executions WHERE expires_at<=?").run(now);
+    q("DELETE FROM reaction_budgets WHERE expires_at<=?").run(now);
+    if (
+      !q("SELECT 1 FROM reaction_events WHERE event_key=? AND expires_at>?").get(
+        input.eventKey,
+        now,
+      )
+    )
+      return "EVENT_MISSING";
+    if (
+      q("SELECT 1 FROM reaction_executions WHERE event_key=? OR rule_key=? OR action_key=?").get(
+        input.eventKey,
+        input.ruleKey,
+        input.actionKey,
+      )
+    )
+      return "DUPLICATE";
+    if (q("SELECT COUNT(*) AS n FROM reaction_executions").get().n >= REACTION_LEDGER_CAP)
+      return "CAPACITY";
+    const admitted = spendReactionBudgets(input.budgets, now);
+    if (admitted !== "ADMITTED") return admitted;
+    q("INSERT INTO reaction_executions VALUES(?,?,?,?)").run(
+      input.eventKey,
+      input.ruleKey,
+      input.actionKey,
+      input.expiresAt,
+    );
+    return "CLAIMED";
+  });
+}
+
 function storeLidPnMapping(lid, pn, deviceIndex = 0) {
+  // Keep the caller's text, including a device suffix. Validation uses the
+  // normalized form so "555:9@lid" still stores as "555:9@lid".
+  if (!acceptableMappingSide(lid, "@lid") || !acceptableMappingSide(pn, "@s.whatsapp.net"))
+    return false;
   q(
     `INSERT INTO lid_mapping (lid, pn, device_index, updated_at) VALUES (?, ?, ?, ?)
      ON CONFLICT(lid) DO UPDATE SET
@@ -973,19 +1084,23 @@ function storeLidPnMapping(lid, pn, deviceIndex = 0) {
   ).run(lid, pn, deviceIndex, Date.now());
   // The pair is an identifier: sanitized debug log only, never combined.log.
   logger.debugOnly.debug({ lid, pn }, "[LID] Stored mapping");
+  return true;
 }
 
 function storeLidPnMappings(mappings) {
   if (!mappings?.length) return;
+  let stored = 0;
   for (const { lid, pn, deviceIndex = 0 } of mappings) {
-    storeLidPnMapping(lid, pn, deviceIndex);
+    if (storeLidPnMapping(lid, pn, deviceIndex)) stored += 1;
   }
-  logger.info(`[LID] Stored ${mappings.length} mappings`);
+  if (stored) logger.info(`[LID] Stored ${stored} mappings`);
 }
 
 function getLidForPn(pn) {
+  if (!acceptableMappingSide(pn, "@s.whatsapp.net")) return null;
   const row = q("SELECT lid FROM lid_mapping WHERE pn = ?").get(pn);
-  return row ? row.lid : null;
+  if (!row || !acceptableMappingSide(row.lid, "@lid")) return null;
+  return row.lid;
 }
 
 // Every LID stored for this phone. Writers persist the pn they are given
@@ -998,6 +1113,11 @@ function getLidsForPn(pn) {
   const consider = (rows) => {
     for (const row of rows) {
       if (!row?.lid || !row?.pn || found.has(row.lid)) continue;
+      if (
+        !acceptableMappingSide(row.lid, "@lid") ||
+        !acceptableMappingSide(row.pn, "@s.whatsapp.net")
+      )
+        continue;
       if (normalizeJid(row.pn) !== pn && row.pn !== pn) continue;
       found.set(row.lid, row.lid);
     }
@@ -1026,8 +1146,10 @@ function getLidsForPns(pns) {
 }
 
 function getPnForLid(lid) {
+  if (!acceptableMappingSide(lid, "@lid")) return null;
   const row = q("SELECT pn FROM lid_mapping WHERE lid = ?").get(lid);
-  return row ? row.pn : null;
+  if (!row || !acceptableMappingSide(row.pn, "@s.whatsapp.net")) return null;
+  return row.pn;
 }
 
 function getAllLidMappings() {
@@ -1340,12 +1462,65 @@ function applyContactRecord(contact) {
 }
 
 /**
+ * Get user metadata using exact self ids and verified aliases only.
+ * Checks exact user_jid, user_lid, device suffixes on the same JID, and verified
+ * mappings in lid_mapping. Never falls back to fuzzy digit matching across PN and LID namespaces.
+ */
+function getUserMetadataExact(identifier) {
+  if (!identifier) return null;
+  const raw = String(identifier).trim();
+  if (!raw) return null;
+
+  function acceptUserLidRow(row, lid) {
+    if (!row) return null;
+    const targetLid = roleJid(lid || row.user_lid);
+    const rowPn =
+      (row.user_jid && !row.user_jid.endsWith("@lid") && !row.user_jid.endsWith("@g.us")
+        ? roleJid(row.user_jid)
+        : null) || (row.phone_number ? asPnJid(row.phone_number) : null);
+    if (!rowPn) return row;
+    if (targetLid) {
+      const current = currentRoleMapping(rowPn);
+      if (current && roleJid(current.lid) === targetLid) return row;
+    }
+    return null;
+  }
+
+  let row = userRow(raw);
+  if (row) return rowToUser(row);
+
+  row = acceptUserLidRow(q("SELECT * FROM user_metadata WHERE user_lid = ?").get(raw), raw);
+  if (row) return rowToUser(row);
+
+  const norm = roleJid(raw);
+  if (norm && norm !== raw) {
+    row =
+      userRow(norm) ||
+      acceptUserLidRow(q("SELECT * FROM user_metadata WHERE user_lid = ?").get(norm), norm);
+    if (row) return rowToUser(row);
+  }
+
+  for (const alias of roleIdentityAliases(raw)) {
+    if (alias === raw) continue;
+    row =
+      userRow(alias) ||
+      acceptUserLidRow(q("SELECT * FROM user_metadata WHERE user_lid = ?").get(alias), alias);
+    if (row) return rowToUser(row);
+  }
+
+  return null;
+}
+
+/**
  * Get user metadata by JID, LID, or bare phone number. Four steps, in order:
  * exact JID, then LID, then phone, then a digits-only match against either
  * identifier (which is what handles the `:12` device suffixes).
+ *
+ * With `{ exact: true }`, matches exact self ids and verified aliases only.
  */
-function getUserMetadata(identifier) {
+function getUserMetadata(identifier, { exact = false } = {}) {
   if (!identifier) return null;
+  if (exact) return getUserMetadataExact(identifier);
 
   let row = userRow(identifier);
 
@@ -1642,19 +1817,172 @@ function countSchedules() {
 // One row per chat, no expiry. `!del` clears one chat, `!delall` clears the
 // table. The callers are async (they always were, back when this was a
 // separate database), so storage-hub keeps the async signatures.
+//
+// `history` is a JSON array of Gemini turns, the same shape 5.0.0 stored.
+// Rows written by the short-lived `{ history, provider, model }` wrapper still
+// load; every write stores an array only.
+
+function historyTurnsFromStored(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (raw && typeof raw === "object") {
+    if (Array.isArray(raw.history)) return raw.history;
+    if (Array.isArray(raw.turns)) return raw.turns;
+    if (Array.isArray(raw.entries)) return raw.entries;
+  }
+  return [];
+}
+
+function historyTurnsFromInput(historyArray) {
+  if (Array.isArray(historyArray)) return historyArray;
+  if (historyArray && typeof historyArray === "object") {
+    if (Array.isArray(historyArray.history)) return historyArray.history;
+    if (Array.isArray(historyArray.turns)) return historyArray.turns;
+    if (Array.isArray(historyArray.entries)) return historyArray.entries;
+  }
+  return [];
+}
+
+// Drop thought signatures and thought parts. Function calls and responses stay,
+// because a signature is valid only for the model and endpoint that issued it.
+function stripThoughtPart(part) {
+  if (!part || typeof part !== "object" || Array.isArray(part)) return part;
+  const call = part.functionCall || part.functionResponse;
+  if (part.thought === true && !call) return null;
+  const dropThought = part.thought === true;
+  const dropSignature = Object.hasOwn(part, "thoughtSignature");
+  if (!dropThought && !dropSignature) return part;
+  const copy = { ...part };
+  if (dropThought) delete copy.thought;
+  if (dropSignature) delete copy.thoughtSignature;
+  return copy;
+}
+
+function stripThoughtTurns(turns) {
+  if (!Array.isArray(turns)) return [];
+  const out = [];
+  for (const turn of turns) {
+    if (!turn || typeof turn !== "object" || !Array.isArray(turn.parts)) {
+      out.push(turn);
+      continue;
+    }
+    let changed = false;
+    const parts = [];
+    for (const part of turn.parts) {
+      const next = stripThoughtPart(part);
+      if (next !== part) changed = true;
+      if (next) parts.push(next);
+    }
+    if (!changed) out.push(turn);
+    else if (parts.length) out.push({ ...turn, parts });
+  }
+  return out;
+}
 
 function getChatHistory(chatId) {
   const row = q("SELECT history FROM ai_history WHERE chat_id = ?").get(chatId);
-  return row ? parseJson(row.history, []) : [];
+  return row ? [...historyTurnsFromStored(parseJson(row.history, []))] : [];
 }
 
 function saveChatHistory(chatId, historyArray) {
+  const turns = historyTurnsFromInput(historyArray);
   q(
     `INSERT INTO ai_history (chat_id, history, updated_at) VALUES (?, ?, ?)
      ON CONFLICT(chat_id) DO UPDATE SET
        history = excluded.history,
        updated_at = excluded.updated_at`,
-  ).run(chatId, JSON.stringify(historyArray || []), Date.now());
+  ).run(chatId, JSON.stringify(turns), Date.now());
+}
+
+/** Drop thought signatures and thought parts from one history value. Calls stay. */
+function stripThoughtSignaturesFromHistory(historyArray) {
+  return stripThoughtTurns(historyTurnsFromInput(historyArray));
+}
+
+function rewriteStoredThoughtSignatures() {
+  const rows = q("SELECT chat_id, history FROM ai_history").all();
+  let updated = 0;
+  for (const row of rows) {
+    let raw;
+    try {
+      raw = JSON.parse(row.history);
+    } catch {
+      continue;
+    }
+    const next = stripThoughtTurns(historyTurnsFromStored(raw));
+    const serialized = JSON.stringify(next);
+    if (serialized === row.history) continue;
+    q("UPDATE ai_history SET history = ? WHERE chat_id = ?").run(serialized, row.chat_id);
+    updated += 1;
+  }
+  return updated;
+}
+
+// In-memory only. Moves on every gemini_model, gemini_base_url or
+// gemini_api_key change, including a change that lands back on the value a
+// turn already pinned. The turn captures this before its first request and
+// drops thought signatures when it has moved.
+let geminiSignatureGeneration = 0;
+let geminiSignatureSweepPending = false;
+
+function geminiSignatureGenerationNow() {
+  return geminiSignatureGeneration;
+}
+
+function bumpGeminiSignatureGeneration() {
+  geminiSignatureGeneration += 1;
+  return geminiSignatureGeneration;
+}
+
+function isGeminiSignatureSweepPending() {
+  return geminiSignatureSweepPending;
+}
+
+function markGeminiSignatureSweepPending() {
+  geminiSignatureSweepPending = true;
+}
+
+function clearGeminiSignatureSweepPending() {
+  geminiSignatureSweepPending = false;
+}
+
+// One transaction for every stored chat. Called when gemini_model,
+// gemini_base_url or gemini_api_key changes — not on each message.
+// Joins a transaction that is already open (backup restore) instead of
+// issuing a nested BEGIN IMMEDIATE. A failure is logged, leaves a pending
+// sweep flag for the next Gemini turn, and is rethrown.
+function stripGeminiThoughtSignatures() {
+  // node:sqlite reports whether a transaction is open on this connection.
+  const nested = db.isTransaction === true;
+  const savepoint = "levix_strip_thoughts";
+  try {
+    db.exec(nested ? `SAVEPOINT ${savepoint}` : "BEGIN IMMEDIATE");
+  } catch (error) {
+    geminiSignatureSweepPending = true;
+    logger.error({ err: error }, "[ai_history] thought-signature sweep could not start");
+    throw error;
+  }
+  try {
+    const updated = rewriteStoredThoughtSignatures();
+    db.exec(nested ? `RELEASE ${savepoint}` : "COMMIT");
+    if (!nested) {
+      geminiSignatureSweepPending = false;
+    }
+    return updated;
+  } catch (error) {
+    geminiSignatureSweepPending = true;
+    try {
+      if (nested) {
+        db.exec(`ROLLBACK TO ${savepoint}`);
+        db.exec(`RELEASE ${savepoint}`);
+      } else {
+        db.exec("ROLLBACK");
+      }
+    } catch (rollbackError) {
+      logger.error({ err: rollbackError }, "[ai_history] thought-signature sweep rollback failed");
+    }
+    logger.error({ err: error }, "[ai_history] thought-signature sweep failed");
+    throw error;
+  }
 }
 
 function deleteChatHistory(chatId) {
@@ -1674,7 +2002,10 @@ function listChatHistories() {
   return q(
     `SELECT chat_id AS chatId,
             updated_at AS updatedAt,
-            json_array_length(history) AS turns
+            CASE
+              WHEN json_type(history) = 'object' THEN COALESCE(json_array_length(history, '$.history'), 0)
+              ELSE COALESCE(json_array_length(history), 0)
+            END AS turns
      FROM ai_history
      ORDER BY updated_at DESC`,
   ).all();
@@ -1685,7 +2016,10 @@ function getChatHistoryWithMeta(chatId) {
     chatId,
   );
   if (!row) return null;
-  return { history: parseJson(row.history, []), updatedAt: row.updatedAt };
+  return {
+    history: [...historyTurnsFromStored(parseJson(row.history, []))],
+    updatedAt: row.updatedAt,
+  };
 }
 
 // ===================================================================
@@ -1774,19 +2108,47 @@ function isPairedSession() {
 
 function resolveUserPhone(jid) {
   if (!jid || String(jid).endsWith("@g.us")) return null;
-  const meta = getUserMetadata(jid);
-  if (meta?.phone) return String(meta.phone).replace(/\D/g, "");
-  const raw = String(jid);
+  const raw = String(jid).trim();
+  const isLid = raw.endsWith("@lid");
   const local = raw.split("@")[0].split(":")[0];
-  if (raw.includes("@lid") || !/^\d{8,15}$/.test(local)) {
-    for (const candidate of [raw, local, `${local}@lid`]) {
+
+  if (isLid) {
+    const normLid = roleJid(raw);
+    for (const candidate of [raw, normLid, `${local}@lid`].filter(Boolean)) {
       const pn = getPnForLid(candidate);
-      if (!pn) continue;
-      const digits = String(pn).split("@")[0].replace(/\D/g, "");
-      if (digits) return digits;
+      if (pn) {
+        const pnJid = roleJid(pn);
+        if (pnJid?.endsWith("@s.whatsapp.net")) {
+          const current = currentRoleMapping(pnJid);
+          const currentLid = current && roleJid(current.lid);
+          const targetLid = roleJid(candidate);
+          if (currentLid && targetLid && currentLid === targetLid) {
+            const digits = pnJid.split("@")[0].replace(/\D/g, "");
+            if (digits && /^\d{8,15}$/.test(digits)) return digits;
+          }
+        }
+      }
     }
-    if (raw.includes("@lid")) return null;
+    return null;
   }
+
+  const exact = userRow(raw) || userRow(`${local}@s.whatsapp.net`);
+  if (exact) {
+    if (exact.user_lid) {
+      const lidLocal = exact.user_lid.split("@")[0].split(":")[0];
+      const pnLocal = exact.user_jid?.split("@")[0].split(":")[0] || exact.phone_number;
+      if (lidLocal && pnLocal && lidLocal === pnLocal) {
+        const verifiedPn = getPnForLid(exact.user_lid);
+        if (!verifiedPn || verifiedPn.split("@")[0].split(":")[0] !== pnLocal) {
+          return null;
+        }
+      }
+    }
+    if (exact.phone_number && /^\d{8,15}$/.test(exact.phone_number)) {
+      return exact.phone_number;
+    }
+  }
+
   if (/^\d{8,15}$/.test(local)) return local;
   return null;
 }
@@ -2564,6 +2926,7 @@ module.exports = {
   reactionRulesForChats,
   verifiedUserRoles,
   claimReactionExecution,
+  claimDestructiveReaction,
   admitReactionAttempt,
   REACTION_LEDGER_CAP,
   // Lifecycle
@@ -2630,6 +2993,9 @@ module.exports = {
   // LID mapping
   storeLidPnMapping,
   storeLidPnMappings,
+  lidMappingsFromUpdate,
+  latestReactionEmoji,
+  latestReactionSlot,
   getLidForPn,
   getLidsForPn,
   getLidsForPns,
@@ -2641,6 +3007,7 @@ module.exports = {
   rememberSavedName,
   applyContactRecord,
   getUserMetadata,
+  getUserMetadataExact,
   isUserOwner,
   isUserBotAdmin,
   getAllOwners,
@@ -2674,6 +3041,13 @@ module.exports = {
   getChatHistoryWithMeta,
   listChatHistories,
   saveChatHistory,
+  stripThoughtSignaturesFromHistory,
+  stripGeminiThoughtSignatures,
+  geminiSignatureGeneration: geminiSignatureGenerationNow,
+  bumpGeminiSignatureGeneration,
+  isGeminiSignatureSweepPending,
+  markGeminiSignatureSweepPending,
+  clearGeminiSignatureSweepPending,
   deleteChatHistory,
   deleteAllChatHistories,
   // Baileys auth
