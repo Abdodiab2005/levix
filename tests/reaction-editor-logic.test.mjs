@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   DEFAULT_REACTION_COMMANDS,
   ORIGINAL_TYPES,
@@ -10,6 +12,7 @@ import {
   isReactionEmoji,
   issueBucket,
   peerLabel,
+  previewText,
   quoteNoteKey,
   reactionDraftIssues,
   resolveSenderMode,
@@ -18,7 +21,7 @@ import {
   unsupportedReasonKey,
   validateReactionCommandArgs,
 } from "../frontend/src/utils/reactionRules.ts";
-import { equal, finish, ok, require, section, throws } from "./harness.mjs";
+import { equal, finish, ok, ROOT, require, section, throws } from "./harness.mjs";
 
 const { listReactionCommands, validateArgs } = require("./src/automation/commandEligibility.cjs");
 
@@ -460,6 +463,88 @@ section("args validation mirrors the server rules in commandEligibility.cjs");
       JSON.stringify(client.errors),
       JSON.stringify(server.errors),
     );
+  }
+}
+
+section("previewText renders natural prose without form labels");
+{
+  const enCatalog = JSON.parse(readFileSync(join(ROOT, "i18n/en/dashboard.json"), "utf8"));
+  const arCatalog = JSON.parse(readFileSync(join(ROOT, "i18n/ar/dashboard.json"), "utf8"));
+  const ptCatalog = JSON.parse(readFileSync(join(ROOT, "i18n/pt-BR/dashboard.json"), "utf8"));
+  const esCatalog = JSON.parse(readFileSync(join(ROOT, "i18n/es-419/dashboard.json"), "utf8"));
+  const catalogs = { en: enCatalog, ar: arCatalog, "pt-BR": ptCatalog, "es-419": esCatalog };
+  const makeT = (catalog) => (key) => catalog[key] ?? key;
+
+  const baseOwnerDraft = {
+    ...emptyReactionDraft(),
+    role: "owner",
+    senderIds: [],
+    emoji: "👍",
+    transitions: ["add"],
+    originalTypes: [...ORIGINAL_TYPES],
+    chatJid: "12036302@g.us",
+    chatName: "Family",
+    action: "weather",
+    destination: "same_chat",
+  };
+
+  const enSentence = previewText(makeT(enCatalog), baseOwnerDraft, "!");
+  equal(
+    "en sentence matches expected target shape",
+    enSentence,
+    "When you add 👍 to any supported message in Family, Levix runs !weather and sends the result to this chat.",
+  );
+  ok("has no 'Owner only'", !enSentence.includes("Owner only"));
+  ok("has no 'is added'", !enSentence.includes("is added"));
+  ok("has no 'The same chat'", !enSentence.includes("The same chat"));
+
+  const arSentence = previewText(makeT(arCatalog), baseOwnerDraft, "!");
+  ok(
+    "the Arabic sentence contains the command inside U+2066 ... U+2069",
+    arSentence.includes("\u2066!weather\u2069"),
+  );
+
+  const senderModes = [
+    selectSenderMode(baseOwnerDraft, "owner"),
+    selectSenderMode(baseOwnerDraft, "owner_group_admin"),
+    selectSenderMode(baseOwnerDraft, "group_admin"),
+    selectSenderMode(baseOwnerDraft, "any"),
+    { ...selectSenderMode(baseOwnerDraft, "selected"), senderIds: ["1001@lid", "1002@lid"] },
+    { ...baseOwnerDraft, role: "bot_admin", senderIds: [], senderMode: undefined }, // custom
+  ];
+
+  const transitionSets = [
+    ["add"],
+    ["change"],
+    ["remove"],
+    ["add", "change"],
+    ["add", "remove"],
+    ["change", "remove"],
+    ["add", "change", "remove"],
+  ];
+
+  const destinations = ["same_chat", "owner_private"];
+
+  for (const [locale, catalog] of Object.entries(catalogs)) {
+    const t = makeT(catalog);
+    for (const senderDraft of senderModes) {
+      for (const transitions of transitionSets) {
+        for (const destination of destinations) {
+          const testDraft = {
+            ...senderDraft,
+            transitions,
+            destination,
+          };
+          const text = previewText(t, testDraft, "!");
+          const mode = resolveSenderMode(testDraft);
+          ok(
+            `${locale} sender ${mode}(${testDraft.senderIds.length}) + transitions ${transitions.join("+")} + ${destination} has no left-over '{'`,
+            !text.includes("{"),
+            text,
+          );
+        }
+      }
+    }
   }
 }
 

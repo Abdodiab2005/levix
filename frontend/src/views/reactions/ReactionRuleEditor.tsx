@@ -14,7 +14,6 @@ import {
   Dialog,
   Disclosure,
   Field,
-  FormActions,
   IconButton,
   Input,
   RadioGroup,
@@ -48,12 +47,12 @@ import {
   draftFromRule,
   draftToWrite,
   emptyReactionDraft,
-  formatCommandToken,
   isRawJid,
   isReactionEmoji,
   issueBucket,
   issueFieldName,
   peerLabel,
+  previewText,
   quoteNoteKey,
   reactionApiCode,
   reactionApiIssues,
@@ -189,40 +188,6 @@ function sectionLabel(t: TFn, field: string): string {
   if (field === "transitions") return t("reactionTransitions");
   if (field === "destination") return t("reactionDestination");
   return `${t("reactionAdvanced")} (${t("reactionPriority")})`;
-}
-
-function previewText(t: TFn, draft: ReactionDraft, prefix: string): string {
-  const mode = resolveSenderMode(draft);
-  const commandToken = formatCommandToken(draft.action, prefix);
-  const vars = {
-    role: senderModeLabel(t, mode),
-    emoji: draft.emoji || t("reactionPreviewEmoji"),
-    transitions:
-      draft.transitions.map((item) => transitionLabel(t, item)).join(t("reactionListJoin")) ||
-      t("reactionTransitions"),
-    types:
-      draft.action !== "stt" && ORIGINAL_TYPES.every((type) => draft.originalTypes.includes(type))
-        ? t("reactionPreviewAllTypes")
-        : (draft.action === "stt" ? ["voice" as const] : draft.originalTypes)
-            .map((item) => typeLabel(t, item))
-            .join(t("reactionListJoin")) || t("reactionTypes"),
-    chat: draft.chatName.trim() || t("reactionPreviewChat"),
-    action:
-      draft.action === "stt"
-        ? t("reactionPreviewActionStt")
-        : draft.action === "ping"
-          ? t("reactionPreviewActionPing")
-          : commandToken
-            ? fill(t("reactionPreviewActionCommand"), { command: commandToken })
-            : t("reactionPreviewActionUnset"),
-    destination:
-      draft.destination === "owner_private" ? t("reactionDestOwner") : t("reactionDestSame"),
-    n: draft.senderIds.length,
-  };
-  return fill(
-    draft.senderIds.length > 0 ? t("reactionPreviewWithPeople") : t("reactionPreview"),
-    vars,
-  );
 }
 
 function toggleList<T extends string>(list: T[], value: T): T[] {
@@ -471,13 +436,6 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
     setField("senderIds", (previous) => previous.filter((item) => item !== jid));
   };
 
-  const discardChanges = () => {
-    if (submitPending.current) return;
-    form.revert();
-    setFormError(null);
-    setFieldErrors({});
-  };
-
   const selectedSpec = useMemo(
     () => (draft.action ? classifyReactionCommand(draft.action, commands) : null),
     [draft.action, commands],
@@ -552,9 +510,35 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
         variant="mobileFullscreen"
         maxWidth="40rem"
         footer={
-          <Button variant="secondary" onClick={close} disabled={busy}>
-            {t("reactionCancel")}
-          </Button>
+          <div className="flex w-full flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              {errorBanner || form.error ? (
+                <p role="alert" className="text-xs text-danger">
+                  {errorBanner || form.error}
+                </p>
+              ) : form.dirty ? (
+                <p className="text-xs text-warn">{t("unsavedChanges")}</p>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                onClick={close}
+                disabled={busy || form.status === "saving"}
+              >
+                {t("reactionCancel")}
+              </Button>
+              <Button
+                type="submit"
+                form="reaction-rule-form"
+                variant="primary"
+                loading={busy || form.status === "saving"}
+                disabled={busy || form.status === "saving" || (Boolean(rule) && !form.dirty)}
+              >
+                {t("reactionSave")}
+              </Button>
+            </div>
+          </div>
         }
       >
         <form
@@ -973,18 +957,6 @@ export const ReactionRuleEditor: React.FC<ReactionRuleEditorProps> = ({
           <UserText as="p" className="text-sm text-muted">
             {previewText(t, { ...draft, chatName: resolvedChatName }, prefix)}
           </UserText>
-
-          <FormActions
-            dirty={form.dirty}
-            saving={busy || form.status === "saving"}
-            justSaved={form.status === "saved"}
-            error={errorBanner || form.error}
-            onDiscard={discardChanges}
-            saveLabel={t("reactionSave")}
-            discardLabel={t("discard")}
-            unsavedLabel={t("unsavedChanges")}
-            savedLabel={t("saved")}
-          />
         </form>
       </Dialog>
 
