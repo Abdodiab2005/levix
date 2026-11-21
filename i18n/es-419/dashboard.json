@@ -1368,7 +1368,6 @@
   "reactionArgMultiline": "Usa una sola línea sin saltos.",
   "reactionArgKeywordPattern": "Comienza con # seguido de hasta 40 letras, números o guiones bajos.",
   "reactionArgStatusPattern": "Debe ser “status”.",
-  "reactionArgGeminiReserved": "Comienza con una consulta, no con un subcomando de administración.",
   "reactionQuoteVoice": "Usa la nota de voz a la que reaccionas.",
   "reactionQuoteSticker": "Usa el sticker al que reaccionas.",
   "reactionQuoteTargetAuthor": "Actúa sobre el autor del mensaje al que reaccionas.",

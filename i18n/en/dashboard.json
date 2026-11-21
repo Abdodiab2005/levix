@@ -1368,7 +1368,6 @@
   "reactionArgMultiline": "Use a single line without line breaks.",
   "reactionArgKeywordPattern": "Start with # followed by up to 40 letters, digits, or underscores.",
   "reactionArgStatusPattern": "Must be “status”.",
-  "reactionArgGeminiReserved": "Start with a prompt, not a management sub-command.",
   "reactionQuoteVoice": "Uses the voice note you react to.",
   "reactionQuoteSticker": "Uses the sticker you react to.",
   "reactionQuoteTargetAuthor": "Targets the author of the message you react to.",

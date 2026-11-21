@@ -1368,7 +1368,6 @@
   "reactionArgMultiline": "استخدم سطرًا واحدًا بدون فواصل أسطر.",
   "reactionArgKeywordPattern": "ابدأ بالرمز # متبوعًا بـ 1 إلى 40 حرفًا إنجليزيًا أو رقمًا أو شرطة سفلية.",
   "reactionArgStatusPattern": "يجب أن تكون القيمة «status».",
-  "reactionArgGeminiReserved": "ابدأ بنص السؤال، وليس بأمر إدارة فرعي.",
   "reactionQuoteVoice": "يستخدم الرسالة الصوتية التي تتفاعل معها.",
   "reactionQuoteSticker": "يستخدم الملصق الذي تتفاعل معه.",
   "reactionQuoteTargetAuthor": "يطبق الإجراء على مرسل الرسالة التي تتفاعل معها.",

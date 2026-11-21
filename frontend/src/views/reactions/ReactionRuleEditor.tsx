@@ -139,7 +139,6 @@ function argFieldErrorMessage(
   if (code === "required") return t("reactionArgRequired");
   if (code === "too_long") return fill(t("reactionArgTooLong"), { max: field.maxLength });
   if (code === "multiline") return t("reactionArgMultiline");
-  if (code === "reserved") return t("reactionArgGeminiReserved");
   if (code === "pattern") {
     if (field.id === "keyword") return t("reactionArgKeywordPattern");
     if (field.id === "status") return t("reactionArgStatusPattern");

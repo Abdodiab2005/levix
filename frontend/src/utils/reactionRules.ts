@@ -66,17 +66,6 @@ export const DEFAULT_REACTION_LIMITS: ReactionLimits = {
 
 const LINE_PATTERN = /^[^\r\n]*$/;
 
-const GEMINI_RESERVED = new Set<string>([
-  "add",
-  "send",
-  "show",
-  "clear",
-  "del",
-  "delall",
-  "resetai",
-  "generate",
-]);
-
 const SETTINGS_ARGS = new Set<string>([
   "setprefix",
   "perm",
@@ -167,7 +156,6 @@ export const DEFAULT_REACTION_COMMANDS: readonly ReactionCommandSpec[] = [
   makeSpec("tts", "quote"),
   makeSpec("group:kick", "quote", { destructive: true, transitions: ["add"] }),
 
-  makeSpec("gemini", "args", { fields: [REACTION_COMMAND_FIELDS.prompt], quote: true }),
   makeSpec("group:note", "args", { fields: [REACTION_COMMAND_FIELDS.keyword] }),
   makeSpec("prayer", "args", { fields: [REACTION_COMMAND_FIELDS.city] }),
   makeSpec("weather", "args", { fields: [REACTION_COMMAND_FIELDS.city] }),
@@ -211,6 +199,7 @@ export const DEFAULT_REACTION_COMMANDS: readonly ReactionCommandSpec[] = [
   makeSpec("group:deletenote", "unsupported", { reason: "NOT_IN_5_0_1" }),
   makeSpec("group:save", "unsupported", { reason: "NOT_IN_5_0_1" }),
   makeSpec("group:removeall", "unsupported", { reason: "NOT_IN_5_0_1" }),
+  makeSpec("gemini", "unsupported", { reason: "NOT_IN_5_0_1" }),
 ];
 
 const DEFAULT_COMMAND_MAP = new Map<string, ReactionCommandSpec>(
@@ -263,7 +252,7 @@ export interface ReactionCommandPickerItem extends ReactionCommandSpec {
   reasonKey: string | null;
 }
 
-export type ReactionFieldErrorCode = "required" | "too_long" | "multiline" | "pattern" | "reserved";
+export type ReactionFieldErrorCode = "required" | "too_long" | "multiline" | "pattern";
 
 export interface ReactionArgsValidation {
   ok: boolean;
@@ -429,13 +418,6 @@ export function validateReactionCommandArgs(
       fieldErrors[field.id] ??= "pattern";
     }
   });
-  if (errors.length === 0 && key === "gemini" && typeof args[0] === "string") {
-    const word = args[0].trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-    if (GEMINI_RESERVED.has(word)) {
-      fail();
-      fieldErrors.prompt = "reserved";
-    }
-  }
   return { ok: errors.length === 0, errors, fieldErrors };
 }
 

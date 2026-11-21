@@ -395,10 +395,11 @@ section("destructive command locks transitions to add; originalTypes preselect a
   );
   equal("calc quote note", quoteNoteKey(classifyReactionCommand("calc")), "reactionQuoteMessage");
   equal(
-    "gemini quote note",
-    quoteNoteKey(classifyReactionCommand("gemini")),
+    "translate quote note",
+    quoteNoteKey(classifyReactionCommand("translate")),
     "reactionQuoteMessage",
   );
+  equal("gemini is not in 5.0.1", classifyReactionCommand("gemini").reason, "NOT_IN_5_0_1");
   equal("ping has no quote note", quoteNoteKey(classifyReactionCommand("ping")), null);
 }
 
