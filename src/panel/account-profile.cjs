@@ -108,15 +108,33 @@ function createAccountProfile({
     return null;
   }
 
-  function resolveStoredDisplayName(raw, identity, acceptedIds, matchesIdentity) {
+  function resolveCanonicalOwnerJid({ socket, identity, selfId, selfLid, matchesIdentity }) {
+    if (selfId && isPhoneJid(selfId)) return selfId;
+    if (matchesIdentity && isPhoneJid(identity?.phone)) return ownJid(identity.phone);
+    if (selfLid && isLidJid(selfLid)) return selfLid;
+    if (selfId && isLidJid(selfId)) return selfId;
+    if (matchesIdentity && isLidJid(identity?.lid)) return ownJid(identity.lid);
+    return selfId || selfLid || null;
+  }
+
+  function resolveStoredDisplayName(
+    raw,
+    identity,
+    acceptedIds,
+    matchesIdentity,
+    canonicalJid = null,
+  ) {
     const lookupFn =
       typeof raw?.getUserDisplayName === "function"
         ? raw.getUserDisplayName
         : typeof getUserDisplayName === "function"
           ? getUserDisplayName
           : null;
+    const ids = canonicalJid
+      ? [canonicalJid, ...acceptedIds.filter((jid) => jid !== canonicalJid)]
+      : acceptedIds;
     if (lookupFn) {
-      for (const jid of acceptedIds) {
+      for (const jid of ids) {
         try {
           const candidate = cleanProfileName(lookupFn(jid));
           if (candidate) return candidate;
@@ -124,7 +142,7 @@ function createAccountProfile({
       }
     }
     if (raw?.userMetadata && typeof raw.userMetadata === "object") {
-      for (const jid of acceptedIds) {
+      for (const jid of ids) {
         const entry = raw.userMetadata[jid];
         const candidate = cleanProfileName(typeof entry === "string" ? entry : entry?.displayName);
         if (candidate) return candidate;
@@ -155,10 +173,20 @@ function createAccountProfile({
     const matchesIdentity = Boolean(
       selfId && (selfJids.includes(selfId) || (selfLid && selfJids.includes(selfLid))),
     );
+    const canonicalJid = resolveCanonicalOwnerJid({
+      socket,
+      identity,
+      selfId,
+      selfLid,
+      matchesIdentity,
+    });
     const socketIds = [selfId, selfLid].filter(Boolean);
-    const acceptedIds = matchesIdentity
+    const rawAcceptedIds = matchesIdentity
       ? [...new Set([...selfJids, ...socketIds])]
       : [...new Set(socketIds)];
+    const acceptedIds = canonicalJid
+      ? [canonicalJid, ...rawAcceptedIds.filter((id) => id !== canonicalJid)]
+      : rawAcceptedIds;
 
     let phone = null;
     if (selfId && isPhoneJid(selfId)) {
@@ -188,7 +216,9 @@ function createAccountProfile({
     // 4. sock.user.notify
     // 5. saved credentials' me.name
     const name = selfId
-      ? cleanProfileName(resolveStoredDisplayName(raw, identity, acceptedIds, matchesIdentity)) ||
+      ? cleanProfileName(
+          resolveStoredDisplayName(raw, identity, acceptedIds, matchesIdentity, canonicalJid),
+        ) ||
         cleanProfileName(socket?.user?.name) ||
         cleanProfileName(socket?.user?.verifiedName) ||
         cleanProfileName(socket?.user?.notify) ||
